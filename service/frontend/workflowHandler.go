@@ -2858,7 +2858,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("uable to build valid search attributes map: %v", err))
 	}
-	searchattribute.ApplyTypeMap(response.WorkflowExecutionInfo.SearchAttributes, saTypeMap)
+	searchattribute.ApplyTypeMap(response.GetWorkflowExecutionInfo().GetSearchAttributes(), saTypeMap)
 
 	return &workflowservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig:       response.GetExecutionConfig(),
