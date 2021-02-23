@@ -95,10 +95,6 @@ type (
 	failureTag struct {
 		value string
 	}
-
-	validatorTag struct {
-		value string
-	}
 )
 
 // NamespaceTag returns a new namespace tag. For timers, this also ensures that we
@@ -307,23 +303,5 @@ func (d failureTag) Key() string {
 
 // Value returns the value of the tag
 func (d failureTag) Value() string {
-	return d.value
-}
-
-// Returns a new vaildator type tag
-func ValidatorTag(value string) Tag {
-	if len(value) == 0 {
-		value = unknownValue
-	}
-	return validatorTag{value}
-}
-
-// Key returns the key of the tag
-func (d validatorTag) Key() string {
-	return ValidatorTagName
-}
-
-// Value returns the value of the tag
-func (d validatorTag) Value() string {
 	return d.value
 }

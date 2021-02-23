@@ -25,12 +25,10 @@
 package executions
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/quotas"
 
@@ -41,46 +39,28 @@ import (
 	"go.temporal.io/server/service/worker/scanner/executor"
 )
 
+const (
+	executorPoolSize         = 4
+	executorPollInterval     = time.Minute
+	executorMaxDeferredTasks = 10000
+)
+
 type (
 	// Scavenger is the type that holds the state for executions scavenger daemon
 	Scavenger struct {
-		frontendClient        workflowservice.WorkflowServiceClient // used to query visibility
-		historyDB             persistence.HistoryManager
-		numHistoryShards      int32
-		executor              executor.Executor
-		metrics               metrics.Client
-		logger                log.Logger
-		status                int32
-		stopC                 chan struct{}
-		stopWG                sync.WaitGroup
-		shardValidatorFactory shardValidatorBuilder
+		status           int32
+		numHistoryShards int32
+
+		execMgrFactory persistence.ExecutionManagerFactory
+		historyManager persistence.HistoryManager
+		executor       executor.Executor
+		rateLimiter    quotas.RateLimiter
+		metrics        metrics.Client
+		logger         log.Logger
+
+		stopC  chan struct{}
+		stopWG sync.WaitGroup
 	}
-
-	shardValidatorBuilder func(rateLimiter quotas.RateLimiter) shardValidator
-
-	// executorTask is a runnable task that adheres to the executor.Task interface
-	// for the scavenger, each of this task processes a single workflow mutableState
-	executorTask struct {
-		shardID     int32
-		scvg        *Scavenger
-		rateLimiter quotas.RateLimiter
-	}
-
-	shardValidationReportExecutionsScanned struct {
-		TotalExecutionsCount     int64
-		CorruptedExecutionsCount int64
-	}
-)
-
-// executionValidatorResultNoCorruption is and instance of result symbolizing no failure found
-var executionValidatorResultNoCorruption = executionValidatorResult{isValid: true}
-
-var (
-	executorPoolSize         = 16
-	executionsPageSize       = 1000
-	executorPollInterval     = time.Minute
-	executorMaxDeferredTasks = 10000
-	targetRPS                = 50
 )
 
 // NewScavenger returns an instance of executions scavenger daemon
@@ -94,36 +74,39 @@ var (
 //  - either all executions are processed successfully (or)
 //  - Stop() method is called to stop the scavenger
 func NewScavenger(
-	frontendClient workflowservice.WorkflowServiceClient,
-	historyDB persistence.HistoryManager,
+	numHistoryShards int32,
+	execMgrFactory persistence.ExecutionManagerFactory,
+	historyManager persistence.HistoryManager,
 	metricsClient metrics.Client,
 	logger log.Logger,
-	execMgrFactory persistence.ExecutionManagerFactory,
-	numHistoryShards int32,
 ) *Scavenger {
-	stopC := make(chan struct{})
-	taskExecutor := executor.NewFixedSizePoolExecutor(
-		executorPoolSize, executorMaxDeferredTasks, metricsClient, metrics.ExecutionsScavengerScope)
-	shardValidatorBuilder := func(limiter quotas.RateLimiter) shardValidator {
-		return createShardValidator(
-			execMgrFactory, limiter, executionsPageSize,
-			historyDB, []executionValidator{newActivityIDValidator()})
-	}
 	return &Scavenger{
-		frontendClient:        frontendClient,
-		historyDB:             historyDB,
-		metrics:               metricsClient,
-		logger:                logger,
-		stopC:                 stopC,
-		executor:              taskExecutor,
-		numHistoryShards:      numHistoryShards,
-		shardValidatorFactory: shardValidatorBuilder,
+		numHistoryShards: numHistoryShards,
+		execMgrFactory:   execMgrFactory,
+		historyManager:   historyManager,
+		executor: executor.NewFixedSizePoolExecutor(
+			executorPoolSize,
+			executorMaxDeferredTasks,
+			metricsClient,
+			metrics.ExecutionsScavengerScope,
+		),
+		rateLimiter: quotas.NewDefaultOutgoingDynamicRateLimiter(
+			func() float64 { return float64(rateOverall) },
+		),
+		metrics: metricsClient,
+		logger:  logger,
+
+		stopC: make(chan struct{}),
 	}
 }
 
 // Start starts the scavenger
 func (s *Scavenger) Start() {
-	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
+	if !atomic.CompareAndSwapInt32(
+		&s.status,
+		common.DaemonStatusInitialized,
+		common.DaemonStatusStarted,
+	) {
 		return
 	}
 	s.logger.Info("Executions scavenger starting")
@@ -136,7 +119,11 @@ func (s *Scavenger) Start() {
 
 // Stop stops the scavenger
 func (s *Scavenger) Stop() {
-	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
+	if !atomic.CompareAndSwapInt32(
+		&s.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
 		return
 	}
 	s.metrics.IncCounter(metrics.ExecutionsScavengerScope, metrics.StoppedCount)
@@ -159,19 +146,32 @@ func (s *Scavenger) run() {
 		s.stopWG.Done()
 	}()
 
-	rateLimiter := getRateLimiter(targetRPS)
-	if rateLimiter == nil {
-		panic(
-			fmt.Sprintf(
-				"ExecutionsScavenger failed to initialize rate limiter with target qps %d. Aborting scan.",
-				targetRPS,
-			),
-		)
-	}
-
 	for shardID := int32(1); shardID <= s.numHistoryShards; shardID++ {
-		if !s.executor.Submit(s.newTask(shardID, rateLimiter)) {
-			return
+		if executionManager, err := s.execMgrFactory.NewExecutionManager(
+			shardID,
+		); err != nil {
+			s.logger.Error("unable to initialize execution manager",
+				tag.ShardID(shardID),
+				tag.Error(err),
+			)
+		} else {
+			submitted := s.executor.Submit(newTask(
+				shardID,
+				executionManager,
+				s.historyManager,
+				s.metrics,
+				s.logger,
+				s,
+				quotas.NewMultiStageRateLimiter([]quotas.RateLimiter{
+					quotas.NewDefaultOutgoingDynamicRateLimiter(
+						func() float64 { return float64(ratePerShard) },
+					),
+					s.rateLimiter,
+				}),
+			))
+			if !submitted {
+				s.logger.Error("unable to submit task to executor", tag.ShardID(shardID))
+			}
 		}
 	}
 
@@ -188,69 +188,5 @@ func (s *Scavenger) awaitExecutor() {
 		case <-s.stopC:
 			return
 		}
-	}
-}
-
-// newTask returns a new instance of an executable task which will process a single mutableState
-func (s *Scavenger) newTask(shardID int32, rateLimiter quotas.RateLimiter) executor.Task {
-	return &executorTask{
-		shardID:     shardID,
-		rateLimiter: rateLimiter,
-		scvg:        s,
-	}
-}
-
-// Run runs the task
-func (t *executorTask) Run() executor.TaskStatus {
-	return t.scvg.validateShardHandler(t.shardID, t.rateLimiter)
-}
-
-func (s *Scavenger) validateShardHandler(shardID int32, rateLimiter quotas.RateLimiter) executor.TaskStatus {
-	validationResult := s.shardValidatorFactory(rateLimiter).validate(shardID)
-	dumpShardValidationReport(validationResult, s.logger, s.metrics)
-	return executor.TaskStatusDone
-}
-
-func dumpShardValidationReport(report *shardValidationResult, logger log.Logger, metricClient metrics.Client) {
-	metricsScope := metricClient.Scope(metrics.ExecutionsScavengerScope)
-	metricsScope.AddCounter(metrics.ScavengerDBRequestsCount, report.TotalDBRequests)
-	metricsScope.UpdateGauge(
-		metrics.ExecutionsScavengerExecutionsCount,
-		float64(report.ScanStats.TotalExecutionsCount))
-	metricsScope.UpdateGauge(
-		metrics.ExecutionsScavengerCorruptedExecutionsCount,
-		float64(report.ScanStats.CorruptedExecutionsCount))
-
-	if !report.IsFailure {
-		return
-	}
-	if report.Error != nil {
-		failureScope := metricsScope.Tagged(
-			metrics.ValidatorTag("scavenger"),
-			metrics.FailureTag("validation_failure"),
-		)
-		failureScope.IncCounter(metrics.ScavengerValidationFailuresCount)
-		logger.Warn(
-			"Validation failed for execution.",
-			tag.ShardID(report.ShardID),
-			tag.Error(report.Error))
-	}
-	for _, executionFailure := range report.ExecutionFailures {
-		for validator, validatorFailure := range executionFailure.Failures {
-			failureScope := metricsScope.Tagged(
-				metrics.ValidatorTag(validator),
-				metrics.FailureTag(validatorFailure.failureReasonTag),
-			)
-			failureScope.IncCounter(metrics.ScavengerValidationFailuresCount)
-		}
-		logger.Warn(
-			"Validation failed for execution.",
-			tag.ShardID(report.ShardID),
-			tag.WorkflowNamespace(executionFailure.Namespace),
-			tag.WorkflowID(executionFailure.WorkflowID),
-			tag.WorkflowRunID(executionFailure.RunID),
-			tag.WorkflowBranchID(executionFailure.BranchID),
-			tag.WorkflowTreeID(executionFailure.TreeID),
-			tag.Value(executionFailure.Failures))
 	}
 }
