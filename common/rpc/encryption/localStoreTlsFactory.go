@@ -55,7 +55,7 @@ type localStoreTlsProvider struct {
 func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS) (TLSConfigProvider, error) {
 	internodeProvider := &localStoreCertProvider{tlsSettings: &tlsConfig.Internode}
 	var workerProvider ClientCertProvider
-	if tlsConfig.SystemWorker.CertFile != "" || tlsConfig.SystemWorker.CertData != "" { // explcit system worker config
+	if tlsConfig.SystemWorker.CertFile != "" || tlsConfig.SystemWorker.CertData != "" { // explicit system worker config
 		workerProvider = &localStoreCertProvider{workerTLSSettings: &tlsConfig.SystemWorker}
 	} else { // legacy implicit system worker config case
 		internodeWorkerProvider := &localStoreCertProvider{tlsSettings: &tlsConfig.Internode}
