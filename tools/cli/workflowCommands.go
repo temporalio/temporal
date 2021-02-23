@@ -377,7 +377,7 @@ func getPrintableSearchAttr(searchAttr *commonpb.SearchAttributes) string {
 	var buf bytes.Buffer
 	searchAttributesString, err := searchattribute.Stringify(searchAttr, nil)
 	if err != nil {
-		fmt.Printf("%s: unable to stringify search attribute: %v",
+		fmt.Printf("%s: unable to stringify search attribute: %v\n",
 			colorMagenta("Warning"),
 			err)
 	}
@@ -897,7 +897,7 @@ func printAutoResetPoints(resp *workflowservice.DescribeWorkflowExecutionRespons
 
 func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWorkflowExecutionResponse) *clispb.DescribeWorkflowExecutionResponse {
 
-	info := resp.WorkflowExecutionInfo
+	info := resp.GetWorkflowExecutionInfo()
 	executionInfo := &clispb.WorkflowExecutionInfo{
 		Execution:         info.GetExecution(),
 		Type:              info.GetType(),
@@ -912,33 +912,32 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 		AutoResetPoints:   info.GetAutoResetPoints(),
 	}
 
-	var pendingActs []*clispb.PendingActivityInfo
-	var tmpAct *clispb.PendingActivityInfo
-	for _, pa := range resp.PendingActivities {
-		tmpAct = &clispb.PendingActivityInfo{
-			ActivityId:         pa.GetActivityId(),
-			ActivityType:       pa.GetActivityType(),
-			State:              pa.GetState(),
-			ScheduledTime:      pa.GetScheduledTime(),
-			LastStartedTime:    pa.GetLastStartedTime(),
-			LastHeartbeatTime:  pa.GetLastHeartbeatTime(),
-			Attempt:            pa.GetAttempt(),
-			MaximumAttempts:    pa.GetMaximumAttempts(),
-			ExpirationTime:     pa.GetExpirationTime(),
-			LastFailure:        convertFailure(pa.GetLastFailure()),
-			LastWorkerIdentity: pa.GetLastWorkerIdentity(),
+	var pendingActivitiesStr []*clispb.PendingActivityInfo
+	for _, pendingActivity := range resp.GetPendingActivities() {
+		pendingActivityStr := &clispb.PendingActivityInfo{
+			ActivityId:         pendingActivity.GetActivityId(),
+			ActivityType:       pendingActivity.GetActivityType(),
+			State:              pendingActivity.GetState(),
+			ScheduledTime:      pendingActivity.GetScheduledTime(),
+			LastStartedTime:    pendingActivity.GetLastStartedTime(),
+			LastHeartbeatTime:  pendingActivity.GetLastHeartbeatTime(),
+			Attempt:            pendingActivity.GetAttempt(),
+			MaximumAttempts:    pendingActivity.GetMaximumAttempts(),
+			ExpirationTime:     pendingActivity.GetExpirationTime(),
+			LastFailure:        convertFailure(pendingActivity.GetLastFailure()),
+			LastWorkerIdentity: pendingActivity.GetLastWorkerIdentity(),
 		}
 
-		if pa.HeartbeatDetails != nil {
-			tmpAct.HeartbeatDetails = payloads.ToString(pa.HeartbeatDetails)
+		if pendingActivity.GetHeartbeatDetails() != nil {
+			pendingActivityStr.HeartbeatDetails = payloads.ToString(pendingActivity.GetHeartbeatDetails())
 		}
-		pendingActs = append(pendingActs, tmpAct)
+		pendingActivitiesStr = append(pendingActivitiesStr, pendingActivityStr)
 	}
 
 	return &clispb.DescribeWorkflowExecutionResponse{
 		ExecutionConfig:       resp.ExecutionConfig,
 		WorkflowExecutionInfo: executionInfo,
-		PendingActivities:     pendingActs,
+		PendingActivities:     pendingActivitiesStr,
 		PendingChildren:       resp.PendingChildren,
 	}
 }
@@ -950,7 +949,7 @@ func convertSearchAttributes(searchAttributes *commonpb.SearchAttributes) *clisp
 
 	fields, err := searchattribute.Stringify(searchAttributes, nil)
 	if err != nil {
-		fmt.Printf("%s: unable to stringify search attribute: %v",
+		fmt.Printf("%s: unable to stringify search attribute: %v\n",
 			colorMagenta("Warning"),
 			err)
 	}
