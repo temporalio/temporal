@@ -928,8 +928,8 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 			LastWorkerIdentity: pendingActivity.GetLastWorkerIdentity(),
 		}
 
-		if pendingActivity.HeartbeatDetails != nil {
-			pendingActivityStr.HeartbeatDetails = payloads.ToString(pendingActivity.HeartbeatDetails)
+		if pendingActivity.GetHeartbeatDetails() != nil {
+			pendingActivityStr.HeartbeatDetails = payloads.ToString(pendingActivity.GetHeartbeatDetails())
 		}
 		pendingActivitiesStr = append(pendingActivitiesStr, pendingActivityStr)
 	}
