@@ -39,10 +39,28 @@ type (
 )
 
 // NewPagingIterator create a new paging iterator
-func NewPagingIterator(paginationFn PaginationFn) Iterator {
+func NewPagingIterator(
+	paginationFn PaginationFn,
+) Iterator {
 	iter := &PagingIteratorImpl{
 		paginationFn:      paginationFn,
 		pageToken:         nil,
+		pageErr:           nil,
+		pageItems:         nil,
+		nextPageItemIndex: 0,
+	}
+	iter.getNextPage() // this will initialize the paging iterator
+	return iter
+}
+
+// NewPagingIteratorWithToken create a new paging iterator with initial token
+func NewPagingIteratorWithToken(
+	paginationFn PaginationFn,
+	pageToken []byte,
+) Iterator {
+	iter := &PagingIteratorImpl{
+		paginationFn:      paginationFn,
+		pageToken:         pageToken,
 		pageErr:           nil,
 		pageItems:         nil,
 		nextPageItemIndex: 0,
