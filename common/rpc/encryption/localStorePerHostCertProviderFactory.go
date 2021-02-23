@@ -26,11 +26,13 @@ package encryption
 
 import (
 	"strings"
+	"time"
 
 	"go.temporal.io/server/common/service/config"
 )
 
 var _ PerHostCertProviderFactory = (*localStorePerHostCertProviderFactory)(nil)
+var _ CertExpirationChecker = (*localStorePerHostCertProviderFactory)(nil)
 
 type localStorePerHostCertProviderFactory struct {
 	certProviderCache map[string]*localStoreCertProvider
@@ -66,4 +68,26 @@ func (f *localStorePerHostCertProviderFactory) GetCertProvider(hostName string) 
 	}
 
 	return cachedCertProvider, nil
+}
+
+func (f *localStorePerHostCertProviderFactory) Expiring(fromNow time.Duration) ([]CertExpirationData, []error) {
+
+	list := make([]CertExpirationData, 1)
+	errs := make([]error, 1)
+
+	if len(f.certProviderCache) == 0 {
+		return list, errs
+	}
+
+	for _, provider := range f.certProviderCache {
+
+		l, err := provider.Expiring(fromNow)
+		if len(err) != 0 {
+			errs = append(errs, err...)
+		}
+		if len(l) != 0 {
+			list = append(list, l...)
+		}
+	}
+	return list, errs
 }
