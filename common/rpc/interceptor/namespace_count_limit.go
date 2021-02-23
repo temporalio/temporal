@@ -34,7 +34,7 @@ import (
 )
 
 var (
-	NamespaceCountLimitServerBusy = serviceerror.NewResourceExhausted("namespace count limit exceeded")
+	ErrNamespaceCountLimitServerBusy = serviceerror.NewResourceExhausted("namespace count limit exceeded")
 )
 
 type (
@@ -61,7 +61,7 @@ func NewNamespaceCountLimitInterceptor(
 	}
 }
 
-func (i *NamespaceCountLimitInterceptor) Intercept(
+func (ni *NamespaceCountLimitInterceptor) Intercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
@@ -69,32 +69,32 @@ func (i *NamespaceCountLimitInterceptor) Intercept(
 ) (interface{}, error) {
 	_, methodName := splitMethodName(info.FullMethod)
 	// token will default to 0
-	token, _ := i.tokens[methodName]
+	token, _ := ni.tokens[methodName]
 	if token != 0 {
 		namespace := GetNamespace(req)
-		counter := i.counter(namespace)
+		counter := ni.counter(namespace)
 		count := atomic.AddInt32(counter, int32(token))
 		defer atomic.AddInt32(counter, -int32(token))
 
-		if int(count) > i.countFn(namespace) {
-			return nil, NamespaceCountLimitServerBusy
+		if int(count) > ni.countFn(namespace) {
+			return nil, ErrNamespaceCountLimitServerBusy
 		}
 	}
 
 	return handler(ctx, req)
 }
 
-func (i *NamespaceCountLimitInterceptor) counter(
+func (ni *NamespaceCountLimitInterceptor) counter(
 	namespace string,
 ) *int32 {
-	i.Lock()
-	defer i.Unlock()
+	ni.Lock()
+	defer ni.Unlock()
 
-	count, ok := i.namespaceToCount[namespace]
+	count, ok := ni.namespaceToCount[namespace]
 	if !ok {
 		counter := int32(0)
 		count = &counter
-		i.namespaceToCount[namespace] = count
+		ni.namespaceToCount[namespace] = count
 	}
 	return count
 }
