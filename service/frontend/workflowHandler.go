@@ -3480,10 +3480,5 @@ func (wh *WorkflowHandler) checkNamespaceMatch(requestNamespace string, tokenNam
 }
 
 func (wh *WorkflowHandler) metricsScope(ctx context.Context) metrics.Scope {
-	scope, ok := ctx.Value(interceptor.ContextKeyMetrics).(metrics.Scope)
-	if !ok {
-		wh.GetLogger().Error("unable to get metrics scope")
-		return metrics.NoopScope(metrics.Frontend)
-	}
-	return scope
+	return interceptor.MetricsScope(ctx, wh.GetLogger())
 }

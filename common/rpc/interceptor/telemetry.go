@@ -37,8 +37,12 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
-const (
-	ContextKeyMetrics = "context-key-metrics"
+type (
+	metricsContextKey struct{}
+)
+
+var (
+	metricsCtxKey = metricsContextKey{}
 )
 
 type (
@@ -79,7 +83,7 @@ func (ti *TelemetryInterceptor) Intercept(
 	} else {
 		metricsScope = ti.metricsClient.Scope(scope).Tagged(metrics.NamespaceUnknownTag())
 	}
-	ctx = context.WithValue(ctx, ContextKeyMetrics, metricsScope)
+	ctx = context.WithValue(ctx, metricsCtxKey, metricsScope)
 	metricsScope.IncCounter(metrics.ServiceRequests)
 	timer := metricsScope.StartTimer(metrics.ServiceLatency)
 	defer timer.Stop()
@@ -135,4 +139,16 @@ func (ti *TelemetryInterceptor) handleError(
 		ti.metricsClient.IncCounter(scope, metrics.ServiceFailures)
 		ti.logger.Error("uncategorized error", tag.Error(err))
 	}
+}
+
+func MetricsScope(
+	ctx context.Context,
+	logger log.Logger,
+) metrics.Scope {
+	scope, ok := ctx.Value(metricsCtxKey).(metrics.Scope)
+	if !ok {
+		logger.Error("unable to get metrics scope")
+		return metrics.NoopScope(metrics.Frontend)
+	}
+	return scope
 }
