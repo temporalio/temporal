@@ -1063,7 +1063,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
-		PageSize:      0,
+		PageSize:      1,
 		NextPageToken: []byte{},
 		ShardID:       convert.Int32Ptr(shardID),
 	}
@@ -1080,7 +1080,17 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
-	history, token, err := wh.getHistory(namespaceID, we, firstEventID, nextEventID, 0, []byte{}, nil, branchToken)
+	history, token, err := wh.getHistory(
+		metrics.NoopScope(metrics.Frontend),
+		namespaceID,
+		we,
+		firstEventID,
+		nextEventID,
+		1,
+		[]byte{},
+		nil,
+		branchToken,
+	)
 	s.NoError(err)
 	s.NotNil(history)
 	s.Equal([]byte{}, token)
