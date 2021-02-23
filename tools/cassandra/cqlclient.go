@@ -145,12 +145,13 @@ func newCQLClient(cfg *CQLClientConfig) (*cqlClient, error) {
 
 func (cfg *CQLClientConfig) toCassandraConfig() *config.Cassandra {
 	cassandraConfig := config.Cassandra{
-		Hosts:    cfg.Hosts,
-		Port:     cfg.Port,
-		User:     cfg.User,
-		Password: cfg.Password,
-		Keyspace: cfg.Keyspace,
-		TLS:      cfg.TLS,
+		Hosts:      cfg.Hosts,
+		Port:       cfg.Port,
+		User:       cfg.User,
+		Password:   cfg.Password,
+		Keyspace:   cfg.Keyspace,
+		TLS:        cfg.TLS,
+		Datacenter: cfg.Datacenter,
 	}
 
 	return &cassandraConfig
