@@ -39,7 +39,7 @@ const (
 )
 
 var (
-	NamespaceRateLimitServerBusy = serviceerror.NewResourceExhausted("namespace rate limit exceeded")
+	ErrNamespaceRateLimitServerBusy = serviceerror.NewResourceExhausted("namespace rate limit exceeded")
 )
 
 type (
@@ -66,21 +66,21 @@ func NewNamespaceRateLimitInterceptor(
 	}
 }
 
-func (i *NamespaceRateLimitInterceptor) Intercept(
+func (ni *NamespaceRateLimitInterceptor) Intercept(
 	ctx context.Context,
 	req interface{},
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 	_, methodName := splitMethodName(info.FullMethod)
-	token, ok := i.tokens[methodName]
+	token, ok := ni.tokens[methodName]
 	if !ok {
 		token = NamespaceRateLimitDefaultToken
 	}
 
 	namespace := GetNamespace(req)
-	if !i.rateLimiter.AllowN(namespace, time.Now().UTC(), token) {
-		return nil, NamespaceRateLimitServerBusy
+	if !ni.rateLimiter.AllowN(namespace, time.Now().UTC(), token) {
+		return nil, ErrNamespaceRateLimitServerBusy
 	}
 	return handler(ctx, req)
 }
