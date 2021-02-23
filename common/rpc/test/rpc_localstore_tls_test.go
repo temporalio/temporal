@@ -34,6 +34,7 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -522,6 +523,36 @@ func (s *localStoreRPCSuite) TestDynamicRootCAOverrideFrontend() {
 
 func (s *localStoreRPCSuite) TestDynamicRootCAOverrideInternode() {
 	s.testDynamicRootCA("localhost", true)
+}
+
+func (s *localStoreRPCSuite) TestCertExpiration() {
+	sixHours := time.Hour * 6
+	s.testCertExpiration(s.insecureRPCFactory, sixHours, 0)
+	s.testCertExpiration(s.internodeMutualTLSRPCFactory, sixHours, 0)
+	s.testCertExpiration(s.internodeServerTLSRPCFactory, sixHours, 0)
+	s.testCertExpiration(s.internodeAltMutualTLSRPCFactory, sixHours, 0)
+	s.testCertExpiration(s.frontendMutualTLSRPCFactory, sixHours, 0)
+	s.testCertExpiration(s.frontendServerTLSRPCFactory, sixHours, 0)
+	s.testCertExpiration(s.frontendSystemWorkerMutualTLSRPCFactory, sixHours, 0)
+
+	twoDays := time.Hour * 48
+	s.testCertExpiration(s.insecureRPCFactory, twoDays, 0)
+	s.testCertExpiration(s.internodeMutualTLSRPCFactory, twoDays, 5)
+	s.testCertExpiration(s.internodeServerTLSRPCFactory, twoDays, 5)
+	s.testCertExpiration(s.internodeAltMutualTLSRPCFactory, twoDays, 5)
+	s.testCertExpiration(s.frontendMutualTLSRPCFactory, twoDays, 4)
+	s.testCertExpiration(s.frontendServerTLSRPCFactory, twoDays, 2)
+	s.testCertExpiration(s.frontendSystemWorkerMutualTLSRPCFactory, twoDays, 5)
+}
+
+func (s *localStoreRPCSuite) testCertExpiration(factory *TestFactory, fromNow time.Duration, nExpired int) {
+	provider, ok := factory.GetTLSConfigProvider().(encryption.CertExpirationChecker)
+	s.True(ok)
+	list, errs := provider.Expiring(fromNow)
+	s.NotNil(list)
+	s.NotNil(errs)
+	s.Equal(nExpired, len(list))
+	s.Equal(0, len(errs))
 }
 
 func (s *localStoreRPCSuite) testDynamicRootCA(host string, frontend bool) {
