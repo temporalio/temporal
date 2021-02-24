@@ -4586,14 +4586,14 @@ func (e *mutableStateBuilder) createInternalServerError(
 	actionTag tag.Tag,
 ) error {
 
-	return serviceerror.NewInternal(actionTag.Field().String + " operation failed")
+	return serviceerror.NewInternal(actionTag.Field.String + " operation failed")
 }
 
 func (e *mutableStateBuilder) createCallerError(
 	actionTag tag.Tag,
 ) error {
 
-	return serviceerror.NewInvalidArgument(fmt.Sprintf(mutableStateInvalidHistoryActionMsgTemplate, actionTag.Field().String))
+	return serviceerror.NewInvalidArgument(fmt.Sprintf(mutableStateInvalidHistoryActionMsgTemplate, actionTag.Field.String))
 }
 
 func (_ *mutableStateBuilder) unixNanoToTime(
