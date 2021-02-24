@@ -208,7 +208,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvali
 
 func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnNamespaceCache() {
 	ctx := context.Background()
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return("", fmt.Errorf("test")).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return("", fmt.Errorf("test"))
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace: s.namespace,

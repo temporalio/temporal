@@ -83,11 +83,11 @@ func (s *clientSuite) TestUpload() {
 
 	storageWrapper, _ := connector.NewClientWithParams(mockStorageClient)
 
-	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient).Times(1)
-	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.history").Return(mockObjectHandler).Times(1)
-	mockObjectHandler.EXPECT().NewWriter(ctx).Return(mockWriter).Times(1)
-	mockWriter.EXPECT().Write(gomock.Any()).Return(2, nil).Times(1)
-	mockWriter.EXPECT().Close().Return(nil).Times(1)
+	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient)
+	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.history").Return(mockObjectHandler)
+	mockObjectHandler.EXPECT().NewWriter(ctx).Return(mockWriter)
+	mockWriter.EXPECT().Write(gomock.Any()).Return(2, nil)
+	mockWriter.EXPECT().Close().Return(nil)
 
 	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	err = storageWrapper.Upload(ctx, URI, "myfile.history", []byte("{}"))
@@ -104,11 +104,11 @@ func (s *clientSuite) TestUploadWriterCloseError() {
 
 	storageWrapper, _ := connector.NewClientWithParams(mockStorageClient)
 
-	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient).Times(1)
-	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.history").Return(mockObjectHandler).Times(1)
-	mockObjectHandler.EXPECT().NewWriter(ctx).Return(mockWriter).Times(1)
-	mockWriter.EXPECT().Write(gomock.Any()).Return(2, nil).Times(1)
-	mockWriter.EXPECT().Close().Return(errors.New("Not Found")).Times(1)
+	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient)
+	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.history").Return(mockObjectHandler)
+	mockObjectHandler.EXPECT().NewWriter(ctx).Return(mockWriter)
+	mockWriter.EXPECT().Write(gomock.Any()).Return(2, nil)
+	mockWriter.EXPECT().Close().Return(errors.New("Not Found"))
 
 	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	err = storageWrapper.Upload(ctx, URI, "myfile.history", []byte("{}"))
@@ -210,11 +210,11 @@ func (s *clientSuite) TestGet() {
 
 	storageWrapper, _ := connector.NewClientWithParams(mockStorageClient)
 
-	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient).Times(1)
-	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.history").Return(mockObjectHandler).Times(1)
-	mockObjectHandler.EXPECT().NewReader(ctx).Return(mockReader, nil).Times(1)
-	mockReader.EXPECT().Read(gomock.Any()).Return(2, io.EOF).Times(1)
-	mockReader.EXPECT().Close().Return(nil).Times(1)
+	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient)
+	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.history").Return(mockObjectHandler)
+	mockObjectHandler.EXPECT().NewReader(ctx).Return(mockReader, nil)
+	mockReader.EXPECT().Read(gomock.Any()).Return(2, io.EOF)
+	mockReader.EXPECT().Close().Return(nil)
 
 	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	_, err = storageWrapper.Get(ctx, URI, "myfile.history")
@@ -239,8 +239,8 @@ func (s *clientSuite) TestQuery() {
 	attr := new(storage.ObjectAttrs)
 	attr.Name = "fileName_01"
 
-	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient).Times(1)
-	mockBucketHandleClient.EXPECT().Objects(ctx, gomock.Any()).Return(mockObjectIterator).Times(1)
+	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient)
+	mockBucketHandleClient.EXPECT().Objects(ctx, gomock.Any()).Return(mockObjectIterator)
 	mockIterator := 0
 	mockObjectIterator.EXPECT().Next().DoAndReturn(func() (*storage.ObjectAttrs, error) {
 		mockIterator++
@@ -271,8 +271,8 @@ func (s *clientSuite) TestQueryWithFilter() {
 	attrInvalid := new(storage.ObjectAttrs)
 	attrInvalid.Name = "closeTimeout_2020-02-27T09:42:28Z_12851121011173788097_4418294404690464321_15619178330501475177.visibility"
 
-	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient).Times(1)
-	mockBucketHandleClient.EXPECT().Objects(ctx, gomock.Any()).Return(mockObjectIterator).Times(1)
+	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient)
+	mockBucketHandleClient.EXPECT().Objects(ctx, gomock.Any()).Return(mockObjectIterator)
 	mockIterator := 0
 	mockObjectIterator.EXPECT().Next().DoAndReturn(func() (*storage.ObjectAttrs, error) {
 		mockIterator++

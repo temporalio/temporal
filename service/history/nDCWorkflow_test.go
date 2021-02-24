@@ -282,7 +282,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 		ScheduleID: 5678,
 		StartedID:  9012,
 	}
-	s.mockMutableState.EXPECT().GetInFlightWorkflowTask().Return(inFlightWorkflowTask, true).Times(1)
+	s.mockMutableState.EXPECT().GetInFlightWorkflowTask().Return(inFlightWorkflowTask, true)
 	s.mockMutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		inFlightWorkflowTask.ScheduleID,
 		inFlightWorkflowTask.StartedID,
@@ -293,20 +293,20 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 		"",
 		"",
 		int64(0),
-	).Return(&historypb.HistoryEvent{}, nil).Times(1)
-	s.mockMutableState.EXPECT().FlushBufferedEvents().Return(nil).Times(1)
+	).Return(&historypb.HistoryEvent{}, nil)
+	s.mockMutableState.EXPECT().FlushBufferedEvents().Return(nil)
 
 	s.mockMutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
 		lastEventID+1, workflowTerminationReason, gomock.Any(), workflowTerminationIdentity,
-	).Return(&historypb.HistoryEvent{}, nil).Times(1)
+	).Return(&historypb.HistoryEvent{}, nil)
 
 	// if workflow is in zombie or finished state, keep as is
-	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).Times(1)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	policy, err := nDCWorkflow.suppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(transactionPolicyPassive, policy)
 
-	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).Times(1)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	policy, err = nDCWorkflow.suppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(transactionPolicyActive, policy)
@@ -367,12 +367,12 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Zombiefy() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	// if workflow is in zombie or finished state, keep as is
-	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).Times(1)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	policy, err := nDCWorkflow.suppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(transactionPolicyPassive, policy)
 
-	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).Times(1)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	policy, err = nDCWorkflow.suppressBy(incomingNDCWorkflow)
 	s.NoError(err)
 	s.Equal(transactionPolicyPassive, policy)

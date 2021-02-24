@@ -91,7 +91,7 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask() {
 		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest) {
 			request = arg1
 		},
-	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil).Times(1)
+	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
 
 	taskInfo := randomTaskInfo()
 	task := newInternalTask(taskInfo, nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
@@ -118,7 +118,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 		func(arg0 context.Context, arg1 *matchingservice.AddActivityTaskRequest) {
 			request = arg1
 		},
-	).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(1)
+	).Return(&matchingservice.AddActivityTaskResponse{}, nil)
 
 	taskInfo := randomTaskInfo()
 	task := newInternalTask(taskInfo, nil, enumsspb.TASK_SOURCE_HISTORY, "", false)
@@ -169,7 +169,7 @@ func (t *ForwarderTestSuite) TestForwardQueryTask() {
 		func(arg0 context.Context, arg1 *matchingservice.QueryWorkflowRequest) {
 			request = arg1
 		},
-	).Return(resp, nil).Times(1)
+	).Return(resp, nil)
 
 	gotResp, err := t.fwdr.ForwardQueryTask(context.Background(), task)
 	t.NoError(err)
@@ -217,7 +217,7 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest) {
 			request = arg1
 		},
-	).Return(resp, nil).Times(1)
+	).Return(resp, nil)
 
 	task, err := t.fwdr.ForwardPoll(ctx)
 	t.NoError(err)
@@ -245,7 +245,7 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 		func(arg0 context.Context, arg1 *matchingservice.PollActivityTaskQueueRequest) {
 			request = arg1
 		},
-	).Return(resp, nil).Times(1)
+	).Return(resp, nil)
 
 	task, err := t.fwdr.ForwardPoll(ctx)
 	t.NoError(err)
