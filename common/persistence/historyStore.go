@@ -239,7 +239,7 @@ func (m *historyV2ManagerImpl) ReadHistoryBranchByBatch(
 
 	resp := &ReadHistoryBranchByBatchResponse{}
 	var err error
-	_, resp.History, resp.NextPageToken, resp.Size, resp.LastFirstEventID, resp.LastEventID, err = m.readHistoryBranch(true, request)
+	_, resp.History, resp.NextPageToken, resp.Size, resp.LastFirstEventID, err = m.readHistoryBranch(true, request)
 	return resp, err
 }
 
@@ -251,7 +251,7 @@ func (m *historyV2ManagerImpl) ReadHistoryBranch(
 
 	resp := &ReadHistoryBranchResponse{}
 	var err error
-	resp.HistoryEvents, _, resp.NextPageToken, resp.Size, resp.LastFirstEventID, _, err = m.readHistoryBranch(false, request)
+	resp.HistoryEvents, _, resp.NextPageToken, resp.Size, resp.LastFirstEventID, err = m.readHistoryBranch(false, request)
 	return resp, err
 }
 
@@ -403,11 +403,11 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 func (m *historyV2ManagerImpl) readHistoryBranch(
 	byBatch bool,
 	request *ReadHistoryBranchRequest,
-) ([]*historypb.HistoryEvent, []*historypb.History, []byte, int, int64, int64, error) {
+) ([]*historypb.HistoryEvent, []*historypb.History, []byte, int, int64, error) {
 
 	dataBlobs, token, dataSize, logger, err := m.readRawHistoryBranch(request)
 	if err != nil {
-		return nil, nil, nil, 0, 0, 0, err
+		return nil, nil, nil, 0, 0, err
 	}
 	defaultLastEventID := request.MinEventID - 1
 
@@ -418,12 +418,11 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 	for _, batch := range dataBlobs {
 		events, err := m.historySerializer.DeserializeEvents(batch)
 		if err != nil {
-			return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, token.LastEventID, err
+			return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, err
 		}
 		if len(events) == 0 {
 			logger.Error("Empty events in a batch")
-			return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, token.LastEventID,
-				serviceerror.NewDataLoss(fmt.Sprintf("corrupted history event batch, empty events"))
+			return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, serviceerror.NewDataLoss(fmt.Sprintf("corrupted history event batch, empty events"))
 		}
 
 		firstEvent := events[0]           // first
@@ -436,8 +435,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 				tag.FirstEventVersion(firstEvent.GetVersion()), tag.WorkflowFirstEventID(firstEvent.GetEventId()),
 				tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
 				tag.Counter(eventCount))
-			return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, token.LastEventID,
-				serviceerror.NewDataLoss("corrupted history event batch, wrong version and IDs")
+			return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, serviceerror.NewDataLoss("corrupted history event batch, wrong version and IDs")
 		}
 
 		if firstEvent.GetVersion() < token.LastEventVersion {
@@ -461,8 +459,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 					tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
 					tag.TokenLastEventVersion(token.LastEventVersion), tag.TokenLastEventID(token.LastEventID),
 					tag.Counter(eventCount))
-				return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, token.LastEventID,
-					serviceerror.NewDataLoss("corrupted history event batch, eventID is not contiguous")
+				return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, serviceerror.NewDataLoss("corrupted history event batch, eventID is not contiguous")
 			}
 		}
 
@@ -478,10 +475,10 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 
 	nextPageToken, err := m.serializeToken(token)
 	if err != nil {
-		return nil, nil, nil, 0, 0, 0, err
+		return nil, nil, nil, 0, 0, err
 	}
 
-	return historyEvents, historyEventBatches, nextPageToken, dataSize, lastFirstEventID, token.LastEventID, nil
+	return historyEvents, historyEventBatches, nextPageToken, dataSize, lastFirstEventID, nil
 }
 
 func (m *historyV2ManagerImpl) deserializeToken(
