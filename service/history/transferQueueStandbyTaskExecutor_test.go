@@ -302,7 +302,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending_
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(1)
+	s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
@@ -465,7 +465,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending_
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockMatchingClient.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, nil).Times(1)
+	s.mockMatchingClient.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
@@ -705,7 +705,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 			WorkflowId: transferTask.GetWorkflowId(),
 			RunId:      transferTask.GetRunId(),
 		},
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil).Times(1)
+	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		transferTask.GetNamespaceId(),
 		transferTask.GetWorkflowId(),
@@ -714,7 +714,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 		s.version,
 		int64(0),
 		int64(0),
-	).Return(nil).Times(1)
+	).Return(nil)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Equal(ErrTaskRetry, err)
 
@@ -860,7 +860,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 			WorkflowId: transferTask.GetWorkflowId(),
 			RunId:      transferTask.GetRunId(),
 		},
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil).Times(1)
+	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		transferTask.GetNamespaceId(),
 		transferTask.GetWorkflowId(),
@@ -869,7 +869,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 		s.version,
 		int64(0),
 		int64(0),
-	).Return(nil).Times(1)
+	).Return(nil)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Equal(ErrTaskRetry, err)
 
@@ -1015,7 +1015,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 			WorkflowId: transferTask.GetWorkflowId(),
 			RunId:      transferTask.GetRunId(),
 		},
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil).Times(1)
+	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		transferTask.GetNamespaceId(),
 		transferTask.GetWorkflowId(),
@@ -1024,7 +1024,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 		s.version,
 		int64(0),
 		int64(0),
-	).Return(nil).Times(1)
+	).Return(nil)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
 	s.Equal(ErrTaskRetry, err)
 

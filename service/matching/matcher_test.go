@@ -400,7 +400,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	var err error
 	var remoteSyncMatch bool
 	var req *matchingservice.AddWorkflowTaskRequest
-	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottle).Times(1)
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottle)
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest) {
 			req = arg1

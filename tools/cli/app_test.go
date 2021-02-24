@@ -564,7 +564,7 @@ func (s *cliAppSuite) TestAdminAddSearchAttribute() {
 			"testKey": enumspb.IndexedValueType(2),
 		},
 	}
-	s.serverAdminClient.EXPECT().AddSearchAttribute(gomock.Any(), request).Times(1)
+	s.serverAdminClient.EXPECT().AddSearchAttribute(gomock.Any(), request)
 
 	err := s.app.Run([]string{"", "--auto_confirm", "--ns", cliTestNamespace, "admin", "cl", "asa", "--search_attr_key", "testKey", "--search_attr_type", "keyword"})
 	s.Nil(err)

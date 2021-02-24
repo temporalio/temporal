@@ -101,10 +101,10 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent() {
 		attr.GetSignalName(),
 		attr.GetInput(),
 		attr.GetIdentity(),
-	).Return(event, nil).Times(1)
+	).Return(event, nil)
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
-	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false).Times(1)
-	msBuilderCurrent.EXPECT().UpdateDuplicatedResource(dedupResource).Times(1)
+	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
+	msBuilderCurrent.EXPECT().UpdateDuplicatedResource(dedupResource)
 	events := []*historypb.HistoryEvent{
 		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
 		event,
@@ -128,7 +128,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 
 	msBuilderCurrent := NewMockmutableState(s.controller)
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
-	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(true).Times(1)
+	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(true)
 	events := []*historypb.HistoryEvent{
 		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
 		event,
@@ -171,12 +171,12 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 		attr1.GetSignalName(),
 		attr1.GetInput(),
 		attr1.GetIdentity(),
-	).Return(event1, nil).Times(1)
+	).Return(event1, nil)
 	dedupResource1 := definition.NewEventReappliedID(runID, event1.GetEventId(), event1.GetVersion())
-	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource1).Return(false).Times(1)
+	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource1).Return(false)
 	dedupResource2 := definition.NewEventReappliedID(runID, event2.GetEventId(), event2.GetVersion())
-	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource2).Return(true).Times(1)
-	msBuilderCurrent.EXPECT().UpdateDuplicatedResource(dedupResource1).Times(1)
+	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource2).Return(true)
+	msBuilderCurrent.EXPECT().UpdateDuplicatedResource(dedupResource1)
 	events := []*historypb.HistoryEvent{
 		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
 		event1,
@@ -211,9 +211,9 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 		attr.GetSignalName(),
 		attr.GetInput(),
 		attr.GetIdentity(),
-	).Return(nil, fmt.Errorf("test")).Times(1)
+	).Return(nil, fmt.Errorf("test"))
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
-	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false).Times(1)
+	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
 	events := []*historypb.HistoryEvent{
 		{EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
 		event,

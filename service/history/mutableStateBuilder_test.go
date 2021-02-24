@@ -701,7 +701,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	s.mockEventsCache.EXPECT().PutEvent(
 		namespaceID, execution.GetWorkflowId(), execution.GetRunId(),
 		workflowStartEvent.GetEventId(), workflowStartEvent,
-	).Times(1)
+	)
 	err := s.msBuilder.ReplicateWorkflowExecutionStartedEvent(
 		"",
 		execution,

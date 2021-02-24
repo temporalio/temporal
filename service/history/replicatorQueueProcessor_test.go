@@ -190,7 +190,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	)
 	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
-	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
+	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace},
@@ -239,7 +239,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 
 	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
-	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
+	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
@@ -298,7 +298,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	activityDetails := payloads.EncodeString("some random activity progress")
 	activityLastFailure := failure.NewServerFailure("some random reason", false)
 	activityLastWorkerIdentity := "some random worker identity"
-	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
+	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistencespb.ActivityInfo{
 		Version:                 activityVersion,
@@ -407,7 +407,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	activityDetails := payloads.EncodeString("some random activity progress")
 	activityLastFailure := failure.NewServerFailure("some random reason", false)
 	activityLastWorkerIdentity := "some random worker identity"
-	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil).Times(1)
+	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistencespb.ActivityInfo{
 		Version:                 activityVersion,

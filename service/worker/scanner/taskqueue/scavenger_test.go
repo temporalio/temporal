@@ -212,9 +212,9 @@ func (s *ScavengerTestSuite) setupTaskMgrMocks() {
 }
 
 func (s *ScavengerTestSuite) setupTaskMgrMocksWithErrors() {
-	s.taskMgr.EXPECT().ListTaskQueue(gomock.Any()).Return(nil, errTest).Times(1)
-	s.taskMgr.EXPECT().GetTasks(gomock.Any()).Return(nil, errTest).Times(1)
-	s.taskMgr.EXPECT().CompleteTasksLessThan(gomock.Any()).Return(0, errTest).Times(1)
-	s.taskMgr.EXPECT().DeleteTaskQueue(gomock.Any()).Return(errTest).Times(1)
+	s.taskMgr.EXPECT().ListTaskQueue(gomock.Any()).Return(nil, errTest)
+	s.taskMgr.EXPECT().GetTasks(gomock.Any()).Return(nil, errTest)
+	s.taskMgr.EXPECT().CompleteTasksLessThan(gomock.Any()).Return(0, errTest)
+	s.taskMgr.EXPECT().DeleteTaskQueue(gomock.Any()).Return(errTest)
 	s.setupTaskMgrMocks()
 }

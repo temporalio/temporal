@@ -167,7 +167,7 @@ func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus_Success() {
 		SourceCluster: cluster.TestAlternativeClusterName,
 		ShardId:       0,
 		StatusTime:    now,
-	}).Return(nil).Times(1)
+	}).Return(nil)
 
 	err := s.replicationTaskProcessor.handleSyncShardStatus(&replicationspb.SyncShardStatus{
 		StatusTime: now,
@@ -192,7 +192,7 @@ func (s *replicationTaskProcessorSuite) TestHandleReplicationTask_SyncActivity()
 		},
 	}
 
-	s.mockReplicationTaskExecutor.EXPECT().execute(task, false).Return(0, nil).Times(1)
+	s.mockReplicationTaskExecutor.EXPECT().execute(task, false).Return(0, nil)
 	err := s.replicationTaskProcessor.handleReplicationTask(task)
 	s.NoError(err)
 }
@@ -229,7 +229,7 @@ func (s *replicationTaskProcessorSuite) TestHandleReplicationTask_History() {
 		},
 	}
 
-	s.mockReplicationTaskExecutor.EXPECT().execute(task, false).Return(0, nil).Times(1)
+	s.mockReplicationTaskExecutor.EXPECT().execute(task, false).Return(0, nil)
 	err = s.replicationTaskProcessor.handleReplicationTask(task)
 	s.NoError(err)
 }
@@ -355,7 +355,7 @@ func (s *replicationTaskProcessorSuite) TestConvertTaskToDLQTask_History() {
 
 func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Noop() {
 	ackedTaskID := int64(12345)
-	s.mockResource.ShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil).Times(1)
+	s.mockResource.ShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
 	err := s.mockShard.UpdateClusterReplicationLevel(cluster.TestAlternativeClusterName, ackedTaskID)
 	s.NoError(err)
 
@@ -366,14 +366,14 @@ func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Noop() {
 
 func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
 	ackedTaskID := int64(12345)
-	s.mockResource.ShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil).Times(1)
+	s.mockResource.ShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
 	err := s.mockShard.UpdateClusterReplicationLevel(cluster.TestAlternativeClusterName, ackedTaskID)
 	s.NoError(err)
 
 	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID - 1
 	s.mockExecutionManager.EXPECT().RangeCompleteReplicationTask(&persistence.RangeCompleteReplicationTaskRequest{
 		InclusiveEndTaskID: ackedTaskID,
-	}).Return(nil).Times(1)
+	}).Return(nil)
 	err = s.replicationTaskProcessor.cleanupReplicationTasks()
 	s.NoError(err)
 }

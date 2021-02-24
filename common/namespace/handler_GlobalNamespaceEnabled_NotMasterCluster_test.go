@@ -696,7 +696,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 		s.Equal(isGlobalNamespace, isGlobalNamespace)
 	}
 
-	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil).Times(1)
+	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil)
 
 	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,
