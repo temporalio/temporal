@@ -35,90 +35,85 @@ import (
 
 // Tag is the interface for logging system
 type Tag struct {
-	// keep this field private
-	field zap.Field
+	// keep this Field private
+	Field zap.Field
 }
 
-// Field returns a zap field
-func (t *Tag) Field() zap.Field {
-	return t.field
-}
-
-func newBinaryTag(key string, value []byte) Tag {
+func NewBinaryTag(key string, value []byte) Tag {
 	return Tag{
-		field: zap.Binary(key, value),
+		Field: zap.Binary(key, value),
 	}
 }
 
-func newStringTag(key string, value string) Tag {
+func NewStringTag(key string, value string) Tag {
 	return Tag{
-		field: zap.String(key, value),
+		Field: zap.String(key, value),
 	}
 }
 
-func newInt64(key string, value int64) Tag {
+func NewInt64(key string, value int64) Tag {
 	return Tag{
-		field: zap.Int64(key, value),
+		Field: zap.Int64(key, value),
 	}
 }
 
-func newInt(key string, value int) Tag {
+func NewInt(key string, value int) Tag {
 	return Tag{
-		field: zap.Int(key, value),
+		Field: zap.Int(key, value),
 	}
 }
 
-func newInt32(key string, value int32) Tag {
+func NewInt32(key string, value int32) Tag {
 	return Tag{
-		field: zap.Int32(key, value),
+		Field: zap.Int32(key, value),
 	}
 }
 
-func newBoolTag(key string, value bool) Tag {
+func NewBoolTag(key string, value bool) Tag {
 	return Tag{
-		field: zap.Bool(key, value),
+		Field: zap.Bool(key, value),
 	}
 }
 
-func newErrorTag(key string, value error) Tag {
+func NewErrorTag(key string, value error) Tag {
 	//NOTE zap already chosen "error" as key
 	return Tag{
-		field: zap.Error(value),
+		Field: zap.Error(value),
 	}
 }
 
-func newDurationTag(key string, value time.Duration) Tag {
+func NewDurationTag(key string, value time.Duration) Tag {
 	return Tag{
-		field: zap.Duration(key, value),
+		Field: zap.Duration(key, value),
 	}
 }
 
-func newDurationPtrTag(key string, value *time.Duration) Tag {
+func NewDurationPtrTag(key string, value *time.Duration) Tag {
 	return Tag{
-		field: zap.Duration(key, timestamp.DurationValue(value)),
+		Field: zap.Duration(key, timestamp.DurationValue(value)),
 	}
 }
 
-func newTimeTag(key string, value time.Time) Tag {
+func NewTimeTag(key string, value time.Time) Tag {
 	return Tag{
-		field: zap.Time(key, value),
+		Field: zap.Time(key, value),
 	}
 }
 
-func newTimePtrTag(key string, value *time.Time) Tag {
+func NewTimePtrTag(key string, value *time.Time) Tag {
 	return Tag{
-		field: zap.Time(key, timestamp.TimeValue(value)),
+		Field: zap.Time(key, timestamp.TimeValue(value)),
 	}
 }
 
-func newObjectTag(key string, value interface{}) Tag {
+func NewObjectTag(key string, value interface{}) Tag {
 	return Tag{
-		field: zap.String(key, fmt.Sprintf("%v", value)),
+		Field: zap.String(key, fmt.Sprintf("%v", value)),
 	}
 }
 
-func newPredefinedStringTag(key string, value string) Tag {
+func NewPredefinedStringTag(key string, value string) Tag {
 	return Tag{
-		field: zap.String(key, value),
+		Field: zap.String(key, value),
 	}
 }
