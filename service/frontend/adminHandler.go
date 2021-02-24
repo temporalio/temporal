@@ -46,7 +46,6 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -160,9 +159,9 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 
 	searchAttr := request.GetSearchAttribute()
 	currentValidAttr, _ := adh.params.DynamicConfig.GetMapValue(
-		dynamicconfig.ValidSearchAttributes, nil, definition.GetDefaultIndexedKeys())
+		dynamicconfig.ValidSearchAttributes, nil, searchattribute.GetDefaultTypeMap())
 	for k, v := range searchAttr {
-		if definition.IsSystemIndexedKey(k) {
+		if searchattribute.IsSystem(k) {
 			return nil, adh.error(errKeyIsReservedBySystem.MessageArgs(k), scope)
 		}
 		if _, exist := currentValidAttr[k]; exist {
@@ -185,7 +184,7 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 		if len(esType) == 0 {
 			return nil, adh.error(errUnknownValueType.MessageArgs(v), scope)
 		}
-		err := adh.params.ESClient.PutMapping(ctx, index, definition.Attr, k, esType)
+		err := adh.params.ESClient.PutMapping(ctx, index, searchattribute.Attr, k, esType)
 		if err != nil {
 			return nil, adh.error(errFailedToUpdateESMapping.MessageArgs(err), scope)
 		}

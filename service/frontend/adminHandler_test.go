@@ -34,6 +34,7 @@ import (
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/searchattribute"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -47,7 +48,6 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -441,7 +441,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	mockValidAttr := map[string]interface{}{
 		"testkey": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
-	dynamicConfig.EXPECT().GetMapValue(dynamicconfig.ValidSearchAttributes, nil, definition.GetDefaultIndexedKeys()).
+	dynamicConfig.EXPECT().GetMapValue(dynamicconfig.ValidSearchAttributes, nil, searchattribute.GetDefaultTypeMap()).
 		Return(mockValidAttr, nil).AnyTimes()
 
 	testCases2 := []test{

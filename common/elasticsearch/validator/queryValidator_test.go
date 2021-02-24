@@ -30,7 +30,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
 
-	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -44,7 +44,7 @@ func TestQueryValidatorSuite(t *testing.T) {
 }
 
 func (s *queryValidatorSuite) TestValidateListRequestForQuery() {
-	validSearchAttr := dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys())
+	validSearchAttr := dynamicconfig.GetMapPropertyFn(searchattribute.GetDefaultTypeMap())
 	qv := NewQueryValidator(validSearchAttr)
 
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{}

@@ -1992,7 +1992,7 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 	if exeInfo.SearchAttributes == nil {
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
-	exeInfo.SearchAttributes[definition.BinaryChecksums] = checksumPayload
+	exeInfo.SearchAttributes[searchattribute.BinaryChecksums] = checksumPayload
 	if e.shard.GetConfig().AdvancedVisibilityWritingMode() != common.AdvancedVisibilityWritingModeOff {
 		return e.taskGenerator.generateWorkflowSearchAttrTasks(timestamp.TimeValue(event.GetEventTime()))
 	}
