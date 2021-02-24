@@ -56,7 +56,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/elasticsearch/validator"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -64,6 +63,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
@@ -115,7 +115,7 @@ type (
 		matchingClient            matchingservice.MatchingServiceClient
 		rawMatchingClient         matchingservice.MatchingServiceClient
 		replicationDLQHandler     replicationDLQHandler
-		searchAttributesValidator *validator.SearchAttributesValidator
+		searchAttributesValidator *searchattribute.Validator
 	}
 )
 
@@ -250,7 +250,7 @@ func NewEngineWithShardContext(
 		logger,
 	)
 
-	historyEngImpl.searchAttributesValidator = validator.NewSearchAttributesValidator(
+	historyEngImpl.searchAttributesValidator = searchattribute.NewValidator(
 		logger,
 		config.ValidSearchAttributes,
 		config.SearchAttributesNumberOfKeysLimit,
@@ -2577,7 +2577,7 @@ func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
 	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
 		return err
 	}
-	if err := e.searchAttributesValidator.ValidateSearchAttributes(request.SearchAttributes, namespace); err != nil {
+	if err := e.searchAttributesValidator.ValidateAndLog(request.SearchAttributes, namespace); err != nil {
 		return err
 	}
 
