@@ -1052,8 +1052,6 @@ type (
 		Size int
 		// the first_event_id of last loaded batch
 		LastFirstEventID int64
-		// event id of the last event in the last loaded batch
-		LastEventID int64
 	}
 
 	// ReadRawHistoryBranchResponse is the response to ReadHistoryBranchRequest

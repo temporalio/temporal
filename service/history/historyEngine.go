@@ -2261,6 +2261,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	if baseRunID == "" {
 		baseRunID = currentRunID
 	}
+
 	var currentContext workflowExecutionContext
 	var currentMutableState mutableState
 	var currentReleaseFn releaseWorkflowExecutionFunc
