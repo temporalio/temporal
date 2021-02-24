@@ -45,7 +45,7 @@ const (
 	ratePerShard = 1
 	rateOverall  = 10
 
-	taskStartupDelayRatio              = 2 * time.Second
+	taskStartupDelayRatio              = 100 * time.Millisecond
 	taskStartupDelayRandomizationRatio = 1.0
 )
 
