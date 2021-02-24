@@ -63,8 +63,8 @@ const (
 )
 
 var (
-	// systemAttributes is internal system search attributes.
-	systemAttributes = map[string]enumspb.IndexedValueType{
+	// systemTypeMap is internal system search attributes.
+	systemTypeMap = map[string]enumspb.IndexedValueType{
 		NamespaceID:     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		WorkflowID:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		RunID:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -79,12 +79,12 @@ var (
 		Encoding:        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
-	// defaultAttributes defines all search attributes.
-	defaultAttributes = newDefaultAttributes()
+	// defaultTypeMap defines all search attributes.
+	defaultTypeMap = newDefaultTypeMap()
 )
 
-func newDefaultAttributes() map[string]enumspb.IndexedValueType {
-	result := map[string]enumspb.IndexedValueType{
+func newDefaultTypeMap() map[string]interface{} {
+	result := map[string]interface{}{
 		CustomStringField:     enumspb.INDEXED_VALUE_TYPE_STRING,
 		CustomKeywordField:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		CustomIntField:        enumspb.INDEXED_VALUE_TYPE_INT,
@@ -96,19 +96,19 @@ func newDefaultAttributes() map[string]enumspb.IndexedValueType {
 		CustomNamespace:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		Operator:              enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
-	for k, v := range systemAttributes {
+	for k, v := range systemTypeMap {
 		result[k] = v
 	}
 	return result
 }
 
-// GetDefault return default valid search attributes.
-func GetDefault() map[string]enumspb.IndexedValueType {
-	return defaultAttributes
+// GetDefaultTypeMap return default valid search attributes.
+func GetDefaultTypeMap() map[string]interface{} {
+	return defaultTypeMap
 }
 
 // IsSystem return true if search attribute is system.
 func IsSystem(saName string) bool {
-	_, ok := systemAttributes[saName]
+	_, ok := systemTypeMap[saName]
 	return ok
 }
