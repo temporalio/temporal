@@ -138,19 +138,19 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) TestDeleteWorkflow_NoErr() {
 		VisibilityTime:  timestamp.TimeNowPtrUtc(),
 	}
 
-	s.mockWorkflowExecutionContext.EXPECT().clear().Times(1)
+	s.mockWorkflowExecutionContext.EXPECT().clear()
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testGlobalNamespaceEntry, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockExecutionManager.EXPECT().AddTasks(gomock.Any()).Return(nil).Times(1)
-	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any()).Times(1)
-	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any()).Times(1)
-	s.mockEngine.EXPECT().NotifyNewVisibilityTasks(gomock.Any()).Times(1)
+	s.mockExecutionManager.EXPECT().AddTasks(gomock.Any()).Return(nil)
+	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any())
+	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any())
+	s.mockEngine.EXPECT().NotifyNewVisibilityTasks(gomock.Any())
 
-	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any()).Return(nil).Times(1)
-	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any()).Return(nil).Times(1)
-	s.mockHistoryMgr.EXPECT().DeleteHistoryBranch(gomock.Any()).Return(nil).Times(1)
-	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil).Times(1)
+	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any()).Return(nil)
+	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any()).Return(nil)
+	s.mockHistoryMgr.EXPECT().DeleteHistoryBranch(gomock.Any()).Return(nil)
+	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil)
 
 	err := s.timerQueueTaskExecutorBase.deleteWorkflow(task, s.mockWorkflowExecutionContext, s.mockMutableState)
 	s.NoError(err)
@@ -160,20 +160,20 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) TestArchiveHistory_NoErr_InlineArchi
 	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistencespb.ExecutionStats{
 		HistorySize: 1024,
 	}, nil).Times(1)
-	s.mockWorkflowExecutionContext.EXPECT().clear().Times(1)
-	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil).Times(1)
-	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1234), nil).Times(1)
-	s.mockMutableState.EXPECT().GetNextEventID().Return(int64(101)).Times(1)
+	s.mockWorkflowExecutionContext.EXPECT().clear()
+	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil)
+	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1234), nil)
+	s.mockMutableState.EXPECT().GetNextEventID().Return(int64(101))
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testGlobalNamespaceEntry, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockExecutionManager.EXPECT().AddTasks(gomock.Any()).Return(nil).Times(1)
-	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any()).Times(1)
-	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any()).Times(1)
-	s.mockEngine.EXPECT().NotifyNewVisibilityTasks(gomock.Any()).Times(1)
+	s.mockExecutionManager.EXPECT().AddTasks(gomock.Any()).Return(nil)
+	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any())
+	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any())
+	s.mockEngine.EXPECT().NotifyNewVisibilityTasks(gomock.Any())
 
-	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any()).Return(nil).Times(1)
-	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any()).Return(nil).Times(1)
+	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any()).Return(nil)
+	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any()).Return(nil)
 
 	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), archiverClientRequestMatcher{inline: true}).
 		Return(&archiver.ClientResponse{
@@ -191,9 +191,9 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) TestArchiveHistory_SendSignalErr() {
 		HistorySize: 1024 * 1024 * 1024,
 	}, nil).Times(1)
 
-	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil).Times(1)
-	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1234), nil).Times(1)
-	s.mockMutableState.EXPECT().GetNextEventID().Return(int64(101)).Times(1)
+	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil)
+	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1234), nil)
+	s.mockMutableState.EXPECT().GetNextEventID().Return(int64(101))
 
 	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), archiverClientRequestMatcher{inline: false}).
 		Return(nil, errors.New("failed to send signal"))

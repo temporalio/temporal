@@ -243,7 +243,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutions() {
 	_, err := s.visibilityStore.ListOpenWorkflowExecutions(testRequest)
 	s.NoError(err)
 
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch).Times(1)
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ListOpenWorkflowExecutions(testRequest)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
@@ -260,7 +260,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutions() {
 	_, err := s.visibilityStore.ListClosedWorkflowExecutions(testRequest)
 	s.NoError(err)
 
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch).Times(1)
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ListClosedWorkflowExecutions(testRequest)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
@@ -283,7 +283,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByType() {
 	_, err := s.visibilityStore.ListOpenWorkflowExecutionsByType(request)
 	s.NoError(err)
 
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch).Times(1)
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ListOpenWorkflowExecutionsByType(request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
@@ -306,7 +306,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByType() {
 	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByType(request)
 	s.NoError(err)
 
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch).Times(1)
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByType(request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
@@ -329,7 +329,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 	_, err := s.visibilityStore.ListOpenWorkflowExecutionsByWorkflowID(request)
 	s.NoError(err)
 
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch).Times(1)
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ListOpenWorkflowExecutionsByWorkflowID(request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
@@ -352,7 +352,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByWorkflowID() {
 	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByWorkflowID(request)
 	s.NoError(err)
 
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch).Times(1)
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByWorkflowID(request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
@@ -374,7 +374,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
 	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByStatus(request)
 	s.NoError(err)
 
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch).Times(1)
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByStatus(request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
@@ -400,7 +400,7 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution() {
 	_, err := s.visibilityStore.GetClosedWorkflowExecution(request)
 	s.NoError(err)
 
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch).Times(1)
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.GetClosedWorkflowExecution(request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
@@ -466,7 +466,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 		PageSize: testPageSize,
 		Sorter:   []elastic.Sorter{elastic.NewFieldSort(es.StartTime).Desc(), tieBreakerSorter},
 	}
-	s.mockESClient.EXPECT().Search(gomock.Any(), params).Return(nil, nil).Times(1)
+	s.mockESClient.EXPECT().Search(gomock.Any(), params).Return(nil, nil)
 	_, err := s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
 	s.NoError(err)
 
@@ -481,7 +481,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 		PageSize: testPageSize,
 		Sorter:   []elastic.Sorter{elastic.NewFieldSort(es.StartTime).Desc(), tieBreakerSorter},
 	}
-	s.mockESClient.EXPECT().Search(gomock.Any(), param1).Return(nil, nil).Times(1)
+	s.mockESClient.EXPECT().Search(gomock.Any(), param1).Return(nil, nil)
 	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
 	s.NoError(err)
 	request.LatestStartTime = testLatestTime // revert
@@ -491,7 +491,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	boolQuery = elastic.NewBoolQuery().MustNot(runningQuery).Must(matchNamespaceQuery).Filter(rangeQuery)
 	params.Query = boolQuery
 	params.Sorter = []elastic.Sorter{elastic.NewFieldSort(es.CloseTime).Desc(), tieBreakerSorter}
-	s.mockESClient.EXPECT().Search(gomock.Any(), params).Return(nil, nil).Times(1)
+	s.mockESClient.EXPECT().Search(gomock.Any(), params).Return(nil, nil)
 	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), false)
 	s.NoError(err)
 
@@ -499,7 +499,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	matchQuery := elastic.NewMatchQuery(es.ExecutionStatus, int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 	boolQuery = elastic.NewBoolQuery().Must(matchQuery).Must(matchNamespaceQuery).Filter(rangeQuery)
 	params.Query = boolQuery
-	s.mockESClient.EXPECT().Search(gomock.Any(), params).Return(nil, nil).Times(1)
+	s.mockESClient.EXPECT().Search(gomock.Any(), params).Return(nil, nil)
 	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Must(matchQuery), false)
 	s.NoError(err)
 
@@ -511,7 +511,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	}
 	params.From = 0
 	params.SearchAfter = []interface{}{token.SortValue, token.TieBreaker}
-	s.mockESClient.EXPECT().Search(gomock.Any(), params).Return(nil, nil).Times(1)
+	s.mockESClient.EXPECT().Search(gomock.Any(), params).Return(nil, nil)
 	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Must(matchQuery), false)
 	s.NoError(err)
 }
@@ -875,7 +875,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 	_, err := s.visibilityStore.ListWorkflowExecutions(request)
 	s.NoError(err)
 
-	s.mockESClient.EXPECT().SearchWithDSL(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errTestESSearch).Times(1)
+	s.mockESClient.EXPECT().SearchWithDSL(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ListWorkflowExecutions(request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
@@ -916,7 +916,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 
 	// test scroll
 	scrollID := "scrollID-1"
-	s.mockESClient.EXPECT().Scroll(gomock.Any(), scrollID).Return(testSearchResult, nil, nil).Times(1)
+	s.mockESClient.EXPECT().Scroll(gomock.Any(), scrollID).Return(testSearchResult, nil, nil)
 
 	token := &esVisibilityPageToken{ScrollID: scrollID}
 	tokenBytes, err := s.visibilityStore.serializePageToken(token)
@@ -927,13 +927,13 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 
 	// test last page
 	mockScroll := es.NewMockScrollService(s.controller)
-	s.mockESClient.EXPECT().Scroll(gomock.Any(), scrollID).Return(testSearchResult, mockScroll, io.EOF).Times(1)
-	mockScroll.EXPECT().Clear(gomock.Any()).Return(nil).Times(1)
+	s.mockESClient.EXPECT().Scroll(gomock.Any(), scrollID).Return(testSearchResult, mockScroll, io.EOF)
+	mockScroll.EXPECT().Clear(gomock.Any()).Return(nil)
 	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
 	s.NoError(err)
 
 	// test internal error
-	s.mockESClient.EXPECT().Scroll(gomock.Any(), scrollID).Return(nil, nil, errTestESSearch).Times(1)
+	s.mockESClient.EXPECT().Scroll(gomock.Any(), scrollID).Return(nil, nil, errTestESSearch)
 	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
 	s.Error(err)
 	_, ok = err.(*serviceerror.Internal)
@@ -957,7 +957,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 	s.Equal(int64(1), resp.Count)
 
 	// test internal error
-	s.mockESClient.EXPECT().Count(gomock.Any(), testIndex, gomock.Any()).Return(int64(0), errTestESSearch).Times(1)
+	s.mockESClient.EXPECT().Count(gomock.Any(), testIndex, gomock.Any()).Return(int64(0), errTestESSearch)
 
 	_, err = s.visibilityStore.CountWorkflowExecutions(request)
 	s.Error(err)

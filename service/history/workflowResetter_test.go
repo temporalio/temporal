@@ -193,7 +193,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		gomock.Any(),
 		transactionPolicyActive,
 	).Return(resetSnapshot, resetEventsSeq, nil).Times(1)
-	resetContext.EXPECT().persistNonFirstWorkflowEvents(resetEventsSeq[0]).Return(resetEventsSize, nil).Times(1)
+	resetContext.EXPECT().persistNonFirstWorkflowEvents(resetEventsSeq[0]).Return(resetEventsSize, nil)
 	resetContext.EXPECT().createWorkflowExecution(
 		resetSnapshot,
 		resetEventsSize,
@@ -333,7 +333,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 	mutableState := NewMockmutableState(s.controller)
 
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
-	mutableState.EXPECT().GetInFlightWorkflowTask().Return(workflowTask, true).Times(1)
+	mutableState.EXPECT().GetInFlightWorkflowTask().Return(workflowTask, true)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		workflowTask.ScheduleID,
 		workflowTask.StartedID,
@@ -345,7 +345,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		"",
 		int64(0),
 	).Return(&historypb.HistoryEvent{}, nil).Times(1)
-	mutableState.EXPECT().FlushBufferedEvents().Return(nil).Times(1)
+	mutableState.EXPECT().FlushBufferedEvents().Return(nil)
 	mutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
 		nextEventID,
 		terminateReason,
@@ -445,10 +445,10 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 	}, nil).Times(1)
 
 	resetContext := NewMockworkflowExecutionContext(s.controller)
-	resetContext.EXPECT().lock(gomock.Any()).Return(nil).Times(1)
-	resetContext.EXPECT().unlock().Times(1)
+	resetContext.EXPECT().lock(gomock.Any()).Return(nil)
+	resetContext.EXPECT().unlock()
 	resetMutableState := NewMockmutableState(s.controller)
-	resetContext.EXPECT().loadWorkflowExecution().Return(resetMutableState, nil).Times(1)
+	resetContext.EXPECT().loadWorkflowExecution().Return(resetMutableState, nil)
 	resetMutableState.EXPECT().GetNextEventID().Return(newNextEventID).AnyTimes()
 	resetMutableState.EXPECT().GetCurrentBranchToken().Return(newBranchToken, nil).AnyTimes()
 	resetContextCacheKey := definition.NewWorkflowIdentifier(s.namespaceID, s.workflowID, newRunID)

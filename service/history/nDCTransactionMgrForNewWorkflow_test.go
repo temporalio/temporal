@@ -89,7 +89,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Dup() 
 		RunId: runID,
 	}).AnyTimes()
 
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(runID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(runID, nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, now, workflow)
 	s.NoError(err)
@@ -254,8 +254,8 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	).Times(1)
 
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(true, nil)
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
@@ -331,8 +331,8 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	).Times(1)
 
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(true, nil)
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
@@ -410,11 +410,11 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	).Times(1)
 
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
-	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
+	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil)
 
 	targetContext.EXPECT().persistFirstWorkflowEvents(
 		targetWorkflowEventsSeq[0],
@@ -427,7 +427,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		"",
 		int64(0),
 	).Return(nil).Times(1)
-	targetContext.EXPECT().reapplyEvents(targetWorkflowEventsSeq).Return(nil).Times(1)
+	targetContext.EXPECT().reapplyEvents(targetWorkflowEventsSeq).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, now, targetWorkflow)
 	s.NoError(err)
@@ -482,11 +482,11 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	).Times(1)
 
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
-	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
+	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil)
 
 	targetContext.EXPECT().persistNonFirstWorkflowEvents(
 		targetWorkflowEventsSeq[0],
@@ -499,7 +499,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		"",
 		int64(0),
 	).Return(nil).Times(1)
-	targetContext.EXPECT().reapplyEvents(targetWorkflowEventsSeq).Return(nil).Times(1)
+	targetContext.EXPECT().reapplyEvents(targetWorkflowEventsSeq).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, now, targetWorkflow)
 	s.NoError(err)
@@ -554,11 +554,11 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	).Times(1)
 
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
-	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
+	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil)
 
 	targetContext.EXPECT().persistFirstWorkflowEvents(
 		targetWorkflowEventsSeq[0],
@@ -571,7 +571,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		"",
 		int64(0),
 	).Return(&persistence.WorkflowExecutionAlreadyStartedError{}).Times(1)
-	targetContext.EXPECT().reapplyEvents(targetWorkflowEventsSeq).Return(nil).Times(1)
+	targetContext.EXPECT().reapplyEvents(targetWorkflowEventsSeq).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, now, targetWorkflow)
 	s.NoError(err)
@@ -626,11 +626,11 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		targetWorkflowSnapshot, targetWorkflowEventsSeq, nil,
 	).Times(1)
 
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
-	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
+	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil)
 
 	targetContext.EXPECT().persistNonFirstWorkflowEvents(
 		targetWorkflowEventsSeq[0],
@@ -643,7 +643,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		"",
 		int64(0),
 	).Return(&persistence.WorkflowExecutionAlreadyStartedError{}).Times(1)
-	targetContext.EXPECT().reapplyEvents(targetWorkflowEventsSeq).Return(nil).Times(1)
+	targetContext.EXPECT().reapplyEvents(targetWorkflowEventsSeq).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, now, targetWorkflow)
 	s.NoError(err)
@@ -687,14 +687,14 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Suppre
 		RunId: targetRunID,
 	}).AnyTimes()
 
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(true, nil)
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	currentWorkflowPolicy := transactionPolicyActive
-	currentWorkflow.EXPECT().suppressBy(targetWorkflow).Return(currentWorkflowPolicy, nil).Times(1)
-	targetWorkflow.EXPECT().revive().Return(nil).Times(1)
+	currentWorkflow.EXPECT().suppressBy(targetWorkflow).Return(currentWorkflowPolicy, nil)
+	targetWorkflow.EXPECT().revive().Return(nil)
 
 	currentContext.EXPECT().updateWorkflowExecutionWithNew(
 		now,

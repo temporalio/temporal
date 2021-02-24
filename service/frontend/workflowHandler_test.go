@@ -924,7 +924,7 @@ func (s *workflowHandlerSuite) TestHistoryArchived() {
 	}
 	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-namespace"))
 
-	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, nil).Times(1)
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, nil)
 	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: testWorkflowID,
@@ -933,7 +933,7 @@ func (s *workflowHandlerSuite) TestHistoryArchived() {
 	}
 	s.False(wh.historyArchived(context.Background(), getHistoryRequest, "test-namespace"))
 
-	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("got archival indication error")).Times(1)
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("got archival indication error"))
 	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: testWorkflowID,
@@ -942,7 +942,7 @@ func (s *workflowHandlerSuite) TestHistoryArchived() {
 	}
 	s.True(wh.historyArchived(context.Background(), getHistoryRequest, "test-namespace"))
 
-	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, errors.New("got non-archival indication error")).Times(1)
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(nil, errors.New("got non-archival indication error"))
 	getHistoryRequest = &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: testWorkflowID,
@@ -953,7 +953,7 @@ func (s *workflowHandlerSuite) TestHistoryArchived() {
 }
 
 func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_NamespaceCacheEntryError() {
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(nil, errors.New("error getting namespace")).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(nil, errors.New("error getting namespace"))
 
 	wh := s.getWorkflowHandler(s.newConfig())
 

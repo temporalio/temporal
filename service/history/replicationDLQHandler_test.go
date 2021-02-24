@@ -201,7 +201,7 @@ func (s *replicationDLQHandlerSuite) TestPurgeMessages() {
 			InclusiveEndTaskID:   lastMessageID,
 		}).Return(nil).Times(1)
 
-	s.shardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil).Times(1)
+	s.shardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil)
 	err := s.replicationMessageHandler.purgeMessages(s.sourceCluster, lastMessageID)
 	s.NoError(err)
 }
@@ -268,14 +268,14 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 		Return(&adminservice.GetDLQReplicationMessagesResponse{
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
 		}, nil)
-	s.taskExecutor.EXPECT().execute(remoteTask, true).Return(0, nil).Times(1)
+	s.taskExecutor.EXPECT().execute(remoteTask, true).Return(0, nil)
 	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(&persistence.RangeDeleteReplicationTaskFromDLQRequest{
 		SourceClusterName:    s.sourceCluster,
 		ExclusiveBeginTaskID: persistence.EmptyQueueMessageID,
 		InclusiveEndTaskID:   lastMessageID,
 	}).Return(nil).Times(1)
 
-	s.shardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil).Times(1)
+	s.shardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil)
 
 	token, err := s.replicationMessageHandler.mergeMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)

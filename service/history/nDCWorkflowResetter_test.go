@@ -157,7 +157,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	}
 	mockBaseWorkflow := NewMocknDCWorkflow(s.controller)
 	mockBaseWorkflow.EXPECT().getMutableState().Return(s.mockBaseMutableState).AnyTimes()
-	mockBaseWorkflow.EXPECT().getReleaseFn().Return(mockBaseWorkflowReleaseFn).Times(1)
+	mockBaseWorkflow.EXPECT().getReleaseFn().Return(mockBaseWorkflowReleaseFn)
 
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(
 		ctx,
@@ -231,7 +231,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 	}
 	mockBaseWorkflow := NewMocknDCWorkflow(s.controller)
 	mockBaseWorkflow.EXPECT().getMutableState().Return(s.mockBaseMutableState).AnyTimes()
-	mockBaseWorkflow.EXPECT().getReleaseFn().Return(mockBaseWorkflowReleaseFn).Times(1)
+	mockBaseWorkflow.EXPECT().getReleaseFn().Return(mockBaseWorkflowReleaseFn)
 
 	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(
 		ctx,

@@ -141,8 +141,8 @@ func (s *taskPriorityAssignerSuite) TestGetNamespaceInfo_Fail_UnknownError() {
 
 func (s *taskPriorityAssignerSuite) TestAssign_ReplicationTask() {
 	mockTask := NewMockqueueTask(s.controller)
-	mockTask.EXPECT().GetQueueType().Return(replicationQueueType).Times(1)
-	mockTask.EXPECT().SetPriority(configs.GetTaskPriority(configs.TaskLowPriorityClass, configs.TaskDefaultPrioritySubclass)).Times(1)
+	mockTask.EXPECT().GetQueueType().Return(replicationQueueType)
+	mockTask.EXPECT().SetPriority(configs.GetTaskPriority(configs.TaskLowPriorityClass, configs.TaskDefaultPrioritySubclass))
 
 	err := s.priorityAssigner.Assign(mockTask)
 	s.NoError(err)
@@ -156,9 +156,9 @@ func (s *taskPriorityAssignerSuite) TestAssign_StandbyTask() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testGlobalNamespaceEntry, nil)
 
 	mockTask := NewMockqueueTask(s.controller)
-	mockTask.EXPECT().GetQueueType().Return(transferQueueType).Times(1)
-	mockTask.EXPECT().GetNamespaceID().Return(testNamespaceID).Times(1)
-	mockTask.EXPECT().SetPriority(configs.GetTaskPriority(configs.TaskLowPriorityClass, configs.TaskDefaultPrioritySubclass)).Times(1)
+	mockTask.EXPECT().GetQueueType().Return(transferQueueType)
+	mockTask.EXPECT().GetNamespaceID().Return(testNamespaceID)
+	mockTask.EXPECT().SetPriority(configs.GetTaskPriority(configs.TaskLowPriorityClass, configs.TaskDefaultPrioritySubclass))
 
 	err := s.priorityAssigner.Assign(mockTask)
 	s.NoError(err)
@@ -169,8 +169,8 @@ func (s *taskPriorityAssignerSuite) TestAssign_TransferTask() {
 
 	mockTask := NewMockqueueTask(s.controller)
 	mockTask.EXPECT().GetQueueType().Return(transferQueueType).AnyTimes()
-	mockTask.EXPECT().GetNamespaceID().Return(testNamespaceID).Times(1)
-	mockTask.EXPECT().SetPriority(configs.GetTaskPriority(configs.TaskHighPriorityClass, configs.TaskDefaultPrioritySubclass)).Times(1)
+	mockTask.EXPECT().GetNamespaceID().Return(testNamespaceID)
+	mockTask.EXPECT().SetPriority(configs.GetTaskPriority(configs.TaskHighPriorityClass, configs.TaskDefaultPrioritySubclass))
 
 	err := s.priorityAssigner.Assign(mockTask)
 	s.NoError(err)
@@ -181,8 +181,8 @@ func (s *taskPriorityAssignerSuite) TestAssign_TimerTask() {
 
 	mockTask := NewMockqueueTask(s.controller)
 	mockTask.EXPECT().GetQueueType().Return(timerQueueType).AnyTimes()
-	mockTask.EXPECT().GetNamespaceID().Return(testNamespaceID).Times(1)
-	mockTask.EXPECT().SetPriority(configs.GetTaskPriority(configs.TaskHighPriorityClass, configs.TaskDefaultPrioritySubclass)).Times(1)
+	mockTask.EXPECT().GetNamespaceID().Return(testNamespaceID)
+	mockTask.EXPECT().SetPriority(configs.GetTaskPriority(configs.TaskHighPriorityClass, configs.TaskDefaultPrioritySubclass))
 
 	err := s.priorityAssigner.Assign(mockTask)
 	s.NoError(err)
@@ -194,11 +194,11 @@ func (s *taskPriorityAssignerSuite) TestAssign_ThrottledTask() {
 	for i := 0; i != s.testTaskProcessRPS*2; i++ {
 		mockTask := NewMockqueueTask(s.controller)
 		mockTask.EXPECT().GetQueueType().Return(timerQueueType).AnyTimes()
-		mockTask.EXPECT().GetNamespaceID().Return(testNamespaceID).Times(1)
+		mockTask.EXPECT().GetNamespaceID().Return(testNamespaceID)
 		if i < s.testTaskProcessRPS {
-			mockTask.EXPECT().SetPriority(configs.GetTaskPriority(configs.TaskHighPriorityClass, configs.TaskDefaultPrioritySubclass)).Times(1)
+			mockTask.EXPECT().SetPriority(configs.GetTaskPriority(configs.TaskHighPriorityClass, configs.TaskDefaultPrioritySubclass))
 		} else {
-			mockTask.EXPECT().SetPriority(configs.GetTaskPriority(configs.TaskDefaultPriorityClass, configs.TaskDefaultPrioritySubclass)).Times(1)
+			mockTask.EXPECT().SetPriority(configs.GetTaskPriority(configs.TaskDefaultPriorityClass, configs.TaskDefaultPrioritySubclass))
 		}
 
 		err := s.priorityAssigner.Assign(mockTask)

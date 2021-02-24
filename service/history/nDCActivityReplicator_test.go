@@ -162,7 +162,7 @@ func (s *activityReplicatorSuite) TestRefreshTask_DiffCluster() {
 		Attempt: attempt,
 	}
 
-	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, localActivityInfo.Version).Return(false).Times(1)
+	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, localActivityInfo.Version).Return(false)
 
 	apply := s.nDCActivityReplicator.testRefreshActivityTimerTaskMask(
 		version,
@@ -180,7 +180,7 @@ func (s *activityReplicatorSuite) TestRefreshTask_SameCluster_DiffAttempt() {
 		Attempt: attempt + 1,
 	}
 
-	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true).Times(1)
+	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
 	apply := s.nDCActivityReplicator.testRefreshActivityTimerTaskMask(
 		version,
@@ -198,7 +198,7 @@ func (s *activityReplicatorSuite) TestRefreshTask_SameCluster_SameAttempt() {
 		Attempt: attempt,
 	}
 
-	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true).Times(1)
+	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
 	apply := s.nDCActivityReplicator.testRefreshActivityTimerTaskMask(
 		version,
@@ -664,9 +664,9 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 
 	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
-	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
+	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
-	weContext.EXPECT().unlock().Times(1)
+	weContext.EXPECT().unlock()
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 
@@ -739,9 +739,9 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityNotFound() {
 
 	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
-	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
+	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
-	weContext.EXPECT().unlock().Times(1)
+	weContext.EXPECT().unlock()
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 
@@ -760,7 +760,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityNotFound() {
 	s.mockMutableState.EXPECT().GetWorkflowStateStatus().Return(
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	).AnyTimes()
-	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).Times(1)
+	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
@@ -815,9 +815,9 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 
 	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
-	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
+	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
-	weContext.EXPECT().unlock().Times(1)
+	weContext.EXPECT().unlock()
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 
@@ -839,10 +839,10 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistencespb.ActivityInfo{
 		Version: version,
 	}, true).Times(1)
-	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, false).Return(nil).Times(1)
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{}).Times(1)
+	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, false).Return(nil)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
 
-	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true).Times(1)
+	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		gomock.Any(),
@@ -906,9 +906,9 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 
 	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
 	weContext := NewMockworkflowExecutionContext(s.controller)
-	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil).Times(1)
+	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil)
 	weContext.EXPECT().lock(gomock.Any()).Return(nil)
-	weContext.EXPECT().unlock().Times(1)
+	weContext.EXPECT().unlock()
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 
@@ -930,10 +930,10 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistencespb.ActivityInfo{
 		Version: version,
 	}, true).Times(1)
-	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, false).Return(nil).Times(1)
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{}).Times(1)
+	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, false).Return(nil)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
 
-	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true).Times(1)
+	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		gomock.Any(),

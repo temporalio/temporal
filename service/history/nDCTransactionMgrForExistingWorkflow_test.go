@@ -130,7 +130,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(targetRunID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(targetRunID, nil)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
 	s.Error(err)
@@ -166,7 +166,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	newWorkflow.EXPECT().getContext().Return(newContext).AnyTimes()
 	newWorkflow.EXPECT().getMutableState().Return(newMutableState).AnyTimes()
 	newWorkflow.EXPECT().getReleaseFn().Return(newReleaseFn).AnyTimes()
-	newWorkflow.EXPECT().revive().Return(nil).Times(1)
+	newWorkflow.EXPECT().revive().Return(nil)
 
 	currentWorkflow := NewMocknDCWorkflow(s.controller)
 	currentContext := NewMockworkflowExecutionContext(s.controller)
@@ -184,14 +184,14 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(true, nil)
 	currentWorkflowPolicy := transactionPolicyPassive
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	currentWorkflow.EXPECT().suppressBy(targetWorkflow).Return(currentWorkflowPolicy, nil).Times(1)
-	targetWorkflow.EXPECT().revive().Return(nil).Times(1)
+	currentWorkflow.EXPECT().suppressBy(targetWorkflow).Return(currentWorkflowPolicy, nil)
+	targetWorkflow.EXPECT().revive().Return(nil)
 
 	targetContext.EXPECT().conflictResolveWorkflowExecution(
 		now,
@@ -241,7 +241,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	newWorkflow.EXPECT().getContext().Return(newContext).AnyTimes()
 	newWorkflow.EXPECT().getMutableState().Return(newMutableState).AnyTimes()
 	newWorkflow.EXPECT().getReleaseFn().Return(newReleaseFn).AnyTimes()
-	newWorkflow.EXPECT().revive().Return(nil).Times(1)
+	newWorkflow.EXPECT().revive().Return(nil)
 
 	currentWorkflow := NewMocknDCWorkflow(s.controller)
 	currentContext := NewMockworkflowExecutionContext(s.controller)
@@ -259,14 +259,14 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(true, nil)
 	currentWorkflowPolicy := transactionPolicyPassive
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	currentWorkflow.EXPECT().suppressBy(targetWorkflow).Return(currentWorkflowPolicy, nil).Times(0)
-	targetWorkflow.EXPECT().revive().Return(nil).Times(1)
+	targetWorkflow.EXPECT().revive().Return(nil)
 
 	targetContext.EXPECT().conflictResolveWorkflowExecution(
 		now,
@@ -337,13 +337,13 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	newMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: newRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, namespaceID, workflowID, newRunID).Return(false, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil)
+	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, namespaceID, workflowID, newRunID).Return(false, nil)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
-	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
-	newWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
+	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil)
+	newWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil)
 
 	targetContext.EXPECT().updateWorkflowExecutionWithNew(
 		now,
@@ -412,13 +412,13 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	newMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: newRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, namespaceID, workflowID, newRunID).Return(true, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil)
+	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, namespaceID, workflowID, newRunID).Return(true, nil)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
-	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
-	newWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
+	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil)
+	newWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil)
 
 	targetContext.EXPECT().updateWorkflowExecutionWithNew(
 		now,
@@ -472,7 +472,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(targetRunID, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(targetRunID, nil)
 
 	targetContext.EXPECT().conflictResolveWorkflowExecution(
 		now,
@@ -521,7 +521,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	newWorkflow.EXPECT().getContext().Return(newContext).AnyTimes()
 	newWorkflow.EXPECT().getMutableState().Return(newMutableState).AnyTimes()
 	newWorkflow.EXPECT().getReleaseFn().Return(newReleaseFn).AnyTimes()
-	newWorkflow.EXPECT().revive().Return(nil).Times(1)
+	newWorkflow.EXPECT().revive().Return(nil)
 
 	currentWorkflow := NewMocknDCWorkflow(s.controller)
 	currentContext := NewMockworkflowExecutionContext(s.controller)
@@ -538,14 +538,14 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(true, nil)
 	currentWorkflowPolicy := transactionPolicyActive
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
-	currentWorkflow.EXPECT().suppressBy(targetWorkflow).Return(currentWorkflowPolicy, nil).Times(1)
-	targetWorkflow.EXPECT().revive().Return(nil).Times(1)
+	currentWorkflow.EXPECT().suppressBy(targetWorkflow).Return(currentWorkflowPolicy, nil)
+	targetWorkflow.EXPECT().revive().Return(nil)
 
 	targetContext.EXPECT().conflictResolveWorkflowExecution(
 		now,
@@ -615,13 +615,13 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	newMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: newRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, namespaceID, workflowID, newRunID).Return(false, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil)
+	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, namespaceID, workflowID, newRunID).Return(false, nil)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
-	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
-	newWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
+	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil)
+	newWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil)
 
 	targetContext.EXPECT().conflictResolveWorkflowExecution(
 		now,
@@ -691,13 +691,13 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	newMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: newRunID,
 	}).AnyTimes()
-	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil).Times(1)
-	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, namespaceID, workflowID, newRunID).Return(true, nil).Times(1)
+	s.mockTransactionMgr.EXPECT().getCurrentWorkflowRunID(ctx, namespaceID, workflowID).Return(currentRunID, nil)
+	s.mockTransactionMgr.EXPECT().loadNDCWorkflow(ctx, namespaceID, workflowID, currentRunID).Return(currentWorkflow, nil)
+	s.mockTransactionMgr.EXPECT().checkWorkflowExists(ctx, namespaceID, workflowID, newRunID).Return(true, nil)
 
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
-	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
-	newWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil).Times(1)
+	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil)
+	newWorkflow.EXPECT().suppressBy(currentWorkflow).Return(transactionPolicyPassive, nil)
 
 	targetContext.EXPECT().conflictResolveWorkflowExecution(
 		now,

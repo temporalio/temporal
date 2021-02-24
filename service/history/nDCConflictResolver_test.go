@@ -155,7 +155,7 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 			),
 		},
 	).Times(2)
-	mockRebuildMutableState.EXPECT().SetUpdateCondition(updateCondition).Times(1)
+	mockRebuildMutableState.EXPECT().SetUpdateCondition(updateCondition)
 
 	s.mockStateBuilder.EXPECT().rebuild(
 		ctx,
@@ -169,8 +169,8 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 		requestID,
 	).Return(mockRebuildMutableState, historySize, nil).Times(1)
 
-	s.mockContext.EXPECT().clear().Times(1)
-	s.mockContext.EXPECT().setHistorySize(historySize).Times(1)
+	s.mockContext.EXPECT().clear()
+	s.mockContext.EXPECT().setHistorySize(historySize)
 	rebuiltMutableState, err := s.nDCConflictResolver.rebuild(ctx, 1, requestID)
 	s.NoError(err)
 	s.NotNil(rebuiltMutableState)
@@ -251,7 +251,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 			),
 		},
 	).Times(2)
-	mockRebuildMutableState.EXPECT().SetUpdateCondition(updateCondition).Times(1)
+	mockRebuildMutableState.EXPECT().SetUpdateCondition(updateCondition)
 
 	s.mockStateBuilder.EXPECT().rebuild(
 		ctx,
@@ -265,8 +265,8 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 		gomock.Any(),
 	).Return(mockRebuildMutableState, historySize, nil).Times(1)
 
-	s.mockContext.EXPECT().clear().Times(1)
-	s.mockContext.EXPECT().setHistorySize(int64(historySize)).Times(1)
+	s.mockContext.EXPECT().clear()
+	s.mockContext.EXPECT().setHistorySize(int64(historySize))
 	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.prepareMutableState(ctx, 1, incomingVersion)
 	s.NoError(err)
 	s.NotNil(rebuiltMutableState)

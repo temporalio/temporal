@@ -451,7 +451,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterG
 		})
 	}
 
-	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil).Times(1)
+	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil)
 
 	retention := 1 * time.Hour * 24
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
@@ -513,7 +513,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterG
 	data := map[string]string{"some random key": "some random value"}
 	isGlobalNamespace := true
 
-	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil).Times(1)
+	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil)
 
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,

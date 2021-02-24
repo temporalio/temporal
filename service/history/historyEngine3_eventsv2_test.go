@@ -183,8 +183,8 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil).Times(1)
-	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Times(1)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
+	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(&p.UpdateWorkflowExecutionResponse{
 		MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{},
 	}, nil).Times(1)
@@ -243,8 +243,8 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 
-	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Times(1)
-	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any()).Return(&p.CreateWorkflowExecutionResponse{}, nil).Times(1)
+	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil)
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any()).Return(&p.CreateWorkflowExecutionResponse{}, nil)
 
 	requestID := uuid.New()
 	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
@@ -299,9 +299,9 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &p.GetCurrentExecutionResponse{RunID: runID}
 
-	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any()).Return(gceResponse, nil).Times(1)
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil).Times(1)
-	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Times(1)
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any()).Return(gceResponse, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
+	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(&p.UpdateWorkflowExecutionResponse{
 		MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{},
 	}, nil).Times(1)
@@ -348,9 +348,9 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 
 	notExistErr := serviceerror.NewNotFound("Workflow not exist")
 
-	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any()).Return(nil, notExistErr).Times(1)
-	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil).Times(1)
-	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any()).Return(&p.CreateWorkflowExecutionResponse{}, nil).Times(1)
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any()).Return(nil, notExistErr)
+	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil)
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any()).Return(&p.CreateWorkflowExecutionResponse{}, nil)
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
 	s.Nil(err)
