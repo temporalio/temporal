@@ -95,21 +95,21 @@ GOCOVERPKG_ARG := -coverpkg="$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/..
 ##### Tools #####
 update-checkers:
 	@printf $(COLOR) "Install/update check tools..."
-	cd && GO111MODULE=on go get golang.org/x/tools/cmd/goimports
-	cd && GO111MODULE=on go get golang.org/x/lint/golint
-	cd && GO111MODULE=on go get honnef.co/go/tools/cmd/staticcheck@v0.1.0
-	cd && GO111MODULE=on go get github.com/kisielk/errcheck@v1.4.0
-	cd && GO111MODULE=on go get github.com/googleapis/api-linter/cmd/api-linter@v1.10.0
-	cd && GO111MODULE=on go get github.com/bufbuild/buf/cmd/buf@v0.33.0
+	@go install golang.org/x/tools/cmd/goimports
+	@go install golang.org/x/lint/golint
+	@go install honnef.co/go/tools/cmd/staticcheck@v0.1.0
+	@go install github.com/kisielk/errcheck@v1.4.0
+	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.10.0
+	@go install github.com/bufbuild/buf/cmd/buf@v0.33.0
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
-	cd && GO111MODULE=on go get github.com/golang/mock/mockgen@1fe605df5e5f07f453dc4f594cc3510c914dbdee
+	@go install github.com/golang/mock/mockgen@1fe605df5e5f07f453dc4f594cc3510c914dbdee
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
 	GO111MODULE=off go get github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
-	cd && GO111MODULE=on go get google.golang.org/grpc@v1.34.0
+	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.1.0
 
 update-tools: update-checkers update-mockgen update-proto-plugins
 
@@ -130,7 +130,7 @@ install-proto-submodule:
 
 protoc: $(PROTO_OUT)
 	@printf $(COLOR) "Build proto files..."
-# Run protoc separately for each directory because of different package names.
+	# Run protoc separately for each directory because of different package names.
 	$(foreach PROTO_DIR,$(PROTO_DIRS),\
 		protoc $(PROTO_IMPORTS) \
 		 	--gogoslick_out=Mgoogle/protobuf/descriptor.proto=github.com/golang/protobuf/protoc-gen-go/descriptor,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/wrappers.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/timestamp.proto=github.com/gogo/protobuf/types,plugins=grpc,paths=source_relative:$(PROTO_OUT) \
@@ -306,7 +306,7 @@ coverage-report: $(SUMMARY_COVER_PROFILE)
 
 ci-coverage-report: $(SUMMARY_COVER_PROFILE) coverage-report
 	@printf $(COLOR) "Generate Coveralls report from $(SUMMARY_COVER_PROFILE)..."
-	cd && GO111MODULE=on go get github.com/mattn/goveralls@v0.0.7
+	go install github.com/mattn/goveralls@v0.0.7
 	@goveralls -coverprofile=$(SUMMARY_COVER_PROFILE) -service=buildkite || (printf $(RED) "Generating report for Coveralls (goveralls) failed."; exit 1)
 
 ##### Schema #####
