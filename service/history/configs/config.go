@@ -30,7 +30,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/common/task"
 )
@@ -436,7 +436,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		VisibilityQueue:            dc.GetStringProperty(dynamicconfig.VisibilityQueue, common.VisibilityQueueInternal),
 		VisibilityProcessorEnabled: dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnabled, true),
 
-		ValidSearchAttributes:             dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, definition.GetDefaultIndexedKeys()),
+		ValidSearchAttributes:             dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, searchattribute.GetDefault()),
 		SearchAttributesNumberOfKeysLimit: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
 		SearchAttributesSizeOfValueLimit:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
 		SearchAttributesTotalSizeLimit:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),

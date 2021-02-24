@@ -108,46 +108,6 @@ func (s *adminHandlerSuite) TearDownTest() {
 	s.handler.Stop()
 }
 
-func (s *adminHandlerSuite) Test_ConvertIndexedValueTypeToESDataType() {
-	tests := []struct {
-		input    enumspb.IndexedValueType
-		expected string
-	}{
-		{
-			input:    enumspb.INDEXED_VALUE_TYPE_STRING,
-			expected: "text",
-		},
-		{
-			input:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			expected: "keyword",
-		},
-		{
-			input:    enumspb.INDEXED_VALUE_TYPE_INT,
-			expected: "long",
-		},
-		{
-			input:    enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-			expected: "double",
-		},
-		{
-			input:    enumspb.INDEXED_VALUE_TYPE_BOOL,
-			expected: "boolean",
-		},
-		{
-			input:    enumspb.INDEXED_VALUE_TYPE_DATETIME,
-			expected: "date",
-		},
-		{
-			input:    enumspb.IndexedValueType(-1),
-			expected: "",
-		},
-	}
-
-	for _, test := range tests {
-		s.Equal(test.expected, s.handler.convertIndexedValueTypeToESDataType(test.input))
-	}
-}
-
 func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidWorkflowID() {
 
 	ctx := context.Background()

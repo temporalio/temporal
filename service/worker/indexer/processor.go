@@ -37,12 +37,12 @@ import (
 	indexerspb "go.temporal.io/server/api/indexer/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
-	"go.temporal.io/server/common/definition"
 	es "go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type indexProcessor struct {
@@ -263,7 +263,7 @@ func (p *indexProcessor) dumpFieldsToMap(fields map[string]*indexerspb.Field) ma
 		case enumsspb.FIELD_TYPE_BOOL:
 			doc[k] = v.GetBoolData()
 		case enumsspb.FIELD_TYPE_BINARY:
-			if k == definition.Memo {
+			if k == searchattribute.Memo {
 				doc[k] = v.GetBinaryData()
 			} else { // custom search attributes
 				attr[k] = p.decodeSearchAttrBinary(v.GetBinaryData(), k)
@@ -273,7 +273,7 @@ func (p *indexProcessor) dumpFieldsToMap(fields map[string]*indexerspb.Field) ma
 			p.logger.Fatal("Unknown field type")
 		}
 	}
-	doc[definition.Attr] = attr
+	doc[searchattribute.Attr] = attr
 	return doc
 }
 
@@ -281,15 +281,15 @@ func (p *indexProcessor) isValidFieldToES(field string) bool {
 	if _, ok := p.config.ValidSearchAttributes()[field]; ok {
 		return true
 	}
-	if field == definition.Memo || field == definition.KafkaKey || field == definition.Encoding {
+	if field == searchattribute.Memo || field == searchattribute.KafkaKey || field == searchattribute.Encoding {
 		return true
 	}
 	return false
 }
 
 func fulfillDoc(doc map[string]interface{}, msg *indexerspb.Message, keyToKafkaMsg string) {
-	doc[definition.NamespaceID] = msg.GetNamespaceId()
-	doc[definition.WorkflowID] = msg.GetWorkflowId()
-	doc[definition.RunID] = msg.GetRunId()
-	doc[definition.KafkaKey] = keyToKafkaMsg
+	doc[searchattribute.NamespaceID] = msg.GetNamespaceId()
+	doc[searchattribute.WorkflowID] = msg.GetWorkflowId()
+	doc[searchattribute.RunID] = msg.GetRunId()
+	doc[searchattribute.KafkaKey] = keyToKafkaMsg
 }
