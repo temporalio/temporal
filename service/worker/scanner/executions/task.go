@@ -144,9 +144,11 @@ func (t *task) validate(
 		results = append(results, validationResults...)
 	}
 
-	if validationResults, err := NewHistoryEventIDValidator(t.shardID, t.historyManager).Validate(
-		mutableState,
-	); err != nil {
+	if validationResults, err := NewHistoryEventIDValidator(
+		t.shardID,
+		t.executionManager,
+		t.historyManager,
+	).Validate(mutableState); err != nil {
 		t.logger.Error("unable to validate history event ID being contiguous",
 			tag.ShardID(t.shardID),
 			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
@@ -206,6 +208,7 @@ func printValidationResult(
 			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
 			tag.WorkflowID(mutableState.GetExecutionInfo().GetWorkflowId()),
 			tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
-			tag.Value(result.failureDetails))
+			tag.Value(result.failureDetails),
+		)
 	}
 }

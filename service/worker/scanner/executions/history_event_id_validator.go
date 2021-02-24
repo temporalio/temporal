@@ -25,6 +25,7 @@
 package executions
 
 import (
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
@@ -41,8 +42,9 @@ const (
 type (
 	// historyEventIDValidator is a validator that checks event IDs are contiguous
 	historyEventIDValidator struct {
-		shardID        int32
-		historyManager persistence.HistoryManager
+		shardID          int32
+		executionManager persistence.ExecutionManager
+		historyManager   persistence.HistoryManager
 	}
 )
 
@@ -51,11 +53,13 @@ var _ Validator = (*historyEventIDValidator)(nil)
 // NewEventIDValidator returns new instance.
 func NewHistoryEventIDValidator(
 	shardID int32,
+	executionManager persistence.ExecutionManager,
 	historyManager persistence.HistoryManager,
 ) *historyEventIDValidator {
 	return &historyEventIDValidator{
-		shardID:        shardID,
-		historyManager: historyManager,
+		shardID:          shardID,
+		executionManager: executionManager,
+		historyManager:   historyManager,
 	}
 }
 
@@ -83,11 +87,31 @@ func (v *historyEventIDValidator) Validate(
 	switch err.(type) {
 	case nil:
 		return nil, nil
+
 	case *serviceerror.NotFound, *serviceerror.DataLoss:
-		return []MutableStateValidationResult{{
-			failureType:    historyEventIDFailureType,
-			failureDetails: historyEventIDFailureReason,
-		}}, nil
+		// additionally validate mutable state is still present in DB
+		_, err = v.executionManager.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
+			NamespaceID: mutableState.GetExecutionInfo().NamespaceId,
+			Execution: commonpb.WorkflowExecution{
+				WorkflowId: mutableState.GetExecutionInfo().WorkflowId,
+				RunId:      mutableState.GetExecutionState().RunId,
+			},
+		})
+		switch err.(type) {
+		case nil:
+			return []MutableStateValidationResult{{
+				failureType:    historyEventIDFailureType,
+				failureDetails: historyEventIDFailureReason,
+			}}, nil
+		case *serviceerror.NotFound:
+			// noop, mutable state is gone from DB
+			// this can be the case during DB retention cleanup
+			return nil, nil
+
+		default:
+			return nil, err
+		}
+
 	default:
 		return nil, err
 	}
