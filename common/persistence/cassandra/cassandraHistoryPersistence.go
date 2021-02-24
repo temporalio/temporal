@@ -356,9 +356,9 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 	for _, b := range rsp.Branches {
 		for _, br := range b.Ancestors {
 			// These string casts are safe and optimized away -- https://github.com/golang/go/issues/3512
-			curr, ok := validBRsMaxEndNode[string(br.GetBranchId())]
+			curr, ok := validBRsMaxEndNode[br.GetBranchId()]
 			if !ok || curr < br.GetEndNodeId() {
-				validBRsMaxEndNode[string(br.GetBranchId())] = br.GetEndNodeId()
+				validBRsMaxEndNode[br.GetBranchId()] = br.GetEndNodeId()
 			}
 		}
 	}
@@ -366,7 +366,7 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 	// for each branch range to delete, we iterate from bottom to up, and delete up to the point according to validBRsEndNode
 	for i := len(brsToDelete) - 1; i >= 0; i-- {
 		br := brsToDelete[i]
-		maxReferredEndNodeID, ok := validBRsMaxEndNode[string(br.GetBranchId())]
+		maxReferredEndNodeID, ok := validBRsMaxEndNode[br.GetBranchId()]
 		if ok {
 			// we can only delete from the maxEndNode and stop here
 			h.deleteBranchRangeNodes(batch, treeID, br.GetBranchId(), maxReferredEndNodeID)
@@ -403,7 +403,7 @@ func (h *cassandraHistoryV2Persistence) GetAllHistoryTreeBranches(
 
 	query := h.session.Query(v2templateScanAllTreeBranches)
 
-	iter := query.PageSize(int(request.PageSize)).PageState(request.NextPageToken).Iter()
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
 		return nil, serviceerror.NewInternal("GetAllHistoryTreeBranches operation failed.  Not able to create query iterator.")
 	}
@@ -454,7 +454,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 	query := h.session.Query(v2templateReadAllBranches, treeID)
 
 	pageSize := 100
-	pagingToken := []byte{}
+	var pagingToken []byte
 	branches := make([]*persistencespb.HistoryBranch, 0, pageSize)
 
 	var iter *gocql.Iter
