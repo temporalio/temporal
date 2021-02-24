@@ -167,7 +167,7 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 		workflowIdentifier,
 		branchToken1,
 		requestID,
-	).Return(mockRebuildMutableState, historySize, nil).Times(1)
+	).Return(mockRebuildMutableState, historySize, nil)
 
 	s.mockContext.EXPECT().clear()
 	s.mockContext.EXPECT().setHistorySize(historySize)
@@ -263,7 +263,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 		workflowIdentifier,
 		branchToken1,
 		gomock.Any(),
-	).Return(mockRebuildMutableState, historySize, nil).Times(1)
+	).Return(mockRebuildMutableState, historySize, nil)
 
 	s.mockContext.EXPECT().clear()
 	s.mockContext.EXPECT().setHistorySize(int64(historySize))

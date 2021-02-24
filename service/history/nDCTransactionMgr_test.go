@@ -119,7 +119,7 @@ func (s *nDCTransactionMgrSuite) TestCreateWorkflow() {
 
 	s.mockCreateMgr.EXPECT().dispatchForNewWorkflow(
 		ctx, now, targetWorkflow,
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	err := s.transactionMgr.createWorkflow(ctx, now, targetWorkflow)
 	s.NoError(err)
@@ -134,7 +134,7 @@ func (s *nDCTransactionMgrSuite) TestUpdateWorkflow() {
 
 	s.mockUpdateMgr.EXPECT().dispatchForExistingWorkflow(
 		ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow,
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	err := s.transactionMgr.updateWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
 	s.NoError(err)
@@ -171,7 +171,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil)
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, transactionPolicyActive, (*transactionPolicy)(nil),
-	).Return(nil).Times(1)
+	).Return(nil)
 	err := s.transactionMgr.backfillWorkflow(ctx, now, workflow, workflowEvents)
 	s.NoError(err)
 	s.True(releaseCalled)
@@ -236,17 +236,17 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 		workflow,
 		eventsReapplicationResetWorkflowReason,
 		workflowEvents.Events,
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
-	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).Times(1)
+	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
 
 	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil)
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, transactionPolicyPassive, (*transactionPolicy)(nil),
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	err := s.transactionMgr.backfillWorkflow(ctx, now, workflow, workflowEvents)
 	s.NoError(err)
@@ -281,7 +281,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Op
 	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil)
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, transactionPolicyPassive, (*transactionPolicy)(nil),
-	).Return(nil).Times(1)
+	).Return(nil)
 	err := s.transactionMgr.backfillWorkflow(ctx, now, workflow, workflowEvents)
 	s.NoError(err)
 	s.True(releaseCalled)
@@ -325,12 +325,12 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Cl
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
-	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).Times(1)
+	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
 	weContext.EXPECT().reapplyEvents([]*persistence.WorkflowEvents{workflowEvents})
 	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil)
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, transactionPolicyPassive, (*transactionPolicy)(nil),
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	err := s.transactionMgr.backfillWorkflow(ctx, now, workflow, workflowEvents)
 	s.NoError(err)
@@ -382,12 +382,12 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
-	}).Return(&persistence.GetCurrentExecutionResponse{RunID: currentRunID}, nil).Times(1)
+	}).Return(&persistence.GetCurrentExecutionResponse{RunID: currentRunID}, nil)
 	weContext.EXPECT().reapplyEvents([]*persistence.WorkflowEvents{workflowEvents})
 	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil)
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, transactionPolicyPassive, (*transactionPolicy)(nil),
-	).Return(nil).Times(1)
+	).Return(nil)
 	err := s.transactionMgr.backfillWorkflow(ctx, now, workflow, workflowEvents)
 	s.NoError(err)
 	s.True(releaseCalled)
@@ -438,12 +438,12 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
-	}).Return(&persistence.GetCurrentExecutionResponse{RunID: currentRunID}, nil).Times(1)
+	}).Return(&persistence.GetCurrentExecutionResponse{RunID: currentRunID}, nil)
 	weContext.EXPECT().reapplyEvents([]*persistence.WorkflowEvents{workflowEvents})
 	weContext.EXPECT().persistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil)
 	weContext.EXPECT().updateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, transactionPolicyPassive, (*transactionPolicy)(nil),
-	).Return(nil).Times(1)
+	).Return(nil)
 	err := s.transactionMgr.backfillWorkflow(ctx, now, workflow, workflowEvents)
 	s.NoError(err)
 	s.True(releaseCalled)
@@ -461,7 +461,7 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesNotExists() {
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-	}).Return(nil, serviceerror.NewNotFound("")).Times(1)
+	}).Return(nil, serviceerror.NewNotFound(""))
 
 	exists, err := s.transactionMgr.checkWorkflowExists(ctx, namespaceID, workflowID, runID)
 	s.NoError(err)
@@ -480,7 +480,7 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesExists() {
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-	}).Return(&persistence.GetWorkflowExecutionResponse{}, nil).Times(1)
+	}).Return(&persistence.GetWorkflowExecutionResponse{}, nil)
 
 	exists, err := s.transactionMgr.checkWorkflowExists(ctx, namespaceID, workflowID, runID)
 	s.NoError(err)
@@ -495,7 +495,7 @@ func (s *nDCTransactionMgrSuite) TestGetWorkflowCurrentRunID_Missing() {
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
-	}).Return(nil, serviceerror.NewNotFound("")).Times(1)
+	}).Return(nil, serviceerror.NewNotFound(""))
 
 	currentRunID, err := s.transactionMgr.getCurrentWorkflowRunID(ctx, namespaceID, workflowID)
 	s.NoError(err)
@@ -511,7 +511,7 @@ func (s *nDCTransactionMgrSuite) TestGetWorkflowCurrentRunID_Exists() {
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
-	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).Times(1)
+	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
 
 	currentRunID, err := s.transactionMgr.getCurrentWorkflowRunID(ctx, namespaceID, workflowID)
 	s.NoError(err)

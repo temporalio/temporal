@@ -838,7 +838,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 	).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistencespb.ActivityInfo{
 		Version: version,
-	}, true).Times(1)
+	}, true)
 	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, false).Return(nil)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
 
@@ -851,7 +851,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 		mutableState(nil),
 		transactionPolicyPassive,
 		(*transactionPolicy)(nil),
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(
@@ -929,7 +929,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 	).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(&persistencespb.ActivityInfo{
 		Version: version,
-	}, true).Times(1)
+	}, true)
 	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, false).Return(nil)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
 
@@ -942,7 +942,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 		mutableState(nil),
 		transactionPolicyPassive,
 		(*transactionPolicy)(nil),
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
 		cache.NewGlobalNamespaceCacheEntryForTest(

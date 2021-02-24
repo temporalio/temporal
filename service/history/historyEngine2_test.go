@@ -192,7 +192,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyExpired() {
 	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(&persistence.UpdateWorkflowExecutionResponse{
 		MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{},
-	}, nil).Times(1)
+	}, nil)
 
 	request := historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID,
@@ -262,7 +262,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(&persistence.UpdateWorkflowExecutionResponse{
 		MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{},
-	}, nil).Times(1)
+	}, nil)
 
 	request := historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID,
@@ -464,7 +464,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
 	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(&persistence.UpdateWorkflowExecutionResponse{
 		MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{},
-	}, nil).Times(1)
+	}, nil)
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID,
@@ -634,7 +634,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskSuccess() {
 	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(&persistence.UpdateWorkflowExecutionResponse{
 		MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{},
-	}, nil).Times(1)
+	}, nil)
 
 	// load mutable state such that it already exists in memory when respond workflow task is called
 	// this enables us to set query registry on it
@@ -734,7 +734,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(&persistence.UpdateWorkflowExecutionResponse{
 		MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{},
-	}, nil).Times(1)
+	}, nil)
 
 	s.mockEventsCache.EXPECT().GetEvent(
 		namespaceID, workflowExecution.GetWorkflowId(), workflowExecution.GetRunId(),
@@ -776,7 +776,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_Running() {
 	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(&persistence.UpdateWorkflowExecutionResponse{
 		MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{},
-	}, nil).Times(1)
+	}, nil)
 
 	err := s.historyEngine.RequestCancelWorkflowExecution(context.Background(), &historyservice.RequestCancelWorkflowExecutionRequest{
 		NamespaceId: namespaceID,
@@ -906,7 +906,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(&persistence.UpdateWorkflowExecutionResponse{
 		MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{},
-	}, nil).Times(1)
+	}, nil)
 
 	_, err := s.historyEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId: namespaceID,
@@ -972,7 +972,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastWriteVersion: lastWriteVersion,
-	}).Times(1)
+	})
 
 	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
 		Attempt:     1,
@@ -1009,7 +1009,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		LastWriteVersion: lastWriteVersion,
-	}).Times(1)
+	})
 
 	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
 		Attempt:     1,
@@ -1070,7 +1070,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 						request.PreviousRunID == runID &&
 						request.PreviousLastWriteVersion == lastWriteVersion
 				}),
-			).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Times(1)
+			).Return(&persistence.CreateWorkflowExecutionResponse{}, nil)
 		}
 
 		resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
@@ -1150,7 +1150,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 							request.PreviousRunID == runIDs[i] &&
 							request.PreviousLastWriteVersion == lastWriteVersion
 					}),
-				).Return(&persistence.CreateWorkflowExecutionResponse{}, nil).Times(1)
+				).Return(&persistence.CreateWorkflowExecutionResponse{}, nil)
 			}
 
 			resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
@@ -1215,7 +1215,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(&persistence.UpdateWorkflowExecutionResponse{
 		MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{},
-	}, nil).Times(1)
+	}, nil)
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
 	s.Nil(err)

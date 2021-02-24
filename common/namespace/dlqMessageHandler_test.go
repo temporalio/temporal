@@ -99,7 +99,7 @@ func (s *dlqMessageHandlerSuite) TestReadMessages() {
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel().Return(ackLevel, nil)
 	s.mockReplicationQueue.EXPECT().GetMessagesFromDLQ(ackLevel, lastMessageID, pageSize, pageToken).
-		Return(tasks, nil, nil).Times(1)
+		Return(tasks, nil, nil)
 
 	resp, token, err := s.dlqMessageHandler.Read(lastMessageID, pageSize, pageToken)
 
@@ -138,7 +138,7 @@ func (s *dlqMessageHandlerSuite) TestReadMessages_ThrowErrorOnReadMessages() {
 	testError := fmt.Errorf("test")
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel().Return(ackLevel, nil)
 	s.mockReplicationQueue.EXPECT().GetMessagesFromDLQ(ackLevel, lastMessageID, pageSize, pageToken).
-		Return(nil, nil, testError).Times(1)
+		Return(nil, nil, testError)
 
 	_, _, err := s.dlqMessageHandler.Read(lastMessageID, pageSize, pageToken)
 
@@ -204,7 +204,7 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages() {
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel().Return(ackLevel, nil)
 	s.mockReplicationQueue.EXPECT().GetMessagesFromDLQ(ackLevel, lastMessageID, pageSize, pageToken).
-		Return(tasks, nil, nil).Times(1)
+		Return(tasks, nil, nil)
 	s.mockReplicationTaskExecutor.EXPECT().Execute(namespaceAttribute).Return(nil)
 	s.mockReplicationQueue.EXPECT().UpdateDLQAckLevel(messageID).Return(nil)
 	s.mockReplicationQueue.EXPECT().RangeDeleteMessagesFromDLQ(ackLevel, messageID).Return(nil)
@@ -254,7 +254,7 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnGetDLQMessages() 
 
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel().Return(ackLevel, nil)
 	s.mockReplicationQueue.EXPECT().GetMessagesFromDLQ(ackLevel, lastMessageID, pageSize, pageToken).
-		Return(nil, nil, testError).Times(1)
+		Return(nil, nil, testError)
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any()).Times(0)
 	s.mockReplicationQueue.EXPECT().DeleteMessageFromDLQ(gomock.Any()).Times(0)
 	s.mockReplicationQueue.EXPECT().UpdateDLQAckLevel(gomock.Any()).Times(0)
@@ -296,7 +296,7 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnHandleReceivingTa
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel().Return(ackLevel, nil)
 	s.mockReplicationQueue.EXPECT().GetMessagesFromDLQ(ackLevel, lastMessageID, pageSize, pageToken).
-		Return(tasks, nil, nil).Times(1)
+		Return(tasks, nil, nil)
 	s.mockReplicationTaskExecutor.EXPECT().Execute(namespaceAttribute1).Return(nil)
 	s.mockReplicationTaskExecutor.EXPECT().Execute(namespaceAttribute2).Return(testError)
 	s.mockReplicationQueue.EXPECT().DeleteMessageFromDLQ(messageID1).Return(nil)
@@ -340,7 +340,7 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnDeleteMessages() 
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel().Return(ackLevel, nil)
 	s.mockReplicationQueue.EXPECT().GetMessagesFromDLQ(ackLevel, lastMessageID, pageSize, pageToken).
-		Return(tasks, nil, nil).Times(1)
+		Return(tasks, nil, nil)
 	s.mockReplicationTaskExecutor.EXPECT().Execute(namespaceAttribute1).Return(nil)
 	s.mockReplicationTaskExecutor.EXPECT().Execute(namespaceAttribute2).Return(nil)
 	s.mockReplicationQueue.EXPECT().RangeDeleteMessagesFromDLQ(ackLevel, messageID2).Return(testError)
@@ -373,7 +373,7 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_IgnoreErrorOnUpdateDLQAckLeve
 	}
 	s.mockReplicationQueue.EXPECT().GetDLQAckLevel().Return(ackLevel, nil)
 	s.mockReplicationQueue.EXPECT().GetMessagesFromDLQ(ackLevel, lastMessageID, pageSize, pageToken).
-		Return(tasks, nil, nil).Times(1)
+		Return(tasks, nil, nil)
 	s.mockReplicationTaskExecutor.EXPECT().Execute(namespaceAttribute).Return(nil)
 	s.mockReplicationQueue.EXPECT().RangeDeleteMessagesFromDLQ(ackLevel, messageID).Return(nil)
 	s.mockReplicationQueue.EXPECT().UpdateDLQAckLevel(messageID).Return(testError)

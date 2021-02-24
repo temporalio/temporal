@@ -143,7 +143,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 		gomock.Any(),
 		resetContext,
 		resetMutableState,
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	err := s.workflowResetter.persistToDB(true, currentWorkflow, resetWorkflow)
 	s.NoError(err)
@@ -192,7 +192,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
 		gomock.Any(),
 		transactionPolicyActive,
-	).Return(resetSnapshot, resetEventsSeq, nil).Times(1)
+	).Return(resetSnapshot, resetEventsSeq, nil)
 	resetContext.EXPECT().persistNonFirstWorkflowEvents(resetEventsSeq[0]).Return(resetEventsSize, nil)
 	resetContext.EXPECT().createWorkflowExecution(
 		resetSnapshot,
@@ -201,7 +201,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		persistence.CreateWorkflowModeContinueAsNew,
 		s.currentRunID,
 		currentLastWriteVersion,
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	err := s.workflowResetter.persistToDB(false, currentWorkflow, resetWorkflow)
 	s.NoError(err)
@@ -228,7 +228,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		ForkNodeID:      baseNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID, s.workflowID, s.resetRunID),
 		ShardID:         &shardId,
-	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil).Times(1)
+	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil)
 
 	s.mockStateRebuilder.EXPECT().rebuild(
 		ctx,
@@ -248,7 +248,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		),
 		resetBranchToken,
 		resetRequestID,
-	).Return(resetMutableState, resetHistorySize, nil).Times(1)
+	).Return(resetMutableState, resetHistorySize, nil)
 
 	resetWorkflow, err := s.workflowResetter.replayResetWorkflow(
 		ctx,
@@ -294,7 +294,7 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 		failure.NewResetWorkflowFailure(terminateReason, activity1.LastHeartbeatDetails),
 		enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
 		activity1.StartedIdentity,
-	).Return(&historypb.HistoryEvent{}, nil).Times(1)
+	).Return(&historypb.HistoryEvent{}, nil)
 
 	err := s.workflowResetter.failInflightActivity(mutableState, terminateReason)
 	s.NoError(err)
@@ -312,7 +312,7 @@ func (s *workflowResetterSuite) TestGenerateBranchToken() {
 		ForkNodeID:      baseNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID, s.workflowID, s.resetRunID),
 		ShardID:         &shardId,
-	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil).Times(1)
+	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil)
 
 	newBranchToken, err := s.workflowResetter.forkAndGenerateBranchToken(
 		s.namespaceID, s.workflowID, baseBranchToken, baseNodeID, s.resetRunID,
@@ -344,14 +344,14 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		"",
 		"",
 		int64(0),
-	).Return(&historypb.HistoryEvent{}, nil).Times(1)
+	).Return(&historypb.HistoryEvent{}, nil)
 	mutableState.EXPECT().FlushBufferedEvents().Return(nil)
 	mutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
 		nextEventID,
 		terminateReason,
 		nil,
 		identityHistoryService,
-	).Return(&historypb.HistoryEvent{}, nil).Times(1)
+	).Return(&historypb.HistoryEvent{}, nil)
 
 	err := s.workflowResetter.terminateWorkflow(mutableState, terminateReason)
 	s.NoError(err)
@@ -429,7 +429,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		History:       []*historypb.History{{Events: baseEvents}},
 		NextPageToken: nil,
-	}, nil).Times(1)
+	}, nil)
 
 	newEvents := []*historypb.HistoryEvent{newEvent1, newEvent2, newEvent3, newEvent4, newEvent5}
 	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
@@ -442,7 +442,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		History:       []*historypb.History{{Events: newEvents}},
 		NextPageToken: nil,
-	}, nil).Times(1)
+	}, nil)
 
 	resetContext := NewMockworkflowExecutionContext(s.controller)
 	resetContext.EXPECT().lock(gomock.Any()).Return(nil)
@@ -514,7 +514,7 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		History:       []*historypb.History{{Events: events}},
 		NextPageToken: nil,
-	}, nil).Times(1)
+	}, nil)
 
 	mutableState := NewMockmutableState(s.controller)
 
@@ -564,7 +564,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 				attr.GetSignalName(),
 				attr.GetInput(),
 				attr.GetIdentity(),
-			).Return(&historypb.HistoryEvent{}, nil).Times(1)
+			).Return(&historypb.HistoryEvent{}, nil)
 		}
 	}
 
@@ -619,7 +619,7 @@ func (s *workflowResetterSuite) TestPagination() {
 		History:       history1,
 		NextPageToken: pageToken,
 		Size:          12345,
-	}, nil).Times(1)
+	}, nil)
 	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
@@ -631,7 +631,7 @@ func (s *workflowResetterSuite) TestPagination() {
 		History:       history2,
 		NextPageToken: nil,
 		Size:          67890,
-	}, nil).Times(1)
+	}, nil)
 
 	paginationFn := s.workflowResetter.getPaginationFn(firstEventID, nextEventID, branchToken)
 	iter := collection.NewPagingIterator(paginationFn)

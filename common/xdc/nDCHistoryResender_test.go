@@ -183,7 +183,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		VersionHistory: &historyspb.VersionHistory{
 			Items: versionHistoryItems,
 		},
-	}, nil).Times(1)
+	}, nil)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(
 		gomock.Any(),
@@ -205,7 +205,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		VersionHistory: &historyspb.VersionHistory{
 			Items: versionHistoryItems,
 		},
-	}, nil).Times(1)
+	}, nil)
 
 	s.mockHistoryClient.EXPECT().ReplicateEventsV2(
 		gomock.Any(),
@@ -352,7 +352,7 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 		EndEventVersion:   version,
 		MaximumPageSize:   pageSize,
 		NextPageToken:     nextTokenIn,
-	}).Return(response, nil).Times(1)
+	}).Return(response, nil)
 
 	out, err := s.rereplicator.getHistory(
 		context.Background(),

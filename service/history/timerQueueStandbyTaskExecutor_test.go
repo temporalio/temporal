@@ -265,7 +265,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 			WorkflowId: timerTask.GetWorkflowId(),
 			RunId:      timerTask.GetRunId(),
 		},
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil).Times(1)
+	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(timerTask.GetNamespaceId(), timerTask.GetWorkflowId(), timerTask.GetRunId(), nextEventID, s.version, int64(0), int64(0)).Return(nil)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
 	s.Equal(ErrTaskRetry, err)
@@ -490,7 +490,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 			WorkflowId: timerTask.GetWorkflowId(),
 			RunId:      timerTask.GetRunId(),
 		},
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil).Times(1)
+	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		timerTask.GetNamespaceId(),
 		timerTask.GetWorkflowId(),
@@ -499,7 +499,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 		s.version,
 		int64(0),
 		int64(0),
-	).Return(nil).Times(1)
+	).Return(nil)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
 	s.Equal(ErrTaskRetry, err)
 
@@ -762,7 +762,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 			NewWorkflowSnapshot: nil,
 		}, input)
 		return true
-	})).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil).Times(1)
+	})).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
@@ -830,7 +830,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 			WorkflowId: timerTask.GetWorkflowId(),
 			RunId:      timerTask.GetRunId(),
 		},
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil).Times(1)
+	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		timerTask.GetNamespaceId(),
 		timerTask.GetWorkflowId(),
@@ -839,7 +839,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 		s.version,
 		int64(0),
 		int64(0),
-	).Return(nil).Times(1)
+	).Return(nil)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
 	s.Equal(ErrTaskRetry, err)
 
@@ -987,7 +987,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 			WorkflowId: timerTask.GetWorkflowId(),
 			RunId:      timerTask.GetRunId(),
 		},
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil).Times(1)
+	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		timerTask.GetNamespaceId(),
 		timerTask.GetWorkflowId(),
@@ -996,7 +996,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 		s.version,
 		int64(0),
 		int64(0),
-	).Return(nil).Times(1)
+	).Return(nil)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
 	s.Equal(ErrTaskRetry, err)
 
@@ -1116,7 +1116,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 			WorkflowId: timerTask.GetWorkflowId(),
 			RunId:      timerTask.GetRunId(),
 		},
-	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil).Times(1)
+	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		timerTask.GetNamespaceId(),
 		timerTask.GetWorkflowId(),
@@ -1125,7 +1125,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 		s.version,
 		int64(0),
 		int64(0),
-	).Return(nil).Times(1)
+	).Return(nil)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)
 	s.Equal(ErrTaskRetry, err)
 

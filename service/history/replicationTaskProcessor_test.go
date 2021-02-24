@@ -167,7 +167,7 @@ func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus_Success() {
 		SourceCluster: cluster.TestAlternativeClusterName,
 		ShardId:       0,
 		StatusTime:    now,
-	}).Return(nil).Times(1)
+	}).Return(nil)
 
 	err := s.replicationTaskProcessor.handleSyncShardStatus(&replicationspb.SyncShardStatus{
 		StatusTime: now,
@@ -373,7 +373,7 @@ func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
 	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID - 1
 	s.mockExecutionManager.EXPECT().RangeCompleteReplicationTask(&persistence.RangeCompleteReplicationTaskRequest{
 		InclusiveEndTaskID: ackedTaskID,
-	}).Return(nil).Times(1)
+	}).Return(nil)
 	err = s.replicationTaskProcessor.cleanupReplicationTasks()
 	s.NoError(err)
 }

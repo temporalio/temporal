@@ -168,7 +168,7 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecord1},
 		NextPageToken: pageToken,
-	}, nil).Times(1)
+	}, nil)
 
 	s.metadataMgr.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
 		PageSize:      namespaceCacheRefreshPageSize,
@@ -176,7 +176,7 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecord2, namespaceRecord3},
 		NextPageToken: nil,
-	}, nil).Times(1)
+	}, nil)
 
 	// load namespaces
 	s.namespaceCache.Start()
@@ -261,7 +261,7 @@ func (s *namespaceCacheSuite) TestRegisterCallback_CatchUp() {
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecord1, namespaceRecord2},
 		NextPageToken: nil,
-	}, nil).Times(1)
+	}, nil)
 
 	// load namespaces
 	s.Nil(s.namespaceCache.refreshNamespaces())
@@ -348,7 +348,7 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecord1Old, namespaceRecord2Old},
 		NextPageToken: nil,
-	}, nil).Times(1)
+	}, nil)
 
 	// load namespaces
 	s.Nil(s.namespaceCache.refreshNamespaces())
@@ -420,7 +420,7 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecord1New, namespaceRecord2New},
 		NextPageToken: nil,
-	}, nil).Times(1)
+	}, nil)
 	s.Nil(s.namespaceCache.refreshNamespaces())
 
 	// the order matters here: the record 2 got updated first, thus with a lower notification version
@@ -464,7 +464,7 @@ func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess(
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecordOld},
 		NextPageToken: nil,
-	}, nil).Times(1)
+	}, nil)
 
 	// load namespaces
 	s.namespaceCache.Start()

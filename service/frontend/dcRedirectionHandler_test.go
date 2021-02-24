@@ -125,7 +125,7 @@ func (s *dcRedirectionHandlerSuite) TestDescribeTaskQueue() {
 	apiName := "DescribeTaskQueue"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.DescribeTaskQueueRequest{
 		Namespace: s.namespace,
@@ -148,7 +148,7 @@ func (s *dcRedirectionHandlerSuite) TestDescribeWorkflowExecution() {
 	apiName := "DescribeWorkflowExecution"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.namespace,
@@ -171,7 +171,7 @@ func (s *dcRedirectionHandlerSuite) TestGetWorkflowExecutionHistory() {
 	apiName := "GetWorkflowExecutionHistory"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.namespace,
@@ -194,7 +194,7 @@ func (s *dcRedirectionHandlerSuite) TestListArchivedWorkflowExecutions() {
 	apiName := "ListArchivedWorkflowExecutions"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.ListArchivedWorkflowExecutionsRequest{
 		Namespace: s.namespace,
@@ -217,7 +217,7 @@ func (s *dcRedirectionHandlerSuite) TestListClosedWorkflowExecutions() {
 	apiName := "ListClosedWorkflowExecutions"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.ListClosedWorkflowExecutionsRequest{
 		Namespace: s.namespace,
@@ -240,7 +240,7 @@ func (s *dcRedirectionHandlerSuite) TestListOpenWorkflowExecutions() {
 	apiName := "ListOpenWorkflowExecutions"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.ListOpenWorkflowExecutionsRequest{
 		Namespace: s.namespace,
@@ -263,7 +263,7 @@ func (s *dcRedirectionHandlerSuite) TestListWorkflowExecutions() {
 	apiName := "ListWorkflowExecutions"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
@@ -286,7 +286,7 @@ func (s *dcRedirectionHandlerSuite) TestScanWorkflowExecutions() {
 	apiName := "ScanWorkflowExecutions"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.ScanWorkflowExecutionsRequest{
 		Namespace: s.namespace,
@@ -309,7 +309,7 @@ func (s *dcRedirectionHandlerSuite) TestCountWorkflowExecutions() {
 	apiName := "CountWorkflowExecutions"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.CountWorkflowExecutionsRequest{
 		Namespace: s.namespace,
@@ -332,7 +332,7 @@ func (s *dcRedirectionHandlerSuite) TestPollActivityTaskQueue() {
 	apiName := "PollActivityTaskQueue"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: s.namespace,
@@ -355,7 +355,7 @@ func (s *dcRedirectionHandlerSuite) TestPollWorkflowTaskQueue() {
 	apiName := "PollWorkflowTaskQueue"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: s.namespace,
@@ -378,7 +378,7 @@ func (s *dcRedirectionHandlerSuite) TestQueryWorkflow() {
 	apiName := "QueryWorkflow"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.QueryWorkflowRequest{
 		Namespace: s.namespace,
@@ -401,7 +401,7 @@ func (s *dcRedirectionHandlerSuite) TestRecordActivityTaskHeartbeat() {
 	apiName := "RecordActivityTaskHeartbeat"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceIDRedirect",
-		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespaceID, apiName, mock.Anything).Return(nil)
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
 		ScheduleAttempt: 1,
@@ -429,7 +429,7 @@ func (s *dcRedirectionHandlerSuite) TestRecordActivityTaskHeartbeatById() {
 	apiName := "RecordActivityTaskHeartbeatById"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.RecordActivityTaskHeartbeatByIdRequest{
 		Namespace: s.namespace,
@@ -452,7 +452,7 @@ func (s *dcRedirectionHandlerSuite) TestRequestCancelWorkflowExecution() {
 	apiName := "RequestCancelWorkflowExecution"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.RequestCancelWorkflowExecutionRequest{
 		Namespace: s.namespace,
@@ -475,7 +475,7 @@ func (s *dcRedirectionHandlerSuite) TestResetStickyTaskQueue() {
 	apiName := "ResetStickyTaskQueue"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.ResetStickyTaskQueueRequest{
 		Namespace: s.namespace,
@@ -498,7 +498,7 @@ func (s *dcRedirectionHandlerSuite) TestResetWorkflowExecution() {
 	apiName := "ResetWorkflowExecution"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace: s.namespace,
@@ -521,7 +521,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCanceled() {
 	apiName := "RespondActivityTaskCanceled"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceIDRedirect",
-		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespaceID, apiName, mock.Anything).Return(nil)
 
 	token, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
 		ScheduleAttempt: 1,
@@ -548,7 +548,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCanceledById() {
 	apiName := "RespondActivityTaskCanceledById"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.RespondActivityTaskCanceledByIdRequest{
 		Namespace: s.namespace,
@@ -570,7 +570,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCompleted() {
 	apiName := "RespondActivityTaskCompleted"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceIDRedirect",
-		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespaceID, apiName, mock.Anything).Return(nil)
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
 		ScheduleAttempt: 1,
@@ -597,7 +597,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCompletedById() {
 	apiName := "RespondActivityTaskCompletedById"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.RespondActivityTaskCompletedByIdRequest{
 		Namespace: s.namespace,
@@ -619,7 +619,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskFailed() {
 	apiName := "RespondActivityTaskFailed"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceIDRedirect",
-		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespaceID, apiName, mock.Anything).Return(nil)
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
 		ScheduleAttempt: 1,
@@ -646,7 +646,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskFailedById() {
 	apiName := "RespondActivityTaskFailedById"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.RespondActivityTaskFailedByIdRequest{
 		Namespace: s.namespace,
@@ -668,7 +668,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondWorkflowTaskCompleted() {
 	apiName := "RespondWorkflowTaskCompleted"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceIDRedirect",
-		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespaceID, apiName, mock.Anything).Return(nil)
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
 		ScheduleAttempt: 1,
@@ -696,7 +696,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondWorkflowTaskFailed() {
 	apiName := "RespondWorkflowTaskFailed"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceIDRedirect",
-		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespaceID, apiName, mock.Anything).Return(nil)
 
 	token, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
 		ScheduleAttempt: 1,
@@ -723,7 +723,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondQueryTaskCompleted() {
 	apiName := "RespondQueryTaskCompleted"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceIDRedirect",
-		s.namespaceID, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespaceID, apiName, mock.Anything).Return(nil)
 
 	taskToken, err := s.handler.tokenSerializer.SerializeQueryTaskToken(&tokenspb.QueryTask{
 		NamespaceId: s.namespaceID,
@@ -748,7 +748,7 @@ func (s *dcRedirectionHandlerSuite) TestSignalWithStartWorkflowExecution() {
 	apiName := "SignalWithStartWorkflowExecution"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		Namespace: s.namespace,
@@ -771,7 +771,7 @@ func (s *dcRedirectionHandlerSuite) TestSignalWorkflowExecution() {
 	apiName := "SignalWorkflowExecution"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
@@ -793,7 +793,7 @@ func (s *dcRedirectionHandlerSuite) TestStartWorkflowExecution() {
 	apiName := "StartWorkflowExecution"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace: s.namespace,
@@ -816,7 +816,7 @@ func (s *dcRedirectionHandlerSuite) TestTerminateWorkflowExecution() {
 	apiName := "TerminateWorkflowExecution"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: s.namespace,
@@ -838,7 +838,7 @@ func (s *dcRedirectionHandlerSuite) TestListTaskQueuePartitions() {
 	apiName := "ListTaskQueuePartitions"
 
 	s.mockDCRedirectionPolicy.On("WithNamespaceRedirect",
-		s.namespace, apiName, mock.Anything).Return(nil).Times(1)
+		s.namespace, apiName, mock.Anything).Return(nil)
 
 	req := &workflowservice.ListTaskQueuePartitionsRequest{
 		Namespace: s.namespace,

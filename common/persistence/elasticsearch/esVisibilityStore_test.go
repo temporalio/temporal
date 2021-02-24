@@ -239,7 +239,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutions() {
 		source, _ := input.Query.Source()
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterOpen))
 		return true
-	})).Return(testSearchResult, nil).Times(1)
+	})).Return(testSearchResult, nil)
 	_, err := s.visibilityStore.ListOpenWorkflowExecutions(testRequest)
 	s.NoError(err)
 
@@ -256,7 +256,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutions() {
 		source, _ := input.Query.Source()
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterClose))
 		return true
-	})).Return(testSearchResult, nil).Times(1)
+	})).Return(testSearchResult, nil)
 	_, err := s.visibilityStore.ListClosedWorkflowExecutions(testRequest)
 	s.NoError(err)
 
@@ -274,7 +274,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByType() {
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterOpen))
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByType))
 		return true
-	})).Return(testSearchResult, nil).Times(1)
+	})).Return(testSearchResult, nil)
 
 	request := &p.ListWorkflowExecutionsByTypeRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
@@ -297,7 +297,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByType() {
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterClose))
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByType))
 		return true
-	})).Return(testSearchResult, nil).Times(1)
+	})).Return(testSearchResult, nil)
 
 	request := &p.ListWorkflowExecutionsByTypeRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
@@ -320,7 +320,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterOpen))
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByWID))
 		return true
-	})).Return(testSearchResult, nil).Times(1)
+	})).Return(testSearchResult, nil)
 
 	request := &p.ListWorkflowExecutionsByWorkflowIDRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
@@ -343,7 +343,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByWorkflowID() {
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterClose))
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByWID))
 		return true
-	})).Return(testSearchResult, nil).Times(1)
+	})).Return(testSearchResult, nil)
 
 	request := &p.ListWorkflowExecutionsByWorkflowIDRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
@@ -365,7 +365,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
 		source, _ := input.Query.Source()
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByExecutionStatus))
 		return true
-	})).Return(testSearchResult, nil).Times(1)
+	})).Return(testSearchResult, nil)
 
 	request := &p.ListClosedWorkflowExecutionsByStatusRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
@@ -389,7 +389,7 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution() {
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByWID))
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByRunID))
 		return true
-	})).Return(testSearchResult, nil).Times(1)
+	})).Return(testSearchResult, nil)
 	request := &p.GetClosedWorkflowExecutionRequest{
 		NamespaceID: testNamespaceID,
 		Execution: commonpb.WorkflowExecution{
@@ -415,7 +415,7 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution_NoRunID() {
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByWID))
 		s.False(strings.Contains(fmt.Sprintf("%v", source), filterByRunID))
 		return true
-	})).Return(testSearchResult, nil).Times(1)
+	})).Return(testSearchResult, nil)
 	request := &p.GetClosedWorkflowExecutionRequest{
 		NamespaceID: testNamespaceID,
 		Execution: commonpb.WorkflowExecution{
@@ -864,7 +864,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 	s.mockESClient.EXPECT().SearchWithDSL(gomock.Any(), gomock.Any(), mock.MatchedBy(func(input string) bool {
 		s.True(strings.Contains(input, `{"match_phrase":{"ExecutionStatus":{"query":"5"}}}`))
 		return true
-	})).Return(testSearchResult, nil).Times(1)
+	})).Return(testSearchResult, nil)
 
 	request := &p.ListWorkflowExecutionsRequestV2{
 		NamespaceID: testNamespaceID,
@@ -895,7 +895,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 	s.mockESClient.EXPECT().ScrollFirstPage(gomock.Any(), testIndex, mock.MatchedBy(func(input string) bool {
 		s.True(strings.Contains(input, `{"match_phrase":{"ExecutionStatus":{"query":"5"}}}`))
 		return true
-	})).Return(testSearchResult, nil, nil).Times(1)
+	})).Return(testSearchResult, nil, nil)
 
 	request := &p.ListWorkflowExecutionsRequestV2{
 		NamespaceID: testNamespaceID,
@@ -945,7 +945,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 	s.mockESClient.EXPECT().Count(gomock.Any(), testIndex, mock.MatchedBy(func(input string) bool {
 		s.True(strings.Contains(input, `{"match_phrase":{"ExecutionStatus":{"query":"5"}}}`))
 		return true
-	})).Return(int64(1), nil).Times(1)
+	})).Return(int64(1), nil)
 
 	request := &p.CountWorkflowExecutionsRequest{
 		NamespaceID: testNamespaceID,

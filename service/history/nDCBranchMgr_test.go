@@ -154,7 +154,7 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 		return true
 	})).Return(&persistence.ForkHistoryBranchResponse{
 		NewBranchToken: newBranchToken,
-	}, nil).Times(1)
+	}, nil)
 
 	newIndex, err := s.nDCBranchMgr.createNewBranch(context.Background(), baseBranchToken, baseBranchLCAEventID, newVersionHistory)
 	s.Nil(err)
@@ -211,7 +211,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 		"",
 		"",
 		int64(0),
-	).Return(&historypb.HistoryEvent{}, nil).Times(1)
+	).Return(&historypb.HistoryEvent{}, nil)
 	s.mockMutableState.EXPECT().FlushBufferedEvents().Return(nil)
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(lastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -334,7 +334,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 		return true
 	})).Return(&persistence.ForkHistoryBranchResponse{
 		NewBranchToken: newBranchToken,
-	}, nil).Times(1)
+	}, nil)
 
 	doContinue, index, err := s.nDCBranchMgr.prepareVersionHistory(
 		context.Background(),

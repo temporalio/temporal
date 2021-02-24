@@ -101,7 +101,7 @@ func (s *authorizerInterceptorSuite) TearDownTest() {
 
 func (s *authorizerInterceptorSuite) TestIsAuthorized() {
 	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, describeNamespaceTarget).
-		Return(Result{Decision: DecisionAllow}, nil).Times(1)
+		Return(Result{Decision: DecisionAllow}, nil)
 
 	res, err := s.interceptor(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
 	s.True(res.(bool))
@@ -110,7 +110,7 @@ func (s *authorizerInterceptorSuite) TestIsAuthorized() {
 
 func (s *authorizerInterceptorSuite) TestIsAuthorizedWithNamespace() {
 	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, startWorkflowExecutionTarget).
-		Return(Result{Decision: DecisionAllow}, nil).Times(1)
+		Return(Result{Decision: DecisionAllow}, nil)
 
 	res, err := s.interceptor(ctx, startWorkflowExecutionRequest, startWorkflowExecutionInfo, s.handler)
 	s.True(res.(bool))
@@ -119,7 +119,7 @@ func (s *authorizerInterceptorSuite) TestIsAuthorizedWithNamespace() {
 
 func (s *authorizerInterceptorSuite) TestIsUnauthorized() {
 	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, describeNamespaceTarget).
-		Return(Result{Decision: DecisionDeny}, nil).Times(1)
+		Return(Result{Decision: DecisionDeny}, nil)
 	s.mockMetricsScope.EXPECT().IncCounter(metrics.ServiceErrUnauthorizedCounter)
 
 	res, err := s.interceptor(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)
@@ -129,7 +129,7 @@ func (s *authorizerInterceptorSuite) TestIsUnauthorized() {
 
 func (s *authorizerInterceptorSuite) TestAuthorizationFailed() {
 	s.mockAuthorizer.EXPECT().Authorize(ctx, nil, describeNamespaceTarget).
-		Return(Result{Decision: DecisionDeny}, errUnauthorized).Times(1)
+		Return(Result{Decision: DecisionDeny}, errUnauthorized)
 	s.mockMetricsScope.EXPECT().IncCounter(metrics.ServiceErrAuthorizeFailedCounter)
 
 	res, err := s.interceptor(ctx, describeNamespaceRequest, describeNamespaceInfo, s.handler)

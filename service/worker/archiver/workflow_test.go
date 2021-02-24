@@ -100,7 +100,7 @@ func (s *workflowSuite) TestArchivalWorkflow_Fail_HashesDoNotEqual() {
 	workflowTestHandler.EXPECT().Finished().Return([]uint64{9, 7, 0})
 	workflowTestPump.EXPECT().Run().Return(PumpResult{
 		PumpedHashes: []uint64{8, 7, 0},
-	}).Times(1)
+	})
 
 	env := s.NewTestWorkflowEnvironment()
 	s.registerWorkflows(env)
@@ -125,7 +125,7 @@ func (s *workflowSuite) TestArchivalWorkflow_Exit_TimeoutWithoutSignals() {
 	workflowTestPump.EXPECT().Run().Return(PumpResult{
 		PumpedHashes:          []uint64{},
 		TimeoutWithoutSignals: true,
-	}).Times(1)
+	})
 
 	env := s.NewTestWorkflowEnvironment()
 	s.registerWorkflows(env)
@@ -146,7 +146,7 @@ func (s *workflowSuite) TestArchivalWorkflow_Success() {
 	workflowTestHandler.EXPECT().Finished().Return([]uint64{1, 2, 3, 4, 5})
 	workflowTestPump.EXPECT().Run().Return(PumpResult{
 		PumpedHashes: []uint64{1, 2, 3, 4, 5},
-	}).Times(1)
+	})
 
 	env := s.NewTestWorkflowEnvironment()
 	s.registerWorkflows(env)

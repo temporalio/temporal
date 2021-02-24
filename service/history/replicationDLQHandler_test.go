@@ -178,7 +178,7 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 			BatchSize:     pageSize,
 			NextPageToken: pageToken,
 		},
-	}).Return(dbResp, nil).Times(1)
+	}).Return(dbResp, nil)
 
 	s.mockClientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(s.adminClient).AnyTimes()
 	s.adminClient.EXPECT().GetDLQReplicationMessages(ctx, gomock.Any()).
@@ -199,7 +199,7 @@ func (s *replicationDLQHandlerSuite) TestPurgeMessages() {
 			SourceClusterName:    s.sourceCluster,
 			ExclusiveBeginTaskID: persistence.EmptyQueueMessageID,
 			InclusiveEndTaskID:   lastMessageID,
-		}).Return(nil).Times(1)
+		}).Return(nil)
 
 	s.shardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil)
 	err := s.replicationMessageHandler.purgeMessages(s.sourceCluster, lastMessageID)
@@ -261,7 +261,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 			BatchSize:     pageSize,
 			NextPageToken: pageToken,
 		},
-	}).Return(dbResp, nil).Times(1)
+	}).Return(dbResp, nil)
 
 	s.mockClientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(s.adminClient).AnyTimes()
 	s.adminClient.EXPECT().GetDLQReplicationMessages(ctx, gomock.Any()).
@@ -273,7 +273,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 		SourceClusterName:    s.sourceCluster,
 		ExclusiveBeginTaskID: persistence.EmptyQueueMessageID,
 		InclusiveEndTaskID:   lastMessageID,
-	}).Return(nil).Times(1)
+	}).Return(nil)
 
 	s.shardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil)
 

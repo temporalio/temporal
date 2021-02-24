@@ -187,7 +187,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(&p.UpdateWorkflowExecutionResponse{
 		MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{},
-	}, nil).Times(1)
+	}, nil)
 
 	request := historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:       namespaceID,
@@ -304,7 +304,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(&p.UpdateWorkflowExecutionResponse{
 		MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{},
-	}, nil).Times(1)
+	}, nil)
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
 	s.Nil(err)

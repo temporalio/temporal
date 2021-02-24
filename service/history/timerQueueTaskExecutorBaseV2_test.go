@@ -159,7 +159,7 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) TestDeleteWorkflow_NoErr() {
 func (s *timerQueueTaskExecutorBaseSuiteV2) TestArchiveHistory_NoErr_InlineArchivalFailed() {
 	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistencespb.ExecutionStats{
 		HistorySize: 1024,
-	}, nil).Times(1)
+	}, nil)
 	s.mockWorkflowExecutionContext.EXPECT().clear()
 	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil)
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1234), nil)
@@ -189,7 +189,7 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) TestArchiveHistory_NoErr_InlineArchi
 func (s *timerQueueTaskExecutorBaseSuiteV2) TestArchiveHistory_SendSignalErr() {
 	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistencespb.ExecutionStats{
 		HistorySize: 1024 * 1024 * 1024,
-	}, nil).Times(1)
+	}, nil)
 
 	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil)
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1234), nil)

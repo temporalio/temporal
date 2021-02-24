@@ -113,7 +113,7 @@ func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
-	}, nil).Times(1)
+	}, nil)
 
 	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
@@ -133,7 +133,7 @@ func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 		},
-	}, nil).Times(1)
+	}, nil)
 
 	hbd, err := scvgr.Run(context.Background())
 	s.Nil(err)
@@ -165,7 +165,7 @@ func (s *ScavengerTestSuite) TestAllErrorSplittingTasksTwoPages() {
 				Info:     "error-info",
 			},
 		},
-	}, nil).Times(1)
+	}, nil)
 
 	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
@@ -185,7 +185,7 @@ func (s *ScavengerTestSuite) TestAllErrorSplittingTasksTwoPages() {
 				Info:     "error-info",
 			},
 		},
-	}, nil).Times(1)
+	}, nil)
 
 	hbd, err := scvgr.Run(context.Background())
 	s.Nil(err)
@@ -217,7 +217,7 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
-	}, nil).Times(1)
+	}, nil)
 
 	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
@@ -237,7 +237,7 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 		},
-	}, nil).Times(1)
+	}, nil)
 
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID1",
@@ -298,7 +298,7 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID2", "workflowID2", "runID2"),
 			},
 		},
-	}, nil).Times(1)
+	}, nil)
 	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
 		NextPageToken: []byte("page1"),
@@ -317,7 +317,7 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID4", "workflowID4", "runID4"),
 			},
 		},
-	}, nil).Times(1)
+	}, nil)
 
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID1",
@@ -353,25 +353,25 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken1,
 		ShardID:     convert.Int32Ptr(1),
-	}).Return(nil).Times(1)
+	}).Return(nil)
 	branchToken2, err := p.NewHistoryBranchTokenByBranchID(treeID2, branchID2)
 	s.Nil(err)
 	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken2,
 		ShardID:     convert.Int32Ptr(1),
-	}).Return(nil).Times(1)
+	}).Return(nil)
 	branchToken3, err := p.NewHistoryBranchTokenByBranchID(treeID3, branchID3)
 	s.Nil(err)
 	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
 		ShardID:     convert.Int32Ptr(1),
-	}).Return(nil).Times(1)
+	}).Return(nil)
 	branchToken4, err := p.NewHistoryBranchTokenByBranchID(treeID4, branchID4)
 	s.Nil(err)
 	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
 		ShardID:     convert.Int32Ptr(1),
-	}).Return(nil).Times(1)
+	}).Return(nil)
 
 	hbd, err := scvgr.Run(context.Background())
 	s.Nil(err)
@@ -405,7 +405,7 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 				Info:     "error-info",
 			},
 		},
-	}, nil).Times(1)
+	}, nil)
 	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
 		NextPageToken: []byte("page1"),
@@ -433,7 +433,7 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 				Info:     p.BuildHistoryGarbageCleanupInfo("namespaceID5", "workflowID5", "runID5"),
 			},
 		},
-	}, nil).Times(1)
+	}, nil)
 
 	client.EXPECT().DescribeMutableState(gomock.Any(), &historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID3",
@@ -463,14 +463,14 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
 		ShardID:     convert.Int32Ptr(1),
-	}).Return(nil).Times(1)
+	}).Return(nil)
 
 	branchToken4, err := p.NewHistoryBranchTokenByBranchID(treeID4, branchID4)
 	s.Nil(err)
 	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
 		ShardID:     convert.Int32Ptr(1),
-	}).Return(fmt.Errorf("failed to delete history")).Times(1)
+	}).Return(fmt.Errorf("failed to delete history"))
 
 	hbd, err := scvgr.Run(context.Background())
 	s.Nil(err)

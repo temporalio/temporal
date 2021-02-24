@@ -98,7 +98,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		now,
 		newContext,
 		newMutableState,
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
 	s.NoError(err)
@@ -202,7 +202,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		currentContext,
 		currentMutableState,
 		currentWorkflowPolicy.ptr(),
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
 	s.NoError(err)
@@ -277,7 +277,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		currentContext,
 		currentMutableState,
 		currentWorkflowPolicy.ptr(),
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
 	s.NoError(err)
@@ -352,7 +352,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		newMutableState,
 		transactionPolicyPassive,
 		transactionPolicyPassive.ptr(),
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
 	s.NoError(err)
@@ -427,7 +427,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		(mutableState)(nil),
 		transactionPolicyPassive,
 		(*transactionPolicy)(nil),
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
 	s.NoError(err)
@@ -483,7 +483,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		(workflowExecutionContext)(nil),
 		(mutableState)(nil),
 		(*transactionPolicy)(nil),
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
 	s.NoError(err)
@@ -556,7 +556,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		currentContext,
 		currentMutableState,
 		currentWorkflowPolicy.ptr(),
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
 	s.NoError(err)
@@ -632,7 +632,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		(workflowExecutionContext)(nil),
 		(mutableState)(nil),
 		(*transactionPolicy)(nil),
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
 	s.NoError(err)
@@ -708,7 +708,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 		(workflowExecutionContext)(nil),
 		(mutableState)(nil),
 		(*transactionPolicy)(nil),
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	err := s.updateMgr.dispatchForExistingWorkflow(ctx, now, isWorkflowRebuilt, targetWorkflow, newWorkflow)
 	s.NoError(err)

@@ -143,7 +143,7 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 						ClusterReplicationLevel: map[string]int64{},
 						ReplicationDlqAckLevel:  map[string]int64{},
 					},
-				}, nil).Times(1)
+				}, nil)
 			s.mockShardManager.EXPECT().UpdateShard(&persistence.UpdateShardRequest{
 				ShardInfo: &persistencespb.ShardInfo{
 					ShardId:             shardID,
@@ -165,7 +165,7 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 					ReplicationDlqAckLevel:  map[string]int64{},
 				},
 				PreviousRangeID: 5,
-			}).Return(nil).Times(1)
+			}).Return(nil)
 		} else {
 			ownerHost := fmt.Sprintf("test-acquire-shard-host-%v", hostID)
 			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(membership.NewHostInfo(ownerHost, nil), nil)
@@ -225,7 +225,7 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 						ClusterReplicationLevel: map[string]int64{},
 						ReplicationDlqAckLevel:  map[string]int64{},
 					},
-				}, nil).Times(1)
+				}, nil)
 			s.mockShardManager.EXPECT().UpdateShard(&persistence.UpdateShardRequest{
 				ShardInfo: &persistencespb.ShardInfo{
 					ShardId:             shardID,
@@ -247,7 +247,7 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 					ReplicationDlqAckLevel:  map[string]int64{},
 				},
 				PreviousRangeID: 5,
-			}).Return(nil).Times(1)
+			}).Return(nil)
 		} else {
 			ownerHost := fmt.Sprintf("test-acquire-shard-host-%v", hostID)
 			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(membership.NewHostInfo(ownerHost, nil), nil)
@@ -314,7 +314,7 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 					ClusterReplicationLevel: map[string]int64{},
 					ReplicationDlqAckLevel:  map[string]int64{},
 				},
-			}, nil).Times(1)
+			}, nil)
 		s.mockShardManager.EXPECT().UpdateShard(&persistence.UpdateShardRequest{
 			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:             shardID,
@@ -336,7 +336,7 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 				ReplicationDlqAckLevel:  map[string]int64{},
 			},
 			PreviousRangeID: 5,
-		}).Return(nil).Times(1)
+		}).Return(nil)
 	}
 
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
@@ -388,7 +388,7 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 					ClusterReplicationLevel: map[string]int64{},
 					ReplicationDlqAckLevel:  map[string]int64{},
 				},
-			}, nil).Times(1)
+			}, nil)
 		s.mockShardManager.EXPECT().UpdateShard(&persistence.UpdateShardRequest{
 			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:             shardID,
@@ -410,7 +410,7 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 				ReplicationDlqAckLevel:  map[string]int64{},
 			},
 			PreviousRangeID: 5,
-		}).Return(nil).Times(1)
+		}).Return(nil)
 	}
 
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
@@ -597,7 +597,7 @@ func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *M
 				ClusterReplicationLevel: map[string]int64{},
 				ReplicationDlqAckLevel:  map[string]int64{},
 			},
-		}, nil).Times(1)
+		}, nil)
 	s.mockShardManager.EXPECT().UpdateShard(&persistence.UpdateShardRequest{
 		ShardInfo: &persistencespb.ShardInfo{
 			ShardId:             shardID,
@@ -619,7 +619,7 @@ func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *M
 			ReplicationDlqAckLevel:  map[string]int64{},
 		},
 		PreviousRangeID: currentRangeID,
-	}).Return(nil).Times(1)
+	}).Return(nil)
 }
 
 func newContextMatcher(shardID int32) *contextMatcher {

@@ -701,7 +701,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessCloseExecution_HasPa
 		InitiatedId:        parentInitiatedID,
 		CompletedExecution: &execution,
 		CompletionEvent:    event,
-	}).Return(nil, nil).Times(1)
+	}).Return(nil, nil)
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewDisabledArchvialConfig())
 
 	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
@@ -978,7 +978,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessCloseExecution_NoPar
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewDisabledArchvialConfig())
-	s.mockParentClosePolicyClient.On("SendParentClosePolicyRequest", mock.Anything).Return(nil).Times(1)
+	s.mockParentClosePolicyClient.On("SendParentClosePolicyRequest", mock.Anything).Return(nil)
 
 	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
@@ -1332,7 +1332,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessSignalExecution_Succ
 			RunId:      transferTask.GetTargetRunId(),
 		},
 		RequestId: si.GetRequestId(),
-	}).Return(nil, nil).Times(1)
+	}).Return(nil, nil)
 
 	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
@@ -1534,7 +1534,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessStartChildExecution_
 		transferTask,
 		mutableState,
 		ci,
-	)).Return(&historyservice.StartWorkflowExecutionResponse{RunId: childRunID}, nil).Times(1)
+	)).Return(&historyservice.StartWorkflowExecutionResponse{RunId: childRunID}, nil)
 	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil)
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -1545,7 +1545,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessStartChildExecution_
 			RunId:      childRunID,
 		},
 		IsFirstWorkflowTask: true,
-	}).Return(nil, nil).Times(1)
+	}).Return(nil, nil)
 
 	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
@@ -1624,7 +1624,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessStartChildExecution_
 		transferTask,
 		mutableState,
 		ci,
-	)).Return(nil, serviceerror.NewWorkflowExecutionAlreadyStarted("msg", "", "")).Times(1)
+	)).Return(nil, serviceerror.NewWorkflowExecutionAlreadyStarted("msg", "", ""))
 	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(&p.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &p.MutableStateUpdateSessionStats{}}, nil)
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -1712,7 +1712,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessStartChildExecution_
 			RunId:      childRunID,
 		},
 		IsFirstWorkflowTask: true,
-	}).Return(nil, nil).Times(1)
+	}).Return(nil, nil)
 
 	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)

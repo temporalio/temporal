@@ -1156,7 +1156,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 			ScheduleId:             activityInfo.ScheduleId,
 			ScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout,
 		},
-	).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(1)
+	).Return(&matchingservice.AddActivityTaskResponse{}, nil)
 
 	err = s.timerQueueActiveTaskExecutor.execute(timerTask, true)
 	s.NoError(err)

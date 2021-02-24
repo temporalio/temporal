@@ -164,7 +164,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 		s.namespaceID,
 		s.workflowID,
 		s.baseRunID,
-	).Return(mockBaseWorkflow, nil).Times(1)
+	).Return(mockBaseWorkflow, nil)
 
 	s.mockStateBuilder.EXPECT().rebuild(
 		ctx,
@@ -184,7 +184,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 		),
 		newBranchToken,
 		gomock.Any(),
-	).Return(s.mockRebuiltMutableState, rebuiltHistorySize, nil).Times(1)
+	).Return(s.mockRebuiltMutableState, rebuiltHistorySize, nil)
 
 	shardId := s.mockShard.GetShardID()
 	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
@@ -192,7 +192,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 		ForkNodeID:      baseEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID, s.workflowID, s.newRunID),
 		ShardID:         &shardId,
-	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken}, nil).Times(1)
+	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken}, nil)
 
 	rebuiltMutableState, err := s.nDCWorkflowResetter.resetWorkflow(
 		ctx,
@@ -238,7 +238,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 		s.namespaceID,
 		s.workflowID,
 		s.baseRunID,
-	).Return(mockBaseWorkflow, nil).Times(1)
+	).Return(mockBaseWorkflow, nil)
 
 	rebuiltMutableState, err := s.nDCWorkflowResetter.resetWorkflow(
 		ctx,
