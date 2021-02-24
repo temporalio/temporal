@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
@@ -65,11 +64,10 @@ func (s *pumpSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	pumpTestMetrics = metrics.NewMockClient(s.controller)
 	pumpTestMetrics.EXPECT().StartTimer(gomock.Any(), gomock.Any()).Return(metrics.NopStopwatch())
-	pumpTestLogger = &log.MockLogger{}
+	pumpTestLogger = log.NewMockLogger(s.controller)
 }
 
 func (s *pumpSuite) TearDownTest() {
-	pumpTestLogger.AssertExpectations(s.T())
 }
 
 func (s *pumpSuite) TestPumpRun_CarryoverLargerThanLimit() {
@@ -152,7 +150,7 @@ func (s *pumpSuite) TestPumpRun_SignalsAndCarryover() {
 func (s *pumpSuite) TestPumpRun_SignalChannelClosedUnexpectedly() {
 	pumpTestMetrics.EXPECT().UpdateGauge(metrics.ArchiverPumpScope, metrics.ArchiverBacklogSizeGauge, float64(0))
 	pumpTestMetrics.EXPECT().IncCounter(metrics.ArchiverPumpScope, metrics.ArchiverPumpSignalChannelClosedCount)
-	pumpTestLogger.On("Error", mock.Anything, mock.Anything).Once()
+	pumpTestLogger.EXPECT().Error(gomock.Any(), gomock.Any())
 
 	env := s.NewTestWorkflowEnvironment()
 	s.registerWorkflows(env)
