@@ -67,7 +67,9 @@ func NewValidator(
 // Validate validate search attributes are valid for writing and not exceed limits
 func (v *Validator) ValidateAndLog(searchAttributes *commonpb.SearchAttributes, namespace string) error {
 	err := v.Validate(searchAttributes, namespace)
-	v.logger.Error("Error while validating search attributes.", tag.Error(err), tag.WorkflowNamespace(namespace))
+	if err != nil {
+		v.logger.Error("Error while validating search attributes.", tag.Error(err), tag.WorkflowNamespace(namespace))
+	}
 	return err
 }
 
