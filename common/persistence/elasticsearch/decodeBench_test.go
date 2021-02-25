@@ -32,8 +32,8 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/server/common/definition"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 var (
@@ -84,20 +84,20 @@ func BenchmarkJSONDecodeToMap(b *testing.B) {
 		d.UseNumber()
 		d.Decode(&source)
 
-		startTime, _ := source[definition.StartTime].(json.Number).Int64()
-		executionTime, _ := source[definition.StartTime].(json.Number).Int64()
-		closeTime, _ := source[definition.CloseTime].(json.Number).Int64()
-		status, _ := source[definition.ExecutionStatus].(json.Number).Int64()
-		historyLen, _ := source[definition.HistoryLength].(json.Number).Int64()
+		startTime, _ := source[searchattribute.StartTime].(json.Number).Int64()
+		executionTime, _ := source[searchattribute.StartTime].(json.Number).Int64()
+		closeTime, _ := source[searchattribute.CloseTime].(json.Number).Int64()
+		status, _ := source[searchattribute.ExecutionStatus].(json.Number).Int64()
+		historyLen, _ := source[searchattribute.HistoryLength].(json.Number).Int64()
 
 		record := &p.VisibilityWorkflowExecutionInfo{
-			WorkflowID:    source[definition.WorkflowID].(string),
-			RunID:         source[definition.RunID].(string),
-			TypeName:      source[definition.WorkflowType].(string),
+			WorkflowID:    source[searchattribute.WorkflowID].(string),
+			RunID:         source[searchattribute.RunID].(string),
+			TypeName:      source[searchattribute.WorkflowType].(string),
 			StartTime:     time.Unix(0, startTime).UTC(),
 			ExecutionTime: time.Unix(0, executionTime).UTC(),
-			TaskQueue:     source[definition.TaskQueue].(string),
-			Memo:          p.NewDataBlob([]byte(source[definition.Memo].(string)), source[definition.Encoding].(string)),
+			TaskQueue:     source[searchattribute.TaskQueue].(string),
+			Memo:          p.NewDataBlob([]byte(source[searchattribute.Memo].(string)), source[searchattribute.Encoding].(string)),
 		}
 		record.CloseTime = time.Unix(0, closeTime).UTC()
 		statusEnum := enumspb.WorkflowExecutionStatus(status)

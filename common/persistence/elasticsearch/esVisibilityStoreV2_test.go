@@ -31,10 +31,10 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/server/common/definition"
 	es "go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/payload"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStartedV2() {
@@ -54,7 +54,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStartedV2() {
 			TaskQueue:          "task-queue-name",
 			SearchAttributes: &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
-					definition.CustomStringField: payload.EncodeString("alex"),
+					searchattribute.CustomStringField: payload.EncodeString("alex"),
 				},
 			},
 		},
@@ -71,21 +71,21 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStartedV2() {
 
 			body := bulkRequest.Doc
 
-			s.Equal(request.NamespaceID, body[definition.NamespaceID])
-			s.Equal(request.WorkflowID, body[definition.WorkflowID])
-			s.Equal(request.RunID, body[definition.RunID])
-			s.Equal(request.WorkflowTypeName, body[definition.WorkflowType])
-			s.EqualValues(request.StartTimestamp, body[definition.StartTime])
-			s.EqualValues(request.ExecutionTimestamp, body[definition.ExecutionTime])
-			s.Equal(request.TaskQueue, body[definition.TaskQueue])
-			s.EqualValues(request.Status, body[definition.ExecutionStatus])
+			s.Equal(request.NamespaceID, body[searchattribute.NamespaceID])
+			s.Equal(request.WorkflowID, body[searchattribute.WorkflowID])
+			s.Equal(request.RunID, body[searchattribute.RunID])
+			s.Equal(request.WorkflowTypeName, body[searchattribute.WorkflowType])
+			s.EqualValues(request.StartTimestamp, body[searchattribute.StartTime])
+			s.EqualValues(request.ExecutionTimestamp, body[searchattribute.ExecutionTime])
+			s.Equal(request.TaskQueue, body[searchattribute.TaskQueue])
+			s.EqualValues(request.Status, body[searchattribute.ExecutionStatus])
 
-			s.Equal(request.Memo.Data, body[definition.Memo])
-			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[definition.Encoding])
+			s.Equal(request.Memo.Data, body[searchattribute.Memo])
+			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[searchattribute.Encoding])
 
-			searchAttributes := body[definition.Attr].(map[string]interface{})
+			searchAttributes := body[searchattribute.Attr].(map[string]interface{})
 			// %q because request has JSON encoded string.
-			s.EqualValues(request.SearchAttributes.GetIndexedFields()[definition.CustomStringField].Data, fmt.Sprintf("%q", searchAttributes[definition.CustomStringField]))
+			s.EqualValues(request.SearchAttributes.GetIndexedFields()[searchattribute.CustomStringField].Data, fmt.Sprintf("%q", searchAttributes[searchattribute.CustomStringField]))
 
 			s.Equal(es.BulkableRequestTypeIndex, bulkRequest.RequestType)
 			s.EqualValues(request.TaskID, bulkRequest.Version)
@@ -148,7 +148,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosedV2() {
 			TaskQueue:          "task-queue-name",
 			SearchAttributes: &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
-					definition.CustomStringField: payload.EncodeString("alex"),
+					searchattribute.CustomStringField: payload.EncodeString("alex"),
 				},
 			},
 		},
@@ -167,17 +167,17 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosedV2() {
 
 			body := bulkRequest.Doc
 
-			s.Equal(request.NamespaceID, body[definition.NamespaceID])
-			s.Equal(request.WorkflowID, body[definition.WorkflowID])
-			s.Equal(request.RunID, body[definition.RunID])
-			s.Equal(request.WorkflowTypeName, body[definition.WorkflowType])
-			s.EqualValues(request.StartTimestamp, body[definition.StartTime])
-			s.EqualValues(request.ExecutionTimestamp, body[definition.ExecutionTime])
-			s.Equal(request.Memo.Data, body[definition.Memo])
-			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[definition.Encoding])
-			s.EqualValues(request.CloseTimestamp, body[definition.CloseTime])
-			s.EqualValues(request.Status, body[definition.ExecutionStatus])
-			s.EqualValues(request.HistoryLength, body[definition.HistoryLength])
+			s.Equal(request.NamespaceID, body[searchattribute.NamespaceID])
+			s.Equal(request.WorkflowID, body[searchattribute.WorkflowID])
+			s.Equal(request.RunID, body[searchattribute.RunID])
+			s.Equal(request.WorkflowTypeName, body[searchattribute.WorkflowType])
+			s.EqualValues(request.StartTimestamp, body[searchattribute.StartTime])
+			s.EqualValues(request.ExecutionTimestamp, body[searchattribute.ExecutionTime])
+			s.Equal(request.Memo.Data, body[searchattribute.Memo])
+			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[searchattribute.Encoding])
+			s.EqualValues(request.CloseTimestamp, body[searchattribute.CloseTime])
+			s.EqualValues(request.Status, body[searchattribute.ExecutionStatus])
+			s.EqualValues(request.HistoryLength, body[searchattribute.HistoryLength])
 
 			s.Equal(es.BulkableRequestTypeIndex, bulkRequest.RequestType)
 			s.EqualValues(request.TaskID, bulkRequest.Version)

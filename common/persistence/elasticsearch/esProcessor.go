@@ -39,11 +39,11 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -304,7 +304,7 @@ func (p *esProcessorImpl) extractVisibilityTaskKey(request elastic.BulkableReque
 			return ""
 		}
 
-		k, ok := body[definition.VisibilityTaskKey]
+		k, ok := body[searchattribute.VisibilityTaskKey]
 		if !ok {
 			p.logger.Error("Unable to extract VisibilityTaskKey from ES request.", tag.ESRequest(request.String()))
 			p.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)

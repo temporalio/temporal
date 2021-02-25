@@ -32,10 +32,10 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/searchattribute"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -46,7 +46,6 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -160,9 +159,9 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 
 	searchAttr := request.GetSearchAttribute()
 	currentValidAttr, _ := adh.params.DynamicConfig.GetMapValue(
-		dynamicconfig.ValidSearchAttributes, nil, definition.GetDefaultIndexedKeys())
+		dynamicconfig.ValidSearchAttributes, nil, searchattribute.GetDefaultTypeMap())
 	for k, v := range searchAttr {
-		if definition.IsSystemIndexedKey(k) {
+		if searchattribute.IsSystem(k) {
 			return nil, adh.error(errKeyIsReservedBySystem.MessageArgs(k), scope)
 		}
 		if _, exist := currentValidAttr[k]; exist {
@@ -181,11 +180,11 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 	// update elasticsearch mapping, new added field will not be able to remove or update
 	index := adh.params.ESConfig.GetVisibilityIndex()
 	for k, v := range searchAttr {
-		valueType := adh.convertIndexedValueTypeToESDataType(v)
-		if len(valueType) == 0 {
+		esType := searchattribute.GetESType(v)
+		if len(esType) == 0 {
 			return nil, adh.error(errUnknownValueType.MessageArgs(v), scope)
 		}
-		err := adh.params.ESClient.PutMapping(ctx, index, definition.Attr, k, valueType)
+		err := adh.params.ESClient.PutMapping(ctx, index, searchattribute.Attr, k, esType)
 		if err != nil {
 			return nil, adh.error(errFailedToUpdateESMapping.MessageArgs(err), scope)
 		}
@@ -1052,23 +1051,4 @@ func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 	scope.IncCounter(metrics.ServiceFailures)
 
 	return err
-}
-
-func (adh *AdminHandler) convertIndexedValueTypeToESDataType(valueType enumspb.IndexedValueType) string {
-	switch valueType {
-	case enumspb.INDEXED_VALUE_TYPE_STRING:
-		return "text"
-	case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
-		return "keyword"
-	case enumspb.INDEXED_VALUE_TYPE_INT:
-		return "long"
-	case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
-		return "double"
-	case enumspb.INDEXED_VALUE_TYPE_BOOL:
-		return "boolean"
-	case enumspb.INDEXED_VALUE_TYPE_DATETIME:
-		return "date"
-	default:
-		return ""
-	}
 }

@@ -34,10 +34,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/payload"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -741,7 +741,7 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 					Memo:               nil,
 					SearchAttributes: &commonpb.SearchAttributes{
 						IndexedFields: map[string]*commonpb.Payload{
-							definition.TemporalChangeVersion: payload.EncodeBytes([]byte("dummy")),
+							searchattribute.TemporalChangeVersion: payload.EncodeBytes([]byte("dummy")),
 						},
 					},
 					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,

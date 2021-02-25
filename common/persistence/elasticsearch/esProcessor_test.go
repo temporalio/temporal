@@ -38,10 +38,10 @@ import (
 	"go.uber.org/zap"
 
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/definition"
 	es "go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -198,7 +198,7 @@ func (s *esProcessorSuite) TestBulkAfterAction_Ack() {
 		Index(testIndex).
 		Id(testID).
 		Version(version).
-		Doc(map[string]interface{}{definition.VisibilityTaskKey: testKey})
+		Doc(map[string]interface{}{searchattribute.VisibilityTaskKey: testKey})
 	requests := []elastic.BulkableRequest{request}
 
 	mSuccess := map[string]*elastic.BulkResponseItem{
@@ -240,10 +240,10 @@ func (s *esProcessorSuite) TestBulkAfterAction_Nack() {
 		Id(testID).
 		Version(version).
 		Doc(map[string]interface{}{
-			definition.VisibilityTaskKey: testKey,
-			definition.NamespaceID:       namespaceID,
-			definition.WorkflowID:        wid,
-			definition.RunID:             rid,
+			searchattribute.VisibilityTaskKey: testKey,
+			searchattribute.NamespaceID:       namespaceID,
+			searchattribute.WorkflowID:        wid,
+			searchattribute.RunID:             rid,
 		})
 	requests := []elastic.BulkableRequest{request}
 
@@ -277,7 +277,7 @@ func (s *esProcessorSuite) TestBulkAfterAction_Nack() {
 func (s *esProcessorSuite) TestBulkAfterAction_Error() {
 	version := int64(3)
 	doc := map[string]interface{}{
-		definition.VisibilityTaskKey: "str",
+		searchattribute.VisibilityTaskKey: "str",
 	}
 
 	request := elastic.NewBulkIndexRequest().
@@ -362,13 +362,13 @@ func (s *esProcessorSuite) TestExtractVisibilityTaskKey() {
 	s.Equal("", visibilityTaskKey)
 
 	m := map[string]interface{}{
-		definition.VisibilityTaskKey: 1,
+		searchattribute.VisibilityTaskKey: 1,
 	}
 	request.Doc(m)
 	s.Panics(func() { s.esProcessor.extractVisibilityTaskKey(request) })
 
 	testKey := "test-key"
-	m[definition.VisibilityTaskKey] = testKey
+	m[searchattribute.VisibilityTaskKey] = testKey
 	request.Doc(m)
 	s.Equal(testKey, s.esProcessor.extractVisibilityTaskKey(request))
 }
