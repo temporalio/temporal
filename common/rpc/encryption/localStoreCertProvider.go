@@ -272,10 +272,10 @@ func (s *localStoreCertProvider) getClientTLSSettings(isWorker bool) *config.Cli
 }
 
 func (s *localStoreCertProvider) Expiring(fromNow time.Duration,
-) (expiring map[[16]byte]CertExpirationData, expired map[[16]byte]CertExpirationData, errs []error) {
+) (expiring CertExpirationMap, expired CertExpirationMap, errs []error) {
 
-	expiring = make(map[[16]byte]CertExpirationData)
-	expired = make(map[[16]byte]CertExpirationData)
+	expiring = make(CertExpirationMap)
+	expired = make(CertExpirationMap)
 	errs = make([]error, 0)
 	when := time.Now().UTC().Add(fromNow)
 
@@ -307,8 +307,8 @@ func (s *localStoreCertProvider) Expiring(fromNow time.Duration,
 func checkTLSCertForExpiration(
 	fetchCert func() (*tls.Certificate, error),
 	time time.Time,
-	expiring map[[16]byte]CertExpirationData,
-	expired map[[16]byte]CertExpirationData,
+	expiring CertExpirationMap,
+	expired CertExpirationMap,
 	errors []error,
 ) []error {
 
@@ -329,8 +329,8 @@ func checkTLSCertForExpiration(
 func fetchAndCheckCertForExpiration(
 	fetchCert func() (*x509.Certificate, error),
 	when time.Time,
-	expiring map[[16]byte]CertExpirationData,
-	expired map[[16]byte]CertExpirationData,
+	expiring CertExpirationMap,
+	expired CertExpirationMap,
 	errors []error,
 ) []error {
 
@@ -345,8 +345,8 @@ func fetchAndCheckCertForExpiration(
 func checkCertsForExpiration(
 	certs []*x509.Certificate,
 	time time.Time,
-	expiring map[[16]byte]CertExpirationData,
-	expired map[[16]byte]CertExpirationData,
+	expiring CertExpirationMap,
+	expired CertExpirationMap,
 ) {
 
 	for _, cert := range certs {
@@ -357,8 +357,8 @@ func checkCertsForExpiration(
 func checkCertForExpiration(
 	cert *x509.Certificate,
 	when time.Time,
-	expiring map[[16]byte]CertExpirationData,
-	expired map[[16]byte]CertExpirationData,
+	expiring CertExpirationMap,
+	expired CertExpirationMap,
 ) {
 
 	if cert != nil && cert.NotAfter.Before(when) {

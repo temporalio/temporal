@@ -71,10 +71,10 @@ func (f *localStorePerHostCertProviderFactory) GetCertProvider(hostName string) 
 }
 
 func (f *localStorePerHostCertProviderFactory) Expiring(fromNow time.Duration,
-) (expiring map[[16]byte]CertExpirationData, expired map[[16]byte]CertExpirationData, errs []error) {
+) (expiring CertExpirationMap, expired CertExpirationMap, errs []error) {
 
-	expiring = make(map[[16]byte]CertExpirationData)
-	expired = make(map[[16]byte]CertExpirationData)
+	expiring = make(CertExpirationMap)
+	expired = make(CertExpirationMap)
 	errs = make([]error, 0)
 
 	if len(f.certProviderCache) == 0 {

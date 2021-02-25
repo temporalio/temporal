@@ -70,10 +70,12 @@ type (
 		Expiration time.Time
 	}
 
+	CertExpirationMap map[[16]byte]CertExpirationData
+
 	CertExpirationChecker interface {
 		Expiring(fromNow time.Duration) (
-			expiring map[[16]byte]CertExpirationData,
-			expired map[[16]byte]CertExpirationData,
+			expiring CertExpirationMap,
+			expired CertExpirationMap,
 			errs []error)
 	}
 

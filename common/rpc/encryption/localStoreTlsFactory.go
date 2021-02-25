@@ -157,10 +157,10 @@ func (s *localStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) 
 }
 
 func (s *localStoreTlsProvider) Expiring(fromNow time.Duration,
-) (expiring map[[16]byte]CertExpirationData, expired map[[16]byte]CertExpirationData, errs []error) {
+) (expiring CertExpirationMap, expired CertExpirationMap, errs []error) {
 
-	expiring = make(map[[16]byte]CertExpirationData, 0)
-	expired = make(map[[16]byte]CertExpirationData, 0)
+	expiring = make(CertExpirationMap, 0)
+	expired = make(CertExpirationMap, 0)
 	errs = make([]error, 0)
 
 	errs = checkExpiration(s.internodeCertProvider, fromNow, expiring, expired, errs)
@@ -174,8 +174,8 @@ func (s *localStoreTlsProvider) Expiring(fromNow time.Duration,
 func checkExpiration(
 	provider interface{},
 	fromNow time.Duration,
-	expiring map[[16]byte]CertExpirationData,
-	expired map[[16]byte]CertExpirationData,
+	expiring CertExpirationMap,
+	expired CertExpirationMap,
 	errs []error,
 ) []error {
 
@@ -347,7 +347,7 @@ func (s *localStoreTlsProvider) timerCallback() {
 	}
 }
 
-func (s *localStoreTlsProvider) logCerts(certs map[[16]byte]CertExpirationData, expired bool, errorTime time.Time) {
+func (s *localStoreTlsProvider) logCerts(certs CertExpirationMap, expired bool, errorTime time.Time) {
 
 	for _, cert := range certs {
 		str := warningString(cert, expired)
@@ -378,7 +378,7 @@ func warningString(cert CertExpirationData, expired bool) string {
 		cert.Thumbprint, verb, cert.Expiration, cert.IsCA, cert.DNSNames)
 }
 
-func mergeMaps(to map[[16]byte]CertExpirationData, from map[[16]byte]CertExpirationData) {
+func mergeMaps(to CertExpirationMap, from CertExpirationMap) {
 	for k, v := range from {
 		to[k] = v
 	}
