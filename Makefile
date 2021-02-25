@@ -246,7 +246,7 @@ clean-test-results:
 
 build-test:
 	@printf $(COLOR) "Build tests..."
-	@go test -exec="true" -count=0 $(TEST_DIRS)
+	@go test -exec="true" -count=0 -tags=esintegration $(TEST_DIRS)
 
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
