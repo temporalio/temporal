@@ -455,7 +455,7 @@ func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collec
 
 func (s *Server) logImmutableMismatch(logger l.Logger, key string, ignored interface{}, value interface{}) {
 	logger.Error(
-		"Supplied configuration key/value mismatches persisted ImmutableClusterMetadata."+
+		"Supplied configuration key/value mismatches persisted ImmutableClusterMetadata. "+
 			"Continuing with the persisted value as this value cannot be changed once initialized.",
 		tag.Key(key),
 		tag.IgnoredValue(ignored),
