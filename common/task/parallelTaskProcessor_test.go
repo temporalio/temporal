@@ -109,8 +109,8 @@ func (s *parallelTaskProcessorSuite) TestTaskWorker() {
 	go func() {
 		for i := 0; i != numTasks; i++ {
 			mockTask := NewMockTask(s.controller)
-			mockTask.EXPECT().Execute().Return(nil).Times(1)
-			mockTask.EXPECT().Ack().Times(1)
+			mockTask.EXPECT().Execute().Return(nil)
+			mockTask.EXPECT().Ack()
 			err := s.processor.Submit(mockTask)
 			s.NoError(err)
 		}

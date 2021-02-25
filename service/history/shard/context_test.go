@@ -130,10 +130,10 @@ func (s *contextSuite) TestAddTasks_Success() {
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil)
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
-	s.mockExecutionManager.EXPECT().AddTasks(addTasksRequest).Return(nil).Times(1)
-	s.mockHistoryEngine.EXPECT().NotifyNewTransferTasks(transferTasks).Times(1)
-	s.mockHistoryEngine.EXPECT().NotifyNewTimerTasks(timerTasks).Times(1)
-	s.mockHistoryEngine.EXPECT().NotifyNewVisibilityTasks(visibilityTasks).Times(1)
+	s.mockExecutionManager.EXPECT().AddTasks(addTasksRequest).Return(nil)
+	s.mockHistoryEngine.EXPECT().NotifyNewTransferTasks(transferTasks)
+	s.mockHistoryEngine.EXPECT().NotifyNewTimerTasks(timerTasks)
+	s.mockHistoryEngine.EXPECT().NotifyNewVisibilityTasks(visibilityTasks)
 
 	err := s.shardContext.AddTasks(addTasksRequest)
 	s.NoError(err)

@@ -158,7 +158,7 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 		},
 		events,
 		[]*historypb.HistoryEvent(nil),
-	).Return(nil, nil).Times(1)
+	).Return(nil, nil)
 
 	err := s.nDCStateRebuilder.applyEvents(workflowIdentifier, mockStateBuilder, events, requestID)
 	s.NoError(err)
@@ -211,7 +211,7 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 		History:       history1,
 		NextPageToken: pageToken,
 		Size:          12345,
-	}, nil).Times(1)
+	}, nil)
 	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
@@ -223,7 +223,7 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 		History:       history2,
 		NextPageToken: nil,
 		Size:          67890,
-	}, nil).Times(1)
+	}, nil)
 
 	paginationFn := s.nDCStateRebuilder.getPaginationFn(firstEventID, nextEventID, branchToken)
 	iter := collection.NewPagingIterator(paginationFn)
@@ -294,7 +294,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		History:       history1,
 		NextPageToken: pageToken,
 		Size:          historySize1,
-	}, nil).Times(1)
+	}, nil)
 	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
@@ -306,7 +306,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		History:       history2,
 		NextPageToken: nil,
 		Size:          historySize2,
-	}, nil).Times(1)
+	}, nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(targetNamespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: targetNamespaceID, Name: targetNamespace},
@@ -321,7 +321,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		1234,
 		s.mockClusterMetadata,
 	), nil).AnyTimes()
-	s.mockTaskRefresher.EXPECT().refreshTasks(s.now, gomock.Any()).Return(nil).Times(1)
+	s.mockTaskRefresher.EXPECT().refreshTasks(s.now, gomock.Any()).Return(nil)
 
 	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.rebuild(
 		context.Background(),

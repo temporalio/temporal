@@ -97,7 +97,7 @@ func (lg *loggerImpl) buildFieldsWithCallat(tags []tag.Tag) []zap.Field {
 func (lg *loggerImpl) buildFields(tags []tag.Tag) []zap.Field {
 	fs := make([]zap.Field, 0, len(tags))
 	for _, t := range tags {
-		f := t.Field()
+		f := t.Field
 		if f.Key == "" {
 			// ignore empty field(which can be constructed manually)
 			continue

@@ -226,7 +226,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 		LastWorkerIdentity: "",
 	}
 
-	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(nil).Times(1)
+	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(nil)
 	_, err := s.replicationTaskHandler.execute(task, true)
 	s.NoError(err)
 }
@@ -279,7 +279,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 		345,
 		456,
 	)
-	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(resendErr).Times(1)
+	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(resendErr)
 	s.nDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		resendErr.NamespaceId,
 		resendErr.WorkflowId,
@@ -289,7 +289,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 		resendErr.EndEventId,
 		resendErr.EndEventVersion,
 	)
-	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(nil).Times(1)
+	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(nil)
 	_, err := s.replicationTaskHandler.execute(task, true)
 	s.NoError(err)
 }
@@ -322,7 +322,7 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask() {
 		NewRunEvents:        nil,
 	}
 
-	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil).Times(1)
+	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil)
 	_, err := s.replicationTaskHandler.execute(task, true)
 	s.NoError(err)
 }
@@ -365,7 +365,7 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask_Resend
 		345,
 		456,
 	)
-	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(resendErr).Times(1)
+	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(resendErr)
 	s.nDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		resendErr.NamespaceId,
 		resendErr.WorkflowId,
@@ -375,7 +375,7 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask_Resend
 		resendErr.EndEventId,
 		resendErr.EndEventVersion,
 	)
-	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil).Times(1)
+	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil)
 	_, err := s.replicationTaskHandler.execute(task, true)
 	s.NoError(err)
 }
