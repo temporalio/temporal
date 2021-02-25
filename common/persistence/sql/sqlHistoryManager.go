@@ -172,7 +172,7 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 	lastNodeID := request.LastNodeID
 	lastTxnID := request.LastTransactionID
 
-	if request.NextPageToken != nil && len(request.NextPageToken) > 0 {
+	if len(request.NextPageToken) > 0 {
 		var lastNodeID int64
 		var err error
 		// TODO the inner pagination token can be replaced by a dummy token

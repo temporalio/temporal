@@ -25,6 +25,7 @@
 package executor
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -141,16 +142,26 @@ func (e *fixedPoolExecutor) worker() {
 		if !ok {
 			return
 		}
+
 		status := task.Run()
-		if status == TaskStatusDefer {
+		switch status {
+		case TaskStatusDone:
+			atomic.AddInt64(&e.outstanding, -1)
+			e.metrics.IncCounter(e.metricScope, metrics.ExecutorTasksDoneCount)
+		case TaskStatusDefer:
 			if e.runQ.deferredCount() < e.maxDeferred {
 				e.runQ.addAndDefer(task)
 				e.metrics.IncCounter(e.metricScope, metrics.ExecutorTasksDeferredCount)
-				continue
+			} else {
+				atomic.AddInt64(&e.outstanding, -1)
+				e.metrics.IncCounter(e.metricScope, metrics.ExecutorTasksDroppedCount)
 			}
-			e.metrics.IncCounter(e.metricScope, metrics.ExecutorTasksDroppedCount)
+		case TaskStatusErr:
+			atomic.AddInt64(&e.outstanding, -1)
+			e.metrics.IncCounter(e.metricScope, metrics.ExecutorTasksErrCount)
+		default:
+			panic(fmt.Sprintf("unknown task status: %v", status))
 		}
-		atomic.AddInt64(&e.outstanding, -1)
 	}
 }
 
