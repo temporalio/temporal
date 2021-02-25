@@ -26,43 +26,48 @@ package history
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
-	"golang.org/x/time/rate"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 )
 
 type (
 	// ScavengerHeartbeatDetails is the heartbeat detail for HistoryScavengerActivity
 	ScavengerHeartbeatDetails struct {
+		SuccessCount int
+		ErrorCount   int
+		SkipCount    int
+		CurrentPage  int
+
 		NextPageToken []byte
-		CurrentPage   int
-		SkipCount     int
-		ErrorCount    int
-		SuccCount     int
 	}
 
 	// Scavenger is the type that holds the state for history scavenger daemon
 	Scavenger struct {
-		db       persistence.HistoryManager
-		client   historyservice.HistoryServiceClient
-		hbd      ScavengerHeartbeatDetails
-		rps      int
-		limiter  *rate.Limiter
-		metrics  metrics.Client
-		logger   log.Logger
-		isInTest bool
+		db          persistence.HistoryManager
+		client      historyservice.HistoryServiceClient
+		rateLimiter quotas.RateLimiter
+		metrics     metrics.Client
+		logger      log.Logger
+		isInTest    bool
+
+		sync.WaitGroup
+		sync.Mutex
+		hbd ScavengerHeartbeatDetails
 	}
 
 	taskDetail struct {
@@ -71,16 +76,13 @@ type (
 		runID       string
 		treeID      string
 		branchID    string
-
-		// passing along the current heartbeat details to make heartbeat within a task so that it won't timeout
-		hbd ScavengerHeartbeatDetails
 	}
 )
 
 const (
-	// used this to decide how many goroutines to process
-	rpsPerConcurrency = 50
-	pageSize          = 1000
+	pageSize  = 100
+	numWorker = 10
+
 	// only clean up history branches that older than this threshold
 	// we double the MaxWorkflowRetentionPeriod to avoid racing condition with history archival.
 	// Our history archiver delete mutable state, and then upload history to blob store and then delete history.
@@ -105,186 +107,223 @@ func NewScavenger(
 	logger log.Logger,
 ) *Scavenger {
 
-	rateLimiter := rate.NewLimiter(rate.Limit(rps), rps)
-
 	return &Scavenger{
-		db:      db,
-		client:  client,
-		hbd:     hbd,
-		rps:     rps,
-		limiter: rateLimiter,
+		db:     db,
+		client: client,
+		rateLimiter: quotas.NewDefaultOutgoingDynamicRateLimiter(
+			func() float64 { return float64(rps) },
+		),
 		metrics: metricsClient,
 		logger:  logger,
+
+		hbd: hbd,
 	}
 }
 
 // Run runs the scavenger
 func (s *Scavenger) Run(ctx context.Context) (ScavengerHeartbeatDetails, error) {
-	taskCh := make(chan taskDetail, pageSize)
-	respCh := make(chan error, pageSize)
-	concurrency := s.rps/rpsPerConcurrency + 1
+	reqCh := make(chan taskDetail, pageSize)
 
-	for i := 0; i < concurrency; i++ {
-		go s.startTaskProcessor(ctx, taskCh, respCh)
+	for i := 0; i < numWorker; i++ {
+		s.WaitGroup.Add(1)
+		go s.taskWorker(ctx, reqCh)
 	}
+	s.WaitGroup.Add(1)
+	go s.loadTasks(ctx, reqCh)
 
-	for {
-		resp, err := s.db.GetAllHistoryTreeBranches(&persistence.GetAllHistoryTreeBranchesRequest{
-			PageSize:      pageSize,
-			NextPageToken: s.hbd.NextPageToken,
-		})
-		if err != nil {
-			return s.hbd, err
-		}
-		batchCount := len(resp.Branches)
+	s.WaitGroup.Wait()
 
-		skips := 0
-		errorsOnSplitting := 0
-		// send all tasks
-		for _, br := range resp.Branches {
-			if time.Now().UTC().Add(-cleanUpThreshold).Before(timestamp.TimeValue(br.ForkTime)) {
-				batchCount--
-				skips++
-				s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerSkipCount)
-				continue
-			}
-
-			namespaceID, wid, rid, err := persistence.SplitHistoryGarbageCleanupInfo(br.Info)
-			if err != nil {
-				batchCount--
-				errorsOnSplitting++
-				s.logger.Error("unable to parse the history cleanup info", tag.DetailInfo(br.Info))
-				s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerErrorCount)
-				continue
-			}
-
-			taskCh <- taskDetail{
-				namespaceID: namespaceID,
-				workflowID:  wid,
-				runID:       rid,
-				treeID:      br.TreeID,
-				branchID:    br.BranchID,
-
-				hbd: s.hbd,
-			}
-		}
-
-		succCount := 0
-		errCount := 0
-		if batchCount > 0 {
-			// wait for counters indicate this batch is done
-		Loop:
-			for {
-				select {
-				case err := <-respCh:
-					if err == nil {
-						s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerSuccessCount)
-						succCount++
-					} else {
-						s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerErrorCount)
-						errCount++
-					}
-					if succCount+errCount == batchCount {
-						break Loop
-					}
-				case <-ctx.Done():
-					return s.hbd, ctx.Err()
-				}
-			}
-		}
-
-		s.hbd.CurrentPage++
-		s.hbd.NextPageToken = resp.NextPageToken
-		s.hbd.SuccCount += succCount
-		s.hbd.ErrorCount += errCount + errorsOnSplitting
-		s.hbd.SkipCount += skips
-		if !s.isInTest {
-			activity.RecordHeartbeat(ctx, s.hbd)
-		}
-
-		if len(s.hbd.NextPageToken) == 0 {
-			break
-		}
-	}
+	s.Lock()
+	defer s.Unlock()
 	return s.hbd, nil
 }
 
-func (s *Scavenger) startTaskProcessor(
+func (s *Scavenger) loadTasks(
+	ctx context.Context,
+	reqCh chan taskDetail,
+) error {
+
+	defer func() {
+		close(reqCh)
+		s.WaitGroup.Done()
+	}()
+
+	iter := collection.NewPagingIteratorWithToken(s.getPaginationFn(), s.hbd.NextPageToken)
+	for iter.HasNext() {
+		if err := s.rateLimiter.Wait(ctx); err != nil {
+			// context done
+			return err
+		}
+
+		item, err := iter.Next()
+		if err != nil {
+			return err
+		}
+
+		task := s.filterTask(item.(persistence.HistoryBranchDetail))
+		if task == nil {
+			continue
+		}
+
+		select {
+		case reqCh <- *task:
+			// noop
+
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	return nil
+}
+
+func (s *Scavenger) taskWorker(
 	ctx context.Context,
 	taskCh chan taskDetail,
-	respCh chan error,
 ) {
+
+	defer s.WaitGroup.Done()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case task := <-taskCh:
-			if isDone(ctx) {
+
+		case task, ok := <-taskCh:
+			if !ok {
 				return
 			}
 
-			if !s.isInTest {
-				activity.RecordHeartbeat(ctx, s.hbd)
-			}
-
-			err := s.limiter.Wait(ctx)
-			if err != nil {
-				respCh <- err
-				s.logger.Error("encounter error when wait for rate limiter",
-					getTaskLoggingTags(err, task)...)
-				continue
-			}
-
-			// this checks if the mutableState still exists
-			// if not then the history branch is garbage, we need to delete the history branch
-			_, err = s.client.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
-				NamespaceId: task.namespaceID,
-				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: task.workflowID,
-					RunId:      task.runID,
-				},
-			})
-
-			if err != nil {
-				if _, ok := err.(*serviceerror.NotFound); ok {
-					//deleting history branch
-					var branchToken []byte
-					branchToken, err = persistence.NewHistoryBranchTokenByBranchID(task.treeID, task.branchID)
-					if err != nil {
-						respCh <- err
-						s.logger.Error("encounter error when creating branch token",
-							getTaskLoggingTags(err, task)...)
-						continue
-					}
-
-					err = s.db.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
-						BranchToken: branchToken,
-						// This is a required argument but it is not needed for Cassandra.
-						// Since this scanner is only for Cassandra,
-						// we can fill any number here to let to code go through
-						ShardID: convert.Int32Ptr(1),
-					})
-					if err != nil {
-						respCh <- err
-						s.logger.Error("encounter error when deleting garbage history branch",
-							getTaskLoggingTags(err, task)...)
-					} else {
-						// deleted garbage
-						s.logger.Info("deleted history garbage",
-							getTaskLoggingTags(nil, task)...)
-
-						respCh <- nil
-					}
-				} else {
-					s.logger.Error("encounter error when describing the mutable state",
-						getTaskLoggingTags(err, task)...)
-					respCh <- err
-				}
-			} else {
-				// no garbage
-				respCh <- nil
-			}
+			s.heartbeat(ctx)
+			s.handleErr(s.handleTask(ctx, task))
 		}
+	}
+}
+
+func (s *Scavenger) heartbeat(ctx context.Context) {
+	s.Lock()
+	defer s.Unlock()
+
+	if !s.isInTest {
+		activity.RecordHeartbeat(ctx, s.hbd)
+	}
+}
+
+func (s *Scavenger) filterTask(
+	branch persistence.HistoryBranchDetail,
+) *taskDetail {
+
+	if time.Now().UTC().Add(-cleanUpThreshold).Before(timestamp.TimeValue(branch.ForkTime)) {
+		s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerSkipCount)
+
+		s.Lock()
+		defer s.Unlock()
+		s.hbd.SkipCount++
+		return nil
+	}
+
+	namespaceID, wid, rid, err := persistence.SplitHistoryGarbageCleanupInfo(branch.Info)
+	if err != nil {
+		s.logger.Error("unable to parse the history cleanup info", tag.DetailInfo(branch.Info))
+		s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerErrorCount)
+
+		s.Lock()
+		defer s.Unlock()
+		s.hbd.ErrorCount++
+		return nil
+	}
+
+	return &taskDetail{
+		namespaceID: namespaceID,
+		workflowID:  wid,
+		runID:       rid,
+		treeID:      branch.TreeID,
+		branchID:    branch.BranchID,
+	}
+}
+
+func (s *Scavenger) handleTask(
+	ctx context.Context,
+	task taskDetail,
+) error {
+	// this checks if the mutableState still exists
+	// if not then the history branch is garbage, we need to delete the history branch
+	_, err := s.client.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
+		NamespaceId: task.namespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: task.workflowID,
+			RunId:      task.runID,
+		},
+	})
+	switch err.(type) {
+	case nil:
+		return nil
+	case *serviceerror.NotFound:
+		// case handled below
+	default:
+		s.logger.Error("encounter error when describing the mutable state", getTaskLoggingTags(err, task)...)
+		return err
+	}
+
+	//deleting history branch
+	var branchToken []byte
+	branchToken, err = persistence.NewHistoryBranchTokenByBranchID(task.treeID, task.branchID)
+	if err != nil {
+		s.logger.Error("encounter error when creating branch token", getTaskLoggingTags(err, task)...)
+		return err
+	}
+
+	err = s.db.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+		BranchToken: branchToken,
+		// This is a required argument but it is not needed for Cassandra.
+		// Since this scanner is only for Cassandra,
+		// we can fill any number here to let to code go through
+		ShardID: convert.Int32Ptr(1),
+	})
+	if err != nil {
+		s.logger.Error("encounter error when deleting garbage history branch", getTaskLoggingTags(err, task)...)
+	} else {
+		s.logger.Info("deleted history garbage", getTaskLoggingTags(nil, task)...)
+	}
+	return err
+}
+
+func (s *Scavenger) handleErr(
+	err error,
+) {
+	s.Lock()
+	defer s.Unlock()
+	if err != nil {
+		s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerErrorCount)
+		s.hbd.ErrorCount++
+		return
+	}
+
+	s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerSuccessCount)
+	s.hbd.SuccessCount++
+}
+
+func (s *Scavenger) getPaginationFn() collection.PaginationFn {
+	return func(paginationToken []byte) ([]interface{}, []byte, error) {
+		req := &persistence.GetAllHistoryTreeBranchesRequest{
+			PageSize:      pageSize,
+			NextPageToken: paginationToken,
+		}
+		resp, err := s.db.GetAllHistoryTreeBranches(req)
+		if err != nil {
+			return nil, nil, err
+		}
+		var paginateItems []interface{}
+		for _, branch := range resp.Branches {
+			paginateItems = append(paginateItems, branch)
+		}
+
+		s.Lock()
+		s.hbd.CurrentPage++
+		s.hbd.NextPageToken = resp.NextPageToken
+		s.Unlock()
+
+		return paginateItems, resp.NextPageToken, nil
 	}
 }
 
@@ -305,14 +344,5 @@ func getTaskLoggingTags(err error, task taskDetail) []tag.Tag {
 		tag.WorkflowRunID(task.runID),
 		tag.WorkflowTreeID(task.treeID),
 		tag.WorkflowBranchID(task.branchID),
-	}
-}
-
-func isDone(ctx context.Context) bool {
-	select {
-	case <-ctx.Done():
-		return true
-	default:
-		return false
 	}
 }
