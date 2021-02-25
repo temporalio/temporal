@@ -165,7 +165,6 @@ func (t *task) validate(
 
 func (t *task) getPaginationFn() collection.PaginationFn {
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
-		t.paginationToken = paginationToken
 		req := &persistence.ListConcreteExecutionsRequest{
 			PageSize:  executionsPageSize,
 			PageToken: paginationToken,
@@ -178,6 +177,8 @@ func (t *task) getPaginationFn() collection.PaginationFn {
 		for _, state := range resp.States {
 			paginateItems = append(paginateItems, state)
 		}
+
+		t.paginationToken = resp.PageToken
 		return paginateItems, resp.PageToken, nil
 	}
 }
