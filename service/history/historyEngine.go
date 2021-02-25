@@ -75,11 +75,7 @@ import (
 
 const (
 	conditionalRetryCount                     = 5
-	activityCancellationMsgActivityIDUnknown  = "ACTIVITY_ID_UNKNOWN"
 	activityCancellationMsgActivityNotStarted = "ACTIVITY_ID_NOT_STARTED"
-	timerCancellationMsgTimerIDUnknown        = "TIMER_ID_UNKNOWN"
-	defaultQueryFirstWorkflowTaskWaitTime     = time.Second
-	queryFirstWorkflowTaskCheckInterval       = 200 * time.Millisecond
 )
 
 type (
@@ -2329,8 +2325,21 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	}
 	if request.GetWorkflowTaskFinishEventId() <= common.FirstEventID ||
 		request.GetWorkflowTaskFinishEventId() >= baseMutableState.GetNextEventID() {
-		return nil, serviceerror.NewInvalidArgument("Workflow task finish ID must be > 1 && <= workflow next event ID.")
+		return nil, serviceerror.NewInvalidArgument("Workflow task finish ID must be > 1 && <= workflow last event ID.")
 	}
+
+	var resetReappyType ResetReapplyType
+	switch request.GetResetReapplyType() {
+	case enumspb.RESET_REAPPLY_TYPE_UNSPECIFIED:
+		return nil, serviceerror.NewInvalidArgument("reset type not set")
+	case enumspb.RESET_REAPPLY_TYPE_ALL:
+		resetReappyType = ResetReapplyTypeAll
+	case enumspb.RESET_REAPPLY_TYPE_NONE:
+		resetReappyType = ResetReapplyTypeNone
+	default:
+		return nil, serviceerror.NewInternal("unknown reset type")
+	}
+
 	// also load the current run of the workflow, it can be different from the base runID
 	resp, err := e.executionManager.GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 		NamespaceID: namespaceID,
@@ -2418,6 +2427,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 		),
 		request.GetReason(),
 		nil,
+		resetReappyType,
 	); err != nil {
 		return nil, err
 	}
@@ -3015,6 +3025,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 					),
 					eventsReapplicationResetWorkflowReason,
 					toReapplyEvents,
+					ResetReapplyTypeAll,
 				); err != nil {
 					return nil, err
 				}

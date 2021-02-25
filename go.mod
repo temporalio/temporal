@@ -81,3 +81,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 	honnef.co/go/tools v0.1.0 // indirect
 )
+
+replace go.temporal.io/api => github.com/wxing1292/api-go v1.0.1-0.20210305184909-513103793126

@@ -356,6 +356,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 			targetWorkflow,
 			eventsReapplicationResetWorkflowReason,
 			targetWorkflowEvents.Events,
+			ResetReapplyTypeAll,
 		); err != nil {
 			return 0, transactionPolicyActive, err
 		}

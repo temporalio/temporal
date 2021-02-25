@@ -49,7 +49,14 @@ import (
 	"go.temporal.io/server/service/history/shard"
 )
 
+const (
+	ResetReapplyTypeAll ResetReapplyType = iota
+	ResetReapplyTypeNone
+)
+
 type (
+	ResetReapplyType int
+
 	workflowResetter interface {
 		// resetWorkflow is the new NDC compatible workflow reset logic
 		resetWorkflow(
@@ -66,6 +73,7 @@ type (
 			currentWorkflow nDCWorkflow,
 			resetReason string,
 			additionalReapplyEvents []*historypb.HistoryEvent,
+			resetReapplyType ResetReapplyType,
 		) error
 	}
 
@@ -116,6 +124,7 @@ func (r *workflowResetterImpl) resetWorkflow(
 	currentWorkflow nDCWorkflow,
 	resetReason string,
 	additionalReapplyEvents []*historypb.HistoryEvent,
+	resetReapplyType ResetReapplyType,
 ) (retError error) {
 
 	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(namespaceID)
@@ -151,6 +160,7 @@ func (r *workflowResetterImpl) resetWorkflow(
 		resetWorkflowVersion,
 		resetReason,
 		additionalReapplyEvents,
+		resetReapplyType,
 	)
 	if err != nil {
 		return err
@@ -178,6 +188,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	resetWorkflowVersion int64,
 	resetReason string,
 	additionalReapplyEvents []*historypb.HistoryEvent,
+	resetReapplyType ResetReapplyType,
 ) (nDCWorkflow, error) {
 
 	resetWorkflow, err := r.replayResetWorkflow(
@@ -237,17 +248,24 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		return nil, err
 	}
 
-	if err := r.reapplyContinueAsNewWorkflowEvents(
-		ctx,
-		resetMutableState,
-		namespaceID,
-		workflowID,
-		baseRunID,
-		baseBranchToken,
-		baseRebuildLastEventID+1,
-		baseNextEventID,
-	); err != nil {
-		return nil, err
+	switch resetReapplyType {
+	case ResetReapplyTypeAll:
+		if err := r.reapplyContinueAsNewWorkflowEvents(
+			ctx,
+			resetMutableState,
+			namespaceID,
+			workflowID,
+			baseRunID,
+			baseBranchToken,
+			baseRebuildLastEventID+1,
+			baseNextEventID,
+		); err != nil {
+			return nil, err
+		}
+	case ResetReapplyTypeNone:
+		// noop
+	default:
+		panic(fmt.Sprintf("unknown reset type: %v", resetReapplyType))
 	}
 
 	if err := r.reapplyEvents(resetMutableState, additionalReapplyEvents); err != nil {

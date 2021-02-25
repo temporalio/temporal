@@ -1263,6 +1263,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		),
 		reason,
 		nil,
+		ResetReapplyTypeAll,
 	)
 
 	switch err.(type) {
