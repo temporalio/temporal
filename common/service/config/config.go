@@ -117,6 +117,8 @@ type (
 		Frontend GroupTLS `yaml:"frontend"`
 		// SystemWorker controls TLS setting for System Workers connecting to Frontend.
 		SystemWorker WorkerTLS `yaml:"systemWorker"`
+		// ExpirationChecks defines settings for periodic checks for expiration of certificates
+		ExpirationChecks CertExpirationValidation `yaml:"expirationChecks"`
 	}
 
 	// GroupTLS contains an instance client and server TLS settings
@@ -187,6 +189,16 @@ type (
 
 		// Client TLS settings for system workers
 		Client ClientTLS `yaml:"client"`
+	}
+
+	// CertExpirationValidation contains settings for periodic checks of TLS certificate expiration
+	CertExpirationValidation struct {
+		// Log warnings for certificates expiring during this period of time from now
+		WarningPeriod time.Duration `yaml:"warningPeriod"`
+		// Log error for certificates expiring during this period of time from now
+		ErrorPeriod time.Duration `yaml:"errorPeriod"`
+		// Interval between checks for certificate expiration
+		CheckInterval time.Duration `yaml:"checkInterval"`
 	}
 
 	// Membership contains config items related to the membership layer of temporal

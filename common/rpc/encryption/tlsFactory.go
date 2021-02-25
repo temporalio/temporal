@@ -29,6 +29,8 @@ import (
 	"crypto/x509"
 	"time"
 
+	"github.com/uber-go/tally"
+
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -63,17 +65,25 @@ type (
 
 	CertExpirationData struct {
 		Thumbprint [16]byte
+		IsCA       bool
+		DNSNames   []string
 		Expiration time.Time
 	}
 
 	CertExpirationChecker interface {
-		Expiring(fromNow time.Duration) ([]CertExpirationData, []error)
+		Expiring(fromNow time.Duration) (
+			expiring map[[16]byte]CertExpirationData,
+			expired map[[16]byte]CertExpirationData,
+			errs []error)
 	}
 
 	tlsConfigConstructor func() (*tls.Config, error)
 )
 
 // NewTLSConfigProviderFromConfig creates a new TLS Config provider from RootTLS config
-func NewTLSConfigProviderFromConfig(encryptionSettings config.RootTLS) (TLSConfigProvider, error) {
-	return NewLocalStoreTlsProvider(&encryptionSettings)
+func NewTLSConfigProviderFromConfig(
+	encryptionSettings config.RootTLS,
+	scope tally.Scope,
+) (TLSConfigProvider, error) {
+	return NewLocalStoreTlsProvider(&encryptionSettings, scope)
 }

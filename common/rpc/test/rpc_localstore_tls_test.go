@@ -112,7 +112,7 @@ func (s *localStoreRPCSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 
-	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, nil)
 	s.NoError(err)
 	insecureFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(insecureFactory)
@@ -250,17 +250,17 @@ func (s *localStoreRPCSuite) setupFrontend() {
 		},
 	}
 
-	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS, nil)
 	s.NoError(err)
 	frontendMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(frontendMutualTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS, nil)
 	s.NoError(err)
 	frontendServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(frontendServerTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSSystemWorker.TLS)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSSystemWorker.TLS, nil)
 	s.NoError(err)
 	frontendSystemWorkerMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(frontendSystemWorkerMutualTLSFactory)
@@ -306,17 +306,17 @@ func (s *localStoreRPCSuite) setupInternode() {
 		},
 	}
 
-	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS, nil)
 	s.NoError(err)
 	internodeMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(internodeMutualTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS, nil)
 	s.NoError(err)
 	internodeServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(internodeServerTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreAltMutualTLS.TLS)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreAltMutualTLS.TLS, nil)
 	s.NoError(err)
 	internodeMutualAltTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(internodeMutualAltTLSFactory)
@@ -537,21 +537,23 @@ func (s *localStoreRPCSuite) TestCertExpiration() {
 
 	twoDays := time.Hour * 48
 	s.testCertExpiration(s.insecureRPCFactory, twoDays, 0)
-	s.testCertExpiration(s.internodeMutualTLSRPCFactory, twoDays, 5)
-	s.testCertExpiration(s.internodeServerTLSRPCFactory, twoDays, 5)
-	s.testCertExpiration(s.internodeAltMutualTLSRPCFactory, twoDays, 5)
+	s.testCertExpiration(s.internodeMutualTLSRPCFactory, twoDays, 3)
+	s.testCertExpiration(s.internodeServerTLSRPCFactory, twoDays, 3)
+	s.testCertExpiration(s.internodeAltMutualTLSRPCFactory, twoDays, 2)
 	s.testCertExpiration(s.frontendMutualTLSRPCFactory, twoDays, 4)
 	s.testCertExpiration(s.frontendServerTLSRPCFactory, twoDays, 2)
-	s.testCertExpiration(s.frontendSystemWorkerMutualTLSRPCFactory, twoDays, 5)
+	s.testCertExpiration(s.frontendSystemWorkerMutualTLSRPCFactory, twoDays, 6)
 }
 
-func (s *localStoreRPCSuite) testCertExpiration(factory *TestFactory, fromNow time.Duration, nExpired int) {
+func (s *localStoreRPCSuite) testCertExpiration(factory *TestFactory, fromNow time.Duration, nExpiring int) {
 	provider, ok := factory.GetTLSConfigProvider().(encryption.CertExpirationChecker)
 	s.True(ok)
-	list, errs := provider.Expiring(fromNow)
-	s.NotNil(list)
+	expiring, expired, errs := provider.Expiring(fromNow)
+	if len(expired) > 0 {
+	}
+	s.NotNil(expiring)
 	s.NotNil(errs)
-	s.Equal(nExpired, len(list))
+	s.Equal(nExpiring, len(expiring))
 	s.Equal(0, len(errs))
 }
 

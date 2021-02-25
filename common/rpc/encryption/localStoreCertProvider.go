@@ -49,12 +49,14 @@ type localStoreCertProvider struct {
 	tlsSettings       *config.GroupTLS
 	workerTLSSettings *config.WorkerTLS
 
-	serverCert    *tls.Certificate
-	clientCert    *tls.Certificate
-	clientCAs     *x509.CertPool
-	serverCAs     *x509.CertPool
-	clientCACerts []*x509.Certificate // copies of certs in the clientCAs CertPool for expiration checks
-	serverCACerts []*x509.Certificate // copies of certs in the serverCAs CertPool for expiration checks
+	serverCert          *tls.Certificate
+	clientCert          *tls.Certificate
+	clientCAs           *x509.CertPool
+	serverCAs           *x509.CertPool
+	serverCAsWorker     *x509.CertPool
+	clientCACerts       []*x509.Certificate // copies of certs in the clientCAs CertPool for expiration checks
+	serverCACerts       []*x509.Certificate // copies of certs in the serverCAs CertPool for expiration checks
+	serverCACertsWorker []*x509.Certificate // copies of certs in the serverCAs CertPool for expiration checks
 
 	isLegacyWorkerConfig bool
 	legacyWorkerSettings *config.ClientTLS
@@ -74,6 +76,10 @@ func (s *localStoreCertProvider) FetchServerCertificate() (*tls.Certificate, err
 }
 
 func (s *localStoreCertProvider) FetchClientCAs() (*x509.CertPool, error) {
+
+	if s.tlsSettings == nil {
+		return nil, nil
+	}
 	return s.fetchCAs(
 		s.tlsSettings.Server.ClientCAFiles,
 		s.tlsSettings.Server.ClientCAData,
@@ -83,15 +89,29 @@ func (s *localStoreCertProvider) FetchClientCAs() (*x509.CertPool, error) {
 }
 
 func (s *localStoreCertProvider) FetchServerRootCAsForClient(isWorker bool) (*x509.CertPool, error) {
+
 	clientSettings := s.getClientTLSSettings(isWorker)
+	if clientSettings == nil {
+		return nil, nil
+	}
 	rootCAFiles := clientSettings.RootCAFiles
 	rootCAData := clientSettings.RootCAData
+
+	var cached **x509.CertPool
+	var certs *[]*x509.Certificate
+	if isWorker {
+		cached = &s.serverCAsWorker
+		certs = &s.serverCACertsWorker
+	} else {
+		cached = &s.serverCAs
+		certs = &s.serverCACerts
+	}
 
 	return s.fetchCAs(
 		rootCAFiles,
 		rootCAData,
-		&s.serverCAs,
-		&s.serverCACerts,
+		cached,
+		certs,
 		"cannot specify both rootCAFiles and rootCAData properties")
 }
 
@@ -244,41 +264,55 @@ func (s *localStoreCertProvider) getClientTLSSettings(isWorker bool) *config.Cli
 	} else if isWorker {
 		return s.legacyWorkerSettings // legacy config case when we use Frontend.Client settings
 	} else {
+		if s.tlsSettings == nil {
+			return nil
+		}
 		return &s.tlsSettings.Client // internode client case
 	}
 }
 
-func (s *localStoreCertProvider) Expiring(fromNow time.Duration) ([]CertExpirationData, []error) {
+func (s *localStoreCertProvider) Expiring(fromNow time.Duration,
+) (expiring map[[16]byte]CertExpirationData, expired map[[16]byte]CertExpirationData, errs []error) {
 
-	list := make([]CertExpirationData, 0)
-	errs := make([]error, 0)
-	when := time.Now().Add(fromNow)
+	expiring = make(map[[16]byte]CertExpirationData)
+	expired = make(map[[16]byte]CertExpirationData)
+	errs = make([]error, 0)
+	when := time.Now().UTC().Add(fromNow)
 
-	list, errs = checkTLSCertForExpiration(s.FetchServerCertificate, when, list, errs)
-	list, errs = checkTLSCertForExpiration(
+	errs = checkTLSCertForExpiration(s.FetchServerCertificate, when, expiring, expired, errs)
+	errs = checkTLSCertForExpiration(
 		func() (*tls.Certificate, error) { return s.FetchClientCertificate(false) },
-		when, list, errs)
-	list, errs = checkTLSCertForExpiration(
+		when, expiring, expired, errs)
+	errs = checkTLSCertForExpiration(
 		func() (*tls.Certificate, error) { return s.FetchClientCertificate(true) },
-		when, list, errs)
+		when, expiring, expired, errs)
 
-	for _, cert := range s.serverCACerts {
-		list, errs = checkCertForExpiration(
-			func() (*x509.Certificate, error) { return cert, nil },
-			when, list, errs)
-	}
+	// load CA certs, so that they are cached in memory
+	errs = loadCAsAndCaptureErrors(s.FetchClientCAs, errs)
+	checkCertsForExpiration(s.clientCACerts, when, expiring, expired)
 
-	return list, errs
+	errs = loadCAsAndCaptureErrors(func() (*x509.CertPool, error) {
+		return s.FetchServerRootCAsForClient(false)
+	}, errs)
+	checkCertsForExpiration(s.serverCACerts, when, expiring, expired)
+
+	errs = loadCAsAndCaptureErrors(func() (*x509.CertPool, error) {
+		return s.FetchServerRootCAsForClient(true)
+	}, errs)
+	checkCertsForExpiration(s.serverCACertsWorker, when, expiring, expired)
+
+	return expiring, expired, errs
 }
 
 func checkTLSCertForExpiration(
 	fetchCert func() (*tls.Certificate, error),
 	time time.Time,
-	list []CertExpirationData,
+	expiring map[[16]byte]CertExpirationData,
+	expired map[[16]byte]CertExpirationData,
 	errors []error,
-) ([]CertExpirationData, []error) {
+) []error {
 
-	return checkCertForExpiration(
+	return fetchAndCheckCertForExpiration(
 		func() (*x509.Certificate, error) {
 			cert, err := fetchCert()
 			if err != nil {
@@ -289,28 +323,57 @@ func checkTLSCertForExpiration(
 			}
 			return x509.ParseCertificate(cert.Certificate[0])
 		},
-		time, list, errors)
+		time, expiring, expired, errors)
 }
 
-func checkCertForExpiration(
+func fetchAndCheckCertForExpiration(
 	fetchCert func() (*x509.Certificate, error),
-	time time.Time,
-	list []CertExpirationData,
+	when time.Time,
+	expiring map[[16]byte]CertExpirationData,
+	expired map[[16]byte]CertExpirationData,
 	errors []error,
-) ([]CertExpirationData, []error) {
+) []error {
 
 	cert, err := fetchCert()
 	if err != nil {
 		errors = append(errors, err)
 	}
-	if cert != nil && cert.NotAfter.Before(time) {
+	checkCertForExpiration(cert, when, expiring, expired)
+	return errors
+}
+
+func checkCertsForExpiration(
+	certs []*x509.Certificate,
+	time time.Time,
+	expiring map[[16]byte]CertExpirationData,
+	expired map[[16]byte]CertExpirationData,
+) {
+
+	for _, cert := range certs {
+		checkCertForExpiration(cert, time, expiring, expired)
+	}
+}
+
+func checkCertForExpiration(
+	cert *x509.Certificate,
+	when time.Time,
+	expiring map[[16]byte]CertExpirationData,
+	expired map[[16]byte]CertExpirationData,
+) {
+
+	if cert != nil && cert.NotAfter.Before(when) {
 		record := CertExpirationData{
 			Thumbprint: md5.Sum(cert.Raw),
+			IsCA:       cert.IsCA,
+			DNSNames:   cert.DNSNames,
 			Expiration: cert.NotAfter,
 		}
-		list = append(list, record)
+		if record.Expiration.Before(time.Now().UTC()) {
+			expired[record.Thumbprint] = record
+		} else {
+			expiring[record.Thumbprint] = record
+		}
 	}
-	return list, errors
 }
 
 func buildCAPoolFromData(caData []string) (*x509.CertPool, []*x509.Certificate, error) {
@@ -376,4 +439,13 @@ func parseCert(bytes []byte) (*x509.Certificate, error) {
 		return nil, fmt.Errorf("failed to decode PEM certificatew data")
 	}
 	return x509.ParseCertificate(certBytes[0])
+}
+
+func loadCAsAndCaptureErrors(getCAs func() (*x509.CertPool, error), errs []error) []error {
+
+	_, err := getCAs()
+	if err != nil {
+		errs = append(errs, err)
+	}
+	return errs
 }
