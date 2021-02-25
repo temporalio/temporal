@@ -25,36 +25,22 @@
 package executions
 
 import (
-	historypb "go.temporal.io/api/history/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
 type (
-	// executionData wraps data on execution that is suitable for running validations.
-	// Extend this structure if more data is required for new checks.
-	executionData struct {
-		mutableState  *persistencespb.WorkflowMutableState
-		history       []*historypb.HistoryEvent
-		historyBranch *persistencespb.HistoryBranch
+	MutableState struct {
+		*persistencespb.WorkflowMutableState
 	}
 
-	// executionValidatorResult provides a summary of validation results
-	executionValidatorResult struct {
-		// true if provided executionData is valid.
-		isValid bool
-		// This would be put into metric label.
-		failureReasonTag string
-		// Detailed description. Will be added to failure long.
-		failureReasonDetailed string
-		// Extra error information
-		error error
+	MutableStateValidationResult struct {
+		// type tag used for metrics
+		failureType string
+		// failure details used for logging
+		failureDetails string
 	}
 
-	// executionValidator Implement this interface and provide it to executions scavenger to add extra checks
-	// on executions table.
-	executionValidator interface {
-		validatorTag() string
-		validate(execData *executionData) executionValidatorResult
+	Validator interface {
+		Validate(mutableState *MutableState) ([]MutableStateValidationResult, error)
 	}
 )

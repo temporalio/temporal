@@ -197,12 +197,11 @@ func ExecutionsScavengerActivity(
 
 	metricsClient := ctx.GetMetricsClient()
 	scavenger := executions.NewScavenger(
-		ctx.GetFrontendClient(),
+		ctx.cfg.Persistence.NumHistoryShards,
+		scannerCtxExecMgrFactory{ctx}, // as persistence.ExecutionManagerFactory
 		ctx.GetHistoryManager(),
 		metricsClient,
 		ctx.GetLogger(),
-		scannerCtxExecMgrFactory{ctx}, // as persistence.ExecutionManagerFactory
-		ctx.cfg.Persistence.NumHistoryShards,
 	)
 	scavenger.Start()
 	for scavenger.Alive() {
