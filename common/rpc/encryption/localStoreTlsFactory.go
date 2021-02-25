@@ -163,10 +163,10 @@ func (s *localStoreTlsProvider) Expiring(fromNow time.Duration,
 	expired = make(CertExpirationMap, 0)
 	errs = make([]error, 0)
 
-	errs = checkExpiration(s.internodeCertProvider, fromNow, expiring, expired, errs)
-	errs = checkExpiration(s.frontendCertProvider, fromNow, expiring, expired, errs)
-	errs = checkExpiration(s.workerCertProvider, fromNow, expiring, expired, errs)
-	errs = checkExpiration(s.frontendPerHostCertProviderFactory, fromNow, expiring, expired, errs)
+	errs = append(errs, checkExpiration(s.internodeCertProvider, fromNow, expiring, expired)...)
+	errs = append(errs, checkExpiration(s.frontendCertProvider, fromNow, expiring, expired)...)
+	errs = append(errs, checkExpiration(s.workerCertProvider, fromNow, expiring, expired)...)
+	errs = append(errs, checkExpiration(s.frontendPerHostCertProviderFactory, fromNow, expiring, expired)...)
 
 	return expiring, expired, errs
 }
@@ -176,17 +176,15 @@ func checkExpiration(
 	fromNow time.Duration,
 	expiring CertExpirationMap,
 	expired CertExpirationMap,
-	errs []error,
 ) []error {
 
 	p, ok := provider.(CertExpirationChecker)
+	var errs []error
 	if ok {
 		providerExpiring, providerExpired, err := p.Expiring(fromNow)
 		mergeMaps(expiring, providerExpiring)
 		mergeMaps(expired, providerExpired)
-		if len(err) != 0 {
-			errs = append(errs, err...)
-		}
+		errs = err
 	}
 	return errs
 }
