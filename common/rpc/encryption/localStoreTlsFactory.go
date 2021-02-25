@@ -91,11 +91,11 @@ func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope tally.Scope) (TLS
 		settings:                           tlsConfig,
 		scope:                              scope,
 	}
-	provider.init()
+	provider.initialize()
 	return provider, nil
 }
 
-func (s *localStoreTlsProvider) init() {
+func (s *localStoreTlsProvider) initialize() {
 
 	period := s.settings.ExpirationChecks.CheckInterval
 	if period != 0 {
@@ -181,10 +181,10 @@ func checkExpiration(
 	p, ok := provider.(CertExpirationChecker)
 	var errs []error
 	if ok {
-		providerExpiring, providerExpired, err := p.Expiring(fromNow)
+		providerExpiring, providerExpired, providerErrors := p.Expiring(fromNow)
 		mergeMaps(expiring, providerExpiring)
 		mergeMaps(expired, providerExpired)
-		errs = err
+		errs = providerErrors
 	}
 	return errs
 }
@@ -348,7 +348,7 @@ func (s *localStoreTlsProvider) timerCallback() {
 func (s *localStoreTlsProvider) logCerts(certs CertExpirationMap, expired bool, errorTime time.Time) {
 
 	for _, cert := range certs {
-		str := warningString(cert, expired)
+		str := createExpirationLogMessage(cert, expired)
 		if expired || cert.Expiration.Before(errorTime) {
 			s.logger.Error(str)
 		} else {
@@ -364,7 +364,7 @@ func (s *localStoreTlsProvider) reportErrors(errs []error) {
 	}
 }
 
-func warningString(cert CertExpirationData, expired bool) string {
+func createExpirationLogMessage(cert CertExpirationData, expired bool) string {
 
 	var verb string
 	if expired {
@@ -372,7 +372,7 @@ func warningString(cert CertExpirationData, expired bool) string {
 	} else {
 		verb = "is expiring"
 	}
-	return fmt.Sprintf("certificate with thumbrint=%x %s on %v, IsCA=%t, DNS=%v",
+	return fmt.Sprintf("certificate with thumbprint=%x %s on %v, IsCA=%t, DNS=%v",
 		cert.Thumbprint, verb, cert.Expiration, cert.IsCA, cert.DNSNames)
 }
 

@@ -63,14 +63,16 @@ type (
 		GetCertProvider(hostName string) (CertProvider, error)
 	}
 
+	CertThumbprint [16]byte
+
 	CertExpirationData struct {
-		Thumbprint [16]byte
+		Thumbprint CertThumbprint
 		IsCA       bool
 		DNSNames   []string
 		Expiration time.Time
 	}
 
-	CertExpirationMap map[[16]byte]CertExpirationData
+	CertExpirationMap map[CertThumbprint]CertExpirationData
 
 	CertExpirationChecker interface {
 		Expiring(fromNow time.Duration) (

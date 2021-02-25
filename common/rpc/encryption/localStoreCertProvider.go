@@ -56,11 +56,13 @@ type localStoreCertProvider struct {
 	serverCAsWorker     *x509.CertPool
 	clientCACerts       []*x509.Certificate // copies of certs in the clientCAs CertPool for expiration checks
 	serverCACerts       []*x509.Certificate // copies of certs in the serverCAs CertPool for expiration checks
-	serverCACertsWorker []*x509.Certificate // copies of certs in the serverCAs CertPool for expiration checks
+	serverCACertsWorker []*x509.Certificate // copies of certs in the serverCAsWorker CertPool for expiration checks
 
 	isLegacyWorkerConfig bool
 	legacyWorkerSettings *config.ClientTLS
 }
+
+type loadOrDecodeDataFunc func(item string) ([]byte, error)
 
 func (s *localStoreCertProvider) GetSettings() *config.GroupTLS {
 	return s.tlsSettings
@@ -120,7 +122,7 @@ func (s *localStoreCertProvider) fetchCAs(
 	data []string,
 	cached **x509.CertPool,
 	certs *[]*x509.Certificate,
-	duplicateSettingsError string) (*x509.CertPool, error) {
+	duplicateErrorMessage string) (*x509.CertPool, error) {
 	if len(files) == 0 && len(data) == 0 {
 		return nil, nil
 	}
@@ -150,7 +152,7 @@ func (s *localStoreCertProvider) fetchCAs(
 	}
 
 	if clientCAPoolFromFiles != nil && clientCaPoolFromData != nil {
-		return nil, errors.New(duplicateSettingsError)
+		return nil, errors.New(duplicateErrorMessage)
 	}
 
 	if clientCaPoolFromData != nil {
@@ -381,10 +383,10 @@ func buildCAPoolFromFiles(caFiles []string) (*x509.CertPool, []*x509.Certificate
 	return buildCAPool(caFiles, ioutil.ReadFile)
 }
 
-func buildCAPool(cas []string, getBytes func(item string) ([]byte, error)) (*x509.CertPool, []*x509.Certificate, error) {
+func buildCAPool(cas []string, getBytes loadOrDecodeDataFunc) (*x509.CertPool, []*x509.Certificate, error) {
 	atLeastOneCert := false
 	caPool := x509.NewCertPool()
-	certs := make([]*x509.Certificate, 1)
+	var certs []*x509.Certificate
 
 	for _, ca := range cas {
 		if ca == "" {
@@ -393,19 +395,18 @@ func buildCAPool(cas []string, getBytes func(item string) ([]byte, error)) (*x50
 
 		caBytes, err := getBytes(ca)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to decode ca cert: %v", err)
+			return nil, nil, fmt.Errorf("failed to decode ca cert: %w", err)
 		}
 
 		if !caPool.AppendCertsFromPEM(caBytes) {
 			return nil, nil, errors.New("unknown failure constructing cert pool for ca")
-		} else {
-
-			cert, err := parseCert(caBytes)
-			if err != nil {
-				return nil, nil, fmt.Errorf("failed to parse x509 certificate: #{err}")
-			}
-			certs = append(certs, cert)
 		}
+
+		cert, err := parseCert(caBytes)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to parse x509 certificate: %w", err)
+		}
+		certs = append(certs, cert)
 		atLeastOneCert = true
 	}
 
@@ -431,7 +432,7 @@ func parseCert(bytes []byte) (*x509.Certificate, error) {
 	}
 
 	if len(certBytes[0]) == 0 {
-		return nil, fmt.Errorf("failed to decode PEM certificatew data")
+		return nil, fmt.Errorf("failed to decode PEM certificate data")
 	}
 	return x509.ParseCertificate(certBytes[0])
 }

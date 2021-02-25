@@ -83,11 +83,11 @@ func (f *localStorePerHostCertProviderFactory) Expiring(fromNow time.Duration,
 
 	for _, provider := range f.certProviderCache {
 
-		providerExpiring, providerExpired, err := provider.Expiring(fromNow)
+		providerExpiring, providerExpired, errs := provider.Expiring(fromNow)
 		mergeMaps(expiring, providerExpiring)
 		mergeMaps(expired, providerExpired)
-		if len(err) != 0 {
-			errs = append(errs, err...)
+		if len(errs) != 0 {
+			errs = append(errs, errs...)
 		}
 	}
 	return expiring, expired, errs
