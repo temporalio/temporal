@@ -58,8 +58,8 @@ type (
 		DisableHostVerification(isWorker bool) bool
 	}
 
-	// PerHostCertProviderFactory creates a CertProvider in the context of a specific Domain.
-	PerHostCertProviderFactory interface {
+	// PerHostCertProviderMap returns a CertProvider for a given host name.
+	PerHostCertProviderMap interface {
 		GetCertProvider(hostName string) (CertProvider, error)
 	}
 

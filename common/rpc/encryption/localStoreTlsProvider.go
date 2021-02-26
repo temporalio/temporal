@@ -53,7 +53,7 @@ type localStoreTlsProvider struct {
 	frontendCertProvider        *localStoreCertProvider
 	workerCertProvider          *localStoreCertProvider
 
-	frontendPerHostCertProviderFactory *localStorePerHostCertProviderFactory
+	frontendPerHostCertProviderMap *localStorePerHostCertProviderMap
 
 	internodeServerConfig *tls.Config
 	internodeClientConfig *tls.Config
@@ -82,14 +82,14 @@ func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope tally.Scope) (TLS
 	}
 
 	provider := &localStoreTlsProvider{
-		internodeCertProvider:              internodeProvider,
-		internodeClientCertProvider:        internodeProvider,
-		frontendCertProvider:               &localStoreCertProvider{tlsSettings: &tlsConfig.Frontend},
-		workerCertProvider:                 workerProvider,
-		frontendPerHostCertProviderFactory: newLocalStorePerHostCertProviderFactory(tlsConfig.Frontend.PerHostOverrides),
-		RWMutex:                            sync.RWMutex{},
-		settings:                           tlsConfig,
-		scope:                              scope,
+		internodeCertProvider:          internodeProvider,
+		internodeClientCertProvider:    internodeProvider,
+		frontendCertProvider:           &localStoreCertProvider{tlsSettings: &tlsConfig.Frontend},
+		workerCertProvider:             workerProvider,
+		frontendPerHostCertProviderMap: newLocalStorePerHostCertProviderMap(tlsConfig.Frontend.PerHostOverrides),
+		RWMutex:                        sync.RWMutex{},
+		settings:                       tlsConfig,
+		scope:                          scope,
 	}
 	provider.initialize()
 	return provider, nil
@@ -142,7 +142,7 @@ func (s *localStoreTlsProvider) GetFrontendServerConfig() (*tls.Config, error) {
 	return s.getOrCreateConfig(
 		&s.frontendServerConfig,
 		func() (*tls.Config, error) {
-			return newServerTLSConfig(s.frontendCertProvider, s.frontendPerHostCertProviderFactory)
+			return newServerTLSConfig(s.frontendCertProvider, s.frontendPerHostCertProviderMap)
 		},
 		s.frontendCertProvider.GetSettings().IsEnabled())
 }
@@ -168,7 +168,7 @@ func (s *localStoreTlsProvider) GetExpiringCerts(timeWindow time.Duration,
 	err = appendError(err, checkError)
 	checkError = checkExpiration(s.workerCertProvider, timeWindow, expiring, expired)
 	err = appendError(err, checkError)
-	checkError = checkExpiration(s.frontendPerHostCertProviderFactory, timeWindow, expiring, expired)
+	checkError = checkExpiration(s.frontendPerHostCertProviderMap, timeWindow, expiring, expired)
 	err = appendError(err, checkError)
 
 	return expiring, expired, err
@@ -224,7 +224,7 @@ func (s *localStoreTlsProvider) getOrCreateConfig(
 
 func newServerTLSConfig(
 	certProvider CertProvider,
-	perHostCertProviderFactory PerHostCertProviderFactory,
+	perHostCertProviderMap PerHostCertProviderMap,
 ) (*tls.Config, error) {
 
 	tlsConfig, err := getServerTLSConfigFromCertProvider(certProvider)
@@ -233,8 +233,8 @@ func newServerTLSConfig(
 	}
 
 	tlsConfig.GetConfigForClient = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
-		if perHostCertProviderFactory != nil {
-			perHostCertProvider, err := perHostCertProviderFactory.GetCertProvider(c.ServerName)
+		if perHostCertProviderMap != nil {
+			perHostCertProvider, err := perHostCertProviderMap.GetCertProvider(c.ServerName)
 			if err != nil {
 				return nil, err
 			}

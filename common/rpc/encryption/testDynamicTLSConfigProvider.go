@@ -40,7 +40,7 @@ type TestDynamicTLSConfigProvider struct {
 	FrontendClientCertProvider  *TestDynamicCertProvider
 	WorkerCertProvider          *TestDynamicCertProvider
 
-	FrontendPerHostCertProviderFactory PerHostCertProviderFactory
+	FrontendPerHostCertProviderMap PerHostCertProviderMap
 
 	internodeServerConfig *tls.Config
 	internodeClientConfig *tls.Config
@@ -57,7 +57,7 @@ func (t *TestDynamicTLSConfigProvider) GetInternodeClientConfig() (*tls.Config, 
 }
 
 func (t *TestDynamicTLSConfigProvider) GetFrontendServerConfig() (*tls.Config, error) {
-	return newServerTLSConfig(t.FrontendCertProvider, t.FrontendPerHostCertProviderFactory)
+	return newServerTLSConfig(t.FrontendCertProvider, t.FrontendPerHostCertProviderMap)
 }
 
 func (t *TestDynamicTLSConfigProvider) GetFrontendClientConfig() (*tls.Config, error) {
@@ -79,12 +79,12 @@ func NewTestDynamicTLSConfigProvider(
 	frontendProvider := NewTestDynamicCertProvider(frontendCerts, frontendCACerts, wrongCACerts, tlsConfig.Frontend)
 
 	return &TestDynamicTLSConfigProvider{
-		InternodeCertProvider:              internodeProvider,
-		InternodeClientCertProvider:        internodeProvider,
-		FrontendCertProvider:               frontendProvider,
-		FrontendClientCertProvider:         frontendProvider,
-		WorkerCertProvider:                 frontendProvider,
-		FrontendPerHostCertProviderFactory: frontendProvider,
-		settings:                           tlsConfig,
+		InternodeCertProvider:          internodeProvider,
+		InternodeClientCertProvider:    internodeProvider,
+		FrontendCertProvider:           frontendProvider,
+		FrontendClientCertProvider:     frontendProvider,
+		WorkerCertProvider:             frontendProvider,
+		FrontendPerHostCertProviderMap: frontendProvider,
+		settings:                       tlsConfig,
 	}, nil
 }

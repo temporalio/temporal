@@ -43,7 +43,7 @@ type TestDynamicCertProvider struct {
 
 var _ CertProvider = (*TestDynamicCertProvider)(nil)
 var _ ClientCertProvider = (*TestDynamicCertProvider)(nil)
-var _ PerHostCertProviderFactory = (*TestDynamicCertProvider)(nil)
+var _ PerHostCertProviderMap = (*TestDynamicCertProvider)(nil)
 
 func NewTestDynamicCertProvider(
 	serverCerts []*tls.Certificate,

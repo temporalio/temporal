@@ -31,15 +31,16 @@ import (
 	"go.temporal.io/server/common/service/config"
 )
 
-var _ PerHostCertProviderFactory = (*localStorePerHostCertProviderFactory)(nil)
-var _ CertExpirationChecker = (*localStorePerHostCertProviderFactory)(nil)
+var _ PerHostCertProviderMap = (*localStorePerHostCertProviderMap)(nil)
+var _ CertExpirationChecker = (*localStorePerHostCertProviderMap)(nil)
 
-type localStorePerHostCertProviderFactory struct {
+type localStorePerHostCertProviderMap struct {
 	certProviderCache map[string]*localStoreCertProvider
 }
 
-func newLocalStorePerHostCertProviderFactory(overrides map[string]config.ServerTLS) *localStorePerHostCertProviderFactory {
-	factory := &localStorePerHostCertProviderFactory{}
+func newLocalStorePerHostCertProviderMap(overrides map[string]config.ServerTLS) *localStorePerHostCertProviderMap {
+
+	factory := &localStorePerHostCertProviderMap{}
 	if overrides == nil {
 		return factory
 	}
@@ -57,20 +58,19 @@ func newLocalStorePerHostCertProviderFactory(overrides map[string]config.ServerT
 	return factory
 }
 
-func (f *localStorePerHostCertProviderFactory) GetCertProvider(hostName string) (CertProvider, error) {
+func (f *localStorePerHostCertProviderMap) GetCertProvider(hostName string) (CertProvider, error) {
+
 	if f.certProviderCache == nil {
 		return nil, nil
 	}
-
 	cachedCertProvider, ok := f.certProviderCache[strings.ToLower(hostName)]
 	if !ok {
 		return nil, nil
 	}
-
 	return cachedCertProvider, nil
 }
 
-func (f *localStorePerHostCertProviderFactory) GetExpiringCerts(timeWindow time.Duration,
+func (f *localStorePerHostCertProviderMap) GetExpiringCerts(timeWindow time.Duration,
 ) (expiring CertExpirationMap, expired CertExpirationMap, err error) {
 
 	expiring = make(CertExpirationMap)
