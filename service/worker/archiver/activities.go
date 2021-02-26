@@ -33,7 +33,6 @@ import (
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -113,7 +112,7 @@ func deleteHistoryActivity(ctx context.Context, request ArchiveRequest) (err err
 	}()
 	err = container.HistoryV2Manager.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: request.BranchToken,
-		ShardID:     convert.Int32Ptr(request.ShardID),
+		ShardID:     request.ShardID,
 	})
 	if err == nil {
 		return nil

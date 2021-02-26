@@ -412,7 +412,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		MaxEventID:    pageToken.GetEndEventId(),
 		PageSize:      pageSize,
 		NextPageToken: pageToken.PersistenceToken,
-		ShardID:       &shardID,
+		ShardID:       shardID,
 	})
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {

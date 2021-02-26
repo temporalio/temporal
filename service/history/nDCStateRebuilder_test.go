@@ -199,14 +199,14 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 	history := append(history1, history2...)
 	pageToken := []byte("some random token")
 
-	shardId := s.mockShard.GetShardID()
+	shardID := s.mockShard.GetShardID()
 	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
 		PageSize:      nDCDefaultPageSize,
 		NextPageToken: nil,
-		ShardID:       &shardId,
+		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		History:       history1,
 		NextPageToken: pageToken,
@@ -218,7 +218,7 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 		MaxEventID:    nextEventID,
 		PageSize:      nDCDefaultPageSize,
 		NextPageToken: pageToken,
-		ShardID:       &shardId,
+		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		History:       history2,
 		NextPageToken: nil,
@@ -282,14 +282,14 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 
 	historySize1 := 12345
 	historySize2 := 67890
-	shardId := s.mockShard.GetShardID()
+	shardID := s.mockShard.GetShardID()
 	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
 		PageSize:      nDCDefaultPageSize,
 		NextPageToken: nil,
-		ShardID:       &shardId,
+		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		History:       history1,
 		NextPageToken: pageToken,
@@ -301,7 +301,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		MaxEventID:    nextEventID,
 		PageSize:      nDCDefaultPageSize,
 		NextPageToken: pageToken,
-		ShardID:       &shardId,
+		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		History:       history2,
 		NextPageToken: nil,

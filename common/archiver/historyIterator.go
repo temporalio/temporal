@@ -218,7 +218,7 @@ func (i *historyIterator) readHistory(firstEventID int64) ([]*historypb.History,
 		MinEventID:  firstEventID,
 		MaxEventID:  common.EndEventID,
 		PageSize:    i.historyPageSize,
-		ShardID:     &i.request.ShardID,
+		ShardID:     i.request.ShardID,
 	}
 	historyBatches, _, _, err := persistence.ReadFullPageV2EventsByBatch(i.historyV2Manager, req)
 	return historyBatches, err

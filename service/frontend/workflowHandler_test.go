@@ -54,7 +54,6 @@ import (
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/namespace"
@@ -1065,7 +1064,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		MaxEventID:    nextEventID,
 		PageSize:      1,
 		NextPageToken: []byte{},
-		ShardID:       convert.Int32Ptr(shardID),
+		ShardID:       shardID,
 	}
 	s.mockHistoryMgr.EXPECT().ReadHistoryBranch(req).Return(&persistence.ReadHistoryBranchResponse{
 		HistoryEvents: []*historypb.HistoryEvent{

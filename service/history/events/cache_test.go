@@ -36,7 +36,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
@@ -88,7 +87,7 @@ func (s *eventsCacheSuite) TearDownTest() {
 func (s *eventsCacheSuite) newTestEventsCache() *CacheImpl {
 	shardId := int32(10)
 	return NewEventsCache(
-		convert.Int32Ptr(shardId),
+		shardId,
 		16,
 		32,
 		time.Minute,
@@ -151,14 +150,14 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
 	}
 
-	shardId := int32(10)
+	shardID := int32(10)
 	s.mockHistoryMgr.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    event1.GetEventId(),
 		MaxEventID:    event6.GetEventId() + 1,
 		PageSize:      1,
 		NextPageToken: nil,
-		ShardID:       &shardId,
+		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchResponse{
 		HistoryEvents:    []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6},
 		NextPageToken:    nil,
@@ -177,7 +176,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 	workflowID := "events-cache-miss-failure-workflow-id"
 	runID := "events-cache-miss-failure-run-id"
 
-	shardId := int32(10)
+	shardID := int32(10)
 	expectedErr := errors.New("persistence call failed")
 	s.mockHistoryMgr.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
@@ -185,7 +184,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 		MaxEventID:    int64(15),
 		PageSize:      1,
 		NextPageToken: nil,
-		ShardID:       &shardId,
+		ShardID:       shardID,
 	}).Return(nil, expectedErr)
 
 	actualEvent, err := s.cache.GetEvent(namespaceID, workflowID, runID, int64(11), int64(14),
@@ -209,14 +208,14 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{}},
 	}
 
-	shardId := int32(10)
+	shardID := int32(10)
 	s.mockHistoryMgr.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    event2.GetEventId(),
 		MaxEventID:    event2.GetEventId() + 1,
 		PageSize:      1,
 		NextPageToken: nil,
-		ShardID:       &shardId,
+		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchResponse{
 		HistoryEvents:    []*historypb.HistoryEvent{event2},
 		NextPageToken:    nil,
