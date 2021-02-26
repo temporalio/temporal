@@ -127,12 +127,11 @@ func NewScavenger(
 func (s *Scavenger) Run(ctx context.Context) (ScavengerHeartbeatDetails, error) {
 	reqCh := make(chan taskDetail, pageSize)
 
+	go s.loadTasks(ctx, reqCh)
 	for i := 0; i < numWorker; i++ {
 		s.WaitGroup.Add(1)
 		go s.taskWorker(ctx, reqCh)
 	}
-	s.WaitGroup.Add(1)
-	go s.loadTasks(ctx, reqCh)
 
 	s.WaitGroup.Wait()
 
@@ -146,10 +145,7 @@ func (s *Scavenger) loadTasks(
 	reqCh chan taskDetail,
 ) error {
 
-	defer func() {
-		close(reqCh)
-		s.WaitGroup.Done()
-	}()
+	defer close(reqCh)
 
 	iter := collection.NewPagingIteratorWithToken(s.getPaginationFn(), s.hbd.NextPageToken)
 	for iter.HasNext() {
