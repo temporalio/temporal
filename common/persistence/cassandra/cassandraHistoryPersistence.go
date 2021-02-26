@@ -355,7 +355,6 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 	validBRsMaxEndNode := map[string]int64{}
 	for _, b := range rsp.Branches {
 		for _, br := range b.Ancestors {
-			// These string casts are safe and optimized away -- https://github.com/golang/go/issues/3512
 			curr, ok := validBRsMaxEndNode[br.GetBranchId()]
 			if !ok || curr < br.GetEndNodeId() {
 				validBRsMaxEndNode[br.GetBranchId()] = br.GetEndNodeId()
