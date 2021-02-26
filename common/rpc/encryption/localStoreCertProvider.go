@@ -147,26 +147,26 @@ func (s *localStoreCertProvider) fetchCAs(
 		return *cached, nil
 	}
 
-	clientCAPoolFromFiles, clientCACertsFromFiles, err := buildCAPoolFromFiles(files)
+	caPoolFromFiles, caCertsFromFiles, err := buildCAPoolFromFiles(files)
 	if err != nil {
 		return nil, err
 	}
 
-	clientCaPoolFromData, clientCaCertsFromData, err := buildCAPoolFromData(data)
+	caPoolFromData, caCertsFromData, err := buildCAPoolFromData(data)
 	if err != nil {
 		return nil, err
 	}
 
-	if clientCAPoolFromFiles != nil && clientCaPoolFromData != nil {
+	if caPoolFromFiles != nil && caPoolFromData != nil {
 		return nil, errors.New(duplicateErrorMessage)
 	}
 
-	if clientCaPoolFromData != nil {
-		*cached = clientCaPoolFromData
-		*certs = clientCaCertsFromData
+	if caPoolFromData != nil {
+		*cached = caPoolFromData
+		*certs = caCertsFromData
 	} else {
-		*cached = clientCAPoolFromFiles
-		*certs = clientCACertsFromFiles
+		*cached = caPoolFromFiles
+		*certs = caCertsFromFiles
 	}
 
 	return *cached, nil
@@ -288,13 +288,9 @@ func (s *localStoreCertProvider) Expiring(fromNow time.Duration,
 
 	checkError := checkTLSCertForExpiration(s.FetchServerCertificate, when, expiring, expired)
 	err = appendError(err, checkError)
-	checkError = checkTLSCertForExpiration(
-		func() (*tls.Certificate, error) { return s.FetchClientCertificate(false) },
-		when, expiring, expired)
+	checkError = checkTLSCertForExpiration(s.fetchClientCert, when, expiring, expired)
 	err = appendError(err, checkError)
-	checkError = checkTLSCertForExpiration(
-		func() (*tls.Certificate, error) { return s.FetchClientCertificate(true) },
-		when, expiring, expired)
+	checkError = checkTLSCertForExpiration(s.fetchWorkerCert, when, expiring, expired)
 	err = appendError(err, checkError)
 
 	// load CA certs, so that they are cached in memory
@@ -315,6 +311,14 @@ func (s *localStoreCertProvider) Expiring(fromNow time.Duration,
 	checkCertsForExpiration(s.serverCACertsWorker, when, expiring, expired)
 
 	return expiring, expired, err
+}
+
+func (s *localStoreCertProvider) fetchClientCert() (*tls.Certificate, error) {
+	return s.FetchClientCertificate(false)
+}
+
+func (s *localStoreCertProvider) fetchWorkerCert() (*tls.Certificate, error) {
+	return s.FetchClientCertificate(true)
 }
 
 func checkTLSCertForExpiration(
