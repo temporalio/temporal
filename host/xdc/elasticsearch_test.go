@@ -53,7 +53,6 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
@@ -61,6 +60,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/host"
 )
@@ -136,7 +136,7 @@ func (s *esCrossDCTestSuite) SetupSuite() {
 	host.CreateIndex(s.Suite, s.esClient, s.clusterConfigs[0].ESConfig.Indices[common.VisibilityAppName])
 	host.CreateIndex(s.Suite, s.esClient, s.clusterConfigs[1].ESConfig.Indices[common.VisibilityAppName])
 
-	s.testSearchAttributeKey = definition.CustomStringField
+	s.testSearchAttributeKey = searchattribute.CustomStringField
 	s.testSearchAttributeVal = "test value"
 }
 
@@ -301,7 +301,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 					payload.Decode(searchValBytes, &searchVal)
 					s.Equal("another string", searchVal)
 
-					searchValBytes2 := fields[definition.CustomIntField]
+					searchValBytes2 := fields[searchattribute.CustomIntField]
 					var searchVal2 int
 					payload.Decode(searchValBytes2, &searchVal2)
 					s.Equal(123, searchVal2)
@@ -394,8 +394,8 @@ func getUpsertSearchAttributes() *commonpb.SearchAttributes {
 	attrValPayload2, _ := payload.Encode(123)
 	upsertSearchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			definition.CustomStringField: attrValPayload1,
-			definition.CustomIntField:    attrValPayload2,
+			searchattribute.CustomStringField: attrValPayload1,
+			searchattribute.CustomIntField:    attrValPayload2,
 		},
 	}
 	return upsertSearchAttr

@@ -47,12 +47,12 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	indexerspb "go.temporal.io/server/api/indexer/v1"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/definition"
 	es "go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -111,7 +111,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 
 	cfg := &config.VisibilityConfig{
 		ESIndexMaxResultWindow: dynamicconfig.GetIntPropertyFn(3),
-		ValidSearchAttributes:  dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
+		ValidSearchAttributes:  dynamicconfig.GetMapPropertyFn(searchattribute.GetDefaultTypeMap()),
 		ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 	}
 
@@ -773,7 +773,7 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 
 	request.Query = `order by CustomStringField desc`
 	dsl, err = v.getESQueryDSL(request, token)
-	s.Equal(errors.New("not able to sort by IndexedValueTypeString field, use IndexedValueTypeKeyword field"), err)
+	s.Equal(errors.New("unable to sort by field of String type, use field of type Keyword"), err)
 
 	request.Query = `order by CustomIntField asc`
 	dsl, err = v.getESQueryDSL(request, token)
@@ -1053,7 +1053,7 @@ func (s *ESVisibilitySuite) TestGetValueOfSearchAfterInJSON() {
 
 	// Int field
 	token := s.getTokenHelper(123)
-	sortField := definition.CustomIntField
+	sortField := searchattribute.CustomIntField
 	res, err := v.getValueOfSearchAfterInJSON(token, sortField)
 	s.Nil(err)
 	s.Equal(`[123, "t"]`, res)
@@ -1078,7 +1078,7 @@ func (s *ESVisibilitySuite) TestGetValueOfSearchAfterInJSON() {
 
 	// Double field
 	token = s.getTokenHelper(1.11)
-	sortField = definition.CustomDoubleField
+	sortField = searchattribute.CustomDoubleField
 	res, err = v.getValueOfSearchAfterInJSON(token, sortField)
 	s.Nil(err)
 	s.Equal(`[1.11, "t"]`, res)
@@ -1094,7 +1094,7 @@ func (s *ESVisibilitySuite) TestGetValueOfSearchAfterInJSON() {
 
 	// Keyword field
 	token = s.getTokenHelper("keyword")
-	sortField = definition.CustomKeywordField
+	sortField = searchattribute.CustomKeywordField
 	res, err = v.getValueOfSearchAfterInJSON(token, sortField)
 	s.Nil(err)
 	s.Equal(`["keyword", "t"]`, res)

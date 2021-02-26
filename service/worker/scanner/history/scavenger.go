@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -58,6 +57,7 @@ type (
 
 	// Scavenger is the type that holds the state for history scavenger daemon
 	Scavenger struct {
+		numShards   int32
 		db          persistence.HistoryManager
 		client      historyservice.HistoryServiceClient
 		rateLimiter quotas.RateLimiter
@@ -71,6 +71,7 @@ type (
 	}
 
 	taskDetail struct {
+		shardID     int32
 		namespaceID string
 		workflowID  string
 		runID       string
@@ -99,6 +100,7 @@ const (
 //  - describe the corresponding workflow execution
 //  - deletion of history itself, if there are no workflow execution
 func NewScavenger(
+	numShards int32,
 	db persistence.HistoryManager,
 	rps int,
 	client historyservice.HistoryServiceClient,
@@ -108,8 +110,9 @@ func NewScavenger(
 ) *Scavenger {
 
 	return &Scavenger{
-		db:     db,
-		client: client,
+		numShards: numShards,
+		db:        db,
+		client:    client,
 		rateLimiter: quotas.NewDefaultOutgoingDynamicRateLimiter(
 			func() float64 { return float64(rps) },
 		),
@@ -124,12 +127,11 @@ func NewScavenger(
 func (s *Scavenger) Run(ctx context.Context) (ScavengerHeartbeatDetails, error) {
 	reqCh := make(chan taskDetail, pageSize)
 
+	go s.loadTasks(ctx, reqCh)
 	for i := 0; i < numWorker; i++ {
 		s.WaitGroup.Add(1)
 		go s.taskWorker(ctx, reqCh)
 	}
-	s.WaitGroup.Add(1)
-	go s.loadTasks(ctx, reqCh)
 
 	s.WaitGroup.Wait()
 
@@ -143,10 +145,7 @@ func (s *Scavenger) loadTasks(
 	reqCh chan taskDetail,
 ) error {
 
-	defer func() {
-		close(reqCh)
-		s.WaitGroup.Done()
-	}()
+	defer close(reqCh)
 
 	iter := collection.NewPagingIteratorWithToken(s.getPaginationFn(), s.hbd.NextPageToken)
 	for iter.HasNext() {
@@ -222,7 +221,7 @@ func (s *Scavenger) filterTask(
 		return nil
 	}
 
-	namespaceID, wid, rid, err := persistence.SplitHistoryGarbageCleanupInfo(branch.Info)
+	namespaceID, workflowID, runID, err := persistence.SplitHistoryGarbageCleanupInfo(branch.Info)
 	if err != nil {
 		s.logger.Error("unable to parse the history cleanup info", tag.DetailInfo(branch.Info))
 		s.metrics.IncCounter(metrics.HistoryScavengerScope, metrics.HistoryScavengerErrorCount)
@@ -232,11 +231,13 @@ func (s *Scavenger) filterTask(
 		s.hbd.ErrorCount++
 		return nil
 	}
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, s.numShards)
 
 	return &taskDetail{
+		shardID:     shardID,
 		namespaceID: namespaceID,
-		workflowID:  wid,
-		runID:       rid,
+		workflowID:  workflowID,
+		runID:       runID,
 		treeID:      branch.TreeID,
 		branchID:    branch.BranchID,
 	}
@@ -274,11 +275,8 @@ func (s *Scavenger) handleTask(
 	}
 
 	err = s.db.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+		ShardID:     task.shardID,
 		BranchToken: branchToken,
-		// This is a required argument but it is not needed for Cassandra.
-		// Since this scanner is only for Cassandra,
-		// we can fill any number here to let to code go through
-		ShardID: convert.Int32Ptr(1),
 	})
 	if err != nil {
 		s.logger.Error("encounter error when deleting garbage history branch", getTaskLoggingTags(err, task)...)

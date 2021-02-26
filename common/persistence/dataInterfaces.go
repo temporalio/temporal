@@ -989,6 +989,8 @@ type (
 
 	// AppendHistoryNodesRequest is used to append a batch of history nodes
 	AppendHistoryNodesRequest struct {
+		// The shard to get history node data
+		ShardID int32
 		// true if this is the first append request to the branch
 		IsNewBranch bool
 		// the info for clean up data in background
@@ -999,8 +1001,6 @@ type (
 		Events []*historypb.HistoryEvent
 		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
 		TransactionID int64
-		// The shard to get history node data
-		ShardID *int32
 	}
 
 	// AppendHistoryNodesResponse is a response to AppendHistoryNodesRequest
@@ -1011,6 +1011,8 @@ type (
 
 	// ReadHistoryBranchRequest is used to read a history branch
 	ReadHistoryBranchRequest struct {
+		// The shard to get history branch data
+		ShardID int32
 		// The branch to be read
 		BranchToken []byte
 		// Get the history nodes from MinEventID. Inclusive.
@@ -1022,8 +1024,6 @@ type (
 		PageSize int
 		// Token to continue reading next page of history append transactions.  Pass in empty slice for first page
 		NextPageToken []byte
-		// The shard to get history branch data
-		ShardID *int32
 	}
 
 	// ReadHistoryBranchResponse is the response to ReadHistoryBranchRequest
@@ -1068,6 +1068,8 @@ type (
 
 	// ForkHistoryBranchRequest is used to fork a history branch
 	ForkHistoryBranchRequest struct {
+		// The shard to get history branch data
+		ShardID int32
 		// The base branch to fork from
 		ForkBranchToken []byte
 		// The nodeID to fork from, the new branch will start from ( inclusive ), the base branch will stop at(exclusive)
@@ -1076,8 +1078,6 @@ type (
 		ForkNodeID int64
 		// the info for clean up data in background
 		Info string
-		// The shard to get history branch data
-		ShardID *int32
 	}
 
 	// ForkHistoryBranchResponse is the response to ForkHistoryBranchRequest
@@ -1098,10 +1098,10 @@ type (
 
 	// DeleteHistoryBranchRequest is used to remove a history branch
 	DeleteHistoryBranchRequest struct {
+		// The shard to delete history branch data
+		ShardID int32
 		// branch to be deleted
 		BranchToken []byte
-		// The shard to delete history branch data
-		ShardID *int32
 	}
 
 	// GetHistoryTreeRequest is used to retrieve branch info of a history tree

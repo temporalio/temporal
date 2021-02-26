@@ -34,7 +34,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -176,10 +176,10 @@ func (qv *VisibilityQueryValidator) validateComparisonExpr(expr sqlparser.Expr) 
 	}
 	colNameStr := colName.Name.String()
 	if qv.isValidSearchAttributes(colNameStr) {
-		if !definition.IsSystemIndexedKey(colNameStr) { // add search attribute prefix
+		if !searchattribute.IsSystem(colNameStr) { // add search attribute prefix
 			comparisonExpr.Left = &sqlparser.ColName{
 				Metadata:  colName.Metadata,
-				Name:      sqlparser.NewColIdent(definition.Attr + "." + colNameStr),
+				Name:      sqlparser.NewColIdent(searchattribute.Attr + "." + colNameStr),
 				Qualifier: colName.Qualifier,
 			}
 		}
@@ -196,10 +196,10 @@ func (qv *VisibilityQueryValidator) validateRangeExpr(expr sqlparser.Expr) error
 	}
 	colNameStr := colName.Name.String()
 	if qv.isValidSearchAttributes(colNameStr) {
-		if !definition.IsSystemIndexedKey(colNameStr) { // add search attribute prefix
+		if !searchattribute.IsSystem(colNameStr) { // add search attribute prefix
 			rangeCond.Left = &sqlparser.ColName{
 				Metadata:  colName.Metadata,
-				Name:      sqlparser.NewColIdent(definition.Attr + "." + colNameStr),
+				Name:      sqlparser.NewColIdent(searchattribute.Attr + "." + colNameStr),
 				Qualifier: colName.Qualifier,
 			}
 		}
@@ -216,10 +216,10 @@ func (qv *VisibilityQueryValidator) validateOrderByExpr(orderBy sqlparser.OrderB
 		}
 		colNameStr := colName.Name.String()
 		if qv.isValidSearchAttributes(colNameStr) {
-			if !definition.IsSystemIndexedKey(colNameStr) { // add search attribute prefix
+			if !searchattribute.IsSystem(colNameStr) { // add search attribute prefix
 				orderByExpr.Expr = &sqlparser.ColName{
 					Metadata:  colName.Metadata,
-					Name:      sqlparser.NewColIdent(definition.Attr + "." + colNameStr),
+					Name:      sqlparser.NewColIdent(searchattribute.Attr + "." + colNameStr),
 					Qualifier: colName.Qualifier,
 				}
 			}

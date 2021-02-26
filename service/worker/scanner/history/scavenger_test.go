@@ -38,7 +38,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
-	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
@@ -51,8 +51,11 @@ import (
 type (
 	ScavengerTestSuite struct {
 		suite.Suite
+
 		logger log.Logger
 		metric metrics.Client
+
+		numShards int32
 	}
 )
 
@@ -81,13 +84,16 @@ func (s *ScavengerTestSuite) SetupTest() {
 	}
 	s.logger = loggerimpl.NewLogger(zapLogger)
 	s.metric = metrics.NewClient(tally.NoopScope, metrics.Worker)
+	s.numShards = 512
 }
 
-func (s *ScavengerTestSuite) createTestScavenger(rps int) (*persistence.MockHistoryManager, *historyservicemock.MockHistoryServiceClient, *Scavenger, *gomock.Controller) {
+func (s *ScavengerTestSuite) createTestScavenger(
+	rps int,
+) (*persistence.MockHistoryManager, *historyservicemock.MockHistoryServiceClient, *Scavenger, *gomock.Controller) {
 	controller := gomock.NewController(s.T())
 	db := persistence.NewMockHistoryManager(controller)
 	historyClient := historyservicemock.NewMockHistoryServiceClient(controller)
-	scvgr := NewScavenger(db, 100, historyClient, ScavengerHeartbeatDetails{}, s.metric, s.logger)
+	scvgr := NewScavenger(s.numShards, db, rps, historyClient, ScavengerHeartbeatDetails{}, s.metric, s.logger)
 	scvgr.isInTest = true
 	return db, historyClient, scvgr, controller
 }
@@ -352,25 +358,25 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 	s.Nil(err)
 	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken1,
-		ShardID:     convert.Int32Ptr(1),
+		ShardID:     common.WorkflowIDToHistoryShard("namespaceID1", "workflowID1", s.numShards),
 	}).Return(nil)
 	branchToken2, err := p.NewHistoryBranchTokenByBranchID(treeID2, branchID2)
 	s.Nil(err)
 	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken2,
-		ShardID:     convert.Int32Ptr(1),
+		ShardID:     common.WorkflowIDToHistoryShard("namespaceID2", "workflowID2", s.numShards),
 	}).Return(nil)
 	branchToken3, err := p.NewHistoryBranchTokenByBranchID(treeID3, branchID3)
 	s.Nil(err)
 	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
-		ShardID:     convert.Int32Ptr(1),
+		ShardID:     common.WorkflowIDToHistoryShard("namespaceID3", "workflowID3", s.numShards),
 	}).Return(nil)
 	branchToken4, err := p.NewHistoryBranchTokenByBranchID(treeID4, branchID4)
 	s.Nil(err)
 	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
-		ShardID:     convert.Int32Ptr(1),
+		ShardID:     common.WorkflowIDToHistoryShard("namespaceID4", "workflowID4", s.numShards),
 	}).Return(nil)
 
 	hbd, err := scvgr.Run(context.Background())
@@ -462,14 +468,14 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 	s.Nil(err)
 	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
-		ShardID:     convert.Int32Ptr(1),
+		ShardID:     common.WorkflowIDToHistoryShard("namespaceID3", "workflowID3", s.numShards),
 	}).Return(nil)
 
 	branchToken4, err := p.NewHistoryBranchTokenByBranchID(treeID4, branchID4)
 	s.Nil(err)
 	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
-		ShardID:     convert.Int32Ptr(1),
+		ShardID:     common.WorkflowIDToHistoryShard("namespaceID4", "workflowID4", s.numShards),
 	}).Return(fmt.Errorf("failed to delete history"))
 
 	hbd, err := scvgr.Run(context.Background())

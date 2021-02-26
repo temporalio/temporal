@@ -186,12 +186,12 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 		gomock.Any(),
 	).Return(s.mockRebuiltMutableState, rebuiltHistorySize, nil)
 
-	shardId := s.mockShard.GetShardID()
+	shardID := s.mockShard.GetShardID()
 	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: branchToken,
 		ForkNodeID:      baseEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID, s.workflowID, s.newRunID),
-		ShardID:         &shardId,
+		ShardID:         shardID,
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken}, nil)
 
 	rebuiltMutableState, err := s.nDCWorkflowResetter.resetWorkflow(

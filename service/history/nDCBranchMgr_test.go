@@ -142,14 +142,14 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 		RunId: s.runID,
 	}).AnyTimes()
 
-	shardId := s.mockShard.GetShardID()
+	shardID := s.mockShard.GetShardID()
 	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(mock.MatchedBy(func(input *persistence.ForkHistoryBranchRequest) bool {
 		input.Info = ""
 		s.Equal(&persistence.ForkHistoryBranchRequest{
 			ForkBranchToken: baseBranchToken,
 			ForkNodeID:      baseBranchLCAEventID + 1,
 			Info:            "",
-			ShardID:         &shardId,
+			ShardID:         shardID,
 		}, input)
 		return true
 	})).Return(&persistence.ForkHistoryBranchResponse{
@@ -322,14 +322,14 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 		RunId: s.runID,
 	}).AnyTimes()
 
-	shardId := s.mockShard.GetShardID()
+	shardID := s.mockShard.GetShardID()
 	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(mock.MatchedBy(func(input *persistence.ForkHistoryBranchRequest) bool {
 		input.Info = ""
 		s.Equal(&persistence.ForkHistoryBranchRequest{
 			ForkBranchToken: baseBranchToken,
 			ForkNodeID:      baseBranchLCAEventID + 1,
 			Info:            "",
-			ShardID:         &shardId,
+			ShardID:         shardID,
 		}, input)
 		return true
 	})).Return(&persistence.ForkHistoryBranchResponse{

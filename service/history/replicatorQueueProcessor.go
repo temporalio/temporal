@@ -38,7 +38,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/messaging"
@@ -383,7 +382,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 		MaxEventID:    nextEventID,
 		PageSize:      1,
 		NextPageToken: pageToken,
-		ShardID:       convert.Int32Ptr(p.shard.GetShardID()),
+		ShardID:       p.shard.GetShardID(),
 	}
 
 	for {

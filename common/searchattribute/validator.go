@@ -30,7 +30,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
@@ -107,7 +106,7 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		}
 
 		// verify: saName is not system reserved
-		if definition.IsSystemIndexedKey(saName) {
+		if IsSystem(saName) {
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is read-only Temporal reserved search attribute", saName))
 		}
 		// verify: size of single value <= limit

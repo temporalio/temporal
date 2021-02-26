@@ -94,16 +94,13 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(
 	if err != nil {
 		return nil, err
 	}
-	shardID, err := getShardID(request.ShardID)
-	if err != nil {
-		return nil, serviceerror.NewInternal(err.Error())
-	}
+
 	req := &InternalForkHistoryBranchRequest{
 		ForkBranchInfo: forkBranch,
 		ForkNodeID:     request.ForkNodeID,
 		NewBranchID:    uuid.New(),
 		Info:           request.Info,
-		ShardID:        shardID,
+		ShardID:        request.ShardID,
 	}
 
 	resp, err := m.persistence.ForkHistoryBranch(req)
@@ -132,14 +129,9 @@ func (m *historyV2ManagerImpl) DeleteHistoryBranch(
 		return err
 	}
 
-	shardID, err := getShardID(request.ShardID)
-	if err != nil {
-		m.logger.Error("shardID is not set in delete history operation", tag.Error(err))
-		return serviceerror.NewInternal(err.Error())
-	}
 	req := &InternalDeleteHistoryBranchRequest{
 		BranchInfo: branch,
-		ShardID:    shardID,
+		ShardID:    request.ShardID,
 	}
 
 	return m.persistence.DeleteHistoryBranch(req)
@@ -209,11 +201,7 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(
 			Msg: fmt.Sprintf("transaction size of %v bytes exceeds limit of %v bytes", size, sizeLimit),
 		}
 	}
-	shardID, err := getShardID(request.ShardID)
-	if err != nil {
-		m.logger.Error("shardID is not set in append history nodes operation", tag.Error(err))
-		return nil, serviceerror.NewInternal(err.Error())
-	}
+
 	req := &InternalAppendHistoryNodesRequest{
 		IsNewBranch:   request.IsNewBranch,
 		Info:          request.Info,
@@ -221,7 +209,7 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(
 		NodeID:        nodeID,
 		Events:        blob,
 		TransactionID: request.TransactionID,
-		ShardID:       shardID,
+		ShardID:       request.ShardID,
 	}
 
 	err = m.persistence.AppendHistoryNodes(req)
@@ -356,13 +344,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	if request.MaxEventID < maxNodeID {
 		maxNodeID = request.MaxEventID
 	}
-	pageSize := request.PageSize
 
-	shardID, err := getShardID(request.ShardID)
-	if err != nil {
-		m.logger.Error("shardID is not set in read history branch operation", tag.Error(err))
-		return nil, nil, 0, nil, serviceerror.NewInternal(err.Error())
-	}
 	req := &InternalReadHistoryBranchRequest{
 		TreeID:            treeID,
 		BranchID:          allBRs[token.CurrentRangeIndex].GetBranchId(),
@@ -371,8 +353,8 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 		NextPageToken:     token.StoreToken,
 		LastNodeID:        token.LastNodeID,
 		LastTransactionID: token.LastTransactionID,
-		ShardID:           shardID,
-		PageSize:          pageSize,
+		ShardID:           request.ShardID,
+		PageSize:          request.PageSize,
 	}
 
 	resp, err := m.persistence.ReadHistoryBranch(req)

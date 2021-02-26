@@ -30,7 +30,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/service/dynamicconfig"
@@ -51,7 +50,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	sizeOfTotalLimit := 20
 
 	validator := NewValidator(log.NewNoop(),
-		dynamicconfig.GetMapPropertyFn(definition.GetDefaultIndexedKeys()),
+		dynamicconfig.GetMapPropertyFn(GetDefaultTypeMap()),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit))

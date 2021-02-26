@@ -625,7 +625,7 @@ func (s *HistoryIteratorSuite) initMockHistoryManager(batchInfo []int, returnErr
 			MinEventID:  firstEventIDs[p.firstbatchIdx],
 			MaxEventID:  common.EndEventID,
 			PageSize:    testDefaultPersistencePageSize,
-			ShardID:     &testShardId,
+			ShardID:     testShardId,
 		}
 		if returnErrorOnPage == i {
 			s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(req).Return(nil, errors.New("got error getting workflow execution history"))
@@ -644,7 +644,7 @@ func (s *HistoryIteratorSuite) initMockHistoryManager(batchInfo []int, returnErr
 			MinEventID:  firstEventIDs[len(firstEventIDs)-1],
 			MaxEventID:  common.EndEventID,
 			PageSize:    testDefaultPersistencePageSize,
-			ShardID:     &testShardId,
+			ShardID:     testShardId,
 		}
 		s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(req).Return(nil, serviceerror.NewNotFound("Reach the end"))
 	}

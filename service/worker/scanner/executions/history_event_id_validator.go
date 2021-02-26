@@ -29,7 +29,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 )
@@ -80,7 +79,7 @@ func (v *historyEventIDValidator) Validate(
 		MinEventID:    common.FirstEventID,
 		MaxEventID:    common.FirstEventID + 1,
 		BranchToken:   currentVersionHistory.BranchToken,
-		ShardID:       convert.Int32Ptr(v.shardID),
+		ShardID:       v.shardID,
 		PageSize:      1,
 		NextPageToken: nil,
 	})
