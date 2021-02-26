@@ -33,7 +33,6 @@ import (
 	"github.com/pborman/uuid"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
@@ -215,7 +214,7 @@ func (r *nDCWorkflowResetterImpl) getResetBranchToken(
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseLastEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(r.namespaceID, r.workflowID, r.newRunID),
-		ShardID:         convert.Int32Ptr(shardID),
+		ShardID:         shardID,
 	})
 	if err != nil {
 		return nil, err

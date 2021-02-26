@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
@@ -419,7 +418,7 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 		ForkBranchToken: forkBranchToken,
 		ForkNodeID:      forkNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, resetRunID),
-		ShardID:         convert.Int32Ptr(shardID),
+		ShardID:         shardID,
 	})
 	if err != nil {
 		return nil, err
@@ -607,7 +606,7 @@ func (r *workflowResetterImpl) getPaginationFn(
 			MaxEventID:    nextEventID,
 			PageSize:      nDCDefaultPageSize,
 			NextPageToken: paginationToken,
-			ShardID:       convert.Int32Ptr(r.shard.GetShardID()),
+			ShardID:       r.shard.GetShardID(),
 		})
 		if err != nil {
 			return nil, nil, err

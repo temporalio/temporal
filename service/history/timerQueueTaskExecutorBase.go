@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -264,7 +263,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowHistory(
 		}
 		return t.shard.GetHistoryManager().DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
 			BranchToken: branchToken,
-			ShardID:     convert.Int32Ptr(t.shard.GetShardID()),
+			ShardID:     t.shard.GetShardID(),
 		})
 
 	}
