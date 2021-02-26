@@ -30,6 +30,7 @@ require (
 	github.com/golang/protobuf v1.4.3
 	github.com/golang/snappy v0.0.2 // indirect
 	github.com/google/uuid v1.1.4
+	github.com/hashicorp/go-multierror v1.1.0
 	github.com/iancoleman/strcase v0.1.2
 	github.com/jmoiron/sqlx v1.2.1-0.20200615141059-0794cb1f47ee
 	github.com/jonboulle/clockwork v0.2.2

@@ -157,18 +157,21 @@ func (s *localStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) 
 }
 
 func (s *localStoreTlsProvider) Expiring(fromNow time.Duration,
-) (expiring CertExpirationMap, expired CertExpirationMap, errs []error) {
+) (expiring CertExpirationMap, expired CertExpirationMap, err error) {
 
 	expiring = make(CertExpirationMap, 0)
 	expired = make(CertExpirationMap, 0)
-	errs = make([]error, 0)
 
-	errs = append(errs, checkExpiration(s.internodeCertProvider, fromNow, expiring, expired)...)
-	errs = append(errs, checkExpiration(s.frontendCertProvider, fromNow, expiring, expired)...)
-	errs = append(errs, checkExpiration(s.workerCertProvider, fromNow, expiring, expired)...)
-	errs = append(errs, checkExpiration(s.frontendPerHostCertProviderFactory, fromNow, expiring, expired)...)
+	checkError := checkExpiration(s.internodeCertProvider, fromNow, expiring, expired)
+	err = appendError(err, checkError)
+	checkError = checkExpiration(s.frontendCertProvider, fromNow, expiring, expired)
+	err = appendError(err, checkError)
+	checkError = checkExpiration(s.workerCertProvider, fromNow, expiring, expired)
+	err = appendError(err, checkError)
+	checkError = checkExpiration(s.frontendPerHostCertProviderFactory, fromNow, expiring, expired)
+	err = appendError(err, checkError)
 
-	return expiring, expired, errs
+	return expiring, expired, err
 }
 
 func checkExpiration(
@@ -176,17 +179,16 @@ func checkExpiration(
 	fromNow time.Duration,
 	expiring CertExpirationMap,
 	expired CertExpirationMap,
-) []error {
+) error {
 
 	p, ok := provider.(CertExpirationChecker)
-	var errs []error
 	if ok {
-		providerExpiring, providerExpired, providerErrors := p.Expiring(fromNow)
+		providerExpiring, providerExpired, err := p.Expiring(fromNow)
 		mergeMaps(expiring, providerExpiring)
 		mergeMaps(expired, providerExpired)
-		errs = providerErrors
+		return err
 	}
-	return errs
+	return nil
 }
 
 func (s *localStoreTlsProvider) getOrCreateConfig(
@@ -333,8 +335,8 @@ func (s *localStoreTlsProvider) timerCallback() {
 
 		period := s.settings.ExpirationChecks.WarningPeriod
 		if period != 0 {
-			expiring, expired, errs := s.Expiring(period)
-			s.reportErrors(errs)
+			expiring, expired, err := s.Expiring(period)
+			s.logger.Error(fmt.Sprintf("error while checking for certificate expiration: %v", err))
 			if s.scope != nil {
 				s.scope.Gauge(metricCertsExpired).Update(float64(len(expired)))
 				s.scope.Gauge(metricCertsExpiring).Update(float64(len(expiring)))
@@ -354,13 +356,6 @@ func (s *localStoreTlsProvider) logCerts(certs CertExpirationMap, expired bool, 
 		} else {
 			s.logger.Warn(str)
 		}
-	}
-}
-
-func (s *localStoreTlsProvider) reportErrors(errs []error) {
-
-	for _, err := range errs {
-		s.logger.Error(fmt.Sprintf("error while checking for certificate expiration: %v", err))
 	}
 }
 

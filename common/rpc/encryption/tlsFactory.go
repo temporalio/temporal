@@ -78,7 +78,7 @@ type (
 		Expiring(fromNow time.Duration) (
 			expiring CertExpirationMap,
 			expired CertExpirationMap,
-			errs []error)
+			err error)
 	}
 
 	tlsConfigConstructor func() (*tls.Config, error)

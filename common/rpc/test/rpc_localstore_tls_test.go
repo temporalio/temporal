@@ -548,13 +548,12 @@ func (s *localStoreRPCSuite) TestCertExpiration() {
 func (s *localStoreRPCSuite) testCertExpiration(factory *TestFactory, fromNow time.Duration, nExpiring int) {
 	provider, ok := factory.GetTLSConfigProvider().(encryption.CertExpirationChecker)
 	s.True(ok)
-	expiring, expired, errs := provider.Expiring(fromNow)
+	expiring, expired, err := provider.Expiring(fromNow)
 	if len(expired) > 0 {
 	}
 	s.NotNil(expiring)
-	s.NotNil(errs)
+	s.Nil(err)
 	s.Equal(nExpiring, len(expiring))
-	s.Equal(0, len(errs))
 }
 
 func (s *localStoreRPCSuite) testDynamicRootCA(host string, frontend bool) {

@@ -36,6 +36,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashicorp/go-multierror"
+
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -278,36 +280,41 @@ func (s *localStoreCertProvider) getClientTLSSettings(isWorker bool) *config.Cli
 }
 
 func (s *localStoreCertProvider) Expiring(fromNow time.Duration,
-) (expiring CertExpirationMap, expired CertExpirationMap, errs []error) {
+) (expiring CertExpirationMap, expired CertExpirationMap, err error) {
 
 	expiring = make(CertExpirationMap)
 	expired = make(CertExpirationMap)
-	errs = make([]error, 0)
 	when := time.Now().UTC().Add(fromNow)
 
-	errs = appendError(errs, checkTLSCertForExpiration(s.FetchServerCertificate, when, expiring, expired))
-	errs = appendError(errs, checkTLSCertForExpiration(
+	checkError := checkTLSCertForExpiration(s.FetchServerCertificate, when, expiring, expired)
+	err = appendError(err, checkError)
+	checkError = checkTLSCertForExpiration(
 		func() (*tls.Certificate, error) { return s.FetchClientCertificate(false) },
-		when, expiring, expired))
-	errs = appendError(errs, checkTLSCertForExpiration(
+		when, expiring, expired)
+	err = appendError(err, checkError)
+	checkError = checkTLSCertForExpiration(
 		func() (*tls.Certificate, error) { return s.FetchClientCertificate(true) },
-		when, expiring, expired))
+		when, expiring, expired)
+	err = appendError(err, checkError)
 
 	// load CA certs, so that they are cached in memory
-	errs = appendError(errs, loadCAsAndCaptureErrors(s.FetchClientCAs))
+	checkError = loadCAsAndCaptureErrors(s.FetchClientCAs)
+	err = appendError(err, checkError)
 	checkCertsForExpiration(s.clientCACerts, when, expiring, expired)
 
-	errs = appendError(errs, loadCAsAndCaptureErrors(func() (*x509.CertPool, error) {
+	checkError = loadCAsAndCaptureErrors(func() (*x509.CertPool, error) {
 		return s.FetchServerRootCAsForClient(false)
-	}))
+	})
+	err = appendError(err, checkError)
 	checkCertsForExpiration(s.serverCACerts, when, expiring, expired)
 
-	errs = appendError(errs, loadCAsAndCaptureErrors(func() (*x509.CertPool, error) {
+	checkError = loadCAsAndCaptureErrors(func() (*x509.CertPool, error) {
 		return s.FetchServerRootCAsForClient(true)
-	}))
+	})
+	err = appendError(err, checkError)
 	checkCertsForExpiration(s.serverCACertsWorker, when, expiring, expired)
 
-	return expiring, expired, errs
+	return expiring, expired, err
 }
 
 func checkTLSCertForExpiration(
@@ -449,10 +456,10 @@ func loadCAsAndCaptureErrors(getCAs x509CertPoolFetcher) error {
 	return err
 }
 
-func appendError(errs []error, err error) []error {
+func appendError(to error, from error) error {
 
-	if err == nil {
-		return errs
+	if from != nil {
+		return multierror.Append(to, from)
 	}
-	return append(errs, err)
+	return to
 }
