@@ -64,6 +64,10 @@ type localStoreCertProvider struct {
 
 type loadOrDecodeDataFunc func(item string) ([]byte, error)
 
+type x509CertFetcher func() (*x509.Certificate, error)
+type x509CertPoolFetcher func() (*x509.CertPool, error)
+type tlsCertFetcher func() (*tls.Certificate, error)
+
 func (s *localStoreCertProvider) GetSettings() *config.GroupTLS {
 	return s.tlsSettings
 }
@@ -307,28 +311,30 @@ func (s *localStoreCertProvider) Expiring(fromNow time.Duration,
 }
 
 func checkTLSCertForExpiration(
-	fetchCert func() (*tls.Certificate, error),
+	fetchCert tlsCertFetcher,
 	time time.Time,
 	expiring CertExpirationMap,
 	expired CertExpirationMap,
 ) error {
 
 	return fetchAndCheckCertForExpiration(
-		func() (*x509.Certificate, error) {
-			cert, err := fetchCert()
-			if err != nil {
-				return nil, err
-			}
-			if cert == nil {
-				return nil, nil
-			}
-			return x509.ParseCertificate(cert.Certificate[0])
-		},
+		func() (*x509.Certificate, error) { return fetchAndParseTLSCert(fetchCert) },
 		time, expiring, expired)
 }
 
+func fetchAndParseTLSCert(fetchCert tlsCertFetcher) (*x509.Certificate, error) {
+	cert, err := fetchCert()
+	if err != nil {
+		return nil, err
+	}
+	if cert == nil {
+		return nil, nil
+	}
+	return x509.ParseCertificate(cert.Certificate[0])
+}
+
 func fetchAndCheckCertForExpiration(
-	fetchCert func() (*x509.Certificate, error),
+	fetchCert x509CertFetcher,
 	when time.Time,
 	expiring CertExpirationMap,
 	expired CertExpirationMap,
@@ -437,7 +443,7 @@ func parseCert(bytes []byte) (*x509.Certificate, error) {
 	return x509.ParseCertificate(certBytes[0])
 }
 
-func loadCAsAndCaptureErrors(getCAs func() (*x509.CertPool, error)) error {
+func loadCAsAndCaptureErrors(getCAs x509CertPoolFetcher) error {
 
 	_, err := getCAs()
 	return err

@@ -291,7 +291,7 @@ func newClientTLSConfig(clientProvider ClientCertProvider, isAuthRequired bool, 
 		return nil, fmt.Errorf("failed to load client ca: %v", err)
 	}
 
-	var getCert func() (*tls.Certificate, error)
+	var getCert tlsCertFetcher
 
 	// mTLS enabled, present certificate
 	if isAuthRequired {
