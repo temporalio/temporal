@@ -70,19 +70,15 @@ func (f *localStorePerHostCertProviderFactory) GetCertProvider(hostName string) 
 	return cachedCertProvider, nil
 }
 
-func (f *localStorePerHostCertProviderFactory) Expiring(fromNow time.Duration,
+func (f *localStorePerHostCertProviderFactory) GetExpiringCerts(timeWindow time.Duration,
 ) (expiring CertExpirationMap, expired CertExpirationMap, err error) {
 
 	expiring = make(CertExpirationMap)
 	expired = make(CertExpirationMap)
 
-	if len(f.certProviderCache) == 0 {
-		return expiring, expired, err
-	}
-
 	for _, provider := range f.certProviderCache {
 
-		providerExpiring, providerExpired, providerError := provider.Expiring(fromNow)
+		providerExpiring, providerExpired, providerError := provider.GetExpiringCerts(timeWindow)
 		mergeMaps(expiring, providerExpiring)
 		mergeMaps(expired, providerExpired)
 		if providerError != nil {

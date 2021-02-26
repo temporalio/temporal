@@ -193,10 +193,10 @@ type (
 
 	// CertExpirationValidation contains settings for periodic checks of TLS certificate expiration
 	CertExpirationValidation struct {
-		// Log warnings for certificates expiring during this period of time from now
-		WarningPeriod time.Duration `yaml:"warningPeriod"`
-		// Log error for certificates expiring during this period of time from now
-		ErrorPeriod time.Duration `yaml:"errorPeriod"`
+		// Log warnings for certificates expiring during this time window from now
+		WarningWindow time.Duration `yaml:"warningWindow"`
+		// Log error for certificates expiring during this time window from now
+		ErrorWindow time.Duration `yaml:"errorWindow"`
 		// Interval between checks for certificate expiration
 		CheckInterval time.Duration `yaml:"checkInterval"`
 	}

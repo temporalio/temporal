@@ -75,7 +75,7 @@ type (
 	CertExpirationMap map[CertThumbprint]CertExpirationData
 
 	CertExpirationChecker interface {
-		Expiring(fromNow time.Duration) (
+		GetExpiringCerts(timeWindow time.Duration) (
 			expiring CertExpirationMap,
 			expired CertExpirationMap,
 			err error)
