@@ -48,12 +48,12 @@ type localStoreTlsProvider struct {
 
 	settings *config.RootTLS
 
-	internodeCertProvider       CertProvider
-	internodeClientCertProvider ClientCertProvider
-	frontendCertProvider        CertProvider
-	workerCertProvider          ClientCertProvider
+	internodeCertProvider       *localStoreCertProvider
+	internodeClientCertProvider *localStoreCertProvider
+	frontendCertProvider        *localStoreCertProvider
+	workerCertProvider          *localStoreCertProvider
 
-	frontendPerHostCertProviderFactory PerHostCertProviderFactory
+	frontendPerHostCertProviderFactory *localStorePerHostCertProviderFactory
 
 	internodeServerConfig *tls.Config
 	internodeClientConfig *tls.Config
@@ -71,7 +71,7 @@ var _ CertExpirationChecker = (*localStoreTlsProvider)(nil)
 
 func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope tally.Scope) (TLSConfigProvider, error) {
 	internodeProvider := &localStoreCertProvider{tlsSettings: &tlsConfig.Internode}
-	var workerProvider ClientCertProvider
+	var workerProvider *localStoreCertProvider
 	if tlsConfig.SystemWorker.CertFile != "" || tlsConfig.SystemWorker.CertData != "" { // explicit system worker config
 		workerProvider = &localStoreCertProvider{workerTLSSettings: &tlsConfig.SystemWorker}
 	} else { // legacy implicit system worker config case
@@ -175,20 +175,16 @@ func (s *localStoreTlsProvider) Expiring(fromNow time.Duration,
 }
 
 func checkExpiration(
-	provider interface{},
+	provider CertExpirationChecker,
 	fromNow time.Duration,
 	expiring CertExpirationMap,
 	expired CertExpirationMap,
 ) error {
 
-	p, ok := provider.(CertExpirationChecker)
-	if ok {
-		providerExpiring, providerExpired, err := p.Expiring(fromNow)
-		mergeMaps(expiring, providerExpiring)
-		mergeMaps(expired, providerExpired)
-		return err
-	}
-	return nil
+	providerExpiring, providerExpired, err := provider.Expiring(fromNow)
+	mergeMaps(expiring, providerExpiring)
+	mergeMaps(expired, providerExpired)
+	return err
 }
 
 func (s *localStoreTlsProvider) getOrCreateConfig(

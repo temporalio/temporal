@@ -38,7 +38,7 @@ type localStorePerHostCertProviderFactory struct {
 	certProviderCache map[string]*localStoreCertProvider
 }
 
-func newLocalStorePerHostCertProviderFactory(overrides map[string]config.ServerTLS) PerHostCertProviderFactory {
+func newLocalStorePerHostCertProviderFactory(overrides map[string]config.ServerTLS) *localStorePerHostCertProviderFactory {
 	factory := &localStorePerHostCertProviderFactory{}
 	if overrides == nil {
 		return factory
