@@ -58,11 +58,11 @@ var _ TokenKeyProvider = (*defaultTokenKeyProvider)(nil)
 func NewDefaultTokenKeyProvider(cfg *config.Config) *defaultTokenKeyProvider {
 	logger := loggerimpl.NewLogger(cfg.Log.NewZapLogger())
 	provider := defaultTokenKeyProvider{config: cfg.Global.Authorization.JWTKeyProvider, logger: logger}
-	provider.init()
+	provider.initialize()
 	return &provider
 }
 
-func (a *defaultTokenKeyProvider) init() {
+func (a *defaultTokenKeyProvider) initialize() {
 	a.rsaKeys = make(map[string]*rsa.PublicKey)
 	a.ecKeys = make(map[string]*ecdsa.PublicKey)
 	if len(a.config.KeySourceURIs) > 0 {

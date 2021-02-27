@@ -54,7 +54,7 @@ func GenerateSelfSignedX509CA(commonName string, extUsage []x509.ExtKeyUsage, ke
 			Organization: []string{"TemporalTechnologiesTesting"},
 		},
 		NotBefore:             now.Add(-time.Minute),
-		NotAfter:              now.AddDate(3, 0, 0), // 3 year expiry
+		NotAfter:              now.AddDate(0, 0, 1), // 1 day expiry
 		BasicConstraintsValid: true,
 		IsCA:                  true,
 		ExtKeyUsage:           extUsage,
@@ -109,7 +109,7 @@ func GenerateServerX509UsingCAAndSerialNumber(commonName string, serialNumber in
 			Organization: []string{"TemporalTechnologiesTesting"},
 		},
 		NotBefore:             now.Add(-time.Minute),
-		NotAfter:              now.AddDate(3, 0, 0), // 3 year expiry
+		NotAfter:              now.AddDate(0, 0, 1), // 1 day expiry
 		BasicConstraintsValid: true,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 		KeyUsage:              x509.KeyUsageDigitalSignature,

@@ -236,3 +236,7 @@ func getBroadcastAddressFromConfig(serverCfg *config.Global, cfg *config.RPC, lo
 		return getListenIP(cfg, logger).String()
 	}
 }
+
+func (d *RPCFactory) GetTLSConfigProvider() encryption.TLSConfigProvider {
+	return d.tlsFactory
+}

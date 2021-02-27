@@ -29,9 +29,18 @@ import (
 	"crypto/x509"
 	"fmt"
 	"sync"
+	"time"
+
+	"github.com/uber-go/tally"
 
 	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/service/config"
+)
+
+const (
+	metricCertsExpired  = "certificates_expired"
+	metricCertsExpiring = "certificates_expiring"
 )
 
 type localStoreTlsProvider struct {
@@ -39,23 +48,31 @@ type localStoreTlsProvider struct {
 
 	settings *config.RootTLS
 
-	internodeCertProvider       CertProvider
-	internodeClientCertProvider ClientCertProvider
-	frontendCertProvider        CertProvider
-	workerCertProvider          ClientCertProvider
+	internodeCertProvider       *localStoreCertProvider
+	internodeClientCertProvider *localStoreCertProvider
+	frontendCertProvider        *localStoreCertProvider
+	workerCertProvider          *localStoreCertProvider
 
-	frontendPerHostCertProviderFactory PerHostCertProviderFactory
+	frontendPerHostCertProviderMap *localStorePerHostCertProviderMap
 
 	internodeServerConfig *tls.Config
 	internodeClientConfig *tls.Config
 	frontendServerConfig  *tls.Config
 	frontendClientConfig  *tls.Config
+
+	ticker *time.Ticker
+	logger log.Logger
+	stop   chan bool
+	scope  tally.Scope
 }
 
-func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS) (TLSConfigProvider, error) {
+var _ TLSConfigProvider = (*localStoreTlsProvider)(nil)
+var _ CertExpirationChecker = (*localStoreTlsProvider)(nil)
+
+func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope tally.Scope) (TLSConfigProvider, error) {
 	internodeProvider := &localStoreCertProvider{tlsSettings: &tlsConfig.Internode}
-	var workerProvider ClientCertProvider
-	if tlsConfig.SystemWorker.CertFile != "" || tlsConfig.SystemWorker.CertData != "" { // explcit system worker config
+	var workerProvider *localStoreCertProvider
+	if tlsConfig.SystemWorker.CertFile != "" || tlsConfig.SystemWorker.CertData != "" { // explicit system worker config
 		workerProvider = &localStoreCertProvider{workerTLSSettings: &tlsConfig.SystemWorker}
 	} else { // legacy implicit system worker config case
 		internodeWorkerProvider := &localStoreCertProvider{tlsSettings: &tlsConfig.Internode}
@@ -64,15 +81,39 @@ func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS) (TLSConfigProvider, err
 		workerProvider = internodeWorkerProvider
 	}
 
-	return &localStoreTlsProvider{
-		internodeCertProvider:              internodeProvider,
-		internodeClientCertProvider:        internodeProvider,
-		frontendCertProvider:               &localStoreCertProvider{tlsSettings: &tlsConfig.Frontend},
-		workerCertProvider:                 workerProvider,
-		frontendPerHostCertProviderFactory: newLocalStorePerHostCertProviderFactory(tlsConfig.Frontend.PerHostOverrides),
-		RWMutex:                            sync.RWMutex{},
-		settings:                           tlsConfig,
-	}, nil
+	provider := &localStoreTlsProvider{
+		internodeCertProvider:          internodeProvider,
+		internodeClientCertProvider:    internodeProvider,
+		frontendCertProvider:           &localStoreCertProvider{tlsSettings: &tlsConfig.Frontend},
+		workerCertProvider:             workerProvider,
+		frontendPerHostCertProviderMap: newLocalStorePerHostCertProviderMap(tlsConfig.Frontend.PerHostOverrides),
+		RWMutex:                        sync.RWMutex{},
+		settings:                       tlsConfig,
+		scope:                          scope,
+	}
+	provider.initialize()
+	return provider, nil
+}
+
+func (s *localStoreTlsProvider) initialize() {
+
+	period := s.settings.ExpirationChecks.CheckInterval
+	if period != 0 {
+		s.stop = make(chan bool)
+		s.ticker = time.NewTicker(period)
+		go s.timerCallback()
+	}
+}
+
+func (s *localStoreTlsProvider) Close() {
+
+	if s.ticker != nil {
+		s.ticker.Stop()
+	}
+	if s.stop != nil {
+		s.stop <- true
+		close(s.stop)
+	}
 }
 
 func (s *localStoreTlsProvider) GetInternodeClientConfig() (*tls.Config, error) {
@@ -101,7 +142,7 @@ func (s *localStoreTlsProvider) GetFrontendServerConfig() (*tls.Config, error) {
 	return s.getOrCreateConfig(
 		&s.frontendServerConfig,
 		func() (*tls.Config, error) {
-			return newServerTLSConfig(s.frontendCertProvider, s.frontendPerHostCertProviderFactory)
+			return newServerTLSConfig(s.frontendCertProvider, s.frontendPerHostCertProviderMap)
 		},
 		s.frontendCertProvider.GetSettings().IsEnabled())
 }
@@ -113,6 +154,37 @@ func (s *localStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) 
 			return newServerTLSConfig(s.internodeCertProvider, nil)
 		},
 		s.internodeCertProvider.GetSettings().IsEnabled())
+}
+
+func (s *localStoreTlsProvider) GetExpiringCerts(timeWindow time.Duration,
+) (expiring CertExpirationMap, expired CertExpirationMap, err error) {
+
+	expiring = make(CertExpirationMap, 0)
+	expired = make(CertExpirationMap, 0)
+
+	checkError := checkExpiration(s.internodeCertProvider, timeWindow, expiring, expired)
+	err = appendError(err, checkError)
+	checkError = checkExpiration(s.frontendCertProvider, timeWindow, expiring, expired)
+	err = appendError(err, checkError)
+	checkError = checkExpiration(s.workerCertProvider, timeWindow, expiring, expired)
+	err = appendError(err, checkError)
+	checkError = checkExpiration(s.frontendPerHostCertProviderMap, timeWindow, expiring, expired)
+	err = appendError(err, checkError)
+
+	return expiring, expired, err
+}
+
+func checkExpiration(
+	provider CertExpirationChecker,
+	timeWindow time.Duration,
+	expiring CertExpirationMap,
+	expired CertExpirationMap,
+) error {
+
+	providerExpiring, providerExpired, err := provider.GetExpiringCerts(timeWindow)
+	mergeMaps(expiring, providerExpiring)
+	mergeMaps(expired, providerExpired)
+	return err
 }
 
 func (s *localStoreTlsProvider) getOrCreateConfig(
@@ -152,7 +224,7 @@ func (s *localStoreTlsProvider) getOrCreateConfig(
 
 func newServerTLSConfig(
 	certProvider CertProvider,
-	perHostCertProviderFactory PerHostCertProviderFactory,
+	perHostCertProviderMap PerHostCertProviderMap,
 ) (*tls.Config, error) {
 
 	tlsConfig, err := getServerTLSConfigFromCertProvider(certProvider)
@@ -161,8 +233,8 @@ func newServerTLSConfig(
 	}
 
 	tlsConfig.GetConfigForClient = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
-		if perHostCertProviderFactory != nil {
-			perHostCertProvider, err := perHostCertProviderFactory.GetCertProvider(c.ServerName)
+		if perHostCertProviderMap != nil {
+			perHostCertProvider, err := perHostCertProviderMap.GetCertProvider(c.ServerName)
 			if err != nil {
 				return nil, err
 			}
@@ -217,7 +289,7 @@ func newClientTLSConfig(clientProvider ClientCertProvider, isAuthRequired bool, 
 		return nil, fmt.Errorf("failed to load client ca: %v", err)
 	}
 
-	var getCert func() (*tls.Certificate, error)
+	var getCert tlsCertFetcher
 
 	// mTLS enabled, present certificate
 	if isAuthRequired {
@@ -240,4 +312,67 @@ func newClientTLSConfig(clientProvider ClientCertProvider, isAuthRequired bool, 
 		clientProvider.ServerName(isWorker),
 		!clientProvider.DisableHostVerification(isWorker),
 	), nil
+}
+
+func (s *localStoreTlsProvider) timerCallback() {
+	for {
+		select {
+		case <-s.stop:
+			break
+		case <-s.ticker.C:
+		}
+
+		var errorTime time.Time
+		if s.settings.ExpirationChecks.ErrorWindow != 0 {
+			errorTime = time.Now().UTC().Add(s.settings.ExpirationChecks.ErrorWindow)
+		} else {
+			errorTime = time.Now().UTC().AddDate(10, 0, 0)
+		}
+
+		window := s.settings.ExpirationChecks.WarningWindow
+		// if only ErrorWindow is set, we set WarningWindow to the same value, so that the checks do happen
+		if window == 0 && s.settings.ExpirationChecks.ErrorWindow != 0 {
+			window = s.settings.ExpirationChecks.ErrorWindow
+		}
+		if window != 0 {
+			expiring, expired, err := s.GetExpiringCerts(window)
+			s.logger.Error(fmt.Sprintf("error while checking for certificate expiration: %v", err))
+			if s.scope != nil {
+				s.scope.Gauge(metricCertsExpired).Update(float64(len(expired)))
+				s.scope.Gauge(metricCertsExpiring).Update(float64(len(expiring)))
+			}
+			s.logCerts(expired, true, errorTime)
+			s.logCerts(expiring, false, errorTime)
+		}
+	}
+}
+
+func (s *localStoreTlsProvider) logCerts(certs CertExpirationMap, expired bool, errorTime time.Time) {
+
+	for _, cert := range certs {
+		str := createExpirationLogMessage(cert, expired)
+		if expired || cert.Expiration.Before(errorTime) {
+			s.logger.Error(str)
+		} else {
+			s.logger.Warn(str)
+		}
+	}
+}
+
+func createExpirationLogMessage(cert CertExpirationData, expired bool) string {
+
+	var verb string
+	if expired {
+		verb = "has expired"
+	} else {
+		verb = "will expire"
+	}
+	return fmt.Sprintf("certificate with thumbprint=%x %s on %v, IsCA=%t, DNS=%v",
+		cert.Thumbprint, verb, cert.Expiration, cert.IsCA, cert.DNSNames)
+}
+
+func mergeMaps(to CertExpirationMap, from CertExpirationMap) {
+	for k, v := range from {
+		to[k] = v
+	}
 }
