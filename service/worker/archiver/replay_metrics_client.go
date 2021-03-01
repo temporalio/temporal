@@ -27,8 +27,6 @@ package archiver
 import (
 	"time"
 
-	"github.com/uber-go/tally"
-
 	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/common/metrics"
@@ -71,9 +69,9 @@ func (r *replayMetricsClient) AddCounter(scope int, counter int, delta int64) {
 }
 
 // StartTimer starts a timer for the given metric name. Time will be recorded when stopwatch is stopped.
-func (r *replayMetricsClient) StartTimer(scope int, timer int) tally.Stopwatch {
+func (r *replayMetricsClient) StartTimer(scope int, timer int) metrics.Stopwatch {
 	if workflow.IsReplaying(r.ctx) {
-		return metrics.NopStopwatch()
+		return metrics.NewStopwatch()
 	}
 	return r.client.StartTimer(scope, timer)
 }

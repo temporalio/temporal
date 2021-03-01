@@ -28,14 +28,13 @@ import (
 	"bytes"
 	"time"
 
-	"github.com/uber-go/tally/m3"
-	"github.com/uber-go/tally/prometheus"
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/masker"
 	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -72,7 +71,7 @@ type (
 		// RPC is the rpc configuration
 		RPC RPC `yaml:"rpc"`
 		// Deprecated. Use Metrics in global section instead.
-		Metrics Metrics `yaml:"metrics"`
+		Metrics metrics.Metrics `yaml:"metrics"`
 	}
 
 	// PProf contains the config items for the pprof utility
@@ -104,7 +103,7 @@ type (
 		// TLS controls the communication encryption configuration
 		TLS RootTLS `yaml:"tls"`
 		// Metrics is the metrics subsystem configuration
-		Metrics *Metrics `yaml:"metrics"`
+		Metrics *metrics.Metrics `yaml:"metrics"`
 		// Settings for authentication and authorization
 		Authorization Authorization `yaml:"authorization"`
 	}
@@ -389,35 +388,6 @@ type (
 	DCRedirectionPolicy struct {
 		Policy string `yaml:"policy"`
 		ToDC   string `yaml:"toDC"`
-	}
-
-	// Metrics contains the config items for metrics subsystem
-	Metrics struct {
-		// M3 is the configuration for m3 metrics reporter
-		M3 *m3.Configuration `yaml:"m3"`
-		// Statsd is the configuration for statsd reporter
-		Statsd *Statsd `yaml:"statsd"`
-		// Prometheus is the configuration for prometheus reporter
-		Prometheus *prometheus.Configuration `yaml:"prometheus"`
-		// Tags is the set of key-value pairs to be reported as part of every metric
-		Tags map[string]string `yaml:"tags"`
-		// Prefix sets the prefix to all outgoing metrics
-		Prefix string `yaml:"prefix"`
-	}
-
-	// Statsd contains the config items for statsd metrics reporter
-	Statsd struct {
-		// The host and port of the statsd server
-		HostPort string `yaml:"hostPort" validate:"nonzero"`
-		// The prefix to use in reporting to statsd
-		Prefix string `yaml:"prefix" validate:"nonzero"`
-		// FlushInterval is the maximum interval for sending packets.
-		// If it is not specified, it defaults to 1 second.
-		FlushInterval time.Duration `yaml:"flushInterval"`
-		// FlushBytes specifies the maximum udp packet size you wish to send.
-		// If FlushBytes is unspecified, it defaults  to 1432 bytes, which is
-		// considered safe for local traffic.
-		FlushBytes int `yaml:"flushBytes"`
 	}
 
 	// Archival contains the config for archival

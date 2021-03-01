@@ -31,7 +31,6 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/olivere/elastic/v7"
-	"github.com/uber-go/tally"
 
 	indexerspb "go.temporal.io/server/api/indexer/v1"
 	"go.temporal.io/server/common/codec"
@@ -65,7 +64,7 @@ type (
 
 	kafkaMessageWithMetrics struct { // value of esProcessorImpl.mapToKafkaMsg
 		message        messaging.Message
-		swFromAddToAck *tally.Stopwatch // metric from message add to process, to message ack/nack
+		swFromAddToAck *metrics.Stopwatch // metric from message add to process, to message ack/nack
 	}
 )
 
@@ -313,7 +312,7 @@ func getErrorMsgFromESResp(resp *elastic.BulkResponseItem) string {
 	return errMsg
 }
 
-func newKafkaMessageWithMetrics(kafkaMsg messaging.Message, stopwatch *tally.Stopwatch) *kafkaMessageWithMetrics {
+func newKafkaMessageWithMetrics(kafkaMsg messaging.Message, stopwatch *metrics.Stopwatch) *kafkaMessageWithMetrics {
 	return &kafkaMessageWithMetrics{
 		message:        kafkaMsg,
 		swFromAddToAck: stopwatch,
@@ -323,13 +322,13 @@ func newKafkaMessageWithMetrics(kafkaMsg messaging.Message, stopwatch *tally.Sto
 func (km *kafkaMessageWithMetrics) Ack() {
 	km.message.Ack() //nolint:errcheck
 	if km.swFromAddToAck != nil {
-		km.swFromAddToAck.Stop()
+		(*km.swFromAddToAck).Stop()
 	}
 }
 
 func (km *kafkaMessageWithMetrics) Nack() {
 	km.message.Nack() //nolint:errcheck
 	if km.swFromAddToAck != nil {
-		km.swFromAddToAck.Stop()
+		(*km.swFromAddToAck).Stop()
 	}
 }

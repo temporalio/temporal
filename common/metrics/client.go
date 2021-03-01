@@ -34,10 +34,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 )
 
-const (
-	distributionToTimerRatio = int(time.Millisecond / time.Nanosecond)
-)
-
 // ClientImpl is used for reporting metrics by various Temporal services
 type ClientImpl struct {
 	//parentReporter is the parent scope for the metrics
@@ -97,9 +93,10 @@ func (m *ClientImpl) AddCounter(scopeIdx int, counterIdx int, delta int64) {
 
 // StartTimer starts a timer for the given
 // metric name
-func (m *ClientImpl) StartTimer(scopeIdx int, timerIdx int) tally.Stopwatch {
+func (m *ClientImpl) StartTimer(scopeIdx int, timerIdx int) Stopwatch {
 	name := string(m.metricDefs[timerIdx].metricName)
-	return m.childScopes[scopeIdx].Timer(name).Start()
+	timer := m.childScopes[scopeIdx].Timer(name)
+	return NewStopwatch(timer)
 }
 
 // RecordTimer record and emit a timer for the given
@@ -128,25 +125,6 @@ func (m *ClientImpl) UpdateGauge(scopeIdx int, gaugeIdx int, value float64) {
 func (m *ClientImpl) Scope(scopeIdx int, tags ...Tag) Scope {
 	scope := m.childScopes[scopeIdx]
 	return newMetricsScope(scope, scope, m.metricDefs, false).Tagged(tags...)
-}
-
-func getMetricDefs(serviceIdx ServiceIdx) map[int]metricDefinition {
-	defs := make(map[int]metricDefinition)
-	for idx, def := range MetricDefs[Common] {
-		defs[idx] = def
-	}
-
-	for idx, def := range MetricDefs[serviceIdx] {
-		defs[idx] = def
-	}
-
-	return defs
-}
-
-func mergeMapToRight(src map[string]string, dest map[string]string) {
-	for k, v := range src {
-		dest[k] = v
-	}
 }
 
 // GetMetricsServiceIdx returns the metrics name

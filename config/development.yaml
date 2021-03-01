@@ -18,6 +18,8 @@ global:
   pprof:
     port: 7936
   metrics:
+#    otprometheus:
+#      listenAddress: "127.0.0.1:8001"
     prometheus:
       timerType: "histogram"
       listenAddress: "127.0.0.1:8000"

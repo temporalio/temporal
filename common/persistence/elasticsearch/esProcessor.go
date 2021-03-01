@@ -35,7 +35,6 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/olivere/elastic/v7"
-	"github.com/uber-go/tally"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
@@ -70,7 +69,7 @@ type (
 
 	ackChanWithStopwatch struct { // value of esProcessorImpl.mapToAckChan
 		ackCh                 chan<- bool
-		addToProcessStopwatch *tally.Stopwatch // Used to report metrics: interval between visibility task being added to bulk processor and it is processed (ack/nack).
+		addToProcessStopwatch *metrics.Stopwatch // Used to report metrics: interval between visibility task being added to bulk processor and it is processed (ack/nack).
 	}
 )
 
@@ -171,7 +170,7 @@ func (p *esProcessorImpl) Add(request *elasticsearch.BulkableRequest, visibility
 		p.logger.Warn("Adding duplicate ES request for visibility task key.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc))
 
 		// Nack existing visibility task.
-		ackChWithStopwatchExisting.addToProcessStopwatch.Stop()
+		(*ackChWithStopwatchExisting.addToProcessStopwatch).Stop()
 		ackChWithStopwatchExisting.ackCh <- false
 
 		// Replace existing dictionary item with new item.
@@ -282,7 +281,7 @@ func (p *esProcessorImpl) sendToAckChan(visibilityTaskKey string, ack bool) {
 			p.logger.Fatal(fmt.Sprintf("mapToAckChan has item of a wrong type %T (%T expected).", value, &ackChanWithStopwatch{}), tag.ESKey(visibilityTaskKey))
 		}
 
-		ackChWithStopwatch.addToProcessStopwatch.Stop()
+		(*ackChWithStopwatch.addToProcessStopwatch).Stop()
 		ackChWithStopwatch.ackCh <- ack
 		return true
 	})
@@ -384,7 +383,7 @@ func extractErrorReason(resp *elastic.BulkResponseItem) string {
 	return ""
 }
 
-func newAckChanWithStopwatch(ackCh chan<- bool, stopwatch *tally.Stopwatch) *ackChanWithStopwatch {
+func newAckChanWithStopwatch(ackCh chan<- bool, stopwatch *metrics.Stopwatch) *ackChanWithStopwatch {
 	return &ackChanWithStopwatch{
 		ackCh:                 ackCh,
 		addToProcessStopwatch: stopwatch,

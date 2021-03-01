@@ -63,6 +63,8 @@ require (
 	github.com/valyala/fastjson v1.6.3
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
+	go.opentelemetry.io/otel v0.15.0
+	go.opentelemetry.io/otel/exporters/metric/prometheus v0.15.0
 	go.temporal.io/api v1.4.0
 	go.temporal.io/sdk v1.5.0
 	go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193

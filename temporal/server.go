@@ -27,6 +27,7 @@ package temporal
 import (
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -264,8 +265,22 @@ func (s *Server) getServiceParams(
 	if metricsScope == nil {
 		metricsScope = svcCfg.Metrics.NewScope(s.logger)
 	}
+
+	// todomigryz: This tally scope is used to initialize SDK client.
+	//  Might cause metric collisions and require porting of SDK client to OpenTelemetery.
 	params.MetricsScope = metricsScope
-	metricsClient := metrics.NewClient(metricsScope, metrics.GetMetricsServiceIdx(svcName, s.logger))
+	serviceIdx := metrics.GetMetricsServiceIdx(svcName, s.logger)
+	var metricsClient metrics.Client
+	if s.so.config.Global.Metrics.OTPrometheus != nil {
+		var err error
+		metricsClient, err = metrics.NewOpentelemeteryClient(s.so.config.Global.Metrics, serviceIdx, s.logger)
+		if err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		metricsClient = metrics.NewClient(metricsScope, metrics.GetMetricsServiceIdx(svcName, s.logger))
+	}
+
 	params.MetricsClient = metricsClient
 	params.ClusterMetadata = clusterMetadata
 
