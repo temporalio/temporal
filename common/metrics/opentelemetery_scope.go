@@ -250,5 +250,10 @@ func newOpenTelemetryStopwatch(metricsMeta []openTelemetryStopwatchMetric) openT
 }
 
 func (o openTelemetryStopwatch) Stop() {
-	panic("implement me")
+	ctx := context.Background()
+	d := time.Since(o.start)
+
+	for _, m := range o.metrics {
+		m.timer.Record(ctx, float64(d.Nanoseconds()), m.labels...)
+	}
 }
