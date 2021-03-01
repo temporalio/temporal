@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strings"
+	"time"
 
 	"github.com/gocql/gocql"
 
@@ -137,6 +138,12 @@ func NewCassandraCluster(cfg config.Cassandra, r resolver.ServiceResolver) (*goc
 
 	if cfg.ConnectTimeout > 0 {
 		cluster.ConnectTimeout = cfg.ConnectTimeout
+	}
+
+	cluster.ReconnectionPolicy = &gocql.ExponentialReconnectionPolicy{
+		MaxRetries:      30,
+		InitialInterval: 1 * time.Second,
+		MaxInterval:     8 * time.Second,
 	}
 
 	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
