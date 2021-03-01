@@ -39,7 +39,6 @@ import (
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/rpc"
-
 	"go.temporal.io/server/common/service/config"
 )
 
