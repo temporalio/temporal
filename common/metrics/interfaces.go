@@ -33,6 +33,13 @@ import (
 )
 
 type (
+	// Stopwatch is a helper for simpler tracking of elapsed time, use the
+	// Stop() method to report time elapsed since its created back to the
+	// timer or histogram.
+	Stopwatch interface {
+		Stop()
+	}
+
 	// Client is the interface used to report metrics tally.
 	Client interface {
 		// IncCounter increments a counter metric

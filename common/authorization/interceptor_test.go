@@ -85,7 +85,7 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 	s.mockMetricsClient = metrics.NewMockClient(s.controller)
 	s.mockMetricsClient.EXPECT().Scope(metrics.AuthorizationScope).Return(s.mockMetricsScope)
 	s.mockMetricsScope.EXPECT().Tagged(metrics.NamespaceTag(testNamespace)).Return(s.mockMetricsScope)
-	s.mockMetricsScope.EXPECT().StartTimer(metrics.ServiceAuthorizationLatency).Return(metrics.Stopwatch{})
+	s.mockMetricsScope.EXPECT().StartTimer(metrics.ServiceAuthorizationLatency).Return(metrics.TallyStopwatch{})
 	s.mockClaimMapper = NewMockClaimMapper(s.controller)
 	s.interceptor = NewAuthorizationInterceptor(
 		s.mockClaimMapper,
