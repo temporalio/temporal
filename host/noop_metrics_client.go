@@ -27,8 +27,6 @@ package host
 import (
 	"time"
 
-	"github.com/uber-go/tally"
-
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -40,7 +38,7 @@ func (m noopMetricsClient) IncCounter(scope int, counter int) {}
 
 func (m noopMetricsClient) AddCounter(scope int, counter int, delta int64) {}
 
-func (m noopMetricsClient) StartTimer(scope int, timer int) tally.Stopwatch {
+func (m noopMetricsClient) StartTimer(scope int, timer int) metrics.Stopwatch {
 	panic("Unexpected call to NoopMetricsClient StartTimer")
 }
 
