@@ -91,9 +91,7 @@ func (s *session) refresh() error {
 	}
 
 	s.sessionInitTime = time.Now().UTC()
-	if session, ok := s.Value.Load().(*gocql.Session); ok {
-		session.Close()
-	}
+	s.Value.Load().(*gocql.Session).Close()
 	s.Value.Store(gocqlSession)
 	return nil
 }
