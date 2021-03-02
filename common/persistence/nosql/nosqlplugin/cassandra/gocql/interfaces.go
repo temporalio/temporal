@@ -30,7 +30,7 @@ import (
 	"context"
 )
 
-// Note: this file defines the minimal interface that is needed by Cadence's cassandra
+// Note: this file defines the minimal interface that is needed by Temporal's cassandra
 // persistence implementation and should be implemented for all gocql libraries if
 // they need to be used.
 // Please add more methods to the interface if needed by the cassandra implementation.

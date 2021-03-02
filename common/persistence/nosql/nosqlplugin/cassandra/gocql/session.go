@@ -31,6 +31,7 @@ import (
 
 	"github.com/gocql/gocql"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 )
@@ -43,6 +44,7 @@ const (
 
 type (
 	session struct {
+		status       int32
 		config       config.Cassandra
 		resolver     resolver.ServiceResolver
 		atomic.Value // *gocql.Session
@@ -63,6 +65,7 @@ func NewSession(
 	}
 
 	session := &session{
+		status:          common.DaemonStatusStarted,
 		config:          config,
 		sessionInitTime: time.Now().UTC(),
 	}
@@ -74,6 +77,10 @@ func (s *session) refresh() error {
 	s.Lock()
 	defer s.Unlock()
 
+	if atomic.LoadInt32(&s.status) != common.DaemonStatusStarted {
+		return nil
+	}
+
 	if time.Now().UTC().Sub(s.sessionInitTime) < sessionRefreshMinInternal {
 		return nil
 	}
@@ -84,6 +91,9 @@ func (s *session) refresh() error {
 	}
 
 	s.sessionInitTime = time.Now().UTC()
+	if session, ok := s.Value.Load().(*gocql.Session); ok {
+		session.Close()
+	}
 	s.Value.Store(gocqlSession)
 	return nil
 }
@@ -112,8 +122,8 @@ func (s *session) Query(
 		return nil
 	}
 	return &query{
-		session: s,
-		query:   q,
+		session:    s,
+		gocqlQuery: q,
 	}
 }
 
@@ -125,8 +135,8 @@ func (s *session) NewBatch(
 		return nil
 	}
 	return &batch{
-		session: s,
-		batch:   b,
+		session:    s,
+		gocqlBatch: b,
 	}
 }
 
@@ -135,7 +145,7 @@ func (s *session) ExecuteBatch(
 ) (retError error) {
 	defer func() { s.handleError(retError) }()
 
-	return s.Value.Load().(*gocql.Session).ExecuteBatch(b.(*batch).batch)
+	return s.Value.Load().(*gocql.Session).ExecuteBatch(b.(*batch).gocqlBatch)
 }
 
 func (s *session) MapExecuteBatchCAS(
@@ -144,7 +154,7 @@ func (s *session) MapExecuteBatchCAS(
 ) (_ bool, _ Iter, retError error) {
 	defer func() { s.handleError(retError) }()
 
-	applied, iter, err := s.Value.Load().(*gocql.Session).MapExecuteBatchCAS(b.(*batch).batch, previous)
+	applied, iter, err := s.Value.Load().(*gocql.Session).MapExecuteBatchCAS(b.(*batch).gocqlBatch, previous)
 	if iter == nil {
 		return applied, nil, err
 	}
@@ -152,10 +162,14 @@ func (s *session) MapExecuteBatchCAS(
 }
 
 func (s *session) Close() {
-	session, ok := s.Value.Load().(*gocql.Session)
-	if ok {
-		session.Close()
+	if !atomic.CompareAndSwapInt32(
+		&s.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
+		return
 	}
+	s.Value.Load().(*gocql.Session).Close()
 }
 
 func (s *session) handleError(
@@ -163,8 +177,6 @@ func (s *session) handleError(
 ) {
 	switch err {
 	case gocql.ErrNoConnections:
-		_ = s.refresh()
-	case gocql.ErrSessionClosed:
 		_ = s.refresh()
 	default:
 		// noop

@@ -37,7 +37,7 @@ type (
 	batch struct {
 		session *session
 
-		batch *gocql.Batch
+		gocqlBatch *gocql.Batch
 	}
 )
 
@@ -53,26 +53,22 @@ func newBatch(
 	gocqlBatch *gocql.Batch,
 ) *batch {
 	return &batch{
-		session: session,
-		batch:   gocqlBatch,
+		session:    session,
+		gocqlBatch: gocqlBatch,
 	}
 }
 
 func (b *batch) Query(stmt string, args ...interface{}) {
-	b.batch.Query(stmt, args...)
+	b.gocqlBatch.Query(stmt, args...)
 }
 
 func (b *batch) WithContext(ctx context.Context) Batch {
-	b2 := b.batch.WithContext(ctx)
-	if b2 == nil {
-		return nil
-	}
-	return newBatch(b.session, b2)
+	return newBatch(b.session, b.gocqlBatch.WithContext(ctx))
 }
 
 func (b *batch) WithTimestamp(timestamp int64) Batch {
-	b.batch.WithTimestamp(timestamp)
-	return newBatch(b.session, b.batch)
+	b.gocqlBatch.WithTimestamp(timestamp)
+	return newBatch(b.session, b.gocqlBatch)
 }
 
 func mustConvertBatchType(batchType BatchType) gocql.BatchType {

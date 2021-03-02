@@ -34,8 +34,8 @@ var _ Query = (*query)(nil)
 
 type (
 	query struct {
-		session *session
-		query   *gocql.Query
+		session    *session
+		gocqlQuery *gocql.Query
 	}
 )
 
@@ -44,15 +44,15 @@ func newQuery(
 	gocqlQuery *gocql.Query,
 ) *query {
 	return &query{
-		session: session,
-		query:   gocqlQuery,
+		session:    session,
+		gocqlQuery: gocqlQuery,
 	}
 }
 
 func (q *query) Exec() (retError error) {
 	defer func() { q.handleError(retError) }()
 
-	return q.query.Exec()
+	return q.gocqlQuery.Exec()
 }
 
 func (q *query) Scan(
@@ -60,7 +60,7 @@ func (q *query) Scan(
 ) (retError error) {
 	defer func() { q.handleError(retError) }()
 
-	return q.query.Scan(dest...)
+	return q.gocqlQuery.Scan(dest...)
 }
 
 func (q *query) ScanCAS(
@@ -68,7 +68,7 @@ func (q *query) ScanCAS(
 ) (_ bool, retError error) {
 	defer func() { q.handleError(retError) }()
 
-	return q.query.ScanCAS(dest...)
+	return q.gocqlQuery.ScanCAS(dest...)
 }
 
 func (q *query) MapScan(
@@ -76,7 +76,7 @@ func (q *query) MapScan(
 ) (retError error) {
 	defer func() { q.handleError(retError) }()
 
-	return q.query.MapScan(m)
+	return q.gocqlQuery.MapScan(m)
 }
 
 func (q *query) MapScanCAS(
@@ -84,11 +84,11 @@ func (q *query) MapScanCAS(
 ) (_ bool, retError error) {
 	defer func() { q.handleError(retError) }()
 
-	return q.query.MapScanCAS(dest)
+	return q.gocqlQuery.MapScanCAS(dest)
 }
 
 func (q *query) Iter() Iter {
-	iter := q.query.Iter()
+	iter := q.gocqlQuery.Iter()
 	if iter == nil {
 		return nil
 	}
@@ -96,27 +96,27 @@ func (q *query) Iter() Iter {
 }
 
 func (q *query) PageSize(n int) Query {
-	q.query.PageSize(n)
-	return newQuery(q.session, q.query)
+	q.gocqlQuery.PageSize(n)
+	return newQuery(q.session, q.gocqlQuery)
 }
 
 func (q *query) PageState(state []byte) Query {
-	q.query.PageState(state)
-	return newQuery(q.session, q.query)
+	q.gocqlQuery.PageState(state)
+	return newQuery(q.session, q.gocqlQuery)
 }
 
 func (q *query) Consistency(c Consistency) Query {
-	q.query.Consistency(mustConvertConsistency(c))
-	return newQuery(q.session, q.query)
+	q.gocqlQuery.Consistency(mustConvertConsistency(c))
+	return newQuery(q.session, q.gocqlQuery)
 }
 
 func (q *query) WithTimestamp(timestamp int64) Query {
-	q.query.WithTimestamp(timestamp)
-	return newQuery(q.session, q.query)
+	q.gocqlQuery.WithTimestamp(timestamp)
+	return newQuery(q.session, q.gocqlQuery)
 }
 
 func (q *query) WithContext(ctx context.Context) Query {
-	q2 := q.query.WithContext(ctx)
+	q2 := q.gocqlQuery.WithContext(ctx)
 	if q2 == nil {
 		return nil
 	}
@@ -124,8 +124,8 @@ func (q *query) WithContext(ctx context.Context) Query {
 }
 
 func (q *query) Bind(v ...interface{}) Query {
-	q.query.Bind(v...)
-	return newQuery(q.session, q.query)
+	q.gocqlQuery.Bind(v...)
+	return newQuery(q.session, q.gocqlQuery)
 }
 
 func (q *query) handleError(
@@ -133,8 +133,6 @@ func (q *query) handleError(
 ) {
 	switch err {
 	case gocql.ErrNoConnections:
-		_ = q.session.refresh()
-	case gocql.ErrSessionClosed:
 		_ = q.session.refresh()
 	default:
 		// noop
