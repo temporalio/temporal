@@ -30,7 +30,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gocql/gocql"
+	gitgocql "github.com/gocql/gocql"
 	"github.com/urfave/cli"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -46,12 +46,13 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence"
 	cassp "go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
-	"go.temporal.io/server/tools/cassandra"
 )
 
 const maxEventID = 9999
@@ -281,17 +282,17 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	fmt.Println("delete current row successfully")
 }
 
-func readOneRow(query *gocql.Query) (map[string]interface{}, error) {
+func readOneRow(query gocql.Query) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
 	err := query.MapScan(result)
 	return result, err
 }
 
-func connectToCassandra(c *cli.Context) *gocql.Session {
+func connectToCassandra(c *cli.Context) gocql.Session {
 	host := getRequiredOption(c, FlagDBAddress)
 	port := c.Int(FlagDBPort)
 
-	cassandraConfig := &config.Cassandra{
+	cassandraConfig := config.Cassandra{
 		Hosts:    host,
 		Port:     port,
 		User:     c.String(FlagUsername),
@@ -308,15 +309,7 @@ func connectToCassandra(c *cli.Context) *gocql.Session {
 		}
 	}
 
-	clusterCfg, err := cassandra.NewCassandraCluster(cassandraConfig, 10)
-	if err != nil {
-		ErrorAndExit("connect to Cassandra failed", err)
-	}
-	clusterCfg.SerialConsistency = gocql.LocalSerial
-	clusterCfg.NumConns = 20
-	clusterCfg.PoolConfig.HostSelectionPolicy = nil
-
-	session, err := clusterCfg.CreateSession()
+	session, err := gocql.NewSession(cassandraConfig, resolver.NewNoopResolver())
 	if err != nil {
 		ErrorAndExit("connect to Cassandra failed", err)
 	}
@@ -357,11 +350,11 @@ func AdminGetNamespaceIDOrName(c *cli.Context) {
 				ErrorAndExit("readOneRow for v2", err)
 			}
 			namespace := res["namespace"].(map[string]interface{})
-			namespaceID := namespace["id"].(gocql.UUID).String()
+			namespaceID := namespace["id"].(gitgocql.UUID).String()
 			fmt.Printf("namespaceId for namespace %v is %v \n", namespace, namespaceID)
 		} else {
 			namespace := res["namespace"].(map[string]interface{})
-			namespaceID := namespace["id"].(gocql.UUID).String()
+			namespaceID := namespace["id"].(gitgocql.UUID).String()
 			fmt.Printf("namespaceId for namespace %v is %v \n", namespace, namespaceID)
 		}
 	}

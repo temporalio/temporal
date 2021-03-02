@@ -28,13 +28,13 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/gocql/gocql"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -71,7 +71,7 @@ type (
 
 // NewHistoryV2PersistenceFromSession returns new HistoryStore
 func NewHistoryV2PersistenceFromSession(
-	session *gocql.Session,
+	session gocql.Session,
 	logger log.Logger,
 ) p.HistoryStore {
 
@@ -80,7 +80,7 @@ func NewHistoryV2PersistenceFromSession(
 
 // newHistoryPersistence is used to create an instance of HistoryManager implementation
 func newHistoryPersistence(
-	session *gocql.Session,
+	session gocql.Session,
 	logger log.Logger,
 ) (p.HistoryStore, error) {
 	return &cassandraHistoryV2Persistence{
@@ -385,7 +385,7 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 }
 
 func (h *cassandraHistoryV2Persistence) deleteBranchRangeNodes(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	treeID string,
 	branchID string,
 	beginNodeID int64,
@@ -410,8 +410,8 @@ func (h *cassandraHistoryV2Persistence) GetAllHistoryTreeBranches(
 	pagingToken := iter.PageState()
 
 	branches := make([]p.HistoryBranchDetail, 0, request.PageSize)
-	treeUUID := gocql.UUID{}
-	branchUUID := gocql.UUID{}
+	treeUUID := ""
+	branchUUID := ""
 	var data []byte
 	var encoding string
 
@@ -422,12 +422,17 @@ func (h *cassandraHistoryV2Persistence) GetAllHistoryTreeBranches(
 		}
 
 		branchDetail := p.HistoryBranchDetail{
-			TreeID:   treeUUID.String(),
-			BranchID: branchUUID.String(),
+			TreeID:   treeUUID,
+			BranchID: branchUUID,
 			ForkTime: hti.ForkTime,
 			Info:     hti.Info,
 		}
 		branches = append(branches, branchDetail)
+
+		treeUUID = ""
+		branchUUID = ""
+		data = nil
+		encoding = ""
 	}
 
 	if err := iter.Close(); err != nil {
@@ -457,7 +462,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 	pagingToken := []byte{}
 	branches := make([]*persistencespb.HistoryBranch, 0, pageSize)
 
-	var iter *gocql.Iter
+	var iter gocql.Iter
 	for {
 		iter = query.PageSize(pageSize).PageState(pagingToken).Iter()
 		if iter == nil {
@@ -465,7 +470,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 		}
 		pagingToken = iter.PageState()
 
-		branchUUID := gocql.UUID{}
+		branchUUID := ""
 		var data []byte
 		var encoding string
 		for iter.Scan(&branchUUID, &data, &encoding) {
@@ -476,7 +481,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 
 			branches = append(branches, br.BranchInfo)
 
-			branchUUID = gocql.UUID{}
+			branchUUID = ""
 			data = []byte{}
 			encoding = ""
 		}
