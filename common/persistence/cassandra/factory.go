@@ -27,11 +27,10 @@ package cassandra
 import (
 	"sync"
 
-	"github.com/gocql/gocql"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 )
@@ -44,11 +43,11 @@ type (
 		clusterName      string
 		logger           log.Logger
 		execStoreFactory *executionStoreFactory
-		session          *gocql.Session
+		session          gocql.Session
 	}
 
 	executionStoreFactory struct {
-		session *gocql.Session
+		session gocql.Session
 		logger  log.Logger
 	}
 )
@@ -61,7 +60,7 @@ func NewFactory(
 	clusterName string,
 	logger log.Logger,
 ) *Factory {
-	session, err := NewSession(cfg, r)
+	session, err := gocql.NewSession(cfg, r)
 	if err != nil {
 		logger.Fatal("unable to initialize cassandra session", tag.Error(err))
 	}
@@ -152,7 +151,7 @@ func (f *Factory) executionStoreFactory() (*executionStoreFactory, error) {
 
 // newExecutionStoreFactory is used to create an instance of ExecutionStoreFactory implementation
 func newExecutionStoreFactory(
-	session *gocql.Session,
+	session gocql.Session,
 	logger log.Logger,
 ) (*executionStoreFactory, error) {
 	return &executionStoreFactory{

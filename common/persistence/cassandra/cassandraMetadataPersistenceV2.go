@@ -27,12 +27,12 @@ package cassandra
 import (
 	"fmt"
 
-	"github.com/gocql/gocql"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/primitives"
 )
 
@@ -98,7 +98,7 @@ type (
 
 // newMetadataPersistence is used to create an instance of the Namespace MetadataStore implementation
 func newMetadataPersistence(
-	session *gocql.Session,
+	session gocql.Session,
 	currentClusterName string,
 	logger log.Logger,
 ) (p.MetadataStore, error) {
@@ -211,7 +211,7 @@ func (m *cassandraMetadataPersistenceV2) UpdateNamespace(request *p.InternalUpda
 }
 
 func (m *cassandraMetadataPersistenceV2) GetNamespace(request *p.GetNamespaceRequest) (*p.InternalGetNamespaceResponse, error) {
-	var query *gocql.Query
+	var query gocql.Query
 	var err error
 	var detail []byte
 	var detailEncoding string
@@ -226,7 +226,7 @@ func (m *cassandraMetadataPersistenceV2) GetNamespace(request *p.GetNamespaceReq
 
 	handleError := func(name string, ID string, err error) error {
 		identity := name
-		if err == gocql.ErrNotFound {
+		if gocql.IsNotFoundError(err) {
 			if len(ID) > 0 {
 				identity = ID
 			}
@@ -266,9 +266,7 @@ func (m *cassandraMetadataPersistenceV2) GetNamespace(request *p.GetNamespaceReq
 }
 
 func (m *cassandraMetadataPersistenceV2) ListNamespaces(request *p.ListNamespacesRequest) (*p.InternalListNamespacesResponse, error) {
-	var query *gocql.Query
-
-	query = m.session.Query(templateListNamespaceQueryV2, constNamespacePartition)
+	query := m.session.Query(templateListNamespaceQueryV2, constNamespacePartition)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
 		return nil, serviceerror.NewInternal("ListNamespaces operation failed.  Not able to create query iterator.")
@@ -318,7 +316,7 @@ func (m *cassandraMetadataPersistenceV2) DeleteNamespace(request *p.DeleteNamesp
 	query := m.session.Query(templateGetNamespaceQuery, request.ID)
 	err := query.Scan(&name)
 	if err != nil {
-		if err == gocql.ErrNotFound {
+		if gocql.IsNotFoundError(err) {
 			return nil
 		}
 		return err
@@ -336,7 +334,7 @@ func (m *cassandraMetadataPersistenceV2) DeleteNamespaceByName(request *p.Delete
 	query := m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, request.Name)
 	err := query.Scan(&ID, nil, nil, nil, nil, nil)
 	if err != nil {
-		if err == gocql.ErrNotFound {
+		if gocql.IsNotFoundError(err) {
 			return nil
 		}
 		return err
@@ -349,7 +347,7 @@ func (m *cassandraMetadataPersistenceV2) GetMetadata() (*p.GetMetadataResponse, 
 	query := m.session.Query(templateGetMetadataQueryV2, constNamespacePartition, namespaceMetadataRecordName)
 	err := query.Scan(&notificationVersion)
 	if err != nil {
-		if err == gocql.ErrNotFound {
+		if gocql.IsNotFoundError(err) {
 			// this error can be thrown in the very beginning,
 			// i.e. when namespaces is initialized
 			return &p.GetMetadataResponse{NotificationVersion: 0}, nil
@@ -359,7 +357,10 @@ func (m *cassandraMetadataPersistenceV2) GetMetadata() (*p.GetMetadataResponse, 
 	return &p.GetMetadataResponse{NotificationVersion: notificationVersion}, nil
 }
 
-func (m *cassandraMetadataPersistenceV2) updateMetadataBatch(batch *gocql.Batch, notificationVersion int64) {
+func (m *cassandraMetadataPersistenceV2) updateMetadataBatch(
+	batch gocql.Batch,
+	notificationVersion int64,
+) {
 	var nextVersion int64 = 1
 	var currentVersion *int64
 	if notificationVersion > 0 {
