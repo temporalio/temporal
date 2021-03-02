@@ -58,6 +58,20 @@ func (m *MockSession) EXPECT() *MockSessionMockRecorder {
 	return m.recorder
 }
 
+// AwaitSchemaAgreement mocks base method.
+func (m *MockSession) AwaitSchemaAgreement(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AwaitSchemaAgreement", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AwaitSchemaAgreement indicates an expected call of AwaitSchemaAgreement.
+func (mr *MockSessionMockRecorder) AwaitSchemaAgreement(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AwaitSchemaAgreement", reflect.TypeOf((*MockSession)(nil).AwaitSchemaAgreement), ctx)
+}
+
 // Close mocks base method.
 func (m *MockSession) Close() {
 	m.ctrl.T.Helper()

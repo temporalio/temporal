@@ -42,6 +42,7 @@ type (
 		NewBatch(BatchType) Batch
 		ExecuteBatch(Batch) error
 		MapExecuteBatchCAS(Batch, map[string]interface{}) (bool, Iter, error)
+		AwaitSchemaAgreement(ctx context.Context) error
 		Close()
 	}
 

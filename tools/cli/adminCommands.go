@@ -30,7 +30,6 @@ import (
 	"strconv"
 	"time"
 
-	gitgocql "github.com/gocql/gocql"
 	"github.com/urfave/cli"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -350,11 +349,11 @@ func AdminGetNamespaceIDOrName(c *cli.Context) {
 				ErrorAndExit("readOneRow for v2", err)
 			}
 			namespace := res["namespace"].(map[string]interface{})
-			namespaceID := namespace["id"].(gitgocql.UUID).String()
+			namespaceID := gocql.UUIDToString(namespace["id"])
 			fmt.Printf("namespaceId for namespace %v is %v \n", namespace, namespaceID)
 		} else {
 			namespace := res["namespace"].(map[string]interface{})
-			namespaceID := namespace["id"].(gitgocql.UUID).String()
+			namespaceID := gocql.UUIDToString(namespace["id"])
 			fmt.Printf("namespaceId for namespace %v is %v \n", namespace, namespaceID)
 		}
 	}
