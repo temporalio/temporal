@@ -29,12 +29,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gocql/gocql"
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 )
 
 const constMetadataPartition = 0
@@ -73,7 +73,7 @@ var _ p.ClusterMetadataStore = (*cassandraClusterMetadata)(nil)
 
 // newClusterMetadataInstance is used to create an instance of ClusterMetadataStore implementation
 func newClusterMetadataInstance(
-	session *gocql.Session,
+	session gocql.Session,
 	logger log.Logger,
 ) (p.ClusterMetadataStore, error) {
 
@@ -107,7 +107,7 @@ func (m *cassandraClusterMetadata) GetClusterMetadata() (*p.InternalGetClusterMe
 }
 
 func (m *cassandraClusterMetadata) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
-	var query *gocql.Query
+	var query gocql.Query
 	if request.Version == 0 {
 		query = m.session.Query(
 			templateCreateClusterMetadata,
@@ -179,8 +179,7 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 		return nil, serviceerror.NewInternal("GetClusterMembers operation failed.  Not able to create query iterator.")
 	}
 
-	rowCount := iter.NumRows()
-	clusterMembers := make([]*p.ClusterMember, 0, rowCount)
+	var clusterMembers []*p.ClusterMember
 
 	cqlHostID := make([]byte, 0, 16)
 	rpcAddress := net.IP{}

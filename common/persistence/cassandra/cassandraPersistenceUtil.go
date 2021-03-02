@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gocql/gocql"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -37,12 +36,13 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 func applyWorkflowMutationBatch(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	shardID int32,
 	workflowMutation *p.InternalWorkflowMutation,
 ) error {
@@ -161,7 +161,7 @@ func applyWorkflowMutationBatch(
 }
 
 func applyWorkflowSnapshotBatchAsReset(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	shardID int32,
 	workflowSnapshot *p.InternalWorkflowSnapshot,
 ) error {
@@ -273,7 +273,7 @@ func applyWorkflowSnapshotBatchAsReset(
 }
 
 func applyWorkflowSnapshotBatchAsNew(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	shardID int32,
 	workflowSnapshot *p.InternalWorkflowSnapshot,
 ) error {
@@ -381,7 +381,7 @@ func applyWorkflowSnapshotBatchAsNew(
 }
 
 func createExecution(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	shardID int32,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
@@ -441,7 +441,7 @@ func createExecution(
 }
 
 func updateExecution(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	shardID int32,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
@@ -503,7 +503,7 @@ func updateExecution(
 }
 
 func applyTasks(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -562,7 +562,7 @@ func applyTasks(
 }
 
 func createTransferTasks(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	transferTasks []p.Task,
 	shardID int32,
 	namespaceID string,
@@ -662,7 +662,7 @@ func createTransferTasks(
 }
 
 func createReplicationTasks(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	replicationTasks []p.Task,
 	shardID int32,
 	namespaceID string,
@@ -729,7 +729,7 @@ func createReplicationTasks(
 }
 
 func createVisibilityTasks(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	visibilityTasks []p.Task,
 	shardID int32,
 	namespaceID string,
@@ -784,7 +784,7 @@ func createVisibilityTasks(
 }
 
 func createTimerTasks(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	timerTasks []p.Task,
 	shardID int32,
 	namespaceID string,
@@ -868,7 +868,7 @@ func createTimerTasks(
 }
 
 func createOrUpdateCurrentExecution(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	createMode p.CreateWorkflowMode,
 	shardID int32,
 	namespaceID string,
@@ -950,7 +950,7 @@ func createOrUpdateCurrentExecution(
 }
 
 func updateActivityInfos(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	activityInfos []*persistencespb.ActivityInfo,
 	deleteIDs []int64,
 	shardID int32,
@@ -993,7 +993,7 @@ func updateActivityInfos(
 }
 
 func deleteBufferedEvents(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1012,7 +1012,7 @@ func deleteBufferedEvents(
 }
 
 func resetActivityInfos(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	activityInfos []*persistencespb.ActivityInfo,
 	shardID int32,
 	namespaceID string,
@@ -1039,7 +1039,7 @@ func resetActivityInfos(
 }
 
 func updateTimerInfos(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	timerInfos []*persistencespb.TimerInfo,
 	deleteInfos []string,
 	shardID int32,
@@ -1082,7 +1082,7 @@ func updateTimerInfos(
 }
 
 func resetTimerInfos(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	timerInfos []*persistencespb.TimerInfo,
 	shardID int32,
 	namespaceID string,
@@ -1110,7 +1110,7 @@ func resetTimerInfos(
 }
 
 func updateChildExecutionInfos(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	childExecutionInfos []*persistencespb.ChildExecutionInfo,
 	deleteIDs []int64,
 	shardID int32,
@@ -1153,7 +1153,7 @@ func updateChildExecutionInfos(
 }
 
 func resetChildExecutionInfos(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	childExecutionInfos []*persistencespb.ChildExecutionInfo,
 	shardID int32,
 	namespaceID string,
@@ -1179,7 +1179,7 @@ func resetChildExecutionInfos(
 }
 
 func updateRequestCancelInfos(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	requestCancelInfos []*persistencespb.RequestCancelInfo,
 	deleteIDs []int64,
 	shardID int32,
@@ -1222,7 +1222,7 @@ func updateRequestCancelInfos(
 }
 
 func resetRequestCancelInfos(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	requestCancelInfos []*persistencespb.RequestCancelInfo,
 	shardID int32,
 	namespaceID string,
@@ -1251,7 +1251,7 @@ func resetRequestCancelInfos(
 }
 
 func updateSignalInfos(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	signalInfos []*persistencespb.SignalInfo,
 	deleteIDs []int64,
 	shardID int32,
@@ -1294,7 +1294,7 @@ func updateSignalInfos(
 }
 
 func resetSignalInfos(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	signalInfos []*persistencespb.SignalInfo,
 	shardID int32,
 	namespaceID string,
@@ -1322,7 +1322,7 @@ func resetSignalInfos(
 }
 
 func updateSignalsRequested(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	signalReqIDs []string,
 	deleteSignalReqIDs []string,
 	shardID int32,
@@ -1357,7 +1357,7 @@ func updateSignalsRequested(
 }
 
 func resetSignalRequested(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	signalRequested []string,
 	shardID int32,
 	namespaceID string,
@@ -1377,7 +1377,7 @@ func resetSignalRequested(
 }
 
 func updateBufferedEvents(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	newBufferedEvents *commonpb.DataBlob,
 	clearBufferedEvents bool,
 	shardID int32,
@@ -1530,23 +1530,4 @@ func createHistoryEventBatchBlob(
 	}
 
 	return eventBatch
-}
-
-func isTimeoutError(err error) bool {
-	if err == gocql.ErrTimeoutNoResponse {
-		return true
-	}
-	if err == gocql.ErrConnectionClosed {
-		return true
-	}
-	_, ok := err.(*gocql.RequestErrWriteTimeout)
-	return ok
-}
-
-func isThrottlingError(err error) bool {
-	if req, ok := err.(gocql.RequestError); ok {
-		// gocql does not expose the constant errOverloaded = 0x1001
-		return req.Code() == 0x1001
-	}
-	return false
 }

@@ -31,10 +31,10 @@ import (
 	"log"
 	"time"
 
-	"github.com/gocql/gocql"
+	gitgocql "github.com/gocql/gocql"
 
 	"go.temporal.io/server/common/auth"
-	ccassandra "go.temporal.io/server/common/cassandra"
+	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/tools/common/schema"
@@ -45,8 +45,8 @@ type (
 		nReplicas     int
 		datacenter    string
 		timeout       time.Duration
-		session       *gocql.Session
-		clusterConfig *gocql.ClusterConfig
+		session       *gitgocql.Session
+		clusterConfig *gitgocql.ClusterConfig
 	}
 	// CQLClientConfig contains the configuration for cql client
 	CQLClientConfig struct {
@@ -103,8 +103,8 @@ const (
 var _ schema.DB = (*cqlClient)(nil)
 
 // NewCassandraCluster return gocql clusterConfig
-func NewCassandraCluster(cfg *config.Cassandra, timeoutSeconds int) (*gocql.ClusterConfig, error) {
-	clusterCfg, err := ccassandra.NewCassandraCluster(*cfg, resolver.NewNoopResolver())
+func NewCassandraCluster(cfg *config.Cassandra, timeoutSeconds int) (*gitgocql.ClusterConfig, error) {
+	clusterCfg, err := gocql.NewCassandraCluster(*cfg, resolver.NewNoopResolver())
 	if err != nil {
 		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
 	}
@@ -197,7 +197,7 @@ func (client *cqlClient) ReadSchemaVersion() (string, error) {
 	query := client.session.Query(readSchemaVersionCQL, client.clusterConfig.Keyspace)
 	// when querying the DB schema version, override to local quorum
 	// in case Cassandra node down (compared to using ALL)
-	query.SetConsistency(gocql.LocalQuorum)
+	query.SetConsistency(gitgocql.LocalQuorum)
 
 	iter := query.Iter()
 	var version string

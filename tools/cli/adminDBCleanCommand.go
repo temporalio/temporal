@@ -32,12 +32,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/persistence"
 	cassp "go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -147,7 +147,7 @@ func AdminDBClean(c *cli.Context) {
 
 func cleanShard(
 	limiter quotas.RateLimiter,
-	session *gocql.Session,
+	session gocql.Session,
 	outputDirectories *CleanOutputDirectories,
 	inputDirectory string,
 	shardID int32,

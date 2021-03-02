@@ -29,6 +29,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
@@ -84,7 +85,7 @@ func checkCompatibleVersion(
 	expectedVersion string,
 ) error {
 
-	session, err := NewSession(cfg, r)
+	session, err := gocql.NewSession(cfg, r)
 	if err != nil {
 		return err
 	}

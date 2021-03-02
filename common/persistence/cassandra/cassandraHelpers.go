@@ -29,19 +29,15 @@ import (
 	"io/ioutil"
 	"strings"
 
-	"github.com/gocql/gocql"
-
-	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 )
 
 const cassandraPersistenceName = "cassandra"
 
 // CreateCassandraKeyspace creates the keyspace using this session for given replica count
-func CreateCassandraKeyspace(s *gocql.Session, keyspace string, replicas int, overwrite bool, logger log.Logger) (err error) {
+func CreateCassandraKeyspace(s gocql.Session, keyspace string, replicas int, overwrite bool, logger log.Logger) (err error) {
 	// if overwrite flag is set, drop the keyspace and create a new one
 	if overwrite {
 		err = DropCassandraKeyspace(s, keyspace, logger)
@@ -62,7 +58,7 @@ func CreateCassandraKeyspace(s *gocql.Session, keyspace string, replicas int, ov
 }
 
 // DropCassandraKeyspace drops the given keyspace, if it exists
-func DropCassandraKeyspace(s *gocql.Session, keyspace string, logger log.Logger) (err error) {
+func DropCassandraKeyspace(s gocql.Session, keyspace string, logger log.Logger) (err error) {
 	err = s.Query(fmt.Sprintf("DROP KEYSPACE IF EXISTS %s", keyspace)).Exec()
 	if err != nil {
 		logger.Error("drop keyspace error", tag.Error(err))
@@ -74,23 +70,10 @@ func DropCassandraKeyspace(s *gocql.Session, keyspace string, logger log.Logger)
 
 // loadCassandraSchema loads the schema from the given .cql files on this keyspace
 func loadCassandraSchema(
+	session gocql.Session,
 	dir string,
 	fileNames []string,
-	hosts []string,
-	port int,
-	keyspace string,
-	tls *auth.TLS,
-) (err error) {
-
-	session, err := NewSession(config.Cassandra{
-		Hosts:    strings.Join(hosts, ","),
-		Port:     port,
-		Keyspace: keyspace,
-		TLS:      tls,
-	}, resolver.NewNoopResolver())
-	if err != nil {
-		return err
-	}
+) error {
 
 	for _, file := range fileNames {
 		// This is only used in tests. Excluding it from security scanners
