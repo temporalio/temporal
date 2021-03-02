@@ -74,25 +74,26 @@ func NewSession(
 }
 
 func (s *session) refresh() error {
-	s.Lock()
-	defer s.Unlock()
-
 	if atomic.LoadInt32(&s.status) != common.DaemonStatusStarted {
 		return nil
 	}
+
+	s.Lock()
+	defer s.Unlock()
 
 	if time.Now().UTC().Sub(s.sessionInitTime) < sessionRefreshMinInternal {
 		return nil
 	}
 
-	gocqlSession, err := initSession(s.config, s.resolver)
+	newSession, err := initSession(s.config, s.resolver)
 	if err != nil {
 		return err
 	}
 
 	s.sessionInitTime = time.Now().UTC()
-	s.Value.Load().(*gocql.Session).Close()
-	s.Value.Store(gocqlSession)
+	oldSession := s.Value.Load().(*gocql.Session)
+	s.Value.Store(newSession)
+	oldSession.Close()
 	return nil
 }
 
