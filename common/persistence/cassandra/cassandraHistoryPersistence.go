@@ -110,7 +110,7 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 		query := h.session.Query(v2templateUpsertData,
 			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
 		if err := query.Exec(); err != nil {
-			return convertCommonErrors("AppendHistoryNodes", err)
+			return gocql.ConvertError("AppendHistoryNodes", err)
 		}
 		return nil
 	}
@@ -124,7 +124,7 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 		Info:       request.Info,
 	})
 	if err != nil {
-		return convertCommonErrors("AppendHistoryNodes", err)
+		return gocql.ConvertError("AppendHistoryNodes", err)
 	}
 
 	batch := h.session.NewBatch(gocql.LoggedBatch)
@@ -133,7 +133,7 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 	batch.Query(v2templateUpsertData,
 		branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
 	if err = h.session.ExecuteBatch(batch); err != nil {
-		return convertCommonErrors("AppendHistoryNodes", err)
+		return gocql.ConvertError("AppendHistoryNodes", err)
 	}
 	return nil
 }
@@ -318,7 +318,7 @@ func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
 	query := h.session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.EncodingType.String())
 	err = query.Exec()
 	if err != nil {
-		return nil, convertCommonErrors("ForkHistoryBranch", err)
+		return nil, gocql.ConvertError("ForkHistoryBranch", err)
 	}
 
 	return &p.InternalForkHistoryBranchResponse{
@@ -378,7 +378,7 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 
 	err = h.session.ExecuteBatch(batch)
 	if err != nil {
-		return convertCommonErrors("DeleteHistoryBranch", err)
+		return gocql.ConvertError("DeleteHistoryBranch", err)
 	}
 	return nil
 }
@@ -417,7 +417,7 @@ func (h *cassandraHistoryV2Persistence) GetAllHistoryTreeBranches(
 	for iter.Scan(&treeUUID, &branchUUID, &data, &encoding) {
 		hti, err := serialization.HistoryTreeInfoFromBlob(data, encoding)
 		if err != nil {
-			return nil, convertCommonErrors("GetAllHistoryTreeBranches", err)
+			return nil, gocql.ConvertError("GetAllHistoryTreeBranches", err)
 		}
 
 		branchDetail := p.HistoryBranchDetail{
@@ -475,7 +475,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 		for iter.Scan(&branchUUID, &data, &encoding) {
 			br, err := serialization.HistoryTreeInfoFromBlob(data, encoding)
 			if err != nil {
-				return nil, convertCommonErrors("GetHistoryTree", err)
+				return nil, gocql.ConvertError("GetHistoryTree", err)
 			}
 
 			branches = append(branches, br.BranchInfo)
@@ -486,7 +486,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 		}
 
 		if err := iter.Close(); err != nil {
-			return nil, convertCommonErrors("GetHistoryTree", err)
+			return nil, gocql.ConvertError("GetHistoryTree", err)
 		}
 
 		if len(pagingToken) == 0 {
