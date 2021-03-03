@@ -149,6 +149,9 @@ func (q *cassandraQueue) getLastMessageID(
 	result := make(map[string]interface{})
 	err := query.MapScan(result)
 	if err != nil {
+		if gocql.IsNotFoundError(err) {
+			return persistence.EmptyQueueMessageID, nil
+		}
 		return persistence.EmptyQueueMessageID, gocql.ConvertError("getLastMessageID", err)
 	}
 	return result["message_id"].(int64), nil
