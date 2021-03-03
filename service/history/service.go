@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/masker"
-	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
@@ -86,35 +85,24 @@ func NewService(
 		if params.ESConfig != nil {
 			visibilityIndexName := params.ESConfig.Indices[common.VisibilityAppName]
 
-			var visibilityProducer messaging.Producer
-			var esProcessor espersistence.Processor
-			if serviceConfig.VisibilityQueue() == common.VisibilityQueueInternal || serviceConfig.VisibilityQueue() == common.VisibilityQueueInternalWithDualProcessor {
-				esProcessorConfig := &espersistence.ProcessorConfig{
-					IndexerConcurrency:       serviceConfig.IndexerConcurrency,
-					ESProcessorNumOfWorkers:  serviceConfig.ESProcessorNumOfWorkers,
-					ESProcessorBulkActions:   serviceConfig.ESProcessorBulkActions,
-					ESProcessorBulkSize:      serviceConfig.ESProcessorBulkSize,
-					ESProcessorFlushInterval: serviceConfig.ESProcessorFlushInterval,
-					ValidSearchAttributes:    serviceConfig.ValidSearchAttributes,
-				}
+			esProcessorConfig := &espersistence.ProcessorConfig{
+				IndexerConcurrency:       serviceConfig.IndexerConcurrency,
+				ESProcessorNumOfWorkers:  serviceConfig.ESProcessorNumOfWorkers,
+				ESProcessorBulkActions:   serviceConfig.ESProcessorBulkActions,
+				ESProcessorBulkSize:      serviceConfig.ESProcessorBulkSize,
+				ESProcessorFlushInterval: serviceConfig.ESProcessorFlushInterval,
+				ValidSearchAttributes:    serviceConfig.ValidSearchAttributes,
+			}
 
-				esProcessor = espersistence.NewProcessor(esProcessorConfig, params.ESClient, logger, params.MetricsClient)
-				esProcessor.Start()
-			}
-			if serviceConfig.VisibilityQueue() == common.VisibilityQueueKafka || serviceConfig.VisibilityQueue() == common.VisibilityQueueInternalWithDualProcessor {
-				var err error
-				visibilityProducer, err = params.MessagingClient.NewProducer(common.VisibilityAppName)
-				if err != nil {
-					logger.Fatal("Creating visibility producer failed", tag.Error(err))
-				}
-			}
+			esProcessor := espersistence.NewProcessor(esProcessorConfig, params.ESClient, logger, params.MetricsClient)
+			esProcessor.Start()
 
 			visibilityConfigForES := &config.VisibilityConfig{
 				ESIndexMaxResultWindow: serviceConfig.ESIndexMaxResultWindow,
 				ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
 				ESProcessorAckTimeout:  serviceConfig.ESProcessorAckTimeout,
 			}
-			visibilityFromES = espersistence.NewESVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES, visibilityProducer, esProcessor, params.MetricsClient, logger)
+			visibilityFromES = espersistence.NewESVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES, esProcessor, params.MetricsClient, logger)
 		}
 		return persistence.NewVisibilityManagerWrapper(
 			visibilityFromDB,

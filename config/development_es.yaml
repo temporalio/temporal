@@ -97,23 +97,6 @@ namespaceDefaults:
       state: "enabled"
       URI: "file:///tmp/temporal_vis_archival/development"
 
-kafka:
-  tls:
-    enabled: false
-  clusters:
-    test:
-      brokers:
-        - 127.0.0.1:9092
-  topics:
-    temporal-visibility-dev:
-      cluster: test
-    temporal-visibility-dev-dlq:
-      cluster: test
-  applications:
-    visibility:
-      topic: temporal-visibility-dev
-      dlq-topic: temporal-visibility-dev-dlq
-
 publicClient:
   hostPort: "localhost:7233"
 

@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -64,7 +63,6 @@ import (
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/archiver"
-	"go.temporal.io/server/service/worker/indexer"
 	"go.temporal.io/server/service/worker/replicator"
 )
 
@@ -91,7 +89,6 @@ type (
 		logger                           log.Logger
 		clusterMetadata                  cluster.Metadata
 		persistenceConfig                config.Persistence
-		messagingClient                  messaging.Client
 		metadataMgr                      persistence.MetadataManager
 		shardMgr                         persistence.ShardManager
 		historyV2Mgr                     persistence.HistoryManager
@@ -104,7 +101,6 @@ type (
 		clusterNo                        int // cluster number
 		replicator                       *replicator.Replicator
 		clientWorker                     archiver.ClientWorker
-		indexer                          *indexer.Indexer
 		archiverMetadata                 carchiver.ArchivalMetadata
 		archiverProvider                 provider.ArchiverProvider
 		historyConfig                    *HistoryConfig
@@ -127,7 +123,6 @@ type (
 	TemporalParams struct {
 		ClusterMetadata                  cluster.Metadata
 		PersistenceConfig                config.Persistence
-		MessagingClient                  messaging.Client
 		MetadataMgr                      persistence.MetadataManager
 		ShardMgr                         persistence.ShardManager
 		HistoryV2Mgr                     persistence.HistoryManager
@@ -160,7 +155,6 @@ func NewTemporal(params *TemporalParams) Temporal {
 		logger:                           params.Logger,
 		clusterMetadata:                  params.ClusterMetadata,
 		persistenceConfig:                params.PersistenceConfig,
-		messagingClient:                  params.MessagingClient,
 		metadataMgr:                      params.MetadataMgr,
 		visibilityMgr:                    params.VisibilityMgr,
 		shardMgr:                         params.ShardMgr,
@@ -381,7 +375,6 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadata = c.clusterMetadata
-	params.MessagingClient = c.messagingClient
 	params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
 	params.ArchivalMetadata = c.archiverMetadata
@@ -446,7 +439,6 @@ func (c *temporalImpl) startHistory(
 			return newMembershipFactory(params.Name, hosts), nil
 		}
 		params.ClusterMetadata = c.clusterMetadata
-		params.MessagingClient = c.messagingClient
 		params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNopClient())
 		c.overrideHistoryDynamicConfig(integrationClient)
@@ -681,22 +673,6 @@ func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams,
 	if err := c.clientWorker.Start(); err != nil {
 		c.clientWorker.Stop()
 		c.logger.Fatal("Fail to start archiver when start worker", tag.Error(err))
-	}
-}
-
-func (c *temporalImpl) startWorkerIndexer(params *resource.BootstrapParams, service resource.Resource) {
-	params.DynamicConfig.UpdateValue(dynamicconfig.AdvancedVisibilityWritingMode, common.AdvancedVisibilityWritingModeDual)
-	workerConfig := worker.NewConfig(params)
-	c.indexer = indexer.NewIndexer(
-		workerConfig.IndexerCfg,
-		c.messagingClient,
-		c.esClient,
-		c.esConfig,
-		c.logger,
-		service.GetMetricsClient())
-	if err := c.indexer.Start(); err != nil {
-		c.logger.Fatal("Fail to start indexer when start worker", tag.Error(err))
-		c.indexer.Stop()
 	}
 }
 

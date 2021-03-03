@@ -37,11 +37,9 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/batcher"
-	"go.temporal.io/server/service/worker/indexer"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 	"go.temporal.io/server/service/worker/replicator"
 	"go.temporal.io/server/service/worker/scanner"
@@ -65,14 +63,11 @@ type (
 	Config struct {
 		ReplicationCfg                *replicator.Config
 		ArchiverConfig                *archiver.Config
-		IndexerCfg                    *indexer.Config
 		ScannerCfg                    *scanner.Config
 		BatcherCfg                    *batcher.Config
 		ThrottledLogRPS               dynamicconfig.IntPropertyFn
 		PersistenceGlobalMaxQPS       dynamicconfig.IntPropertyFn
 		EnableBatcher                 dynamicconfig.BoolPropertyFn
-		VisibilityQueue               dynamicconfig.StringPropertyFn
-		VisibilityProcessorEnabled    dynamicconfig.BoolPropertyFn
 		EnableParentClosePolicyWorker dynamicconfig.BoolPropertyFn
 	}
 )
@@ -143,27 +138,9 @@ func NewConfig(params *resource.BootstrapParams) *Config {
 			ClusterMetadata: params.ClusterMetadata,
 		},
 		EnableBatcher:                 dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
-		VisibilityQueue:               dc.GetStringProperty(dynamicconfig.VisibilityQueue, common.VisibilityQueueInternal),
-		VisibilityProcessorEnabled:    dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnabled, true),
 		EnableParentClosePolicyWorker: dc.GetBoolProperty(dynamicconfig.EnableParentClosePolicyWorker, true),
 		ThrottledLogRPS:               dc.GetIntProperty(dynamicconfig.WorkerThrottledLogRPS, 20),
 		PersistenceGlobalMaxQPS:       dc.GetIntProperty(dynamicconfig.WorkerPersistenceGlobalMaxQPS, 0),
-	}
-	advancedVisWritingMode := dc.GetStringProperty(
-		dynamicconfig.AdvancedVisibilityWritingMode,
-		common.GetDefaultAdvancedVisibilityWritingMode(params.PersistenceConfig.IsAdvancedVisibilityConfigExist()),
-	)
-	if (config.VisibilityQueue() == common.VisibilityQueueKafka || config.VisibilityQueue() == common.VisibilityQueueInternalWithDualProcessor) &&
-		advancedVisWritingMode() != common.AdvancedVisibilityWritingModeOff &&
-		config.VisibilityProcessorEnabled() {
-		config.IndexerCfg = &indexer.Config{
-			IndexerConcurrency:       dc.GetIntProperty(dynamicconfig.WorkerIndexerConcurrency, 100),
-			ESProcessorNumOfWorkers:  dc.GetIntProperty(dynamicconfig.WorkerESProcessorNumOfWorkers, 1),
-			ESProcessorBulkActions:   dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkActions, 1000),
-			ESProcessorBulkSize:      dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkSize, 2<<24), // 16MB
-			ESProcessorFlushInterval: dc.GetDurationProperty(dynamicconfig.WorkerESProcessorFlushInterval, 1*time.Second),
-			ValidSearchAttributes:    dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, searchattribute.GetDefaultTypeMap()),
-		}
 	}
 	return config
 }
@@ -181,9 +158,6 @@ func (s *Service) Start() {
 
 	s.ensureSystemNamespaceExists()
 	s.startScanner()
-	if s.config.IndexerCfg != nil {
-		s.startIndexer()
-	}
 
 	if s.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		s.startReplicator()
@@ -267,21 +241,6 @@ func (s *Service) startReplicator() {
 		namespaceReplicationTaskExecutor,
 	)
 	msgReplicator.Start()
-}
-
-func (s *Service) startIndexer() {
-	visibilityIndexer := indexer.NewIndexer(
-		s.config.IndexerCfg,
-		s.GetMessagingClient(),
-		s.params.ESClient,
-		s.params.ESConfig,
-		s.GetLogger(),
-		s.GetMetricsClient(),
-	)
-	if err := visibilityIndexer.Start(); err != nil {
-		visibilityIndexer.Stop()
-		s.GetLogger().Fatal("fail to start indexer", tag.Error(err))
-	}
 }
 
 func (s *Service) startArchiver() {

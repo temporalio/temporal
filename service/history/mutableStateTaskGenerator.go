@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
@@ -108,9 +107,6 @@ type (
 		logger         log.Logger
 
 		mutableState mutableState
-
-		// TODO (alex): remove when kafka deprecation is done.
-		visibilityQueue string
 	}
 )
 
@@ -128,13 +124,7 @@ func newMutableStateTaskGenerator(
 		namespaceCache: namespaceCache,
 		logger:         logger,
 
-		mutableState:    mutableState,
-		visibilityQueue: common.VisibilityQueueKafka,
-	}
-
-	// TODO (alex): remove when kafka deprecation is done.
-	if ms, ok := mutableState.(*mutableStateBuilder); ok {
-		mstg.visibilityQueue = ms.config.VisibilityQueue()
+		mutableState: mutableState,
 	}
 
 	return mstg
@@ -174,13 +164,11 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowCloseTasks(
 		Version:             currentVersion,
 	})
 
-	if r.visibilityQueue == common.VisibilityQueueInternal || r.visibilityQueue == common.VisibilityQueueInternalWithDualProcessor {
-		r.mutableState.AddVisibilityTasks(&persistence.CloseExecutionVisibilityTask{
-			// TaskID is set by shard
-			VisibilityTimestamp: now,
-			Version:             currentVersion,
-		})
-	}
+	r.mutableState.AddVisibilityTasks(&persistence.CloseExecutionVisibilityTask{
+		// TaskID is set by shard
+		VisibilityTimestamp: now,
+		Version:             currentVersion,
+	})
 
 	retentionInDays := defaultWorkflowRetentionInDays
 	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(executionInfo.NamespaceId)
@@ -241,15 +229,6 @@ func (r *mutableStateTaskGeneratorImpl) generateRecordWorkflowStartedTasks(
 ) error {
 
 	startVersion := startEvent.GetVersion()
-
-	if r.visibilityQueue == common.VisibilityQueueKafka {
-		r.mutableState.AddTransferTasks(&persistence.RecordWorkflowStartedTask{
-			// TaskID is set by shard
-			VisibilityTimestamp: now,
-			Version:             startVersion,
-		})
-		return nil
-	}
 
 	r.mutableState.AddVisibilityTasks(&persistence.StartExecutionVisibilityTask{
 		// TaskID is set by shard
@@ -494,15 +473,6 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowSearchAttrTasks(
 ) error {
 
 	currentVersion := r.mutableState.GetCurrentVersion()
-
-	if r.visibilityQueue == common.VisibilityQueueKafka {
-		r.mutableState.AddTransferTasks(&persistence.UpsertWorkflowSearchAttributesTask{
-			// TaskID is set by shard
-			VisibilityTimestamp: now,
-			Version:             currentVersion, // task processing does not check this version
-		})
-		return nil
-	}
 
 	r.mutableState.AddVisibilityTasks(&persistence.UpsertExecutionVisibilityTask{
 		// TaskID is set by shard

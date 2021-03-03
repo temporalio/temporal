@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
@@ -68,7 +67,6 @@ type (
 		GetPayloadSerializer() persistence.PayloadSerializer
 		GetMetricsClient() metrics.Client
 		GetArchiverProvider() provider.ArchiverProvider
-		GetMessagingClient() messaging.Client
 
 		// membership infos
 

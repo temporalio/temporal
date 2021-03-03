@@ -53,7 +53,6 @@ import (
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
@@ -88,7 +87,6 @@ type (
 		timeSource        clock.TimeSource
 		payloadSerializer persistence.PayloadSerializer
 		metricsClient     metrics.Client
-		messagingClient   messaging.Client
 		archivalMetadata  archiver.ArchivalMetadata
 		archiverProvider  provider.ArchiverProvider
 
@@ -306,7 +304,6 @@ func New(
 		timeSource:        clock.NewRealTimeSource(),
 		payloadSerializer: persistence.NewPayloadSerializer(),
 		metricsClient:     params.MetricsClient,
-		messagingClient:   params.MessagingClient,
 		archivalMetadata:  params.ArchivalMetadata,
 		archiverProvider:  params.ArchiverProvider,
 
@@ -447,11 +444,6 @@ func (h *Impl) GetPayloadSerializer() persistence.PayloadSerializer {
 // GetMetricsClient return metrics client
 func (h *Impl) GetMetricsClient() metrics.Client {
 	return h.metricsClient
-}
-
-// GetMessagingClient return messaging client
-func (h *Impl) GetMessagingClient() messaging.Client {
-	return h.messagingClient
 }
 
 // GetArchivalMetadata return archival metadata

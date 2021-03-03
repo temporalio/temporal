@@ -37,7 +37,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 )
 
-func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStartedV2() {
+func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 	// test non-empty request fields match
 	request := &p.InternalRecordWorkflowExecutionStartedRequest{
 		InternalVisibilityRequestBase: &p.InternalVisibilityRequestBase{
@@ -93,11 +93,11 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStartedV2() {
 			s.Equal("test-index", bulkRequest.Index)
 		})
 
-	err := s.visibilityStore.RecordWorkflowExecutionStartedV2(request)
+	err := s.visibilityStore.RecordWorkflowExecutionStarted(request)
 	s.NoError(err)
 }
 
-func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStartedV2_EmptyRequest() {
+func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 	// test empty request
 	request := &p.InternalRecordWorkflowExecutionStartedRequest{
 		InternalVisibilityRequestBase: &p.InternalVisibilityRequestBase{
@@ -127,11 +127,11 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStartedV2_EmptyRequest() 
 			s.Equal("test-index", bulkRequest.Index)
 		})
 
-	err := s.visibilityStore.RecordWorkflowExecutionStartedV2(request)
+	err := s.visibilityStore.RecordWorkflowExecutionStarted(request)
 	s.NoError(err)
 }
 
-func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosedV2() {
+func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	// test non-empty request fields match
 	request := &p.InternalRecordWorkflowExecutionClosedRequest{
 		InternalVisibilityRequestBase: &p.InternalVisibilityRequestBase{
@@ -185,11 +185,11 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosedV2() {
 			s.Equal("test-index", bulkRequest.Index)
 		})
 
-	err := s.visibilityStore.RecordWorkflowExecutionClosedV2(request)
+	err := s.visibilityStore.RecordWorkflowExecutionClosed(request)
 	s.NoError(err)
 }
 
-func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosedV2_EmptyRequest() {
+func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 	// test empty request
 	request := &p.InternalRecordWorkflowExecutionClosedRequest{
 		InternalVisibilityRequestBase: &p.InternalVisibilityRequestBase{
@@ -219,11 +219,11 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosedV2_EmptyRequest() {
 			s.Equal("test-index", bulkRequest.Index)
 		})
 
-	err := s.visibilityStore.RecordWorkflowExecutionClosedV2(request)
+	err := s.visibilityStore.RecordWorkflowExecutionClosed(request)
 	s.NoError(err)
 }
 
-func (s *ESVisibilitySuite) TestDeleteExecutionV2() {
+func (s *ESVisibilitySuite) TestDeleteExecution() {
 	// test non-empty request fields match
 	request := &p.VisibilityDeleteWorkflowExecutionRequest{
 		NamespaceID: "namespaceID",
@@ -247,11 +247,11 @@ func (s *ESVisibilitySuite) TestDeleteExecutionV2() {
 			s.Equal("test-index", bulkRequest.Index)
 		})
 
-	err := s.visibilityStore.DeleteWorkflowExecutionV2(request)
+	err := s.visibilityStore.DeleteWorkflowExecution(request)
 	s.NoError(err)
 }
 
-func (s *ESVisibilitySuite) TestDeleteExecutionV2_EmptyRequest() {
+func (s *ESVisibilitySuite) TestDeleteExecution_EmptyRequest() {
 	// test empty request
 	request := &p.VisibilityDeleteWorkflowExecutionRequest{}
 
@@ -269,6 +269,6 @@ func (s *ESVisibilitySuite) TestDeleteExecutionV2_EmptyRequest() {
 			s.Equal("test-index", bulkRequest.Index)
 		})
 
-	err := s.visibilityStore.DeleteWorkflowExecutionV2(request)
+	err := s.visibilityStore.DeleteWorkflowExecution(request)
 	s.NoError(err)
 }

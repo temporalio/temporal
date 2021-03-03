@@ -274,20 +274,6 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 	task *persistencespb.TimerTaskInfo,
 ) error {
 
-	if t.config.VisibilityQueue() == common.VisibilityQueueKafka {
-		op := func() error {
-			request := &persistence.VisibilityDeleteWorkflowExecutionRequest{
-				NamespaceID: task.GetNamespaceId(),
-				WorkflowID:  task.GetWorkflowId(),
-				RunID:       task.GetRunId(),
-				TaskID:      task.GetTaskId(),
-			}
-			// TODO: expose GetVisibilityManager method on shardContext interface
-			return t.shard.GetService().GetVisibilityManager().DeleteWorkflowExecution(request) // delete from db
-		}
-		return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-	}
-
 	return t.shard.AddTasks(&persistence.AddTasksRequest{
 		// RangeID is set by shard
 

@@ -52,7 +52,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
@@ -280,11 +279,6 @@ func (s *Test) GetPayloadSerializer() persistence.PayloadSerializer {
 // GetMetricsClient for testing
 func (s *Test) GetMetricsClient() metrics.Client {
 	return s.MetricsClient
-}
-
-// GetMessagingClient for testing
-func (s *Test) GetMessagingClient() messaging.Client {
-	panic("user should implement this method for test")
 }
 
 // GetArchivalMetadata for testing

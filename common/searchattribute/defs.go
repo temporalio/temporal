@@ -77,7 +77,6 @@ var (
 		ExecutionStatus: enumspb.INDEXED_VALUE_TYPE_INT,
 		HistoryLength:   enumspb.INDEXED_VALUE_TYPE_INT,
 		TaskQueue:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		KafkaKey:        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		Encoding:        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 

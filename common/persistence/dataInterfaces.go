@@ -231,13 +231,6 @@ type (
 		RecordVisibility    bool
 	}
 
-	// Deprecated. RecordWorkflowStartedTask identifies a transfer task for writing visibility open execution record
-	RecordWorkflowStartedTask struct {
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		Version             int64
-	}
-
 	// ResetWorkflowTask identifies a transfer task to reset workflow
 	ResetWorkflowTask struct {
 		VisibilityTimestamp time.Time
@@ -298,15 +291,6 @@ type (
 		TargetChildWorkflowOnly bool
 		InitiatedID             int64
 		Version                 int64
-	}
-
-	// Deprecated. UpsertWorkflowSearchAttributesTask identifies a transfer task for upsert search attributes
-	UpsertWorkflowSearchAttributesTask struct {
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		// this version is not used by task processing for validation,
-		// instead, the version is used by elastic search
-		Version int64
 	}
 
 	// StartChildExecutionTask identifies a transfer task for starting child execution
@@ -1458,41 +1442,6 @@ func (d *WorkflowTask) SetVisibilityTimestamp(timestamp time.Time) {
 	d.VisibilityTimestamp = timestamp
 }
 
-// GetType returns the type of the record workflow started task
-func (a *RecordWorkflowStartedTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED
-}
-
-// GetVersion returns the version of the record workflow started task
-func (a *RecordWorkflowStartedTask) GetVersion() int64 {
-	return a.Version
-}
-
-// SetVersion returns the version of the record workflow started task
-func (a *RecordWorkflowStartedTask) SetVersion(version int64) {
-	a.Version = version
-}
-
-// GetTaskID returns the sequence ID of the record workflow started task
-func (a *RecordWorkflowStartedTask) GetTaskID() int64 {
-	return a.TaskID
-}
-
-// SetTaskID sets the sequence ID of the record workflow started task
-func (a *RecordWorkflowStartedTask) SetTaskID(id int64) {
-	a.TaskID = id
-}
-
-// GetVisibilityTime get the visibility timestamp
-func (a *RecordWorkflowStartedTask) GetVisibilityTimestamp() time.Time {
-	return a.VisibilityTimestamp
-}
-
-// SetVisibilityTimestamp set the visibility timestamp
-func (a *RecordWorkflowStartedTask) SetVisibilityTimestamp(timestamp time.Time) {
-	a.VisibilityTimestamp = timestamp
-}
-
 // GetType returns the type of the ResetWorkflowTask
 func (a *ResetWorkflowTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW
@@ -1875,41 +1824,6 @@ func (u *SignalExecutionTask) GetVisibilityTimestamp() time.Time {
 
 // SetVisibilityTimestamp set the visibility timestamp
 func (u *SignalExecutionTask) SetVisibilityTimestamp(timestamp time.Time) {
-	u.VisibilityTimestamp = timestamp
-}
-
-// GetType returns the type of the upsert search attributes transfer task
-func (u *UpsertWorkflowSearchAttributesTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES
-}
-
-// GetVersion returns the version of the upsert search attributes transfer task
-func (u *UpsertWorkflowSearchAttributesTask) GetVersion() int64 {
-	return u.Version
-}
-
-// SetVersion returns the version of the upsert search attributes transfer task
-func (u *UpsertWorkflowSearchAttributesTask) SetVersion(version int64) {
-	u.Version = version
-}
-
-// GetTaskID returns the sequence ID of the signal transfer task.
-func (u *UpsertWorkflowSearchAttributesTask) GetTaskID() int64 {
-	return u.TaskID
-}
-
-// SetTaskID sets the sequence ID of the signal transfer task.
-func (u *UpsertWorkflowSearchAttributesTask) SetTaskID(id int64) {
-	u.TaskID = id
-}
-
-// GetVisibilityTime get the visibility timestamp
-func (u *UpsertWorkflowSearchAttributesTask) GetVisibilityTimestamp() time.Time {
-	return u.VisibilityTimestamp
-}
-
-// SetVisibilityTimestamp set the visibility timestamp
-func (u *UpsertWorkflowSearchAttributesTask) SetVisibilityTimestamp(timestamp time.Time) {
 	u.VisibilityTimestamp = timestamp
 }
 
