@@ -26,9 +26,40 @@ package gocql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/gocql/gocql"
+	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/common/persistence"
 )
+
+func ConvertError(
+	operation string,
+	err error,
+) error {
+
+	switch err {
+	case nil:
+		return nil
+	case context.DeadlineExceeded, gocql.ErrTimeoutNoResponse, gocql.ErrConnectionClosed:
+		return &persistence.TimeoutError{Msg: fmt.Sprintf("operation %v encounter %v", operation, err.Error())}
+	case gocql.ErrNotFound:
+		return serviceerror.NewNotFound(fmt.Sprintf("operation %v encounter %v", operation, err.Error()))
+	}
+
+	switch v := err.(type) {
+	case *gocql.RequestErrWriteTimeout:
+		return &persistence.TimeoutError{Msg: fmt.Sprintf("operation %v encounter %v", operation, err.Error())}
+	case gocql.RequestError:
+		if v.Code() == 0x1001 {
+			return serviceerror.NewResourceExhausted(fmt.Sprintf("operation %v encounter %v", operation, err.Error()))
+		}
+		return serviceerror.NewInternal(fmt.Sprintf("operation %v encounter %v", operation, err.Error()))
+	default:
+		return serviceerror.NewInternal(fmt.Sprintf("operation %v encounter %v", operation, err.Error()))
+	}
+}
 
 func IsTimeoutError(err error) bool {
 	if err == context.DeadlineExceeded {

@@ -66,8 +66,10 @@ func NewSession(
 	}
 
 	session := &session{
-		status:          common.DaemonStatusStarted,
-		config:          config,
+		status:   common.DaemonStatusStarted,
+		config:   config,
+		resolver: resolver,
+
 		sessionInitTime: time.Now().UTC(),
 	}
 	session.Value.Store(gocqlSession)

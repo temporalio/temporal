@@ -131,10 +131,7 @@ func (q *cassandraQueue) tryEnqueue(
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
-		if gocql.IsThrottlingError(err) {
-			return persistence.EmptyQueueMessageID, serviceerror.NewResourceExhausted(fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType))
-		}
-		return persistence.EmptyQueueMessageID, serviceerror.NewInternal(fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType))
+		return persistence.EmptyQueueMessageID, gocql.ConvertError("tryEnqueue", err)
 	}
 
 	if !applied {
@@ -154,13 +151,9 @@ func (q *cassandraQueue) getLastMessageID(
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
 			return persistence.EmptyQueueMessageID, nil
-		} else if gocql.IsThrottlingError(err) {
-			return persistence.EmptyQueueMessageID, serviceerror.NewResourceExhausted(fmt.Sprintf("Failed to get last message ID for queue %v. Error: %v", queueType, err))
 		}
-
-		return persistence.EmptyQueueMessageID, serviceerror.NewInternal(fmt.Sprintf("Failed to get last message ID for queue %v. Error: %v", queueType, err))
+		return persistence.EmptyQueueMessageID, gocql.ConvertError("getLastMessageID", err)
 	}
-
 	return result["message_id"].(int64), nil
 }
 
