@@ -98,7 +98,7 @@ func (m *cassandraClusterMetadata) GetClusterMetadata() (*p.InternalGetClusterMe
 	var version int64
 	err := query.Scan(&clusterMetadata, &encoding, &version)
 	if err != nil {
-		return nil, convertCommonErrors("GetClusterMetadata", err)
+		return nil, gocql.ConvertError("GetClusterMetadata", err)
 	}
 	return &p.InternalGetClusterMetadataResponse{
 		ClusterMetadata: p.NewDataBlob(clusterMetadata, encoding),
@@ -130,7 +130,7 @@ func (m *cassandraClusterMetadata) SaveClusterMetadata(request *p.InternalSaveCl
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
-		return false, convertCommonErrors("SaveClusterMetadata", err)
+		return false, gocql.ConvertError("SaveClusterMetadata", err)
 	}
 	if !applied {
 		return false, serviceerror.NewInternal("SaveClusterMetadata operation encountered concurrent write.")
@@ -212,7 +212,7 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, convertCommonErrors("GetClusterMembers", err)
+		return nil, gocql.ConvertError("GetClusterMembers", err)
 	}
 
 	return &p.GetClusterMembersResponse{ActiveMembers: clusterMembers, NextPageToken: pagingTokenCopy}, nil
@@ -224,7 +224,7 @@ func (m *cassandraClusterMetadata) UpsertClusterMembership(request *p.UpsertClus
 	err := query.Exec()
 
 	if err != nil {
-		return convertCommonErrors("UpsertClusterMembership", err)
+		return gocql.ConvertError("UpsertClusterMembership", err)
 	}
 
 	return nil

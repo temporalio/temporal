@@ -26,11 +26,6 @@ package cassandra
 
 import (
 	"fmt"
-
-	"go.temporal.io/api/serviceerror"
-
-	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 )
 
 type (
@@ -68,18 +63,4 @@ func newPersistedTypeMismatchError(
 	return &PersistedTypeMismatchError{
 		Msg: fmt.Sprintf("Field '%s' is of type '%T' but expected type '%T' in payload - '%v'",
 			fieldName, received, expectedType, payload)}
-}
-
-func convertCommonErrors(
-	operation string,
-	err error,
-) error {
-	if gocql.IsNotFoundError(err) {
-		return serviceerror.NewNotFound(fmt.Sprintf("%v failed. Error: %v ", operation, err))
-	} else if gocql.IsTimeoutError(err) {
-		return &persistence.TimeoutError{Msg: fmt.Sprintf("%v timed out. Error: %v", operation, err)}
-	} else if gocql.IsThrottlingError(err) {
-		return serviceerror.NewResourceExhausted(fmt.Sprintf("%v operation failed. Error: %v", operation, err))
-	}
-	return serviceerror.NewInternal(fmt.Sprintf("%v operation failed. Error: %v", operation, err))
 }
