@@ -22,36 +22,25 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cassandra
+package gocql
 
 import (
-	"fmt"
-
 	"github.com/gocql/gocql"
-
-	"go.temporal.io/server/common/cassandra"
-	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/service/config"
 )
 
-// NewSession creates a new cassandra session
-func NewSession(
-	cfg config.Cassandra,
-	r resolver.ServiceResolver,
-) (*gocql.Session, error) {
+func UUIDToString(
+	item interface{},
+) string {
+	return item.(gocql.UUID).String()
+}
 
-	cluster, err := cassandra.NewCassandraCluster(cfg, r)
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra cluster from config: %w", err)
+func UUIDsToStrings(
+	item interface{},
+) []string {
+	uuids := item.([]gocql.UUID)
+	results := make([]string, len(uuids))
+	for i, uuid := range uuids {
+		results[i] = uuid.String()
 	}
-
-	cluster.ProtoVersion = ProtocolVersion
-	cluster.Consistency = cfg.Consistency.GetConsistency()
-	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
-	cluster.Timeout = defaultSessionTimeout
-	session, err := cluster.CreateSession()
-	if err != nil {
-		return nil, fmt.Errorf("create cassandra session from cluster: %w", err)
-	}
-	return session, nil
+	return results
 }

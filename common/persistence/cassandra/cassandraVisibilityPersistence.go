@@ -28,12 +28,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gocql/gocql"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 )
 
 // Fixed namespace values for now
@@ -140,7 +140,7 @@ type (
 
 // newVisibilityPersistence is used to create an instance of VisibilityManager implementation
 func newVisibilityPersistence(
-	session *gocql.Session,
+	session gocql.Session,
 	logger log.Logger,
 ) (p.VisibilityStore, error) {
 
@@ -165,7 +165,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(request 
 func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStartedV2(
 	request *p.InternalRecordWorkflowExecutionStartedRequest) error {
 	ttl := request.RunTimeout + openExecutionTTLBuffer
-	var query *gocql.Query
+	var query gocql.Query
 
 	if ttl > maxCassandraTTL {
 		query = v.session.Query(templateCreateWorkflowExecutionStarted,
@@ -197,14 +197,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStartedV2(
 	}
 	query = query.WithTimestamp(p.UnixNanoToDBTimestamp(request.StartTimestamp))
 	err := query.Exec()
-	if err != nil {
-		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("RecordWorkflowExecutionStarted operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("RecordWorkflowExecutionStarted operation failed. Error: %v", err))
-	}
-
-	return nil
+	return gocql.ConvertError("RecordWorkflowExecutionStarted", err)
 }
 
 // Deprecated.
@@ -279,13 +272,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosedV2(
 	}
 	batch = batch.WithTimestamp(p.UnixNanoToDBTimestamp(queryTimeStamp))
 	err := v.session.ExecuteBatch(batch)
-	if err != nil {
-		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("RecordWorkflowExecutionClosed operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("RecordWorkflowExecutionClosed operation failed. Error: %v", err))
-	}
-	return nil
+	return gocql.ConvertError("RecordWorkflowExecutionClosed", err)
 }
 
 // Deprecated.
@@ -324,12 +311,8 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
 	response.NextPageToken = make([]byte, len(nextPageToken))
 	copy(response.NextPageToken, nextPageToken)
 	if err := iter.Close(); err != nil {
-		if isThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("ListOpenWorkflowExecutions operation failed. Error: %v", err))
-		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutions operation failed. Error: %v", err))
+		return nil, gocql.ConvertError("ListOpenWorkflowExecutions", err)
 	}
-
 	return response, nil
 }
 
@@ -359,12 +342,8 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByType(
 	response.NextPageToken = make([]byte, len(nextPageToken))
 	copy(response.NextPageToken, nextPageToken)
 	if err := iter.Close(); err != nil {
-		if isThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("ListOpenWorkflowExecutionsByType operation failed. Error: %v", err))
-		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByType operation failed. Error: %v", err))
+		return nil, gocql.ConvertError("ListOpenWorkflowExecutionsByType", err)
 	}
-
 	return response, nil
 }
 
@@ -394,12 +373,8 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByWorkflowID(
 	response.NextPageToken = make([]byte, len(nextPageToken))
 	copy(response.NextPageToken, nextPageToken)
 	if err := iter.Close(); err != nil {
-		if isThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("ListOpenWorkflowExecutionsByWorkflowID operation failed. Error: %v", err))
-		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByWorkflowID operation failed. Error: %v", err))
+		return nil, gocql.ConvertError("ListOpenWorkflowExecutionsByWorkflowID", err)
 	}
-
 	return response, nil
 }
 
@@ -428,12 +403,8 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
 	response.NextPageToken = make([]byte, len(nextPageToken))
 	copy(response.NextPageToken, nextPageToken)
 	if err := iter.Close(); err != nil {
-		if isThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("ListClosedWorkflowExecutions operation failed. Error: %v", err))
-		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutions operation failed. Error: %v", err))
+		return nil, gocql.ConvertError("ListClosedWorkflowExecutions", err)
 	}
-
 	return response, nil
 }
 
@@ -463,12 +434,8 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
 	response.NextPageToken = make([]byte, len(nextPageToken))
 	copy(response.NextPageToken, nextPageToken)
 	if err := iter.Close(); err != nil {
-		if isThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("ListClosedWorkflowExecutionsByType operation failed. Error: %v", err))
-		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByType operation failed. Error: %v", err))
+		return nil, gocql.ConvertError("ListClosedWorkflowExecutionsByType", err)
 	}
-
 	return response, nil
 }
 
@@ -498,12 +465,8 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowI
 	response.NextPageToken = make([]byte, len(nextPageToken))
 	copy(response.NextPageToken, nextPageToken)
 	if err := iter.Close(); err != nil {
-		if isThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("ListClosedWorkflowExecutionsByWorkflowID operation failed. Error: %v", err))
-		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByWorkflowID operation failed. Error: %v", err))
+		return nil, gocql.ConvertError("ListClosedWorkflowExecutionsByWorkflowID", err)
 	}
-
 	return response, nil
 }
 
@@ -533,12 +496,8 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByStatus(
 	response.NextPageToken = make([]byte, len(nextPageToken))
 	copy(response.NextPageToken, nextPageToken)
 	if err := iter.Close(); err != nil {
-		if isThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("ListClosedWorkflowExecutionsByStatus operation failed. Error: %v", err))
-		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByStatus operation failed. Error: %v", err))
+		return nil, gocql.ConvertError("ListClosedWorkflowExecutionsByStatus", err)
 	}
-
 	return response, nil
 }
 
@@ -563,12 +522,8 @@ func (v *cassandraVisibilityPersistence) GetClosedWorkflowExecution(
 	}
 
 	if err := iter.Close(); err != nil {
-		if isThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("GetClosedWorkflowExecution operation failed. Error: %v", err))
-		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetClosedWorkflowExecution operation failed. Error: %v", err))
+		return nil, gocql.ConvertError("GetClosedWorkflowExecution", err)
 	}
-
 	return &p.InternalGetClosedWorkflowExecutionResponse{
 		Execution: wfexecution,
 	}, nil
@@ -596,9 +551,9 @@ func (v *cassandraVisibilityPersistence) CountWorkflowExecutions(request *p.Coun
 	return nil, p.NewOperationNotSupportErrorForVis()
 }
 
-func readOpenWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowExecutionInfo, bool) {
+func readOpenWorkflowExecutionRecord(iter gocql.Iter) (*p.VisibilityWorkflowExecutionInfo, bool) {
 	var workflowID string
-	var runID gocql.UUID
+	var runID string
 	var typeName string
 	var startTime time.Time
 	var executionTime time.Time
@@ -608,7 +563,7 @@ func readOpenWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowExe
 	if iter.Scan(&workflowID, &runID, &startTime, &executionTime, &typeName, &memo, &encoding, &taskQueue) {
 		record := &p.VisibilityWorkflowExecutionInfo{
 			WorkflowID:    workflowID,
-			RunID:         runID.String(),
+			RunID:         runID,
 			TypeName:      typeName,
 			StartTime:     startTime,
 			ExecutionTime: executionTime,
@@ -621,9 +576,9 @@ func readOpenWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowExe
 	return nil, false
 }
 
-func readClosedWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowExecutionInfo, bool) {
+func readClosedWorkflowExecutionRecord(iter gocql.Iter) (*p.VisibilityWorkflowExecutionInfo, bool) {
 	var workflowID string
-	var runID gocql.UUID
+	var runID string
 	var typeName string
 	var startTime time.Time
 	var executionTime time.Time
@@ -636,7 +591,7 @@ func readClosedWorkflowExecutionRecord(iter *gocql.Iter) (*p.VisibilityWorkflowE
 	if iter.Scan(&workflowID, &runID, &startTime, &executionTime, &closeTime, &typeName, &status, &historyLength, &memo, &encoding, &taskQueue) {
 		record := &p.VisibilityWorkflowExecutionInfo{
 			WorkflowID:    workflowID,
-			RunID:         runID.String(),
+			RunID:         runID,
 			TypeName:      typeName,
 			StartTime:     startTime,
 			ExecutionTime: executionTime,

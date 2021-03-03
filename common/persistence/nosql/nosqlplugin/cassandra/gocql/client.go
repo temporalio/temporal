@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cassandra
+package gocql
 
 import (
 	"crypto/tls"
@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strings"
+	"time"
 
 	"github.com/gocql/gocql"
 
@@ -40,11 +41,13 @@ import (
 	"go.temporal.io/server/common/service/config"
 )
 
-// NewCassandraCluster creates a cassandra cluster from a given configuration
-func NewCassandraCluster(cfg config.Cassandra, r resolver.ServiceResolver) (*gocql.ClusterConfig, error) {
+func NewCassandraCluster(
+	cfg config.Cassandra,
+	resolver resolver.ServiceResolver,
+) (*gocql.ClusterConfig, error) {
 	var resolvedHosts []string
 	for _, host := range parseHosts(cfg.Hosts) {
-		resolvedHosts = append(resolvedHosts, r.Resolve(host)...)
+		resolvedHosts = append(resolvedHosts, resolver.Resolve(host)...)
 	}
 	cluster := gocql.NewCluster(resolvedHosts...)
 	cluster.ProtoVersion = 4
@@ -136,13 +139,33 @@ func NewCassandraCluster(cfg config.Cassandra, r resolver.ServiceResolver) (*goc
 	}
 
 	if cfg.ConnectTimeout > 0 {
+		cluster.Timeout = cfg.ConnectTimeout
 		cluster.ConnectTimeout = cfg.ConnectTimeout
+	} else {
+		cluster.Timeout = 10 * time.Second
+		cluster.ConnectTimeout = 10 * time.Second
 	}
+
+	cluster.ProtoVersion = 4
+	cluster.Consistency = cfg.Consistency.GetConsistency()
+	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 
 	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
 	return cluster, nil
 }
 
+// regionHostFilter returns a gocql host filter for the given region name
+func regionHostFilter(region string) gocql.HostFilter {
+	return gocql.HostFilterFunc(func(host *gocql.HostInfo) bool {
+		applicationRegion := region
+		if len(host.DataCenter()) < 3 {
+			return false
+		}
+		return host.DataCenter()[:3] == applicationRegion
+	})
+}
+
+// parseHosts returns parses a list of hosts separated by comma
 func parseHosts(input string) []string {
 	var hosts []string
 	for _, h := range strings.Split(input, ",") {

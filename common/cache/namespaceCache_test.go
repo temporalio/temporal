@@ -160,7 +160,7 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 
 	pageToken := []byte("some random page token")
 
-	s.metadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil).Times(1)
+	s.metadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil)
 	s.clusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.metadataMgr.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
 		PageSize:      namespaceCacheRefreshPageSize,
@@ -168,7 +168,7 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecord1},
 		NextPageToken: pageToken,
-	}, nil).Times(1)
+	}, nil)
 
 	s.metadataMgr.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
 		PageSize:      namespaceCacheRefreshPageSize,
@@ -176,7 +176,7 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecord2, namespaceRecord3},
 		NextPageToken: nil,
-	}, nil).Times(1)
+	}, nil)
 
 	// load namespaces
 	s.namespaceCache.Start()
@@ -253,7 +253,7 @@ func (s *namespaceCacheSuite) TestRegisterCallback_CatchUp() {
 	entry2 := s.buildEntryFromRecord(namespaceRecord2)
 	namespaceNotificationVersion++
 
-	s.metadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil).Times(1)
+	s.metadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil)
 	s.clusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.metadataMgr.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
 		PageSize:      namespaceCacheRefreshPageSize,
@@ -261,7 +261,7 @@ func (s *namespaceCacheSuite) TestRegisterCallback_CatchUp() {
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecord1, namespaceRecord2},
 		NextPageToken: nil,
-	}, nil).Times(1)
+	}, nil)
 
 	// load namespaces
 	s.Nil(s.namespaceCache.refreshNamespaces())
@@ -340,7 +340,7 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 	entry2Old := s.buildEntryFromRecord(namespaceRecord2Old)
 	namespaceNotificationVersion++
 
-	s.metadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil).Times(1)
+	s.metadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil)
 	s.clusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.metadataMgr.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
 		PageSize:      namespaceCacheRefreshPageSize,
@@ -348,7 +348,7 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecord1Old, namespaceRecord2Old},
 		NextPageToken: nil,
-	}, nil).Times(1)
+	}, nil)
 
 	// load namespaces
 	s.Nil(s.namespaceCache.refreshNamespaces())
@@ -413,14 +413,14 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 	s.Empty(entriesOld)
 	s.Empty(entriesNew)
 
-	s.metadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil).Times(1)
+	s.metadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil)
 	s.metadataMgr.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
 		PageSize:      namespaceCacheRefreshPageSize,
 		NextPageToken: nil,
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecord1New, namespaceRecord2New},
 		NextPageToken: nil,
-	}, nil).Times(1)
+	}, nil)
 	s.Nil(s.namespaceCache.refreshNamespaces())
 
 	// the order matters here: the record 2 got updated first, thus with a lower notification version
@@ -435,7 +435,7 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 	s.clusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	namespaceNotificationVersion := int64(999999) // make this notification version really large for test
-	s.metadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil).Times(1)
+	s.metadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil)
 	id := uuid.NewRandom().String()
 	namespaceRecordOld := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
@@ -464,7 +464,7 @@ func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess(
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecordOld},
 		NextPageToken: nil,
-	}, nil).Times(1)
+	}, nil)
 
 	// load namespaces
 	s.namespaceCache.Start()

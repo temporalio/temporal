@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
@@ -116,7 +115,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		config,
 	)
 	s.mockShard.EventsCache = events.NewEventsCache(
-		convert.Int32Ptr(s.mockShard.GetShardID()),
+		s.mockShard.GetShardID(),
 		s.mockShard.GetConfig().EventsCacheInitialSize(),
 		s.mockShard.GetConfig().EventsCacheMaxSize(),
 		s.mockShard.GetConfig().EventsCacheTTL(),

@@ -28,13 +28,13 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/gocql/gocql"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -71,7 +71,7 @@ type (
 
 // NewHistoryV2PersistenceFromSession returns new HistoryStore
 func NewHistoryV2PersistenceFromSession(
-	session *gocql.Session,
+	session gocql.Session,
 	logger log.Logger,
 ) p.HistoryStore {
 
@@ -80,7 +80,7 @@ func NewHistoryV2PersistenceFromSession(
 
 // newHistoryPersistence is used to create an instance of HistoryManager implementation
 func newHistoryPersistence(
-	session *gocql.Session,
+	session gocql.Session,
 	logger log.Logger,
 ) (p.HistoryStore, error) {
 	return &cassandraHistoryV2Persistence{
@@ -110,7 +110,7 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 		query := h.session.Query(v2templateUpsertData,
 			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
 		if err := query.Exec(); err != nil {
-			return convertCommonErrors("AppendHistoryNodes", err)
+			return gocql.ConvertError("AppendHistoryNodes", err)
 		}
 		return nil
 	}
@@ -124,7 +124,7 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 		Info:       request.Info,
 	})
 	if err != nil {
-		return convertCommonErrors("AppendHistoryNodes", err)
+		return gocql.ConvertError("AppendHistoryNodes", err)
 	}
 
 	batch := h.session.NewBatch(gocql.LoggedBatch)
@@ -133,7 +133,7 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 	batch.Query(v2templateUpsertData,
 		branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
 	if err = h.session.ExecuteBatch(batch); err != nil {
-		return convertCommonErrors("AppendHistoryNodes", err)
+		return gocql.ConvertError("AppendHistoryNodes", err)
 	}
 	return nil
 }
@@ -318,7 +318,7 @@ func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
 	query := h.session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.EncodingType.String())
 	err = query.Exec()
 	if err != nil {
-		return nil, convertCommonErrors("ForkHistoryBranch", err)
+		return nil, gocql.ConvertError("ForkHistoryBranch", err)
 	}
 
 	return &p.InternalForkHistoryBranchResponse{
@@ -355,10 +355,9 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 	validBRsMaxEndNode := map[string]int64{}
 	for _, b := range rsp.Branches {
 		for _, br := range b.Ancestors {
-			// These string casts are safe and optimized away -- https://github.com/golang/go/issues/3512
-			curr, ok := validBRsMaxEndNode[string(br.GetBranchId())]
+			curr, ok := validBRsMaxEndNode[br.GetBranchId()]
 			if !ok || curr < br.GetEndNodeId() {
-				validBRsMaxEndNode[string(br.GetBranchId())] = br.GetEndNodeId()
+				validBRsMaxEndNode[br.GetBranchId()] = br.GetEndNodeId()
 			}
 		}
 	}
@@ -366,7 +365,7 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 	// for each branch range to delete, we iterate from bottom to up, and delete up to the point according to validBRsEndNode
 	for i := len(brsToDelete) - 1; i >= 0; i-- {
 		br := brsToDelete[i]
-		maxReferredEndNodeID, ok := validBRsMaxEndNode[string(br.GetBranchId())]
+		maxReferredEndNodeID, ok := validBRsMaxEndNode[br.GetBranchId()]
 		if ok {
 			// we can only delete from the maxEndNode and stop here
 			h.deleteBranchRangeNodes(batch, treeID, br.GetBranchId(), maxReferredEndNodeID)
@@ -379,13 +378,13 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 
 	err = h.session.ExecuteBatch(batch)
 	if err != nil {
-		return convertCommonErrors("DeleteHistoryBranch", err)
+		return gocql.ConvertError("DeleteHistoryBranch", err)
 	}
 	return nil
 }
 
 func (h *cassandraHistoryV2Persistence) deleteBranchRangeNodes(
-	batch *gocql.Batch,
+	batch gocql.Batch,
 	treeID string,
 	branchID string,
 	beginNodeID int64,
@@ -403,31 +402,36 @@ func (h *cassandraHistoryV2Persistence) GetAllHistoryTreeBranches(
 
 	query := h.session.Query(v2templateScanAllTreeBranches)
 
-	iter := query.PageSize(int(request.PageSize)).PageState(request.NextPageToken).Iter()
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	if iter == nil {
 		return nil, serviceerror.NewInternal("GetAllHistoryTreeBranches operation failed.  Not able to create query iterator.")
 	}
 	pagingToken := iter.PageState()
 
 	branches := make([]p.HistoryBranchDetail, 0, request.PageSize)
-	treeUUID := gocql.UUID{}
-	branchUUID := gocql.UUID{}
+	treeUUID := ""
+	branchUUID := ""
 	var data []byte
 	var encoding string
 
 	for iter.Scan(&treeUUID, &branchUUID, &data, &encoding) {
 		hti, err := serialization.HistoryTreeInfoFromBlob(data, encoding)
 		if err != nil {
-			return nil, convertCommonErrors("GetAllHistoryTreeBranches", err)
+			return nil, gocql.ConvertError("GetAllHistoryTreeBranches", err)
 		}
 
 		branchDetail := p.HistoryBranchDetail{
-			TreeID:   treeUUID.String(),
-			BranchID: branchUUID.String(),
+			TreeID:   treeUUID,
+			BranchID: branchUUID,
 			ForkTime: hti.ForkTime,
 			Info:     hti.Info,
 		}
 		branches = append(branches, branchDetail)
+
+		treeUUID = ""
+		branchUUID = ""
+		data = nil
+		encoding = ""
 	}
 
 	if err := iter.Close(); err != nil {
@@ -454,10 +458,10 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 	query := h.session.Query(v2templateReadAllBranches, treeID)
 
 	pageSize := 100
-	pagingToken := []byte{}
+	var pagingToken []byte
 	branches := make([]*persistencespb.HistoryBranch, 0, pageSize)
 
-	var iter *gocql.Iter
+	var iter gocql.Iter
 	for {
 		iter = query.PageSize(pageSize).PageState(pagingToken).Iter()
 		if iter == nil {
@@ -465,24 +469,24 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 		}
 		pagingToken = iter.PageState()
 
-		branchUUID := gocql.UUID{}
+		branchUUID := ""
 		var data []byte
 		var encoding string
 		for iter.Scan(&branchUUID, &data, &encoding) {
 			br, err := serialization.HistoryTreeInfoFromBlob(data, encoding)
 			if err != nil {
-				return nil, convertCommonErrors("GetHistoryTree", err)
+				return nil, gocql.ConvertError("GetHistoryTree", err)
 			}
 
 			branches = append(branches, br.BranchInfo)
 
-			branchUUID = gocql.UUID{}
+			branchUUID = ""
 			data = []byte{}
 			encoding = ""
 		}
 
 		if err := iter.Close(); err != nil {
-			return nil, convertCommonErrors("GetHistoryTree", err)
+			return nil, gocql.ConvertError("GetHistoryTree", err)
 		}
 
 		if len(pagingToken) == 0 {

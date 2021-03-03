@@ -91,10 +91,10 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_AlreadyCreated_AfterWorkflo
 		TaskStatus: timerTaskStatusCreated,
 	}
 	timerInfos := map[string]*persistencespb.TimerInfo{timerInfo.TimerId: timerInfo}
-	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowRunExpirationTime: timestamp.TimePtr(timerExpiry.Add(-1 * time.Second)),
-	}).Times(1)
+	})
 
 	modified, err := s.timerSequence.createNextUserTimer()
 	s.NoError(err)
@@ -112,10 +112,10 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_AlreadyCreated_BeforeWorkfl
 		TaskStatus: timerTaskStatusCreated,
 	}
 	timerInfos := map[string]*persistencespb.TimerInfo{timerInfo.TimerId: timerInfo}
-	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowRunExpirationTime: timestamp.TimePtr(timerExpiry.Add(1 * time.Second)),
-	}).Times(1)
+	})
 
 	modified, err := s.timerSequence.createNextUserTimer()
 	s.NoError(err)
@@ -133,10 +133,10 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_AlreadyCreated_NoWorkflowEx
 		TaskStatus: timerTaskStatusCreated,
 	}
 	timerInfos := map[string]*persistencespb.TimerInfo{timerInfo.TimerId: timerInfo}
-	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowRunExpirationTime: &time.Time{},
-	}).Times(1)
+	})
 
 	modified, err := s.timerSequence.createNextUserTimer()
 	s.NoError(err)
@@ -154,10 +154,10 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_AfterWorkflowExp
 		TaskStatus: timerTaskStatusNone,
 	}
 	timerInfos := map[string]*persistencespb.TimerInfo{timerInfo.TimerId: timerInfo}
-	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowRunExpirationTime: timestamp.TimePtr(timerExpiry.Add(-1 * time.Second)),
-	}).Times(1)
+	})
 
 	modified, err := s.timerSequence.createNextUserTimer()
 	s.NoError(err)
@@ -176,22 +176,22 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_BeforeWorkflowEx
 		TaskStatus: timerTaskStatusNone,
 	}
 	timerInfos := map[string]*persistencespb.TimerInfo{timerInfo.TimerId: timerInfo}
-	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
-	s.mockMutableState.EXPECT().GetUserTimerInfoByEventID(timerInfo.StartedId).Return(timerInfo, true).Times(1)
+	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos)
+	s.mockMutableState.EXPECT().GetUserTimerInfoByEventID(timerInfo.StartedId).Return(timerInfo, true)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowRunExpirationTime: timestamp.TimePtr(timerExpiry.Add(1 * time.Second)),
-	}).Times(1)
+	})
 
 	var timerInfoUpdated = *timerInfo // make a copy
 	timerInfoUpdated.TaskStatus = timerTaskStatusCreated
-	s.mockMutableState.EXPECT().UpdateUserTimer(&timerInfoUpdated).Return(nil).Times(1)
-	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion).Times(1)
+	s.mockMutableState.EXPECT().UpdateUserTimer(&timerInfoUpdated).Return(nil)
+	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
 	s.mockMutableState.EXPECT().AddTimerTasks(&persistence.UserTimerTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: *timerExpiry,
 		EventID:             timerInfo.GetStartedId(),
 		Version:             currentVersion,
-	}).Times(1)
+	})
 
 	modified, err := s.timerSequence.createNextUserTimer()
 	s.NoError(err)
@@ -210,22 +210,22 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_NoWorkflowExpiry
 		TaskStatus: timerTaskStatusNone,
 	}
 	timerInfos := map[string]*persistencespb.TimerInfo{timerInfo.TimerId: timerInfo}
-	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
-	s.mockMutableState.EXPECT().GetUserTimerInfoByEventID(timerInfo.StartedId).Return(timerInfo, true).Times(1)
+	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos)
+	s.mockMutableState.EXPECT().GetUserTimerInfoByEventID(timerInfo.StartedId).Return(timerInfo, true)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowRunExpirationTime: &time.Time{},
-	}).Times(1)
+	})
 
 	var timerInfoUpdated = *timerInfo // make a copy
 	timerInfoUpdated.TaskStatus = timerTaskStatusCreated
-	s.mockMutableState.EXPECT().UpdateUserTimer(&timerInfoUpdated).Return(nil).Times(1)
-	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion).Times(1)
+	s.mockMutableState.EXPECT().UpdateUserTimer(&timerInfoUpdated).Return(nil)
+	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
 	s.mockMutableState.EXPECT().AddTimerTasks(&persistence.UserTimerTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: *timerExpiry,
 		EventID:             timerInfo.GetStartedId(),
 		Version:             currentVersion,
-	}).Times(1)
+	})
 
 	modified, err := s.timerSequence.createNextUserTimer()
 	s.NoError(err)
@@ -250,10 +250,10 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_AlreadyCreated_AfterWor
 		Attempt:                 12,
 	}
 	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowRunExpirationTime: timestamp.TimePtr(now.Add(-2000 * time.Second)),
-	}).Times(1)
+	})
 
 	modified, err := s.timerSequence.createNextActivityTimer()
 	s.NoError(err)
@@ -278,10 +278,10 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_AlreadyCreated_BeforeWo
 		Attempt:                 12,
 	}
 	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowRunExpirationTime: timestamp.TimePtr(now.Add(2000 * time.Second)),
-	}).Times(1)
+	})
 
 	modified, err := s.timerSequence.createNextActivityTimer()
 	s.NoError(err)
@@ -306,10 +306,10 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_AlreadyCreated_NoWorkfl
 		Attempt:                 12,
 	}
 	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowRunExpirationTime: timestamp.TimePtr(time.Time{}),
-	}).Times(1)
+	})
 
 	modified, err := s.timerSequence.createNextActivityTimer()
 	s.NoError(err)
@@ -334,10 +334,10 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_AfterWorkflo
 		Attempt:                 12,
 	}
 	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowRunExpirationTime: timestamp.TimePtr(now.Add(-2000 * time.Second)),
-	}).Times(1)
+	})
 
 	modified, err := s.timerSequence.createNextActivityTimer()
 	s.NoError(err)
@@ -363,16 +363,16 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_BeforeWorkfl
 		Attempt:                 12,
 	}
 	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
-	s.mockMutableState.EXPECT().GetActivityInfo(activityInfo.ScheduleId).Return(activityInfo, true).Times(1)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
+	s.mockMutableState.EXPECT().GetActivityInfo(activityInfo.ScheduleId).Return(activityInfo, true)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowRunExpirationTime: timestamp.TimePtr(now.Add(2000 * time.Second)),
-	}).Times(1)
+	})
 
 	var activityInfoUpdated = *activityInfo // make a copy
 	activityInfoUpdated.TimerTaskStatus = timerTaskStatusCreatedScheduleToStart
-	s.mockMutableState.EXPECT().UpdateActivity(&activityInfoUpdated).Return(nil).Times(1)
-	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion).Times(1)
+	s.mockMutableState.EXPECT().UpdateActivity(&activityInfoUpdated).Return(nil)
+	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
 	s.mockMutableState.EXPECT().AddTimerTasks(&persistence.ActivityTimeoutTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: activityInfo.ScheduledTime.Add(*activityInfo.ScheduleToStartTimeout),
@@ -380,7 +380,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_BeforeWorkfl
 		EventID:             activityInfo.ScheduleId,
 		Attempt:             activityInfo.Attempt,
 		Version:             currentVersion,
-	}).Times(1)
+	})
 
 	modified, err := s.timerSequence.createNextActivityTimer()
 	s.NoError(err)
@@ -406,16 +406,16 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_NoWorkflowEx
 		Attempt:                 12,
 	}
 	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
-	s.mockMutableState.EXPECT().GetActivityInfo(activityInfo.ScheduleId).Return(activityInfo, true).Times(1)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
+	s.mockMutableState.EXPECT().GetActivityInfo(activityInfo.ScheduleId).Return(activityInfo, true)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowRunExpirationTime: timestamp.TimePtr(time.Time{}),
-	}).Times(1)
+	})
 
 	var activityInfoUpdated = *activityInfo // make a copy
 	activityInfoUpdated.TimerTaskStatus = timerTaskStatusCreatedScheduleToStart
-	s.mockMutableState.EXPECT().UpdateActivity(&activityInfoUpdated).Return(nil).Times(1)
-	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion).Times(1)
+	s.mockMutableState.EXPECT().UpdateActivity(&activityInfoUpdated).Return(nil)
+	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
 	s.mockMutableState.EXPECT().AddTimerTasks(&persistence.ActivityTimeoutTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: activityInfo.ScheduledTime.Add(*activityInfo.ScheduleToStartTimeout),
@@ -423,7 +423,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_NoWorkflowEx
 		EventID:             activityInfo.ScheduleId,
 		Attempt:             activityInfo.Attempt,
 		Version:             currentVersion,
-	}).Times(1)
+	})
 
 	modified, err := s.timerSequence.createNextActivityTimer()
 	s.NoError(err)
@@ -448,10 +448,10 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_AfterWor
 		Attempt:                 12,
 	}
 	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowRunExpirationTime: timestamp.TimePtr(now.Add(-2000 * time.Second)),
-	}).Times(1)
+	})
 
 	modified, err := s.timerSequence.createNextActivityTimer()
 	s.NoError(err)
@@ -477,18 +477,18 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_BeforeWo
 		Attempt:                 12,
 	}
 	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
-	s.mockMutableState.EXPECT().GetActivityInfo(activityInfo.ScheduleId).Return(activityInfo, true).Times(1)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
+	s.mockMutableState.EXPECT().GetActivityInfo(activityInfo.ScheduleId).Return(activityInfo, true)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowRunExpirationTime: timestamp.TimePtr(now.Add(2000 * time.Second)),
-	}).Times(1)
+	})
 
 	taskVisibilityTimestamp := activityInfo.StartedTime.Add(*activityInfo.HeartbeatTimeout)
 
 	var activityInfoUpdated = *activityInfo // make a copy
 	activityInfoUpdated.TimerTaskStatus = timerTaskStatusCreatedHeartbeat
-	s.mockMutableState.EXPECT().UpdateActivityWithTimerHeartbeat(&activityInfoUpdated, taskVisibilityTimestamp).Return(nil).Times(1)
-	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion).Times(1)
+	s.mockMutableState.EXPECT().UpdateActivityWithTimerHeartbeat(&activityInfoUpdated, taskVisibilityTimestamp).Return(nil)
+	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
 	s.mockMutableState.EXPECT().AddTimerTasks(&persistence.ActivityTimeoutTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: taskVisibilityTimestamp,
@@ -496,7 +496,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_BeforeWo
 		EventID:             activityInfo.ScheduleId,
 		Attempt:             activityInfo.Attempt,
 		Version:             currentVersion,
-	}).Times(1)
+	})
 
 	modified, err := s.timerSequence.createNextActivityTimer()
 	s.NoError(err)
@@ -522,18 +522,18 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_NoWorkfl
 		Attempt:                 12,
 	}
 	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
-	s.mockMutableState.EXPECT().GetActivityInfo(activityInfo.ScheduleId).Return(activityInfo, true).Times(1)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
+	s.mockMutableState.EXPECT().GetActivityInfo(activityInfo.ScheduleId).Return(activityInfo, true)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowRunExpirationTime: timestamp.TimePtr(time.Time{}),
-	}).Times(1)
+	})
 
 	taskVisibilityTimestamp := activityInfo.StartedTime.Add(*activityInfo.HeartbeatTimeout)
 
 	var activityInfoUpdated = *activityInfo // make a copy
 	activityInfoUpdated.TimerTaskStatus = timerTaskStatusCreatedHeartbeat
-	s.mockMutableState.EXPECT().UpdateActivityWithTimerHeartbeat(&activityInfoUpdated, taskVisibilityTimestamp).Return(nil).Times(1)
-	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion).Times(1)
+	s.mockMutableState.EXPECT().UpdateActivityWithTimerHeartbeat(&activityInfoUpdated, taskVisibilityTimestamp).Return(nil)
+	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
 	s.mockMutableState.EXPECT().AddTimerTasks(&persistence.ActivityTimeoutTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: taskVisibilityTimestamp,
@@ -541,7 +541,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_NoWorkfl
 		EventID:             activityInfo.ScheduleId,
 		Attempt:             activityInfo.Attempt,
 		Version:             currentVersion,
-	}).Times(1)
+	})
 
 	modified, err := s.timerSequence.createNextActivityTimer()
 	s.NoError(err)
@@ -550,7 +550,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_NoWorkfl
 
 func (s *timerSequenceSuite) TestLoadAndSortUserTimers_None() {
 	timerInfos := map[string]*persistencespb.TimerInfo{}
-	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortUserTimers()
 	s.Empty(timerSequenceIDs)
@@ -567,7 +567,7 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_One() {
 		TaskStatus: timerTaskStatusCreated,
 	}
 	timerInfos := map[string]*persistencespb.TimerInfo{timerInfo.TimerId: timerInfo}
-	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortUserTimers()
 	s.Equal([]timerSequenceID{{
@@ -601,7 +601,7 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_Multiple() {
 		timerInfo1.TimerId: timerInfo1,
 		timerInfo2.TimerId: timerInfo2,
 	}
-	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingTimerInfos().Return(timerInfos)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortUserTimers()
 	s.Equal([]timerSequenceID{
@@ -624,7 +624,7 @@ func (s *timerSequenceSuite) TestLoadAndSortUserTimers_Multiple() {
 
 func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_None() {
 	activityInfos := map[int64]*persistencespb.ActivityInfo{}
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortActivityTimers()
 	s.Empty(timerSequenceIDs)
@@ -646,7 +646,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_NotScheduled() {
 		TimerTaskStatus:         timerTaskStatusNone,
 	}
 	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortActivityTimers()
 	s.Empty(timerSequenceIDs)
@@ -670,7 +670,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_NotStar
 		Attempt:                 12,
 	}
 	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortActivityTimers()
 	s.Equal([]timerSequenceID{
@@ -709,7 +709,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 		Attempt:                 12,
 	}
 	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortActivityTimers()
 	s.Equal([]timerSequenceID{
@@ -755,7 +755,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 		Attempt:                 12,
 	}
 	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortActivityTimers()
 	s.Equal([]timerSequenceID{
@@ -794,7 +794,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 		Attempt:                 12,
 	}
 	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortActivityTimers()
 	s.Equal([]timerSequenceID{
@@ -840,7 +840,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_One_Scheduled_Started
 		Attempt:                 12,
 	}
 	activityInfos := map[int64]*persistencespb.ActivityInfo{activityInfo.ScheduleId: activityInfo}
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortActivityTimers()
 	s.EqualValues([]timerSequenceID{
@@ -897,7 +897,7 @@ func (s *timerSequenceSuite) TestLoadAndSortActivityTimers_Multiple() {
 		activityInfo1.ScheduleId: activityInfo1,
 		activityInfo2.ScheduleId: activityInfo2,
 	}
-	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos).Times(1)
+	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
 
 	timerSequenceIDs := s.timerSequence.loadAndSortActivityTimers()
 	s.Equal([]timerSequenceID{

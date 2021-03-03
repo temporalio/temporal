@@ -79,7 +79,6 @@ const (
 	StatsTypeTagName   = "stats_type"
 	CacheTypeTagName   = "cache_type"
 	FailureTagName     = "failure"
-	ValidatorTagName   = "validator"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -1994,6 +1993,8 @@ const (
 	StartedCount
 	StoppedCount
 	ScanDuration
+	ExecutorTasksDoneCount
+	ExecutorTasksErrCount
 	ExecutorTasksDeferredCount
 	ExecutorTasksDroppedCount
 	BatcherProcessorSuccess
@@ -2002,10 +2003,8 @@ const (
 	HistoryScavengerErrorCount
 	HistoryScavengerSkipCount
 	NamespaceReplicationEnqueueDLQCount
-	ScavengerDBRequestsCount
+	ScavengerValidationRequestsCount
 	ScavengerValidationFailuresCount
-	ExecutionsScavengerExecutionsCount
-	ExecutionsScavengerCorruptedExecutionsCount
 
 	NumWorkerMetrics
 )
@@ -2419,6 +2418,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		StartedCount:                                  {metricName: "started", metricType: Counter},
 		StoppedCount:                                  {metricName: "stopped", metricType: Counter},
 		ScanDuration:                                  {metricName: "scan_duration", metricType: Timer},
+		ExecutorTasksDoneCount:                        {metricName: "executor_done", metricType: Counter},
+		ExecutorTasksErrCount:                         {metricName: "executor_err", metricType: Counter},
 		ExecutorTasksDeferredCount:                    {metricName: "executor_deferred", metricType: Counter},
 		ExecutorTasksDroppedCount:                     {metricName: "executor_dropped", metricType: Counter},
 		BatcherProcessorSuccess:                       {metricName: "batcher_processor_requests", metricType: Counter},
@@ -2427,10 +2428,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistoryScavengerErrorCount:                    {metricName: "scavenger_errors", metricType: Counter},
 		HistoryScavengerSkipCount:                     {metricName: "scavenger_skips", metricType: Counter},
 		NamespaceReplicationEnqueueDLQCount:           {metricName: "namespace_replication_dlq_enqueue_requests", metricType: Counter},
-		ScavengerDBRequestsCount:                      {metricName: "scavenger_db_requests", metricType: Counter},
+		ScavengerValidationRequestsCount:              {metricName: "scavenger_validation_requests", metricType: Counter},
 		ScavengerValidationFailuresCount:              {metricName: "scavenger_validation_failures", metricType: Counter},
-		ExecutionsScavengerExecutionsCount:            {metricName: "executions_scavenger_executions_count", metricType: Gauge},
-		ExecutionsScavengerCorruptedExecutionsCount:   {metricName: "executions_scavenger_corrupted_executions_count", metricType: Gauge},
 	},
 }
 

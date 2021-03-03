@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -261,7 +260,7 @@ func (r *nDCStateRebuilderImpl) getPaginationFn(
 			MaxEventID:    nextEventID,
 			PageSize:      nDCDefaultPageSize,
 			NextPageToken: paginationToken,
-			ShardID:       convert.Int32Ptr(r.shard.GetShardID()),
+			ShardID:       r.shard.GetShardID(),
 		})
 		if err != nil {
 			return nil, nil, err

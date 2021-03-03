@@ -34,6 +34,7 @@ import (
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/searchattribute"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -47,7 +48,6 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -106,46 +106,6 @@ func (s *adminHandlerSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockResource.Finish(s.T())
 	s.handler.Stop()
-}
-
-func (s *adminHandlerSuite) Test_ConvertIndexedValueTypeToESDataType() {
-	tests := []struct {
-		input    enumspb.IndexedValueType
-		expected string
-	}{
-		{
-			input:    enumspb.INDEXED_VALUE_TYPE_STRING,
-			expected: "text",
-		},
-		{
-			input:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			expected: "keyword",
-		},
-		{
-			input:    enumspb.INDEXED_VALUE_TYPE_INT,
-			expected: "long",
-		},
-		{
-			input:    enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-			expected: "double",
-		},
-		{
-			input:    enumspb.INDEXED_VALUE_TYPE_BOOL,
-			expected: "boolean",
-		},
-		{
-			input:    enumspb.INDEXED_VALUE_TYPE_DATETIME,
-			expected: "date",
-		},
-		{
-			input:    enumspb.IndexedValueType(-1),
-			expected: "",
-		},
-	}
-
-	for _, test := range tests {
-		s.Equal(test.expected, s.handler.convertIndexedValueTypeToESDataType(test.input))
-	}
 }
 
 func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidWorkflowID() {
@@ -208,7 +168,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvali
 
 func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnNamespaceCache() {
 	ctx := context.Background()
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return("", fmt.Errorf("test")).Times(1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return("", fmt.Errorf("test"))
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace: s.namespace,
@@ -481,7 +441,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	mockValidAttr := map[string]interface{}{
 		"testkey": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
-	dynamicConfig.EXPECT().GetMapValue(dynamicconfig.ValidSearchAttributes, nil, definition.GetDefaultIndexedKeys()).
+	dynamicConfig.EXPECT().GetMapValue(dynamicconfig.ValidSearchAttributes, nil, searchattribute.GetDefaultTypeMap()).
 		Return(mockValidAttr, nil).AnyTimes()
 
 	testCases2 := []test{

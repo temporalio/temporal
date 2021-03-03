@@ -742,7 +742,7 @@ func (s *ContextImpl) AppendHistoryEvents(
 		return 0, err
 	}
 
-	request.ShardID = convert.Int32Ptr(s.shardID)
+	request.ShardID = s.shardID
 	request.TransactionID = transactionID
 
 	size := 0
@@ -1188,7 +1188,7 @@ func acquireShard(
 		previousShardOwnerWasDifferent: ownershipChanged,
 	}
 	shardContext.EventsCache = events.NewEventsCache(
-		convert.Int32Ptr(shardContext.GetShardID()),
+		shardContext.GetShardID(),
 		shardContext.GetConfig().EventsCacheInitialSize(),
 		shardContext.GetConfig().EventsCacheMaxSize(),
 		shardContext.GetConfig().EventsCacheTTL(),

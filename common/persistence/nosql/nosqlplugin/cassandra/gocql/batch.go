@@ -22,54 +22,64 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package log
+package gocql
 
 import (
-	"github.com/stretchr/testify/mock"
+	"context"
+	"fmt"
 
-	"go.temporal.io/server/common/log/tag"
+	"github.com/gocql/gocql"
 )
 
-// MockLogger returns a mock for Logger interface
-type MockLogger struct {
-	mock.Mock
-}
+var _ Batch = (*batch)(nil)
 
-// Debug provides a mock function with given fields: msg, tags
-func (_m *MockLogger) Debug(msg string, tags ...tag.Tag) {
-	_m.Called(msg, tags)
-}
+type (
+	batch struct {
+		session *session
 
-// Info provides a mock function with given fields: msg, tags
-func (_m *MockLogger) Info(msg string, tags ...tag.Tag) {
-	_m.Called(msg, tags)
-}
-
-// Warn provides a mock function with given fields: msg, tags
-func (_m *MockLogger) Warn(msg string, tags ...tag.Tag) {
-	_m.Called(msg, tags)
-}
-
-// Error provides a mock function with given fields: msg, tags
-func (_m *MockLogger) Error(msg string, tags ...tag.Tag) {
-	_m.Called(msg, tags)
-}
-
-// Fatal provides a mock function with given fields: msg, tags
-func (_m *MockLogger) Fatal(msg string, tags ...tag.Tag) {
-	_m.Called(msg, tags)
-}
-
-// WithTags provides a mock function with given fields: tags
-func (_m *MockLogger) WithTags(tags ...tag.Tag) Logger {
-	ret := _m.Called(tags)
-
-	var r0 Logger
-	if rf, ok := ret.Get(0).(func(...tag.Tag) Logger); ok {
-		r0 = rf(tags...)
-	} else {
-		r0 = ret.Get(0).(Logger)
+		gocqlBatch *gocql.Batch
 	}
+)
 
-	return r0
+// Definition of all BatchTypes
+const (
+	LoggedBatch BatchType = iota
+	UnloggedBatch
+	CounterBatch
+)
+
+func newBatch(
+	session *session,
+	gocqlBatch *gocql.Batch,
+) *batch {
+	return &batch{
+		session:    session,
+		gocqlBatch: gocqlBatch,
+	}
+}
+
+func (b *batch) Query(stmt string, args ...interface{}) {
+	b.gocqlBatch.Query(stmt, args...)
+}
+
+func (b *batch) WithContext(ctx context.Context) Batch {
+	return newBatch(b.session, b.gocqlBatch.WithContext(ctx))
+}
+
+func (b *batch) WithTimestamp(timestamp int64) Batch {
+	b.gocqlBatch.WithTimestamp(timestamp)
+	return newBatch(b.session, b.gocqlBatch)
+}
+
+func mustConvertBatchType(batchType BatchType) gocql.BatchType {
+	switch batchType {
+	case LoggedBatch:
+		return gocql.LoggedBatch
+	case UnloggedBatch:
+		return gocql.UnloggedBatch
+	case CounterBatch:
+		return gocql.CounterBatch
+	default:
+		panic(fmt.Sprintf("Unknown gocql BatchType: %v", batchType))
+	}
 }

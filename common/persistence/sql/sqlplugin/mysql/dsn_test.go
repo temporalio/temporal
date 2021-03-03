@@ -127,7 +127,7 @@ func (s *StoreTestSuite) TestBuildDSN() {
 
 	for _, tc := range testCases {
 		r := resolver.NewMockServiceResolver(s.controller)
-		r.EXPECT().Resolve(tc.in.ConnectAddr).Return([]string{tc.in.ConnectAddr}).Times(1)
+		r.EXPECT().Resolve(tc.in.ConnectAddr).Return([]string{tc.in.ConnectAddr})
 
 		out := buildDSN(&tc.in, r)
 		s.True(strings.HasPrefix(out, tc.outURLPath), "invalid url path")

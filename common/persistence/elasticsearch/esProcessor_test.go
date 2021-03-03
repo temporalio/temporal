@@ -38,10 +38,10 @@ import (
 	"go.uber.org/zap"
 
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/definition"
 	es "go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
@@ -119,7 +119,7 @@ func (s *esProcessorSuite) TestNewESProcessorAndStartStop() {
 			s.NotNil(input.AfterFunc)
 
 			bulkProcessor := es.NewMockBulkProcessor(s.controller)
-			bulkProcessor.EXPECT().Stop().Times(1)
+			bulkProcessor.EXPECT().Stop()
 			return bulkProcessor, nil
 		}).
 		Times(1)
@@ -139,7 +139,7 @@ func (s *esProcessorSuite) TestAdd() {
 	ackCh := make(chan bool, 1)
 	s.Equal(0, s.esProcessor.mapToAckChan.Len())
 
-	s.mockBulkProcessor.EXPECT().Add(request).Times(1)
+	s.mockBulkProcessor.EXPECT().Add(request)
 	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(testStopWatch)
 
 	s.esProcessor.Add(request, visibilityTaskKey, ackCh)
@@ -175,7 +175,7 @@ func (s *esProcessorSuite) TestAdd_ConcurrentAdd() {
 	}
 	wg := &sync.WaitGroup{}
 	wg.Add(duplicates)
-	s.mockBulkProcessor.EXPECT().Add(request).Times(1)
+	s.mockBulkProcessor.EXPECT().Add(request)
 	for i := 0; i < duplicates; i++ {
 		go addFunc(wg)
 	}
@@ -198,7 +198,7 @@ func (s *esProcessorSuite) TestBulkAfterAction_Ack() {
 		Index(testIndex).
 		Id(testID).
 		Version(version).
-		Doc(map[string]interface{}{definition.VisibilityTaskKey: testKey})
+		Doc(map[string]interface{}{searchattribute.VisibilityTaskKey: testKey})
 	requests := []elastic.BulkableRequest{request}
 
 	mSuccess := map[string]*elastic.BulkResponseItem{
@@ -240,10 +240,10 @@ func (s *esProcessorSuite) TestBulkAfterAction_Nack() {
 		Id(testID).
 		Version(version).
 		Doc(map[string]interface{}{
-			definition.VisibilityTaskKey: testKey,
-			definition.NamespaceID:       namespaceID,
-			definition.WorkflowID:        wid,
-			definition.RunID:             rid,
+			searchattribute.VisibilityTaskKey: testKey,
+			searchattribute.NamespaceID:       namespaceID,
+			searchattribute.WorkflowID:        wid,
+			searchattribute.RunID:             rid,
 		})
 	requests := []elastic.BulkableRequest{request}
 
@@ -277,7 +277,7 @@ func (s *esProcessorSuite) TestBulkAfterAction_Nack() {
 func (s *esProcessorSuite) TestBulkAfterAction_Error() {
 	version := int64(3)
 	doc := map[string]interface{}{
-		definition.VisibilityTaskKey: "str",
+		searchattribute.VisibilityTaskKey: "str",
 	}
 
 	request := elastic.NewBulkIndexRequest().
@@ -312,7 +312,7 @@ func (s *esProcessorSuite) TestAckChan() {
 
 	request := &es.BulkableRequest{}
 	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(testStopWatch)
-	s.mockBulkProcessor.EXPECT().Add(request).Times(1)
+	s.mockBulkProcessor.EXPECT().Add(request)
 	ackCh := make(chan bool, 1)
 	s.esProcessor.Add(request, key, ackCh)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
@@ -333,7 +333,7 @@ func (s *esProcessorSuite) TestNackChan() {
 	s.esProcessor.sendToAckChan(key, false)
 
 	request := &es.BulkableRequest{}
-	s.mockBulkProcessor.EXPECT().Add(request).Times(1)
+	s.mockBulkProcessor.EXPECT().Add(request)
 	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(testStopWatch)
 	ackCh := make(chan bool, 1)
 	s.esProcessor.Add(request, key, ackCh)
@@ -356,19 +356,19 @@ func (s *esProcessorSuite) TestHashFn() {
 
 func (s *esProcessorSuite) TestExtractVisibilityTaskKey() {
 	request := elastic.NewBulkIndexRequest()
-	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData).Times(1)
+	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
 
 	visibilityTaskKey := s.esProcessor.extractVisibilityTaskKey(request)
 	s.Equal("", visibilityTaskKey)
 
 	m := map[string]interface{}{
-		definition.VisibilityTaskKey: 1,
+		searchattribute.VisibilityTaskKey: 1,
 	}
 	request.Doc(m)
 	s.Panics(func() { s.esProcessor.extractVisibilityTaskKey(request) })
 
 	testKey := "test-key"
-	m[definition.VisibilityTaskKey] = testKey
+	m[searchattribute.VisibilityTaskKey] = testKey
 	request.Doc(m)
 	s.Equal(testKey, s.esProcessor.extractVisibilityTaskKey(request))
 }
@@ -386,7 +386,7 @@ func (s *esProcessorSuite) TestExtractVisibilityTaskKey_Delete() {
 	_, ok := body["delete"]
 	s.True(ok)
 
-	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData).Times(1)
+	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorCorruptedData)
 	key := s.esProcessor.extractVisibilityTaskKey(request)
 	s.Equal("", key)
 

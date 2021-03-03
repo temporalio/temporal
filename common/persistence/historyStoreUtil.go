@@ -25,8 +25,6 @@
 package persistence
 
 import (
-	"fmt"
-
 	historypb "go.temporal.io/api/history/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -84,11 +82,4 @@ func GetBeginNodeID(bi *persistencespb.HistoryBranch) int64 {
 	}
 	idx := len(bi.Ancestors) - 1
 	return bi.Ancestors[idx].GetEndNodeId()
-}
-
-func getShardID(shardID *int32) (int32, error) {
-	if shardID == nil {
-		return 0, fmt.Errorf("shardID is not set for persistence operation")
-	}
-	return *shardID, nil
 }

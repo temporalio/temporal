@@ -149,7 +149,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 				FailoverVersion: failoverVersion,
 			},
 		},
-	}).Return(nil).Times(1)
+	}).Return(nil)
 
 	err := s.namespaceReplicator.HandleTransmissionTask(namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 	s.Nil(err)
@@ -269,7 +269,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 				ConfigVersion:   configVersion,
 				FailoverVersion: failoverVersion},
 		},
-	}).Return(nil).Times(1)
+	}).Return(nil)
 
 	err := s.namespaceReplicator.HandleTransmissionTask(namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 	s.Nil(err)

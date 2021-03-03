@@ -32,7 +32,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/gocql/gocql"
 	"github.com/urfave/cli"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -44,6 +43,7 @@ import (
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/persistence"
 	cassp "go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives"
@@ -273,7 +273,7 @@ func AdminDBScan(c *cli.Context) {
 }
 
 func scanShard(
-	session *gocql.Session,
+	session gocql.Session,
 	shardID int32,
 	scanOutputDirectories *ScanOutputDirectories,
 	limiter quotas.RateLimiter,
@@ -484,7 +484,7 @@ func fetchAndVerifyHistoryExists(
 	}
 
 	if err != nil {
-		if err == gocql.ErrNotFound {
+		if gocql.IsNotFoundError(err) {
 			corruptedExecutionWriter.Add(&CorruptedExecution{
 				ShardID:     shardID,
 				NamespaceID: executionInfo.NamespaceId,

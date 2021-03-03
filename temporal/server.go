@@ -115,16 +115,6 @@ func (s *Server) Start() error {
 		return err
 	}
 
-	var tlsFactory encryption.TLSConfigProvider
-	if s.so.tlsConfigProvider != nil {
-		tlsFactory = s.so.tlsConfigProvider
-	} else {
-		tlsFactory, err = encryption.NewTLSConfigProviderFromConfig(s.so.config.Global.TLS)
-		if err != nil {
-			return fmt.Errorf("TLS provider initialization error: %w", err)
-		}
-	}
-
 	dynamicConfig, err := dynamicconfig.NewFileBasedClient(&s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
 	if err != nil {
 		s.logger.Info("Error creating file based dynamic config client, use no-op config client instead.", tag.Error(err))
@@ -154,6 +144,16 @@ func (s *Server) Start() error {
 		globalMetricsScope = s.so.config.Global.Metrics.NewCustomReporterScope(s.logger, s.so.metricsReporter)
 	} else if s.so.config.Global.Metrics != nil {
 		globalMetricsScope = s.so.config.Global.Metrics.NewScope(s.logger)
+	}
+
+	var tlsFactory encryption.TLSConfigProvider
+	if s.so.tlsConfigProvider != nil {
+		tlsFactory = s.so.tlsConfigProvider
+	} else {
+		tlsFactory, err = encryption.NewTLSConfigProviderFromConfig(s.so.config.Global.TLS, globalMetricsScope)
+		if err != nil {
+			return fmt.Errorf("TLS provider initialization error: %w", err)
+		}
 	}
 
 	for _, svcName := range s.so.serviceNames {
@@ -455,7 +455,7 @@ func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collec
 
 func (s *Server) logImmutableMismatch(logger l.Logger, key string, ignored interface{}, value interface{}) {
 	logger.Error(
-		"Supplied configuration key/value mismatches persisted ImmutableClusterMetadata."+
+		"Supplied configuration key/value mismatches persisted ImmutableClusterMetadata. "+
 			"Continuing with the persisted value as this value cannot be changed once initialized.",
 		tag.Key(key),
 		tag.IgnoredValue(ignored),

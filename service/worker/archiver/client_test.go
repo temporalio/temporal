@@ -88,8 +88,8 @@ func (s *clientSuite) TearDownTest() {
 }
 
 func (s *clientSuite) TestArchiveVisibilityInlineSuccess() {
-	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.visibilityArchiver, nil).Times(1)
-	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.visibilityArchiver, nil)
+	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveAttemptCount)
 
@@ -106,8 +106,8 @@ func (s *clientSuite) TestArchiveVisibilityInlineSuccess() {
 }
 
 func (s *clientSuite) TestArchiveVisibilityInlineFail_SendSignalSuccess() {
-	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.visibilityArchiver, nil).Times(1)
-	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error")).Times(1)
+	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.visibilityArchiver, nil)
+	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error"))
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveFailureCount)
@@ -129,8 +129,8 @@ func (s *clientSuite) TestArchiveVisibilityInlineFail_SendSignalSuccess() {
 }
 
 func (s *clientSuite) TestArchiveVisibilityInlineFail_SendSignalFail() {
-	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.visibilityArchiver, nil).Times(1)
-	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error")).Times(1)
+	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.visibilityArchiver, nil)
+	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error"))
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveFailureCount)
@@ -152,8 +152,8 @@ func (s *clientSuite) TestArchiveVisibilityInlineFail_SendSignalFail() {
 }
 
 func (s *clientSuite) TestArchiveHistoryInlineSuccess() {
-	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.historyArchiver, nil).Times(1)
-	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.historyArchiver, nil)
+	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount)
 
@@ -170,8 +170,8 @@ func (s *clientSuite) TestArchiveHistoryInlineSuccess() {
 }
 
 func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalSuccess() {
-	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.historyArchiver, nil).Times(1)
-	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error")).Times(1)
+	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.historyArchiver, nil)
+	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error"))
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveFailureCount)
@@ -193,8 +193,8 @@ func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalSuccess() {
 }
 
 func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalFail() {
-	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.historyArchiver, nil).Times(1)
-	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error")).Times(1)
+	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.historyArchiver, nil)
+	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error"))
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveFailureCount)
@@ -216,10 +216,10 @@ func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalFail() {
 }
 
 func (s *clientSuite) TestArchiveInline_HistoryFail_VisibilitySuccess() {
-	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.historyArchiver, nil).Times(1)
-	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.visibilityArchiver, nil).Times(1)
-	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error")).Times(1)
-	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.historyArchiver, nil)
+	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.visibilityArchiver, nil)
+	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error"))
+	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveFailureCount)
@@ -244,10 +244,10 @@ func (s *clientSuite) TestArchiveInline_HistoryFail_VisibilitySuccess() {
 }
 
 func (s *clientSuite) TestArchiveInline_VisibilityFail_HistorySuccess() {
-	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.historyArchiver, nil).Times(1)
-	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.visibilityArchiver, nil).Times(1)
-	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
-	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error")).Times(1)
+	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.historyArchiver, nil)
+	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.visibilityArchiver, nil)
+	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error"))
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityRequestCount)
@@ -272,10 +272,10 @@ func (s *clientSuite) TestArchiveInline_VisibilityFail_HistorySuccess() {
 }
 
 func (s *clientSuite) TestArchiveInline_VisibilityFail_HistoryFail() {
-	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.historyArchiver, nil).Times(1)
-	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.visibilityArchiver, nil).Times(1)
-	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error")).Times(1)
-	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error")).Times(1)
+	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.historyArchiver, nil)
+	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.visibilityArchiver, nil)
+	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error"))
+	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("some random error"))
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveFailureCount)
@@ -301,10 +301,10 @@ func (s *clientSuite) TestArchiveInline_VisibilityFail_HistoryFail() {
 }
 
 func (s *clientSuite) TestArchiveInline_VisibilitySuccess_HistorySuccess() {
-	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.historyArchiver, nil).Times(1)
-	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.visibilityArchiver, nil).Times(1)
-	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
-	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.archiverProvider.EXPECT().GetHistoryArchiver(gomock.Any(), gomock.Any()).Return(s.historyArchiver, nil)
+	s.archiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.visibilityArchiver, nil)
+	s.historyArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	s.visibilityArchiver.EXPECT().Archive(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityRequestCount)

@@ -70,7 +70,7 @@ type (
 		disabled      bool
 		logger        log.Logger
 		metricsClient metrics.Client
-		shardID       *int32
+		shardID       int32
 	}
 
 	eventKey struct {
@@ -88,7 +88,7 @@ var (
 var _ Cache = (*CacheImpl)(nil)
 
 func NewEventsCache(
-	shardID *int32,
+	shardID int32,
 	initialCount int,
 	maxCount int,
 	ttl time.Duration,

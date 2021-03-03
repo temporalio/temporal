@@ -25,7 +25,6 @@ option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
-import "google/protobuf/wrappers.proto";
 
 import "dependencies/gogoproto/gogo.proto";
 
