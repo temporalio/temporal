@@ -1,5 +1,5 @@
 # Alpine base image
-FROM alpine:3.12 AS alpine
+FROM alpine:3.12 AS base-admin-tools
 
 RUN apk add --update --no-cache \
     ca-certificates \
@@ -13,9 +13,6 @@ RUN apk add --update --no-cache \
 RUN test ! -e /etc/nsswitch.conf && echo 'hosts: files dns' > /etc/nsswitch.conf
 
 SHELL ["/bin/bash", "-c"]
-
-# All temporal tool binaries
-FROM alpine AS base-admin-tools
 
 RUN apk add --update --no-cache \
     jq \

@@ -3,18 +3,34 @@ ARG TARGET=server
 # Can be used in case a proxy is necessary
 ARG GOPROXY
 
+FROM temporalio/base-builder AS temporal-builder
+
+# Making sure that dependency is not touched
+ENV GOFLAGS="-mod=readonly"
+
+WORKDIR /temporal
+
+# Copy go mod dependencies first and build docker cache
+COPY go.mod ./
+COPY go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=0 make bins
+
 # Temporal server
-FROM temporaliotest/base-server AS temporal-server
+FROM temporalio/base-server AS temporal-server
 
 ENV TEMPORAL_HOME /etc/temporal
 RUN mkdir -p /etc/temporal
 
-COPY --from=temporaliotest/base-server /usr/local/bin/dockerize /usr/local/bin
-COPY --from=temporaliotest/base-builder /temporal/temporal-cassandra-tool /usr/local/bin
-COPY --from=temporaliotest/base-builder /temporal/temporal-sql-tool /usr/local/bin
-COPY --from=temporaliotest/base-builder /temporal/tctl /usr/local/bin
-COPY --from=temporaliotest/base-builder /temporal/temporal-server /usr/local/bin
-COPY --from=temporaliotest/base-builder /temporal/schema /etc/temporal/schema
+COPY --from=temporalio/base-server /usr/local/bin/dockerize /usr/local/bin
+COPY --from=temporal-builder /temporal/temporal-cassandra-tool /usr/local/bin
+COPY --from=temporal-builder /temporal/temporal-sql-tool /usr/local/bin
+COPY --from=temporal-builder /temporal/tctl /usr/local/bin
+COPY --from=temporal-builder /temporal/temporal-server /usr/local/bin
+COPY --from=temporal-builder /temporal/schema /etc/temporal/schema
 
 COPY docker/entrypoint.sh /entrypoint.sh
 COPY config/dynamicconfig /etc/temporal/config/dynamicconfig
@@ -35,9 +51,9 @@ FROM temporal-server AS temporal-auto-setup
 CMD /start.sh autosetup
 
 # Temporal CLI
-FROM base-server AS temporal-tctl
+FROM temporalio/base-server AS temporal-tctl
 
-COPY --from=base-builder /temporal/tctl /usr/local/bin
+COPY --from=temporal-builder /temporal/tctl /usr/local/bin
 
 ENTRYPOINT ["tctl"]
 
@@ -46,10 +62,10 @@ ENTRYPOINT ["tctl"]
 ENV TEMPORAL_HOME /etc/temporal
 RUN mkdir -p /etc/temporal
 
-COPY --from=temporaliotest/base-builder /temporal/temporal-cassandra-tool /usr/local/bin
-COPY --from=temporaliotest/base-builder /temporal/temporal-sql-tool /usr/local/bin
-COPY --from=temporaliotest/base-builder /temporal/tctl /usr/local/bin
-COPY --from=temporaliotest/base-builder /temporal/schema /etc/temporal/schema
+COPY --from=temporal-builder /temporal/temporal-cassandra-tool /usr/local/bin
+COPY --from=temporal-builder /temporal/temporal-sql-tool /usr/local/bin
+COPY --from=temporal-builder /temporal/tctl /usr/local/bin
+COPY --from=temporal-builder /temporal/schema /etc/temporal/schema
 
 WORKDIR /etc/temporal
 
