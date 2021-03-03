@@ -7,11 +7,11 @@ This doc is for contributors to Temporal Server (hopefully that's you!)
 ## Prerequisites
 
 ### Build prerequisites 
-* [Go Lang](https://golang.org/) (minimum version required is 1.14):
-  - Install on OS X with `brew install go`.
+* [Go Lang](https://golang.org/) (minimum version required is 1.16):
+  - Install on macOS with `brew install go`.
   - Install on Ubuntu with `sudo apt install golang`.
-* [Protocol buffers compiler](https://github.com/protocolbuffers/protobuf/):
-  - Install on OS X with `brew install protobuf`.
+* [Protocol buffers compiler](https://github.com/protocolbuffers/protobuf/) (only if you are going to change `proto` files):
+  - Install on macOS with `brew install protobuf`.
   - Install on Ubuntu with `sudo apt install protobuf-compiler`.
 
 ### Runtime (server and tests) prerequisites
@@ -52,7 +52,7 @@ Tests require runtime dependencies. They can be run with `start-dependencies` ta
 $ make start-dependencies
 ```
 
-Before testing on MacOS, make sure you increase the file handle limit:
+Before testing on macOS, make sure you increase the file handle limit:
 ```bash
 $ ulimit -n 8192
 ```
