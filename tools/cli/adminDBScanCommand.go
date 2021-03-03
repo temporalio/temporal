@@ -32,7 +32,6 @@ import (
 	"os"
 	"time"
 
-	gitgocql "github.com/gocql/gocql"
 	"github.com/urfave/cli"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -485,7 +484,7 @@ func fetchAndVerifyHistoryExists(
 	}
 
 	if err != nil {
-		if err == gitgocql.ErrNotFound {
+		if gocql.IsNotFoundError(err) {
 			corruptedExecutionWriter.Add(&CorruptedExecution{
 				ShardID:     shardID,
 				NamespaceID: executionInfo.NamespaceId,
