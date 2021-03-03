@@ -139,8 +139,16 @@ func NewCassandraCluster(
 	}
 
 	if cfg.ConnectTimeout > 0 {
+		cluster.Timeout = cfg.ConnectTimeout
 		cluster.ConnectTimeout = cfg.ConnectTimeout
+	} else {
+		cluster.Timeout = 10 * time.Second
+		cluster.ConnectTimeout = 10 * time.Second
 	}
+
+	cluster.ProtoVersion = 4
+	cluster.Consistency = cfg.Consistency.GetConsistency()
+	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
 
 	cluster.ReconnectionPolicy = &gocql.ExponentialReconnectionPolicy{
 		MaxRetries:      30,

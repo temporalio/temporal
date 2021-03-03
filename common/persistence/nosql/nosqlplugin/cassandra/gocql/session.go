@@ -25,6 +25,7 @@
 package gocql
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -105,10 +106,6 @@ func initSession(
 	if err != nil {
 		return nil, err
 	}
-	cluster.ProtoVersion = 4
-	cluster.Consistency = config.Consistency.GetConsistency()
-	cluster.SerialConsistency = config.Consistency.GetSerialConsistency()
-	cluster.Timeout = 10 * time.Second
 	return cluster.CreateSession()
 }
 
@@ -158,6 +155,14 @@ func (s *session) MapExecuteBatchCAS(
 		return applied, nil, err
 	}
 	return applied, iter, err
+}
+
+func (s *session) AwaitSchemaAgreement(
+	ctx context.Context,
+) (retError error) {
+	defer func() { s.handleError(retError) }()
+
+	return s.Value.Load().(*gocql.Session).AwaitSchemaAgreement(ctx)
 }
 
 func (s *session) Close() {
