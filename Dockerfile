@@ -3,7 +3,7 @@ ARG TARGET=server
 # Can be used in case a proxy is necessary
 ARG GOPROXY
 
-FROM temporalio/base-builder AS temporal-builder
+FROM temporalio/base-builder:1.0.0 AS temporal-builder
 
 # Making sure that dependency is not touched
 ENV GOFLAGS="-mod=readonly"
