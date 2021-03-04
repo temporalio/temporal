@@ -40,12 +40,12 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/elasticsearch/validator"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/service/history/configs"
 )
@@ -55,7 +55,7 @@ type (
 		namespaceCache                  cache.NamespaceCache
 		config                          *configs.Config
 		maxIDLengthLimit                int
-		searchAttributesValidator       *validator.SearchAttributesValidator
+		searchAttributesValidator       *searchattribute.Validator
 		getDefaultActivityRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
 		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
 	}
@@ -85,7 +85,7 @@ const (
 func newCommandAttrValidator(
 	namespaceCache cache.NamespaceCache,
 	config *configs.Config,
-	searchAttributesValidator *validator.SearchAttributesValidator,
+	searchAttributesValidator *searchattribute.Validator,
 ) *commandAttrValidator {
 	return &commandAttrValidator{
 		namespaceCache:                  namespaceCache,
@@ -451,7 +451,7 @@ func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
 		return serviceerror.NewInvalidArgument("IndexedFields is empty on command.")
 	}
 
-	return v.searchAttributesValidator.ValidateSearchAttributes(attributes.GetSearchAttributes(), namespace)
+	return v.searchAttributesValidator.ValidateAndLog(attributes.GetSearchAttributes(), namespace)
 }
 
 func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
@@ -503,7 +503,7 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	if err != nil {
 		return err
 	}
-	return v.searchAttributesValidator.ValidateSearchAttributes(attributes.GetSearchAttributes(), namespaceEntry.GetInfo().Name)
+	return v.searchAttributesValidator.ValidateAndLog(attributes.GetSearchAttributes(), namespaceEntry.GetInfo().Name)
 }
 
 func (v *commandAttrValidator) validateStartChildExecutionAttributes(
@@ -566,7 +566,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return err
 	}
 
-	if err := v.searchAttributesValidator.ValidateSearchAttributes(attributes.GetSearchAttributes(), targetNamespace); err != nil {
+	if err := v.searchAttributesValidator.ValidateAndLog(attributes.GetSearchAttributes(), targetNamespace); err != nil {
 		return err
 	}
 

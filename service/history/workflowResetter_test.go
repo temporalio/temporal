@@ -143,7 +143,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 		gomock.Any(),
 		resetContext,
 		resetMutableState,
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	err := s.workflowResetter.persistToDB(true, currentWorkflow, resetWorkflow)
 	s.NoError(err)
@@ -192,8 +192,8 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
 		gomock.Any(),
 		transactionPolicyActive,
-	).Return(resetSnapshot, resetEventsSeq, nil).Times(1)
-	resetContext.EXPECT().persistNonFirstWorkflowEvents(resetEventsSeq[0]).Return(resetEventsSize, nil).Times(1)
+	).Return(resetSnapshot, resetEventsSeq, nil)
+	resetContext.EXPECT().persistNonFirstWorkflowEvents(resetEventsSeq[0]).Return(resetEventsSize, nil)
 	resetContext.EXPECT().createWorkflowExecution(
 		resetSnapshot,
 		resetEventsSize,
@@ -201,7 +201,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		persistence.CreateWorkflowModeContinueAsNew,
 		s.currentRunID,
 		currentLastWriteVersion,
-	).Return(nil).Times(1)
+	).Return(nil)
 
 	err := s.workflowResetter.persistToDB(false, currentWorkflow, resetWorkflow)
 	s.NoError(err)
@@ -222,13 +222,13 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 	resetHistorySize := int64(4411)
 	resetMutableState := NewMockmutableState(s.controller)
 
-	shardId := s.mockShard.GetShardID()
+	shardID := s.mockShard.GetShardID()
 	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID, s.workflowID, s.resetRunID),
-		ShardID:         &shardId,
-	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil).Times(1)
+		ShardID:         shardID,
+	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil)
 
 	s.mockStateRebuilder.EXPECT().rebuild(
 		ctx,
@@ -248,7 +248,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		),
 		resetBranchToken,
 		resetRequestID,
-	).Return(resetMutableState, resetHistorySize, nil).Times(1)
+	).Return(resetMutableState, resetHistorySize, nil)
 
 	resetWorkflow, err := s.workflowResetter.replayResetWorkflow(
 		ctx,
@@ -294,7 +294,7 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 		failure.NewResetWorkflowFailure(terminateReason, activity1.LastHeartbeatDetails),
 		enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
 		activity1.StartedIdentity,
-	).Return(&historypb.HistoryEvent{}, nil).Times(1)
+	).Return(&historypb.HistoryEvent{}, nil)
 
 	err := s.workflowResetter.failInflightActivity(mutableState, terminateReason)
 	s.NoError(err)
@@ -306,13 +306,13 @@ func (s *workflowResetterSuite) TestGenerateBranchToken() {
 
 	resetBranchToken := []byte("some random reset branch token")
 
-	shardId := s.mockShard.GetShardID()
+	shardID := s.mockShard.GetShardID()
 	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID, s.workflowID, s.resetRunID),
-		ShardID:         &shardId,
-	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil).Times(1)
+		ShardID:         shardID,
+	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil)
 
 	newBranchToken, err := s.workflowResetter.forkAndGenerateBranchToken(
 		s.namespaceID, s.workflowID, baseBranchToken, baseNodeID, s.resetRunID,
@@ -333,7 +333,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 	mutableState := NewMockmutableState(s.controller)
 
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
-	mutableState.EXPECT().GetInFlightWorkflowTask().Return(workflowTask, true).Times(1)
+	mutableState.EXPECT().GetInFlightWorkflowTask().Return(workflowTask, true)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		workflowTask.ScheduleID,
 		workflowTask.StartedID,
@@ -344,14 +344,14 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		"",
 		"",
 		int64(0),
-	).Return(&historypb.HistoryEvent{}, nil).Times(1)
-	mutableState.EXPECT().FlushBufferedEvents().Return(nil).Times(1)
+	).Return(&historypb.HistoryEvent{}, nil)
+	mutableState.EXPECT().FlushBufferedEvents().Return(nil)
 	mutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
 		nextEventID,
 		terminateReason,
 		nil,
 		identityHistoryService,
-	).Return(&historypb.HistoryEvent{}, nil).Times(1)
+	).Return(&historypb.HistoryEvent{}, nil)
 
 	err := s.workflowResetter.terminateWorkflow(mutableState, terminateReason)
 	s.NoError(err)
@@ -418,18 +418,18 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 	}
 
 	baseEvents := []*historypb.HistoryEvent{baseEvent1, baseEvent2, baseEvent3, baseEvent4}
-	shardId := s.mockShard.GetShardID()
+	shardID := s.mockShard.GetShardID()
 	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   baseBranchToken,
 		MinEventID:    baseFirstEventID,
 		MaxEventID:    baseNextEventID,
 		PageSize:      nDCDefaultPageSize,
 		NextPageToken: nil,
-		ShardID:       &shardId,
+		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		History:       []*historypb.History{{Events: baseEvents}},
 		NextPageToken: nil,
-	}, nil).Times(1)
+	}, nil)
 
 	newEvents := []*historypb.HistoryEvent{newEvent1, newEvent2, newEvent3, newEvent4, newEvent5}
 	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
@@ -438,17 +438,17 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 		MaxEventID:    newNextEventID,
 		PageSize:      nDCDefaultPageSize,
 		NextPageToken: nil,
-		ShardID:       &shardId,
+		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		History:       []*historypb.History{{Events: newEvents}},
 		NextPageToken: nil,
-	}, nil).Times(1)
+	}, nil)
 
 	resetContext := NewMockworkflowExecutionContext(s.controller)
-	resetContext.EXPECT().lock(gomock.Any()).Return(nil).Times(1)
-	resetContext.EXPECT().unlock().Times(1)
+	resetContext.EXPECT().lock(gomock.Any()).Return(nil)
+	resetContext.EXPECT().unlock()
 	resetMutableState := NewMockmutableState(s.controller)
-	resetContext.EXPECT().loadWorkflowExecution().Return(resetMutableState, nil).Times(1)
+	resetContext.EXPECT().loadWorkflowExecution().Return(resetMutableState, nil)
 	resetMutableState.EXPECT().GetNextEventID().Return(newNextEventID).AnyTimes()
 	resetMutableState.EXPECT().GetCurrentBranchToken().Return(newBranchToken, nil).AnyTimes()
 	resetContextCacheKey := definition.NewWorkflowIdentifier(s.namespaceID, s.workflowID, newRunID)
@@ -503,18 +503,18 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 		}},
 	}
 	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5}
-	shardId := s.mockShard.GetShardID()
+	shardID := s.mockShard.GetShardID()
 	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
 		PageSize:      nDCDefaultPageSize,
 		NextPageToken: nil,
-		ShardID:       &shardId,
+		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		History:       []*historypb.History{{Events: events}},
 		NextPageToken: nil,
-	}, nil).Times(1)
+	}, nil)
 
 	mutableState := NewMockmutableState(s.controller)
 
@@ -564,7 +564,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 				attr.GetSignalName(),
 				attr.GetInput(),
 				attr.GetIdentity(),
-			).Return(&historypb.HistoryEvent{}, nil).Times(1)
+			).Return(&historypb.HistoryEvent{}, nil)
 		}
 	}
 
@@ -607,31 +607,31 @@ func (s *workflowResetterSuite) TestPagination() {
 	history := append(history1, history2...)
 	pageToken := []byte("some random token")
 
-	shardId := s.mockShard.GetShardID()
+	shardID := s.mockShard.GetShardID()
 	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
 		PageSize:      nDCDefaultPageSize,
 		NextPageToken: nil,
-		ShardID:       &shardId,
+		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		History:       history1,
 		NextPageToken: pageToken,
 		Size:          12345,
-	}, nil).Times(1)
+	}, nil)
 	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
 		PageSize:      nDCDefaultPageSize,
 		NextPageToken: pageToken,
-		ShardID:       &shardId,
+		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
 		History:       history2,
 		NextPageToken: nil,
 		Size:          67890,
-	}, nil).Times(1)
+	}, nil)
 
 	paginationFn := s.workflowResetter.getPaginationFn(firstEventID, nextEventID, branchToken)
 	iter := collection.NewPagingIterator(paginationFn)

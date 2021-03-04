@@ -95,21 +95,21 @@ GOCOVERPKG_ARG := -coverpkg="$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/..
 ##### Tools #####
 update-checkers:
 	@printf $(COLOR) "Install/update check tools..."
-	cd && GO111MODULE=on go get golang.org/x/tools/cmd/goimports
-	cd && GO111MODULE=on go get golang.org/x/lint/golint
-	cd && GO111MODULE=on go get honnef.co/go/tools/cmd/staticcheck@v0.1.0
-	cd && GO111MODULE=on go get github.com/kisielk/errcheck@v1.4.0
-	cd && GO111MODULE=on go get github.com/googleapis/api-linter/cmd/api-linter@v1.10.0
-	cd && GO111MODULE=on go get github.com/bufbuild/buf/cmd/buf@v0.33.0
+	@go install golang.org/x/tools/cmd/goimports
+	@go install golang.org/x/lint/golint
+	@go install honnef.co/go/tools/cmd/staticcheck@v0.1.0
+	@go install github.com/kisielk/errcheck@v1.4.0
+	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.10.0
+	@go install github.com/bufbuild/buf/cmd/buf@v0.33.0
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
-	cd && GO111MODULE=on go get github.com/golang/mock/mockgen@1fe605df5e5f07f453dc4f594cc3510c914dbdee
+	@go install github.com/golang/mock/mockgen@1fe605df5e5f07f453dc4f594cc3510c914dbdee
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
 	GO111MODULE=off go get github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
-	cd && GO111MODULE=on go get google.golang.org/grpc@v1.34.0
+	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.1.0
 
 update-tools: update-checkers update-mockgen update-proto-plugins
 
@@ -246,7 +246,7 @@ clean-test-results:
 
 build-test:
 	@printf $(COLOR) "Build tests..."
-	@go test -exec="true" -count=0 $(TEST_DIRS)
+	@go test -exec="true" -count=0 -tags=esintegration $(TEST_DIRS)
 
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
@@ -306,7 +306,7 @@ coverage-report: $(SUMMARY_COVER_PROFILE)
 
 ci-coverage-report: $(SUMMARY_COVER_PROFILE) coverage-report
 	@printf $(COLOR) "Generate Coveralls report from $(SUMMARY_COVER_PROFILE)..."
-	cd && GO111MODULE=on go get github.com/mattn/goveralls@v0.0.7
+	go install github.com/mattn/goveralls@v0.0.7
 	@goveralls -coverprofile=$(SUMMARY_COVER_PROFILE) -service=buildkite || (printf $(RED) "Generating report for Coveralls (goveralls) failed."; exit 1)
 
 ##### Schema #####

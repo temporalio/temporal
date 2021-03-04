@@ -73,18 +73,17 @@ func (s *handlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	handlerTestMetrics = metrics.NewMockClient(s.controller)
 	handlerTestMetrics.EXPECT().StartTimer(gomock.Any(), gomock.Any()).Return(metrics.NopStopwatch()).AnyTimes()
-	handlerTestLogger = &log.MockLogger{}
-	handlerTestLogger.On("WithTags", mock.Anything).Return(handlerTestLogger)
+	handlerTestLogger = log.NewMockLogger(s.controller)
+	handlerTestLogger.EXPECT().WithTags(gomock.Any()).Return(handlerTestLogger).AnyTimes()
 }
 
 func (s *handlerSuite) TearDownTest() {
-	handlerTestLogger.AssertExpectations(s.T())
 }
 
 func (s *handlerSuite) TestHandleHistoryRequest_UploadFails_NonRetryableError() {
 	handlerTestMetrics.EXPECT().IncCounter(metrics.ArchiverScope, metrics.ArchiverUploadFailedAllRetriesCount)
 	handlerTestMetrics.EXPECT().IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount)
-	handlerTestLogger.On("Error", mock.Anything, mock.Anything).Once()
+	handlerTestLogger.EXPECT().Error(gomock.Any(), gomock.Any())
 
 	env := s.NewTestWorkflowEnvironment()
 	s.registerWorkflows(env)
@@ -100,7 +99,7 @@ func (s *handlerSuite) TestHandleHistoryRequest_UploadFails_NonRetryableError() 
 func (s *handlerSuite) TestHandleHistoryRequest_UploadFails_ExpireRetryTimeout() {
 	handlerTestMetrics.EXPECT().IncCounter(metrics.ArchiverScope, metrics.ArchiverUploadFailedAllRetriesCount)
 	handlerTestMetrics.EXPECT().IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteSuccessCount)
-	handlerTestLogger.On("Error", mock.Anything, mock.Anything).Once()
+	handlerTestLogger.EXPECT().Error(gomock.Any(), gomock.Any())
 
 	timeoutErr := temporal.NewTimeoutError(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, nil)
 	env := s.NewTestWorkflowEnvironment()
@@ -132,7 +131,7 @@ func (s *handlerSuite) TestHandleHistoryRequest_UploadSuccess() {
 func (s *handlerSuite) TestHandleHistoryRequest_DeleteFails_NonRetryableError() {
 	handlerTestMetrics.EXPECT().IncCounter(metrics.ArchiverScope, metrics.ArchiverUploadSuccessCount)
 	handlerTestMetrics.EXPECT().IncCounter(metrics.ArchiverScope, metrics.ArchiverDeleteFailedAllRetriesCount)
-	handlerTestLogger.On("Error", mock.Anything, mock.Anything).Once()
+	handlerTestLogger.EXPECT().Error(gomock.Any(), gomock.Any())
 
 	env := s.NewTestWorkflowEnvironment()
 	s.registerWorkflows(env)
@@ -171,7 +170,7 @@ func (s *handlerSuite) TestHandleHistoryRequest_DeleteFailsThenSucceeds() {
 
 func (s *handlerSuite) TestHandleVisibilityRequest_Fail() {
 	handlerTestMetrics.EXPECT().IncCounter(metrics.ArchiverScope, metrics.ArchiverHandleVisibilityFailedAllRetiresCount)
-	handlerTestLogger.On("Error", mock.Anything, mock.Anything).Once()
+	handlerTestLogger.EXPECT().Error(gomock.Any(), gomock.Any())
 
 	env := s.NewTestWorkflowEnvironment()
 	s.registerWorkflows(env)

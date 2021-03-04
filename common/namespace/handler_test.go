@@ -305,7 +305,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 			ClusterName: clusterName,
 		})
 	}
-	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil).Times(1)
+	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil)
 	registerResp, err = s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace2,
 		Description:                      description2,

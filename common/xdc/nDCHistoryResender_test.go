@@ -183,7 +183,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		VersionHistory: &historyspb.VersionHistory{
 			Items: versionHistoryItems,
 		},
-	}, nil).Times(1)
+	}, nil)
 
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(
 		gomock.Any(),
@@ -205,7 +205,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		VersionHistory: &historyspb.VersionHistory{
 			Items: versionHistoryItems,
 		},
-	}, nil).Times(1)
+	}, nil)
 
 	s.mockHistoryClient.EXPECT().ReplicateEventsV2(
 		gomock.Any(),
@@ -282,7 +282,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest() {
 		VersionHistoryItems: []*historyspb.VersionHistoryItem{item},
 	}
 
-	s.mockHistoryClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil, nil).Times(1)
+	s.mockHistoryClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil, nil)
 	err := s.rereplicator.sendReplicationRawRequest(context.Background(), request)
 	s.Nil(err)
 }
@@ -317,7 +317,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 		common.EmptyVersion,
 	)
 
-	s.mockHistoryClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil, retryErr).Times(1)
+	s.mockHistoryClient.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil, retryErr)
 	err := s.rereplicator.sendReplicationRawRequest(context.Background(), request)
 	s.Equal(retryErr, err)
 }
@@ -352,7 +352,7 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 		EndEventVersion:   version,
 		MaximumPageSize:   pageSize,
 		NextPageToken:     nextTokenIn,
-	}).Return(response, nil).Times(1)
+	}).Return(response, nil)
 
 	out, err := s.rereplicator.getHistory(
 		context.Background(),

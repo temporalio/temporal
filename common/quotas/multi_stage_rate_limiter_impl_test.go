@@ -117,7 +117,7 @@ func (s *multiStageRateLimiterSuite) TestAllowN_NonSuccess() {
 	numToken := 2
 
 	s.firstReservation.EXPECT().OK().Return(false).AnyTimes()
-	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation).Times(1)
+	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation)
 
 	result := s.rateLimiter.AllowN(now, numToken)
 	s.False(result)
@@ -129,12 +129,12 @@ func (s *multiStageRateLimiterSuite) TestAllowN_SomeSuccess_Case1() {
 
 	s.firstReservation.EXPECT().OK().Return(true).AnyTimes()
 	s.firstReservation.EXPECT().DelayFrom(now).Return(time.Duration(0)).AnyTimes()
-	s.firstReservation.EXPECT().CancelAt(now).Times(1)
-	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation).Times(1)
+	s.firstReservation.EXPECT().CancelAt(now)
+	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation)
 
 	s.secondReservation.EXPECT().OK().Return(false).AnyTimes()
 	s.secondReservation.EXPECT().DelayFrom(now).Return(time.Duration(0)).AnyTimes()
-	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation).Times(1)
+	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.AllowN(now, numToken)
 	s.False(result)
@@ -146,13 +146,13 @@ func (s *multiStageRateLimiterSuite) TestAllowN_SomeSuccess_Case2() {
 
 	s.firstReservation.EXPECT().OK().Return(true).AnyTimes()
 	s.firstReservation.EXPECT().DelayFrom(now).Return(time.Duration(0)).AnyTimes()
-	s.firstReservation.EXPECT().CancelAt(now).Times(1)
-	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation).Times(1)
+	s.firstReservation.EXPECT().CancelAt(now)
+	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation)
 
 	s.secondReservation.EXPECT().OK().Return(true).AnyTimes()
 	s.secondReservation.EXPECT().DelayFrom(now).Return(time.Duration(1)).AnyTimes()
-	s.secondReservation.EXPECT().CancelAt(now).Times(1)
-	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation).Times(1)
+	s.secondReservation.EXPECT().CancelAt(now)
+	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.AllowN(now, numToken)
 	s.False(result)
@@ -164,11 +164,11 @@ func (s *multiStageRateLimiterSuite) TestAllowN_AllSuccess() {
 
 	s.firstReservation.EXPECT().OK().Return(true).AnyTimes()
 	s.firstReservation.EXPECT().DelayFrom(now).Return(time.Duration(0)).AnyTimes()
-	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation).Times(1)
+	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation)
 
 	s.secondReservation.EXPECT().OK().Return(true).AnyTimes()
 	s.secondReservation.EXPECT().DelayFrom(now).Return(time.Duration(0)).AnyTimes()
-	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation).Times(1)
+	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.AllowN(now, numToken)
 	s.True(result)
@@ -179,7 +179,7 @@ func (s *multiStageRateLimiterSuite) TestReserveN_NonSuccess() {
 	numToken := 4
 
 	s.firstReservation.EXPECT().OK().Return(false).AnyTimes()
-	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation).Times(1)
+	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation)
 
 	result := s.rateLimiter.ReserveN(now, numToken)
 	s.Equal(&MultiStageReservationImpl{
@@ -193,11 +193,11 @@ func (s *multiStageRateLimiterSuite) TestReserveN_SomeSuccess() {
 	numToken := 4
 
 	s.firstReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.firstReservation.EXPECT().CancelAt(now).Times(1)
-	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation).Times(1)
+	s.firstReservation.EXPECT().CancelAt(now)
+	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation)
 
 	s.secondReservation.EXPECT().OK().Return(false).AnyTimes()
-	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation).Times(1)
+	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.ReserveN(now, numToken)
 	s.Equal(&MultiStageReservationImpl{
@@ -211,10 +211,10 @@ func (s *multiStageRateLimiterSuite) TestReserveN_AllSuccess() {
 	numToken := 4
 
 	s.firstReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation).Times(1)
+	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation)
 
 	s.secondReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation).Times(1)
+	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.ReserveN(now, numToken)
 	s.Equal(&MultiStageReservationImpl{
@@ -238,15 +238,15 @@ func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithExpiration_Error()
 
 	firstReservationDelay := 2 * time.Second
 	secondReservationDelay := 3 * time.Second
-	s.firstReservation.EXPECT().DelayFrom(gomock.Any()).Return(firstReservationDelay).Times(1)
-	s.secondReservation.EXPECT().DelayFrom(gomock.Any()).Return(secondReservationDelay).Times(1)
-	s.firstReservation.EXPECT().CancelAt(gomock.Any()).Times(1)
-	s.secondReservation.EXPECT().CancelAt(gomock.Any()).Times(1)
+	s.firstReservation.EXPECT().DelayFrom(gomock.Any()).Return(firstReservationDelay)
+	s.secondReservation.EXPECT().DelayFrom(gomock.Any()).Return(secondReservationDelay)
+	s.firstReservation.EXPECT().CancelAt(gomock.Any())
+	s.secondReservation.EXPECT().CancelAt(gomock.Any())
 
 	s.firstReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.firstRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.firstReservation).Times(1)
+	s.firstRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.firstReservation)
 	s.secondReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.secondRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.secondReservation).Times(1)
+	s.secondRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.WaitN(ctx, numToken)
 	s.Error(result)
@@ -263,15 +263,15 @@ func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithExpiration_Cancell
 
 	firstReservationDelay := 20 * time.Second
 	secondReservationDelay := 30 * time.Second
-	s.firstReservation.EXPECT().DelayFrom(gomock.Any()).Return(firstReservationDelay).Times(1)
-	s.secondReservation.EXPECT().DelayFrom(gomock.Any()).Return(secondReservationDelay).Times(1)
-	s.firstReservation.EXPECT().CancelAt(gomock.Any()).Times(1)
-	s.secondReservation.EXPECT().CancelAt(gomock.Any()).Times(1)
+	s.firstReservation.EXPECT().DelayFrom(gomock.Any()).Return(firstReservationDelay)
+	s.secondReservation.EXPECT().DelayFrom(gomock.Any()).Return(secondReservationDelay)
+	s.firstReservation.EXPECT().CancelAt(gomock.Any())
+	s.secondReservation.EXPECT().CancelAt(gomock.Any())
 
 	s.firstReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.firstRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.firstReservation).Times(1)
+	s.firstRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.firstReservation)
 	s.secondReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.secondRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.secondReservation).Times(1)
+	s.secondRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.WaitN(ctx, numToken)
 	s.Error(result)
@@ -283,13 +283,13 @@ func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithExpiration_NoError
 
 	firstReservationDelay := 2 * time.Second
 	secondReservationDelay := 3 * time.Second
-	s.firstReservation.EXPECT().DelayFrom(gomock.Any()).Return(firstReservationDelay).Times(1)
-	s.secondReservation.EXPECT().DelayFrom(gomock.Any()).Return(secondReservationDelay).Times(1)
+	s.firstReservation.EXPECT().DelayFrom(gomock.Any()).Return(firstReservationDelay)
+	s.secondReservation.EXPECT().DelayFrom(gomock.Any()).Return(secondReservationDelay)
 
 	s.firstReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.firstRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.firstReservation).Times(1)
+	s.firstRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.firstReservation)
 	s.secondReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.secondRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.secondReservation).Times(1)
+	s.secondRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.WaitN(ctx, numToken)
 	s.NoError(result)
@@ -301,13 +301,13 @@ func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithoutExpiration() {
 
 	firstReservationDelay := 2 * time.Second
 	secondReservationDelay := 3 * time.Second
-	s.firstReservation.EXPECT().DelayFrom(gomock.Any()).Return(firstReservationDelay).Times(1)
-	s.secondReservation.EXPECT().DelayFrom(gomock.Any()).Return(secondReservationDelay).Times(1)
+	s.firstReservation.EXPECT().DelayFrom(gomock.Any()).Return(firstReservationDelay)
+	s.secondReservation.EXPECT().DelayFrom(gomock.Any()).Return(secondReservationDelay)
 
 	s.firstReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.firstRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.firstReservation).Times(1)
+	s.firstRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.firstReservation)
 	s.secondReservation.EXPECT().OK().Return(true).AnyTimes()
-	s.secondRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.secondReservation).Times(1)
+	s.secondRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.WaitN(ctx, numToken)
 	s.NoError(result)
@@ -366,8 +366,8 @@ func (s *multiStageReservationSuite) Test_OK_OK() {
 
 func (s *multiStageReservationSuite) Test_OK_CancelAt() {
 	now := time.Now()
-	s.firstReservation.EXPECT().CancelAt(now).Times(1)
-	s.secondReservation.EXPECT().CancelAt(now).Times(1)
+	s.firstReservation.EXPECT().CancelAt(now)
+	s.secondReservation.EXPECT().CancelAt(now)
 	reservation := NewMultiStageReservation(true, []Reservation{s.firstReservation, s.secondReservation})
 
 	reservation.CancelAt(now)
@@ -377,8 +377,8 @@ func (s *multiStageReservationSuite) Test_OK_DelayFrom() {
 	now := time.Now()
 	firstReservationDelay := time.Second
 	secondReservationDelay := time.Minute
-	s.firstReservation.EXPECT().DelayFrom(now).Return(firstReservationDelay).Times(1)
-	s.secondReservation.EXPECT().DelayFrom(now).Return(secondReservationDelay).Times(1)
+	s.firstReservation.EXPECT().DelayFrom(now).Return(firstReservationDelay)
+	s.secondReservation.EXPECT().DelayFrom(now).Return(secondReservationDelay)
 	reservation := NewMultiStageReservation(true, []Reservation{s.firstReservation, s.secondReservation})
 
 	result := reservation.DelayFrom(now)

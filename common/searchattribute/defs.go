@@ -22,14 +22,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package definition
+package searchattribute
 
 import (
 	enumspb "go.temporal.io/api/enums/v1"
 )
 
-// valid indexed fields on ES
 const (
+	// Indexed fields on ES.
 	NamespaceID     = "NamespaceId"
 	WorkflowID      = "WorkflowId"
 	RunID           = "RunId"
@@ -46,6 +46,8 @@ const (
 
 	VisibilityTaskKey = "VisibilityTaskKey"
 
+	// Attr is prefix of custom search attributes.
+	Attr                  = "Attr"
 	CustomStringField     = "CustomStringField"
 	CustomKeywordField    = "CustomKeywordField"
 	CustomIntField        = "CustomIntField"
@@ -55,21 +57,34 @@ const (
 	TemporalChangeVersion = "TemporalChangeVersion"
 	CustomNamespace       = "CustomNamespace"
 	Operator              = "Operator"
-)
 
-// valid non-indexed fields on ES
-const (
+	// Valid non-indexed fields on ES.
 	Memo = "Memo"
 )
 
-// Attr is prefix of custom search attributes
-const Attr = "Attr"
+var (
+	// systemTypeMap is internal system search attributes.
+	systemTypeMap = map[string]enumspb.IndexedValueType{
+		NamespaceID:     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		WorkflowID:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		RunID:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		WorkflowType:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		StartTime:       enumspb.INDEXED_VALUE_TYPE_INT,
+		ExecutionTime:   enumspb.INDEXED_VALUE_TYPE_INT,
+		CloseTime:       enumspb.INDEXED_VALUE_TYPE_INT,
+		ExecutionStatus: enumspb.INDEXED_VALUE_TYPE_INT,
+		HistoryLength:   enumspb.INDEXED_VALUE_TYPE_INT,
+		TaskQueue:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		KafkaKey:        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		Encoding:        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	}
 
-// defaultIndexedKeys defines all searchable keys
-var defaultIndexedKeys = createDefaultIndexedKeys()
+	// defaultTypeMap defines all search attributes.
+	defaultTypeMap = newDefaultTypeMap()
+)
 
-func createDefaultIndexedKeys() map[string]interface{} {
-	defaultIndexedKeys := map[string]interface{}{
+func newDefaultTypeMap() map[string]interface{} {
+	result := map[string]interface{}{
 		CustomStringField:     enumspb.INDEXED_VALUE_TYPE_STRING,
 		CustomKeywordField:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		CustomIntField:        enumspb.INDEXED_VALUE_TYPE_INT,
@@ -81,35 +96,19 @@ func createDefaultIndexedKeys() map[string]interface{} {
 		CustomNamespace:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		Operator:              enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
-	for k, v := range systemIndexedKeys {
-		defaultIndexedKeys[k] = v
+	for k, v := range systemTypeMap {
+		result[k] = v
 	}
-	return defaultIndexedKeys
+	return result
 }
 
-// GetDefaultIndexedKeys return default valid indexed keys
-func GetDefaultIndexedKeys() map[string]interface{} {
-	return defaultIndexedKeys
+// GetDefaultTypeMap return default valid search attributes.
+func GetDefaultTypeMap() map[string]interface{} {
+	return defaultTypeMap
 }
 
-// systemIndexedKeys is Temporal created visibility keys
-var systemIndexedKeys = map[string]interface{}{
-	NamespaceID:     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-	WorkflowID:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-	RunID:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-	WorkflowType:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-	StartTime:       enumspb.INDEXED_VALUE_TYPE_INT,
-	ExecutionTime:   enumspb.INDEXED_VALUE_TYPE_INT,
-	CloseTime:       enumspb.INDEXED_VALUE_TYPE_INT,
-	ExecutionStatus: enumspb.INDEXED_VALUE_TYPE_INT,
-	HistoryLength:   enumspb.INDEXED_VALUE_TYPE_INT,
-	TaskQueue:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-	KafkaKey:        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-	Encoding:        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-}
-
-// IsSystemIndexedKey return true is key is system added
-func IsSystemIndexedKey(key string) bool {
-	_, ok := systemIndexedKeys[key]
+// IsSystem return true if search attribute is system.
+func IsSystem(saName string) bool {
+	_, ok := systemTypeMap[saName]
 	return ok
 }

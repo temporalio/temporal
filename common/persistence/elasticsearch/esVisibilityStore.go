@@ -48,7 +48,6 @@ import (
 	indexerspb "go.temporal.io/server/api/indexer/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/definition"
 	es "go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -196,8 +195,8 @@ func (v *esVisibilityStore) RecordWorkflowExecutionClosedV2(request *p.InternalR
 	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
 	doc := v.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
 
-	doc[definition.CloseTime] = request.CloseTimestamp
-	doc[definition.HistoryLength] = request.HistoryLength
+	doc[searchattribute.CloseTime] = request.CloseTimestamp
+	doc[searchattribute.HistoryLength] = request.HistoryLength
 
 	return v.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
 }
@@ -287,20 +286,20 @@ func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest *es.BulkableReques
 
 func (v *esVisibilityStore) generateESDoc(request *p.InternalVisibilityRequestBase, visibilityTaskKey string) map[string]interface{} {
 	doc := map[string]interface{}{
-		definition.VisibilityTaskKey: visibilityTaskKey,
-		definition.NamespaceID:       request.NamespaceID,
-		definition.WorkflowID:        request.WorkflowID,
-		definition.RunID:             request.RunID,
-		definition.WorkflowType:      request.WorkflowTypeName,
-		definition.StartTime:         request.StartTimestamp,
-		definition.ExecutionTime:     request.ExecutionTimestamp,
-		definition.ExecutionStatus:   request.Status,
-		definition.TaskQueue:         request.TaskQueue,
+		searchattribute.VisibilityTaskKey: visibilityTaskKey,
+		searchattribute.NamespaceID:       request.NamespaceID,
+		searchattribute.WorkflowID:        request.WorkflowID,
+		searchattribute.RunID:             request.RunID,
+		searchattribute.WorkflowType:      request.WorkflowTypeName,
+		searchattribute.StartTime:         request.StartTimestamp,
+		searchattribute.ExecutionTime:     request.ExecutionTimestamp,
+		searchattribute.ExecutionStatus:   request.Status,
+		searchattribute.TaskQueue:         request.TaskQueue,
 	}
 
 	if len(request.Memo.GetData()) > 0 {
-		doc[definition.Memo] = request.Memo.GetData()
-		doc[definition.Encoding] = request.Memo.GetEncodingType().String()
+		doc[searchattribute.Memo] = request.Memo.GetData()
+		doc[searchattribute.Encoding] = request.Memo.GetEncodingType().String()
 	}
 
 	typeMap, err := searchattribute.BuildTypeMap(v.config.ValidSearchAttributes)
@@ -314,7 +313,7 @@ func (v *esVisibilityStore) generateESDoc(request *p.InternalVisibilityRequestBa
 		v.logger.Error("Unable to decode search attributes.", tag.Error(err))
 		v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
-	doc[definition.Attr] = attr
+	doc[searchattribute.Attr] = attr
 
 	return doc
 }
@@ -765,7 +764,7 @@ func (v *esVisibilityStore) processSortField(dsl *fastjson.Value) (string, error
 
 	if !isSorted { // set default sorting by StartTime desc
 		dsl.Set(dslFieldSort, fastjson.MustParse(jsonSortForOpen))
-		sortField = definition.StartTime
+		sortField = searchattribute.StartTime
 	} else { // user provide sorting using order by
 		// sort validation on length
 		if len(dsl.GetArray(dslFieldSort)) > 1 {
@@ -777,7 +776,7 @@ func (v *esVisibilityStore) processSortField(dsl *fastjson.Value) (string, error
 			sortField = string(k)
 		})
 		if v.getFieldType(sortField) == enumspb.INDEXED_VALUE_TYPE_STRING {
-			return "", errors.New("not able to sort by IndexedValueTypeString field, use IndexedValueTypeKeyword field")
+			return "", errors.New("unable to sort by field of String type, use field of type Keyword")
 		}
 		// add RunID as tie-breaker
 		dsl.Get(dslFieldSort).Set("1", fastjson.MustParse(jsonSortWithTieBreaker))
@@ -787,8 +786,8 @@ func (v *esVisibilityStore) processSortField(dsl *fastjson.Value) (string, error
 }
 
 func (v *esVisibilityStore) getFieldType(fieldName string) enumspb.IndexedValueType {
-	if strings.HasPrefix(fieldName, definition.Attr) {
-		fieldName = fieldName[len(definition.Attr)+1:] // remove prefix
+	if strings.HasPrefix(fieldName, searchattribute.Attr) {
+		fieldName = fieldName[len(searchattribute.Attr)+1:] // remove prefix
 	}
 	typeMap, err := searchattribute.BuildTypeMap(v.config.ValidSearchAttributes)
 	if err != nil {

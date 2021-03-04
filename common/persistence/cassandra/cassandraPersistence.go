@@ -29,7 +29,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gocql/gocql"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -39,6 +38,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -52,10 +52,6 @@ import (
 // R represents row type in executions table, valid values are:
 // R = {Shard = 1, Execution = 2, Transfer = 3, Timer = 4, Replication = 5}
 const (
-	// ProtocolVersion is the protocol version used to communicate with Cassandra cluster
-	ProtocolVersion = 4
-
-	defaultSessionTimeout = 10 * time.Second
 	// Special Namespaces related constants
 	emptyNamespaceID = "10000000-0000-f000-f000-000000000000"
 	// Special Run IDs
@@ -711,7 +707,7 @@ var (
 
 type (
 	cassandraStore struct {
-		session *gocql.Session
+		session gocql.Session
 		logger  log.Logger
 	}
 
@@ -727,7 +723,7 @@ var _ p.ExecutionStore = (*cassandraPersistence)(nil)
 
 // newShardPersistence is used to create an instance of ShardManager implementation
 func newShardPersistence(
-	session *gocql.Session,
+	session gocql.Session,
 	clusterName string,
 	logger log.Logger,
 ) (p.ShardStore, error) {
@@ -741,7 +737,7 @@ func newShardPersistence(
 // NewWorkflowExecutionPersistence is used to create an instance of workflowExecutionManager implementation
 func NewWorkflowExecutionPersistence(
 	shardID int32,
-	session *gocql.Session,
+	session gocql.Session,
 	logger log.Logger,
 ) (p.ExecutionStore, error) {
 	return &cassandraPersistence{
@@ -752,7 +748,7 @@ func NewWorkflowExecutionPersistence(
 
 // newTaskPersistence is used to create an instance of TaskManager implementation
 func newTaskPersistence(
-	session *gocql.Session,
+	session gocql.Session,
 	logger log.Logger,
 ) (p.TaskStore, error) {
 	return &cassandraPersistence{
@@ -782,7 +778,7 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 	data, err := serialization.ShardInfoToBlob(shardInfo)
 
 	if err != nil {
-		return convertCommonErrors("CreateShard", err)
+		return gocql.ConvertError("CreateShard", err)
 	}
 
 	query := d.session.Query(templateCreateShardQuery,
@@ -800,7 +796,7 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
-		return convertCommonErrors("CreateShard", err)
+		return gocql.ConvertError("CreateShard", err)
 	}
 
 	if !applied {
@@ -831,13 +827,13 @@ func (d *cassandraPersistence) GetShard(request *p.GetShardRequest) (*p.GetShard
 	var data []byte
 	var encoding string
 	if err := query.Scan(&data, &encoding); err != nil {
-		return nil, convertCommonErrors("GetShard", err)
+		return nil, gocql.ConvertError("GetShard", err)
 	}
 
 	info, err := serialization.ShardInfoFromBlob(data, encoding, d.currentClusterName)
 
 	if err != nil {
-		return nil, convertCommonErrors("GetShard", err)
+		return nil, gocql.ConvertError("GetShard", err)
 	}
 
 	return &p.GetShardResponse{ShardInfo: info}, nil
@@ -849,7 +845,7 @@ func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error 
 	data, err := serialization.ShardInfoToBlob(shardInfo)
 
 	if err != nil {
-		return convertCommonErrors("UpdateShard", err)
+		return gocql.ConvertError("UpdateShard", err)
 	}
 
 	query := d.session.Query(templateUpdateShardQuery,
@@ -868,7 +864,7 @@ func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error 
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
-		return convertCommonErrors("UpdateShard", err)
+		return gocql.ConvertError("UpdateShard", err)
 	}
 
 	if !applied {
@@ -949,23 +945,12 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 
 	previous := make(map[string]interface{})
 	applied, iter, err := d.session.MapExecuteBatchCAS(batch, previous)
-	defer func() {
-		if iter != nil {
-			_ = iter.Close()
-		}
-	}()
-
 	if err != nil {
-		if isTimeoutError(err) {
-			// Write may have succeeded, but we don't know
-			// return this info to the caller so they have the option of trying to find out by executing a read
-			return nil, &p.TimeoutError{Msg: fmt.Sprintf("CreateWorkflowExecution timed out. Error: %v", err)}
-		} else if isThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("CreateWorkflowExecution operation failed. Error: %v", err))
-		}
-
-		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateWorkflowExecution operation failed. Error: %v", err))
+		return nil, gocql.ConvertError("CreateWorkflowExecution", err)
 	}
+	defer func() {
+		_ = iter.Close()
+	}()
 
 	if !applied {
 		// There can be two reasons why the query does not get applied. Either the RangeID has changed, or
@@ -977,7 +962,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 				// This should never happen, as all our rows have the type field.
 				break GetFailureReasonLoop
 			}
-			runID := previous["run_id"].(gocql.UUID).String()
+			runID := gocql.UUIDToString(previous["run_id"])
 
 			if rowType == rowTypeShard {
 				if rangeID, ok := previous["range_id"].(int64); ok && rangeID != request.RangeID {
@@ -1025,7 +1010,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 					return nil, &p.CurrentWorkflowConditionFailedError{Msg: msg}
 				}
 
-				if prevRunID := previous["current_run_id"].(gocql.UUID).String(); prevRunID != request.PreviousRunID {
+				if prevRunID := gocql.UUIDToString(previous["current_run_id"]); prevRunID != request.PreviousRunID {
 					// currentRunID on previous run has been changed, return to caller to handle
 					msg := fmt.Sprintf("Workflow execution creation condition failed by mismatch runID. WorkflowId: %v, Expected Current RunId: %v, Actual Current RunId: %v",
 						newWorkflow.ExecutionInfo.WorkflowId, request.PreviousRunID, prevRunID)
@@ -1104,7 +1089,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 
 	result := make(map[string]interface{})
 	if err := query.MapScan(result); err != nil {
-		return nil, convertCommonErrors("GetWorkflowExecution", err)
+		return nil, gocql.ConvertError("GetWorkflowExecution", err)
 	}
 
 	state, err := mutableStateFromRow(result)
@@ -1171,13 +1156,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 		signalInfos[key] = info
 	}
 	state.SignalInfos = signalInfos
-
-	sList := result["signal_requested"].([]gocql.UUID)
-	signalRequestedIDs := make([]string, len(sList))
-	for i, v := range sList {
-		signalRequestedIDs[i] = v.String()
-	}
-	state.SignalRequestedIDs = signalRequestedIDs
+	state.SignalRequestedIDs = gocql.UUIDsToStrings(result["signal_requested"])
 
 	eList := result["buffered_events_list"].([]map[string]interface{})
 	bufferedEventsBlobs := make([]*commonpb.DataBlob, 0, len(eList))
@@ -1326,22 +1305,12 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 
 	previous := make(map[string]interface{})
 	applied, iter, err := d.session.MapExecuteBatchCAS(batch, previous)
-	defer func() {
-		if iter != nil {
-			_ = iter.Close()
-		}
-	}()
-
 	if err != nil {
-		if isTimeoutError(err) {
-			// Write may have succeeded, but we don't know
-			// return this info to the caller so they have the option of trying to find out by executing a read
-			return &p.TimeoutError{Msg: fmt.Sprintf("UpdateWorkflowExecution timed out. Error: %v", err)}
-		} else if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("UpdateWorkflowExecution operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution operation failed. Error: %v", err))
+		return gocql.ConvertError("UpdateWorkflowExecution", err)
 	}
+	defer func() {
+		_ = iter.Close()
+	}()
 
 	if !applied {
 		return d.getExecutionConditionalUpdateFailure(previous, iter, updateWorkflow.ExecutionState.RunId, updateWorkflow.Condition, request.RangeID, updateWorkflow.ExecutionState.RunId)
@@ -1446,9 +1415,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 		return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
-	if err := applyWorkflowSnapshotBatchAsReset(batch,
-		shardID,
-		&resetWorkflow); err != nil {
+	if err := applyWorkflowSnapshotBatchAsReset(batch, shardID, &resetWorkflow); err != nil {
 		return err
 	}
 
@@ -1478,22 +1445,12 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 
 	previous := make(map[string]interface{})
 	applied, iter, err := d.session.MapExecuteBatchCAS(batch, previous)
-	defer func() {
-		if iter != nil {
-			_ = iter.Close()
-		}
-	}()
-
 	if err != nil {
-		if isTimeoutError(err) {
-			// Write may have succeeded, but we don't know
-			// return this info to the caller so they have the option of trying to find out by executing a read
-			return &p.TimeoutError{Msg: fmt.Sprintf("ConflictResolveWorkflowExecution timed out. Error: %v", err)}
-		} else if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Error: %v", err))
+		return gocql.ConvertError("ConflictResolveWorkflowExecution", err)
 	}
+	defer func() {
+		_ = iter.Close()
+	}()
 
 	if !applied {
 		return d.getExecutionConditionalUpdateFailure(previous, iter, resetWorkflow.ExecutionState.RunId, request.ResetWorkflowSnapshot.Condition, request.RangeID, prevRunID)
@@ -1501,7 +1458,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 	return nil
 }
 
-func (d *cassandraPersistence) getExecutionConditionalUpdateFailure(previous map[string]interface{}, iter *gocql.Iter, requestRunID string, requestCondition int64, requestRangeID int64, requestConditionalRunID string) error {
+func (d *cassandraPersistence) getExecutionConditionalUpdateFailure(previous map[string]interface{}, iter gocql.Iter, requestRunID string, requestCondition int64, requestRangeID int64, requestConditionalRunID string) error {
 	// There can be three reasons why the query does not get applied: the RangeID has changed, or the next_event_id or current_run_id check failed.
 	// Check the row info returned by Cassandra to figure out which one it is.
 	rangeIDUnmatch := false
@@ -1520,7 +1477,7 @@ GetFailureReasonLoop:
 			break GetFailureReasonLoop
 		}
 
-		runID := previous["run_id"].(gocql.UUID).String()
+		runID := gocql.UUIDToString(previous["run_id"])
 
 		if rowType == rowTypeShard {
 			if actualRangeID, ok = previous["range_id"].(int64); ok && actualRangeID != requestRangeID {
@@ -1534,7 +1491,7 @@ GetFailureReasonLoop:
 			}
 		} else if rowType == rowTypeExecution && runID == permanentRunID {
 			// UpdateWorkflowExecution failed because current_run_id is unexpected
-			if actualCurrRunID = previous["current_run_id"].(gocql.UUID).String(); actualCurrRunID != requestConditionalRunID {
+			if actualCurrRunID = gocql.UUIDToString(previous["current_run_id"]); actualCurrRunID != requestConditionalRunID {
 				// UpdateWorkflowExecution failed because next event ID is unexpected
 				runIDUnmatch = true
 			}
@@ -1621,14 +1578,7 @@ func (d *cassandraPersistence) DeleteWorkflowExecution(request *p.DeleteWorkflow
 		rowTypeExecutionTaskID)
 
 	err := query.Exec()
-	if err != nil {
-		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("DeleteWorkflowExecution operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("DeleteWorkflowExecution operation failed. Error: %v", err))
-	}
-
-	return nil
+	return gocql.ConvertError("DeleteWorkflowExecution", err)
 }
 
 func (d *cassandraPersistence) DeleteCurrentWorkflowExecution(request *p.DeleteCurrentWorkflowExecutionRequest) error {
@@ -1643,14 +1593,7 @@ func (d *cassandraPersistence) DeleteCurrentWorkflowExecution(request *p.DeleteC
 		request.RunID)
 
 	err := query.Exec()
-	if err != nil {
-		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("DeleteWorkflowCurrentRow operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("DeleteWorkflowCurrentRow operation failed. Error: %v", err))
-	}
-
-	return nil
+	return gocql.ConvertError("DeleteWorkflowCurrentRow", err)
 }
 
 func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutionRequest) (*p.GetCurrentExecutionResponse,
@@ -1666,16 +1609,10 @@ func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutio
 
 	result := make(map[string]interface{})
 	if err := query.MapScan(result); err != nil {
-		if err == gocql.ErrNotFound {
-			return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow execution not found.  WorkflowId: %v", request.WorkflowID))
-		} else if isThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err))
-		}
-
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err))
+		return nil, gocql.ConvertError("GetCurrentExecution", err)
 	}
 
-	currentRunID := result["current_run_id"].(gocql.UUID).String()
+	currentRunID := gocql.UUIDToString(result["current_run_id"])
 	lastWriteVersion := result["workflow_last_write_version"].(int64)
 	executionState, err := protoExecutionStateFromRow(result)
 	if err != nil {
@@ -1708,7 +1645,7 @@ func (d *cassandraPersistence) ListConcreteExecutions(
 	response := &p.InternalListConcreteExecutionsResponse{}
 	result := make(map[string]interface{})
 	for iter.MapScan(result) {
-		runID := result["run_id"].(gocql.UUID).String()
+		runID := gocql.UUIDToString(result["run_id"])
 		if runID == permanentRunID {
 			result = make(map[string]interface{})
 			continue
@@ -1759,22 +1696,13 @@ func (d *cassandraPersistence) AddTasks(request *p.AddTasksRequest) error {
 
 	previous := make(map[string]interface{})
 	applied, iter, err := d.session.MapExecuteBatchCAS(batch, previous)
+	if err != nil {
+		return gocql.ConvertError("AddTasks", err)
+	}
 	defer func() {
-		if iter != nil {
-			_ = iter.Close()
-		}
+		_ = iter.Close()
 	}()
 
-	if err != nil {
-		if isTimeoutError(err) {
-			// Write may have succeeded, but we don't know
-			// return this info to the caller so they have the option of trying to find out by executing a read
-			return &p.TimeoutError{Msg: fmt.Sprintf("AddTasks timed out. Error: %v", err)}
-		} else if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("AddTasks operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("AddTasks operation failed. Error: %v", err))
-	}
 	if !applied {
 		if previousRangeID, ok := previous["range_id"].(int64); ok && previousRangeID != request.RangeID {
 			// CreateWorkflowExecution failed because rangeID was modified
@@ -1804,13 +1732,13 @@ func (d *cassandraPersistence) GetTransferTask(request *p.GetTransferTaskRequest
 	var data []byte
 	var encoding string
 	if err := query.Scan(&data, &encoding); err != nil {
-		return nil, convertCommonErrors("GetTransferTask", err)
+		return nil, gocql.ConvertError("GetTransferTask", err)
 	}
 
 	info, err := serialization.TransferTaskInfoFromBlob(data, encoding)
 
 	if err != nil {
-		return nil, convertCommonErrors("GetTransferTask", err)
+		return nil, gocql.ConvertError("GetTransferTask", err)
 	}
 
 	return &p.GetTransferTaskResponse{TransferTaskInfo: info}, nil
@@ -1842,7 +1770,7 @@ func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksReque
 	for iter.Scan(&data, &encoding) {
 		t, err := serialization.TransferTaskInfoFromBlob(data, encoding)
 		if err != nil {
-			return nil, convertCommonErrors("GetTransferTasks", err)
+			return nil, gocql.ConvertError("GetTransferTasks", err)
 		}
 
 		response.Tasks = append(response.Tasks, t)
@@ -1852,7 +1780,7 @@ func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksReque
 	copy(response.NextPageToken, nextPageToken)
 
 	if err := iter.Close(); err != nil {
-		return nil, convertCommonErrors("GetTransferTasks", err)
+		return nil, gocql.ConvertError("GetTransferTasks", err)
 	}
 
 	return response, nil
@@ -1873,13 +1801,13 @@ func (d *cassandraPersistence) GetVisibilityTask(request *p.GetVisibilityTaskReq
 	var data []byte
 	var encoding string
 	if err := query.Scan(&data, &encoding); err != nil {
-		return nil, convertCommonErrors("GetVisibilityTask", err)
+		return nil, gocql.ConvertError("GetVisibilityTask", err)
 	}
 
 	info, err := serialization.VisibilityTaskInfoFromBlob(data, encoding)
 
 	if err != nil {
-		return nil, convertCommonErrors("GetVisibilityTask", err)
+		return nil, gocql.ConvertError("GetVisibilityTask", err)
 	}
 
 	return &p.GetVisibilityTaskResponse{VisibilityTaskInfo: info}, nil
@@ -1911,7 +1839,7 @@ func (d *cassandraPersistence) GetVisibilityTasks(request *p.GetVisibilityTasksR
 	for iter.Scan(&data, &encoding) {
 		t, err := serialization.VisibilityTaskInfoFromBlob(data, encoding)
 		if err != nil {
-			return nil, convertCommonErrors("GetVisibilityTasks", err)
+			return nil, gocql.ConvertError("GetVisibilityTasks", err)
 		}
 
 		response.Tasks = append(response.Tasks, t)
@@ -1921,7 +1849,7 @@ func (d *cassandraPersistence) GetVisibilityTasks(request *p.GetVisibilityTasksR
 	copy(response.NextPageToken, nextPageToken)
 
 	if err := iter.Close(); err != nil {
-		return nil, convertCommonErrors("GetVisibilityTasks", err)
+		return nil, gocql.ConvertError("GetVisibilityTasks", err)
 	}
 
 	return response, nil
@@ -1942,13 +1870,13 @@ func (d *cassandraPersistence) GetReplicationTask(request *p.GetReplicationTaskR
 	var data []byte
 	var encoding string
 	if err := query.Scan(&data, &encoding); err != nil {
-		return nil, convertCommonErrors("GetReplicationTask", err)
+		return nil, gocql.ConvertError("GetReplicationTask", err)
 	}
 
 	info, err := serialization.ReplicationTaskInfoFromBlob(data, encoding)
 
 	if err != nil {
-		return nil, convertCommonErrors("GetReplicationTask", err)
+		return nil, gocql.ConvertError("GetReplicationTask", err)
 	}
 
 	return &p.GetReplicationTaskResponse{ReplicationTaskInfo: info}, nil
@@ -1974,7 +1902,7 @@ func (d *cassandraPersistence) GetReplicationTasks(
 }
 
 func (d *cassandraPersistence) populateGetReplicationTasksResponse(
-	query *gocql.Query, operation string,
+	query gocql.Query, operation string,
 ) (*p.GetReplicationTasksResponse, error) {
 	iter := query.Iter()
 	if iter == nil {
@@ -1989,7 +1917,7 @@ func (d *cassandraPersistence) populateGetReplicationTasksResponse(
 		t, err := serialization.ReplicationTaskInfoFromBlob(data, encoding)
 
 		if err != nil {
-			return nil, convertCommonErrors(operation, err)
+			return nil, gocql.ConvertError(operation, err)
 		}
 
 		response.Tasks = append(response.Tasks, t)
@@ -1999,7 +1927,7 @@ func (d *cassandraPersistence) populateGetReplicationTasksResponse(
 	copy(response.NextPageToken, nextPageToken)
 
 	if err := iter.Close(); err != nil {
-		return nil, convertCommonErrors(operation, err)
+		return nil, gocql.ConvertError(operation, err)
 	}
 
 	return response, nil
@@ -2016,14 +1944,7 @@ func (d *cassandraPersistence) CompleteTransferTask(request *p.CompleteTransferT
 		request.TaskID)
 
 	err := query.Exec()
-	if err != nil {
-		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("CompleteTransferTask operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("CompleteTransferTask operation failed. Error: %v", err))
-	}
-
-	return nil
+	return gocql.ConvertError("CompleteTransferTask", err)
 }
 
 func (d *cassandraPersistence) RangeCompleteTransferTask(request *p.RangeCompleteTransferTaskRequest) error {
@@ -2039,14 +1960,7 @@ func (d *cassandraPersistence) RangeCompleteTransferTask(request *p.RangeComplet
 	)
 
 	err := query.Exec()
-	if err != nil {
-		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("RangeCompleteTransferTask operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteTransferTask operation failed. Error: %v", err))
-	}
-
-	return nil
+	return gocql.ConvertError("RangeCompleteTransferTask", err)
 }
 
 func (d *cassandraPersistence) CompleteVisibilityTask(request *p.CompleteVisibilityTaskRequest) error {
@@ -2060,14 +1974,7 @@ func (d *cassandraPersistence) CompleteVisibilityTask(request *p.CompleteVisibil
 		request.TaskID)
 
 	err := query.Exec()
-	if err != nil {
-		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("CompleteVisibilityTask operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("CompleteVisibilityTask operation failed. Error: %v", err))
-	}
-
-	return nil
+	return gocql.ConvertError("CompleteVisibilityTask", err)
 }
 
 func (d *cassandraPersistence) RangeCompleteVisibilityTask(request *p.RangeCompleteVisibilityTaskRequest) error {
@@ -2083,14 +1990,7 @@ func (d *cassandraPersistence) RangeCompleteVisibilityTask(request *p.RangeCompl
 	)
 
 	err := query.Exec()
-	if err != nil {
-		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("RangeCompleteVisibilityTask operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteVisibilityTask operation failed. Error: %v", err))
-	}
-
-	return nil
+	return gocql.ConvertError("RangeCompleteVisibilityTask", err)
 }
 
 func (d *cassandraPersistence) CompleteReplicationTask(request *p.CompleteReplicationTaskRequest) error {
@@ -2104,14 +2004,7 @@ func (d *cassandraPersistence) CompleteReplicationTask(request *p.CompleteReplic
 		request.TaskID)
 
 	err := query.Exec()
-	if err != nil {
-		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("CompleteReplicationTask operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("CompleteReplicationTask operation failed. Error: %v", err))
-	}
-
-	return nil
+	return gocql.ConvertError("CompleteReplicationTask", err)
 }
 
 func (d *cassandraPersistence) RangeCompleteReplicationTask(
@@ -2129,14 +2022,7 @@ func (d *cassandraPersistence) RangeCompleteReplicationTask(
 	)
 
 	err := query.Exec()
-	if err != nil {
-		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("RangeCompleteReplicationTask operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteReplicationTask operation failed. Error: %v", err))
-	}
-
-	return nil
+	return gocql.ConvertError("RangeCompleteReplicationTask", err)
 }
 
 func (d *cassandraPersistence) CompleteTimerTask(request *p.CompleteTimerTaskRequest) error {
@@ -2151,14 +2037,7 @@ func (d *cassandraPersistence) CompleteTimerTask(request *p.CompleteTimerTaskReq
 		request.TaskID)
 
 	err := query.Exec()
-	if err != nil {
-		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("CompleteTimerTask operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("CompleteTimerTask operation failed. Error: %v", err))
-	}
-
-	return nil
+	return gocql.ConvertError("CompleteTimerTask", err)
 }
 
 func (d *cassandraPersistence) RangeCompleteTimerTask(request *p.RangeCompleteTimerTaskRequest) error {
@@ -2175,14 +2054,7 @@ func (d *cassandraPersistence) RangeCompleteTimerTask(request *p.RangeCompleteTi
 	)
 
 	err := query.Exec()
-	if err != nil {
-		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("RangeCompleteTimerTask operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteTimerTask operation failed. Error: %v", err))
-	}
-
-	return nil
+	return gocql.ConvertError("RangeCompleteTimerTask", err)
 }
 
 // From TaskManager interface
@@ -2204,7 +2076,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 	err := query.Scan(&rangeID, &tlBytes, &tlEncoding)
 	var tl *p.PersistedTaskQueueInfo
 	if err != nil {
-		if err == gocql.ErrNotFound { // First time task queue is used
+		if gocql.IsNotFoundError(err) { // First time task queue is used
 			tl = &p.PersistedTaskQueueInfo{
 				Data: &persistencespb.TaskQueueInfo{
 					NamespaceId:    request.NamespaceID,
@@ -2233,7 +2105,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 				datablob.Data,
 				datablob.EncodingType.String(),
 			)
-		} else if isThrottlingError(err) {
+		} else if gocql.IsThrottlingError(err) {
 			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("LeaseTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
 		} else {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
@@ -2280,10 +2152,7 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
-		if isThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("LeaseTaskQueue operation failed. Error: %v", err))
-		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed. Error : %v", err))
+		return nil, gocql.ConvertError("LeaseTaskQueue", err)
 	}
 	if !applied {
 		previousRangeID := previous["range_id"]
@@ -2302,7 +2171,7 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 	tli.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	datablob, err := serialization.TaskQueueInfoToBlob(&tli)
 	if err != nil {
-		return nil, convertCommonErrors("UpdateTaskQueue", err)
+		return nil, gocql.ConvertError("UpdateTaskQueue", err)
 	}
 
 	var applied bool
@@ -2346,10 +2215,7 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 	}
 
 	if err != nil {
-		if isThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("UpdateTaskQueue operation failed. Error: %v", err))
-		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("UpdateTaskQueue operation failed. Error: %v", err))
+		return nil, gocql.ConvertError("UpdateTaskQueue", err)
 	}
 
 	if !applied {
@@ -2377,10 +2243,7 @@ func (d *cassandraPersistence) DeleteTaskQueue(request *p.DeleteTaskQueueRequest
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
-		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("DeleteTaskQueue operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("DeleteTaskQueue operation failed. Error: %v", err))
+		return gocql.ConvertError("DeleteTaskQueue", err)
 	}
 	if !applied {
 		return &p.ConditionFailedError{
@@ -2450,10 +2313,7 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 	previous := make(map[string]interface{})
 	applied, _, err := d.session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
-		if isThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("CreateTasks operation failed. Error: %v", err))
-		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateTasks operation failed. Error : %v", err))
+		return nil, gocql.ConvertError("CreateTasks", err)
 	}
 	if !applied {
 		rangeID := previous["range_id"]
@@ -2538,7 +2398,7 @@ PopulateTasks:
 
 		t, err := serialization.TaskInfoFromBlob(taskVal, encodingVal)
 		if err != nil {
-			return nil, convertCommonErrors("GetTasks", err)
+			return nil, gocql.ConvertError("GetTasks", err)
 		}
 
 		response.Tasks = append(response.Tasks, t)
@@ -2567,10 +2427,7 @@ func (d *cassandraPersistence) CompleteTask(request *p.CompleteTaskRequest) erro
 
 	err := query.Exec()
 	if err != nil {
-		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("CompleteTask operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("CompleteTask operation failed. Error: %v", err))
+		return gocql.ConvertError("CompleteTask", err)
 	}
 
 	return nil
@@ -2584,10 +2441,7 @@ func (d *cassandraPersistence) CompleteTasksLessThan(request *p.CompleteTasksLes
 		request.NamespaceID, request.TaskQueueName, request.TaskType, rowTypeTask, request.TaskID)
 	err := query.Exec()
 	if err != nil {
-		if isThrottlingError(err) {
-			return 0, serviceerror.NewResourceExhausted(fmt.Sprintf("CompleteTasksLessThan operation failed. Error: %v", err))
-		}
-		return 0, serviceerror.NewInternal(fmt.Sprintf("CompleteTasksLessThan operation failed. Error: %v", err))
+		return 0, gocql.ConvertError("CompleteTasksLessThan", err)
 	}
 	return p.UnknownNumRowsAffected, nil
 }
@@ -2608,13 +2462,13 @@ func (d *cassandraPersistence) GetTimerTask(request *p.GetTimerTaskRequest) (*p.
 	var data []byte
 	var encoding string
 	if err := query.Scan(&data, &encoding); err != nil {
-		return nil, convertCommonErrors("GetTimerTask", err)
+		return nil, gocql.ConvertError("GetTimerTask", err)
 	}
 
 	info, err := serialization.TimerTaskInfoFromBlob(data, encoding)
 
 	if err != nil {
-		return nil, convertCommonErrors("GetTimerTask", err)
+		return nil, gocql.ConvertError("GetTimerTask", err)
 	}
 
 	return &p.GetTimerTaskResponse{TimerTaskInfo: info}, nil
@@ -2648,7 +2502,7 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksR
 		t, err := serialization.TimerTaskInfoFromBlob(data, encoding)
 
 		if err != nil {
-			return nil, convertCommonErrors("GetTimerIndexTasks", err)
+			return nil, gocql.ConvertError("GetTimerIndexTasks", err)
 		}
 
 		response.Timers = append(response.Timers, t)
@@ -2658,7 +2512,7 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksR
 	copy(response.NextPageToken, nextPageToken)
 
 	if err := iter.Close(); err != nil {
-		return nil, convertCommonErrors("GetTimerIndexTasks", err)
+		return nil, gocql.ConvertError("GetTimerIndexTasks", err)
 	}
 
 	return response, nil
@@ -2668,7 +2522,7 @@ func (d *cassandraPersistence) PutReplicationTaskToDLQ(request *p.PutReplication
 	task := request.TaskInfo
 	datablob, err := serialization.ReplicationTaskInfoToBlob(task)
 	if err != nil {
-		return convertCommonErrors("PutReplicationTaskToDLQ", err)
+		return gocql.ConvertError("PutReplicationTaskToDLQ", err)
 	}
 
 	// Use source cluster name as the workflow id for replication dlq
@@ -2685,7 +2539,7 @@ func (d *cassandraPersistence) PutReplicationTaskToDLQ(request *p.PutReplication
 
 	err = query.Exec()
 	if err != nil {
-		return convertCommonErrors("PutReplicationTaskToDLQ", err)
+		return gocql.ConvertError("PutReplicationTaskToDLQ", err)
 	}
 
 	return nil
@@ -2724,13 +2578,7 @@ func (d *cassandraPersistence) DeleteReplicationTaskFromDLQ(
 	)
 
 	err := query.Exec()
-	if err != nil {
-		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("DeleteReplicationTaskFromDLQ operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("DeleteReplicationTaskFromDLQ operation failed. Error: %v", err))
-	}
-	return nil
+	return gocql.ConvertError("DeleteReplicationTaskFromDLQ", err)
 }
 
 func (d *cassandraPersistence) RangeDeleteReplicationTaskFromDLQ(
@@ -2749,13 +2597,7 @@ func (d *cassandraPersistence) RangeDeleteReplicationTaskFromDLQ(
 	)
 
 	err := query.Exec()
-	if err != nil {
-		if isThrottlingError(err) {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("RangeDeleteReplicationTaskFromDLQ operation failed. Error: %v", err))
-		}
-		return serviceerror.NewInternal(fmt.Sprintf("RangeDeleteReplicationTaskFromDLQ operation failed. Error: %v", err))
-	}
-	return nil
+	return gocql.ConvertError("RangeDeleteReplicationTaskFromDLQ", err)
 }
 
 func mutableStateFromRow(result map[string]interface{}) (*p.InternalWorkflowMutableState, error) {

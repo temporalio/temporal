@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gocql/gocql"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -37,6 +36,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
 )
 
@@ -73,7 +73,7 @@ type (
 )
 
 func newQueue(
-	session *gocql.Session,
+	session gocql.Session,
 	logger log.Logger,
 	queueType persistence.QueueType,
 ) (persistence.Queue, error) {
@@ -131,10 +131,7 @@ func (q *cassandraQueue) tryEnqueue(
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
-		if isThrottlingError(err) {
-			return persistence.EmptyQueueMessageID, serviceerror.NewResourceExhausted(fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType))
-		}
-		return persistence.EmptyQueueMessageID, serviceerror.NewInternal(fmt.Sprintf("Failed to enqueue message. Error: %v, Type: %v.", err, queueType))
+		return persistence.EmptyQueueMessageID, gocql.ConvertError("tryEnqueue", err)
 	}
 
 	if !applied {
@@ -152,15 +149,11 @@ func (q *cassandraQueue) getLastMessageID(
 	result := make(map[string]interface{})
 	err := query.MapScan(result)
 	if err != nil {
-		if err == gocql.ErrNotFound {
+		if gocql.IsNotFoundError(err) {
 			return persistence.EmptyQueueMessageID, nil
-		} else if isThrottlingError(err) {
-			return persistence.EmptyQueueMessageID, serviceerror.NewResourceExhausted(fmt.Sprintf("Failed to get last message ID for queue %v. Error: %v", queueType, err))
 		}
-
-		return persistence.EmptyQueueMessageID, serviceerror.NewInternal(fmt.Sprintf("Failed to get last message ID for queue %v. Error: %v", queueType, err))
+		return persistence.EmptyQueueMessageID, gocql.ConvertError("getLastMessageID", err)
 	}
-
 	return result["message_id"].(int64), nil
 }
 
@@ -418,26 +411,18 @@ func (q *cassandraQueue) getDLQTypeFromQueueType() persistence.QueueType {
 
 func (q *cassandraQueue) initializeQueueMetadata() error {
 	_, err := q.getQueueMetadata(q.queueType)
-	switch err {
-	case nil:
-		return nil
-	case gocql.ErrNotFound:
+	if gocql.IsNotFoundError(err) {
 		return q.insertInitialQueueMetadataRecord(q.queueType)
-	default:
-		return err
 	}
+	return err
 }
 
 func (q *cassandraQueue) initializeDLQMetadata() error {
 	_, err := q.getQueueMetadata(q.getDLQTypeFromQueueType())
-	switch err {
-	case nil:
-		return nil
-	case gocql.ErrNotFound:
+	if gocql.IsNotFoundError(err) {
 		return q.insertInitialQueueMetadataRecord(q.getDLQTypeFromQueueType())
-	default:
-		return err
 	}
+	return err
 }
 
 func convertQueueMessage(

@@ -27,6 +27,9 @@ package encryption
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"time"
+
+	"github.com/uber-go/tally"
 
 	"go.temporal.io/server/common/service/config"
 )
@@ -55,15 +58,36 @@ type (
 		DisableHostVerification(isWorker bool) bool
 	}
 
-	// PerHostCertProviderFactory creates a CertProvider in the context of a specific Domain.
-	PerHostCertProviderFactory interface {
+	// PerHostCertProviderMap returns a CertProvider for a given host name.
+	PerHostCertProviderMap interface {
 		GetCertProvider(hostName string) (CertProvider, error)
+	}
+
+	CertThumbprint [16]byte
+
+	CertExpirationData struct {
+		Thumbprint CertThumbprint
+		IsCA       bool
+		DNSNames   []string
+		Expiration time.Time
+	}
+
+	CertExpirationMap map[CertThumbprint]CertExpirationData
+
+	CertExpirationChecker interface {
+		GetExpiringCerts(timeWindow time.Duration) (
+			expiring CertExpirationMap,
+			expired CertExpirationMap,
+			err error)
 	}
 
 	tlsConfigConstructor func() (*tls.Config, error)
 )
 
 // NewTLSConfigProviderFromConfig creates a new TLS Config provider from RootTLS config
-func NewTLSConfigProviderFromConfig(encryptionSettings config.RootTLS) (TLSConfigProvider, error) {
-	return NewLocalStoreTlsProvider(&encryptionSettings)
+func NewTLSConfigProviderFromConfig(
+	encryptionSettings config.RootTLS,
+	scope tally.Scope,
+) (TLSConfigProvider, error) {
+	return NewLocalStoreTlsProvider(&encryptionSettings, scope)
 }

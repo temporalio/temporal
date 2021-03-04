@@ -1992,7 +1992,7 @@ func (e *mutableStateBuilder) addBinaryCheckSumIfNotExists(
 	if exeInfo.SearchAttributes == nil {
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
-	exeInfo.SearchAttributes[definition.BinaryChecksums] = checksumPayload
+	exeInfo.SearchAttributes[searchattribute.BinaryChecksums] = checksumPayload
 	if e.shard.GetConfig().AdvancedVisibilityWritingMode() != common.AdvancedVisibilityWritingModeOff {
 		return e.taskGenerator.generateWorkflowSearchAttrTasks(timestamp.TimeValue(event.GetEventTime()))
 	}
@@ -4586,14 +4586,14 @@ func (e *mutableStateBuilder) createInternalServerError(
 	actionTag tag.Tag,
 ) error {
 
-	return serviceerror.NewInternal(actionTag.Field().String + " operation failed")
+	return serviceerror.NewInternal(actionTag.Field.String + " operation failed")
 }
 
 func (e *mutableStateBuilder) createCallerError(
 	actionTag tag.Tag,
 ) error {
 
-	return serviceerror.NewInvalidArgument(fmt.Sprintf(mutableStateInvalidHistoryActionMsgTemplate, actionTag.Field().String))
+	return serviceerror.NewInvalidArgument(fmt.Sprintf(mutableStateInvalidHistoryActionMsgTemplate, actionTag.Field.String))
 }
 
 func (_ *mutableStateBuilder) unixNanoToTime(

@@ -22,46 +22,65 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package executions
+package gocql
 
 import (
-	"testing"
+	"fmt"
 
-	"github.com/stretchr/testify/suite"
-
-	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/quotas"
+	"github.com/gocql/gocql"
 )
 
-type (
-	ScavengerTestSuite struct {
-		suite.Suite
+// Definition of all Consistency levels
+const (
+	Any Consistency = iota
+	One
+	Two
+	Three
+	Quorum
+	All
+	LocalQuorum
+	EachQuorum
+	LocalOne
+)
+
+// Definition of all SerialConsistency levels
+const (
+	Serial SerialConsistency = iota
+	LocalSerial
+)
+
+func mustConvertConsistency(c Consistency) gocql.Consistency {
+	switch c {
+	case Any:
+		return gocql.Any
+	case One:
+		return gocql.One
+	case Two:
+		return gocql.Two
+	case Three:
+		return gocql.Three
+	case Quorum:
+		return gocql.Quorum
+	case All:
+		return gocql.All
+	case LocalQuorum:
+		return gocql.LocalQuorum
+	case EachQuorum:
+		return gocql.EachQuorum
+	case LocalOne:
+		return gocql.LocalOne
+	default:
+		panic(fmt.Sprintf("Unknown gocql Consistency level: %v", c))
 	}
-)
-
-func TestScavengerTestSuite(t *testing.T) {
-	suite.Run(t, new(ScavengerTestSuite))
 }
 
-func (s *ScavengerTestSuite) TestShardValidatorInitializedWithProperValues() {
-	var frontendClient workflowservice.WorkflowServiceClient
-	var historyDB persistence.HistoryManager
-	var metricsClient metrics.Client
-	var logger log.Logger
-	var execMgrProvider persistence.ExecutionManagerFactory
-	var numHistoryShards int32
-	scavenger := NewScavenger(
-		frontendClient,
-		historyDB,
-		metricsClient,
-		logger,
-		execMgrProvider,
-		numHistoryShards,
-	)
-	var rateLimiter quotas.RateLimiter
-	result := scavenger.shardValidatorFactory(rateLimiter).(*shardValidatorImpl)
-	s.IsType(result.validators[0], newActivityIDValidator())
+func mustConvertSerialConsistency(c SerialConsistency) gocql.SerialConsistency {
+	switch c {
+	case Serial:
+		return gocql.Serial
+	case LocalSerial:
+		return gocql.LocalSerial
+	default:
+		panic(fmt.Sprintf("Unknown gocql SerialConsistency level: %v", c))
+	}
 }

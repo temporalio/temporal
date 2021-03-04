@@ -34,6 +34,7 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -111,7 +112,7 @@ func (s *localStoreRPCSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
 
-	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, nil)
 	s.NoError(err)
 	insecureFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(insecureFactory)
@@ -249,17 +250,17 @@ func (s *localStoreRPCSuite) setupFrontend() {
 		},
 	}
 
-	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS, nil)
 	s.NoError(err)
 	frontendMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(frontendMutualTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS, nil)
 	s.NoError(err)
 	frontendServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(frontendServerTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSSystemWorker.TLS)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSSystemWorker.TLS, nil)
 	s.NoError(err)
 	frontendSystemWorkerMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(frontendSystemWorkerMutualTLSFactory)
@@ -305,17 +306,17 @@ func (s *localStoreRPCSuite) setupInternode() {
 		},
 	}
 
-	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS, nil)
 	s.NoError(err)
 	internodeMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(internodeMutualTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS, nil)
 	s.NoError(err)
 	internodeServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(internodeServerTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreAltMutualTLS.TLS)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreAltMutualTLS.TLS, nil)
 	s.NoError(err)
 	internodeMutualAltTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(internodeMutualAltTLSFactory)
@@ -522,6 +523,37 @@ func (s *localStoreRPCSuite) TestDynamicRootCAOverrideFrontend() {
 
 func (s *localStoreRPCSuite) TestDynamicRootCAOverrideInternode() {
 	s.testDynamicRootCA("localhost", true)
+}
+
+func (s *localStoreRPCSuite) TestCertExpiration() {
+	sixHours := time.Hour * 6
+	s.testCertExpiration(s.insecureRPCFactory, sixHours, 0)
+	s.testCertExpiration(s.internodeMutualTLSRPCFactory, sixHours, 0)
+	s.testCertExpiration(s.internodeServerTLSRPCFactory, sixHours, 0)
+	s.testCertExpiration(s.internodeAltMutualTLSRPCFactory, sixHours, 0)
+	s.testCertExpiration(s.frontendMutualTLSRPCFactory, sixHours, 0)
+	s.testCertExpiration(s.frontendServerTLSRPCFactory, sixHours, 0)
+	s.testCertExpiration(s.frontendSystemWorkerMutualTLSRPCFactory, sixHours, 0)
+
+	twoDays := time.Hour * 48
+	s.testCertExpiration(s.insecureRPCFactory, twoDays, 0)
+	s.testCertExpiration(s.internodeMutualTLSRPCFactory, twoDays, 3)
+	s.testCertExpiration(s.internodeServerTLSRPCFactory, twoDays, 3)
+	s.testCertExpiration(s.internodeAltMutualTLSRPCFactory, twoDays, 2)
+	s.testCertExpiration(s.frontendMutualTLSRPCFactory, twoDays, 4)
+	s.testCertExpiration(s.frontendServerTLSRPCFactory, twoDays, 2)
+	s.testCertExpiration(s.frontendSystemWorkerMutualTLSRPCFactory, twoDays, 6)
+}
+
+func (s *localStoreRPCSuite) testCertExpiration(factory *TestFactory, timeWindow time.Duration, nExpiring int) {
+	provider, ok := factory.GetTLSConfigProvider().(encryption.CertExpirationChecker)
+	s.True(ok)
+	expiring, expired, err := provider.GetExpiringCerts(timeWindow)
+	if len(expired) > 0 {
+	}
+	s.NotNil(expiring)
+	s.Nil(err)
+	s.Equal(nExpiring, len(expiring))
 }
 
 func (s *localStoreRPCSuite) testDynamicRootCA(host string, frontend bool) {
