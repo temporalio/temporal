@@ -3,28 +3,28 @@
 ## v9.6
 
 ### Install
-```zsh
+```bash
 brew install postgresql@9.6
 ```
 
 ### Start
-```zsh
+```bash
 brew services start postgresql@9.6
 ```
 
 ### Stop
-```zsh
+```bash
 brew services stop postgresql@9.6
 ```
 
 ### Post Installation
 Create a user `postgres`
-```zsh
+```bash
 createuser -s root
 ```
 
 Verify PostgreSQL v9.6 is running & accessible:
-```zsh
+```bash
 psql -h 127.0.0.1 -p 5432 -U root -d postgres
 ```
 
@@ -37,7 +37,7 @@ ALTER USER temporal WITH SUPERUSER;
 ```
 
 Change the following file context:
-```zsh
+```bash
 emacs /usr/local/var/postgresql@9.6/pg_hba.conf
 ```
 from
@@ -53,12 +53,12 @@ host    all             all             127.0.0.1/32            md5
 host    all             all             ::1/128                 md5
 ```
 then restart PostgreSQL:
-```zsh
+```bash
 brew services restart postgresql@9.6
 ```
 
 Verify password:
-```zsh
+```bash
 psql -h 127.0.0.1 -p 5432 -U root -d postgres
 psql -h 127.0.0.1 -p 5432 -U temporal -d postgres
 ```
@@ -66,7 +66,7 @@ psql -h 127.0.0.1 -p 5432 -U temporal -d postgres
 ### TLS
 [TLS Key / Cert Setup Guide](../tls/tls.md)
 
-```zsh
+```bash
 emacs /usr/local/var/postgresql@9.6/postgresql.conf
 ```
 
@@ -78,7 +78,7 @@ ssl_key_file=<path to the server-key.pem>
 ssl_ca_file=<path to the ca.pem>
 ```
 
-```zsh
+```bash
 emacs /usr/local/var/postgresql@9.6/pg_hba.conf
 ```
 
@@ -88,12 +88,12 @@ hostssl    all             all             127.0.0.1/32            md5 clientcer
 hostssl    all             all             ::1/128                 md5 clientcert=1
 ```
 then restart PostgreSQL:
-```zsh
+```bash
 brew services restart postgresql@9.6
 ```
 
 Verify TLS & password:
-```zsh
+```bash
 psql "sslmode=require host=localhost dbname=postgres user=root \
   sslkey=<path to the client-key.pem> \
   sslcert=<path to the client-cert.pem> \

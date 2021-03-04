@@ -3,17 +3,17 @@
 ## v3.11
 
 ### Install
-```zsh
+```bash
 brew install cassandra@3.11
 ```
 
 ### Start
-```zsh
+```bash
 cassandra -f
 ```
 
 ### Post Installation
 Verify Cassandra v5.7 is running & accessible:
-```zsh
+```bash
 cqlsh
 ```

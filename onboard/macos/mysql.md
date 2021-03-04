@@ -3,23 +3,23 @@
 ## v5.7
 
 ### Install
-```zsh
+```bash
 brew install mysql@5.7
 ```
 
 ### Start
-```zsh
+```bash
 brew services start mysql@5.7
 ```
 
 ### Stop
-```zsh
+```bash
 brew services stop mysql@5.7
 ```
 
 ### Post Installation
 Verify MySQL v5.7 is running & accessible:
-```zsh
+```bash
 mysql -h 127.0.0.1 -P 3306 -u root
 ```
 
@@ -31,7 +31,7 @@ GRANT ALL PRIVILEGES ON *.* TO 'temporal'@'localhost';
 ```
 
 Verify password:
-```zsh
+```bash
 mysql -h 127.0.0.1 -P 3306 -u root -p
 mysql -h 127.0.0.1 -P 3306 -u temporal -p
 ```
@@ -39,7 +39,7 @@ mysql -h 127.0.0.1 -P 3306 -u temporal -p
 ### TLS
 [TLS Key / Cert Setup Guide](../tls/tls.md)
 
-```zsh
+```bash
 emacs /usr/local/etc/my.cnf
 ```
 
@@ -57,12 +57,12 @@ ALTER USER 'temporal'@'localhost' IDENTIFIED BY 'temporal' REQUIRE X509;
 ```
 
 then restart MySQL:
-```zsh
+```bash
 brew services restart mysql@5.7
 ```
 
 Verify TLS & password:
-```zsh
+```bash
 mysql -u root -p \
   --ssl-cert=<path to the client-cert.pem> \
   --ssl-key=<path to the client-key.pem> \
