@@ -54,7 +54,6 @@ type (
 	workflowTaskHandlerImpl struct {
 		identity                string
 		workflowTaskCompletedID int64
-		namespaceEntry          *cache.NamespaceCacheEntry
 
 		// internal state
 		hasBufferedEvents               bool
@@ -86,7 +85,6 @@ type (
 func newWorkflowTaskHandler(
 	identity string,
 	workflowTaskCompletedID int64,
-	namespaceEntry *cache.NamespaceCacheEntry,
 	mutableState mutableState,
 	attrValidator *commandAttrValidator,
 	sizeLimitChecker *workflowSizeChecker,
@@ -99,7 +97,6 @@ func newWorkflowTaskHandler(
 	return &workflowTaskHandlerImpl{
 		identity:                identity,
 		workflowTaskCompletedID: workflowTaskCompletedID,
-		namespaceEntry:          namespaceEntry,
 
 		// internal state
 		hasBufferedEvents:               mutableState.HasBufferedEvents(),
@@ -712,9 +709,10 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		metrics.CommandTypeChildWorkflowCounter,
 	)
 
-	namespaceID := handler.mutableState.GetExecutionInfo().NamespaceId
-	parentNamespace := handler.namespaceEntry.GetInfo().GetName()
-	targetNamespaceID := namespaceID
+	parentNamespaceEntry := handler.mutableState.GetNamespaceEntry()
+	parentNamespaceID := parentNamespaceEntry.GetInfo().Id
+	parentNamespace := parentNamespaceEntry.GetInfo().Name
+	targetNamespaceID := parentNamespaceID
 	targetNamespace := parentNamespace
 	if attr.GetNamespace() != "" {
 		targetNamespaceEntry, err := handler.namespaceCache.GetNamespace(attr.GetNamespace())
@@ -723,12 +721,14 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		}
 		targetNamespace = targetNamespaceEntry.GetInfo().Name
 		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
+	} else {
+		attr.Namespace = parentNamespace
 	}
 
 	if err := handler.validateCommandAttr(
 		func() error {
 			return handler.attrValidator.validateStartChildExecutionAttributes(
-				namespaceID,
+				parentNamespaceID,
 				targetNamespaceID,
 				targetNamespace,
 				attr,
@@ -751,7 +751,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		return err
 	}
 
-	enabled := handler.config.EnableParentClosePolicy(handler.namespaceEntry.GetInfo().Name)
+	enabled := handler.config.EnableParentClosePolicy(parentNamespace)
 	if enabled {
 		enums.SetDefaultParentClosePolicy(&attr.ParentClosePolicy)
 	} else {
