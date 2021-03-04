@@ -3,7 +3,7 @@ ARG TARGET=server
 # Can be used in case a proxy is necessary
 ARG GOPROXY
 
-FROM temporalio/base-builder AS temporal-builder
+FROM temporalio/base-builder:1.0.0 AS temporal-builder
 
 # Making sure that dependency is not touched
 ENV GOFLAGS="-mod=readonly"
@@ -20,12 +20,11 @@ COPY . .
 RUN CGO_ENABLED=0 make bins
 
 # Temporal server
-FROM temporalio/base-server AS temporal-server
+FROM temporalio/base-server:1.0.0 AS temporal-server
 
 ENV TEMPORAL_HOME /etc/temporal
 RUN mkdir -p /etc/temporal
 
-COPY --from=temporalio/base-server /usr/local/bin/dockerize /usr/local/bin
 COPY --from=temporal-builder /temporal/temporal-cassandra-tool /usr/local/bin
 COPY --from=temporal-builder /temporal/temporal-sql-tool /usr/local/bin
 COPY --from=temporal-builder /temporal/tctl /usr/local/bin
@@ -51,7 +50,7 @@ FROM temporal-server AS temporal-auto-setup
 CMD /start.sh autosetup
 
 # Temporal CLI
-FROM temporalio/base-server AS temporal-tctl
+FROM temporalio/base-server:1.0.0 AS temporal-tctl
 
 COPY --from=temporal-builder /temporal/tctl /usr/local/bin
 
