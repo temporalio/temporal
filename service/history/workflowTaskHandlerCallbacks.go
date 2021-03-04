@@ -407,7 +407,6 @@ Update_History_Loop:
 			workflowTaskHandler := newWorkflowTaskHandler(
 				request.GetIdentity(),
 				completedEvent.GetEventId(),
-				namespaceEntry,
 				msBuilder,
 				handler.commandAttrValidator,
 				workflowSizeChecker,

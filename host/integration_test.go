@@ -2249,7 +2249,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.NoError(err)
 	s.NotNil(completedEvent)
 	completedAttributes := completedEvent.GetChildWorkflowExecutionCompletedEventAttributes()
-	s.Empty(completedAttributes.Namespace)
+	s.Equal(s.namespace, completedAttributes.Namespace)
 	s.Equal(childID, completedAttributes.WorkflowExecution.WorkflowId)
 	s.Equal(wtChild, completedAttributes.WorkflowType.Name)
 	var r string
