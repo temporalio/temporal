@@ -30,9 +30,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/uber-go/tally"
-	"go.uber.org/zap"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -42,9 +39,7 @@ import (
 	"go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	pes "go.temporal.io/server/common/persistence/elasticsearch"
@@ -76,23 +71,16 @@ type (
 
 	// TestClusterConfig are config for a test cluster
 	TestClusterConfig struct {
-		FrontendAddress       string
-		EnableArchival        bool
-		IsMasterCluster       bool
-		ClusterNo             int
-		ClusterMetadata       config.ClusterMetadata
-		MessagingClientConfig *MessagingClientConfig
-		Persistence           persistencetests.TestBaseOptions
-		HistoryConfig         *HistoryConfig
-		ESConfig              *elasticsearch.Config
-		WorkerConfig          *WorkerConfig
-		MockAdminClient       map[string]adminservice.AdminServiceClient
-	}
-
-	// MessagingClientConfig is the config for messaging config
-	MessagingClientConfig struct {
-		UseMock     bool
-		KafkaConfig *messaging.KafkaConfig
+		FrontendAddress string
+		EnableArchival  bool
+		IsMasterCluster bool
+		ClusterNo       int
+		ClusterMetadata config.ClusterMetadata
+		Persistence     persistencetests.TestBaseOptions
+		HistoryConfig   *HistoryConfig
+		ESConfig        *elasticsearch.Config
+		WorkerConfig    *WorkerConfig
+		MockAdminClient map[string]adminservice.AdminServiceClient
 	}
 
 	// WorkerConfig is the config for enabling/disabling Temporal worker
@@ -155,7 +143,6 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	testBase.Setup()
 	setupShards(testBase, options.HistoryConfig.NumHistoryShards, logger)
 	archiverBase := newArchiverBase(options.EnableArchival, logger)
-	messagingClient := getMessagingClient(options.MessagingClientConfig, logger)
 	var esClient elasticsearch.Client
 	var esVisibilityMgr persistence.VisibilityManager
 	advancedVisibilityWritingMode := dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOff)
@@ -186,7 +173,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		}
 		indexName := options.ESConfig.Indices[common.VisibilityAppName]
 		esVisibilityStore := pes.NewElasticSearchVisibilityStore(
-			esClient, indexName, nil, esProcessor, visConfig, logger, &metrics.NoopMetricsClient{},
+			esClient, indexName, esProcessor, visConfig, logger, &metrics.NoopMetricsClient{},
 		)
 		esVisibilityMgr = persistence.NewVisibilityManagerImpl(esVisibilityStore, visConfig.ValidSearchAttributes, logger)
 	}
@@ -199,7 +186,6 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	temporalParams := &TemporalParams{
 		ClusterMetadata:                  clusterMetadata,
 		PersistenceConfig:                pConfig,
-		MessagingClient:                  messagingClient,
 		MetadataMgr:                      testBase.MetadataManager,
 		ShardMgr:                         testBase.ShardMgr,
 		HistoryV2Mgr:                     testBase.HistoryV2Mgr,
@@ -296,15 +282,6 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 		historyURI:               filestore.URIScheme + "://" + historyStoreDirectory,
 		visibilityURI:            filestore.URIScheme + "://" + visibilityStoreDirectory,
 	}
-}
-
-func getMessagingClient(config *MessagingClientConfig, logger log.Logger) messaging.Client {
-	if config == nil || config.UseMock {
-		return mocks.NewMockMessagingClient(&mocks.KafkaProducer{}, nil)
-	}
-	checkCluster := len(config.KafkaConfig.ClusterToTopic) != 0
-	checkApp := len(config.KafkaConfig.Applications) != 0
-	return messaging.NewKafkaClient(config.KafkaConfig, nil, zap.NewNop(), logger, tally.NoopScope, checkCluster, checkApp)
 }
 
 // TearDownCluster tears down the test cluster

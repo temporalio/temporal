@@ -262,7 +262,7 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 		},
 		RunTimeout: int64(timestamp.DurationValue(runTimeout).Round(time.Second).Seconds()),
 	}
-	return t.visibilityMgr.RecordWorkflowExecutionStartedV2(request)
+	return t.visibilityMgr.RecordWorkflowExecutionStarted(request)
 }
 
 func (t *visibilityQueueTaskExecutor) upsertExecution(
@@ -311,7 +311,7 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 		WorkflowTimeout: int64(timestamp.DurationValue(workflowTimeout).Round(time.Second).Seconds()),
 	}
 
-	return t.visibilityMgr.UpsertWorkflowExecutionV2(request)
+	return t.visibilityMgr.UpsertWorkflowExecution(request)
 }
 
 func (t *visibilityQueueTaskExecutor) processCloseExecution(
@@ -428,7 +428,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 	}
 
 	if recordWorkflowClose {
-		return t.visibilityMgr.RecordWorkflowExecutionClosedV2(&persistence.RecordWorkflowExecutionClosedRequest{
+		return t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
 			VisibilityRequestBase: &persistence.VisibilityRequestBase{
 				NamespaceID: namespaceID,
 				Namespace:   namespace,
@@ -466,7 +466,7 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 			TaskID:      task.GetTaskId(),
 		}
 		// TODO: expose GetVisibilityManager method on shardContext interface
-		return t.shard.GetService().GetVisibilityManager().DeleteWorkflowExecutionV2(request) // delete from db
+		return t.shard.GetService().GetVisibilityManager().DeleteWorkflowExecution(request) // delete from db
 	}
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }

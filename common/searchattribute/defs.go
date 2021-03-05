@@ -47,7 +47,6 @@ const (
 	// Valid non-indexed fields on ES.
 	Memo              = "Memo"
 	VisibilityTaskKey = "VisibilityTaskKey"
-	KafkaKey          = "KafkaKey"
 
 	// Attr is prefix of custom search attributes.
 	Attr = "Attr"
@@ -77,7 +76,6 @@ var (
 		ExecutionStatus: enumspb.INDEXED_VALUE_TYPE_INT,
 		HistoryLength:   enumspb.INDEXED_VALUE_TYPE_INT,
 		TaskQueue:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		KafkaKey:        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		Encoding:        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 

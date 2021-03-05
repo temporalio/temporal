@@ -161,15 +161,9 @@ type (
 	VisibilityManager interface {
 		Closeable
 		GetName() string
-		// Deprecated.
 		RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error
-		RecordWorkflowExecutionStartedV2(request *RecordWorkflowExecutionStartedRequest) error
-		// Deprecated.
 		RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error
-		RecordWorkflowExecutionClosedV2(request *RecordWorkflowExecutionClosedRequest) error
-		// Deprecated.
 		UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error
-		UpsertWorkflowExecutionV2(request *UpsertWorkflowExecutionRequest) error
 		ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error)
 		ListOpenWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error)
@@ -178,9 +172,7 @@ type (
 		ListClosedWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error)
 		GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error)
-		// Deprecated.
 		DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error
-		DeleteWorkflowExecutionV2(request *VisibilityDeleteWorkflowExecutionRequest) error
 		ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
 		ScanWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
 		CountWorkflowExecutions(request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error)

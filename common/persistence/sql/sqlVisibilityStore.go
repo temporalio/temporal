@@ -62,11 +62,7 @@ func NewSQLVisibilityStore(
 	}, nil
 }
 
-func (s *sqlVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRecordWorkflowExecutionStartedRequest) error {
-	return s.RecordWorkflowExecutionStartedV2(request)
-}
-
-func (s *sqlVisibilityStore) RecordWorkflowExecutionStartedV2(
+func (s *sqlVisibilityStore) RecordWorkflowExecutionStarted(
 	request *p.InternalRecordWorkflowExecutionStartedRequest,
 ) error {
 	ctx, cancel := newVisibilityContext()
@@ -331,12 +327,6 @@ func (s *sqlVisibilityStore) DeleteWorkflowExecution(
 		return serviceerror.NewInternal(err.Error())
 	}
 	return nil
-}
-
-func (s *sqlVisibilityStore) DeleteWorkflowExecutionV2(
-	request *p.VisibilityDeleteWorkflowExecutionRequest,
-) error {
-	return s.DeleteWorkflowExecution(request)
 }
 
 func (s *sqlVisibilityStore) ListWorkflowExecutions(

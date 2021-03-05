@@ -48,13 +48,6 @@ const (
 	// MySQLDefaultPort MySQL default port
 	MySQLDefaultPort = 3306
 
-	// KafkaSeeds env
-	KafkaSeeds = "KAFKA_SEEDS"
-	// KafkaPort env
-	KafkaPort = "KAFKA_PORT"
-	// KafkaDefaultPort Kafka default port
-	KafkaDefaultPort = 9092
-
 	// ESSeeds env
 	ESSeeds = "ES_SEEDS"
 	// ESPort env
@@ -115,20 +108,6 @@ func SetupEnv() {
 		err := os.Setenv(PostgresPort, strconv.Itoa(PostgresDefaultPort))
 		if err != nil {
 			panic(fmt.Sprintf("error setting env %v", PostgresPort))
-		}
-	}
-
-	if os.Getenv(KafkaSeeds) == "" {
-		err := os.Setenv(KafkaSeeds, Localhost)
-		if err != nil {
-			panic(fmt.Sprintf("error setting env %v", KafkaSeeds))
-		}
-	}
-
-	if os.Getenv(KafkaPort) == "" {
-		err := os.Setenv(KafkaPort, strconv.Itoa(KafkaDefaultPort))
-		if err != nil {
-			panic(fmt.Sprintf("error setting env %v", KafkaPort))
 		}
 	}
 

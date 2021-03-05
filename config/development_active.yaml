@@ -73,40 +73,6 @@ dcRedirectionPolicy:
   policy: "selected-apis-forwarding"
   toDC: ""
 
-kafka:
-  tls:
-    enabled: false
-    certFile: ""
-    keyFile: ""
-    caFile: ""
-  clusters:
-    test:
-      brokers:
-        - 127.0.0.1:9092
-  topics:
-    active:
-      cluster: test
-    active-dlq:
-      cluster: test
-    standby:
-      cluster: test
-    standby-dlq:
-      cluster: test
-    other:
-      cluster: test
-    other-dlq:
-      cluster: test
-  temporal-cluster-topics:
-    active:
-      topic: active
-      dlq-topic: active-dlq
-    standby:
-      topic: standby
-      dlq-topic: standby-dlq
-    other:
-      topic: other
-      dlq-topic: other-dlq
-
 archival:
   history:
     state: "enabled"

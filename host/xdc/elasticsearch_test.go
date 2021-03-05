@@ -25,7 +25,7 @@
 // +build !race
 // +build esintegration
 
-// to run locally, make sure kafka and es is running,
+// to run locally, make sure Elasticsearch is running,
 // then run cmd `go test -v ./host/xdc -run TestESCrossDCTestSuite -tags esintegration`
 package xdc
 

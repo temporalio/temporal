@@ -266,9 +266,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 ) error {
 
 	// Record closing in visibility store
-	retentionSeconds := int64(0)
 	namespace := defaultNamespace
-	recordWorkflowClose := true
 	archiveVisibility := false
 
 	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
@@ -277,44 +275,9 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	}
 
 	if err == nil {
-		// retention in namespace config is in days, convert to seconds
-		retentionSeconds = int64(timestamp.DurationFromDays(namespaceEntry.GetRetentionDays(workflowID)).Seconds())
-		namespace = namespaceEntry.GetInfo().Name
-		// if sampled for longer retention is enabled, only record those sampled events
-		if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
-			!namespaceEntry.IsSampledForLongerRetention(workflowID) {
-			recordWorkflowClose = false
-		}
-
 		clusterConfiguredForVisibilityArchival := t.shard.GetService().GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
 		namespaceConfiguredForVisibilityArchival := namespaceEntry.GetConfig().VisibilityArchivalState == enumspb.ARCHIVAL_STATE_ENABLED
 		archiveVisibility = clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
-	}
-
-	if t.config.VisibilityQueue() == common.VisibilityQueueKafka && recordWorkflowClose {
-		if err := t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
-			VisibilityRequestBase: &persistence.VisibilityRequestBase{
-				NamespaceID: namespaceID,
-				Namespace:   namespace,
-				Execution: commonpb.WorkflowExecution{
-					WorkflowId: workflowID,
-					RunId:      runID,
-				},
-				WorkflowTypeName:   workflowTypeName,
-				StartTimestamp:     startTime.UnixNano(),
-				ExecutionTimestamp: executionTime.UnixNano(),
-				Status:             status,
-				TaskID:             taskID,
-				Memo:               visibilityMemo,
-				TaskQueue:          taskQueue,
-				SearchAttributes:   searchAttributes,
-			},
-			CloseTimestamp:   endTime.UnixNano(),
-			HistoryLength:    historyLength,
-			RetentionSeconds: retentionSeconds,
-		}); err != nil {
-			return err
-		}
 	}
 
 	if archiveVisibility {

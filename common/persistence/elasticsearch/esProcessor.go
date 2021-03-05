@@ -51,8 +51,7 @@ type (
 	Processor interface {
 		common.Daemon
 
-		// Add request to bulk, and record kafka message in map with provided key
-		// This call will be blocked when downstream has issues
+		// Add request to bulk processor.
 		Add(request *elasticsearch.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool)
 	}
 
