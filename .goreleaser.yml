@@ -1,0 +1,61 @@
+env:
+  - MODULE_ROOT=go.temporal.io/server
+before:
+  hooks:
+    - go mod download
+builds:
+  - id: "temporal-server"
+    dir: cmd/server
+    binary: temporal-server
+    ldflags:
+      - -X {{.Env.MODULE_ROOT}}/ldflags.GitRevision={{.ShortCommit}}
+      - -X {{.Env.MODULE_ROOT}}/ldflags.GitBranch={{.Env.GIT_BRANCH}}
+      - -X {{.Env.MODULE_ROOT}}/ldflags.GitTag={{.Tag}}
+      - -X {{.Env.MODULE_ROOT}}/ldflags.BuildDate={{.Env.BUILD_DATE}}
+      - -X {{.Env.MODULE_ROOT}}/ldflags.BuildTimeUnix={{.Env.BUILD_TS_UNIX}}
+      - -X {{.Env.MODULE_ROOT}}/ldflags.BuildPlatform={{.Env.BUILD_PLATFORM}}
+      - -X {{.Env.MODULE_ROOT}}/ldflags.GoVersion={{.Env.GO_VERSION}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+  - id: "tctl"
+    dir: cmd/tools/cli
+    binary: tctl
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+  - id: "temporal-cassandra-tool"
+    dir: cmd/tools/cassandra
+    binary: temporal-cassandra-tool
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+  - id: "temporal-sql-tool"
+    dir: cmd/tools/sql
+    binary: temporal-sql-tool
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+snapshot:
+  name_template: "{{ .Tag }}-next"
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'

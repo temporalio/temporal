@@ -1,0 +1,44 @@
+name: goreleaser
+on:
+  release:
+    types:
+      - released
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16
+      - name: Get build date
+        id: date
+        run: echo "::set-output name=date::$(date '+%F-%T')"
+      - name: Get build unix timestamp
+        id: timestamp
+        run: echo "::set-output name=timestamp::$(date '+%s')"
+      - name: Get git branch
+        id: branch
+        run: echo "::set-output name=branch::$(git rev-parse --abbrev-ref HEAD)"
+      - name: Get build platform
+        id: platform
+        run: echo "::set-output name=platform::$(go version | cut -d ' ' -f 4)"
+      - name: Get Go version
+        id: go
+        run: echo "::set-output name=go::$(go version | cut -d ' ' -f 3)"
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v2
+        with:
+          version: latest
+          args: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILD_DATE: ${{ steps.date.outputs.date }}
+          BUILD_TS_UNIX: ${{ steps.timestamp.outputs.timestamp }}
+          GIT_BRANCH: ${{ steps.branch.outputs.branch }}
+          BUILD_PLATFORM: ${{ steps.platform.outputs.platform }}
+          GO_VERSION: ${{ steps.go.outputs.go }}
