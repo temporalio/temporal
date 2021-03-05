@@ -67,7 +67,7 @@ bin/kafka-console-producer.sh --broker-list localhost:9092 --topic standby
 
 Replication task message:
 ```
-{taskType: 0
+{taskType: 0}
 ```
 
 Archiver
