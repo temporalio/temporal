@@ -247,8 +247,14 @@ func newWorkflowCommands() []cli.Command {
 					Usage: "reason to do the reset",
 				},
 				cli.StringFlag{
-					Name:  FlagResetType,
-					Usage: "where to reset. Support one of these: " + strings.Join(mapKeysToArray(resetTypesMap), ","),
+					Name: FlagResetType,
+					Usage: "where to reset. Support one of these: " +
+						strings.Join(mapKeysToArray(resetTypesMap), ","),
+				},
+				cli.StringFlag{
+					Name: FlagResetReapplyType,
+					Usage: "whether to reapply events after the reset point. Support one of these: " +
+						strings.Join(mapKeysToArray(resetReapplyTypesMap), ",") + "Default to: All",
 				},
 				cli.StringFlag{
 					Name:  FlagResetBadBinaryChecksum,

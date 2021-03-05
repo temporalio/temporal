@@ -22,7 +22,7 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
-	github.com/golang/mock v1.5.0
+	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.2
 	github.com/golang/snappy v0.0.3 // indirect
 	github.com/google/uuid v1.2.0
@@ -61,7 +61,7 @@ require (
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.opentelemetry.io/otel v0.15.0
 	go.opentelemetry.io/otel/exporters/metric/prometheus v0.15.0
-	go.temporal.io/api v1.4.1-0.20210429213054-a9a257b5cf16
+	go.temporal.io/api v1.4.1-0.20210615193141-8b3a0a10898b
 	go.temporal.io/sdk v1.7.0
 	go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193
 	go.uber.org/atomic v1.7.0
@@ -70,9 +70,8 @@ require (
 	golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b // indirect
 	golang.org/x/oauth2 v0.0.0-20210413134643-5e61552d6c78
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
-	golang.org/x/tools v0.1.1 // indirect
 	google.golang.org/api v0.45.0
-	google.golang.org/grpc v1.37.0
+	google.golang.org/grpc v1.38.0
 	google.golang.org/grpc/examples v0.0.0-20210426212906-52a707c0dafe
 	gopkg.in/check.v1 v1.0.0-20200902074654-038fdea0a05b // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1
@@ -81,5 +80,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 	honnef.co/go/tools v0.1.0 // indirect
 )
-
-replace go.temporal.io/api => github.com/wxing1292/api-go v1.0.1-0.20210305184909-513103793126

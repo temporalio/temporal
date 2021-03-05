@@ -80,11 +80,17 @@ var envKeysForUserName = []string{
 	"HOME",
 }
 
-var resetTypesMap = map[string]string{
+var resetTypesMap = map[string]interface{}{
 	"FirstWorkflowTask":  "",
 	"LastWorkflowTask":   "",
 	"LastContinuedAsNew": "",
 	"BadBinary":          FlagResetBadBinaryChecksum,
+}
+
+var resetReapplyTypesMap = map[string]interface{}{
+	"":     enumspb.RESET_REAPPLY_TYPE_ALL, // default value
+	"All":  enumspb.RESET_REAPPLY_TYPE_ALL,
+	"None": enumspb.RESET_REAPPLY_TYPE_NONE,
 }
 
 type jsonType int

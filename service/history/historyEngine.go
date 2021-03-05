@@ -1236,7 +1236,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				p.LastStartedTime = ai.StartedTime
 			}
 			if ai.HasRetryPolicy {
-				p.Attempt = int32(ai.Attempt)
+				p.Attempt = ai.Attempt
 				p.ExpirationTime = ai.RetryExpirationTime
 				if ai.RetryMaximumAttempts != 0 {
 					p.MaximumAttempts = ai.RetryMaximumAttempts
@@ -2328,14 +2328,13 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 		return nil, serviceerror.NewInvalidArgument("Workflow task finish ID must be > 1 && <= workflow last event ID.")
 	}
 
-	var resetReappyType ResetReapplyType
 	switch request.GetResetReapplyType() {
 	case enumspb.RESET_REAPPLY_TYPE_UNSPECIFIED:
 		return nil, serviceerror.NewInvalidArgument("reset type not set")
 	case enumspb.RESET_REAPPLY_TYPE_ALL:
-		resetReappyType = ResetReapplyTypeAll
+		// noop
 	case enumspb.RESET_REAPPLY_TYPE_NONE:
-		resetReappyType = ResetReapplyTypeNone
+		// noop
 	default:
 		return nil, serviceerror.NewInternal("unknown reset type")
 	}
@@ -2427,7 +2426,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 		),
 		request.GetReason(),
 		nil,
-		resetReappyType,
+		request.GetResetReapplyType(),
 	); err != nil {
 		return nil, err
 	}
@@ -3025,7 +3024,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 					),
 					eventsReapplicationResetWorkflowReason,
 					toReapplyEvents,
-					ResetReapplyTypeAll,
+					enumspb.RESET_REAPPLY_TYPE_ALL,
 				); err != nil {
 					return nil, err
 				}
