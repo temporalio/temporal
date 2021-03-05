@@ -38,16 +38,20 @@ const (
 	ExecutionTime   = "ExecutionTime"
 	CloseTime       = "CloseTime"
 	ExecutionStatus = "ExecutionStatus"
-	HistoryLength   = "HistoryLength"
-	KafkaKey        = "KafkaKey"
-	Encoding        = "Encoding"
-	BinaryChecksums = "BinaryChecksums"
-	TaskQueue       = "TaskQueue"
 
+	// TODO (alex): move these 3 to non-indexed.
+	HistoryLength = "HistoryLength"
+	TaskQueue     = "TaskQueue"
+	Encoding      = "Encoding"
+
+	// Valid non-indexed fields on ES.
+	Memo              = "Memo"
 	VisibilityTaskKey = "VisibilityTaskKey"
+	KafkaKey          = "KafkaKey"
 
 	// Attr is prefix of custom search attributes.
-	Attr                  = "Attr"
+	Attr = "Attr"
+	// Custom search attributes.
 	CustomStringField     = "CustomStringField"
 	CustomKeywordField    = "CustomKeywordField"
 	CustomIntField        = "CustomIntField"
@@ -55,11 +59,9 @@ const (
 	CustomBoolField       = "CustomBoolField"
 	CustomDatetimeField   = "CustomDatetimeField"
 	TemporalChangeVersion = "TemporalChangeVersion"
+	BinaryChecksums       = "BinaryChecksums"
 	CustomNamespace       = "CustomNamespace"
 	Operator              = "Operator"
-
-	// Valid non-indexed fields on ES.
-	Memo = "Memo"
 )
 
 var (

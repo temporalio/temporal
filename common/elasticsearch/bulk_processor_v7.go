@@ -44,7 +44,12 @@ func newBulkProcessorV7(esBulkProcessor *elastic.BulkProcessor) *bulkProcessorV7
 }
 
 func (p *bulkProcessorV7) Stop() error {
-	return p.esBulkProcessor.Stop()
+	errF := p.esBulkProcessor.Flush()
+	errS := p.esBulkProcessor.Stop()
+	if errF != nil {
+		return errF
+	}
+	return errS
 }
 
 func (p *bulkProcessorV7) Add(request *BulkableRequest) {

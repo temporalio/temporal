@@ -603,7 +603,7 @@ func newAdminElasticSearchCommands() []cli.Command {
 				cli.IntFlag{
 					Name:  FlagBatchSizeWithAlias,
 					Usage: "Optional batch size of actions for bulk operations",
-					Value: 1000,
+					Value: 10,
 				},
 			},
 			Action: func(c *cli.Context) {
