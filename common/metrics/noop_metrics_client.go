@@ -22,34 +22,39 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package host
+package metrics
 
 import (
 	"time"
 
 	"github.com/uber-go/tally"
-
-	"go.temporal.io/server/common/metrics"
 )
 
 type (
-	noopMetricsClient struct{}
+	NoopMetricsClient struct{}
 )
 
-func (m noopMetricsClient) IncCounter(scope int, counter int) {}
-
-func (m noopMetricsClient) AddCounter(scope int, counter int, delta int64) {}
-
-func (m noopMetricsClient) StartTimer(scope int, timer int) tally.Stopwatch {
-	panic("Unexpected call to NoopMetricsClient StartTimer")
+func NewNoopMetricsClient() *NoopMetricsClient {
+	return &NoopMetricsClient{}
 }
 
-func (m noopMetricsClient) RecordTimer(scope int, timer int, d time.Duration) {}
+func (m NoopMetricsClient) IncCounter(scope int, counter int) {}
 
-func (m noopMetricsClient) RecordDistribution(scope int, timer int, d int) {}
+func (m NoopMetricsClient) AddCounter(scope int, counter int, delta int64) {}
 
-func (m noopMetricsClient) UpdateGauge(scope int, gauge int, value float64) {}
+func (m NoopMetricsClient) StartTimer(scope int, timer int) tally.Stopwatch {
+	return NopStopwatch()
+}
 
-func (m noopMetricsClient) Scope(scope int, tags ...metrics.Tag) metrics.Scope {
-	panic("Unexpected call to NoopMetricsClient Scope")
+func (m NoopMetricsClient) RecordTimer(scope int, timer int, d time.Duration) {}
+
+func (m NoopMetricsClient) RecordDistribution(scope int, timer int, d int) {}
+
+func (m NoopMetricsClient) UpdateGauge(scope int, gauge int, value float64) {}
+
+func (m NoopMetricsClient) Scope(scope int, tags ...Tag) Scope {
+	return &metricsScope{
+		scope:     tally.NoopScope,
+		rootScope: tally.NoopScope,
+	}
 }

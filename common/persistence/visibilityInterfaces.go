@@ -63,7 +63,7 @@ type (
 		*VisibilityRequestBase
 		CloseTimestamp   int64
 		HistoryLength    int64
-		RetentionSeconds int64
+		RetentionSeconds int64 // not persisted, used for cassandra ttl
 	}
 
 	// UpsertWorkflowExecutionRequest is used to upsert workflow execution

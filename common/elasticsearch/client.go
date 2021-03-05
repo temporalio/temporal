@@ -52,8 +52,8 @@ type (
 	}
 
 	CLIClient interface {
+		Client
 		CatIndices(ctx context.Context) (elastic.CatIndicesResponse, error)
-		SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error)
 		Bulk() BulkService
 	}
 
