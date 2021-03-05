@@ -41,9 +41,6 @@
         "HistoryLength": {
           "type": "long"
         },
-        "KafkaKey": {
-          "type": "keyword"
-        },
         "Encoding": {
           "type": "keyword"
         },

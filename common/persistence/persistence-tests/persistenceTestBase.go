@@ -723,7 +723,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *persisten
 	var replicationTasks []persistence.Task
 	for _, task := range txTasks {
 		switch t := task.(type) {
-		case *persistence.WorkflowTask, *persistence.ActivityTask, *persistence.CloseExecutionTask, *persistence.CancelExecutionTask, *persistence.StartChildExecutionTask, *persistence.SignalExecutionTask, *persistence.RecordWorkflowStartedTask:
+		case *persistence.WorkflowTask, *persistence.ActivityTask, *persistence.CloseExecutionTask, *persistence.CancelExecutionTask, *persistence.StartChildExecutionTask, *persistence.SignalExecutionTask:
 			transferTasks = append(transferTasks, t)
 		case *persistence.HistoryReplicationTask, *persistence.SyncActivityTask:
 			replicationTasks = append(replicationTasks, t)

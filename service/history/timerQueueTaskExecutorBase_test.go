@@ -44,7 +44,7 @@ import (
 )
 
 type (
-	timerQueueTaskExecutorBaseSuiteV2 struct {
+	timerQueueTaskExecutorBaseSuite struct {
 		suite.Suite
 		*require.Assertions
 
@@ -65,20 +65,20 @@ type (
 	}
 )
 
-func TestTimerQueueTaskExecutorBaseSuiteV2(t *testing.T) {
-	s := new(timerQueueTaskExecutorBaseSuiteV2)
+func TestTimerQueueTaskExecutorBaseSuite(t *testing.T) {
+	s := new(timerQueueTaskExecutorBaseSuite)
 	suite.Run(t, s)
 }
 
-func (s *timerQueueTaskExecutorBaseSuiteV2) SetupSuite() {
+func (s *timerQueueTaskExecutorBaseSuite) SetupSuite() {
 
 }
 
-func (s *timerQueueTaskExecutorBaseSuiteV2) TearDownSuite() {
+func (s *timerQueueTaskExecutorBaseSuite) TearDownSuite() {
 
 }
 
-func (s *timerQueueTaskExecutorBaseSuiteV2) SetupTest() {
+func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
@@ -126,12 +126,12 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) SetupTest() {
 	)
 }
 
-func (s *timerQueueTaskExecutorBaseSuiteV2) TearDownTest() {
+func (s *timerQueueTaskExecutorBaseSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.Finish(s.T())
 }
 
-func (s *timerQueueTaskExecutorBaseSuiteV2) TestDeleteWorkflow_NoErr() {
+func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 	task := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
 		TaskId:          12345,
@@ -156,7 +156,7 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) TestDeleteWorkflow_NoErr() {
 	s.NoError(err)
 }
 
-func (s *timerQueueTaskExecutorBaseSuiteV2) TestArchiveHistory_NoErr_InlineArchivalFailed() {
+func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchivalFailed() {
 	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistencespb.ExecutionStats{
 		HistorySize: 1024,
 	}, nil)
@@ -186,7 +186,7 @@ func (s *timerQueueTaskExecutorBaseSuiteV2) TestArchiveHistory_NoErr_InlineArchi
 	s.NoError(err)
 }
 
-func (s *timerQueueTaskExecutorBaseSuiteV2) TestArchiveHistory_SendSignalErr() {
+func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_SendSignalErr() {
 	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistencespb.ExecutionStats{
 		HistorySize: 1024 * 1024 * 1024,
 	}, nil)

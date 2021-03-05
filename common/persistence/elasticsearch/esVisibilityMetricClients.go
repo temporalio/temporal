@@ -68,20 +68,6 @@ func (p *visibilityMetricsClient) RecordWorkflowExecutionStarted(request *p.Reco
 	return err
 }
 
-func (p *visibilityMetricsClient) RecordWorkflowExecutionStartedV2(request *p.RecordWorkflowExecutionStartedRequest) error {
-	p.metricClient.IncCounter(metrics.ElasticsearchRecordWorkflowExecutionStartedScope, metrics.ElasticsearchRequests)
-
-	sw := p.metricClient.StartTimer(metrics.ElasticsearchRecordWorkflowExecutionStartedScope, metrics.ElasticsearchLatency)
-	err := p.persistence.RecordWorkflowExecutionStartedV2(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.ElasticsearchRecordWorkflowExecutionStartedScope, err)
-	}
-
-	return err
-}
-
 func (p *visibilityMetricsClient) RecordWorkflowExecutionClosed(request *p.RecordWorkflowExecutionClosedRequest) error {
 	p.metricClient.IncCounter(metrics.ElasticsearchRecordWorkflowExecutionClosedScope, metrics.ElasticsearchRequests)
 
@@ -96,39 +82,11 @@ func (p *visibilityMetricsClient) RecordWorkflowExecutionClosed(request *p.Recor
 	return err
 }
 
-func (p *visibilityMetricsClient) RecordWorkflowExecutionClosedV2(request *p.RecordWorkflowExecutionClosedRequest) error {
-	p.metricClient.IncCounter(metrics.ElasticsearchRecordWorkflowExecutionClosedScope, metrics.ElasticsearchRequests)
-
-	sw := p.metricClient.StartTimer(metrics.ElasticsearchRecordWorkflowExecutionClosedScope, metrics.ElasticsearchLatency)
-	err := p.persistence.RecordWorkflowExecutionClosedV2(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.ElasticsearchRecordWorkflowExecutionClosedScope, err)
-	}
-
-	return err
-}
-
 func (p *visibilityMetricsClient) UpsertWorkflowExecution(request *p.UpsertWorkflowExecutionRequest) error {
 	p.metricClient.IncCounter(metrics.ElasticsearchUpsertWorkflowExecutionScope, metrics.ElasticsearchRequests)
 
 	sw := p.metricClient.StartTimer(metrics.ElasticsearchUpsertWorkflowExecutionScope, metrics.ElasticsearchLatency)
 	err := p.persistence.UpsertWorkflowExecution(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.ElasticsearchUpsertWorkflowExecutionScope, err)
-	}
-
-	return err
-}
-
-func (p *visibilityMetricsClient) UpsertWorkflowExecutionV2(request *p.UpsertWorkflowExecutionRequest) error {
-	p.metricClient.IncCounter(metrics.ElasticsearchUpsertWorkflowExecutionScope, metrics.ElasticsearchRequests)
-
-	sw := p.metricClient.StartTimer(metrics.ElasticsearchUpsertWorkflowExecutionScope, metrics.ElasticsearchLatency)
-	err := p.persistence.UpsertWorkflowExecutionV2(request)
 	sw.Stop()
 
 	if err != nil {
@@ -297,20 +255,6 @@ func (p *visibilityMetricsClient) DeleteWorkflowExecution(request *p.VisibilityD
 
 	sw := p.metricClient.StartTimer(metrics.ElasticsearchDeleteWorkflowExecutionsScope, metrics.ElasticsearchLatency)
 	err := p.persistence.DeleteWorkflowExecution(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.ElasticsearchDeleteWorkflowExecutionsScope, err)
-	}
-
-	return err
-}
-
-func (p *visibilityMetricsClient) DeleteWorkflowExecutionV2(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
-	p.metricClient.IncCounter(metrics.ElasticsearchDeleteWorkflowExecutionsScope, metrics.ElasticsearchRequests)
-
-	sw := p.metricClient.StartTimer(metrics.ElasticsearchDeleteWorkflowExecutionsScope, metrics.ElasticsearchLatency)
-	err := p.persistence.DeleteWorkflowExecutionV2(request)
 	sw.Stop()
 
 	if err != nil {

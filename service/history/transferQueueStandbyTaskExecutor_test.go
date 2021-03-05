@@ -55,7 +55,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
-	dc "go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
@@ -107,7 +106,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	config := configs.NewDynamicConfigForTest()
-	config.VisibilityQueue = dc.GetStringPropertyFn(common.VisibilityQueueInternal)
 
 	s.namespaceID = testNamespaceID
 	s.namespaceEntry = testGlobalNamespaceEntry

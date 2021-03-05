@@ -217,6 +217,97 @@ func (mr *MockCLIClientMockRecorder) CatIndices(ctx interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CatIndices", reflect.TypeOf((*MockCLIClient)(nil).CatIndices), ctx)
 }
 
+// Count mocks base method.
+func (m *MockCLIClient) Count(ctx context.Context, index, query string) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Count", ctx, index, query)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Count indicates an expected call of Count.
+func (mr *MockCLIClientMockRecorder) Count(ctx, index, query interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockCLIClient)(nil).Count), ctx, index, query)
+}
+
+// PutMapping mocks base method.
+func (m *MockCLIClient) PutMapping(ctx context.Context, index, root, key, valueType string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PutMapping", ctx, index, root, key, valueType)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PutMapping indicates an expected call of PutMapping.
+func (mr *MockCLIClientMockRecorder) PutMapping(ctx, index, root, key, valueType interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutMapping", reflect.TypeOf((*MockCLIClient)(nil).PutMapping), ctx, index, root, key, valueType)
+}
+
+// RunBulkProcessor mocks base method.
+func (m *MockCLIClient) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RunBulkProcessor", ctx, p)
+	ret0, _ := ret[0].(BulkProcessor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RunBulkProcessor indicates an expected call of RunBulkProcessor.
+func (mr *MockCLIClientMockRecorder) RunBulkProcessor(ctx, p interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunBulkProcessor", reflect.TypeOf((*MockCLIClient)(nil).RunBulkProcessor), ctx, p)
+}
+
+// Scroll mocks base method.
+func (m *MockCLIClient) Scroll(ctx context.Context, scrollID string) (*v7.SearchResult, ScrollService, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Scroll", ctx, scrollID)
+	ret0, _ := ret[0].(*v7.SearchResult)
+	ret1, _ := ret[1].(ScrollService)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// Scroll indicates an expected call of Scroll.
+func (mr *MockCLIClientMockRecorder) Scroll(ctx, scrollID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Scroll", reflect.TypeOf((*MockCLIClient)(nil).Scroll), ctx, scrollID)
+}
+
+// ScrollFirstPage mocks base method.
+func (m *MockCLIClient) ScrollFirstPage(ctx context.Context, index, query string) (*v7.SearchResult, ScrollService, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ScrollFirstPage", ctx, index, query)
+	ret0, _ := ret[0].(*v7.SearchResult)
+	ret1, _ := ret[1].(ScrollService)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ScrollFirstPage indicates an expected call of ScrollFirstPage.
+func (mr *MockCLIClientMockRecorder) ScrollFirstPage(ctx, index, query interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScrollFirstPage", reflect.TypeOf((*MockCLIClient)(nil).ScrollFirstPage), ctx, index, query)
+}
+
+// Search mocks base method.
+func (m *MockCLIClient) Search(ctx context.Context, p *SearchParameters) (*v7.SearchResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Search", ctx, p)
+	ret0, _ := ret[0].(*v7.SearchResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Search indicates an expected call of Search.
+func (mr *MockCLIClientMockRecorder) Search(ctx, p interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Search", reflect.TypeOf((*MockCLIClient)(nil).Search), ctx, p)
+}
+
 // SearchWithDSL mocks base method.
 func (m *MockCLIClient) SearchWithDSL(ctx context.Context, index, query string) (*v7.SearchResult, error) {
 	m.ctrl.T.Helper()

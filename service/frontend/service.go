@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -199,7 +198,7 @@ func NewService(
 				ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
 			}
 			visibilityFromES = espersistence.NewESVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
-				nil, nil, params.MetricsClient, logger)
+				nil, params.MetricsClient, logger)
 		}
 		return persistence.NewVisibilityManagerWrapper(
 			visibilityFromDB,
@@ -238,10 +237,10 @@ func (s *Service) Start() {
 	logger := s.GetLogger()
 	logger.Info("frontend starting")
 
-	var replicationMessageSink messaging.Producer
+	var namespaceReplicationQueue persistence.NamespaceReplicationQueue
 	clusterMetadata := s.GetClusterMetadata()
 	if clusterMetadata.IsGlobalNamespaceEnabled() {
-		replicationMessageSink = s.GetNamespaceReplicationQueue()
+		namespaceReplicationQueue = s.GetNamespaceReplicationQueue()
 	}
 
 	metricsInterceptor := interceptor.NewTelemetryInterceptor(
@@ -286,7 +285,7 @@ func (s *Service) Start() {
 	)
 	s.server = grpc.NewServer(opts...)
 
-	wfHandler := NewWorkflowHandler(s, s.config, replicationMessageSink)
+	wfHandler := NewWorkflowHandler(s, s.config, namespaceReplicationQueue)
 	s.handler = NewDCRedirectionHandler(wfHandler, s.params.DCRedirectionPolicy)
 
 	workflowservice.RegisterWorkflowServiceServer(s.server, s.handler)

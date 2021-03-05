@@ -102,16 +102,5 @@ namespaceDefaults:
       state: "disabled"
       URI: "file:///tmp/temporal_vis_archival/development"
 
-kafka:
-  clusters:
-    test:
-      brokers:
-        - 127.0.0.1:9092
-  topics:
-    temporal-visibility-dev:
-      cluster: test
-    temporal-visibility-dev-dlq:
-      cluster: test
-
 publicClient:
   hostPort: "127.0.0.1:7233"

@@ -244,9 +244,6 @@ type Config struct {
 	VisibilityProcessorEnablePriorityTaskProcessor         dynamicconfig.BoolPropertyFn
 	VisibilityProcessorVisibilityArchivalTimeLimit         dynamicconfig.DurationPropertyFn
 
-	VisibilityQueue            dynamicconfig.StringPropertyFn
-	VisibilityProcessorEnabled dynamicconfig.BoolPropertyFn
-
 	// ValidSearchAttributes is legal indexed keys that can be used in list APIs
 	ValidSearchAttributes             dynamicconfig.MapPropertyFn
 	SearchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -432,9 +429,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		VisibilityProcessorMaxRedispatchQueueSize:              dc.GetIntProperty(dynamicconfig.VisibilityProcessorMaxRedispatchQueueSize, 10000),
 		VisibilityProcessorEnablePriorityTaskProcessor:         dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnablePriorityTaskProcessor, false),
 		VisibilityProcessorVisibilityArchivalTimeLimit:         dc.GetDurationProperty(dynamicconfig.VisibilityProcessorVisibilityArchivalTimeLimit, 200*time.Millisecond),
-
-		VisibilityQueue:            dc.GetStringProperty(dynamicconfig.VisibilityQueue, common.VisibilityQueueInternal),
-		VisibilityProcessorEnabled: dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnabled, true),
 
 		ValidSearchAttributes:             dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, searchattribute.GetDefaultTypeMap()),
 		SearchAttributesNumberOfKeysLimit: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),

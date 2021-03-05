@@ -37,11 +37,9 @@
       "ExecutionStatus": {
         "type": "long"
       },
+
       "HistoryLength": {
         "type": "long"
-      },
-      "KafkaKey": {
-        "type": "keyword"
       },
       "Encoding": {
         "type": "keyword"

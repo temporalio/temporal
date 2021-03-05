@@ -622,33 +622,6 @@ func SysStackTrace(stackTrace string) Tag {
 	return NewStringTag("sys-stack-trace", stackTrace)
 }
 
-// Kafka related
-
-// KafkaTopicName returns tag for TopicName
-func KafkaTopicName(topicName string) Tag {
-	return NewStringTag("kafka-topic-name", topicName)
-}
-
-// KafkaConsumerName returns tag for ConsumerName
-func KafkaConsumerName(consumerName string) Tag {
-	return NewStringTag("kafka-consumer-name", consumerName)
-}
-
-// KafkaPartition returns tag for Partition
-func KafkaPartition(partition int32) Tag {
-	return NewInt32("kafka-partition", partition)
-}
-
-// KafkaPartitionKey returns tag for PartitionKey
-func KafkaPartitionKey(partitionKey interface{}) Tag {
-	return NewObjectTag("kafka-partition-key", partitionKey)
-}
-
-// KafkaOffset returns tag for Offset
-func KafkaOffset(offset int64) Tag {
-	return NewInt64("kafka-offset", offset)
-}
-
 // TokenLastEventID returns tag for TokenLastEventID
 func TokenLastEventID(id int64) Tag {
 	return NewInt64("token-last-event-id", id)

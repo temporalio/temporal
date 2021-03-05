@@ -157,12 +157,7 @@ func (v *cassandraVisibilityPersistence) Close() {
 	}
 }
 
-// Deprecated.
-func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(request *p.InternalRecordWorkflowExecutionStartedRequest) error {
-	return v.RecordWorkflowExecutionStartedV2(request)
-}
-
-func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStartedV2(
+func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 	request *p.InternalRecordWorkflowExecutionStartedRequest) error {
 	ttl := request.RunTimeout + openExecutionTTLBuffer
 	var query gocql.Query
@@ -275,13 +270,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosedV2(
 	return gocql.ConvertError("RecordWorkflowExecutionClosed", err)
 }
 
-// Deprecated.
-func (v *cassandraVisibilityPersistence) UpsertWorkflowExecution(
-	_ *p.InternalUpsertWorkflowExecutionRequest) error {
-	return nil
-}
-
-func (v *cassandraVisibilityPersistence) UpsertWorkflowExecutionV2(request *p.InternalUpsertWorkflowExecutionRequest) error {
+func (v *cassandraVisibilityPersistence) UpsertWorkflowExecution(request *p.InternalUpsertWorkflowExecutionRequest) error {
 	return nil
 }
 
@@ -531,11 +520,6 @@ func (v *cassandraVisibilityPersistence) GetClosedWorkflowExecution(
 
 // DeleteWorkflowExecution is a no-op since deletes are auto-handled by cassandra TTLs
 func (v *cassandraVisibilityPersistence) DeleteWorkflowExecution(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
-	return nil
-}
-
-// DeleteWorkflowExecutionV2 is a no-op since deletes are auto-handled by cassandra TTLs
-func (v *cassandraVisibilityPersistence) DeleteWorkflowExecutionV2(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
 	return nil
 }
 
