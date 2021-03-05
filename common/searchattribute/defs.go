@@ -47,7 +47,6 @@ const (
 	// Valid non-indexed fields on ES.
 	Memo              = "Memo"
 	VisibilityTaskKey = "VisibilityTaskKey"
-	KafkaKey          = "KafkaKey"
 
 	// Attr is prefix of custom search attributes.
 	Attr = "Attr"

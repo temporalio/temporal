@@ -164,7 +164,7 @@ func AdminIndex(c *cli.Context) {
 		ValidSearchAttributes:  dc.GetMapPropertyFn(searchattribute.GetDefaultTypeMap()),
 		ESProcessorAckTimeout:  dc.GetDurationPropertyFn(1 * time.Minute),
 	}
-	visibilityManager := espersistence.NewESVisibilityManager(indexName, esClient, visibilityConfigForES, nil, esProcessor, metrics.NewNoopMetricsClient(), logger)
+	visibilityManager := espersistence.NewESVisibilityManager(indexName, esClient, visibilityConfigForES, esProcessor, metrics.NewNoopMetricsClient(), logger)
 
 	successLines := &atomic.Int32{}
 	wg := &sync.WaitGroup{}
@@ -172,7 +172,7 @@ func AdminIndex(c *cli.Context) {
 	for i := 0; i < numOfBatches; i++ {
 		go func(batchNum int) {
 			for line := batchNum; line < len(messages); line += numOfBatches {
-				err1 := visibilityManager.RecordWorkflowExecutionClosedV2(messages[line])
+				err1 := visibilityManager.RecordWorkflowExecutionClosed(messages[line])
 				if err1 != nil {
 					fmt.Printf("Unable to save row at line %d: %v", line, err1)
 				} else {
