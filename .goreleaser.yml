@@ -7,6 +7,8 @@ builds:
   - id: "temporal-server"
     dir: cmd/server
     binary: temporal-server
+    env:
+      - CGO_ENABLED=0
     ldflags:
       - -X {{.Env.MODULE_ROOT}}/ldflags.GitRevision={{.ShortCommit}}
       - -X {{.Env.MODULE_ROOT}}/ldflags.GitBranch={{.Env.GIT_BRANCH}}
@@ -24,6 +26,8 @@ builds:
   - id: "tctl"
     dir: cmd/tools/cli
     binary: tctl
+    env:
+      - CGO_ENABLED=0
     goos:
       - linux
       - darwin
@@ -33,6 +37,8 @@ builds:
   - id: "temporal-cassandra-tool"
     dir: cmd/tools/cassandra
     binary: temporal-cassandra-tool
+    env:
+      - CGO_ENABLED=0
     goos:
       - linux
       - darwin
@@ -42,6 +48,8 @@ builds:
   - id: "temporal-sql-tool"
     dir: cmd/tools/sql
     binary: temporal-sql-tool
+    env:
+      - CGO_ENABLED=0
     goos:
       - linux
       - darwin
