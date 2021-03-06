@@ -40,6 +40,7 @@ import (
 	history "go.temporal.io/api/history/v1"
 	taskqueue "go.temporal.io/api/taskqueue/v1"
 	workflowservice "go.temporal.io/api/workflowservice/v1"
+
 	enums0 "go.temporal.io/server/api/enums/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
@@ -810,9 +811,9 @@ func (mr *MockmutableStateMockRecorder) ClearStickyness() *gomock.Call {
 }
 
 // Clone mocks base method.
-func (m *MockmutableState) Clone() (*persistence.WorkflowMutableState, error) {
+func (m *MockmutableState) CloneProto() (*persistence.WorkflowMutableState, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Clone")
+	ret := m.ctrl.Call(m, "CloneProto")
 	ret0, _ := ret[0].(*persistence.WorkflowMutableState)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
@@ -821,7 +822,7 @@ func (m *MockmutableState) Clone() (*persistence.WorkflowMutableState, error) {
 // Clone indicates an expected call of Clone.
 func (mr *MockmutableStateMockRecorder) Clone() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Clone", reflect.TypeOf((*MockmutableState)(nil).Clone))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloneProto", reflect.TypeOf((*MockmutableState)(nil).CloneProto))
 }
 
 // CloseTransactionAsMutation mocks base method.

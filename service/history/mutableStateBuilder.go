@@ -268,7 +268,7 @@ func newMutableStateBuilderWithVersionHistories(
 	return s
 }
 
-func (e *mutableStateBuilder) Clone() (*persistencespb.WorkflowMutableState, error) {
+func (e *mutableStateBuilder) CloneProto() (*persistencespb.WorkflowMutableState, error) {
 	ms := &persistencespb.WorkflowMutableState{
 		ActivityInfos:       e.pendingActivityInfoIDs,
 		TimerInfos:          e.pendingTimerInfoIDs,
