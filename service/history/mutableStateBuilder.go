@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
@@ -267,8 +268,8 @@ func newMutableStateBuilderWithVersionHistories(
 	return s
 }
 
-func (e *mutableStateBuilder) ToProto() *persistencespb.WorkflowMutableState {
-	return &persistencespb.WorkflowMutableState{
+func (e *mutableStateBuilder) CloneProto() (*persistencespb.WorkflowMutableState, error) {
+	ms := &persistencespb.WorkflowMutableState{
 		ActivityInfos:       e.pendingActivityInfoIDs,
 		TimerInfos:          e.pendingTimerInfoIDs,
 		ChildExecutionInfos: e.pendingChildExecutionInfoIDs,
@@ -281,6 +282,12 @@ func (e *mutableStateBuilder) ToProto() *persistencespb.WorkflowMutableState {
 		BufferedEvents:      e.bufferedEvents,
 		Checksum:            e.checksum,
 	}
+
+	blob, err := serialization.WorkflowMutableStateToBlob(ms)
+	if err != nil {
+		return nil, err
+	}
+	return serialization.WorkflowMutableStateFromBlob(blob.Data, blob.String())
 }
 
 func (e *mutableStateBuilder) Load(
