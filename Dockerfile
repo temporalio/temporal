@@ -57,6 +57,7 @@ COPY --from=temporal-builder /temporal/tctl /usr/local/bin
 ENTRYPOINT ["tctl"]
 
 # All temporal tool binaries
+FROM temporalio/base-admin-tools:1.0.0 as temporal-admin-tools
 
 ENV TEMPORAL_HOME /etc/temporal
 RUN mkdir -p /etc/temporal
