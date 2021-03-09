@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	pes "go.temporal.io/server/common/persistence/elasticsearch"
+	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
@@ -142,18 +142,18 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	testBase.Setup()
 	setupShards(testBase, options.HistoryConfig.NumHistoryShards, logger)
 	archiverBase := newArchiverBase(options.EnableArchival, logger)
-	var esClient pes.Client
+	var esClient espersistence.Client
 	var esVisibilityMgr persistence.VisibilityManager
 	advancedVisibilityWritingMode := dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOff)
 	if options.WorkerConfig.EnableIndexer {
 		advancedVisibilityWritingMode = dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOn)
 		var err error
-		esClient, err = pes.NewClient(options.ESConfig, nil, logger)
+		esClient, err = espersistence.NewClient(options.ESConfig, nil, logger)
 		if err != nil {
 			return nil, err
 		}
 
-		esProcessorConfig := &pes.ProcessorConfig{
+		esProcessorConfig := &espersistence.ProcessorConfig{
 			IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(32),
 			ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(1),
 			ESProcessorBulkActions:   dynamicconfig.GetIntPropertyFn(10),
@@ -161,7 +161,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 			ValidSearchAttributes:    dynamicconfig.GetMapPropertyFn(searchattribute.GetDefaultTypeMap()),
 		}
-		esProcessor := pes.NewProcessor(esProcessorConfig, esClient, logger, &metrics.NoopMetricsClient{})
+		esProcessor := espersistence.NewProcessor(esProcessorConfig, esClient, logger, &metrics.NoopMetricsClient{})
 		esProcessor.Start()
 
 		visConfig := &config.VisibilityConfig{
@@ -171,7 +171,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 		}
 		indexName := options.ESConfig.Indices[common.VisibilityAppName]
-		esVisibilityStore := pes.NewVisibilityStore(
+		esVisibilityStore := espersistence.NewVisibilityStore(
 			esClient, indexName, esProcessor, visConfig, logger, &metrics.NoopMetricsClient{},
 		)
 		esVisibilityMgr = persistence.NewVisibilityManagerImpl(esVisibilityStore, visConfig.ValidSearchAttributes, logger)

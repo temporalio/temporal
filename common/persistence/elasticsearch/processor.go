@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
@@ -64,6 +65,16 @@ type (
 		logger                  log.Logger
 		metricsClient           metrics.Client
 		indexerConcurrency      uint32
+	}
+
+	// ProcessorConfig contains all configs for processor
+	ProcessorConfig struct {
+		IndexerConcurrency       dynamicconfig.IntPropertyFn
+		ESProcessorNumOfWorkers  dynamicconfig.IntPropertyFn
+		ESProcessorBulkActions   dynamicconfig.IntPropertyFn // max number of requests in bulk
+		ESProcessorBulkSize      dynamicconfig.IntPropertyFn // max total size of bytes in bulk
+		ESProcessorFlushInterval dynamicconfig.DurationPropertyFn
+		ValidSearchAttributes    dynamicconfig.MapPropertyFn
 	}
 
 	ackChanWithStopwatch struct { // value of processorImpl.mapToAckChan

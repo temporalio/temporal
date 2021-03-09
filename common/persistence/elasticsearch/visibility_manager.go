@@ -44,8 +44,8 @@ func NewVisibilityManager(
 	log log.Logger,
 ) persistence.VisibilityManager {
 
-	visibilityStore := NewVisibilityStore(esClient, indexName, processor, cfg, log, metricsClient)
-	visibilityManager := persistence.NewVisibilityManagerImpl(visibilityStore, cfg.ValidSearchAttributes, log)
+	visStore := NewVisibilityStore(esClient, indexName, processor, cfg, log, metricsClient)
+	visManager := persistence.NewVisibilityManagerImpl(visStore, cfg.ValidSearchAttributes, log)
 
 	if cfg != nil {
 		// wrap with rate limiter
@@ -53,13 +53,13 @@ func NewVisibilityManager(
 			esRateLimiter := quotas.NewDefaultOutgoingDynamicRateLimiter(
 				func() float64 { return float64(cfg.MaxQPS()) },
 			)
-			visibilityManager = persistence.NewVisibilityPersistenceRateLimitedClient(visibilityManager, esRateLimiter, log)
+			visManager = persistence.NewVisibilityPersistenceRateLimitedClient(visManager, esRateLimiter, log)
 		}
 	}
 	if metricsClient != nil {
 		// wrap with metrics
-		visibilityManager = NewVisibilityManagerMetrics(visibilityManager, metricsClient, log)
+		visManager = NewVisibilityManagerMetrics(visManager, metricsClient, log)
 	}
 
-	return visibilityManager
+	return visManager
 }
