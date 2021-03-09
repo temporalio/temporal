@@ -5,9 +5,6 @@ ARG GOPROXY
 
 FROM temporalio/base-builder:1.0.0 AS temporal-builder
 
-# Making sure that dependency is not touched
-ENV GOFLAGS="-mod=readonly"
-
 WORKDIR /temporal
 
 # Copy go mod dependencies first and build docker cache

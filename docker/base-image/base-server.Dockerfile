@@ -10,7 +10,7 @@ RUN wget https://github.com/jwilder/dockerize/releases/download/${DOCKERIZE_VERS
 
 RUN apk add --update --no-cache \
     ca-certificates \
-	openssl \
+    openssl \
     tzdata \
     bash \
     curl \
