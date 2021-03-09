@@ -809,6 +809,21 @@ func (mr *MockmutableStateMockRecorder) ClearStickyness() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearStickyness", reflect.TypeOf((*MockmutableState)(nil).ClearStickyness))
 }
 
+// CloneProto mocks base method.
+func (m *MockmutableState) CloneProto() (*persistence.WorkflowMutableState, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CloneProto")
+	ret0, _ := ret[0].(*persistence.WorkflowMutableState)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CloneProto indicates an expected call of CloneProto.
+func (mr *MockmutableStateMockRecorder) CloneProto() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloneProto", reflect.TypeOf((*MockmutableState)(nil).CloneProto))
+}
+
 // CloseTransactionAsMutation mocks base method.
 func (m *MockmutableState) CloseTransactionAsMutation(now time.Time, transactionPolicy transactionPolicy) (*persistence0.WorkflowMutation, []*persistence0.WorkflowEvents, error) {
 	m.ctrl.T.Helper()
@@ -2328,20 +2343,6 @@ func (m *MockmutableState) StartTransactionSkipWorkflowTaskFail(entry *cache.Nam
 func (mr *MockmutableStateMockRecorder) StartTransactionSkipWorkflowTaskFail(entry interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTransactionSkipWorkflowTaskFail", reflect.TypeOf((*MockmutableState)(nil).StartTransactionSkipWorkflowTaskFail), entry)
-}
-
-// ToProto mocks base method.
-func (m *MockmutableState) ToProto() *persistence.WorkflowMutableState {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ToProto")
-	ret0, _ := ret[0].(*persistence.WorkflowMutableState)
-	return ret0
-}
-
-// ToProto indicates an expected call of ToProto.
-func (mr *MockmutableStateMockRecorder) ToProto() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ToProto", reflect.TypeOf((*MockmutableState)(nil).ToProto))
 }
 
 // UpdateActivity mocks base method.
