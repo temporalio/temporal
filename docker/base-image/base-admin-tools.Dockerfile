@@ -1,4 +1,3 @@
-# Alpine base image
 FROM alpine:3.12 AS base-admin-tools
 
 RUN apk add --update --no-cache \
