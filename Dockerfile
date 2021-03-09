@@ -4,19 +4,20 @@ ARG GOPROXY
 ##### Temporal builder #####
 FROM temporalio/base-builder:1.0.0 AS temporal-builder
 WORKDIR /temporal
+ENV CGO_ENABLED 0
 
 # Copy go.mod first to build docker layer with go dependencies (to improve rebuild time).
 COPY go.mod .
 COPY go.sum .
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 make bins
+RUN make bins
 
 ##### Temporal server #####
 FROM temporalio/base-server:1.0.0 AS temporal-server
 WORKDIR /etc/temporal
 ENV TEMPORAL_HOME /etc/temporal
-ENV SERVICES="history:matching:frontend:worker"
+ENV SERVICES "history:matching:frontend:worker"
 EXPOSE 6933 6934 6935 6939 7233 7234 7235 7239
 ENTRYPOINT ["/entrypoint.sh"]
 CMD /start.sh
@@ -53,7 +54,6 @@ COPY --from=temporal-builder /temporal/schema /etc/temporal/schema
 COPY --from=temporal-builder /temporal/temporal-cassandra-tool /usr/local/bin
 COPY --from=temporal-builder /temporal/temporal-sql-tool /usr/local/bin
 COPY --from=temporal-builder /temporal/tctl /usr/local/bin
-
 
 ##### Build requested image #####
 FROM temporal-${TARGET}
