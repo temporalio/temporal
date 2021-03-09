@@ -22,51 +22,45 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package elasticsearch
+package client
 
 import (
-	"context"
+	"fmt"
+	"net/http"
 
-	"github.com/olivere/elastic/v7"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/service/config"
 )
 
-type (
-	bulkServiceV7 struct {
-		esBulkService *elastic.BulkService
+func NewClient(config *config.Elasticsearch, httpClient *http.Client, logger log.Logger) (Client, error) {
+	switch config.Version {
+	case "v6", "":
+		return newClientV6(config, httpClient, logger)
+	case "v7":
+		return newClientV7(config, httpClient, logger)
+	default:
+		return nil, fmt.Errorf("not supported ElasticSearch version: %v", config.Version)
 	}
-)
+}
 
-func newBulkServiceV7(esBulkService *elastic.BulkService) *bulkServiceV7 {
-	return &bulkServiceV7{
-		esBulkService: esBulkService,
+func NewCLIClient(url string, version string) (CLIClient, error) {
+	switch version {
+	case "v6":
+		return newSimpleClientV6(url)
+	case "v7", "":
+		return newSimpleClientV7(url)
+	default:
+		return nil, fmt.Errorf("not supported ElasticSearch version: %v", version)
 	}
 }
 
-func (b *bulkServiceV7) Do(ctx context.Context) error {
-	_, err := b.esBulkService.Do(ctx)
-	return err
-}
-
-func (b *bulkServiceV7) NumberOfActions() int {
-	return b.esBulkService.NumberOfActions()
-}
-
-func (b *bulkServiceV7) Add(request *BulkableRequest) {
-	switch request.RequestType {
-	case BulkableRequestTypeIndex:
-		bulkDeleteRequest := elastic.NewBulkIndexRequest().
-			Index(request.Index).
-			Id(request.ID).
-			VersionType(versionTypeExternal).
-			Version(request.Version).
-			Doc(request.Doc)
-		b.esBulkService.Add(bulkDeleteRequest)
-	case BulkableRequestTypeDelete:
-		bulkDeleteRequest := elastic.NewBulkDeleteRequest().
-			Index(request.Index).
-			Id(request.ID).
-			VersionType(versionTypeExternal).
-			Version(request.Version)
-		b.esBulkService.Add(bulkDeleteRequest)
+func NewIntegrationTestsClient(url string, version string) (IntegrationTestsClient, error) {
+	switch version {
+	case "v6":
+		return newSimpleClientV6(url)
+	case "v7":
+		return newSimpleClientV7(url)
+	default:
+		return nil, fmt.Errorf("not supported ElasticSearch version: %v", version)
 	}
 }

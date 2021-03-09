@@ -24,7 +24,7 @@
 
 //go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination client_mock.go
 
-package elasticsearch
+package client
 
 import (
 	"context"

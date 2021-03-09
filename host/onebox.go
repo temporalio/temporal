@@ -52,7 +52,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/elasticsearch"
+	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
@@ -105,7 +105,7 @@ type (
 		archiverProvider                 provider.ArchiverProvider
 		historyConfig                    *HistoryConfig
 		esConfig                         *config.Elasticsearch
-		esClient                         elasticsearch.Client
+		esClient                         client.Client
 		workerConfig                     *WorkerConfig
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
@@ -137,7 +137,7 @@ type (
 		EnableReadHistoryFromArchival    bool
 		HistoryConfig                    *HistoryConfig
 		ESConfig                         *config.Elasticsearch
-		ESClient                         elasticsearch.Client
+		ESClient                         client.Client
 		WorkerConfig                     *WorkerConfig
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor

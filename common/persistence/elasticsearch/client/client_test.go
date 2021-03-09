@@ -22,36 +22,46 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package elasticsearch
+package client
 
 import (
 	"fmt"
+	"testing"
 
-	"go.temporal.io/server/common/log"
+	"github.com/olivere/elastic/v7"
+	"github.com/stretchr/testify/require"
 )
 
-type (
-	errorLogger struct {
-		log.Logger
+func Test_BuildPutMappingBody(t *testing.T) {
+	tests := []struct {
+		root     string
+		expected string
+	}{
+		{
+			root:     "Attr",
+			expected: "map[properties:map[Attr:map[properties:map[testKey:map[type:text]]]]]",
+		},
+		{
+			root:     "",
+			expected: "map[properties:map[testKey:map[type:text]]]",
+		},
 	}
+	k := "testKey"
+	v := "text"
 
-	infoLogger struct {
-		log.Logger
+	var client clientV6
+	for _, test := range tests {
+		require.Equal(t, test.expected, fmt.Sprintf("%v", client.buildPutMappingBody(test.root, k, v)))
 	}
-)
-
-func newErrorLogger(logger log.Logger) *errorLogger {
-	return &errorLogger{logger}
 }
+func Test_ConvertV7Sorters(t *testing.T) {
+	sortersV7 := make([]elastic.Sorter, 2)
+	sortersV7[0] = elastic.NewFieldSort("test")
+	sortersV7[1] = elastic.NewFieldSort("test2")
 
-func (l *errorLogger) Printf(format string, v ...interface{}) {
-	l.Error(fmt.Sprintf(format, v...))
-}
-
-func newInfoLogger(logger log.Logger) *infoLogger {
-	return &infoLogger{logger}
-}
-
-func (l *infoLogger) Printf(format string, v ...interface{}) {
-	l.Info(fmt.Sprintf(format, v...))
+	sortersV6 := convertV7SortersToV6(sortersV7)
+	require.NotNil(t, sortersV6[0])
+	source0, err0 := sortersV6[0].Source()
+	require.NoError(t, err0)
+	require.NotNil(t, source0)
 }

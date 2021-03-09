@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/service/config"
 )
@@ -37,7 +38,7 @@ import (
 // In frontend, it only needs ES client and related config for reading data
 func NewVisibilityManager(
 	indexName string,
-	esClient Client,
+	esClient client.Client,
 	cfg *config.VisibilityConfig,
 	processor Processor,
 	metricsClient metrics.Client,

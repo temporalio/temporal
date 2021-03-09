@@ -37,7 +37,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/elasticsearch"
+	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
@@ -60,7 +60,7 @@ type (
 		ClusterMetadata              cluster.Metadata
 		ReplicatorConfig             config.Replicator
 		MetricsClient                metrics.Client
-		ESClient                     elasticsearch.Client
+		ESClient                     client.Client
 		ESConfig                     *config.Elasticsearch
 		DynamicConfig                dynamicconfig.Client
 		DCRedirectionPolicy          config.DCRedirectionPolicy

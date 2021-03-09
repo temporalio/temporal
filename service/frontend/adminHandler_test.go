@@ -33,7 +33,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	historyspb "go.temporal.io/server/api/history/v1"
-	elasticsearch2 "go.temporal.io/server/common/persistence/elasticsearch"
+	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/searchattribute"
 
@@ -435,7 +435,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	handler.params.DynamicConfig = dynamicConfig
 	// add advanced visibility store related config
 	handler.params.ESConfig = &config.Elasticsearch{}
-	esClient := elasticsearch2.NewMockClient(s.controller)
+	esClient := client.NewMockClient(s.controller)
 	handler.params.ESClient = esClient
 
 	mockValidAttr := map[string]interface{}{

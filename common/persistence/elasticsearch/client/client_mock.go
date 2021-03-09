@@ -26,7 +26,7 @@
 // Source: client.go
 
 // Package elasticsearch is a generated GoMock package.
-package elasticsearch
+package client
 
 import (
 	context "context"

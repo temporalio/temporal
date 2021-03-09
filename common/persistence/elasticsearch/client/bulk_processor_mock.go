@@ -26,7 +26,7 @@
 // Source: bulk_processor.go
 
 // Package elasticsearch is a generated GoMock package.
-package elasticsearch
+package client
 
 import (
 	reflect "reflect"

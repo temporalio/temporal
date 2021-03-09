@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/config"
 )
@@ -61,7 +62,7 @@ const (
 
 type (
 	visibilityStore struct {
-		esClient      Client
+		esClient      client.Client
 		index         string
 		logger        log.Logger
 		config        *config.VisibilityConfig
@@ -103,7 +104,7 @@ var (
 
 // NewVisibilityStore create a visibility store connecting to ElasticSearch
 func NewVisibilityStore(
-	esClient Client,
+	esClient client.Client,
 	index string,
 	processor Processor,
 	cfg *config.VisibilityConfig,
@@ -159,11 +160,11 @@ func (s *visibilityStore) UpsertWorkflowExecution(request *persistence.InternalU
 func (s *visibilityStore) DeleteWorkflowExecution(request *persistence.VisibilityDeleteWorkflowExecutionRequest) error {
 	docID := getDocID(request.WorkflowID, request.RunID)
 
-	bulkDeleteRequest := &BulkableRequest{
+	bulkDeleteRequest := &client.BulkableRequest{
 		Index:       s.index,
 		ID:          docID,
 		Version:     request.TaskID,
-		RequestType: BulkableRequestTypeDelete,
+		RequestType: client.BulkableRequestTypeDelete,
 	}
 
 	return s.addBulkRequestAndWait(bulkDeleteRequest, docID)
@@ -182,18 +183,18 @@ func (s *visibilityStore) addBulkIndexRequestAndWait(
 	esDoc map[string]interface{},
 	visibilityTaskKey string,
 ) error {
-	bulkIndexRequest := &BulkableRequest{
+	bulkIndexRequest := &client.BulkableRequest{
 		Index:       s.index,
 		ID:          getDocID(request.WorkflowID, request.RunID),
 		Version:     request.TaskID,
-		RequestType: BulkableRequestTypeIndex,
+		RequestType: client.BulkableRequestTypeIndex,
 		Doc:         esDoc,
 	}
 
 	return s.addBulkRequestAndWait(bulkIndexRequest, visibilityTaskKey)
 }
 
-func (s *visibilityStore) addBulkRequestAndWait(bulkRequest *BulkableRequest, visibilityTaskKey string) error {
+func (s *visibilityStore) addBulkRequestAndWait(bulkRequest *client.BulkableRequest, visibilityTaskKey string) error {
 	s.checkProcessor()
 
 	ackCh := make(chan bool, 1)
@@ -417,7 +418,7 @@ func (s *visibilityStore) GetClosedWorkflowExecution(
 	}
 
 	ctx := context.Background()
-	params := &SearchParameters{
+	params := &client.SearchParameters{
 		Index: s.index,
 		Query: boolQuery,
 	}
@@ -472,7 +473,7 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 
 	ctx := context.Background()
 	var searchResult *elastic.SearchResult
-	var scrollService ScrollService
+	var scrollService client.ScrollService
 	if len(token.ScrollID) == 0 { // first call
 		var queryDSL string
 		queryDSL, err = getESQueryDSLForScan(request)
@@ -820,7 +821,7 @@ func (s *visibilityStore) getSearchResult(request *persistence.ListWorkflowExecu
 	query = query.Must(matchNamespaceQuery).Filter(rangeQuery)
 
 	ctx := context.Background()
-	params := &SearchParameters{
+	params := &client.SearchParameters{
 		Index:    s.index,
 		Query:    query,
 		From:     token.From,

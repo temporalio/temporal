@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
+	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/elasticsearch/esql"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/searchattribute"
@@ -83,14 +84,14 @@ func timeValProcess(timeStr string) (string, error) {
 	return fmt.Sprintf("%v", parsedTime.UnixNano()), nil
 }
 
-func newESClient(c *cli.Context) espersistence.CLIClient {
+func newESClient(c *cli.Context) client.CLIClient {
 	url := getRequiredOption(c, FlagURL)
 	var version string
 	if c.IsSet(FlagVersion) {
 		version = c.String(FlagVersion)
 	}
 
-	client, err := espersistence.NewCLIClient(url, version)
+	client, err := client.NewCLIClient(url, version)
 	if err != nil {
 		ErrorAndExit("Unable to create Elasticsearch client", err)
 	}
@@ -225,11 +226,11 @@ func AdminDelete(c *cli.Context) {
 	for scanner.Scan() {
 		line := strings.Split(scanner.Text(), "|")
 		docID := strings.TrimSpace(line[1]) + esDocIDDelimiter + strings.TrimSpace(line[2])
-		req := &espersistence.BulkableRequest{
+		req := &client.BulkableRequest{
 			Index:       indexName,
 			ID:          docID,
 			Version:     math.MaxInt64,
-			RequestType: espersistence.BulkableRequestTypeDelete,
+			RequestType: client.BulkableRequestTypeDelete,
 		}
 		bulkRequest.Add(req)
 		if i%batchSize == batchSize-1 {

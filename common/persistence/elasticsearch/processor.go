@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -52,15 +53,15 @@ type (
 		common.Daemon
 
 		// Add request to bulk processor.
-		Add(request *BulkableRequest, visibilityTaskKey string, ackCh chan<- bool)
+		Add(request *client.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool)
 	}
 
 	// processorImpl implements Processor, it's an agent of elastic.BulkProcessor
 	processorImpl struct {
 		status                  int32
-		bulkProcessor           BulkProcessor
-		bulkProcessorParameters *BulkProcessorParameters
-		client                  Client
+		bulkProcessor           client.BulkProcessor
+		bulkProcessorParameters *client.BulkProcessorParameters
+		client                  client.Client
 		mapToAckChan            collection.ConcurrentTxMap // used to map ES request to ack channel
 		logger                  log.Logger
 		metricsClient           metrics.Client
@@ -95,18 +96,18 @@ const (
 // NewProcessor create new processorImpl
 func NewProcessor(
 	cfg *ProcessorConfig,
-	client Client,
+	esClient client.Client,
 	logger log.Logger,
 	metricsClient metrics.Client,
 ) *processorImpl {
 
 	p := &processorImpl{
 		status:             common.DaemonStatusInitialized,
-		client:             client,
+		client:             esClient,
 		logger:             logger.WithTags(tag.ComponentIndexerESProcessor),
 		metricsClient:      metricsClient,
 		indexerConcurrency: uint32(cfg.IndexerConcurrency()),
-		bulkProcessorParameters: &BulkProcessorParameters{
+		bulkProcessorParameters: &client.BulkProcessorParameters{
 			Name:          visibilityProcessorName,
 			NumOfWorkers:  cfg.ESProcessorNumOfWorkers(),
 			BulkActions:   cfg.ESProcessorBulkActions(),
@@ -165,7 +166,7 @@ func (p *processorImpl) hashFn(key interface{}) uint32 {
 }
 
 // Add request to bulk, and record ack channel message in map with provided key
-func (p *processorImpl) Add(request *BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
 	if cap(ackCh) < 1 {
 		panic("ackCh must be buffered channel (length should be 1 or more)")
 	}

@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -48,9 +49,9 @@ type processorSuite struct {
 	suite.Suite
 	controller        *gomock.Controller
 	esProcessor       *processorImpl
-	mockBulkProcessor *MockBulkProcessor
+	mockBulkProcessor *client.MockBulkProcessor
 	mockMetricClient  *metrics.MockClient
-	mockESClient      *MockClient
+	mockESClient      *client.MockClient
 }
 
 var (
@@ -83,8 +84,8 @@ func (s *processorSuite) SetupTest() {
 	}
 
 	s.mockMetricClient = metrics.NewMockClient(s.controller)
-	s.mockBulkProcessor = NewMockBulkProcessor(s.controller)
-	s.mockESClient = NewMockClient(s.controller)
+	s.mockBulkProcessor = client.NewMockBulkProcessor(s.controller)
+	s.mockESClient = client.NewMockClient(s.controller)
 	s.esProcessor = NewProcessor(cfg, s.mockESClient, loggerimpl.NewLogger(zapLogger), s.mockMetricClient)
 
 	// esProcessor.Start mock
@@ -108,7 +109,7 @@ func (s *processorSuite) TestNewESProcessorAndStartStop() {
 	p := NewProcessor(config, s.mockESClient, s.esProcessor.logger, s.mockMetricClient)
 
 	s.mockESClient.EXPECT().RunBulkProcessor(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, input *BulkProcessorParameters) (BulkProcessor, error) {
+		DoAndReturn(func(_ context.Context, input *client.BulkProcessorParameters) (client.BulkProcessor, error) {
 			s.Equal(visibilityProcessorName, input.Name)
 			s.Equal(config.ESProcessorNumOfWorkers(), input.NumOfWorkers)
 			s.Equal(config.ESProcessorBulkActions(), input.BulkActions)
@@ -117,7 +118,7 @@ func (s *processorSuite) TestNewESProcessorAndStartStop() {
 			s.NotNil(input.Backoff)
 			s.NotNil(input.AfterFunc)
 
-			bulkProcessor := NewMockBulkProcessor(s.controller)
+			bulkProcessor := client.NewMockBulkProcessor(s.controller)
 			bulkProcessor.EXPECT().Stop()
 			return bulkProcessor, nil
 		}).
@@ -133,7 +134,7 @@ func (s *processorSuite) TestNewESProcessorAndStartStop() {
 }
 
 func (s *processorSuite) TestAdd() {
-	request := &BulkableRequest{}
+	request := &client.BulkableRequest{}
 	visibilityTaskKey := "test-key"
 	ackCh := make(chan bool, 1)
 	s.Equal(0, s.esProcessor.mapToAckChan.Len())
@@ -162,7 +163,7 @@ func (s *processorSuite) TestAdd() {
 }
 
 func (s *processorSuite) TestAdd_ConcurrentAdd() {
-	request := &BulkableRequest{}
+	request := &client.BulkableRequest{}
 	key := "test-key"
 	duplicates := 100
 	ackCh := make(chan bool, duplicates-1)
@@ -309,7 +310,7 @@ func (s *processorSuite) TestAckChan() {
 	// no msg in map, nothing called
 	s.esProcessor.sendToAckChan(key, true)
 
-	request := &BulkableRequest{}
+	request := &client.BulkableRequest{}
 	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(testStopWatch)
 	s.mockBulkProcessor.EXPECT().Add(request)
 	ackCh := make(chan bool, 1)
@@ -331,7 +332,7 @@ func (s *processorSuite) TestNackChan() {
 	// no msg in map, nothing called
 	s.esProcessor.sendToAckChan(key, false)
 
-	request := &BulkableRequest{}
+	request := &client.BulkableRequest{}
 	s.mockBulkProcessor.EXPECT().Add(request)
 	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(testStopWatch)
 	ackCh := make(chan bool, 1)

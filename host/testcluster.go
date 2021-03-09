@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
+	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
@@ -142,13 +143,13 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	testBase.Setup()
 	setupShards(testBase, options.HistoryConfig.NumHistoryShards, logger)
 	archiverBase := newArchiverBase(options.EnableArchival, logger)
-	var esClient espersistence.Client
+	var esClient client.Client
 	var esVisibilityMgr persistence.VisibilityManager
 	advancedVisibilityWritingMode := dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOff)
 	if options.WorkerConfig.EnableIndexer {
 		advancedVisibilityWritingMode = dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOn)
 		var err error
-		esClient, err = espersistence.NewClient(options.ESConfig, nil, logger)
+		esClient, err = client.NewClient(options.ESConfig, nil, logger)
 		if err != nil {
 			return nil, err
 		}

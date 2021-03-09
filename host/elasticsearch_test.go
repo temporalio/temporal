@@ -55,7 +55,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	elasticsearch2 "go.temporal.io/server/common/persistence/elasticsearch"
+	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -71,7 +71,7 @@ type elasticsearchIntegrationSuite struct {
 	// not merely log an error
 	*require.Assertions
 	IntegrationBase
-	esClient elasticsearch2.IntegrationTestsClient
+	esClient client.IntegrationTestsClient
 
 	testSearchAttributeKey string
 	testSearchAttributeVal string
