@@ -114,6 +114,26 @@ When you are done, press `Ctrl+C` to stop the server. Don't forget to stop depen
 $ make stop-dependencies
 ```
 
+## Release artifacts
+
+Release binaries are created using [GoReleaser](https://goreleaser.com/)
+
+GoReleaser github action is configured to attach release binaries on a Github release event [Release action](.github/workflows/goreleaser.yml)
+
+GoReleaser configuration is at [.goreleaser.yml](.goreleaser.yml)
+
+
+Locally build snapshot binaries
+```shell
+./.development/scripts/goreleaser.sh --snapshot --rm-dist
+```
+
+Locally build release binaries
+```shell
+./.development/scripts/goreleaser.sh
+```
+
+
 ## Licence headers
 
 This project is Open Source Software, and requires a header at the beginning of
