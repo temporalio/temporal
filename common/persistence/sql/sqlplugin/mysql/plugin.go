@@ -53,7 +53,6 @@ const (
 var dsnAttrOverrides = map[string]string{
 	"parseTime":       "true",
 	"clientFoundRows": "true",
-	"multiStatements": "true",
 }
 
 type plugin struct{}
