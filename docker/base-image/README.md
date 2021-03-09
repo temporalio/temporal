@@ -1,14 +1,14 @@
 Create new base docker images
 =============================
 
-To build new version of base docker images run:
+To build a new version of base docker images run:
 
 ```bash
-$ make base-images DOCKER_IMAGE_TAG=<current_base_image_tag>
+make all-images DOCKER_IMAGE_TAG=<new_base_image_version>
 ```
 
 For example:
 
 ```bash
-$ make base-images DOCKER_IMAGE_TAG=1.0.0
+make all-images DOCKER_IMAGE_TAG=1.0.0
 ```
