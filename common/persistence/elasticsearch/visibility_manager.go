@@ -27,25 +27,25 @@ package elasticsearch
 import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/service/config"
 )
 
-// NewESVisibilityManager create a visibility manager for ElasticSearch
+// NewVisibilityManager create a visibility manager for Elasticsearch
 // In history, it only writes data;
 // In frontend, it only needs ES client and related config for reading data
-func NewESVisibilityManager(
+func NewVisibilityManager(
 	indexName string,
 	esClient Client,
 	cfg *config.VisibilityConfig,
 	processor Processor,
 	metricsClient metrics.Client,
 	log log.Logger,
-) p.VisibilityManager {
+) persistence.VisibilityManager {
 
-	visibilityStore := NewElasticSearchVisibilityStore(esClient, indexName, processor, cfg, log, metricsClient)
-	visibilityManager := p.NewVisibilityManagerImpl(visibilityStore, cfg.ValidSearchAttributes, log)
+	visibilityStore := NewVisibilityStore(esClient, indexName, processor, cfg, log, metricsClient)
+	visibilityManager := persistence.NewVisibilityManagerImpl(visibilityStore, cfg.ValidSearchAttributes, log)
 
 	if cfg != nil {
 		// wrap with rate limiter
@@ -53,12 +53,12 @@ func NewESVisibilityManager(
 			esRateLimiter := quotas.NewDefaultOutgoingDynamicRateLimiter(
 				func() float64 { return float64(cfg.MaxQPS()) },
 			)
-			visibilityManager = p.NewVisibilityPersistenceRateLimitedClient(visibilityManager, esRateLimiter, log)
+			visibilityManager = persistence.NewVisibilityPersistenceRateLimitedClient(visibilityManager, esRateLimiter, log)
 		}
 	}
 	if metricsClient != nil {
 		// wrap with metrics
-		visibilityManager = NewVisibilityMetricsClient(visibilityManager, metricsClient, log)
+		visibilityManager = NewVisibilityManagerMetrics(visibilityManager, metricsClient, log)
 	}
 
 	return visibilityManager

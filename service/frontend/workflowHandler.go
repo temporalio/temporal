@@ -56,7 +56,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/elasticsearch/validator"
+	"go.temporal.io/server/common/persistence/validator"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"

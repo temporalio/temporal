@@ -171,7 +171,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 		}
 		indexName := options.ESConfig.Indices[common.VisibilityAppName]
-		esVisibilityStore := pes.NewElasticSearchVisibilityStore(
+		esVisibilityStore := pes.NewVisibilityStore(
 			esClient, indexName, esProcessor, visConfig, logger, &metrics.NoopMetricsClient{},
 		)
 		esVisibilityMgr = persistence.NewVisibilityManagerImpl(esVisibilityStore, visConfig.ValidSearchAttributes, logger)

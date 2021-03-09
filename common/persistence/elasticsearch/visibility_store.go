@@ -48,7 +48,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/config"
 )
@@ -60,7 +60,7 @@ const (
 )
 
 type (
-	esVisibilityStore struct {
+	visibilityStore struct {
 		esClient      Client
 		index         string
 		logger        log.Logger
@@ -69,7 +69,7 @@ type (
 		processor     Processor
 	}
 
-	esVisibilityPageToken struct {
+	visibilityPageToken struct {
 		// for ES API From+Size
 		From int
 		// for ES API searchAfter
@@ -95,23 +95,23 @@ type (
 	}
 )
 
-var _ p.VisibilityStore = (*esVisibilityStore)(nil)
+var _ persistence.VisibilityStore = (*visibilityStore)(nil)
 
 var (
 	oneMilliSecondInNano = int64(1000)
 )
 
-// NewElasticSearchVisibilityStore create a visibility store connecting to ElasticSearch
-func NewElasticSearchVisibilityStore(
+// NewVisibilityStore create a visibility store connecting to ElasticSearch
+func NewVisibilityStore(
 	esClient Client,
 	index string,
 	processor Processor,
 	cfg *config.VisibilityConfig,
 	logger log.Logger,
 	metricsClient metrics.Client,
-) *esVisibilityStore {
+) *visibilityStore {
 
-	return &esVisibilityStore{
+	return &visibilityStore{
 		esClient:      esClient,
 		index:         index,
 		processor:     processor,
@@ -121,52 +121,52 @@ func NewElasticSearchVisibilityStore(
 	}
 }
 
-func (v *esVisibilityStore) Close() {
-	// TODO (alex): esVisibilityStore shouldn't Stop processor. Processor should be stopped where it is created.
-	if v.processor != nil {
-		v.processor.Stop()
+func (s *visibilityStore) Close() {
+	// TODO (alex): visibilityStore shouldn't Stop processor. Processor should be stopped where it is created.
+	if s.processor != nil {
+		s.processor.Stop()
 	}
 }
 
-func (v *esVisibilityStore) GetName() string {
+func (s *visibilityStore) GetName() string {
 	return persistenceName
 }
 
-func (v *esVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRecordWorkflowExecutionStartedRequest) error {
+func (s *visibilityStore) RecordWorkflowExecutionStarted(request *persistence.InternalRecordWorkflowExecutionStartedRequest) error {
 	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
-	doc := v.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
+	doc := s.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
 
-	return v.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
+	return s.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
 }
 
-func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRecordWorkflowExecutionClosedRequest) error {
+func (s *visibilityStore) RecordWorkflowExecutionClosed(request *persistence.InternalRecordWorkflowExecutionClosedRequest) error {
 	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
-	doc := v.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
+	doc := s.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
 
 	doc[searchattribute.CloseTime] = request.CloseTimestamp
 	doc[searchattribute.HistoryLength] = request.HistoryLength
 
-	return v.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
+	return s.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
 }
 
-func (v *esVisibilityStore) UpsertWorkflowExecution(request *p.InternalUpsertWorkflowExecutionRequest) error {
+func (s *visibilityStore) UpsertWorkflowExecution(request *persistence.InternalUpsertWorkflowExecutionRequest) error {
 	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
-	doc := v.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
+	doc := s.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
 
-	return v.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
+	return s.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
 }
 
-func (v *esVisibilityStore) DeleteWorkflowExecution(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
+func (s *visibilityStore) DeleteWorkflowExecution(request *persistence.VisibilityDeleteWorkflowExecutionRequest) error {
 	docID := getDocID(request.WorkflowID, request.RunID)
 
 	bulkDeleteRequest := &BulkableRequest{
-		Index:       v.index,
+		Index:       s.index,
 		ID:          docID,
 		Version:     request.TaskID,
 		RequestType: BulkableRequestTypeDelete,
 	}
 
-	return v.addBulkRequestAndWait(bulkDeleteRequest, docID)
+	return s.addBulkRequestAndWait(bulkDeleteRequest, docID)
 }
 
 func getDocID(workflowID string, runID string) string {
@@ -177,28 +177,28 @@ func getVisibilityTaskKey(shardID int32, taskID int64) string {
 	return fmt.Sprintf("%d%s%d", shardID, delimiter, taskID)
 }
 
-func (v *esVisibilityStore) addBulkIndexRequestAndWait(
-	request *p.InternalVisibilityRequestBase,
+func (s *visibilityStore) addBulkIndexRequestAndWait(
+	request *persistence.InternalVisibilityRequestBase,
 	esDoc map[string]interface{},
 	visibilityTaskKey string,
 ) error {
 	bulkIndexRequest := &BulkableRequest{
-		Index:       v.index,
+		Index:       s.index,
 		ID:          getDocID(request.WorkflowID, request.RunID),
 		Version:     request.TaskID,
 		RequestType: BulkableRequestTypeIndex,
 		Doc:         esDoc,
 	}
 
-	return v.addBulkRequestAndWait(bulkIndexRequest, visibilityTaskKey)
+	return s.addBulkRequestAndWait(bulkIndexRequest, visibilityTaskKey)
 }
 
-func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest *BulkableRequest, visibilityTaskKey string) error {
-	v.checkProcessor()
+func (s *visibilityStore) addBulkRequestAndWait(bulkRequest *BulkableRequest, visibilityTaskKey string) error {
+	s.checkProcessor()
 
 	ackCh := make(chan bool, 1)
-	v.processor.Add(bulkRequest, visibilityTaskKey, ackCh)
-	ackTimeoutTimer := time.NewTimer(v.config.ESProcessorAckTimeout())
+	s.processor.Add(bulkRequest, visibilityTaskKey, ackCh)
+	ackTimeoutTimer := time.NewTimer(s.config.ESProcessorAckTimeout())
 	defer ackTimeoutTimer.Stop()
 
 	select {
@@ -208,11 +208,11 @@ func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest *BulkableRequest, 
 		}
 		return nil
 	case <-ackTimeoutTimer.C:
-		return newVisibilityTaskAckTimeoutError(visibilityTaskKey, v.config.ESProcessorAckTimeout())
+		return newVisibilityTaskAckTimeoutError(visibilityTaskKey, s.config.ESProcessorAckTimeout())
 	}
 }
 
-func (v *esVisibilityStore) generateESDoc(request *p.InternalVisibilityRequestBase, visibilityTaskKey string) map[string]interface{} {
+func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityRequestBase, visibilityTaskKey string) map[string]interface{} {
 	doc := map[string]interface{}{
 		searchattribute.VisibilityTaskKey: visibilityTaskKey,
 		searchattribute.NamespaceID:       request.NamespaceID,
@@ -230,181 +230,181 @@ func (v *esVisibilityStore) generateESDoc(request *p.InternalVisibilityRequestBa
 		doc[searchattribute.Encoding] = request.Memo.GetEncodingType().String()
 	}
 
-	typeMap, err := searchattribute.BuildTypeMap(v.config.ValidSearchAttributes)
+	typeMap, err := searchattribute.BuildTypeMap(s.config.ValidSearchAttributes)
 	if err != nil {
-		v.logger.Error("Unable to parse search attributes from config.", tag.Error(err))
-		v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
+		s.logger.Error("Unable to parse search attributes from config.", tag.Error(err))
+		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
 
 	attr, err := searchattribute.Decode(request.SearchAttributes, typeMap)
 	if err != nil {
-		v.logger.Error("Unable to decode search attributes.", tag.Error(err))
-		v.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
+		s.logger.Error("Unable to decode search attributes.", tag.Error(err))
+		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
 	doc[searchattribute.Attr] = attr
 
 	return doc
 }
 
-func (v *esVisibilityStore) ListOpenWorkflowExecutions(
-	request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
-	token, err := v.getNextPageToken(request.NextPageToken)
+func (s *visibilityStore) ListOpenWorkflowExecutions(
+	request *persistence.ListWorkflowExecutionsRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
+	token, err := s.getNextPageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
 
 	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
-	searchResult, err := v.getSearchResult(request, token, query, true)
+	searchResult, err := s.getSearchResult(request, token, query, true)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutions failed. Error: %v", err))
 	}
 
-	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
 		startTime := rec.StartTime.UnixNano()
 		return request.EarliestStartTime <= startTime && startTime <= request.LatestStartTime
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
 }
 
-func (v *esVisibilityStore) ListClosedWorkflowExecutions(
-	request *p.ListWorkflowExecutionsRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
+func (s *visibilityStore) ListClosedWorkflowExecutions(
+	request *persistence.ListWorkflowExecutionsRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := v.getNextPageToken(request.NextPageToken)
+	token, err := s.getNextPageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
 
 	executionStatusQuery := elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
-	searchResult, err := v.getSearchResult(request, token, executionStatusQuery, false)
+	searchResult, err := s.getSearchResult(request, token, executionStatusQuery, false)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutions failed. Error: %v", err))
 	}
 
-	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
 		closeTime := rec.CloseTime.UnixNano()
 		return request.EarliestStartTime <= closeTime && closeTime <= request.LatestStartTime
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
 }
 
-func (v *esVisibilityStore) ListOpenWorkflowExecutionsByType(
-	request *p.ListWorkflowExecutionsByTypeRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
+func (s *visibilityStore) ListOpenWorkflowExecutionsByType(
+	request *persistence.ListWorkflowExecutionsByTypeRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := v.getNextPageToken(request.NextPageToken)
+	token, err := s.getNextPageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
 
 	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(WorkflowType, request.WorkflowTypeName)).
 		Must(elastic.NewMatchQuery(ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
-	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, true)
+	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, true)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByType failed. Error: %v", err))
 	}
 
-	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
 		startTime := rec.StartTime.UnixNano()
 		return request.EarliestStartTime <= startTime && startTime <= request.LatestStartTime
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
 }
 
-func (v *esVisibilityStore) ListClosedWorkflowExecutionsByType(
-	request *p.ListWorkflowExecutionsByTypeRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
+func (s *visibilityStore) ListClosedWorkflowExecutionsByType(
+	request *persistence.ListWorkflowExecutionsByTypeRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := v.getNextPageToken(request.NextPageToken)
+	token, err := s.getNextPageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
 
 	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(WorkflowType, request.WorkflowTypeName)).
 		MustNot(elastic.NewMatchQuery(ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
-	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
+	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByType failed. Error: %v", err))
 	}
 
-	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
 		closeTime := rec.CloseTime.UnixNano()
 		return request.EarliestStartTime <= closeTime && closeTime <= request.LatestStartTime
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
 }
 
-func (v *esVisibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
-	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
+func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
+	request *persistence.ListWorkflowExecutionsByWorkflowIDRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := v.getNextPageToken(request.NextPageToken)
+	token, err := s.getNextPageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
 
 	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(WorkflowID, request.WorkflowID)).
 		Must(elastic.NewMatchQuery(ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
-	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, true)
+	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, true)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByWorkflowID failed. Error: %v", err))
 	}
 
-	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
 		startTime := rec.StartTime.UnixNano()
 		return request.EarliestStartTime <= startTime && startTime <= request.LatestStartTime
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
 }
 
-func (v *esVisibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
-	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
+func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
+	request *persistence.ListWorkflowExecutionsByWorkflowIDRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := v.getNextPageToken(request.NextPageToken)
+	token, err := s.getNextPageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
 
 	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(WorkflowID, request.WorkflowID)).
 		MustNot(elastic.NewMatchQuery(ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
-	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
+	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByWorkflowID failed. Error: %v", err))
 	}
 
-	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
 		closeTime := rec.CloseTime.UnixNano()
 		return request.EarliestStartTime <= closeTime && closeTime <= request.LatestStartTime
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
 }
 
-func (v *esVisibilityStore) ListClosedWorkflowExecutionsByStatus(
-	request *p.ListClosedWorkflowExecutionsByStatusRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
+func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(
+	request *persistence.ListClosedWorkflowExecutionsByStatusRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := v.getNextPageToken(request.NextPageToken)
+	token, err := s.getNextPageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
 
 	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(ExecutionStatus, int32(request.Status)))
-	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
+	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByStatus failed. Error: %v", err))
 	}
 
-	isRecordValid := func(rec *p.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
 		closeTime := rec.CloseTime.UnixNano()
 		return request.EarliestStartTime <= closeTime && closeTime <= request.LatestStartTime
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
 }
 
-func (v *esVisibilityStore) GetClosedWorkflowExecution(
-	request *p.GetClosedWorkflowExecutionRequest) (*p.InternalGetClosedWorkflowExecutionResponse, error) {
+func (s *visibilityStore) GetClosedWorkflowExecution(
+	request *persistence.GetClosedWorkflowExecutionRequest) (*persistence.InternalGetClosedWorkflowExecutionResponse, error) {
 
 	matchNamespaceQuery := elastic.NewMatchQuery(NamespaceID, request.NamespaceID)
 	executionStatusQuery := elastic.NewMatchQuery(ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
@@ -418,54 +418,54 @@ func (v *esVisibilityStore) GetClosedWorkflowExecution(
 
 	ctx := context.Background()
 	params := &SearchParameters{
-		Index: v.index,
+		Index: s.index,
 		Query: boolQuery,
 	}
-	searchResult, err := v.esClient.Search(ctx, params)
+	searchResult, err := s.esClient.Search(ctx, params)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetClosedWorkflowExecution failed. Error: %v", err))
 	}
 
-	response := &p.InternalGetClosedWorkflowExecutionResponse{}
+	response := &persistence.InternalGetClosedWorkflowExecutionResponse{}
 	actualHits := searchResult.Hits.Hits
 	if len(actualHits) == 0 {
 		return response, nil
 	}
-	response.Execution = v.convertSearchResultToVisibilityRecord(actualHits[0])
+	response.Execution = s.convertSearchResultToVisibilityRecord(actualHits[0])
 
 	return response, nil
 }
 
-func (v *esVisibilityStore) ListWorkflowExecutions(
-	request *p.ListWorkflowExecutionsRequestV2) (*p.InternalListWorkflowExecutionsResponse, error) {
+func (s *visibilityStore) ListWorkflowExecutions(
+	request *persistence.ListWorkflowExecutionsRequestV2) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
 	checkPageSize(request)
 
-	token, err := v.getNextPageToken(request.NextPageToken)
+	token, err := s.getNextPageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
 
-	queryDSL, err := v.getESQueryDSL(request, token)
+	queryDSL, err := s.getESQueryDSL(request, token)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Error when parse query: %v", err))
 	}
 
 	ctx := context.Background()
-	searchResult, err := v.esClient.SearchWithDSL(ctx, v.index, queryDSL)
+	searchResult, err := s.esClient.SearchWithDSL(ctx, s.index, queryDSL)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListWorkflowExecutions failed. Error: %v", err))
 	}
 
-	return v.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, nil)
+	return s.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, nil)
 }
 
-func (v *esVisibilityStore) ScanWorkflowExecutions(
-	request *p.ListWorkflowExecutionsRequestV2) (*p.InternalListWorkflowExecutionsResponse, error) {
+func (s *visibilityStore) ScanWorkflowExecutions(
+	request *persistence.ListWorkflowExecutionsRequestV2) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
 	checkPageSize(request)
 
-	token, err := v.getNextPageToken(request.NextPageToken)
+	token, err := s.getNextPageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
@@ -479,9 +479,9 @@ func (v *esVisibilityStore) ScanWorkflowExecutions(
 		if err != nil {
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Error when parse query: %v", err))
 		}
-		searchResult, scrollService, err = v.esClient.ScrollFirstPage(ctx, v.index, queryDSL)
+		searchResult, scrollService, err = s.esClient.ScrollFirstPage(ctx, s.index, queryDSL)
 	} else {
-		searchResult, scrollService, err = v.esClient.Scroll(ctx, token.ScrollID)
+		searchResult, scrollService, err = s.esClient.Scroll(ctx, token.ScrollID)
 	}
 
 	isLastPage := false
@@ -492,11 +492,11 @@ func (v *esVisibilityStore) ScanWorkflowExecutions(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %v", err))
 	}
 
-	return v.getScanWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, searchResult.ScrollId, isLastPage)
+	return s.getScanWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, searchResult.ScrollId, isLastPage)
 }
 
-func (v *esVisibilityStore) CountWorkflowExecutions(request *p.CountWorkflowExecutionsRequest) (
-	*p.CountWorkflowExecutionsResponse, error) {
+func (s *visibilityStore) CountWorkflowExecutions(request *persistence.CountWorkflowExecutionsRequest) (
+	*persistence.CountWorkflowExecutionsResponse, error) {
 
 	queryDSL, err := getESQueryDSLForCount(request)
 	if err != nil {
@@ -504,12 +504,12 @@ func (v *esVisibilityStore) CountWorkflowExecutions(request *p.CountWorkflowExec
 	}
 
 	ctx := context.Background()
-	count, err := v.esClient.Count(ctx, v.index, queryDSL)
+	count, err := s.esClient.Count(ctx, s.index, queryDSL)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("CountWorkflowExecutions failed. Error: %v", err))
 	}
 
-	response := &p.CountWorkflowExecutionsResponse{Count: count}
+	response := &persistence.CountWorkflowExecutionsResponse{Count: count}
 	return response, nil
 }
 
@@ -542,7 +542,7 @@ var (
 	}
 )
 
-func getESQueryDSLForScan(request *p.ListWorkflowExecutionsRequestV2) (string, error) {
+func getESQueryDSLForScan(request *persistence.ListWorkflowExecutionsRequestV2) (string, error) {
 	sql := getSQLFromListRequest(request)
 	dsl, err := getCustomizedDSLFromSQL(sql, request.NamespaceID)
 	if err != nil {
@@ -554,7 +554,7 @@ func getESQueryDSLForScan(request *p.ListWorkflowExecutionsRequestV2) (string, e
 	return dsl.String(), nil
 }
 
-func getESQueryDSLForCount(request *p.CountWorkflowExecutionsRequest) (string, error) {
+func getESQueryDSLForCount(request *persistence.CountWorkflowExecutionsRequest) (string, error) {
 	sql := getSQLFromCountRequest(request)
 	dsl, err := getCustomizedDSLFromSQL(sql, request.NamespaceID)
 	if err != nil {
@@ -569,20 +569,20 @@ func getESQueryDSLForCount(request *p.CountWorkflowExecutionsRequest) (string, e
 	return dsl.String(), nil
 }
 
-func (v *esVisibilityStore) getESQueryDSL(request *p.ListWorkflowExecutionsRequestV2, token *esVisibilityPageToken) (string, error) {
+func (s *visibilityStore) getESQueryDSL(request *persistence.ListWorkflowExecutionsRequestV2, token *visibilityPageToken) (string, error) {
 	sql := getSQLFromListRequest(request)
 	dsl, err := getCustomizedDSLFromSQL(sql, request.NamespaceID)
 	if err != nil {
 		return "", err
 	}
 
-	sortField, err := v.processSortField(dsl)
+	sortField, err := s.processSortField(dsl)
 	if err != nil {
 		return "", err
 	}
 
 	if shouldSearchAfter(token) {
-		valueOfSearchAfter, err := v.getValueOfSearchAfterInJSON(token, sortField)
+		valueOfSearchAfter, err := s.getValueOfSearchAfterInJSON(token, sortField)
 		if err != nil {
 			return "", err
 		}
@@ -596,7 +596,7 @@ func (v *esVisibilityStore) getESQueryDSL(request *p.ListWorkflowExecutionsReque
 	return dslStr, nil
 }
 
-func getSQLFromListRequest(request *p.ListWorkflowExecutionsRequestV2) string {
+func getSQLFromListRequest(request *persistence.ListWorkflowExecutionsRequestV2) string {
 	var sql string
 	query := strings.TrimSpace(request.Query)
 	if query == "" {
@@ -609,7 +609,7 @@ func getSQLFromListRequest(request *p.ListWorkflowExecutionsRequestV2) string {
 	return sql
 }
 
-func getSQLFromCountRequest(request *p.CountWorkflowExecutionsRequest) string {
+func getSQLFromCountRequest(request *persistence.CountWorkflowExecutionsRequest) string {
 	var sql string
 	if strings.TrimSpace(request.Query) == "" {
 		sql = "select * from dummy"
@@ -675,7 +675,7 @@ func addMustQuery(dsl *fastjson.Value, queryString string) {
 	valOfTopQuery.Set("bool", fastjson.MustParse(newValOfBool))
 }
 
-func (v *esVisibilityStore) processSortField(dsl *fastjson.Value) (string, error) {
+func (s *visibilityStore) processSortField(dsl *fastjson.Value) (string, error) {
 	isSorted := dsl.Exists(dslFieldSort)
 	var sortField string
 
@@ -692,7 +692,7 @@ func (v *esVisibilityStore) processSortField(dsl *fastjson.Value) (string, error
 		obj.Visit(func(k []byte, v *fastjson.Value) { // visit is only way to get object key in fastjson
 			sortField = string(k)
 		})
-		if v.getFieldType(sortField) == enumspb.INDEXED_VALUE_TYPE_STRING {
+		if s.getFieldType(sortField) == enumspb.INDEXED_VALUE_TYPE_STRING {
 			return "", errors.New("unable to sort by field of String type, use field of type Keyword")
 		}
 		// add RunID as tie-breaker
@@ -702,30 +702,30 @@ func (v *esVisibilityStore) processSortField(dsl *fastjson.Value) (string, error
 	return sortField, nil
 }
 
-func (v *esVisibilityStore) getFieldType(fieldName string) enumspb.IndexedValueType {
+func (s *visibilityStore) getFieldType(fieldName string) enumspb.IndexedValueType {
 	if strings.HasPrefix(fieldName, searchattribute.Attr) {
 		fieldName = fieldName[len(searchattribute.Attr)+1:] // remove prefix
 	}
-	typeMap, err := searchattribute.BuildTypeMap(v.config.ValidSearchAttributes)
+	typeMap, err := searchattribute.BuildTypeMap(s.config.ValidSearchAttributes)
 	if err != nil {
-		v.logger.Error("Unable to parse search attributes from config.", tag.Error(err))
+		s.logger.Error("Unable to parse search attributes from config.", tag.Error(err))
 	}
 
 	fieldType, err := searchattribute.GetType(fieldName, typeMap)
 	if err != nil {
-		v.logger.Error("Unable to get search attribute type.", tag.Value(fieldName), tag.Error(err))
+		s.logger.Error("Unable to get search attribute type.", tag.Value(fieldName), tag.Error(err))
 	}
 	return fieldType
 }
 
-func shouldSearchAfter(token *esVisibilityPageToken) bool {
+func shouldSearchAfter(token *visibilityPageToken) bool {
 	return token.TieBreaker != ""
 }
 
-func (v *esVisibilityStore) getValueOfSearchAfterInJSON(token *esVisibilityPageToken, sortField string) (string, error) {
+func (s *visibilityStore) getValueOfSearchAfterInJSON(token *visibilityPageToken, sortField string) (string, error) {
 	var sortVal interface{}
 	var err error
-	switch v.getFieldType(sortField) {
+	switch s.getFieldType(sortField) {
 	case enumspb.INDEXED_VALUE_TYPE_INT, enumspb.INDEXED_VALUE_TYPE_DATETIME, enumspb.INDEXED_VALUE_TYPE_BOOL:
 		sortVal, err = token.SortValue.(json.Number).Int64()
 		if err != nil {
@@ -762,32 +762,32 @@ func (v *esVisibilityStore) getValueOfSearchAfterInJSON(token *esVisibilityPageT
 	return fmt.Sprintf(`[%v, "%s"]`, sortVal, token.TieBreaker), nil
 }
 
-func (v *esVisibilityStore) checkProcessor() {
-	if v.processor == nil {
+func (s *visibilityStore) checkProcessor() {
+	if s.processor == nil {
 		// must be bug, check history setup
 		panic("elastic search processor is nil")
 	}
-	if v.config.ESProcessorAckTimeout == nil {
+	if s.config.ESProcessorAckTimeout == nil {
 		// must be bug, check history setup
 		panic("config.ESProcessorAckTimeout is nil")
 	}
 }
 
-func (v *esVisibilityStore) getNextPageToken(token []byte) (*esVisibilityPageToken, error) {
-	var result *esVisibilityPageToken
+func (s *visibilityStore) getNextPageToken(token []byte) (*visibilityPageToken, error) {
+	var result *visibilityPageToken
 	var err error
 	if len(token) > 0 {
-		result, err = v.deserializePageToken(token)
+		result, err = s.deserializePageToken(token)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		result = &esVisibilityPageToken{}
+		result = &visibilityPageToken{}
 	}
 	return result, nil
 }
 
-func (v *esVisibilityStore) getSearchResult(request *p.ListWorkflowExecutionsRequest, token *esVisibilityPageToken,
+func (s *visibilityStore) getSearchResult(request *persistence.ListWorkflowExecutionsRequest, token *visibilityPageToken,
 	boolQuery *elastic.BoolQuery, overStartTime bool) (*elastic.SearchResult, error) {
 
 	matchNamespaceQuery := elastic.NewMatchQuery(NamespaceID, request.NamespaceID)
@@ -821,7 +821,7 @@ func (v *esVisibilityStore) getSearchResult(request *p.ListWorkflowExecutionsReq
 
 	ctx := context.Background()
 	params := &SearchParameters{
-		Index:    v.index,
+		Index:    s.index,
 		Query:    query,
 		From:     token.From,
 		PageSize: request.PageSize,
@@ -837,25 +837,25 @@ func (v *esVisibilityStore) getSearchResult(request *p.ListWorkflowExecutionsReq
 		params.SearchAfter = []interface{}{token.SortValue, token.TieBreaker}
 	}
 
-	return v.esClient.Search(ctx, params)
+	return s.esClient.Search(ctx, params)
 }
 
-func (v *esVisibilityStore) getScanWorkflowExecutionsResponse(searchHits *elastic.SearchHits,
-	token *esVisibilityPageToken, pageSize int, scrollID string, isLastPage bool) (
-	*p.InternalListWorkflowExecutionsResponse, error) {
+func (s *visibilityStore) getScanWorkflowExecutionsResponse(searchHits *elastic.SearchHits,
+	token *visibilityPageToken, pageSize int, scrollID string, isLastPage bool) (
+	*persistence.InternalListWorkflowExecutionsResponse, error) {
 
-	response := &p.InternalListWorkflowExecutionsResponse{}
+	response := &persistence.InternalListWorkflowExecutionsResponse{}
 	actualHits := searchHits.Hits
 	numOfActualHits := len(actualHits)
 
-	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0)
+	response.Executions = make([]*persistence.VisibilityWorkflowExecutionInfo, 0)
 	for i := 0; i < numOfActualHits; i++ {
-		workflowExecutionInfo := v.convertSearchResultToVisibilityRecord(actualHits[i])
+		workflowExecutionInfo := s.convertSearchResultToVisibilityRecord(actualHits[i])
 		response.Executions = append(response.Executions, workflowExecutionInfo)
 	}
 
 	if numOfActualHits == pageSize && !isLastPage {
-		nextPageToken, err := v.serializePageToken(&esVisibilityPageToken{ScrollID: scrollID})
+		nextPageToken, err := s.serializePageToken(&visibilityPageToken{ScrollID: scrollID})
 		if err != nil {
 			return nil, err
 		}
@@ -866,16 +866,16 @@ func (v *esVisibilityStore) getScanWorkflowExecutionsResponse(searchHits *elasti
 	return response, nil
 }
 
-func (v *esVisibilityStore) getListWorkflowExecutionsResponse(searchHits *elastic.SearchHits,
-	token *esVisibilityPageToken, pageSize int, isRecordValid func(rec *p.VisibilityWorkflowExecutionInfo) bool) (*p.InternalListWorkflowExecutionsResponse, error) {
+func (s *visibilityStore) getListWorkflowExecutionsResponse(searchHits *elastic.SearchHits,
+	token *visibilityPageToken, pageSize int, isRecordValid func(rec *persistence.VisibilityWorkflowExecutionInfo) bool) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
-	response := &p.InternalListWorkflowExecutionsResponse{}
+	response := &persistence.InternalListWorkflowExecutionsResponse{}
 	actualHits := searchHits.Hits
 	numOfActualHits := len(actualHits)
 
-	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0)
+	response.Executions = make([]*persistence.VisibilityWorkflowExecutionInfo, 0)
 	for i := 0; i < numOfActualHits; i++ {
-		workflowExecutionInfo := v.convertSearchResultToVisibilityRecord(actualHits[i])
+		workflowExecutionInfo := s.convertSearchResultToVisibilityRecord(actualHits[i])
 		if isRecordValid == nil || isRecordValid(workflowExecutionInfo) {
 			// for old APIs like ListOpenWorkflowExecutions, we added 1 ms to range query to overcome ES limitation
 			// (see getSearchResult function), but manually dropped records beyond request range here.
@@ -889,15 +889,15 @@ func (v *esVisibilityStore) getListWorkflowExecutionsResponse(searchHits *elasti
 
 		// ES Search API support pagination using From and PageSize, but has limit that From+PageSize cannot exceed a threshold
 		// to retrieve deeper pages, use ES SearchAfter
-		if searchHits.TotalHits.Value <= int64(v.config.ESIndexMaxResultWindow()-pageSize) { // use ES Search From+Size
-			nextPageToken, err = v.serializePageToken(&esVisibilityPageToken{From: token.From + numOfActualHits})
+		if searchHits.TotalHits.Value <= int64(s.config.ESIndexMaxResultWindow()-pageSize) { // use ES Search From+Size
+			nextPageToken, err = s.serializePageToken(&visibilityPageToken{From: token.From + numOfActualHits})
 		} else { // use ES Search After
 			var sortVal interface{}
 			sortVals := actualHits[len(response.Executions)-1].Sort
 			sortVal = sortVals[0]
 			tieBreaker := sortVals[1].(string)
 
-			nextPageToken, err = v.serializePageToken(&esVisibilityPageToken{SortValue: sortVal, TieBreaker: tieBreaker})
+			nextPageToken, err = s.serializePageToken(&visibilityPageToken{SortValue: sortVal, TieBreaker: tieBreaker})
 		}
 		if err != nil {
 			return nil, err
@@ -910,8 +910,8 @@ func (v *esVisibilityStore) getListWorkflowExecutionsResponse(searchHits *elasti
 	return response, nil
 }
 
-func (v *esVisibilityStore) deserializePageToken(data []byte) (*esVisibilityPageToken, error) {
-	var token esVisibilityPageToken
+func (s *visibilityStore) deserializePageToken(data []byte) (*visibilityPageToken, error) {
+	var token visibilityPageToken
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
 	err := dec.Decode(&token)
@@ -921,7 +921,7 @@ func (v *esVisibilityStore) deserializePageToken(data []byte) (*esVisibilityPage
 	return &token, nil
 }
 
-func (v *esVisibilityStore) serializePageToken(token *esVisibilityPageToken) ([]byte, error) {
+func (s *visibilityStore) serializePageToken(token *visibilityPageToken) ([]byte, error) {
 	data, err := json.Marshal(token)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to serialize page token. err: %v", err))
@@ -929,23 +929,23 @@ func (v *esVisibilityStore) serializePageToken(token *esVisibilityPageToken) ([]
 	return data, nil
 }
 
-func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.SearchHit) *p.VisibilityWorkflowExecutionInfo {
+func (s *visibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.SearchHit) *persistence.VisibilityWorkflowExecutionInfo {
 	var source *visibilityRecord
 	// TODO (alex): use hit.Fields instead
 	err := json.Unmarshal(hit.Source, &source)
 	if err != nil { // log and skip error
-		v.logger.Error("unable to unmarshal search hit source",
+		s.logger.Error("unable to unmarshal search hit source",
 			tag.Error(err), tag.ESDocID(hit.Id))
 		return nil
 	}
 
-	record := &p.VisibilityWorkflowExecutionInfo{
+	record := &persistence.VisibilityWorkflowExecutionInfo{
 		WorkflowID:       source.WorkflowID,
 		RunID:            source.RunID,
 		TypeName:         source.WorkflowType,
 		StartTime:        time.Unix(0, source.StartTime).UTC(),
 		ExecutionTime:    time.Unix(0, source.ExecutionTime).UTC(),
-		Memo:             p.NewDataBlob(source.Memo, source.Encoding),
+		Memo:             persistence.NewDataBlob(source.Memo, source.Encoding),
 		TaskQueue:        source.TaskQueue,
 		SearchAttributes: source.Attr,
 		Status:           source.ExecutionStatus,
@@ -958,7 +958,7 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 	return record
 }
 
-func checkPageSize(request *p.ListWorkflowExecutionsRequestV2) {
+func checkPageSize(request *persistence.ListWorkflowExecutionsRequestV2) {
 	if request.PageSize == 0 {
 		request.PageSize = 1000
 	}

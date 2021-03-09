@@ -47,7 +47,7 @@ import (
 type esProcessorSuite struct {
 	suite.Suite
 	controller        *gomock.Controller
-	esProcessor       *esProcessorImpl
+	esProcessor       *processorImpl
 	mockBulkProcessor *MockBulkProcessor
 	mockMetricClient  *metrics.MockClient
 	mockESClient      *MockClient

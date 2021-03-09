@@ -163,7 +163,7 @@ func AdminIndex(c *cli.Context) {
 		ValidSearchAttributes:  dc.GetMapPropertyFn(searchattribute.GetDefaultTypeMap()),
 		ESProcessorAckTimeout:  dc.GetDurationPropertyFn(1 * time.Minute),
 	}
-	visibilityManager := espersistence.NewESVisibilityManager(indexName, esClient, visibilityConfigForES, esProcessor, metrics.NewNoopMetricsClient(), logger)
+	visibilityManager := espersistence.NewVisibilityManager(indexName, esClient, visibilityConfigForES, esProcessor, metrics.NewNoopMetricsClient(), logger)
 
 	successLines := &atomic.Int32{}
 	wg := &sync.WaitGroup{}
