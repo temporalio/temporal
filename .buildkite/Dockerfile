@@ -1,7 +1,2 @@
-FROM golang:1.16
-
-RUN apt update && apt install -y --no-install-recommends \
-    protobuf-compiler
-
-RUN mkdir -p /temporal
+FROM temporalio/base-builder:1.0.0
 WORKDIR /temporal
