@@ -33,17 +33,23 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
+	"go.uber.org/atomic"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	indexerspb "go.temporal.io/server/api/indexer/v1"
-	"go.temporal.io/server/common/codec"
 	es "go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/elasticsearch/esql"
+	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/service/config"
+	dc "go.temporal.io/server/common/service/dynamicconfig"
 )
 
 const (
@@ -56,9 +62,9 @@ const (
 )
 
 var timeKeys = map[string]bool{
-	"StartTime":     true,
-	"CloseTime":     true,
-	"ExecutionTime": true,
+	searchattribute.StartTime:     true,
+	searchattribute.CloseTime:     true,
+	searchattribute.ExecutionTime: true,
 }
 
 func timeKeyFilter(key string) bool {
@@ -122,63 +128,67 @@ func AdminCatIndices(c *cli.Context) {
 	table.Render()
 }
 
-// AdminIndex used to bulk insert message from kafka parse
+// AdminIndex used to bulk insert message to ES.
+// Sample JSON line:
+// {"NamespaceID": "namespace-id", "Namespace": "namespace-name", "Execution": {"workflow_id": "workflow-id1", "run_id": "run-id" }, "WorkflowTypeName": "workflow-type", "StartTimestamp": 1234, "Status": 1, "ExecutionTimestamp": 5678, "TaskID": 2208, "ShardID": 1978, "Memo": {"fields": {"memo-1": {"metadata": {"encoding": "anNvbi9wbGFpbg==" }, "data": "MQ==" } } }, "TaskQueue": "task-queue", "CloseTimestamp": 9012, "HistoryLength": 2203, "SearchAttributes": {"indexed_fields": {"CustomKeywordField": {"metadata": {"encoding": "anNvbi9wbGFpbg==" }, "data": "ImtleXdvcmQiCg==" } } } }
 func AdminIndex(c *cli.Context) {
 	esClient := newESClient(c)
 	indexName := getRequiredOption(c, FlagIndex)
 	inputFileName := getRequiredOption(c, FlagInputFile)
-	batchSize := c.Int(FlagBatchSize)
+	numOfBatches := c.Int(FlagBatchSize)
 
 	messages, err := parseIndexerMessage(inputFileName)
 	if err != nil {
-		ErrorAndExit("Unable to parse indexer message", err)
+		ErrorAndExit("Unable to parse RecordWorkflowExecutionClosedRequest message", err)
 	}
 
-	bulkRequest := esClient.Bulk()
-	bulkConductFn := func() {
-		err := bulkRequest.Do(context.Background())
-		if err != nil {
-			ErrorAndExit("Bulk failed", err)
-		}
-		if bulkRequest.NumberOfActions() != 0 {
-			ErrorAndExit(fmt.Sprintf("Bulk request not done, %d", bulkRequest.NumberOfActions()), nil)
-		}
+	esProcessorConfig := &espersistence.ProcessorConfig{
+		IndexerConcurrency:       dc.GetIntPropertyFn(100),
+		ESProcessorNumOfWorkers:  dc.GetIntPropertyFn(1),
+		ESProcessorBulkActions:   dc.GetIntPropertyFn(numOfBatches),
+		ESProcessorBulkSize:      dc.GetIntPropertyFn(2 << 20),
+		ESProcessorFlushInterval: dc.GetDurationPropertyFn(1 * time.Second),
+		ValidSearchAttributes:    dc.GetMapPropertyFn(searchattribute.GetDefaultTypeMap()),
 	}
-	for i, message := range messages {
-		docID := message.GetWorkflowId() + esDocIDDelimiter + message.GetRunId()
-		var req *es.BulkableRequest
-		switch message.GetMessageType() {
-		case enumsspb.MESSAGE_TYPE_INDEX:
-			doc := generateESDoc(message)
-			req = &es.BulkableRequest{
-				Index:       indexName,
-				ID:          docID,
-				Version:     message.GetVersion(),
-				RequestType: es.BulkableRequestTypeIndex,
-				Doc:         doc,
-			}
-		case enumsspb.MESSAGE_TYPE_DELETE:
-			req = &es.BulkableRequest{
-				Index:       indexName,
-				ID:          docID,
-				Version:     message.GetVersion(),
-				RequestType: es.BulkableRequestTypeDelete,
-			}
-		default:
-			ErrorAndExit("Unknown message type", nil)
-		}
-		bulkRequest.Add(req)
 
-		if i%batchSize == batchSize-1 {
-			bulkConductFn()
-		}
+	logger, err := loggerimpl.NewDevelopment()
+	if err != nil {
+		ErrorAndExit("Unable to create logger", err)
 	}
-	if bulkRequest.NumberOfActions() != 0 {
-		bulkConductFn()
+
+	esProcessor := espersistence.NewProcessor(esProcessorConfig, esClient, logger, metrics.NewNoopMetricsClient())
+	esProcessor.Start()
+
+	visibilityConfigForES := &config.VisibilityConfig{
+		ESIndexMaxResultWindow: dc.GetIntPropertyFn(10000),
+		ValidSearchAttributes:  dc.GetMapPropertyFn(searchattribute.GetDefaultTypeMap()),
+		ESProcessorAckTimeout:  dc.GetDurationPropertyFn(1 * time.Minute),
 	}
+	visibilityManager := espersistence.NewESVisibilityManager(indexName, esClient, visibilityConfigForES, esProcessor, metrics.NewNoopMetricsClient(), logger)
+
+	successLines := &atomic.Int32{}
+	wg := &sync.WaitGroup{}
+	wg.Add(numOfBatches)
+	for i := 0; i < numOfBatches; i++ {
+		go func(batchNum int) {
+			for line := batchNum; line < len(messages); line += numOfBatches {
+				err1 := visibilityManager.RecordWorkflowExecutionClosed(messages[line])
+				if err1 != nil {
+					fmt.Printf("Unable to save row at line %d: %v", line, err1)
+				} else {
+					successLines.Inc()
+				}
+			}
+			wg.Done()
+		}(i)
+	}
+
+	wg.Wait()
+	visibilityManager.Close()
+	fmt.Println("ES processor stopped.", successLines, "lines were saved successfully")
 }
 
-// AdminDelete used to delete documents from ElasticSearch with input of list result
+// AdminDelete used to delete documents from Elasticsearch with input of list result
 func AdminDelete(c *cli.Context) {
 	esClient := newESClient(c)
 	indexName := getRequiredOption(c, FlagIndex)
@@ -233,18 +243,15 @@ func AdminDelete(c *cli.Context) {
 	}
 }
 
-func parseIndexerMessage(fileName string) (messages []*indexerspb.Message, err error) {
-	// Executed from the CLI to parse existing elasticsearch files
-	// #nosec
+func parseIndexerMessage(fileName string) (messages []*persistence.RecordWorkflowExecutionClosedRequest, err error) {
 	file, err := os.Open(fileName)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	idx := 0
-	encoder := codec.NewJSONPBEncoder()
 	for scanner.Scan() {
 		idx++
 		line := strings.TrimSpace(scanner.Text())
@@ -253,10 +260,10 @@ func parseIndexerMessage(fileName string) (messages []*indexerspb.Message, err e
 			continue
 		}
 
-		msg := &indexerspb.Message{}
-		err := encoder.Decode([]byte(line), msg)
+		msg := &persistence.RecordWorkflowExecutionClosedRequest{}
+		err := json.Unmarshal([]byte(line), msg)
 		if err != nil {
-			fmt.Printf("line %v cannot be deserialized to indexer message: %v.\n", idx, line)
+			fmt.Printf("line %v cannot be deserialized to RecordWorkflowExecutionClosedRequest: %v.\n", idx, line)
 			return nil, err
 		}
 		messages = append(messages, msg)
@@ -266,29 +273,6 @@ func parseIndexerMessage(fileName string) (messages []*indexerspb.Message, err e
 		return nil, err
 	}
 	return messages, nil
-}
-
-func generateESDoc(msg *indexerspb.Message) map[string]interface{} {
-	doc := make(map[string]interface{})
-	doc[es.NamespaceID] = msg.GetNamespaceId()
-	doc[es.WorkflowID] = msg.GetWorkflowId()
-	doc[es.RunID] = msg.GetRunId()
-
-	for k, v := range msg.Fields {
-		switch v.GetType() {
-		case enumsspb.FIELD_TYPE_STRING:
-			doc[k] = v.GetStringData()
-		case enumsspb.FIELD_TYPE_INT:
-			doc[k] = v.GetIntData()
-		case enumsspb.FIELD_TYPE_BOOL:
-			doc[k] = v.GetBoolData()
-		case enumsspb.FIELD_TYPE_BINARY:
-			doc[k] = v.GetBinaryData()
-		default:
-			ErrorAndExit("Unknown field type", nil)
-		}
-	}
-	return doc
 }
 
 // This function is used to trim unnecessary tag in returned json for table header

@@ -54,7 +54,6 @@ if err == nil {
 ## Testing
 To setup local testing environment:
 - start cassandra service locally. Please refer to [Temporal](https://github.com/temporalio/temporal) readme.
-- start zookeeper and kafka service locally. Here is a [referecne](https://kafka.apache.org/quickstart).
 - start elasticsearch and kibana service locally.
 - start a temporal worker by `./bin/helloworld -m worker` under temporal directory.
 - start temporal service locally. Please refer to [Temporal](https://github.com/temporalio/temporal) readme.

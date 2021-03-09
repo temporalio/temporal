@@ -114,7 +114,7 @@ type (
 		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string) (*historypb.HistoryEvent, error)
 		ClearStickyness()
 		CheckResettable() error
-		ToProto() *persistencespb.WorkflowMutableState
+		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
 		CreateNewHistoryEvent(eventType enumspb.EventType) *historypb.HistoryEvent
 		CreateNewHistoryEventWithTime(eventType enumspb.EventType, time time.Time) *historypb.HistoryEvent

@@ -28,7 +28,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stretchr/testify/mock"
+	"github.com/golang/mock/gomock"
 	"github.com/uber-go/tally"
 	"github.com/urfave/cli"
 	"go.temporal.io/api/workflowservice/v1"
@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/client"
@@ -383,9 +382,9 @@ func initializeNamespaceReplicator(
 	logger log.Logger,
 ) namespace.Replicator {
 
-	replicationMessageSink := &mocks.KafkaProducer{}
-	replicationMessageSink.On("Publish", mock.Anything).Return(nil)
-	return namespace.NewNamespaceReplicator(replicationMessageSink, logger)
+	namespaceReplicationQueue := &persistence.MockNamespaceReplicationQueue{}
+	namespaceReplicationQueue.EXPECT().Publish(gomock.Any()).Return(nil)
+	return namespace.NewNamespaceReplicator(namespaceReplicationQueue, logger)
 }
 
 func initializeDynamicConfig(

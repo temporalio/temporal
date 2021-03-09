@@ -48,8 +48,8 @@ type (
 
 		controller *gomock.Controller
 
-		namespaceReplicator *namespaceReplicatorImpl
-		kafkaProducer       *persistence.MockNamespaceReplicationQueue
+		namespaceReplicator       *namespaceReplicatorImpl
+		namespaceReplicationQueue *persistence.MockNamespaceReplicationQueue
 	}
 )
 
@@ -67,9 +67,9 @@ func (s *transmissionTaskSuite) TearDownSuite() {
 
 func (s *transmissionTaskSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
-	s.kafkaProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
+	s.namespaceReplicationQueue = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.namespaceReplicator = NewNamespaceReplicator(
-		s.kafkaProducer,
+		s.namespaceReplicationQueue,
 		loggerimpl.NewDevelopmentForTest(s.Suite),
 	).(*namespaceReplicatorImpl)
 }
@@ -120,7 +120,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	}
 	isGlobalNamespace := true
 
-	s.kafkaProducer.EXPECT().Publish(&replicationspb.ReplicationTask{
+	s.namespaceReplicationQueue.EXPECT().Publish(&replicationspb.ReplicationTask{
 		TaskType: taskType,
 		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
@@ -241,7 +241,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 	}
 	isGlobalNamespace := true
 
-	s.kafkaProducer.EXPECT().Publish(&replicationspb.ReplicationTask{
+	s.namespaceReplicationQueue.EXPECT().Publish(&replicationspb.ReplicationTask{
 		TaskType: taskType,
 		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{

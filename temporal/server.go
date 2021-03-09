@@ -45,7 +45,6 @@ import (
 	l "go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
@@ -292,18 +291,8 @@ func (s *Server) getServiceParams(
 		dynamicconfig.AdvancedVisibilityWritingMode,
 		common.GetDefaultAdvancedVisibilityWritingMode(s.so.config.Persistence.IsAdvancedVisibilityConfigExist()),
 	)()
-	visibilityQueue := dc.GetStringProperty(
-		dynamicconfig.VisibilityQueue,
-		common.VisibilityQueueInternal,
-	)()
-	isAdvancedVisEnabled := advancedVisMode != common.AdvancedVisibilityWritingModeOff
-	if isAdvancedVisEnabled && (visibilityQueue == common.VisibilityQueueKafka || visibilityQueue == common.VisibilityQueueInternalWithDualProcessor) {
-		params.MessagingClient = messaging.NewKafkaClient(&s.so.config.Kafka, metricsClient, zap.NewNop(), s.logger, metricsScope, false, isAdvancedVisEnabled)
-	} else {
-		params.MessagingClient = nil
-	}
 
-	if isAdvancedVisEnabled {
+	if advancedVisMode != common.AdvancedVisibilityWritingModeOff {
 		// verify config of advanced visibility store
 		advancedVisStoreKey := s.so.config.Persistence.AdvancedVisibilityStore
 		advancedVisStore, ok := s.so.config.Persistence.DataStores[advancedVisStoreKey]

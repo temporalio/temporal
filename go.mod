@@ -5,7 +5,6 @@ go 1.16
 require (
 	cloud.google.com/go v0.74.0 // indirect
 	cloud.google.com/go/storage v1.12.0
-	github.com/Shopify/sarama v1.27.2
 	// v0.0.0-20161221203622-b2a4d4ae21c7 is important here.
 	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7 // indirect
 	github.com/aws/aws-sdk-go v1.36.17
@@ -13,7 +12,6 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bitly/go-hostpool v0.1.0 // indirect
 	github.com/blang/semver/v4 v4.0.0
-	github.com/bsm/sarama-cluster v2.1.15+incompatible
 	github.com/cactus/go-statsd-client/statsd v0.0.0-20200423205355-cb0885a1018c
 	github.com/cch123/elasticsql v1.0.1
 	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
@@ -34,7 +32,7 @@ require (
 	github.com/iancoleman/strcase v0.1.2
 	github.com/jmoiron/sqlx v1.2.1-0.20200615141059-0794cb1f47ee
 	github.com/jonboulle/clockwork v0.2.2
-	github.com/klauspost/compress v1.11.4 // indirect
+	github.com/kr/pretty v0.2.1 // indirect
 	github.com/lib/pq v1.9.0
 	github.com/m3db/prometheus_client_golang v0.8.1
 	github.com/m3db/prometheus_client_model v0.1.0 // indirect
@@ -47,13 +45,11 @@ require (
 	github.com/olivere/elastic v6.2.35+incompatible
 	github.com/olivere/elastic/v7 v7.0.22
 	github.com/pborman/uuid v1.2.1
-	github.com/pierrec/lz4 v2.6.0+incompatible // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/robfig/cron v1.2.0
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sirupsen/logrus v1.7.0 // indirect
 	github.com/stretchr/testify v1.6.1
-	github.com/temporalio/kafka-client v0.2.3-0.20201118205213-e4dff30fc573
 	github.com/temporalio/ringpop-go v0.0.0-20200708034907-1e016ebb537a
 	github.com/uber-common/bark v1.3.0 // indirect
 	github.com/uber-go/tally v3.3.17+incompatible
@@ -61,7 +57,6 @@ require (
 	github.com/urfave/cli v1.22.5
 	github.com/urfave/cli/v2 v2.3.0
 	github.com/valyala/fastjson v1.6.3
-	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.temporal.io/api v1.4.0
 	go.temporal.io/sdk v1.5.0
@@ -78,6 +73,7 @@ require (
 	google.golang.org/grpc v1.34.0
 	google.golang.org/grpc/examples v0.0.0-20200625174016-7a808837ae92
 	google.golang.org/protobuf v1.25.1-0.20201020201750-d3470999428b // indirect
+	gopkg.in/check.v1 v1.0.0-20200902074654-038fdea0a05b // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1
 	gopkg.in/validator.v2 v2.0.0-20200605151824-2b28d334fa05
 	gopkg.in/yaml.v2 v2.4.0

@@ -32,7 +32,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/messaging"
+	"go.temporal.io/server/common/persistence"
 )
 
 // NOTE: the counterpart of namespace replication receiving logic is in service/worker package
@@ -52,19 +52,19 @@ type (
 	}
 
 	namespaceReplicatorImpl struct {
-		replicationMessageSink messaging.Producer
-		logger                 log.Logger
+		namespaceReplicationQueue persistence.NamespaceReplicationQueue
+		logger                    log.Logger
 	}
 )
 
 // NewNamespaceReplicator create a new instance of namespace replicator
 func NewNamespaceReplicator(
-	replicationMessageSink messaging.Producer,
+	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	logger log.Logger,
 ) Replicator {
 	return &namespaceReplicatorImpl{
-		replicationMessageSink: replicationMessageSink,
-		logger:                 logger,
+		namespaceReplicationQueue: namespaceReplicationQueue,
+		logger:                    logger,
 	}
 }
 
@@ -112,7 +112,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
 		},
 	}
 
-	return namespaceReplicator.replicationMessageSink.Publish(
+	return namespaceReplicator.namespaceReplicationQueue.Publish(
 		&replicationspb.ReplicationTask{
 			TaskType:   taskType,
 			Attributes: task,

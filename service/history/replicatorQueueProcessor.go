@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -54,7 +53,6 @@ type (
 		historyCache       *historyCache
 		executionMgr       persistence.ExecutionManager
 		historyMgr         persistence.HistoryManager
-		replicator         messaging.Producer
 		metricsClient      metrics.Client
 		logger             log.Logger
 		retryPolicy        backoff.RetryPolicy

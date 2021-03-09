@@ -29,6 +29,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -267,8 +268,8 @@ func newMutableStateBuilderWithVersionHistories(
 	return s
 }
 
-func (e *mutableStateBuilder) ToProto() *persistencespb.WorkflowMutableState {
-	return &persistencespb.WorkflowMutableState{
+func (e *mutableStateBuilder) CloneToProto() *persistencespb.WorkflowMutableState {
+	ms := &persistencespb.WorkflowMutableState{
 		ActivityInfos:       e.pendingActivityInfoIDs,
 		TimerInfos:          e.pendingTimerInfoIDs,
 		ChildExecutionInfos: e.pendingChildExecutionInfoIDs,
@@ -281,6 +282,8 @@ func (e *mutableStateBuilder) ToProto() *persistencespb.WorkflowMutableState {
 		BufferedEvents:      e.bufferedEvents,
 		Checksum:            e.checksum,
 	}
+
+	return proto.Clone(ms).(*persistencespb.WorkflowMutableState)
 }
 
 func (e *mutableStateBuilder) Load(

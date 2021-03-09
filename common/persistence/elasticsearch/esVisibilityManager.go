@@ -27,7 +27,6 @@ package elasticsearch
 import (
 	es "go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
@@ -35,19 +34,18 @@ import (
 )
 
 // NewESVisibilityManager create a visibility manager for ElasticSearch
-// In history, it only needs kafka producer for writing data;
+// In history, it only writes data;
 // In frontend, it only needs ES client and related config for reading data
 func NewESVisibilityManager(
 	indexName string,
 	esClient es.Client,
 	cfg *config.VisibilityConfig,
-	producer messaging.Producer,
 	processor Processor,
 	metricsClient metrics.Client,
 	log log.Logger,
 ) p.VisibilityManager {
 
-	visibilityStore := NewElasticSearchVisibilityStore(esClient, indexName, producer, processor, cfg, log, metricsClient)
+	visibilityStore := NewElasticSearchVisibilityStore(esClient, indexName, processor, cfg, log, metricsClient)
 	visibilityManager := p.NewVisibilityManagerImpl(visibilityStore, cfg.ValidSearchAttributes, log)
 
 	if cfg != nil {

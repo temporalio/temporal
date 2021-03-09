@@ -22,45 +22,39 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package messaging
+package metrics
 
 import (
-	"go.temporal.io/server/common/metrics"
+	"time"
+
+	"github.com/uber-go/tally"
 )
 
 type (
-	metricsProducer struct {
-		producer      Producer
-		metricsClient metrics.Client
-	}
+	NoopMetricsClient struct{}
 )
 
-// NewMetricProducer creates a new instance of producer that emits metrics
-func NewMetricProducer(producer Producer,
-	metricsClient metrics.Client) Producer {
-	return &metricsProducer{
-		producer:      producer,
-		metricsClient: metricsClient,
-	}
+func NewNoopMetricsClient() *NoopMetricsClient {
+	return &NoopMetricsClient{}
 }
 
-func (p *metricsProducer) Publish(msg interface{}) error {
-	p.metricsClient.IncCounter(metrics.MessagingClientPublishScope, metrics.ClientRequests)
+func (m NoopMetricsClient) IncCounter(scope int, counter int) {}
 
-	sw := p.metricsClient.StartTimer(metrics.MessagingClientPublishScope, metrics.ClientLatency)
-	err := p.producer.Publish(msg)
-	sw.Stop()
+func (m NoopMetricsClient) AddCounter(scope int, counter int, delta int64) {}
 
-	if err != nil {
-		p.metricsClient.IncCounter(metrics.MessagingClientPublishScope, metrics.ClientFailures)
-	}
-	return err
+func (m NoopMetricsClient) StartTimer(scope int, timer int) tally.Stopwatch {
+	return NopStopwatch()
 }
 
-func (p *metricsProducer) Close() error {
-	if closeableProducer, ok := p.producer.(CloseableProducer); ok {
-		return closeableProducer.Close()
-	}
+func (m NoopMetricsClient) RecordTimer(scope int, timer int, d time.Duration) {}
 
-	return nil
+func (m NoopMetricsClient) RecordDistribution(scope int, timer int, d int) {}
+
+func (m NoopMetricsClient) UpdateGauge(scope int, gauge int, value float64) {}
+
+func (m NoopMetricsClient) Scope(scope int, tags ...Tag) Scope {
+	return &metricsScope{
+		scope:     tally.NoopScope,
+		rootScope: tally.NoopScope,
+	}
 }

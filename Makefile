@@ -174,19 +174,19 @@ clean-bins:
 
 temporal-server:
 	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
-	go build -ldflags "$(shell ./.development/scripts/go-build-ldflags.sh $(MODULE_ROOT)/ldflags)" -o temporal-server cmd/server/main.go
+	CGO_ENABLED=0 go build -ldflags "$(shell ./.development/scripts/go-build-ldflags.sh $(MODULE_ROOT)/ldflags)" -o temporal-server cmd/server/main.go
 
 tctl:
 	@printf $(COLOR) "Build tctl with OS: $(GOOS), ARCH: $(GOARCH)..."
-	go build -o tctl cmd/tools/cli/main.go
+	CGO_ENABLED=0 go build -o tctl cmd/tools/cli/main.go
 
 temporal-cassandra-tool:
 	@printf $(COLOR) "Build temporal-cassandra-tool with OS: $(GOOS), ARCH: $(GOARCH)..."
-	go build -o temporal-cassandra-tool cmd/tools/cassandra/main.go
+	CGO_ENABLED=0 go build -o temporal-cassandra-tool cmd/tools/cassandra/main.go
 
 temporal-sql-tool:
 	@printf $(COLOR) "Build temporal-sql-tool with OS: $(GOOS), ARCH: $(GOARCH)..."
-	go build -o temporal-sql-tool cmd/tools/sql/main.go
+	CGO_ENABLED=0 go build -o temporal-sql-tool cmd/tools/sql/main.go
 
 ##### Checks #####
 copyright-check:
@@ -345,8 +345,8 @@ install-schema-postgresql: temporal-sql-tool
 
 install-schema-es:
 	@printf $(COLOR) "Install Elasticsearch schema..."
-	curl -X PUT "http://127.0.0.1:9200/_template/temporal-visibility-template" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/v7/visibility/index_template.json
-	curl -X PUT "http://127.0.0.1:9200/temporal-visibility-dev"
+	curl -X PUT "http://127.0.0.1:9200/_template/temporal-visibility-template" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/v7/visibility/index_template.json --write-out "\n"
+	curl -X PUT "http://127.0.0.1:9200/temporal-visibility-dev" --write-out "\n"
 
 install-schema-cdc: temporal-cassandra-tool
 	@printf $(COLOR)  "Set up temporal_active key space..."

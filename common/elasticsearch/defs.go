@@ -24,10 +24,6 @@
 
 package elasticsearch
 
-import (
-	enumsspb "go.temporal.io/server/api/enums/v1"
-)
-
 // All legal fields allowed in elastic search index
 const (
 	NamespaceID     = "NamespaceId"
@@ -43,14 +39,4 @@ const (
 	Encoding        = "Encoding"
 	TaskQueue       = "TaskQueue"
 	CustomNamespace = "CustomNamespace"
-
-	KafkaKey = "KafkaKey"
-)
-
-// Supported field types
-var (
-	FieldTypeString = enumsspb.FIELD_TYPE_STRING
-	FieldTypeInt    = enumsspb.FIELD_TYPE_INT
-	FieldTypeBool   = enumsspb.FIELD_TYPE_BOOL
-	FieldTypeBinary = enumsspb.FIELD_TYPE_BINARY
 )

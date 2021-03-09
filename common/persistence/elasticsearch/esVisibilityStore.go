@@ -40,18 +40,14 @@ import (
 	"github.com/cch123/elasticsql"
 	"github.com/olivere/elastic/v7"
 	"github.com/valyala/fastjson"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	indexerspb "go.temporal.io/server/api/indexer/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	es "go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/messaging"
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute"
@@ -72,9 +68,6 @@ type (
 		config        *config.VisibilityConfig
 		metricsClient metrics.Client
 		processor     Processor
-
-		// Deprecated.
-		producer messaging.Producer
 	}
 
 	esVisibilityPageToken struct {
@@ -113,7 +106,6 @@ var (
 func NewElasticSearchVisibilityStore(
 	esClient es.Client,
 	index string,
-	producer messaging.Producer,
 	processor Processor,
 	cfg *config.VisibilityConfig,
 	logger log.Logger,
@@ -123,7 +115,6 @@ func NewElasticSearchVisibilityStore(
 	return &esVisibilityStore{
 		esClient:      esClient,
 		index:         index,
-		producer:      producer,
 		processor:     processor,
 		logger:        logger.WithTags(tag.ComponentESVisibilityManager),
 		config:        cfg,
@@ -142,56 +133,14 @@ func (v *esVisibilityStore) GetName() string {
 	return persistenceName
 }
 
-// Deprecated.
 func (v *esVisibilityStore) RecordWorkflowExecutionStarted(request *p.InternalRecordWorkflowExecutionStartedRequest) error {
-	v.checkProducer()
-	msg := getVisibilityMessage(
-		request.NamespaceID,
-		request.WorkflowID,
-		request.RunID,
-		request.WorkflowTypeName,
-		request.TaskQueue,
-		request.StartTimestamp,
-		request.ExecutionTimestamp,
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		request.TaskID,
-		request.Memo.Data,
-		request.Memo.EncodingType,
-		request.SearchAttributes,
-	)
-	return v.producer.Publish(msg)
-}
-
-func (v *esVisibilityStore) RecordWorkflowExecutionStartedV2(request *p.InternalRecordWorkflowExecutionStartedRequest) error {
 	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
 	doc := v.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
 
 	return v.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
 }
 
-// Deprecated.
 func (v *esVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRecordWorkflowExecutionClosedRequest) error {
-	v.checkProducer()
-	msg := getVisibilityMessageForCloseExecution(
-		request.NamespaceID,
-		request.WorkflowID,
-		request.RunID,
-		request.WorkflowTypeName,
-		request.StartTimestamp,
-		request.ExecutionTimestamp,
-		request.CloseTimestamp,
-		request.Status,
-		request.HistoryLength,
-		request.TaskID,
-		request.Memo.Data,
-		request.TaskQueue,
-		request.Memo.EncodingType,
-		request.SearchAttributes,
-	)
-	return v.producer.Publish(msg)
-}
-
-func (v *esVisibilityStore) RecordWorkflowExecutionClosedV2(request *p.InternalRecordWorkflowExecutionClosedRequest) error {
 	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
 	doc := v.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
 
@@ -201,34 +150,14 @@ func (v *esVisibilityStore) RecordWorkflowExecutionClosedV2(request *p.InternalR
 	return v.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
 }
 
-// Deprecated.
 func (v *esVisibilityStore) UpsertWorkflowExecution(request *p.InternalUpsertWorkflowExecutionRequest) error {
-	v.checkProducer()
-	msg := getVisibilityMessage(
-		request.NamespaceID,
-		request.WorkflowID,
-		request.RunID,
-		request.WorkflowTypeName,
-		request.TaskQueue,
-		request.StartTimestamp,
-		request.ExecutionTimestamp,
-		request.Status,
-		request.TaskID,
-		request.Memo.Data,
-		request.Memo.EncodingType,
-		request.SearchAttributes,
-	)
-	return v.producer.Publish(msg)
-}
-
-func (v *esVisibilityStore) UpsertWorkflowExecutionV2(request *p.InternalUpsertWorkflowExecutionRequest) error {
 	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
 	doc := v.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
 
 	return v.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
 }
 
-func (v *esVisibilityStore) DeleteWorkflowExecutionV2(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
+func (v *esVisibilityStore) DeleteWorkflowExecution(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
 	docID := getDocID(request.WorkflowID, request.RunID)
 
 	bulkDeleteRequest := &es.BulkableRequest{
@@ -506,17 +435,6 @@ func (v *esVisibilityStore) GetClosedWorkflowExecution(
 	response.Execution = v.convertSearchResultToVisibilityRecord(actualHits[0])
 
 	return response, nil
-}
-
-func (v *esVisibilityStore) DeleteWorkflowExecution(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
-	v.checkProducer()
-	msg := getVisibilityMessageForDeletion(
-		request.NamespaceID,
-		request.WorkflowID,
-		request.RunID,
-		request.TaskID,
-	)
-	return v.producer.Publish(msg)
 }
 
 func (v *esVisibilityStore) ListWorkflowExecutions(
@@ -845,13 +763,6 @@ func (v *esVisibilityStore) getValueOfSearchAfterInJSON(token *esVisibilityPageT
 	return fmt.Sprintf(`[%v, "%s"]`, sortVal, token.TieBreaker), nil
 }
 
-func (v *esVisibilityStore) checkProducer() {
-	if v.producer == nil {
-		// must be bug, check history setup
-		panic("message producer is nil")
-	}
-}
-
 func (v *esVisibilityStore) checkProcessor() {
 	if v.processor == nil {
 		// must be bug, check history setup
@@ -1046,90 +957,6 @@ func (v *esVisibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.S
 	}
 
 	return record
-}
-
-func getVisibilityMessage(namespaceID string, wid, rid string, workflowTypeName string, taskQueue string,
-	startTimeUnixNano, executionTimeUnixNano int64, status enumspb.WorkflowExecutionStatus,
-	taskID int64, memo []byte, memoEncoding enumspb.EncodingType,
-	searchAttributes *commonpb.SearchAttributes) *indexerspb.Message {
-
-	msgType := enumsspb.MESSAGE_TYPE_INDEX
-	fields := map[string]*indexerspb.Field{
-		es.WorkflowType:    {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: workflowTypeName}},
-		es.StartTime:       {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: startTimeUnixNano}},
-		es.ExecutionTime:   {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: executionTimeUnixNano}},
-		es.TaskQueue:       {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: taskQueue}},
-		es.ExecutionStatus: {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: int64(status)}},
-	}
-	if len(memo) != 0 {
-		fields[es.Memo] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: memo}}
-		fields[es.Encoding] = &indexerspb.Field{Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: memoEncoding.String()}}
-	}
-	for k, v := range searchAttributes.GetIndexedFields() {
-		// TODO: current implementation assumes that payload is JSON.
-		// This needs to be saved in generic way (as commonpb.Payload) and then deserialized on consumer side.
-		data := v.GetData() // content must always be JSON
-		fields[k] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: data}}
-	}
-
-	msg := &indexerspb.Message{
-		MessageType: msgType,
-		NamespaceId: namespaceID,
-		WorkflowId:  wid,
-		RunId:       rid,
-		Version:     taskID,
-		Fields:      fields,
-	}
-	return msg
-}
-
-func getVisibilityMessageForCloseExecution(namespaceID string, wid, rid string, workflowTypeName string,
-	startTimeUnixNano int64, executionTimeUnixNano int64, endTimeUnixNano int64, status enumspb.WorkflowExecutionStatus,
-	historyLength int64, taskID int64, memo []byte, taskQueue string, encoding enumspb.EncodingType,
-	searchAttributes *commonpb.SearchAttributes) *indexerspb.Message {
-
-	msgType := enumsspb.MESSAGE_TYPE_INDEX
-	fields := map[string]*indexerspb.Field{
-		es.WorkflowType:    {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: workflowTypeName}},
-		es.StartTime:       {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: startTimeUnixNano}},
-		es.ExecutionTime:   {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: executionTimeUnixNano}},
-		es.CloseTime:       {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: endTimeUnixNano}},
-		es.ExecutionStatus: {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: int64(status)}},
-		es.HistoryLength:   {Type: es.FieldTypeInt, Data: &indexerspb.Field_IntData{IntData: historyLength}},
-		es.TaskQueue:       {Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: taskQueue}},
-	}
-	if len(memo) != 0 {
-		fields[es.Memo] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: memo}}
-		fields[es.Encoding] = &indexerspb.Field{Type: es.FieldTypeString, Data: &indexerspb.Field_StringData{StringData: encoding.String()}}
-	}
-	for k, v := range searchAttributes.GetIndexedFields() {
-		// TODO: current implementation assumes that payload is JSON.
-		// This needs to be saved in generic way (as commonpb.Payload) and then deserialized on consumer side.
-		data := v.GetData() // content must always be JSON
-		fields[k] = &indexerspb.Field{Type: es.FieldTypeBinary, Data: &indexerspb.Field_BinaryData{BinaryData: data}}
-	}
-
-	msg := &indexerspb.Message{
-		MessageType: msgType,
-		NamespaceId: namespaceID,
-		WorkflowId:  wid,
-		RunId:       rid,
-		Version:     taskID,
-		Fields:      fields,
-	}
-	return msg
-}
-
-func getVisibilityMessageForDeletion(namespaceID, workflowID, runID string, docVersion int64) *indexerspb.Message {
-	msgType := enumsspb.MESSAGE_TYPE_DELETE
-	msg := &indexerspb.Message{
-		MessageType: msgType,
-		NamespaceId: namespaceID,
-		WorkflowId:  workflowID,
-		RunId:       runID,
-		Version:     docVersion,
-	}
-	return msg
 }
 
 func checkPageSize(request *p.ListWorkflowExecutionsRequestV2) {

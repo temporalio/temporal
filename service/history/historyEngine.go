@@ -218,10 +218,7 @@ func NewEngineWithShardContext(
 
 	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, queueTaskProcessor, logger)
-	if (config.VisibilityQueue() == common.VisibilityQueueInternal || config.VisibilityQueue() == common.VisibilityQueueInternalWithDualProcessor) &&
-		config.VisibilityProcessorEnabled() {
-		historyEngImpl.visibilityProcessor = newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
-	}
+	historyEngImpl.visibilityProcessor = newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
 	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
@@ -1081,7 +1078,7 @@ func (e *historyEngineImpl) DescribeMutableState(
 
 	if cacheHit && cacheCtx.(*workflowExecutionContextImpl).mutableState != nil {
 		msb := cacheCtx.(*workflowExecutionContextImpl).mutableState
-		response.CacheMutableState = msb.ToProto()
+		response.CacheMutableState = msb.CloneToProto()
 	}
 
 	msb, err := dbCtx.loadWorkflowExecution()
@@ -1089,7 +1086,7 @@ func (e *historyEngineImpl) DescribeMutableState(
 		return nil, err
 	}
 
-	response.DatabaseMutableState = msb.ToProto()
+	response.DatabaseMutableState = msb.CloneToProto()
 	return response, nil
 }
 

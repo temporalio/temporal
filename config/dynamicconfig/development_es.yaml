@@ -46,7 +46,6 @@ frontend.validSearchAttributes:
       ExecutionStatus: "Int"
       HistoryLength: "Int"
       TaskQueue: "Keyword"
-      KafkaKey: "Keyword"
       Encoding: "Keyword"
       CustomStringField: "String"
       CustomKeywordField: "Keyword"

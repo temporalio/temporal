@@ -198,3 +198,14 @@ func confirmOrExit(message string) {
 		osExit(0)
 	}
 }
+
+func getOutputFile(outputFile string) *os.File {
+	if len(outputFile) == 0 {
+		return os.Stdout
+	}
+	f, err := os.Create(outputFile)
+	if err != nil {
+		ErrorAndExit("failed to create output file", err)
+	}
+	return f
+}

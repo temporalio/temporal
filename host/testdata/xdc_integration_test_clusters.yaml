@@ -25,30 +25,6 @@
   historyconfig:
     numhistoryshards: 1
     numhistoryhosts: 1
-  messagingclientconfig:
-    usemock: false
-    kafkaconfig:
-      clusters:
-        test:
-          brokers:
-            - "${KAFKA_SEEDS}:9092"
-      topics:
-        active:
-          cluster: test
-        active-dlq:
-          cluster: test
-        standby:
-          cluster: test
-        standby-dlq:
-          cluster: test
-      temporal-cluster-topics:
-        active:
-          topic: active
-          dlq-topic: active-dlq
-        standby:
-          topic: standby
-          dlq-topic: standby-dlq
-      applications: {}
 - persistence:
     dbname: integration_standby
   clustermetadata:
@@ -76,27 +52,3 @@
   historyconfig:
     numhistoryshards: 1
     numhistoryhosts: 1
-  messagingclientconfig:
-    usemock: false
-    kafkaconfig:
-      clusters:
-        test:
-          brokers:
-            - "${KAFKA_SEEDS}:9092"
-      topics:
-        active:
-          cluster: test
-        active-dlq:
-          cluster: test
-        standby:
-          cluster: test
-        standby-dlq:
-          cluster: test
-      temporal-cluster-topics:
-        active:
-          topic: active
-          dlq-topic: active-dlq
-        standby:
-          topic: standby
-          dlq-topic: standby-dlq
-      applications: {}

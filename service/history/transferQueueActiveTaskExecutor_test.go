@@ -76,7 +76,7 @@ import (
 )
 
 type (
-	transferQueueActiveTaskExecutorSuiteV2 struct {
+	transferQueueActiveTaskExecutorSuite struct {
 		suite.Suite
 		*require.Assertions
 
@@ -116,20 +116,20 @@ type (
 	}
 )
 
-func TestTransferQueueActiveTaskExecutorSuiteV2(t *testing.T) {
-	s := new(transferQueueActiveTaskExecutorSuiteV2)
+func TestTransferQueueActiveTaskExecutorSuite(t *testing.T) {
+	s := new(transferQueueActiveTaskExecutorSuite)
 	suite.Run(t, s)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) SetupSuite() {
+func (s *transferQueueActiveTaskExecutorSuite) SetupSuite() {
 
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TearDownSuite() {
+func (s *transferQueueActiveTaskExecutorSuite) TearDownSuite() {
 
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) SetupTest() {
+func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.namespaceID = testNamespaceID
@@ -154,7 +154,6 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) SetupTest() {
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
 
 	config := NewDynamicConfigForTest()
-	config.VisibilityQueue = dc.GetStringPropertyFn(common.VisibilityQueueInternal)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
@@ -232,13 +231,13 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) SetupTest() {
 	s.transferQueueActiveTaskExecutor.parentClosePolicyClient = s.mockParentClosePolicyClient
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TearDownTest() {
+func (s *transferQueueActiveTaskExecutorSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.Finish(s.T())
 	s.mockQueueAckMgr.AssertExpectations(s.T())
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessActivityTask_Success() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -296,7 +295,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessActivityTask_Success
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessActivityTask_Duplication() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplication() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -356,7 +355,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessActivityTask_Duplica
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessWorkflowTask_FirstWorkflowTask() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_FirstWorkflowTask() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -406,7 +405,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessWorkflowTask_FirstWo
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessWorkflowTask_NonFirstWorkflowTask() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_NonFirstWorkflowTask() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -463,7 +462,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessWorkflowTask_NonFirs
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessWorkflowTask_Sticky_NonFirstWorkflowTask() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Sticky_NonFirstWorkflowTask() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -523,7 +522,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessWorkflowTask_Sticky_
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessWorkflowTask_WorkflowTaskNotSticky_MutableStateSticky() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_WorkflowTaskNotSticky_MutableStateSticky() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -586,7 +585,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessWorkflowTask_Workflo
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessWorkflowTask_Duplication() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_Duplication() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -635,7 +634,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessWorkflowTask_Duplica
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessCloseExecution_HasParent() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasParent() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -708,7 +707,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessCloseExecution_HasPa
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessCloseExecution_NoParent() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -761,7 +760,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessCloseExecution_NoPar
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessCloseExecution_NoParent_HasFewChildren() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent_HasFewChildren() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -894,7 +893,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessCloseExecution_NoPar
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessCloseExecution_NoParent_HasManyChildren() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent_HasManyChildren() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -984,7 +983,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessCloseExecution_NoPar
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessCloseExecution_NoParent_HasManyAbandonedChildren() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent_HasManyAbandonedChildren() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -1073,7 +1072,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessCloseExecution_NoPar
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessCancelExecution_Success() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Success() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -1136,7 +1135,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessCancelExecution_Succ
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessCancelExecution_Failure() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failure() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -1199,7 +1198,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessCancelExecution_Fail
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessCancelExecution_Duplication() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplication() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -1262,7 +1261,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessCancelExecution_Dupl
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessSignalExecution_Success() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Success() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -1338,7 +1337,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessSignalExecution_Succ
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessSignalExecution_Failure() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failure() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -1405,7 +1404,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessSignalExecution_Fail
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessSignalExecution_Duplication() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Duplication() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -1472,7 +1471,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessSignalExecution_Dupl
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessStartChildExecution_Success() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Success() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -1551,7 +1550,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessStartChildExecution_
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessStartChildExecution_Failure() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Failure() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -1633,7 +1632,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessStartChildExecution_
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessStartChildExecution_Success_Dup() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Success_Dup() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -1718,7 +1717,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessStartChildExecution_
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessStartChildExecution_Duplication() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Duplication() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -1801,7 +1800,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessStartChildExecution_
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessRecordWorkflowStartedTask() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessRecordWorkflowStartedTask() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -1853,7 +1852,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessRecordWorkflowStarte
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessUpsertWorkflowSearchAttributes() {
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttributes() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -1901,7 +1900,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestProcessUpsertWorkflowSearch
 	s.Nil(err)
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) TestCopySearchAttributes() {
+func (s *transferQueueActiveTaskExecutorSuite) TestCopySearchAttributes() {
 	var input map[string]*commonpb.Payload
 	s.Nil(copySearchAttributes(input))
 
@@ -1916,7 +1915,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) TestCopySearchAttributes() {
 	s.Equal(byte('1'), val.GetData()[0])
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) createAddActivityTaskRequest(
+func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 	task *persistencespb.TransferTaskInfo,
 	ai *persistencespb.ActivityInfo,
 ) *matchingservice.AddActivityTaskRequest {
@@ -1936,7 +1935,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) createAddActivityTaskRequest(
 	}
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) createAddWorkflowTaskRequest(
+func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 	task *persistencespb.TransferTaskInfo,
 	mutableState mutableState,
 ) *matchingservice.AddWorkflowTaskRequest {
@@ -1965,7 +1964,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) createAddWorkflowTaskRequest(
 	}
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) createRecordWorkflowExecutionStartedRequest(
+func (s *transferQueueActiveTaskExecutorSuite) createRecordWorkflowExecutionStartedRequest(
 	namespace string,
 	startEvent *historypb.HistoryEvent,
 	task *persistencespb.TransferTaskInfo,
@@ -1994,7 +1993,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) createRecordWorkflowExecutionSt
 	}
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) createRequestCancelWorkflowExecutionRequest(
+func (s *transferQueueActiveTaskExecutorSuite) createRequestCancelWorkflowExecutionRequest(
 	targetNamespace string,
 	task *persistencespb.TransferTaskInfo,
 	rci *persistencespb.RequestCancelInfo,
@@ -2024,7 +2023,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) createRequestCancelWorkflowExec
 	}
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) createSignalWorkflowExecutionRequest(
+func (s *transferQueueActiveTaskExecutorSuite) createSignalWorkflowExecutionRequest(
 	targetNamespace string,
 	task *persistencespb.TransferTaskInfo,
 	si *persistencespb.SignalInfo,
@@ -2055,7 +2054,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) createSignalWorkflowExecutionRe
 	}
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) createChildWorkflowExecutionRequest(
+func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionRequest(
 	namespace string,
 	childNamespace string,
 	task *persistencespb.TransferTaskInfo,
@@ -2099,7 +2098,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) createChildWorkflowExecutionReq
 	}
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) createUpsertWorkflowSearchAttributesRequest(
+func (s *transferQueueActiveTaskExecutorSuite) createUpsertWorkflowSearchAttributesRequest(
 	namespace string,
 	startEvent *historypb.HistoryEvent,
 	task *persistencespb.TransferTaskInfo,
@@ -2127,7 +2126,7 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) createUpsertWorkflowSearchAttri
 	}
 }
 
-func (s *transferQueueActiveTaskExecutorSuiteV2) createPersistenceMutableState(
+func (s *transferQueueActiveTaskExecutorSuite) createPersistenceMutableState(
 	ms mutableState,
 	lastEventID int64,
 	lastEventVersion int64,

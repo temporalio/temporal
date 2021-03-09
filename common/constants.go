@@ -70,7 +70,7 @@ const (
 )
 
 const (
-	// VisibilityAppName is used to find kafka topics and ES indexName for visibility
+	// VisibilityAppName is used to find ES indexName for visibility
 	VisibilityAppName = "visibility"
 )
 
@@ -131,11 +131,4 @@ const (
 	AdvancedVisibilityWritingModeOn = "on"
 	// AdvancedVisibilityWritingModeDual means write to both normal visibility and advanced visibility store
 	AdvancedVisibilityWritingModeDual = "dual"
-)
-
-// enum for dynamic config VisibilityQueue
-const (
-	VisibilityQueueKafka                     = "kafka"
-	VisibilityQueueInternalWithDualProcessor = "internalWithDualProcessor"
-	VisibilityQueueInternal                  = "internal"
 )
