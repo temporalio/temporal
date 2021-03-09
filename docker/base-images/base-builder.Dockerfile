@@ -4,4 +4,4 @@ RUN apk add --update --no-cache \
     make \
     git \
     protobuf \
-    gcc
+    build-base

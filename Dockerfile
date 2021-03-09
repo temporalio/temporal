@@ -4,7 +4,6 @@ ARG GOPROXY
 ##### Temporal builder #####
 FROM temporalio/base-builder:1.0.0 AS temporal-builder
 WORKDIR /temporal
-ENV CGO_ENABLED 0
 
 # Copy go.mod first to build docker layer with go dependencies (to improve rebuild time).
 COPY go.mod .
