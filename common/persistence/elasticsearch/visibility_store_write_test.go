@@ -115,9 +115,9 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 
 			body := bulkRequest.Doc
 
-			_, ok := body[Memo]
+			_, ok := body[searchattribute.Memo]
 			s.False(ok)
-			_, ok = body[Encoding]
+			_, ok = body[searchattribute.Encoding]
 			s.False(ok)
 
 			s.Equal(BulkableRequestTypeIndex, bulkRequest.RequestType)
@@ -207,9 +207,9 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 
 			body := bulkRequest.Doc
 
-			_, ok := body[Memo]
+			_, ok := body[searchattribute.Memo]
 			s.False(ok)
-			_, ok = body[Encoding]
+			_, ok = body[searchattribute.Encoding]
 			s.False(ok)
 
 			s.Equal(BulkableRequestTypeIndex, bulkRequest.RequestType)

@@ -336,54 +336,54 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	from := 1
 	token := &visibilityPageToken{From: from}
 
-	matchNamespaceQuery := elastic.NewMatchQuery(NamespaceID, request.NamespaceID)
-	runningQuery := elastic.NewMatchQuery(ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
-	tieBreakerSorter := elastic.NewFieldSort(RunID).Desc()
+	matchNamespaceQuery := elastic.NewMatchQuery(searchattribute.NamespaceID, request.NamespaceID)
+	runningQuery := elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	tieBreakerSorter := elastic.NewFieldSort(searchattribute.RunID).Desc()
 
 	earliestTime := convert.Int64ToString(request.EarliestStartTime - oneMilliSecondInNano)
 	latestTime := convert.Int64ToString(request.LatestStartTime + oneMilliSecondInNano)
 
 	// test for open
-	rangeQuery := elastic.NewRangeQuery(StartTime).Gte(earliestTime).Lte(latestTime)
+	rangeQuery := elastic.NewRangeQuery(searchattribute.StartTime).Gte(earliestTime).Lte(latestTime)
 	boolQuery := elastic.NewBoolQuery().Must(runningQuery).Must(matchNamespaceQuery).Filter(rangeQuery)
 	params := &SearchParameters{
 		Index:    testIndex,
 		Query:    boolQuery,
 		From:     from,
 		PageSize: testPageSize,
-		Sorter:   []elastic.Sorter{elastic.NewFieldSort(StartTime).Desc(), tieBreakerSorter},
+		Sorter:   []elastic.Sorter{elastic.NewFieldSort(searchattribute.StartTime).Desc(), tieBreakerSorter},
 	}
 	s.mockESClient.EXPECT().Search(gomock.Any(), params).Return(nil, nil)
-	_, err := s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Must(elastic.NewMatchQuery(ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
+	_, err := s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Must(elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
 	s.NoError(err)
 
 	// test request latestTime overflow
 	request.LatestStartTime = math.MaxInt64
-	rangeQuery1 := elastic.NewRangeQuery(StartTime).Gte(earliestTime).Lte(convert.Int64ToString(request.LatestStartTime))
+	rangeQuery1 := elastic.NewRangeQuery(searchattribute.StartTime).Gte(earliestTime).Lte(convert.Int64ToString(request.LatestStartTime))
 	boolQuery1 := elastic.NewBoolQuery().Must(runningQuery).Must(matchNamespaceQuery).Filter(rangeQuery1)
 	param1 := &SearchParameters{
 		Index:    testIndex,
 		Query:    boolQuery1,
 		From:     from,
 		PageSize: testPageSize,
-		Sorter:   []elastic.Sorter{elastic.NewFieldSort(StartTime).Desc(), tieBreakerSorter},
+		Sorter:   []elastic.Sorter{elastic.NewFieldSort(searchattribute.StartTime).Desc(), tieBreakerSorter},
 	}
 	s.mockESClient.EXPECT().Search(gomock.Any(), param1).Return(nil, nil)
-	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Must(elastic.NewMatchQuery(ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
+	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Must(elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
 	s.NoError(err)
 	request.LatestStartTime = testLatestTime // revert
 
 	// test for closed
-	rangeQuery = elastic.NewRangeQuery(CloseTime).Gte(earliestTime).Lte(latestTime)
+	rangeQuery = elastic.NewRangeQuery(searchattribute.CloseTime).Gte(earliestTime).Lte(latestTime)
 	boolQuery = elastic.NewBoolQuery().MustNot(runningQuery).Must(matchNamespaceQuery).Filter(rangeQuery)
 	params.Query = boolQuery
-	params.Sorter = []elastic.Sorter{elastic.NewFieldSort(CloseTime).Desc(), tieBreakerSorter}
+	params.Sorter = []elastic.Sorter{elastic.NewFieldSort(searchattribute.CloseTime).Desc(), tieBreakerSorter}
 	s.mockESClient.EXPECT().Search(gomock.Any(), params).Return(nil, nil)
-	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), false)
+	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), false)
 	s.NoError(err)
 
 	// test for additional boolQuery
-	matchQuery := elastic.NewMatchQuery(ExecutionStatus, int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	matchQuery := elastic.NewMatchQuery(searchattribute.ExecutionStatus, int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 	boolQuery = elastic.NewBoolQuery().Must(matchQuery).Must(matchNamespaceQuery).Filter(rangeQuery)
 	params.Query = boolQuery
 	s.mockESClient.EXPECT().Search(gomock.Any(), params).Return(nil, nil)
