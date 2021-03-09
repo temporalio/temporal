@@ -53,12 +53,12 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	elasticsearch2 "go.temporal.io/server/common/persistence/elasticsearch"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/environment"
@@ -80,7 +80,7 @@ type esCrossDCTestSuite struct {
 	cluster2       *host.TestCluster
 	logger         log.Logger
 	clusterConfigs []*host.TestClusterConfig
-	esClient       elasticsearch.IntegrationTestsClient
+	esClient       elasticsearch2.IntegrationTestsClient
 
 	testSearchAttributeKey string
 	testSearchAttributeVal string

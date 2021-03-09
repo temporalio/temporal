@@ -45,7 +45,6 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
-	es "go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -62,7 +61,7 @@ const (
 
 type (
 	esVisibilityStore struct {
-		esClient      es.Client
+		esClient      Client
 		index         string
 		logger        log.Logger
 		config        *config.VisibilityConfig
@@ -104,7 +103,7 @@ var (
 
 // NewElasticSearchVisibilityStore create a visibility store connecting to ElasticSearch
 func NewElasticSearchVisibilityStore(
-	esClient es.Client,
+	esClient Client,
 	index string,
 	processor Processor,
 	cfg *config.VisibilityConfig,
@@ -160,11 +159,11 @@ func (v *esVisibilityStore) UpsertWorkflowExecution(request *p.InternalUpsertWor
 func (v *esVisibilityStore) DeleteWorkflowExecution(request *p.VisibilityDeleteWorkflowExecutionRequest) error {
 	docID := getDocID(request.WorkflowID, request.RunID)
 
-	bulkDeleteRequest := &es.BulkableRequest{
+	bulkDeleteRequest := &BulkableRequest{
 		Index:       v.index,
 		ID:          docID,
 		Version:     request.TaskID,
-		RequestType: es.BulkableRequestTypeDelete,
+		RequestType: BulkableRequestTypeDelete,
 	}
 
 	return v.addBulkRequestAndWait(bulkDeleteRequest, docID)
@@ -183,18 +182,18 @@ func (v *esVisibilityStore) addBulkIndexRequestAndWait(
 	esDoc map[string]interface{},
 	visibilityTaskKey string,
 ) error {
-	bulkIndexRequest := &es.BulkableRequest{
+	bulkIndexRequest := &BulkableRequest{
 		Index:       v.index,
 		ID:          getDocID(request.WorkflowID, request.RunID),
 		Version:     request.TaskID,
-		RequestType: es.BulkableRequestTypeIndex,
+		RequestType: BulkableRequestTypeIndex,
 		Doc:         esDoc,
 	}
 
 	return v.addBulkRequestAndWait(bulkIndexRequest, visibilityTaskKey)
 }
 
-func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest *es.BulkableRequest, visibilityTaskKey string) error {
+func (v *esVisibilityStore) addBulkRequestAndWait(bulkRequest *BulkableRequest, visibilityTaskKey string) error {
 	v.checkProcessor()
 
 	ackCh := make(chan bool, 1)
@@ -254,7 +253,7 @@ func (v *esVisibilityStore) ListOpenWorkflowExecutions(
 		return nil, err
 	}
 
-	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
+	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
 	searchResult, err := v.getSearchResult(request, token, query, true)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutions failed. Error: %v", err))
@@ -276,7 +275,7 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutions(
 		return nil, err
 	}
 
-	executionStatusQuery := elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
+	executionStatusQuery := elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
 	searchResult, err := v.getSearchResult(request, token, executionStatusQuery, false)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutions failed. Error: %v", err))
@@ -298,8 +297,8 @@ func (v *esVisibilityStore) ListOpenWorkflowExecutionsByType(
 		return nil, err
 	}
 
-	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.WorkflowType, request.WorkflowTypeName)).
-		Must(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
+	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(WorkflowType, request.WorkflowTypeName)).
+		Must(elastic.NewMatchQuery(ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
 	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, true)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByType failed. Error: %v", err))
@@ -321,8 +320,8 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutionsByType(
 		return nil, err
 	}
 
-	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.WorkflowType, request.WorkflowTypeName)).
-		MustNot(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
+	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(WorkflowType, request.WorkflowTypeName)).
+		MustNot(elastic.NewMatchQuery(ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
 	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByType failed. Error: %v", err))
@@ -344,8 +343,8 @@ func (v *esVisibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 		return nil, err
 	}
 
-	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.WorkflowID, request.WorkflowID)).
-		Must(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
+	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(WorkflowID, request.WorkflowID)).
+		Must(elastic.NewMatchQuery(ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
 	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, true)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByWorkflowID failed. Error: %v", err))
@@ -367,8 +366,8 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 		return nil, err
 	}
 
-	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.WorkflowID, request.WorkflowID)).
-		MustNot(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
+	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(WorkflowID, request.WorkflowID)).
+		MustNot(elastic.NewMatchQuery(ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
 	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByWorkflowID failed. Error: %v", err))
@@ -390,7 +389,7 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutionsByStatus(
 		return nil, err
 	}
 
-	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.ExecutionStatus, int32(request.Status)))
+	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(ExecutionStatus, int32(request.Status)))
 	searchResult, err := v.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByStatus failed. Error: %v", err))
@@ -407,18 +406,18 @@ func (v *esVisibilityStore) ListClosedWorkflowExecutionsByStatus(
 func (v *esVisibilityStore) GetClosedWorkflowExecution(
 	request *p.GetClosedWorkflowExecutionRequest) (*p.InternalGetClosedWorkflowExecutionResponse, error) {
 
-	matchNamespaceQuery := elastic.NewMatchQuery(es.NamespaceID, request.NamespaceID)
-	executionStatusQuery := elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
-	matchWorkflowIDQuery := elastic.NewMatchQuery(es.WorkflowID, request.Execution.GetWorkflowId())
+	matchNamespaceQuery := elastic.NewMatchQuery(NamespaceID, request.NamespaceID)
+	executionStatusQuery := elastic.NewMatchQuery(ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	matchWorkflowIDQuery := elastic.NewMatchQuery(WorkflowID, request.Execution.GetWorkflowId())
 	boolQuery := elastic.NewBoolQuery().Must(matchNamespaceQuery).MustNot(executionStatusQuery).Must(matchWorkflowIDQuery)
 	rid := request.Execution.GetRunId()
 	if rid != "" {
-		matchRunIDQuery := elastic.NewMatchQuery(es.RunID, rid)
+		matchRunIDQuery := elastic.NewMatchQuery(RunID, rid)
 		boolQuery = boolQuery.Must(matchRunIDQuery)
 	}
 
 	ctx := context.Background()
-	params := &es.SearchParameters{
+	params := &SearchParameters{
 		Index: v.index,
 		Query: boolQuery,
 	}
@@ -473,7 +472,7 @@ func (v *esVisibilityStore) ScanWorkflowExecutions(
 
 	ctx := context.Background()
 	var searchResult *elastic.SearchResult
-	var scrollService es.ScrollService
+	var scrollService ScrollService
 	if len(token.ScrollID) == 0 { // first call
 		var queryDSL string
 		queryDSL, err = getESQueryDSLForScan(request)
@@ -791,12 +790,12 @@ func (v *esVisibilityStore) getNextPageToken(token []byte) (*esVisibilityPageTok
 func (v *esVisibilityStore) getSearchResult(request *p.ListWorkflowExecutionsRequest, token *esVisibilityPageToken,
 	boolQuery *elastic.BoolQuery, overStartTime bool) (*elastic.SearchResult, error) {
 
-	matchNamespaceQuery := elastic.NewMatchQuery(es.NamespaceID, request.NamespaceID)
+	matchNamespaceQuery := elastic.NewMatchQuery(NamespaceID, request.NamespaceID)
 	var rangeQuery *elastic.RangeQuery
 	if overStartTime {
-		rangeQuery = elastic.NewRangeQuery(es.StartTime)
+		rangeQuery = elastic.NewRangeQuery(StartTime)
 	} else {
-		rangeQuery = elastic.NewRangeQuery(es.CloseTime)
+		rangeQuery = elastic.NewRangeQuery(CloseTime)
 	}
 	// ElasticSearch v6 is unable to precisely compare time, have to manually add resolution 1ms to time range.
 	// Also has to use string instead of int64 to avoid data conversion issue,
@@ -821,18 +820,18 @@ func (v *esVisibilityStore) getSearchResult(request *p.ListWorkflowExecutionsReq
 	query = query.Must(matchNamespaceQuery).Filter(rangeQuery)
 
 	ctx := context.Background()
-	params := &es.SearchParameters{
+	params := &SearchParameters{
 		Index:    v.index,
 		Query:    query,
 		From:     token.From,
 		PageSize: request.PageSize,
 	}
 	if overStartTime {
-		params.Sorter = append(params.Sorter, elastic.NewFieldSort(es.StartTime).Desc())
+		params.Sorter = append(params.Sorter, elastic.NewFieldSort(StartTime).Desc())
 	} else {
-		params.Sorter = append(params.Sorter, elastic.NewFieldSort(es.CloseTime).Desc())
+		params.Sorter = append(params.Sorter, elastic.NewFieldSort(CloseTime).Desc())
 	}
-	params.Sorter = append(params.Sorter, elastic.NewFieldSort(es.RunID).Desc())
+	params.Sorter = append(params.Sorter, elastic.NewFieldSort(RunID).Desc())
 
 	if shouldSearchAfter(token) {
 		params.SearchAfter = []interface{}{token.SortValue, token.TieBreaker}

@@ -33,6 +33,7 @@ import (
 	"github.com/olivere/elastic/v7"
 
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/service/config"
 )
 
 type (
@@ -45,7 +46,7 @@ type (
 var _ Client = (*clientV7)(nil)
 
 // newClientV7 create a ES client
-func newClientV7(config *Config, httpClient *http.Client, logger log.Logger) (*clientV7, error) {
+func newClientV7(config *config.Elasticsearch, httpClient *http.Client, logger log.Logger) (*clientV7, error) {
 	options := []elastic.ClientOptionFunc{
 		elastic.SetURL(config.URL.String()),
 		elastic.SetSniff(false),

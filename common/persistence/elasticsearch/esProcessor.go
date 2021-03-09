@@ -39,7 +39,6 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -52,15 +51,15 @@ type (
 		common.Daemon
 
 		// Add request to bulk processor.
-		Add(request *elasticsearch.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool)
+		Add(request *BulkableRequest, visibilityTaskKey string, ackCh chan<- bool)
 	}
 
 	// esProcessorImpl implements Processor, it's an agent of elastic.BulkProcessor
 	esProcessorImpl struct {
 		status                  int32
-		bulkProcessor           elasticsearch.BulkProcessor
-		bulkProcessorParameters *elasticsearch.BulkProcessorParameters
-		client                  elasticsearch.Client
+		bulkProcessor           BulkProcessor
+		bulkProcessorParameters *BulkProcessorParameters
+		client                  Client
 		mapToAckChan            collection.ConcurrentTxMap // used to map ES request to ack channel
 		logger                  log.Logger
 		metricsClient           metrics.Client
@@ -85,7 +84,7 @@ const (
 // NewProcessor create new esProcessorImpl
 func NewProcessor(
 	cfg *ProcessorConfig,
-	client elasticsearch.Client,
+	client Client,
 	logger log.Logger,
 	metricsClient metrics.Client,
 ) *esProcessorImpl {
@@ -96,7 +95,7 @@ func NewProcessor(
 		logger:             logger.WithTags(tag.ComponentIndexerESProcessor),
 		metricsClient:      metricsClient,
 		indexerConcurrency: uint32(cfg.IndexerConcurrency()),
-		bulkProcessorParameters: &elasticsearch.BulkProcessorParameters{
+		bulkProcessorParameters: &BulkProcessorParameters{
 			Name:          visibilityProcessorName,
 			NumOfWorkers:  cfg.ESProcessorNumOfWorkers(),
 			BulkActions:   cfg.ESProcessorBulkActions(),
@@ -155,7 +154,7 @@ func (p *esProcessorImpl) hashFn(key interface{}) uint32 {
 }
 
 // Add request to bulk, and record ack channel message in map with provided key
-func (p *esProcessorImpl) Add(request *elasticsearch.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+func (p *esProcessorImpl) Add(request *BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
 	if cap(ackCh) < 1 {
 		panic("ackCh must be buffered channel (length should be 1 or more)")
 	}

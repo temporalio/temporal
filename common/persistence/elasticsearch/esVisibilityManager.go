@@ -25,7 +25,6 @@
 package elasticsearch
 
 import (
-	es "go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
@@ -38,7 +37,7 @@ import (
 // In frontend, it only needs ES client and related config for reading data
 func NewESVisibilityManager(
 	indexName string,
-	esClient es.Client,
+	esClient Client,
 	cfg *config.VisibilityConfig,
 	processor Processor,
 	metricsClient metrics.Client,

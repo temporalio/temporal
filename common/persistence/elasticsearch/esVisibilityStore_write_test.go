@@ -31,7 +31,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
-	es "go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/payload"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute"
@@ -61,7 +60,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(bulkRequest *es.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+		Do(func(bulkRequest *BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
 			s.NotNil(ackCh)
 			s.Equal(1, cap(ackCh))
 			s.Equal(0, len(ackCh))
@@ -87,7 +86,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 			// %q because request has JSON encoded string.
 			s.EqualValues(request.SearchAttributes.GetIndexedFields()[searchattribute.CustomStringField].Data, fmt.Sprintf("%q", searchAttributes[searchattribute.CustomStringField]))
 
-			s.Equal(es.BulkableRequestTypeIndex, bulkRequest.RequestType)
+			s.Equal(BulkableRequestTypeIndex, bulkRequest.RequestType)
 			s.EqualValues(request.TaskID, bulkRequest.Version)
 			s.Equal("wid~rid", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
@@ -106,7 +105,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(bulkRequest *es.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+		Do(func(bulkRequest *BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
 			s.NotNil(ackCh)
 			s.Equal(1, cap(ackCh))
 			s.Equal(0, len(ackCh))
@@ -116,12 +115,12 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 
 			body := bulkRequest.Doc
 
-			_, ok := body[es.Memo]
+			_, ok := body[Memo]
 			s.False(ok)
-			_, ok = body[es.Encoding]
+			_, ok = body[Encoding]
 			s.False(ok)
 
-			s.Equal(es.BulkableRequestTypeIndex, bulkRequest.RequestType)
+			s.Equal(BulkableRequestTypeIndex, bulkRequest.RequestType)
 			s.EqualValues(request.TaskID, bulkRequest.Version)
 			s.Equal("~", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
@@ -157,7 +156,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(bulkRequest *es.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+		Do(func(bulkRequest *BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
 			s.NotNil(ackCh)
 			s.Equal(1, cap(ackCh))
 			s.Equal(0, len(ackCh))
@@ -179,7 +178,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 			s.EqualValues(request.Status, body[searchattribute.ExecutionStatus])
 			s.EqualValues(request.HistoryLength, body[searchattribute.HistoryLength])
 
-			s.Equal(es.BulkableRequestTypeIndex, bulkRequest.RequestType)
+			s.Equal(BulkableRequestTypeIndex, bulkRequest.RequestType)
 			s.EqualValues(request.TaskID, bulkRequest.Version)
 			s.Equal("wid~rid", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
@@ -198,7 +197,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(bulkRequest *es.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+		Do(func(bulkRequest *BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
 			s.NotNil(ackCh)
 			s.Equal(1, cap(ackCh))
 			s.Equal(0, len(ackCh))
@@ -208,12 +207,12 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 
 			body := bulkRequest.Doc
 
-			_, ok := body[es.Memo]
+			_, ok := body[Memo]
 			s.False(ok)
-			_, ok = body[es.Encoding]
+			_, ok = body[Encoding]
 			s.False(ok)
 
-			s.Equal(es.BulkableRequestTypeIndex, bulkRequest.RequestType)
+			s.Equal(BulkableRequestTypeIndex, bulkRequest.RequestType)
 			s.EqualValues(request.TaskID, bulkRequest.Version)
 			s.Equal("~", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
@@ -233,7 +232,7 @@ func (s *ESVisibilitySuite) TestDeleteExecution() {
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(bulkRequest *es.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+		Do(func(bulkRequest *BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
 			s.NotNil(ackCh)
 			s.Equal(1, cap(ackCh))
 			s.Equal(0, len(ackCh))
@@ -241,7 +240,7 @@ func (s *ESVisibilitySuite) TestDeleteExecution() {
 
 			s.Equal("wid~rid", visibilityTaskKey)
 
-			s.Equal(es.BulkableRequestTypeDelete, bulkRequest.RequestType)
+			s.Equal(BulkableRequestTypeDelete, bulkRequest.RequestType)
 			s.EqualValues(request.TaskID, bulkRequest.Version)
 			s.Equal("wid~rid", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
@@ -256,7 +255,7 @@ func (s *ESVisibilitySuite) TestDeleteExecution_EmptyRequest() {
 	request := &p.VisibilityDeleteWorkflowExecutionRequest{}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(bulkRequest *es.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+		Do(func(bulkRequest *BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
 			s.NotNil(ackCh)
 			s.Equal(1, cap(ackCh))
 			s.Equal(0, len(ackCh))
@@ -264,7 +263,7 @@ func (s *ESVisibilitySuite) TestDeleteExecution_EmptyRequest() {
 
 			s.Equal("~", visibilityTaskKey)
 
-			s.Equal(es.BulkableRequestTypeDelete, bulkRequest.RequestType)
+			s.Equal(BulkableRequestTypeDelete, bulkRequest.RequestType)
 			s.Equal("~", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
 		})
