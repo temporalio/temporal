@@ -33,6 +33,13 @@ import (
 )
 
 type (
+	// Stopwatch is a helper for simpler tracking of elapsed time, use the
+	// Stop() method to report time elapsed since its created back to the
+	// timer or histogram.
+	Stopwatch interface {
+		Stop()
+	}
+
 	// Client is the interface used to report metrics tally.
 	Client interface {
 		// IncCounter increments a counter metric
@@ -41,7 +48,7 @@ type (
 		AddCounter(scope int, counter int, delta int64)
 		// StartTimer starts a timer for the given
 		// metric name. Time will be recorded when stopwatch is stopped.
-		StartTimer(scope int, timer int) tally.Stopwatch
+		StartTimer(scope int, timer int) Stopwatch
 		// RecordTimer starts a timer for the given
 		// metric name
 		RecordTimer(scope int, timer int, d time.Duration)

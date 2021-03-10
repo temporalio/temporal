@@ -64,6 +64,7 @@ type (
 		mockAuthorizer      *MockAuthorizer
 		mockMetricsClient   *metrics.MockClient
 		mockMetricsScope    *metrics.MockScope
+		mockStopwatch       *metrics.MockStopwatch
 		interceptor         grpc.UnaryServerInterceptor
 		handler             grpc.UnaryHandler
 		mockClaimMapper     *MockClaimMapper
@@ -83,9 +84,11 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 	s.mockAuthorizer = NewMockAuthorizer(s.controller)
 	s.mockMetricsScope = metrics.NewMockScope(s.controller)
 	s.mockMetricsClient = metrics.NewMockClient(s.controller)
+	s.mockStopwatch = metrics.NewMockStopwatch(s.controller)
+	s.mockStopwatch.EXPECT().Stop().AnyTimes()
 	s.mockMetricsClient.EXPECT().Scope(metrics.AuthorizationScope).Return(s.mockMetricsScope)
 	s.mockMetricsScope.EXPECT().Tagged(metrics.NamespaceTag(testNamespace)).Return(s.mockMetricsScope)
-	s.mockMetricsScope.EXPECT().StartTimer(metrics.ServiceAuthorizationLatency).Return(metrics.Stopwatch{})
+	s.mockMetricsScope.EXPECT().StartTimer(metrics.ServiceAuthorizationLatency).Return(s.mockStopwatch)
 	s.mockClaimMapper = NewMockClaimMapper(s.controller)
 	s.interceptor = NewAuthorizationInterceptor(
 		s.mockClaimMapper,
