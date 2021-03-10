@@ -58,7 +58,7 @@ func NewDefaultJWTClaimMapper(provider TokenKeyProvider, cfg *config.Config) Cla
 	if claimName == "" {
 		claimName = defaultPermissionsClaimName
 	}
-	logger := log.NewLogger(cfg.Log.NewZapLogger())
+	logger := log.NewLogger(log.NewZapLogger(&cfg.Log))
 	return &defaultJWTClaimMapper{keyProvider: provider, logger: logger, permissionsClaimName: claimName}
 }
 

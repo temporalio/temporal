@@ -26,8 +26,15 @@ package config
 
 import (
 	"errors"
+)
 
-	"go.temporal.io/server/common"
+const (
+	// ArchivalEnabled is the state for enabling archival
+	ArchivalEnabled = "enabled"
+	// ArchivalDisabled is the state for disabling archival
+	ArchivalDisabled = "disabled"
+	// ArchivalPaused is the state for pausing archival
+	ArchivalPaused = "paused"
 )
 
 // Validate validates the archival config
@@ -50,10 +57,10 @@ func isArchivalConfigValid(
 	domianDefaultURI string,
 	specifiedProvider bool,
 ) bool {
-	archivalEnabled := clusterStatus == common.ArchivalEnabled
+	archivalEnabled := clusterStatus == ArchivalEnabled
 	URISet := len(domianDefaultURI) != 0
 
 	validEnable := archivalEnabled && URISet && specifiedProvider
-	validDisabled := !archivalEnabled && !enableRead && namespaceDefaultStatus != common.ArchivalEnabled && !URISet && !specifiedProvider
+	validDisabled := !archivalEnabled && !enableRead && namespaceDefaultStatus != ArchivalEnabled && !URISet && !specifiedProvider
 	return validEnable || validDisabled
 }

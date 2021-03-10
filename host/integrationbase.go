@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/environment"
 )
 
@@ -140,7 +141,7 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 
 	options.FrontendAddress = TestFlags.FrontendAddr
 	if options.ESConfig != nil {
-		options.ESConfig.Indices[common.VisibilityAppName] += uuid.New()
+		options.ESConfig.Indices[config.VisibilityAppName] += uuid.New()
 	}
 	return &options, nil
 }

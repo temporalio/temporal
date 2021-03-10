@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package config
+package metrics
 
 import (
 	"time"
@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	statsdreporter "go.temporal.io/server/common/metrics/tally/statsd"
+	"go.temporal.io/server/common/service/config"
 )
 
 const (
@@ -98,26 +99,26 @@ var (
 //
 // Current priority order is:
 // m3 > statsd > prometheus
-func (c *Metrics) NewScope(logger log.Logger) tally.Scope {
-	if c.M3 != nil {
-		return c.newM3Scope(logger)
+func NewScope(cfg *config.Metrics, logger log.Logger) tally.Scope {
+	if cfg.M3 != nil {
+		return newM3Scope(cfg, logger)
 	}
-	if c.Statsd != nil {
-		return c.newStatsdScope(logger)
+	if cfg.Statsd != nil {
+		return newStatsdScope(cfg, logger)
 	}
-	if c.Prometheus != nil {
-		return c.newPrometheusScope(logger)
+	if cfg.Prometheus != nil {
+		return newPrometheusScope(cfg, logger)
 	}
 	return tally.NoopScope
 }
 
-func (c *Metrics) NewCustomReporterScope(logger log.Logger, customReporter tally.BaseStatsReporter) tally.Scope {
+func NewCustomReporterScope(cfg *config.Metrics, logger log.Logger, customReporter tally.BaseStatsReporter) tally.Scope {
 	options := tally.ScopeOptions{
 		DefaultBuckets: defaultHistogramBuckets,
 	}
-	if c != nil {
-		options.Tags = c.Tags
-		options.Prefix = c.Prefix
+	if cfg != nil {
+		options.Tags = cfg.Tags
+		options.Prefix = cfg.Prefix
 	}
 
 	switch reporter := customReporter.(type) {
@@ -135,15 +136,15 @@ func (c *Metrics) NewCustomReporterScope(logger log.Logger, customReporter tally
 
 // newM3Scope returns a new m3 scope with
 // a default reporting interval of a second
-func (c *Metrics) newM3Scope(logger log.Logger) tally.Scope {
-	reporter, err := c.M3.NewReporter()
+func newM3Scope(cfg *config.Metrics, logger log.Logger) tally.Scope {
+	reporter, err := cfg.M3.NewReporter()
 	if err != nil {
 		logger.Fatal("error creating m3 reporter", tag.Error(err))
 	}
 	scopeOpts := tally.ScopeOptions{
-		Tags:           c.Tags,
+		Tags:           cfg.Tags,
 		CachedReporter: reporter,
-		Prefix:         c.Prefix,
+		Prefix:         cfg.Prefix,
 		DefaultBuckets: defaultHistogramBuckets,
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
@@ -152,8 +153,8 @@ func (c *Metrics) newM3Scope(logger log.Logger) tally.Scope {
 
 // newM3Scope returns a new statsd scope with
 // a default reporting interval of a second
-func (c *Metrics) newStatsdScope(logger log.Logger) tally.Scope {
-	config := c.Statsd
+func newStatsdScope(cfg *config.Metrics, logger log.Logger) tally.Scope {
+	config := cfg.Statsd
 	if len(config.HostPort) == 0 {
 		return tally.NoopScope
 	}
@@ -165,9 +166,9 @@ func (c *Metrics) newStatsdScope(logger log.Logger) tally.Scope {
 	// Therefore, we implement Tally interface to have a statsd reporter that can support tagging
 	reporter := statsdreporter.NewReporter(statter, tallystatsdreporter.Options{})
 	scopeOpts := tally.ScopeOptions{
-		Tags:           c.Tags,
+		Tags:           cfg.Tags,
 		Reporter:       reporter,
-		Prefix:         c.Prefix,
+		Prefix:         cfg.Prefix,
 		DefaultBuckets: defaultHistogramBuckets,
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
@@ -176,18 +177,18 @@ func (c *Metrics) newStatsdScope(logger log.Logger) tally.Scope {
 
 // newPrometheusScope returns a new prometheus scope with
 // a default reporting interval of a second
-func (c *Metrics) newPrometheusScope(logger log.Logger) tally.Scope {
-	if len(c.Prometheus.DefaultHistogramBuckets) == 0 {
+func newPrometheusScope(cfg *config.Metrics, logger log.Logger) tally.Scope {
+	if len(cfg.Prometheus.DefaultHistogramBuckets) == 0 {
 		for _, value := range defaultHistogramBuckets {
-			c.Prometheus.DefaultHistogramBuckets = append(
-				c.Prometheus.DefaultHistogramBuckets,
+			cfg.Prometheus.DefaultHistogramBuckets = append(
+				cfg.Prometheus.DefaultHistogramBuckets,
 				prometheus.HistogramObjective{
 					Upper: value,
 				},
 			)
 		}
 	}
-	reporter, err := c.Prometheus.NewReporter(
+	reporter, err := cfg.Prometheus.NewReporter(
 		prometheus.ConfigurationOptions{
 			Registry: prom.NewRegistry(),
 			OnError: func(err error) {
@@ -199,11 +200,11 @@ func (c *Metrics) newPrometheusScope(logger log.Logger) tally.Scope {
 		logger.Fatal("error creating prometheus reporter", tag.Error(err))
 	}
 	scopeOpts := tally.ScopeOptions{
-		Tags:            c.Tags,
+		Tags:            cfg.Tags,
 		CachedReporter:  reporter,
 		Separator:       prometheus.DefaultSeparator,
 		SanitizeOptions: &sanitizeOptions,
-		Prefix:          c.Prefix,
+		Prefix:          cfg.Prefix,
 		DefaultBuckets:  defaultHistogramBuckets,
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)

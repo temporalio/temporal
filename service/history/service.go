@@ -83,7 +83,7 @@ func NewService(
 
 		var visibilityFromES persistence.VisibilityManager
 		if params.ESConfig != nil {
-			visibilityIndexName := params.ESConfig.Indices[common.VisibilityAppName]
+			visibilityIndexName := params.ESConfig.GetVisibilityIndex()
 
 			esProcessorConfig := &espersistence.ProcessorConfig{
 				IndexerConcurrency:       serviceConfig.IndexerConcurrency,

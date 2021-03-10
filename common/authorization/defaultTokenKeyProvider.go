@@ -55,7 +55,7 @@ type defaultTokenKeyProvider struct {
 var _ TokenKeyProvider = (*defaultTokenKeyProvider)(nil)
 
 func NewDefaultTokenKeyProvider(cfg *config.Config) *defaultTokenKeyProvider {
-	logger := log.NewLogger(cfg.Log.NewZapLogger())
+	logger := log.NewLogger(log.NewZapLogger(&cfg.Log))
 	provider := defaultTokenKeyProvider{config: cfg.Global.Authorization.JWTKeyProvider, logger: logger}
 	provider.initialize()
 	return &provider

@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package config
+package log
 
 import (
 	"io/ioutil"
@@ -62,12 +62,12 @@ func (s *LogSuite) TestNewLogger() {
 	s.Nil(err)
 	defer os.RemoveAll(dir)
 
-	config := &Logger{
+	cfg := &Config{
 		Level:      "info",
 		OutputFile: dir + "/test.log",
 	}
 
-	log := config.NewZapLogger()
+	log := NewZapLogger(cfg)
 	s.NotNil(log)
 	_, err = os.Stat(dir + "/test.log")
 	s.Nil(err)

@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
-	l "go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -49,6 +49,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
@@ -69,7 +70,7 @@ type (
 		services          map[string]common.Daemon
 		serviceStoppedChs map[string]chan struct{}
 		stoppedCh         chan struct{}
-		logger            l.Logger
+		logger            log.Logger
 	}
 )
 
@@ -102,8 +103,8 @@ func (s *Server) Start() error {
 
 	s.stoppedCh = make(chan struct{})
 
-	zapLogger := s.so.config.Log.NewZapLogger()
-	s.logger = l.NewLogger(zapLogger)
+	zapLogger := log.NewZapLogger(&s.so.config.Log)
+	s.logger = log.NewLogger(zapLogger)
 
 	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))
 	s.logger.Debug(s.so.config.String())
@@ -139,9 +140,9 @@ func (s *Server) Start() error {
 
 	var globalMetricsScope tally.Scope
 	if s.so.metricsReporter != nil {
-		globalMetricsScope = s.so.config.Global.Metrics.NewCustomReporterScope(s.logger, s.so.metricsReporter)
+		globalMetricsScope = metrics.NewCustomReporterScope(s.so.config.Global.Metrics, s.logger, s.so.metricsReporter)
 	} else if s.so.config.Global.Metrics != nil {
-		globalMetricsScope = s.so.config.Global.Metrics.NewScope(s.logger)
+		globalMetricsScope = metrics.NewScope(s.so.config.Global.Metrics, s.logger)
 	}
 
 	var tlsFactory encryption.TLSConfigProvider
@@ -247,7 +248,7 @@ func (s *Server) getServiceParams(
 	}
 
 	params.MembershipFactoryInitializer =
-		func(persistenceBean persistenceClient.Bean, logger l.Logger) (resource.MembershipMonitorFactory, error) {
+		func(persistenceBean persistenceClient.Bean, logger log.Logger) (resource.MembershipMonitorFactory, error) {
 			return ringpop.NewRingpopFactory(
 				&s.so.config.Global.Membership,
 				rpcFactory.GetRingpopChannel(),
@@ -260,7 +261,7 @@ func (s *Server) getServiceParams(
 
 	params.DCRedirectionPolicy = s.so.config.DCRedirectionPolicy
 	if metricsScope == nil {
-		metricsScope = svcCfg.Metrics.NewScope(s.logger)
+		metricsScope = metrics.NewScope(&svcCfg.Metrics, s.logger)
 	}
 	params.MetricsScope = metricsScope
 	metricsClient := metrics.NewClient(metricsScope, metrics.GetMetricsServiceIdx(svcName, s.logger))
@@ -276,7 +277,7 @@ func (s *Server) getServiceParams(
 		HostPort:     s.so.config.PublicClient.HostPort,
 		Namespace:    common.SystemLocalNamespace,
 		MetricsScope: metricsScope,
-		Logger:       l.NewZapAdapter(zapLogger),
+		Logger:       log.NewZapAdapter(zapLogger),
 		ConnectionOptions: sdkclient.ConnectionOptions{
 			TLS:                options,
 			DisableHealthCheck: true,
@@ -314,8 +315,8 @@ func (s *Server) getServiceParams(
 		params.ESClient = esClient
 
 		// verify index name
-		indexName, ok := advancedVisStore.ElasticSearch.Indices[common.VisibilityAppName]
-		if !ok || len(indexName) == 0 {
+		indexName := advancedVisStore.ElasticSearch.GetVisibilityIndex()
+		if len(indexName) == 0 {
 			return nil, errors.New("visibility index in missing in Elasticsearch config")
 		}
 	}
@@ -363,7 +364,7 @@ func (s *Server) validate() error {
 		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
 	}
 
-	if err := s.so.config.Global.PProf.NewInitializer(s.logger).Start(); err != nil {
+	if err := pprof.NewInitializer(&s.so.config.Global.PProf, s.logger).Start(); err != nil {
 		return fmt.Errorf("unable to start PProf: %w", err)
 	}
 
@@ -441,7 +442,7 @@ func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collec
 	return nil
 }
 
-func (s *Server) logImmutableMismatch(logger l.Logger, key string, ignored interface{}, value interface{}) {
+func (s *Server) logImmutableMismatch(logger log.Logger, key string, ignored interface{}, value interface{}) {
 	logger.Error(
 		"Supplied configuration key/value mismatches persisted ImmutableClusterMetadata. "+
 			"Continuing with the persisted value as this value cannot be changed once initialized.",
