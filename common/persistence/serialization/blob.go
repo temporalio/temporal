@@ -82,15 +82,6 @@ func NamespaceDetailFromBlob(blob []byte, encoding string) (*persistencespb.Name
 	return result, proto3Decode(blob, encoding, result)
 }
 
-func WorkflowMutableStateToBlob(info *persistencespb.WorkflowMutableState) (commonpb.DataBlob, error) {
-	return proto3Encode(info)
-}
-
-func WorkflowMutableStateFromBlob(blob []byte, encoding string) (*persistencespb.WorkflowMutableState, error) {
-	result := &persistencespb.WorkflowMutableState{}
-	return result, proto3Decode(blob, encoding, result)
-}
-
 func HistoryTreeInfoToBlob(info *persistencespb.HistoryTreeInfo) (commonpb.DataBlob, error) {
 	return proto3Encode(info)
 }

@@ -1078,10 +1078,7 @@ func (e *historyEngineImpl) DescribeMutableState(
 
 	if cacheHit && cacheCtx.(*workflowExecutionContextImpl).mutableState != nil {
 		msb := cacheCtx.(*workflowExecutionContextImpl).mutableState
-		response.CacheMutableState, err = msb.CloneProto()
-		if err != nil {
-			return nil, err
-		}
+		response.CacheMutableState = msb.CloneToProto()
 	}
 
 	msb, err := dbCtx.loadWorkflowExecution()
@@ -1089,10 +1086,7 @@ func (e *historyEngineImpl) DescribeMutableState(
 		return nil, err
 	}
 
-	response.DatabaseMutableState, err = msb.CloneProto()
-	if err != nil {
-		return nil, err
-	}
+	response.DatabaseMutableState = msb.CloneToProto()
 	return response, nil
 }
 

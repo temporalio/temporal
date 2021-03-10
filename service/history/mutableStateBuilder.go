@@ -29,6 +29,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -56,7 +57,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
@@ -268,7 +268,7 @@ func newMutableStateBuilderWithVersionHistories(
 	return s
 }
 
-func (e *mutableStateBuilder) CloneProto() (*persistencespb.WorkflowMutableState, error) {
+func (e *mutableStateBuilder) CloneToProto() *persistencespb.WorkflowMutableState {
 	ms := &persistencespb.WorkflowMutableState{
 		ActivityInfos:       e.pendingActivityInfoIDs,
 		TimerInfos:          e.pendingTimerInfoIDs,
@@ -283,11 +283,7 @@ func (e *mutableStateBuilder) CloneProto() (*persistencespb.WorkflowMutableState
 		Checksum:            e.checksum,
 	}
 
-	blob, err := serialization.WorkflowMutableStateToBlob(ms)
-	if err != nil {
-		return nil, err
-	}
-	return serialization.WorkflowMutableStateFromBlob(blob.Data, blob.String())
+	return proto.Clone(ms).(*persistencespb.WorkflowMutableState)
 }
 
 func (e *mutableStateBuilder) Load(

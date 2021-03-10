@@ -809,19 +809,18 @@ func (mr *MockmutableStateMockRecorder) ClearStickyness() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearStickyness", reflect.TypeOf((*MockmutableState)(nil).ClearStickyness))
 }
 
-// CloneProto mocks base method.
-func (m *MockmutableState) CloneProto() (*persistence.WorkflowMutableState, error) {
+// CloneToProto mocks base method.
+func (m *MockmutableState) CloneToProto() *persistence.WorkflowMutableState {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CloneProto")
+	ret := m.ctrl.Call(m, "CloneToProto")
 	ret0, _ := ret[0].(*persistence.WorkflowMutableState)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
-// CloneProto indicates an expected call of CloneProto.
-func (mr *MockmutableStateMockRecorder) CloneProto() *gomock.Call {
+// CloneToProto indicates an expected call of CloneToProto.
+func (mr *MockmutableStateMockRecorder) CloneToProto() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloneProto", reflect.TypeOf((*MockmutableState)(nil).CloneProto))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloneToProto", reflect.TypeOf((*MockmutableState)(nil).CloneToProto))
 }
 
 // CloseTransactionAsMutation mocks base method.
