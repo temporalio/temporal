@@ -39,7 +39,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.uber.org/zap"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
@@ -86,9 +85,8 @@ func (s *visibilityArchiverSuite) TearDownSuite() {
 
 func (s *visibilityArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	zapLogger := zap.NewNop()
 	s.container = &archiver.VisibilityBootstrapContainer{
-		Logger: log.NewLogger(zapLogger),
+		Logger: log.NewNoop(),
 	}
 	s.controller = gomock.NewController(s.T())
 }

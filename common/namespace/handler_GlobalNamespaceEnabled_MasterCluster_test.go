@@ -26,8 +26,6 @@ package namespace
 
 import (
 	"context"
-	"log"
-	"os"
 	"testing"
 	"time"
 
@@ -44,7 +42,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cluster"
-	log2 "go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -77,10 +75,6 @@ func TestNamespaceHandlerGlobalNamespaceEnabledMasterClusterSuite(t *testing.T) 
 }
 
 func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
-
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{
 		ClusterMetadata: cluster.GetTestClusterMetadata(true, true),
 	})
@@ -92,7 +86,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TearDownSuite
 }
 
 func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) SetupTest() {
-	logger := log2.NewNopLogger()
+	logger := log.NewNoop()
 	dcCollection := dc.NewCollection(dc.NewNopClient(), logger)
 	s.minRetentionDays = 1
 	s.maxBadBinaryCount = 10

@@ -54,7 +54,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v2"
 
@@ -108,11 +107,11 @@ func TestNDCIntegrationTestSuite(t *testing.T) {
 }
 
 func (s *nDCIntegrationTestSuite) SetupSuite() {
-	zapLogger, err := zap.NewDevelopment()
+	var err error
+	s.logger, err = log.NewDevelopment()
 	// cannot use s.Nil since it is not initialized
 	s.Require().NoError(err)
 	s.serializer = persistence.NewPayloadSerializer()
-	s.logger = log.NewLogger(zapLogger)
 
 	fileName := "../testdata/ndc_integration_test_clusters.yaml"
 	if host.TestFlags.TestClusterConfigFile != "" {

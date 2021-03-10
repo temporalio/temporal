@@ -96,7 +96,7 @@ func (s *MetricsSuite) TestStatsd() {
 
 	config := new(config2.Metrics)
 	config.Statsd = statsd
-	scope := NewScope(config, log.NewNopLogger())
+	scope := NewScope(config, log.NewNoop())
 	s.NotNil(scope)
 }
 
@@ -108,7 +108,7 @@ func (s *MetricsSuite) TestM3() {
 	}
 	config := new(config2.Metrics)
 	config.M3 = m3
-	scope := NewScope(config, log.NewNopLogger())
+	scope := NewScope(config, log.NewNoop())
 	s.NotNil(scope)
 }
 
@@ -120,32 +120,32 @@ func (s *MetricsSuite) TestPrometheus() {
 	}
 	config := new(config2.Metrics)
 	config.Prometheus = prom
-	scope := NewScope(config, log.NewNopLogger())
+	scope := NewScope(config, log.NewNoop())
 	s.NotNil(scope)
 }
 
 func (s *MetricsSuite) TestNoop() {
 	config := &config2.Metrics{}
-	scope := NewScope(config, log.NewNopLogger())
+	scope := NewScope(config, log.NewNoop())
 	s.Equal(tally.NoopScope, scope)
 }
 
 func (s *MetricsSuite) TestCustomReporter() {
 	config := &config2.Metrics{}
-	scope := NewCustomReporterScope(config, log.NewNopLogger(), tally.NullStatsReporter)
+	scope := NewCustomReporterScope(config, log.NewNoop(), tally.NullStatsReporter)
 	s.NotNil(scope)
 	s.NotEqual(tally.NoopScope, scope)
 }
 
 func (s *MetricsSuite) TestCustomCachedReporter() {
 	config := &config2.Metrics{}
-	scope := NewCustomReporterScope(config, log.NewNopLogger(), CachedNullStatsReporter)
+	scope := NewCustomReporterScope(config, log.NewNoop(), CachedNullStatsReporter)
 	s.NotNil(scope)
 	s.NotEqual(tally.NoopScope, scope)
 }
 
 func (s *MetricsSuite) TestUnsupportedReporter() {
 	config := &config2.Metrics{}
-	scope := NewCustomReporterScope(config, log.NewNopLogger(), UnsupportedNullStatsReporter)
+	scope := NewCustomReporterScope(config, log.NewNoop(), UnsupportedNullStatsReporter)
 	s.Equal(tally.NoopScope, scope)
 }

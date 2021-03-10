@@ -46,7 +46,6 @@ import (
 	"github.com/uber-go/tally"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.uber.org/zap"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
@@ -103,9 +102,8 @@ func (s *historyArchiverSuite) TearDownSuite() {
 func (s *historyArchiverSuite) SetupTest() {
 	scope := tally.NewTestScope("test", nil)
 	s.Assertions = require.New(s.T())
-	zapLogger := zap.NewNop()
 	s.container = &archiver.HistoryBootstrapContainer{
-		Logger:        log.NewLogger(zapLogger),
+		Logger:        log.NewNoop(),
 		MetricsClient: metrics.NewClient(scope, metrics.HistoryArchiverScope),
 	}
 

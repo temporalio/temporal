@@ -80,7 +80,7 @@ func (s *VisibilitySamplingSuite) SetupTest() {
 	}
 	s.controller = gomock.NewController(s.T())
 	s.metricClient = metrics.NewMockClient(s.controller)
-	s.client = p.NewVisibilitySamplingClient(s.persistence, config, s.metricClient, log.NewNopLogger())
+	s.client = p.NewVisibilitySamplingClient(s.persistence, config, s.metricClient, log.NewNoop())
 }
 
 func (s *VisibilitySamplingSuite) TearDownTest() {

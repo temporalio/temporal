@@ -35,7 +35,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/zap"
 
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
@@ -70,7 +69,7 @@ func (s *processorSuite) SetupSuite() {
 }
 
 func (s *processorSuite) SetupTest() {
-	zapLogger, err := zap.NewDevelopment()
+	logger, err := log.NewDevelopment()
 	s.Require().NoError(err)
 
 	s.controller = gomock.NewController(s.T())
@@ -86,7 +85,7 @@ func (s *processorSuite) SetupTest() {
 	s.mockMetricClient = metrics.NewMockClient(s.controller)
 	s.mockBulkProcessor = client.NewMockBulkProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
-	s.esProcessor = NewProcessor(cfg, s.mockESClient, log.NewLogger(zapLogger), s.mockMetricClient)
+	s.esProcessor = NewProcessor(cfg, s.mockESClient, logger, s.mockMetricClient)
 
 	// esProcessor.Start mock
 	s.esProcessor.mapToAckChan = collection.NewShardedConcurrentTxMap(1024, s.esProcessor.hashFn)

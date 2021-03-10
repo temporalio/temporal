@@ -53,7 +53,6 @@ import (
 	"github.com/uber-go/tally"
 	commonpb "go.temporal.io/api/common/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.uber.org/zap"
 )
 
 type visibilityArchiverSuite struct {
@@ -137,9 +136,8 @@ func (s *visibilityArchiverSuite) SetupSuite() {
 	s.testArchivalURI, err = archiver.NewURI(testBucketURI)
 	s.Require().NoError(err)
 
-	zapLogger := zap.NewNop()
 	s.container = &archiver.VisibilityBootstrapContainer{
-		Logger:        log.NewLogger(zapLogger),
+		Logger:        log.NewNoop(),
 		MetricsClient: metrics.NewClient(scope, metrics.VisibilityArchiverScope),
 	}
 }

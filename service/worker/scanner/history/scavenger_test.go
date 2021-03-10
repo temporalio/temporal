@@ -34,7 +34,6 @@ import (
 	"github.com/uber-go/tally"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.uber.org/zap"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -77,11 +76,11 @@ func TestScavengerTestSuite(t *testing.T) {
 }
 
 func (s *ScavengerTestSuite) SetupTest() {
-	zapLogger, err := zap.NewDevelopment()
+	var err error
+	s.logger, err = log.NewDevelopment()
 	if err != nil {
 		s.Require().NoError(err)
 	}
-	s.logger = log.NewLogger(zapLogger)
 	s.metric = metrics.NewClient(tally.NoopScope, metrics.Worker)
 	s.numShards = 512
 }

@@ -610,7 +610,7 @@ func Test_IsSampledForLongerRetention(t *testing.T) {
 
 func Test_NamespaceCacheEntry_GetNamespaceNotActiveErr(t *testing.T) {
 	clusterMetadata := cluster.NewMetadata(
-		log.NewNopLogger(),
+		log.NewNoop(),
 		true,
 		int64(10),
 		cluster.TestCurrentClusterName,

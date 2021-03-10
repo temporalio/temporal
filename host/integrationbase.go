@@ -37,7 +37,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -114,9 +113,9 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 }
 
 func (s *IntegrationBase) setupLogger() {
-	zapLogger, err := zap.NewDevelopment()
+	var err error
+	s.Logger, err = log.NewDevelopment()
 	s.Require().NoError(err)
-	s.Logger = log.NewLogger(zapLogger)
 }
 
 // GetTestClusterConfig return test cluster config

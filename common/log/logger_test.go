@@ -55,7 +55,7 @@ func TestDefaultLogger(t *testing.T) {
 	var zapLogger *zap.Logger
 	zapLogger = zap.NewExample()
 
-	logger := NewLogger(zapLogger)
+	logger := newLogger(zapLogger)
 	preCaller := caller(1)
 	logger.WithTags(tag.Error(fmt.Errorf("test error"))).Info("test info", tag.WorkflowActionWorkflowStarted)
 
@@ -88,7 +88,7 @@ func TestThrottleLogger(t *testing.T) {
 	var zapLogger *zap.Logger
 	zapLogger = zap.NewExample()
 
-	logger := NewThrottledLogger(NewLogger(zapLogger),
+	logger := NewThrottledLogger(newLogger(zapLogger),
 		func() float64 { return 1 })
 	preCaller := caller(1)
 	logger.WithTags(tag.Error(fmt.Errorf("test error"))).WithTags(tag.ComponentShard).Info("test info", tag.WorkflowActionWorkflowStarted)
@@ -121,7 +121,7 @@ func TestEmptyMsg(t *testing.T) {
 	var zapLogger *zap.Logger
 	zapLogger = zap.NewExample()
 
-	logger := NewLogger(zapLogger)
+	logger := newLogger(zapLogger)
 	preCaller := caller(1)
 	logger.WithTags(tag.Error(fmt.Errorf("test error"))).Info("", tag.WorkflowActionWorkflowStarted)
 

@@ -33,7 +33,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
-	"go.uber.org/zap"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -64,11 +63,10 @@ func (s *ScavengerTestSuite) SetupTest() {
 	s.taskMgr = p.NewMockTaskManager(s.controller)
 	s.taskQueueTable = &mockTaskQueueTable{}
 	s.taskTables = make(map[string]*mockTaskTable)
-	zapLogger, err := zap.NewDevelopment()
+	logger, err := log.NewDevelopment()
 	if err != nil {
 		s.Require().NoError(err)
 	}
-	logger := log.NewLogger(zapLogger)
 	s.scvgr = NewScavenger(s.taskMgr, metrics.NewClient(tally.NoopScope, metrics.Worker), logger)
 	maxTasksPerJob = 4
 	executorPollInterval = time.Millisecond * 50

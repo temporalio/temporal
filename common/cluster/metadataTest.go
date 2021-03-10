@@ -88,7 +88,7 @@ func GetTestClusterMetadata(enableGlobalNamespace bool, isMasterCluster bool) Me
 
 	if enableGlobalNamespace {
 		return NewMetadata(
-			log.NewNopLogger(),
+			log.NewNoop(),
 			true,
 			TestFailoverVersionIncrement,
 			masterClusterName,
@@ -98,7 +98,7 @@ func GetTestClusterMetadata(enableGlobalNamespace bool, isMasterCluster bool) Me
 	}
 
 	return NewMetadata(
-		log.NewNopLogger(),
+		log.NewNoop(),
 		false,
 		TestFailoverVersionIncrement,
 		TestCurrentClusterName,

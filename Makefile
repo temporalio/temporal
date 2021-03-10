@@ -9,7 +9,7 @@ bins: clean-bins temporal-server tctl temporal-cassandra-tool temporal-sql-tool
 all: update-tools clean proto bins check test
 
 # Used by Buildkite.
-ci-build: bins build-test update-tools check proto mocks gomodtidy ensure-no-changes
+ci-build: bins build-tests update-tools check proto mocks gomodtidy ensure-no-changes
 
 # Delete all build artefacts.
 clean: clean-bins clean-test-results
@@ -244,7 +244,7 @@ clean-test-results:
 	@rm -f test.log
 	@go clean -testcache
 
-build-test:
+build-tests:
 	@printf $(COLOR) "Build tests..."
 	@go test -exec="true" -count=0 -tags=esintegration $(TEST_DIRS)
 

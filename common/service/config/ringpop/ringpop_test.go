@@ -59,7 +59,7 @@ func (s *RingpopSuite) TestHostsMode() {
 	s.Equal(time.Second*30, cfg.MaxJoinDuration)
 	err = ValidateRingpopConfig(&cfg)
 	s.Nil(err)
-	f, err := NewRingpopFactory(&cfg, nil, "test", nil, log.NewNopLogger(), nil)
+	f, err := NewRingpopFactory(&cfg, nil, "test", nil, log.NewNoop(), nil)
 	s.Nil(err)
 	s.NotNil(f)
 }

@@ -67,7 +67,7 @@ func CreatePersistenceFactory(c *cli.Context) persistenceClient.Factory {
 		params.AbstractDatastoreFactory,
 		c.String(FlagTargetCluster),
 		nil, // MetricsClient
-		log.NewNopLogger(),
+		log.NewNoop(),
 	)
 
 	return factory

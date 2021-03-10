@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservicemock/v1"
-	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/log"
@@ -91,7 +90,7 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 		s.mockClaimMapper,
 		s.mockAuthorizer,
 		s.mockMetricsClient,
-		log.NewLogger(zap.NewNop()))
+		log.NewNoop())
 	s.handler = func(ctx context.Context, req interface{}) (interface{}, error) { return true, nil }
 }
 

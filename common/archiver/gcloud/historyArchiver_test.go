@@ -36,7 +36,6 @@ import (
 	"github.com/uber-go/tally"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.uber.org/zap"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
@@ -65,11 +64,10 @@ var (
 )
 
 func (h *historyArchiverSuite) SetupTest() {
-	zapLogger := zap.NewNop()
 	h.Assertions = require.New(h.T())
 	h.controller = gomock.NewController(h.T())
 	h.container = &archiver.HistoryBootstrapContainer{
-		Logger:        log.NewLogger(zapLogger),
+		Logger:        log.NewNoop(),
 		MetricsClient: metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 	h.testArchivalURI, _ = archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")

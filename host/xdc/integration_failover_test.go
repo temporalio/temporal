@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
 	"go.temporal.io/server/common"
@@ -99,10 +98,10 @@ func TestIntegrationClustersTestSuite(t *testing.T) {
 }
 
 func (s *integrationClustersTestSuite) SetupSuite() {
-	zapLogger, err := zap.NewDevelopment()
+	var err error
+	s.logger, err = log.NewDevelopment()
 	// cannot use s.Nil since it is not initialized
 	s.Require().NoError(err)
-	s.logger = log.NewLogger(zapLogger)
 
 	fileName := "../testdata/xdc_integration_test_clusters.yaml"
 	if host.TestFlags.TestClusterConfigFile != "" {
