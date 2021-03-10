@@ -94,7 +94,7 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
 
-	s.logger = log.NewDevelopmentForTest(s.Suite)
+	s.logger = log.NewDevelopment()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 
 	s.namespaceID = uuid.New()

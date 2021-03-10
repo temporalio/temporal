@@ -85,7 +85,7 @@ func (s *queueTaskSuite) SetupTest() {
 	s.mockQueueTaskInfo = NewMockqueueTaskInfo(s.controller)
 
 	s.scope = metrics.NewClient(tally.NoopScope, metrics.History).Scope(0)
-	s.logger = log.NewDevelopmentForTest(s.Suite)
+	s.logger = log.NewDevelopment()
 	s.timeSource = clock.NewRealTimeSource()
 	s.maxRetryCount = dynamicconfig.GetIntPropertyFn(10)
 }

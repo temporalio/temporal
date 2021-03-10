@@ -151,10 +151,7 @@ func AdminIndex(c *cli.Context) {
 		ValidSearchAttributes:    dc.GetMapPropertyFn(searchattribute.GetDefaultTypeMap()),
 	}
 
-	logger, err := log.NewDevelopment()
-	if err != nil {
-		ErrorAndExit("Unable to create logger", err)
-	}
+	logger := log.NewDevelopment()
 
 	esProcessor := espersistence.NewProcessor(esProcessorConfig, esClient, logger, metrics.NewNoopMetricsClient())
 	esProcessor.Start()

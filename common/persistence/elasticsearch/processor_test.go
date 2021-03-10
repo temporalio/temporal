@@ -69,8 +69,7 @@ func (s *processorSuite) SetupSuite() {
 }
 
 func (s *processorSuite) SetupTest() {
-	logger, err := log.NewDevelopment()
-	s.Require().NoError(err)
+	logger := log.NewDevelopment()
 
 	s.controller = gomock.NewController(s.T())
 

@@ -85,7 +85,7 @@ func (s *queueTaskProcessorSuite) SetupTest() {
 	s.mockPriorityAssigner = NewMocktaskPriorityAssigner(s.controller)
 
 	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.History)
-	s.logger = log.NewDevelopmentForTest(s.Suite)
+	s.logger = log.NewDevelopment()
 
 	s.processor = s.newTestQueueTaskProcessor()
 }

@@ -102,10 +102,7 @@ var (
 )
 
 func (s *esCrossDCTestSuite) SetupSuite() {
-	var err error
-	s.logger, err = log.NewDevelopment()
-	// cannot use s.Nil since it is not initialized
-	s.Require().NoError(err)
+	s.logger = log.NewDevelopment()
 
 	fileName := "../testdata/xdc_integration_es_clusters.yaml"
 	if host.TestFlags.TestClusterConfigFile != "" {

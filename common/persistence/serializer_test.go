@@ -61,9 +61,7 @@ func TestTemporalSerializerSuite(t *testing.T) {
 }
 
 func (s *temporalSerializerSuite) SetupTest() {
-	var err error
-	s.logger, err = log.NewDevelopment()
-	s.Require().NoError(err)
+	s.logger = log.NewDevelopment()
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
 }

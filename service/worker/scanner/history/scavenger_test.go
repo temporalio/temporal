@@ -76,11 +76,7 @@ func TestScavengerTestSuite(t *testing.T) {
 }
 
 func (s *ScavengerTestSuite) SetupTest() {
-	var err error
-	s.logger, err = log.NewDevelopment()
-	if err != nil {
-		s.Require().NoError(err)
-	}
+	s.logger = log.NewDevelopment()
 	s.metric = metrics.NewClient(tally.NoopScope, metrics.Worker)
 	s.numShards = 512
 }

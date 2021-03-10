@@ -107,10 +107,7 @@ func TestNDCIntegrationTestSuite(t *testing.T) {
 }
 
 func (s *nDCIntegrationTestSuite) SetupSuite() {
-	var err error
-	s.logger, err = log.NewDevelopment()
-	// cannot use s.Nil since it is not initialized
-	s.Require().NoError(err)
+	s.logger = log.NewDevelopment()
 	s.serializer = persistence.NewPayloadSerializer()
 
 	fileName := "../testdata/ndc_integration_test_clusters.yaml"

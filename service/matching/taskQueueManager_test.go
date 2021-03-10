@@ -151,10 +151,7 @@ func createTestTaskQueueManager(controller *gomock.Controller) *taskQueueManager
 }
 
 func createTestTaskQueueManagerWithConfig(controller *gomock.Controller, cfg *Config) *taskQueueManagerImpl {
-	logger, err := log.NewDevelopment()
-	if err != nil {
-		panic(err)
-	}
+	logger := log.NewDevelopment()
 	tm := newTestTaskManager(logger)
 	mockNamespaceCache := cache.NewMockNamespaceCache(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(cache.CreateNamespaceCacheEntry("namespace"), nil).AnyTimes()

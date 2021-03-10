@@ -29,7 +29,6 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
 	"go.temporal.io/server/common/log/tag"
@@ -48,23 +47,11 @@ type (
 	}
 )
 
-// TODO (alex): remove
-// NewDevelopmentForTest is a helper to create new development logger in unit test
-func NewDevelopmentForTest(s suite.Suite) Logger {
-	logger, err := NewDevelopment()
-	if err != nil {
-		panic(err)
-	}
-	return logger
-}
-
-// TODO (alex): remove error
 // NewDevelopment returns a logger at debug level and log into STDERR
-func NewDevelopment() (Logger, error) {
-	cfg := &Config{
+func NewDevelopment() Logger {
+	return NewLogger(&Config{
 		Level: "debug",
-	}
-	return NewLogger(cfg), nil
+	})
 }
 
 // NewLogger returns a new logger

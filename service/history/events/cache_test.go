@@ -75,7 +75,7 @@ func (s *eventsCacheSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockHistoryMgr = persistence.NewMockHistoryManager(s.controller)
 
-	s.logger = log.NewDevelopmentForTest(s.Suite)
+	s.logger = log.NewDevelopment()
 	s.cache = s.newTestEventsCache()
 }
 

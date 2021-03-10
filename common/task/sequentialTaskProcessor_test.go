@@ -66,8 +66,7 @@ func TestSequentialTaskProcessorSuite(t *testing.T) {
 }
 
 func (s *SequentialTaskProcessorSuite) SetupTest() {
-	logger, err := log.NewDevelopment()
-	s.Nil(err)
+	logger := log.NewDevelopment()
 	s.processor = NewSequentialTaskProcessor(
 		20,
 		func(key interface{}) uint32 {

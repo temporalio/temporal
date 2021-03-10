@@ -68,7 +68,7 @@ func (s *parallelTaskProcessorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.processor = NewParallelTaskProcessor(
-		log.NewDevelopmentForTest(s.Suite),
+		log.NewDevelopment(),
 		metrics.NewClient(tally.NoopScope, metrics.Common),
 		&ParallelTaskProcessorOptions{
 			QueueSize:   0,

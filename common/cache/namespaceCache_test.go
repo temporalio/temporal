@@ -76,7 +76,7 @@ func (s *namespaceCacheSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
-	s.logger = log.NewDevelopmentForTest(s.Suite)
+	s.logger = log.NewDevelopment()
 	s.clusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.metadataMgr = persistence.NewMockMetadataManager(s.controller)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)

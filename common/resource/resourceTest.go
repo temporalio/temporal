@@ -121,10 +121,7 @@ func NewTest(
 	serviceMetricsIndex metrics.ServiceIdx,
 ) *Test {
 
-	logger, err := log.NewDevelopment()
-	if err != nil {
-		panic(err)
-	}
+	logger := log.NewDevelopment()
 
 	frontendClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
 	matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)

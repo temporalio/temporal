@@ -99,7 +99,7 @@ func (s *matchingEngineSuite) TearDownSuite() {
 }
 
 func (s *matchingEngineSuite) SetupTest() {
-	s.logger = log.NewDevelopmentForTest(s.Suite)
+	s.logger = log.NewDevelopment()
 	s.Lock()
 	defer s.Unlock()
 	s.controller = gomock.NewController(s.T())

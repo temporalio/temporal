@@ -70,7 +70,7 @@ func (s *transmissionTaskSuite) SetupTest() {
 	s.namespaceReplicationQueue = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.namespaceReplicator = NewNamespaceReplicator(
 		s.namespaceReplicationQueue,
-		log.NewDevelopmentForTest(s.Suite),
+		log.NewDevelopment(),
 	).(*namespaceReplicatorImpl)
 }
 

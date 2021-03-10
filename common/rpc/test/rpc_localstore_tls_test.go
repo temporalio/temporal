@@ -109,7 +109,7 @@ func (s *localStoreRPCSuite) TearDownSuite() {
 }
 func (s *localStoreRPCSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
-	s.logger = log.NewDevelopmentForTest(s.Suite)
+	s.logger = log.NewDevelopment()
 
 	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, nil)
 	s.NoError(err)

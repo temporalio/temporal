@@ -82,7 +82,7 @@ func (s *workflowResetterSuite) TearDownSuite() {
 func (s *workflowResetterSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.logger = log.NewDevelopmentForTest(s.Suite)
+	s.logger = log.NewDevelopment()
 	s.controller = gomock.NewController(s.T())
 	s.mockStateRebuilder = NewMocknDCStateRebuilder(s.controller)
 

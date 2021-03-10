@@ -98,10 +98,7 @@ func TestIntegrationClustersTestSuite(t *testing.T) {
 }
 
 func (s *integrationClustersTestSuite) SetupSuite() {
-	var err error
-	s.logger, err = log.NewDevelopment()
-	// cannot use s.Nil since it is not initialized
-	s.Require().NoError(err)
+	s.logger = log.NewDevelopment()
 
 	fileName := "../testdata/xdc_integration_test_clusters.yaml"
 	if host.TestFlags.TestClusterConfigFile != "" {

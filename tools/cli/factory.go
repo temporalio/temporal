@@ -58,10 +58,7 @@ type clientFactory struct {
 
 // NewClientFactory creates a new ClientFactory
 func NewClientFactory() ClientFactory {
-	logger, err := log.NewDevelopment()
-	if err != nil {
-		panic(err)
-	}
+	logger := log.NewDevelopment()
 
 	return &clientFactory{
 		logger: logger,
