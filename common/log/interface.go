@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination interfaces_mock.go
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination interface_mock.go
 
 package log
 
@@ -34,7 +34,8 @@ type (
 	// Logger is our abstraction for logging
 	// Usage examples:
 	//  import "go.temporal.io/server/common/log/tag"
-	//  1) logger = logger.WithTags(
+	//  1) logger = log.With(
+	//          logger,
 	//          tag.WorkflowNextEventID(123),
 	//          tag.WorkflowActionWorkflowStarted,
 	//          tag.WorkflowNamespaceID("test-namespace-id"))
@@ -56,6 +57,6 @@ type (
 	}
 
 	WithLogger interface {
-		WithTags(tags ...tag.Tag) Logger
+		With(tags ...tag.Tag) Logger
 	}
 )

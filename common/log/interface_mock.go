@@ -166,20 +166,20 @@ func (m *MockWithLogger) EXPECT() *MockWithLoggerMockRecorder {
 	return m.recorder
 }
 
-// WithTags mocks base method.
-func (m *MockWithLogger) WithTags(tags ...tag.Tag) Logger {
+// With mocks base method.
+func (m *MockWithLogger) With(tags ...tag.Tag) Logger {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{}
 	for _, a := range tags {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "WithTags", varargs...)
+	ret := m.ctrl.Call(m, "With", varargs...)
 	ret0, _ := ret[0].(Logger)
 	return ret0
 }
 
-// WithTags indicates an expected call of WithTags.
-func (mr *MockWithLoggerMockRecorder) WithTags(tags ...interface{}) *gomock.Call {
+// With indicates an expected call of With.
+func (mr *MockWithLoggerMockRecorder) With(tags ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithTags", reflect.TypeOf((*MockWithLogger)(nil).WithTags), tags...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "With", reflect.TypeOf((*MockWithLogger)(nil).With), tags...)
 }

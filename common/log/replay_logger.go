@@ -95,7 +95,7 @@ func (r *replayLogger) Fatal(msg string, tags ...tag.Tag) {
 	r.logger.Fatal(msg, tags...)
 }
 
-func (r *replayLogger) WithTags(tags ...tag.Tag) Logger {
+func (r *replayLogger) With(tags ...tag.Tag) Logger {
 	return &replayLogger{
 		logger:            newWithLogger(r.logger, tags...),
 		ctx:               r.ctx,

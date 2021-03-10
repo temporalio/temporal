@@ -38,7 +38,7 @@ var _ Logger = (*withLogger)(nil)
 // With returns Logger instance that prepend every log entry with tags. If logger implements WithLogger it is used, otherwise every log call will be intercepted.
 func With(logger Logger, tags ...tag.Tag) Logger {
 	if wl, ok := logger.(WithLogger); ok {
-		return wl.WithTags(tags...)
+		return wl.With(tags...)
 	}
 
 	return newWithLogger(logger, tags...)

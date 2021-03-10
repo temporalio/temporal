@@ -42,6 +42,6 @@ func (n *noop) Info(msg string, tags ...tag.Tag)  {}
 func (n *noop) Warn(msg string, tags ...tag.Tag)  {}
 func (n *noop) Error(msg string, tags ...tag.Tag) {}
 func (n *noop) Fatal(msg string, tags ...tag.Tag) {}
-func (n *noop) WithTags(tags ...tag.Tag) Logger {
+func (n *noop) With(tags ...tag.Tag) Logger {
 	return n
 }

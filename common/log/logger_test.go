@@ -57,7 +57,7 @@ func TestDefaultLogger(t *testing.T) {
 
 	logger := newLogger(zapLogger)
 	preCaller := caller(1)
-	logger.WithTags(tag.Error(fmt.Errorf("test error"))).Info("test info", tag.WorkflowActionWorkflowStarted)
+	logger.With(tag.Error(fmt.Errorf("test error"))).Info("test info", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
 	w.Close()
@@ -128,7 +128,7 @@ func TestEmptyMsg(t *testing.T) {
 
 	logger := newLogger(zapLogger)
 	preCaller := caller(1)
-	logger.WithTags(tag.Error(fmt.Errorf("test error"))).Info("", tag.WorkflowActionWorkflowStarted)
+	logger.With(tag.Error(fmt.Errorf("test error"))).Info("", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
 	w.Close()

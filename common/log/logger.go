@@ -132,7 +132,7 @@ func (l *loggerImpl) Fatal(msg string, tags ...tag.Tag) {
 	l.zapLogger.Fatal(msg, fields...)
 }
 
-func (l *loggerImpl) WithTags(tags ...tag.Tag) Logger {
+func (l *loggerImpl) With(tags ...tag.Tag) Logger {
 	fields := l.buildFields(tags)
 	zapLogger := l.zapLogger.With(fields...)
 	return &loggerImpl{

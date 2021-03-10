@@ -67,7 +67,7 @@ func BenchmarkLoggerWithFields(b *testing.B) {
 	logger := newLogger(zapLogger)
 
 	for i := 0; i < b.N; i++ {
-		lg := logger.WithTags(tag.WorkflowScheduleID(int64(i)), tag.ClusterName("this is a very long value: 1234567890 1234567890 1234567890 1234567890"))
+		lg := logger.With(tag.WorkflowScheduleID(int64(i)), tag.ClusterName("this is a very long value: 1234567890 1234567890 1234567890 1234567890"))
 		lg.Info("msg to print log, 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",
 			tag.WorkflowNamespace("test-namespace"))
 	}
