@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/elasticsearch"
 	l "go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
@@ -49,6 +48,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
@@ -301,13 +301,13 @@ func (s *Server) getServiceParams(
 		}
 
 		if s.so.elasticseachHttpClient == nil {
-			s.so.elasticseachHttpClient, err = elasticsearch.NewAwsHttpClient(advancedVisStore.ElasticSearch.AWSRequestSigning)
+			s.so.elasticseachHttpClient, err = client.NewAwsHttpClient(advancedVisStore.ElasticSearch.AWSRequestSigning)
 			if err != nil {
 				return nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
 			}
 		}
 
-		esClient, err := elasticsearch.NewClient(advancedVisStore.ElasticSearch, s.so.elasticseachHttpClient, s.logger)
+		esClient, err := client.NewClient(advancedVisStore.ElasticSearch, s.so.elasticseachHttpClient, s.logger)
 		if err != nil {
 			return nil, fmt.Errorf("unable to create Elasticsearch client: %w", err)
 		}

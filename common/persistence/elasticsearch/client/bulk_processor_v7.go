@@ -22,44 +22,52 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package elasticsearch
+package client
 
 import (
-	"fmt"
-	"net/http"
-
-	"go.temporal.io/server/common/log"
+	"github.com/olivere/elastic/v7"
 )
 
-func NewClient(config *Config, httpClient *http.Client, logger log.Logger) (Client, error) {
-	switch config.Version {
-	case "v6", "":
-		return newClientV6(config, httpClient, logger)
-	case "v7":
-		return newClientV7(config, httpClient, logger)
-	default:
-		return nil, fmt.Errorf("not supported ElasticSearch version: %v", config.Version)
+type (
+	bulkProcessorV7 struct {
+		esBulkProcessor *elastic.BulkProcessor
+	}
+)
+
+func newBulkProcessorV7(esBulkProcessor *elastic.BulkProcessor) *bulkProcessorV7 {
+	if esBulkProcessor == nil {
+		return nil
+	}
+	return &bulkProcessorV7{
+		esBulkProcessor: esBulkProcessor,
 	}
 }
 
-func NewCLIClient(url string, version string) (CLIClient, error) {
-	switch version {
-	case "v6":
-		return newSimpleClientV6(url)
-	case "v7", "":
-		return newSimpleClientV7(url)
-	default:
-		return nil, fmt.Errorf("not supported ElasticSearch version: %v", version)
+func (p *bulkProcessorV7) Stop() error {
+	errF := p.esBulkProcessor.Flush()
+	errS := p.esBulkProcessor.Stop()
+	if errF != nil {
+		return errF
 	}
+	return errS
 }
 
-func NewIntegrationTestsClient(url string, version string) (IntegrationTestsClient, error) {
-	switch version {
-	case "v6":
-		return newSimpleClientV6(url)
-	case "v7":
-		return newSimpleClientV7(url)
-	default:
-		return nil, fmt.Errorf("not supported ElasticSearch version: %v", version)
+func (p *bulkProcessorV7) Add(request *BulkableRequest) {
+	switch request.RequestType {
+	case BulkableRequestTypeIndex:
+		bulkIndexRequest := elastic.NewBulkIndexRequest().
+			Index(request.Index).
+			Id(request.ID).
+			VersionType(versionTypeExternal).
+			Version(request.Version).
+			Doc(request.Doc)
+		p.esBulkProcessor.Add(bulkIndexRequest)
+	case BulkableRequestTypeDelete:
+		bulkDeleteRequest := elastic.NewBulkDeleteRequest().
+			Index(request.Index).
+			Id(request.ID).
+			VersionType(versionTypeExternal).
+			Version(request.Version)
+		p.esBulkProcessor.Add(bulkDeleteRequest)
 	}
 }

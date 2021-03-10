@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination esProcessor_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination processor_mock.go
 
 package elasticsearch
 
@@ -39,11 +39,12 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (
@@ -52,28 +53,38 @@ type (
 		common.Daemon
 
 		// Add request to bulk processor.
-		Add(request *elasticsearch.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool)
+		Add(request *client.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool)
 	}
 
-	// esProcessorImpl implements Processor, it's an agent of elastic.BulkProcessor
-	esProcessorImpl struct {
+	// processorImpl implements Processor, it's an agent of elastic.BulkProcessor
+	processorImpl struct {
 		status                  int32
-		bulkProcessor           elasticsearch.BulkProcessor
-		bulkProcessorParameters *elasticsearch.BulkProcessorParameters
-		client                  elasticsearch.Client
+		bulkProcessor           client.BulkProcessor
+		bulkProcessorParameters *client.BulkProcessorParameters
+		client                  client.Client
 		mapToAckChan            collection.ConcurrentTxMap // used to map ES request to ack channel
 		logger                  log.Logger
 		metricsClient           metrics.Client
 		indexerConcurrency      uint32
 	}
 
-	ackChanWithStopwatch struct { // value of esProcessorImpl.mapToAckChan
+	// ProcessorConfig contains all configs for processor
+	ProcessorConfig struct {
+		IndexerConcurrency       dynamicconfig.IntPropertyFn
+		ESProcessorNumOfWorkers  dynamicconfig.IntPropertyFn
+		ESProcessorBulkActions   dynamicconfig.IntPropertyFn // max number of requests in bulk
+		ESProcessorBulkSize      dynamicconfig.IntPropertyFn // max total size of bytes in bulk
+		ESProcessorFlushInterval dynamicconfig.DurationPropertyFn
+		ValidSearchAttributes    dynamicconfig.MapPropertyFn
+	}
+
+	ackChanWithStopwatch struct { // value of processorImpl.mapToAckChan
 		ackCh                 chan<- bool
 		addToProcessStopwatch *tally.Stopwatch // Used to report metrics: interval between visibility task being added to bulk processor and it is processed (ack/nack).
 	}
 )
 
-var _ Processor = (*esProcessorImpl)(nil)
+var _ Processor = (*processorImpl)(nil)
 
 const (
 	// retry configs for es bulk processor
@@ -82,21 +93,21 @@ const (
 	visibilityProcessorName         = "visibility-processor"
 )
 
-// NewProcessor create new esProcessorImpl
+// NewProcessor create new processorImpl
 func NewProcessor(
 	cfg *ProcessorConfig,
-	client elasticsearch.Client,
+	esClient client.Client,
 	logger log.Logger,
 	metricsClient metrics.Client,
-) *esProcessorImpl {
+) *processorImpl {
 
-	p := &esProcessorImpl{
+	p := &processorImpl{
 		status:             common.DaemonStatusInitialized,
-		client:             client,
+		client:             esClient,
 		logger:             logger.WithTags(tag.ComponentIndexerESProcessor),
 		metricsClient:      metricsClient,
 		indexerConcurrency: uint32(cfg.IndexerConcurrency()),
-		bulkProcessorParameters: &elasticsearch.BulkProcessorParameters{
+		bulkProcessorParameters: &client.BulkProcessorParameters{
 			Name:          visibilityProcessorName,
 			NumOfWorkers:  cfg.ESProcessorNumOfWorkers(),
 			BulkActions:   cfg.ESProcessorBulkActions(),
@@ -110,7 +121,7 @@ func NewProcessor(
 	return p
 }
 
-func (p *esProcessorImpl) Start() {
+func (p *processorImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&p.status,
 		common.DaemonStatusInitialized,
@@ -127,7 +138,7 @@ func (p *esProcessorImpl) Start() {
 	}
 }
 
-func (p *esProcessorImpl) Stop() {
+func (p *processorImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&p.status,
 		common.DaemonStatusStarted,
@@ -144,7 +155,7 @@ func (p *esProcessorImpl) Stop() {
 	p.bulkProcessor = nil
 }
 
-func (p *esProcessorImpl) hashFn(key interface{}) uint32 {
+func (p *processorImpl) hashFn(key interface{}) uint32 {
 	id, ok := key.(string)
 	if !ok {
 		return 0
@@ -155,7 +166,7 @@ func (p *esProcessorImpl) hashFn(key interface{}) uint32 {
 }
 
 // Add request to bulk, and record ack channel message in map with provided key
-func (p *esProcessorImpl) Add(request *elasticsearch.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
 	if cap(ackCh) < 1 {
 		panic("ackCh must be buffered channel (length should be 1 or more)")
 	}
@@ -186,12 +197,12 @@ func (p *esProcessorImpl) Add(request *elasticsearch.BulkableRequest, visibility
 }
 
 // bulkBeforeAction is triggered before bulk processor commit
-func (p *esProcessorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableRequest) {
+func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableRequest) {
 	p.metricsClient.AddCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorRequests, int64(len(requests)))
 }
 
 // bulkAfterAction is triggered after bulk processor commit
-func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
+func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
 	if err != nil {
 		// This happens after configured retry, which means something bad happens on cluster or index
 		// When cluster back to live, processor will re-commit those failure requests
@@ -257,7 +268,7 @@ func (p *esProcessorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRe
 	}
 }
 
-func (p *esProcessorImpl) buildResponseIndex(response *elastic.BulkResponse) map[string]*elastic.BulkResponseItem {
+func (p *processorImpl) buildResponseIndex(response *elastic.BulkResponse) map[string]*elastic.BulkResponseItem {
 	result := make(map[string]*elastic.BulkResponseItem)
 	for _, operationResponseItemMap := range response.Items {
 		for _, responseItem := range operationResponseItemMap {
@@ -273,7 +284,7 @@ func (p *esProcessorImpl) buildResponseIndex(response *elastic.BulkResponse) map
 	return result
 }
 
-func (p *esProcessorImpl) sendToAckChan(visibilityTaskKey string, ack bool) {
+func (p *processorImpl) sendToAckChan(visibilityTaskKey string, ack bool) {
 	// Use RemoveIf here to prevent race condition with de-dup logic in Add method.
 	_ = p.mapToAckChan.RemoveIf(visibilityTaskKey, func(key interface{}, value interface{}) bool {
 		ackChWithStopwatch, ok := value.(*ackChanWithStopwatch)
@@ -287,7 +298,7 @@ func (p *esProcessorImpl) sendToAckChan(visibilityTaskKey string, ack bool) {
 	})
 }
 
-func (p *esProcessorImpl) extractVisibilityTaskKey(request elastic.BulkableRequest) string {
+func (p *processorImpl) extractVisibilityTaskKey(request elastic.BulkableRequest) string {
 	req, err := request.Source()
 	if err != nil {
 		p.logger.Error("Unable to get ES request source.", tag.Error(err), tag.ESRequest(request.String()))
@@ -315,7 +326,7 @@ func (p *esProcessorImpl) extractVisibilityTaskKey(request elastic.BulkableReque
 	}
 }
 
-func (p *esProcessorImpl) extractDocID(request elastic.BulkableRequest) string {
+func (p *processorImpl) extractDocID(request elastic.BulkableRequest) string {
 	req, err := request.Source()
 	if err != nil {
 		p.logger.Error("Unable to get ES request source.", tag.Error(err), tag.ESRequest(request.String()))

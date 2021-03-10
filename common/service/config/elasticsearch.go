@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package elasticsearch
+package config
 
 import (
 	"net/url"
@@ -30,20 +30,20 @@ import (
 	"go.temporal.io/server/common"
 )
 
-// Config for connecting to ElasticSearch
+// Config for connecting to Elasticsearch
 type (
-	Config struct {
-		Version           string                  `yaml:"version"`
-		URL               url.URL                 `yaml:"url"` //nolint:govet
-		Username          string                  `yaml:"username"`
-		Password          string                  `yaml:"password"`
-		Indices           map[string]string       `yaml:"indices"` //nolint:govet
-		LogLevel          string                  `yaml:"logLevel"`
-		AWSRequestSigning AWSRequestSigningConfig `yaml:"aws-request-signing"`
+	Elasticsearch struct {
+		Version           string                    `yaml:"version"`
+		URL               url.URL                   `yaml:"url"` //nolint:govet
+		Username          string                    `yaml:"username"`
+		Password          string                    `yaml:"password"`
+		Indices           map[string]string         `yaml:"indices"` //nolint:govet
+		LogLevel          string                    `yaml:"logLevel"`
+		AWSRequestSigning ESAWSRequestSigningConfig `yaml:"aws-request-signing"`
 	}
 
-	// AWSRequestSigningConfig represents configuration for signing ES requests to AWS
-	AWSRequestSigningConfig struct {
+	// ESAWSRequestSigningConfig represents configuration for signing ES requests to AWS
+	ESAWSRequestSigningConfig struct {
 		Enabled bool   `yaml:"enabled"`
 		Region  string `yaml:"region"`
 
@@ -56,11 +56,11 @@ type (
 		//		a) Follows aws-go-sdk default credential resolution for session.NewSession
 		CredentialProvider string `yaml:"credentialProvider"`
 
-		Static AWSStaticCredentialProvider `yaml:"static"`
+		Static ESAWSStaticCredentialProvider `yaml:"static"`
 	}
 
-	// AWSStaticCredentialProvider represents static AWS credentials
-	AWSStaticCredentialProvider struct {
+	// ESAWSStaticCredentialProvider represents static AWS credentials
+	ESAWSStaticCredentialProvider struct {
 		AccessKeyID     string `yaml:"accessKeyID"`
 		SecretAccessKey string `yaml:"secretAccessKey"`
 
@@ -70,6 +70,6 @@ type (
 )
 
 // GetVisibilityIndex return visibility index name
-func (cfg *Config) GetVisibilityIndex() string {
+func (cfg *Elasticsearch) GetVisibilityIndex() string {
 	return cfg.Indices[common.VisibilityAppName]
 }
