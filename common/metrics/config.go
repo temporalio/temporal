@@ -40,8 +40,8 @@ import (
 )
 
 type (
-	// Metrics contains the config items for metrics subsystem
-	Metrics struct {
+	// Config contains the config items for metrics subsystem
+	Config struct {
 		// M3 is the configuration for m3 metrics reporter
 		M3 *m3.Configuration `yaml:"m3"`
 		// Statsd is the configuration for statsd reporter
@@ -141,7 +141,7 @@ var (
 //
 // Current priority order is:
 // m3 > statsd > prometheus
-func (c *Metrics) NewScope(logger log.Logger) tally.Scope {
+func (c *Config) NewScope(logger log.Logger) tally.Scope {
 	if c.M3 != nil {
 		return c.newM3Scope(logger)
 	}
@@ -154,7 +154,7 @@ func (c *Metrics) NewScope(logger log.Logger) tally.Scope {
 	return tally.NoopScope
 }
 
-func (c *Metrics) NewCustomReporterScope(logger log.Logger, customReporter tally.BaseStatsReporter) tally.Scope {
+func (c *Config) NewCustomReporterScope(logger log.Logger, customReporter tally.BaseStatsReporter) tally.Scope {
 	options := tally.ScopeOptions{
 		DefaultBuckets: defaultHistogramBuckets,
 	}
@@ -178,7 +178,7 @@ func (c *Metrics) NewCustomReporterScope(logger log.Logger, customReporter tally
 
 // newM3Scope returns a new m3 scope with
 // a default reporting interval of a second
-func (c *Metrics) newM3Scope(logger log.Logger) tally.Scope {
+func (c *Config) newM3Scope(logger log.Logger) tally.Scope {
 	reporter, err := c.M3.NewReporter()
 	if err != nil {
 		logger.Fatal("error creating m3 reporter", tag.Error(err))
@@ -195,7 +195,7 @@ func (c *Metrics) newM3Scope(logger log.Logger) tally.Scope {
 
 // newM3Scope returns a new statsd scope with
 // a default reporting interval of a second
-func (c *Metrics) newStatsdScope(logger log.Logger) tally.Scope {
+func (c *Config) newStatsdScope(logger log.Logger) tally.Scope {
 	config := c.Statsd
 	if len(config.HostPort) == 0 {
 		return tally.NoopScope
@@ -219,7 +219,7 @@ func (c *Metrics) newStatsdScope(logger log.Logger) tally.Scope {
 
 // newPrometheusScope returns a new prometheus scope with
 // a default reporting interval of a second
-func (c *Metrics) newPrometheusScope(logger log.Logger) tally.Scope {
+func (c *Config) newPrometheusScope(logger log.Logger) tally.Scope {
 	if len(c.Prometheus.DefaultHistogramBuckets) == 0 {
 		for _, value := range defaultHistogramBuckets {
 			c.Prometheus.DefaultHistogramBuckets = append(

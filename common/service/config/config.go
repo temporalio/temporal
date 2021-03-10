@@ -67,7 +67,7 @@ type (
 		// RPC is the rpc configuration
 		RPC RPC `yaml:"rpc"`
 		// Deprecated. Use Metrics in global section instead.
-		Metrics metrics.Metrics `yaml:"metrics"`
+		Metrics metrics.Config `yaml:"metrics"`
 	}
 
 	// PProf contains the config items for the pprof utility
@@ -99,7 +99,7 @@ type (
 		// TLS controls the communication encryption configuration
 		TLS RootTLS `yaml:"tls"`
 		// Metrics is the metrics subsystem configuration
-		Metrics *metrics.Metrics `yaml:"metrics"`
+		Metrics *metrics.Config `yaml:"metrics"`
 		// Settings for authentication and authorization
 		Authorization Authorization `yaml:"authorization"`
 	}
