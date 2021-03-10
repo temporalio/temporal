@@ -83,7 +83,7 @@ func newTransferQueueActiveProcessor(
 		MetricScope:                         metrics.TransferActiveQueueProcessorScope,
 	}
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
-	logger = logger.WithTags(tag.ClusterName(currentClusterName))
+	logger = log.With(logger, tag.ClusterName(currentClusterName))
 	transferTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
 		task, ok := taskInfo.(*persistencespb.TransferTaskInfo)
 		if !ok {
@@ -204,7 +204,8 @@ func newTransferQueueFailoverProcessor(
 	}
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	failoverUUID := uuid.New()
-	logger = logger.WithTags(
+	logger = log.With(
+		logger,
 		tag.ClusterName(currentClusterName),
 		tag.WorkflowNamespaceIDs(namespaceIDs),
 		tag.FailoverMsg("from: "+standbyClusterName),

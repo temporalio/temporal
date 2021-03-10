@@ -33,14 +33,14 @@ const skipForThrottleLogger = 6
 
 type throttledLogger struct {
 	limiter quotas.RateLimiter
-	log     Logger
+	logger  Logger
 }
 
 var _ Logger = (*throttledLogger)(nil)
 
 // NewThrottledLogger returns an implementation of logger that throttles the
 // log messages being emitted. The underlying implementation uses a token bucket
-// ratelimiter and stops emitting logs once the bucket runs out of tokens
+// rate limiter and stops emitting logs once the bucket runs out of tokens
 //
 // Fatal/Panic logs are always emitted without any throttling
 func NewThrottledLogger(logger Logger, rps quotas.RateFn) *throttledLogger {
@@ -59,38 +59,38 @@ func NewThrottledLogger(logger Logger, rps quotas.RateFn) *throttledLogger {
 	limiter := quotas.NewDefaultOutgoingDynamicRateLimiter(rps)
 	tl := &throttledLogger{
 		limiter: limiter,
-		log:     log,
+		logger:  log,
 	}
 	return tl
 }
 
 func (tl *throttledLogger) Debug(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
-		tl.log.Debug(msg, tags...)
+		tl.logger.Debug(msg, tags...)
 	})
 }
 
 func (tl *throttledLogger) Info(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
-		tl.log.Info(msg, tags...)
+		tl.logger.Info(msg, tags...)
 	})
 }
 
 func (tl *throttledLogger) Warn(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
-		tl.log.Warn(msg, tags...)
+		tl.logger.Warn(msg, tags...)
 	})
 }
 
 func (tl *throttledLogger) Error(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
-		tl.log.Error(msg, tags...)
+		tl.logger.Error(msg, tags...)
 	})
 }
 
 func (tl *throttledLogger) Fatal(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
-		tl.log.Fatal(msg, tags...)
+		tl.logger.Fatal(msg, tags...)
 	})
 }
 
@@ -98,7 +98,7 @@ func (tl *throttledLogger) Fatal(msg string, tags ...tag.Tag) {
 func (tl *throttledLogger) WithTags(tags ...tag.Tag) Logger {
 	result := &throttledLogger{
 		limiter: tl.limiter,
-		log:     tl.log.WithTags(tags...),
+		logger:  With(tl.logger, tags...),
 	}
 	return result
 }

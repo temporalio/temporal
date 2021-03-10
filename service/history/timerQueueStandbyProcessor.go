@@ -69,7 +69,7 @@ func newTimerQueueStandbyProcessor(
 	updateShardAckLevel := func(ackLevel timerKey) error {
 		return shard.UpdateTimerClusterAckLevel(clusterName, ackLevel.VisibilityTimestamp)
 	}
-	logger = logger.WithTags(tag.ClusterName(clusterName))
+	logger = log.With(logger, tag.ClusterName(clusterName))
 	timerTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
 		timer, ok := taskInfo.(*persistencespb.TimerTaskInfo)
 		if !ok {

@@ -47,19 +47,21 @@ type (
 	}
 )
 
+var _ Logger = (*loggerImpl)(nil)
+
 // NewDevelopment returns a logger at debug level and log into STDERR
-func NewDevelopment() Logger {
+func NewDevelopment() *loggerImpl {
 	return NewLogger(&Config{
 		Level: "debug",
 	})
 }
 
 // NewLogger returns a new logger
-func NewLogger(cfg *Config) Logger {
+func NewLogger(cfg *Config) *loggerImpl {
 	return newLogger(newZapLogger(cfg))
 }
 
-func newLogger(zapLogger *zap.Logger) Logger {
+func newLogger(zapLogger *zap.Logger) *loggerImpl {
 	return &loggerImpl{
 		zapLogger: zapLogger,
 		skip:      skipForDefaultLogger,

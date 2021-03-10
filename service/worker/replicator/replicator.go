@@ -83,7 +83,7 @@ func NewReplicator(
 	namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor,
 ) *Replicator {
 
-	logger = logger.WithTags(tag.ComponentReplicator)
+	logger = log.With(logger, tag.ComponentReplicator)
 	var namespaceReplicationMessageProcessors []*namespaceReplicationMessageProcessor
 	currentClusterName := clusterMetadata.GetCurrentClusterName()
 	for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
@@ -94,7 +94,7 @@ func NewReplicator(
 		if clusterName != currentClusterName {
 			namespaceReplicationMessageProcessors = append(namespaceReplicationMessageProcessors, newNamespaceReplicationMessageProcessor(
 				clusterName,
-				logger.WithTags(tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName)),
+				log.With(logger, tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName)),
 				clientBean.GetRemoteAdminClient(clusterName),
 				metricsClient,
 				namespaceReplicationTaskExecutor,

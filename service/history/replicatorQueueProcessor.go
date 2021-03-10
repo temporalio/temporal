@@ -75,7 +75,6 @@ func newReplicatorQueueProcessor(
 
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
-	logger = logger.WithTags(tag.ComponentReplicatorQueue)
 
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	retryPolicy.SetMaximumAttempts(10)
@@ -88,7 +87,7 @@ func newReplicatorQueueProcessor(
 		executionMgr:        executionMgr,
 		historyMgr:          historyMgr,
 		metricsClient:       shard.GetMetricsClient(),
-		logger:              logger,
+		logger:              log.With(logger, tag.ComponentReplicatorQueue),
 		retryPolicy:         retryPolicy,
 		fetchTasksBatchSize: config.ReplicatorProcessorFetchTasksBatchSize(),
 	}

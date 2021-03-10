@@ -116,7 +116,7 @@ func NewVisibilityStore(
 		esClient:      esClient,
 		index:         index,
 		processor:     processor,
-		logger:        logger.WithTags(tag.ComponentESVisibilityManager),
+		logger:        log.With(logger, tag.ComponentESVisibilityManager),
 		config:        cfg,
 		metricsClient: metricsClient,
 	}

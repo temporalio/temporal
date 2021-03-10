@@ -96,7 +96,7 @@ var (
 
 // NewClientWorker returns a new ClientWorker
 func NewClientWorker(container *BootstrapContainer) ClientWorker {
-	globalLogger = container.Logger.WithTags(tag.ComponentArchiver, tag.WorkflowNamespace(common.SystemLocalNamespace))
+	globalLogger = log.With(container.Logger, tag.ComponentArchiver, tag.WorkflowNamespace(common.SystemLocalNamespace))
 	globalMetricsClient = container.MetricsClient
 	globalConfig = container.Config
 	actCtx := context.WithValue(context.Background(), bootstrapContainerKey, container)

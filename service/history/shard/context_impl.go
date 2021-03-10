@@ -954,13 +954,11 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 			logWarnTransferLevelDiff < transferLag ||
 			logWarnTimerLevelDiff < timerLag) {
 
-		logger := s.logger.WithTags(
+		s.logger.Warn("Shard ack levels diff exceeds warn threshold.",
 			tag.ShardTime(s.remoteClusterCurrentTime),
 			tag.ShardReplicationAck(s.shardInfo.ReplicationAckLevel),
 			tag.ShardTimerAcks(s.shardInfo.ClusterTimerAckLevel),
 			tag.ShardTransferAcks(s.shardInfo.ClusterTransferAckLevel))
-
-		logger.Warn("Shard ack levels diff exceeds warn threshold.")
 	}
 
 	s.GetMetricsClient().RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTransferDiffTimer, int(diffTransferLevel))

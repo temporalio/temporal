@@ -153,7 +153,8 @@ func (c *client) Archive(ctx context.Context, request *ClientRequest) (*ClientRe
 			c.metricsScope.IncCounter(metrics.ArchiverClientVisibilityRequestCount)
 		}
 	}
-	logger := c.logger.WithTags(
+	logger := log.With(
+		c.logger,
 		tag.ArchivalCallerServiceName(request.CallerService),
 		tag.ArchivalArchiveAttemptedInline(request.AttemptArchiveInline),
 	)
@@ -294,15 +295,14 @@ func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest,
 	defer cancel()
 	_, err := c.temporalClient.SignalWithStartWorkflow(signalCtx, workflowID, signalName, *request, workflowOptions, archivalWorkflowFnName, nil)
 	if err != nil {
-		taggedLogger = taggedLogger.WithTags(
+		taggedLogger.Error("failed to send signal to archival system workflow",
 			tag.ArchivalRequestNamespaceID(request.NamespaceID),
 			tag.ArchivalRequestNamespace(request.Namespace),
 			tag.ArchivalRequestWorkflowID(request.WorkflowID),
 			tag.ArchivalRequestRunID(request.RunID),
 			tag.WorkflowID(workflowID),
-			tag.Error(err),
-		)
-		taggedLogger.Error("failed to send signal to archival system workflow")
+			tag.Error(err))
+
 		c.metricsScope.IncCounter(metrics.ArchiverClientSendSignalFailureCount)
 		return err
 	}

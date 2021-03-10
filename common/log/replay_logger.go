@@ -42,7 +42,7 @@ type (
 
 var _ Logger = (*replayLogger)(nil)
 
-// NewReplayLogger creates a logger which is aware of temporal's replay mode
+// NewReplayLogger creates a logger which is aware of Temporal's replay mode
 func NewReplayLogger(logger Logger, ctx workflow.Context, enableLogInReplay bool) Logger {
 	lg, ok := logger.(*loggerImpl)
 	if ok {
@@ -97,7 +97,7 @@ func (r *replayLogger) Fatal(msg string, tags ...tag.Tag) {
 
 func (r *replayLogger) WithTags(tags ...tag.Tag) Logger {
 	return &replayLogger{
-		logger:            r.logger.WithTags(tags...),
+		logger:            newWithLogger(r.logger, tags...),
 		ctx:               r.ctx,
 		enableLogInReplay: r.enableLogInReplay,
 	}

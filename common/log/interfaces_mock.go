@@ -143,8 +143,31 @@ func (mr *MockLoggerMockRecorder) Warn(msg interface{}, tags ...interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Warn", reflect.TypeOf((*MockLogger)(nil).Warn), varargs...)
 }
 
+// MockWithLogger is a mock of WithLogger interface.
+type MockWithLogger struct {
+	ctrl     *gomock.Controller
+	recorder *MockWithLoggerMockRecorder
+}
+
+// MockWithLoggerMockRecorder is the mock recorder for MockWithLogger.
+type MockWithLoggerMockRecorder struct {
+	mock *MockWithLogger
+}
+
+// NewMockWithLogger creates a new mock instance.
+func NewMockWithLogger(ctrl *gomock.Controller) *MockWithLogger {
+	mock := &MockWithLogger{ctrl: ctrl}
+	mock.recorder = &MockWithLoggerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockWithLogger) EXPECT() *MockWithLoggerMockRecorder {
+	return m.recorder
+}
+
 // WithTags mocks base method.
-func (m *MockLogger) WithTags(tags ...tag.Tag) Logger {
+func (m *MockWithLogger) WithTags(tags ...tag.Tag) Logger {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{}
 	for _, a := range tags {
@@ -156,7 +179,7 @@ func (m *MockLogger) WithTags(tags ...tag.Tag) Logger {
 }
 
 // WithTags indicates an expected call of WithTags.
-func (mr *MockLoggerMockRecorder) WithTags(tags ...interface{}) *gomock.Call {
+func (mr *MockWithLoggerMockRecorder) WithTags(tags ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithTags", reflect.TypeOf((*MockLogger)(nil).WithTags), tags...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithTags", reflect.TypeOf((*MockWithLogger)(nil).WithTags), tags...)
 }

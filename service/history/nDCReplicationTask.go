@@ -137,7 +137,8 @@ func newNDCReplicationTask(
 		}
 	}
 
-	logger = logger.WithTags(
+	logger = log.With(
+		logger,
 		tag.WorkflowID(execution.GetWorkflowId()),
 		tag.WorkflowRunID(execution.GetRunId()),
 		tag.SourceCluster(sourceCluster),
@@ -264,7 +265,8 @@ func (t *nDCReplicationTaskImpl) splitTask(
 		}},
 	}
 
-	logger := t.logger.WithTags(
+	logger := log.With(
+		t.logger,
 		tag.WorkflowID(t.getExecution().GetWorkflowId()),
 		tag.WorkflowRunID(newRunID),
 		tag.SourceCluster(t.sourceCluster),

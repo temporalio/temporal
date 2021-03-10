@@ -142,7 +142,7 @@ func New(
 	visibilityManagerInitializer VisibilityManagerInitializer,
 ) (impl *Impl, retError error) {
 
-	logger := params.Logger.WithTags(tag.Service(serviceName))
+	logger := log.With(params.Logger, tag.Service(serviceName))
 	throttledLogger := log.NewThrottledLogger(logger,
 		func() float64 { return float64(throttledLoggerMaxRPS()) })
 
@@ -373,7 +373,7 @@ func (h *Impl) Start() {
 
 	hostInfo, err := h.membershipMonitor.WhoAmI()
 	if err != nil {
-		h.logger.WithTags(tag.Error(err)).Fatal("fail to get host info from membership monitor")
+		h.logger.Fatal("fail to get host info from membership monitor", tag.Error(err))
 	}
 	h.hostInfo = hostInfo
 

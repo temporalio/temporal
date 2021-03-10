@@ -92,7 +92,7 @@ func newTransferQueueProcessor(
 	logger log.Logger,
 ) *transferQueueProcessorImpl {
 
-	logger = logger.WithTags(tag.ComponentTransferQueue)
+	logger = log.With(logger, tag.ComponentTransferQueue)
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
 	taskAllocator := newTaskAllocator(shard)

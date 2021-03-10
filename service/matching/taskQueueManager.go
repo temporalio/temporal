@@ -148,14 +148,13 @@ func newTaskQueueManager(
 	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue.name, taskQueue.taskType, taskQueueKind, e.logger)
 
 	tlMgr := &taskQueueManagerImpl{
-		namespaceCache: e.namespaceCache,
-		metricsClient:  e.metricsClient,
-		engine:         e,
-		shutdownCh:     make(chan struct{}),
-		taskQueueID:    taskQueue,
-		taskQueueKind:  taskQueueKind,
-		logger: e.logger.WithTags(tag.WorkflowTaskQueueName(taskQueue.name),
-			tag.WorkflowTaskQueueType(taskQueue.taskType)),
+		namespaceCache:      e.namespaceCache,
+		metricsClient:       e.metricsClient,
+		engine:              e,
+		shutdownCh:          make(chan struct{}),
+		taskQueueID:         taskQueue,
+		taskQueueKind:       taskQueueKind,
+		logger:              log.With(e.logger, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType)),
 		db:                  db,
 		taskAckManager:      newAckManager(e.logger),
 		taskGC:              newTaskGC(db, taskQueueConfig),

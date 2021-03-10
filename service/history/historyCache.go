@@ -76,7 +76,7 @@ func newHistoryCache(shard shard.Context) *historyCache {
 		Cache:            cache.New(config.HistoryCacheMaxSize(), opts),
 		shard:            shard,
 		executionManager: shard.GetExecutionManager(),
-		logger:           shard.GetLogger().WithTags(tag.ComponentHistoryCache),
+		logger:           log.With(shard.GetLogger(), tag.ComponentHistoryCache),
 		metricsClient:    shard.GetMetricsClient(),
 		config:           config,
 	}

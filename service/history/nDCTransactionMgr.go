@@ -189,7 +189,7 @@ func newNDCTransactionMgr(
 			logger,
 		),
 		eventsReapplier: eventsReapplier,
-		logger:          logger.WithTags(tag.ComponentHistoryReplicator),
+		logger:          log.With(logger, tag.ComponentHistoryReplicator),
 
 		createMgr: nil,
 		updateMgr: nil,

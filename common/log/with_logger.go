@@ -25,59 +25,54 @@
 package log
 
 import (
-	"fmt"
-
-	"go.temporal.io/sdk/log"
-
 	"go.temporal.io/server/common/log/tag"
 )
 
-type SdkLogger struct {
+type withLogger struct {
 	logger Logger
+	tags   []tag.Tag
 }
 
-var _ log.Logger = (*SdkLogger)(nil)
+var _ Logger = (*withLogger)(nil)
 
-func NewSdkLogger(l Logger) *SdkLogger {
-	return &SdkLogger{
-		logger: l,
-	}
-}
-
-func (l *SdkLogger) tags(keyvals []interface{}) []tag.Tag {
-	if len(keyvals)%2 != 0 {
-		return []tag.Tag{tag.Error(fmt.Errorf("odd number of keyvals pairs: %v", keyvals))}
+// With returns Logger instance that prepend every log entry with tags. If logger implements WithLogger it is used, otherwise every log call will be intercepted.
+func With(logger Logger, tags ...tag.Tag) Logger {
+	if wl, ok := logger.(WithLogger); ok {
+		return wl.WithTags(tags...)
 	}
 
-	var tags []tag.Tag
-	for i := 0; i < len(keyvals); i += 2 {
-		key, ok := keyvals[i].(string)
-		if !ok {
-			key = fmt.Sprintf("%v", keyvals[i])
-		}
-		tags = append(tags, tag.NewAnyTag(key, keyvals[i+1]))
-	}
-
-	return tags
+	return newWithLogger(logger, tags...)
 }
 
-func (l *SdkLogger) Debug(msg string, keyvals ...interface{}) {
-	l.logger.Debug(msg, l.tags(keyvals)...)
+func newWithLogger(logger Logger, tags ...tag.Tag) *withLogger {
+	return &withLogger{logger: logger, tags: tags}
 }
 
-func (l *SdkLogger) Info(msg string, keyvals ...interface{}) {
-	l.logger.Info(msg, l.tags(keyvals)...)
+func (l *withLogger) prependTags(tags []tag.Tag) []tag.Tag {
+	return append(l.tags, tags...)
 }
 
-func (l *SdkLogger) Warn(msg string, keyvals ...interface{}) {
-	l.logger.Warn(msg, l.tags(keyvals)...)
+// Debug writes message to the log.
+func (l *withLogger) Debug(msg string, tags ...tag.Tag) {
+	l.logger.Debug(msg, l.prependTags(tags)...)
 }
 
-func (l *SdkLogger) Error(msg string, keyvals ...interface{}) {
-	l.logger.Error(msg, l.tags(keyvals)...)
+// Info writes message to the log.
+func (l *withLogger) Info(msg string, tags ...tag.Tag) {
+	l.logger.Info(msg, l.prependTags(tags)...)
 }
 
-func (l *SdkLogger) With(keyvals ...interface{}) log.Logger {
-	return NewSdkLogger(
-		With(l.logger, l.tags(keyvals)...))
+// Warn writes message to the log.
+func (l *withLogger) Warn(msg string, tags ...tag.Tag) {
+	l.logger.Warn(msg, l.prependTags(tags)...)
+}
+
+// Error writes message to the log.
+func (l *withLogger) Error(msg string, tags ...tag.Tag) {
+	l.logger.Error(msg, l.prependTags(tags)...)
+}
+
+// Error writes message to the log.
+func (l *withLogger) Fatal(msg string, tags ...tag.Tag) {
+	l.logger.Fatal(msg, l.prependTags(tags)...)
 }

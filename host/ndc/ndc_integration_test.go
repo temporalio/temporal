@@ -141,7 +141,7 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	s.mockAdminClient["other"] = mockOtherClient
 	clusterConfigs[0].MockAdminClient = s.mockAdminClient
 
-	cluster, err := host.NewCluster(clusterConfigs[0], s.logger.WithTags(tag.ClusterName(clusterName[0])))
+	cluster, err := host.NewCluster(clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterName[0])))
 	s.Require().NoError(err)
 	s.active = cluster
 

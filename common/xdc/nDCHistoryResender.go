@@ -255,7 +255,7 @@ func (n *NDCHistoryResenderImpl) getHistory(
 	pageSize int32,
 ) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 
-	logger := n.logger.WithTags(tag.WorkflowRunID(runID))
+	logger := log.With(n.logger, tag.WorkflowRunID(runID))
 
 	namespaceEntry, err := n.namespaceCache.GetNamespaceByID(namespaceID)
 	if err != nil {

@@ -752,7 +752,8 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		return nil
 	}
 
-	logger := t.logger.WithTags(
+	logger := log.With(
+		t.logger,
 		tag.WorkflowNamespaceID(task.GetNamespaceId()),
 		tag.WorkflowID(task.GetWorkflowId()),
 		tag.WorkflowRunID(task.GetRunId()),
@@ -794,14 +795,15 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	if err != nil {
 		return err
 	}
-	logger = logger.WithTags(tag.WorkflowNamespace(namespaceEntry.GetInfo().Name))
+	logger = log.With(logger, tag.WorkflowNamespace(namespaceEntry.GetInfo().Name))
 
 	reason, resetPoint := FindAutoResetPoint(t.shard.GetTimeSource(), namespaceEntry.GetConfig().BadBinaries, executionInfo.AutoResetPoints)
 	if resetPoint == nil {
 		logger.Warn("Auto-Reset is skipped, because reset point is not found.")
 		return nil
 	}
-	logger = logger.WithTags(
+	logger = log.With(
+		logger,
 		tag.WorkflowResetBaseRunID(resetPoint.GetRunId()),
 		tag.WorkflowBinaryChecksum(resetPoint.GetBinaryChecksum()),
 		tag.WorkflowEventID(resetPoint.GetFirstWorkflowTaskCompletedId()),

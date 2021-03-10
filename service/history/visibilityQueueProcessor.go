@@ -92,7 +92,7 @@ func newVisibilityQueueProcessor(
 ) *visibilityQueueProcessorImpl {
 
 	config := shard.GetConfig()
-	logger = logger.WithTags(tag.ComponentVisibilityQueue)
+	logger = log.With(logger, tag.ComponentVisibilityQueue)
 
 	options := &QueueProcessorOptions{
 		BatchSize:                           config.VisibilityTaskBatchSize,

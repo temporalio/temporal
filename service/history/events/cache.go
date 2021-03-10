@@ -105,7 +105,7 @@ func NewEventsCache(
 		Cache:         cache.New(maxCount, opts),
 		eventsMgr:     eventsMgr,
 		disabled:      disabled,
-		logger:        logger.WithTags(tag.ComponentEventsCache),
+		logger:        log.With(logger, tag.ComponentEventsCache),
 		metricsClient: metrics,
 		shardID:       shardID,
 	}

@@ -376,7 +376,7 @@ func (s *Server) validate() error {
 }
 
 func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collection) error {
-	logger := s.logger.WithTags(tag.ComponentMetadataInitializer)
+	logger := log.With(s.logger, tag.ComponentMetadataInitializer)
 
 	factory := persistenceClient.NewFactory(
 		&s.so.config.Persistence,

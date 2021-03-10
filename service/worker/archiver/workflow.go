@@ -57,7 +57,8 @@ func archivalWorkflowHelper(
 	metricsClient.IncCounter(metrics.ArchiverArchivalWorkflowScope, metrics.ArchiverWorkflowStartedCount)
 	sw := metricsClient.StartTimer(metrics.ArchiverArchivalWorkflowScope, metrics.ServiceLatency)
 	workflowInfo := workflow.GetInfo(ctx)
-	logger = logger.WithTags(
+	logger = log.With(
+		logger,
 		tag.WorkflowID(workflowInfo.WorkflowExecution.ID),
 		tag.WorkflowRunID(workflowInfo.WorkflowExecution.RunID),
 		tag.WorkflowTaskQueueName(workflowInfo.TaskQueueName),

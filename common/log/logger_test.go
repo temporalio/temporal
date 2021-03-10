@@ -91,7 +91,12 @@ func TestThrottleLogger(t *testing.T) {
 	logger := NewThrottledLogger(newLogger(zapLogger),
 		func() float64 { return 1 })
 	preCaller := caller(1)
-	logger.WithTags(tag.Error(fmt.Errorf("test error"))).WithTags(tag.ComponentShard).Info("test info", tag.WorkflowActionWorkflowStarted)
+	With(
+		With(
+			logger, tag.Error(fmt.Errorf("test error")),
+		),
+		tag.ComponentShard).
+		Info("test info", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
 	w.Close()

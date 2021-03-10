@@ -35,12 +35,12 @@ type (
 	// Usage examples:
 	//  import "go.temporal.io/server/common/log/tag"
 	//  1) logger = logger.WithTags(
-	//          tag.WorkflowNextEventID( 123),
+	//          tag.WorkflowNextEventID(123),
 	//          tag.WorkflowActionWorkflowStarted,
 	//          tag.WorkflowNamespaceID("test-namespace-id"))
 	//     logger.Info("hello world")
 	//  2) logger.Info("hello world",
-	//          tag.WorkflowNextEventID( 123),
+	//          tag.WorkflowNextEventID(123),
 	//          tag.WorkflowActionWorkflowStarted,
 	//          tag.WorkflowNamespaceID("test-namespace-id"))
 	//	   )
@@ -51,7 +51,11 @@ type (
 		Info(msg string, tags ...tag.Tag)
 		Warn(msg string, tags ...tag.Tag)
 		Error(msg string, tags ...tag.Tag)
+		// TODO (alex): remove
 		Fatal(msg string, tags ...tag.Tag)
+	}
+
+	WithLogger interface {
 		WithTags(tags ...tag.Tag) Logger
 	}
 )
