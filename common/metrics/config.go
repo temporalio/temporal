@@ -81,7 +81,6 @@ type (
 	}
 )
 
-
 const (
 	ms = float64(time.Millisecond) / float64(time.Second)
 )

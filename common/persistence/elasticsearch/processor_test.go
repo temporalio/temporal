@@ -56,9 +56,9 @@ type processorSuite struct {
 }
 
 var (
-	testID        = "test-doc-id"
-	testScope     = metrics.ElasticSearchVisibility
-	testMetric    = metrics.ESBulkProcessorRequestLatency
+	testID     = "test-doc-id"
+	testScope  = metrics.ElasticSearchVisibility
+	testMetric = metrics.ESBulkProcessorRequestLatency
 )
 
 func TestElasticsearchProcessorSuite(t *testing.T) {
