@@ -26,7 +26,6 @@ package sql
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -34,6 +33,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
@@ -96,8 +96,8 @@ func (s *TestCluster) SetupTestDatabase() {
 		}
 		schemaDir = path.Join(temporalPackageDir, schemaDir)
 	}
-	s.LoadSchema([]string{"schema.sql"}, schemaDir)
-	s.LoadVisibilitySchema([]string{"schema.sql"}, schemaDir)
+	s.LoadSchema(path.Join(schemaDir, "temporal", "schema.sql"))
+	s.LoadSchema(path.Join(schemaDir, "visibility", "schema.sql"))
 }
 
 // Config returns the persistence config for connecting to this test cluster
@@ -165,20 +165,27 @@ func (s *TestCluster) DropDatabase() {
 }
 
 // LoadSchema from PersistenceTestCluster interface
-func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
-	workflowSchemaDir := path.Join(schemaDir, "temporal")
-	err := s.loadDatabaseSchema(workflowSchemaDir, fileNames)
+func (s *TestCluster) LoadSchema(schemaFile string) {
+	statements, err := p.LoadAndSplitQuery([]string{schemaFile})
 	if err != nil {
-		s.logger.Fatal("loadDatabaseSchema", tag.Error(err))
+		s.logger.Fatal("LoadSchema", tag.Error(err))
 	}
-}
 
-// LoadVisibilitySchema from PersistenceTestCluster interface
-func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string) {
-	workflowSchemaDir := path.Join(schemaDir, "visibility")
-	err := s.loadDatabaseSchema(workflowSchemaDir, fileNames)
+	db, err := NewSQLAdminDB(sqlplugin.DbKindUnknown, &s.cfg, resolver.NewNoopResolver())
 	if err != nil {
-		s.logger.Fatal("loadDatabaseVisibilitySchema", tag.Error(err))
+		panic(err)
+	}
+	defer func() {
+		err := db.Close()
+		if err != nil {
+			panic(err)
+		}
+	}()
+
+	for _, stmt := range statements {
+		if err = db.Exec(stmt); err != nil {
+			s.logger.Fatal("LoadSchema", tag.Error(err))
+		}
 	}
 }
 
@@ -197,32 +204,4 @@ func getTemporalPackageDir() (string, error) {
 		temporalPackageDir = temporalPackageDir[:temporalIndex+len("/temporal/")]
 	}
 	return temporalPackageDir, err
-}
-
-// loadDatabaseSchema loads the schema from the given .sql files on this database
-func (s *TestCluster) loadDatabaseSchema(dir string, fileNames []string) (err error) {
-	db, err := NewSQLAdminDB(sqlplugin.DbKindUnknown, &s.cfg, resolver.NewNoopResolver())
-	if err != nil {
-		panic(err)
-	}
-	defer func() {
-		err := db.Close()
-		if err != nil {
-			panic(err)
-		}
-	}()
-
-	for _, file := range fileNames {
-		// This is only used in tests. Excluding it from security scanners
-		// #nosec
-		content, err := ioutil.ReadFile(dir + "/" + file)
-		if err != nil {
-			return fmt.Errorf("error reading contents of file %v:%v", file, err.Error())
-		}
-		err = db.Exec(string(content))
-		if err != nil {
-			return fmt.Errorf("error loading schema from %v: %v", file, err.Error())
-		}
-	}
-	return nil
 }

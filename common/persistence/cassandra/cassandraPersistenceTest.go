@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/service/config"
@@ -117,8 +118,8 @@ func (s *TestCluster) SetupTestDatabase() {
 		schemaDir = path.Join(temporalPackageDir, schemaDir)
 	}
 
-	s.LoadSchema([]string{"schema.cql"}, schemaDir)
-	s.LoadVisibilitySchema([]string{"schema.cql"}, schemaDir)
+	s.LoadSchema(path.Join(schemaDir, "temporal", "schema.cql"))
+	s.LoadSchema(path.Join(schemaDir, "visibility", "schema.cql"))
 }
 
 // TearDownTestDatabase from PersistenceTestCluster interface
@@ -173,20 +174,15 @@ func (s *TestCluster) DropDatabase() {
 }
 
 // LoadSchema from PersistenceTestCluster interface
-func (s *TestCluster) LoadSchema(fileNames []string, schemaDir string) {
-	workflowSchemaDir := path.Join(schemaDir, "temporal")
-	err := loadCassandraSchema(s.session, workflowSchemaDir, fileNames)
-	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
-		s.logger.Fatal("loadCassandraSchema", tag.Error(err))
+func (s *TestCluster) LoadSchema(schemaFile string) {
+	statements, err := p.LoadAndSplitQuery([]string{schemaFile})
+	if err != nil {
+		s.logger.Fatal("LoadSchema", tag.Error(err))
 	}
-}
-
-// LoadVisibilitySchema from PersistenceTestCluster interface
-func (s *TestCluster) LoadVisibilitySchema(fileNames []string, schemaDir string) {
-	workflowSchemaDir := path.Join(schemaDir, "visibility")
-	err := loadCassandraSchema(s.session, workflowSchemaDir, fileNames)
-	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
-		s.logger.Fatal("loadCassandraVisibilitySchema", tag.Error(err))
+	for _, stmt := range statements {
+		if err = s.session.Query(stmt).Exec(); err != nil {
+			s.logger.Fatal("LoadSchema", tag.Error(err))
+		}
 	}
 }
 
