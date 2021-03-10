@@ -36,7 +36,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -91,7 +91,7 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 		s.mockClaimMapper,
 		s.mockAuthorizer,
 		s.mockMetricsClient,
-		loggerimpl.NewLogger(zap.NewNop()))
+		log.NewLogger(zap.NewNop()))
 	s.handler = func(ctx context.Context, req interface{}) (interface{}, error) { return true, nil }
 }
 

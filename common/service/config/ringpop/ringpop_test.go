@@ -30,13 +30,12 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/service/config"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"gopkg.in/yaml.v2"
-
-	"go.temporal.io/server/common/log/loggerimpl"
 )
 
 type RingpopSuite struct {
@@ -60,7 +59,7 @@ func (s *RingpopSuite) TestHostsMode() {
 	s.Equal(time.Second*30, cfg.MaxJoinDuration)
 	err = ValidateRingpopConfig(&cfg)
 	s.Nil(err)
-	f, err := NewRingpopFactory(&cfg, nil, "test", nil, loggerimpl.NewNopLogger(), nil)
+	f, err := NewRingpopFactory(&cfg, nil, "test", nil, log.NewNopLogger(), nil)
 	s.Nil(err)
 	s.NotNil(f)
 }

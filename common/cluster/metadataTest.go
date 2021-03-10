@@ -26,7 +26,7 @@ package cluster
 
 import (
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -88,7 +88,7 @@ func GetTestClusterMetadata(enableGlobalNamespace bool, isMasterCluster bool) Me
 
 	if enableGlobalNamespace {
 		return NewMetadata(
-			loggerimpl.NewNopLogger(),
+			log.NewNopLogger(),
 			true,
 			TestFailoverVersionIncrement,
 			masterClusterName,
@@ -98,7 +98,7 @@ func GetTestClusterMetadata(enableGlobalNamespace bool, isMasterCluster bool) Me
 	}
 
 	return NewMetadata(
-		loggerimpl.NewNopLogger(),
+		log.NewNopLogger(),
 		false,
 		TestFailoverVersionIncrement,
 		TestCurrentClusterName,

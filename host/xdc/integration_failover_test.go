@@ -58,7 +58,6 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -103,7 +102,7 @@ func (s *integrationClustersTestSuite) SetupSuite() {
 	zapLogger, err := zap.NewDevelopment()
 	// cannot use s.Nil since it is not initialized
 	s.Require().NoError(err)
-	s.logger = loggerimpl.NewLogger(zapLogger)
+	s.logger = log.NewLogger(zapLogger)
 
 	fileName := "../testdata/xdc_integration_test_clusters.yaml"
 	if host.TestFlags.TestClusterConfigFile != "" {

@@ -40,7 +40,6 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -63,7 +62,7 @@ func TestTemporalSerializerSuite(t *testing.T) {
 
 func (s *temporalSerializerSuite) SetupTest() {
 	var err error
-	s.logger, err = loggerimpl.NewDevelopment()
+	s.logger, err = log.NewDevelopment()
 	s.Require().NoError(err)
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())

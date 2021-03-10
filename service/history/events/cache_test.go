@@ -37,7 +37,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 )
@@ -76,7 +75,7 @@ func (s *eventsCacheSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockHistoryMgr = persistence.NewMockHistoryManager(s.controller)
 
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
+	s.logger = log.NewDevelopmentForTest(s.Suite)
 	s.cache = s.newTestEventsCache()
 }
 

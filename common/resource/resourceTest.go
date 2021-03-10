@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
@@ -127,7 +126,7 @@ func NewTest(
 	if err != nil {
 		panic(err)
 	}
-	logger := loggerimpl.NewLogger(zapLogger)
+	logger := log.NewLogger(zapLogger)
 
 	frontendClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
 	matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)

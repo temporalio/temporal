@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -144,7 +143,8 @@ func New(
 ) (impl *Impl, retError error) {
 
 	logger := params.Logger.WithTags(tag.Service(serviceName))
-	throttledLogger := loggerimpl.NewThrottledLogger(logger, throttledLoggerMaxRPS)
+	throttledLogger := log.NewThrottledLogger(logger,
+		func() float64 { return float64(throttledLoggerMaxRPS()) })
 
 	numShards := params.PersistenceConfig.NumHistoryShards
 	hostName, err := os.Hostname()

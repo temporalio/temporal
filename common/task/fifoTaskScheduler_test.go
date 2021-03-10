@@ -35,7 +35,7 @@ import (
 	"github.com/uber-go/tally"
 
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -66,7 +66,7 @@ func (s *fifoTaskSchedulerSuite) SetupTest() {
 
 	s.queueSize = 2
 	s.scheduler = NewFIFOTaskScheduler(
-		loggerimpl.NewDevelopmentForTest(s.Suite),
+		log.NewDevelopmentForTest(s.Suite),
 		metrics.NewClient(tally.NoopScope, metrics.Common),
 		&FIFOTaskSchedulerOptions{
 			QueueSize:   s.queueSize,

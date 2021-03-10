@@ -40,7 +40,7 @@ import (
 	"github.com/urfave/cli"
 	"go.uber.org/atomic"
 
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
@@ -151,7 +151,7 @@ func AdminIndex(c *cli.Context) {
 		ValidSearchAttributes:    dc.GetMapPropertyFn(searchattribute.GetDefaultTypeMap()),
 	}
 
-	logger, err := loggerimpl.NewDevelopment()
+	logger, err := log.NewDevelopment()
 	if err != nil {
 		ErrorAndExit("Unable to create logger", err)
 	}

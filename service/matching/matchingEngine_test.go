@@ -56,7 +56,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
@@ -100,7 +99,7 @@ func (s *matchingEngineSuite) TearDownSuite() {
 }
 
 func (s *matchingEngineSuite) SetupTest() {
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
+	s.logger = log.NewDevelopmentForTest(s.Suite)
 	s.Lock()
 	defer s.Unlock()
 	s.controller = gomock.NewController(s.T())

@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -56,7 +56,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 	zapLogger := zap.NewNop()
 	s.controller = gomock.NewController(s.T())
 	s.container = &archiver.VisibilityBootstrapContainer{
-		Logger:        loggerimpl.NewLogger(zapLogger),
+		Logger:        log.NewLogger(zapLogger),
 		MetricsClient: metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 	s.expectedVisibilityRecords = []*archiverspb.VisibilityRecord{

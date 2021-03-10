@@ -38,7 +38,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/dynamicconfig"
@@ -151,7 +151,7 @@ func createTestTaskQueueManager(controller *gomock.Controller) *taskQueueManager
 }
 
 func createTestTaskQueueManagerWithConfig(controller *gomock.Controller, cfg *Config) *taskQueueManagerImpl {
-	logger, err := loggerimpl.NewDevelopment()
+	logger, err := log.NewDevelopment()
 	if err != nil {
 		panic(err)
 	}

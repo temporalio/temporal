@@ -35,7 +35,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/tools/common/schema"
 )
@@ -63,7 +62,7 @@ type (
 func (tb *DBTestBase) SetupSuiteBase(db DB) {
 	tb.Assertions = require.New(tb.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, tb.T() will return nil
 	var err error
-	tb.Log, err = loggerimpl.NewDevelopment()
+	tb.Log, err = log.NewDevelopment()
 	tb.Require().NoError(err)
 	rand := rand.New(rand.NewSource(time.Now().UnixNano()))
 	tb.DBName = fmt.Sprintf("db_client_test_%v", rand.Int63())

@@ -33,7 +33,7 @@ import (
 	"github.com/uber-go/tally/m3"
 	"github.com/uber-go/tally/prometheus"
 
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 )
 
 type nullStatsReporter struct{}
@@ -95,7 +95,7 @@ func (s *MetricsSuite) TestStatsd() {
 
 	config := new(Metrics)
 	config.Statsd = statsd
-	scope := config.NewScope(loggerimpl.NewNopLogger())
+	scope := config.NewScope(log.NewNopLogger())
 	s.NotNil(scope)
 }
 
@@ -107,7 +107,7 @@ func (s *MetricsSuite) TestM3() {
 	}
 	config := new(Metrics)
 	config.M3 = m3
-	scope := config.NewScope(loggerimpl.NewNopLogger())
+	scope := config.NewScope(log.NewNopLogger())
 	s.NotNil(scope)
 }
 
@@ -119,32 +119,32 @@ func (s *MetricsSuite) TestPrometheus() {
 	}
 	config := new(Metrics)
 	config.Prometheus = prom
-	scope := config.NewScope(loggerimpl.NewNopLogger())
+	scope := config.NewScope(log.NewNopLogger())
 	s.NotNil(scope)
 }
 
 func (s *MetricsSuite) TestNoop() {
 	config := &Metrics{}
-	scope := config.NewScope(loggerimpl.NewNopLogger())
+	scope := config.NewScope(log.NewNopLogger())
 	s.Equal(tally.NoopScope, scope)
 }
 
 func (s *MetricsSuite) TestCustomReporter() {
 	config := &Metrics{}
-	scope := config.NewCustomReporterScope(loggerimpl.NewNopLogger(), tally.NullStatsReporter)
+	scope := config.NewCustomReporterScope(log.NewNopLogger(), tally.NullStatsReporter)
 	s.NotNil(scope)
 	s.NotEqual(tally.NoopScope, scope)
 }
 
 func (s *MetricsSuite) TestCustomCachedReporter() {
 	config := &Metrics{}
-	scope := config.NewCustomReporterScope(loggerimpl.NewNopLogger(), CachedNullStatsReporter)
+	scope := config.NewCustomReporterScope(log.NewNopLogger(), CachedNullStatsReporter)
 	s.NotNil(scope)
 	s.NotEqual(tally.NoopScope, scope)
 }
 
 func (s *MetricsSuite) TestUnsupportedReporter() {
 	config := &Metrics{}
-	scope := config.NewCustomReporterScope(loggerimpl.NewNopLogger(), UnsupportedNullStatsReporter)
+	scope := config.NewCustomReporterScope(log.NewNopLogger(), UnsupportedNullStatsReporter)
 	s.Equal(tally.NoopScope, scope)
 }

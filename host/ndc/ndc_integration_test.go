@@ -64,7 +64,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	test "go.temporal.io/server/common/testing"
@@ -113,7 +112,7 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	// cannot use s.Nil since it is not initialized
 	s.Require().NoError(err)
 	s.serializer = persistence.NewPayloadSerializer()
-	s.logger = loggerimpl.NewLogger(zapLogger)
+	s.logger = log.NewLogger(zapLogger)
 
 	fileName := "../testdata/ndc_integration_test_clusters.yaml"
 	if host.TestFlags.TestClusterConfigFile != "" {

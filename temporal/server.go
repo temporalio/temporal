@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	l "go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -104,7 +103,7 @@ func (s *Server) Start() error {
 	s.stoppedCh = make(chan struct{})
 
 	zapLogger := s.so.config.Log.NewZapLogger()
-	s.logger = loggerimpl.NewLogger(zapLogger)
+	s.logger = l.NewLogger(zapLogger)
 
 	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))
 	s.logger.Debug(s.so.config.String())

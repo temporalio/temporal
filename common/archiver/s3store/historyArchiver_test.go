@@ -55,7 +55,6 @@ import (
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -106,7 +105,7 @@ func (s *historyArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	zapLogger := zap.NewNop()
 	s.container = &archiver.HistoryBootstrapContainer{
-		Logger:        loggerimpl.NewLogger(zapLogger),
+		Logger:        log.NewLogger(zapLogger),
 		MetricsClient: metrics.NewClient(scope, metrics.HistoryArchiverScope),
 	}
 

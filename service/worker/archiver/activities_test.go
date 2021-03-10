@@ -42,7 +42,6 @@ import (
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 )
@@ -89,7 +88,7 @@ func (s *activitiesSuite) SetupTest() {
 	s.mockHistoryMgr = persistence.NewMockHistoryManager(s.controller)
 
 	zapLogger := zap.NewNop()
-	s.logger = loggerimpl.NewLogger(zapLogger)
+	s.logger = log.NewLogger(zapLogger)
 	s.metricsClient = metrics.NewMockClient(s.controller)
 	s.metricsScope = metrics.NewMockScope(s.controller)
 	s.archiverProvider = provider.NewMockArchiverProvider(s.controller)

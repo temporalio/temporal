@@ -45,7 +45,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
@@ -88,7 +88,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	zapLogger := zap.NewNop()
 	s.container = &archiver.VisibilityBootstrapContainer{
-		Logger: loggerimpl.NewLogger(zapLogger),
+		Logger: log.NewLogger(zapLogger),
 	}
 	s.controller = gomock.NewController(s.T())
 }

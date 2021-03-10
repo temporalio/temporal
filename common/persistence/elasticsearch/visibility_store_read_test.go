@@ -45,7 +45,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/elasticsearch/client"
@@ -115,7 +115,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
-	s.visibilityStore = NewVisibilityStore(s.mockESClient, testIndex, s.mockProcessor, cfg, loggerimpl.NewNopLogger(), s.mockMetricsClient)
+	s.visibilityStore = NewVisibilityStore(s.mockESClient, testIndex, s.mockProcessor, cfg, log.NewNopLogger(), s.mockMetricsClient)
 }
 
 func (s *ESVisibilitySuite) TearDownTest() {

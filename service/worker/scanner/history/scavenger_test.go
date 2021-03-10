@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	p "go.temporal.io/server/common/persistence"
@@ -82,7 +81,7 @@ func (s *ScavengerTestSuite) SetupTest() {
 	if err != nil {
 		s.Require().NoError(err)
 	}
-	s.logger = loggerimpl.NewLogger(zapLogger)
+	s.logger = log.NewLogger(zapLogger)
 	s.metric = metrics.NewClient(tally.NoopScope, metrics.Worker)
 	s.numShards = 512
 }

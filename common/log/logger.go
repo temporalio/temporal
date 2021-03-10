@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package loggerimpl
+package log
 
 import (
 	"fmt"
@@ -32,7 +32,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
 
@@ -50,14 +49,14 @@ type (
 )
 
 // NewNopLogger returns a no-op logger
-func NewNopLogger() log.Logger {
+func NewNopLogger() Logger {
 	return &loggerImpl{
 		zapLogger: zap.NewNop(),
 	}
 }
 
 // NewDevelopmentForTest is a helper to create new development logger in unit test
-func NewDevelopmentForTest(s suite.Suite) log.Logger {
+func NewDevelopmentForTest(s suite.Suite) Logger {
 	logger, err := NewDevelopment()
 	if err != nil {
 		panic(err)
@@ -66,7 +65,7 @@ func NewDevelopmentForTest(s suite.Suite) log.Logger {
 }
 
 // NewDevelopment returns a logger at debug level and log into STDERR
-func NewDevelopment() (log.Logger, error) {
+func NewDevelopment() (Logger, error) {
 	zapLogger, err := zap.NewDevelopment()
 	if err != nil {
 		return nil, err
@@ -75,7 +74,7 @@ func NewDevelopment() (log.Logger, error) {
 }
 
 // NewLogger returns a new logger
-func NewLogger(zapLogger *zap.Logger) log.Logger {
+func NewLogger(zapLogger *zap.Logger) Logger {
 	return &loggerImpl{
 		zapLogger: zapLogger,
 		skip:      skipForDefaultLogger,
@@ -90,13 +89,13 @@ func caller(skip int) string {
 	return fmt.Sprintf("%v:%v", filepath.Base(path), lineno)
 }
 
-func (lg *loggerImpl) buildFieldsWithCallat(tags []tag.Tag) []zap.Field {
-	fs := lg.buildFields(tags)
-	fs = append(fs, zap.String(tag.LoggingCallAtKey, caller(lg.skip)))
+func (l *loggerImpl) buildFieldsWithCallat(tags []tag.Tag) []zap.Field {
+	fs := l.buildFields(tags)
+	fs = append(fs, zap.String(tag.LoggingCallAtKey, caller(l.skip)))
 	return fs
 }
 
-func (lg *loggerImpl) buildFields(tags []tag.Tag) []zap.Field {
+func (l *loggerImpl) buildFields(tags []tag.Tag) []zap.Field {
 	fs := make([]zap.Field, 0, len(tags))
 	for _, t := range tags {
 		f := t.Field
@@ -116,41 +115,41 @@ func setDefaultMsg(msg string) string {
 	return msg
 }
 
-func (lg *loggerImpl) Debug(msg string, tags ...tag.Tag) {
+func (l *loggerImpl) Debug(msg string, tags ...tag.Tag) {
 	msg = setDefaultMsg(msg)
-	fields := lg.buildFieldsWithCallat(tags)
-	lg.zapLogger.Debug(msg, fields...)
+	fields := l.buildFieldsWithCallat(tags)
+	l.zapLogger.Debug(msg, fields...)
 }
 
-func (lg *loggerImpl) Info(msg string, tags ...tag.Tag) {
+func (l *loggerImpl) Info(msg string, tags ...tag.Tag) {
 	msg = setDefaultMsg(msg)
-	fields := lg.buildFieldsWithCallat(tags)
-	lg.zapLogger.Info(msg, fields...)
+	fields := l.buildFieldsWithCallat(tags)
+	l.zapLogger.Info(msg, fields...)
 }
 
-func (lg *loggerImpl) Warn(msg string, tags ...tag.Tag) {
+func (l *loggerImpl) Warn(msg string, tags ...tag.Tag) {
 	msg = setDefaultMsg(msg)
-	fields := lg.buildFieldsWithCallat(tags)
-	lg.zapLogger.Warn(msg, fields...)
+	fields := l.buildFieldsWithCallat(tags)
+	l.zapLogger.Warn(msg, fields...)
 }
 
-func (lg *loggerImpl) Error(msg string, tags ...tag.Tag) {
+func (l *loggerImpl) Error(msg string, tags ...tag.Tag) {
 	msg = setDefaultMsg(msg)
-	fields := lg.buildFieldsWithCallat(tags)
-	lg.zapLogger.Error(msg, fields...)
+	fields := l.buildFieldsWithCallat(tags)
+	l.zapLogger.Error(msg, fields...)
 }
 
-func (lg *loggerImpl) Fatal(msg string, tags ...tag.Tag) {
+func (l *loggerImpl) Fatal(msg string, tags ...tag.Tag) {
 	msg = setDefaultMsg(msg)
-	fields := lg.buildFieldsWithCallat(tags)
-	lg.zapLogger.Fatal(msg, fields...)
+	fields := l.buildFieldsWithCallat(tags)
+	l.zapLogger.Fatal(msg, fields...)
 }
 
-func (lg *loggerImpl) WithTags(tags ...tag.Tag) log.Logger {
-	fields := lg.buildFields(tags)
-	zapLogger := lg.zapLogger.With(fields...)
+func (l *loggerImpl) WithTags(tags ...tag.Tag) Logger {
+	fields := l.buildFields(tags)
+	zapLogger := l.zapLogger.With(fields...)
 	return &loggerImpl{
 		zapLogger: zapLogger,
-		skip:      lg.skip,
+		skip:      l.skip,
 	}
 }

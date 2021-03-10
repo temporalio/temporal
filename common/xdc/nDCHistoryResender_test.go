@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -95,7 +94,7 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
 
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
+	s.logger = log.NewDevelopmentForTest(s.Suite)
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 
 	s.namespaceID = uuid.New()

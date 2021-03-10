@@ -35,7 +35,7 @@ import (
 	"github.com/uber-go/tally"
 	"go.uber.org/zap"
 
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
 )
@@ -68,7 +68,7 @@ func (s *ScavengerTestSuite) SetupTest() {
 	if err != nil {
 		s.Require().NoError(err)
 	}
-	logger := loggerimpl.NewLogger(zapLogger)
+	logger := log.NewLogger(zapLogger)
 	s.scvgr = NewScavenger(s.taskMgr, metrics.NewClient(tally.NoopScope, metrics.Worker), logger)
 	maxTasksPerJob = 4
 	executorPollInterval = time.Millisecond * 50

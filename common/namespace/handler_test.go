@@ -45,7 +45,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/log/loggerimpl"
+	log2 "go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -95,7 +95,7 @@ func (s *namespaceHandlerCommonSuite) TearDownSuite() {
 }
 
 func (s *namespaceHandlerCommonSuite) SetupTest() {
-	logger := loggerimpl.NewNopLogger()
+	logger := log2.NewNopLogger()
 	dcCollection := dc.NewCollection(dc.NewNopClient(), logger)
 	s.minRetentionDays = 1
 	s.maxBadBinaryCount = 10

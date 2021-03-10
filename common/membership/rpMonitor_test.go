@@ -28,12 +28,11 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
-	"go.temporal.io/server/common/log/loggerimpl"
 )
 
 type RpoSuite struct {
@@ -54,7 +53,7 @@ func (s *RpoSuite) TestRingpopMonitor() {
 	testService := NewTestRingpopCluster(s.T(), "rpm-test", 3, "0.0.0.0", "", serviceName, "127.0.0.1")
 	s.NotNil(testService, "Failed to create test service")
 
-	logger := loggerimpl.NewNopLogger()
+	logger := log.NewNopLogger()
 
 	rpm := testService.rings[0]
 

@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package loggerimpl
+package log
 
 import (
 	"bytes"
@@ -37,7 +37,6 @@ import (
 	"go.uber.org/zap"
 
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 func TestDefaultLogger(t *testing.T) {
@@ -89,9 +88,8 @@ func TestThrottleLogger(t *testing.T) {
 	var zapLogger *zap.Logger
 	zapLogger = zap.NewExample()
 
-	dc := dynamicconfig.NewNopClient()
-	cln := dynamicconfig.NewCollection(dc, NewNopLogger())
-	logger := NewThrottledLogger(NewLogger(zapLogger), cln.GetIntProperty(dynamicconfig.FrontendRPS, 1))
+	logger := NewThrottledLogger(NewLogger(zapLogger),
+		func() float64 { return 1 })
 	preCaller := caller(1)
 	logger.WithTags(tag.Error(fmt.Errorf("test error"))).WithTags(tag.ComponentShard).Info("test info", tag.WorkflowActionWorkflowStarted)
 

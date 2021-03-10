@@ -38,7 +38,6 @@ import (
 	"go.uber.org/zap"
 
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -75,7 +74,7 @@ func (s *workflowSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	workflowTestMetrics = metrics.NewMockClient(s.controller)
-	workflowTestLogger = loggerimpl.NewLogger(zap.NewNop())
+	workflowTestLogger = log.NewLogger(zap.NewNop())
 	workflowTestHandler = NewMockHandler(s.controller)
 	workflowTestPump = NewMockPump(s.controller)
 	workflowTestConfig = &Config{

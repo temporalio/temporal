@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 )
@@ -63,7 +62,7 @@ func archivalWorkflowHelper(
 		tag.WorkflowRunID(workflowInfo.WorkflowExecution.RunID),
 		tag.WorkflowTaskQueueName(workflowInfo.TaskQueueName),
 		tag.WorkflowType(workflowInfo.WorkflowType.Name))
-	logger = loggerimpl.NewReplayLogger(logger, ctx, false)
+	logger = log.NewReplayLogger(logger, ctx, false)
 
 	logger.Info("archival system workflow started")
 	var dcResult dynamicConfigResult

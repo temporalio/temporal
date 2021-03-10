@@ -37,7 +37,6 @@ import (
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 )
 
@@ -57,7 +56,7 @@ type SetupSchemaTestBase struct {
 func (tb *SetupSchemaTestBase) SetupSuiteBase(db DB, pluginName string) {
 	tb.Assertions = require.New(tb.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, tb.T() will return nil
 	var err error
-	tb.Log, err = loggerimpl.NewDevelopment()
+	tb.Log, err = log.NewDevelopment()
 	tb.Require().NoError(err)
 	tb.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	tb.DBName = fmt.Sprintf("setup_test_%v", tb.rand.Int63())

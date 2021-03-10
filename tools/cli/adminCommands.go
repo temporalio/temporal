@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/codec"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence"
 	cassp "go.temporal.io/server/common/persistence/cassandra"
@@ -67,7 +67,7 @@ func AdminShowWorkflow(c *cli.Context) {
 	serializer := persistence.NewPayloadSerializer()
 	var history []*commonpb.DataBlob
 	if len(tid) != 0 {
-		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
+		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, log.NewNopLogger())
 		resp, err := histV2.ReadHistoryBranch(&persistence.InternalReadHistoryBranchRequest{
 			TreeID:    tid,
 			BranchID:  bid,
@@ -233,7 +233,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		}
 		fmt.Println("deleting history events for ...")
 		prettyPrintJSONObject(branchInfo)
-		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
+		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, log.NewNopLogger())
 		err = histV2.DeleteHistoryBranch(&persistence.InternalDeleteHistoryBranchRequest{
 			BranchInfo: branchInfo,
 			ShardID:    shardIDInt32,
@@ -247,7 +247,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		}
 	}
 
-	exeStore, _ := cassp.NewWorkflowExecutionPersistence(shardIDInt32, session, loggerimpl.NewNopLogger())
+	exeStore, _ := cassp.NewWorkflowExecutionPersistence(shardIDInt32, session, log.NewNopLogger())
 	req := &persistence.DeleteWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  wid,

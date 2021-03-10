@@ -36,7 +36,6 @@ import (
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 )
 
@@ -56,7 +55,7 @@ type UpdateSchemaTestBase struct {
 func (tb *UpdateSchemaTestBase) SetupSuiteBase(db DB, pluginName string) {
 	tb.Assertions = require.New(tb.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, tb.T() will return nil
 	var err error
-	tb.Log, err = loggerimpl.NewDevelopment()
+	tb.Log, err = log.NewDevelopment()
 	tb.Require().NoError(err)
 	tb.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	tb.DBName = fmt.Sprintf("update_test_%v", tb.rand.Int63())

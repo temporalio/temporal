@@ -38,7 +38,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/task"
@@ -86,7 +85,7 @@ func (s *queueTaskProcessorSuite) SetupTest() {
 	s.mockPriorityAssigner = NewMocktaskPriorityAssigner(s.controller)
 
 	s.metricsClient = metrics.NewClient(tally.NoopScope, metrics.History)
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
+	s.logger = log.NewDevelopmentForTest(s.Suite)
 
 	s.processor = s.newTestQueueTaskProcessor()
 }

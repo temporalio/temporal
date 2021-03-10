@@ -35,7 +35,6 @@ import (
 
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -65,7 +64,7 @@ func (s *queueProcessorSuite) SetupTest() {
 	s.mockQueueTaskProcessor = NewMockqueueTaskProcessor(s.controller)
 
 	s.redispatchQueue = collection.NewConcurrentQueue()
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
+	s.logger = log.NewDevelopmentForTest(s.Suite)
 	s.metricsScope = metrics.NewClient(tally.NoopScope, metrics.History).Scope(metrics.TransferQueueProcessorScope)
 }
 

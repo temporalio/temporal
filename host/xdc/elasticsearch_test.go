@@ -54,7 +54,6 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -107,7 +106,7 @@ func (s *esCrossDCTestSuite) SetupSuite() {
 	zapLogger, err := zap.NewDevelopment()
 	// cannot use s.Nil since it is not initialized
 	s.Require().NoError(err)
-	s.logger = loggerimpl.NewLogger(zapLogger)
+	s.logger = log.NewLogger(zapLogger)
 
 	fileName := "../testdata/xdc_integration_es_clusters.yaml"
 	if host.TestFlags.TestClusterConfigFile != "" {

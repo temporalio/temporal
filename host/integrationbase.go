@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -116,7 +115,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 func (s *IntegrationBase) setupLogger() {
 	zapLogger, err := zap.NewDevelopment()
 	s.Require().NoError(err)
-	s.Logger = loggerimpl.NewLogger(zapLogger)
+	s.Logger = log.NewLogger(zapLogger)
 }
 
 // GetTestClusterConfig return test cluster config

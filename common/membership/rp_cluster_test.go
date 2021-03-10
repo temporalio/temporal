@@ -30,6 +30,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 
@@ -37,7 +38,6 @@ import (
 	"github.com/temporalio/ringpop-go"
 	"github.com/uber/tchannel-go"
 
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 )
 
@@ -63,7 +63,7 @@ func NewTestRingpopCluster(
 	serviceName string,
 	broadcastAddress string,
 ) *TestRingpopCluster {
-	logger, err := loggerimpl.NewDevelopment()
+	logger, err := log.NewDevelopment()
 	if err != nil {
 		logger.Error("Failed to create test logger", tag.Error(err))
 		return nil

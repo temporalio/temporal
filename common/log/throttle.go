@@ -22,31 +22,29 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package loggerimpl
+package log
 
 import (
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 const skipForThrottleLogger = 6
 
 type throttledLogger struct {
 	limiter quotas.RateLimiter
-	log     log.Logger
+	log     Logger
 }
 
-var _ log.Logger = (*throttledLogger)(nil)
+var _ Logger = (*throttledLogger)(nil)
 
 // NewThrottledLogger returns an implementation of logger that throttles the
 // log messages being emitted. The underlying implementation uses a token bucket
 // ratelimiter and stops emitting logs once the bucket runs out of tokens
 //
 // Fatal/Panic logs are always emitted without any throttling
-func NewThrottledLogger(logger log.Logger, rps dynamicconfig.IntPropertyFn) *throttledLogger {
-	var log log.Logger
+func NewThrottledLogger(logger Logger, rps quotas.RateFn) *throttledLogger {
+	var log Logger
 	lg, ok := logger.(*loggerImpl)
 	if ok {
 		log = &loggerImpl{
@@ -58,9 +56,7 @@ func NewThrottledLogger(logger log.Logger, rps dynamicconfig.IntPropertyFn) *thr
 		log = logger
 	}
 
-	limiter := quotas.NewDefaultOutgoingDynamicRateLimiter(
-		func() float64 { return float64(rps()) },
-	)
+	limiter := quotas.NewDefaultOutgoingDynamicRateLimiter(rps)
 	tl := &throttledLogger{
 		limiter: limiter,
 		log:     log,
@@ -99,7 +95,7 @@ func (tl *throttledLogger) Fatal(msg string, tags ...tag.Tag) {
 }
 
 // Return a logger with the specified key-value pairs set, to be included in a subsequent normal logging call
-func (tl *throttledLogger) WithTags(tags ...tag.Tag) log.Logger {
+func (tl *throttledLogger) WithTags(tags ...tag.Tag) Logger {
 	result := &throttledLogger{
 		limiter: tl.limiter,
 		log:     tl.log.WithTags(tags...),

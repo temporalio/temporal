@@ -35,7 +35,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 )
@@ -64,7 +64,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 	s.workflowTaskHandlerCallback = &workflowTaskHandlerCallbacksImpl{
 		metricsClient: metrics.NewClient(tally.NoopScope, metrics.History),
 		config:        NewDynamicConfigForTest(),
-		logger:        loggerimpl.NewNopLogger(),
+		logger:        log.NewNopLogger(),
 	}
 	s.queryRegistry = s.constructQueryRegistry(10)
 	s.mockMutableState = NewMockmutableState(s.controller)

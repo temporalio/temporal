@@ -38,7 +38,7 @@ import (
 	"go.uber.org/zap"
 
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
@@ -86,7 +86,7 @@ func (s *processorSuite) SetupTest() {
 	s.mockMetricClient = metrics.NewMockClient(s.controller)
 	s.mockBulkProcessor = client.NewMockBulkProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
-	s.esProcessor = NewProcessor(cfg, s.mockESClient, loggerimpl.NewLogger(zapLogger), s.mockMetricClient)
+	s.esProcessor = NewProcessor(cfg, s.mockESClient, log.NewLogger(zapLogger), s.mockMetricClient)
 
 	// esProcessor.Start mock
 	s.esProcessor.mapToAckChan = collection.NewShardedConcurrentTxMap(1024, s.esProcessor.hashFn)

@@ -41,7 +41,6 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/service/config"
@@ -110,7 +109,7 @@ func (s *localStoreRPCSuite) TearDownSuite() {
 }
 func (s *localStoreRPCSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
+	s.logger = log.NewDevelopmentForTest(s.Suite)
 
 	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, nil)
 	s.NoError(err)
