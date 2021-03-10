@@ -26,7 +26,6 @@ package tests
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
 	"path/filepath"
 	"strconv"
@@ -34,6 +33,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
@@ -476,13 +476,15 @@ func SetupMySQLSchema(cfg *config.SQL) {
 		panic(err)
 	}
 
-	content, err := ioutil.ReadFile(schemaPath)
+	statements, err := p.LoadAndSplitQuery([]string{schemaPath})
 	if err != nil {
 		panic(err)
 	}
-	err = db.Exec(string(content))
-	if err != nil {
-		panic(err)
+
+	for _, stmt := range statements {
+		if err = db.Exec(stmt); err != nil {
+			panic(err)
+		}
 	}
 
 	schemaPath, err = filepath.Abs(testMySQLVisibilitySchema)
@@ -490,13 +492,15 @@ func SetupMySQLSchema(cfg *config.SQL) {
 		panic(err)
 	}
 
-	content, err = ioutil.ReadFile(schemaPath)
+	statements, err = p.LoadAndSplitQuery([]string{schemaPath})
 	if err != nil {
 		panic(err)
 	}
-	err = db.Exec(string(content))
-	if err != nil {
-		panic(err)
+
+	for _, stmt := range statements {
+		if err = db.Exec(stmt); err != nil {
+			panic(err)
+		}
 	}
 }
 
