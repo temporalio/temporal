@@ -32,8 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-
-	"go.temporal.io/server/common/persistence/elasticsearch/client"
+	client "go.temporal.io/server/common/persistence/elasticsearch/client"
 )
 
 // MockProcessor is a mock of Processor interface.
