@@ -88,7 +88,7 @@ func (s *MetricsSuite) SetupTest() {
 }
 
 func (s *MetricsSuite) TestStatsd() {
-	statsd := &Statsd{
+	statsd := &StatsdConfig{
 		HostPort: "127.0.0.1:8125",
 		Prefix:   "testStatsd",
 	}

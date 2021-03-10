@@ -33,7 +33,7 @@ import (
 )
 
 type (
-	// Stopwatch is a helper for simpler tracking of elapsed time, use the
+	// Stopwatch is an interface tracking of elapsed time, use the
 	// Stop() method to report time elapsed since its created back to the
 	// timer or histogram.
 	Stopwatch interface {

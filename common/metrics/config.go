@@ -45,7 +45,7 @@ type (
 		// M3 is the configuration for m3 metrics reporter
 		M3 *m3.Configuration `yaml:"m3"`
 		// Statsd is the configuration for statsd reporter
-		Statsd *Statsd `yaml:"statsd"`
+		Statsd *StatsdConfig `yaml:"statsd"`
 		// Prometheus is the configuration for prometheus reporter
 		Prometheus *prometheus.Configuration `yaml:"prometheus"`
 		// Config for Opentelemetery Prometheus metrics
@@ -57,8 +57,8 @@ type (
 		Prefix string `yaml:"prefix"`
 	}
 
-	// Statsd contains the config items for statsd metrics reporter
-	Statsd struct {
+	// StatsdConfig contains the config items for statsd metrics reporter
+	StatsdConfig struct {
 		// The host and port of the statsd server
 		HostPort string `yaml:"hostPort" validate:"nonzero"`
 		// The prefix to use in reporting to statsd
