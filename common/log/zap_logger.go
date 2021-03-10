@@ -7,9 +7,9 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// NewZapLogger builds and returns a new zap
+// newZapLogger builds and returns a new zap
 // logger for this logging configuration
-func NewZapLogger(cfg *Config) *zap.Logger {
+func newZapLogger(cfg *Config) *zap.Logger {
 	encodeConfig := zapcore.EncoderConfig{
 		TimeKey:        "ts",
 		LevelKey:       "level",

@@ -102,9 +102,10 @@ func (s *Server) Start() error {
 
 	s.stoppedCh = make(chan struct{})
 
-	zapLogger := log.NewZapLogger(&s.so.config.Log)
-	sdkZapAdapter := log.NewZapAdapter(zapLogger)
-	s.logger = log.NewLogger(zapLogger)
+	s.logger = s.so.logger
+	if s.logger == nil {
+		s.logger = log.NewLogger(&s.so.config.Log)
+	}
 
 	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))
 	s.logger.Debug(s.so.config.String())
@@ -156,7 +157,7 @@ func (s *Server) Start() error {
 	}
 
 	for _, svcName := range s.so.serviceNames {
-		params, err := s.getServiceParams(svcName, dynamicConfig, tlsFactory, clusterMetadata, dc, sdkZapAdapter, globalMetricsScope)
+		params, err := s.getServiceParams(svcName, dynamicConfig, tlsFactory, clusterMetadata, dc, globalMetricsScope)
 		if err != nil {
 			return err
 		}
@@ -226,7 +227,6 @@ func (s *Server) getServiceParams(
 	tlsFactory encryption.TLSConfigProvider,
 	clusterMetadata cluster.Metadata,
 	dc *dynamicconfig.Collection,
-	sdkZapAdapter *log.ZapAdapter,
 	metricsScope tally.Scope,
 ) (*resource.BootstrapParams, error) {
 
@@ -277,7 +277,7 @@ func (s *Server) getServiceParams(
 		HostPort:     s.so.config.PublicClient.HostPort,
 		Namespace:    common.SystemLocalNamespace,
 		MetricsScope: metricsScope,
-		Logger:       sdkZapAdapter,
+		Logger:       log.NewSdkLogger(s.logger),
 		ConnectionOptions: sdkclient.ConnectionOptions{
 			TLS:                options,
 			DisableHealthCheck: true,

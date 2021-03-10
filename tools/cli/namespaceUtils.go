@@ -277,7 +277,7 @@ func initializeNamespaceHandler(
 func initializeLogger(
 	serviceConfig *config.Config,
 ) log.Logger {
-	return log.NewLogger(log.NewZapLogger(&serviceConfig.Log))
+	return log.NewLogger(&serviceConfig.Log)
 }
 
 func initializeMetadataMgr(

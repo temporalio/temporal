@@ -112,6 +112,12 @@ func NewObjectTag(key string, value interface{}) Tag {
 	}
 }
 
+func NewAnyTag(key string, value interface{}) Tag {
+	return Tag{
+		Field: zap.Any(key, value),
+	}
+}
+
 func NewPredefinedStringTag(key string, value string) Tag {
 	return Tag{
 		Field: zap.String(key, value),

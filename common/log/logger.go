@@ -55,6 +55,7 @@ func NewNopLogger() Logger {
 	}
 }
 
+// TODO (alex): remove
 // NewDevelopmentForTest is a helper to create new development logger in unit test
 func NewDevelopmentForTest(s suite.Suite) Logger {
 	logger, err := NewDevelopment()
@@ -64,19 +65,19 @@ func NewDevelopmentForTest(s suite.Suite) Logger {
 	return logger
 }
 
+// TODO (alex): remove error
 // NewDevelopment returns a logger at debug level and log into STDERR
 func NewDevelopment() (Logger, error) {
-	zapLogger, err := zap.NewDevelopment()
-	if err != nil {
-		return nil, err
+	cfg := &Config{
+		Level: "debug",
 	}
-	return NewLogger(zapLogger), nil
+	return NewLogger(cfg), nil
 }
 
 // NewLogger returns a new logger
-func NewLogger(zapLogger *zap.Logger) Logger {
+func NewLogger(cfg *Config) Logger {
 	return &loggerImpl{
-		zapLogger: zapLogger,
+		zapLogger: newZapLogger(cfg),
 		skip:      skipForDefaultLogger,
 	}
 }

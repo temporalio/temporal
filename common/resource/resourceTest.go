@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/api/workflowservicemock/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkmocks "go.temporal.io/sdk/mocks"
-	"go.uber.org/zap"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -122,11 +121,10 @@ func NewTest(
 	serviceMetricsIndex metrics.ServiceIdx,
 ) *Test {
 
-	zapLogger, err := zap.NewDevelopment()
+	logger, err := log.NewDevelopment()
 	if err != nil {
 		panic(err)
 	}
-	logger := log.NewLogger(zapLogger)
 
 	frontendClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
 	matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)

@@ -31,6 +31,7 @@ import (
 	"github.com/uber-go/tally"
 
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/service/config"
@@ -48,6 +49,7 @@ type (
 		interruptCh   <-chan interface{}
 		blockingStart bool
 
+		logger                     log.Logger
 		authorizer                 authorization.Authorizer
 		tlsConfigProvider          encryption.TLSConfigProvider
 		claimMapper                authorization.ClaimMapper
