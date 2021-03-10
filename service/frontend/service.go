@@ -197,7 +197,7 @@ func NewService(
 				ESIndexMaxResultWindow: serviceConfig.ESIndexMaxResultWindow,
 				ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
 			}
-			visibilityFromES = espersistence.NewESVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
+			visibilityFromES = espersistence.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
 				nil, params.MetricsClient, logger)
 		}
 		return persistence.NewVisibilityManagerWrapper(

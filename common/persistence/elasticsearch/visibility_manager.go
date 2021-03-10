@@ -25,33 +25,42 @@
 package elasticsearch
 
 import (
-	"fmt"
-
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/elasticsearch/client"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/service/config"
 )
 
-type (
-	errorLogger struct {
-		log.Logger
+// NewVisibilityManager create a visibility manager for Elasticsearch
+// In history, it only writes data;
+// In frontend, it only needs ES client and related config for reading data
+func NewVisibilityManager(
+	indexName string,
+	esClient client.Client,
+	cfg *config.VisibilityConfig,
+	processor Processor,
+	metricsClient metrics.Client,
+	log log.Logger,
+) persistence.VisibilityManager {
+
+	visStore := NewVisibilityStore(esClient, indexName, processor, cfg, log, metricsClient)
+	visManager := persistence.NewVisibilityManagerImpl(visStore, cfg.ValidSearchAttributes, log)
+
+	if cfg != nil {
+		// wrap with rate limiter
+		if cfg.MaxQPS != nil && cfg.MaxQPS() != 0 {
+			esRateLimiter := quotas.NewDefaultOutgoingDynamicRateLimiter(
+				func() float64 { return float64(cfg.MaxQPS()) },
+			)
+			visManager = persistence.NewVisibilityPersistenceRateLimitedClient(visManager, esRateLimiter, log)
+		}
+	}
+	if metricsClient != nil {
+		// wrap with metrics
+		visManager = NewVisibilityManagerMetrics(visManager, metricsClient, log)
 	}
 
-	infoLogger struct {
-		log.Logger
-	}
-)
-
-func newErrorLogger(logger log.Logger) *errorLogger {
-	return &errorLogger{logger}
-}
-
-func (l *errorLogger) Printf(format string, v ...interface{}) {
-	l.Error(fmt.Sprintf(format, v...))
-}
-
-func newInfoLogger(logger log.Logger) *infoLogger {
-	return &infoLogger{logger}
-}
-
-func (l *infoLogger) Printf(format string, v ...interface{}) {
-	l.Info(fmt.Sprintf(format, v...))
+	return visManager
 }

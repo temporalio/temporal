@@ -22,45 +22,45 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package elasticsearch
+package client
 
 import (
-	es "go.temporal.io/server/common/elasticsearch"
+	"fmt"
+	"net/http"
+
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/service/config"
 )
 
-// NewESVisibilityManager create a visibility manager for ElasticSearch
-// In history, it only writes data;
-// In frontend, it only needs ES client and related config for reading data
-func NewESVisibilityManager(
-	indexName string,
-	esClient es.Client,
-	cfg *config.VisibilityConfig,
-	processor Processor,
-	metricsClient metrics.Client,
-	log log.Logger,
-) p.VisibilityManager {
-
-	visibilityStore := NewElasticSearchVisibilityStore(esClient, indexName, processor, cfg, log, metricsClient)
-	visibilityManager := p.NewVisibilityManagerImpl(visibilityStore, cfg.ValidSearchAttributes, log)
-
-	if cfg != nil {
-		// wrap with rate limiter
-		if cfg.MaxQPS != nil && cfg.MaxQPS() != 0 {
-			esRateLimiter := quotas.NewDefaultOutgoingDynamicRateLimiter(
-				func() float64 { return float64(cfg.MaxQPS()) },
-			)
-			visibilityManager = p.NewVisibilityPersistenceRateLimitedClient(visibilityManager, esRateLimiter, log)
-		}
+func NewClient(config *config.Elasticsearch, httpClient *http.Client, logger log.Logger) (Client, error) {
+	switch config.Version {
+	case "v6", "":
+		return newClientV6(config, httpClient, logger)
+	case "v7":
+		return newClientV7(config, httpClient, logger)
+	default:
+		return nil, fmt.Errorf("not supported ElasticSearch version: %v", config.Version)
 	}
-	if metricsClient != nil {
-		// wrap with metrics
-		visibilityManager = NewVisibilityMetricsClient(visibilityManager, metricsClient, log)
-	}
+}
 
-	return visibilityManager
+func NewCLIClient(url string, version string) (CLIClient, error) {
+	switch version {
+	case "v6":
+		return newSimpleClientV6(url)
+	case "v7", "":
+		return newSimpleClientV7(url)
+	default:
+		return nil, fmt.Errorf("not supported ElasticSearch version: %v", version)
+	}
+}
+
+func NewIntegrationTestsClient(url string, version string) (IntegrationTestsClient, error) {
+	switch version {
+	case "v6":
+		return newSimpleClientV6(url)
+	case "v7":
+		return newSimpleClientV7(url)
+	default:
+		return nil, fmt.Errorf("not supported ElasticSearch version: %v", version)
+	}
 }

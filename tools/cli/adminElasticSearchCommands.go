@@ -40,12 +40,12 @@ import (
 	"github.com/urfave/cli"
 	"go.uber.org/atomic"
 
-	es "go.temporal.io/server/common/elasticsearch"
-	"go.temporal.io/server/common/elasticsearch/esql"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
+	"go.temporal.io/server/common/persistence/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/elasticsearch/esql"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/config"
@@ -84,14 +84,14 @@ func timeValProcess(timeStr string) (string, error) {
 	return fmt.Sprintf("%v", parsedTime.UnixNano()), nil
 }
 
-func newESClient(c *cli.Context) es.CLIClient {
+func newESClient(c *cli.Context) client.CLIClient {
 	url := getRequiredOption(c, FlagURL)
 	var version string
 	if c.IsSet(FlagVersion) {
 		version = c.String(FlagVersion)
 	}
 
-	client, err := es.NewCLIClient(url, version)
+	client, err := client.NewCLIClient(url, version)
 	if err != nil {
 		ErrorAndExit("Unable to create Elasticsearch client", err)
 	}
@@ -164,7 +164,7 @@ func AdminIndex(c *cli.Context) {
 		ValidSearchAttributes:  dc.GetMapPropertyFn(searchattribute.GetDefaultTypeMap()),
 		ESProcessorAckTimeout:  dc.GetDurationPropertyFn(1 * time.Minute),
 	}
-	visibilityManager := espersistence.NewESVisibilityManager(indexName, esClient, visibilityConfigForES, esProcessor, metrics.NewNoopMetricsClient(), logger)
+	visibilityManager := espersistence.NewVisibilityManager(indexName, esClient, visibilityConfigForES, esProcessor, metrics.NewNoopMetricsClient(), logger)
 
 	successLines := &atomic.Int32{}
 	wg := &sync.WaitGroup{}
@@ -226,11 +226,11 @@ func AdminDelete(c *cli.Context) {
 	for scanner.Scan() {
 		line := strings.Split(scanner.Text(), "|")
 		docID := strings.TrimSpace(line[1]) + esDocIDDelimiter + strings.TrimSpace(line[2])
-		req := &es.BulkableRequest{
+		req := &client.BulkableRequest{
 			Index:       indexName,
 			ID:          docID,
 			Version:     math.MaxInt64,
-			RequestType: es.BulkableRequestTypeDelete,
+			RequestType: client.BulkableRequestTypeDelete,
 		}
 		bulkRequest.Add(req)
 		if i%batchSize == batchSize-1 {

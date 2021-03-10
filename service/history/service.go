@@ -102,7 +102,7 @@ func NewService(
 				ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
 				ESProcessorAckTimeout:  serviceConfig.ESProcessorAckTimeout,
 			}
-			visibilityFromES = espersistence.NewESVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES, esProcessor, params.MetricsClient, logger)
+			visibilityFromES = espersistence.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES, esProcessor, params.MetricsClient, logger)
 		}
 		return persistence.NewVisibilityManagerWrapper(
 			visibilityFromDB,
