@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package elasticsearch
+package client
 
 import (
 	"fmt"
@@ -34,9 +34,11 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	elasticaws "github.com/olivere/elastic/aws/v4"
+
+	"go.temporal.io/server/common/service/config"
 )
 
-func NewAwsHttpClient(config AWSRequestSigningConfig) (*http.Client, error) {
+func NewAwsHttpClient(config config.ESAWSRequestSigningConfig) (*http.Client, error) {
 	if !config.Enabled {
 		return nil, nil
 	}

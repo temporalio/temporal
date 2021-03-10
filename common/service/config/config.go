@@ -33,7 +33,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/common/auth"
-	"go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/masker"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -236,7 +235,7 @@ type (
 		// Custom contains the config for custom datastore implementation
 		CustomDataStoreConfig *CustomDatastoreConfig `yaml:"customDatastore"`
 		// ElasticSearch contains the config for a ElasticSearch datastore
-		ElasticSearch *elasticsearch.Config `yaml:"elasticsearch"`
+		ElasticSearch *Elasticsearch `yaml:"elasticsearch"`
 	}
 
 	// VisibilityConfig is config for visibility sampling

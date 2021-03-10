@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package elasticsearch
+package client
 
 import (
 	"context"
@@ -35,6 +35,7 @@ import (
 	"github.com/olivere/elastic/v7"
 
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/service/config"
 )
 
 type (
@@ -47,7 +48,7 @@ type (
 var _ Client = (*clientV6)(nil)
 
 // newClientV6 create a ES client
-func newClientV6(config *Config, httpClient *http.Client, logger log.Logger) (*clientV6, error) {
+func newClientV6(config *config.Elasticsearch, httpClient *http.Client, logger log.Logger) (*clientV6, error) {
 	options := []elastic6.ClientOptionFunc{
 		elastic6.SetURL(config.URL.String()),
 		elastic6.SetSniff(false),

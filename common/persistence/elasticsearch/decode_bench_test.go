@@ -32,7 +32,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
-	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -60,13 +60,13 @@ func BenchmarkJSONDecodeToType(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		var source *visibilityRecord
 		json.Unmarshal(*bytes, &source)
-		record := &p.VisibilityWorkflowExecutionInfo{
+		record := &persistence.VisibilityWorkflowExecutionInfo{
 			WorkflowID:    source.WorkflowID,
 			RunID:         source.RunID,
 			TypeName:      source.WorkflowType,
 			StartTime:     time.Unix(0, source.StartTime).UTC(),
 			ExecutionTime: time.Unix(0, source.ExecutionTime).UTC(),
-			Memo:          p.NewDataBlob(source.Memo, source.Encoding),
+			Memo:          persistence.NewDataBlob(source.Memo, source.Encoding),
 			TaskQueue:     source.TaskQueue,
 			CloseTime:     time.Unix(0, source.CloseTime).UTC(),
 			Status:        source.ExecutionStatus,
@@ -89,14 +89,14 @@ func BenchmarkJSONDecodeToMap(b *testing.B) {
 		status, _ := source[searchattribute.ExecutionStatus].(json.Number).Int64()
 		historyLen, _ := source[searchattribute.HistoryLength].(json.Number).Int64()
 
-		record := &p.VisibilityWorkflowExecutionInfo{
+		record := &persistence.VisibilityWorkflowExecutionInfo{
 			WorkflowID:    source[searchattribute.WorkflowID].(string),
 			RunID:         source[searchattribute.RunID].(string),
 			TypeName:      source[searchattribute.WorkflowType].(string),
 			StartTime:     time.Unix(0, startTime).UTC(),
 			ExecutionTime: time.Unix(0, executionTime).UTC(),
 			TaskQueue:     source[searchattribute.TaskQueue].(string),
-			Memo:          p.NewDataBlob([]byte(source[searchattribute.Memo].(string)), source[searchattribute.Encoding].(string)),
+			Memo:          persistence.NewDataBlob([]byte(source[searchattribute.Memo].(string)), source[searchattribute.Encoding].(string)),
 		}
 		record.CloseTime = time.Unix(0, closeTime).UTC()
 		statusEnum := enumspb.WorkflowExecutionStatus(status)

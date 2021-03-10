@@ -22,52 +22,46 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package elasticsearch
+//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination bulk_processor_mock.go
+
+package client
 
 import (
+	"time"
+
 	"github.com/olivere/elastic/v7"
 )
 
-type (
-	bulkProcessorV7 struct {
-		esBulkProcessor *elastic.BulkProcessor
-	}
+type BulkableRequestType uint8
+
+const (
+	BulkableRequestTypeIndex BulkableRequestType = iota
+	BulkableRequestTypeDelete
 )
 
-func newBulkProcessorV7(esBulkProcessor *elastic.BulkProcessor) *bulkProcessorV7 {
-	if esBulkProcessor == nil {
-		return nil
+type (
+	BulkProcessor interface {
+		Stop() error
+		Add(request *BulkableRequest)
 	}
-	return &bulkProcessorV7{
-		esBulkProcessor: esBulkProcessor,
-	}
-}
 
-func (p *bulkProcessorV7) Stop() error {
-	errF := p.esBulkProcessor.Flush()
-	errS := p.esBulkProcessor.Stop()
-	if errF != nil {
-		return errF
+	// BulkProcessorParameters holds all required and optional parameters for executing bulk service
+	BulkProcessorParameters struct {
+		Name          string
+		NumOfWorkers  int
+		BulkActions   int
+		BulkSize      int
+		FlushInterval time.Duration
+		Backoff       elastic.Backoff
+		BeforeFunc    elastic.BulkBeforeFunc
+		AfterFunc     elastic.BulkAfterFunc
 	}
-	return errS
-}
 
-func (p *bulkProcessorV7) Add(request *BulkableRequest) {
-	switch request.RequestType {
-	case BulkableRequestTypeIndex:
-		bulkIndexRequest := elastic.NewBulkIndexRequest().
-			Index(request.Index).
-			Id(request.ID).
-			VersionType(versionTypeExternal).
-			Version(request.Version).
-			Doc(request.Doc)
-		p.esBulkProcessor.Add(bulkIndexRequest)
-	case BulkableRequestTypeDelete:
-		bulkDeleteRequest := elastic.NewBulkDeleteRequest().
-			Index(request.Index).
-			Id(request.ID).
-			VersionType(versionTypeExternal).
-			Version(request.Version)
-		p.esBulkProcessor.Add(bulkDeleteRequest)
+	BulkableRequest struct {
+		RequestType BulkableRequestType
+		Index       string
+		ID          string
+		Version     int64
+		Doc         map[string]interface{}
 	}
-}
+)

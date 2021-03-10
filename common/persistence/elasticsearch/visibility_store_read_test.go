@@ -45,10 +45,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/convert"
-	es "go.temporal.io/server/common/elasticsearch"
 	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
-	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
@@ -59,8 +59,8 @@ type ESVisibilitySuite struct {
 	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
 	*require.Assertions
 	controller        *gomock.Controller
-	visibilityStore   *esVisibilityStore
-	mockESClient      *es.MockClient
+	visibilityStore   *visibilityStore
+	mockESClient      *client.MockClient
 	mockProcessor     *MockProcessor
 	mockMetricsClient *metrics.MockClient
 }
@@ -77,7 +77,7 @@ var (
 	testRunID        = "1601da05-4db9-4eeb-89e4-da99481bdfc9"
 	testStatus       = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 
-	testRequest = &p.ListWorkflowExecutionsRequest{
+	testRequest = &persistence.ListWorkflowExecutionsRequest{
 		NamespaceID:       testNamespaceID,
 		Namespace:         testNamespace,
 		PageSize:          testPageSize,
@@ -114,8 +114,8 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.mockMetricsClient = metrics.NewMockClient(s.controller)
 	s.controller = gomock.NewController(s.T())
 	s.mockProcessor = NewMockProcessor(s.controller)
-	s.mockESClient = es.NewMockClient(s.controller)
-	s.visibilityStore = NewElasticSearchVisibilityStore(s.mockESClient, testIndex, s.mockProcessor, cfg, loggerimpl.NewNopLogger(), s.mockMetricsClient)
+	s.mockESClient = client.NewMockClient(s.controller)
+	s.visibilityStore = NewVisibilityStore(s.mockESClient, testIndex, s.mockProcessor, cfg, loggerimpl.NewNopLogger(), s.mockMetricsClient)
 }
 
 func (s *ESVisibilitySuite) TearDownTest() {
@@ -123,7 +123,7 @@ func (s *ESVisibilitySuite) TearDownTest() {
 }
 
 func (s *ESVisibilitySuite) TestListOpenWorkflowExecutions() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), mock.MatchedBy(func(input *es.SearchParameters) bool {
+	s.mockESClient.EXPECT().Search(gomock.Any(), mock.MatchedBy(func(input *client.SearchParameters) bool {
 		source, _ := input.Query.Source()
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterOpen))
 		return true
@@ -140,7 +140,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutions() {
 }
 
 func (s *ESVisibilitySuite) TestListClosedWorkflowExecutions() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), mock.MatchedBy(func(input *es.SearchParameters) bool {
+	s.mockESClient.EXPECT().Search(gomock.Any(), mock.MatchedBy(func(input *client.SearchParameters) bool {
 		source, _ := input.Query.Source()
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterClose))
 		return true
@@ -157,14 +157,14 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutions() {
 }
 
 func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByType() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), mock.MatchedBy(func(input *es.SearchParameters) bool {
+	s.mockESClient.EXPECT().Search(gomock.Any(), mock.MatchedBy(func(input *client.SearchParameters) bool {
 		source, _ := input.Query.Source()
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterOpen))
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByType))
 		return true
 	})).Return(testSearchResult, nil)
 
-	request := &p.ListWorkflowExecutionsByTypeRequest{
+	request := &persistence.ListWorkflowExecutionsByTypeRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
 		WorkflowTypeName:              testWorkflowType,
 	}
@@ -180,14 +180,14 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByType() {
 }
 
 func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByType() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), mock.MatchedBy(func(input *es.SearchParameters) bool {
+	s.mockESClient.EXPECT().Search(gomock.Any(), mock.MatchedBy(func(input *client.SearchParameters) bool {
 		source, _ := input.Query.Source()
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterClose))
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByType))
 		return true
 	})).Return(testSearchResult, nil)
 
-	request := &p.ListWorkflowExecutionsByTypeRequest{
+	request := &persistence.ListWorkflowExecutionsByTypeRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
 		WorkflowTypeName:              testWorkflowType,
 	}
@@ -203,14 +203,14 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByType() {
 }
 
 func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByWorkflowID() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), mock.MatchedBy(func(input *es.SearchParameters) bool {
+	s.mockESClient.EXPECT().Search(gomock.Any(), mock.MatchedBy(func(input *client.SearchParameters) bool {
 		source, _ := input.Query.Source()
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterOpen))
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByWID))
 		return true
 	})).Return(testSearchResult, nil)
 
-	request := &p.ListWorkflowExecutionsByWorkflowIDRequest{
+	request := &persistence.ListWorkflowExecutionsByWorkflowIDRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
 		WorkflowID:                    testWorkflowID,
 	}
@@ -226,14 +226,14 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 }
 
 func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByWorkflowID() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), mock.MatchedBy(func(input *es.SearchParameters) bool {
+	s.mockESClient.EXPECT().Search(gomock.Any(), mock.MatchedBy(func(input *client.SearchParameters) bool {
 		source, _ := input.Query.Source()
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterClose))
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByWID))
 		return true
 	})).Return(testSearchResult, nil)
 
-	request := &p.ListWorkflowExecutionsByWorkflowIDRequest{
+	request := &persistence.ListWorkflowExecutionsByWorkflowIDRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
 		WorkflowID:                    testWorkflowID,
 	}
@@ -249,13 +249,13 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByWorkflowID() {
 }
 
 func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), mock.MatchedBy(func(input *es.SearchParameters) bool {
+	s.mockESClient.EXPECT().Search(gomock.Any(), mock.MatchedBy(func(input *client.SearchParameters) bool {
 		source, _ := input.Query.Source()
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByExecutionStatus))
 		return true
 	})).Return(testSearchResult, nil)
 
-	request := &p.ListClosedWorkflowExecutionsByStatusRequest{
+	request := &persistence.ListClosedWorkflowExecutionsByStatusRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
 		Status:                        testStatus,
 	}
@@ -271,14 +271,14 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
 }
 
 func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), mock.MatchedBy(func(input *es.SearchParameters) bool {
+	s.mockESClient.EXPECT().Search(gomock.Any(), mock.MatchedBy(func(input *client.SearchParameters) bool {
 		source, _ := input.Query.Source()
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterClose))
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByWID))
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByRunID))
 		return true
 	})).Return(testSearchResult, nil)
-	request := &p.GetClosedWorkflowExecutionRequest{
+	request := &persistence.GetClosedWorkflowExecutionRequest{
 		NamespaceID: testNamespaceID,
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: testWorkflowID,
@@ -297,14 +297,14 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution() {
 }
 
 func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution_NoRunID() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), mock.MatchedBy(func(input *es.SearchParameters) bool {
+	s.mockESClient.EXPECT().Search(gomock.Any(), mock.MatchedBy(func(input *client.SearchParameters) bool {
 		source, _ := input.Query.Source()
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterClose))
 		s.True(strings.Contains(fmt.Sprintf("%v", source), filterByWID))
 		s.False(strings.Contains(fmt.Sprintf("%v", source), filterByRunID))
 		return true
 	})).Return(testSearchResult, nil)
-	request := &p.GetClosedWorkflowExecutionRequest{
+	request := &persistence.GetClosedWorkflowExecutionRequest{
 		NamespaceID: testNamespaceID,
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: testWorkflowID,
@@ -320,7 +320,7 @@ func (s *ESVisibilitySuite) TestGetNextPageToken() {
 	s.NoError(err)
 
 	from := 5
-	input, err := s.visibilityStore.serializePageToken(&esVisibilityPageToken{From: from})
+	input, err := s.visibilityStore.serializePageToken(&visibilityPageToken{From: from})
 	s.NoError(err)
 	token, err = s.visibilityStore.getNextPageToken(input)
 	s.Equal(from, token.From)
@@ -335,56 +335,56 @@ func (s *ESVisibilitySuite) TestGetNextPageToken() {
 func (s *ESVisibilitySuite) TestGetSearchResult() {
 	request := testRequest
 	from := 1
-	token := &esVisibilityPageToken{From: from}
+	token := &visibilityPageToken{From: from}
 
-	matchNamespaceQuery := elastic.NewMatchQuery(es.NamespaceID, request.NamespaceID)
-	runningQuery := elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
-	tieBreakerSorter := elastic.NewFieldSort(es.RunID).Desc()
+	matchNamespaceQuery := elastic.NewMatchQuery(searchattribute.NamespaceID, request.NamespaceID)
+	runningQuery := elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	tieBreakerSorter := elastic.NewFieldSort(searchattribute.RunID).Desc()
 
 	earliestTime := convert.Int64ToString(request.EarliestStartTime - oneMilliSecondInNano)
 	latestTime := convert.Int64ToString(request.LatestStartTime + oneMilliSecondInNano)
 
 	// test for open
-	rangeQuery := elastic.NewRangeQuery(es.StartTime).Gte(earliestTime).Lte(latestTime)
+	rangeQuery := elastic.NewRangeQuery(searchattribute.StartTime).Gte(earliestTime).Lte(latestTime)
 	boolQuery := elastic.NewBoolQuery().Must(runningQuery).Must(matchNamespaceQuery).Filter(rangeQuery)
-	params := &es.SearchParameters{
+	params := &client.SearchParameters{
 		Index:    testIndex,
 		Query:    boolQuery,
 		From:     from,
 		PageSize: testPageSize,
-		Sorter:   []elastic.Sorter{elastic.NewFieldSort(es.StartTime).Desc(), tieBreakerSorter},
+		Sorter:   []elastic.Sorter{elastic.NewFieldSort(searchattribute.StartTime).Desc(), tieBreakerSorter},
 	}
 	s.mockESClient.EXPECT().Search(gomock.Any(), params).Return(nil, nil)
-	_, err := s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
+	_, err := s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Must(elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
 	s.NoError(err)
 
 	// test request latestTime overflow
 	request.LatestStartTime = math.MaxInt64
-	rangeQuery1 := elastic.NewRangeQuery(es.StartTime).Gte(earliestTime).Lte(convert.Int64ToString(request.LatestStartTime))
+	rangeQuery1 := elastic.NewRangeQuery(searchattribute.StartTime).Gte(earliestTime).Lte(convert.Int64ToString(request.LatestStartTime))
 	boolQuery1 := elastic.NewBoolQuery().Must(runningQuery).Must(matchNamespaceQuery).Filter(rangeQuery1)
-	param1 := &es.SearchParameters{
+	param1 := &client.SearchParameters{
 		Index:    testIndex,
 		Query:    boolQuery1,
 		From:     from,
 		PageSize: testPageSize,
-		Sorter:   []elastic.Sorter{elastic.NewFieldSort(es.StartTime).Desc(), tieBreakerSorter},
+		Sorter:   []elastic.Sorter{elastic.NewFieldSort(searchattribute.StartTime).Desc(), tieBreakerSorter},
 	}
 	s.mockESClient.EXPECT().Search(gomock.Any(), param1).Return(nil, nil)
-	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Must(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
+	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Must(elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
 	s.NoError(err)
 	request.LatestStartTime = testLatestTime // revert
 
 	// test for closed
-	rangeQuery = elastic.NewRangeQuery(es.CloseTime).Gte(earliestTime).Lte(latestTime)
+	rangeQuery = elastic.NewRangeQuery(searchattribute.CloseTime).Gte(earliestTime).Lte(latestTime)
 	boolQuery = elastic.NewBoolQuery().MustNot(runningQuery).Must(matchNamespaceQuery).Filter(rangeQuery)
 	params.Query = boolQuery
-	params.Sorter = []elastic.Sorter{elastic.NewFieldSort(es.CloseTime).Desc(), tieBreakerSorter}
+	params.Sorter = []elastic.Sorter{elastic.NewFieldSort(searchattribute.CloseTime).Desc(), tieBreakerSorter}
 	s.mockESClient.EXPECT().Search(gomock.Any(), params).Return(nil, nil)
-	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(es.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), false)
+	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), false)
 	s.NoError(err)
 
 	// test for additional boolQuery
-	matchQuery := elastic.NewMatchQuery(es.ExecutionStatus, int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	matchQuery := elastic.NewMatchQuery(searchattribute.ExecutionStatus, int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 	boolQuery = elastic.NewBoolQuery().Must(matchQuery).Must(matchNamespaceQuery).Filter(rangeQuery)
 	params.Query = boolQuery
 	s.mockESClient.EXPECT().Search(gomock.Any(), params).Return(nil, nil)
@@ -393,7 +393,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 
 	// test for search after
 	runID := "runID"
-	token = &esVisibilityPageToken{
+	token = &visibilityPageToken{
 		SortValue:  latestTime,
 		TieBreaker: runID,
 	}
@@ -405,7 +405,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 }
 
 func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
-	token := &esVisibilityPageToken{From: 0}
+	token := &visibilityPageToken{From: 0}
 
 	// test for empty hits
 	searchHits := &elastic.SearchHits{
@@ -435,7 +435,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	searchHits.TotalHits.Value = 1
 	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, 1, nil)
 	s.NoError(err)
-	serializedToken, _ := s.visibilityStore.serializePageToken(&esVisibilityPageToken{From: 1})
+	serializedToken, _ := s.visibilityStore.serializePageToken(&visibilityPageToken{From: 1})
 	s.Equal(serializedToken, resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
 
@@ -446,7 +446,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.Equal(1, len(resp.Executions))
 
 	// test for search after
-	token = &esVisibilityPageToken{}
+	token = &visibilityPageToken{}
 	searchHits.Hits = []*elastic.SearchHit{}
 	searchHits.TotalHits = &elastic.TotalHits{
 		Value: int64(s.visibilityStore.config.ESIndexMaxResultWindow() + 1),
@@ -473,7 +473,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 }
 
 func (s *ESVisibilitySuite) TestDeserializePageToken() {
-	token := &esVisibilityPageToken{From: 0}
+	token := &visibilityPageToken{From: 0}
 	data, _ := s.visibilityStore.serializePageToken(token)
 	result, err := s.visibilityStore.deserializePageToken(data)
 	s.NoError(err)
@@ -487,7 +487,7 @@ func (s *ESVisibilitySuite) TestDeserializePageToken() {
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "unable to deserialize page token"))
 
-	token = &esVisibilityPageToken{SortValue: int64(64), TieBreaker: "unique"}
+	token = &visibilityPageToken{SortValue: int64(64), TieBreaker: "unique"}
 	data, _ = s.visibilityStore.serializePageToken(token)
 	result, err = s.visibilityStore.deserializePageToken(data)
 	s.NoError(err)
@@ -506,7 +506,7 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 	s.Equal(nil, token.SortValue)
 	s.Equal("", token.TieBreaker)
 
-	newToken := &esVisibilityPageToken{From: 5}
+	newToken := &visibilityPageToken{From: 5}
 	data, err = s.visibilityStore.serializePageToken(newToken)
 	s.NoError(err)
 	s.True(len(data) > 0)
@@ -516,7 +516,7 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 
 	sortTime := int64(123)
 	tieBreaker := "unique"
-	newToken = &esVisibilityPageToken{SortValue: sortTime, TieBreaker: tieBreaker}
+	newToken = &visibilityPageToken{SortValue: sortTime, TieBreaker: tieBreaker}
 	data, err = s.visibilityStore.serializePageToken(newToken)
 	s.NoError(err)
 	s.True(len(data) > 0)
@@ -573,7 +573,7 @@ func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
 }
 
 func (s *ESVisibilitySuite) TestShouldSearchAfter() {
-	token := &esVisibilityPageToken{}
+	token := &visibilityPageToken{}
 	s.False(shouldSearchAfter(token))
 
 	token.TieBreaker = "a"
@@ -582,11 +582,11 @@ func (s *ESVisibilitySuite) TestShouldSearchAfter() {
 
 // nolint
 func (s *ESVisibilitySuite) TestGetESQueryDSL() {
-	request := &p.ListWorkflowExecutionsRequestV2{
+	request := &persistence.ListWorkflowExecutionsRequestV2{
 		NamespaceID: testNamespaceID,
 		PageSize:    10,
 	}
-	token := &esVisibilityPageToken{}
+	token := &visibilityPageToken{}
 
 	v := s.visibilityStore
 
@@ -685,7 +685,7 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 }
 
 func (s *ESVisibilitySuite) TestGetESQueryDSLForScan() {
-	request := &p.ListWorkflowExecutionsRequestV2{
+	request := &persistence.ListWorkflowExecutionsRequestV2{
 		NamespaceID: testNamespaceID,
 		PageSize:    10,
 	}
@@ -712,7 +712,7 @@ func (s *ESVisibilitySuite) TestGetESQueryDSLForScan() {
 }
 
 func (s *ESVisibilitySuite) TestGetESQueryDSLForCount() {
-	request := &p.CountWorkflowExecutionsRequest{
+	request := &persistence.CountWorkflowExecutionsRequest{
 		NamespaceID: testNamespaceID,
 	}
 
@@ -754,7 +754,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 		return true
 	})).Return(testSearchResult, nil)
 
-	request := &p.ListWorkflowExecutionsRequestV2{
+	request := &persistence.ListWorkflowExecutionsRequestV2{
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
 		PageSize:    10,
@@ -785,7 +785,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 		return true
 	})).Return(testSearchResult, nil, nil)
 
-	request := &p.ListWorkflowExecutionsRequestV2{
+	request := &persistence.ListWorkflowExecutionsRequestV2{
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
 		PageSize:    10,
@@ -806,7 +806,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 	scrollID := "scrollID-1"
 	s.mockESClient.EXPECT().Scroll(gomock.Any(), scrollID).Return(testSearchResult, nil, nil)
 
-	token := &esVisibilityPageToken{ScrollID: scrollID}
+	token := &visibilityPageToken{ScrollID: scrollID}
 	tokenBytes, err := s.visibilityStore.serializePageToken(token)
 	s.NoError(err)
 	request.NextPageToken = tokenBytes
@@ -814,7 +814,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 	s.NoError(err)
 
 	// test last page
-	mockScroll := es.NewMockScrollService(s.controller)
+	mockScroll := client.NewMockScrollService(s.controller)
 	s.mockESClient.EXPECT().Scroll(gomock.Any(), scrollID).Return(testSearchResult, mockScroll, io.EOF)
 	mockScroll.EXPECT().Clear(gomock.Any()).Return(nil)
 	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
@@ -835,7 +835,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 		return true
 	})).Return(int64(1), nil)
 
-	request := &p.CountWorkflowExecutionsRequest{
+	request := &persistence.CountWorkflowExecutionsRequest{
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
 		Query:       `ExecutionStatus = 5`,
@@ -993,9 +993,9 @@ func (s *ESVisibilitySuite) TestGetValueOfSearchAfterInJSON() {
 	s.Equal(`[null, "t"]`, res)
 }
 
-func (s *ESVisibilitySuite) getTokenHelper(sortValue interface{}) *esVisibilityPageToken {
+func (s *ESVisibilitySuite) getTokenHelper(sortValue interface{}) *visibilityPageToken {
 	v := s.visibilityStore
-	token := &esVisibilityPageToken{
+	token := &visibilityPageToken{
 		SortValue:  sortValue,
 		TieBreaker: "t",
 	}
