@@ -36,15 +36,17 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-type loggerImpl struct {
-	zapLogger *zap.Logger
-	skip      int
-}
-
 const (
 	skipForDefaultLogger = 3
 	// we put a default message when it is empty so that the log can be searchable/filterable
 	defaultMsgForEmpty = "none"
+)
+
+type (
+	loggerImpl struct {
+		zapLogger *zap.Logger
+		skip      int
+	}
 )
 
 // NewNopLogger returns a no-op logger

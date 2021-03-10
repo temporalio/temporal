@@ -31,6 +31,8 @@ import (
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
+const skipForThrottleLogger = 6
+
 type throttledLogger struct {
 	limiter quotas.RateLimiter
 	log     log.Logger
@@ -38,14 +40,12 @@ type throttledLogger struct {
 
 var _ log.Logger = (*throttledLogger)(nil)
 
-const skipForThrottleLogger = 6
-
 // NewThrottledLogger returns an implementation of logger that throttles the
 // log messages being emitted. The underlying implementation uses a token bucket
 // ratelimiter and stops emitting logs once the bucket runs out of tokens
 //
 // Fatal/Panic logs are always emitted without any throttling
-func NewThrottledLogger(logger log.Logger, rps dynamicconfig.IntPropertyFn) log.Logger {
+func NewThrottledLogger(logger log.Logger, rps dynamicconfig.IntPropertyFn) *throttledLogger {
 	var log log.Logger
 	lg, ok := logger.(*loggerImpl)
 	if ok {

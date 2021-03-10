@@ -31,15 +31,17 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-type replayLogger struct {
-	logger            log.Logger
-	ctx               workflow.Context
-	enableLogInReplay bool
-}
+const skipForReplayLogger = skipForDefaultLogger + 1
+
+type (
+	replayLogger struct {
+		logger            log.Logger
+		ctx               workflow.Context
+		enableLogInReplay bool
+	}
+)
 
 var _ log.Logger = (*replayLogger)(nil)
-
-const skipForReplayLogger = skipForDefaultLogger + 1
 
 // NewReplayLogger creates a logger which is aware of temporal's replay mode
 func NewReplayLogger(logger log.Logger, ctx workflow.Context, enableLogInReplay bool) log.Logger {
