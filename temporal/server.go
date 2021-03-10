@@ -33,7 +33,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.uber.org/zap"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -104,6 +103,7 @@ func (s *Server) Start() error {
 	s.stoppedCh = make(chan struct{})
 
 	zapLogger := log.NewZapLogger(&s.so.config.Log)
+	sdkZapAdapter := log.NewZapAdapter(zapLogger)
 	s.logger = log.NewLogger(zapLogger)
 
 	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))
@@ -156,7 +156,7 @@ func (s *Server) Start() error {
 	}
 
 	for _, svcName := range s.so.serviceNames {
-		params, err := s.getServiceParams(svcName, dynamicConfig, tlsFactory, clusterMetadata, dc, zapLogger, globalMetricsScope)
+		params, err := s.getServiceParams(svcName, dynamicConfig, tlsFactory, clusterMetadata, dc, sdkZapAdapter, globalMetricsScope)
 		if err != nil {
 			return err
 		}
@@ -226,7 +226,7 @@ func (s *Server) getServiceParams(
 	tlsFactory encryption.TLSConfigProvider,
 	clusterMetadata cluster.Metadata,
 	dc *dynamicconfig.Collection,
-	zapLogger *zap.Logger,
+	sdkZapAdapter *log.ZapAdapter,
 	metricsScope tally.Scope,
 ) (*resource.BootstrapParams, error) {
 
@@ -277,7 +277,7 @@ func (s *Server) getServiceParams(
 		HostPort:     s.so.config.PublicClient.HostPort,
 		Namespace:    common.SystemLocalNamespace,
 		MetricsScope: metricsScope,
-		Logger:       log.NewZapAdapter(zapLogger),
+		Logger:       sdkZapAdapter,
 		ConnectionOptions: sdkclient.ConnectionOptions{
 			TLS:                options,
 			DisableHealthCheck: true,
@@ -341,7 +341,7 @@ func (s *Server) getServiceParams(
 	if s.so.claimMapper != nil {
 		params.ClaimMapper = s.so.claimMapper
 	} else {
-		params.ClaimMapper = authorization.NewNoopClaimMapper(s.so.config)
+		params.ClaimMapper = authorization.NewNoopClaimMapper()
 	}
 
 	params.PersistenceServiceResolver = s.so.persistenceServiceResolver

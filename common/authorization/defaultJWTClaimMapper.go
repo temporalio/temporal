@@ -53,12 +53,11 @@ type defaultJWTClaimMapper struct {
 	permissionsClaimName string
 }
 
-func NewDefaultJWTClaimMapper(provider TokenKeyProvider, cfg *config.Config) ClaimMapper {
-	claimName := cfg.Global.Authorization.PermissionsClaimName
+func NewDefaultJWTClaimMapper(provider TokenKeyProvider, cfg *config.Authorization, logger log.Logger) ClaimMapper {
+	claimName := cfg.PermissionsClaimName
 	if claimName == "" {
 		claimName = defaultPermissionsClaimName
 	}
-	logger := log.NewLogger(log.NewZapLogger(&cfg.Log))
 	return &defaultJWTClaimMapper{keyProvider: provider, logger: logger, permissionsClaimName: claimName}
 }
 

@@ -130,7 +130,9 @@ func buildCLI() *cli.App {
 				if err != nil {
 					cli.Exit(fmt.Sprintf("Unable to instantiate authorizer: %v.", err), 1)
 				}
-				claimMapper, err := authorization.GetClaimMapperFromConfig(cfg)
+
+				// TODO (alex): replace nil
+				claimMapper, err := authorization.GetClaimMapperFromConfig(&cfg.Global.Authorization, nil)
 				if err != nil {
 					cli.Exit(fmt.Sprintf("Unable to instantiate claim mapper: %v.", err), 1)
 				}

@@ -38,6 +38,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -68,7 +69,8 @@ type (
 		controller     *gomock.Controller
 		tokenGenerator *tokenGenerator
 		claimMapper    ClaimMapper
-		config         *config.Config
+		config         *config.Authorization
+		logger         log.Logger
 	}
 )
 
@@ -80,8 +82,9 @@ func (s *defaultClaimMapperSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.tokenGenerator = newTokenGenerator()
-	s.config = &config.Config{}
-	s.claimMapper = NewDefaultJWTClaimMapper(s.tokenGenerator, s.config)
+	s.config = &config.Authorization{}
+	s.logger = log.NewNoop()
+	s.claimMapper = NewDefaultJWTClaimMapper(s.tokenGenerator, s.config, s.logger)
 }
 func (s *defaultClaimMapperSuite) TearDownTest() {
 	s.controller.Finish()
@@ -167,9 +170,9 @@ func (s *defaultClaimMapperSuite) TestGetClaimMapperFromConfigUnknown() {
 
 func (s *defaultClaimMapperSuite) testGetClaimMapperFromConfig(name string, valid bool, cmType reflect.Type) {
 
-	cfg := config.Config{}
-	cfg.Global.Authorization.ClaimMapper = name
-	cm, err := GetClaimMapperFromConfig(&cfg)
+	cfg := config.Authorization{}
+	cfg.ClaimMapper = name
+	cm, err := GetClaimMapperFromConfig(&cfg, s.logger)
 	if valid {
 		s.NoError(err)
 		s.NotNil(cm)
