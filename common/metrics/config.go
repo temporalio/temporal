@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package config
+package metrics
 
 import (
 	"time"
@@ -30,12 +30,55 @@ import (
 	"github.com/cactus/go-statsd-client/statsd"
 	prom "github.com/m3db/prometheus_client_golang/prometheus"
 	"github.com/uber-go/tally"
+	"github.com/uber-go/tally/m3"
 	"github.com/uber-go/tally/prometheus"
 	tallystatsdreporter "github.com/uber-go/tally/statsd"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	statsdreporter "go.temporal.io/server/common/metrics/tally/statsd"
+)
+
+type (
+	// Config contains the config items for metrics subsystem
+	Config struct {
+		// M3 is the configuration for m3 metrics reporter
+		M3 *m3.Configuration `yaml:"m3"`
+		// Statsd is the configuration for statsd reporter
+		Statsd *StatsdConfig `yaml:"statsd"`
+		// Prometheus is the configuration for prometheus reporter
+		Prometheus *prometheus.Configuration `yaml:"prometheus"`
+		// Config for Opentelemetery Prometheus metrics
+		OTPrometheus *PrometheusConfig `yaml:"otprometheus"`
+		// Tags is the set of key-value pairs to be reported as part of every metric
+		Tags map[string]string `yaml:"tags"`
+
+		// Prefix sets the prefix to all outgoing metrics
+		Prefix string `yaml:"prefix"`
+	}
+
+	// StatsdConfig contains the config items for statsd metrics reporter
+	StatsdConfig struct {
+		// The host and port of the statsd server
+		HostPort string `yaml:"hostPort" validate:"nonzero"`
+		// The prefix to use in reporting to statsd
+		Prefix string `yaml:"prefix" validate:"nonzero"`
+		// FlushInterval is the maximum interval for sending packets.
+		// If it is not specified, it defaults to 1 second.
+		FlushInterval time.Duration `yaml:"flushInterval"`
+		// FlushBytes specifies the maximum udp packet size you wish to send.
+		// If FlushBytes is unspecified, it defaults  to 1432 bytes, which is
+		// considered safe for local traffic.
+		FlushBytes int `yaml:"flushBytes"`
+	}
+
+	PrometheusConfig struct {
+		// Address for prometheus to serve metrics from.
+		ListenAddress string `yaml:"listenAddress"`
+		// DefaultHistogramBoundaries defines the default histogram bucket
+		// boundaries.
+		DefaultHistogramBoundaries []float64 `yaml:"defaultHistogramBoundaries"`
+	}
 )
 
 const (
@@ -98,7 +141,7 @@ var (
 //
 // Current priority order is:
 // m3 > statsd > prometheus
-func (c *Metrics) NewScope(logger log.Logger) tally.Scope {
+func (c *Config) NewScope(logger log.Logger) tally.Scope {
 	if c.M3 != nil {
 		return c.newM3Scope(logger)
 	}
@@ -111,7 +154,7 @@ func (c *Metrics) NewScope(logger log.Logger) tally.Scope {
 	return tally.NoopScope
 }
 
-func (c *Metrics) NewCustomReporterScope(logger log.Logger, customReporter tally.BaseStatsReporter) tally.Scope {
+func (c *Config) NewCustomReporterScope(logger log.Logger, customReporter tally.BaseStatsReporter) tally.Scope {
 	options := tally.ScopeOptions{
 		DefaultBuckets: defaultHistogramBuckets,
 	}
@@ -135,7 +178,7 @@ func (c *Metrics) NewCustomReporterScope(logger log.Logger, customReporter tally
 
 // newM3Scope returns a new m3 scope with
 // a default reporting interval of a second
-func (c *Metrics) newM3Scope(logger log.Logger) tally.Scope {
+func (c *Config) newM3Scope(logger log.Logger) tally.Scope {
 	reporter, err := c.M3.NewReporter()
 	if err != nil {
 		logger.Fatal("error creating m3 reporter", tag.Error(err))
@@ -152,7 +195,7 @@ func (c *Metrics) newM3Scope(logger log.Logger) tally.Scope {
 
 // newM3Scope returns a new statsd scope with
 // a default reporting interval of a second
-func (c *Metrics) newStatsdScope(logger log.Logger) tally.Scope {
+func (c *Config) newStatsdScope(logger log.Logger) tally.Scope {
 	config := c.Statsd
 	if len(config.HostPort) == 0 {
 		return tally.NoopScope
@@ -176,7 +219,7 @@ func (c *Metrics) newStatsdScope(logger log.Logger) tally.Scope {
 
 // newPrometheusScope returns a new prometheus scope with
 // a default reporting interval of a second
-func (c *Metrics) newPrometheusScope(logger log.Logger) tally.Scope {
+func (c *Config) newPrometheusScope(logger log.Logger) tally.Scope {
 	if len(c.Prometheus.DefaultHistogramBuckets) == 0 {
 		for _, value := range defaultHistogramBuckets {
 			c.Prometheus.DefaultHistogramBuckets = append(

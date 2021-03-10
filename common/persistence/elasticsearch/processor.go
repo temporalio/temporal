@@ -35,7 +35,6 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/olivere/elastic/v7"
-	"github.com/uber-go/tally"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
@@ -80,7 +79,7 @@ type (
 
 	ackChanWithStopwatch struct { // value of processorImpl.mapToAckChan
 		ackCh                 chan<- bool
-		addToProcessStopwatch *tally.Stopwatch // Used to report metrics: interval between visibility task being added to bulk processor and it is processed (ack/nack).
+		addToProcessStopwatch metrics.Stopwatch // Used to report metrics: interval between visibility task being added to bulk processor and it is processed (ack/nack).
 	}
 )
 
@@ -171,7 +170,7 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 		panic("ackCh must be buffered channel (length should be 1 or more)")
 	}
 	sw := p.metricsClient.StartTimer(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorRequestLatency)
-	ackChWithStopwatch := newAckChanWithStopwatch(ackCh, &sw)
+	ackChWithStopwatch := newAckChanWithStopwatch(ackCh, sw)
 	_, isDup, _ := p.mapToAckChan.PutOrDo(visibilityTaskKey, ackChWithStopwatch, func(key interface{}, value interface{}) error {
 		ackChWithStopwatchExisting, ok := value.(*ackChanWithStopwatch)
 		if !ok {
@@ -394,7 +393,7 @@ func extractErrorReason(resp *elastic.BulkResponseItem) string {
 	return ""
 }
 
-func newAckChanWithStopwatch(ackCh chan<- bool, stopwatch *tally.Stopwatch) *ackChanWithStopwatch {
+func newAckChanWithStopwatch(ackCh chan<- bool, stopwatch metrics.Stopwatch) *ackChanWithStopwatch {
 	return &ackChanWithStopwatch{
 		ackCh:                 ackCh,
 		addToProcessStopwatch: stopwatch,

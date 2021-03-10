@@ -52,13 +52,13 @@ type processorSuite struct {
 	mockBulkProcessor *client.MockBulkProcessor
 	mockMetricClient  *metrics.MockClient
 	mockESClient      *client.MockClient
+	mockStopwatch     *metrics.MockStopwatch
 }
 
 var (
-	testID        = "test-doc-id"
-	testStopWatch = metrics.NopStopwatch()
-	testScope     = metrics.ElasticSearchVisibility
-	testMetric    = metrics.ESBulkProcessorRequestLatency
+	testID     = "test-doc-id"
+	testScope  = metrics.ElasticSearchVisibility
+	testMetric = metrics.ESBulkProcessorRequestLatency
 )
 
 func TestElasticsearchProcessorSuite(t *testing.T) {
@@ -84,6 +84,7 @@ func (s *processorSuite) SetupTest() {
 	}
 
 	s.mockMetricClient = metrics.NewMockClient(s.controller)
+	s.mockStopwatch = metrics.NewMockStopwatch(s.controller)
 	s.mockBulkProcessor = client.NewMockBulkProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
 	s.esProcessor = NewProcessor(cfg, s.mockESClient, loggerimpl.NewLogger(zapLogger), s.mockMetricClient)
@@ -139,8 +140,9 @@ func (s *processorSuite) TestAdd() {
 	ackCh := make(chan bool, 1)
 	s.Equal(0, s.esProcessor.mapToAckChan.Len())
 
+	s.mockStopwatch.EXPECT().Stop()
 	s.mockBulkProcessor.EXPECT().Add(request)
-	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(testStopWatch)
+	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(s.mockStopwatch)
 
 	s.esProcessor.Add(request, visibilityTaskKey, ackCh)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
@@ -151,7 +153,7 @@ func (s *processorSuite) TestAdd() {
 	}
 
 	// handle duplicate
-	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(testStopWatch)
+	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(s.mockStopwatch)
 	s.esProcessor.Add(request, visibilityTaskKey, ackCh)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
 	select {
@@ -167,7 +169,8 @@ func (s *processorSuite) TestAdd_ConcurrentAdd() {
 	key := "test-key"
 	duplicates := 100
 	ackCh := make(chan bool, duplicates-1)
-	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(testStopWatch).Times(duplicates)
+	s.mockStopwatch.EXPECT().Stop().AnyTimes()
+	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(s.mockStopwatch).Times(duplicates)
 
 	addFunc := func(wg *sync.WaitGroup) {
 		s.esProcessor.Add(request, key, ackCh)
@@ -216,7 +219,8 @@ func (s *processorSuite) TestBulkAfterAction_Ack() {
 	}
 
 	ackCh := make(chan bool, 1)
-	mapVal := newAckChanWithStopwatch(ackCh, &testStopWatch)
+	s.mockStopwatch.EXPECT().Stop()
+	mapVal := newAckChanWithStopwatch(ackCh, s.mockStopwatch)
 	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
 	s.esProcessor.bulkAfterAction(0, requests, response, nil)
 	select {
@@ -262,7 +266,8 @@ func (s *processorSuite) TestBulkAfterAction_Nack() {
 	}
 
 	ackCh := make(chan bool, 1)
-	mapVal := newAckChanWithStopwatch(ackCh, &testStopWatch)
+	s.mockStopwatch.EXPECT().Stop()
+	mapVal := newAckChanWithStopwatch(ackCh, s.mockStopwatch)
 	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
 	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticSearchVisibility, metrics.ESBulkProcessorFailures)
 	s.esProcessor.bulkAfterAction(0, requests, response, nil)
@@ -311,7 +316,8 @@ func (s *processorSuite) TestAckChan() {
 	s.esProcessor.sendToAckChan(key, true)
 
 	request := &client.BulkableRequest{}
-	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(testStopWatch)
+	s.mockStopwatch.EXPECT().Stop()
+	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(s.mockStopwatch)
 	s.mockBulkProcessor.EXPECT().Add(request)
 	ackCh := make(chan bool, 1)
 	s.esProcessor.Add(request, key, ackCh)
@@ -334,7 +340,8 @@ func (s *processorSuite) TestNackChan() {
 
 	request := &client.BulkableRequest{}
 	s.mockBulkProcessor.EXPECT().Add(request)
-	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(testStopWatch)
+	s.mockStopwatch.EXPECT().Stop()
+	s.mockMetricClient.EXPECT().StartTimer(testScope, testMetric).Return(s.mockStopwatch)
 	ackCh := make(chan bool, 1)
 	s.esProcessor.Add(request, key, ackCh)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
