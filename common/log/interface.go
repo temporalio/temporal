@@ -52,7 +52,6 @@ type (
 		Info(msg string, tags ...tag.Tag)
 		Warn(msg string, tags ...tag.Tag)
 		Error(msg string, tags ...tag.Tag)
-		// TODO (alex): remove
 		Fatal(msg string, tags ...tag.Tag)
 	}
 
