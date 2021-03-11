@@ -183,8 +183,8 @@ func WorkflowNamespace(namespace string) ZapTag {
 }
 
 // WorkflowNamespaceIDs returns tag for WorkflowNamespaceIDs
-func WorkflowNamespaceIDs(namespaceIDs interface{}) ZapTag {
-	return NewObjectTag("wf-namespace-ids", namespaceIDs)
+func WorkflowNamespaceIDs(namespaceIDs map[string]struct{}) ZapTag {
+	return NewAnyTag("wf-namespace-ids", namespaceIDs)
 }
 
 // history event ID related
@@ -347,7 +347,7 @@ func Service(sv string) ZapTag {
 
 // Addresses returns tag for Addresses
 func Addresses(ads []string) ZapTag {
-	return NewObjectTag("addresses", ads)
+	return NewStringsTag("addresses", ads)
 }
 
 // ListenerName returns tag for ListenerName
@@ -382,7 +382,7 @@ func Name(k string) ZapTag {
 
 // Value returns tag for Value
 func Value(v interface{}) ZapTag {
-	return NewObjectTag("value", v)
+	return NewAnyTag("value", v)
 }
 
 // ValueType returns tag for ValueType
@@ -392,12 +392,12 @@ func ValueType(v interface{}) ZapTag {
 
 // DefaultValue returns tag for DefaultValue
 func DefaultValue(v interface{}) ZapTag {
-	return NewObjectTag("default-value", v)
+	return NewAnyTag("default-value", v)
 }
 
 // IgnoredValue returns tag for IgnoredValue
 func IgnoredValue(v interface{}) ZapTag {
-	return NewObjectTag("ignored-value", v)
+	return NewAnyTag("ignored-value", v)
 }
 
 // Port returns tag for Port
@@ -454,12 +454,12 @@ func ShardID(shardID int32) ZapTag {
 
 // ShardItem returns tag for ShardItem
 func ShardItem(shardItem interface{}) ZapTag {
-	return NewObjectTag("shard-item", shardItem)
+	return NewAnyTag("shard-item", shardItem)
 }
 
 // ShardTime returns tag for ShardTime
 func ShardTime(shardTime interface{}) ZapTag {
-	return NewObjectTag("shard-time", shardTime)
+	return NewAnyTag("shard-time", shardTime)
 }
 
 // ShardReplicationAck returns tag for ShardReplicationAck
@@ -494,19 +494,19 @@ func MaxLevel(lv int64) ZapTag {
 
 // ShardTransferAcks returns tag for ShardTransferAcks
 func ShardTransferAcks(shardTransferAcks interface{}) ZapTag {
-	return NewObjectTag("shard-transfer-acks", shardTransferAcks)
+	return NewAnyTag("shard-transfer-acks", shardTransferAcks)
 }
 
 // ShardTimerAcks returns tag for ShardTimerAcks
 func ShardTimerAcks(shardTimerAcks interface{}) ZapTag {
-	return NewObjectTag("shard-timer-acks", shardTimerAcks)
+	return NewAnyTag("shard-timer-acks", shardTimerAcks)
 }
 
 // task queue processor
 
 // Task returns tag for Task
 func Task(task interface{}) ZapTag {
-	return NewObjectTag("queue-task", task)
+	return NewAnyTag("queue-task", task)
 }
 
 // TaskID returns tag for TaskID
@@ -601,7 +601,7 @@ func ESValue(ESValue []byte) ZapTag {
 
 // ESConfig returns tag for ESConfig
 func ESConfig(c interface{}) ZapTag {
-	return NewObjectTag("es-config", c)
+	return NewAnyTag("es-config", c)
 }
 
 // ESField returns tag for ESField
@@ -659,16 +659,6 @@ func IncomingVersion(incomingVersion int64) ZapTag {
 	return NewInt64("xdc-incoming-version", incomingVersion)
 }
 
-// ReplicationInfo returns tag for ReplicationInfo
-func ReplicationInfo(replicationInfo interface{}) ZapTag {
-	return NewObjectTag("xdc-replication-info", replicationInfo)
-}
-
-// ReplicationState returns tag for ReplicationState
-func ReplicationState(replicationState interface{}) ZapTag {
-	return NewObjectTag("xdc-replication-state", replicationState)
-}
-
 // FirstEventVersion returns tag for FirstEventVersion
 func FirstEventVersion(version int64) ZapTag {
 	return NewInt64("xdc-first-event-version", version)
@@ -724,7 +714,7 @@ func ArchivalRequestRunID(requestRunID string) ZapTag {
 
 // ArchivalRequestBranchToken returns tag for RequestBranchToken
 func ArchivalRequestBranchToken(requestBranchToken []byte) ZapTag {
-	return NewObjectTag("archival-request-branch-token", requestBranchToken)
+	return NewBinaryTag("archival-request-branch-token", requestBranchToken)
 }
 
 // ArchivalRequestNextEventID returns tag for RequestNextEventID
@@ -802,7 +792,7 @@ func TransportType(transportType string) ZapTag {
 
 // ActivityInfo returns tag for activity info
 func ActivityInfo(activityInfo interface{}) ZapTag {
-	return NewObjectTag("activity-info", activityInfo)
+	return NewAnyTag("activity-info", activityInfo)
 }
 
 // WorkflowTaskRequestId returns tag for workflow task RequestId
@@ -812,7 +802,7 @@ func WorkflowTaskRequestId(s string) ZapTag {
 
 // AckLevel returns tag for ack level
 func AckLevel(s interface{}) ZapTag {
-	return NewObjectTag("ack-level", s)
+	return NewAnyTag("ack-level", s)
 }
 
 // MinQueryLevel returns tag for query level

@@ -25,7 +25,6 @@
 package tag
 
 import (
-	"fmt"
 	"time"
 
 	"go.uber.org/zap"
@@ -62,6 +61,12 @@ func NewBinaryTag(key string, value []byte) ZapTag {
 func NewStringTag(key string, value string) ZapTag {
 	return ZapTag{
 		field: zap.String(key, value),
+	}
+}
+
+func NewStringsTag(key string, value []string) ZapTag {
+	return ZapTag{
+		field: zap.Strings(key, value),
 	}
 }
 
@@ -117,12 +122,6 @@ func NewTimeTag(key string, value time.Time) ZapTag {
 func NewTimePtrTag(key string, value *time.Time) ZapTag {
 	return ZapTag{
 		field: zap.Time(key, timestamp.TimeValue(value)),
-	}
-}
-
-func NewObjectTag(key string, value interface{}) ZapTag {
-	return ZapTag{
-		field: zap.String(key, fmt.Sprintf("%v", value)),
 	}
 }
 
