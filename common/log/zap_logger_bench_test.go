@@ -52,6 +52,8 @@ func BenchmarkZapLoggerWithFields(b *testing.B) {
 		lg := zLogger.With(zap.Int64("wf-schedule-id", int64(i)), zap.String("cluster-name", "this is a very long value: 1234567890 1234567890 1234567890 1234567890"))
 		lg.Info("msg to print log, 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",
 			zap.String("wf-namespace", "test-namespace"))
+		lg.Debug("msg to print log, 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",
+			zap.String("wf-namespace", "test-namespace"))
 	}
 }
 
@@ -61,6 +63,8 @@ func BenchmarkLoggerWithFields(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		lg := logger.With(tag.WorkflowScheduleID(int64(i)), tag.ClusterName("this is a very long value: 1234567890 1234567890 1234567890 1234567890"))
 		lg.Info("msg to print log, 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",
+			tag.WorkflowNamespace("test-namespace"))
+		lg.Debug("msg to print log, 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",
 			tag.WorkflowNamespace("test-namespace"))
 	}
 }
@@ -72,6 +76,9 @@ func BenchmarkZapLoggerWithoutFields(b *testing.B) {
 		zLogger.Info("msg to print log, 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",
 			zap.Int64("wf-schedule-id", int64(i)), zap.String("cluster-name", "this is a very long value: 1234567890 1234567890 1234567890 1234567890"),
 			zap.String("wf-namespace", "test-namespace"))
+		zLogger.Debug("msg to print log, 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",
+			zap.Int64("wf-schedule-id", int64(i)), zap.String("cluster-name", "this is a very long value: 1234567890 1234567890 1234567890 1234567890"),
+			zap.String("wf-namespace", "test-namespace"))
 	}
 }
 
@@ -80,6 +87,9 @@ func BenchmarkLoggerWithoutFields(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		logger.Info("msg to print log, 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",
+			tag.WorkflowNamespace("test-namespace"),
+			tag.WorkflowScheduleID(int64(i)), tag.ClusterName("this is a very long value: 1234567890 1234567890 1234567890 1234567890"))
+		logger.Debug("msg to print log, 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",
 			tag.WorkflowNamespace("test-namespace"),
 			tag.WorkflowScheduleID(int64(i)), tag.ClusterName("this is a very long value: 1234567890 1234567890 1234567890 1234567890"))
 	}
