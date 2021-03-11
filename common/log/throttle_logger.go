@@ -29,7 +29,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 )
 
-const skipForThrottleLogger = skipForDefaultLogger + 3
+const extraSkipForThrottleLogger = 3
 
 type throttledLogger struct {
 	limiter quotas.RateLimiter
@@ -44,13 +44,8 @@ var _ Logger = (*throttledLogger)(nil)
 //
 // Fatal/Panic logs are always emitted without any throttling
 func NewThrottledLogger(logger Logger, rps quotas.RateFn) *throttledLogger {
-	if l, ok := logger.(*loggerImpl); ok {
-		logger = &loggerImpl{
-			zapLogger: l.zapLogger,
-			skip:      skipForThrottleLogger,
-		}
-	} else {
-		logger.Warn("ThrottledLogger may not emit logging-call-at tag correctly because the logger passed in is not loggerImpl")
+	if sl, ok := logger.(SkipLogger); ok {
+		logger = sl.Skip(extraSkipForThrottleLogger)
 	}
 
 	limiter := quotas.NewDefaultOutgoingDynamicRateLimiter(rps)

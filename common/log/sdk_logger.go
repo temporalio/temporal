@@ -32,7 +32,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-const skipForSdkLogger = skipForDefaultLogger + 1
+const extraSkipForSdkLogger = 1
 
 type SdkLogger struct {
 	logger Logger
@@ -41,13 +41,8 @@ type SdkLogger struct {
 var _ log.Logger = (*SdkLogger)(nil)
 
 func NewSdkLogger(logger Logger) *SdkLogger {
-	if l, ok := logger.(*loggerImpl); ok {
-		logger = &loggerImpl{
-			zapLogger: l.zapLogger,
-			skip:      skipForSdkLogger,
-		}
-	} else {
-		logger.Warn("SdkLogger may not emit logging-call-at tag correctly because the logger passed in is not loggerImpl")
+	if sl, ok := logger.(SkipLogger); ok {
+		logger = sl.Skip(extraSkipForSdkLogger)
 	}
 
 	return &SdkLogger{

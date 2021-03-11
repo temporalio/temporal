@@ -25,13 +25,21 @@
 package log
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
+	"strconv"
+	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
+
+	"go.temporal.io/server/common/log/tag"
 )
 
 type LogSuite struct {
@@ -67,8 +75,96 @@ func (s *LogSuite) TestNewLogger() {
 		OutputFile: dir + "/test.log",
 	}
 
-	log := newZapLogger(cfg)
+	log := buildZapLogger(cfg)
 	s.NotNil(log)
 	_, err = os.Stat(dir + "/test.log")
 	s.Nil(err)
+}
+func TestDefaultLogger(t *testing.T) {
+	old := os.Stdout // keep backup of the real stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	outC := make(chan string)
+	// copy the output in a separate goroutine so logging can't block indefinitely
+	go func() {
+		var buf bytes.Buffer
+		_, err := io.Copy(&buf, r)
+		assert.NoError(t, err)
+		outC <- buf.String()
+	}()
+
+	logger := newLogger(zap.NewExample())
+	preCaller := caller(1)
+	logger.With(tag.Error(fmt.Errorf("test error"))).Info("test info", tag.WorkflowActionWorkflowStarted)
+
+	// back to normal state
+	w.Close()
+	os.Stdout = old // restoring the real stdout
+	out := <-outC
+	sps := strings.Split(preCaller, ":")
+	par, err := strconv.Atoi(sps[1])
+	assert.Nil(t, err)
+	lineNum := fmt.Sprintf("%v", par+1)
+	fmt.Println(out, lineNum)
+	assert.Equal(t, `{"level":"info","msg":"test info","error":"test error","wf-action":"add-workflow-started-event","logging-call-at":"zap_logger_test.go:`+lineNum+`"}`+"\n", out)
+}
+
+func TestThrottleLogger(t *testing.T) {
+	old := os.Stdout // keep backup of the real stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	outC := make(chan string)
+	// copy the output in a separate goroutine so logging can't block indefinitely
+	go func() {
+		var buf bytes.Buffer
+		_, err := io.Copy(&buf, r)
+		assert.NoError(t, err)
+		outC <- buf.String()
+	}()
+
+	logger := NewThrottledLogger(newLogger(zap.NewExample()),
+		func() float64 { return 1 })
+	preCaller := caller(1)
+	With(With(logger, tag.Error(fmt.Errorf("test error"))), tag.ComponentShard).Info("test info", tag.WorkflowActionWorkflowStarted)
+
+	// back to normal state
+	w.Close()
+	os.Stdout = old // restoring the real stdout
+	out := <-outC
+	sps := strings.Split(preCaller, ":")
+	par, err := strconv.Atoi(sps[1])
+	assert.Nil(t, err)
+	lineNum := fmt.Sprintf("%v", par+1)
+	fmt.Println(out, lineNum)
+	assert.Equal(t, `{"level":"info","msg":"test info","error":"test error","component":"shard","wf-action":"add-workflow-started-event","logging-call-at":"zap_logger_test.go:`+lineNum+`"}`+"\n", out)
+}
+
+func TestEmptyMsg(t *testing.T) {
+	old := os.Stdout // keep backup of the real stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	outC := make(chan string)
+	// copy the output in a separate goroutine so logging can't block indefinitely
+	go func() {
+		var buf bytes.Buffer
+		_, err := io.Copy(&buf, r)
+		assert.NoError(t, err)
+		outC <- buf.String()
+	}()
+
+	logger := newLogger(zap.NewExample())
+	preCaller := caller(1)
+	logger.With(tag.Error(fmt.Errorf("test error"))).Info("", tag.WorkflowActionWorkflowStarted)
+
+	// back to normal state
+	w.Close()
+	os.Stdout = old // restoring the real stdout
+	out := <-outC
+	sps := strings.Split(preCaller, ":")
+	par, err := strconv.Atoi(sps[1])
+	assert.Nil(t, err)
+	lineNum := fmt.Sprintf("%v", par+1)
+	fmt.Println(out, lineNum)
+	assert.Equal(t, `{"level":"info","msg":"`+defaultMsgForEmpty+`","error":"test error","wf-action":"add-workflow-started-event","logging-call-at":"zap_logger_test.go:`+lineNum+`"}`+"\n", out)
+
 }

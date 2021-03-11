@@ -58,4 +58,8 @@ type (
 	WithLogger interface {
 		With(tags ...tag.Tag) Logger
 	}
+
+	SkipLogger interface {
+		Skip(extraSkip int) Logger
+	}
 )

@@ -30,7 +30,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-const skipForReplayLogger = skipForDefaultLogger + 1
+const extraSkipForReplayLogger = 1
 
 type (
 	replayLogger struct {
@@ -44,13 +44,8 @@ var _ Logger = (*replayLogger)(nil)
 
 // NewReplayLogger creates a logger which is aware of Temporal replay mode
 func NewReplayLogger(logger Logger, ctx workflow.Context, enableLogInReplay bool) Logger {
-	if l, ok := logger.(*loggerImpl); ok {
-		logger = &loggerImpl{
-			zapLogger: l.zapLogger,
-			skip:      skipForReplayLogger,
-		}
-	} else {
-		logger.Warn("ReplayLogger may not emit logging-call-at tag correctly because the logger passed in is not loggerImpl")
+	if sl, ok := logger.(SkipLogger); ok {
+		logger = sl.Skip(extraSkipForReplayLogger)
 	}
 	return &replayLogger{
 		logger:            logger,
