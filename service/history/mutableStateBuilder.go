@@ -4530,7 +4530,7 @@ func (e *mutableStateBuilder) closeTransactionHandleActivityUserTimerTasks(
 }
 
 func (e *mutableStateBuilder) checkMutability(
-	actionTag tag.Tag,
+	actionTag tag.ZapTag,
 ) error {
 
 	if !e.IsWorkflowExecutionRunning() {
@@ -4586,17 +4586,17 @@ func (e *mutableStateBuilder) shouldInvalidateCheckum() bool {
 }
 
 func (e *mutableStateBuilder) createInternalServerError(
-	actionTag tag.Tag,
+	actionTag tag.ZapTag,
 ) error {
 
-	return serviceerror.NewInternal(actionTag.Field.String + " operation failed")
+	return serviceerror.NewInternal(actionTag.Field().String + " operation failed")
 }
 
 func (e *mutableStateBuilder) createCallerError(
-	actionTag tag.Tag,
+	actionTag tag.ZapTag,
 ) error {
 
-	return serviceerror.NewInvalidArgument(fmt.Sprintf(mutableStateInvalidHistoryActionMsgTemplate, actionTag.Field.String))
+	return serviceerror.NewInvalidArgument(fmt.Sprintf(mutableStateInvalidHistoryActionMsgTemplate, actionTag.Field().String))
 }
 
 func (_ *mutableStateBuilder) unixNanoToTime(

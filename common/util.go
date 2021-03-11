@@ -550,7 +550,7 @@ func CheckEventBlobSizeLimit(
 	runID string,
 	scope metrics.Scope,
 	logger log.Logger,
-	blobSizeViolationOperationTag tag.Tag,
+	blobSizeViolationOperationTag tag.ZapTag,
 ) error {
 	scope.RecordDistribution(metrics.EventBlobSize, actualSize)
 

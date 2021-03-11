@@ -37,11 +37,11 @@ func NewNoop() Logger {
 	return &noop{}
 }
 
-func (n *noop) Debug(msg string, tags ...tag.Tag) {}
-func (n *noop) Info(msg string, tags ...tag.Tag)  {}
-func (n *noop) Warn(msg string, tags ...tag.Tag)  {}
-func (n *noop) Error(msg string, tags ...tag.Tag) {}
-func (n *noop) Fatal(msg string, tags ...tag.Tag) {}
-func (n *noop) With(tags ...tag.Tag) Logger {
+func (n *noop) Debug(string, ...tag.Tag) {}
+func (n *noop) Info(string, ...tag.Tag)  {}
+func (n *noop) Warn(string, ...tag.Tag)  {}
+func (n *noop) Error(string, ...tag.Tag) {}
+func (n *noop) Fatal(string, ...tag.Tag) {}
+func (n *noop) With(...tag.Tag) Logger {
 	return n
 }
