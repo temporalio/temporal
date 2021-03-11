@@ -55,10 +55,12 @@ type (
 		Fatal(msg string, tags ...tag.Tag)
 	}
 
+	// Implement WithLogger to efficiently create a logger with added tags.
 	WithLogger interface {
 		With(tags ...tag.Tag) Logger
 	}
 
+	// Implement SkipLogger to efficiently create a logger which skips extraSkip frames from call stack.
 	SkipLogger interface {
 		Skip(extraSkip int) Logger
 	}

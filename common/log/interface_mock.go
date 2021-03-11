@@ -183,3 +183,40 @@ func (mr *MockWithLoggerMockRecorder) With(tags ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "With", reflect.TypeOf((*MockWithLogger)(nil).With), tags...)
 }
+
+// MockSkipLogger is a mock of SkipLogger interface.
+type MockSkipLogger struct {
+	ctrl     *gomock.Controller
+	recorder *MockSkipLoggerMockRecorder
+}
+
+// MockSkipLoggerMockRecorder is the mock recorder for MockSkipLogger.
+type MockSkipLoggerMockRecorder struct {
+	mock *MockSkipLogger
+}
+
+// NewMockSkipLogger creates a new mock instance.
+func NewMockSkipLogger(ctrl *gomock.Controller) *MockSkipLogger {
+	mock := &MockSkipLogger{ctrl: ctrl}
+	mock.recorder = &MockSkipLoggerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSkipLogger) EXPECT() *MockSkipLoggerMockRecorder {
+	return m.recorder
+}
+
+// Skip mocks base method.
+func (m *MockSkipLogger) Skip(extraSkip int) Logger {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Skip", extraSkip)
+	ret0, _ := ret[0].(Logger)
+	return ret0
+}
+
+// Skip indicates an expected call of Skip.
+func (mr *MockSkipLoggerMockRecorder) Skip(extraSkip interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Skip", reflect.TypeOf((*MockSkipLogger)(nil).Skip), extraSkip)
+}
