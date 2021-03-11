@@ -25,9 +25,9 @@
 package log
 
 import (
-	"fmt"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"go.uber.org/zap"
@@ -71,35 +71,29 @@ func newLogger(zl *zap.Logger) *zapLogger {
 }
 
 func caller(skip int) string {
-	_, path, lineno, ok := runtime.Caller(skip)
+	_, path, line, ok := runtime.Caller(skip)
 	if !ok {
 		return ""
 	}
-	return fmt.Sprintf("%v:%v", filepath.Base(path), lineno)
+	return filepath.Base(path) + ":" + strconv.Itoa(line)
 }
 
-func (l *zapLogger) buildFieldsWithCallat(tags []tag.Tag) []zap.Field {
-	fs := l.buildFields(tags)
-	fs = append(fs, zap.String(tag.LoggingCallAtKey, caller(l.skip)))
-	return fs
+func (l *zapLogger) buildFieldsWithCallAt(tags []tag.Tag) []zap.Field {
+	fields := make([]zap.Field, len(tags)+1)
+	l.fillFields(tags, fields)
+	fields[len(fields)-1] = zap.String(tag.LoggingCallAtKey, caller(l.skip))
+	return fields
 }
 
-func (l *zapLogger) buildFields(tags []tag.Tag) []zap.Field {
-	fs := make([]zap.Field, 0, len(tags))
-	for _, t := range tags {
-		var f zap.Field
+// fillFields fill fields parameter with fields read from tags. Optimized for performance.
+func (l *zapLogger) fillFields(tags []tag.Tag, fields []zap.Field) {
+	for i, t := range tags {
 		if zt, ok := t.(tag.ZapTag); ok {
-			f = zt.Field()
+			fields[i] = zt.Field()
 		} else {
-			f = zap.Any(t.Key(), t.Value())
+			fields[i] = zap.Any(t.Key(), t.Value())
 		}
-
-		if f.Key == "" {
-			continue
-		}
-		fs = append(fs, f)
 	}
-	return fs
 }
 
 func setDefaultMsg(msg string) string {
@@ -112,7 +106,7 @@ func setDefaultMsg(msg string) string {
 func (l *zapLogger) Debug(msg string, tags ...tag.Tag) {
 	if l.zl.Core().Enabled(zap.DebugLevel) {
 		msg = setDefaultMsg(msg)
-		fields := l.buildFieldsWithCallat(tags)
+		fields := l.buildFieldsWithCallAt(tags)
 		l.zl.Debug(msg, fields...)
 	}
 }
@@ -120,7 +114,7 @@ func (l *zapLogger) Debug(msg string, tags ...tag.Tag) {
 func (l *zapLogger) Info(msg string, tags ...tag.Tag) {
 	if l.zl.Core().Enabled(zap.InfoLevel) {
 		msg = setDefaultMsg(msg)
-		fields := l.buildFieldsWithCallat(tags)
+		fields := l.buildFieldsWithCallAt(tags)
 		l.zl.Info(msg, fields...)
 	}
 }
@@ -128,7 +122,7 @@ func (l *zapLogger) Info(msg string, tags ...tag.Tag) {
 func (l *zapLogger) Warn(msg string, tags ...tag.Tag) {
 	if l.zl.Core().Enabled(zap.WarnLevel) {
 		msg = setDefaultMsg(msg)
-		fields := l.buildFieldsWithCallat(tags)
+		fields := l.buildFieldsWithCallAt(tags)
 		l.zl.Warn(msg, fields...)
 	}
 }
@@ -136,7 +130,7 @@ func (l *zapLogger) Warn(msg string, tags ...tag.Tag) {
 func (l *zapLogger) Error(msg string, tags ...tag.Tag) {
 	if l.zl.Core().Enabled(zap.ErrorLevel) {
 		msg = setDefaultMsg(msg)
-		fields := l.buildFieldsWithCallat(tags)
+		fields := l.buildFieldsWithCallAt(tags)
 		l.zl.Error(msg, fields...)
 	}
 }
@@ -144,13 +138,14 @@ func (l *zapLogger) Error(msg string, tags ...tag.Tag) {
 func (l *zapLogger) Fatal(msg string, tags ...tag.Tag) {
 	if l.zl.Core().Enabled(zap.FatalLevel) {
 		msg = setDefaultMsg(msg)
-		fields := l.buildFieldsWithCallat(tags)
+		fields := l.buildFieldsWithCallAt(tags)
 		l.zl.Fatal(msg, fields...)
 	}
 }
 
 func (l *zapLogger) With(tags ...tag.Tag) Logger {
-	fields := l.buildFields(tags)
+	fields := make([]zap.Field, len(tags))
+	l.fillFields(tags, fields)
 	zl := l.zl.With(fields...)
 	return &zapLogger{
 		zl:   zl,

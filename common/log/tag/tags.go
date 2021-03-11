@@ -41,6 +41,9 @@ import (
 //   1. Workflow: these tags are information that are useful to our customer, like workflow-id/run-id/task-queue/...
 //   2. System : these tags are internal information which usually cannot be understood by our customers,
 
+// LoggingCallAtKey is reserved tag
+const LoggingCallAtKey = "logging-call-at"
+
 ///////////////////  Common tags defined here ///////////////////
 
 // Error returns tag for Error
@@ -613,9 +616,6 @@ func ESField(ESField string) ZapTag {
 func ESDocID(id string) ZapTag {
 	return NewStringTag("es-doc-id", id)
 }
-
-// LoggingCallAtKey is reserved tag
-const LoggingCallAtKey = "logging-call-at"
 
 // SysStackTrace returns tag for SysStackTrace
 func SysStackTrace(stackTrace string) ZapTag {

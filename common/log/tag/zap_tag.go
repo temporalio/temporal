@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -49,7 +50,13 @@ func (t ZapTag) Key() string {
 }
 
 func (t ZapTag) Value() interface{} {
-	return t.field.Interface
+	// Not for production use.
+	enc := zapcore.NewMapObjectEncoder()
+	t.field.AddTo(enc)
+	for _, val := range enc.Fields {
+		return val
+	}
+	return nil
 }
 
 func NewBinaryTag(key string, value []byte) ZapTag {
