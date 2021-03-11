@@ -22,39 +22,39 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package metrics
+package persistence
 
 import (
-	"time"
-
-	"github.com/uber-go/tally"
+	"fmt"
+	"os"
+	"strings"
 )
 
-type (
-	NoopMetricsClient struct{}
+const (
+	queryDelimiter        = ";"
+	querySliceDefaultSize = 100
 )
 
-func NewNoopMetricsClient() *NoopMetricsClient {
-	return &NoopMetricsClient{}
-}
+// LoadAndSplitQuery loads and split cql / sql query into one statement per string
+func LoadAndSplitQuery(
+	filePaths []string,
+) ([]string, error) {
 
-func (m NoopMetricsClient) IncCounter(scope int, counter int) {}
+	result := make([]string, 0, querySliceDefaultSize)
 
-func (m NoopMetricsClient) AddCounter(scope int, counter int, delta int64) {}
+	for _, path := range filePaths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("error reading contents from file %v, err: %v", path, err)
+		}
+		for _, stmt := range strings.Split(string(content), queryDelimiter) {
+			stmt = strings.TrimSpace(stmt)
+			if stmt == "" {
+				continue
+			}
+			result = append(result, stmt)
+		}
 
-func (m NoopMetricsClient) StartTimer(scope int, timer int) Stopwatch {
-	return NopStopwatch()
-}
-
-func (m NoopMetricsClient) RecordTimer(scope int, timer int, d time.Duration) {}
-
-func (m NoopMetricsClient) RecordDistribution(scope int, timer int, d int) {}
-
-func (m NoopMetricsClient) UpdateGauge(scope int, gauge int, value float64) {}
-
-func (m NoopMetricsClient) Scope(scope int, tags ...Tag) Scope {
-	return &metricsScope{
-		scope:     tally.NoopScope,
-		rootScope: tally.NoopScope,
 	}
+	return result, nil
 }

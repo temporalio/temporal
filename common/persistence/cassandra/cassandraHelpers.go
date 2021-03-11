@@ -26,8 +26,6 @@ package cassandra
 
 import (
 	"fmt"
-	"io/ioutil"
-	"strings"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -66,33 +64,4 @@ func DropCassandraKeyspace(s gocql.Session, keyspace string, logger log.Logger) 
 	}
 	logger.Debug("dropped keyspace", tag.Value(keyspace))
 	return
-}
-
-// loadCassandraSchema loads the schema from the given .cql files on this keyspace
-func loadCassandraSchema(
-	session gocql.Session,
-	dir string,
-	fileNames []string,
-) error {
-
-	for _, file := range fileNames {
-		// This is only used in tests. Excluding it from security scanners
-		// #nosec
-		content, err := ioutil.ReadFile(dir + "/" + file)
-		if err != nil {
-			return fmt.Errorf("error reading contents of file %v:%v", file, err.Error())
-		}
-		for _, stmt := range strings.Split(string(content), ";") {
-			stmt = strings.TrimSpace(stmt)
-			if stmt == "" {
-				continue
-			}
-			err = session.Query(stmt).Exec()
-			if err != nil {
-				return fmt.Errorf("error loading schema from %v: %v", file, err.Error())
-			}
-		}
-
-	}
-	return nil
 }

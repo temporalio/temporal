@@ -36,6 +36,6 @@ type nopStopwatchRecorder struct{}
 func (n *nopStopwatchRecorder) RecordStopwatch(stopwatchStart time.Time) {}
 
 // NopStopwatch return a fake tally stop watch
-func NopStopwatch() tally.Stopwatch {
+func NopStopwatch() Stopwatch {
 	return tally.NewStopwatch(time.Now().UTC(), &nopStopwatchRecorder{})
 }

@@ -24,37 +24,27 @@
 
 package metrics
 
-import (
-	"time"
+import "time"
 
-	"github.com/uber-go/tally"
+const (
+	distributionToTimerRatio = int(time.Millisecond / time.Nanosecond)
 )
 
-type (
-	NoopMetricsClient struct{}
-)
-
-func NewNoopMetricsClient() *NoopMetricsClient {
-	return &NoopMetricsClient{}
-}
-
-func (m NoopMetricsClient) IncCounter(scope int, counter int) {}
-
-func (m NoopMetricsClient) AddCounter(scope int, counter int, delta int64) {}
-
-func (m NoopMetricsClient) StartTimer(scope int, timer int) Stopwatch {
-	return NopStopwatch()
-}
-
-func (m NoopMetricsClient) RecordTimer(scope int, timer int, d time.Duration) {}
-
-func (m NoopMetricsClient) RecordDistribution(scope int, timer int, d int) {}
-
-func (m NoopMetricsClient) UpdateGauge(scope int, gauge int, value float64) {}
-
-func (m NoopMetricsClient) Scope(scope int, tags ...Tag) Scope {
-	return &metricsScope{
-		scope:     tally.NoopScope,
-		rootScope: tally.NoopScope,
+func mergeMapToRight(src map[string]string, dest map[string]string) {
+	for k, v := range src {
+		dest[k] = v
 	}
+}
+
+func getMetricDefs(serviceIdx ServiceIdx) map[int]metricDefinition {
+	defs := make(map[int]metricDefinition)
+	for idx, def := range MetricDefs[Common] {
+		defs[idx] = def
+	}
+
+	for idx, def := range MetricDefs[serviceIdx] {
+		defs[idx] = def
+	}
+
+	return defs
 }

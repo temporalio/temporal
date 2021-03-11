@@ -33,8 +33,7 @@ import (
 	"github.com/uber-go/tally/m3"
 	"github.com/uber-go/tally/prometheus"
 
-	"go.temporal.io/server/common/log"
-	config2 "go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/log/loggerimpl"
 )
 
 type nullStatsReporter struct{}
@@ -89,14 +88,14 @@ func (s *MetricsSuite) SetupTest() {
 }
 
 func (s *MetricsSuite) TestStatsd() {
-	statsd := &config2.Statsd{
+	statsd := &StatsdConfig{
 		HostPort: "127.0.0.1:8125",
 		Prefix:   "testStatsd",
 	}
 
-	config := new(config2.Metrics)
+	config := new(Config)
 	config.Statsd = statsd
-	scope := NewScope(config, log.NewNoop())
+	scope := config.NewScope(loggerimpl.NewNopLogger())
 	s.NotNil(scope)
 }
 
@@ -106,9 +105,9 @@ func (s *MetricsSuite) TestM3() {
 		Service:  "testM3",
 		Env:      "devel",
 	}
-	config := new(config2.Metrics)
+	config := new(Config)
 	config.M3 = m3
-	scope := NewScope(config, log.NewNoop())
+	scope := config.NewScope(loggerimpl.NewNopLogger())
 	s.NotNil(scope)
 }
 
@@ -118,34 +117,34 @@ func (s *MetricsSuite) TestPrometheus() {
 		TimerType:     "histogram",
 		ListenAddress: "127.0.0.1:0",
 	}
-	config := new(config2.Metrics)
+	config := new(Config)
 	config.Prometheus = prom
-	scope := NewScope(config, log.NewNoop())
+	scope := config.NewScope(loggerimpl.NewNopLogger())
 	s.NotNil(scope)
 }
 
 func (s *MetricsSuite) TestNoop() {
-	config := &config2.Metrics{}
-	scope := NewScope(config, log.NewNoop())
+	config := &Config{}
+	scope := config.NewScope(loggerimpl.NewNopLogger())
 	s.Equal(tally.NoopScope, scope)
 }
 
 func (s *MetricsSuite) TestCustomReporter() {
-	config := &config2.Metrics{}
-	scope := NewCustomReporterScope(config, log.NewNoop(), tally.NullStatsReporter)
+	config := &Config{}
+	scope := config.NewCustomReporterScope(loggerimpl.NewNopLogger(), tally.NullStatsReporter)
 	s.NotNil(scope)
 	s.NotEqual(tally.NoopScope, scope)
 }
 
 func (s *MetricsSuite) TestCustomCachedReporter() {
-	config := &config2.Metrics{}
-	scope := NewCustomReporterScope(config, log.NewNoop(), CachedNullStatsReporter)
+	config := &Config{}
+	scope := config.NewCustomReporterScope(loggerimpl.NewNopLogger(), CachedNullStatsReporter)
 	s.NotNil(scope)
 	s.NotEqual(tally.NoopScope, scope)
 }
 
 func (s *MetricsSuite) TestUnsupportedReporter() {
-	config := &config2.Metrics{}
-	scope := NewCustomReporterScope(config, log.NewNoop(), UnsupportedNullStatsReporter)
+	config := &Config{}
+	scope := config.NewCustomReporterScope(loggerimpl.NewNopLogger(), UnsupportedNullStatsReporter)
 	s.Equal(tally.NoopScope, scope)
 }

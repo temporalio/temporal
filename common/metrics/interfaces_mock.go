@@ -33,8 +33,42 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-	tally "github.com/uber-go/tally"
 )
+
+// MockStopwatch is a mock of Stopwatch interface.
+type MockStopwatch struct {
+	ctrl     *gomock.Controller
+	recorder *MockStopwatchMockRecorder
+}
+
+// MockStopwatchMockRecorder is the mock recorder for MockStopwatch.
+type MockStopwatchMockRecorder struct {
+	mock *MockStopwatch
+}
+
+// NewMockStopwatch creates a new mock instance.
+func NewMockStopwatch(ctrl *gomock.Controller) *MockStopwatch {
+	mock := &MockStopwatch{ctrl: ctrl}
+	mock.recorder = &MockStopwatchMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockStopwatch) EXPECT() *MockStopwatchMockRecorder {
+	return m.recorder
+}
+
+// Stop mocks base method.
+func (m *MockStopwatch) Stop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Stop")
+}
+
+// Stop indicates an expected call of Stop.
+func (mr *MockStopwatchMockRecorder) Stop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockStopwatch)(nil).Stop))
+}
 
 // MockClient is a mock of Client interface.
 type MockClient struct {
@@ -127,10 +161,10 @@ func (mr *MockClientMockRecorder) Scope(scope interface{}, tags ...interface{}) 
 }
 
 // StartTimer mocks base method.
-func (m *MockClient) StartTimer(scope, timer int) tally.Stopwatch {
+func (m *MockClient) StartTimer(scope, timer int) Stopwatch {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartTimer", scope, timer)
-	ret0, _ := ret[0].(tally.Stopwatch)
+	ret0, _ := ret[0].(Stopwatch)
 	return ret0
 }
 
