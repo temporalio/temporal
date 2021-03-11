@@ -48,7 +48,7 @@ const LoggingCallAtKey = "logging-call-at"
 
 // Error returns tag for Error
 func Error(err error) ZapTag {
-	return NewErrorTag("error", err)
+	return NewErrorTag(err)
 }
 
 // ClusterName returns tag for ClusterName
@@ -70,18 +70,15 @@ func TimestampPtr(t *time.Time) ZapTag {
 
 // WorkflowAction returns tag for WorkflowAction
 func workflowAction(action string) ZapTag {
-	return NewPredefinedStringTag("wf-action", action)
+	return NewStringTag("wf-action", action)
 }
 
 // WorkflowListFilterType returns tag for WorkflowListFilterType
 func workflowListFilterType(listFilterType string) ZapTag {
-	return NewPredefinedStringTag("wf-list-filter-type", listFilterType)
+	return NewStringTag("wf-list-filter-type", listFilterType)
 }
 
 // general
-
-// WorkflowError returns tag for WorkflowError
-func WorkflowError(error error) ZapTag { return NewErrorTag("wf-error", error) }
 
 // WorkflowTimeoutType returns tag for WorkflowTimeoutType
 func WorkflowTimeoutType(timeoutType enumspb.TimeoutType) ZapTag {
@@ -313,32 +310,32 @@ func WorkflowEventCount(eventCount int) ZapTag {
 
 // Component returns tag for Component
 func component(component string) ZapTag {
-	return NewPredefinedStringTag("component", component)
+	return NewStringTag("component", component)
 }
 
 // Lifecycle returns tag for Lifecycle
 func lifecycle(lifecycle string) ZapTag {
-	return NewPredefinedStringTag("lifecycle", lifecycle)
+	return NewStringTag("lifecycle", lifecycle)
 }
 
 // StoreOperation returns tag for StoreOperation
 func storeOperation(storeOperation string) ZapTag {
-	return NewPredefinedStringTag("store-operation", storeOperation)
+	return NewStringTag("store-operation", storeOperation)
 }
 
 // OperationResult returns tag for OperationResult
 func operationResult(operationResult string) ZapTag {
-	return NewPredefinedStringTag("operation-result", operationResult)
+	return NewStringTag("operation-result", operationResult)
 }
 
 // ErrorType returns tag for ErrorType
 func errorType(errorType string) ZapTag {
-	return NewPredefinedStringTag("error", errorType)
+	return NewStringTag("error-type", errorType)
 }
 
 // Shardupdate returns tag for Shardupdate
 func shardupdate(shardupdate string) ZapTag {
-	return NewPredefinedStringTag("shard-update", shardupdate)
+	return NewStringTag("shard-update", shardupdate)
 }
 
 // general
@@ -420,7 +417,7 @@ func MetricScope(metricScope int) ZapTag {
 
 // StoreType returns tag for StoreType
 func StoreType(storeType string) ZapTag {
-	return NewPredefinedStringTag("store-type", storeType)
+	return NewStringTag("store-type", storeType)
 }
 
 // DetailInfo returns tag for DetailInfo

@@ -41,6 +41,12 @@ type (
 	}
 )
 
+func NewZapTag(field zap.Field) ZapTag {
+	return ZapTag{
+		field: field,
+	}
+}
+
 func (t ZapTag) Field() zap.Field {
 	return t.field
 }
@@ -101,8 +107,8 @@ func NewBoolTag(key string, value bool) ZapTag {
 	}
 }
 
-func NewErrorTag(key string, value error) ZapTag {
-	// NOTE zap already chosen "error" as key
+func NewErrorTag(value error) ZapTag {
+	// NOTE: zap already chosen "error" as key
 	return ZapTag{
 		field: zap.Error(value),
 	}
@@ -135,11 +141,5 @@ func NewTimePtrTag(key string, value *time.Time) ZapTag {
 func NewAnyTag(key string, value interface{}) ZapTag {
 	return ZapTag{
 		field: zap.Any(key, value),
-	}
-}
-
-func NewPredefinedStringTag(key string, value string) ZapTag {
-	return ZapTag{
-		field: zap.String(key, value),
 	}
 }
