@@ -83,7 +83,7 @@ func (s *defaultClaimMapperSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.tokenGenerator = newTokenGenerator()
 	s.config = &config.Authorization{}
-	s.logger = log.NewNoop()
+	s.logger = log.NewNoopLogger()
 	s.claimMapper = NewDefaultJWTClaimMapper(s.tokenGenerator, s.config, s.logger)
 }
 func (s *defaultClaimMapperSuite) TearDownTest() {

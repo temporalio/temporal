@@ -64,7 +64,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 	s.workflowTaskHandlerCallback = &workflowTaskHandlerCallbacksImpl{
 		metricsClient: metrics.NewClient(tally.NoopScope, metrics.History),
 		config:        NewDynamicConfigForTest(),
-		logger:        log.NewNoop(),
+		logger:        log.NewNoopLogger(),
 	}
 	s.queryRegistry = s.constructQueryRegistry(10)
 	s.mockMutableState = NewMockmutableState(s.controller)

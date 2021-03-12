@@ -115,7 +115,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
-	s.visibilityStore = NewVisibilityStore(s.mockESClient, testIndex, s.mockProcessor, cfg, log.NewNoop(), s.mockMetricsClient)
+	s.visibilityStore = NewVisibilityStore(s.mockESClient, testIndex, s.mockProcessor, cfg, log.NewNoopLogger(), s.mockMetricsClient)
 }
 
 func (s *ESVisibilitySuite) TearDownTest() {

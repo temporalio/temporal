@@ -43,7 +43,7 @@ type (
 var _ Logger = (*replayLogger)(nil)
 
 // NewReplayLogger creates a logger which is aware of Temporal replay mode
-func NewReplayLogger(logger Logger, ctx workflow.Context, enableLogInReplay bool) Logger {
+func NewReplayLogger(logger Logger, ctx workflow.Context, enableLogInReplay bool) *replayLogger {
 	if sl, ok := logger.(SkipLogger); ok {
 		logger = sl.Skip(extraSkipForReplayLogger)
 	}

@@ -73,7 +73,7 @@ func (s *workflowSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	workflowTestMetrics = metrics.NewMockClient(s.controller)
-	workflowTestLogger = log.NewNoop()
+	workflowTestLogger = log.NewNoopLogger()
 	workflowTestHandler = NewMockHandler(s.controller)
 	workflowTestPump = NewMockPump(s.controller)
 	workflowTestConfig = &Config{
@@ -158,7 +158,7 @@ func (s *workflowSuite) TestArchivalWorkflow_Success() {
 }
 
 func (s *workflowSuite) TestReplayArchiveHistoryWorkflow() {
-	logger := log.NewDevelopment()
+	logger := log.NewDefaultLogger()
 	globalLogger = workflowTestLogger
 	globalMetricsClient = metrics.NewClient(tally.NewTestScope("replay", nil), metrics.Worker)
 	globalConfig = &Config{

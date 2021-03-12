@@ -176,7 +176,7 @@ func cleanShard(
 		return report
 	}
 	defer shardCorruptedFile.Close()
-	execStore, err := cassp.NewWorkflowExecutionPersistence(shardID, session, log.NewNoop())
+	execStore, err := cassp.NewWorkflowExecutionPersistence(shardID, session, log.NewNoopLogger())
 	if err != nil {
 		report.Failure = &ShardCleanReportFailure{
 			Note:    "failed to create execution store",

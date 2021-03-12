@@ -64,7 +64,7 @@ func (s *queueProcessorSuite) SetupTest() {
 	s.mockQueueTaskProcessor = NewMockqueueTaskProcessor(s.controller)
 
 	s.redispatchQueue = collection.NewConcurrentQueue()
-	s.logger = log.NewDevelopment()
+	s.logger = log.NewDefaultLogger()
 	s.metricsScope = metrics.NewClient(tally.NoopScope, metrics.History).Scope(metrics.TransferQueueProcessorScope)
 }
 

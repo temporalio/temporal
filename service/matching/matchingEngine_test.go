@@ -99,7 +99,7 @@ func (s *matchingEngineSuite) TearDownSuite() {
 }
 
 func (s *matchingEngineSuite) SetupTest() {
-	s.logger = log.NewDevelopment()
+	s.logger = log.NewDefaultLogger()
 	s.Lock()
 	defer s.Unlock()
 	s.controller = gomock.NewController(s.T())
@@ -113,7 +113,7 @@ func (s *matchingEngineSuite) SetupTest() {
 		&taskqueuepb.TaskQueue{Name: matchingTestTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		metrics.NewClient(tally.NoopScope, metrics.Matching),
 		metrics.MatchingTaskQueueMgrScope,
-		log.NewNoop(),
+		log.NewNoopLogger(),
 	)
 
 	s.matchingEngine = s.newMatchingEngine(defaultTestConfig(), s.taskManager)

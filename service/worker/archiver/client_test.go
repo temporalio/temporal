@@ -74,7 +74,7 @@ func (s *clientSuite) SetupTest() {
 	s.metricsClient.EXPECT().Scope(metrics.ArchiverClientScope, gomock.Any()).Return(s.metricsScope)
 	s.client = NewClient(
 		s.metricsClient,
-		log.NewNoop(),
+		log.NewNoopLogger(),
 		nil,
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetIntPropertyFn(1000),

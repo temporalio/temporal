@@ -127,7 +127,7 @@ func buildCLI() *cli.App {
 					return cli.Exit(fmt.Sprintf("Unable to load configuration: %v.", err), 1)
 				}
 
-				logger := tlog.NewLogger(&cfg.Log)
+				logger := tlog.NewZapLogger(tlog.BuildZapLogger(cfg.Log))
 
 				authorizer, err := authorization.GetAuthorizerFromConfig(&cfg.Global.Authorization)
 				if err != nil {

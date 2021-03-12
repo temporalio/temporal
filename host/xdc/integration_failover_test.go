@@ -98,7 +98,7 @@ func TestIntegrationClustersTestSuite(t *testing.T) {
 }
 
 func (s *integrationClustersTestSuite) SetupSuite() {
-	s.logger = log.NewDevelopment()
+	s.logger = log.NewDefaultLogger()
 
 	fileName := "../testdata/xdc_integration_test_clusters.yaml"
 	if host.TestFlags.TestClusterConfigFile != "" {

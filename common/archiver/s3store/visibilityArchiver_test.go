@@ -137,7 +137,7 @@ func (s *visibilityArchiverSuite) SetupSuite() {
 	s.Require().NoError(err)
 
 	s.container = &archiver.VisibilityBootstrapContainer{
-		Logger:        log.NewNoop(),
+		Logger:        log.NewNoopLogger(),
 		MetricsClient: metrics.NewClient(scope, metrics.VisibilityArchiverScope),
 	}
 }

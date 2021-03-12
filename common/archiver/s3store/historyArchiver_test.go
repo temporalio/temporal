@@ -103,7 +103,7 @@ func (s *historyArchiverSuite) SetupTest() {
 	scope := tally.NewTestScope("test", nil)
 	s.Assertions = require.New(s.T())
 	s.container = &archiver.HistoryBootstrapContainer{
-		Logger:        log.NewNoop(),
+		Logger:        log.NewNoopLogger(),
 		MetricsClient: metrics.NewClient(scope, metrics.HistoryArchiverScope),
 	}
 

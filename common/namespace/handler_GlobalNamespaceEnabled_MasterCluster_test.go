@@ -86,7 +86,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TearDownSuite
 }
 
 func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) SetupTest() {
-	logger := log.NewNoop()
+	logger := log.NewNoopLogger()
 	dcCollection := dc.NewCollection(dc.NewNopClient(), logger)
 	s.minRetentionDays = 1
 	s.maxBadBinaryCount = 10

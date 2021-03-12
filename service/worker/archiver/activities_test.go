@@ -85,7 +85,7 @@ func (s *activitiesSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockHistoryMgr = persistence.NewMockHistoryManager(s.controller)
 
-	s.logger = log.NewNoop()
+	s.logger = log.NewNoopLogger()
 	s.metricsClient = metrics.NewMockClient(s.controller)
 	s.metricsScope = metrics.NewMockScope(s.controller)
 	s.archiverProvider = provider.NewMockArchiverProvider(s.controller)

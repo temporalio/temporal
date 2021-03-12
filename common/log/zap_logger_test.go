@@ -70,12 +70,12 @@ func (s *LogSuite) TestNewLogger() {
 	s.Nil(err)
 	defer os.RemoveAll(dir)
 
-	cfg := &Config{
+	cfg := Config{
 		Level:      "info",
 		OutputFile: dir + "/test.log",
 	}
 
-	log := buildZapLogger(cfg)
+	log := BuildZapLogger(cfg)
 	s.NotNil(log)
 	_, err = os.Stat(dir + "/test.log")
 	s.Nil(err)
@@ -93,7 +93,7 @@ func TestDefaultLogger(t *testing.T) {
 		outC <- buf.String()
 	}()
 
-	logger := newLogger(zap.NewExample())
+	logger := NewZapLogger(zap.NewExample())
 	preCaller := caller(1)
 	logger.With(tag.Error(fmt.Errorf("test error"))).Info("test info", tag.WorkflowActionWorkflowStarted)
 
@@ -122,7 +122,7 @@ func TestThrottleLogger(t *testing.T) {
 		outC <- buf.String()
 	}()
 
-	logger := NewThrottledLogger(newLogger(zap.NewExample()),
+	logger := NewThrottledLogger(NewZapLogger(zap.NewExample()),
 		func() float64 { return 1 })
 	preCaller := caller(1)
 	With(With(logger, tag.Error(fmt.Errorf("test error"))), tag.ComponentShard).Info("test info", tag.WorkflowActionWorkflowStarted)
@@ -152,7 +152,7 @@ func TestEmptyMsg(t *testing.T) {
 		outC <- buf.String()
 	}()
 
-	logger := newLogger(zap.NewExample())
+	logger := NewZapLogger(zap.NewExample())
 	preCaller := caller(1)
 	logger.With(tag.Error(fmt.Errorf("test error"))).Info("", tag.WorkflowActionWorkflowStarted)
 

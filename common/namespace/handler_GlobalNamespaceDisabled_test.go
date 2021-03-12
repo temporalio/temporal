@@ -86,7 +86,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TearDownSuite() {
 }
 
 func (s *namespaceHandlerGlobalNamespaceDisabledSuite) SetupTest() {
-	logger := log.NewNoop()
+	logger := log.NewNoopLogger()
 	dcCollection := dc.NewCollection(dc.NewNopClient(), logger)
 	s.minRetentionDays = 1
 	s.maxBadBinaryCount = 10

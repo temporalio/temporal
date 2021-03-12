@@ -54,7 +54,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.container = &archiver.VisibilityBootstrapContainer{
-		Logger:        log.NewNoop(),
+		Logger:        log.NewNoopLogger(),
 		MetricsClient: metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 	s.expectedVisibilityRecords = []*archiverspb.VisibilityRecord{

@@ -236,7 +236,7 @@ func AdminDBScan(c *cli.Context) {
 	rateLimiter := getRateLimiter(startingRPS, targetRPS)
 	session := connectToCassandra(c)
 	defer session.Close()
-	historyStore := cassp.NewHistoryV2PersistenceFromSession(session, log.NewNoop())
+	historyStore := cassp.NewHistoryV2PersistenceFromSession(session, log.NewNoopLogger())
 	scanOutputDirectories := createScanOutputDirectories()
 
 	reports := make(chan *ShardScanReport)
@@ -294,7 +294,7 @@ func scanShard(
 		deleteEmptyFiles(outputFiles.CorruptedExecutionFile, outputFiles.ExecutionCheckFailureFile, outputFiles.ShardScanReportFile)
 		closeFn()
 	}()
-	execStore, err := cassp.NewWorkflowExecutionPersistence(shardID, session, log.NewNoop())
+	execStore, err := cassp.NewWorkflowExecutionPersistence(shardID, session, log.NewNoopLogger())
 	if err != nil {
 		report.Failure = &ShardScanReportFailure{
 			Note:    "failed to create execution store",

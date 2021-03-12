@@ -104,7 +104,7 @@ func (s *Server) Start() error {
 
 	s.logger = s.so.logger
 	if s.logger == nil {
-		s.logger = log.NewLogger(&s.so.config.Log)
+		s.logger = log.NewZapLogger(log.BuildZapLogger(s.so.config.Log))
 	}
 
 	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))

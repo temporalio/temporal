@@ -86,7 +86,7 @@ func (s *visibilityArchiverSuite) TearDownSuite() {
 func (s *visibilityArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.container = &archiver.VisibilityBootstrapContainer{
-		Logger: log.NewNoop(),
+		Logger: log.NewNoopLogger(),
 	}
 	s.controller = gomock.NewController(s.T())
 }

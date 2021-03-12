@@ -37,12 +37,13 @@ import (
 )
 
 const (
-	skipForDefaultLogger = 3
+	skipForZapLogger = 3
 	// we put a default message when it is empty so that the log can be searchable/filterable
 	defaultMsgForEmpty = "none"
 )
 
 type (
+	// zapLogger is logger backed up by zap.Logger.
 	zapLogger struct {
 		zl   *zap.Logger
 		skip int
@@ -51,23 +52,24 @@ type (
 
 var _ Logger = (*zapLogger)(nil)
 
-// NewDevelopment returns a logger at debug level and log into STDERR
-func NewDevelopment() *zapLogger {
-	return NewLogger(&Config{
+// NewDefaultLogger returns a logger at debug level and log into STDERR
+func NewDefaultLogger() *zapLogger {
+	return NewZapLogger(BuildZapLogger(Config{
 		Level: "debug",
-	})
+	}))
 }
 
-// NewLogger returns a new logger
-func NewLogger(cfg *Config) *zapLogger {
-	return newLogger(buildZapLogger(cfg))
-}
-
-func newLogger(zl *zap.Logger) *zapLogger {
+// NewZapLogger returns a new zap based logger from zap.Logger
+func NewZapLogger(zl *zap.Logger) *zapLogger {
 	return &zapLogger{
 		zl:   zl,
-		skip: skipForDefaultLogger,
+		skip: skipForZapLogger,
 	}
+}
+
+// BuildZapLogger builds and returns a new zap.Logger for this logging configuration
+func BuildZapLogger(cfg Config) *zap.Logger {
+	return buildZapLogger(cfg, true)
 }
 
 func caller(skip int) string {
@@ -160,8 +162,7 @@ func (l *zapLogger) Skip(extraSkip int) Logger {
 	}
 }
 
-// buildZapLogger builds and returns a new zap.Logger for this logging configuration
-func buildZapLogger(cfg *Config) *zap.Logger {
+func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {
 	encodeConfig := zapcore.EncoderConfig{
 		TimeKey:        "ts",
 		LevelKey:       "level",
@@ -174,7 +175,11 @@ func buildZapLogger(cfg *Config) *zap.Logger {
 		EncodeLevel:    zapcore.LowercaseLevelEncoder,
 		EncodeTime:     zapcore.ISO8601TimeEncoder,
 		EncodeDuration: zapcore.SecondsDurationEncoder,
-		EncodeCaller:   nil,
+		EncodeCaller:   zapcore.ShortCallerEncoder,
+	}
+	if disableCaller {
+		encodeConfig.CallerKey = zapcore.OmitKey
+		encodeConfig.EncodeCaller = nil
 	}
 
 	outputPath := "stderr"
@@ -193,7 +198,7 @@ func buildZapLogger(cfg *Config) *zap.Logger {
 		EncoderConfig:    encodeConfig,
 		OutputPaths:      []string{outputPath},
 		ErrorOutputPaths: []string{outputPath},
-		DisableCaller:    true,
+		DisableCaller:    disableCaller,
 	}
 	logger, _ := config.Build()
 	return logger

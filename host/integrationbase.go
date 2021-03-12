@@ -113,7 +113,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 }
 
 func (s *IntegrationBase) setupLogger() {
-	s.Logger = log.NewDevelopment()
+	s.Logger = log.NewDefaultLogger()
 }
 
 // GetTestClusterConfig return test cluster config

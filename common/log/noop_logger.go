@@ -29,19 +29,19 @@ import (
 )
 
 type (
-	noop struct{}
+	noopLogger struct{}
 )
 
-// NewNoop return a noop logger
-func NewNoop() Logger {
-	return &noop{}
+// NewNoopLogger return a noopLogger
+func NewNoopLogger() *noopLogger {
+	return &noopLogger{}
 }
 
-func (n *noop) Debug(string, ...tag.Tag) {}
-func (n *noop) Info(string, ...tag.Tag)  {}
-func (n *noop) Warn(string, ...tag.Tag)  {}
-func (n *noop) Error(string, ...tag.Tag) {}
-func (n *noop) Fatal(string, ...tag.Tag) {}
-func (n *noop) With(...tag.Tag) Logger {
+func (n *noopLogger) Debug(string, ...tag.Tag) {}
+func (n *noopLogger) Info(string, ...tag.Tag)  {}
+func (n *noopLogger) Warn(string, ...tag.Tag)  {}
+func (n *noopLogger) Error(string, ...tag.Tag) {}
+func (n *noopLogger) Fatal(string, ...tag.Tag) {}
+func (n *noopLogger) With(...tag.Tag) Logger {
 	return n
 }

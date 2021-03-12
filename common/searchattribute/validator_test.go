@@ -49,7 +49,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	sizeOfValueLimit := 5
 	sizeOfTotalLimit := 20
 
-	validator := NewValidator(log.NewNoop(),
+	validator := NewValidator(log.NewNoopLogger(),
 		dynamicconfig.GetMapPropertyFn(GetDefaultTypeMap()),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),

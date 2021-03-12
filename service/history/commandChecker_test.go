@@ -96,7 +96,7 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 		s.mockNamespaceCache,
 		config,
 		searchattribute.NewValidator(
-			log.NewNoop(),
+			log.NewNoopLogger(),
 			config.ValidSearchAttributes,
 			config.SearchAttributesNumberOfKeysLimit,
 			config.SearchAttributesSizeOfValueLimit,

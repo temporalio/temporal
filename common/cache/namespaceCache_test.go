@@ -76,7 +76,7 @@ func (s *namespaceCacheSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
-	s.logger = log.NewDevelopment()
+	s.logger = log.NewDefaultLogger()
 	s.clusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.metadataMgr = persistence.NewMockMetadataManager(s.controller)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
@@ -610,7 +610,7 @@ func Test_IsSampledForLongerRetention(t *testing.T) {
 
 func Test_NamespaceCacheEntry_GetNamespaceNotActiveErr(t *testing.T) {
 	clusterMetadata := cluster.NewMetadata(
-		log.NewNoop(),
+		log.NewNoopLogger(),
 		true,
 		int64(10),
 		cluster.TestCurrentClusterName,

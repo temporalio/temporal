@@ -95,7 +95,7 @@ func (s *historyArchiverSuite) TearDownSuite() {
 func (s *historyArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.container = &archiver.HistoryBootstrapContainer{
-		Logger: log.NewNoop(),
+		Logger: log.NewNoopLogger(),
 	}
 }
 

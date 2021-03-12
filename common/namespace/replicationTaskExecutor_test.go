@@ -65,7 +65,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TearDownSuite() {
 func (s *namespaceReplicationTaskExecutorSuite) SetupTest() {
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
 	s.TestBase.Setup()
-	logger := log.NewDevelopment()
+	logger := log.NewDefaultLogger()
 	s.namespaceReplicator = NewReplicationTaskExecutor(
 		s.MetadataManager,
 		logger,

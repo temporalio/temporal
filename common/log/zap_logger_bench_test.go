@@ -28,7 +28,6 @@ import (
 	"testing"
 
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"go.temporal.io/server/common/log/tag"
 )
@@ -46,7 +45,7 @@ BenchmarkLoggerWithoutFields-4            162109              7211 ns/op
 */
 
 func BenchmarkZapLoggerWithFields(b *testing.B) {
-	zLogger := buildZapLoggerForTest(false)
+	zLogger := buildZapLogger(Config{Level: "info"}, false)
 
 	for i := 0; i < b.N; i++ {
 		zLoggerWith := zLogger.With(zap.Int64("wf-schedule-id", int64(i)), zap.String("cluster-name", "this is a very long value: 1234567890 1234567890 1234567890 1234567890"))
@@ -58,7 +57,7 @@ func BenchmarkZapLoggerWithFields(b *testing.B) {
 }
 
 func BenchmarkLoggerWithFields(b *testing.B) {
-	logger := newLogger(buildZapLoggerForTest(true))
+	logger := NewZapLogger(buildZapLogger(Config{Level: "info"}, true))
 
 	for i := 0; i < b.N; i++ {
 		loggerWith := logger.With(tag.WorkflowScheduleID(int64(i)), tag.ClusterName("this is a very long value: 1234567890 1234567890 1234567890 1234567890"))
@@ -70,7 +69,7 @@ func BenchmarkLoggerWithFields(b *testing.B) {
 }
 
 func BenchmarkZapLoggerWithoutFields(b *testing.B) {
-	zLogger := buildZapLoggerForTest(false)
+	zLogger := buildZapLogger(Config{Level: "info"}, false)
 
 	for i := 0; i < b.N; i++ {
 		zLogger.Info("msg to print log, 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",
@@ -83,7 +82,7 @@ func BenchmarkZapLoggerWithoutFields(b *testing.B) {
 }
 
 func BenchmarkLoggerWithoutFields(b *testing.B) {
-	logger := newLogger(buildZapLoggerForTest(true))
+	logger := NewZapLogger(buildZapLogger(Config{Level: "info"}, true))
 
 	for i := 0; i < b.N; i++ {
 		logger.Info("msg to print log, 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890 1234567890",
@@ -93,38 +92,4 @@ func BenchmarkLoggerWithoutFields(b *testing.B) {
 			tag.WorkflowNamespace("test-namespace"),
 			tag.WorkflowScheduleID(int64(i)), tag.ClusterName("this is a very long value: 1234567890 1234567890 1234567890 1234567890"))
 	}
-}
-
-func buildZapLoggerForTest(disableCaller bool) *zap.Logger {
-	encConfig := zapcore.EncoderConfig{
-		TimeKey:        "ts",
-		LevelKey:       "level",
-		NameKey:        "logger",
-		CallerKey:      "caller",
-		FunctionKey:    zapcore.OmitKey,
-		MessageKey:     "msg",
-		StacktraceKey:  "stacktrace",
-		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.LowercaseLevelEncoder,
-		EncodeTime:     zapcore.EpochTimeEncoder,
-		EncodeDuration: zapcore.SecondsDurationEncoder,
-		EncodeCaller:   zapcore.ShortCallerEncoder,
-	}
-	if disableCaller {
-		encConfig.CallerKey = zapcore.OmitKey
-		encConfig.EncodeCaller = nil
-	}
-
-	cfg := zap.Config{
-		Level:            zap.NewAtomicLevelAt(zap.InfoLevel),
-		Development:      false,
-		Sampling:         nil,
-		Encoding:         "json",
-		EncoderConfig:    encConfig,
-		OutputPaths:      []string{"stderr"},
-		ErrorOutputPaths: []string{"stderr"},
-		DisableCaller:    disableCaller,
-	}
-	logger, _ := cfg.Build()
-	return logger
 }

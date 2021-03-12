@@ -220,7 +220,7 @@ func initializeAdminNamespaceHandler(
 
 	configuration := loadConfig(context)
 	metricsClient := initializeMetricsClient()
-	logger := initializeLogger(configuration)
+	logger := log.NewZapLogger(log.BuildZapLogger(configuration.Log))
 	clusterMetadata := initializeClusterMetadata(
 		configuration,
 		logger,
@@ -272,12 +272,6 @@ func initializeNamespaceHandler(
 		archivalMetadata,
 		archiverProvider,
 	)
-}
-
-func initializeLogger(
-	serviceConfig *config.Config,
-) log.Logger {
-	return log.NewLogger(&serviceConfig.Log)
 }
 
 func initializeMetadataMgr(

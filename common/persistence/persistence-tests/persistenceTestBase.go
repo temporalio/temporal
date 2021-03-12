@@ -127,7 +127,7 @@ func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
 		options.DBName = "test_" + GenerateRandomDBName(3)
 	}
-	logger := log.NewDevelopment()
+	logger := log.NewDefaultLogger()
 	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, logger)
 	return newTestBase(options, testCluster, logger)
 }
@@ -137,7 +137,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
 		options.DBName = "test_" + GenerateRandomDBName(3)
 	}
-	logger := log.NewDevelopment()
+	logger := log.NewDefaultLogger()
 
 	if options.DBPort == 0 {
 		switch options.SQLDBPluginName {
