@@ -33,8 +33,8 @@ import (
 	"github.com/gocql/gocql"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/service/config"
 )
 
 var _ Session = (*session)(nil)

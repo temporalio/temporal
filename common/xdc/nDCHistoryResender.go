@@ -37,11 +37,11 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 const (

@@ -29,7 +29,7 @@ import (
 	"net/url"
 	"strings"
 
-	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/config"
 )
 
 const (

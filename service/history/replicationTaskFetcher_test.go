@@ -38,10 +38,10 @@ import (
 	"go.temporal.io/server/api/adminservicemock/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/service/history/configs"
 )
 

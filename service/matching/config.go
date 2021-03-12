@@ -29,7 +29,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/common/dynamicconfig"
 )
 
 type (

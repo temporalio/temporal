@@ -27,9 +27,9 @@ package sql
 import (
 	"fmt"
 
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/service/config"
 )
 
 var supportedPlugins = map[string]sqlplugin.Plugin{}

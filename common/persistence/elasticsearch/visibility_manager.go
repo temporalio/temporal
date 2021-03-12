@@ -25,12 +25,12 @@
 package elasticsearch
 
 import (
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/service/config"
 )
 
 // NewVisibilityManager create a visibility manager for Elasticsearch

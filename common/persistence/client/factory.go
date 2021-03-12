@@ -31,6 +31,9 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"go.temporal.io/server/common/config"
+
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
@@ -38,8 +41,6 @@ import (
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/service/config"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (

@@ -43,9 +43,9 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type MatcherTestSuite struct {

@@ -33,7 +33,7 @@ import (
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/auth"
-	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/tools/common/schema"
 )
 

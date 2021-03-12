@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence"
@@ -51,7 +52,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/service/config"
 )
 
 const maxEventID = 9999

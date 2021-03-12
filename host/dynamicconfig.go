@@ -29,7 +29,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/common/dynamicconfig"
 )
 
 var (

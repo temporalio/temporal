@@ -29,15 +29,16 @@ import (
 
 	"github.com/urfave/cli"
 
+	"go.temporal.io/server/common/config"
+
 	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/service/config"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 // CreatePersistenceFactory returns an initialized persistence managers factory.

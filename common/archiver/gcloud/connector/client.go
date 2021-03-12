@@ -39,7 +39,7 @@ import (
 	"google.golang.org/api/iterator"
 
 	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/config"
 )
 
 const (

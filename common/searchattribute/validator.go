@@ -30,10 +30,10 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 // Validator is used to validate search attributes

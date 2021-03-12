@@ -39,10 +39,10 @@ import (
 	"go.temporal.io/server/common/archiver/gcloud/connector"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/service/config"
 )
 
 var (

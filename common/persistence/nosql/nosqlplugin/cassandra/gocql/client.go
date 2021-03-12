@@ -37,8 +37,8 @@ import (
 	"github.com/gocql/gocql"
 
 	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/service/config"
 )
 
 func NewCassandraCluster(

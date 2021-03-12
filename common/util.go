@@ -48,10 +48,10 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/service/dynamicconfig"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 

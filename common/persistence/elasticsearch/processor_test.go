@@ -37,11 +37,11 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type processorSuite struct {

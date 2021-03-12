@@ -28,7 +28,7 @@ import (
 	"strings"
 	"time"
 
-	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/config"
 )
 
 var _ PerHostCertProviderMap = (*localStorePerHostCertProviderMap)(nil)

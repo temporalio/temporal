@@ -28,8 +28,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/service/config"
 )
 
 func NewClient(config *config.Elasticsearch, httpClient *http.Client, logger log.Logger) (Client, error) {

@@ -31,10 +31,10 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/masker"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (

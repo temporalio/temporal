@@ -28,7 +28,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 
-	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/config"
 )
 
 type TestDynamicTLSConfigProvider struct {

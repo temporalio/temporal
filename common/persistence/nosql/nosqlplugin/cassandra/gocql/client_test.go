@@ -34,8 +34,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/service/config"
 )
 
 func TestNewCassandraCluster(t *testing.T) {

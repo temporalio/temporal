@@ -32,8 +32,8 @@ import (
 
 	"github.com/olivere/elastic/v7"
 
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/service/config"
 )
 
 type (

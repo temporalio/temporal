@@ -32,7 +32,7 @@ import (
 
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/config"
 )
 
 const (

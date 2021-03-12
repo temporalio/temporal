@@ -26,6 +26,7 @@ package history
 
 import (
 	"github.com/stretchr/testify/mock"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 

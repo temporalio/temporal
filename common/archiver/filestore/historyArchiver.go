@@ -53,8 +53,8 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/service/config"
 )
 
 const (
