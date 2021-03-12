@@ -92,7 +92,7 @@ func newTimerQueueProcessor(
 
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
-	logger = logger.WithTags(tag.ComponentTimerQueue)
+	logger = log.With(logger, tag.ComponentTimerQueue)
 	taskAllocator := newTaskAllocator(shard)
 
 	standbyTimerProcessors := make(map[string]*timerQueueStandbyProcessorImpl)

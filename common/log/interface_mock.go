@@ -143,20 +143,80 @@ func (mr *MockLoggerMockRecorder) Warn(msg interface{}, tags ...interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Warn", reflect.TypeOf((*MockLogger)(nil).Warn), varargs...)
 }
 
-// WithTags mocks base method.
-func (m *MockLogger) WithTags(tags ...tag.Tag) Logger {
+// MockWithLogger is a mock of WithLogger interface.
+type MockWithLogger struct {
+	ctrl     *gomock.Controller
+	recorder *MockWithLoggerMockRecorder
+}
+
+// MockWithLoggerMockRecorder is the mock recorder for MockWithLogger.
+type MockWithLoggerMockRecorder struct {
+	mock *MockWithLogger
+}
+
+// NewMockWithLogger creates a new mock instance.
+func NewMockWithLogger(ctrl *gomock.Controller) *MockWithLogger {
+	mock := &MockWithLogger{ctrl: ctrl}
+	mock.recorder = &MockWithLoggerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockWithLogger) EXPECT() *MockWithLoggerMockRecorder {
+	return m.recorder
+}
+
+// With mocks base method.
+func (m *MockWithLogger) With(tags ...tag.Tag) Logger {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{}
 	for _, a := range tags {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "WithTags", varargs...)
+	ret := m.ctrl.Call(m, "With", varargs...)
 	ret0, _ := ret[0].(Logger)
 	return ret0
 }
 
-// WithTags indicates an expected call of WithTags.
-func (mr *MockLoggerMockRecorder) WithTags(tags ...interface{}) *gomock.Call {
+// With indicates an expected call of With.
+func (mr *MockWithLoggerMockRecorder) With(tags ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithTags", reflect.TypeOf((*MockLogger)(nil).WithTags), tags...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "With", reflect.TypeOf((*MockWithLogger)(nil).With), tags...)
+}
+
+// MockSkipLogger is a mock of SkipLogger interface.
+type MockSkipLogger struct {
+	ctrl     *gomock.Controller
+	recorder *MockSkipLoggerMockRecorder
+}
+
+// MockSkipLoggerMockRecorder is the mock recorder for MockSkipLogger.
+type MockSkipLoggerMockRecorder struct {
+	mock *MockSkipLogger
+}
+
+// NewMockSkipLogger creates a new mock instance.
+func NewMockSkipLogger(ctrl *gomock.Controller) *MockSkipLogger {
+	mock := &MockSkipLogger{ctrl: ctrl}
+	mock.recorder = &MockSkipLoggerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSkipLogger) EXPECT() *MockSkipLoggerMockRecorder {
+	return m.recorder
+}
+
+// Skip mocks base method.
+func (m *MockSkipLogger) Skip(extraSkip int) Logger {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Skip", extraSkip)
+	ret0, _ := ret[0].(Logger)
+	return ret0
+}
+
+// Skip indicates an expected call of Skip.
+func (mr *MockSkipLoggerMockRecorder) Skip(extraSkip interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Skip", reflect.TypeOf((*MockSkipLogger)(nil).Skip), extraSkip)
 }

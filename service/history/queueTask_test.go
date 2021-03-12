@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/service/dynamicconfig"
@@ -86,7 +85,7 @@ func (s *queueTaskSuite) SetupTest() {
 	s.mockQueueTaskInfo = NewMockqueueTaskInfo(s.controller)
 
 	s.scope = metrics.NewClient(tally.NoopScope, metrics.History).Scope(0)
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
+	s.logger = log.NewDefaultLogger()
 	s.timeSource = clock.NewRealTimeSource()
 	s.maxRetryCount = dynamicconfig.GetIntPropertyFn(10)
 }

@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -128,10 +127,7 @@ func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
 		options.DBName = "test_" + GenerateRandomDBName(3)
 	}
-	logger, err := loggerimpl.NewDevelopment()
-	if err != nil {
-		panic(err)
-	}
+	logger := log.NewDefaultLogger()
 	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, logger)
 	return newTestBase(options, testCluster, logger)
 }
@@ -141,10 +137,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 	if options.DBName == "" {
 		options.DBName = "test_" + GenerateRandomDBName(3)
 	}
-	logger, err := loggerimpl.NewDevelopment()
-	if err != nil {
-		panic(err)
-	}
+	logger := log.NewDefaultLogger()
 
 	if options.DBPort == 0 {
 		switch options.SQLDBPluginName {

@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
 	"go.temporal.io/server/common"
@@ -58,7 +57,6 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -100,10 +98,7 @@ func TestIntegrationClustersTestSuite(t *testing.T) {
 }
 
 func (s *integrationClustersTestSuite) SetupSuite() {
-	zapLogger, err := zap.NewDevelopment()
-	// cannot use s.Nil since it is not initialized
-	s.Require().NoError(err)
-	s.logger = loggerimpl.NewLogger(zapLogger)
+	s.logger = log.NewDefaultLogger()
 
 	fileName := "../testdata/xdc_integration_test_clusters.yaml"
 	if host.TestFlags.TestClusterConfigFile != "" {
@@ -118,11 +113,11 @@ func (s *integrationClustersTestSuite) SetupSuite() {
 	var clusterConfigs []*host.TestClusterConfig
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 
-	c, err := host.NewCluster(clusterConfigs[0], s.logger.WithTags(tag.ClusterName(clusterName[0])))
+	c, err := host.NewCluster(clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterName[0])))
 	s.Require().NoError(err)
 	s.cluster1 = c
 
-	c, err = host.NewCluster(clusterConfigs[1], s.logger.WithTags(tag.ClusterName(clusterName[1])))
+	c, err = host.NewCluster(clusterConfigs[1], log.With(s.logger, tag.ClusterName(clusterName[1])))
 	s.Require().NoError(err)
 	s.cluster2 = c
 }

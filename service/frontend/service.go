@@ -190,7 +190,7 @@ func NewService(
 
 		var visibilityFromES persistence.VisibilityManager
 		if params.ESConfig != nil {
-			visibilityIndexName := params.ESConfig.Indices[common.VisibilityAppName]
+			visibilityIndexName := params.ESConfig.GetVisibilityIndex()
 			visibilityConfigForES := &config.VisibilityConfig{
 				MaxQPS:                 serviceConfig.PersistenceMaxQPS,
 				VisibilityListMaxQPS:   serviceConfig.ESVisibilityListMaxQPS,

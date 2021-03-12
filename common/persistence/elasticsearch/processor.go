@@ -103,7 +103,7 @@ func NewProcessor(
 	p := &processorImpl{
 		status:             common.DaemonStatusInitialized,
 		client:             esClient,
-		logger:             logger.WithTags(tag.ComponentIndexerESProcessor),
+		logger:             log.With(logger, tag.ComponentIndexerESProcessor),
 		metricsClient:      metricsClient,
 		indexerConcurrency: uint32(cfg.IndexerConcurrency()),
 		bulkProcessorParameters: &client.BulkProcessorParameters{

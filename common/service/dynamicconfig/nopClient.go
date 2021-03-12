@@ -86,5 +86,5 @@ func NewNopClient() Client {
 
 // NewNopCollection creates a new nop collection
 func NewNopCollection() *Collection {
-	return NewCollection(&nopClient{}, log.NewNoop())
+	return NewCollection(&nopClient{}, log.NewNoopLogger())
 }

@@ -81,7 +81,7 @@ func newTransferQueueStandbyProcessor(
 		EnablePriorityTaskProcessor:         config.TransferProcessorEnablePriorityTaskProcessor,
 		MetricScope:                         metrics.TransferStandbyQueueProcessorScope,
 	}
-	logger = logger.WithTags(tag.ClusterName(clusterName))
+	logger = log.With(logger, tag.ClusterName(clusterName))
 
 	transferTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
 		task, ok := taskInfo.(*persistencespb.TransferTaskInfo)

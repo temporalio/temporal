@@ -108,8 +108,8 @@ func NewController(
 		engineFactory:      factory,
 		historyShards:      make(map[int32]*historyShardsItem),
 		shutdownCh:         make(chan struct{}),
-		logger:             resource.GetLogger().WithTags(tag.ComponentShardController, tag.Address(hostIdentity)),
-		throttledLogger:    resource.GetThrottledLogger().WithTags(tag.ComponentShardController, tag.Address(hostIdentity)),
+		logger:             log.With(resource.GetLogger(), tag.ComponentShardController, tag.Address(hostIdentity)),
+		throttledLogger:    log.With(resource.GetThrottledLogger(), tag.ComponentShardController, tag.Address(hostIdentity)),
 		config:             config,
 		metricsScope:       resource.GetMetricsClient().Scope(metrics.HistoryShardControllerScope),
 	}
@@ -129,11 +129,11 @@ func newHistoryShardsItem(
 		status:          historyShardsItemStatusInitialized,
 		engineFactory:   factory,
 		config:          config,
-		logger:          resource.GetLogger().WithTags(tag.ShardID(shardID), tag.Address(hostIdentity)),
-		throttledLogger: resource.GetThrottledLogger().WithTags(tag.ShardID(shardID), tag.Address(hostIdentity)),
+		logger:          log.With(resource.GetLogger(), tag.ShardID(shardID), tag.Address(hostIdentity)),
+		throttledLogger: log.With(resource.GetThrottledLogger(), tag.ShardID(shardID), tag.Address(hostIdentity)),
 	}
-	shardItem.logger = shardItem.logger.WithTags(tag.ShardItem(shardItem))
-	shardItem.throttledLogger = shardItem.throttledLogger.WithTags(tag.ShardItem(shardItem))
+	shardItem.logger = log.With(shardItem.logger, tag.ShardItem(shardItem))
+	shardItem.throttledLogger = log.With(shardItem.throttledLogger, tag.ShardItem(shardItem))
 
 	return shardItem, nil
 }

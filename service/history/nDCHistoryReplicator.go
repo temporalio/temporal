@@ -136,7 +136,7 @@ func newNDCHistoryReplicator(
 		historyCache:      historyCache,
 		transactionMgr:    transactionMgr,
 		eventsReapplier:   eventsReapplier,
-		logger:            logger.WithTags(tag.ComponentHistoryReplicator),
+		logger:            log.With(logger, tag.ComponentHistoryReplicator),
 
 		newBranchMgr: func(
 			context workflowExecutionContext,

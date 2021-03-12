@@ -280,12 +280,11 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 func (v *visibilityManagerImpl) serializeMemo(visibilityMemo *commonpb.Memo, namespaceID, wID, rID string) *commonpb.DataBlob {
 	memo, err := v.serializer.SerializeVisibilityMemo(visibilityMemo, VisibilityEncoding)
 	if err != nil {
-		v.logger.WithTags(
+		v.logger.Error("Unable to encode visibility memo",
 			tag.WorkflowNamespaceID(namespaceID),
 			tag.WorkflowID(wID),
 			tag.WorkflowRunID(rID),
-			tag.Error(err)).
-			Error("Unable to encode visibility memo")
+			tag.Error(err))
 	}
 	if memo == nil {
 		return &commonpb.DataBlob{}

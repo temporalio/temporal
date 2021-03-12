@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -221,7 +220,7 @@ func initializeAdminNamespaceHandler(
 
 	configuration := loadConfig(context)
 	metricsClient := initializeMetricsClient()
-	logger := initializeLogger(configuration)
+	logger := log.NewZapLogger(log.BuildZapLogger(configuration.Log))
 	clusterMetadata := initializeClusterMetadata(
 		configuration,
 		logger,
@@ -273,12 +272,6 @@ func initializeNamespaceHandler(
 		archivalMetadata,
 		archiverProvider,
 	)
-}
-
-func initializeLogger(
-	serviceConfig *config.Config,
-) log.Logger {
-	return loggerimpl.NewLogger(serviceConfig.Log.NewZapLogger())
 }
 
 func initializeMetadataMgr(

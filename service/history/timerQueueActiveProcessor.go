@@ -68,7 +68,7 @@ func newTimerQueueActiveProcessor(
 	updateShardAckLevel := func(ackLevel timerKey) error {
 		return shard.UpdateTimerClusterAckLevel(currentClusterName, ackLevel.VisibilityTimestamp)
 	}
-	logger = logger.WithTags(tag.ClusterName(currentClusterName))
+	logger = log.With(logger, tag.ClusterName(currentClusterName))
 	timerTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
 		timer, ok := taskInfo.(*persistencespb.TimerTaskInfo)
 		if !ok {
@@ -179,7 +179,8 @@ func newTimerQueueFailoverProcessor(
 		return shard.DeleteTimerFailoverLevel(failoverUUID)
 	}
 
-	logger = logger.WithTags(
+	logger = log.With(
+		logger,
 		tag.ClusterName(currentClusterName),
 		tag.WorkflowNamespaceIDs(namespaceIDs),
 		tag.FailoverMsg("from: "+standbyClusterName),

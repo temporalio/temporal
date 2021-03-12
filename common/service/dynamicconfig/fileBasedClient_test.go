@@ -52,7 +52,7 @@ func (s *fileBasedClientSuite) SetupSuite() {
 	s.client, err = NewFileBasedClient(&FileBasedClientConfig{
 		Filepath:     "config/testConfig.yaml",
 		PollInterval: time.Second * 5,
-	}, log.NewNoop(), s.doneCh)
+	}, log.NewNoopLogger(), s.doneCh)
 	s.Require().NoError(err)
 }
 

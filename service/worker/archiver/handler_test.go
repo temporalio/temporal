@@ -74,7 +74,6 @@ func (s *handlerSuite) SetupTest() {
 	handlerTestMetrics = metrics.NewMockClient(s.controller)
 	handlerTestMetrics.EXPECT().StartTimer(gomock.Any(), gomock.Any()).Return(metrics.NopStopwatch()).AnyTimes()
 	handlerTestLogger = log.NewMockLogger(s.controller)
-	handlerTestLogger.EXPECT().WithTags(gomock.Any()).Return(handlerTestLogger).AnyTimes()
 }
 
 func (s *handlerSuite) TearDownTest() {

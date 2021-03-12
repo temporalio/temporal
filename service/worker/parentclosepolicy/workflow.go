@@ -155,7 +155,8 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 func getActivityLogger(ctx context.Context) log.Logger {
 	processor := ctx.Value(processorContextKey).(*Processor)
 	wfInfo := activity.GetInfo(ctx)
-	return processor.logger.WithTags(
+	return log.With(
+		processor.logger,
 		tag.WorkflowID(wfInfo.WorkflowExecution.ID),
 		tag.WorkflowRunID(wfInfo.WorkflowExecution.RunID),
 		tag.WorkflowNamespace(wfInfo.WorkflowNamespace),

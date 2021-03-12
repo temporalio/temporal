@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
@@ -83,7 +82,7 @@ func (s *workflowResetterSuite) TearDownSuite() {
 func (s *workflowResetterSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.logger = loggerimpl.NewDevelopmentForTest(s.Suite)
+	s.logger = log.NewDefaultLogger()
 	s.controller = gomock.NewController(s.T())
 	s.mockStateRebuilder = NewMocknDCStateRebuilder(s.controller)
 

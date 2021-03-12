@@ -33,7 +33,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.uber.org/zap"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -41,8 +40,7 @@ import (
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
-	l "go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -50,6 +48,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
@@ -70,7 +69,7 @@ type (
 		services          map[string]common.Daemon
 		serviceStoppedChs map[string]chan struct{}
 		stoppedCh         chan struct{}
-		logger            l.Logger
+		logger            log.Logger
 	}
 )
 
@@ -103,8 +102,10 @@ func (s *Server) Start() error {
 
 	s.stoppedCh = make(chan struct{})
 
-	zapLogger := s.so.config.Log.NewZapLogger()
-	s.logger = loggerimpl.NewLogger(zapLogger)
+	s.logger = s.so.logger
+	if s.logger == nil {
+		s.logger = log.NewZapLogger(log.BuildZapLogger(s.so.config.Log))
+	}
 
 	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))
 	s.logger.Debug(s.so.config.String())
@@ -156,7 +157,7 @@ func (s *Server) Start() error {
 	}
 
 	for _, svcName := range s.so.serviceNames {
-		params, err := s.getServiceParams(svcName, dynamicConfig, tlsFactory, clusterMetadata, dc, zapLogger, globalMetricsScope)
+		params, err := s.getServiceParams(svcName, dynamicConfig, tlsFactory, clusterMetadata, dc, globalMetricsScope)
 		if err != nil {
 			return err
 		}
@@ -226,7 +227,6 @@ func (s *Server) getServiceParams(
 	tlsFactory encryption.TLSConfigProvider,
 	clusterMetadata cluster.Metadata,
 	dc *dynamicconfig.Collection,
-	zapLogger *zap.Logger,
 	metricsScope tally.Scope,
 ) (*resource.BootstrapParams, error) {
 
@@ -248,7 +248,7 @@ func (s *Server) getServiceParams(
 	}
 
 	params.MembershipFactoryInitializer =
-		func(persistenceBean persistenceClient.Bean, logger l.Logger) (resource.MembershipMonitorFactory, error) {
+		func(persistenceBean persistenceClient.Bean, logger log.Logger) (resource.MembershipMonitorFactory, error) {
 			return ringpop.NewRingpopFactory(
 				&s.so.config.Global.Membership,
 				rpcFactory.GetRingpopChannel(),
@@ -277,7 +277,7 @@ func (s *Server) getServiceParams(
 		HostPort:     s.so.config.PublicClient.HostPort,
 		Namespace:    common.SystemLocalNamespace,
 		MetricsScope: metricsScope,
-		Logger:       l.NewZapAdapter(zapLogger),
+		Logger:       log.NewSdkLogger(s.logger),
 		ConnectionOptions: sdkclient.ConnectionOptions{
 			TLS:                options,
 			DisableHealthCheck: true,
@@ -315,8 +315,8 @@ func (s *Server) getServiceParams(
 		params.ESClient = esClient
 
 		// verify index name
-		indexName, ok := advancedVisStore.ElasticSearch.Indices[common.VisibilityAppName]
-		if !ok || len(indexName) == 0 {
+		indexName := advancedVisStore.ElasticSearch.GetVisibilityIndex()
+		if len(indexName) == 0 {
 			return nil, errors.New("visibility index in missing in Elasticsearch config")
 		}
 	}
@@ -341,7 +341,7 @@ func (s *Server) getServiceParams(
 	if s.so.claimMapper != nil {
 		params.ClaimMapper = s.so.claimMapper
 	} else {
-		params.ClaimMapper = authorization.NewNoopClaimMapper(s.so.config)
+		params.ClaimMapper = authorization.NewNoopClaimMapper()
 	}
 
 	params.PersistenceServiceResolver = s.so.persistenceServiceResolver
@@ -364,7 +364,7 @@ func (s *Server) validate() error {
 		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
 	}
 
-	if err := s.so.config.Global.PProf.NewInitializer(s.logger).Start(); err != nil {
+	if err := pprof.NewInitializer(&s.so.config.Global.PProf, s.logger).Start(); err != nil {
 		return fmt.Errorf("unable to start PProf: %w", err)
 	}
 
@@ -376,7 +376,7 @@ func (s *Server) validate() error {
 }
 
 func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collection) error {
-	logger := s.logger.WithTags(tag.ComponentMetadataInitializer)
+	logger := log.With(s.logger, tag.ComponentMetadataInitializer)
 
 	factory := persistenceClient.NewFactory(
 		&s.so.config.Persistence,
@@ -442,7 +442,7 @@ func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collec
 	return nil
 }
 
-func (s *Server) logImmutableMismatch(logger l.Logger, key string, ignored interface{}, value interface{}) {
+func (s *Server) logImmutableMismatch(logger log.Logger, key string, ignored interface{}, value interface{}) {
 	logger.Error(
 		"Supplied configuration key/value mismatches persisted ImmutableClusterMetadata. "+
 			"Continuing with the persisted value as this value cannot be changed once initialized.",

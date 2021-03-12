@@ -22,26 +22,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package config
+package pprof
 
 import (
 	"fmt"
 	"net/http"
-
-	// DO NOT REMOVE THE LINE BELOW
-	_ "net/http/pprof"
+	_ "net/http/pprof" // DO NOT REMOVE THE LINE
 	"sync/atomic"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-)
-
-type (
-	// PProfInitializerImpl initialize the pprof based on config
-	PProfInitializerImpl struct {
-		PProf  *PProf
-		Logger log.Logger
-	}
+	"go.temporal.io/server/common/service/config"
 )
 
 const (
@@ -49,12 +40,20 @@ const (
 	pprofInitialized    int32 = 1
 )
 
+type (
+	// PProfInitializerImpl initialize the pprof based on config
+	PProfInitializerImpl struct {
+		PProf  *config.PProf
+		Logger log.Logger
+	}
+)
+
 // the pprof should only be initialized once per process
 // otherwise, the caller / worker will experience weird issue
 var pprofStatus = pprofNotInitialized
 
 // NewInitializer create a new instance of PProf Initializer
-func (cfg *PProf) NewInitializer(logger log.Logger) *PProfInitializerImpl {
+func NewInitializer(cfg *config.PProf, logger log.Logger) *PProfInitializerImpl {
 	return &PProfInitializerImpl{
 		PProf:  cfg,
 		Logger: logger,

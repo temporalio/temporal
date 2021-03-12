@@ -22,11 +22,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package common
+package log
+
+import (
+	"go.temporal.io/server/common/log/tag"
+)
 
 type (
-	// PProfInitializer initialize the pprof based on config
-	PProfInitializer interface {
-		Start() error
-	}
+	noopLogger struct{}
 )
+
+// NewNoopLogger return a noopLogger
+func NewNoopLogger() *noopLogger {
+	return &noopLogger{}
+}
+
+func (n *noopLogger) Debug(string, ...tag.Tag) {}
+func (n *noopLogger) Info(string, ...tag.Tag)  {}
+func (n *noopLogger) Warn(string, ...tag.Tag)  {}
+func (n *noopLogger) Error(string, ...tag.Tag) {}
+func (n *noopLogger) Fatal(string, ...tag.Tag) {}
+func (n *noopLogger) With(...tag.Tag) Logger {
+	return n
+}

@@ -78,7 +78,7 @@ func newNDCActivityReplicator(
 	return &nDCActivityReplicatorImpl{
 		historyCache:    historyCache,
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
-		logger:          logger.WithTags(tag.ComponentHistoryReplicator),
+		logger:          log.With(logger, tag.ComponentHistoryReplicator),
 	}
 }
 

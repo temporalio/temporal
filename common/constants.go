@@ -69,11 +69,6 @@ const (
 	ReadDLQMessagesPageSize = 1000
 )
 
-const (
-	// VisibilityAppName is used to find ES indexName for visibility
-	VisibilityAppName = "visibility"
-)
-
 // This was flagged by salus as potentially hardcoded credentials. This is a false positive by the scanner and should be
 // disregarded.
 // #nosec
@@ -112,15 +107,6 @@ const (
 const (
 	// DefaultTransactionSizeLimit is the largest allowed transaction size to persistence
 	DefaultTransactionSizeLimit = 4 * 1024 * 1024
-)
-
-const (
-	// ArchivalEnabled is the state for enabling archival
-	ArchivalEnabled = "enabled"
-	// ArchivalDisabled is the state for disabling archival
-	ArchivalDisabled = "disabled"
-	// ArchivalPaused is the state for pausing archival
-	ArchivalPaused = "paused"
 )
 
 // enum for dynamic config AdvancedVisibilityWritingMode

@@ -33,6 +33,7 @@ import (
 
 	"google.golang.org/grpc/credentials"
 
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -60,7 +61,7 @@ type noopClaimMapper struct{}
 
 var _ ClaimMapper = (*noopClaimMapper)(nil)
 
-func NewNoopClaimMapper(_ *config.Config) ClaimMapper {
+func NewNoopClaimMapper() ClaimMapper {
 	return &noopClaimMapper{}
 }
 
@@ -68,13 +69,13 @@ func (*noopClaimMapper) GetClaims(_ *AuthInfo) (*Claims, error) {
 	return &Claims{System: RoleAdmin}, nil
 }
 
-func GetClaimMapperFromConfig(config *config.Config) (ClaimMapper, error) {
+func GetClaimMapperFromConfig(config *config.Authorization, logger log.Logger) (ClaimMapper, error) {
 
-	switch strings.ToLower(config.Global.Authorization.ClaimMapper) {
+	switch strings.ToLower(config.ClaimMapper) {
 	case "":
-		return NewNoopClaimMapper(config), nil
+		return NewNoopClaimMapper(), nil
 	case "default":
-		return NewDefaultJWTClaimMapper(NewDefaultTokenKeyProvider(config), config), nil
+		return NewDefaultJWTClaimMapper(NewDefaultTokenKeyProvider(config, logger), config, logger), nil
 	}
-	return nil, fmt.Errorf("unknown claim mapper: %s", config.Global.Authorization.ClaimMapper)
+	return nil, fmt.Errorf("unknown claim mapper: %s", config.ClaimMapper)
 }

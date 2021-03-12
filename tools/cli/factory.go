@@ -34,7 +34,6 @@ import (
 	"github.com/urfave/cli"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -42,6 +41,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 // ClientFactory is used to construct rpc clients
@@ -53,15 +53,12 @@ type ClientFactory interface {
 }
 
 type clientFactory struct {
-	logger *zap.Logger
+	logger log.Logger
 }
 
 // NewClientFactory creates a new ClientFactory
 func NewClientFactory() ClientFactory {
-	logger, err := zap.NewDevelopment()
-	if err != nil {
-		panic(err)
-	}
+	logger := log.NewDefaultLogger()
 
 	return &clientFactory{
 		logger: logger,
@@ -91,20 +88,20 @@ func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Cl
 
 	tlsConfig, err := b.createTLSConfig(c)
 	if err != nil {
-		b.logger.Fatal("Failed to configure TLS for SDK client", zap.Error(err))
+		b.logger.Fatal("Failed to configure TLS for SDK client", tag.Error(err))
 	}
 
 	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
 		HostPort:  hostPort,
 		Namespace: namespace,
-		Logger:    log.NewZapAdapter(b.logger),
+		Logger:    log.NewSdkLogger(b.logger),
 		ConnectionOptions: sdkclient.ConnectionOptions{
 			DisableHealthCheck: true,
 			TLS:                tlsConfig,
 		},
 	})
 	if err != nil {
-		b.logger.Fatal("Failed to create SDK client", zap.Error(err))
+		b.logger.Fatal("Failed to create SDK client", tag.Error(err))
 	}
 
 	return sdkClient
@@ -136,7 +133,7 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 
 	connection, err := grpc.Dial(hostPort, grpcSecurityOptions)
 	if err != nil {
-		b.logger.Fatal("Failed to create connection", zap.Error(err))
+		b.logger.Fatal("Failed to create connection", tag.Error(err))
 		return nil, err
 	}
 	return connection, nil
@@ -157,7 +154,7 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 	if caPath != "" {
 		caCertPool, err := fetchCACert(caPath)
 		if err != nil {
-			b.logger.Fatal("Failed to load server CA certificate", zap.Error(err))
+			b.logger.Fatal("Failed to load server CA certificate", tag.Error(err))
 			return nil, err
 		}
 		caPool = caCertPool
@@ -165,7 +162,7 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 	if certPath != "" {
 		myCert, err := tls.LoadX509KeyPair(certPath, keyPath)
 		if err != nil {
-			b.logger.Fatal("Failed to load client certificate", zap.Error(err))
+			b.logger.Fatal("Failed to load client certificate", tag.Error(err))
 			return nil, err
 		}
 		cert = &myCert

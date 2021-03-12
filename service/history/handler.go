@@ -1518,23 +1518,6 @@ func (h *Handler) convertError(err error) error {
 	return err
 }
 
-func (h *Handler) getLoggerWithTags(
-	namespaceID string,
-	workflowID string,
-) log.Logger {
-
-	logger := h.GetLogger()
-	if namespaceID != "" {
-		logger = logger.WithTags(tag.WorkflowNamespaceID(namespaceID))
-	}
-
-	if workflowID != "" {
-		logger = logger.WithTags(tag.WorkflowID(workflowID))
-	}
-
-	return logger
-}
-
 func validateTaskToken(taskToken *tokenspb.Task) error {
 	if taskToken.GetWorkflowId() == "" {
 		return errWorkflowIDNotSet

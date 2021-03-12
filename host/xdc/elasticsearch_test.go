@@ -49,12 +49,10 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -104,10 +102,7 @@ var (
 )
 
 func (s *esCrossDCTestSuite) SetupSuite() {
-	zapLogger, err := zap.NewDevelopment()
-	// cannot use s.Nil since it is not initialized
-	s.Require().NoError(err)
-	s.logger = loggerimpl.NewLogger(zapLogger)
+	s.logger = log.NewDefaultLogger()
 
 	fileName := "../testdata/xdc_integration_es_clusters.yaml"
 	if host.TestFlags.TestClusterConfigFile != "" {
@@ -123,18 +118,18 @@ func (s *esCrossDCTestSuite) SetupSuite() {
 	s.Require().NoError(yaml.Unmarshal(confContent, &clusterConfigs))
 	s.clusterConfigs = clusterConfigs
 
-	c, err := host.NewCluster(clusterConfigs[0], s.logger.WithTags(tag.ClusterName(clusterNameES[0])))
+	c, err := host.NewCluster(clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterNameES[0])))
 	s.Require().NoError(err)
 	s.cluster1 = c
 
-	c, err = host.NewCluster(clusterConfigs[1], s.logger.WithTags(tag.ClusterName(clusterNameES[1])))
+	c, err = host.NewCluster(clusterConfigs[1], log.With(s.logger, tag.ClusterName(clusterNameES[1])))
 	s.Require().NoError(err)
 	s.cluster2 = c
 
 	s.esClient = host.CreateESClient(s.Suite, s.clusterConfigs[0].ESConfig.URL.String(), s.clusterConfigs[0].ESConfig.Version)
 	host.PutIndexTemplate(s.Suite, s.esClient, fmt.Sprintf("../testdata/es_%s_index_template.json", s.clusterConfigs[0].ESConfig.Version), "test-visibility-template")
-	host.CreateIndex(s.Suite, s.esClient, s.clusterConfigs[0].ESConfig.Indices[common.VisibilityAppName])
-	host.CreateIndex(s.Suite, s.esClient, s.clusterConfigs[1].ESConfig.Indices[common.VisibilityAppName])
+	host.CreateIndex(s.Suite, s.esClient, s.clusterConfigs[0].ESConfig.GetVisibilityIndex())
+	host.CreateIndex(s.Suite, s.esClient, s.clusterConfigs[1].ESConfig.GetVisibilityIndex())
 
 	s.testSearchAttributeKey = searchattribute.CustomStringField
 	s.testSearchAttributeVal = "test value"
@@ -148,8 +143,8 @@ func (s *esCrossDCTestSuite) SetupTest() {
 func (s *esCrossDCTestSuite) TearDownSuite() {
 	s.cluster1.TearDownCluster()
 	s.cluster2.TearDownCluster()
-	host.DeleteIndex(s.Suite, s.esClient, s.clusterConfigs[0].ESConfig.Indices[common.VisibilityAppName])
-	host.DeleteIndex(s.Suite, s.esClient, s.clusterConfigs[1].ESConfig.Indices[common.VisibilityAppName])
+	host.DeleteIndex(s.Suite, s.esClient, s.clusterConfigs[0].ESConfig.GetVisibilityIndex())
+	host.DeleteIndex(s.Suite, s.esClient, s.clusterConfigs[1].ESConfig.GetVisibilityIndex())
 }
 
 func (s *esCrossDCTestSuite) TestSearchAttributes() {

@@ -35,13 +35,12 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.uber.org/zap"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud/connector"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -53,10 +52,9 @@ const (
 
 func (s *visibilityArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	zapLogger := zap.NewNop()
 	s.controller = gomock.NewController(s.T())
 	s.container = &archiver.VisibilityBootstrapContainer{
-		Logger:        loggerimpl.NewLogger(zapLogger),
+		Logger:        log.NewNoopLogger(),
 		MetricsClient: metrics.NewClient(tally.NoopScope, metrics.History),
 	}
 	s.expectedVisibilityRecords = []*archiverspb.VisibilityRecord{

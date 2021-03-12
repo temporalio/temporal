@@ -54,7 +54,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v2"
 
@@ -64,7 +63,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	test "go.temporal.io/server/common/testing"
@@ -109,11 +107,8 @@ func TestNDCIntegrationTestSuite(t *testing.T) {
 }
 
 func (s *nDCIntegrationTestSuite) SetupSuite() {
-	zapLogger, err := zap.NewDevelopment()
-	// cannot use s.Nil since it is not initialized
-	s.Require().NoError(err)
+	s.logger = log.NewDefaultLogger()
 	s.serializer = persistence.NewPayloadSerializer()
-	s.logger = loggerimpl.NewLogger(zapLogger)
 
 	fileName := "../testdata/ndc_integration_test_clusters.yaml"
 	if host.TestFlags.TestClusterConfigFile != "" {
@@ -146,7 +141,7 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 	s.mockAdminClient["other"] = mockOtherClient
 	clusterConfigs[0].MockAdminClient = s.mockAdminClient
 
-	cluster, err := host.NewCluster(clusterConfigs[0], s.logger.WithTags(tag.ClusterName(clusterName[0])))
+	cluster, err := host.NewCluster(clusterConfigs[0], log.With(s.logger, tag.ClusterName(clusterName[0])))
 	s.Require().NoError(err)
 	s.active = cluster
 

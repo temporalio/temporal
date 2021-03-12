@@ -34,11 +34,10 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.uber.org/zap"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 )
@@ -66,9 +65,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TearDownSuite() {
 func (s *namespaceReplicationTaskExecutorSuite) SetupTest() {
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
 	s.TestBase.Setup()
-	zapLogger, err := zap.NewDevelopment()
-	s.Require().NoError(err)
-	logger := loggerimpl.NewLogger(zapLogger)
+	logger := log.NewDefaultLogger()
 	s.namespaceReplicator = NewReplicationTaskExecutor(
 		s.MetadataManager,
 		logger,

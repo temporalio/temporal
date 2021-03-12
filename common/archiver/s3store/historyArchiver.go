@@ -165,11 +165,10 @@ func (h *historyArchiver) Archive(
 	for historyIterator.HasNext() {
 		historyBlob, err := getNextHistoryBlob(ctx, historyIterator)
 		if err != nil {
-			logger := logger.WithTags(tag.ArchivalArchiveFailReason(archiver.ErrReasonReadHistory), tag.Error(err))
 			if common.IsPersistenceTransientError(err) {
-				logger.Error(archiver.ArchiveTransientErrorMsg)
+				logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonReadHistory), tag.Error(err))
 			} else {
-				logger.Error(archiver.ArchiveNonRetryableErrorMsg)
+				logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonReadHistory), tag.Error(err))
 			}
 			return err
 		}
@@ -189,11 +188,10 @@ func (h *historyArchiver) Archive(
 
 		exists, err := keyExists(ctx, h.s3cli, URI, key)
 		if err != nil {
-			logger := logger.WithTags(tag.ArchivalArchiveFailReason(errWriteKey), tag.Error(err))
 			if isRetryableError(err) {
-				logger.Error(archiver.ArchiveTransientErrorMsg)
+				logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteKey), tag.Error(err))
 			} else {
-				logger.Error(archiver.ArchiveNonRetryableErrorMsg)
+				logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(errWriteKey), tag.Error(err))
 			}
 			return err
 		}
@@ -202,11 +200,10 @@ func (h *historyArchiver) Archive(
 			scope.IncCounter(metrics.HistoryArchiverBlobExistsCount)
 		} else {
 			if err := upload(ctx, h.s3cli, URI, key, encodedHistoryBlob); err != nil {
-				logger := logger.WithTags(tag.ArchivalArchiveFailReason(errWriteKey), tag.Error(err))
 				if isRetryableError(err) {
-					logger.Error(archiver.ArchiveTransientErrorMsg)
+					logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteKey), tag.Error(err))
 				} else {
-					logger.Error(archiver.ArchiveNonRetryableErrorMsg)
+					logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(errWriteKey), tag.Error(err))
 				}
 				return err
 			}

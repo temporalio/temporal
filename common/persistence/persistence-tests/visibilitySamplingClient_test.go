@@ -35,7 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
 	p "go.temporal.io/server/common/persistence"
@@ -80,7 +80,7 @@ func (s *VisibilitySamplingSuite) SetupTest() {
 	}
 	s.controller = gomock.NewController(s.T())
 	s.metricClient = metrics.NewMockClient(s.controller)
-	s.client = p.NewVisibilitySamplingClient(s.persistence, config, s.metricClient, loggerimpl.NewNopLogger())
+	s.client = p.NewVisibilitySamplingClient(s.persistence, config, s.metricClient, log.NewNoopLogger())
 }
 
 func (s *VisibilitySamplingSuite) TearDownTest() {

@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -143,8 +142,9 @@ func New(
 	visibilityManagerInitializer VisibilityManagerInitializer,
 ) (impl *Impl, retError error) {
 
-	logger := params.Logger.WithTags(tag.Service(serviceName))
-	throttledLogger := loggerimpl.NewThrottledLogger(logger, throttledLoggerMaxRPS)
+	logger := log.With(params.Logger, tag.Service(serviceName))
+	throttledLogger := log.NewThrottledLogger(logger,
+		func() float64 { return float64(throttledLoggerMaxRPS()) })
 
 	numShards := params.PersistenceConfig.NumHistoryShards
 	hostName, err := os.Hostname()
@@ -373,7 +373,7 @@ func (h *Impl) Start() {
 
 	hostInfo, err := h.membershipMonitor.WhoAmI()
 	if err != nil {
-		h.logger.WithTags(tag.Error(err)).Fatal("fail to get host info from membership monitor")
+		h.logger.Fatal("fail to get host info from membership monitor", tag.Error(err))
 	}
 	h.hostInfo = hostInfo
 

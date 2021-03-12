@@ -67,7 +67,7 @@ func New(params *BootstrapParams) *Processor {
 	return &Processor{
 		svcClient:     params.ServiceClient,
 		metricsClient: params.MetricsClient,
-		logger:        params.Logger.WithTags(tag.ComponentBatcher),
+		logger:        log.With(params.Logger, tag.ComponentBatcher),
 		clientBean:    params.ClientBean,
 	}
 }

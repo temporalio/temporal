@@ -29,16 +29,14 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-
-	"go.temporal.io/server/common/mocks"
-	"go.temporal.io/server/common/persistence"
-
 	"github.com/pborman/uuid"
 	"github.com/temporalio/ringpop-go"
 	"github.com/uber/tchannel-go"
 
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/mocks"
+	"go.temporal.io/server/common/persistence"
 )
 
 // TestRingpopCluster is a type that represents a test ringpop cluster
@@ -63,11 +61,7 @@ func NewTestRingpopCluster(
 	serviceName string,
 	broadcastAddress string,
 ) *TestRingpopCluster {
-	logger, err := loggerimpl.NewDevelopment()
-	if err != nil {
-		logger.Error("Failed to create test logger", tag.Error(err))
-		return nil
-	}
+	logger := log.NewDefaultLogger()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -113,6 +107,10 @@ func NewTestRingpopCluster(
 	logger.Info("seedNode", tag.Name(cluster.seedNode))
 
 	seedAddress, seedPort, err := SplitHostPortTyped(cluster.seedNode)
+	if err != nil {
+		logger.Error("unable to split host port", tag.Error(err))
+		return nil
+	}
 	seedMember := &persistence.ClusterMember{
 		HostID:        uuid.NewUUID(),
 		RPCAddress:    seedAddress,

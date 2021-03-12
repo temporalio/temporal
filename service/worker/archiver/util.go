@@ -68,7 +68,8 @@ func hashesEqual(a []uint64, b []uint64) bool {
 }
 
 func tagLoggerWithHistoryRequest(logger log.Logger, request *ArchiveRequest) log.Logger {
-	return logger.WithTags(
+	return log.With(
+		logger,
 		tag.ShardID(request.ShardID),
 		tag.ArchivalRequestNamespaceID(request.NamespaceID),
 		tag.ArchivalRequestNamespace(request.Namespace),
@@ -82,7 +83,8 @@ func tagLoggerWithHistoryRequest(logger log.Logger, request *ArchiveRequest) log
 }
 
 func tagLoggerWithVisibilityRequest(logger log.Logger, request *ArchiveRequest) log.Logger {
-	return logger.WithTags(
+	return log.With(
+		logger,
 		tag.ArchivalRequestNamespaceID(request.NamespaceID),
 		tag.ArchivalRequestNamespace(request.Namespace),
 		tag.ArchivalRequestWorkflowID(request.WorkflowID),
@@ -92,7 +94,8 @@ func tagLoggerWithVisibilityRequest(logger log.Logger, request *ArchiveRequest) 
 }
 
 func tagLoggerWithActivityInfo(logger log.Logger, activityInfo activity.Info) log.Logger {
-	return logger.WithTags(
+	return log.With(
+		logger,
 		tag.WorkflowID(activityInfo.WorkflowExecution.ID),
 		tag.WorkflowRunID(activityInfo.WorkflowExecution.RunID),
 		tag.Attempt(activityInfo.Attempt))

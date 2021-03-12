@@ -32,11 +32,10 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/zap"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -69,12 +68,10 @@ func (s *dlqMessageHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
-	zapLogger, err := zap.NewDevelopment()
-	s.Require().NoError(err)
+	logger := log.NewDefaultLogger()
 	s.mockReplicationTaskExecutor = NewMockReplicationTaskExecutor(s.controller)
 	s.mockReplicationQueue = persistence.NewMockNamespaceReplicationQueue(s.controller)
 
-	logger := loggerimpl.NewLogger(zapLogger)
 	s.dlqMessageHandler = NewDLQMessageHandler(
 		s.mockReplicationTaskExecutor,
 		s.mockReplicationQueue,

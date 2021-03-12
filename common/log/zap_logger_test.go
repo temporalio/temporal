@@ -22,24 +22,64 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package loggerimpl
+package log
 
 import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
+type LogSuite struct {
+	*require.Assertions
+	suite.Suite
+}
+
+func TestLogSuite(t *testing.T) {
+	suite.Run(t, new(LogSuite))
+}
+
+func (s *LogSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+}
+
+func (s *LogSuite) TestParseLogLevel() {
+	s.Equal(zap.DebugLevel, parseZapLevel("debug"))
+	s.Equal(zap.InfoLevel, parseZapLevel("info"))
+	s.Equal(zap.WarnLevel, parseZapLevel("warn"))
+	s.Equal(zap.ErrorLevel, parseZapLevel("error"))
+	s.Equal(zap.FatalLevel, parseZapLevel("fatal"))
+	s.Equal(zap.InfoLevel, parseZapLevel("unknown"))
+}
+
+func (s *LogSuite) TestNewLogger() {
+
+	dir, err := ioutil.TempDir("", "config.testNewLogger")
+	s.Nil(err)
+	defer os.RemoveAll(dir)
+
+	cfg := Config{
+		Level:      "info",
+		OutputFile: dir + "/test.log",
+	}
+
+	log := BuildZapLogger(cfg)
+	s.NotNil(log)
+	_, err = os.Stat(dir + "/test.log")
+	s.Nil(err)
+}
 func TestDefaultLogger(t *testing.T) {
 	old := os.Stdout // keep backup of the real stdout
 	r, w, _ := os.Pipe()
@@ -53,12 +93,9 @@ func TestDefaultLogger(t *testing.T) {
 		outC <- buf.String()
 	}()
 
-	var zapLogger *zap.Logger
-	zapLogger = zap.NewExample()
-
-	logger := NewLogger(zapLogger)
+	logger := NewZapLogger(zap.NewExample())
 	preCaller := caller(1)
-	logger.WithTags(tag.Error(fmt.Errorf("test error"))).Info("test info", tag.WorkflowActionWorkflowStarted)
+	logger.With(tag.Error(fmt.Errorf("test error"))).Info("test info", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
 	w.Close()
@@ -69,8 +106,7 @@ func TestDefaultLogger(t *testing.T) {
 	assert.Nil(t, err)
 	lineNum := fmt.Sprintf("%v", par+1)
 	fmt.Println(out, lineNum)
-	assert.Equal(t, out, `{"level":"info","msg":"test info","error":"test error","wf-action":"add-workflow-started-event","logging-call-at":"logger_test.go:`+lineNum+`"}`+"\n")
-
+	assert.Equal(t, `{"level":"info","msg":"test info","error":"test error","wf-action":"add-workflow-started-event","logging-call-at":"zap_logger_test.go:`+lineNum+`"}`+"\n", out)
 }
 
 func TestThrottleLogger(t *testing.T) {
@@ -86,14 +122,10 @@ func TestThrottleLogger(t *testing.T) {
 		outC <- buf.String()
 	}()
 
-	var zapLogger *zap.Logger
-	zapLogger = zap.NewExample()
-
-	dc := dynamicconfig.NewNopClient()
-	cln := dynamicconfig.NewCollection(dc, NewNopLogger())
-	logger := NewThrottledLogger(NewLogger(zapLogger), cln.GetIntProperty(dynamicconfig.FrontendRPS, 1))
+	logger := NewThrottledLogger(NewZapLogger(zap.NewExample()),
+		func() float64 { return 1 })
 	preCaller := caller(1)
-	logger.WithTags(tag.Error(fmt.Errorf("test error"))).WithTags(tag.ComponentShard).Info("test info", tag.WorkflowActionWorkflowStarted)
+	With(With(logger, tag.Error(fmt.Errorf("test error"))), tag.ComponentShard).Info("test info", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
 	w.Close()
@@ -104,7 +136,7 @@ func TestThrottleLogger(t *testing.T) {
 	assert.Nil(t, err)
 	lineNum := fmt.Sprintf("%v", par+1)
 	fmt.Println(out, lineNum)
-	assert.Equal(t, out, `{"level":"info","msg":"test info","error":"test error","component":"shard","wf-action":"add-workflow-started-event","logging-call-at":"logger_test.go:`+lineNum+`"}`+"\n")
+	assert.Equal(t, `{"level":"info","msg":"test info","error":"test error","component":"shard","wf-action":"add-workflow-started-event","logging-call-at":"zap_logger_test.go:`+lineNum+`"}`+"\n", out)
 }
 
 func TestEmptyMsg(t *testing.T) {
@@ -120,12 +152,9 @@ func TestEmptyMsg(t *testing.T) {
 		outC <- buf.String()
 	}()
 
-	var zapLogger *zap.Logger
-	zapLogger = zap.NewExample()
-
-	logger := NewLogger(zapLogger)
+	logger := NewZapLogger(zap.NewExample())
 	preCaller := caller(1)
-	logger.WithTags(tag.Error(fmt.Errorf("test error"))).Info("", tag.WorkflowActionWorkflowStarted)
+	logger.With(tag.Error(fmt.Errorf("test error"))).Info("", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
 	w.Close()
@@ -136,6 +165,6 @@ func TestEmptyMsg(t *testing.T) {
 	assert.Nil(t, err)
 	lineNum := fmt.Sprintf("%v", par+1)
 	fmt.Println(out, lineNum)
-	assert.Equal(t, out, `{"level":"info","msg":"`+defaultMsgForEmpty+`","error":"test error","wf-action":"add-workflow-started-event","logging-call-at":"logger_test.go:`+lineNum+`"}`+"\n")
+	assert.Equal(t, `{"level":"info","msg":"`+defaultMsgForEmpty+`","error":"test error","wf-action":"add-workflow-started-event","logging-call-at":"zap_logger_test.go:`+lineNum+`"}`+"\n", out)
 
 }

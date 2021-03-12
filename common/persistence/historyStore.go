@@ -377,7 +377,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 
 	// NOTE: in this method, we need to make sure eventVersion is NOT
 	// decreasing(otherwise we skip the events), eventID should be contiguous(otherwise return error)
-	logger := m.logger.WithTags(tag.WorkflowBranchID(branch.BranchId), tag.WorkflowTreeID(branch.TreeId))
+	logger := log.With(m.logger, tag.WorkflowBranchID(branch.BranchId), tag.WorkflowTreeID(branch.TreeId))
 
 	return dataBlobs, token, dataSize, logger, nil
 }

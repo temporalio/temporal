@@ -153,12 +153,11 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 		historyBlob, err := getNextHistoryBlob(ctx, historyIterator)
 
 		if err != nil {
-			logger := logger.WithTags(tag.ArchivalArchiveFailReason(archiver.ErrReasonReadHistory), tag.Error(err))
 			if !common.IsPersistenceTransientError(err) {
-				logger.Error(archiver.ArchiveNonRetryableErrorMsg)
+				logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonReadHistory), tag.Error(err))
 				return errUploadNonRetryable
 			}
-			logger.Error(archiver.ArchiveTransientErrorMsg)
+			logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonReadHistory), tag.Error(err))
 			return err
 		}
 

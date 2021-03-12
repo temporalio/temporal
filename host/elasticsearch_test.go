@@ -51,7 +51,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -82,14 +81,14 @@ func (s *elasticsearchIntegrationSuite) SetupSuite() {
 	s.setupSuite("testdata/integration_elasticsearch_cluster.yaml")
 	s.esClient = CreateESClient(s.Suite, s.testClusterConfig.ESConfig.URL.String(), s.testClusterConfig.ESConfig.Version)
 	PutIndexTemplate(s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", s.testClusterConfig.ESConfig.Version), "test-visibility-template")
-	indexName := s.testClusterConfig.ESConfig.Indices[common.VisibilityAppName]
+	indexName := s.testClusterConfig.ESConfig.GetVisibilityIndex()
 	CreateIndex(s.Suite, s.esClient, indexName)
 	s.putIndexSettings(indexName, defaultTestValueOfESIndexMaxResultWindow)
 }
 
 func (s *elasticsearchIntegrationSuite) TearDownSuite() {
 	s.tearDownSuite()
-	DeleteIndex(s.Suite, s.esClient, s.testClusterConfig.ESConfig.Indices[common.VisibilityAppName])
+	DeleteIndex(s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
 }
 
 func (s *elasticsearchIntegrationSuite) SetupTest() {

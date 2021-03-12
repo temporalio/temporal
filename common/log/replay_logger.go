@@ -22,35 +22,30 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package loggerimpl
+package log
 
 import (
 	"go.temporal.io/sdk/workflow"
 
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
 
-type replayLogger struct {
-	logger            log.Logger
-	ctx               workflow.Context
-	enableLogInReplay bool
-}
+const extraSkipForReplayLogger = 1
 
-var _ log.Logger = (*replayLogger)(nil)
+type (
+	replayLogger struct {
+		logger            Logger
+		ctx               workflow.Context
+		enableLogInReplay bool
+	}
+)
 
-const skipForReplayLogger = skipForDefaultLogger + 1
+var _ Logger = (*replayLogger)(nil)
 
-// NewReplayLogger creates a logger which is aware of temporal's replay mode
-func NewReplayLogger(logger log.Logger, ctx workflow.Context, enableLogInReplay bool) log.Logger {
-	lg, ok := logger.(*loggerImpl)
-	if ok {
-		logger = &loggerImpl{
-			zapLogger: lg.zapLogger,
-			skip:      skipForReplayLogger,
-		}
-	} else {
-		logger.Warn("ReplayLogger may not emit callat tag correctly because the logger passed in is not loggerImpl")
+// NewReplayLogger creates a logger which is aware of Temporal replay mode
+func NewReplayLogger(logger Logger, ctx workflow.Context, enableLogInReplay bool) *replayLogger {
+	if sl, ok := logger.(SkipLogger); ok {
+		logger = sl.Skip(extraSkipForReplayLogger)
 	}
 	return &replayLogger{
 		logger:            logger,
@@ -94,9 +89,9 @@ func (r *replayLogger) Fatal(msg string, tags ...tag.Tag) {
 	r.logger.Fatal(msg, tags...)
 }
 
-func (r *replayLogger) WithTags(tags ...tag.Tag) log.Logger {
+func (r *replayLogger) With(tags ...tag.Tag) Logger {
 	return &replayLogger{
-		logger:            r.logger.WithTags(tags...),
+		logger:            newWithLogger(r.logger, tags...),
 		ctx:               r.ctx,
 		enableLogInReplay: r.enableLogInReplay,
 	}

@@ -34,7 +34,7 @@ import (
 
 	"github.com/urfave/cli"
 
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	cassp "go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -176,7 +176,7 @@ func cleanShard(
 		return report
 	}
 	defer shardCorruptedFile.Close()
-	execStore, err := cassp.NewWorkflowExecutionPersistence(shardID, session, loggerimpl.NewNopLogger())
+	execStore, err := cassp.NewWorkflowExecutionPersistence(shardID, session, log.NewNoopLogger())
 	if err != nil {
 		report.Failure = &ShardCleanReportFailure{
 			Note:    "failed to create execution store",

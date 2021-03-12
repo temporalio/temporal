@@ -39,7 +39,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 )
@@ -65,7 +65,7 @@ func (s *nDCEventReapplicationSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
-	logger := loggerimpl.NewDevelopmentForTest(s.Suite)
+	logger := log.NewDefaultLogger()
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
 	s.nDCReapplication = newNDCEventsReapplier(
 		metricsClient,

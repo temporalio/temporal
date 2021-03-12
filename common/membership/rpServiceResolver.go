@@ -96,7 +96,7 @@ func newRingpopServiceResolver(
 		rp:          rp,
 		refreshChan: make(chan struct{}),
 		shutdownCh:  make(chan struct{}),
-		logger:      logger.WithTags(tag.ComponentServiceResolver, tag.Service(service)),
+		logger:      log.With(logger, tag.ComponentServiceResolver, tag.Service(service)),
 		membersMap:  make(map[string]struct{}),
 		listeners:   make(map[string]chan<- *ChangedEvent),
 	}

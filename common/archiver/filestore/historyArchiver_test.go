@@ -38,12 +38,11 @@ import (
 	"github.com/stretchr/testify/suite"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.uber.org/zap"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/service/config"
 )
@@ -95,9 +94,8 @@ func (s *historyArchiverSuite) TearDownSuite() {
 
 func (s *historyArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	zapLogger := zap.NewNop()
 	s.container = &archiver.HistoryBootstrapContainer{
-		Logger: loggerimpl.NewLogger(zapLogger),
+		Logger: log.NewNoopLogger(),
 	}
 }
 

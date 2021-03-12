@@ -46,7 +46,6 @@ import (
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -54,7 +53,6 @@ import (
 	"github.com/uber-go/tally"
 	commonpb "go.temporal.io/api/common/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.uber.org/zap"
 )
 
 type visibilityArchiverSuite struct {
@@ -138,9 +136,8 @@ func (s *visibilityArchiverSuite) SetupSuite() {
 	s.testArchivalURI, err = archiver.NewURI(testBucketURI)
 	s.Require().NoError(err)
 
-	zapLogger := zap.NewNop()
 	s.container = &archiver.VisibilityBootstrapContainer{
-		Logger:        loggerimpl.NewLogger(zapLogger),
+		Logger:        log.NewNoopLogger(),
 		MetricsClient: metrics.NewClient(scope, metrics.VisibilityArchiverScope),
 	}
 }

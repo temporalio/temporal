@@ -40,7 +40,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	cassp "go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -236,7 +236,7 @@ func AdminDBScan(c *cli.Context) {
 	rateLimiter := getRateLimiter(startingRPS, targetRPS)
 	session := connectToCassandra(c)
 	defer session.Close()
-	historyStore := cassp.NewHistoryV2PersistenceFromSession(session, loggerimpl.NewNopLogger())
+	historyStore := cassp.NewHistoryV2PersistenceFromSession(session, log.NewNoopLogger())
 	scanOutputDirectories := createScanOutputDirectories()
 
 	reports := make(chan *ShardScanReport)
@@ -294,7 +294,7 @@ func scanShard(
 		deleteEmptyFiles(outputFiles.CorruptedExecutionFile, outputFiles.ExecutionCheckFailureFile, outputFiles.ShardScanReportFile)
 		closeFn()
 	}()
-	execStore, err := cassp.NewWorkflowExecutionPersistence(shardID, session, loggerimpl.NewNopLogger())
+	execStore, err := cassp.NewWorkflowExecutionPersistence(shardID, session, log.NewNoopLogger())
 	if err != nil {
 		report.Failure = &ShardScanReportFailure{
 			Note:    "failed to create execution store",

@@ -30,7 +30,7 @@ import (
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/auth"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
@@ -67,7 +67,7 @@ func CreatePersistenceFactory(c *cli.Context) persistenceClient.Factory {
 		params.AbstractDatastoreFactory,
 		c.String(FlagTargetCluster),
 		nil, // MetricsClient
-		loggerimpl.NewNopLogger(),
+		log.NewNoopLogger(),
 	)
 
 	return factory

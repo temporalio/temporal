@@ -37,18 +37,17 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/environment"
 )
 
@@ -114,9 +113,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 }
 
 func (s *IntegrationBase) setupLogger() {
-	zapLogger, err := zap.NewDevelopment()
-	s.Require().NoError(err)
-	s.Logger = loggerimpl.NewLogger(zapLogger)
+	s.Logger = log.NewDefaultLogger()
 }
 
 // GetTestClusterConfig return test cluster config
@@ -141,7 +138,7 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 
 	options.FrontendAddress = TestFlags.FrontendAddr
 	if options.ESConfig != nil {
-		options.ESConfig.Indices[common.VisibilityAppName] += uuid.New()
+		options.ESConfig.Indices[config.VisibilityAppName] += uuid.New()
 	}
 	return &options, nil
 }

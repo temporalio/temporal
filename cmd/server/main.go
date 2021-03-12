@@ -35,6 +35,7 @@ import (
 
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/headers"
+	tlog "go.temporal.io/server/common/log"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"      // needed to load mysql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
 	"go.temporal.io/server/common/service/config"
@@ -126,18 +127,22 @@ func buildCLI() *cli.App {
 					return cli.Exit(fmt.Sprintf("Unable to load configuration: %v.", err), 1)
 				}
 
+				logger := tlog.NewZapLogger(tlog.BuildZapLogger(cfg.Log))
+
 				authorizer, err := authorization.GetAuthorizerFromConfig(&cfg.Global.Authorization)
 				if err != nil {
-					cli.Exit(fmt.Sprintf("Unable to instantiate authorizer: %v.", err), 1)
+					return cli.Exit(fmt.Sprintf("Unable to instantiate authorizer: %v.", err), 1)
 				}
-				claimMapper, err := authorization.GetClaimMapperFromConfig(cfg)
+
+				claimMapper, err := authorization.GetClaimMapperFromConfig(&cfg.Global.Authorization, logger)
 				if err != nil {
-					cli.Exit(fmt.Sprintf("Unable to instantiate claim mapper: %v.", err), 1)
+					return cli.Exit(fmt.Sprintf("Unable to instantiate claim mapper: %v.", err), 1)
 				}
 
 				s := temporal.NewServer(
 					temporal.ForServices(services),
 					temporal.WithConfig(cfg),
+					temporal.WithLogger(logger),
 					temporal.InterruptOn(temporal.InterruptCh()),
 					temporal.WithAuthorizer(authorizer),
 					temporal.WithClaimMapper(func(cfg *config.Config) authorization.ClaimMapper {

@@ -28,52 +28,62 @@ import (
 	"fmt"
 
 	"go.temporal.io/sdk/log"
-	"go.uber.org/zap"
+
+	"go.temporal.io/server/common/log/tag"
 )
 
-type ZapAdapter struct {
-	zl *zap.Logger
+const extraSkipForSdkLogger = 1
+
+type SdkLogger struct {
+	logger Logger
 }
 
-func NewZapAdapter(zapLogger *zap.Logger) *ZapAdapter {
-	return &ZapAdapter{
-		zl: zapLogger.WithOptions(zap.AddCallerSkip(1)),
+var _ log.Logger = (*SdkLogger)(nil)
+
+func NewSdkLogger(logger Logger) *SdkLogger {
+	if sl, ok := logger.(SkipLogger); ok {
+		logger = sl.Skip(extraSkipForSdkLogger)
+	}
+
+	return &SdkLogger{
+		logger: logger,
 	}
 }
 
-func (log *ZapAdapter) fields(keyvals []interface{}) []zap.Field {
+func (l *SdkLogger) tags(keyvals []interface{}) []tag.Tag {
 	if len(keyvals)%2 != 0 {
-		return []zap.Field{zap.Error(fmt.Errorf("odd number of keyvals pairs: %v", keyvals))}
+		return []tag.Tag{tag.Error(fmt.Errorf("odd number of keyvals pairs: %v", keyvals))}
 	}
 
-	var fields []zap.Field
+	var tags []tag.Tag
 	for i := 0; i < len(keyvals); i += 2 {
 		key, ok := keyvals[i].(string)
 		if !ok {
 			key = fmt.Sprintf("%v", keyvals[i])
 		}
-		fields = append(fields, zap.Any(key, keyvals[i+1]))
+		tags = append(tags, tag.NewAnyTag(key, keyvals[i+1]))
 	}
 
-	return fields
+	return tags
 }
 
-func (log *ZapAdapter) Debug(msg string, keyvals ...interface{}) {
-	log.zl.Debug(msg, log.fields(keyvals)...)
+func (l *SdkLogger) Debug(msg string, keyvals ...interface{}) {
+	l.logger.Debug(msg, l.tags(keyvals)...)
 }
 
-func (log *ZapAdapter) Info(msg string, keyvals ...interface{}) {
-	log.zl.Info(msg, log.fields(keyvals)...)
+func (l *SdkLogger) Info(msg string, keyvals ...interface{}) {
+	l.logger.Info(msg, l.tags(keyvals)...)
 }
 
-func (log *ZapAdapter) Warn(msg string, keyvals ...interface{}) {
-	log.zl.Warn(msg, log.fields(keyvals)...)
+func (l *SdkLogger) Warn(msg string, keyvals ...interface{}) {
+	l.logger.Warn(msg, l.tags(keyvals)...)
 }
 
-func (log *ZapAdapter) Error(msg string, keyvals ...interface{}) {
-	log.zl.Error(msg, log.fields(keyvals)...)
+func (l *SdkLogger) Error(msg string, keyvals ...interface{}) {
+	l.logger.Error(msg, l.tags(keyvals)...)
 }
 
-func (log *ZapAdapter) With(keyvals ...interface{}) log.Logger {
-	return NewZapAdapter(log.zl.With(log.fields(keyvals)...))
+func (l *SdkLogger) With(keyvals ...interface{}) log.Logger {
+	return NewSdkLogger(
+		With(l.logger, l.tags(keyvals)...))
 }

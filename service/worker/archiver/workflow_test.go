@@ -35,10 +35,8 @@ import (
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.uber.org/zap"
 
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -75,7 +73,7 @@ func (s *workflowSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	workflowTestMetrics = metrics.NewMockClient(s.controller)
-	workflowTestLogger = loggerimpl.NewLogger(zap.NewNop())
+	workflowTestLogger = log.NewNoopLogger()
 	workflowTestHandler = NewMockHandler(s.controller)
 	workflowTestPump = NewMockPump(s.controller)
 	workflowTestConfig = &Config{
@@ -160,7 +158,7 @@ func (s *workflowSuite) TestArchivalWorkflow_Success() {
 }
 
 func (s *workflowSuite) TestReplayArchiveHistoryWorkflow() {
-	logger, _ := zap.NewDevelopment()
+	logger := log.NewDefaultLogger()
 	globalLogger = workflowTestLogger
 	globalMetricsClient = metrics.NewClient(tally.NewTestScope("replay", nil), metrics.Worker)
 	globalConfig = &Config{
@@ -171,7 +169,7 @@ func (s *workflowSuite) TestReplayArchiveHistoryWorkflow() {
 
 	replayer := worker.NewWorkflowReplayer()
 	s.registerWorkflowsForReplayer(replayer)
-	err := replayer.ReplayWorkflowHistoryFromJSONFile(log.NewZapAdapter(logger), "testdata/archival_workflow_history_v1.json")
+	err := replayer.ReplayWorkflowHistoryFromJSONFile(log.NewSdkLogger(logger), "testdata/archival_workflow_history_v1.json")
 	s.NoError(err)
 }
 

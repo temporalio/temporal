@@ -33,6 +33,8 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+const fileMode = os.FileMode(0644)
+
 type (
 	LoaderSuite struct {
 		*require.Assertions

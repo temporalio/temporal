@@ -169,7 +169,8 @@ func initializeLoggerForTask(
 	task queueTaskInfo,
 	logger log.Logger,
 ) log.Logger {
-	taskLogger := logger.WithTags(
+	taskLogger := log.With(
+		logger,
 		tag.ShardID(shardID),
 		tag.TaskID(task.GetTaskId()),
 		tag.TaskVisibilityTimestamp(task.GetVisibilityTime().UnixNano()),
@@ -182,9 +183,7 @@ func initializeLoggerForTask(
 
 	switch task := task.(type) {
 	case *persistencespb.TimerTaskInfo:
-		taskLogger = taskLogger.WithTags(
-			tag.WorkflowTimeoutType(task.TimeoutType),
-		)
+		log.With(taskLogger, tag.WorkflowTimeoutType(task.TimeoutType))
 	case *persistencespb.TransferTaskInfo,
 		*persistencespb.VisibilityTaskInfo,
 		*persistence.ReplicationTaskInfoWrapper:

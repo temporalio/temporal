@@ -46,6 +46,7 @@ import (
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
@@ -171,7 +172,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			ValidSearchAttributes:  dynamicconfig.GetMapPropertyFn(searchattribute.GetDefaultTypeMap()),
 			ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 		}
-		indexName := options.ESConfig.Indices[common.VisibilityAppName]
+		indexName := options.ESConfig.GetVisibilityIndex()
 		esVisibilityStore := espersistence.NewVisibilityStore(
 			esClient, indexName, esProcessor, visConfig, logger, &metrics.NoopMetricsClient{},
 		)
@@ -218,8 +219,8 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	return &TestCluster{testBase: testBase, archiverBase: archiverBase, host: cluster}, nil
 }
 
-func newPProfInitializerImpl(logger log.Logger, port int) common.PProfInitializer {
-	return &config.PProfInitializerImpl{
+func newPProfInitializerImpl(logger log.Logger, port int) *pprof.PProfInitializerImpl {
+	return &pprof.PProfInitializerImpl{
 		PProf: &config.PProf{
 			Port: port,
 		},

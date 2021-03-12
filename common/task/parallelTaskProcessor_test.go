@@ -37,7 +37,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -68,7 +68,7 @@ func (s *parallelTaskProcessorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.processor = NewParallelTaskProcessor(
-		loggerimpl.NewDevelopmentForTest(s.Suite),
+		log.NewDefaultLogger(),
 		metrics.NewClient(tally.NoopScope, metrics.Common),
 		&ParallelTaskProcessorOptions{
 			QueueSize:   0,

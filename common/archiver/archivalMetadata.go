@@ -32,7 +32,6 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/common/service/dynamicconfig"
 )
@@ -198,11 +197,11 @@ func (a *archivalConfig) GetNamespaceDefaultURI() string {
 func getClusterArchivalState(str string) (ArchivalState, error) {
 	str = strings.TrimSpace(strings.ToLower(str))
 	switch str {
-	case "", common.ArchivalDisabled:
+	case "", config.ArchivalDisabled:
 		return ArchivalDisabled, nil
-	case common.ArchivalPaused:
+	case config.ArchivalPaused:
 		return ArchivalPaused, nil
-	case common.ArchivalEnabled:
+	case config.ArchivalEnabled:
 		return ArchivalEnabled, nil
 	}
 	return ArchivalDisabled, fmt.Errorf("invalid archival state of %v for cluster, valid states are: {\"\", \"disabled\", \"paused\", \"enabled\"}", str)
@@ -211,9 +210,9 @@ func getClusterArchivalState(str string) (ArchivalState, error) {
 func getNamespaceArchivalState(str string) (enumspb.ArchivalState, error) {
 	str = strings.TrimSpace(strings.ToLower(str))
 	switch str {
-	case "", common.ArchivalDisabled:
+	case "", config.ArchivalDisabled:
 		return enumspb.ARCHIVAL_STATE_DISABLED, nil
-	case common.ArchivalEnabled:
+	case config.ArchivalEnabled:
 		return enumspb.ARCHIVAL_STATE_ENABLED, nil
 	}
 	return enumspb.ARCHIVAL_STATE_DISABLED, fmt.Errorf("invalid archival state of %v for namespace, valid states are: {\"\", \"disabled\", \"enabled\"}", str)

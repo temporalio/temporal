@@ -30,6 +30,7 @@ import (
 	"github.com/uber-go/tally"
 
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/service/config"
@@ -64,6 +65,12 @@ func InterruptOn(interruptCh <-chan interface{}) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.blockingStart = true
 		s.interruptCh = interruptCh
+	})
+}
+
+func WithLogger(logger log.Logger) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.logger = logger
 	})
 }
 

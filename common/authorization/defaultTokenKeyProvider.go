@@ -37,7 +37,6 @@ import (
 	"gopkg.in/square/go-jose.v2"
 
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/service/config"
 )
@@ -55,9 +54,8 @@ type defaultTokenKeyProvider struct {
 
 var _ TokenKeyProvider = (*defaultTokenKeyProvider)(nil)
 
-func NewDefaultTokenKeyProvider(cfg *config.Config) *defaultTokenKeyProvider {
-	logger := loggerimpl.NewLogger(cfg.Log.NewZapLogger())
-	provider := defaultTokenKeyProvider{config: cfg.Global.Authorization.JWTKeyProvider, logger: logger}
+func NewDefaultTokenKeyProvider(cfg *config.Authorization, logger log.Logger) *defaultTokenKeyProvider {
+	provider := defaultTokenKeyProvider{config: cfg.JWTKeyProvider, logger: logger}
 	provider.initialize()
 	return &provider
 }

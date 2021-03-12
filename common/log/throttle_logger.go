@@ -22,87 +22,75 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package loggerimpl
+package log
 
 import (
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
+
+const extraSkipForThrottleLogger = 3
 
 type throttledLogger struct {
 	limiter quotas.RateLimiter
-	log     log.Logger
+	logger  Logger
 }
 
-var _ log.Logger = (*throttledLogger)(nil)
-
-const skipForThrottleLogger = 6
+var _ Logger = (*throttledLogger)(nil)
 
 // NewThrottledLogger returns an implementation of logger that throttles the
 // log messages being emitted. The underlying implementation uses a token bucket
-// ratelimiter and stops emitting logs once the bucket runs out of tokens
+// rate limiter and stops emitting logs once the bucket runs out of tokens
 //
 // Fatal/Panic logs are always emitted without any throttling
-func NewThrottledLogger(logger log.Logger, rps dynamicconfig.IntPropertyFn) log.Logger {
-	var log log.Logger
-	lg, ok := logger.(*loggerImpl)
-	if ok {
-		log = &loggerImpl{
-			zapLogger: lg.zapLogger,
-			skip:      skipForThrottleLogger,
-		}
-	} else {
-		logger.Warn("ReplayLogger may not emit callat tag correctly because the logger passed in is not loggerImpl")
-		log = logger
+func NewThrottledLogger(logger Logger, rps quotas.RateFn) *throttledLogger {
+	if sl, ok := logger.(SkipLogger); ok {
+		logger = sl.Skip(extraSkipForThrottleLogger)
 	}
 
-	limiter := quotas.NewDefaultOutgoingDynamicRateLimiter(
-		func() float64 { return float64(rps()) },
-	)
+	limiter := quotas.NewDefaultOutgoingDynamicRateLimiter(rps)
 	tl := &throttledLogger{
 		limiter: limiter,
-		log:     log,
+		logger:  logger,
 	}
 	return tl
 }
 
 func (tl *throttledLogger) Debug(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
-		tl.log.Debug(msg, tags...)
+		tl.logger.Debug(msg, tags...)
 	})
 }
 
 func (tl *throttledLogger) Info(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
-		tl.log.Info(msg, tags...)
+		tl.logger.Info(msg, tags...)
 	})
 }
 
 func (tl *throttledLogger) Warn(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
-		tl.log.Warn(msg, tags...)
+		tl.logger.Warn(msg, tags...)
 	})
 }
 
 func (tl *throttledLogger) Error(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
-		tl.log.Error(msg, tags...)
+		tl.logger.Error(msg, tags...)
 	})
 }
 
 func (tl *throttledLogger) Fatal(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
-		tl.log.Fatal(msg, tags...)
+		tl.logger.Fatal(msg, tags...)
 	})
 }
 
 // Return a logger with the specified key-value pairs set, to be included in a subsequent normal logging call
-func (tl *throttledLogger) WithTags(tags ...tag.Tag) log.Logger {
+func (tl *throttledLogger) With(tags ...tag.Tag) Logger {
 	result := &throttledLogger{
 		limiter: tl.limiter,
-		log:     tl.log.WithTags(tags...),
+		logger:  With(tl.logger, tags...),
 	}
 	return result
 }

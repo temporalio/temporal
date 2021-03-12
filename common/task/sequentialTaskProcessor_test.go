@@ -35,7 +35,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -66,8 +66,7 @@ func TestSequentialTaskProcessorSuite(t *testing.T) {
 }
 
 func (s *SequentialTaskProcessorSuite) SetupTest() {
-	logger, err := loggerimpl.NewDevelopment()
-	s.Nil(err)
+	logger := log.NewDefaultLogger()
 	s.processor = NewSequentialTaskProcessor(
 		20,
 		func(key interface{}) uint32 {

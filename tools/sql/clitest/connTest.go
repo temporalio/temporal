@@ -29,7 +29,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"go.temporal.io/server/common/log/loggerimpl"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/tools/common/schema/test"
@@ -78,8 +78,8 @@ func (s *SQLConnTestSuite) SetupTest() {
 func (s *SQLConnTestSuite) SetupSuite() {
 	conn, err := newTestConn("", s.host, s.port, s.pluginName)
 	if err != nil {
-		log, _ := loggerimpl.NewDevelopment()
-		log.Fatal("error creating sql conn, ", tag.Error(err))
+		logger := log.NewDefaultLogger()
+		logger.Fatal("error creating sql conn, ", tag.Error(err))
 	}
 	s.SetupSuiteBase(conn)
 }

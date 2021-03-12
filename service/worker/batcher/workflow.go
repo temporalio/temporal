@@ -479,7 +479,8 @@ func isDone(ctx context.Context) bool {
 func getActivityLogger(ctx context.Context) log.Logger {
 	batcher := ctx.Value(batcherContextKey).(*Batcher)
 	wfInfo := activity.GetInfo(ctx)
-	return batcher.logger.WithTags(
+	return log.With(
+		batcher.logger,
 		tag.WorkflowID(wfInfo.WorkflowExecution.ID),
 		tag.WorkflowRunID(wfInfo.WorkflowExecution.RunID),
 		tag.WorkflowNamespace(wfInfo.WorkflowNamespace),

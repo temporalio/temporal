@@ -209,7 +209,7 @@ func newReplicationTaskFetcher(
 		status:         common.DaemonStatusInitialized,
 		config:         config,
 		numWorker:      numWorker,
-		logger:         logger.WithTags(tag.ClusterName(sourceCluster)),
+		logger:         log.With(logger, tag.ClusterName(sourceCluster)),
 		remotePeer:     sourceFrontend,
 		currentCluster: currentCluster,
 		sourceCluster:  sourceCluster,

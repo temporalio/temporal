@@ -104,7 +104,7 @@ func newTimerQueueProcessorBase(
 	metricsScope metrics.Scope,
 ) *timerQueueProcessorBase {
 
-	logger = logger.WithTags(tag.ComponentTimerQueue)
+	logger = log.With(logger, tag.ComponentTimerQueue)
 	config := shard.GetConfig()
 
 	var taskProcessor *taskProcessor

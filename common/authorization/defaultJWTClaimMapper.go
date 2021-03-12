@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/loggerimpl"
 	"go.temporal.io/server/common/service/config"
 )
 
@@ -54,12 +53,11 @@ type defaultJWTClaimMapper struct {
 	permissionsClaimName string
 }
 
-func NewDefaultJWTClaimMapper(provider TokenKeyProvider, cfg *config.Config) ClaimMapper {
-	claimName := cfg.Global.Authorization.PermissionsClaimName
+func NewDefaultJWTClaimMapper(provider TokenKeyProvider, cfg *config.Authorization, logger log.Logger) ClaimMapper {
+	claimName := cfg.PermissionsClaimName
 	if claimName == "" {
 		claimName = defaultPermissionsClaimName
 	}
-	logger := loggerimpl.NewLogger(cfg.Log.NewZapLogger())
 	return &defaultJWTClaimMapper{keyProvider: provider, logger: logger, permissionsClaimName: claimName}
 }
 

@@ -26,8 +26,11 @@ package config
 
 import (
 	"net/url"
+)
 
-	"go.temporal.io/server/common"
+const (
+	// VisibilityAppName is used to find ES indexName for visibility
+	VisibilityAppName = "visibility"
 )
 
 // Config for connecting to Elasticsearch
@@ -71,5 +74,5 @@ type (
 
 // GetVisibilityIndex return visibility index name
 func (cfg *Elasticsearch) GetVisibilityIndex() string {
-	return cfg.Indices[common.VisibilityAppName]
+	return cfg.Indices[VisibilityAppName]
 }

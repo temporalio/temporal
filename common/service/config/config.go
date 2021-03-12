@@ -31,6 +31,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/masker"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/service/dynamicconfig"
@@ -44,7 +45,7 @@ type (
 		// Persistence contains the configuration for temporal datastores
 		Persistence Persistence `yaml:"persistence"`
 		// Log is the logging config
-		Log Logger `yaml:"log"`
+		Log log.Config `yaml:"log"`
 		// ClusterMetadata is the config containing all valid clusters and active cluster
 		ClusterMetadata *ClusterMetadata `yaml:"clusterMetadata"`
 		// DCRedirectionPolicy contains the frontend datacenter redirection policy
@@ -337,16 +338,6 @@ type (
 
 	// Replicator describes the configuration of replicator
 	Replicator struct{}
-
-	// Logger contains the config items for logger
-	Logger struct {
-		// Stdout is true if the output needs to goto standard out
-		Stdout bool `yaml:"stdout"`
-		// Level is the desired log level
-		Level string `yaml:"level"`
-		// OutputFile is the path to the log output file
-		OutputFile string `yaml:"outputFile"`
-	}
 
 	// ClusterMetadata contains the all cluster which participated in cross DC
 	ClusterMetadata struct {

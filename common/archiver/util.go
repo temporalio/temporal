@@ -46,7 +46,8 @@ var (
 
 // TagLoggerWithArchiveHistoryRequestAndURI tags logger with fields in the archive history request and the URI
 func TagLoggerWithArchiveHistoryRequestAndURI(logger log.Logger, request *ArchiveHistoryRequest, URI string) log.Logger {
-	return logger.WithTags(
+	return log.With(
+		logger,
 		tag.ShardID(request.ShardID),
 		tag.ArchivalRequestNamespaceID(request.NamespaceID),
 		tag.ArchivalRequestNamespace(request.Namespace),
@@ -61,7 +62,8 @@ func TagLoggerWithArchiveHistoryRequestAndURI(logger log.Logger, request *Archiv
 
 // TagLoggerWithArchiveVisibilityRequestAndURI tags logger with fields in the archive visibility request and the URI
 func TagLoggerWithArchiveVisibilityRequestAndURI(logger log.Logger, request *archiverspb.VisibilityRecord, URI string) log.Logger {
-	return logger.WithTags(
+	return log.With(
+		logger,
 		tag.ArchivalRequestNamespaceID(request.GetNamespaceId()),
 		tag.ArchivalRequestNamespace(request.GetNamespace()),
 		tag.ArchivalRequestWorkflowID(request.GetWorkflowId()),
