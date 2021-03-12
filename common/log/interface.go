@@ -31,22 +31,14 @@ import (
 )
 
 type (
-	// Logger is our abstraction for logging
-	// Usage examples:
-	//  import "go.temporal.io/server/common/log/tag"
-	//  1) logger = log.With(
-	//          logger,
+	// Logger is the logging interface.
+	// Usage example:
+	//  logger.Info("hello world",
 	//          tag.WorkflowNextEventID(123),
 	//          tag.WorkflowActionWorkflowStarted,
-	//          tag.WorkflowNamespaceID("test-namespace-id"))
-	//     logger.Info("hello world")
-	//  2) logger.Info("hello world",
-	//          tag.WorkflowNextEventID(123),
-	//          tag.WorkflowActionWorkflowStarted,
-	//          tag.WorkflowNamespaceID("test-namespace-id"))
-	//	   )
-	//  Note: msg should be static, it is not recommended to use fmt.Sprintf() for msg.
-	//        Anything dynamic should be tagged.
+	//          tag.WorkflowNamespaceID("test-namespace-id")),
+	//	 )
+	//  Note: msg should be static, do not use fmt.Sprintf() for msg. Anything dynamic should be tagged.
 	Logger interface {
 		Debug(msg string, tags ...tag.Tag)
 		Info(msg string, tags ...tag.Tag)
@@ -55,12 +47,22 @@ type (
 		Fatal(msg string, tags ...tag.Tag)
 	}
 
-	// Implement WithLogger to efficiently create a logger with added tags.
+	// Implement WithLogger interface with With method which should return new instance of logger with prepended tags.
+	// If WithLogger is not implemented on logger, internal (not very efficient) preppender is used.
+	// Create prepended logger example:
+	//  logger = log.With(
+	//          logger,
+	//          tag.WorkflowNextEventID(123),
+	//          tag.WorkflowActionWorkflowStarted,
+	//          tag.WorkflowNamespaceID("test-namespace-id"))
+	//  ...
+	//  logger.Info("hello world")
 	WithLogger interface {
 		With(tags ...tag.Tag) Logger
 	}
 
-	// Implement SkipLogger to efficiently create a logger which skips extraSkip frames from call stack.
+	// If logger implements SkipLogger then Skip method will be called and extraSkip parameter will have
+	// number of extra stack trace frames to skip (useful to log caller func file/line).
 	SkipLogger interface {
 		Skip(extraSkip int) Logger
 	}

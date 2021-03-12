@@ -34,13 +34,14 @@ import (
 )
 
 type (
-	// ZapTag is the interface for logging system
+	// ZapTag is the wrapper over zap.Field.
 	ZapTag struct {
 		// keep this field private
 		field zap.Field
 	}
 )
 
+// NewZapTag creates new ZapTag from zap.Field.
 func NewZapTag(field zap.Field) ZapTag {
 	return ZapTag{
 		field: field,
