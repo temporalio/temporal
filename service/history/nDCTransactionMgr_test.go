@@ -109,7 +109,6 @@ func (s *nDCTransactionMgrSuite) SetupTest() {
 
 func (s *nDCTransactionMgrSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockShard.Finish(s.T())
 }
 
 func (s *nDCTransactionMgrSuite) TestCreateWorkflow() {

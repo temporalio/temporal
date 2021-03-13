@@ -289,7 +289,6 @@ func (s *engineSuite) SetupTest() {
 
 func (s *engineSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockShard.Finish(s.T())
 	s.mockHistoryEngine.eventNotifier.Stop()
 }
 

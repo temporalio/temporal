@@ -92,7 +92,6 @@ func (s *queueTaskSuite) SetupTest() {
 
 func (s *queueTaskSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockShard.Finish(s.T())
 }
 
 func (s *queueTaskSuite) TestExecute_TaskFilterErr() {

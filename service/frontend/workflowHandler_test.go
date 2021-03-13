@@ -32,7 +32,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -56,7 +55,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
@@ -88,7 +86,7 @@ type (
 		mockProducer           *persistence.MockNamespaceReplicationQueue
 		mockMetadataMgr        *persistence.MockMetadataManager
 		mockHistoryMgr         *persistence.MockHistoryManager
-		mockVisibilityMgr      *mocks.VisibilityManager
+		mockVisibilityMgr      *persistence.MockVisibilityManager
 		mockArchivalMetadata   *archiver.MockArchivalMetadata
 		mockArchiverProvider   *provider.MockArchiverProvider
 		mockHistoryArchiver    *archiver.MockHistoryArchiver
@@ -144,7 +142,6 @@ func (s *workflowHandlerSuite) SetupTest() {
 
 func (s *workflowHandlerSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
 }
 
 func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
@@ -1196,7 +1193,7 @@ func (s *workflowHandlerSuite) TestListWorkflowExecutions() {
 	wh := s.getWorkflowHandler(config)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
-	s.mockVisibilityMgr.On("ListWorkflowExecutions", mock.Anything).Return(&persistence.ListWorkflowExecutionsResponse{}, nil).Once()
+	s.mockVisibilityMgr.EXPECT().ListWorkflowExecutions(gomock.Any()).Return(&persistence.ListWorkflowExecutionsResponse{}, nil)
 
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.testNamespace,
@@ -1220,44 +1217,44 @@ func (s *workflowHandlerSuite) TestListWorkflowExecutions() {
 	s.NotNil(err)
 }
 
-func (s *workflowHandlerSuite) TestScantWorkflowExecutions() {
+func (s *workflowHandlerSuite) TestScanWorkflowExecutions() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
-	s.mockVisibilityMgr.On("ScanWorkflowExecutions", mock.Anything).Return(&persistence.ListWorkflowExecutionsResponse{}, nil).Once()
+	s.mockVisibilityMgr.EXPECT().ScanWorkflowExecutions(gomock.Any()).Return(&persistence.ListWorkflowExecutionsResponse{}, nil)
 
 	scanRequest := &workflowservice.ScanWorkflowExecutionsRequest{
-		Namespace: s.testNamespace,
-		PageSize:  int32(config.ESIndexMaxResultWindow()),
-	}
-	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.testNamespace,
 		PageSize:  int32(config.ESIndexMaxResultWindow()),
 	}
 	ctx := context.Background()
 
 	query := "WorkflowId = 'wid'"
-	listRequest.Query = query
+	scanRequest.Query = query
 	_, err := wh.ScanWorkflowExecutions(ctx, scanRequest)
 	s.NoError(err)
-	s.Equal(query, listRequest.GetQuery())
+	s.Equal(query, scanRequest.GetQuery())
 
 	query = "InvalidKey = 'a'"
-	listRequest.Query = query
+	scanRequest.Query = query
 	_, err = wh.ScanWorkflowExecutions(ctx, scanRequest)
-	s.NotNil(err)
+	s.Error(err)
 
-	listRequest.PageSize = int32(config.ESIndexMaxResultWindow() + 1)
+	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.testNamespace,
+		PageSize:  int32(config.ESIndexMaxResultWindow() + 1),
+		Query:     query,
+	}
 	_, err = wh.ListWorkflowExecutions(ctx, listRequest)
-	s.NotNil(err)
+	s.Error(err)
 }
 
 func (s *workflowHandlerSuite) TestCountWorkflowExecutions() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
-	s.mockVisibilityMgr.On("CountWorkflowExecutions", mock.Anything).Return(&persistence.CountWorkflowExecutionsResponse{}, nil).Once()
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any()).Return(&persistence.CountWorkflowExecutionsResponse{}, nil)
 
 	countRequest := &workflowservice.CountWorkflowExecutionsRequest{
 		Namespace: s.testNamespace,

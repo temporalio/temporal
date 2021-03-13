@@ -116,7 +116,6 @@ func (s *workflowResetterSuite) SetupTest() {
 
 func (s *workflowResetterSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockShard.Finish(s.T())
 }
 
 func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {

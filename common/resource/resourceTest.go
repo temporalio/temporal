@@ -28,7 +28,6 @@ import (
 	"net"
 
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/mock"
 	"github.com/uber-go/tally"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservicemock/v1"
@@ -51,7 +50,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 )
@@ -92,9 +90,9 @@ type (
 		// persistence clients
 
 		MetadataMgr               *persistence.MockMetadataManager
-		ClusterMetadataMgr        *mocks.MockClusterMetadataManager
+		ClusterMetadataMgr        *persistence.MockClusterMetadataManager
 		TaskMgr                   *persistence.MockTaskManager
-		VisibilityMgr             *mocks.VisibilityManager
+		VisibilityMgr             *persistence.MockVisibilityManager
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		ShardMgr                  *persistence.MockShardManager
 		HistoryMgr                *persistence.MockHistoryManager
@@ -128,7 +126,7 @@ func NewTest(
 	historyClient := historyservicemock.NewMockHistoryServiceClient(controller)
 	remoteFrontendClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
 	remoteAdminClient := adminservicemock.NewMockAdminServiceClient(controller)
-	clusterMetadataManager := mocks.NewMockClusterMetadataManager(controller)
+	clusterMetadataManager := persistence.NewMockClusterMetadataManager(controller)
 	clientBean := client.NewMockBean(controller)
 	clientBean.EXPECT().GetFrontendClient().Return(frontendClient).AnyTimes()
 	clientBean.EXPECT().GetMatchingClient(gomock.Any()).Return(matchingClient, nil).AnyTimes()
@@ -138,7 +136,7 @@ func NewTest(
 
 	metadataMgr := persistence.NewMockMetadataManager(controller)
 	taskMgr := persistence.NewMockTaskManager(controller)
-	visibilityMgr := &mocks.VisibilityManager{}
+	visibilityMgr := persistence.NewMockVisibilityManager(controller)
 	shardMgr := persistence.NewMockShardManager(controller)
 	historyMgr := persistence.NewMockHistoryManager(controller)
 	executionMgr := persistence.NewMockExecutionManager(controller)
@@ -431,11 +429,4 @@ func (s *Test) GetThrottledLogger() log.Logger {
 // GetGRPCListener for testing
 func (s *Test) GetGRPCListener() net.Listener {
 	panic("user should implement this method for test")
-}
-
-// Finish checks whether expectations are met
-func (s *Test) Finish(
-	t mock.TestingT,
-) {
-	s.VisibilityMgr.AssertExpectations(t)
 }

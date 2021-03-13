@@ -22,6 +22,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// -aux_files is required here due to Closeable interface being in another file.
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination visibilityInterfaces_mock.go -aux_files go.temporal.io/server/common/persistence=dataInterfaces.go
+
 package persistence
 
 import (
