@@ -35,7 +35,6 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -65,7 +64,7 @@ func NewTestRingpopCluster(
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockMgr := mocks.NewMockClusterMetadataManager(ctrl)
+	mockMgr := persistence.NewMockClusterMetadataManager(ctrl)
 	mockMgr.EXPECT().PruneClusterMembership(gomock.Any()).Return(nil).AnyTimes()
 	mockMgr.EXPECT().UpsertClusterMembership(gomock.Any()).Return(nil).AnyTimes()
 
