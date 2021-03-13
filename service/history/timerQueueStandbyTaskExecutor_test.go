@@ -30,7 +30,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
@@ -723,44 +722,45 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, completeEvent1.GetEventId(), completeEvent1.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(mock.MatchedBy(func(input *persistence.UpdateWorkflowExecutionRequest) bool {
-		s.Equal(1, len(input.UpdateWorkflowMutation.TimerTasks))
-		s.Equal(1, len(input.UpdateWorkflowMutation.UpsertActivityInfos))
-		mutableState.executionInfo.LastUpdateTime = input.UpdateWorkflowMutation.ExecutionInfo.LastUpdateTime
-		input.RangeID = 0
-		input.UpdateWorkflowMutation.ExecutionInfo.LastEventTaskId = 0
-		mutableState.executionInfo.LastEventTaskId = 0
-		mutableState.executionInfo.WorkflowTaskOriginalScheduledTime = input.UpdateWorkflowMutation.ExecutionInfo.WorkflowTaskOriginalScheduledTime
-		mutableState.executionInfo.ExecutionStats = &persistencespb.ExecutionStats{}
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).DoAndReturn(
+		func(input *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			s.Equal(1, len(input.UpdateWorkflowMutation.TimerTasks))
+			s.Equal(1, len(input.UpdateWorkflowMutation.UpsertActivityInfos))
+			mutableState.executionInfo.LastUpdateTime = input.UpdateWorkflowMutation.ExecutionInfo.LastUpdateTime
+			input.RangeID = 0
+			input.UpdateWorkflowMutation.ExecutionInfo.LastEventTaskId = 0
+			mutableState.executionInfo.LastEventTaskId = 0
+			mutableState.executionInfo.WorkflowTaskOriginalScheduledTime = input.UpdateWorkflowMutation.ExecutionInfo.WorkflowTaskOriginalScheduledTime
+			mutableState.executionInfo.ExecutionStats = &persistencespb.ExecutionStats{}
 
-		s.Equal(&persistence.UpdateWorkflowExecutionRequest{
-			UpdateWorkflowMutation: persistence.WorkflowMutation{
-				ExecutionInfo:             mutableState.executionInfo,
-				ExecutionState:            mutableState.executionState,
-				NextEventID:               mutableState.nextEventID,
-				TransferTasks:             nil,
-				ReplicationTasks:          nil,
-				TimerTasks:                input.UpdateWorkflowMutation.TimerTasks,
-				Condition:                 mutableState.GetNextEventID(),
-				UpsertActivityInfos:       input.UpdateWorkflowMutation.UpsertActivityInfos,
-				DeleteActivityInfos:       []int64{},
-				UpsertTimerInfos:          []*persistencespb.TimerInfo{},
-				DeleteTimerInfos:          []string{},
-				UpsertChildExecutionInfos: []*persistencespb.ChildExecutionInfo{},
-				DeleteChildExecutionInfos: []int64{},
-				UpsertRequestCancelInfos:  []*persistencespb.RequestCancelInfo{},
-				DeleteRequestCancelInfos:  []int64{},
-				UpsertSignalInfos:         []*persistencespb.SignalInfo{},
-				DeleteSignalInfos:         []int64{},
-				UpsertSignalRequestedIDs:  []string{},
-				DeleteSignalRequestedIDs:  []string{},
-				NewBufferedEvents:         nil,
-				ClearBufferedEvents:       false,
-			},
-			NewWorkflowSnapshot: nil,
-		}, input)
-		return true
-	})).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil)
+			s.Equal(&persistence.UpdateWorkflowExecutionRequest{
+				UpdateWorkflowMutation: persistence.WorkflowMutation{
+					ExecutionInfo:             mutableState.executionInfo,
+					ExecutionState:            mutableState.executionState,
+					NextEventID:               mutableState.nextEventID,
+					TransferTasks:             nil,
+					ReplicationTasks:          nil,
+					TimerTasks:                input.UpdateWorkflowMutation.TimerTasks,
+					Condition:                 mutableState.GetNextEventID(),
+					UpsertActivityInfos:       input.UpdateWorkflowMutation.UpsertActivityInfos,
+					DeleteActivityInfos:       []int64{},
+					UpsertTimerInfos:          []*persistencespb.TimerInfo{},
+					DeleteTimerInfos:          []string{},
+					UpsertChildExecutionInfos: []*persistencespb.ChildExecutionInfo{},
+					DeleteChildExecutionInfos: []int64{},
+					UpsertRequestCancelInfos:  []*persistencespb.RequestCancelInfo{},
+					DeleteRequestCancelInfos:  []int64{},
+					UpsertSignalInfos:         []*persistencespb.SignalInfo{},
+					DeleteSignalInfos:         []int64{},
+					UpsertSignalRequestedIDs:  []string{},
+					DeleteSignalRequestedIDs:  []string{},
+					NewBufferedEvents:         nil,
+					ClearBufferedEvents:       false,
+				},
+				NewWorkflowSnapshot: nil,
+			}, input)
+			return &persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil
+		})
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	err = s.timerQueueStandbyTaskExecutor.execute(timerTask, true)

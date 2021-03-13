@@ -32,7 +32,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
@@ -1048,7 +1047,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 
 	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Times(len(expecedErrs))
 	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(
-		mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
+		newCreateWorkflowExecutionRequestMatcher(func(request *persistence.CreateWorkflowExecutionRequest) bool {
 			return request.Mode == persistence.CreateWorkflowModeBrandNew
 		}),
 	).Return(nil, &persistence.WorkflowExecutionAlreadyStartedError{
@@ -1063,7 +1062,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 	for index, option := range options {
 		if !expecedErrs[index] {
 			s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(
-				mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
+				newCreateWorkflowExecutionRequestMatcher(func(request *persistence.CreateWorkflowExecutionRequest) bool {
 					return request.Mode == persistence.CreateWorkflowModeWorkflowIDReuse &&
 						request.PreviousRunID == runID &&
 						request.PreviousLastWriteVersion == lastWriteVersion
@@ -1127,7 +1126,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 
 		s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil).Times(len(expecedErrs))
 		s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(
-			mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
+			newCreateWorkflowExecutionRequestMatcher(func(request *persistence.CreateWorkflowExecutionRequest) bool {
 				return request.Mode == persistence.CreateWorkflowModeBrandNew
 			}),
 		).Return(nil, &persistence.WorkflowExecutionAlreadyStartedError{
@@ -1143,7 +1142,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 
 			if !expecedErrs[j] {
 				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(
-					mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
+					newCreateWorkflowExecutionRequestMatcher(func(request *persistence.CreateWorkflowExecutionRequest) bool {
 						return request.Mode == persistence.CreateWorkflowModeWorkflowIDReuse &&
 							request.PreviousRunID == runIDs[i] &&
 							request.PreviousLastWriteVersion == lastWriteVersion
@@ -1504,4 +1503,26 @@ func (s *engine2Suite) getBuilder(namespaceID string, we commonpb.WorkflowExecut
 	defer release(nil)
 
 	return weContext.(*workflowExecutionContextImpl).mutableState
+}
+
+type createWorkflowExecutionRequestMatcher struct {
+	f func(request *persistence.CreateWorkflowExecutionRequest) bool
+}
+
+func newCreateWorkflowExecutionRequestMatcher(f func(request *persistence.CreateWorkflowExecutionRequest) bool) gomock.Matcher {
+	return &createWorkflowExecutionRequestMatcher{
+		f: f,
+	}
+}
+
+func (m *createWorkflowExecutionRequestMatcher) Matches(x interface{}) bool {
+	request, ok := x.(*persistence.CreateWorkflowExecutionRequest)
+	if !ok {
+		return false
+	}
+	return m.f(request)
+}
+
+func (m *createWorkflowExecutionRequestMatcher) String() string {
+	return "CreateWorkflowExecutionRequest match condition"
 }

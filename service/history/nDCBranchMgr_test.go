@@ -30,7 +30,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -142,18 +141,19 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 	}).AnyTimes()
 
 	shardID := s.mockShard.GetShardID()
-	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(mock.MatchedBy(func(input *persistence.ForkHistoryBranchRequest) bool {
-		input.Info = ""
-		s.Equal(&persistence.ForkHistoryBranchRequest{
-			ForkBranchToken: baseBranchToken,
-			ForkNodeID:      baseBranchLCAEventID + 1,
-			Info:            "",
-			ShardID:         shardID,
-		}, input)
-		return true
-	})).Return(&persistence.ForkHistoryBranchResponse{
-		NewBranchToken: newBranchToken,
-	}, nil)
+	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(gomock.Any()).DoAndReturn(
+		func(input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
+			input.Info = ""
+			s.Equal(&persistence.ForkHistoryBranchRequest{
+				ForkBranchToken: baseBranchToken,
+				ForkNodeID:      baseBranchLCAEventID + 1,
+				Info:            "",
+				ShardID:         shardID,
+			}, input)
+			return &persistence.ForkHistoryBranchResponse{
+				NewBranchToken: newBranchToken,
+			}, nil
+		})
 
 	newIndex, err := s.nDCBranchMgr.createNewBranch(context.Background(), baseBranchToken, baseBranchLCAEventID, newVersionHistory)
 	s.Nil(err)
@@ -322,18 +322,19 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 	}).AnyTimes()
 
 	shardID := s.mockShard.GetShardID()
-	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(mock.MatchedBy(func(input *persistence.ForkHistoryBranchRequest) bool {
-		input.Info = ""
-		s.Equal(&persistence.ForkHistoryBranchRequest{
-			ForkBranchToken: baseBranchToken,
-			ForkNodeID:      baseBranchLCAEventID + 1,
-			Info:            "",
-			ShardID:         shardID,
-		}, input)
-		return true
-	})).Return(&persistence.ForkHistoryBranchResponse{
-		NewBranchToken: newBranchToken,
-	}, nil)
+	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(gomock.Any()).DoAndReturn(
+		func(input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
+			input.Info = ""
+			s.Equal(&persistence.ForkHistoryBranchRequest{
+				ForkBranchToken: baseBranchToken,
+				ForkNodeID:      baseBranchLCAEventID + 1,
+				Info:            "",
+				ShardID:         shardID,
+			}, input)
+			return &persistence.ForkHistoryBranchResponse{
+				NewBranchToken: newBranchToken,
+			}, nil
+		})
 
 	doContinue, index, err := s.nDCBranchMgr.prepareVersionHistory(
 		context.Background(),

@@ -30,7 +30,6 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
@@ -92,7 +91,7 @@ func (s *activitiesSuite) SetupTest() {
 	s.historyArchiver = carchiver.NewMockHistoryArchiver(s.controller)
 	s.visibilityArchiver = carchiver.NewMockVisibilityArchiver(s.controller)
 	s.metricsScope.EXPECT().StartTimer(metrics.ServiceLatency).Return(metrics.NewTestStopwatch()).MinTimes(0)
-	s.metricsScope.EXPECT().RecordTimer(mock.Anything, mock.Anything).MinTimes(0)
+	s.metricsScope.EXPECT().RecordTimer(gomock.Any(), gomock.Any()).MinTimes(0)
 }
 
 func (s *activitiesSuite) TearDownTest() {
