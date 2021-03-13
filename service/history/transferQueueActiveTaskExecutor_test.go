@@ -30,7 +30,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
@@ -94,7 +93,7 @@ type (
 		mockArchivalClient          *warchiver.MockClient
 		mockArchivalMetadata        *archiver.MockArchivalMetadata
 		mockArchiverProvider        *provider.MockArchiverProvider
-		mockParentClosePolicyClient *parentclosepolicy.ClientMock
+		mockParentClosePolicyClient *parentclosepolicy.MockClient
 
 		logger                          log.Logger
 		namespaceID                     string
@@ -173,7 +172,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	)
 	s.mockShard.Resource.TimeSource = s.timeSource
 
-	s.mockParentClosePolicyClient = &parentclosepolicy.ClientMock{}
+	s.mockParentClosePolicyClient = parentclosepolicy.NewMockClient(s.controller)
 	s.mockArchivalClient = warchiver.NewMockClient(s.controller)
 	s.mockMatchingClient = s.mockShard.Resource.MatchingClient
 	s.mockHistoryClient = s.mockShard.Resource.HistoryClient
@@ -971,7 +970,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewDisabledArchvialConfig())
-	s.mockParentClosePolicyClient.On("SendParentClosePolicyRequest", mock.Anything).Return(nil)
+	s.mockParentClosePolicyClient.EXPECT().SendParentClosePolicyRequest(gomock.Any()).Return(nil)
 
 	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)
