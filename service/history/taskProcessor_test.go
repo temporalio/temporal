@@ -53,7 +53,7 @@ type (
 		controller *gomock.Controller
 		mockShard  *shard.ContextTest
 
-		mockProcessor *MockTimerProcessor
+		mockProcessor *MocktimerProcessor
 
 		scopeIdx         int
 		scope            metrics.Scope
@@ -92,7 +92,7 @@ func (s *taskProcessorSuite) SetupTest() {
 		configs.NewDynamicConfigForTest(),
 	)
 
-	s.mockProcessor = &MockTimerProcessor{}
+	s.mockProcessor = NewMocktimerProcessor(s.controller)
 
 	s.logger = s.mockShard.GetLogger()
 
@@ -113,8 +113,6 @@ func (s *taskProcessorSuite) SetupTest() {
 
 func (s *taskProcessorSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockShard.Finish(s.T())
-	s.mockProcessor.AssertExpectations(s.T())
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_ShutDown() {
@@ -139,10 +137,10 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceErrRetry_ProcessNoEr
 	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
 		return true, nil
 	}
-	s.mockProcessor.On("getTaskFilter").Return(taskFilterErr).Once()
-	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
-	s.mockProcessor.On("process", task).Return(s.scopeIdx, nil).Once()
-	s.mockProcessor.On("complete", task).Once()
+	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilterErr)
+	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
+	s.mockProcessor.EXPECT().process(task).Return(s.scopeIdx, nil)
+	s.mockProcessor.EXPECT().complete(task)
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(testNamespace, nil)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
@@ -157,9 +155,9 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceFalse_ProcessNoErr()
 	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
 		return false, nil
 	}
-	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
-	s.mockProcessor.On("process", task).Return(s.scopeIdx, nil).Once()
-	s.mockProcessor.On("complete", task).Once()
+	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
+	s.mockProcessor.EXPECT().process(task).Return(s.scopeIdx, nil)
+	s.mockProcessor.EXPECT().complete(task)
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(testNamespace, nil)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
@@ -173,9 +171,9 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessNoErr() 
 	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
 		return true, nil
 	}
-	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
-	s.mockProcessor.On("process", task).Return(s.scopeIdx, nil).Once()
-	s.mockProcessor.On("complete", task).Once()
+	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
+	s.mockProcessor.EXPECT().process(task).Return(s.scopeIdx, nil)
+	s.mockProcessor.EXPECT().complete(task)
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(testNamespace, nil)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
@@ -190,10 +188,10 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessErrNoErr
 	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
 		return true, nil
 	}
-	s.mockProcessor.On("getTaskFilter").Return(taskFilter).Once()
-	s.mockProcessor.On("process", task).Return(s.scopeIdx, err).Once()
-	s.mockProcessor.On("process", task).Return(s.scopeIdx, nil).Once()
-	s.mockProcessor.On("complete", task).Once()
+	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
+	s.mockProcessor.EXPECT().process(task).Return(s.scopeIdx, err)
+	s.mockProcessor.EXPECT().process(task).Return(s.scopeIdx, nil)
+	s.mockProcessor.EXPECT().complete(task)
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(testNamespace, nil).Times(2)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,

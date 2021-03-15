@@ -52,7 +52,7 @@ type (
 		controller *gomock.Controller
 		mockShard  *shard.ContextTest
 
-		mockProcessor *MockProcessor
+		mockProcessor *Mockprocessor
 
 		logger      log.Logger
 		queueAckMgr *queueAckMgrImpl
@@ -65,7 +65,7 @@ type (
 		controller *gomock.Controller
 		mockShard  *shard.ContextTest
 
-		mockProcessor *MockProcessor
+		mockProcessor *Mockprocessor
 
 		logger              log.Logger
 		queueFailoverAckMgr *queueAckMgrImpl
@@ -111,7 +111,7 @@ func (s *queueAckMgrSuite) SetupTest() {
 		config,
 	)
 
-	s.mockProcessor = &MockProcessor{}
+	s.mockProcessor = NewMockprocessor(s.controller)
 
 	s.logger = s.mockShard.GetLogger()
 
@@ -122,8 +122,6 @@ func (s *queueAckMgrSuite) SetupTest() {
 
 func (s *queueAckMgrSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockShard.Finish(s.T())
-	s.mockProcessor.AssertExpectations(s.T())
 }
 
 func (s *queueAckMgrSuite) TestReadTimerTasks() {
@@ -145,7 +143,7 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 		},
 	}
 
-	s.mockProcessor.On("readTasks", readLevel).Return(tasksInput, moreInput, nil).Once()
+	s.mockProcessor.EXPECT().readTasks(readLevel).Return(tasksInput, moreInput, nil)
 
 	tasksOutput, moreOutput, err := s.queueAckMgr.readQueueTasks()
 	s.Nil(err)
@@ -167,7 +165,7 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 		},
 	}
 
-	s.mockProcessor.On("readTasks", taskID1).Return(tasksInput, moreInput, nil).Once()
+	s.mockProcessor.EXPECT().readTasks(taskID1).Return(tasksInput, moreInput, nil)
 
 	tasksOutput, moreOutput, err = s.queueAckMgr.readQueueTasks()
 	s.Nil(err)
@@ -195,7 +193,7 @@ func (s *queueAckMgrSuite) TestReadCompleteTimerTasks() {
 		},
 	}
 
-	s.mockProcessor.On("readTasks", readLevel).Return(tasksInput, moreInput, nil).Once()
+	s.mockProcessor.EXPECT().readTasks(readLevel).Return(tasksInput, moreInput, nil)
 
 	tasksOutput, moreOutput, err := s.queueAckMgr.readQueueTasks()
 	s.Nil(err)
@@ -246,7 +244,7 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		},
 	}
 
-	s.mockProcessor.On("readTasks", readLevel).Return(tasksInput, moreInput, nil).Once()
+	s.mockProcessor.EXPECT().readTasks(readLevel).Return(tasksInput, moreInput, nil)
 
 	tasksOutput, moreOutput, err := s.queueAckMgr.readQueueTasks()
 	s.Nil(err)
@@ -254,17 +252,17 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.Equal(moreOutput, moreInput)
 	s.Equal(map[int64]bool{taskID1: false, taskID2: false, taskID3: false}, s.queueAckMgr.outstandingTasks)
 
-	s.mockProcessor.On("updateAckLevel", taskID1).Return(nil).Once()
+	s.mockProcessor.EXPECT().updateAckLevel(taskID1).Return(nil)
 	s.queueAckMgr.completeQueueTask(taskID1)
 	s.queueAckMgr.updateQueueAckLevel()
 	s.Equal(taskID1, s.queueAckMgr.getQueueAckLevel())
 
-	s.mockProcessor.On("updateAckLevel", taskID1).Return(nil).Once()
+	s.mockProcessor.EXPECT().updateAckLevel(taskID1).Return(nil)
 	s.queueAckMgr.completeQueueTask(taskID3)
 	s.queueAckMgr.updateQueueAckLevel()
 	s.Equal(taskID1, s.queueAckMgr.getQueueAckLevel())
 
-	s.mockProcessor.On("updateAckLevel", taskID3).Return(nil).Once()
+	s.mockProcessor.EXPECT().updateAckLevel(taskID3).Return(nil)
 	s.queueAckMgr.completeQueueTask(taskID2)
 	s.queueAckMgr.updateQueueAckLevel()
 	s.Equal(taskID3, s.queueAckMgr.getQueueAckLevel())
@@ -300,7 +298,7 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 		config,
 	)
 
-	s.mockProcessor = &MockProcessor{}
+	s.mockProcessor = NewMockprocessor(s.controller)
 
 	s.logger = s.mockShard.GetLogger()
 
@@ -311,8 +309,6 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 
 func (s *queueFailoverAckMgrSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockShard.Finish(s.T())
-	s.mockProcessor.AssertExpectations(s.T())
 }
 
 func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
@@ -334,7 +330,7 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 		},
 	}
 
-	s.mockProcessor.On("readTasks", readLevel).Return(tasksInput, moreInput, nil).Once()
+	s.mockProcessor.EXPECT().readTasks(readLevel).Return(tasksInput, moreInput, nil)
 
 	tasksOutput, moreOutput, err := s.queueFailoverAckMgr.readQueueTasks()
 	s.Nil(err)
@@ -357,7 +353,7 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 		},
 	}
 
-	s.mockProcessor.On("readTasks", taskID1).Return(tasksInput, moreInput, nil).Once()
+	s.mockProcessor.EXPECT().readTasks(taskID1).Return(tasksInput, moreInput, nil)
 
 	tasksOutput, moreOutput, err = s.queueFailoverAckMgr.readQueueTasks()
 	s.Nil(err)
@@ -396,7 +392,7 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 		},
 	}
 
-	s.mockProcessor.On("readTasks", readLevel).Return(tasksInput, moreInput, nil).Once()
+	s.mockProcessor.EXPECT().readTasks(readLevel).Return(tasksInput, moreInput, nil)
 
 	tasksOutput, moreOutput, err := s.queueFailoverAckMgr.readQueueTasks()
 	s.Nil(err)
@@ -406,7 +402,7 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 
 	s.queueFailoverAckMgr.completeQueueTask(taskID2)
 	s.Equal(map[int64]bool{taskID1: false, taskID2: true}, s.queueFailoverAckMgr.outstandingTasks)
-	s.mockProcessor.On("updateAckLevel", s.queueFailoverAckMgr.getQueueAckLevel()).Return(nil)
+	s.mockProcessor.EXPECT().updateAckLevel(s.queueFailoverAckMgr.getQueueAckLevel()).Return(nil)
 	s.queueFailoverAckMgr.updateQueueAckLevel()
 	select {
 	case <-s.queueFailoverAckMgr.getFinishedChan():
@@ -416,7 +412,7 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 
 	s.queueFailoverAckMgr.completeQueueTask(taskID1)
 	s.Equal(map[int64]bool{taskID1: true, taskID2: true}, s.queueFailoverAckMgr.outstandingTasks)
-	s.mockProcessor.On("queueShutdown").Return(nil)
+	s.mockProcessor.EXPECT().queueShutdown().Return(nil)
 	s.queueFailoverAckMgr.updateQueueAckLevel()
 	select {
 	case <-s.queueFailoverAckMgr.getFinishedChan():

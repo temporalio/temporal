@@ -103,7 +103,6 @@ func (s *nDCConflictResolverSuite) SetupTest() {
 
 func (s *nDCConflictResolverSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockShard.Finish(s.T())
 }
 
 func (s *nDCConflictResolverSuite) TestRebuild() {

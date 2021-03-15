@@ -53,7 +53,7 @@ type clientSuite struct {
 	visibilityArchiver *carchiver.MockVisibilityArchiver
 	metricsClient      *metrics.MockClient
 	metricsScope       *metrics.MockScope
-	temporalClient     *mocks.Client
+	sdkClient          *mocks.Client
 	client             *client
 }
 
@@ -70,7 +70,7 @@ func (s *clientSuite) SetupTest() {
 	s.visibilityArchiver = carchiver.NewMockVisibilityArchiver(s.controller)
 	s.metricsClient = metrics.NewMockClient(s.controller)
 	s.metricsScope = metrics.NewMockScope(s.controller)
-	s.temporalClient = &mocks.Client{}
+	s.sdkClient = &mocks.Client{}
 	s.metricsClient.EXPECT().Scope(metrics.ArchiverClientScope, gomock.Any()).Return(s.metricsScope)
 	s.client = NewClient(
 		s.metricsClient,
@@ -80,7 +80,7 @@ func (s *clientSuite) SetupTest() {
 		dynamicconfig.GetIntPropertyFn(1000),
 		s.archiverProvider,
 	).(*client)
-	s.client.temporalClient = s.temporalClient
+	s.client.temporalClient = s.sdkClient
 }
 
 func (s *clientSuite) TearDownTest() {
@@ -112,7 +112,7 @@ func (s *clientSuite) TestArchiveVisibilityInlineFail_SendSignalSuccess() {
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveFailureCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
-	s.temporalClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
+	s.sdkClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 1 && v.Targets[0] == ArchiveTargetVisibility
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
 
@@ -136,7 +136,7 @@ func (s *clientSuite) TestArchiveVisibilityInlineFail_SendSignalFail() {
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveFailureCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalFailureCount)
-	s.temporalClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
+	s.sdkClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 1 && v.Targets[0] == ArchiveTargetVisibility
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("some random error"))
 
@@ -176,7 +176,7 @@ func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalSuccess() {
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveFailureCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
-	s.temporalClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
+	s.sdkClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 1 && v.Targets[0] == ArchiveTargetHistory
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
 
@@ -200,7 +200,7 @@ func (s *clientSuite) TestArchiveHistoryInlineFail_SendSignalFail() {
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryInlineArchiveFailureCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalFailureCount)
-	s.temporalClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
+	s.sdkClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 1 && v.Targets[0] == ArchiveTargetHistory
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("some random error"))
 
@@ -226,7 +226,7 @@ func (s *clientSuite) TestArchiveInline_HistoryFail_VisibilitySuccess() {
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityRequestCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
-	s.temporalClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
+	s.sdkClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 1 && v.Targets[0] == ArchiveTargetHistory
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
 
@@ -254,7 +254,7 @@ func (s *clientSuite) TestArchiveInline_VisibilityFail_HistorySuccess() {
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveFailureCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
-	s.temporalClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
+	s.sdkClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 1 && v.Targets[0] == ArchiveTargetVisibility
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
 
@@ -283,7 +283,7 @@ func (s *clientSuite) TestArchiveInline_VisibilityFail_HistoryFail() {
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveAttemptCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientVisibilityInlineArchiveFailureCount)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientSendSignalCount)
-	s.temporalClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
+	s.sdkClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 2
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
 
@@ -324,7 +324,7 @@ func (s *clientSuite) TestArchiveInline_VisibilitySuccess_HistorySuccess() {
 }
 
 func (s *clientSuite) TestArchiveSendSignal_Success() {
-	s.temporalClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
+	s.sdkClient.On("SignalWithStartWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.MatchedBy(func(v ArchiveRequest) bool {
 		return len(v.Targets) == 2
 	}), mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverClientHistoryRequestCount)

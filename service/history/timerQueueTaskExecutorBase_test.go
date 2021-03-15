@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/shard"
@@ -55,7 +54,7 @@ type (
 		mockMutableState             *MockmutableState
 
 		mockExecutionManager  *persistence.MockExecutionManager
-		mockVisibilityManager *mocks.VisibilityManager
+		mockVisibilityManager *persistence.MockVisibilityManager
 		mockHistoryMgr        *persistence.MockHistoryManager
 		mockArchivalClient    *archiver.MockClient
 		mockNamespaceCache    *cache.MockNamespaceCache
@@ -128,7 +127,6 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 
 func (s *timerQueueTaskExecutorBaseSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockShard.Finish(s.T())
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {

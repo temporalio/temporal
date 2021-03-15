@@ -39,7 +39,7 @@ endif
 GOBIN := $(if $(shell go env GOBIN),$(shell go env GOBIN),$(GOPATH)/bin)
 SHELL := PATH=$(GOBIN):$(PATH) /bin/sh
 
-MODULE_ROOT := go.temporal.io/server
+MODULE_ROOT := $(lastword $(shell grep -e "^module " go.mod))
 COLOR := "\e[1;36m%s\e[0m\n"
 RED :=   "\e[1;31m%s\e[0m\n"
 

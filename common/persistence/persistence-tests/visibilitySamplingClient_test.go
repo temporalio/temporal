@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/mocks"
 	p "go.temporal.io/server/common/persistence"
 )
 
@@ -50,7 +49,7 @@ type VisibilitySamplingSuite struct {
 	controller *gomock.Controller
 
 	client       p.VisibilityManager
-	persistence  *mocks.VisibilityManager
+	persistence  *p.MockVisibilityManager
 	metricClient *metrics.MockClient
 }
 
@@ -73,19 +72,19 @@ func TestVisibilitySamplingSuite(t *testing.T) {
 func (s *VisibilitySamplingSuite) SetupTest() {
 	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 
-	s.persistence = &mocks.VisibilityManager{}
+	s.controller = gomock.NewController(s.T())
+	s.persistence = p.NewMockVisibilityManager(s.controller)
+	s.metricClient = metrics.NewMockClient(s.controller)
 	config := &c.VisibilityConfig{
 		VisibilityOpenMaxQPS:   dynamicconfig.GetIntPropertyFilteredByNamespace(1),
 		VisibilityClosedMaxQPS: dynamicconfig.GetIntPropertyFilteredByNamespace(2),
 		VisibilityListMaxQPS:   dynamicconfig.GetIntPropertyFilteredByNamespace(1),
 	}
-	s.controller = gomock.NewController(s.T())
-	s.metricClient = metrics.NewMockClient(s.controller)
 	s.client = p.NewVisibilitySamplingClient(s.persistence, config, s.metricClient, log.NewNoopLogger())
 }
 
 func (s *VisibilitySamplingSuite) TearDownTest() {
-	s.persistence.AssertExpectations(s.T())
+	s.controller.Finish()
 }
 
 func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionStarted() {
@@ -98,7 +97,7 @@ func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionStarted() {
 			StartTimestamp:   time.Now().UnixNano(),
 		},
 	}
-	s.persistence.On("RecordWorkflowExecutionStarted", request).Return(nil).Once()
+	s.persistence.EXPECT().RecordWorkflowExecutionStarted(request).Return(nil)
 	s.NoError(s.client.RecordWorkflowExecutionStarted(request))
 
 	// no remaining tokens
@@ -128,9 +127,9 @@ func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionClosed() {
 		},
 	}
 
-	s.persistence.On("RecordWorkflowExecutionClosed", request).Return(nil).Once()
+	s.persistence.EXPECT().RecordWorkflowExecutionClosed(request).Return(nil)
 	s.NoError(s.client.RecordWorkflowExecutionClosed(request))
-	s.persistence.On("RecordWorkflowExecutionClosed", request2).Return(nil).Once()
+	s.persistence.EXPECT().RecordWorkflowExecutionClosed(request2).Return(nil)
 	s.NoError(s.client.RecordWorkflowExecutionClosed(request2))
 
 	// no remaining tokens
@@ -150,7 +149,7 @@ func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutions() {
 		NamespaceID: testNamespaceUUID,
 		Namespace:   testNamespace,
 	}
-	s.persistence.On("ListOpenWorkflowExecutions", request).Return(nil, nil).Once()
+	s.persistence.EXPECT().ListOpenWorkflowExecutions(request).Return(nil, nil)
 	_, err := s.client.ListOpenWorkflowExecutions(request)
 	s.NoError(err)
 
@@ -167,7 +166,7 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutions() {
 		NamespaceID: testNamespaceUUID,
 		Namespace:   testNamespace,
 	}
-	s.persistence.On("ListClosedWorkflowExecutions", request).Return(nil, nil).Once()
+	s.persistence.EXPECT().ListClosedWorkflowExecutions(request).Return(nil, nil)
 	_, err := s.client.ListClosedWorkflowExecutions(request)
 	s.NoError(err)
 
@@ -188,7 +187,7 @@ func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutionsByType() {
 		ListWorkflowExecutionsRequest: req,
 		WorkflowTypeName:              testWorkflowTypeName,
 	}
-	s.persistence.On("ListOpenWorkflowExecutionsByType", request).Return(nil, nil).Once()
+	s.persistence.EXPECT().ListOpenWorkflowExecutionsByType(request).Return(nil, nil)
 	_, err := s.client.ListOpenWorkflowExecutionsByType(request)
 	s.NoError(err)
 
@@ -209,7 +208,7 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByType() {
 		ListWorkflowExecutionsRequest: req,
 		WorkflowTypeName:              testWorkflowTypeName,
 	}
-	s.persistence.On("ListClosedWorkflowExecutionsByType", request).Return(nil, nil).Once()
+	s.persistence.EXPECT().ListClosedWorkflowExecutionsByType(request).Return(nil, nil)
 	_, err := s.client.ListClosedWorkflowExecutionsByType(request)
 	s.NoError(err)
 
@@ -230,7 +229,7 @@ func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 		ListWorkflowExecutionsRequest: req,
 		WorkflowID:                    testWorkflowExecution.GetWorkflowId(),
 	}
-	s.persistence.On("ListOpenWorkflowExecutionsByWorkflowID", request).Return(nil, nil).Once()
+	s.persistence.EXPECT().ListOpenWorkflowExecutionsByWorkflowID(request).Return(nil, nil)
 	_, err := s.client.ListOpenWorkflowExecutionsByWorkflowID(request)
 	s.NoError(err)
 
@@ -251,7 +250,7 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByWorkflowID()
 		ListWorkflowExecutionsRequest: req,
 		WorkflowID:                    testWorkflowExecution.GetWorkflowId(),
 	}
-	s.persistence.On("ListClosedWorkflowExecutionsByWorkflowID", request).Return(nil, nil).Once()
+	s.persistence.EXPECT().ListClosedWorkflowExecutionsByWorkflowID(request).Return(nil, nil)
 	_, err := s.client.ListClosedWorkflowExecutionsByWorkflowID(request)
 	s.NoError(err)
 
@@ -272,7 +271,7 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByStatus() {
 		ListWorkflowExecutionsRequest: req,
 		Status:                        enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 	}
-	s.persistence.On("ListClosedWorkflowExecutionsByStatus", request).Return(nil, nil).Once()
+	s.persistence.EXPECT().ListClosedWorkflowExecutionsByStatus(request).Return(nil, nil)
 	_, err := s.client.ListClosedWorkflowExecutionsByStatus(request)
 	s.NoError(err)
 
