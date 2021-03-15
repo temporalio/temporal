@@ -109,11 +109,11 @@ func (s *stringifySuite) TestAnyToString_DecodeMapValues() {
 func (s *stringifySuite) TestAnyToString_Slice() {
 	var fields []string
 	got := AnyToString(fields, true, 0)
-	s.Equal("", got)
+	s.Equal("[]", got)
 
 	fields = make([]string, 0)
 	got = AnyToString(fields, true, 0)
-	s.Equal("", got)
+	s.Equal("[]", got)
 
 	fields = make([]string, 1)
 	got = AnyToString(fields, true, 0)
@@ -122,10 +122,26 @@ func (s *stringifySuite) TestAnyToString_Slice() {
 	fields[0] = "qwe"
 	got = AnyToString(fields, true, 0)
 	s.Equal("[qwe]", got)
+	got = AnyToString(fields, false, 0)
+	s.Equal("[qwe]", got)
 
 	fields = make([]string, 2)
+	fields[0] = "asd"
+	fields[1] = "zxc"
 	got = AnyToString(fields, true, 0)
-	s.Equal("[len=2]", got)
+	s.Equal("[asd,zxc]", got)
+	got = AnyToString(fields, false, 0)
+	s.Equal("[asd,...1 more]", got)
+
+	fields = make([]string, 3)
+	fields[0] = "0"
+	fields[1] = "1"
+	fields[2] = "2"
+	got = AnyToString(fields, true, 0)
+	s.Equal("[0,1,2]", got)
+	got = AnyToString(fields, false, 0)
+	s.Equal("[0,...2 more]", got)
+
 }
 
 func (s *stringifySuite) TestIsAttributeName() {
