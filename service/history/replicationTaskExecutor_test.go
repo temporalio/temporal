@@ -133,7 +133,6 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 
 func (s *replicationTaskExecutorSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
 }
 
 func (s *replicationTaskExecutorSuite) TestFilterTask_Apply() {

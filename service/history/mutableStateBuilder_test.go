@@ -117,7 +117,6 @@ func (s *mutableStateSuite) SetupTest() {
 
 func (s *mutableStateSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockShard.Finish(s.T())
 }
 
 func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplicated_ReplicateWorkflowTaskCompleted() {

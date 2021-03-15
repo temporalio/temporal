@@ -105,7 +105,6 @@ func (s *adminHandlerSuite) SetupTest() {
 
 func (s *adminHandlerSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
 	s.handler.Stop()
 }
 

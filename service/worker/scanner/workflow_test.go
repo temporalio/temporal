@@ -78,7 +78,6 @@ func (s *scannerWorkflowTestSuite) TestScavengerActivity() {
 	controller := gomock.NewController(s.T())
 	defer controller.Finish()
 	mockResource := resource.NewTest(controller, metrics.Worker)
-	defer mockResource.Finish(s.T())
 
 	mockResource.TaskMgr.EXPECT().ListTaskQueue(gomock.Any()).Return(&p.ListTaskQueueResponse{}, nil)
 	ctx := scannerContext{

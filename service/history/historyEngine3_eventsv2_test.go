@@ -150,7 +150,6 @@ func (s *engine3Suite) SetupTest() {
 
 func (s *engine3Suite) TearDownTest() {
 	s.controller.Finish()
-	s.mockShard.Finish(s.T())
 }
 
 func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {

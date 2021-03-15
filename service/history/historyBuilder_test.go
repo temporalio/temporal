@@ -112,7 +112,6 @@ func (s *historyBuilderSuite) SetupTest() {
 
 func (s *historyBuilderSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockShard.Finish(s.T())
 }
 
 func (s *historyBuilderSuite) TestHistoryBuilderDynamicSuccess() {

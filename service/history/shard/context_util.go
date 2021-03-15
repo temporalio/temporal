@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/mock"
 
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -74,10 +73,4 @@ func NewTestContext(
 		Resource:        resource,
 		MockEventsCache: eventsCache,
 	}
-}
-
-func (s *ContextTest) Finish(
-	t mock.TestingT,
-) {
-	s.Resource.Finish(t)
 }

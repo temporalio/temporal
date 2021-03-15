@@ -102,7 +102,6 @@ func (s *controllerSuite) SetupTest() {
 
 func (s *controllerSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
 }
 
 func (s *controllerSuite) TestAcquireShardSuccess() {

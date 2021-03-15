@@ -51,7 +51,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -74,7 +73,7 @@ type (
 		mockNDCHistoryResender *xdc.MockNDCHistoryResender
 		mockMatchingClient     *matchingservicemock.MockMatchingServiceClient
 
-		mockVisibilityMgr    *mocks.VisibilityManager
+		mockVisibilityMgr    *persistence.MockVisibilityManager
 		mockExecutionMgr     *persistence.MockExecutionManager
 		mockArchivalMetadata *archiver.MockArchivalMetadata
 		mockArchiverProvider *provider.MockArchiverProvider
@@ -189,7 +188,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 
 func (s *transferQueueStandbyTaskExecutorSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockShard.Finish(s.T())
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending() {
@@ -1144,7 +1142,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStarted
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockVisibilityMgr.On("RecordWorkflowExecutionStarted", &persistence.RecordWorkflowExecutionStartedRequest{
+	s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionStarted(&persistence.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &persistence.VisibilityRequestBase{
 			NamespaceID: testNamespaceID,
 			Namespace:   testNamespace,
@@ -1158,7 +1156,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStarted
 			TaskQueue:        taskQueueName,
 		},
 		RunTimeout: int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
-	}).Return(nil).Once()
+	}).Return(nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)
@@ -1211,7 +1209,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchA
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockVisibilityMgr.On("UpsertWorkflowExecution", &persistence.UpsertWorkflowExecutionRequest{
+	s.mockVisibilityMgr.EXPECT().UpsertWorkflowExecution(&persistence.UpsertWorkflowExecutionRequest{
 		VisibilityRequestBase: &persistence.VisibilityRequestBase{
 			NamespaceID: testNamespaceID,
 			Namespace:   testNamespace,
@@ -1226,7 +1224,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchA
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		},
 		WorkflowTimeout: int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
-	}).Return(nil).Once()
+	}).Return(nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, *now)
 	err = s.transferQueueStandbyTaskExecutor.execute(transferTask, true)

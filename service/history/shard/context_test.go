@@ -96,7 +96,6 @@ func (s *contextSuite) SetupTest() {
 
 func (s *contextSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
 }
 
 func (s *contextSuite) TestAddTasks_Success() {

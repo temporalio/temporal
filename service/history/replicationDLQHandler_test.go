@@ -119,7 +119,6 @@ func (s *replicationDLQHandlerSuite) SetupTest() {
 
 func (s *replicationDLQHandlerSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockResource.Finish(s.T())
 }
 
 func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {

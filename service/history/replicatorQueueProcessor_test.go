@@ -118,7 +118,6 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 
 func (s *replicatorQueueProcessorSuite) TearDownTest() {
 	s.controller.Finish()
-	s.mockShard.Finish(s.T())
 }
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
