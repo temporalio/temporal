@@ -1,10 +1,11 @@
-.buildkite
 .coverage
 .github
 .idea
 .vscode
-docker-compose
 *.md
+
+develop/docker-compose
+develop/buildkite
 
 # exclude binaries from the docker build context
 tctl

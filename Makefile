@@ -174,7 +174,7 @@ clean-bins:
 
 temporal-server:
 	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=0 go build -ldflags "$(shell ./.development/scripts/go-build-ldflags.sh $(MODULE_ROOT)/ldflags)" -o temporal-server cmd/server/main.go
+	CGO_ENABLED=0 go build -ldflags "$(shell ./develop/scripts/go-build-ldflags.sh $(MODULE_ROOT)/ldflags)" -o temporal-server cmd/server/main.go
 
 tctl:
 	@printf $(COLOR) "Build tctl with OS: $(GOOS), ARCH: $(GOARCH)..."
@@ -381,10 +381,10 @@ install-schema-cdc: temporal-cassandra-tool
 
 ##### Run server #####
 start-dependencies:
-	docker-compose -f ./.development/docker-compose/docker-compose.yml -f ./.development/docker-compose/docker-compose.$(GOOS).yml up
+	docker-compose -f ./develop/docker-compose/docker-compose.yml -f ./develop/docker-compose/docker-compose.$(GOOS).yml up
 
 stop-dependencies:
-	docker-compose -f ./.development/docker-compose/docker-compose.yml -f ./.development/docker-compose/docker-compose.$(GOOS).yml down
+	docker-compose -f ./develop/docker-compose/docker-compose.yml -f ./develop/docker-compose/docker-compose.$(GOOS).yml down
 
 start: temporal-server
 	./temporal-server start
@@ -411,7 +411,7 @@ start-cdc-other: temporal-server
 AWS_SDK_VERSION := $(lastword $(shell grep "github.com/aws/aws-sdk-go" go.mod))
 external-mocks:
 	@printf $(COLOR) "Generate external libraries mocks..."
-	@mockgen -copyright_file LICENSE -package mocks -source $(GOPATH)/pkg/mod/github.com/aws/aws-sdk-go@$(AWS_SDK_VERSION)/service/s3/s3iface/interface.go | grep -v -e "^// Source: .*" > common/archiver/s3store/mocks/S3API.go
+	@mockgen -copyright_file ./LICENSE -package mocks -source $(GOPATH)/pkg/mod/github.com/aws/aws-sdk-go@$(AWS_SDK_VERSION)/service/s3/s3iface/interface.go | grep -v -e "^// Source: .*" > common/archiver/s3store/mocks/S3API.go
 
 go-generate:
 	@printf $(COLOR) "Process go:generate directives..."

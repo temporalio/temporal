@@ -12,21 +12,21 @@ To run docker image with dependencies:
 
 Replace **YOUR_TAG** and **YOUR_CHECKOUT_COMMIT** in the below command to build:
 ```bash
-$ git checkout YOUR_CHECKOUT_COMMIT
-$ docker build . -t temporalio/auto-setup:YOUR_TAG --build-arg TARGET=auto-setup
+git checkout YOUR_CHECKOUT_COMMIT
+docker build . -t temporalio/auto-setup:YOUR_TAG --build-arg TARGET=auto-setup
 ```
 
 ## Run Temporal with custom docker image
 
 Clone Temporal docker-compose repo: [https://github.com/temporalio/docker-compose](https://github.com/temporalio/docker-compose):
 ```bash
-$ git clone https://github.com/temporalio/docker-compose.git
+git clone https://github.com/temporalio/docker-compose.git
 ```
 
 Replace the tag of `image: temporalio/auto-setup` to **YOUR_TAG** in `docker-compose.yml`.
 Then start the service using the below command:
 ```bash
-$ docker-compose up
+docker-compose up
 ```
 
 ## Quickstart for production
@@ -35,7 +35,7 @@ In a typical production setting, dependencies (such as `cassandra` or `elasticse
 To use the container in a production setting, use the following command:
 
 ```plain
-$ docker run -e CASSANDRA_SEEDS=10.x.x.x                -- csv of cassandra server ipaddrs
+docker run -e CASSANDRA_SEEDS=10.x.x.x                  -- csv of cassandra server ipaddrs
     -e KEYSPACE=<keyspace>                              -- Cassandra keyspace
     -e VISIBILITY_KEYSPACE=<visibility_keyspace>        -- Cassandra visibility keyspace
     -e SKIP_SCHEMA_SETUP=true                           -- do not setup cassandra schema during startup
