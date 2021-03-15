@@ -94,6 +94,9 @@ func AnyToString(val interface{}, printFully bool, maxFieldLength int) string {
 		if v.Len() == 0 {
 			return ""
 		}
+		if v.Len() == 1 {
+			return fmt.Sprintf("[%s]", AnyToString(v.Index(0).Interface(), printFully, maxFieldLength))
+		}
 		return fmt.Sprintf("[len=%d]", v.Len())
 	case reflect.Ptr:
 		return AnyToString(v.Elem().Interface(), printFully, maxFieldLength)
