@@ -90,11 +90,11 @@ func (t *TestDynamicCertProvider) DisableHostVerification(_ bool) bool {
 	return false
 }
 
-func (t *TestDynamicCertProvider) GetCertProvider(hostName string) (CertProvider, error) {
+func (t *TestDynamicCertProvider) GetCertProvider(hostName string) (CertProvider, bool, error) {
 	if hostName == "localhost" {
-		return t, nil
+		return t, false, nil
 	}
-	return nil, nil
+	return nil, false, nil
 }
 
 func (t *TestDynamicCertProvider) SwitchToWrongServerRootCACerts() {

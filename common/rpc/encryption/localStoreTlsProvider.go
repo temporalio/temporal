@@ -142,7 +142,7 @@ func (s *localStoreTlsProvider) GetFrontendServerConfig() (*tls.Config, error) {
 	return s.getOrCreateConfig(
 		&s.cachedFrontendServerConfig,
 		func() (*tls.Config, error) {
-			return newServerTLSConfig(s.frontendCertProvider, s.frontendPerHostCertProviderMap)
+			return newServerTLSConfig(s.frontendCertProvider, s.frontendPerHostCertProviderMap, &s.settings.Frontend)
 		},
 		s.frontendCertProvider.GetSettings().IsEnabled())
 }
@@ -151,7 +151,7 @@ func (s *localStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) 
 	return s.getOrCreateConfig(
 		&s.cachedInternodeServerConfig,
 		func() (*tls.Config, error) {
-			return newServerTLSConfig(s.internodeCertProvider, nil)
+			return newServerTLSConfig(s.internodeCertProvider, nil, &s.settings.Internode)
 		},
 		s.internodeCertProvider.GetSettings().IsEnabled())
 }
@@ -225,31 +225,33 @@ func (s *localStoreTlsProvider) getOrCreateConfig(
 func newServerTLSConfig(
 	certProvider CertProvider,
 	perHostCertProviderMap PerHostCertProviderMap,
+	config *config.GroupTLS,
 ) (*tls.Config, error) {
 
-	tlsConfig, err := getServerTLSConfigFromCertProvider(certProvider)
+	clientAuthRequired := config.Server.RequireClientAuth
+	tlsConfig, err := getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired)
 	if err != nil {
 		return nil, err
 	}
 
 	tlsConfig.GetConfigForClient = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
 		if perHostCertProviderMap != nil {
-			perHostCertProvider, err := perHostCertProviderMap.GetCertProvider(c.ServerName)
+			perHostCertProvider, clientAuth, err := perHostCertProviderMap.GetCertProvider(c.ServerName)
 			if err != nil {
 				return nil, err
 			}
 
 			if perHostCertProvider == nil {
-				return getServerTLSConfigFromCertProvider(certProvider)
+				return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired)
 			}
-			return getServerTLSConfigFromCertProvider(perHostCertProvider)
+			return getServerTLSConfigFromCertProvider(perHostCertProvider, clientAuth)
 		}
-		return getServerTLSConfigFromCertProvider(certProvider)
+		return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired)
 	}
 	return tlsConfig, nil
 }
 
-func getServerTLSConfigFromCertProvider(certProvider CertProvider) (*tls.Config, error) {
+func getServerTLSConfigFromCertProvider(certProvider CertProvider, requireClientAuth bool) (*tls.Config, error) {
 	// Get serverCert from disk
 	serverCert, err := certProvider.FetchServerCertificate()
 	if err != nil {
@@ -266,7 +268,7 @@ func getServerTLSConfigFromCertProvider(certProvider CertProvider) (*tls.Config,
 	var clientCaPool *x509.CertPool
 
 	// If mTLS enabled
-	if certProvider.GetSettings().Server.RequireClientAuth {
+	if requireClientAuth {
 		clientAuthType = tls.RequireAndVerifyClientCert
 
 		ca, err := certProvider.FetchClientCAs()

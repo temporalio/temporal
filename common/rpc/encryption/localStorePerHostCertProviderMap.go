@@ -36,6 +36,7 @@ var _ CertExpirationChecker = (*localStorePerHostCertProviderMap)(nil)
 
 type localStorePerHostCertProviderMap struct {
 	certProviderCache map[string]*localStoreCertProvider
+	clientAuthCache map[string] bool
 }
 
 func newLocalStorePerHostCertProviderMap(overrides map[string]config.ServerTLS) *localStorePerHostCertProviderMap {
@@ -46,28 +47,36 @@ func newLocalStorePerHostCertProviderMap(overrides map[string]config.ServerTLS) 
 	}
 
 	factory.certProviderCache = make(map[string]*localStoreCertProvider, len(overrides))
+	factory.clientAuthCache = make(map[string]bool, len(overrides))
 
 	for host, settings := range overrides {
-		factory.certProviderCache[strings.ToLower(host)] = &localStoreCertProvider{
+		lcHost := strings.ToLower(host)
+		factory.certProviderCache[lcHost] = &localStoreCertProvider{
 			tlsSettings: &config.GroupTLS{
 				Server: settings,
 			},
 		}
+		factory.clientAuthCache[lcHost] = settings.RequireClientAuth
 	}
 
 	return factory
 }
 
-func (f *localStorePerHostCertProviderMap) GetCertProvider(hostName string) (CertProvider, error) {
+func (f *localStorePerHostCertProviderMap) GetCertProvider(hostName string,
+) (provider CertProvider, clientAuthRequired bool, err error) {
+
+	clientAuthRequired = true
+	lcHostName := strings.ToLower(hostName)
 
 	if f.certProviderCache == nil {
-		return nil, nil
+		return nil, clientAuthRequired, nil
 	}
-	cachedCertProvider, ok := f.certProviderCache[strings.ToLower(hostName)]
+	cachedCertProvider, ok := f.certProviderCache[lcHostName]
 	if !ok {
-		return nil, nil
+		return nil, clientAuthRequired,nil
 	}
-	return cachedCertProvider, nil
+	clientAuthRequired = f.clientAuthCache[lcHostName]
+	return cachedCertProvider, clientAuthRequired,nil
 }
 
 func (f *localStorePerHostCertProviderMap) GetExpiringCerts(timeWindow time.Duration,
