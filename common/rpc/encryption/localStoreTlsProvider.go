@@ -55,10 +55,10 @@ type localStoreTlsProvider struct {
 
 	frontendPerHostCertProviderMap *localStorePerHostCertProviderMap
 
-	internodeServerConfig *tls.Config
-	internodeClientConfig *tls.Config
-	frontendServerConfig  *tls.Config
-	frontendClientConfig  *tls.Config
+	cachedInternodeServerConfig *tls.Config
+	cachedInternodeClientConfig *tls.Config
+	cachedFrontendServerConfig  *tls.Config
+	cachedFrontendClientConfig  *tls.Config
 
 	ticker *time.Ticker
 	logger log.Logger
@@ -118,7 +118,7 @@ func (s *localStoreTlsProvider) Close() {
 
 func (s *localStoreTlsProvider) GetInternodeClientConfig() (*tls.Config, error) {
 	return s.getOrCreateConfig(
-		&s.internodeClientConfig,
+		&s.cachedInternodeClientConfig,
 		func() (*tls.Config, error) {
 			return newClientTLSConfig(s.internodeClientCertProvider,
 				s.internodeCertProvider.GetSettings().Server.RequireClientAuth, false)
@@ -129,7 +129,7 @@ func (s *localStoreTlsProvider) GetInternodeClientConfig() (*tls.Config, error) 
 
 func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 	return s.getOrCreateConfig(
-		&s.frontendClientConfig,
+		&s.cachedFrontendClientConfig,
 		func() (*tls.Config, error) {
 			return newClientTLSConfig(s.workerCertProvider,
 				s.frontendCertProvider.GetSettings().Server.RequireClientAuth, true)
@@ -140,7 +140,7 @@ func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 
 func (s *localStoreTlsProvider) GetFrontendServerConfig() (*tls.Config, error) {
 	return s.getOrCreateConfig(
-		&s.frontendServerConfig,
+		&s.cachedFrontendServerConfig,
 		func() (*tls.Config, error) {
 			return newServerTLSConfig(s.frontendCertProvider, s.frontendPerHostCertProviderMap)
 		},
@@ -149,7 +149,7 @@ func (s *localStoreTlsProvider) GetFrontendServerConfig() (*tls.Config, error) {
 
 func (s *localStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) {
 	return s.getOrCreateConfig(
-		&s.internodeServerConfig,
+		&s.cachedInternodeServerConfig,
 		func() (*tls.Config, error) {
 			return newServerTLSConfig(s.internodeCertProvider, nil)
 		},
