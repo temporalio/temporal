@@ -30,9 +30,9 @@ import (
 	_ "net/http/pprof" // DO NOT REMOVE THE LINE
 	"sync/atomic"
 
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/service/config"
 )
 
 const (

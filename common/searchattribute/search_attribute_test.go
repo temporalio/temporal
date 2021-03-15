@@ -32,8 +32,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 func Test_GetTypeMap(t *testing.T) {

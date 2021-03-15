@@ -35,7 +35,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/s3store"
-	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/config"
 )
 
 var (

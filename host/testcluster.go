@@ -30,12 +30,15 @@ import (
 	"os"
 	"time"
 
+	"go.temporal.io/server/common/config"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -48,8 +51,6 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/service/config"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (

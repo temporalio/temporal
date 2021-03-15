@@ -35,11 +35,11 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/service/history/shard"
 )
 

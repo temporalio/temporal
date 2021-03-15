@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -51,7 +52,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/service/config"
 )
 
 const (

@@ -25,9 +25,9 @@
 package persistencetests
 
 import (
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/environment"
 )
 

@@ -31,7 +31,7 @@ import (
 
 	"github.com/uber-go/tally"
 
-	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/config"
 )
 
 type (

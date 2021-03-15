@@ -36,9 +36,9 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 var (

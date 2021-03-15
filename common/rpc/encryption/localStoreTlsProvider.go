@@ -34,8 +34,8 @@ import (
 	"github.com/uber-go/tally"
 
 	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/service/config"
 )
 
 const (

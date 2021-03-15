@@ -29,9 +29,9 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/service/config"
 )
 
 // VerifyCompatibleVersion ensures that the installed version of temporal and visibility

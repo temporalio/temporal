@@ -30,8 +30,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/common/task"
 )
 

@@ -25,10 +25,10 @@
 package sql
 
 import (
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/tools/common/schema"
 )
 

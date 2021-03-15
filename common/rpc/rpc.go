@@ -34,10 +34,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc/encryption"
-	"go.temporal.io/server/common/service/config"
 )
 
 // RPCFactory is an implementation of service.RPCFactory interface

@@ -36,8 +36,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/service/history/shard"
 )
 

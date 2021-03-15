@@ -44,14 +44,15 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common/config"
+
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/service/config"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type ESVisibilitySuite struct {

@@ -33,18 +33,19 @@ import (
 	"github.com/urfave/cli"
 	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/common/config"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/service/config"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 const (

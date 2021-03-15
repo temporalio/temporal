@@ -62,6 +62,7 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
@@ -70,7 +71,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
-	dc "go.temporal.io/server/common/service/dynamicconfig"
 	warchiver "go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 )

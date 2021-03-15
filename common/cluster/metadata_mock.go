@@ -32,7 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	config "go.temporal.io/server/common/service/config"
+	config "go.temporal.io/server/common/config"
 )
 
 // MockMetadata is a mock of Metadata interface.

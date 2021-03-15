@@ -30,14 +30,15 @@ import (
 	"strings"
 	"time"
 
+	"go.temporal.io/server/common/config"
+
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/service/config"
-	"go.temporal.io/server/common/service/dynamicconfig"
 	"go.temporal.io/server/environment"
 )
 

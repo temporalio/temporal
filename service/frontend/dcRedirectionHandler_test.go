@@ -37,12 +37,13 @@ import (
 	"go.temporal.io/api/workflowservicemock/v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
+	"go.temporal.io/server/common/config"
+
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/service/config"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type (

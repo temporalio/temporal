@@ -34,8 +34,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 // VisibilityQueryValidator for sql query validation

@@ -38,7 +38,7 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 
-	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/config"
 )
 
 var _ CertProvider = (*localStoreCertProvider)(nil)

@@ -36,9 +36,9 @@ import (
 
 	"gopkg.in/square/go-jose.v2"
 
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/service/config"
 )
 
 // Default token key provider

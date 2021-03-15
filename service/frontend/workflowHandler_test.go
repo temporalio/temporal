@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
+	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/mocks"
 	"go.temporal.io/server/common/namespace"
@@ -61,7 +62,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
-	dc "go.temporal.io/server/common/service/dynamicconfig"
 )
 
 const (

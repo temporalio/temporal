@@ -34,11 +34,11 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/headers"
 	tlog "go.temporal.io/server/common/log"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"      // needed to load mysql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
-	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/temporal"
 )
 

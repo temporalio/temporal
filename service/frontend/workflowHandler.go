@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
@@ -61,7 +62,6 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 const (

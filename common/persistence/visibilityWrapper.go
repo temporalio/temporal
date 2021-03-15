@@ -30,7 +30,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/service/dynamicconfig"
+	"go.temporal.io/server/common/dynamicconfig"
 )
 
 type (

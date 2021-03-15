@@ -29,10 +29,10 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/service/config"
 	cassandraschema "go.temporal.io/server/schema/cassandra"
 )
 

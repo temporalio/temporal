@@ -33,7 +33,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 
 	"go.temporal.io/server/common/auth"
-	"go.temporal.io/server/common/service/config"
+	"go.temporal.io/server/common/config"
 )
 
 func registerTLSConfig(cfg *config.SQL) error {

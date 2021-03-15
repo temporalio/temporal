@@ -28,8 +28,8 @@ import (
 	"context"
 	"database/sql"
 
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/service/config"
 )
 
 type (

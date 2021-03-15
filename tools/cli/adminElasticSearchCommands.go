@@ -40,6 +40,9 @@ import (
 	"github.com/urfave/cli"
 	"go.uber.org/atomic"
 
+	"go.temporal.io/server/common/config"
+
+	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -48,8 +51,6 @@ import (
 	"go.temporal.io/server/common/persistence/elasticsearch/esql"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/service/config"
-	dc "go.temporal.io/server/common/service/dynamicconfig"
 )
 
 const (

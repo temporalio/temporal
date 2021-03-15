@@ -35,8 +35,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 func TestValidateRetryPolicy(t *testing.T) {

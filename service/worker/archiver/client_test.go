@@ -37,9 +37,9 @@ import (
 
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/service/dynamicconfig"
 )
 
 type clientSuite struct {

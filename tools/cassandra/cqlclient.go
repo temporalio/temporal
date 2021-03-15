@@ -32,9 +32,9 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/service/config"
 	"go.temporal.io/server/tools/common/schema"
 )
 
