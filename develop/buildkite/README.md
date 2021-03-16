@@ -4,11 +4,11 @@ Buildkite simply runs docker containers. So it is easy to perform the
 same build locally that BuildKite will do.
 
 ## Testing the build locally
-To run tests locally use `docker-compose run` command in `.buildkite` directory:
+To run tests locally use `docker-compose run` command in `develop/buildkite` directory:
 
 ```bash
-$ cd .buildkite
-$ docker-compose run <container_name> <command>
+cd develop/buildkite
+docker-compose run <container_name> <command>
 ```
 
 Get `<container_name>` and `<command>` form [pipeline.yml](pipeline.yml):
@@ -31,15 +31,15 @@ Get `<container_name>` and `<command>` form [pipeline.yml](pipeline.yml):
 
 For example to run unit tests:
 ```bash
-$ docker-compose run unit-test make unit-test-coverage
+docker-compose run unit-test make unit-test-coverage
 ```
 or run integration tests with Cassandra:
 ```bash
-$ docker-compose run integration-test-cassandra make integration-test-coverage
+docker-compose run integration-test-cassandra make integration-test-coverage
 ```
 or run integration tests with MySQL:
 ```bash
-$ docker-compose run integration-test-mysql make integration-test-coverage
+docker-compose run integration-test-mysql make integration-test-coverage
 ```
 
 ## Testing the build in Buildkite

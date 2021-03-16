@@ -42,8 +42,8 @@ services:
 
   build:
     build:
-      context: ../
-      dockerfile: ./.buildkite/Dockerfile
+      context: ../..
+      dockerfile: ./develop/buildkite/Dockerfile
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "MYSQL_SEEDS=mysql"
@@ -53,13 +53,13 @@ services:
       - BUILDKITE_BUILD_ID
       - BUILDKITE_BUILD_NUMBER
     volumes:
-      - ../:/temporal
+      - ../..:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
 
   unit-test:
     build:
-      context: ../
-      dockerfile: ./.buildkite/Dockerfile
+      context: ../..
+      dockerfile: ./develop/buildkite/Dockerfile
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "MYSQL_SEEDS=mysql"
@@ -74,7 +74,7 @@ services:
       - mysql
       - postgresql
     volumes:
-      - ../:/temporal
+      - ../..:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -83,8 +83,8 @@ services:
 
   integration-test-cassandra:
     build:
-      context: ../
-      dockerfile: ./.buildkite/Dockerfile
+      context: ../..
+      dockerfile: ./develop/buildkite/Dockerfile
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "ES_SEEDS=elasticsearch"
@@ -101,7 +101,7 @@ services:
       - cassandra
       - elasticsearch
     volumes:
-      - ../:/temporal
+      - ../..:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -110,8 +110,8 @@ services:
 
   integration-test-mysql:
     build:
-      context: ../
-      dockerfile: ./.buildkite/Dockerfile
+      context: ../..
+      dockerfile: ./develop/buildkite/Dockerfile
     environment:
       - "MYSQL_SEEDS=mysql"
       - "ES_SEEDS=elasticsearch"
@@ -128,7 +128,7 @@ services:
       - mysql
       - elasticsearch
     volumes:
-      - ../:/temporal
+      - ../..:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -137,8 +137,8 @@ services:
 
   integration-test-postgresql:
     build:
-      context: ../
-      dockerfile: ./.buildkite/Dockerfile
+      context: ../..
+      dockerfile: ./develop/buildkite/Dockerfile
     environment:
       - "POSTGRES_SEEDS=postgresql"
       - "ES_SEEDS=elasticsearch"
@@ -155,7 +155,7 @@ services:
       - postgresql
       - elasticsearch
     volumes:
-      - ../:/temporal
+      - ../..:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -164,8 +164,8 @@ services:
 
   integration-test-xdc-cassandra:
     build:
-      context: ../
-      dockerfile: ./.buildkite/Dockerfile
+      context: ../..
+      dockerfile: ./develop/buildkite/Dockerfile
     environment:
       - "CASSANDRA_SEEDS=cassandra"
       - "ES_SEEDS=elasticsearch"
@@ -183,7 +183,7 @@ services:
       - cassandra
       - elasticsearch
     volumes:
-      - ../:/temporal
+      - ../..:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -192,8 +192,8 @@ services:
 
   integration-test-xdc-mysql:
     build:
-      context: ../
-      dockerfile: ./.buildkite/Dockerfile
+      context: ../..
+      dockerfile: ./develop/buildkite/Dockerfile
     environment:
       - "MYSQL_SEEDS=mysql"
       - "ES_SEEDS=elasticsearch"
@@ -211,7 +211,7 @@ services:
       - mysql
       - elasticsearch
     volumes:
-      - ../:/temporal
+      - ../..:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -220,8 +220,8 @@ services:
 
   integration-test-xdc-postgresql:
     build:
-      context: ../
-      dockerfile: ./.buildkite/Dockerfile
+      context: ../..
+      dockerfile: ./develop/buildkite/Dockerfile
     environment:
       - "POSTGRES_SEEDS=postgresql"
       - "ES_SEEDS=elasticsearch"
@@ -239,7 +239,7 @@ services:
       - postgresql
       - elasticsearch
     volumes:
-      - ../:/temporal
+      - ../..:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
     networks:
       services-network:
@@ -248,8 +248,8 @@ services:
 
   coverage-report:
     build:
-      context: ../
-      dockerfile: ./.buildkite/Dockerfile
+      context: ../..
+      dockerfile: ./develop/buildkite/Dockerfile
     environment:
       - CI
       - BUILDKITE
@@ -270,7 +270,7 @@ services:
       - BUILDKITE_PULL_REQUEST_REPO
       - COVERALLS_TOKEN
     volumes:
-      - ../:/temporal
+      - ../..:/temporal
       - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
 
 networks:

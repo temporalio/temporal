@@ -6,13 +6,13 @@ Temporal server besides a server itself which you suppose to run locally on the 
 You are not supposed to use these files directly. Please use [Makefile](../../Makefile) targets instead. To start dependencies:
 
 ```bash
-$ make start-dependencies
+make start-dependencies
 ```
 
 To stop dependencies:
 
 ```bash
-$ make stop-dependencies
+make stop-dependencies
 ```
 
 See [CONTRIBUTING.md](../../CONTRIBUTING.md) for details.
