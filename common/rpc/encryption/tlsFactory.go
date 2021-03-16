@@ -47,12 +47,9 @@ type (
 	CertProvider interface {
 		FetchServerCertificate() (*tls.Certificate, error)
 		FetchClientCAs() (*x509.CertPool, error)
-	}
-
-	// ClientCertProvider is an interface to load raw TLS/X509 primitives for configuring clients.
-	ClientCertProvider interface {
 		FetchClientCertificate(isWorker bool) (*tls.Certificate, error)
 		FetchServerRootCAsForClient(isWorker bool) (*x509.CertPool, error)
+		GetExpiringCerts(timeWindow time.Duration) (expiring CertExpirationMap, expired CertExpirationMap, err error)
 	}
 
 	// PerHostCertProviderMap returns a CertProvider for a given host name.

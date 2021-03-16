@@ -40,7 +40,6 @@ import (
 )
 
 var _ CertProvider = (*localStoreCertProvider)(nil)
-var _ ClientCertProvider = (*localStoreCertProvider)(nil)
 var _ CertExpirationChecker = (*localStoreCertProvider)(nil)
 
 type localStoreCertProvider struct {

@@ -48,10 +48,10 @@ type localStoreTlsProvider struct {
 
 	settings *config.RootTLS
 
-	internodeCertProvider       *localStoreCertProvider
-	internodeClientCertProvider *localStoreCertProvider
-	frontendCertProvider        *localStoreCertProvider
-	workerCertProvider          *localStoreCertProvider
+	internodeCertProvider       CertProvider
+	internodeClientCertProvider CertProvider
+	frontendCertProvider        CertProvider
+	workerCertProvider          CertProvider
 
 	frontendPerHostCertProviderMap *localStorePerHostCertProviderMap
 
@@ -288,7 +288,7 @@ func getServerTLSConfigFromCertProvider(certProvider CertProvider, requireClient
 		clientCaPool), nil
 }
 
-func newClientTLSConfig(clientProvider ClientCertProvider, serverName string, isAuthRequired bool,
+func newClientTLSConfig(clientProvider CertProvider, serverName string, isAuthRequired bool,
 	isWorker bool, enableHostVerification bool) (*tls.Config, error) {
 	// Optional ServerCA for client if not already trusted by host
 	serverCa, err := clientProvider.FetchServerRootCAsForClient(isWorker)
