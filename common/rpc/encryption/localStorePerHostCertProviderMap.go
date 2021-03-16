@@ -36,7 +36,7 @@ var _ CertExpirationChecker = (*localStorePerHostCertProviderMap)(nil)
 
 type localStorePerHostCertProviderMap struct {
 	certProviderCache map[string]*localStoreCertProvider
-	clientAuthCache map[string] bool
+	clientAuthCache   map[string]bool
 }
 
 func newLocalStorePerHostCertProviderMap(overrides map[string]config.ServerTLS) *localStorePerHostCertProviderMap {
@@ -73,10 +73,10 @@ func (f *localStorePerHostCertProviderMap) GetCertProvider(hostName string,
 	}
 	cachedCertProvider, ok := f.certProviderCache[lcHostName]
 	if !ok {
-		return nil, clientAuthRequired,nil
+		return nil, clientAuthRequired, nil
 	}
 	clientAuthRequired = f.clientAuthCache[lcHostName]
-	return cachedCertProvider, clientAuthRequired,nil
+	return cachedCertProvider, clientAuthRequired, nil
 }
 
 func (f *localStorePerHostCertProviderMap) GetExpiringCerts(timeWindow time.Duration,
