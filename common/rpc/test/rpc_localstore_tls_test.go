@@ -111,7 +111,7 @@ func (s *localStoreRPCSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 	s.logger = log.NewDefaultLogger()
 
-	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, nil)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, nil, nil)
 	s.NoError(err)
 	insecureFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(insecureFactory)
@@ -249,17 +249,17 @@ func (s *localStoreRPCSuite) setupFrontend() {
 		},
 	}
 
-	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS, nil)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS, nil, nil)
 	s.NoError(err)
 	frontendMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(frontendMutualTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS, nil, nil)
 	s.NoError(err)
 	frontendServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(frontendServerTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSSystemWorker.TLS, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSSystemWorker.TLS, nil, nil)
 	s.NoError(err)
 	frontendSystemWorkerMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(frontendSystemWorkerMutualTLSFactory)
@@ -305,17 +305,17 @@ func (s *localStoreRPCSuite) setupInternode() {
 		},
 	}
 
-	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS, nil)
+	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS, nil, nil)
 	s.NoError(err)
 	internodeMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(internodeMutualTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreServerTLS.TLS, nil, nil)
 	s.NoError(err)
 	internodeServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(internodeServerTLSFactory)
 
-	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreAltMutualTLS.TLS, nil)
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreAltMutualTLS.TLS, nil, nil)
 	s.NoError(err)
 	internodeMutualAltTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(internodeMutualAltTLSFactory)

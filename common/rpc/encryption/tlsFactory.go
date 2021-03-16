@@ -78,10 +78,31 @@ type (
 	tlsConfigConstructor func() (*tls.Config, error)
 )
 
-// NewTLSConfigProviderFromConfig creates a new TLS Config provider from RootTLS config
+// NewTLSConfigProviderFromConfig creates a new TLS Config provider from RootTLS config.
+// A custom cert provider factory can be optionally injected via certProviderFactory argument.
+// Otherwise, it defaults to using localStoreCertProvider
 func NewTLSConfigProviderFromConfig(
 	encryptionSettings config.RootTLS,
 	scope tally.Scope,
+	certProviderFactory CertProviderFactory,
 ) (TLSConfigProvider, error) {
-	return NewLocalStoreTlsProvider(&encryptionSettings, scope)
+
+	if certProviderFactory == nil {
+		certProviderFactory = newLocalStoreCertProvider
+	}
+	return NewLocalStoreTlsProvider(&encryptionSettings, scope, certProviderFactory)
+}
+
+func newLocalStoreCertProvider(
+	tlsSettings *config.GroupTLS,
+	workerTlsSettings *config.WorkerTLS,
+	legacyWorkerSettings *config.ClientTLS) CertProvider {
+
+	provider := &localStoreCertProvider{
+		tlsSettings:          tlsSettings,
+		workerTLSSettings:    workerTlsSettings,
+		legacyWorkerSettings: legacyWorkerSettings,
+		isLegacyWorkerConfig: legacyWorkerSettings != nil,
+	}
+	return provider
 }

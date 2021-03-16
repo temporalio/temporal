@@ -43,6 +43,8 @@ const (
 	metricCertsExpiring = "certificates_expiring"
 )
 
+type CertProviderFactory func(tlsSettings *config.GroupTLS, workerTlsSettings *config.WorkerTLS, legacyWorkerSettings *config.ClientTLS) CertProvider
+
 type localStoreTlsProvider struct {
 	sync.RWMutex
 
@@ -69,22 +71,22 @@ type localStoreTlsProvider struct {
 var _ TLSConfigProvider = (*localStoreTlsProvider)(nil)
 var _ CertExpirationChecker = (*localStoreTlsProvider)(nil)
 
-func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope tally.Scope) (TLSConfigProvider, error) {
-	internodeProvider := &localStoreCertProvider{tlsSettings: &tlsConfig.Internode}
-	var workerProvider *localStoreCertProvider
+func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope tally.Scope, certProviderFactory CertProviderFactory,
+) (TLSConfigProvider, error) {
+
+	internodeProvider := certProviderFactory(&tlsConfig.Internode, nil, nil)
+	var workerProvider CertProvider
 	if tlsConfig.SystemWorker.CertFile != "" || tlsConfig.SystemWorker.CertData != "" { // explicit system worker config
-		workerProvider = &localStoreCertProvider{workerTLSSettings: &tlsConfig.SystemWorker}
+		workerProvider = certProviderFactory(nil, &tlsConfig.SystemWorker, nil)
 	} else { // legacy implicit system worker config case
-		internodeWorkerProvider := &localStoreCertProvider{tlsSettings: &tlsConfig.Internode}
-		internodeWorkerProvider.isLegacyWorkerConfig = true
-		internodeWorkerProvider.legacyWorkerSettings = &tlsConfig.Frontend.Client
+		internodeWorkerProvider := certProviderFactory(&tlsConfig.Internode, nil, &tlsConfig.Frontend.Client)
 		workerProvider = internodeWorkerProvider
 	}
 
 	provider := &localStoreTlsProvider{
 		internodeCertProvider:          internodeProvider,
 		internodeClientCertProvider:    internodeProvider,
-		frontendCertProvider:           &localStoreCertProvider{tlsSettings: &tlsConfig.Frontend},
+		frontendCertProvider:           certProviderFactory(&tlsConfig.Frontend, nil, nil),
 		workerCertProvider:             workerProvider,
 		frontendPerHostCertProviderMap: newLocalStorePerHostCertProviderMap(tlsConfig.Frontend.PerHostOverrides),
 		RWMutex:                        sync.RWMutex{},
