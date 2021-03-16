@@ -53,8 +53,6 @@ type (
 	ClientCertProvider interface {
 		FetchClientCertificate(isWorker bool) (*tls.Certificate, error)
 		FetchServerRootCAsForClient(isWorker bool) (*x509.CertPool, error)
-		ServerName(isWorker bool) string
-		DisableHostVerification(isWorker bool) bool
 	}
 
 	// PerHostCertProviderMap returns a CertProvider for a given host name.

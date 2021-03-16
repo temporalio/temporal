@@ -70,10 +70,6 @@ type x509CertFetcher func() (*x509.Certificate, error)
 type x509CertPoolFetcher func() (*x509.CertPool, error)
 type tlsCertFetcher func() (*tls.Certificate, error)
 
-func (s *localStoreCertProvider) GetSettings() *config.GroupTLS {
-	return s.tlsSettings
-}
-
 func (s *localStoreCertProvider) FetchServerCertificate() (*tls.Certificate, error) {
 
 	if s.tlsSettings == nil {
@@ -256,14 +252,6 @@ func (s *localStoreCertProvider) FetchCertificate(cachedCert **tls.Certificate,
 
 	*cachedCert = &cert
 	return *cachedCert, nil
-}
-
-func (s *localStoreCertProvider) ServerName(isWorker bool) string {
-	return s.getClientTLSSettings(isWorker).ServerName
-}
-
-func (s *localStoreCertProvider) DisableHostVerification(isWorker bool) bool {
-	return s.getClientTLSSettings(isWorker).DisableHostVerification
 }
 
 func (s *localStoreCertProvider) getClientTLSSettings(isWorker bool) *config.ClientTLS {

@@ -117,24 +117,28 @@ func (s *localStoreTlsProvider) Close() {
 }
 
 func (s *localStoreTlsProvider) GetInternodeClientConfig() (*tls.Config, error) {
+
+	client := &s.settings.Internode.Client
 	return s.getOrCreateConfig(
 		&s.cachedInternodeClientConfig,
 		func() (*tls.Config, error) {
-			return newClientTLSConfig(s.internodeClientCertProvider,
-				s.internodeCertProvider.GetSettings().Server.RequireClientAuth, false)
+			return newClientTLSConfig(s.internodeClientCertProvider, client.ServerName,
+				s.settings.Internode.Server.RequireClientAuth, false, !client.DisableHostVerification)
 		},
-		s.internodeCertProvider.GetSettings().IsEnabled(),
+		s.settings.Internode.IsEnabled(),
 	)
 }
 
 func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
+
+	client := &s.settings.Frontend.Client
 	return s.getOrCreateConfig(
 		&s.cachedFrontendClientConfig,
 		func() (*tls.Config, error) {
-			return newClientTLSConfig(s.workerCertProvider,
-				s.frontendCertProvider.GetSettings().Server.RequireClientAuth, true)
+			return newClientTLSConfig(s.workerCertProvider, client.ServerName,
+				s.settings.Frontend.Server.RequireClientAuth, true, !client.DisableHostVerification)
 		},
-		s.internodeCertProvider.GetSettings().IsEnabled(),
+		s.settings.Internode.IsEnabled(),
 	)
 }
 
@@ -144,7 +148,7 @@ func (s *localStoreTlsProvider) GetFrontendServerConfig() (*tls.Config, error) {
 		func() (*tls.Config, error) {
 			return newServerTLSConfig(s.frontendCertProvider, s.frontendPerHostCertProviderMap, &s.settings.Frontend)
 		},
-		s.frontendCertProvider.GetSettings().IsEnabled())
+		s.settings.Frontend.IsEnabled())
 }
 
 func (s *localStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) {
@@ -153,7 +157,7 @@ func (s *localStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) 
 		func() (*tls.Config, error) {
 			return newServerTLSConfig(s.internodeCertProvider, nil, &s.settings.Internode)
 		},
-		s.internodeCertProvider.GetSettings().IsEnabled())
+		s.settings.Internode.IsEnabled())
 }
 
 func (s *localStoreTlsProvider) GetExpiringCerts(timeWindow time.Duration,
@@ -284,7 +288,8 @@ func getServerTLSConfigFromCertProvider(certProvider CertProvider, requireClient
 		clientCaPool), nil
 }
 
-func newClientTLSConfig(clientProvider ClientCertProvider, isAuthRequired bool, isWorker bool) (*tls.Config, error) {
+func newClientTLSConfig(clientProvider ClientCertProvider, serverName string, isAuthRequired bool,
+	isWorker bool, enableHostVerification bool) (*tls.Config, error) {
 	// Optional ServerCA for client if not already trusted by host
 	serverCa, err := clientProvider.FetchServerRootCAsForClient(isWorker)
 	if err != nil {
@@ -311,8 +316,8 @@ func newClientTLSConfig(clientProvider ClientCertProvider, isAuthRequired bool, 
 	return auth.NewDynamicTLSClientConfig(
 		getCert,
 		serverCa,
-		clientProvider.ServerName(isWorker),
-		!clientProvider.DisableHostVerification(isWorker),
+		serverName,
+		enableHostVerification, //!clientProvider.DisableHostVerification(isWorker),
 	), nil
 }
 

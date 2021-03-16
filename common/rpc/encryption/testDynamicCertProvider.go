@@ -82,14 +82,6 @@ func (t *TestDynamicCertProvider) FetchServerRootCAsForClient(_ bool) (*x509.Cer
 	return t.caCerts, nil
 }
 
-func (t *TestDynamicCertProvider) ServerName(_ bool) string {
-	return t.serverName
-}
-
-func (t *TestDynamicCertProvider) DisableHostVerification(_ bool) bool {
-	return false
-}
-
 func (t *TestDynamicCertProvider) GetCertProvider(hostName string) (CertProvider, bool, error) {
 	if hostName == "localhost" {
 		return t, false, nil
