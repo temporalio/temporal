@@ -452,5 +452,8 @@ func appendError(aggregatedErr error, err error) error {
 	if aggregatedErr == nil {
 		return err
 	}
+	if err == nil {
+		return aggregatedErr
+	}
 	return fmt.Errorf("%v, %w", aggregatedErr, err)
 }
