@@ -49,19 +49,19 @@ type TestDynamicTLSConfigProvider struct {
 }
 
 func (t *TestDynamicTLSConfigProvider) GetInternodeServerConfig() (*tls.Config, error) {
-	return newServerTLSConfig(t.InternodeCertProvider, nil)
+	return newServerTLSConfig(t.InternodeCertProvider, nil, &t.settings.Internode)
 }
 
 func (t *TestDynamicTLSConfigProvider) GetInternodeClientConfig() (*tls.Config, error) {
-	return newClientTLSConfig(t.InternodeClientCertProvider, true, false)
+	return newClientTLSConfig(t.InternodeClientCertProvider, t.settings.Internode.Client.ServerName, true, false, true)
 }
 
 func (t *TestDynamicTLSConfigProvider) GetFrontendServerConfig() (*tls.Config, error) {
-	return newServerTLSConfig(t.FrontendCertProvider, t.FrontendPerHostCertProviderMap)
+	return newServerTLSConfig(t.FrontendCertProvider, t.FrontendPerHostCertProviderMap, &t.settings.Frontend)
 }
 
 func (t *TestDynamicTLSConfigProvider) GetFrontendClientConfig() (*tls.Config, error) {
-	return newClientTLSConfig(t.WorkerCertProvider, true, false)
+	return newClientTLSConfig(t.WorkerCertProvider, t.settings.Frontend.Client.ServerName, true, false, true)
 }
 
 var _ TLSConfigProvider = (*TestDynamicTLSConfigProvider)(nil)

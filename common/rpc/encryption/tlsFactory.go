@@ -47,20 +47,17 @@ type (
 	CertProvider interface {
 		FetchServerCertificate() (*tls.Certificate, error)
 		FetchClientCAs() (*x509.CertPool, error)
-		GetSettings() *config.GroupTLS
 	}
 
 	// ClientCertProvider is an interface to load raw TLS/X509 primitives for configuring clients.
 	ClientCertProvider interface {
 		FetchClientCertificate(isWorker bool) (*tls.Certificate, error)
 		FetchServerRootCAsForClient(isWorker bool) (*x509.CertPool, error)
-		ServerName(isWorker bool) string
-		DisableHostVerification(isWorker bool) bool
 	}
 
 	// PerHostCertProviderMap returns a CertProvider for a given host name.
 	PerHostCertProviderMap interface {
-		GetCertProvider(hostName string) (CertProvider, error)
+		GetCertProvider(hostName string) (provider CertProvider, clientAuthRequired bool, err error)
 	}
 
 	CertThumbprint [16]byte
