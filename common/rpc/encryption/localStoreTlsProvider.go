@@ -240,15 +240,15 @@ func newServerTLSConfig(
 
 	tlsConfig.GetConfigForClient = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
 		if perHostCertProviderMap != nil {
-			perHostCertProvider, clientAuth, err := perHostCertProviderMap.GetCertProvider(c.ServerName)
+			perHostCertProvider, hostClientAuthRequired, err := perHostCertProviderMap.GetCertProvider(c.ServerName)
 			if err != nil {
 				return nil, err
 			}
 
-			if perHostCertProvider == nil {
-				return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired)
+			if perHostCertProvider != nil {
+				return getServerTLSConfigFromCertProvider(perHostCertProvider, hostClientAuthRequired)
 			}
-			return getServerTLSConfigFromCertProvider(perHostCertProvider, clientAuth)
+			return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired)
 		}
 		return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired)
 	}
@@ -317,7 +317,7 @@ func newClientTLSConfig(clientProvider ClientCertProvider, serverName string, is
 		getCert,
 		serverCa,
 		serverName,
-		enableHostVerification, //!clientProvider.DisableHostVerification(isWorker),
+		enableHostVerification,
 	), nil
 }
 
