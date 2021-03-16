@@ -36,8 +36,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hashicorp/go-multierror"
-
 	"go.temporal.io/server/common/config"
 )
 
@@ -450,10 +448,12 @@ func loadCAsAndCaptureErrors(getCAs x509CertPoolFetcher) error {
 	return err
 }
 
-func appendError(to error, from error) error {
-
-	if from != nil {
-		return multierror.Append(to, from)
+func appendError(aggregatedErr error, err error) error {
+	if aggregatedErr == nil {
+		return err
 	}
-	return to
+	if err == nil {
+		return aggregatedErr
+	}
+	return fmt.Errorf("%v, %w", aggregatedErr, err)
 }
