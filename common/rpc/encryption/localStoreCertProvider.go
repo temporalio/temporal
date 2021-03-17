@@ -36,8 +36,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hashicorp/go-multierror"
-
 	"go.temporal.io/server/common/config"
 )
 
@@ -69,10 +67,6 @@ type loadOrDecodeDataFunc func(item string) ([]byte, error)
 type x509CertFetcher func() (*x509.Certificate, error)
 type x509CertPoolFetcher func() (*x509.CertPool, error)
 type tlsCertFetcher func() (*tls.Certificate, error)
-
-func (s *localStoreCertProvider) GetSettings() *config.GroupTLS {
-	return s.tlsSettings
-}
 
 func (s *localStoreCertProvider) FetchServerCertificate() (*tls.Certificate, error) {
 
@@ -256,14 +250,6 @@ func (s *localStoreCertProvider) FetchCertificate(cachedCert **tls.Certificate,
 
 	*cachedCert = &cert
 	return *cachedCert, nil
-}
-
-func (s *localStoreCertProvider) ServerName(isWorker bool) string {
-	return s.getClientTLSSettings(isWorker).ServerName
-}
-
-func (s *localStoreCertProvider) DisableHostVerification(isWorker bool) bool {
-	return s.getClientTLSSettings(isWorker).DisableHostVerification
 }
 
 func (s *localStoreCertProvider) getClientTLSSettings(isWorker bool) *config.ClientTLS {
@@ -450,7 +436,7 @@ func parseCert(bytes []byte) (*x509.Certificate, error) {
 		}
 	}
 
-	if len(certBytes[0]) == 0 {
+	if len(certBytes) == 0 || len(certBytes[0]) == 0 {
 		return nil, fmt.Errorf("failed to decode PEM certificate data")
 	}
 	return x509.ParseCertificate(certBytes[0])
@@ -462,10 +448,12 @@ func loadCAsAndCaptureErrors(getCAs x509CertPoolFetcher) error {
 	return err
 }
 
-func appendError(to error, from error) error {
-
-	if from != nil {
-		return multierror.Append(to, from)
+func appendError(aggregatedErr error, err error) error {
+	if aggregatedErr == nil {
+		return err
 	}
-	return to
+	if err == nil {
+		return aggregatedErr
+	}
+	return fmt.Errorf("%v, %w", aggregatedErr, err)
 }

@@ -38,7 +38,7 @@ type keyType struct {
 }
 
 func TestLRU(t *testing.T) {
-	cache := NewLRU(5)
+	cache := NewLRU(4)
 
 	cache.Put("A", "Foo")
 	assert.Equal(t, "Foo", cache.Get("A"))
