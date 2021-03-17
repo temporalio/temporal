@@ -283,7 +283,7 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 	}
 
 	c.byKey[key] = c.byAccess.PushFront(entry)
-	if len(c.byKey) == c.maxSize {
+	if len(c.byKey) > c.maxSize {
 		oldest := c.byAccess.Back().Value.(*entryImpl)
 
 		if oldest.refCount > 0 {
