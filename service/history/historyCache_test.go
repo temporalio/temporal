@@ -116,7 +116,7 @@ func (s *historyCacheSuite) TestHistoryCacheBasic() {
 }
 
 func (s *historyCacheSuite) TestHistoryCachePinning() {
-	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(2)
+	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
 	namespaceID := "test_namespace_id"
 	s.cache = newHistoryCache(s.mockShard)
 	we := commonpb.WorkflowExecution{

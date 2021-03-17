@@ -38,7 +38,7 @@ type keyType struct {
 }
 
 func TestLRU(t *testing.T) {
-	cache := NewLRU(5)
+	cache := NewLRU(4)
 
 	cache.Put("A", "Foo")
 	assert.Equal(t, "Foo", cache.Get("A"))
@@ -234,6 +234,41 @@ func TestRemovedFuncWithTTL_Pin(t *testing.T) {
 	case <-timeout.C:
 		t.Error("RemovedFunc did not send true on channel ch")
 	}
+}
+
+func TestRemovedFuncMaxSize_Pin(t *testing.T) {
+	ch := make(chan bool)
+	cache := New(1, &Options{
+		TTL: time.Millisecond * 50,
+		Pin: true,
+		RemovedFunc: func(i interface{}) {
+			_, ok := i.(*testing.T)
+			assert.True(t, ok)
+			ch <- true
+		},
+	})
+
+	_, err := cache.PutIfNotExist("A", t)
+	assert.NoError(t, err)
+	assert.Equal(t, t, cache.Get("A"))
+	cache.Release("A")
+
+	_, err = cache.PutIfNotExist("B", t)
+	assert.Error(t, err)
+	assert.Equal(t, t, cache.Get("A"))
+	cache.Release("A")
+	assert.Nil(t, cache.Get("B"))
+
+	// since put if not exist also increase the counter
+	cache.Release("A")
+
+	time.Sleep(time.Millisecond * 100)
+	assert.Nil(t, cache.Get("A"))
+
+	_, err = cache.PutIfNotExist("B", t)
+	assert.NoError(t, err)
+	assert.Equal(t, t, cache.Get("B"))
+	cache.Release("B")
 }
 
 func TestIterator(t *testing.T) {
