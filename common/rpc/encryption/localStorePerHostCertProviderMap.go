@@ -65,17 +65,16 @@ func newLocalStorePerHostCertProviderMap(overrides map[string]config.ServerTLS) 
 // GetCertProvider for a given host name returns a cert provider (nil if not found) and if client authentication is required
 func (f *localStorePerHostCertProviderMap) GetCertProvider(hostName string) (CertProvider, bool, error) {
 
-	clientAuthRequired := true
 	lcHostName := strings.ToLower(hostName)
 
 	if f.certProviderCache == nil {
-		return nil, clientAuthRequired, nil
+		return nil, true, nil
 	}
 	cachedCertProvider, ok := f.certProviderCache[lcHostName]
 	if !ok {
-		return nil, clientAuthRequired, nil
+		return nil, true, nil
 	}
-	clientAuthRequired = f.clientAuthCache[lcHostName]
+	clientAuthRequired := f.clientAuthCache[lcHostName]
 	return cachedCertProvider, clientAuthRequired, nil
 }
 

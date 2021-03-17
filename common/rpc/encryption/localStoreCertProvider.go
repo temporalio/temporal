@@ -436,7 +436,7 @@ func parseCert(bytes []byte) (*x509.Certificate, error) {
 		}
 	}
 
-	if len(certBytes[0]) == 0 {
+	if len(certBytes) == 0 || len(certBytes[0]) == 0 {
 		return nil, fmt.Errorf("failed to decode PEM certificate data")
 	}
 	return x509.ParseCertificate(certBytes[0])
