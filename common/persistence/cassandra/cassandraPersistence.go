@@ -1894,8 +1894,8 @@ func (d *cassandraPersistence) GetReplicationTasks(
 		rowTypeReplicationWorkflowID,
 		rowTypeReplicationRunID,
 		defaultVisibilityTimestamp,
-		request.ReadLevel,
-		request.MaxReadLevel,
+		request.MinTaskID,
+		request.MaxTaskID,
 	).PageSize(request.BatchSize).PageState(request.NextPageToken)
 
 	return d.populateGetReplicationTasksResponse(query, "GetReplicationTasks")
@@ -2556,8 +2556,8 @@ func (d *cassandraPersistence) GetReplicationTasksFromDLQ(
 		request.SourceClusterName,
 		rowTypeDLQRunID,
 		defaultVisibilityTimestamp,
-		request.ReadLevel,
-		request.ReadLevel+int64(request.BatchSize),
+		request.MinTaskID,
+		request.MinTaskID+int64(request.BatchSize),
 	).PageSize(request.BatchSize).PageState(request.NextPageToken)
 
 	return d.populateGetReplicationTasksResponse(query, "GetReplicationTasksFromDLQ")

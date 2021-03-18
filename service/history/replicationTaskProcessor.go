@@ -54,10 +54,8 @@ import (
 )
 
 const (
-	dropSyncShardTaskTimeThreshold   = 10 * time.Minute
-	replicationTimeout               = 30 * time.Second
-	taskErrorRetryBackoffCoefficient = 1.2
-	taskErrorRetryMaxInterval        = 5 * time.Second
+	dropSyncShardTaskTimeThreshold = 10 * time.Minute
+	replicationTimeout             = 30 * time.Second
 )
 
 var (
@@ -88,6 +86,8 @@ type (
 		minTxAckedTaskID int64
 		// recv side
 		maxRxProcessedTaskID int64
+		maxRxReceivedTaskID  int64
+		rxTaskBackoff        time.Duration
 
 		requestChan   chan<- *replicationTaskRequest
 		syncShardChan chan *replicationspb.SyncShardStatus
@@ -150,6 +150,7 @@ func NewReplicationTaskProcessor(
 		shutdownChan:         make(chan struct{}),
 		minTxAckedTaskID:     persistence.EmptyQueueMessageID,
 		maxRxProcessedTaskID: persistence.EmptyQueueMessageID,
+		maxRxReceivedTaskID:  persistence.EmptyQueueMessageID,
 	}
 }
 
@@ -198,6 +199,9 @@ func (p *ReplicationTaskProcessorImpl) eventLoop() {
 	))
 	defer cleanupTimer.Stop()
 
+	replicationTimer := time.NewTimer(0)
+	defer replicationTimer.Stop()
+
 	var syncShardTask *replicationspb.SyncShardStatus
 	for {
 		select {
@@ -226,25 +230,30 @@ func (p *ReplicationTaskProcessorImpl) eventLoop() {
 		case <-p.shutdownChan:
 			return
 
-		default:
+		case <-replicationTimer.C:
 			if err := p.pollProcessReplicationTasks(); err != nil {
 				p.logger.Error("unable to process replication tasks", tag.Error(err))
 			}
+			replicationTimer.Reset(p.rxTaskBackoff)
 		}
 	}
 }
 
-func (p *ReplicationTaskProcessorImpl) pollProcessReplicationTasks() error {
-	taskIterator := collection.NewPagingIterator(p.paginationFn)
+func (p *ReplicationTaskProcessorImpl) pollProcessReplicationTasks() (retError error) {
+	defer func() {
+		if retError != nil {
+			p.maxRxReceivedTaskID = p.maxRxProcessedTaskID
+			p.rxTaskBackoff = p.config.ReplicationTaskFetcherErrorRetryWait()
+		}
+	}()
 
-	count := 0
+	taskIterator := collection.NewPagingIterator(p.paginationFn)
 	for taskIterator.HasNext() && !p.isStopped() {
 		task, err := taskIterator.Next()
 		if err != nil {
 			return err
 		}
 
-		count++
 		replicationTask := task.(*replicationspb.ReplicationTask)
 		if err = p.applyReplicationTask(replicationTask); err != nil {
 			return err
@@ -252,11 +261,11 @@ func (p *ReplicationTaskProcessorImpl) pollProcessReplicationTasks() error {
 		p.maxRxProcessedTaskID = replicationTask.GetSourceTaskId()
 	}
 
-	// TODO there should be better handling of remote not having replication tasks
-	//  & make the application of replication task evenly distributed (in terms of time)
-	//  stream / long poll API worth considering
-	if count == 0 {
-		time.Sleep(p.config.ReplicationTaskProcessorNoTaskRetryWait(p.shard.GetShardID()))
+	if !p.isStopped() {
+		// all tasks fetched successfully processed
+		// setting the receiver side max processed task ID to max received task ID
+		// since task ID is not contiguous
+		p.maxRxProcessedTaskID = p.maxRxReceivedTaskID
 	}
 
 	return nil
@@ -415,7 +424,7 @@ func (p *ReplicationTaskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []
 		token: &replicationspb.ReplicationToken{
 			ShardId:                p.shard.GetShardID(),
 			LastProcessedMessageId: p.maxRxProcessedTaskID,
-			LastRetrievedMessageId: p.maxRxProcessedTaskID,
+			LastRetrievedMessageId: p.maxRxReceivedTaskID,
 		},
 		respChan: respChan,
 	}
@@ -437,6 +446,12 @@ func (p *ReplicationTaskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []
 		var tasks []interface{}
 		for _, task := range resp.GetReplicationTasks() {
 			tasks = append(tasks, task)
+		}
+		p.maxRxReceivedTaskID = resp.GetLastRetrievedMessageId()
+		if resp.GetHasMore() {
+			p.rxTaskBackoff = time.Duration(0)
+		} else {
+			p.rxTaskBackoff = p.config.ReplicationTaskProcessorNoTaskRetryWait(p.shard.GetShardID())
 		}
 		return tasks, nil, nil
 

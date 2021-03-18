@@ -419,8 +419,8 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 
 	c.notifyTasks(
 		newWorkflow.TransferTasks,
-		newWorkflow.ReplicationTasks,
 		newWorkflow.TimerTasks,
+		newWorkflow.ReplicationTasks,
 		newWorkflow.VisibilityTasks,
 	)
 	return nil
@@ -568,23 +568,23 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 
 	c.notifyTasks(
 		resetWorkflow.TransferTasks,
-		resetWorkflow.ReplicationTasks,
 		resetWorkflow.TimerTasks,
+		resetWorkflow.ReplicationTasks,
 		resetWorkflow.VisibilityTasks,
 	)
 	if newWorkflow != nil {
 		c.notifyTasks(
 			newWorkflow.TransferTasks,
-			newWorkflow.ReplicationTasks,
 			newWorkflow.TimerTasks,
+			newWorkflow.ReplicationTasks,
 			newWorkflow.VisibilityTasks,
 		)
 	}
 	if currentWorkflow != nil {
 		c.notifyTasks(
 			currentWorkflow.TransferTasks,
-			currentWorkflow.ReplicationTasks,
 			currentWorkflow.TimerTasks,
+			currentWorkflow.ReplicationTasks,
 			currentWorkflow.VisibilityTasks,
 		)
 	}
@@ -785,8 +785,8 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	// notify current workflow tasks
 	c.notifyTasks(
 		currentWorkflow.TransferTasks,
-		currentWorkflow.ReplicationTasks,
 		currentWorkflow.TimerTasks,
+		currentWorkflow.ReplicationTasks,
 		currentWorkflow.VisibilityTasks,
 	)
 
@@ -794,8 +794,8 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 	if newWorkflow != nil {
 		c.notifyTasks(
 			newWorkflow.TransferTasks,
-			newWorkflow.ReplicationTasks,
 			newWorkflow.TimerTasks,
+			newWorkflow.ReplicationTasks,
 			newWorkflow.VisibilityTasks,
 		)
 	}
@@ -826,13 +826,14 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 
 func (c *workflowExecutionContextImpl) notifyTasks(
 	transferTasks []persistence.Task,
-	replicationTasks []persistence.Task,
 	timerTasks []persistence.Task,
+	replicationTasks []persistence.Task,
 	visibilityTasks []persistence.Task,
 ) {
 	c.engine.NotifyNewTransferTasks(transferTasks)
 	c.engine.NotifyNewTimerTasks(timerTasks)
 	c.engine.NotifyNewVisibilityTasks(visibilityTasks)
+	c.engine.NotifyNewReplicationTasks(replicationTasks)
 }
 
 func (c *workflowExecutionContextImpl) mergeContinueAsNewReplicationTasks(

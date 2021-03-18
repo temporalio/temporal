@@ -144,6 +144,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any())
 	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any())
 	s.mockEngine.EXPECT().NotifyNewVisibilityTasks(gomock.Any())
+	s.mockEngine.EXPECT().NotifyNewReplicationTasks(gomock.Any())
 
 	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any()).Return(nil)
 	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any()).Return(nil)
@@ -169,6 +170,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchiva
 	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any())
 	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any())
 	s.mockEngine.EXPECT().NotifyNewVisibilityTasks(gomock.Any())
+	s.mockEngine.EXPECT().NotifyNewReplicationTasks(gomock.Any())
 
 	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any()).Return(nil)
 	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any()).Return(nil)

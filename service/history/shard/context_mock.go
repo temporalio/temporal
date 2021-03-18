@@ -615,17 +615,17 @@ func (mr *MockContextMockRecorder) SetEngine(arg0 interface{}) *gomock.Call {
 }
 
 // UpdateClusterReplicationLevel mocks base method.
-func (m *MockContext) UpdateClusterReplicationLevel(cluster string, lastTaskID int64) error {
+func (m *MockContext) UpdateClusterReplicationLevel(cluster string, ackTaskID int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateClusterReplicationLevel", cluster, lastTaskID)
+	ret := m.ctrl.Call(m, "UpdateClusterReplicationLevel", cluster, ackTaskID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateClusterReplicationLevel indicates an expected call of UpdateClusterReplicationLevel.
-func (mr *MockContextMockRecorder) UpdateClusterReplicationLevel(cluster, lastTaskID interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) UpdateClusterReplicationLevel(cluster, ackTaskID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateClusterReplicationLevel", reflect.TypeOf((*MockContext)(nil).UpdateClusterReplicationLevel), cluster, lastTaskID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateClusterReplicationLevel", reflect.TypeOf((*MockContext)(nil).UpdateClusterReplicationLevel), cluster, ackTaskID)
 }
 
 // UpdateNamespaceNotificationVersion mocks base method.
