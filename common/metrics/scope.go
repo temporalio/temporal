@@ -87,8 +87,10 @@ func (m *metricsScope) StartTimer(id int) Stopwatch {
 	case !def.metricRollupName.Empty():
 		return NewStopwatch(timer, m.rootScope.Timer(def.metricRollupName.String()))
 	case m.isNamespaceTagged:
-		timerAll := m.scope.Tagged(map[string]string{namespace: namespaceAllValue}).Timer(def.metricName.String())
-		return NewStopwatch(timer, timerAll)
+		// remove next line in v1.20.0
+		timerAllDeprecated := m.scope.Tagged(map[string]string{namespace: namespaceAllValue}).Timer(def.metricName.String())
+		timerAll := m.rootScope.Timer(def.metricName.String() + totalMetricSuffix)
+		return NewStopwatch(timer, timerAll, timerAllDeprecated)
 	default:
 		return NewStopwatch(timer)
 	}
@@ -101,7 +103,9 @@ func (m *metricsScope) RecordTimer(id int, d time.Duration) {
 	case !def.metricRollupName.Empty():
 		m.rootScope.Timer(def.metricRollupName.String()).Record(d)
 	case m.isNamespaceTagged:
+		// remove next line in v1.20.0
 		m.scope.Tagged(map[string]string{namespace: namespaceAllValue}).Timer(def.metricName.String()).Record(d)
+		m.rootScope.Timer(def.metricName.String() + totalMetricSuffix).Record(d)
 	}
 }
 
@@ -113,7 +117,9 @@ func (m *metricsScope) RecordDistribution(id int, d int) {
 	case !def.metricRollupName.Empty():
 		m.rootScope.Timer(def.metricRollupName.String()).Record(dist)
 	case m.isNamespaceTagged:
+		// remove next line in v1.20.0
 		m.scope.Tagged(map[string]string{namespace: namespaceAllValue}).Timer(def.metricName.String()).Record(dist)
+		m.rootScope.Timer(def.metricName.String() + totalMetricSuffix).Record(dist)
 	}
 }
 
