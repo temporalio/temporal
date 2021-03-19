@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -159,6 +160,8 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	}
 
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
+
+	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
@@ -221,6 +224,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		taskScheduleToStartTimeoutSeconds = int64(workflowRunTimeout.Round(time.Second).Seconds())
 	}
 
+	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
@@ -274,6 +278,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	workflowCloseTime := wfCloseTime
 	workflowStatus := executionState.Status
 	workflowHistoryLength := mutableState.GetNextEventID() - 1
+	taskQueue := executionInfo.TaskQueue
 
 	startEvent, err := mutableState.GetStartEvent()
 	if err != nil {
@@ -281,11 +286,12 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	}
 	workflowStartTime := timestamp.TimeValue(startEvent.GetEventTime())
 	workflowExecutionTime := getWorkflowExecutionTime(mutableState, startEvent)
-	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
-	searchAttr := getSearchAttributes(executionInfo.SearchAttributes)
+	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
+	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 	namespace := mutableState.GetNamespaceEntry().GetInfo().Name
-	children := mutableState.GetPendingChildExecutionInfos()
+	children := copyChildWorkflowInfos(mutableState.GetPendingChildExecutionInfos())
 
+	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
@@ -301,7 +307,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		workflowHistoryLength,
 		task.GetTaskId(),
 		visibilityMemo,
-		executionInfo.TaskQueue,
+		taskQueue,
 		searchAttr,
 	)
 	if err != nil {
@@ -312,7 +318,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	if replyToParentWorkflow {
 		ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 		defer cancel()
-		_, err = t.historyClient.RecordChildExecutionCompleted(ctx, &historyservice.RecordChildExecutionCompletedRequest{
+		_, err := t.historyClient.RecordChildExecutionCompleted(ctx, &historyservice.RecordChildExecutionCompletedRequest{
 			NamespaceId: parentNamespaceID,
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: parentWorkflowID,
@@ -325,15 +331,14 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 			},
 			CompletionEvent: completionEvent,
 		})
-
-		// Check to see if the error is non-transient, in which case reset the error and continue with processing
-		if _, ok := err.(*serviceerror.NotFound); ok {
-			err = nil
+		switch err.(type) {
+		case nil:
+			// noop
+		case *serviceerror.NotFound:
+			// parent gone, noop
+		default:
+			return err
 		}
-	}
-
-	if err != nil {
-		return err
 	}
 
 	return t.processParentClosePolicy(task.GetNamespaceId(), namespace, children)
@@ -515,6 +520,8 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		return err
 	}
 
+	signalRequestID := signalInfo.GetRequestId()
+
 	// release the weContext lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(retError)
@@ -527,7 +534,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			WorkflowId: task.GetTargetWorkflowId(),
 			RunId:      task.GetTargetRunId(),
 		},
-		RequestId: signalInfo.GetRequestId(),
+		RequestId: signalRequestID,
 	})
 	return err
 }
@@ -686,8 +693,10 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
+	executionStatus := executionState.GetStatus()
 	runTimeout := executionInfo.WorkflowRunTimeout
 	wfTypeName := executionInfo.WorkflowTypeName
+	taskQueue := executionInfo.TaskQueue
 
 	startEvent, err := mutableState.GetStartEvent()
 	if err != nil {
@@ -695,9 +704,10 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 	}
 	startTimestamp := timestamp.TimeValue(startEvent.GetEventTime())
 	executionTimestamp := getWorkflowExecutionTime(mutableState, startEvent)
-	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
+	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
 	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 
+	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
@@ -712,7 +722,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 			executionTimestamp.UnixNano(),
 			runTimeout,
 			task.GetTaskId(),
-			executionInfo.TaskQueue,
+			taskQueue,
 			visibilityMemo,
 			searchAttr,
 		)
@@ -726,8 +736,8 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 		executionTimestamp.UnixNano(),
 		runTimeout,
 		task.GetTaskId(),
-		executionState.GetStatus(),
-		executionInfo.TaskQueue,
+		executionStatus,
+		taskQueue,
 		visibilityMemo,
 		searchAttr,
 	)
@@ -1439,4 +1449,19 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 			Message: fmt.Sprintf("unknown parent close policy: %v", childInfo.ParentClosePolicy),
 		}
 	}
+}
+
+func copyChildWorkflowInfos(
+	input map[int64]*persistencespb.ChildExecutionInfo,
+) map[int64]*persistencespb.ChildExecutionInfo {
+
+	result := make(map[int64]*persistencespb.ChildExecutionInfo)
+	if input == nil {
+		return result
+	}
+
+	for k, v := range input {
+		result[k] = proto.Clone(v).(*persistencespb.ChildExecutionInfo)
+	}
+	return result
 }
