@@ -59,14 +59,11 @@ var (
 	errRequestIDTooLong                                   = serviceerror.NewInvalidArgument("RequestId length exceeds limit.")
 	errIdentityTooLong                                    = serviceerror.NewInvalidArgument("Identity length exceeds limit.")
 	errEarliestTimeIsGreaterThanLatestTime                = serviceerror.NewInvalidArgument("EarliestTime in StartTimeFilter should not be larger than LatestTime.")
-	errPageSizeTooBig                                     = serviceerror.NewInvalidArgument("PageSize is larger than allowed %d.")
 	errClusterIsNotConfiguredForVisibilityArchival        = serviceerror.NewInvalidArgument("Cluster is not configured for visibility archival.")
 	errClusterIsNotConfiguredForReadingArchivalVisibility = serviceerror.NewInvalidArgument("Cluster is not configured for reading archived visibility records.")
 	errNamespaceIsNotConfiguredForVisibilityArchival      = serviceerror.NewInvalidArgument("Namespace is not configured for visibility archival.")
 	errSearchAttributesNotSet                             = serviceerror.NewInvalidArgument("SearchAttributes are not set on request.")
 	errAdvancedVisibilityStoreIsNotConfigured             = serviceerror.NewInvalidArgument("AdvancedVisibilityStore is not configured for this cluster.")
-	errKeyIsReservedBySystem                              = serviceerror.NewInvalidArgument("Key [%s] is reserved by system.")
-	errKeyIsAlreadyWhitelisted                            = serviceerror.NewInvalidArgument("Key [%s] is already whitelist.")
 	errInvalidPageSize                                    = serviceerror.NewInvalidArgument("Invalid PageSize.")
 	errInvalidPaginationToken                             = serviceerror.NewInvalidArgument("Invalid pagination token.")
 	errInvalidFirstNextEventCombination                   = serviceerror.NewInvalidArgument("Invalid FirstEventId and NextEventId combination.")
@@ -74,19 +71,19 @@ var (
 	errInvalidEndEventCombination                         = serviceerror.NewInvalidArgument("Invalid EndEventId and EndEventVersion combination.")
 	errInvalidVersionHistories                            = serviceerror.NewInvalidArgument("Invalid version histories.")
 	errInvalidEventQueryRange                             = serviceerror.NewInvalidArgument("Invalid event query range.")
-	errUnknownValueType                                   = serviceerror.NewInvalidArgument("Unknown value type, %v.")
 	errDLQTypeIsNotSupported                              = serviceerror.NewInvalidArgument("The DLQ type is not supported.")
 	errFailureMustHaveApplicationFailureInfo              = serviceerror.NewInvalidArgument("Failure must have ApplicationFailureInfo.")
 	errStatusFilterMustBeNotRunning                       = serviceerror.NewInvalidArgument("StatusFilter must be specified and must be not Running.")
 	errTokenNamespaceMismatch                             = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
 	errShuttingDown                                       = serviceerror.NewInternal("Shutting down")
 
-	errFailedUpdateDynamicConfig = serviceerror.NewInternal("Failed to update dynamic config, err: %v.")
-	errFailedToCreateESIndex     = serviceerror.NewInternal("Failed to create ES index, err: %v.")
-	errFailedToUpdateESMapping   = serviceerror.NewInternal("Failed to update ES mapping, err: %v.")
+	errPageSizeTooBigMessage                   = "PageSize is larger than allowed %d."
+	errKeyIsReservedBySystemMessage            = "Key [%s] is reserved by system."
+	errKeyIsAlreadyWhitelistedMessage          = "Key [%s] is already whitelist."
+	errUnknownValueTypeMessage                 = "Unknown value type, %v."
+	errFailedUpdateDynamicConfigMessage        = "Failed to update dynamic config, err: %v."
+	errFailedToUpdateESMappingMessage          = "Failed to update ES mapping, err: %v."
+	errUnableToBuildSearchAttributesMapMessage = "Unable to build valid search attributes map, err: %v."
 
 	errNoPermission = serviceerror.NewPermissionDenied("No permission to do this operation.")
-	errUnauthorized = serviceerror.NewPermissionDenied("Request unauthorized.")
-
-	errServiceBusy = serviceerror.NewResourceExhausted("Too many outstanding requests to the service.")
 )

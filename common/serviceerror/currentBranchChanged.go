@@ -42,7 +42,7 @@ type (
 )
 
 // NewCurrentBranchChanged returns new CurrentBranchChanged error.
-func NewCurrentBranchChanged(currentBranchToken, requestBranchToken []byte) *CurrentBranchChanged {
+func NewCurrentBranchChanged(currentBranchToken, requestBranchToken []byte) error {
 	return &CurrentBranchChanged{
 		Message:            "Current branch token and request branch token doesn't match.",
 		CurrentBranchToken: currentBranchToken,
@@ -70,7 +70,7 @@ func (e *CurrentBranchChanged) Status() *status.Status {
 	return st
 }
 
-func newCurrentBranchChanged(st *status.Status, errDetails *errordetails.CurrentBranchChangedFailure) *CurrentBranchChanged {
+func newCurrentBranchChanged(st *status.Status, errDetails *errordetails.CurrentBranchChangedFailure) error {
 	return &CurrentBranchChanged{
 		Message:            st.Message(),
 		CurrentBranchToken: errDetails.GetCurrentBranchToken(),

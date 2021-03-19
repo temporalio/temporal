@@ -44,7 +44,7 @@ type (
 )
 
 // NewShardOwnershipLost returns new ShardOwnershipLost error.
-func NewShardOwnershipLost(ownerHost, currentHost string) *ShardOwnershipLost {
+func NewShardOwnershipLost(ownerHost, currentHost string) error {
 	return &ShardOwnershipLost{
 		Message:     fmt.Sprintf("Shard is owned by:%v but not by %v", ownerHost, currentHost),
 		OwnerHost:   ownerHost,
@@ -72,7 +72,7 @@ func (e *ShardOwnershipLost) Status() *status.Status {
 	return st
 }
 
-func newShardOwnershipLost(st *status.Status, errDetails *errordetails.ShardOwnershipLostFailure) *ShardOwnershipLost {
+func newShardOwnershipLost(st *status.Status, errDetails *errordetails.ShardOwnershipLostFailure) error {
 	return &ShardOwnershipLost{
 		Message:     st.Message(),
 		OwnerHost:   errDetails.GetOwnerHost(),
