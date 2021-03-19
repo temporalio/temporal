@@ -39,7 +39,7 @@ func (f FieldNotFoundError) Error() string {
 	return f.Msg
 }
 
-func newFieldNotFoundError(fieldName string, payload map[string]interface{}) *FieldNotFoundError {
+func newFieldNotFoundError(fieldName string, payload map[string]interface{}) error {
 	return &FieldNotFoundError{Msg: fmt.Sprintf("Unable to find field '%s' in payload - '%v'", fieldName, payload)}
 }
 

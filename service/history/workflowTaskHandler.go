@@ -76,9 +76,7 @@ type (
 
 	workflowTaskFailedError struct {
 		failedCause enumspb.WorkflowTaskFailedCause
-		// Use concrete type (not `error` interface) here to indicate that cause error is always InvalidArgument error
-		// and it is ok to return InvalidArgument to the caller in case of workflowTaskFailedError.
-		causeErr *serviceerror.InvalidArgument
+		causeErr    error
 	}
 )
 
@@ -942,7 +940,7 @@ func (handler *workflowTaskHandlerImpl) failCommand(
 	return nil
 }
 
-func NewWorkflowTaskFailedError(failedCause enumspb.WorkflowTaskFailedCause, causeErr *serviceerror.InvalidArgument) *workflowTaskFailedError {
+func NewWorkflowTaskFailedError(failedCause enumspb.WorkflowTaskFailedCause, causeErr error) *workflowTaskFailedError {
 	return &workflowTaskFailedError{
 		failedCause: failedCause,
 		causeErr:    causeErr,
@@ -955,8 +953,4 @@ func (fwti *workflowTaskFailedError) Error() string {
 	}
 
 	return fmt.Sprintf("%v: %v", fwti.failedCause, fwti.causeErr.Error())
-}
-
-func (fwti *workflowTaskFailedError) ServiceError() *serviceerror.InvalidArgument {
-	return serviceerror.NewInvalidArgument(fwti.Error())
 }

@@ -2186,7 +2186,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 	}
 
 	if wh.isListRequestPageSizeTooLarge(request.GetMaximumPageSize(), request.GetNamespace()) {
-		return nil, errPageSizeTooBig.MessageArgs(wh.config.ESIndexMaxResultWindow())
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errPageSizeTooBigMessage, wh.config.ESIndexMaxResultWindow()))
 	}
 
 	namespace := request.GetNamespace()
@@ -2279,7 +2279,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 	}
 
 	if wh.isListRequestPageSizeTooLarge(request.GetMaximumPageSize(), request.GetNamespace()) {
-		return nil, errPageSizeTooBig.MessageArgs(wh.config.ESIndexMaxResultWindow())
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errPageSizeTooBigMessage, wh.config.ESIndexMaxResultWindow()))
 	}
 
 	namespace := request.GetNamespace()
@@ -2375,7 +2375,7 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 	}
 
 	if wh.isListRequestPageSizeTooLarge(request.GetPageSize(), request.GetNamespace()) {
-		return nil, errPageSizeTooBig.MessageArgs(wh.config.ESIndexMaxResultWindow())
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errPageSizeTooBigMessage, wh.config.ESIndexMaxResultWindow()))
 	}
 
 	if err := wh.visibilityQueryValidator.ValidateListRequestForQuery(request); err != nil {
@@ -2432,7 +2432,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 
 	maxPageSize := wh.config.VisibilityArchivalQueryMaxPageSize()
 	if int(request.GetPageSize()) > maxPageSize {
-		return nil, errPageSizeTooBig.MessageArgs(maxPageSize)
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errPageSizeTooBigMessage, maxPageSize))
 	}
 
 	if !wh.GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival() {
@@ -2471,7 +2471,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 
 	saTypeMap, err := searchattribute.BuildTypeMap(wh.config.ValidSearchAttributes)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("uable to build valid search attributes map: %v", err))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToBuildSearchAttributesMapMessage, err))
 	}
 
 	archiverResponse, err := visibilityArchiver.Query(
@@ -2521,7 +2521,7 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 	}
 
 	if wh.isListRequestPageSizeTooLarge(request.GetPageSize(), request.GetNamespace()) {
-		return nil, errPageSizeTooBig.MessageArgs(wh.config.ESIndexMaxResultWindow())
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errPageSizeTooBigMessage, wh.config.ESIndexMaxResultWindow()))
 	}
 
 	if err := wh.visibilityQueryValidator.ValidateScanRequestForQuery(request); err != nil {
@@ -2613,7 +2613,7 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 
 	saTypeMap, err := searchattribute.BuildTypeMap(wh.config.ValidSearchAttributes)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("uable to build valid search attributes map: %v", err))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToBuildSearchAttributesMapMessage, err))
 	}
 	resp := &workflowservice.GetSearchAttributesResponse{
 		Keys: saTypeMap,
@@ -2854,7 +2854,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 
 	saTypeMap, err := searchattribute.BuildTypeMap(wh.config.ValidSearchAttributes)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("uable to build valid search attributes map: %v", err))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToBuildSearchAttributesMapMessage, err))
 	}
 	searchattribute.ApplyTypeMap(response.GetWorkflowExecutionInfo().GetSearchAttributes(), saTypeMap)
 

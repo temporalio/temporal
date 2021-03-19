@@ -552,7 +552,7 @@ Update_History_Loop:
 		}
 
 		if workflowTaskFailedErr != nil {
-			return nil, workflowTaskFailedErr.ServiceError()
+			return nil, serviceerror.NewInvalidArgument(workflowTaskFailedErr.Error())
 		}
 
 		resp = &historyservice.RespondWorkflowTaskCompletedResponse{}

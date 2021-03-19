@@ -27,6 +27,7 @@ package frontend
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -162,10 +163,10 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 		dynamicconfig.ValidSearchAttributes, nil, searchattribute.GetDefaultTypeMap())
 	for k, v := range searchAttr {
 		if searchattribute.IsSystem(k) {
-			return nil, adh.error(errKeyIsReservedBySystem.MessageArgs(k), scope)
+			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errKeyIsReservedBySystemMessage, k)), scope)
 		}
 		if _, exist := currentValidAttr[k]; exist {
-			return nil, adh.error(errKeyIsAlreadyWhitelisted.MessageArgs(k), scope)
+			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errKeyIsAlreadyWhitelistedMessage, k)), scope)
 		}
 
 		currentValidAttr[k] = int(v)
@@ -174,7 +175,7 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 	// update dynamic config
 	err := adh.params.DynamicConfig.UpdateValue(dynamicconfig.ValidSearchAttributes, currentValidAttr)
 	if err != nil {
-		return nil, adh.error(errFailedUpdateDynamicConfig.MessageArgs(err), scope)
+		return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errFailedUpdateDynamicConfigMessage, err)), scope)
 	}
 
 	// update elasticsearch mapping, new added field will not be able to remove or update
@@ -182,11 +183,11 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 	for k, v := range searchAttr {
 		esType := searchattribute.GetESType(v)
 		if len(esType) == 0 {
-			return nil, adh.error(errUnknownValueType.MessageArgs(v), scope)
+			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errUnknownValueTypeMessage, v)), scope)
 		}
 		err := adh.params.ESClient.PutMapping(ctx, index, searchattribute.Attr, k, esType)
 		if err != nil {
-			return nil, adh.error(errFailedToUpdateESMapping.MessageArgs(err), scope)
+			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errFailedToUpdateESMappingMessage, err)), scope)
 		}
 	}
 

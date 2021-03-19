@@ -27,6 +27,7 @@
 package history
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -636,7 +637,7 @@ func (b *stateBuilderImpl) applyEvents(
 			}
 
 		default:
-			return nil, serviceerror.NewInvalidArgument("Unknown event type: %v").MessageArgs(event.GetEventType())
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown event type: %v", event.GetEventType()))
 		}
 	}
 
