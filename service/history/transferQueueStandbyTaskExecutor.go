@@ -459,7 +459,7 @@ func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertH
 	startTime := timestamp.TimeValue(startEvent.GetEventTime())
 	executionTimestamp := getWorkflowExecutionTime(mutableState, startEvent)
 	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
-	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
+	searchAttr := getSearchAttributes(executionInfo.SearchAttributes)
 
 	if isRecordStart {
 		return t.recordWorkflowStarted(
@@ -530,6 +530,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		return err
 	}
 
+	// NOTE: do not access anything related mutable state after this lock release
 	release(nil)
 	return postActionFn(taskInfo, historyResendInfo, t.logger)
 }
