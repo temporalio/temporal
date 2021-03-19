@@ -171,10 +171,12 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 	}
 	startTimestamp := timestamp.TimeValue(startEvent.GetEventTime())
 	executionTimestamp := getWorkflowExecutionTime(mutableState, startEvent)
-	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
-	// TODO (alex): remove copy?
+	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
 	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
+	executionStatus := executionState.GetStatus()
+	taskQueue := executionInfo.TaskQueue
 
+	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
@@ -189,8 +191,8 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 			executionTimestamp.UnixNano(),
 			runTimeout,
 			task.GetTaskId(),
-			executionState.GetStatus(),
-			executionInfo.TaskQueue,
+			executionStatus,
+			taskQueue,
 			visibilityMemo,
 			searchAttr,
 		)
@@ -204,8 +206,8 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 		executionTimestamp.UnixNano(),
 		runTimeout,
 		task.GetTaskId(),
-		executionState.GetStatus(),
-		executionInfo.TaskQueue,
+		executionStatus,
+		taskQueue,
 		visibilityMemo,
 		searchAttr,
 	)
@@ -364,9 +366,11 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	}
 	workflowStartTime := timestamp.TimeValue(startEvent.GetEventTime())
 	workflowExecutionTime := getWorkflowExecutionTime(mutableState, startEvent)
-	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
-	searchAttr := executionInfo.SearchAttributes
+	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
+	searchAttr := copySearchAttributes(executionInfo.SearchAttributes)
+	taskQueue := executionInfo.TaskQueue
 
+	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
@@ -382,7 +386,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		workflowHistoryLength,
 		task.GetTaskId(),
 		visibilityMemo,
-		executionInfo.TaskQueue,
+		taskQueue,
 		searchAttr,
 	)
 }
@@ -496,6 +500,31 @@ func getWorkflowMemo(
 		return nil
 	}
 	return &commonpb.Memo{Fields: memoFields}
+}
+
+func copyMemo(
+	memoFields map[string]*commonpb.Payload,
+) map[string]*commonpb.Payload {
+
+	if memoFields == nil {
+		return nil
+	}
+
+	result := make(map[string]*commonpb.Payload)
+	for k, v := range memoFields {
+		result[k] = proto.Clone(v).(*commonpb.Payload)
+	}
+	return result
+}
+
+func getSearchAttributes(
+	indexedFields map[string]*commonpb.Payload,
+) *commonpb.SearchAttributes {
+
+	if indexedFields == nil {
+		return nil
+	}
+	return &commonpb.SearchAttributes{IndexedFields: indexedFields}
 }
 
 func copySearchAttributes(
