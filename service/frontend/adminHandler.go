@@ -175,7 +175,7 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 	// update dynamic config
 	err := adh.params.DynamicConfig.UpdateValue(dynamicconfig.ValidSearchAttributes, currentValidAttr)
 	if err != nil {
-		return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errFailedUpdateDynamicConfigMessage, err)), scope)
+		return nil, adh.error(serviceerror.NewInternal(fmt.Sprintf(errFailedUpdateDynamicConfigMessage, err)), scope)
 	}
 
 	// update elasticsearch mapping, new added field will not be able to remove or update
@@ -187,7 +187,7 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 		}
 		err := adh.params.ESClient.PutMapping(ctx, index, searchattribute.Attr, k, esType)
 		if err != nil {
-			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errFailedToUpdateESMappingMessage, err)), scope)
+			return nil, adh.error(serviceerror.NewInternal(fmt.Sprintf(errFailedToUpdateESMappingMessage, err)), scope)
 		}
 	}
 

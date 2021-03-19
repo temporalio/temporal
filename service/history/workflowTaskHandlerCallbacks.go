@@ -367,7 +367,7 @@ Update_History_Loop:
 		}
 
 		var (
-			workflowTaskFailedErr       *workflowTaskFailedError
+			wtFailedCause               *workflowTaskFailedCause
 			activityNotStartedCancelled bool
 			continueAsNewBuilder        mutableState
 
@@ -387,7 +387,7 @@ Update_History_Loop:
 
 		binChecksum := request.GetBinaryChecksum()
 		if _, ok := namespaceEntry.GetConfig().GetBadBinaries().GetBinaries()[binChecksum]; ok {
-			workflowTaskFailedErr = NewWorkflowTaskFailedError(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY, serviceerror.NewInvalidArgument(fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum)))
+			wtFailedCause = NewWorkflowTaskFailedCause(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY, serviceerror.NewInvalidArgument(fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum)))
 		} else {
 			namespace := namespaceEntry.GetInfo().Name
 			workflowSizeChecker := newWorkflowSizeChecker(
@@ -424,7 +424,7 @@ Update_History_Loop:
 
 			// set the vars used by following logic
 			// further refactor should also clean up the vars used below
-			workflowTaskFailedErr = workflowTaskHandler.workflowTaskFailedErr
+			wtFailedCause = workflowTaskHandler.workflowTaskFailedCause
 
 			// failMessage is not used by workflowTaskHandlerCallbacks
 			activityNotStartedCancelled = workflowTaskHandler.activityNotStartedCancelled
@@ -435,14 +435,14 @@ Update_History_Loop:
 			hasUnhandledEvents = workflowTaskHandler.hasBufferedEvents
 		}
 
-		if workflowTaskFailedErr != nil {
+		if wtFailedCause != nil {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.FailedWorkflowTasksCounter)
 			handler.logger.Info("Failing the workflow task.",
-				tag.Error(workflowTaskFailedErr),
+				tag.Value(wtFailedCause.Message()),
 				tag.WorkflowID(token.GetWorkflowId()),
 				tag.WorkflowRunID(token.GetRunId()),
 				tag.WorkflowNamespaceID(namespaceID))
-			msBuilder, err = handler.historyEngine.failWorkflowTask(weContext, scheduleID, startedID, workflowTaskFailedErr, request)
+			msBuilder, err = handler.historyEngine.failWorkflowTask(weContext, scheduleID, startedID, wtFailedCause, request)
 			if err != nil {
 				return nil, err
 			}
@@ -551,8 +551,8 @@ Update_History_Loop:
 			return nil, serviceerror.NewNotFound("workflow task heartbeat timeout")
 		}
 
-		if workflowTaskFailedErr != nil {
-			return nil, serviceerror.NewInvalidArgument(workflowTaskFailedErr.Error())
+		if wtFailedCause != nil {
+			return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
 		}
 
 		resp = &historyservice.RespondWorkflowTaskCompletedResponse{}

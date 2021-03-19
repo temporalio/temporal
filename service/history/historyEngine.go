@@ -2448,7 +2448,7 @@ func (e *historyEngineImpl) failWorkflowTask(
 	context workflowExecutionContext,
 	scheduleID int64,
 	startedID int64,
-	workflowTaskFailedErr *workflowTaskFailedError,
+	wtFailedCause *workflowTaskFailedCause,
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 ) (mutableState, error) {
 
@@ -2464,8 +2464,8 @@ func (e *historyEngineImpl) failWorkflowTask(
 	if _, err = mutableState.AddWorkflowTaskFailedEvent(
 		scheduleID,
 		startedID,
-		workflowTaskFailedErr.failedCause,
-		failure.NewServerFailure(workflowTaskFailedErr.Error(), true),
+		wtFailedCause.failedCause,
+		failure.NewServerFailure(wtFailedCause.Message(), true),
 		request.GetIdentity(),
 		request.GetBinaryChecksum(),
 		"",

@@ -283,10 +283,10 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 		namespaceID,
 		workflowID,
 		runID,
-		123,
-		234,
-		345,
-		456,
+		int64(123),
+		int64(234),
+		int64(345),
+		int64(456),
 	)
 	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(nil)
 	_, err := s.replicationTaskHandler.execute(task, true)
@@ -369,10 +369,10 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask_Resend
 		namespaceID,
 		workflowID,
 		runID,
-		123,
-		234,
-		345,
-		456,
+		int64(123),
+		int64(234),
+		int64(345),
+		int64(456),
 	)
 	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil)
 	_, err := s.replicationTaskHandler.execute(task, true)
