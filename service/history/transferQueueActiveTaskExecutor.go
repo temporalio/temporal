@@ -159,6 +159,8 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	}
 
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
+
+	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
@@ -221,6 +223,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		taskScheduleToStartTimeoutSeconds = int64(workflowRunTimeout.Round(time.Second).Seconds())
 	}
 
+	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
@@ -287,6 +290,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	namespace := mutableState.GetNamespaceEntry().GetInfo().Name
 	children := copyChildWorkflowInfos(mutableState.GetPendingChildExecutionInfos())
 
+	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
@@ -702,6 +706,7 @@ func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHe
 	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
 	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 
+	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)

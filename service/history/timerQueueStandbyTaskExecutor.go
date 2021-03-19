@@ -433,6 +433,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		return err
 	}
 
+	// NOTE: do not access anything related mutable state after this lock release
 	release(nil)
 	return postActionFn(timerTask, historyResendInfo, t.logger)
 }
