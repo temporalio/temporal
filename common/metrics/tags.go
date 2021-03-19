@@ -43,6 +43,7 @@ const (
 
 	namespaceAllValue = "all"
 	unknownValue      = "_unknown_"
+	totalMetricSuffix = "_total"
 )
 
 // Tag is an interface to define metrics tags

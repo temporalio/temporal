@@ -296,9 +296,6 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnHandleReceivingTa
 		Return(tasks, nil, nil)
 	s.mockReplicationTaskExecutor.EXPECT().Execute(namespaceAttribute1).Return(nil)
 	s.mockReplicationTaskExecutor.EXPECT().Execute(namespaceAttribute2).Return(testError)
-	s.mockReplicationQueue.EXPECT().DeleteMessageFromDLQ(messageID1).Return(nil)
-	s.mockReplicationQueue.EXPECT().DeleteMessageFromDLQ(messageID2).Times(0)
-	s.mockReplicationQueue.EXPECT().UpdateDLQAckLevel(messageID1).Return(nil)
 
 	token, err := s.dlqMessageHandler.Merge(lastMessageID, pageSize, pageToken)
 	s.Equal(testError, err)
@@ -341,7 +338,6 @@ func (s *dlqMessageHandlerSuite) TestMergeMessages_ThrowErrorOnDeleteMessages() 
 	s.mockReplicationTaskExecutor.EXPECT().Execute(namespaceAttribute1).Return(nil)
 	s.mockReplicationTaskExecutor.EXPECT().Execute(namespaceAttribute2).Return(nil)
 	s.mockReplicationQueue.EXPECT().RangeDeleteMessagesFromDLQ(ackLevel, messageID2).Return(testError)
-	s.mockReplicationQueue.EXPECT().UpdateDLQAckLevel(messageID1).Return(nil)
 
 	token, err := s.dlqMessageHandler.Merge(lastMessageID, pageSize, pageToken)
 	s.Error(err)

@@ -57,7 +57,7 @@ type (
 
 		// internal state
 		hasBufferedEvents               bool
-		workflowTaskFailedErr           *workflowTaskFailedError
+		workflowTaskFailedCause         *workflowTaskFailedCause
 		activityNotStartedCancelled     bool
 		continueAsNewBuilder            mutableState
 		stopProcessing                  bool // should stop processing any more commands
@@ -74,11 +74,9 @@ type (
 		config         *configs.Config
 	}
 
-	workflowTaskFailedError struct {
+	workflowTaskFailedCause struct {
 		failedCause enumspb.WorkflowTaskFailedCause
-		// Use concrete type (not `error` interface) here to indicate that cause error is always InvalidArgument error
-		// and it is ok to return InvalidArgument to the caller in case of workflowTaskFailedError.
-		causeErr *serviceerror.InvalidArgument
+		causeErr    error
 	}
 )
 
@@ -100,7 +98,7 @@ func newWorkflowTaskHandler(
 
 		// internal state
 		hasBufferedEvents:               mutableState.HasBufferedEvents(),
-		workflowTaskFailedErr:           nil,
+		workflowTaskFailedCause:         nil,
 		activityNotStartedCancelled:     false,
 		continueAsNewBuilder:            nil,
 		stopProcessing:                  false,
@@ -226,14 +224,13 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	enums.SetDefaultTaskQueueKind(&attr.GetTaskQueue().Kind)
 
 	_, _, err = handler.mutableState.AddActivityTaskScheduledEvent(handler.workflowTaskCompletedID, attr)
-	switch err := err.(type) {
-	case nil:
-		return nil
-	case *serviceerror.InvalidArgument:
-		return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_SCHEDULE_ACTIVITY_DUPLICATE_ID, err)
-	default:
+	if err != nil {
+		if _, ok := err.(*serviceerror.InvalidArgument); ok {
+			return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_SCHEDULE_ACTIVITY_DUPLICATE_ID, err)
+		}
 		return err
 	}
+	return nil
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
@@ -260,34 +257,33 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
 		scheduleID,
 		handler.identity,
 	)
-	switch err := err.(type) {
-	case nil:
-		if ai != nil {
-			// If ai is nil, the activity has already been canceled/completed/timedout. The cancel request
-			// will be recorded in the history, but no further action will be taken.
-
-			if ai.StartedId == common.EmptyEventID {
-				// We haven't started the activity yet, we can cancel the activity right away and
-				// schedule a workflow task to ensure the workflow makes progress.
-				_, err = handler.mutableState.AddActivityTaskCanceledEvent(
-					ai.ScheduleId,
-					ai.StartedId,
-					actCancelReqEvent.GetEventId(),
-					payloads.EncodeString(activityCancellationMsgActivityNotStarted),
-					handler.identity,
-				)
-				if err != nil {
-					return err
-				}
-				handler.activityNotStartedCancelled = true
-			}
+	if err != nil {
+		if _, ok := err.(*serviceerror.InvalidArgument); ok {
+			return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES, err)
 		}
-		return nil
-	case *serviceerror.InvalidArgument:
-		return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_ACTIVITY_ATTRIBUTES, err)
-	default:
 		return err
 	}
+	if ai != nil {
+		// If ai is nil, the activity has already been canceled/completed/timedout. The cancel request
+		// will be recorded in the history, but no further action will be taken.
+
+		if ai.StartedId == common.EmptyEventID {
+			// We haven't started the activity yet, we can cancel the activity right away and
+			// schedule a workflow task to ensure the workflow makes progress.
+			_, err = handler.mutableState.AddActivityTaskCanceledEvent(
+				ai.ScheduleId,
+				ai.StartedId,
+				actCancelReqEvent.GetEventId(),
+				payloads.EncodeString(activityCancellationMsgActivityNotStarted),
+				handler.identity,
+			)
+			if err != nil {
+				return err
+			}
+			handler.activityNotStartedCancelled = true
+		}
+	}
+	return nil
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
@@ -309,14 +305,13 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
 	}
 
 	_, _, err := handler.mutableState.AddTimerStartedEvent(handler.workflowTaskCompletedID, attr)
-	switch err := err.(type) {
-	case nil:
-		return nil
-	case *serviceerror.InvalidArgument:
-		return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_START_TIMER_DUPLICATE_ID, err)
-	default:
+	if err != nil {
+		if _, ok := err.(*serviceerror.InvalidArgument); ok {
+			return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_START_TIMER_DUPLICATE_ID, err)
+		}
 		return err
 	}
+	return nil
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
@@ -499,19 +494,19 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
 		handler.workflowTaskCompletedID,
 		attr,
 		handler.identity)
-	switch err := err.(type) {
-	case nil:
-		// timer deletion is a success, we may have deleted a fired timer in
-		// which case we should reset hasBufferedEvents
-		// TODO deletion of timer fired event refreshing hasBufferedEvents
-		//  is not entirely correct, since during these commands processing, new event may appear
-		handler.hasBufferedEvents = handler.mutableState.HasBufferedEvents()
-		return nil
-	case *serviceerror.InvalidArgument:
-		return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CANCEL_TIMER_ATTRIBUTES, err)
-	default:
+	if err != nil {
+		if _, ok := err.(*serviceerror.InvalidArgument); ok {
+			return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CANCEL_TIMER_ATTRIBUTES, err)
+		}
 		return err
 	}
+
+	// timer deletion is a success, we may have deleted a fired timer in
+	// which case we should reset hasBufferedEvents
+	// TODO deletion of timer fired event refreshing hasBufferedEvents
+	//  is not entirely correct, since during these commands processing, new event may appear
+	handler.hasBufferedEvents = handler.mutableState.HasBufferedEvents()
+	return nil
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
@@ -924,7 +919,7 @@ func (handler *workflowTaskHandlerImpl) validateCommandAttr(
 ) error {
 
 	if err := validationFn(); err != nil {
-		if err, ok := err.(*serviceerror.InvalidArgument); ok {
+		if _, ok := err.(*serviceerror.InvalidArgument); ok {
 			return handler.failCommand(failedCause, err)
 		}
 		return err
@@ -935,28 +930,24 @@ func (handler *workflowTaskHandlerImpl) validateCommandAttr(
 
 func (handler *workflowTaskHandlerImpl) failCommand(
 	failedCause enumspb.WorkflowTaskFailedCause,
-	causeErr *serviceerror.InvalidArgument,
+	causeErr error,
 ) error {
-	handler.workflowTaskFailedErr = NewWorkflowTaskFailedError(failedCause, causeErr)
+	handler.workflowTaskFailedCause = NewWorkflowTaskFailedCause(failedCause, causeErr)
 	handler.stopProcessing = true
 	return nil
 }
 
-func NewWorkflowTaskFailedError(failedCause enumspb.WorkflowTaskFailedCause, causeErr *serviceerror.InvalidArgument) *workflowTaskFailedError {
-	return &workflowTaskFailedError{
+func NewWorkflowTaskFailedCause(failedCause enumspb.WorkflowTaskFailedCause, causeErr error) *workflowTaskFailedCause {
+	return &workflowTaskFailedCause{
 		failedCause: failedCause,
 		causeErr:    causeErr,
 	}
 }
 
-func (fwti *workflowTaskFailedError) Error() string {
-	if fwti.causeErr == nil {
-		return fwti.failedCause.String()
+func (wtfc *workflowTaskFailedCause) Message() string {
+	if wtfc.causeErr == nil {
+		return wtfc.failedCause.String()
 	}
 
-	return fmt.Sprintf("%v: %v", fwti.failedCause, fwti.causeErr.Error())
-}
-
-func (fwti *workflowTaskFailedError) ServiceError() *serviceerror.InvalidArgument {
-	return serviceerror.NewInvalidArgument(fwti.Error())
+	return fmt.Sprintf("%v: %v", wtfc.failedCause, wtfc.causeErr.Error())
 }

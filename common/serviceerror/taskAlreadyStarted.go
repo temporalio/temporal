@@ -42,7 +42,7 @@ type (
 )
 
 // NewTaskAlreadyStarted returns new TaskAlreadyStarted error.
-func NewTaskAlreadyStarted(taskType string) *TaskAlreadyStarted {
+func NewTaskAlreadyStarted(taskType string) error {
 	return &TaskAlreadyStarted{
 		Message: fmt.Sprintf("%s task already started.", taskType),
 	}
@@ -65,7 +65,7 @@ func (e *TaskAlreadyStarted) Status() *status.Status {
 	return st
 }
 
-func newTaskAlreadyStarted(st *status.Status) *TaskAlreadyStarted {
+func newTaskAlreadyStarted(st *status.Status) error {
 	return &TaskAlreadyStarted{
 		Message: st.Message(),
 		st:      st,

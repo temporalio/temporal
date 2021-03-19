@@ -22,12 +22,12 @@ require (
 	github.com/fatih/color v1.10.0
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gocql/gocql v0.0.0-20201215165327-e49edf966d90
-	github.com/gogo/protobuf v1.3.1
+	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
-	github.com/golang/mock v1.4.4
-	github.com/golang/protobuf v1.4.3
+	github.com/golang/mock v1.5.0
+	github.com/golang/protobuf v1.5.1
 	github.com/golang/snappy v0.0.2 // indirect
-	github.com/google/uuid v1.1.4
+	github.com/google/uuid v1.2.0
 	github.com/iancoleman/strcase v0.1.2
 	github.com/jmoiron/sqlx v1.2.1-0.20200615141059-0794cb1f47ee
 	github.com/jonboulle/clockwork v0.2.2
@@ -48,7 +48,7 @@ require (
 	github.com/robfig/cron v1.2.0
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sirupsen/logrus v1.7.0 // indirect
-	github.com/stretchr/testify v1.6.1
+	github.com/stretchr/testify v1.7.0
 	github.com/temporalio/ringpop-go v0.0.0-20200708034907-1e016ebb537a
 	github.com/uber-common/bark v1.3.0 // indirect
 	github.com/uber-go/tally v3.3.17+incompatible
@@ -57,8 +57,8 @@ require (
 	github.com/urfave/cli/v2 v2.3.0
 	github.com/valyala/fastjson v1.6.3
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.temporal.io/api v1.4.0
-	go.temporal.io/sdk v1.5.0
+	go.temporal.io/api v1.4.1-0.20210319015452-3dc250bb642a
+	go.temporal.io/sdk v1.5.1-0.20210318225734-a39bbe82b2ba
 	go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193
 	go.uber.org/atomic v1.7.0
 	go.uber.org/multierr v1.6.0
@@ -66,16 +66,14 @@ require (
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
 	golang.org/x/oauth2 v0.0.0-20201208152858-08078c50e5b5
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
-	golang.org/x/time v0.0.0-20201208040808-7e3f01d25324
-	golang.org/x/tools v0.0.0-20201229013931-929a8494cf60 // indirect
+	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 	google.golang.org/api v0.36.0
-	google.golang.org/grpc v1.34.0
+	google.golang.org/grpc v1.36.0
 	google.golang.org/grpc/examples v0.0.0-20200625174016-7a808837ae92
-	google.golang.org/protobuf v1.25.1-0.20201020201750-d3470999428b // indirect
 	gopkg.in/check.v1 v1.0.0-20200902074654-038fdea0a05b // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1
 	gopkg.in/validator.v2 v2.0.0-20200605151824-2b28d334fa05
 	gopkg.in/yaml.v2 v2.4.0
-	gopkg.in/yaml.v3 v3.0.0-20210106172901-c476de37821d
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 	honnef.co/go/tools v0.1.0 // indirect
 )
