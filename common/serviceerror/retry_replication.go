@@ -56,7 +56,7 @@ func NewRetryReplication(
 	startEventVersion int64,
 	endEventId int64,
 	endEventVersion int64,
-) *RetryReplication {
+) error {
 	return &RetryReplication{
 		Message:           message,
 		NamespaceId:       namespaceId,
@@ -97,7 +97,7 @@ func (e *RetryReplication) Status() *status.Status {
 func newRetryReplication(
 	st *status.Status,
 	errDetails *errordetails.RetryReplicationFailure,
-) *RetryReplication {
+) error {
 	return &RetryReplication{
 		Message:           st.Message(),
 		NamespaceId:       errDetails.GetNamespaceId(),

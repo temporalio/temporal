@@ -280,13 +280,13 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 	)
 	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(resendErr)
 	s.nDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
-		resendErr.NamespaceId,
-		resendErr.WorkflowId,
-		resendErr.RunId,
-		resendErr.StartEventId,
-		resendErr.StartEventVersion,
-		resendErr.EndEventId,
-		resendErr.EndEventVersion,
+		namespaceID,
+		workflowID,
+		runID,
+		int64(123),
+		int64(234),
+		int64(345),
+		int64(456),
 	)
 	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(nil)
 	_, err := s.replicationTaskHandler.execute(task, true)
@@ -366,13 +366,13 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask_Resend
 	)
 	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(resendErr)
 	s.nDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
-		resendErr.NamespaceId,
-		resendErr.WorkflowId,
-		resendErr.RunId,
-		resendErr.StartEventId,
-		resendErr.StartEventVersion,
-		resendErr.EndEventId,
-		resendErr.EndEventVersion,
+		namespaceID,
+		workflowID,
+		runID,
+		int64(123),
+		int64(234),
+		int64(345),
+		int64(456),
 	)
 	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil)
 	_, err := s.replicationTaskHandler.execute(task, true)

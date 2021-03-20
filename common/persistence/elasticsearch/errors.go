@@ -40,7 +40,7 @@ type (
 	}
 )
 
-func newVisibilityTaskNAckError(visibilityTaskKey string) *VisibilityTaskNAckError {
+func newVisibilityTaskNAckError(visibilityTaskKey string) error {
 	return &VisibilityTaskNAckError{
 		VisibilityTaskKey: visibilityTaskKey,
 	}
@@ -50,7 +50,7 @@ func (v *VisibilityTaskNAckError) Error() string {
 	return fmt.Sprintf("visibility task %s wasn't acknowledged", v.VisibilityTaskKey)
 }
 
-func newVisibilityTaskAckTimeoutError(visibilityTaskKey string, timeout time.Duration) *VisibilityTaskAckTimeoutError {
+func newVisibilityTaskAckTimeoutError(visibilityTaskKey string, timeout time.Duration) error {
 	return &VisibilityTaskAckTimeoutError{
 		VisibilityTaskKey: visibilityTaskKey,
 		Timeout:           timeout,
