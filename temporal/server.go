@@ -115,10 +115,15 @@ func (s *Server) Start() error {
 		return err
 	}
 
-	dynamicConfig, err := dynamicconfig.NewFileBasedClient(&s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
-	if err != nil {
-		s.logger.Info("Error creating file based dynamic config client, use no-op config client instead.", tag.Error(err))
-		dynamicConfig = dynamicconfig.NewNopClient()
+	var dynamicConfig dynamicconfig.Client
+	if s.so.dynamicConfigClient != nil {
+		dynamicConfig = s.so.dynamicConfigClient
+	} else {
+		dynamicConfig, err = dynamicconfig.NewFileBasedClient(&s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
+		if err != nil {
+			s.logger.Info("Error creating file based dynamic config client, use no-op config client instead.", tag.Error(err))
+			dynamicConfig = dynamicconfig.NewNopClient()
+		}
 	}
 	dc := dynamicconfig.NewCollection(dynamicConfig, s.logger)
 
