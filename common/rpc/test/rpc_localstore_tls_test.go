@@ -545,9 +545,7 @@ func (s *localStoreRPCSuite) TestCertExpiration() {
 }
 
 func (s *localStoreRPCSuite) testCertExpiration(factory *TestFactory, timeWindow time.Duration, nExpiring int) {
-	provider, ok := factory.GetTLSConfigProvider().(encryption.CertExpirationChecker)
-	s.True(ok)
-	expiring, expired, err := provider.GetExpiringCerts(timeWindow)
+	expiring, expired, err := factory.GetTLSConfigProvider().GetExpiringCerts(timeWindow)
 	if len(expired) > 0 {
 	}
 	s.NotNil(expiring)

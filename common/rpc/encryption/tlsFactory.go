@@ -41,6 +41,7 @@ type (
 		GetInternodeClientConfig() (*tls.Config, error)
 		GetFrontendServerConfig() (*tls.Config, error)
 		GetFrontendClientConfig() (*tls.Config, error)
+		GetExpiringCerts(timeWindow time.Duration) (expiring CertExpirationMap, expired CertExpirationMap, err error)
 	}
 
 	// CertProvider is a common interface to load raw TLS/X509 primitives.
@@ -69,10 +70,7 @@ type (
 	CertExpirationMap map[CertThumbprint]CertExpirationData
 
 	CertExpirationChecker interface {
-		GetExpiringCerts(timeWindow time.Duration) (
-			expiring CertExpirationMap,
-			expired CertExpirationMap,
-			err error)
+		GetExpiringCerts(timeWindow time.Duration) (expiring CertExpirationMap, expired CertExpirationMap, err error)
 	}
 
 	tlsConfigConstructor func() (*tls.Config, error)
