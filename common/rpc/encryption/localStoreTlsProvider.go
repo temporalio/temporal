@@ -43,15 +43,17 @@ const (
 	metricCertsExpiring = "certificates_expiring"
 )
 
+type CertProviderFactory func(tlsSettings *config.GroupTLS, workerTlsSettings *config.WorkerTLS, legacyWorkerSettings *config.ClientTLS) CertProvider
+
 type localStoreTlsProvider struct {
 	sync.RWMutex
 
 	settings *config.RootTLS
 
-	internodeCertProvider       *localStoreCertProvider
-	internodeClientCertProvider *localStoreCertProvider
-	frontendCertProvider        *localStoreCertProvider
-	workerCertProvider          *localStoreCertProvider
+	internodeCertProvider       CertProvider
+	internodeClientCertProvider CertProvider
+	frontendCertProvider        CertProvider
+	workerCertProvider          CertProvider
 
 	frontendPerHostCertProviderMap *localStorePerHostCertProviderMap
 
@@ -69,27 +71,28 @@ type localStoreTlsProvider struct {
 var _ TLSConfigProvider = (*localStoreTlsProvider)(nil)
 var _ CertExpirationChecker = (*localStoreTlsProvider)(nil)
 
-func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope tally.Scope) (TLSConfigProvider, error) {
-	internodeProvider := &localStoreCertProvider{tlsSettings: &tlsConfig.Internode}
-	var workerProvider *localStoreCertProvider
+func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope tally.Scope, certProviderFactory CertProviderFactory,
+) (TLSConfigProvider, error) {
+
+	internodeProvider := certProviderFactory(&tlsConfig.Internode, nil, nil)
+	var workerProvider CertProvider
 	if tlsConfig.SystemWorker.CertFile != "" || tlsConfig.SystemWorker.CertData != "" { // explicit system worker config
-		workerProvider = &localStoreCertProvider{workerTLSSettings: &tlsConfig.SystemWorker}
+		workerProvider = certProviderFactory(nil, &tlsConfig.SystemWorker, nil)
 	} else { // legacy implicit system worker config case
-		internodeWorkerProvider := &localStoreCertProvider{tlsSettings: &tlsConfig.Internode}
-		internodeWorkerProvider.isLegacyWorkerConfig = true
-		internodeWorkerProvider.legacyWorkerSettings = &tlsConfig.Frontend.Client
+		internodeWorkerProvider := certProviderFactory(&tlsConfig.Internode, nil, &tlsConfig.Frontend.Client)
 		workerProvider = internodeWorkerProvider
 	}
 
 	provider := &localStoreTlsProvider{
-		internodeCertProvider:          internodeProvider,
-		internodeClientCertProvider:    internodeProvider,
-		frontendCertProvider:           &localStoreCertProvider{tlsSettings: &tlsConfig.Frontend},
-		workerCertProvider:             workerProvider,
-		frontendPerHostCertProviderMap: newLocalStorePerHostCertProviderMap(tlsConfig.Frontend.PerHostOverrides),
-		RWMutex:                        sync.RWMutex{},
-		settings:                       tlsConfig,
-		scope:                          scope,
+		internodeCertProvider:       internodeProvider,
+		internodeClientCertProvider: internodeProvider,
+		frontendCertProvider:        certProviderFactory(&tlsConfig.Frontend, nil, nil),
+		workerCertProvider:          workerProvider,
+		frontendPerHostCertProviderMap: newLocalStorePerHostCertProviderMap(
+			tlsConfig.Frontend.PerHostOverrides, certProviderFactory),
+		RWMutex:  sync.RWMutex{},
+		settings: tlsConfig,
+		scope:    scope,
 	}
 	provider.initialize()
 	return provider, nil
@@ -288,7 +291,7 @@ func getServerTLSConfigFromCertProvider(certProvider CertProvider, requireClient
 		clientCaPool), nil
 }
 
-func newClientTLSConfig(clientProvider ClientCertProvider, serverName string, isAuthRequired bool,
+func newClientTLSConfig(clientProvider CertProvider, serverName string, isAuthRequired bool,
 	isWorker bool, enableHostVerification bool) (*tls.Config, error) {
 	// Optional ServerCA for client if not already trusted by host
 	serverCa, err := clientProvider.FetchServerRootCAsForClient(isWorker)
