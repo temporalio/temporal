@@ -453,7 +453,7 @@ func (config *Config) GetShardID(namespaceID, workflowID string) int32 {
 }
 
 func NewDynamicConfigForTest() *Config {
-	dc := dynamicconfig.NewNopCollection()
+	dc := dynamicconfig.NewNoopCollection()
 	config := NewConfig(dc, 1, false)
 	// reduce the duration of long poll to increase test speed
 	config.LongPollExpirationInterval = dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.HistoryLongPollExpirationInterval, 10*time.Second)
