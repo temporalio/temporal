@@ -52,7 +52,10 @@ func newLocalStorePerHostCertProviderMap(overrides map[string]config.ServerTLS, 
 
 	for host, settings := range overrides {
 		lcHost := strings.ToLower(host)
-		providerMap.certProviderCache[lcHost] = certProviderFactory(&config.GroupTLS{Server: settings}, nil, nil)
+
+		provider := certProviderFactory(&config.GroupTLS{Server: settings}, nil, nil)
+		providerMap.certProviderCache[lcHost] = provider
+		provider.Initialize()
 		providerMap.clientAuthCache[lcHost] = settings.RequireClientAuth
 	}
 

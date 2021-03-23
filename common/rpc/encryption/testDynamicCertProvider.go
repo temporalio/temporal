@@ -101,3 +101,7 @@ func (t *TestDynamicCertProvider) GetExpiringCerts(_ time.Duration,
 ) (expiring CertExpirationMap, expired CertExpirationMap, err error) {
 	panic("not implemented")
 }
+
+func (t *TestDynamicCertProvider) Initialize() {
+	panic("implement me")
+}

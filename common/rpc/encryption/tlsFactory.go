@@ -51,6 +51,7 @@ type (
 		FetchClientCertificate(isWorker bool) (*tls.Certificate, error)
 		FetchServerRootCAsForClient(isWorker bool) (*x509.CertPool, error)
 		GetExpiringCerts(timeWindow time.Duration) (expiring CertExpirationMap, expired CertExpirationMap, err error)
+		Initialize()
 	}
 
 	// PerHostCertProviderMap returns a CertProvider for a given host name.
