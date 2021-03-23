@@ -42,21 +42,21 @@ type localStorePerHostCertProviderMap struct {
 func newLocalStorePerHostCertProviderMap(overrides map[string]config.ServerTLS, certProviderFactory CertProviderFactory,
 ) *localStorePerHostCertProviderMap {
 
-	factory := &localStorePerHostCertProviderMap{}
+	providerMap := &localStorePerHostCertProviderMap{}
 	if overrides == nil {
-		return factory
+		return providerMap
 	}
 
-	factory.certProviderCache = make(map[string]CertProvider, len(overrides))
-	factory.clientAuthCache = make(map[string]bool, len(overrides))
+	providerMap.certProviderCache = make(map[string]CertProvider, len(overrides))
+	providerMap.clientAuthCache = make(map[string]bool, len(overrides))
 
 	for host, settings := range overrides {
 		lcHost := strings.ToLower(host)
-		factory.certProviderCache[lcHost] = certProviderFactory(&config.GroupTLS{Server: settings}, nil, nil)
-		factory.clientAuthCache[lcHost] = settings.RequireClientAuth
+		providerMap.certProviderCache[lcHost] = certProviderFactory(&config.GroupTLS{Server: settings}, nil, nil)
+		providerMap.clientAuthCache[lcHost] = settings.RequireClientAuth
 	}
 
-	return factory
+	return providerMap
 }
 
 // GetCertProvider for a given host name returns a cert provider (nil if not found) and if client authentication is required
