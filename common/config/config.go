@@ -129,6 +129,9 @@ type (
 		// specific hostname. Host names are case insensitive. Optional. If not present,
 		// uses configuration supplied by Server field.
 		PerHostOverrides map[string]ServerTLS `yaml:"hostOverrides"`
+
+		// Interval between refreshes of certificates loaded from files
+		RefreshInterval time.Duration `yaml:"refreshInterval"`
 	}
 
 	// ServerTLS contains items to load server TLS configuration
@@ -185,6 +188,9 @@ type (
 
 		// Client TLS settings for system workers
 		Client ClientTLS `yaml:"client"`
+
+		// Interval between refreshes of certificates loaded from files
+		RefreshInterval time.Duration `yaml:"refreshInterval"`
 	}
 
 	// CertExpirationValidation contains settings for periodic checks of TLS certificate expiration
