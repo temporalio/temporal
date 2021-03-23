@@ -31,6 +31,7 @@ import (
 
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
@@ -113,5 +114,12 @@ func WithPersistenceServiceResolver(r resolver.ServiceResolver) ServerOption {
 func WithElasticsearchHttpClient(c *http.Client) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.elasticseachHttpClient = c
+	})
+}
+
+// Set custom dynmaic config client
+func WithDynamicConfigClient(c dynamicconfig.Client) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.dynamicConfigClient = c
 	})
 }

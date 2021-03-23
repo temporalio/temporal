@@ -32,6 +32,7 @@ import (
 
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
@@ -56,6 +57,7 @@ type (
 		metricsReporter            tally.BaseStatsReporter
 		persistenceServiceResolver resolver.ServiceResolver
 		elasticseachHttpClient     *http.Client
+		dynamicConfigClient        dynamicconfig.Client
 	}
 )
 
