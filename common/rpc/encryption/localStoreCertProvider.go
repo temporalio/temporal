@@ -37,6 +37,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 )
 
 var _ CertProvider = (*localStoreCertProvider)(nil)
@@ -59,6 +60,10 @@ type localStoreCertProvider struct {
 
 	isLegacyWorkerConfig bool
 	legacyWorkerSettings *config.ClientTLS
+
+	ticker *time.Ticker
+	stop   chan bool
+	logger log.Logger
 }
 
 type loadOrDecodeDataFunc func(item string) ([]byte, error)
@@ -66,6 +71,35 @@ type loadOrDecodeDataFunc func(item string) ([]byte, error)
 type x509CertFetcher func() (*x509.Certificate, error)
 type x509CertPoolFetcher func() (*x509.CertPool, error)
 type tlsCertFetcher func() (*tls.Certificate, error)
+
+func (s *localStoreCertProvider) Initialize() {
+
+	s.logger = log.NewDefaultLogger()
+	var period time.Duration
+
+	if s.tlsSettings != nil {
+		period = s.tlsSettings.RefreshInterval
+	} else if s.workerTLSSettings != nil {
+		period = s.workerTLSSettings.RefreshInterval
+	}
+
+	if period != 0 {
+		s.stop = make(chan bool)
+		s.ticker = time.NewTicker(period)
+		go s.refreshCerts()
+	}
+}
+
+func (s *localStoreCertProvider) Close() {
+
+	if s.ticker != nil {
+		s.ticker.Stop()
+	}
+	if s.stop != nil {
+		s.stop <- true
+		close(s.stop)
+	}
+}
 
 func (s *localStoreCertProvider) FetchServerCertificate() (*tls.Certificate, error) {
 
@@ -140,7 +174,7 @@ func (s *localStoreCertProvider) fetchCAs(
 		return *cachedCertPool, nil
 	}
 
-	caPoolFromFiles, caCertsFromFiles, err := buildCAPoolFromFiles(files)
+	caPoolFromFiles, caCertsFromFiles, err := s.buildCAPoolFromFiles(files)
 	if err != nil {
 		return nil, err
 	}
@@ -219,6 +253,7 @@ func (s *localStoreCertProvider) fetchCertificate(cachedCert **tls.Certificate,
 	var err error
 
 	if certFile != "" {
+		s.logger.Info(fmt.Sprintf("loading certificate from file: %s", certFile))
 		certBytes, err = ioutil.ReadFile(certFile)
 		if err != nil {
 			return nil, err
@@ -231,6 +266,7 @@ func (s *localStoreCertProvider) fetchCertificate(cachedCert **tls.Certificate,
 	}
 
 	if keyFile != "" {
+		s.logger.Info(fmt.Sprintf("loading private key from file: %s", keyFile))
 		keyBytes, err = ioutil.ReadFile(keyFile)
 		if err != nil {
 			return nil, err
@@ -384,8 +420,9 @@ func buildCAPoolFromData(caData []string) (*x509.CertPool, []*x509.Certificate, 
 	return buildCAPool(caData, base64.StdEncoding.DecodeString)
 }
 
-func buildCAPoolFromFiles(caFiles []string) (*x509.CertPool, []*x509.Certificate, error) {
+func (s *localStoreCertProvider) buildCAPoolFromFiles(caFiles []string) (*x509.CertPool, []*x509.Certificate, error) {
 
+	s.logger.Info(fmt.Sprintf("loading CA certs from: %v", caFiles))
 	return buildCAPool(caFiles, ioutil.ReadFile)
 }
 
@@ -455,4 +492,17 @@ func appendError(aggregatedErr error, err error) error {
 		return aggregatedErr
 	}
 	return fmt.Errorf("%v, %w", aggregatedErr, err)
+}
+
+func (s *localStoreCertProvider) refreshCerts() {
+
+	s.logger.Info("resetting cached TLS certs to refresh them")
+	s.serverCert = nil
+	s.clientCert = nil
+	s.clientCAPool = nil
+	s.serverCAPool = nil
+	s.serverCAsWorkerPool = nil
+	s.clientCACerts = nil
+	s.serverCACerts = nil
+	s.serverCACertsWorker = nil
 }

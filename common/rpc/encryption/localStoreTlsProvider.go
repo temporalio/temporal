@@ -82,6 +82,7 @@ func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope tally.Scope, cert
 		internodeWorkerProvider := certProviderFactory(&tlsConfig.Internode, nil, &tlsConfig.Frontend.Client)
 		workerProvider = internodeWorkerProvider
 	}
+	workerProvider.Initialize()
 
 	provider := &localStoreTlsProvider{
 		internodeCertProvider:       internodeProvider,
@@ -94,11 +95,14 @@ func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope tally.Scope, cert
 		settings: tlsConfig,
 		scope:    scope,
 	}
-	provider.initialize()
+	provider.internodeCertProvider.Initialize()
+	provider.frontendCertProvider.Initialize()
+	provider.workerCertProvider.Initialize()
+	provider.Initialize()
 	return provider, nil
 }
 
-func (s *localStoreTlsProvider) initialize() {
+func (s *localStoreTlsProvider) Initialize() {
 
 	period := s.settings.ExpirationChecks.CheckInterval
 	if period != 0 {
