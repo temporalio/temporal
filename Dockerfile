@@ -42,9 +42,9 @@ FROM temporal-server as temporal-debug
 # iproute2 contains tc, which can be used for traffic shaping in resiliancy testing. 
 RUN apk add iproute2
 # Add debug configuration file.
-COPY develop/debug/configure.sh /configure.sh
+COPY docker/debug-configure.sh /debug-configure.sh
 # Run configuration script before the service startup.
-CMD /configure.sh && /start.sh autosetup
+CMD /debug-configure.sh && /start.sh autosetup
 
 ##### Temporal CLI (tctl) #####
 FROM temporalio/base-server:1.0.0 AS temporal-tctl
