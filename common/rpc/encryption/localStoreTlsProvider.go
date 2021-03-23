@@ -84,14 +84,15 @@ func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope tally.Scope, cert
 	}
 
 	provider := &localStoreTlsProvider{
-		internodeCertProvider:          internodeProvider,
-		internodeClientCertProvider:    internodeProvider,
-		frontendCertProvider:           certProviderFactory(&tlsConfig.Frontend, nil, nil),
-		workerCertProvider:             workerProvider,
-		frontendPerHostCertProviderMap: newLocalStorePerHostCertProviderMap(tlsConfig.Frontend.PerHostOverrides),
-		RWMutex:                        sync.RWMutex{},
-		settings:                       tlsConfig,
-		scope:                          scope,
+		internodeCertProvider:       internodeProvider,
+		internodeClientCertProvider: internodeProvider,
+		frontendCertProvider:        certProviderFactory(&tlsConfig.Frontend, nil, nil),
+		workerCertProvider:          workerProvider,
+		frontendPerHostCertProviderMap: newLocalStorePerHostCertProviderMap(
+			tlsConfig.Frontend.PerHostOverrides, certProviderFactory),
+		RWMutex:  sync.RWMutex{},
+		settings: tlsConfig,
+		scope:    scope,
 	}
 	provider.initialize()
 	return provider, nil
