@@ -72,7 +72,7 @@ func (s *localStoreCertProvider) FetchServerCertificate() (*tls.Certificate, err
 	if s.tlsSettings == nil {
 		return nil, nil
 	}
-	return s.FetchCertificate(&s.serverCert, s.tlsSettings.Server.CertFile, s.tlsSettings.Server.CertData,
+	return s.fetchCertificate(&s.serverCert, s.tlsSettings.Server.CertFile, s.tlsSettings.Server.CertData,
 		s.tlsSettings.Server.KeyFile, s.tlsSettings.Server.KeyData)
 }
 
@@ -172,24 +172,24 @@ func (s *localStoreCertProvider) FetchClientCertificate(isWorker bool) (*tls.Cer
 	if s.tlsSettings == nil {
 		return nil, nil
 	}
-	return s.FetchCertificate(&s.clientCert, s.tlsSettings.Server.CertFile, s.tlsSettings.Server.CertData,
+	return s.fetchCertificate(&s.clientCert, s.tlsSettings.Server.CertFile, s.tlsSettings.Server.CertData,
 		s.tlsSettings.Server.KeyFile, s.tlsSettings.Server.KeyData)
 }
 
 func (s *localStoreCertProvider) fetchWorkerCertificate() (*tls.Certificate, error) {
 	if s.isLegacyWorkerConfig {
-		return s.FetchCertificate(&s.clientCert, s.tlsSettings.Server.CertFile, s.tlsSettings.Server.CertData,
+		return s.fetchCertificate(&s.clientCert, s.tlsSettings.Server.CertFile, s.tlsSettings.Server.CertData,
 			s.tlsSettings.Server.KeyFile, s.tlsSettings.Server.KeyData)
 	} else {
 		if s.workerTLSSettings != nil {
-			return s.FetchCertificate(&s.clientCert, s.workerTLSSettings.CertFile, s.workerTLSSettings.CertData,
+			return s.fetchCertificate(&s.clientCert, s.workerTLSSettings.CertFile, s.workerTLSSettings.CertData,
 				s.workerTLSSettings.KeyFile, s.workerTLSSettings.KeyData)
 		}
 		return nil, nil
 	}
 }
 
-func (s *localStoreCertProvider) FetchCertificate(cachedCert **tls.Certificate,
+func (s *localStoreCertProvider) fetchCertificate(cachedCert **tls.Certificate,
 	certFile string, certData string,
 	keyFile string, keyData string) (*tls.Certificate, error) {
 	if certFile == "" && certData == "" {
