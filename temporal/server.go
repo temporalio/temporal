@@ -122,7 +122,7 @@ func (s *Server) Start() error {
 		dynamicConfig, err = dynamicconfig.NewFileBasedClient(&s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
 		if err != nil {
 			s.logger.Info("Error creating file based dynamic config client, use no-op config client instead.", tag.Error(err))
-			dynamicConfig = dynamicconfig.NewNopClient()
+			dynamicConfig = dynamicconfig.NewNoopClient()
 		}
 	}
 	dc := dynamicconfig.NewCollection(dynamicConfig, s.logger)

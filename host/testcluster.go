@@ -239,7 +239,7 @@ func setupShards(testBase persistencetests.TestBase, numHistoryShards int32, log
 }
 
 func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
-	dcCollection := dynamicconfig.NewNopCollection()
+	dcCollection := dynamicconfig.NewNoopCollection()
 	if !enabled {
 		return &ArchiverBase{
 			metadata: archiver.NewArchivalMetadata(dcCollection, "", false, "", false, &config.ArchivalNamespaceDefaults{}),
