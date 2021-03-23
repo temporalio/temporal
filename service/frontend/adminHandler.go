@@ -162,7 +162,7 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 	currentValidAttr, _ := adh.params.DynamicConfig.GetMapValue(
 		dynamicconfig.ValidSearchAttributes, nil, searchattribute.GetDefaultTypeMap())
 	for k, v := range searchAttr {
-		if searchattribute.IsSystem(k) {
+		if searchattribute.IsReservedField(k) || searchattribute.IsBuiltIn(k) {
 			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errKeyIsReservedBySystemMessage, k)), scope)
 		}
 		if _, exist := currentValidAttr[k]; exist {
