@@ -38,10 +38,10 @@ const (
 	ExecutionTime   = "ExecutionTime"
 	CloseTime       = "CloseTime"
 	ExecutionStatus = "ExecutionStatus"
+	TaskQueue       = "TaskQueue"
 
 	// Valid non-indexed fields on ES.
 	HistoryLength     = "HistoryLength"
-	TaskQueue         = "TaskQueue"
 	Encoding          = "Encoding"
 	Memo              = "Memo"
 	VisibilityTaskKey = "VisibilityTaskKey"

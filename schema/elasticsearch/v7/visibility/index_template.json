@@ -37,6 +37,9 @@
       "ExecutionStatus": {
         "type": "long"
       },
+      "TaskQueue": {
+        "type": "keyword"
+      },
 
       "Attr": {
         "properties": {
