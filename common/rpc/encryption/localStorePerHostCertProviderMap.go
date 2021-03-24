@@ -39,7 +39,8 @@ type localStorePerHostCertProviderMap struct {
 	clientAuthCache   map[string]bool
 }
 
-func newLocalStorePerHostCertProviderMap(overrides map[string]config.ServerTLS, certProviderFactory CertProviderFactory,
+func newLocalStorePerHostCertProviderMap(
+	overrides map[string]config.ServerTLS, certProviderFactory CertProviderFactory, refreshInterval time.Duration,
 ) *localStorePerHostCertProviderMap {
 
 	providerMap := &localStorePerHostCertProviderMap{}
@@ -55,7 +56,7 @@ func newLocalStorePerHostCertProviderMap(overrides map[string]config.ServerTLS, 
 
 		provider := certProviderFactory(&config.GroupTLS{Server: settings}, nil, nil)
 		providerMap.certProviderCache[lcHost] = provider
-		provider.Initialize()
+		provider.Initialize(refreshInterval)
 		providerMap.clientAuthCache[lcHost] = settings.RequireClientAuth
 	}
 

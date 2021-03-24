@@ -102,6 +102,6 @@ func (t *TestDynamicCertProvider) GetExpiringCerts(_ time.Duration,
 	panic("not implemented")
 }
 
-func (t *TestDynamicCertProvider) Initialize() {
+func (t *TestDynamicCertProvider) Initialize(refreshInterval time.Duration) {
 	panic("implement me")
 }
