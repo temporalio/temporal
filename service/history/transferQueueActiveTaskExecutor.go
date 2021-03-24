@@ -603,6 +603,10 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			WorkflowId: childInfo.StartedWorkflowId,
 			RunId:      childInfo.StartedRunId,
 		}
+		// NOTE: do not access anything related mutable state after this lock release
+		// release the context lock since we no longer need mutable state builder and
+		// the rest of logic is making RPC call, which takes time.
+		release(nil)
 		return t.createFirstWorkflowTask(task.GetTargetNamespaceId(), childExecution)
 	}
 
@@ -631,11 +635,14 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 
 	// Child execution is successfully started, record ChildExecutionStartedEvent in parent execution
 	err = t.recordChildExecutionStarted(task, context, attributes, childRunID)
-
 	if err != nil {
 		return err
 	}
-	// Finally create first workflow task for Child execution so it is really started
+
+	// NOTE: do not access anything related mutable state after this lock release
+	// release the context lock since we no longer need mutable state builder and
+	// the rest of logic is making RPC call, which takes time.
+	release(nil)
 	return t.createFirstWorkflowTask(task.GetTargetNamespaceId(), &commonpb.WorkflowExecution{
 		WorkflowId: task.GetTargetWorkflowId(),
 		RunId:      childRunID,
