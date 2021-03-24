@@ -248,7 +248,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	cfg := NewConfig(dynamicconfig.NewNopCollection())
+	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	cfg.IdleTaskqueueCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
 
 	// Idle
