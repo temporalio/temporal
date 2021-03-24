@@ -72,20 +72,13 @@ type x509CertFetcher func() (*x509.Certificate, error)
 type x509CertPoolFetcher func() (*x509.CertPool, error)
 type tlsCertFetcher func() (*tls.Certificate, error)
 
-func (s *localStoreCertProvider) Initialize() {
+func (s *localStoreCertProvider) Initialize(refreshInterval time.Duration) {
 
 	s.logger = log.NewDefaultLogger()
-	var period time.Duration
 
-	if s.tlsSettings != nil {
-		period = s.tlsSettings.RefreshInterval
-	} else if s.workerTLSSettings != nil {
-		period = s.workerTLSSettings.RefreshInterval
-	}
-
-	if period != 0 {
+	if refreshInterval != 0 {
 		s.stop = make(chan bool)
-		s.ticker = time.NewTicker(period)
+		s.ticker = time.NewTicker(refreshInterval)
 		go s.refreshCerts()
 	}
 }
