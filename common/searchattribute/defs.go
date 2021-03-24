@@ -74,9 +74,9 @@ var (
 		ExecutionTime:   {},
 		CloseTime:       {},
 		ExecutionStatus: {},
+		TaskQueue:       {},
 
 		HistoryLength:     {},
-		TaskQueue:         {},
 		Encoding:          {},
 		Memo:              {},
 		VisibilityTaskKey: {},
@@ -92,6 +92,7 @@ var (
 		ExecutionTime:   {},
 		CloseTime:       {},
 		ExecutionStatus: {},
+		TaskQueue:       {},
 	}
 
 	// builtInSearchAttributes are built-in internal search attributes.
@@ -112,6 +113,7 @@ var (
 		ExecutionTime:   enumspb.INDEXED_VALUE_TYPE_INT,
 		CloseTime:       enumspb.INDEXED_VALUE_TYPE_INT,
 		ExecutionStatus: enumspb.INDEXED_VALUE_TYPE_INT,
+		TaskQueue:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 
 		CustomStringField:   enumspb.INDEXED_VALUE_TYPE_STRING,
 		CustomKeywordField:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
