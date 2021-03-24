@@ -41,23 +41,22 @@ type (
 		GetInternodeClientConfig() (*tls.Config, error)
 		GetFrontendServerConfig() (*tls.Config, error)
 		GetFrontendClientConfig() (*tls.Config, error)
+		GetExpiringCerts(timeWindow time.Duration) (expiring CertExpirationMap, expired CertExpirationMap, err error)
 	}
 
 	// CertProvider is a common interface to load raw TLS/X509 primitives.
 	CertProvider interface {
 		FetchServerCertificate() (*tls.Certificate, error)
 		FetchClientCAs() (*x509.CertPool, error)
-	}
-
-	// ClientCertProvider is an interface to load raw TLS/X509 primitives for configuring clients.
-	ClientCertProvider interface {
 		FetchClientCertificate(isWorker bool) (*tls.Certificate, error)
 		FetchServerRootCAsForClient(isWorker bool) (*x509.CertPool, error)
+		GetExpiringCerts(timeWindow time.Duration) (expiring CertExpirationMap, expired CertExpirationMap, err error)
 	}
 
 	// PerHostCertProviderMap returns a CertProvider for a given host name.
 	PerHostCertProviderMap interface {
 		GetCertProvider(hostName string) (provider CertProvider, clientAuthRequired bool, err error)
+		GetExpiringCerts(timeWindow time.Duration) (expiring CertExpirationMap, expired CertExpirationMap, err error)
 	}
 
 	CertThumbprint [16]byte
@@ -72,19 +71,37 @@ type (
 	CertExpirationMap map[CertThumbprint]CertExpirationData
 
 	CertExpirationChecker interface {
-		GetExpiringCerts(timeWindow time.Duration) (
-			expiring CertExpirationMap,
-			expired CertExpirationMap,
-			err error)
+		GetExpiringCerts(timeWindow time.Duration) (expiring CertExpirationMap, expired CertExpirationMap, err error)
 	}
 
 	tlsConfigConstructor func() (*tls.Config, error)
 )
 
-// NewTLSConfigProviderFromConfig creates a new TLS Config provider from RootTLS config
+// NewTLSConfigProviderFromConfig creates a new TLS Config provider from RootTLS config.
+// A custom cert provider factory can be optionally injected via certProviderFactory argument.
+// Otherwise, it defaults to using localStoreCertProvider
 func NewTLSConfigProviderFromConfig(
 	encryptionSettings config.RootTLS,
 	scope tally.Scope,
+	certProviderFactory CertProviderFactory,
 ) (TLSConfigProvider, error) {
-	return NewLocalStoreTlsProvider(&encryptionSettings, scope)
+
+	if certProviderFactory == nil {
+		certProviderFactory = newLocalStoreCertProvider
+	}
+	return NewLocalStoreTlsProvider(&encryptionSettings, scope, certProviderFactory)
+}
+
+func newLocalStoreCertProvider(
+	tlsSettings *config.GroupTLS,
+	workerTlsSettings *config.WorkerTLS,
+	legacyWorkerSettings *config.ClientTLS) CertProvider {
+
+	provider := &localStoreCertProvider{
+		tlsSettings:          tlsSettings,
+		workerTLSSettings:    workerTlsSettings,
+		legacyWorkerSettings: legacyWorkerSettings,
+		isLegacyWorkerConfig: legacyWorkerSettings != nil,
+	}
+	return provider
 }

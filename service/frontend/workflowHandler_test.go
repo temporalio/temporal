@@ -1385,7 +1385,7 @@ func (s *workflowHandlerSuite) checkResponse(err error, response interface{},
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {
-	return NewConfig(dc.NewCollection(dc.NewNopClient(), s.mockResource.GetLogger()), numHistoryShards, false)
+	return NewConfig(dc.NewCollection(dc.NewNoopClient(), s.mockResource.GetLogger()), numHistoryShards, false)
 }
 
 func (s *workflowHandlerSuite) newRespondActivityTaskCompletedRequest(tokenNamespaceId string) *workflowservice.RespondActivityTaskCompletedRequest {

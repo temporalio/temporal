@@ -35,31 +35,28 @@ var _ PerHostCertProviderMap = (*localStorePerHostCertProviderMap)(nil)
 var _ CertExpirationChecker = (*localStorePerHostCertProviderMap)(nil)
 
 type localStorePerHostCertProviderMap struct {
-	certProviderCache map[string]*localStoreCertProvider
+	certProviderCache map[string]CertProvider
 	clientAuthCache   map[string]bool
 }
 
-func newLocalStorePerHostCertProviderMap(overrides map[string]config.ServerTLS) *localStorePerHostCertProviderMap {
+func newLocalStorePerHostCertProviderMap(overrides map[string]config.ServerTLS, certProviderFactory CertProviderFactory,
+) *localStorePerHostCertProviderMap {
 
-	factory := &localStorePerHostCertProviderMap{}
+	providerMap := &localStorePerHostCertProviderMap{}
 	if overrides == nil {
-		return factory
+		return providerMap
 	}
 
-	factory.certProviderCache = make(map[string]*localStoreCertProvider, len(overrides))
-	factory.clientAuthCache = make(map[string]bool, len(overrides))
+	providerMap.certProviderCache = make(map[string]CertProvider, len(overrides))
+	providerMap.clientAuthCache = make(map[string]bool, len(overrides))
 
 	for host, settings := range overrides {
 		lcHost := strings.ToLower(host)
-		factory.certProviderCache[lcHost] = &localStoreCertProvider{
-			tlsSettings: &config.GroupTLS{
-				Server: settings,
-			},
-		}
-		factory.clientAuthCache[lcHost] = settings.RequireClientAuth
+		providerMap.certProviderCache[lcHost] = certProviderFactory(&config.GroupTLS{Server: settings}, nil, nil)
+		providerMap.clientAuthCache[lcHost] = settings.RequireClientAuth
 	}
 
-	return factory
+	return providerMap
 }
 
 // GetCertProvider for a given host name returns a cert provider (nil if not found) and if client authentication is required

@@ -27,6 +27,7 @@ package encryption
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"time"
 
 	"go.temporal.io/server/common/config"
 )
@@ -62,6 +63,10 @@ func (t *TestDynamicTLSConfigProvider) GetFrontendServerConfig() (*tls.Config, e
 
 func (t *TestDynamicTLSConfigProvider) GetFrontendClientConfig() (*tls.Config, error) {
 	return newClientTLSConfig(t.WorkerCertProvider, t.settings.Frontend.Client.ServerName, true, false, true)
+}
+
+func (t *TestDynamicTLSConfigProvider) GetExpiringCerts(timeWindow time.Duration) (expiring CertExpirationMap, expired CertExpirationMap, err error) {
+	panic("implement me")
 }
 
 var _ TLSConfigProvider = (*TestDynamicTLSConfigProvider)(nil)
