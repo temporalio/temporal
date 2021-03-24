@@ -23,6 +23,7 @@ builds:
       - windows
     goarch:
       - amd64
+      - arm64
   - id: "tctl"
     dir: cmd/tools/cli
     binary: tctl
@@ -34,6 +35,7 @@ builds:
       - windows
     goarch:
       - amd64
+      - arm64
   - id: "temporal-cassandra-tool"
     dir: cmd/tools/cassandra
     binary: temporal-cassandra-tool
@@ -45,6 +47,7 @@ builds:
       - windows
     goarch:
       - amd64
+      - arm64
   - id: "temporal-sql-tool"
     dir: cmd/tools/sql
     binary: temporal-sql-tool
@@ -56,6 +59,7 @@ builds:
       - windows
     goarch:
       - amd64
+      - arm64
 checksum:
   name_template: 'checksums.txt'
   algorithm: sha256
