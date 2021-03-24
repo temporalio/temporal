@@ -489,13 +489,20 @@ func appendError(aggregatedErr error, err error) error {
 
 func (s *localStoreCertProvider) refreshCerts() {
 
-	s.logger.Info("resetting cached TLS certs to refresh them")
-	s.serverCert = nil
-	s.clientCert = nil
-	s.clientCAPool = nil
-	s.serverCAPool = nil
-	s.serverCAsWorkerPool = nil
-	s.clientCACerts = nil
-	s.serverCACerts = nil
-	s.serverCACertsWorker = nil
+	for {
+		select {
+		case <-s.stop:
+			break
+		case <-s.ticker.C:
+		}
+		s.logger.Info("resetting cached TLS certs to refresh them")
+		s.serverCert = nil
+		s.clientCert = nil
+		s.clientCAPool = nil
+		s.serverCAPool = nil
+		s.serverCAsWorkerPool = nil
+		s.clientCACerts = nil
+		s.serverCACerts = nil
+		s.serverCACertsWorker = nil
+	}
 }
