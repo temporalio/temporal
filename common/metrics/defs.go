@@ -743,8 +743,10 @@ const (
 	FrontendRespondActivityTaskFailedByIdScope
 	// FrontendRespondActivityTaskCanceledScope is the metric scope for frontend.RespondActivityTaskCanceledById
 	FrontendRespondActivityTaskCanceledByIdScope
-	// FrontendGetWorkflowExecutionHistoryScope is the metric scope for frontend.GetWorkflowExecutionHistory
+	// FrontendGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
 	FrontendGetWorkflowExecutionHistoryScope
+	// FrontendGetWorkflowExecutionHistoryScope is the metric scope for long poll case of frontend.GetWorkflowExecutionHistory
+	FrontendLongPollGetWorkflowExecutionHistoryScope
 	// FrontendGetWorkflowExecutionRawHistoryScope is the metric scope for frontend.GetWorkflowExecutionRawHistory
 	FrontendGetWorkflowExecutionRawHistoryScope
 	// FrontendPollForWorkflowExecutionRawHistoryScope is the metric scope for frontend.GetWorkflowExecutionRawHistory
@@ -1411,6 +1413,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendRespondActivityTaskFailedByIdScope:      {operation: "RespondActivityTaskFailedById"},
 		FrontendRespondActivityTaskCanceledByIdScope:    {operation: "RespondActivityTaskCanceledById"},
 		FrontendGetWorkflowExecutionHistoryScope:        {operation: "GetWorkflowExecutionHistory"},
+		FrontendLongPollGetWorkflowExecutionHistoryScope:{operation: "LongPollGetWorkflowExecutionHistory"},
 		FrontendGetWorkflowExecutionRawHistoryScope:     {operation: "GetWorkflowExecutionRawHistory"},
 		FrontendPollForWorkflowExecutionRawHistoryScope: {operation: "PollForWorkflowExecutionRawHistory"},
 		FrontendSignalWorkflowExecutionScope:            {operation: "SignalWorkflowExecution"},
