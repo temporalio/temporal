@@ -68,7 +68,6 @@ func NewTelemetryInterceptor(
 	}
 }
 
-
 // Use this method to override scope used for reporting a metric.
 // Ideally this method should never be used.
 func (ti *TelemetryInterceptor) overrideScope(scope int, methodName string, req interface{}) int {
