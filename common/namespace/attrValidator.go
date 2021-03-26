@@ -32,7 +32,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -56,7 +58,9 @@ func newAttrValidator(
 }
 
 func (d *AttrValidatorImpl) validateNamespaceConfig(config *persistencespb.NamespaceConfig) error {
-	if config.Retention != nil && *config.Retention < time.Hour*24*time.Duration(d.minRetentionDays) {
+	if timestamp.DurationValue(config.Retention) < time.Hour*24*time.Duration(d.minRetentionDays) {
+		return errInvalidRetentionPeriod
+	} else if timestamp.DurationValue(config.Retention) > common.MaxWorkflowRetentionPeriod {
 		return errInvalidRetentionPeriod
 	}
 	if config.HistoryArchivalState == enumspb.ARCHIVAL_STATE_ENABLED && len(config.HistoryArchivalUri) == 0 {

@@ -222,10 +222,6 @@ func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workf
 		return nil, errRequestNotSet
 	}
 
-	if timestamp.DurationValue(request.GetWorkflowExecutionRetentionPeriod()) > common.MaxWorkflowRetentionPeriod {
-		return nil, errInvalidRetention
-	}
-
 	if request.GetNamespace() == "" {
 		return nil, errNamespaceNotSet
 	}
