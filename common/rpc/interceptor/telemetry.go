@@ -77,7 +77,7 @@ func (ti *TelemetryInterceptor) overrideScope(scope int, methodName string, req 
 	if scope == metrics.FrontendGetWorkflowExecutionHistoryScope {
 		request := req.(*workflowservice.GetWorkflowExecutionHistoryRequest)
 		if request.GetWaitNewEvent() {
-			return metrics.FrontendLongPollGetWorkflowExecutionHistoryScope
+			return metrics.FrontendPollWorkflowExecutionHistoryScope
 		}
 	}
 	return scope
