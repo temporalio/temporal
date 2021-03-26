@@ -110,7 +110,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	}
 	attr.IndexedFields = fields
 	err = validator.Validate(attr, namespace)
-	s.Equal("StartTime is read-only Temporal reserved search attribute", err.Error())
+	s.Equal("StartTime is Temporal reserved field name", err.Error())
 
 	fields = map[string]*commonpb.Payload{
 		"CustomKeywordField": payload.EncodeString("123456"),

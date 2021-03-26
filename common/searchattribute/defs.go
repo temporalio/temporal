@@ -38,34 +38,73 @@ const (
 	ExecutionTime   = "ExecutionTime"
 	CloseTime       = "CloseTime"
 	ExecutionStatus = "ExecutionStatus"
-
-	// TODO (alex): move these 3 to non-indexed.
-	HistoryLength = "HistoryLength"
-	TaskQueue     = "TaskQueue"
-	Encoding      = "Encoding"
+	TaskQueue       = "TaskQueue"
 
 	// Valid non-indexed fields on ES.
+	HistoryLength     = "HistoryLength"
+	Encoding          = "Encoding"
 	Memo              = "Memo"
 	VisibilityTaskKey = "VisibilityTaskKey"
 
-	// Attr is prefix of custom search attributes.
+	// Attr is prefix for search attributes.
 	Attr = "Attr"
-	// Custom search attributes.
-	CustomStringField     = "CustomStringField"
-	CustomKeywordField    = "CustomKeywordField"
-	CustomIntField        = "CustomIntField"
-	CustomDoubleField     = "CustomDoubleField"
-	CustomBoolField       = "CustomBoolField"
-	CustomDatetimeField   = "CustomDatetimeField"
+	// System search attributes.
 	TemporalChangeVersion = "TemporalChangeVersion"
 	BinaryChecksums       = "BinaryChecksums"
 	CustomNamespace       = "CustomNamespace"
 	Operator              = "Operator"
+
+	// Default custom search attributes.
+	CustomStringField   = "CustomStringField"
+	CustomKeywordField  = "CustomKeywordField"
+	CustomIntField      = "CustomIntField"
+	CustomDoubleField   = "CustomDoubleField"
+	CustomBoolField     = "CustomBoolField"
+	CustomDatetimeField = "CustomDatetimeField"
 )
 
 var (
-	// systemTypeMap is internal system search attributes.
-	systemTypeMap = map[string]enumspb.IndexedValueType{
+	// reservedFields are internal field names that can't be used as search attribute names.
+	reservedFields = map[string]struct{}{
+		NamespaceID:     {},
+		WorkflowID:      {},
+		RunID:           {},
+		WorkflowType:    {},
+		StartTime:       {},
+		ExecutionTime:   {},
+		CloseTime:       {},
+		ExecutionStatus: {},
+		TaskQueue:       {},
+
+		HistoryLength:     {},
+		Encoding:          {},
+		Memo:              {},
+		VisibilityTaskKey: {},
+	}
+
+	// systemSearchAttributes are internal system search attributes which don't require Attr prefix.
+	systemSearchAttributes = map[string]struct{}{
+		NamespaceID:     {},
+		WorkflowID:      {},
+		RunID:           {},
+		WorkflowType:    {},
+		StartTime:       {},
+		ExecutionTime:   {},
+		CloseTime:       {},
+		ExecutionStatus: {},
+		TaskQueue:       {},
+	}
+
+	// builtInSearchAttributes are built-in internal search attributes.
+	builtInSearchAttributes = map[string]struct{}{
+		TemporalChangeVersion: {},
+		BinaryChecksums:       {},
+		CustomNamespace:       {},
+		Operator:              {},
+	}
+
+	// defaultTypeMap defines default search attributes and their types.
+	defaultTypeMap = map[string]interface{}{
 		NamespaceID:     enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		WorkflowID:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		RunID:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -74,41 +113,41 @@ var (
 		ExecutionTime:   enumspb.INDEXED_VALUE_TYPE_INT,
 		CloseTime:       enumspb.INDEXED_VALUE_TYPE_INT,
 		ExecutionStatus: enumspb.INDEXED_VALUE_TYPE_INT,
-		HistoryLength:   enumspb.INDEXED_VALUE_TYPE_INT,
 		TaskQueue:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		Encoding:        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-	}
 
-	// defaultTypeMap defines all search attributes.
-	defaultTypeMap = newDefaultTypeMap()
-)
+		CustomStringField:   enumspb.INDEXED_VALUE_TYPE_STRING,
+		CustomKeywordField:  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		CustomIntField:      enumspb.INDEXED_VALUE_TYPE_INT,
+		CustomDoubleField:   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+		CustomBoolField:     enumspb.INDEXED_VALUE_TYPE_BOOL,
+		CustomDatetimeField: enumspb.INDEXED_VALUE_TYPE_DATETIME,
 
-func newDefaultTypeMap() map[string]interface{} {
-	result := map[string]interface{}{
-		CustomStringField:     enumspb.INDEXED_VALUE_TYPE_STRING,
-		CustomKeywordField:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		CustomIntField:        enumspb.INDEXED_VALUE_TYPE_INT,
-		CustomDoubleField:     enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-		CustomBoolField:       enumspb.INDEXED_VALUE_TYPE_BOOL,
-		CustomDatetimeField:   enumspb.INDEXED_VALUE_TYPE_DATETIME,
 		TemporalChangeVersion: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		BinaryChecksums:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		CustomNamespace:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		Operator:              enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
-	for k, v := range systemTypeMap {
-		result[k] = v
-	}
-	return result
+)
+
+// IsReservedField return true if field name is system reserved.
+func IsReservedField(fieldName string) bool {
+	_, ok := reservedFields[fieldName]
+	return ok
+}
+
+// IsBuiltIn return true if search attribute is system built-in.
+func IsBuiltIn(saName string) bool {
+	_, ok := builtInSearchAttributes[saName]
+	return ok
+}
+
+// IsSystem return true if search attribute is system and doesn't require Attr prefix.
+func IsSystem(saName string) bool {
+	_, ok := systemSearchAttributes[saName]
+	return ok
 }
 
 // GetDefaultTypeMap return default valid search attributes.
 func GetDefaultTypeMap() map[string]interface{} {
 	return defaultTypeMap
-}
-
-// IsSystem return true if search attribute is system.
-func IsSystem(saName string) bool {
-	_, ok := systemTypeMap[saName]
-	return ok
 }

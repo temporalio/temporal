@@ -37,16 +37,10 @@
       "ExecutionStatus": {
         "type": "long"
       },
-
-      "HistoryLength": {
-        "type": "long"
-      },
-      "Encoding": {
-        "type": "keyword"
-      },
       "TaskQueue": {
         "type": "keyword"
       },
+
       "Attr": {
         "properties": {
           "TemporalChangeVersion": {
