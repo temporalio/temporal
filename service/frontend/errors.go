@@ -43,7 +43,6 @@ var (
 	errRequestNotSet                                      = serviceerror.NewInvalidArgument("Request is nil.")
 	errRequestIDNotSet                                    = serviceerror.NewInvalidArgument("RequestId is not set on request.")
 	errWorkflowTypeNotSet                                 = serviceerror.NewInvalidArgument("WorkflowType is not set on request.")
-	errInvalidRetention                                   = serviceerror.NewInvalidArgument("RetentionDays is invalid.")
 	errInvalidWorkflowExecutionTimeoutSeconds             = serviceerror.NewInvalidArgument("An invalid WorkflowExecutionTimeoutSeconds is set on request.")
 	errInvalidWorkflowRunTimeoutSeconds                   = serviceerror.NewInvalidArgument("An invalid WorkflowRunTimeoutSeconds is set on request.")
 	errInvalidWorkflowTaskTimeoutSeconds                  = serviceerror.NewInvalidArgument("An invalid WorkflowTaskTimeoutSeconds is set on request.")

@@ -67,7 +67,7 @@ func (s *taskPriorityAssignerSuite) SetupTest() {
 	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
 
 	s.testTaskProcessRPS = 10
-	dc := dynamicconfig.NewNopCollection()
+	dc := dynamicconfig.NewNoopCollection()
 	config := NewDynamicConfigForTest()
 	config.TaskProcessRPS = dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskProcessRPS, s.testTaskProcessRPS)
 

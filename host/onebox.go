@@ -377,7 +377,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	}
 	params.ClusterMetadata = c.clusterMetadata
 	params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
-	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
+	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 	params.ESConfig = c.esConfig
@@ -441,7 +441,7 @@ func (c *temporalImpl) startHistory(
 		}
 		params.ClusterMetadata = c.clusterMetadata
 		params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
-		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNopClient())
+		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 		c.overrideHistoryDynamicConfig(integrationClient)
 		params.DynamicConfig = integrationClient
 
@@ -524,7 +524,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	}
 	params.ClusterMetadata = c.clusterMetadata
 	params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
-	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
+	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
@@ -567,7 +567,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	}
 	params.ClusterMetadata = c.clusterMetadata
 	params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
-	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNopClient())
+	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
