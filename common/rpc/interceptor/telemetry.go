@@ -74,7 +74,7 @@ func (ti *TelemetryInterceptor) overrideScope(scope int, methodName string, req 
 	// GetWorkflowExecutionHistory method handles both long poll and regular calls.
 	// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
 	// remove this if case when that is done.
-	if scope == metrics.FrontendGetWorkflowExecutionHistoryScope && methodName == "GetWorkflowExecutionHistory" {
+	if scope == metrics.FrontendGetWorkflowExecutionHistoryScope {
 		request := req.(*workflowservice.GetWorkflowExecutionHistoryRequest)
 		if request.GetWaitNewEvent() {
 			return metrics.FrontendLongPollGetWorkflowExecutionHistoryScope
