@@ -106,8 +106,8 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		}
 
 		// verify: saName is not system reserved
-		if IsSystem(saName) {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is read-only Temporal reserved search attribute", saName))
+		if IsReservedField(saName) {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is Temporal reserved field name", saName))
 		}
 		// verify: size of single value <= limit
 		dataSize := len(saPayload.GetData())
