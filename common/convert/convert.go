@@ -88,3 +88,46 @@ func Int32ToString(v int32) string {
 func Uint16ToString(v uint16) string {
 	return strconv.FormatUint(uint64(v), 10)
 }
+
+func Int64SetToSlice(
+	inputs map[int64]struct{},
+) []int64 {
+	outputs := make([]int64, len(inputs))
+	i := 0
+	for item := range inputs {
+		outputs[i] = item
+		i++
+	}
+	return outputs
+}
+
+func Int64SliceToSet(
+	inputs []int64,
+) map[int64]struct{} {
+	outputs := make(map[int64]struct{}, len(inputs))
+	for _, item := range inputs {
+		outputs[item] = struct{}{}
+	}
+	return outputs
+}
+
+func StringSetToSlice(
+	inputs map[string]struct{},
+) []string {
+	outputs := make([]string, len(inputs))
+	i := 0
+	for item := range inputs {
+		outputs[i] = item
+		i++
+	}
+	return outputs
+}
+func StringSliceToSet(
+	inputs []string,
+) map[string]struct{} {
+	outputs := make(map[string]struct{}, len(inputs))
+	for _, item := range inputs {
+		outputs[item] = struct{}{}
+	}
+	return outputs
+}

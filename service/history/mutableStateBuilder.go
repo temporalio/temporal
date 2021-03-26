@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/log"
@@ -97,29 +98,29 @@ var (
 
 type (
 	mutableStateBuilder struct {
-		pendingActivityTimerHeartbeats map[int64]time.Time                       // Schedule Event ID -> LastHeartbeatTimeoutVisibilityInSeconds.
-		pendingActivityInfoIDs         map[int64]*persistencespb.ActivityInfo    // Schedule Event ID -> Activity Info.
-		pendingActivityIDToEventID     map[string]int64                          // Activity ID -> Schedule Event ID of the activity.
-		updateActivityInfos            map[*persistencespb.ActivityInfo]struct{} // Modified activities from last update.
-		deleteActivityInfos            map[int64]struct{}                        // Deleted activities from last update.
-		syncActivityTasks              map[int64]struct{}                        // Activity to be sync to remote
+		pendingActivityTimerHeartbeats map[int64]time.Time                    // Schedule Event ID -> LastHeartbeatTimeoutVisibilityInSeconds.
+		pendingActivityInfoIDs         map[int64]*persistencespb.ActivityInfo // Schedule Event ID -> Activity Info.
+		pendingActivityIDToEventID     map[string]int64                       // Activity ID -> Schedule Event ID of the activity.
+		updateActivityInfos            map[int64]*persistencespb.ActivityInfo // Modified activities from last update.
+		deleteActivityInfos            map[int64]struct{}                     // Deleted activities from last update.
+		syncActivityTasks              map[int64]struct{}                     // Activity to be sync to remote
 
-		pendingTimerInfoIDs     map[string]*persistencespb.TimerInfo   // User Timer ID -> Timer Info.
-		pendingTimerEventIDToID map[int64]string                       // User Timer Start Event ID -> User Timer ID.
-		updateTimerInfos        map[*persistencespb.TimerInfo]struct{} // Modified timers from last update.
-		deleteTimerInfos        map[string]struct{}                    // Deleted timers from last update.
+		pendingTimerInfoIDs     map[string]*persistencespb.TimerInfo // User Timer ID -> Timer Info.
+		pendingTimerEventIDToID map[int64]string                     // User Timer Start Event ID -> User Timer ID.
+		updateTimerInfos        map[string]*persistencespb.TimerInfo // Modified timers from last update.
+		deleteTimerInfos        map[string]struct{}                  // Deleted timers from last update.
 
-		pendingChildExecutionInfoIDs map[int64]*persistencespb.ChildExecutionInfo    // Initiated Event ID -> Child Execution Info
-		updateChildExecutionInfos    map[*persistencespb.ChildExecutionInfo]struct{} // Modified ChildExecution Infos since last update
-		deleteChildExecutionInfos    map[int64]struct{}                              // Deleted ChildExecution Info since last update
+		pendingChildExecutionInfoIDs map[int64]*persistencespb.ChildExecutionInfo // Initiated Event ID -> Child Execution Info
+		updateChildExecutionInfos    map[int64]*persistencespb.ChildExecutionInfo // Modified ChildExecution Infos since last update
+		deleteChildExecutionInfos    map[int64]struct{}                           // Deleted ChildExecution Info since last update
 
-		pendingRequestCancelInfoIDs map[int64]*persistencespb.RequestCancelInfo    // Initiated Event ID -> RequestCancelInfo
-		updateRequestCancelInfos    map[*persistencespb.RequestCancelInfo]struct{} // Modified RequestCancel Infos since last update, for persistence update
-		deleteRequestCancelInfos    map[int64]struct{}                             // Deleted RequestCancel Info since last update, for persistence update
+		pendingRequestCancelInfoIDs map[int64]*persistencespb.RequestCancelInfo // Initiated Event ID -> RequestCancelInfo
+		updateRequestCancelInfos    map[int64]*persistencespb.RequestCancelInfo // Modified RequestCancel Infos since last update, for persistence update
+		deleteRequestCancelInfos    map[int64]struct{}                          // Deleted RequestCancel Info since last update, for persistence update
 
-		pendingSignalInfoIDs map[int64]*persistencespb.SignalInfo    // Initiated Event ID -> SignalInfo
-		updateSignalInfos    map[*persistencespb.SignalInfo]struct{} // Modified SignalInfo since last update
-		deleteSignalInfos    map[int64]struct{}                      // Deleted SignalInfo since last update
+		pendingSignalInfoIDs map[int64]*persistencespb.SignalInfo // Initiated Event ID -> SignalInfo
+		updateSignalInfos    map[int64]*persistencespb.SignalInfo // Modified SignalInfo since last update
+		deleteSignalInfos    map[int64]struct{}                   // Deleted SignalInfo since last update
 
 		pendingSignalRequestedIDs map[string]struct{} // Set of signaled requestIds
 		updateSignalRequestedIDs  map[string]struct{} // Set of signaled requestIds since last update
@@ -186,7 +187,7 @@ func newMutableStateBuilder(
 	namespaceEntry *cache.NamespaceCacheEntry,
 ) *mutableStateBuilder {
 	s := &mutableStateBuilder{
-		updateActivityInfos:            make(map[*persistencespb.ActivityInfo]struct{}),
+		updateActivityInfos:            make(map[int64]*persistencespb.ActivityInfo),
 		pendingActivityTimerHeartbeats: make(map[int64]time.Time),
 		pendingActivityInfoIDs:         make(map[int64]*persistencespb.ActivityInfo),
 		pendingActivityIDToEventID:     make(map[string]int64),
@@ -195,18 +196,18 @@ func newMutableStateBuilder(
 
 		pendingTimerInfoIDs:     make(map[string]*persistencespb.TimerInfo),
 		pendingTimerEventIDToID: make(map[int64]string),
-		updateTimerInfos:        make(map[*persistencespb.TimerInfo]struct{}),
+		updateTimerInfos:        make(map[string]*persistencespb.TimerInfo),
 		deleteTimerInfos:        make(map[string]struct{}),
 
-		updateChildExecutionInfos:    make(map[*persistencespb.ChildExecutionInfo]struct{}),
+		updateChildExecutionInfos:    make(map[int64]*persistencespb.ChildExecutionInfo),
 		pendingChildExecutionInfoIDs: make(map[int64]*persistencespb.ChildExecutionInfo),
 		deleteChildExecutionInfos:    make(map[int64]struct{}),
 
-		updateRequestCancelInfos:    make(map[*persistencespb.RequestCancelInfo]struct{}),
+		updateRequestCancelInfos:    make(map[int64]*persistencespb.RequestCancelInfo),
 		pendingRequestCancelInfoIDs: make(map[int64]*persistencespb.RequestCancelInfo),
 		deleteRequestCancelInfos:    make(map[int64]struct{}),
 
-		updateSignalInfos:    make(map[*persistencespb.SignalInfo]struct{}),
+		updateSignalInfos:    make(map[int64]*persistencespb.SignalInfo),
 		pendingSignalInfoIDs: make(map[int64]*persistencespb.SignalInfo),
 		deleteSignalInfos:    make(map[int64]struct{}),
 
@@ -275,7 +276,7 @@ func (e *mutableStateBuilder) CloneToProto() *persistencespb.WorkflowMutableStat
 		ChildExecutionInfos: e.pendingChildExecutionInfoIDs,
 		RequestCancelInfos:  e.pendingRequestCancelInfoIDs,
 		SignalInfos:         e.pendingSignalInfoIDs,
-		SignalRequestedIds:  convertStringSetToSlice(e.pendingSignalRequestedIDs),
+		SignalRequestedIds:  convert.StringSetToSlice(e.pendingSignalRequestedIDs),
 		ExecutionInfo:       e.executionInfo,
 		ExecutionState:      e.executionState,
 		NextEventId:         e.nextEventID,
@@ -306,7 +307,7 @@ func (e *mutableStateBuilder) Load(
 	e.pendingChildExecutionInfoIDs = state.ChildExecutionInfos
 	e.pendingRequestCancelInfoIDs = state.RequestCancelInfos
 	e.pendingSignalInfoIDs = state.SignalInfos
-	e.pendingSignalRequestedIDs = convertStringSliceToSet(state.SignalRequestedIds)
+	e.pendingSignalRequestedIDs = convert.StringSliceToSet(state.SignalRequestedIds)
 	e.executionInfo = state.ExecutionInfo
 	e.executionState = state.ExecutionState
 	e.nextEventID = state.NextEventId
@@ -677,7 +678,7 @@ func (e *mutableStateBuilder) assignEventIDToBufferedEvents() {
 			scheduledIDToStartedID[scheduledID] = eventID
 			if ai, ok := e.GetActivityInfo(scheduledID); ok {
 				ai.StartedId = eventID
-				e.updateActivityInfos[ai] = struct{}{}
+				e.updateActivityInfos[ai.ScheduleId] = ai
 			}
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
 			attributes := event.GetChildWorkflowExecutionStartedEventAttributes()
@@ -685,7 +686,7 @@ func (e *mutableStateBuilder) assignEventIDToBufferedEvents() {
 			scheduledIDToStartedID[initiatedID] = eventID
 			if ci, ok := e.GetChildExecutionInfo(initiatedID); ok {
 				ci.StartedId = eventID
-				e.updateChildExecutionInfos[ci] = struct{}{}
+				e.updateChildExecutionInfos[ci.InitiatedId] = ci
 			}
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
 			attributes := event.GetActivityTaskCompletedEventAttributes()
@@ -1218,7 +1219,7 @@ func (e *mutableStateBuilder) UpdateActivityProgress(
 	ai.LastHeartbeatDetails = request.Details
 	now := e.timeSource.Now()
 	ai.LastHeartbeatUpdateTime = &now
-	e.updateActivityInfos[ai] = struct{}{}
+	e.updateActivityInfos[ai.ScheduleId] = ai
 	e.syncActivityTasks[ai.ScheduleId] = struct{}{}
 }
 
@@ -1254,7 +1255,7 @@ func (e *mutableStateBuilder) ReplicateActivityInfo(
 		ai.TimerTaskStatus = timerTaskStatusNone
 	}
 
-	e.updateActivityInfos[ai] = struct{}{}
+	e.updateActivityInfos[ai.ScheduleId] = ai
 	return nil
 }
 
@@ -1272,7 +1273,7 @@ func (e *mutableStateBuilder) UpdateActivity(
 	}
 
 	e.pendingActivityInfoIDs[ai.ScheduleId] = ai
-	e.updateActivityInfos[ai] = struct{}{}
+	e.updateActivityInfos[ai.ScheduleId] = ai
 	return nil
 }
 
@@ -1366,8 +1367,8 @@ func (e *mutableStateBuilder) UpdateUserTimer(
 		return ErrMissingTimerInfo
 	}
 
-	e.pendingTimerInfoIDs[timerID] = ti
-	e.updateTimerInfos[ti] = struct{}{}
+	e.pendingTimerInfoIDs[ti.TimerId] = ti
+	e.updateTimerInfos[ti.TimerId] = ti
 	return nil
 }
 
@@ -2188,9 +2189,9 @@ func (e *mutableStateBuilder) ReplicateActivityTaskScheduledEvent(
 		}
 	}
 
-	e.pendingActivityInfoIDs[scheduleEventID] = ai
-	e.pendingActivityIDToEventID[ai.ActivityId] = scheduleEventID
-	e.updateActivityInfos[ai] = struct{}{}
+	e.pendingActivityInfoIDs[ai.ScheduleId] = ai
+	e.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduleId
+	e.updateActivityInfos[ai.ScheduleId] = ai
 
 	return ai, nil
 }
@@ -2269,7 +2270,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskStartedEvent(
 	ai.RequestId = attributes.GetRequestId()
 	ai.StartedTime = event.GetEventTime()
 	ai.LastHeartbeatUpdateTime = ai.StartedTime
-	e.updateActivityInfos[ai] = struct{}{}
+	e.updateActivityInfos[ai.ScheduleId] = ai
 	return nil
 }
 
@@ -2478,7 +2479,7 @@ func (e *mutableStateBuilder) ReplicateActivityTaskCancelRequestedEvent(
 	ai.CancelRequested = true
 
 	ai.CancelRequestId = event.GetEventId()
-	e.updateActivityInfos[ai] = struct{}{}
+	e.updateActivityInfos[ai.ScheduleId] = ai
 	return nil
 }
 
@@ -2776,8 +2777,8 @@ func (e *mutableStateBuilder) ReplicateRequestCancelExternalWorkflowExecutionIni
 		CancelRequestId:       cancelRequestID,
 	}
 
-	e.pendingRequestCancelInfoIDs[initiatedEventID] = rci
-	e.updateRequestCancelInfos[rci] = struct{}{}
+	e.pendingRequestCancelInfoIDs[rci.InitiatedId] = rci
+	e.updateRequestCancelInfos[rci.InitiatedId] = rci
 
 	return rci, nil
 }
@@ -2904,8 +2905,8 @@ func (e *mutableStateBuilder) ReplicateSignalExternalWorkflowExecutionInitiatedE
 		Control:               attributes.Control,
 	}
 
-	e.pendingSignalInfoIDs[initiatedEventID] = si
-	e.updateSignalInfos[si] = struct{}{}
+	e.pendingSignalInfoIDs[si.InitiatedId] = si
+	e.updateSignalInfos[si.InitiatedId] = si
 	return si, nil
 }
 
@@ -3080,9 +3081,9 @@ func (e *mutableStateBuilder) ReplicateTimerStartedEvent(
 		TaskStatus: timerTaskStatusNone,
 	}
 
-	e.pendingTimerInfoIDs[timerID] = ti
-	e.pendingTimerEventIDToID[event.GetEventId()] = timerID
-	e.updateTimerInfos[ti] = struct{}{}
+	e.pendingTimerInfoIDs[ti.TimerId] = ti
+	e.pendingTimerEventIDToID[ti.StartedId] = ti.TimerId
+	e.updateTimerInfos[ti.TimerId] = ti
 
 	return ti, nil
 }
@@ -3431,8 +3432,8 @@ func (e *mutableStateBuilder) ReplicateStartChildWorkflowExecutionInitiatedEvent
 		ParentClosePolicy:     attributes.GetParentClosePolicy(),
 	}
 
-	e.pendingChildExecutionInfoIDs[initiatedEventID] = ci
-	e.updateChildExecutionInfos[ci] = struct{}{}
+	e.pendingChildExecutionInfoIDs[ci.InitiatedId] = ci
+	e.updateChildExecutionInfos[ci.InitiatedId] = ci
 
 	return ci, nil
 }
@@ -3477,7 +3478,7 @@ func (e *mutableStateBuilder) ReplicateChildWorkflowExecutionStartedEvent(
 	ci, _ := e.GetChildExecutionInfo(initiatedID)
 	ci.StartedId = event.GetEventId()
 	ci.StartedRunId = attributes.GetWorkflowExecution().GetRunId()
-	e.updateChildExecutionInfos[ci] = struct{}{}
+	e.updateChildExecutionInfos[ci.InitiatedId] = ci
 
 	return nil
 }
@@ -3787,7 +3788,7 @@ func (e *mutableStateBuilder) RetryActivity(
 		return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
 	}
 
-	e.updateActivityInfos[ai] = struct{}{}
+	e.updateActivityInfos[ai.ScheduleId] = ai
 	e.syncActivityTasks[ai.ScheduleId] = struct{}{}
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
@@ -3918,18 +3919,18 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 		ExecutionState: e.executionState,
 		NextEventID:    e.nextEventID,
 
-		UpsertActivityInfos:       convertUpdateActivityInfos(e.updateActivityInfos),
-		DeleteActivityInfos:       convertDeleteActivityInfos(e.deleteActivityInfos),
-		UpsertTimerInfos:          convertUpdateTimerInfos(e.updateTimerInfos),
-		DeleteTimerInfos:          convertDeleteTimerInfos(e.deleteTimerInfos),
-		UpsertChildExecutionInfos: convertUpdateChildExecutionInfos(e.updateChildExecutionInfos),
-		DeleteChildExecutionInfos: convertInt64SetToSlice(e.deleteChildExecutionInfos),
-		UpsertRequestCancelInfos:  convertUpdateRequestCancelInfos(e.updateRequestCancelInfos),
-		DeleteRequestCancelInfos:  convertInt64SetToSlice(e.deleteRequestCancelInfos),
-		UpsertSignalInfos:         convertUpdateSignalInfos(e.updateSignalInfos),
-		DeleteSignalInfos:         convertInt64SetToSlice(e.deleteSignalInfos),
-		UpsertSignalRequestedIDs:  convertStringSetToSlice(e.updateSignalRequestedIDs),
-		DeleteSignalRequestedIDs:  convertStringSetToSlice(e.deleteSignalRequestedIDs),
+		UpsertActivityInfos:       e.updateActivityInfos,
+		DeleteActivityInfos:       e.deleteActivityInfos,
+		UpsertTimerInfos:          e.updateTimerInfos,
+		DeleteTimerInfos:          e.deleteTimerInfos,
+		UpsertChildExecutionInfos: e.updateChildExecutionInfos,
+		DeleteChildExecutionInfos: e.deleteChildExecutionInfos,
+		UpsertRequestCancelInfos:  e.updateRequestCancelInfos,
+		DeleteRequestCancelInfos:  e.deleteRequestCancelInfos,
+		UpsertSignalInfos:         e.updateSignalInfos,
+		DeleteSignalInfos:         e.deleteSignalInfos,
+		UpsertSignalRequestedIDs:  e.updateSignalRequestedIDs,
+		DeleteSignalRequestedIDs:  e.deleteSignalRequestedIDs,
 		NewBufferedEvents:         e.updateBufferedEvents,
 		ClearBufferedEvents:       e.clearBufferedEvents,
 
@@ -4004,12 +4005,12 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 		ExecutionState: e.executionState,
 		NextEventID:    e.nextEventID,
 
-		ActivityInfos:       convertPendingActivityInfos(e.pendingActivityInfoIDs),
-		TimerInfos:          convertPendingTimerInfos(e.pendingTimerInfoIDs),
-		ChildExecutionInfos: convertPendingChildExecutionInfos(e.pendingChildExecutionInfoIDs),
-		RequestCancelInfos:  convertPendingRequestCancelInfos(e.pendingRequestCancelInfoIDs),
-		SignalInfos:         convertPendingSignalInfos(e.pendingSignalInfoIDs),
-		SignalRequestedIDs:  convertStringSetToSlice(e.pendingSignalRequestedIDs),
+		ActivityInfos:       e.pendingActivityInfoIDs,
+		TimerInfos:          e.pendingTimerInfoIDs,
+		ChildExecutionInfos: e.pendingChildExecutionInfoIDs,
+		RequestCancelInfos:  e.pendingRequestCancelInfoIDs,
+		SignalInfos:         e.pendingSignalInfoIDs,
+		SignalRequestedIDs:  e.pendingSignalRequestedIDs,
 
 		TransferTasks:    e.insertTransferTasks,
 		ReplicationTasks: e.insertReplicationTasks,
@@ -4091,20 +4092,20 @@ func (e *mutableStateBuilder) cleanupTransaction(
 	// Clear all updates to prepare for the next session
 	e.hBuilder = newHistoryBuilder(e)
 
-	e.updateActivityInfos = make(map[*persistencespb.ActivityInfo]struct{})
+	e.updateActivityInfos = make(map[int64]*persistencespb.ActivityInfo)
 	e.deleteActivityInfos = make(map[int64]struct{})
 	e.syncActivityTasks = make(map[int64]struct{})
 
-	e.updateTimerInfos = make(map[*persistencespb.TimerInfo]struct{})
+	e.updateTimerInfos = make(map[string]*persistencespb.TimerInfo)
 	e.deleteTimerInfos = make(map[string]struct{})
 
-	e.updateChildExecutionInfos = make(map[*persistencespb.ChildExecutionInfo]struct{})
+	e.updateChildExecutionInfos = make(map[int64]*persistencespb.ChildExecutionInfo)
 	e.deleteChildExecutionInfos = make(map[int64]struct{})
 
-	e.updateRequestCancelInfos = make(map[*persistencespb.RequestCancelInfo]struct{})
+	e.updateRequestCancelInfos = make(map[int64]*persistencespb.RequestCancelInfo)
 	e.deleteRequestCancelInfos = make(map[int64]struct{})
 
-	e.updateSignalInfos = make(map[*persistencespb.SignalInfo]struct{})
+	e.updateSignalInfos = make(map[int64]*persistencespb.SignalInfo)
 	e.deleteSignalInfos = make(map[int64]struct{})
 
 	e.updateSignalRequestedIDs = make(map[string]struct{})

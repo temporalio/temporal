@@ -829,8 +829,8 @@ func (s *ExecutionManagerSuite) TestUpsertWorkflowActivity() {
 			NextEventID:    info.NextEventId,
 			Condition:      nextEventID,
 			Checksum:       csum,
-			UpsertActivityInfos: []*persistencespb.ActivityInfo{
-				{
+			UpsertActivityInfos: map[int64]*persistencespb.ActivityInfo{
+				100: {
 					Version:    0,
 					ScheduleId: 100,
 					TaskQueue:  "test-activity-tasktlist-1",
@@ -855,8 +855,8 @@ func (s *ExecutionManagerSuite) TestUpsertWorkflowActivity() {
 			NextEventID:    info.NextEventId,
 			Condition:      nextEventID,
 			Checksum:       csum,
-			UpsertActivityInfos: []*persistencespb.ActivityInfo{
-				{
+			UpsertActivityInfos: map[int64]*persistencespb.ActivityInfo{
+				100: {
 					Version:    0,
 					ScheduleId: 100,
 					TaskQueue:  "test-activity-tasktlist-2",
