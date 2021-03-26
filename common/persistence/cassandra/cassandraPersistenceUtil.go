@@ -35,6 +35,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/convert"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -951,8 +952,8 @@ func createOrUpdateCurrentExecution(
 
 func updateActivityInfos(
 	batch gocql.Batch,
-	activityInfos []*persistencespb.ActivityInfo,
-	deleteIDs []int64,
+	activityInfos map[int64]*persistencespb.ActivityInfo,
+	deleteIDs map[int64]struct{},
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -978,7 +979,7 @@ func updateActivityInfos(
 			rowTypeExecutionTaskID)
 	}
 
-	for _, deleteID := range deleteIDs {
+	for deleteID := range deleteIDs {
 		batch.Query(templateDeleteActivityInfoQuery,
 			deleteID,
 			shardID,
@@ -1013,7 +1014,7 @@ func deleteBufferedEvents(
 
 func resetActivityInfos(
 	batch gocql.Batch,
-	activityInfos []*persistencespb.ActivityInfo,
+	activityInfos map[int64]*persistencespb.ActivityInfo,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1040,8 +1041,8 @@ func resetActivityInfos(
 
 func updateTimerInfos(
 	batch gocql.Batch,
-	timerInfos []*persistencespb.TimerInfo,
-	deleteInfos []string,
+	timerInfos map[string]*persistencespb.TimerInfo,
+	deleteInfos map[string]struct{},
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1066,7 +1067,7 @@ func updateTimerInfos(
 			rowTypeExecutionTaskID)
 	}
 
-	for _, deleteInfoID := range deleteInfos {
+	for deleteInfoID := range deleteInfos {
 		batch.Query(templateDeleteTimerInfoQuery,
 			deleteInfoID,
 			shardID,
@@ -1083,7 +1084,7 @@ func updateTimerInfos(
 
 func resetTimerInfos(
 	batch gocql.Batch,
-	timerInfos []*persistencespb.TimerInfo,
+	timerInfos map[string]*persistencespb.TimerInfo,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1111,8 +1112,8 @@ func resetTimerInfos(
 
 func updateChildExecutionInfos(
 	batch gocql.Batch,
-	childExecutionInfos []*persistencespb.ChildExecutionInfo,
-	deleteIDs []int64,
+	childExecutionInfos map[int64]*persistencespb.ChildExecutionInfo,
+	deleteIDs map[int64]struct{},
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1138,7 +1139,7 @@ func updateChildExecutionInfos(
 			rowTypeExecutionTaskID)
 	}
 
-	for _, deleteID := range deleteIDs {
+	for deleteID := range deleteIDs {
 		batch.Query(templateDeleteChildExecutionInfoQuery,
 			deleteID,
 			shardID,
@@ -1154,7 +1155,7 @@ func updateChildExecutionInfos(
 
 func resetChildExecutionInfos(
 	batch gocql.Batch,
-	childExecutionInfos []*persistencespb.ChildExecutionInfo,
+	childExecutionInfos map[int64]*persistencespb.ChildExecutionInfo,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1180,8 +1181,8 @@ func resetChildExecutionInfos(
 
 func updateRequestCancelInfos(
 	batch gocql.Batch,
-	requestCancelInfos []*persistencespb.RequestCancelInfo,
-	deleteIDs []int64,
+	requestCancelInfos map[int64]*persistencespb.RequestCancelInfo,
+	deleteIDs map[int64]struct{},
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1207,7 +1208,7 @@ func updateRequestCancelInfos(
 			rowTypeExecutionTaskID)
 	}
 
-	for _, deleteID := range deleteIDs {
+	for deleteID := range deleteIDs {
 		batch.Query(templateDeleteRequestCancelInfoQuery,
 			deleteID,
 			shardID,
@@ -1223,7 +1224,7 @@ func updateRequestCancelInfos(
 
 func resetRequestCancelInfos(
 	batch gocql.Batch,
-	requestCancelInfos []*persistencespb.RequestCancelInfo,
+	requestCancelInfos map[int64]*persistencespb.RequestCancelInfo,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1252,8 +1253,8 @@ func resetRequestCancelInfos(
 
 func updateSignalInfos(
 	batch gocql.Batch,
-	signalInfos []*persistencespb.SignalInfo,
-	deleteIDs []int64,
+	signalInfos map[int64]*persistencespb.SignalInfo,
+	deleteIDs map[int64]struct{},
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1279,7 +1280,7 @@ func updateSignalInfos(
 			rowTypeExecutionTaskID)
 	}
 
-	for _, deleteID := range deleteIDs {
+	for deleteID := range deleteIDs {
 		batch.Query(templateDeleteSignalInfoQuery,
 			deleteID,
 			shardID,
@@ -1295,7 +1296,7 @@ func updateSignalInfos(
 
 func resetSignalInfos(
 	batch gocql.Batch,
-	signalInfos []*persistencespb.SignalInfo,
+	signalInfos map[int64]*persistencespb.SignalInfo,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1323,8 +1324,8 @@ func resetSignalInfos(
 
 func updateSignalsRequested(
 	batch gocql.Batch,
-	signalReqIDs []string,
-	deleteSignalReqIDs []string,
+	signalReqIDs map[string]struct{},
+	deleteSignalReqIDs map[string]struct{},
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1333,7 +1334,7 @@ func updateSignalsRequested(
 
 	if len(signalReqIDs) > 0 {
 		batch.Query(templateUpdateSignalRequestedQuery,
-			signalReqIDs,
+			convert.StringSetToSlice(signalReqIDs),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1345,7 +1346,7 @@ func updateSignalsRequested(
 
 	if len(deleteSignalReqIDs) > 0 {
 		batch.Query(templateDeleteWorkflowExecutionSignalRequestedQuery,
-			deleteSignalReqIDs,
+			convert.StringSetToSlice(deleteSignalReqIDs),
 			shardID,
 			rowTypeExecution,
 			namespaceID,
@@ -1358,7 +1359,7 @@ func updateSignalsRequested(
 
 func resetSignalRequested(
 	batch gocql.Batch,
-	signalRequested []string,
+	signalRequested map[string]struct{},
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1366,7 +1367,7 @@ func resetSignalRequested(
 ) {
 
 	batch.Query(templateResetSignalRequestedQuery,
-		signalRequested,
+		convert.StringSetToSlice(signalRequested),
 		shardID,
 		rowTypeExecution,
 		namespaceID,
@@ -1414,7 +1415,7 @@ func updateBufferedEvents(
 }
 
 func resetActivityInfoMap(
-	activityInfos []*persistencespb.ActivityInfo,
+	activityInfos map[int64]*persistencespb.ActivityInfo,
 ) (map[int64][]byte, enumspb.EncodingType, error) {
 
 	encoding := enumspb.ENCODING_TYPE_UNSPECIFIED
@@ -1433,7 +1434,7 @@ func resetActivityInfoMap(
 }
 
 func resetTimerInfoMap(
-	timerInfos []*persistencespb.TimerInfo,
+	timerInfos map[string]*persistencespb.TimerInfo,
 ) (map[string][]byte, enumspb.EncodingType, error) {
 
 	tMap := make(map[string][]byte)
@@ -1454,7 +1455,7 @@ func resetTimerInfoMap(
 }
 
 func resetChildExecutionInfoMap(
-	childExecutionInfos []*persistencespb.ChildExecutionInfo,
+	childExecutionInfos map[int64]*persistencespb.ChildExecutionInfo,
 ) (map[int64][]byte, enumspb.EncodingType, error) {
 
 	cMap := make(map[int64][]byte)
@@ -1472,7 +1473,7 @@ func resetChildExecutionInfoMap(
 }
 
 func resetRequestCancelInfoMap(
-	requestCancelInfos []*persistencespb.RequestCancelInfo,
+	requestCancelInfos map[int64]*persistencespb.RequestCancelInfo,
 ) (map[int64][]byte, enumspb.EncodingType, error) {
 
 	rcMap := make(map[int64][]byte)
@@ -1493,7 +1494,7 @@ func resetRequestCancelInfoMap(
 }
 
 func resetSignalInfoMap(
-	signalInfos []*persistencespb.SignalInfo,
+	signalInfos map[int64]*persistencespb.SignalInfo,
 ) (map[int64][]byte, enumspb.EncodingType, error) {
 
 	sMap := make(map[int64][]byte)

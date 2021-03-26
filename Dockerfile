@@ -37,6 +37,15 @@ COPY --from=temporal-builder /temporal/temporal-server /usr/local/bin
 FROM temporal-server AS temporal-auto-setup
 CMD /start.sh autosetup
 
+##### Debug configuration for Temporal with additional set of tools #####
+FROM temporal-server as temporal-debug
+# iproute2 contains tc, which can be used for traffic shaping in resiliancy testing. 
+RUN apk add iproute2
+# Add debug configuration file.
+COPY docker/debug-configure.sh /debug-configure.sh
+# Run configuration script before the service startup.
+CMD /debug-configure.sh && /start.sh autosetup
+
 ##### Temporal CLI (tctl) #####
 FROM temporalio/base-server:1.0.0 AS temporal-tctl
 WORKDIR /etc/temporal

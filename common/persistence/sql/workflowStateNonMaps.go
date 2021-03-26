@@ -32,6 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common/convert"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
@@ -40,8 +41,8 @@ import (
 func updateSignalsRequested(
 	ctx context.Context,
 	tx sqlplugin.Tx,
-	signalRequestedIDs []string,
-	deleteIDs []string,
+	signalRequestedIDs map[string]struct{},
+	deleteIDs map[string]struct{},
 	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
@@ -49,15 +50,15 @@ func updateSignalsRequested(
 ) error {
 
 	if len(signalRequestedIDs) > 0 {
-		rows := make([]sqlplugin.SignalsRequestedSetsRow, len(signalRequestedIDs))
-		for i, v := range signalRequestedIDs {
-			rows[i] = sqlplugin.SignalsRequestedSetsRow{
+		rows := make([]sqlplugin.SignalsRequestedSetsRow, 0, len(signalRequestedIDs))
+		for signalRequestedID := range signalRequestedIDs {
+			rows = append(rows, sqlplugin.SignalsRequestedSetsRow{
 				ShardID:     shardID,
 				NamespaceID: namespaceID,
 				WorkflowID:  workflowID,
 				RunID:       runID,
-				SignalID:    v,
-			}
+				SignalID:    signalRequestedID,
+			})
 		}
 		if _, err := tx.ReplaceIntoSignalsRequestedSets(ctx, rows); err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("Failed to update signals requested. Failed to execute update query. Error: %v", err))
@@ -70,7 +71,7 @@ func updateSignalsRequested(
 			NamespaceID: namespaceID,
 			WorkflowID:  workflowID,
 			RunID:       runID,
-			SignalIDs:   deleteIDs,
+			SignalIDs:   convert.StringSetToSlice(deleteIDs),
 		}); err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("Failed to update signals requested. Failed to execute delete query. Error: %v", err))
 		}

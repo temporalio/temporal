@@ -27,6 +27,7 @@ package encryption
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"time"
 
 	"go.temporal.io/server/common/config"
 )
@@ -42,7 +43,6 @@ type TestDynamicCertProvider struct {
 }
 
 var _ CertProvider = (*TestDynamicCertProvider)(nil)
-var _ ClientCertProvider = (*TestDynamicCertProvider)(nil)
 var _ PerHostCertProviderMap = (*TestDynamicCertProvider)(nil)
 
 func NewTestDynamicCertProvider(
@@ -95,4 +95,9 @@ func (t *TestDynamicCertProvider) SwitchToWrongServerRootCACerts() {
 
 func (t *TestDynamicCertProvider) SetServerName(serverName string) {
 	t.serverName = serverName
+}
+
+func (t *TestDynamicCertProvider) GetExpiringCerts(_ time.Duration,
+) (expiring CertExpirationMap, expired CertExpirationMap, err error) {
+	panic("not implemented")
 }

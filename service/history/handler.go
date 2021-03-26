@@ -1509,7 +1509,7 @@ func (h *Handler) convertError(err error) error {
 		return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), "<unknown>")
 	case *persistence.WorkflowExecutionAlreadyStartedError:
 		err := err.(*persistence.WorkflowExecutionAlreadyStartedError)
-		return serviceerror.NewInternal(err.Msg)
+		return serviceerror.NewWorkflowExecutionAlreadyStarted(err.Msg, err.StartRequestID, err.RunID)
 	case *persistence.CurrentWorkflowConditionFailedError:
 		err := err.(*persistence.CurrentWorkflowConditionFailedError)
 		return serviceerror.NewInternal(err.Msg)

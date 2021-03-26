@@ -539,18 +539,18 @@ type (
 		ExecutionState *persistencespb.WorkflowExecutionState
 		NextEventID    int64
 
-		UpsertActivityInfos       []*persistencespb.ActivityInfo
-		DeleteActivityInfos       []int64
-		UpsertTimerInfos          []*persistencespb.TimerInfo
-		DeleteTimerInfos          []string
-		UpsertChildExecutionInfos []*persistencespb.ChildExecutionInfo
-		DeleteChildExecutionInfos []int64
-		UpsertRequestCancelInfos  []*persistencespb.RequestCancelInfo
-		DeleteRequestCancelInfos  []int64
-		UpsertSignalInfos         []*persistencespb.SignalInfo
-		DeleteSignalInfos         []int64
-		UpsertSignalRequestedIDs  []string
-		DeleteSignalRequestedIDs  []string
+		UpsertActivityInfos       map[int64]*persistencespb.ActivityInfo
+		DeleteActivityInfos       map[int64]struct{}
+		UpsertTimerInfos          map[string]*persistencespb.TimerInfo
+		DeleteTimerInfos          map[string]struct{}
+		UpsertChildExecutionInfos map[int64]*persistencespb.ChildExecutionInfo
+		DeleteChildExecutionInfos map[int64]struct{}
+		UpsertRequestCancelInfos  map[int64]*persistencespb.RequestCancelInfo
+		DeleteRequestCancelInfos  map[int64]struct{}
+		UpsertSignalInfos         map[int64]*persistencespb.SignalInfo
+		DeleteSignalInfos         map[int64]struct{}
+		UpsertSignalRequestedIDs  map[string]struct{}
+		DeleteSignalRequestedIDs  map[string]struct{}
 		NewBufferedEvents         []*historypb.HistoryEvent
 		ClearBufferedEvents       bool
 
@@ -569,12 +569,12 @@ type (
 		ExecutionState *persistencespb.WorkflowExecutionState
 		NextEventID    int64
 
-		ActivityInfos       []*persistencespb.ActivityInfo
-		TimerInfos          []*persistencespb.TimerInfo
-		ChildExecutionInfos []*persistencespb.ChildExecutionInfo
-		RequestCancelInfos  []*persistencespb.RequestCancelInfo
-		SignalInfos         []*persistencespb.SignalInfo
-		SignalRequestedIDs  []string
+		ActivityInfos       map[int64]*persistencespb.ActivityInfo
+		TimerInfos          map[string]*persistencespb.TimerInfo
+		ChildExecutionInfos map[int64]*persistencespb.ChildExecutionInfo
+		RequestCancelInfos  map[int64]*persistencespb.RequestCancelInfo
+		SignalInfos         map[int64]*persistencespb.SignalInfo
+		SignalRequestedIDs  map[string]struct{}
 
 		TransferTasks    []Task
 		ReplicationTasks []Task

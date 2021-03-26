@@ -441,8 +441,6 @@ type (
 	PublicClient struct {
 		// HostPort is the host port to connect on. Host can be DNS name
 		HostPort string `yaml:"hostPort" validate:"nonzero"`
-		// interval to refresh DNS. Default to 10s
-		RefreshInterval time.Duration `yaml:"RefreshInterval"`
 	}
 
 	// NamespaceDefaults is the default config for each namespace
