@@ -214,13 +214,16 @@ func (c *historyCache) getOrCreateWorkflowExecutionInternal(
 	//  Consider revisiting this if it causes too much GC activity
 	releaseFunc := c.makeReleaseFunc(key, workflowCtx, forceClearContext)
 
+	lockAcquireTimer := c.metricsClient.StartTimer(scope, metrics.AcqureWorkflowContextLocklatency)
 	if err := workflowCtx.lock(ctx); err != nil {
+		lockAcquireTimer.Stop()
 		// ctx is done before lock can be acquired
 		c.Release(key)
 		c.metricsClient.IncCounter(scope, metrics.CacheFailures)
 		c.metricsClient.IncCounter(scope, metrics.AcquireLockFailedCounter)
 		return nil, nil, err
 	}
+	lockAcquireTimer.Stop()
 	return workflowCtx, releaseFunc, nil
 }
 
