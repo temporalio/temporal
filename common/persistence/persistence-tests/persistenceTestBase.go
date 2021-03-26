@@ -746,18 +746,18 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *persisten
 			ExecutionState: updatedState,
 			NextEventID:    nextEventID,
 
-			UpsertActivityInfos:       upsertActivityInfos,
-			DeleteActivityInfos:       deleteActivityInfos,
-			UpsertTimerInfos:          upsertTimerInfos,
-			DeleteTimerInfos:          deleteTimerInfos,
-			UpsertChildExecutionInfos: upsertChildInfos,
-			DeleteChildExecutionInfos: deleteChildInfos,
-			UpsertRequestCancelInfos:  upsertCancelInfos,
-			DeleteRequestCancelInfos:  deleteCancelInfos,
-			UpsertSignalInfos:         upsertSignalInfos,
-			DeleteSignalInfos:         deleteSignalInfos,
-			UpsertSignalRequestedIDs:  upsertSignalRequestedIDs,
-			DeleteSignalRequestedIDs:  deleteSignalRequestedIDs,
+			UpsertActivityInfos:       convertActivityInfos(upsertActivityInfos),
+			DeleteActivityInfos:       convert.Int64SliceToSet(deleteActivityInfos),
+			UpsertTimerInfos:          convertTimerInfos(upsertTimerInfos),
+			DeleteTimerInfos:          convert.StringSliceToSet(deleteTimerInfos),
+			UpsertChildExecutionInfos: convertChildExecutionInfos(upsertChildInfos),
+			DeleteChildExecutionInfos: convert.Int64SliceToSet(deleteChildInfos),
+			UpsertRequestCancelInfos:  convertRequestCancelInfos(upsertCancelInfos),
+			DeleteRequestCancelInfos:  convert.Int64SliceToSet(deleteCancelInfos),
+			UpsertSignalInfos:         convertSignalInfos(upsertSignalInfos),
+			DeleteSignalInfos:         convert.Int64SliceToSet(deleteSignalInfos),
+			UpsertSignalRequestedIDs:  convert.StringSliceToSet(upsertSignalRequestedIDs),
+			DeleteSignalRequestedIDs:  convert.StringSliceToSet(deleteSignalRequestedIDs),
 
 			TransferTasks:    transferTasks,
 			ReplicationTasks: replicationTasks,
@@ -780,7 +780,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithTransferTasks(
 			NextEventID:         updatedNextEventID,
 			TransferTasks:       transferTasks,
 			Condition:           condition,
-			UpsertActivityInfos: upsertActivityInfo,
+			UpsertActivityInfos: convertActivityInfos(upsertActivityInfo),
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
 	})
@@ -796,7 +796,7 @@ func (s *TestBase) UpdateWorkflowExecutionForChildExecutionsInitiated(
 			NextEventID:               updatedNextEventID,
 			TransferTasks:             transferTasks,
 			Condition:                 condition,
-			UpsertChildExecutionInfos: childInfos,
+			UpsertChildExecutionInfos: convertChildExecutionInfos(childInfos),
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
 	})
@@ -813,7 +813,7 @@ func (s *TestBase) UpdateWorkflowExecutionForRequestCancel(
 			NextEventID:              updatedNextEventID,
 			TransferTasks:            transferTasks,
 			Condition:                condition,
-			UpsertRequestCancelInfos: upsertRequestCancelInfo,
+			UpsertRequestCancelInfos: convertRequestCancelInfos(upsertRequestCancelInfo),
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
 	})
@@ -830,7 +830,7 @@ func (s *TestBase) UpdateWorkflowExecutionForSignal(
 			NextEventID:       updatedNextEventID,
 			TransferTasks:     transferTasks,
 			Condition:         condition,
-			UpsertSignalInfos: upsertSignalInfos,
+			UpsertSignalInfos: convertSignalInfos(upsertSignalInfos),
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
 	})
@@ -891,12 +891,12 @@ func (s *TestBase) UpdateAllMutableState(updatedMutableState *persistencespb.Wor
 			ExecutionInfo:             updatedMutableState.ExecutionInfo,
 			NextEventID:               updatedMutableState.NextEventId,
 			Condition:                 condition,
-			UpsertActivityInfos:       aInfos,
-			UpsertTimerInfos:          tInfos,
-			UpsertChildExecutionInfos: cInfos,
-			UpsertRequestCancelInfos:  rcInfos,
-			UpsertSignalInfos:         sInfos,
-			UpsertSignalRequestedIDs:  srIDs,
+			UpsertActivityInfos:       convertActivityInfos(aInfos),
+			UpsertTimerInfos:          convertTimerInfos(tInfos),
+			UpsertChildExecutionInfos: convertChildExecutionInfos(cInfos),
+			UpsertRequestCancelInfos:  convertRequestCancelInfos(rcInfos),
+			UpsertSignalInfos:         convertSignalInfos(sInfos),
+			UpsertSignalRequestedIDs:  convert.StringSliceToSet(srIDs),
 		},
 	})
 	return err
@@ -912,12 +912,12 @@ func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWr
 		ResetWorkflowSnapshot: persistence.WorkflowSnapshot{
 			ExecutionInfo:       info,
 			Condition:           nextEventID,
-			ActivityInfos:       activityInfos,
-			TimerInfos:          timerInfos,
-			ChildExecutionInfos: childExecutionInfos,
-			RequestCancelInfos:  requestCancelInfos,
-			SignalInfos:         signalInfos,
-			SignalRequestedIDs:  ids,
+			ActivityInfos:       convertActivityInfos(activityInfos),
+			TimerInfos:          convertTimerInfos(timerInfos),
+			ChildExecutionInfos: convertChildExecutionInfos(childExecutionInfos),
+			RequestCancelInfos:  convertRequestCancelInfos(requestCancelInfos),
+			SignalInfos:         convertSignalInfos(signalInfos),
+			SignalRequestedIDs:  convert.StringSliceToSet(ids),
 			Checksum:            testWorkflowChecksum,
 		},
 	})
@@ -1501,4 +1501,59 @@ func GenerateRandomDBName(n int) string {
 	prefix.WriteRune('_')
 	prefix.WriteString(randString(n))
 	return prefix.String()
+}
+
+func convertActivityInfos(
+	inputs []*persistencespb.ActivityInfo,
+) map[int64]*persistencespb.ActivityInfo {
+
+	outputs := make(map[int64]*persistencespb.ActivityInfo, len(inputs))
+	for _, item := range inputs {
+		outputs[item.ScheduleId] = item
+	}
+	return outputs
+}
+
+func convertTimerInfos(
+	inputs []*persistencespb.TimerInfo,
+) map[string]*persistencespb.TimerInfo {
+
+	outputs := make(map[string]*persistencespb.TimerInfo, len(inputs))
+	for _, item := range inputs {
+		outputs[item.TimerId] = item
+	}
+	return outputs
+}
+
+func convertChildExecutionInfos(
+	inputs []*persistencespb.ChildExecutionInfo,
+) map[int64]*persistencespb.ChildExecutionInfo {
+
+	outputs := make(map[int64]*persistencespb.ChildExecutionInfo, len(inputs))
+	for _, item := range inputs {
+		outputs[item.InitiatedId] = item
+	}
+	return outputs
+}
+
+func convertRequestCancelInfos(
+	inputs []*persistencespb.RequestCancelInfo,
+) map[int64]*persistencespb.RequestCancelInfo {
+
+	outputs := make(map[int64]*persistencespb.RequestCancelInfo, len(inputs))
+	for _, item := range inputs {
+		outputs[item.InitiatedId] = item
+	}
+	return outputs
+}
+
+func convertSignalInfos(
+	inputs []*persistencespb.SignalInfo,
+) map[int64]*persistencespb.SignalInfo {
+
+	outputs := make(map[int64]*persistencespb.SignalInfo, len(inputs))
+	for _, item := range inputs {
+		outputs[item.InitiatedId] = item
+	}
+	return outputs
 }
