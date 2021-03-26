@@ -25,11 +25,12 @@
 package postgresql
 
 import (
-	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/sql"
@@ -43,7 +44,12 @@ const (
 	dsnFmt     = "postgres://%v:%v@%v/%v?%v"
 )
 
-var errTLSNotImplemented = errors.New("tls for postgresql has not been implemented")
+var (
+	defaultDatabaseNames = []string{
+		"postgres",  // normal PostgreSQL default DB name
+		"defaultdb", // special behavior for Aiven: #1389
+	}
+)
 
 type plugin struct{}
 
@@ -85,8 +91,11 @@ func (d *plugin) CreateAdminDB(
 // underlying SQL database. The returned object is to tied to a single
 // SQL database and the object can be used to perform CRUD operations on
 // the tables in the database
-func (d *plugin) createDBConnection(cfg *config.SQL, r resolver.ServiceResolver) (*sqlx.DB, error) {
-	db, err := sqlx.Connect(PluginName, buildDSN(cfg, r))
+func (d *plugin) createDBConnection(
+	cfg *config.SQL,
+	r resolver.ServiceResolver,
+) (*sqlx.DB, error) {
+	db, err := d.tryConnect(cfg, r)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +114,32 @@ func (d *plugin) createDBConnection(cfg *config.SQL, r resolver.ServiceResolver)
 	return db, nil
 }
 
-func buildDSN(cfg *config.SQL, r resolver.ServiceResolver) string {
+func (d *plugin) tryConnect(
+	cfg *config.SQL,
+	r resolver.ServiceResolver,
+) (*sqlx.DB, error) {
+	if cfg.DatabaseName != "" {
+		return sqlx.Connect(PluginName, buildDSN(cfg, r))
+	}
+
+	// database name not provided
+	// try defaults
+	defer func() { cfg.DatabaseName = "" }()
+	for _, databaseName := range defaultDatabaseNames {
+		cfg.DatabaseName = databaseName
+		if sqlxDB, err := sqlx.Connect(PluginName, buildDSN(cfg, r)); err == nil {
+			return sqlxDB, nil
+		}
+	}
+	return nil, serviceerror.NewInternal(
+		fmt.Sprintf("unable to connect to DB, tried default DB names: %v", strings.Join(defaultDatabaseNames, ",")),
+	)
+}
+
+func buildDSN(
+	cfg *config.SQL,
+	r resolver.ServiceResolver,
+) string {
 	tlsAttrs := buildDSNAttr(cfg).Encode()
 	resolvedAddr := r.Resolve(cfg.ConnectAddr)[0]
 	dsn := fmt.Sprintf(
@@ -113,16 +147,8 @@ func buildDSN(cfg *config.SQL, r resolver.ServiceResolver) string {
 		cfg.User,
 		cfg.Password,
 		resolvedAddr,
-		databaseName(cfg.DatabaseName),
+		cfg.DatabaseName,
 		tlsAttrs,
 	)
 	return dsn
-}
-
-func databaseName(dbName string) string {
-	//NOTE: postgres doesn't allow to connect with empty dbName, the admin dbName is "postgres"
-	if dbName == "" {
-		return "postgres"
-	}
-	return dbName
 }

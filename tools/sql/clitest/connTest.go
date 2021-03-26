@@ -79,7 +79,7 @@ func (s *SQLConnTestSuite) SetupSuite() {
 	conn, err := newTestConn("", s.host, s.port, s.pluginName)
 	if err != nil {
 		logger := log.NewDefaultLogger()
-		logger.Fatal("error creating sql conn, ", tag.Error(err))
+		logger.Fatal("error creating sql conn", tag.Error(err))
 	}
 	s.SetupSuiteBase(conn)
 }
