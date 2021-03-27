@@ -24,16 +24,37 @@
 
 package interceptor
 
+import (
+	"go.temporal.io/server/common/cache"
+)
+
 type (
-	NamespaceGetter interface {
+	NamespaceNameGetter interface {
 		GetNamespace() string
+	}
+
+	NamespaceIDGetter interface {
+		GetNamespaceId() string
 	}
 )
 
-func GetNamespace(req interface{}) string {
-	if namespaceGetter, ok := req.(NamespaceGetter); ok {
-		return namespaceGetter.GetNamespace()
-	}
+func GetNamespace(
+	namespaceCache cache.NamespaceCache,
+	req interface{},
+) string {
+	switch request := req.(type) {
+	case NamespaceNameGetter:
+		return request.GetNamespace()
 
-	return ""
+	case NamespaceIDGetter:
+		namespaceID := request.GetNamespaceId()
+		namespaceEntry, err := namespaceCache.GetNamespaceByID(namespaceID)
+		if err != nil {
+			return ""
+		}
+		return namespaceEntry.GetInfo().Name
+
+	default:
+		return ""
+	}
 }
