@@ -140,18 +140,18 @@ func (mr *MockEngineMockRecorder) GetMutableState(ctx, request interface{}) *gom
 }
 
 // GetReplicationMessages mocks base method.
-func (m *MockEngine) GetReplicationMessages(ctx context.Context, pollingCluster string, lastReadMessageID int64) (*repication.ReplicationMessages, error) {
+func (m *MockEngine) GetReplicationMessages(ctx context.Context, pollingCluster string, ackMessageID, queryMessageID int64) (*repication.ReplicationMessages, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReplicationMessages", ctx, pollingCluster, lastReadMessageID)
+	ret := m.ctrl.Call(m, "GetReplicationMessages", ctx, pollingCluster, ackMessageID, queryMessageID)
 	ret0, _ := ret[0].(*repication.ReplicationMessages)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetReplicationMessages indicates an expected call of GetReplicationMessages.
-func (mr *MockEngineMockRecorder) GetReplicationMessages(ctx, pollingCluster, lastReadMessageID interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) GetReplicationMessages(ctx, pollingCluster, ackMessageID, queryMessageID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockEngine)(nil).GetReplicationMessages), ctx, pollingCluster, lastReadMessageID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockEngine)(nil).GetReplicationMessages), ctx, pollingCluster, ackMessageID, queryMessageID)
 }
 
 // MergeDLQMessages mocks base method.
@@ -179,6 +179,18 @@ func (m *MockEngine) NotifyNewHistoryEvent(event *events.Notification) {
 func (mr *MockEngineMockRecorder) NotifyNewHistoryEvent(event interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewHistoryEvent", reflect.TypeOf((*MockEngine)(nil).NotifyNewHistoryEvent), event)
+}
+
+// NotifyNewReplicationTasks mocks base method.
+func (m *MockEngine) NotifyNewReplicationTasks(tasks []persistence.Task) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "NotifyNewReplicationTasks", tasks)
+}
+
+// NotifyNewReplicationTasks indicates an expected call of NotifyNewReplicationTasks.
+func (mr *MockEngineMockRecorder) NotifyNewReplicationTasks(tasks interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewReplicationTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewReplicationTasks), tasks)
 }
 
 // NotifyNewTimerTasks mocks base method.

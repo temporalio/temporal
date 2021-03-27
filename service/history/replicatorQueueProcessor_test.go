@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
@@ -118,6 +119,89 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 
 func (s *replicatorQueueProcessorSuite) TearDownTest() {
 	s.controller.Finish()
+}
+
+func (s *replicatorQueueProcessorSuite) TestNotifyNewTasks_NotInitialized() {
+	s.replicatorQueueProcessor.maxTaskID = nil
+
+	s.replicatorQueueProcessor.NotifyNewTasks([]persistence.Task{
+		&persistence.HistoryReplicationTask{TaskID: 456},
+		&persistence.HistoryReplicationTask{TaskID: 123},
+	})
+
+	s.Equal(*s.replicatorQueueProcessor.maxTaskID, int64(456))
+}
+
+func (s *replicatorQueueProcessorSuite) TestNotifyNewTasks_Initialized() {
+	s.replicatorQueueProcessor.maxTaskID = convert.Int64Ptr(123)
+
+	s.replicatorQueueProcessor.NotifyNewTasks([]persistence.Task{
+		&persistence.HistoryReplicationTask{TaskID: 100},
+	})
+	s.Equal(*s.replicatorQueueProcessor.maxTaskID, int64(123))
+
+	s.replicatorQueueProcessor.NotifyNewTasks([]persistence.Task{
+		&persistence.HistoryReplicationTask{TaskID: 234},
+	})
+	s.Equal(*s.replicatorQueueProcessor.maxTaskID, int64(234))
+}
+
+func (s *replicatorQueueProcessorSuite) TestTaskIDRange_NotInitialized() {
+	s.replicatorQueueProcessor.sanityCheckTime = time.Time{}
+	expectMaxTaskID := s.mockShard.GetTransferMaxReadLevel()
+	expectMinTaskID := expectMaxTaskID - 100
+	s.replicatorQueueProcessor.maxTaskID = convert.Int64Ptr(expectMinTaskID - 100)
+
+	minTaskID, maxTaskID := s.replicatorQueueProcessor.taskIDsRange(expectMinTaskID)
+	s.Equal(expectMinTaskID, minTaskID)
+	s.Equal(expectMaxTaskID, maxTaskID)
+	s.NotEqual(time.Time{}, s.replicatorQueueProcessor.sanityCheckTime)
+	s.Equal(expectMaxTaskID, *s.replicatorQueueProcessor.maxTaskID)
+}
+
+func (s *replicatorQueueProcessorSuite) TestTaskIDRange_Initialized_UseHighestReplicationTaskID() {
+	now := time.Now().UTC()
+	sanityCheckTime := now.Add(2 * time.Minute)
+	s.replicatorQueueProcessor.sanityCheckTime = sanityCheckTime
+	expectMinTaskID := s.mockShard.GetTransferMaxReadLevel() - 100
+	expectMaxTaskID := s.mockShard.GetTransferMaxReadLevel() - 50
+	s.replicatorQueueProcessor.maxTaskID = convert.Int64Ptr(expectMaxTaskID)
+
+	minTaskID, maxTaskID := s.replicatorQueueProcessor.taskIDsRange(expectMinTaskID)
+	s.Equal(expectMinTaskID, minTaskID)
+	s.Equal(expectMaxTaskID, maxTaskID)
+	s.Equal(sanityCheckTime, s.replicatorQueueProcessor.sanityCheckTime)
+	s.Equal(expectMaxTaskID, *s.replicatorQueueProcessor.maxTaskID)
+}
+
+func (s *replicatorQueueProcessorSuite) TestTaskIDRange_Initialized_NoHighestReplicationTaskID() {
+	now := time.Now().UTC()
+	sanityCheckTime := now.Add(2 * time.Minute)
+	s.replicatorQueueProcessor.sanityCheckTime = sanityCheckTime
+	expectMinTaskID := s.mockShard.GetTransferMaxReadLevel() - 100
+	expectMaxTaskID := s.mockShard.GetTransferMaxReadLevel()
+	s.replicatorQueueProcessor.maxTaskID = nil
+
+	minTaskID, maxTaskID := s.replicatorQueueProcessor.taskIDsRange(expectMinTaskID)
+	s.Equal(expectMinTaskID, minTaskID)
+	s.Equal(expectMaxTaskID, maxTaskID)
+	s.Equal(sanityCheckTime, s.replicatorQueueProcessor.sanityCheckTime)
+	s.Equal(expectMaxTaskID, *s.replicatorQueueProcessor.maxTaskID)
+}
+
+func (s *replicatorQueueProcessorSuite) TestTaskIDRange_Initialized_UseHighestTransferTaskID() {
+	now := time.Now().UTC()
+	sanityCheckTime := now.Add(-2 * time.Minute)
+	s.replicatorQueueProcessor.sanityCheckTime = sanityCheckTime
+	expectMinTaskID := s.mockShard.GetTransferMaxReadLevel() - 100
+	expectMaxTaskID := s.mockShard.GetTransferMaxReadLevel()
+	s.replicatorQueueProcessor.maxTaskID = convert.Int64Ptr(s.mockShard.GetTransferMaxReadLevel() - 50)
+
+	minTaskID, maxTaskID := s.replicatorQueueProcessor.taskIDsRange(expectMinTaskID)
+	s.Equal(expectMinTaskID, minTaskID)
+	s.Equal(expectMaxTaskID, maxTaskID)
+	s.NotEqual(sanityCheckTime, s.replicatorQueueProcessor.sanityCheckTime)
+	s.Equal(expectMaxTaskID, *s.replicatorQueueProcessor.maxTaskID)
 }
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {

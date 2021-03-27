@@ -662,8 +662,8 @@ type (
 
 	// GetReplicationTasksRequest is used to read tasks from the replication task queue
 	GetReplicationTasksRequest struct {
-		ReadLevel     int64
-		MaxReadLevel  int64
+		MinTaskID     int64
+		MaxTaskID     int64
 		BatchSize     int
 		NextPageToken []byte
 	}
@@ -2143,8 +2143,8 @@ func NewGetReplicationTasksFromDLQRequest(
 	return &GetReplicationTasksFromDLQRequest{
 		SourceClusterName: sourceClusterName,
 		GetReplicationTasksRequest: GetReplicationTasksRequest{
-			ReadLevel:     readLevel,
-			MaxReadLevel:  maxReadLevel,
+			MinTaskID:     readLevel,
+			MaxTaskID:     maxReadLevel,
 			BatchSize:     batchSize,
 			NextPageToken: nextPageToken,
 		},

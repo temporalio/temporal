@@ -69,7 +69,7 @@ type (
 		ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error
 		SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) error
 		SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) error
-		GetReplicationMessages(ctx context.Context, pollingCluster string, lastReadMessageID int64) (*replicationspb.ReplicationMessages, error)
+		GetReplicationMessages(ctx context.Context, pollingCluster string, ackMessageID int64, queryMessageID int64) (*replicationspb.ReplicationMessages, error)
 		GetDLQReplicationMessages(ctx context.Context, taskInfos []*replicationspb.ReplicationTaskInfo) ([]*replicationspb.ReplicationTask, error)
 		QueryWorkflow(ctx context.Context, request *historyservice.QueryWorkflowRequest) (*historyservice.QueryWorkflowResponse, error)
 		ReapplyEvents(ctx context.Context, namespaceUUID string, workflowID string, runID string, events []*historypb.HistoryEvent) error
@@ -82,5 +82,6 @@ type (
 		NotifyNewTransferTasks(tasks []persistence.Task)
 		NotifyNewTimerTasks(tasks []persistence.Task)
 		NotifyNewVisibilityTasks(tasks []persistence.Task)
+		NotifyNewReplicationTasks(tasks []persistence.Task)
 	}
 )

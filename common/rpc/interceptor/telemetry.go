@@ -28,6 +28,7 @@ import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common"
@@ -71,6 +72,21 @@ func NewTelemetryInterceptor(
 	}
 }
 
+// Use this method to override scope used for reporting a metric.
+// Ideally this method should never be used.
+func (ti *TelemetryInterceptor) overrideScope(scope int, methodName string, req interface{}) int {
+	// GetWorkflowExecutionHistory method handles both long poll and regular calls.
+	// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
+	// remove this if case when that is done.
+	if scope == metrics.FrontendGetWorkflowExecutionHistoryScope {
+		request := req.(*workflowservice.GetWorkflowExecutionHistoryRequest)
+		if request.GetWaitNewEvent() {
+			return metrics.FrontendPollWorkflowExecutionHistoryScope
+		}
+	}
+	return scope
+}
+
 func (ti *TelemetryInterceptor) Intercept(
 	ctx context.Context,
 	req interface{},
@@ -81,6 +97,7 @@ func (ti *TelemetryInterceptor) Intercept(
 	// if the method name is not defined, will default to
 	// unknown scope, which carries value 0
 	scope, _ := ti.scopes[methodName]
+	scope = ti.overrideScope(scope, methodName, req)
 	var metricsScope metrics.Scope
 	if namespace := GetNamespace(ti.namespaceCache, req); namespace != "" {
 		metricsScope = ti.metricsClient.Scope(scope).Tagged(metrics.NamespaceTag(namespace))
@@ -89,6 +106,7 @@ func (ti *TelemetryInterceptor) Intercept(
 	}
 	ctx = context.WithValue(ctx, metricsCtxKey, metricsScope)
 	metricsScope.IncCounter(metrics.ServiceRequests)
+
 	timer := metricsScope.StartTimer(metrics.ServiceLatency)
 	defer timer.Stop()
 
