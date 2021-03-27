@@ -319,7 +319,7 @@ func (m *sqlExecutionManager) GetReplicationTasks(
 
 	switch err {
 	case nil:
-		return m.populateGetReplicationTasksResponse(rows, request.MaxReadLevel)
+		return m.populateGetReplicationTasksResponse(rows, request.MaxTaskID)
 	case sql.ErrNoRows:
 		return &p.GetReplicationTasksResponse{}, nil
 	default:
@@ -330,7 +330,7 @@ func (m *sqlExecutionManager) GetReplicationTasks(
 func getReadLevels(
 	request *p.GetReplicationTasksRequest,
 ) (readLevel int64, maxReadLevelInclusive int64, err error) {
-	readLevel = request.ReadLevel
+	readLevel = request.MinTaskID
 	if len(request.NextPageToken) > 0 {
 		readLevel, err = deserializePageToken(request.NextPageToken)
 		if err != nil {
@@ -338,7 +338,7 @@ func getReadLevels(
 		}
 	}
 
-	maxReadLevelInclusive = collection.MaxInt64(readLevel+int64(request.BatchSize), request.MaxReadLevel)
+	maxReadLevelInclusive = collection.MaxInt64(readLevel+int64(request.BatchSize), request.MaxTaskID)
 	return readLevel, maxReadLevelInclusive, nil
 }
 
@@ -476,7 +476,7 @@ func (m *sqlExecutionManager) GetReplicationTasksFromDLQ(
 
 	switch err {
 	case nil:
-		return m.populateGetReplicationDLQTasksResponse(rows, request.MaxReadLevel)
+		return m.populateGetReplicationDLQTasksResponse(rows, request.MaxTaskID)
 	case sql.ErrNoRows:
 		return &p.GetReplicationTasksResponse{}, nil
 	default:

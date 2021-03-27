@@ -87,7 +87,7 @@ type (
 		UpdateReplicatorDLQAckLevel(sourCluster string, ackLevel int64) error
 
 		GetClusterReplicationLevel(cluster string) int64
-		UpdateClusterReplicationLevel(cluster string, lastTaskID int64) error
+		UpdateClusterReplicationLevel(cluster string, ackTaskID int64) error
 
 		GetTimerAckLevel() time.Time
 		UpdateTimerAckLevel(ackLevel time.Time) error

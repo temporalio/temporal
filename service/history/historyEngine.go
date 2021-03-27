@@ -2496,15 +2496,6 @@ func (e *historyEngineImpl) NotifyNewTransferTasks(
 	}
 }
 
-func (e *historyEngineImpl) NotifyNewVisibilityTasks(
-	tasks []persistence.Task,
-) {
-
-	if len(tasks) > 0 && e.visibilityProcessor != nil {
-		e.visibilityProcessor.NotifyNewTask(tasks)
-	}
-}
-
 func (e *historyEngineImpl) NotifyNewTimerTasks(
 	tasks []persistence.Task,
 ) {
@@ -2513,6 +2504,24 @@ func (e *historyEngineImpl) NotifyNewTimerTasks(
 		task := tasks[0]
 		clusterName := e.clusterMetadata.ClusterNameForFailoverVersion(task.GetVersion())
 		e.timerProcessor.NotifyNewTimers(clusterName, tasks)
+	}
+}
+
+func (e *historyEngineImpl) NotifyNewReplicationTasks(
+	tasks []persistence.Task,
+) {
+
+	if len(tasks) > 0 && e.replicatorProcessor != nil {
+		e.replicatorProcessor.NotifyNewTasks(tasks)
+	}
+}
+
+func (e *historyEngineImpl) NotifyNewVisibilityTasks(
+	tasks []persistence.Task,
+) {
+
+	if len(tasks) > 0 && e.visibilityProcessor != nil {
+		e.visibilityProcessor.NotifyNewTask(tasks)
 	}
 }
 
@@ -2779,26 +2788,31 @@ func getWorkflowAlreadyStartedError(errMsg string, createRequestID string, workf
 func (e *historyEngineImpl) GetReplicationMessages(
 	ctx context.Context,
 	pollingCluster string,
-	lastReadMessageID int64,
+	ackMessageID int64,
+	queryMessageID int64,
 ) (*replicationspb.ReplicationMessages, error) {
 
 	scope := metrics.HistoryGetReplicationMessagesScope
 	sw := e.metricsClient.StartTimer(scope, metrics.GetReplicationMessagesForShardLatency)
 	defer sw.Stop()
 
-	replicationMessages, err := e.replicatorProcessor.getTasks(
+	if ackMessageID != persistence.EmptyQueueMessageID {
+		if err := e.shard.UpdateClusterReplicationLevel(
+			pollingCluster,
+			ackMessageID,
+		); err != nil {
+			e.logger.Error("error updating replication level for shard", tag.Error(err), tag.OperationFailed)
+		}
+	}
+
+	replicationMessages, err := e.replicatorProcessor.paginateTasks(
 		ctx,
 		pollingCluster,
-		lastReadMessageID,
+		queryMessageID,
 	)
 	if err != nil {
 		e.logger.Error("Failed to retrieve replication messages.", tag.Error(err))
 		return nil, err
-	}
-
-	// Set cluster status for sync shard info
-	replicationMessages.SyncShardStatus = &replicationspb.SyncShardStatus{
-		StatusTime: timestamp.TimePtr(e.timeSource.Now()),
 	}
 	e.logger.Debug("Successfully fetched replication messages.", tag.Counter(len(replicationMessages.ReplicationTasks)))
 	return replicationMessages, nil

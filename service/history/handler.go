@@ -1260,6 +1260,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 			tasks, err := engine.GetReplicationMessages(
 				ctx,
 				request.GetClusterName(),
+				token.GetLastProcessedMessageId(),
 				token.GetLastRetrievedMessageId(),
 			)
 			if err != nil {
