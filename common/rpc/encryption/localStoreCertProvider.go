@@ -225,15 +225,13 @@ func (s *localStoreCertProvider) loadCerts() (*certCache, error) {
 
 		newCerts.clientCert = newCerts.serverCert
 
-		_, err = s.fetchCAs(
-			s.tlsSettings.Server.ClientCAFiles,
-			s.tlsSettings.Server.ClientCAData,
-			&newCerts.clientCAPool,
-			&newCerts.clientCACerts,
+		certPool, certs, err := s.fetchCAs(s.tlsSettings.Server.ClientCAFiles, s.tlsSettings.Server.ClientCAData,
 			"cannot specify both clientCAFiles and clientCAData properties")
 		if err != nil {
 			return nil, err
 		}
+		newCerts.clientCAPool = certPool
+		newCerts.clientCACerts = certs
 	}
 
 	if s.isLegacyWorkerConfig {
@@ -248,14 +246,19 @@ func (s *localStoreCertProvider) loadCerts() (*certCache, error) {
 		}
 	}
 
-	err = s.loadServerCACerts(&newCerts, false)
+	nonWorkerPool, nonWorkerCerts, err := s.loadServerCACerts(false)
 	if err != nil {
 		return nil, err
 	}
-	err = s.loadServerCACerts(&newCerts, true)
+	newCerts.serverCAPool = nonWorkerPool
+	newCerts.serverCACerts = nonWorkerCerts
+
+	workerPool, workerCerts, err := s.loadServerCACerts(true)
 	if err != nil {
 		return nil, err
 	}
+	newCerts.serverCAsWorkerPool = workerPool
+	newCerts.serverCACertsWorker = workerCerts
 
 	return &newCerts, nil
 }
@@ -322,59 +325,51 @@ func (s *localStoreCertProvider) getClientTLSSettings(isWorker bool) *config.Cli
 	}
 }
 
-func (s *localStoreCertProvider) loadServerCACerts(cache *certCache, isWorker bool) error {
+func (s *localStoreCertProvider) loadServerCACerts(isWorker bool) (*x509.CertPool, []*x509.Certificate, error) {
 
 	clientSettings := s.getClientTLSSettings(isWorker)
 	if clientSettings == nil {
-		return nil
+		return nil, nil, nil
 	}
-	var pool **x509.CertPool
-	var certs *[]*x509.Certificate
-	if isWorker {
-		pool = &cache.serverCAsWorkerPool
-		certs = &cache.serverCACertsWorker
-	} else {
-		pool = &cache.serverCAPool
-		certs = &cache.serverCACerts
-	}
-	_, err := s.fetchCAs(clientSettings.RootCAFiles, clientSettings.RootCAData,
-		pool, certs, "cannot specify both rootCAFiles and rootCAData properties")
-	return err
+
+	return s.fetchCAs(clientSettings.RootCAFiles, clientSettings.RootCAData,
+		"cannot specify both rootCAFiles and rootCAData properties")
 }
 
 func (s *localStoreCertProvider) fetchCAs(
 	files []string,
 	data []string,
-	cachedCertPool **x509.CertPool,
-	certs *[]*x509.Certificate,
-	duplicateErrorMessage string) (*x509.CertPool, error) {
+	duplicateErrorMessage string) (*x509.CertPool, []*x509.Certificate, error) {
 	if len(files) == 0 && len(data) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	caPoolFromFiles, caCertsFromFiles, err := s.buildCAPoolFromFiles(files)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	caPoolFromData, caCertsFromData, err := buildCAPoolFromData(data)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if caPoolFromFiles != nil && caPoolFromData != nil {
-		return nil, errors.New(duplicateErrorMessage)
+		return nil, nil, errors.New(duplicateErrorMessage)
 	}
+
+	var certPool *x509.CertPool
+	var certs []*x509.Certificate
 
 	if caPoolFromData != nil {
-		*cachedCertPool = caPoolFromData
-		*certs = caCertsFromData
+		certPool = caPoolFromData
+		certs = caCertsFromData
 	} else {
-		*cachedCertPool = caPoolFromFiles
-		*certs = caCertsFromFiles
+		certPool = caPoolFromFiles
+		certs = caCertsFromFiles
 	}
 
-	return *cachedCertPool, nil
+	return certPool, certs, nil
 }
 
 func (s *localStoreCertProvider) fetchClientCert() (*tls.Certificate, error) {
@@ -556,7 +551,7 @@ func equal(a, b [][]byte) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	for i, _ := range a {
+	for i := range a {
 		if bytes.Compare(a[i], b[i]) != 0 {
 			return false
 		}
@@ -568,7 +563,7 @@ func equalX509(a, b []*x509.Certificate) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	for i, _ := range a {
+	for i := range a {
 		if !a[i].Equal(b[i]) {
 			return false
 		}
