@@ -39,6 +39,9 @@ import (
 type Config struct {
 	NumberOfShards int32
 
+	// TODO remove this dynamic flag in 1.11.x
+	EnableDBVersion dynamicconfig.BoolPropertyFn
+
 	RPS                           dynamicconfig.IntPropertyFn
 	MaxIDLengthLimit              dynamicconfig.IntPropertyFn
 	PersistenceMaxQPS             dynamicconfig.IntPropertyFn
@@ -264,7 +267,11 @@ const (
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVisConfigExist bool) *Config {
 	cfg := &Config{
-		NumberOfShards:                       numberOfShards,
+		NumberOfShards: numberOfShards,
+
+		// TODO remove this dynamic flag in 1.11.x
+		EnableDBVersion: dc.GetBoolProperty(dynamicconfig.EnableDBVersion, false),
+
 		RPS:                                  dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
 		MaxIDLengthLimit:                     dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		PersistenceMaxQPS:                    dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 9000),

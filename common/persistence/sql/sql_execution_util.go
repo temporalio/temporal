@@ -65,13 +65,14 @@ func applyWorkflowMutationTx(
 	}
 
 	// TODO Remove me if UPDATE holds the lock to the end of a transaction
-	if err := lockAndCheckNextEventID(ctx,
+	if err := lockAndCheckExecution(ctx,
 		tx,
 		shardID,
 		namespaceIDBytes,
 		workflowID,
 		runIDBytes,
 		workflowMutation.Condition,
+		workflowMutation.DBVersion,
 	); err != nil {
 		switch err.(type) {
 		case *p.ConditionFailedError:
@@ -87,6 +88,7 @@ func applyWorkflowMutationTx(
 		workflowMutation.ExecutionState,
 		workflowMutation.NextEventID,
 		lastWriteVersion,
+		workflowMutation.DBVersion,
 		shardID,
 	); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Failed to update executions row. Erorr: %v", err))
@@ -223,13 +225,14 @@ func applyWorkflowSnapshotTxAsReset(
 	}
 
 	// TODO Is there a way to modify the various map tables without fear of other people adding rows after we delete, without locking the executions row?
-	if err := lockAndCheckNextEventID(ctx,
+	if err := lockAndCheckExecution(ctx,
 		tx,
 		shardID,
 		namespaceIDBytes,
 		workflowID,
 		runIDBytes,
 		workflowSnapshot.Condition,
+		workflowSnapshot.DBVersion,
 	); err != nil {
 		switch err.(type) {
 		case *p.ConditionFailedError:
@@ -245,6 +248,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowSnapshot.ExecutionState,
 		workflowSnapshot.NextEventID,
 		lastWriteVersion,
+		workflowSnapshot.DBVersion,
 		shardID,
 	); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to update executions row. Erorr: %v", err))
@@ -433,6 +437,7 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		workflowSnapshot.ExecutionState,
 		workflowSnapshot.NextEventID,
 		lastWriteVersion,
+		workflowSnapshot.DBVersion,
 		shardID,
 	); err != nil {
 		return err
@@ -679,7 +684,7 @@ func createOrUpdateCurrentExecution(
 	return nil
 }
 
-func lockAndCheckNextEventID(
+func lockAndCheckExecution(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
@@ -687,30 +692,42 @@ func lockAndCheckNextEventID(
 	workflowID string,
 	runID primitives.UUID,
 	condition int64,
+	dbVersion int64,
 ) error {
 
-	nextEventID, err := lockNextEventID(ctx, tx, shardID, namespaceID, workflowID, runID)
+	version, nextEventID, err := lockExecution(ctx, tx, shardID, namespaceID, workflowID, runID)
 	if err != nil {
 		return err
 	}
+
 	if nextEventID != condition {
 		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("lockAndCheckNextEventID failed. Next_event_id was %v when it should have been %v.", nextEventID, condition),
+			Msg: fmt.Sprintf("lockAndCheckExecution failed. Next_event_id was %v when it should have been %v.", nextEventID, condition),
 		}
 	}
+
+	if dbVersion != 0 {
+		dbVersion -= 1
+	}
+	if version != dbVersion {
+		return &p.ConditionFailedError{
+			Msg: fmt.Sprintf("lockAndCheckExecution failed. DBVersion expected: %v, actually %v.", dbVersion, version),
+		}
+	}
+
 	return nil
 }
 
-func lockNextEventID(
+func lockExecution(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
 	namespaceID primitives.UUID,
 	workflowID string,
 	runID primitives.UUID,
-) (int64, error) {
+) (int64, int64, error) {
 
-	nextEventID, err := tx.WriteLockExecutions(ctx, sqlplugin.ExecutionsFilter{
+	version, nextEventID, err := tx.WriteLockExecutions(ctx, sqlplugin.ExecutionsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -718,15 +735,15 @@ func lockNextEventID(
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return 0, serviceerror.NewNotFound(fmt.Sprintf("lockNextEventID failed. Unable to lock executions row with (shard, namespace, workflow, run) = (%v,%v,%v,%v) which does not exist.",
+			return 0, 0, serviceerror.NewNotFound(fmt.Sprintf("lockNextEventID failed. Unable to lock executions row with (shard, namespace, workflow, run) = (%v,%v,%v,%v) which does not exist.",
 				shardID,
 				namespaceID,
 				workflowID,
 				runID))
 		}
-		return 0, serviceerror.NewInternal(fmt.Sprintf("lockNextEventID failed. Error: %v", err))
+		return 0, 0, serviceerror.NewInternal(fmt.Sprintf("lockNextEventID failed. Error: %v", err))
 	}
-	return nextEventID, nil
+	return version, nextEventID, nil
 }
 
 func createTransferTasks(
@@ -1208,6 +1225,7 @@ func buildExecutionRow(
 	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
 	lastWriteVersion int64,
+	dbVersion int64,
 	shardID int32,
 ) (row *sqlplugin.ExecutionsRow, err error) {
 
@@ -1242,6 +1260,7 @@ func buildExecutionRow(
 		DataEncoding:     infoBlob.EncodingType.String(),
 		State:            stateBlob.Data,
 		StateEncoding:    stateBlob.EncodingType.String(),
+		DBVersion:        dbVersion,
 	}, nil
 }
 
@@ -1252,6 +1271,7 @@ func (m *sqlExecutionManager) createExecution(
 	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
 	lastWriteVersion int64,
+	dbVersion int64,
 	shardID int32,
 ) error {
 
@@ -1270,6 +1290,7 @@ func (m *sqlExecutionManager) createExecution(
 		executionState,
 		nextEventID,
 		lastWriteVersion,
+		dbVersion,
 		shardID,
 	)
 	if err != nil {
@@ -1307,6 +1328,7 @@ func updateExecution(
 	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
 	lastWriteVersion int64,
+	dbVersion int64,
 	shardID int32,
 ) error {
 
@@ -1325,6 +1347,7 @@ func updateExecution(
 		executionState,
 		nextEventID,
 		lastWriteVersion,
+		dbVersion,
 		shardID,
 	)
 	if err != nil {

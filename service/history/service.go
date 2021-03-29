@@ -32,6 +32,7 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/migration"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
@@ -65,9 +66,11 @@ type Service struct {
 func NewService(
 	params *resource.BootstrapParams,
 ) (resource.Resource, error) {
-	serviceConfig := configs.NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
+	serviceConfig := configs.NewConfig(
+		dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
 		params.PersistenceConfig.NumHistoryShards,
-		params.PersistenceConfig.IsAdvancedVisibilityConfigExist())
+		params.PersistenceConfig.IsAdvancedVisibilityConfigExist(),
+	)
 
 	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
 		VisibilityOpenMaxQPS:   serviceConfig.VisibilityOpenMaxQPS,
@@ -138,6 +141,9 @@ func (s *Service) Start() {
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
+
+	// TODO remove this dynamic flag in 1.11.x
+	migration.SetDBVersionFlag(s.config.EnableDBVersion())
 
 	logger := s.GetLogger()
 	logger.Info("elastic search config", tag.ESConfig(masker.MaskStruct(s.params.ESConfig, masker.DefaultFieldNames)))

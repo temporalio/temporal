@@ -252,7 +252,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 			namespaceEntry,
 		)
 
-		if err := c.mutableState.Load(response.State); err != nil {
+		if err := c.mutableState.Load(response.State, response.DBVersion); err != nil {
 			return nil, err
 		}
 
@@ -334,7 +334,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 			namespaceEntry,
 		)
 
-		if err := c.mutableState.Load(response.State); err != nil {
+		if err := c.mutableState.Load(response.State, response.DBVersion); err != nil {
 			return nil, err
 		}
 

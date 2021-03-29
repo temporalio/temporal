@@ -45,6 +45,7 @@ CREATE TABLE executions (
   workflow_state                 int,
   checksum                       blob,
   checksum_encoding              text,
+  db_version                     bigint,
   PRIMARY KEY  (shard_id, type, namespace_id, workflow_id, run_id, visibility_ts, task_id)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'

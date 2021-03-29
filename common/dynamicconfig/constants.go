@@ -63,6 +63,9 @@ var Keys = map[Key]string{
 	AdminMatchingNamespaceToPartitionDispatchRate:          "admin.matchingNamespaceToPartitionDispatchRate",
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate: "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
 
+	// TODO remove this dynamic flag in 1.11.x
+	EnableDBVersion: "system.enableDBVersion",
+
 	// system settings
 	EnableVisibilitySampling:               "system.enableVisibilitySampling",
 	AdvancedVisibilityWritingMode:          "system.advancedVisibilityWritingMode",
@@ -340,6 +343,10 @@ const (
 	AdminMatchingNamespaceToPartitionDispatchRate
 	// AdminMatchingNamespaceTaskqueueToPartitionDispatchRate is the max qps of a task queue partition for a given namespace & task queue
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate
+
+	// TODO remove this dynamic flag in 1.11.x
+	// EnableDBVersion is key for enable db version
+	EnableDBVersion
 
 	// EnableVisibilitySampling is key for enable visibility sampling
 	EnableVisibilitySampling

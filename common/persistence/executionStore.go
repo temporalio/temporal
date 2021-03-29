@@ -92,6 +92,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 			ExecutionState:      response.State.ExecutionState,
 			NextEventId:         response.State.NextEventID,
 		},
+		DBVersion: response.DBVersion,
 	}
 
 	newResponse.State.BufferedEvents, err = m.DeserializeBufferedEvents(response.State.BufferedEvents)
@@ -396,6 +397,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 		VisibilityTasks:  input.VisibilityTasks,
 
 		Condition: input.Condition,
+		DBVersion: input.DBVersion,
 		Checksum:  input.Checksum,
 	}, nil
 }
@@ -433,6 +435,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 		VisibilityTasks:  input.VisibilityTasks,
 
 		Condition: input.Condition,
+		DBVersion: input.DBVersion,
 		Checksum:  input.Checksum,
 	}, nil
 }

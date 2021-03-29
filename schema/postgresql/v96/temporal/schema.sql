@@ -39,6 +39,7 @@ CREATE TABLE executions(
   data_encoding VARCHAR(16) NOT NULL,
   state BYTEA NOT NULL,
   state_encoding VARCHAR(16) NOT NULL,
+  db_version BIGINT NOT NULL DEFAULT 0,
   PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id)
 );
 

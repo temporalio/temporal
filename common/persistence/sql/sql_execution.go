@@ -227,7 +227,10 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 	runID := primitives.MustParseUUID(request.Execution.RunId)
 	wfID := request.Execution.WorkflowId
 	executionsRow, err := m.db.SelectFromExecutions(ctx, sqlplugin.ExecutionsFilter{
-		ShardID: m.shardID, NamespaceID: namespaceID, WorkflowID: wfID, RunID: runID,
+		ShardID:     m.shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  wfID,
+		RunID:       runID,
 	})
 	switch err {
 	case nil:
@@ -251,7 +254,10 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 	state := &p.InternalWorkflowMutableState{
 		ExecutionInfo:  info,
 		ExecutionState: executionState,
-		NextEventID:    executionsRow.NextEventID}
+		NextEventID:    executionsRow.NextEventID,
+
+		DBVersion: executionsRow.DBVersion,
+	}
 
 	state.ActivityInfos, err = getActivityInfoMap(ctx,
 		m.db,
@@ -330,7 +336,10 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get signals requested. Error: %v", err))
 	}
 
-	return &p.InternalGetWorkflowExecutionResponse{State: state}, nil
+	return &p.InternalGetWorkflowExecutionResponse{
+		State:     state,
+		DBVersion: executionsRow.DBVersion,
+	}, nil
 }
 
 func (m *sqlExecutionManager) UpdateWorkflowExecution(

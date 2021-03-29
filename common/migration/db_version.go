@@ -22,14 +22,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package postgresql
+package migration
 
-// NOTE: whenever there is a new data base schema update, plz update the following versions
+import (
+	"sync/atomic"
+)
 
-// Version is the Postgres database release version
-// Temporal supports both MySQL and Postgres officially, so upgrade should be perform for both MySQL and Postgres
-const Version = "1.5"
+var (
+	enableDBVersion int32
+)
 
-// VisibilityVersion is the Postgres visibility database release version
-// Temporal supports both MySQL and Postgres officially, so upgrade should be perform for both MySQL and Postgres
-const VisibilityVersion = "1.1"
+func IsDBVersionEnabled() bool {
+	return atomic.LoadInt32(&enableDBVersion) == 1
+}
+
+func SetDBVersionFlag(
+	enabled bool,
+) {
+	if enabled {
+		atomic.StoreInt32(&enableDBVersion, 1)
+	} else {
+		atomic.StoreInt32(&enableDBVersion, 0)
+	}
+}

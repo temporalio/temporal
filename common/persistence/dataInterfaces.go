@@ -448,6 +448,7 @@ type (
 	// GetWorkflowExecutionResponse is the response to GetWorkflowExecutionRequest
 	GetWorkflowExecutionResponse struct {
 		State             *persistencespb.WorkflowMutableState
+		DBVersion         int64
 		MutableStateStats *MutableStateStats
 	}
 
@@ -537,7 +538,8 @@ type (
 	WorkflowMutation struct {
 		ExecutionInfo  *persistencespb.WorkflowExecutionInfo
 		ExecutionState *persistencespb.WorkflowExecutionState
-		NextEventID    int64
+		// TODO deprecate NextEventID in favor of DBVersion
+		NextEventID int64
 
 		UpsertActivityInfos       map[int64]*persistencespb.ActivityInfo
 		DeleteActivityInfos       map[int64]struct{}
@@ -559,7 +561,9 @@ type (
 		TimerTasks       []Task
 		VisibilityTasks  []Task
 
+		// TODO deprecate Condition in favor of DBVersion
 		Condition int64
+		DBVersion int64
 		Checksum  *persistencespb.Checksum
 	}
 
@@ -567,7 +571,8 @@ type (
 	WorkflowSnapshot struct {
 		ExecutionInfo  *persistencespb.WorkflowExecutionInfo
 		ExecutionState *persistencespb.WorkflowExecutionState
-		NextEventID    int64
+		// TODO deprecate NextEventID in favor of DBVersion
+		NextEventID int64
 
 		ActivityInfos       map[int64]*persistencespb.ActivityInfo
 		TimerInfos          map[string]*persistencespb.TimerInfo
@@ -581,7 +586,9 @@ type (
 		TimerTasks       []Task
 		VisibilityTasks  []Task
 
+		// TODO deprecate Condition in favor of DBVersion
 		Condition int64
+		DBVersion int64
 		Checksum  *persistencespb.Checksum
 	}
 

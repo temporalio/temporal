@@ -62,6 +62,7 @@ func applyWorkflowMutationBatch(
 		workflowMutation.NextEventID,
 		cqlNowTimestampMillis,
 		workflowMutation.Condition,
+		workflowMutation.DBVersion,
 		workflowMutation.Checksum,
 	); err != nil {
 		return err
@@ -172,7 +173,6 @@ func applyWorkflowSnapshotBatchAsReset(
 	namespaceID := workflowSnapshot.ExecutionInfo.NamespaceId
 	workflowID := workflowSnapshot.ExecutionInfo.WorkflowId
 	runID := workflowSnapshot.ExecutionState.RunId
-	condition := workflowSnapshot.Condition
 
 	if err := updateExecution(
 		batch,
@@ -181,7 +181,8 @@ func applyWorkflowSnapshotBatchAsReset(
 		workflowSnapshot.ExecutionState,
 		workflowSnapshot.NextEventID,
 		cqlNowTimestampMillis,
-		condition,
+		workflowSnapshot.Condition,
+		workflowSnapshot.DBVersion,
 		workflowSnapshot.Checksum,
 	); err != nil {
 		return err
@@ -291,6 +292,7 @@ func applyWorkflowSnapshotBatchAsNew(
 		workflowSnapshot.ExecutionInfo,
 		workflowSnapshot.ExecutionState,
 		workflowSnapshot.NextEventID,
+		workflowSnapshot.DBVersion,
 		workflowSnapshot.Checksum,
 		cqlNowTimestampMillis,
 	); err != nil {
@@ -387,6 +389,7 @@ func createExecution(
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
+	dbVersion int64,
 	checksum *persistencespb.Checksum,
 	cqlNowTimestampMillis int64,
 ) error {
@@ -432,6 +435,7 @@ func createExecution(
 		executionStateDatablob.Data,
 		executionStateDatablob.EncodingType.String(),
 		nextEventID,
+		dbVersion,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID,
 		checksumDatablob.Data,
@@ -449,6 +453,7 @@ func updateExecution(
 	nextEventID int64,
 	cqlNowTimestampMillis int64,
 	condition int64,
+	dbVersion int64,
 	checksum *persistencespb.Checksum,
 ) error {
 
@@ -481,24 +486,44 @@ func updateExecution(
 		return err
 	}
 
-	// TODO also need to set the start / current / last write version
-	batch.Query(templateUpdateWorkflowExecutionQuery,
-		executionDatablob.Data,
-		executionDatablob.EncodingType.String(),
-		executionStateDatablob.Data,
-		executionStateDatablob.EncodingType.String(),
-		nextEventID,
-		checksumDatablob.Data,
-		checksumDatablob.EncodingType.String(),
-		shardID,
-		rowTypeExecution,
-		namespaceID,
-		workflowID,
-		runID,
-		defaultVisibilityTimestamp,
-		rowTypeExecutionTaskID,
-		condition,
-	)
+	if dbVersion == 0 {
+		batch.Query(templateUpdateWorkflowExecutionQueryDeprecated,
+			executionDatablob.Data,
+			executionDatablob.EncodingType.String(),
+			executionStateDatablob.Data,
+			executionStateDatablob.EncodingType.String(),
+			nextEventID,
+			checksumDatablob.Data,
+			checksumDatablob.EncodingType.String(),
+			shardID,
+			rowTypeExecution,
+			namespaceID,
+			workflowID,
+			runID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID,
+			condition,
+		)
+	} else {
+		batch.Query(templateUpdateWorkflowExecutionQuery,
+			executionDatablob.Data,
+			executionDatablob.EncodingType.String(),
+			executionStateDatablob.Data,
+			executionStateDatablob.EncodingType.String(),
+			nextEventID,
+			dbVersion,
+			checksumDatablob.Data,
+			checksumDatablob.EncodingType.String(),
+			shardID,
+			rowTypeExecution,
+			namespaceID,
+			workflowID,
+			runID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID,
+			dbVersion-1,
+		)
+	}
 
 	return nil
 }

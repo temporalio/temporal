@@ -108,6 +108,7 @@ func (s *nDCConflictResolverSuite) TearDownTest() {
 func (s *nDCConflictResolverSuite) TestRebuild() {
 	ctx := context.Background()
 	updateCondition := int64(59)
+	dbVersion := int64(1444)
 	requestID := uuid.New()
 	version := int64(12)
 	historySize := int64(12345)
@@ -128,7 +129,7 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory1)
 	s.NoError(err)
 
-	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
+	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition, dbVersion).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
@@ -154,7 +155,7 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 			),
 		},
 	).Times(2)
-	mockRebuildMutableState.EXPECT().SetUpdateCondition(updateCondition)
+	mockRebuildMutableState.EXPECT().SetUpdateCondition(updateCondition, dbVersion)
 
 	s.mockStateBuilder.EXPECT().rebuild(
 		ctx,
@@ -197,6 +198,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_NoRebuild() {
 func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	ctx := context.Background()
 	updateCondition := int64(59)
+	dbVersion := int64(1444)
 	version := int64(12)
 	incomingVersion := version + 1
 	historySize := int64(12345)
@@ -224,7 +226,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	_, _, err := versionhistory.AddVersionHistory(versionHistories, versionHistory1)
 	s.Nil(err)
 
-	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition).AnyTimes()
+	s.mockMutableState.EXPECT().GetUpdateCondition().Return(updateCondition, dbVersion).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:      s.namespaceID,
 		WorkflowId:       s.workflowID,
@@ -250,7 +252,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 			),
 		},
 	).Times(2)
-	mockRebuildMutableState.EXPECT().SetUpdateCondition(updateCondition)
+	mockRebuildMutableState.EXPECT().SetUpdateCondition(updateCondition, dbVersion)
 
 	s.mockStateBuilder.EXPECT().rebuild(
 		ctx,
