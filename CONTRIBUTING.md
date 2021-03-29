@@ -1,5 +1,4 @@
 # Develop Temporal Server
-
 This doc is for contributors to Temporal Server (hopefully that's you!)
 
 **Note:** All contributors also need to fill out the [Temporal Contributor License Agreement](https://gist.github.com/samarabbas/7dcd41eb1d847e12263cc961ccfdb197) before we can merge in any of your changes.
@@ -18,19 +17,19 @@ This doc is for contributors to Temporal Server (hopefully that's you!)
 * [docker](https://docs.docker.com/engine/install/)
 * [docker-compose](https://docs.docker.com/compose/install/)
 
-### For Windows developers
+> Note: it is possible to run Temporal server without a `docker`. If for some reason (for example, performance on macOS)
+> you want to run dependencies on the host OS, please follow the [doc](develop/docs/run_dependencies_host.md).
 
+### For Windows developers
 For developing on Windows, install [Windows Subsystem for Linux 2 (WSL2)](https://aka.ms/wsl) and [Ubuntu](https://docs.microsoft.com/en-us/windows/wsl/install-win10#step-6---install-your-linux-distribution-of-choice). After that, follow the guidance for installing prerequisites, building, and testing on Ubuntu.
 
 ## Check out the code
-
 Temporal uses go modules, there is no dependency on `$GOPATH` variable. Clone the repo into the preferred location:
 ```bash
 git clone https://github.com/temporalio/temporal.git
 ```
 
 ## Build
-
 For the very first time build `temporal-server` and helper tools with simple `make` command: 
 ```bash
 make
@@ -46,7 +45,6 @@ make bins
 Please check the top of our [Makefile](Makefile) for other useful build targets.
 
 ## Run tests
-
 Tests require runtime dependencies. They can be run with `start-dependencies` target (uses `docker-compose` internally). Open new terminal window and run:
 ```bash
 make start-dependencies
@@ -87,7 +85,6 @@ make stop-dependencies
 ```
 
 ## Run Temporal Server locally
-
 First start runtime dependencies. They can be run with `start-dependencies` target (uses `docker-compose` internally). Open new terminal window and run:
 ```bash
 make start-dependencies
@@ -115,7 +112,6 @@ make stop-dependencies
 ```
 
 ## Licence headers
-
 This project is Open Source Software, and requires a header at the beginning of
 all source files. To verify that all files contain the header execute:
 ```bash
@@ -123,7 +119,6 @@ make copyright
 ```
 
 ## Commit Messages And Titles of Pull Requests
-
 Overcommit adds some requirements to your commit messages. At Temporal, we follow the
 [Chris Beams](http://chris.beams.io/posts/git-commit/) guide to writing git
 commit messages. Read it, follow it, learn it, love it.

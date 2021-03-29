@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -38,11 +39,14 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -50,14 +54,19 @@ type (
 	replicatorQueueProcessorImpl struct {
 		currentClusterName string
 		shard              shard.Context
+		config             *configs.Config
 		historyCache       *historyCache
 		executionMgr       persistence.ExecutionManager
 		historyMgr         persistence.HistoryManager
 		metricsClient      metrics.Client
 		logger             log.Logger
 		retryPolicy        backoff.RetryPolicy
-		// This is the batch size used by pull based RPC replicator.
-		fetchTasksBatchSize int
+		pageSize           int
+
+		sync.Mutex
+		// largest replication task ID generated
+		maxTaskID       *int64
+		sanityCheckTime time.Time
 	}
 )
 
@@ -81,60 +90,58 @@ func newReplicatorQueueProcessor(
 	retryPolicy.SetBackoffCoefficient(1)
 
 	return &replicatorQueueProcessorImpl{
-		currentClusterName:  currentClusterName,
-		shard:               shard,
-		historyCache:        historyCache,
-		executionMgr:        executionMgr,
-		historyMgr:          historyMgr,
-		metricsClient:       shard.GetMetricsClient(),
-		logger:              log.With(logger, tag.ComponentReplicatorQueue),
-		retryPolicy:         retryPolicy,
-		fetchTasksBatchSize: config.ReplicatorProcessorFetchTasksBatchSize(),
+		currentClusterName: currentClusterName,
+		shard:              shard,
+		config:             shard.GetConfig(),
+		historyCache:       historyCache,
+		executionMgr:       executionMgr,
+		historyMgr:         historyMgr,
+		metricsClient:      shard.GetMetricsClient(),
+		logger:             log.With(logger, tag.ComponentReplicatorQueue),
+		retryPolicy:        retryPolicy,
+		pageSize:           config.ReplicatorProcessorFetchTasksBatchSize(),
+
+		maxTaskID:       nil,
+		sanityCheckTime: time.Time{},
 	}
 }
 
-func (p *replicatorQueueProcessorImpl) getTasks(
+func (p *replicatorQueueProcessorImpl) NotifyNewTasks(
+	tasks []persistence.Task,
+) {
+
+	if len(tasks) == 0 {
+		return
+	}
+	maxTaskID := tasks[0].GetTaskID()
+	for _, task := range tasks {
+		if maxTaskID < task.GetTaskID() {
+			maxTaskID = task.GetTaskID()
+		}
+	}
+
+	p.Lock()
+	defer p.Unlock()
+	if p.maxTaskID == nil || *p.maxTaskID < maxTaskID {
+		p.maxTaskID = &maxTaskID
+	}
+}
+
+func (p *replicatorQueueProcessorImpl) paginateTasks(
 	ctx context.Context,
 	pollingCluster string,
-	lastReadTaskID int64,
+	queryMessageID int64,
 ) (*replicationspb.ReplicationMessages, error) {
 
-	if lastReadTaskID == persistence.EmptyQueueMessageID {
-		lastReadTaskID = p.shard.GetClusterReplicationLevel(pollingCluster)
-	} else {
-		if err := p.shard.UpdateClusterReplicationLevel(
-			pollingCluster,
-			lastReadTaskID,
-		); err != nil {
-			p.logger.Error("error updating replication level for shard", tag.Error(err), tag.OperationFailed)
-		}
-	}
-
-	taskInfoList, hasMore, err := p.readTasksWithBatchSize(lastReadTaskID, p.fetchTasksBatchSize)
+	minTaskID, maxTaskID := p.taskIDsRange(queryMessageID)
+	replicationTasks, lastTaskID, err := p.getTasks(
+		ctx,
+		minTaskID,
+		maxTaskID,
+		p.pageSize,
+	)
 	if err != nil {
 		return nil, err
-	}
-
-	var replicationTasks []*replicationspb.ReplicationTask
-	readLevel := lastReadTaskID
-	for _, taskInfo := range taskInfoList {
-		var replicationTask *replicationspb.ReplicationTask
-		op := func() error {
-			var err error
-			replicationTask, err = p.toReplicationTask(ctx, taskInfo)
-			return err
-		}
-
-		err = backoff.Retry(op, p.retryPolicy, common.IsPersistenceTransientError)
-		if err != nil {
-			p.logger.Debug("Failed to get replication task. Return what we have so far.", tag.Error(err))
-			hasMore = true
-			break
-		}
-		readLevel = taskInfo.GetTaskId()
-		if replicationTask != nil {
-			replicationTasks = append(replicationTasks, replicationTask)
-		}
 	}
 
 	// Note this is a very rough indicator of how much the remote DC is behind on this shard.
@@ -143,13 +150,13 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 		metrics.TargetClusterTag(pollingCluster),
 	).RecordDistribution(
 		metrics.ReplicationTasksLag,
-		int(p.shard.GetTransferMaxReadLevel()-readLevel),
+		int(maxTaskID-lastTaskID),
 	)
 
 	p.metricsClient.RecordDistribution(
 		metrics.ReplicatorQueueProcessorScope,
 		metrics.ReplicationTasksFetched,
-		len(taskInfoList),
+		len(replicationTasks),
 	)
 
 	p.metricsClient.RecordDistribution(
@@ -160,9 +167,66 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 
 	return &replicationspb.ReplicationMessages{
 		ReplicationTasks:       replicationTasks,
-		HasMore:                hasMore,
-		LastRetrievedMessageId: readLevel,
+		HasMore:                lastTaskID < maxTaskID,
+		LastRetrievedMessageId: lastTaskID,
+		SyncShardStatus: &replicationspb.SyncShardStatus{
+			StatusTime: timestamp.TimePtr(p.shard.GetTimeSource().Now()),
+		},
 	}, nil
+}
+
+func (p *replicatorQueueProcessorImpl) getTasks(
+	ctx context.Context,
+	minTaskID int64,
+	maxTaskID int64,
+	batchSize int,
+) ([]*replicationspb.ReplicationTask, int64, error) {
+
+	if minTaskID == maxTaskID {
+		return []*replicationspb.ReplicationTask{}, maxTaskID, nil
+	}
+
+	var token []byte
+	tasks := make([]*replicationspb.ReplicationTask, 0, batchSize)
+	for {
+		response, err := p.executionMgr.GetReplicationTasks(&persistence.GetReplicationTasksRequest{
+			MinTaskID:     minTaskID,
+			MaxTaskID:     maxTaskID,
+			BatchSize:     batchSize,
+			NextPageToken: token,
+		})
+		if err != nil {
+			return nil, 0, err
+		}
+
+		token = response.NextPageToken
+		for _, task := range response.Tasks {
+			if replicationTask, err := p.taskInfoToTask(
+				ctx,
+				&persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: task},
+			); err != nil {
+				return nil, 0, err
+			} else if replicationTask != nil {
+				tasks = append(tasks, replicationTask)
+			}
+		}
+
+		// break if seen at least one task or no more task
+		if len(token) == 0 || len(tasks) > 0 {
+			break
+		}
+	}
+
+	// sanity check we will finish pagination or return some tasks
+	if len(token) != 0 && len(tasks) == 0 {
+		p.logger.Fatal("replication task reader should finish pagination or return some tasks")
+	}
+
+	if len(tasks) == 0 {
+		// len(token) == 0, no more items from DB
+		return nil, maxTaskID, nil
+	}
+	return tasks, tasks[len(tasks)-1].GetSourceTaskId(), nil
 }
 
 func (p *replicatorQueueProcessorImpl) getTask(
@@ -181,29 +245,50 @@ func (p *replicatorQueueProcessorImpl) getTask(
 		Version:      taskInfo.GetVersion(),
 		ScheduledId:  taskInfo.GetScheduledId(),
 	}
-	return p.toReplicationTask(ctx, &persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: task})
+	return p.taskInfoToTask(ctx, &persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: task})
 }
 
-func (p *replicatorQueueProcessorImpl) readTasksWithBatchSize(
-	readLevel int64,
-	batchSize int,
-) ([]queueTaskInfo, bool, error) {
-	response, err := p.executionMgr.GetReplicationTasks(&persistence.GetReplicationTasksRequest{
-		ReadLevel:    readLevel,
-		MaxReadLevel: p.shard.GetTransferMaxReadLevel(),
-		BatchSize:    batchSize,
-	})
-
-	if err != nil {
-		return nil, false, err
+func (p *replicatorQueueProcessorImpl) taskInfoToTask(
+	ctx context.Context,
+	taskInfo queueTaskInfo,
+) (*replicationspb.ReplicationTask, error) {
+	var replicationTask *replicationspb.ReplicationTask
+	op := func() error {
+		var err error
+		replicationTask, err = p.toReplicationTask(ctx, taskInfo)
+		return err
 	}
 
-	tasks := make([]queueTaskInfo, len(response.Tasks))
-	for i := range response.Tasks {
-		tasks[i] = &persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: response.Tasks[i]}
+	if err := backoff.Retry(op, p.retryPolicy, common.IsPersistenceTransientError); err != nil {
+		return nil, err
+	}
+	return replicationTask, nil
+}
+
+func (p *replicatorQueueProcessorImpl) taskIDsRange(
+	lastReadMessageID int64,
+) (minTaskID int64, maxTaskID int64) {
+	minTaskID = lastReadMessageID
+	maxTaskID = p.shard.GetTransferMaxReadLevel()
+
+	p.Lock()
+	defer p.Unlock()
+	defer func() { p.maxTaskID = convert.Int64Ptr(maxTaskID) }()
+
+	now := p.shard.GetTimeSource().Now()
+	if p.sanityCheckTime.IsZero() || p.sanityCheckTime.Before(now) {
+		p.sanityCheckTime = now.Add(backoff.JitDuration(
+			p.config.ReplicatorProcessorMaxPollInterval(),
+			p.config.ReplicatorProcessorMaxPollIntervalJitterCoefficient(),
+		))
+		return minTaskID, maxTaskID
 	}
 
-	return tasks, len(response.NextPageToken) != 0, nil
+	if p.maxTaskID != nil && *p.maxTaskID < maxTaskID {
+		maxTaskID = *p.maxTaskID
+	}
+
+	return minTaskID, maxTaskID
 }
 
 func (p *replicatorQueueProcessorImpl) toReplicationTask(

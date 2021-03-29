@@ -1,6 +1,4 @@
-# Temporal Server Cassandra Setup Guide
-
-## v3.11
+# Run Cassandra v3.11 on macOS
 
 ### Install
 ```bash
@@ -13,7 +11,7 @@ cassandra -f
 ```
 
 ### Post Installation
-Verify Cassandra v5.7 is running & accessible:
+Verify Cassandra v3.11 is running and accessible:
 ```bash
 cqlsh
 ```

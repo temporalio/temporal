@@ -1,6 +1,4 @@
-# Temporal Server PostgreSQL Setup Guide
-
-## v9.6
+# Run PostgreSQL v9.6 on macOS
 
 ### Install
 ```bash
@@ -23,12 +21,12 @@ Create a user `postgres`
 createuser -s root
 ```
 
-Verify PostgreSQL v9.6 is running & accessible:
+Verify PostgreSQL v9.6 is running and accessible:
 ```bash
 psql -h 127.0.0.1 -p 5432 -U root -d postgres
 ```
 
-Within psql shell, add a password:
+Within `psql` shell, add a password:
 ```postgresql
 ALTER USER root WITH PASSWORD 'root';
 ALTER USER root WITH SUPERUSER;

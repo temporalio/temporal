@@ -269,6 +269,7 @@ func (s *Service) Start() {
 	}
 
 	metricsInterceptor := interceptor.NewTelemetryInterceptor(
+		s.Resource.GetNamespaceCache(),
 		s.Resource.GetMetricsClient(),
 		metrics.FrontendAPIMetricsScopes(),
 		s.Resource.GetLogger(),
@@ -278,12 +279,14 @@ func (s *Service) Start() {
 		APIRateLimitOverride,
 	)
 	namespaceRateLimiterInterceptor := interceptor.NewNamespaceRateLimitInterceptor(
+		s.Resource.GetNamespaceCache(),
 		func(namespace string) float64 {
 			return float64(s.config.MaxNamespaceRPSPerInstance(namespace))
 		},
 		APIRateLimitOverride,
 	)
 	namespaceCountLimiterInterceptor := interceptor.NewNamespaceCountLimitInterceptor(
+		s.Resource.GetNamespaceCache(),
 		s.config.MaxNamespaceCountPerInstance,
 		APICountLimitOverride,
 	)

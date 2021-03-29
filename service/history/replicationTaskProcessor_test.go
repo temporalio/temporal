@@ -25,6 +25,7 @@
 package history
 
 import (
+	"math/rand"
 	"testing"
 	"time"
 
@@ -377,7 +378,7 @@ func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
 	s.NoError(err)
 }
 
-func (s *replicationTaskProcessorSuite) TestPaginationFn_Success() {
+func (s *replicationTaskProcessorSuite) TestPaginationFn_Success_More() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom().String()
@@ -396,8 +397,11 @@ func (s *replicationTaskProcessorSuite) TestPaginationFn_Success() {
 	syncShardTask := &replicationspb.SyncShardStatus{
 		StatusTime: timestamp.TimeNowPtrUtc(),
 	}
+	taskID := int64(123)
+	lastRetrievedMessageID := 2 * taskID
 	task := &replicationspb.ReplicationTask{
-		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
+		SourceTaskId: taskID,
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
 		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
 			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
 				NamespaceId: namespaceID,
@@ -412,18 +416,27 @@ func (s *replicationTaskProcessorSuite) TestPaginationFn_Success() {
 		},
 	}
 
+	maxRxProcessedTaskID := rand.Int63()
+	maxRxReceivedTaskID := rand.Int63()
+	rxTaskBackoff := time.Duration(rand.Int63())
+	s.replicationTaskProcessor.maxRxProcessedTaskID = maxRxProcessedTaskID
+	s.replicationTaskProcessor.maxRxReceivedTaskID = maxRxReceivedTaskID
+	s.replicationTaskProcessor.rxTaskBackoff = rxTaskBackoff
+
 	requestToken := &replicationspb.ReplicationToken{
 		ShardId:                s.mockShard.GetShardID(),
-		LastProcessedMessageId: s.replicationTaskProcessor.maxRxProcessedTaskID,
-		LastRetrievedMessageId: s.replicationTaskProcessor.maxRxProcessedTaskID,
+		LastProcessedMessageId: maxRxProcessedTaskID,
+		LastRetrievedMessageId: maxRxReceivedTaskID,
 	}
 
 	go func() {
 		request := <-s.requestChan
 		s.Equal(requestToken, request.token)
 		request.respChan <- &replicationspb.ReplicationMessages{
-			SyncShardStatus:  syncShardTask,
-			ReplicationTasks: []*replicationspb.ReplicationTask{task},
+			SyncShardStatus:        syncShardTask,
+			ReplicationTasks:       []*replicationspb.ReplicationTask{task},
+			LastRetrievedMessageId: lastRetrievedMessageID,
+			HasMore:                true,
 		}
 		close(request.respChan)
 	}()
@@ -433,13 +446,95 @@ func (s *replicationTaskProcessorSuite) TestPaginationFn_Success() {
 	s.Equal(1, len(tasks))
 	s.Equal(task, tasks[0].(*replicationspb.ReplicationTask))
 	s.Equal(syncShardTask, <-s.replicationTaskProcessor.syncShardChan)
+	s.Equal(lastRetrievedMessageID, s.replicationTaskProcessor.maxRxReceivedTaskID)
+	s.Equal(time.Duration(0), s.replicationTaskProcessor.rxTaskBackoff)
+}
+
+func (s *replicationTaskProcessorSuite) TestPaginationFn_Success_NoMore() {
+	namespaceID := uuid.NewRandom().String()
+	workflowID := uuid.New()
+	runID := uuid.NewRandom().String()
+	events := []*historypb.HistoryEvent{{
+		EventId: 1,
+		Version: 1,
+	}}
+	versionHistory := []*historyspb.VersionHistoryItem{{
+		EventId: 1,
+		Version: 1,
+	}}
+	serializer := s.mockResource.GetPayloadSerializer()
+	data, err := serializer.SerializeEvents(events, enumspb.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+
+	syncShardTask := &replicationspb.SyncShardStatus{
+		StatusTime: timestamp.TimeNowPtrUtc(),
+	}
+	taskID := int64(123)
+	lastRetrievedMessageID := 2 * taskID
+	task := &replicationspb.ReplicationTask{
+		SourceTaskId: taskID,
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
+			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+				NamespaceId: namespaceID,
+				WorkflowId:  workflowID,
+				RunId:       runID,
+				Events: &commonpb.DataBlob{
+					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+					Data:         data.Data,
+				},
+				VersionHistoryItems: versionHistory,
+			},
+		},
+	}
+
+	maxRxProcessedTaskID := rand.Int63()
+	maxRxReceivedTaskID := rand.Int63()
+	rxTaskBackoff := time.Duration(rand.Int63())
+	s.replicationTaskProcessor.maxRxProcessedTaskID = maxRxProcessedTaskID
+	s.replicationTaskProcessor.maxRxReceivedTaskID = maxRxReceivedTaskID
+	s.replicationTaskProcessor.rxTaskBackoff = rxTaskBackoff
+
+	requestToken := &replicationspb.ReplicationToken{
+		ShardId:                s.mockShard.GetShardID(),
+		LastProcessedMessageId: maxRxProcessedTaskID,
+		LastRetrievedMessageId: maxRxReceivedTaskID,
+	}
+
+	go func() {
+		request := <-s.requestChan
+		s.Equal(requestToken, request.token)
+		request.respChan <- &replicationspb.ReplicationMessages{
+			SyncShardStatus:        syncShardTask,
+			ReplicationTasks:       []*replicationspb.ReplicationTask{task},
+			LastRetrievedMessageId: lastRetrievedMessageID,
+			HasMore:                false,
+		}
+		close(request.respChan)
+	}()
+
+	tasks, _, err := s.replicationTaskProcessor.paginationFn(nil)
+	s.NoError(err)
+	s.Equal(1, len(tasks))
+	s.Equal(task, tasks[0].(*replicationspb.ReplicationTask))
+	s.Equal(syncShardTask, <-s.replicationTaskProcessor.syncShardChan)
+	s.Equal(lastRetrievedMessageID, s.replicationTaskProcessor.maxRxReceivedTaskID)
+	s.NotEqual(time.Duration(0), s.replicationTaskProcessor.rxTaskBackoff)
 }
 
 func (s *replicationTaskProcessorSuite) TestPaginationFn_Error() {
+
+	maxRxProcessedTaskID := rand.Int63()
+	maxRxReceivedTaskID := rand.Int63()
+	rxTaskBackoff := time.Duration(rand.Int63())
+	s.replicationTaskProcessor.maxRxProcessedTaskID = maxRxProcessedTaskID
+	s.replicationTaskProcessor.maxRxReceivedTaskID = maxRxReceivedTaskID
+	s.replicationTaskProcessor.rxTaskBackoff = rxTaskBackoff
+
 	requestToken := &replicationspb.ReplicationToken{
 		ShardId:                s.mockShard.GetShardID(),
-		LastProcessedMessageId: s.replicationTaskProcessor.maxRxProcessedTaskID,
-		LastRetrievedMessageId: s.replicationTaskProcessor.maxRxProcessedTaskID,
+		LastProcessedMessageId: maxRxProcessedTaskID,
+		LastRetrievedMessageId: maxRxReceivedTaskID,
 	}
 
 	go func() {
@@ -455,6 +550,8 @@ func (s *replicationTaskProcessorSuite) TestPaginationFn_Error() {
 	case <-s.replicationTaskProcessor.syncShardChan:
 		s.Fail("should not receive any sync shard task")
 	default:
-		// noop
+		s.Equal(maxRxProcessedTaskID, s.replicationTaskProcessor.maxRxProcessedTaskID)
+		s.Equal(maxRxReceivedTaskID, s.replicationTaskProcessor.maxRxReceivedTaskID)
+		s.Equal(rxTaskBackoff, s.replicationTaskProcessor.rxTaskBackoff)
 	}
 }
