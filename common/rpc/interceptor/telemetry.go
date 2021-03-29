@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -47,23 +48,26 @@ var (
 
 type (
 	TelemetryInterceptor struct {
-		metricsClient metrics.Client
-		scopes        map[string]int
-		logger        log.Logger
+		namespaceCache cache.NamespaceCache
+		metricsClient  metrics.Client
+		scopes         map[string]int
+		logger         log.Logger
 	}
 )
 
 var _ grpc.UnaryServerInterceptor = (*TelemetryInterceptor)(nil).Intercept
 
 func NewTelemetryInterceptor(
+	namespaceCache cache.NamespaceCache,
 	metricsClient metrics.Client,
 	scopes map[string]int,
 	logger log.Logger,
 ) *TelemetryInterceptor {
 	return &TelemetryInterceptor{
-		metricsClient: metricsClient,
-		scopes:        scopes,
-		logger:        logger,
+		namespaceCache: namespaceCache,
+		metricsClient:  metricsClient,
+		scopes:         scopes,
+		logger:         logger,
 	}
 }
 
@@ -78,7 +82,7 @@ func (ti *TelemetryInterceptor) Intercept(
 	// unknown scope, which carries value 0
 	scope, _ := ti.scopes[methodName]
 	var metricsScope metrics.Scope
-	if namespace := GetNamespace(req); namespace != "" {
+	if namespace := GetNamespace(ti.namespaceCache, req); namespace != "" {
 		metricsScope = ti.metricsClient.Scope(scope).Tagged(metrics.NamespaceTag(namespace))
 	} else {
 		metricsScope = ti.metricsClient.Scope(scope).Tagged(metrics.NamespaceUnknownTag())

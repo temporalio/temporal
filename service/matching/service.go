@@ -103,6 +103,7 @@ func (s *Service) Start() {
 	s.handler.Start()
 
 	metricsInterceptor := interceptor.NewTelemetryInterceptor(
+		s.Resource.GetNamespaceCache(),
 		s.Resource.GetMetricsClient(),
 		metrics.MatchingAPIMetricsScopes(),
 		s.Resource.GetLogger(),
