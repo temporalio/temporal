@@ -55,3 +55,7 @@ frontend.validSearchAttributes:
       BinaryChecksums: "Keyword"
       CustomNamespace: "Keyword"
       Operator: "Keyword"
+system.searchAttributes:
+  - value:
+      OrderId: "String"
+
