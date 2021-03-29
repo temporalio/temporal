@@ -28,6 +28,8 @@ import (
 	"go.temporal.io/server/common/cache"
 )
 
+// gRPC method request must implement either NamespaceNameGetter or NamespaceIDGetter
+// for namespace specific metrics to be reported properly
 type (
 	NamespaceNameGetter interface {
 		GetNamespace() string
