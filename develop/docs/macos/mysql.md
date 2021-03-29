@@ -21,7 +21,7 @@ Verify MySQL v5.7 is running and accessible:
 mysql -h 127.0.0.1 -P 3306 -u root
 ```
 
-Within mysql shell, create user and password:
+Within `mysql` shell, create user and password:
 ```mysql
 ALTER USER 'root'@'localhost' IDENTIFIED BY 'root';
 CREATE USER 'temporal'@'localhost' IDENTIFIED BY 'temporal';

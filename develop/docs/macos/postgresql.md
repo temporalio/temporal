@@ -26,7 +26,7 @@ Verify PostgreSQL v9.6 is running and accessible:
 psql -h 127.0.0.1 -p 5432 -U root -d postgres
 ```
 
-Within psql shell (`psql`), add a password:
+Within `psql` shell, add a password:
 ```postgresql
 ALTER USER root WITH PASSWORD 'root';
 ALTER USER root WITH SUPERUSER;
