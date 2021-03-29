@@ -18,7 +18,7 @@ This doc is for contributors to Temporal Server (hopefully that's you!)
 * [docker-compose](https://docs.docker.com/compose/install/)
 
 > Note: it is possible to run Temporal server without a `docker`. If for some reason (for example, performance on macOS)
-> you want to run dependencies on the host OS, please follow the [doc](develop/run_dependencies_host.md).
+> you want to run dependencies on the host OS, please follow the [doc](develop/docs/run_dependencies_host.md).
 
 ### For Windows developers
 For developing on Windows, install [Windows Subsystem for Linux 2 (WSL2)](https://aka.ms/wsl) and [Ubuntu](https://docs.microsoft.com/en-us/windows/wsl/install-win10#step-6---install-your-linux-distribution-of-choice). After that, follow the guidance for installing prerequisites, building, and testing on Ubuntu.
