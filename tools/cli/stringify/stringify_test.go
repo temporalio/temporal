@@ -36,10 +36,15 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/sdk/converter"
 
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+)
+
+var (
+	dataConverter = converter.GetDefaultDataConverter()
 )
 
 type stringifySuite struct {
@@ -83,7 +88,7 @@ func (s *stringifySuite) TestAnyToString() {
 			Input:               payloads.EncodeString(arg),
 		}},
 	}
-	res := AnyToString(event, false, 500)
+	res := AnyToString(event, false, 500, dataConverter)
 	ss, l := tablewriter.WrapString(res, 10)
 	s.Equal(6, len(ss))
 	s.Equal(120, l)
@@ -97,49 +102,49 @@ func (s *stringifySuite) TestAnyToString_DecodeMapValues() {
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		Memo:   &commonpb.Memo{Fields: fields},
 	}
-	s.Equal(`{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:"testValue"}}}`, AnyToString(execution, true, 0))
+	s.Equal(`{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:"testValue"}}}`, AnyToString(execution, true, 0, dataConverter))
 
 	fields["TestKey2"] = payload.EncodeString("anotherTestValue")
 	execution.Memo = &commonpb.Memo{Fields: fields}
-	got := AnyToString(execution, true, 0)
+	got := AnyToString(execution, true, 0, dataConverter)
 	expected := `{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:"testValue", TestKey2:"anotherTestValue"}}}`
 	s.Equal(expected, got)
 }
 
 func (s *stringifySuite) TestAnyToString_Slice() {
 	var fields []string
-	got := AnyToString(fields, true, 0)
+	got := AnyToString(fields, true, 0, dataConverter)
 	s.Equal("[]", got)
 
 	fields = make([]string, 0)
-	got = AnyToString(fields, true, 0)
+	got = AnyToString(fields, true, 0, dataConverter)
 	s.Equal("[]", got)
 
 	fields = make([]string, 1)
-	got = AnyToString(fields, true, 0)
+	got = AnyToString(fields, true, 0, dataConverter)
 	s.Equal("[]", got)
 
 	fields[0] = "qwe"
-	got = AnyToString(fields, true, 0)
+	got = AnyToString(fields, true, 0, dataConverter)
 	s.Equal("[qwe]", got)
-	got = AnyToString(fields, false, 0)
+	got = AnyToString(fields, false, 0, dataConverter)
 	s.Equal("[qwe]", got)
 
 	fields = make([]string, 2)
 	fields[0] = "asd"
 	fields[1] = "zxc"
-	got = AnyToString(fields, true, 0)
+	got = AnyToString(fields, true, 0, dataConverter)
 	s.Equal("[asd,zxc]", got)
-	got = AnyToString(fields, false, 0)
+	got = AnyToString(fields, false, 0, dataConverter)
 	s.Equal("[asd,...1 more]", got)
 
 	fields = make([]string, 3)
 	fields[0] = "0"
 	fields[1] = "1"
 	fields[2] = "2"
-	got = AnyToString(fields, true, 0)
+	got = AnyToString(fields, true, 0, dataConverter)
 	s.Equal("[0,1,2]", got)
-	got = AnyToString(fields, false, 0)
+	got = AnyToString(fields, false, 0, dataConverter)
 	s.Equal("[0,...2 more]", got)
 
 }

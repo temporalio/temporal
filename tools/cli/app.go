@@ -25,7 +25,14 @@
 package cli
 
 import (
+	"os"
+	"os/exec"
+
+	"github.com/hashicorp/go-hclog"
+	"github.com/hashicorp/go-plugin"
 	"github.com/urfave/cli"
+
+	"go.temporal.io/sdk/converter"
 
 	"go.temporal.io/server/common/headers"
 )
@@ -203,6 +210,8 @@ func NewCliApp() *cli.App {
 			Subcommands: newClusterCommands(),
 		},
 	}
+	app.Before = LoadPlugins
+	app.After = KillPlugins
 
 	// set builder if not customized
 	if cFactory == nil {
@@ -210,3 +219,55 @@ func NewCliApp() *cli.App {
 	}
 	return app
 }
+
+func LoadPlugins(ctx *cli.Context) error {
+	plugin_path := os.Getenv("TEMPORAL_PLUGIN_DATA_CONVERTER")
+	if plugin_path == "" {
+		return nil
+	}
+
+	pluginClient = plugin.NewClient(&plugin.ClientConfig{
+		HandshakeConfig: handshakeConfig,
+		Plugins:         pluginMap,
+		Cmd:             exec.Command(plugin_path),
+		Logger: hclog.New(&hclog.LoggerOptions{
+			Name:  "tctl",
+			Level: hclog.LevelFromString("INFO"),
+		}),
+	})
+
+	rpcClient, err := pluginClient.Client()
+	if err != nil {
+		return err
+	}
+
+	raw, err := rpcClient.Dispense("DataConverter")
+	if err != nil {
+		return err
+	}
+
+	cliDataConverter = raw.(converter.DataConverter)
+
+	return nil
+}
+
+func KillPlugins(ctx *cli.Context) error {
+	if pluginClient == nil {
+		return nil
+	}
+	pluginClient.Kill()
+
+	return nil
+}
+
+var (
+	pluginClient *plugin.Client
+	pluginMap    = map[string]plugin.Plugin{
+		"DataConverter": &converter.DataConverterPlugin{},
+	}
+	handshakeConfig = plugin.HandshakeConfig{
+		ProtocolVersion:  1,
+		MagicCookieKey:   "TEMPORAL_PLUGIN_DATA_CONVERTER",
+		MagicCookieValue: "cookie",
+	}
+)
