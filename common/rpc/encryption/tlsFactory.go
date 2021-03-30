@@ -32,6 +32,7 @@ import (
 	"github.com/uber-go/tally"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 )
 
 type (
@@ -51,7 +52,6 @@ type (
 		FetchClientCertificate(isWorker bool) (*tls.Certificate, error)
 		FetchServerRootCAsForClient(isWorker bool) (*x509.CertPool, error)
 		GetExpiringCerts(timeWindow time.Duration) (expiring CertExpirationMap, expired CertExpirationMap, err error)
-		Initialize(refreshInterval time.Duration)
 	}
 
 	// PerHostCertProviderMap returns a CertProvider for a given host name.
@@ -96,13 +96,17 @@ func NewTLSConfigProviderFromConfig(
 func newLocalStoreCertProvider(
 	tlsSettings *config.GroupTLS,
 	workerTlsSettings *config.WorkerTLS,
-	legacyWorkerSettings *config.ClientTLS) CertProvider {
+	legacyWorkerSettings *config.ClientTLS,
+	refreshInterval time.Duration) CertProvider {
 
 	provider := &localStoreCertProvider{
 		tlsSettings:          tlsSettings,
 		workerTLSSettings:    workerTlsSettings,
 		legacyWorkerSettings: legacyWorkerSettings,
 		isLegacyWorkerConfig: legacyWorkerSettings != nil,
+		logger:               log.NewDefaultLogger(),
+		refreshInterval:      refreshInterval,
 	}
+	provider.initialize()
 	return provider
 }

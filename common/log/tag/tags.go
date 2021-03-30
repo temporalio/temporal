@@ -816,3 +816,17 @@ func MaxQueryLevel(s time.Time) ZapTag {
 func BootstrapHostPorts(s string) ZapTag {
 	return NewStringTag("bootstrap-hostports", s)
 }
+
+// CertFile returns tag for RequestRunID
+func TLSCertFile(filePath string) ZapTag {
+	return NewStringTag("tls-cert-file", filePath)
+}
+
+// CertFile returns tag for RequestRunID
+func TLSKeyFile(filePath string) ZapTag {
+	return NewStringTag("tls-key-file", filePath)
+}
+
+func TLSCertFiles(filePaths []string) ZapTag {
+	return NewStringsTag("tls-cert-file", filePaths)
+}
