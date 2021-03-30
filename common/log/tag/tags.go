@@ -817,16 +817,17 @@ func BootstrapHostPorts(s string) ZapTag {
 	return NewStringTag("bootstrap-hostports", s)
 }
 
-// CertFile returns tag for RequestRunID
+// TLSCertFile returns tag for TLS cert file name
 func TLSCertFile(filePath string) ZapTag {
 	return NewStringTag("tls-cert-file", filePath)
 }
 
-// CertFile returns tag for RequestRunID
+// TLSKeyFile returns tag for TLS key file
 func TLSKeyFile(filePath string) ZapTag {
 	return NewStringTag("tls-key-file", filePath)
 }
 
+// TLSCertFiles returns tag for TLS cert file names
 func TLSCertFiles(filePaths []string) ZapTag {
-	return NewStringsTag("tls-cert-file", filePaths)
+	return NewStringsTag("tls-cert-files", filePaths)
 }
