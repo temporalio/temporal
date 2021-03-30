@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
 	"go.temporal.io/server/common/config"
@@ -112,6 +113,22 @@ type Config struct {
 
 	// EnableTokenNamespaceEnforcement enables enforcement that namespace in completion token matches namespace of the request
 	EnableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn
+
+	// gRPC keep alive options
+	// If a client pings too frequently, terminate the connection.
+	KeepAliveMinTime dynamicconfig.DurationPropertyFn
+	//  Allow pings even when there are no active streams (RPCs)
+	KeepAlivePermitWithoutStream dynamicconfig.BoolPropertyFn
+	// Close the connection if a client is idle.
+	KeepAliveMaxConnectionIdle dynamicconfig.DurationPropertyFn
+	// Close the connection if it is too old.
+	KeepAliveMaxConnectionAge dynamicconfig.DurationPropertyFn
+	// Additive period after MaxConnectionAge after which the connection will be forcibly closed.
+	KeepAliveMaxConnectionAgeGrace dynamicconfig.DurationPropertyFn
+	// Ping the client if it is idle to ensure the connection is still active.
+	KeepAliveTime dynamicconfig.DurationPropertyFn
+	// Wait for the ping ack before assuming the connection is dead.
+	KeepAliveTimeout dynamicconfig.DurationPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -152,6 +169,13 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		DefaultWorkflowTaskTimeout:             dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
 		EnableServerVersionCheck:               dc.GetBoolProperty(dynamicconfig.EnableServerVersionCheck, os.Getenv("TEMPORAL_VERSION_CHECK_DISABLED") == ""),
 		EnableTokenNamespaceEnforcement:        dc.GetBoolProperty(dynamicconfig.EnableTokenNamespaceEnforcement, false),
+		KeepAliveMinTime:                       dc.GetDurationProperty(dynamicconfig.KeepAliveMinTime, 10*time.Second),
+		KeepAlivePermitWithoutStream:           dc.GetBoolProperty(dynamicconfig.KeepAlivePermitWithoutStream, true),
+		KeepAliveMaxConnectionIdle:             dc.GetDurationProperty(dynamicconfig.KeepAliveMaxConnectionIdle, 2*time.Minute),
+		KeepAliveMaxConnectionAge:              dc.GetDurationProperty(dynamicconfig.KeepAliveMaxConnectionAge, 5*time.Minute),
+		KeepAliveMaxConnectionAgeGrace:         dc.GetDurationProperty(dynamicconfig.KeepAliveMaxConnectionAgeGrace, 70*time.Second),
+		KeepAliveTime:                          dc.GetDurationProperty(dynamicconfig.KeepAliveTime, 1*time.Minute),
+		KeepAliveTimeout:                       dc.GetDurationProperty(dynamicconfig.KeepAliveTimeout, 10*time.Second),
 	}
 }
 
@@ -268,11 +292,25 @@ func (s *Service) Start() {
 	)
 
 	opts, err := s.params.RPCFactory.GetFrontendGRPCServerOptions()
+	kep := keepalive.EnforcementPolicy{
+		MinTime:             s.config.KeepAliveMinTime(),
+		PermitWithoutStream: s.config.KeepAlivePermitWithoutStream(),
+	}
+	var kp = keepalive.ServerParameters{
+		MaxConnectionIdle:     s.config.KeepAliveMaxConnectionIdle(),
+		MaxConnectionAge:      s.config.KeepAliveMaxConnectionAge(),
+		MaxConnectionAgeGrace: s.config.KeepAliveMaxConnectionAgeGrace(),
+		Time:                  s.config.KeepAliveTime(),
+		Timeout:               s.config.KeepAliveTimeout(),
+	}
+
 	if err != nil {
 		logger.Fatal("creating grpc server options failed", tag.Error(err))
 	}
 	opts = append(
 		opts,
+		grpc.KeepaliveParams(kp),
+		grpc.KeepaliveEnforcementPolicy(kep),
 		grpc.ChainUnaryInterceptor(
 			rpc.ServiceErrorInterceptor,
 			metricsInterceptor.Intercept,
