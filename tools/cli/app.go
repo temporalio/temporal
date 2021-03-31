@@ -263,7 +263,7 @@ func KillPlugins(ctx *cli.Context) error {
 var (
 	pluginClient *plugin.Client
 	pluginMap    = map[string]plugin.Plugin{
-		"DataConverter": &converter.DataConverterPlugin{},
+		"DataConverter": &DataConverterPlugin{},
 	}
 	handshakeConfig = plugin.HandshakeConfig{
 		ProtocolVersion:  1,
