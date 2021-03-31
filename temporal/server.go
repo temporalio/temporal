@@ -30,21 +30,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	sdkclient "go.temporal.io/sdk/client"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/elasticsearch/client"
@@ -110,39 +108,49 @@ func (s *Server) Start() error {
 	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))
 	s.logger.Debug(s.so.config.String())
 
-	err = s.validate()
-	if err != nil {
-		return err
+	if s.so.persistenceServiceResolver == nil {
+		s.so.persistenceServiceResolver = resolver.NewNoopResolver()
 	}
 
-	var dynamicConfig dynamicconfig.Client
-	if s.so.dynamicConfigClient != nil {
-		dynamicConfig = s.so.dynamicConfigClient
-	} else {
-		dynamicConfig, err = dynamicconfig.NewFileBasedClient(&s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
+	err = verifyPersistenceCompatibleVersion(s.so.config.Persistence, s.so.persistenceServiceResolver)
+
+	if err = pprof.NewInitializer(&s.so.config.Global.PProf, s.logger).Start(); err != nil {
+		return fmt.Errorf("unable to start PProf: %w", err)
+	}
+
+	err = ringpop.ValidateRingpopConfig(&s.so.config.Global.Membership)
+	if err != nil {
+		return fmt.Errorf("ringpop config validation error: %w", err)
+	}
+
+	if s.so.dynamicConfigClient == nil {
+		s.so.dynamicConfigClient, err = dynamicconfig.NewFileBasedClient(&s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
 		if err != nil {
 			s.logger.Info("Error creating file based dynamic config client, use no-op config client instead.", tag.Error(err))
-			dynamicConfig = dynamicconfig.NewNoopClient()
+			s.so.dynamicConfigClient = dynamicconfig.NewNoopClient()
 		}
 	}
-	dc := dynamicconfig.NewCollection(dynamicConfig, s.logger)
+	dc := dynamicconfig.NewCollection(s.so.dynamicConfigClient, s.logger)
 
-	// This call performs a config check against the configured persistence store for immutable cluster metadata.
-	// If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
-	// This is to keep this check hidden from independent downstream daemons and keep this in a single place.
-	err = s.immutableClusterMetadataInitialization(dc)
+	factory := persistenceClient.NewFactory(
+		&s.so.config.Persistence,
+		s.so.persistenceServiceResolver,
+		nil,
+		nil,
+		s.so.config.ClusterMetadata.CurrentClusterName,
+		nil,
+		s.logger,
+	)
+
+	clusterMetadata, err := initClusterMetadata(s.so.config, factory, s.logger)
 	if err != nil {
 		return fmt.Errorf("unable to initialize cluster metadata: %w", err)
 	}
 
-	clusterMetadata := cluster.NewMetadata(
-		s.logger,
-		s.so.config.ClusterMetadata.EnableGlobalNamespace,
-		s.so.config.ClusterMetadata.FailoverVersionIncrement,
-		s.so.config.ClusterMetadata.MasterClusterName,
-		s.so.config.ClusterMetadata.CurrentClusterName,
-		s.so.config.ClusterMetadata.ClusterInformation,
-	)
+	err = initSystemNamespaces(factory, s.so.config.ClusterMetadata.CurrentClusterName)
+	if err != nil {
+		return fmt.Errorf("unable to initialize system namespace: %w", err)
+	}
 
 	var globalMetricsScope tally.Scope
 	if s.so.metricsReporter != nil {
@@ -151,18 +159,15 @@ func (s *Server) Start() error {
 		globalMetricsScope = s.so.config.Global.Metrics.NewScope(s.logger)
 	}
 
-	var tlsFactory encryption.TLSConfigProvider
-	if s.so.tlsConfigProvider != nil {
-		tlsFactory = s.so.tlsConfigProvider
-	} else {
-		tlsFactory, err = encryption.NewTLSConfigProviderFromConfig(s.so.config.Global.TLS, globalMetricsScope, nil)
+	if s.so.tlsConfigProvider == nil {
+		s.so.tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(s.so.config.Global.TLS, globalMetricsScope, nil)
 		if err != nil {
 			return fmt.Errorf("TLS provider initialization error: %w", err)
 		}
 	}
 
 	for _, svcName := range s.so.serviceNames {
-		params, err := s.getServiceParams(svcName, dynamicConfig, tlsFactory, clusterMetadata, dc, globalMetricsScope)
+		params, err := s.newBootstrapParams(svcName, clusterMetadata, dc, globalMetricsScope)
 		if err != nil {
 			return err
 		}
@@ -226,10 +231,8 @@ func (s *Server) Stop() {
 }
 
 // Populates parameters for a service
-func (s *Server) getServiceParams(
+func (s *Server) newBootstrapParams(
 	svcName string,
-	dynamicConfig dynamicconfig.Client,
-	tlsFactory encryption.TLSConfigProvider,
 	clusterMetadata cluster.Metadata,
 	dc *dynamicconfig.Collection,
 	metricsScope tally.Scope,
@@ -239,10 +242,10 @@ func (s *Server) getServiceParams(
 	params.Name = svcName
 	params.Logger = s.logger
 	params.PersistenceConfig = s.so.config.Persistence
-	params.DynamicConfig = dynamicConfig
+	params.DynamicConfig = s.so.dynamicConfigClient
 
 	svcCfg := s.so.config.Services[svcName]
-	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, s.logger, tlsFactory)
+	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, s.logger, s.so.tlsConfigProvider)
 	params.RPCFactory = rpcFactory
 
 	// Ringpop uses a different port to register handlers, this map is needed to resolve
@@ -273,7 +276,7 @@ func (s *Server) getServiceParams(
 	params.MetricsClient = metricsClient
 	params.ClusterMetadata = clusterMetadata
 
-	options, err := tlsFactory.GetFrontendClientConfig()
+	options, err := s.so.tlsConfigProvider.GetFrontendClientConfig()
 	if err != nil {
 		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
 	}
@@ -354,104 +357,26 @@ func (s *Server) getServiceParams(
 	return &params, nil
 }
 
-// Validates configuration of dependencies
-func (s *Server) validate() error {
-	if s.so.persistenceServiceResolver == nil {
-		s.so.persistenceServiceResolver = resolver.NewNoopResolver()
-	}
-
+func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceServiceResolver resolver.ServiceResolver) error {
 	// cassandra schema version validation
-	if err := cassandra.VerifyCompatibleVersion(s.so.config.Persistence, s.so.persistenceServiceResolver); err != nil {
+	if err := cassandra.VerifyCompatibleVersion(config, persistenceServiceResolver); err != nil {
 		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
 	}
 	// sql schema version validation
-	if err := sql.VerifyCompatibleVersion(s.so.config.Persistence, s.so.persistenceServiceResolver); err != nil {
+	if err := sql.VerifyCompatibleVersion(config, persistenceServiceResolver); err != nil {
 		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
-	}
-
-	if err := pprof.NewInitializer(&s.so.config.Global.PProf, s.logger).Start(); err != nil {
-		return fmt.Errorf("unable to start PProf: %w", err)
-	}
-
-	err := ringpop.ValidateRingpopConfig(&s.so.config.Global.Membership)
-	if err != nil {
-		return fmt.Errorf("ringpop config validation error: %w", err)
 	}
 	return nil
 }
 
-func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collection) error {
-	logger := log.With(s.logger, tag.ComponentMetadataInitializer)
-
-	factory := persistenceClient.NewFactory(
-		&s.so.config.Persistence,
-		s.so.persistenceServiceResolver,
-		dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 3000),
-		nil,
-		s.so.config.ClusterMetadata.CurrentClusterName,
-		nil,
-		logger,
-	)
-
-	clusterMetadataManager, err := factory.NewClusterMetadataManager()
-	if err != nil {
-		return fmt.Errorf("error initializing cluster metadata manager: %w", err)
-	}
-	defer clusterMetadataManager.Close()
-
-	applied, err := clusterMetadataManager.SaveClusterMetadata(
-		&persistence.SaveClusterMetadataRequest{
-			ClusterMetadata: persistencespb.ClusterMetadata{
-				HistoryShardCount: s.so.config.Persistence.NumHistoryShards,
-				ClusterName:       s.so.config.ClusterMetadata.CurrentClusterName,
-				ClusterId:         uuid.New(),
-			}})
-	if err != nil {
-		logger.Warn(fmt.Sprintf("Failed to save cluster metadata: %v", err))
-	}
-	if applied {
-		logger.Info("Successfully saved cluster metadata.")
-	} else {
-		resp, err := clusterMetadataManager.GetClusterMetadata()
-		if err != nil {
-			return fmt.Errorf("error while fetching cluster metadata: %w", err)
-		}
-		if s.so.config.ClusterMetadata.CurrentClusterName != resp.ClusterName {
-			s.logImmutableMismatch(logger,
-				"ClusterMetadata.CurrentClusterName",
-				s.so.config.ClusterMetadata.CurrentClusterName,
-				resp.ClusterName)
-
-			s.so.config.ClusterMetadata.CurrentClusterName = resp.ClusterName
-		}
-
-		var persistedShardCount = resp.HistoryShardCount
-		if s.so.config.Persistence.NumHistoryShards != persistedShardCount {
-			s.logImmutableMismatch(logger,
-				"Persistence.NumHistoryShards",
-				s.so.config.Persistence.NumHistoryShards,
-				persistedShardCount)
-
-			s.so.config.Persistence.NumHistoryShards = persistedShardCount
-		}
-	}
-
+func initSystemNamespaces(factory persistenceClient.Factory, currentClusterName string) error {
 	metadataManager, err := factory.NewMetadataManager()
 	if err != nil {
-		return fmt.Errorf("error initializing metadata manager: %w", err)
+		return fmt.Errorf("unable to initialize metadata manager: %w", err)
 	}
 	defer metadataManager.Close()
-	if err = metadataManager.InitializeSystemNamespaces(s.so.config.ClusterMetadata.CurrentClusterName); err != nil {
+	if err = metadataManager.InitializeSystemNamespaces(currentClusterName); err != nil {
 		return fmt.Errorf("unable to register system namespace: %w", err)
 	}
 	return nil
-}
-
-func (s *Server) logImmutableMismatch(logger log.Logger, key string, ignored interface{}, value interface{}) {
-	logger.Error(
-		"Supplied configuration key/value mismatches persisted ImmutableClusterMetadata. "+
-			"Continuing with the persisted value as this value cannot be changed once initialized.",
-		tag.Key(key),
-		tag.IgnoredValue(ignored),
-		tag.Value(value))
 }

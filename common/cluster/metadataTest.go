@@ -25,7 +25,6 @@
 package cluster
 
 import (
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 )
@@ -55,13 +54,11 @@ var (
 		TestCurrentClusterName: config.ClusterInformation{
 			Enabled:                true,
 			InitialFailoverVersion: TestCurrentClusterInitialFailoverVersion,
-			RPCName:                common.FrontendServiceName,
 			RPCAddress:             TestCurrentClusterFrontendAddress,
 		},
 		TestAlternativeClusterName: config.ClusterInformation{
 			Enabled:                true,
 			InitialFailoverVersion: TestAlternativeClusterInitialFailoverVersion,
-			RPCName:                common.FrontendServiceName,
 			RPCAddress:             TestAlternativeClusterFrontendAddress,
 		},
 	}
@@ -73,7 +70,6 @@ var (
 		TestCurrentClusterName: config.ClusterInformation{
 			Enabled:                true,
 			InitialFailoverVersion: TestCurrentClusterInitialFailoverVersion,
-			RPCName:                common.FrontendServiceName,
 			RPCAddress:             TestCurrentClusterFrontendAddress,
 		},
 	}
