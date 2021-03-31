@@ -368,7 +368,7 @@ func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceSe
 
 // initClusterMetadata performs a config check against the configured persistence store for cluster metadata.
 // If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
-// This is to keep this check hidden from downstream call although they should not use config directly.
+// This is to keep this check hidden from downstream calls.
 func initClusterMetadata(cfg *config.Config, persistenceServiceResolver resolver.ServiceResolver, logger log.Logger) (cluster.Metadata, error) {
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
 
