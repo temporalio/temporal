@@ -45,6 +45,7 @@ import (
 const (
 	HistoryBuilderStateMutable   HistoryBuilderState = 0
 	HistoryBuilderStateImmutable                     = 1
+	HistoryBuilderStateSealed                        = 2
 )
 
 // TODO should the reorderFunc functionality be ported?
@@ -74,6 +75,9 @@ type (
 		version     int64
 		nextEventID int64
 
+		// workflow finished
+		workflowFinished bool
+
 		// buffer events in DB
 		dbBufferBatch []*historypb.HistoryEvent
 		dbClearBuffer bool
@@ -88,7 +92,7 @@ type (
 	}
 )
 
-func NewHistoryBuilder(
+func NewMutableHistoryBuilder(
 	timeSource clock.TimeSource,
 	taskIDGenerator TaskIDGenerator,
 	version int64,
@@ -103,12 +107,35 @@ func NewHistoryBuilder(
 		version:     version,
 		nextEventID: nextEventID,
 
+		workflowFinished: false,
+
 		dbBufferBatch:         dbBufferBatch,
 		dbClearBuffer:         false,
 		memEventsBatches:      nil,
 		memLatestBatch:        nil,
 		memBufferBatch:        nil,
 		scheduleIDToStartedID: make(map[int64]int64),
+	}
+}
+
+func NewImmutableHistoryBuilder(
+	history []*historypb.HistoryEvent,
+) *HistoryBuilder {
+	lastEvent := history[len(history)-1]
+	return &HistoryBuilder{
+		state:           HistoryBuilderStateImmutable,
+		timeSource:      nil,
+		taskIDGenerator: nil,
+
+		version:     lastEvent.GetVersion(),
+		nextEventID: lastEvent.GetEventId() + 1,
+
+		dbBufferBatch:         nil,
+		dbClearBuffer:         false,
+		memEventsBatches:      nil,
+		memLatestBatch:        history,
+		memBufferBatch:        nil,
+		scheduleIDToStartedID: nil,
 	}
 }
 
@@ -978,8 +1005,20 @@ func (b *HistoryBuilder) BufferEventSize() int {
 	return len(b.dbBufferBatch) + len(b.memBufferBatch)
 }
 
+func (b *HistoryBuilder) NextEventID() int64 {
+	return b.nextEventID
+}
+
 func (b *HistoryBuilder) FlushBufferToCurrentBatch() map[int64]int64 {
 	if len(b.dbBufferBatch) == 0 && len(b.memBufferBatch) == 0 {
+		return b.scheduleIDToStartedID
+	} else if b.workflowFinished {
+		// in case this case happen
+		// 1. request cancel activity
+		// 2. workflow task complete
+		// above will generate 2 then 1
+		b.dbBufferBatch = nil
+		b.memBufferBatch = nil
 		return b.scheduleIDToStartedID
 	}
 
@@ -1005,7 +1044,7 @@ func (b *HistoryBuilder) FlushBufferToCurrentBatch() map[int64]int64 {
 }
 
 func (b *HistoryBuilder) FlushAndCreateNewBatch() {
-	b.assertMutable()
+	b.assertNotSealed()
 	if len(b.memLatestBatch) == 0 {
 		return
 	}
@@ -1018,7 +1057,7 @@ func (b *HistoryBuilder) Finish(
 	flushBufferEvent bool,
 ) (*HistoryMutation, error) {
 	defer func() {
-		b.state = HistoryBuilderStateImmutable
+		b.state = HistoryBuilderStateSealed
 	}()
 
 	if flushBufferEvent {
@@ -1056,7 +1095,12 @@ func (b *HistoryBuilder) Finish(
 func (b *HistoryBuilder) assignTaskIDs(
 	dbEventsBatches [][]*historypb.HistoryEvent,
 ) error {
-	b.assertMutable()
+	b.assertNotSealed()
+
+	if b.state == HistoryBuilderStateImmutable {
+		return nil
+	}
+
 	taskIDCount := 0
 	for i := 0; i < len(dbEventsBatches); i++ {
 		taskIDCount += len(dbEventsBatches[i])
@@ -1080,7 +1124,13 @@ func (b *HistoryBuilder) assignTaskIDs(
 
 func (b *HistoryBuilder) assertMutable() {
 	if b.state != HistoryBuilderStateMutable {
-		panic(fmt.Sprintf("history builder is mutated while in immutable state"))
+		panic(fmt.Sprintf("history builder is mutated while not in mutable state"))
+	}
+}
+
+func (b *HistoryBuilder) assertNotSealed() {
+	if b.state == HistoryBuilderStateSealed {
+		panic(fmt.Sprintf("history builder is in sealed state"))
 	}
 }
 
@@ -1089,6 +1139,13 @@ func (b *HistoryBuilder) createNewHistoryEvent(
 	time time.Time,
 ) *historypb.HistoryEvent {
 	b.assertMutable()
+
+	if b.workflowFinished {
+		panic(fmt.Sprintf("history builder unable to create new event after workflow finish"))
+	}
+	if b.finishEvent(eventType) {
+		b.workflowFinished = true
+	}
 
 	historyEvent := &historypb.HistoryEvent{}
 	historyEvent.EventTime = timestamp.TimePtr(time.UTC())
@@ -1153,6 +1210,24 @@ func (b *HistoryBuilder) bufferEvent(
 
 	default:
 		return true
+	}
+}
+
+func (b *HistoryBuilder) finishEvent(
+	eventType enumspb.EventType,
+) bool {
+	switch eventType {
+	case
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
+		return true
+
+	default:
+		return false
 	}
 }
 

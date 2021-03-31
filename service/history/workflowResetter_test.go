@@ -343,7 +343,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		"",
 		int64(0),
 	).Return(&historypb.HistoryEvent{}, nil)
-	mutableState.EXPECT().FlushBufferedEvents().Return(nil)
+	mutableState.EXPECT().FlushBufferedEvents()
 	mutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
 		nextEventID,
 		terminateReason,

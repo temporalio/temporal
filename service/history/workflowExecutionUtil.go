@@ -130,7 +130,8 @@ func failWorkflowTask(
 		return err
 	}
 
-	return mutableState.FlushBufferedEvents()
+	mutableState.FlushBufferedEvents()
+	return nil
 }
 
 func scheduleWorkflowTask(
