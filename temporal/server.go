@@ -137,7 +137,7 @@ func (s *Server) Start() error {
 		return fmt.Errorf("unable to initialize cluster metadata: %w", err)
 	}
 
-	err = initSystemNamespaces(s.so.config, s.so.persistenceServiceResolver, s.logger)
+	err = initSystemNamespaces(&s.so.config.Persistence, clusterMetadata.GetCurrentClusterName(), s.so.persistenceServiceResolver, s.logger)
 	if err != nil {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
@@ -359,13 +359,13 @@ func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceSe
 	return nil
 }
 
-func initSystemNamespaces(config *config.Config, persistenceServiceResolver resolver.ServiceResolver, logger log.Logger) error {
+func initSystemNamespaces(cfg *config.Persistence, currentClusterName string, persistenceServiceResolver resolver.ServiceResolver, logger log.Logger) error {
 	factory := persistenceClient.NewFactory(
-		&config.Persistence,
+		cfg,
 		persistenceServiceResolver,
 		nil,
 		nil,
-		config.ClusterMetadata.CurrentClusterName,
+		currentClusterName,
 		nil,
 		logger,
 	)
@@ -375,7 +375,7 @@ func initSystemNamespaces(config *config.Config, persistenceServiceResolver reso
 		return fmt.Errorf("unable to initialize metadata manager: %w", err)
 	}
 	defer metadataManager.Close()
-	if err = metadataManager.InitializeSystemNamespaces(config.ClusterMetadata.CurrentClusterName); err != nil {
+	if err = metadataManager.InitializeSystemNamespaces(currentClusterName); err != nil {
 		return fmt.Errorf("unable to register system namespace: %w", err)
 	}
 	return nil

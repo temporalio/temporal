@@ -21,16 +21,16 @@ const (
 
 // initClusterMetadata performs a config check against the configured persistence store for cluster metadata.
 // If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
-// This is to keep this check hidden from independent downstream daemons and keep this in a single place.
-func initClusterMetadata(config *config.Config, persistenceServiceResolver resolver.ServiceResolver, logger log.Logger) (cluster.Metadata, error) {
+// This is to keep this check hidden from downstream call although they should not use config directly.
+func initClusterMetadata(cfg *config.Config, persistenceServiceResolver resolver.ServiceResolver, logger log.Logger) (cluster.Metadata, error) {
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
 
 	factory := persistenceClient.NewFactory(
-		&config.Persistence,
+		&cfg.Persistence,
 		persistenceServiceResolver,
 		nil,
 		nil,
-		config.ClusterMetadata.CurrentClusterName,
+		cfg.ClusterMetadata.CurrentClusterName,
 		nil,
 		logger,
 	)
@@ -44,8 +44,8 @@ func initClusterMetadata(config *config.Config, persistenceServiceResolver resol
 	applied, err := clusterMetadataManager.SaveClusterMetadata(
 		&persistence.SaveClusterMetadataRequest{
 			ClusterMetadata: persistencespb.ClusterMetadata{
-				HistoryShardCount: config.Persistence.NumHistoryShards,
-				ClusterName:       config.ClusterMetadata.CurrentClusterName,
+				HistoryShardCount: cfg.Persistence.NumHistoryShards,
+				ClusterName:       cfg.ClusterMetadata.CurrentClusterName,
 				ClusterId:         uuid.New(),
 			}})
 	if err != nil {
@@ -58,33 +58,33 @@ func initClusterMetadata(config *config.Config, persistenceServiceResolver resol
 		if err != nil {
 			return nil, fmt.Errorf("error while fetching cluster metadata: %w", err)
 		}
-		if config.ClusterMetadata.CurrentClusterName != resp.ClusterName {
+		if cfg.ClusterMetadata.CurrentClusterName != resp.ClusterName {
 			logger.Error(
 				mismatchLogMessage,
 				tag.Key("clusterMetadata.currentClusterName"),
-				tag.IgnoredValue(config.ClusterMetadata.CurrentClusterName),
+				tag.IgnoredValue(cfg.ClusterMetadata.CurrentClusterName),
 				tag.Value(resp.ClusterName))
-			config.ClusterMetadata.CurrentClusterName = resp.ClusterName
+			cfg.ClusterMetadata.CurrentClusterName = resp.ClusterName
 		}
 
 		var persistedShardCount = resp.HistoryShardCount
-		if config.Persistence.NumHistoryShards != persistedShardCount {
+		if cfg.Persistence.NumHistoryShards != persistedShardCount {
 			logger.Error(
 				mismatchLogMessage,
 				tag.Key("persistence.numHistoryShards"),
-				tag.IgnoredValue(config.Persistence.NumHistoryShards),
+				tag.IgnoredValue(cfg.Persistence.NumHistoryShards),
 				tag.Value(persistedShardCount))
-			config.Persistence.NumHistoryShards = persistedShardCount
+			cfg.Persistence.NumHistoryShards = persistedShardCount
 		}
 	}
 
 	metadata := cluster.NewMetadata(
 		logger,
-		config.ClusterMetadata.EnableGlobalNamespace,
-		config.ClusterMetadata.FailoverVersionIncrement,
-		config.ClusterMetadata.MasterClusterName,
-		config.ClusterMetadata.CurrentClusterName,
-		config.ClusterMetadata.ClusterInformation,
+		cfg.ClusterMetadata.EnableGlobalNamespace,
+		cfg.ClusterMetadata.FailoverVersionIncrement,
+		cfg.ClusterMetadata.MasterClusterName,
+		cfg.ClusterMetadata.CurrentClusterName,
+		cfg.ClusterMetadata.ClusterInformation,
 	)
 	return metadata, nil
 }
