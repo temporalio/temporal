@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package executions
+package mutablestate
 
 import (
 	"fmt"
@@ -1403,17 +1403,16 @@ func (b *HistoryBuilder) FlushEvents() {
 	b.latestBatch = nil
 }
 
+func (b *HistoryBuilder) Finish() [][]*historypb.HistoryEvent {
+	b.FlushEvents()
+	b.state = HistoryBuilderStateImmutable
+	return b.eventsBatch
+}
+
 func (b *HistoryBuilder) assertMutable() {
 	if b.state != HistoryBuilderStateMutable {
 		panic(fmt.Sprintf("history builder is mutated while in immutable state"))
 	}
-}
-
-func (b *HistoryBuilder) Finish() [][]*historypb.HistoryEvent {
-	b.assertMutable()
-	b.FlushEvents()
-	b.state = HistoryBuilderStateImmutable
-	return b.eventsBatch
 }
 
 func (b *HistoryBuilder) createNewHistoryEvent(
