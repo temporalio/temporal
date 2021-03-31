@@ -132,22 +132,12 @@ func (s *Server) Start() error {
 	}
 	dc := dynamicconfig.NewCollection(s.so.dynamicConfigClient, s.logger)
 
-	factory := persistenceClient.NewFactory(
-		&s.so.config.Persistence,
-		s.so.persistenceServiceResolver,
-		nil,
-		nil,
-		s.so.config.ClusterMetadata.CurrentClusterName,
-		nil,
-		s.logger,
-	)
-
-	clusterMetadata, err := initClusterMetadata(s.so.config, factory, s.logger)
+	clusterMetadata, err := initClusterMetadata(s.so.config, s.so.persistenceServiceResolver, s.logger)
 	if err != nil {
 		return fmt.Errorf("unable to initialize cluster metadata: %w", err)
 	}
 
-	err = initSystemNamespaces(factory, s.so.config.ClusterMetadata.CurrentClusterName)
+	err = initSystemNamespaces(s.so.config, s.so.persistenceServiceResolver, s.logger)
 	if err != nil {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
@@ -369,13 +359,23 @@ func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceSe
 	return nil
 }
 
-func initSystemNamespaces(factory persistenceClient.Factory, currentClusterName string) error {
+func initSystemNamespaces(config *config.Config, persistenceServiceResolver resolver.ServiceResolver, logger log.Logger) error {
+	factory := persistenceClient.NewFactory(
+		&config.Persistence,
+		persistenceServiceResolver,
+		nil,
+		nil,
+		config.ClusterMetadata.CurrentClusterName,
+		nil,
+		logger,
+	)
+
 	metadataManager, err := factory.NewMetadataManager()
 	if err != nil {
 		return fmt.Errorf("unable to initialize metadata manager: %w", err)
 	}
 	defer metadataManager.Close()
-	if err = metadataManager.InitializeSystemNamespaces(currentClusterName); err != nil {
+	if err = metadataManager.InitializeSystemNamespaces(config.ClusterMetadata.CurrentClusterName); err != nil {
 		return fmt.Errorf("unable to register system namespace: %w", err)
 	}
 	return nil

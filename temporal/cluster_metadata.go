@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/resolver"
 )
 
 const (
@@ -21,8 +22,18 @@ const (
 // initClusterMetadata performs a config check against the configured persistence store for cluster metadata.
 // If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
 // This is to keep this check hidden from independent downstream daemons and keep this in a single place.
-func initClusterMetadata(config *config.Config, factory persistenceClient.Factory, logger log.Logger) (cluster.Metadata, error) {
+func initClusterMetadata(config *config.Config, persistenceServiceResolver resolver.ServiceResolver, logger log.Logger) (cluster.Metadata, error) {
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
+
+	factory := persistenceClient.NewFactory(
+		&config.Persistence,
+		persistenceServiceResolver,
+		nil,
+		nil,
+		config.ClusterMetadata.CurrentClusterName,
+		nil,
+		logger,
+	)
 
 	clusterMetadataManager, err := factory.NewClusterMetadataManager()
 	if err != nil {
@@ -38,7 +49,7 @@ func initClusterMetadata(config *config.Config, factory persistenceClient.Factor
 				ClusterId:         uuid.New(),
 			}})
 	if err != nil {
-		logger.Warn(fmt.Sprintf("Failed to save cluster metadata: %v", err))
+		logger.Warn("Failed to save cluster metadata.", tag.Error(err))
 	}
 	if applied {
 		logger.Info("Successfully saved cluster metadata.")
