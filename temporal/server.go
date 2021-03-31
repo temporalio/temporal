@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -139,12 +138,12 @@ func (s *Server) Start() error {
 	}
 	dc := dynamicconfig.NewCollection(s.so.dynamicConfigClient, s.logger)
 
-	clusterMetadata, err := initClusterMetadata(s.so.config, s.so.persistenceServiceResolver, s.logger)
+	err = updateClusterMetadataConfig(s.so.config, s.so.persistenceServiceResolver, s.logger)
 	if err != nil {
 		return fmt.Errorf("unable to initialize cluster metadata: %w", err)
 	}
 
-	err = initSystemNamespaces(&s.so.config.Persistence, clusterMetadata.GetCurrentClusterName(), s.so.persistenceServiceResolver, s.logger)
+	err = initSystemNamespaces(&s.so.config.Persistence, s.so.config.ClusterMetadata.CurrentClusterName, s.so.persistenceServiceResolver, s.logger)
 	if err != nil {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
@@ -164,7 +163,7 @@ func (s *Server) Start() error {
 	}
 
 	for _, svcName := range s.so.serviceNames {
-		params, err := s.newBootstrapParams(svcName, clusterMetadata, dc, globalMetricsScope)
+		params, err := s.newBootstrapParams(svcName, dc, globalMetricsScope)
 		if err != nil {
 			return err
 		}
@@ -230,7 +229,6 @@ func (s *Server) Stop() {
 // Populates parameters for a service
 func (s *Server) newBootstrapParams(
 	svcName string,
-	clusterMetadata cluster.Metadata,
 	dc *dynamicconfig.Collection,
 	metricsScope tally.Scope,
 ) (*resource.BootstrapParams, error) {
@@ -240,6 +238,7 @@ func (s *Server) newBootstrapParams(
 	params.Logger = s.logger
 	params.PersistenceConfig = s.so.config.Persistence
 	params.DynamicConfig = s.so.dynamicConfigClient
+	params.ClusterMetadataConfig = s.so.config.ClusterMetadata
 
 	svcCfg := s.so.config.Services[svcName]
 	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, s.logger, s.so.tlsConfigProvider)
@@ -271,7 +270,6 @@ func (s *Server) newBootstrapParams(
 	params.MetricsScope = metricsScope
 	metricsClient := metrics.NewClient(metricsScope, metrics.GetMetricsServiceIdx(svcName, s.logger))
 	params.MetricsClient = metricsClient
-	params.ClusterMetadata = clusterMetadata
 
 	options, err := s.so.tlsConfigProvider.GetFrontendClientConfig()
 	if err != nil {
@@ -366,10 +364,10 @@ func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceSe
 	return nil
 }
 
-// initClusterMetadata performs a config check against the configured persistence store for cluster metadata.
+// updateClusterMetadataConfig performs a config check against the configured persistence store for cluster metadata.
 // If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
 // This is to keep this check hidden from downstream calls.
-func initClusterMetadata(cfg *config.Config, persistenceServiceResolver resolver.ServiceResolver, logger log.Logger) (cluster.Metadata, error) {
+func updateClusterMetadataConfig(cfg *config.Config, persistenceServiceResolver resolver.ServiceResolver, logger log.Logger) error {
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
 
 	factory := persistenceClient.NewFactory(
@@ -384,7 +382,7 @@ func initClusterMetadata(cfg *config.Config, persistenceServiceResolver resolver
 
 	clusterMetadataManager, err := factory.NewClusterMetadataManager()
 	if err != nil {
-		return nil, fmt.Errorf("error initializing cluster metadata manager: %w", err)
+		return fmt.Errorf("error initializing cluster metadata manager: %w", err)
 	}
 	defer clusterMetadataManager.Close()
 
@@ -400,40 +398,33 @@ func initClusterMetadata(cfg *config.Config, persistenceServiceResolver resolver
 	}
 	if applied {
 		logger.Info("Successfully saved cluster metadata.")
-	} else {
-		resp, err := clusterMetadataManager.GetClusterMetadata()
-		if err != nil {
-			return nil, fmt.Errorf("error while fetching cluster metadata: %w", err)
-		}
-		if cfg.ClusterMetadata.CurrentClusterName != resp.ClusterName {
-			logger.Error(
-				mismatchLogMessage,
-				tag.Key("clusterMetadata.currentClusterName"),
-				tag.IgnoredValue(cfg.ClusterMetadata.CurrentClusterName),
-				tag.Value(resp.ClusterName))
-			cfg.ClusterMetadata.CurrentClusterName = resp.ClusterName
-		}
-
-		var persistedShardCount = resp.HistoryShardCount
-		if cfg.Persistence.NumHistoryShards != persistedShardCount {
-			logger.Error(
-				mismatchLogMessage,
-				tag.Key("persistence.numHistoryShards"),
-				tag.IgnoredValue(cfg.Persistence.NumHistoryShards),
-				tag.Value(persistedShardCount))
-			cfg.Persistence.NumHistoryShards = persistedShardCount
-		}
+		return nil
 	}
 
-	metadata := cluster.NewMetadata(
-		logger,
-		cfg.ClusterMetadata.EnableGlobalNamespace,
-		cfg.ClusterMetadata.FailoverVersionIncrement,
-		cfg.ClusterMetadata.MasterClusterName,
-		cfg.ClusterMetadata.CurrentClusterName,
-		cfg.ClusterMetadata.ClusterInformation,
-	)
-	return metadata, nil
+	resp, err := clusterMetadataManager.GetClusterMetadata()
+	if err != nil {
+		return fmt.Errorf("error while fetching cluster metadata: %w", err)
+	}
+	if cfg.ClusterMetadata.CurrentClusterName != resp.ClusterName {
+		logger.Error(
+			mismatchLogMessage,
+			tag.Key("clusterMetadata.currentClusterName"),
+			tag.IgnoredValue(cfg.ClusterMetadata.CurrentClusterName),
+			tag.Value(resp.ClusterName))
+		cfg.ClusterMetadata.CurrentClusterName = resp.ClusterName
+	}
+
+	var persistedShardCount = resp.HistoryShardCount
+	if cfg.Persistence.NumHistoryShards != persistedShardCount {
+		logger.Error(
+			mismatchLogMessage,
+			tag.Key("persistence.numHistoryShards"),
+			tag.IgnoredValue(cfg.Persistence.NumHistoryShards),
+			tag.Value(persistedShardCount))
+		cfg.Persistence.NumHistoryShards = persistedShardCount
+	}
+
+	return nil
 }
 
 func initSystemNamespaces(cfg *config.Persistence, currentClusterName string, persistenceServiceResolver resolver.ServiceResolver, logger log.Logger) error {

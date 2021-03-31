@@ -75,30 +75,40 @@ var (
 	}
 )
 
-// GetTestClusterMetadata return an cluster metadata instance, which is initialized
-func GetTestClusterMetadata(enableGlobalNamespace bool, isMasterCluster bool) Metadata {
+// GetTestClusterMetadataConfig return an cluster metadata config
+func GetTestClusterMetadataConfig(enableGlobalNamespace bool, isMasterCluster bool) *config.ClusterMetadata {
 	masterClusterName := TestCurrentClusterName
 	if !isMasterCluster {
 		masterClusterName = TestAlternativeClusterName
 	}
 
 	if enableGlobalNamespace {
-		return NewMetadata(
-			log.NewNoopLogger(),
-			true,
-			TestFailoverVersionIncrement,
-			masterClusterName,
-			TestCurrentClusterName,
-			TestAllClusterInfo,
-		)
+		return &config.ClusterMetadata{
+			EnableGlobalNamespace:    true,
+			FailoverVersionIncrement: TestFailoverVersionIncrement,
+			MasterClusterName:        masterClusterName,
+			CurrentClusterName:       TestCurrentClusterName,
+			ClusterInformation:       TestAllClusterInfo,
+		}
 	}
 
+	return &config.ClusterMetadata{
+		EnableGlobalNamespace:    false,
+		FailoverVersionIncrement: TestFailoverVersionIncrement,
+		MasterClusterName:        TestCurrentClusterName,
+		CurrentClusterName:       TestCurrentClusterName,
+		ClusterInformation:       TestSingleDCClusterInfo,
+	}
+}
+
+// GetTestClusterMetadata return an cluster metadata instance, which is initialized
+func GetTestClusterMetadata(cfg *config.ClusterMetadata) Metadata {
 	return NewMetadata(
 		log.NewNoopLogger(),
-		false,
-		TestFailoverVersionIncrement,
-		TestCurrentClusterName,
-		TestCurrentClusterName,
-		TestSingleDCClusterInfo,
+		cfg.EnableGlobalNamespace,
+		cfg.FailoverVersionIncrement,
+		cfg.MasterClusterName,
+		cfg.CurrentClusterName,
+		cfg.ClusterInformation,
 	)
 }

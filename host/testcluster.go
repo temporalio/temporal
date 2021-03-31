@@ -101,19 +101,18 @@ const (
 // NewCluster creates and sets up the test cluster
 func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
 
-	clusterMetadata := cluster.GetTestClusterMetadata(
+	clusterMetadataConfig := cluster.GetTestClusterMetadataConfig(
 		options.ClusterMetadata.EnableGlobalNamespace,
 		options.IsMasterCluster,
 	)
 	if !options.IsMasterCluster && options.ClusterMetadata.MasterClusterName != "" { // xdc cluster metadata setup
-		clusterMetadata = cluster.NewMetadata(
-			logger,
-			options.ClusterMetadata.EnableGlobalNamespace,
-			options.ClusterMetadata.FailoverVersionIncrement,
-			options.ClusterMetadata.MasterClusterName,
-			options.ClusterMetadata.CurrentClusterName,
-			options.ClusterMetadata.ClusterInformation,
-		)
+		clusterMetadataConfig = &config.ClusterMetadata{
+			EnableGlobalNamespace:    options.ClusterMetadata.EnableGlobalNamespace,
+			FailoverVersionIncrement: options.ClusterMetadata.FailoverVersionIncrement,
+			MasterClusterName:        options.ClusterMetadata.MasterClusterName,
+			CurrentClusterName:       options.ClusterMetadata.CurrentClusterName,
+			ClusterInformation:       options.ClusterMetadata.ClusterInformation,
+		}
 	}
 
 	options.Persistence.StoreType = TestFlags.PersistenceType
@@ -140,7 +139,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		panic(fmt.Sprintf("unknown store type: %v", options.Persistence.StoreType))
 	}
 
-	options.Persistence.ClusterMetadata = clusterMetadata
+	options.Persistence.ClusterMetadata = cluster.GetTestClusterMetadata(clusterMetadataConfig)
 	testBase := persistencetests.NewTestBase(&options.Persistence)
 	testBase.Setup()
 	setupShards(testBase, options.HistoryConfig.NumHistoryShards, logger)
@@ -186,7 +185,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
 
 	temporalParams := &TemporalParams{
-		ClusterMetadata:                  clusterMetadata,
+		ClusterMetadataConfig:            clusterMetadataConfig,
 		PersistenceConfig:                pConfig,
 		MetadataMgr:                      testBase.MetadataManager,
 		ShardMgr:                         testBase.ShardMgr,

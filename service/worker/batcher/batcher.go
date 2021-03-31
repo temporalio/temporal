@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -42,8 +41,6 @@ import (
 type (
 	// Config defines the configuration for batcher
 	Config struct {
-		// ClusterMetadata contains the metadata for this cluster
-		ClusterMetadata cluster.Metadata
 	}
 
 	// BootstrapParams contains the set of params needed to bootstrap
