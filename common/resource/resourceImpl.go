@@ -173,13 +173,23 @@ func New(
 			return persistenceMaxQPS()
 		},
 		params.AbstractDatastoreFactory,
-		params.ClusterMetadata.GetCurrentClusterName(),
+		params.ClusterMetadataConfig.CurrentClusterName,
 		params.MetricsClient,
 		logger,
 	))
 	if err != nil {
 		return nil, err
 	}
+
+	clusterMetadata := cluster.NewMetadata(
+		logger,
+		// persistenceBean.GetClusterMetadataManager().GetClusterMetadata(),
+		params.ClusterMetadataConfig.EnableGlobalNamespace,
+		params.ClusterMetadataConfig.FailoverVersionIncrement,
+		params.ClusterMetadataConfig.MasterClusterName,
+		params.ClusterMetadataConfig.CurrentClusterName,
+		params.ClusterMetadataConfig.ClusterInformation,
+	)
 
 	membershipFactory, err := params.MembershipFactoryInitializer(persistenceBean, logger)
 	if err != nil {
@@ -201,7 +211,7 @@ func New(
 			numShards,
 			logger,
 		),
-		params.ClusterMetadata,
+		clusterMetadata,
 	)
 	if err != nil {
 		return nil, err
@@ -237,7 +247,7 @@ func New(
 
 	namespaceCache := cache.NewNamespaceCache(
 		persistenceBean.GetMetadataManager(),
-		params.ClusterMetadata,
+		clusterMetadata,
 		params.MetricsClient,
 		logger,
 	)
@@ -270,13 +280,13 @@ func New(
 		HistoryV2Manager: persistenceBean.GetHistoryManager(),
 		Logger:           logger,
 		MetricsClient:    params.MetricsClient,
-		ClusterMetadata:  params.ClusterMetadata,
+		ClusterMetadata:  clusterMetadata,
 		NamespaceCache:   namespaceCache,
 	}
 	visibilityArchiverBootstrapContainer := &archiver.VisibilityBootstrapContainer{
 		Logger:          logger,
 		MetricsClient:   params.MetricsClient,
-		ClusterMetadata: params.ClusterMetadata,
+		ClusterMetadata: clusterMetadata,
 		NamespaceCache:  namespaceCache,
 	}
 	if err := params.ArchiverProvider.RegisterBootstrapContainer(
@@ -296,7 +306,7 @@ func New(
 		serviceName:     params.Name,
 		hostName:        hostName,
 		metricsScope:    params.MetricsScope,
-		clusterMetadata: params.ClusterMetadata,
+		clusterMetadata: clusterMetadata,
 
 		// other common resources
 
