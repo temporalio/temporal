@@ -446,7 +446,7 @@ func (c *temporalImpl) startHistory(
 		params.DynamicConfigClient = integrationClient
 
 		var err error
-		params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
+		params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
 			HostPort:     c.FrontendGRPCAddress(),
 			Namespace:    common.SystemLocalNamespace,
 			MetricsScope: params.MetricsScope,
@@ -578,7 +578,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	}
 	params.PersistenceServiceResolver = resolver.NewNoopResolver()
 
-	params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
+	params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
 		HostPort:     c.FrontendGRPCAddress(),
 		Namespace:    common.SystemLocalNamespace,
 		MetricsScope: params.MetricsScope,
@@ -663,7 +663,7 @@ func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams,
 	workerConfig.ArchiverConfig.ArchiverConcurrency = dynamicconfig.GetIntPropertyFn(10)
 
 	bc := &archiver.BootstrapContainer{
-		PublicClient:     params.PublicClient,
+		SdkClient:        params.SdkClient,
 		MetricsClient:    service.GetMetricsClient(),
 		Logger:           c.logger,
 		HistoryV2Manager: c.historyV2Mgr,

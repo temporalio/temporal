@@ -51,7 +51,6 @@ type Service struct {
 	status  int32
 	handler *Handler
 	config  *Config
-	params  *resource.BootstrapParams
 
 	server *grpc.Server
 }
@@ -60,6 +59,7 @@ type Service struct {
 func NewService(
 	params *resource.BootstrapParams,
 ) (resource.Resource, error) {
+	logger := params.Logger
 
 	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger))
 	serviceResource, err := resource.New(
@@ -79,11 +79,36 @@ func NewService(
 		return nil, err
 	}
 
+	metricsInterceptor := interceptor.NewTelemetryInterceptor(
+		serviceResource.GetNamespaceCache(),
+		serviceResource.GetMetricsClient(),
+		metrics.MatchingAPIMetricsScopes(),
+		logger,
+	)
+	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
+		func() float64 { return float64(serviceConfig.RPS()) },
+		map[string]int{},
+	)
+
+	grpcServerOptions, err := params.RPCFactory.GetInternodeGRPCServerOptions()
+	if err != nil {
+		logger.Fatal("creating gRPC server options failed", tag.Error(err))
+	}
+	grpcServerOptions = append(
+		grpcServerOptions,
+		grpc.ChainUnaryInterceptor(
+			rpc.ServiceErrorInterceptor,
+			metricsInterceptor.Intercept,
+			rateLimiterInterceptor.Intercept,
+		),
+	)
+
 	return &Service{
 		Resource: serviceResource,
 		status:   common.DaemonStatusInitialized,
 		config:   serviceConfig,
-		params:   params,
+		server:   grpc.NewServer(grpcServerOptions...),
+		handler:  NewHandler(serviceResource, serviceConfig),
 	}, nil
 }
 
@@ -96,36 +121,10 @@ func (s *Service) Start() {
 	logger := s.GetLogger()
 	logger.Info("matching starting")
 
-	s.handler = NewHandler(s, s.config)
-
 	// must start base service first
 	s.Resource.Start()
 	s.handler.Start()
 
-	metricsInterceptor := interceptor.NewTelemetryInterceptor(
-		s.Resource.GetNamespaceCache(),
-		s.Resource.GetMetricsClient(),
-		metrics.MatchingAPIMetricsScopes(),
-		s.Resource.GetLogger(),
-	)
-	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
-		func() float64 { return float64(s.config.RPS()) },
-		map[string]int{},
-	)
-
-	opts, err := s.params.RPCFactory.GetInternodeGRPCServerOptions()
-	if err != nil {
-		logger.Fatal("creating grpc server options failed", tag.Error(err))
-	}
-	opts = append(
-		opts,
-		grpc.ChainUnaryInterceptor(
-			rpc.ServiceErrorInterceptor,
-			metricsInterceptor.Intercept,
-			rateLimiterInterceptor.Intercept,
-		),
-	)
-	s.server = grpc.NewServer(opts...)
 	matchingservice.RegisterMatchingServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.handler)
 

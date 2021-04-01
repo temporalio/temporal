@@ -276,7 +276,7 @@ func (s *Server) newBootstrapParams(
 		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
 	}
 
-	params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
+	params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
 		HostPort:     s.so.config.PublicClient.HostPort,
 		Namespace:    common.SystemLocalNamespace,
 		MetricsScope: metricsScope,

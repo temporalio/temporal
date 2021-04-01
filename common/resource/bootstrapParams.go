@@ -64,7 +64,7 @@ type (
 		ESConfig                     *config.Elasticsearch
 		DynamicConfigClient          dynamicconfig.Client
 		DCRedirectionPolicy          config.DCRedirectionPolicy
-		PublicClient                 sdkclient.Client
+		SdkClient                    sdkclient.Client
 		ArchivalMetadata             archiver.ArchivalMetadata
 		ArchiverProvider             provider.ArchiverProvider
 		Authorizer                   authorization.Authorizer

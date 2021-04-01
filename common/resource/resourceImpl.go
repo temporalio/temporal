@@ -327,7 +327,7 @@ func New(
 
 		// internal services clients
 
-		sdkClient:         params.PublicClient,
+		sdkClient:         params.SdkClient,
 		frontendRawClient: frontendRawClient,
 		frontendClient:    frontendClient,
 		matchingRawClient: matchingRawClient,
