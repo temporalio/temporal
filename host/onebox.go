@@ -364,7 +364,7 @@ func (c *temporalImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 }
 
 func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.WaitGroup) {
-	params := new(resource.BootstrapParams)
+	params := &resource.BootstrapParams{}
 	params.DCRedirectionPolicy = config.DCRedirectionPolicy{}
 	params.Name = common.FrontendServiceName
 	params.Logger = c.logger
@@ -377,7 +377,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
 	params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
-	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNoopClient())
+	params.DynamicConfigClient = newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 	params.ESConfig = c.esConfig
@@ -430,7 +430,7 @@ func (c *temporalImpl) startHistory(
 ) {
 	membershipPorts := c.HistoryServiceAddress(2)
 	for i, grpcPort := range c.HistoryServiceAddress(3) {
-		params := new(resource.BootstrapParams)
+		params := &resource.BootstrapParams{}
 		params.Name = common.HistoryServiceName
 		params.Logger = c.logger
 		params.ThrottledLogger = c.logger
@@ -443,10 +443,10 @@ func (c *temporalImpl) startHistory(
 		params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 		c.overrideHistoryDynamicConfig(integrationClient)
-		params.DynamicConfig = integrationClient
+		params.DynamicConfigClient = integrationClient
 
 		var err error
-		params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
+		params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
 			HostPort:     c.FrontendGRPCAddress(),
 			Namespace:    common.SystemLocalNamespace,
 			MetricsScope: params.MetricsScope,
@@ -513,7 +513,7 @@ func (c *temporalImpl) startHistory(
 
 func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.WaitGroup) {
 
-	params := new(resource.BootstrapParams)
+	params := &resource.BootstrapParams{}
 	params.Name = common.MatchingServiceName
 	params.Logger = c.logger
 	params.ThrottledLogger = c.logger
@@ -524,7 +524,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
 	params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
-	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNoopClient())
+	params.DynamicConfigClient = newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
@@ -556,7 +556,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 }
 
 func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.WaitGroup) {
-	params := new(resource.BootstrapParams)
+	params := &resource.BootstrapParams{}
 	params.Name = common.WorkerServiceName
 	params.Logger = c.logger
 	params.ThrottledLogger = c.logger
@@ -567,7 +567,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
 	params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
-	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNoopClient())
+	params.DynamicConfigClient = newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
@@ -578,7 +578,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	}
 	params.PersistenceServiceResolver = resolver.NewNoopResolver()
 
-	params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
+	params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
 		HostPort:     c.FrontendGRPCAddress(),
 		Namespace:    common.SystemLocalNamespace,
 		MetricsScope: params.MetricsScope,
@@ -663,7 +663,7 @@ func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams,
 	workerConfig.ArchiverConfig.ArchiverConcurrency = dynamicconfig.GetIntPropertyFn(10)
 
 	bc := &archiver.BootstrapContainer{
-		PublicClient:     params.PublicClient,
+		SdkClient:        params.SdkClient,
 		MetricsClient:    service.GetMetricsClient(),
 		Logger:           c.logger,
 		HistoryV2Manager: c.historyV2Mgr,

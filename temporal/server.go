@@ -237,7 +237,7 @@ func (s *Server) newBootstrapParams(
 	params.Name = svcName
 	params.Logger = s.logger
 	params.PersistenceConfig = s.so.config.Persistence
-	params.DynamicConfig = s.so.dynamicConfigClient
+	params.DynamicConfigClient = s.so.dynamicConfigClient
 	params.ClusterMetadataConfig = s.so.config.ClusterMetadata
 
 	svcCfg := s.so.config.Services[svcName]
@@ -276,7 +276,7 @@ func (s *Server) newBootstrapParams(
 		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
 	}
 
-	params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
+	params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
 		HostPort:     s.so.config.PublicClient.HostPort,
 		Namespace:    common.SystemLocalNamespace,
 		MetricsScope: metricsScope,

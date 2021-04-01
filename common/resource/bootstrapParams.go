@@ -62,9 +62,9 @@ type (
 		MetricsClient                metrics.Client
 		ESClient                     client.Client
 		ESConfig                     *config.Elasticsearch
-		DynamicConfig                dynamicconfig.Client
+		DynamicConfigClient          dynamicconfig.Client
 		DCRedirectionPolicy          config.DCRedirectionPolicy
-		PublicClient                 sdkclient.Client
+		SdkClient                    sdkclient.Client
 		ArchivalMetadata             archiver.ArchivalMetadata
 		ArchiverProvider             provider.ArchiverProvider
 		Authorizer                   authorization.Authorizer

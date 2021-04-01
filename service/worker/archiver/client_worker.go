@@ -57,7 +57,7 @@ type (
 
 	// BootstrapContainer contains everything need for bootstrapping
 	BootstrapContainer struct {
-		PublicClient     sdkclient.Client
+		SdkClient        sdkclient.Client
 		MetricsClient    metrics.Client
 		Logger           log.Logger
 		HistoryV2Manager persistence.HistoryManager
@@ -104,7 +104,7 @@ func NewClientWorker(container *BootstrapContainer) ClientWorker {
 		BackgroundActivityContext: actCtx,
 	}
 	clientWorker := &clientWorker{
-		worker:         worker.New(container.PublicClient, workflowTaskQueue, wo),
+		worker:         worker.New(container.SdkClient, workflowTaskQueue, wo),
 		namespaceCache: container.NamespaceCache,
 	}
 
