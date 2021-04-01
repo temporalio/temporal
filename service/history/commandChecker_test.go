@@ -85,7 +85,6 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
 	config := &configs.Config{
 		MaxIDLengthLimit:                  dynamicconfig.GetIntPropertyFn(1000),
-		ValidSearchAttributes:             dynamicconfig.GetMapPropertyFn(searchattribute.GetDefaultTypeMap()),
 		SearchAttributesNumberOfKeysLimit: dynamicconfig.GetIntPropertyFilteredByNamespace(100),
 		SearchAttributesSizeOfValueLimit:  dynamicconfig.GetIntPropertyFilteredByNamespace(2 * 1024),
 		SearchAttributesTotalSizeLimit:    dynamicconfig.GetIntPropertyFilteredByNamespace(40 * 1024),
@@ -98,7 +97,7 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 		config,
 		searchattribute.NewValidator(
 			log.NewNoopLogger(),
-			config.ValidSearchAttributes,
+			searchattribute.NewTestProvider(),
 			config.SearchAttributesNumberOfKeysLimit,
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,
@@ -158,15 +157,15 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	namespace := "testNamespace"
 	var attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes
 
-	err := s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
+	err := s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
 	s.EqualError(err, "UpsertWorkflowSearchAttributesCommandAttributes is not set on command.")
 
 	attributes = &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{}
-	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
+	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
 	s.EqualError(err, "SearchAttributes is not set on command.")
 
 	attributes.SearchAttributes = &commonpb.SearchAttributes{}
-	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
+	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
 	s.EqualError(err, "IndexedFields is empty on command.")
 
 	saPayload, err := searchattribute.EncodeValue("bytes", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
@@ -174,7 +173,7 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
 		"CustomKeywordField": saPayload,
 	}
-	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes)
+	err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
 	s.Nil(err)
 }
 

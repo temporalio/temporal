@@ -28,7 +28,6 @@ import (
 	"sync"
 
 	"go.temporal.io/server/common/config"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -37,6 +36,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -284,7 +284,8 @@ func (f *factoryImpl) NewVisibilityManager() (p.VisibilityManager, error) {
 		return nil, err
 	}
 
-	result := p.NewVisibilityManagerImpl(store, visConfig.ValidSearchAttributes, f.logger)
+	// This visibility manager is used by DB visibility only and doesn't care about search attributes.
+	result := p.NewVisibilityManagerImpl(store, searchattribute.NewSystemProvider(), "", f.logger)
 	if ds.ratelimit != nil {
 		result = p.NewVisibilityPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}

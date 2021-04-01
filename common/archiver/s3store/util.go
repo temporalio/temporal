@@ -39,7 +39,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -262,8 +261,8 @@ func contextExpired(ctx context.Context) bool {
 	}
 }
 
-func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap map[string]enumspb.IndexedValueType) (*workflowpb.WorkflowExecutionInfo, error) {
-	searchAttributes, err := searchattribute.Parse(record.SearchAttributes, saTypeMap)
+func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap searchattribute.NameTypeMap) (*workflowpb.WorkflowExecutionInfo, error) {
+	searchAttributes, err := searchattribute.Parse(record.SearchAttributes, &saTypeMap)
 	if err != nil {
 		return nil, err
 	}

@@ -33,12 +33,11 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
-
-	"go.temporal.io/server/common/log"
 )
 
 const (
@@ -135,8 +134,6 @@ func AddSearchAttributesWorkflow(ctx workflow.Context, params WorkflowParams) er
 		return fmt.Errorf("%w: UpdateClusterMetadataActivity: %v", ErrUnableToExecuteActivity, err)
 	}
 
-	// TODO: anything better?
-	workflow.GetMetricsScope(ctx).SubScope("AddSearchAttributesWorkflow").Counter("add_search_attributes_workflow_success").Inc(1)
 	logger.Info("Workflow finished successfully.", "wf-type", WorkflowName)
 	return nil
 }
@@ -184,9 +181,8 @@ func (a *activities) UpdateClusterMetadataActivity(_ context.Context, params Wor
 		return fmt.Errorf("%w: %v", ErrUnableToGetSearchAttributes, err)
 	}
 
-	oldCustomSearchAttributes := searchattribute.FilterCustom(oldSearchAttributes)
 	newCustomSearchAttributes := map[string]enumspb.IndexedValueType{}
-	for saName, saType := range oldCustomSearchAttributes {
+	for saName, saType := range oldSearchAttributes.Custom() {
 		newCustomSearchAttributes[saName] = saType
 	}
 	for saName, saType := range params.CustomAttributesToAdd {

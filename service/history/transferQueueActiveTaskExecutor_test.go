@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/searchattribute"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -77,15 +78,16 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller               *gomock.Controller
-		mockShard                *shard.ContextTest
-		mockTxProcessor          *MocktransferQueueProcessor
-		mockReplicationProcessor *MockReplicatorQueueProcessor
-		mockTimerProcessor       *MocktimerQueueProcessor
-		mockNamespaceCache       *cache.MockNamespaceCache
-		mockMatchingClient       *matchingservicemock.MockMatchingServiceClient
-		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
-		mockClusterMetadata      *cluster.MockMetadata
+		controller                   *gomock.Controller
+		mockShard                    *shard.ContextTest
+		mockTxProcessor              *MocktransferQueueProcessor
+		mockReplicationProcessor     *MockReplicatorQueueProcessor
+		mockTimerProcessor           *MocktimerQueueProcessor
+		mockNamespaceCache           *cache.MockNamespaceCache
+		mockMatchingClient           *matchingservicemock.MockMatchingServiceClient
+		mockHistoryClient            *historyservicemock.MockHistoryServiceClient
+		mockClusterMetadata          *cluster.MockMetadata
+		mockSearchAttributesProvider *searchattribute.MockProvider
 
 		mockVisibilityMgr           *persistence.MockVisibilityManager
 		mockExecutionMgr            *persistence.MockExecutionManager
@@ -180,6 +182,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
 	s.mockVisibilityMgr = s.mockShard.Resource.VisibilityMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
+	s.mockSearchAttributesProvider = s.mockShard.Resource.SearchAttributesProvider
 	s.mockArchivalMetadata = s.mockShard.Resource.ArchivalMetadata
 	s.mockArchiverProvider = s.mockShard.Resource.ArchiverProvider
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
@@ -748,6 +751,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI"))
 	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), gomock.Any()).Return(nil, nil)
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
 
 	err = s.transferQueueActiveTaskExecutor.execute(transferTask, true)
 	s.Nil(err)

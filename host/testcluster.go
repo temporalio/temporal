@@ -30,6 +30,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/pborman/uuid"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/config"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -160,7 +162,6 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			ESProcessorBulkActions:   dynamicconfig.GetIntPropertyFn(10),
 			ESProcessorBulkSize:      dynamicconfig.GetIntPropertyFn(2 << 20),
 			ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
-			ValidSearchAttributes:    dynamicconfig.GetMapPropertyFn(searchattribute.GetDefaultTypeMap()),
 		}
 		esProcessor := espersistence.NewProcessor(esProcessorConfig, esClient, logger, &metrics.NoopMetricsClient{})
 		esProcessor.Start()
@@ -168,20 +169,37 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		visConfig := &config.VisibilityConfig{
 			VisibilityListMaxQPS:   dynamicconfig.GetIntPropertyFilteredByNamespace(2000),
 			ESIndexMaxResultWindow: dynamicconfig.GetIntPropertyFn(defaultTestValueOfESIndexMaxResultWindow),
-			ValidSearchAttributes:  dynamicconfig.GetMapPropertyFn(searchattribute.GetDefaultTypeMap()),
 			ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 		}
 		indexName := options.ESConfig.GetVisibilityIndex()
 		esVisibilityStore := espersistence.NewVisibilityStore(
-			esClient, indexName, esProcessor, visConfig, logger, &metrics.NoopMetricsClient{},
+			esClient, indexName, searchattribute.NewTestProvider(), esProcessor, visConfig, logger, &metrics.NoopMetricsClient{},
 		)
-		esVisibilityMgr = persistence.NewVisibilityManagerImpl(esVisibilityStore, visConfig.ValidSearchAttributes, logger)
+		esVisibilityMgr = persistence.NewVisibilityManagerImpl(esVisibilityStore, searchattribute.NewTestProvider(), indexName, logger)
 	}
 	visibilityMgr := persistence.NewVisibilityManagerWrapper(testBase.VisibilityMgr, esVisibilityMgr,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(options.WorkerConfig.EnableIndexer), advancedVisibilityWritingMode)
 
 	pConfig := testBase.Config()
 	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
+
+	_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+		ClusterMetadata: persistencespb.ClusterMetadata{
+			HistoryShardCount: options.HistoryConfig.NumHistoryShards,
+			ClusterName:       options.ClusterMetadata.CurrentClusterName,
+			ClusterId:         uuid.New(),
+		}})
+	if err != nil {
+		return nil, err
+	}
+
+	err = testBase.SearchAttributesManager.SaveSearchAttributes(
+		options.ESConfig.GetVisibilityIndex(),
+		searchattribute.TestNameTypeMap.Custom(),
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	temporalParams := &TemporalParams{
 		ClusterMetadataConfig:            clusterMetadataConfig,
@@ -206,7 +224,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		NamespaceReplicationTaskExecutor: namespace.NewReplicationTaskExecutor(testBase.MetadataManager, logger),
 	}
 
-	err := newPProfInitializerImpl(logger, pprofTestPort).Start()
+	err = newPProfInitializerImpl(logger, pprofTestPort).Start()
 	if err != nil {
 		logger.Fatal("Failed to start pprof", tag.Error(err))
 	}

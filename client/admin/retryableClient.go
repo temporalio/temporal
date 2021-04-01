@@ -50,16 +50,32 @@ func NewRetryableClient(client adminservice.AdminServiceClient, policy backoff.R
 	}
 }
 
-func (c *retryableClient) AddSearchAttribute(
+func (c *retryableClient) AddSearchAttributes(
 	ctx context.Context,
-	request *adminservice.AddSearchAttributeRequest,
+	request *adminservice.AddSearchAttributesRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.AddSearchAttributeResponse, error) {
+) (*adminservice.AddSearchAttributesResponse, error) {
 
-	var resp *adminservice.AddSearchAttributeResponse
+	var resp *adminservice.AddSearchAttributesResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.AddSearchAttribute(ctx, request, opts...)
+		resp, err = c.client.AddSearchAttributes(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) GetSearchAttributes(
+	ctx context.Context,
+	request *adminservice.GetSearchAttributesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetSearchAttributesResponse, error) {
+
+	var resp *adminservice.GetSearchAttributesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.GetSearchAttributes(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)

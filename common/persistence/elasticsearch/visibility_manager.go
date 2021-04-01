@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 // NewVisibilityManager create a visibility manager for Elasticsearch
@@ -40,13 +41,14 @@ func NewVisibilityManager(
 	indexName string,
 	esClient client.Client,
 	cfg *config.VisibilityConfig,
+	searchAttributesProvider searchattribute.Provider,
 	processor Processor,
 	metricsClient metrics.Client,
 	log log.Logger,
 ) persistence.VisibilityManager {
 
-	visStore := NewVisibilityStore(esClient, indexName, processor, cfg, log, metricsClient)
-	visManager := persistence.NewVisibilityManagerImpl(visStore, cfg.ValidSearchAttributes, log)
+	visStore := NewVisibilityStore(esClient, indexName, searchAttributesProvider, processor, cfg, log, metricsClient)
+	visManager := persistence.NewVisibilityManagerImpl(visStore, searchAttributesProvider, indexName, log)
 
 	if cfg != nil {
 		// wrap with rate limiter

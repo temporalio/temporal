@@ -467,6 +467,7 @@ func (v *commandAttrValidator) validateSignalExternalWorkflowExecutionAttributes
 func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
 	namespace string,
 	attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
+	visibilityIndexName string,
 ) error {
 
 	if attributes == nil {
@@ -481,13 +482,14 @@ func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
 		return serviceerror.NewInvalidArgument("IndexedFields is empty on command.")
 	}
 
-	return v.searchAttributesValidator.ValidateAndLog(attributes.GetSearchAttributes(), namespace)
+	return v.searchAttributesValidator.ValidateAndLog(attributes.GetSearchAttributes(), namespace, visibilityIndexName)
 }
 
 func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 	namespace string,
 	attributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
+	visibilityIndexName string,
 ) error {
 
 	if attributes == nil {
@@ -530,7 +532,7 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 		attributes.WorkflowTaskTimeout = timestamp.DurationPtr(timestamp.DurationValue(executionInfo.DefaultWorkflowTaskTimeout))
 	}
 
-	return v.searchAttributesValidator.ValidateAndLog(attributes.GetSearchAttributes(), namespace)
+	return v.searchAttributesValidator.ValidateAndLog(attributes.GetSearchAttributes(), namespace, visibilityIndexName)
 }
 
 func (v *commandAttrValidator) validateStartChildExecutionAttributes(
@@ -540,6 +542,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	parentInfo *persistencespb.WorkflowExecutionInfo,
 	defaultWorkflowTaskTimeoutFn dynamicconfig.DurationPropertyFnWithNamespaceFilter,
+	visibilityIndexName string,
 ) error {
 
 	if err := v.validateCrossNamespaceCall(
@@ -593,7 +596,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return err
 	}
 
-	if err := v.searchAttributesValidator.ValidateAndLog(attributes.GetSearchAttributes(), targetNamespace); err != nil {
+	if err := v.searchAttributesValidator.ValidateAndLog(attributes.GetSearchAttributes(), targetNamespace, visibilityIndexName); err != nil {
 		return err
 	}
 

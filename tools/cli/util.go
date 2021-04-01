@@ -350,10 +350,15 @@ func getCurrentUserFromEnv() string {
 			return os.Getenv(n)
 		}
 	}
-	return "unkown"
+	return "unknown"
 }
 
 func prettyPrintJSONObject(o interface{}) {
+	v := reflect.ValueOf(o)
+	if o == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+		fmt.Println("nil")
+		return
+	}
 	var b []byte
 	var err error
 	if pb, ok := o.(proto.Message); ok {
@@ -364,9 +369,11 @@ func prettyPrintJSONObject(o interface{}) {
 	}
 
 	if err != nil {
-		fmt.Printf("Error when try to print pretty: %v\n", err)
+		fmt.Printf("%s. Raw data:", color.RedString("Unable to marshal object to JSON for pretty print: %v", err))
 		fmt.Println(o)
+		return
 	}
+
 	_, _ = os.Stdout.Write(b)
 	fmt.Println()
 }
@@ -413,6 +420,14 @@ func getWorkflowClientWithOptionalNamespace(c *cli.Context) sdkclient.Client {
 
 func getRequiredOption(c *cli.Context, optionName string) string {
 	value := c.String(optionName)
+	if len(value) == 0 {
+		ErrorAndExit(fmt.Sprintf("Option %s is required", optionName), nil)
+	}
+	return value
+}
+
+func getRequiredStringSliceOption(c *cli.Context, optionName string) []string {
+	value := c.StringSlice(optionName)
 	if len(value) == 0 {
 		ErrorAndExit(fmt.Sprintf("Option %s is required", optionName), nil)
 	}
@@ -807,7 +822,15 @@ func stringToEnum(search string, candidates map[string]int32) (int32, error) {
 		candidateNames = append(candidateNames, key)
 	}
 
-	return 0, fmt.Errorf("Could not find corresponding candidate for %s. Possible candidates: %q", search, candidateNames)
+	return 0, fmt.Errorf("unable to find corresponding candidate for %s from %s list", search, candidateNames)
+}
+
+func allowedEnumValues(names map[int32]string) []string {
+	result := make([]string, len(names)-1)
+	for i := 0; i < len(result); i++ {
+		result[i] = names[int32(i+1)]
+	}
+	return result
 }
 
 // prompt will show input msg, then waiting user input y/yes to continue
@@ -825,6 +848,6 @@ func prompt(msg string, autoConfirm bool) {
 
 	textLower := strings.ToLower(strings.TrimRight(text, "\n"))
 	if textLower != "y" && textLower != "yes" {
-		os.Exit(0)
+		os.Exit(1)
 	}
 }
