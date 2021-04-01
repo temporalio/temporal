@@ -544,8 +544,9 @@ func (c *certCache) isEqual(other *certCache) bool {
 	if c == nil || other == nil {
 		return false
 	}
-	if !equal(c.serverCert.Certificate, other.serverCert.Certificate) ||
-		!equal(c.workerCert.Certificate, other.workerCert.Certificate) ||
+
+	if !equalTLSCerts(c.serverCert, other.serverCert) ||
+		!equalTLSCerts(c.workerCert, other.workerCert) ||
 		!equalX509(c.clientCACerts, other.clientCACerts) ||
 		!equalX509(c.serverCACerts, other.serverCACerts) ||
 		!equalX509(c.serverCACertsWorker, other.serverCACertsWorker) {
@@ -572,6 +573,19 @@ func equalX509(a, b []*x509.Certificate) bool {
 	}
 	for i := range a {
 		if !a[i].Equal(b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func equalTLSCerts(a, b *tls.Certificate) bool {
+	if a != nil {
+		if b == nil || !equal(a.Certificate, b.Certificate) {
+			return false
+		}
+	} else {
+		if b != nil {
 			return false
 		}
 	}
