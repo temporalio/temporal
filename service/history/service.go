@@ -63,7 +63,7 @@ type Service struct {
 // NewService builds a new history service
 func NewService(
 	params *resource.BootstrapParams,
-) (resource.Resource, error) {
+) (*Service, error) {
 	logger := params.Logger
 
 	serviceConfig := configs.NewConfig(dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger),

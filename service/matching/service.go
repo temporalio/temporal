@@ -58,7 +58,7 @@ type Service struct {
 // NewService builds a new matching service
 func NewService(
 	params *resource.BootstrapParams,
-) (resource.Resource, error) {
+) (*Service, error) {
 	logger := params.Logger
 
 	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger))

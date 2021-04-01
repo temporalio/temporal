@@ -76,7 +76,7 @@ type (
 // NewService builds a new worker service
 func NewService(
 	params *resource.BootstrapParams,
-) (resource.Resource, error) {
+) (*Service, error) {
 
 	serviceConfig := NewConfig(params)
 
