@@ -107,7 +107,7 @@ func NewService(
 
 // NewConfig builds the new Config for worker service
 func NewConfig(params *resource.BootstrapParams) *Config {
-	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)
+	dc := dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger)
 	config := &Config{
 		ReplicationCfg: &replicator.Config{
 			PersistenceMaxQPS:                  dc.GetIntProperty(dynamicconfig.WorkerPersistenceMaxQPS, 500),

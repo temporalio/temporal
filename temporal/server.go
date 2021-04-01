@@ -237,7 +237,7 @@ func (s *Server) newBootstrapParams(
 	params.Name = svcName
 	params.Logger = s.logger
 	params.PersistenceConfig = s.so.config.Persistence
-	params.DynamicConfig = s.so.dynamicConfigClient
+	params.DynamicConfigClient = s.so.dynamicConfigClient
 	params.ClusterMetadataConfig = s.so.config.ClusterMetadata
 
 	svcCfg := s.so.config.Services[svcName]

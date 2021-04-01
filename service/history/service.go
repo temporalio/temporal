@@ -65,7 +65,7 @@ type Service struct {
 func NewService(
 	params *resource.BootstrapParams,
 ) (resource.Resource, error) {
-	serviceConfig := configs.NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
+	serviceConfig := configs.NewConfig(dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger),
 		params.PersistenceConfig.NumHistoryShards,
 		params.PersistenceConfig.IsAdvancedVisibilityConfigExist())
 

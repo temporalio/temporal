@@ -61,7 +61,7 @@ func NewService(
 	params *resource.BootstrapParams,
 ) (resource.Resource, error) {
 
-	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger))
+	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger))
 	serviceResource, err := resource.New(
 		params,
 		common.MatchingServiceName,

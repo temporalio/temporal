@@ -30,11 +30,6 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/searchattribute"
-
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -42,11 +37,14 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -54,7 +52,10 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/xdc"
 )
 
@@ -70,7 +71,9 @@ type (
 		status int32
 
 		numberOfHistoryShards int32
-		params                *resource.BootstrapParams
+		ESConfig              *config.Elasticsearch
+		ESClient              esclient.Client
+		DynamicConfigClient   dynamicconfig.Client
 		config                *Config
 		namespaceDLQHandler   namespace.DLQMessageHandler
 		eventSerializder      persistence.PayloadSerializer
@@ -99,14 +102,16 @@ func NewAdminHandler(
 		Resource:              resource,
 		status:                common.DaemonStatusInitialized,
 		numberOfHistoryShards: params.PersistenceConfig.NumHistoryShards,
-		params:                params,
 		config:                config,
 		namespaceDLQHandler: namespace.NewDLQMessageHandler(
 			namespaceReplicationTaskExecutor,
 			resource.GetNamespaceReplicationQueue(),
 			resource.GetLogger(),
 		),
-		eventSerializder: persistence.NewPayloadSerializer(),
+		eventSerializder:    persistence.NewPayloadSerializer(),
+		DynamicConfigClient: params.DynamicConfigClient,
+		ESConfig:            params.ESConfig,
+		ESClient:            params.ESClient,
 	}
 }
 
@@ -159,7 +164,7 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 	}
 
 	searchAttr := request.GetSearchAttribute()
-	currentValidAttr, _ := adh.params.DynamicConfig.GetMapValue(
+	currentValidAttr, _ := adh.DynamicConfigClient.GetMapValue(
 		dynamicconfig.ValidSearchAttributes, nil, searchattribute.GetDefaultTypeMap())
 	for k, v := range searchAttr {
 		if searchattribute.IsReservedField(k) || searchattribute.IsBuiltIn(k) {
@@ -173,19 +178,19 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 	}
 
 	// update dynamic config
-	err := adh.params.DynamicConfig.UpdateValue(dynamicconfig.ValidSearchAttributes, currentValidAttr)
+	err := adh.DynamicConfigClient.UpdateValue(dynamicconfig.ValidSearchAttributes, currentValidAttr)
 	if err != nil {
 		return nil, adh.error(serviceerror.NewInternal(fmt.Sprintf(errFailedUpdateDynamicConfigMessage, err)), scope)
 	}
 
 	// update elasticsearch mapping, new added field will not be able to remove or update
-	index := adh.params.ESConfig.GetVisibilityIndex()
+	index := adh.ESConfig.GetVisibilityIndex()
 	for k, v := range searchAttr {
 		esType := searchattribute.GetESType(v)
 		if len(esType) == 0 {
 			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errUnknownValueTypeMessage, v)), scope)
 		}
-		err := adh.params.ESClient.PutMapping(ctx, index, searchattribute.Attr, k, esType)
+		err := adh.ESClient.PutMapping(ctx, index, searchattribute.Attr, k, esType)
 		if err != nil {
 			return nil, adh.error(serviceerror.NewInternal(fmt.Sprintf(errFailedToUpdateESMappingMessage, err)), scope)
 		}
@@ -938,7 +943,7 @@ func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 }
 
 func (adh *AdminHandler) validateConfigForAdvanceVisibility() error {
-	if adh.params.ESConfig == nil || adh.params.ESClient == nil {
+	if adh.ESConfig == nil || adh.ESClient == nil {
 		return errors.New("ES related config not found")
 	}
 	return nil
