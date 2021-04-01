@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common/config"
 
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/resource"
@@ -55,8 +54,6 @@ type (
 		PersistenceMaxQPS dynamicconfig.IntPropertyFn
 		// Persistence contains the persistence configuration
 		Persistence *config.Persistence
-		// ClusterMetadata contains the metadata for this cluster
-		ClusterMetadata cluster.Metadata
 		// TaskQueueScannerEnabled indicates if taskQueue scanner should be started as part of scanner
 		TaskQueueScannerEnabled dynamicconfig.BoolPropertyFn
 		// HistoryScannerEnabled indicates if history scanner should be started as part of scanner

@@ -129,14 +129,11 @@ func NewConfig(params *resource.BootstrapParams) *Config {
 		ScannerCfg: &scanner.Config{
 			PersistenceMaxQPS:        dc.GetIntProperty(dynamicconfig.ScannerPersistenceMaxQPS, 100),
 			Persistence:              &params.PersistenceConfig,
-			ClusterMetadata:          params.ClusterMetadata,
 			TaskQueueScannerEnabled:  dc.GetBoolProperty(dynamicconfig.TaskQueueScannerEnabled, true),
 			HistoryScannerEnabled:    dc.GetBoolProperty(dynamicconfig.HistoryScannerEnabled, true),
 			ExecutionsScannerEnabled: dc.GetBoolProperty(dynamicconfig.ExecutionsScannerEnabled, false),
 		},
-		BatcherCfg: &batcher.Config{
-			ClusterMetadata: params.ClusterMetadata,
-		},
+		BatcherCfg:                    &batcher.Config{},
 		EnableBatcher:                 dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
 		EnableParentClosePolicyWorker: dc.GetBoolProperty(dynamicconfig.EnableParentClosePolicyWorker, true),
 		ThrottledLogRPS:               dc.GetIntProperty(dynamicconfig.WorkerThrottledLogRPS, 20),
