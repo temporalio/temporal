@@ -395,7 +395,6 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 
 func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	handler := s.handler
-	handler.params = &resource.BootstrapParams{}
 	ctx := context.Background()
 
 	type test struct {
@@ -431,17 +430,17 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 		s.Nil(resp)
 	}
 
-	dynamicConfig := dynamicconfig.NewMockClient(s.controller)
-	handler.params.DynamicConfig = dynamicConfig
+	dynamicConfigClient := dynamicconfig.NewMockClient(s.controller)
+	handler.DynamicConfigClient = dynamicConfigClient
 	// add advanced visibility store related config
-	handler.params.ESConfig = &config.Elasticsearch{}
+	handler.ESConfig = &config.Elasticsearch{}
 	esClient := client.NewMockClient(s.controller)
-	handler.params.ESClient = esClient
+	handler.ESClient = esClient
 
 	mockValidAttr := map[string]interface{}{
 		"testkey": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
-	dynamicConfig.EXPECT().GetMapValue(dynamicconfig.ValidSearchAttributes, nil, searchattribute.GetDefaultTypeMap()).
+	dynamicConfigClient.EXPECT().GetMapValue(dynamicconfig.ValidSearchAttributes, nil, searchattribute.GetDefaultTypeMap()).
 		Return(mockValidAttr, nil).AnyTimes()
 
 	testCases2 := []test{
@@ -479,7 +478,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 		},
 		Expected: &serviceerror.Internal{Message: "Failed to update dynamic config, err: error."},
 	}
-	dynamicConfig.EXPECT().UpdateValue(dynamicconfig.ValidSearchAttributes, map[string]interface{}{
+	dynamicConfigClient.EXPECT().UpdateValue(dynamicconfig.ValidSearchAttributes, map[string]interface{}{
 		"testkey":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		"testkey2": 1,
 	}).Return(errors.New("error"))
@@ -489,7 +488,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	s.Nil(resp)
 
 	// ES operations tests
-	dynamicConfig.EXPECT().UpdateValue(gomock.Any(), gomock.Any()).Return(nil).Times(2)
+	dynamicConfigClient.EXPECT().UpdateValue(gomock.Any(), gomock.Any()).Return(nil).Times(2)
 
 	convertFailedTest := test{
 		Name: "unknown value type",
