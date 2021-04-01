@@ -129,5 +129,5 @@ var (
 )
 
 var (
-	cliDataConverter = converter.GetDefaultDataConverter()
+	cliDataConverter converter.DataConverter = converter.GetDefaultDataConverter()
 )
