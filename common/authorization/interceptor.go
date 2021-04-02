@@ -28,12 +28,11 @@ import (
 	"context"
 	"crypto/x509/pkix"
 
+	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
-
-	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
