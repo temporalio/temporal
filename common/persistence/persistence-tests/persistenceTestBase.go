@@ -178,7 +178,7 @@ func NewTestBase(options *TestBaseOptions) TestBase {
 func newTestBase(options *TestBaseOptions, testCluster PersistenceTestCluster, logger log.Logger) TestBase {
 	metadata := options.ClusterMetadata
 	if metadata == nil {
-		metadata = cluster.GetTestClusterMetadata(false, false)
+		metadata = cluster.GetTestClusterMetadata(cluster.GetTestClusterMetadataConfig(false, false))
 	}
 	options.ClusterMetadata = metadata
 	base := TestBase{
@@ -980,8 +980,8 @@ func (s *TestBase) GetReplicationTasks(batchSize int, getAll bool) ([]*persisten
 Loop:
 	for {
 		response, err := s.ExecutionManager.GetReplicationTasks(&persistence.GetReplicationTasksRequest{
-			ReadLevel:     s.GetReplicationReadLevel(),
-			MaxReadLevel:  int64(math.MaxInt64),
+			MinTaskID:     s.GetReplicationReadLevel(),
+			MaxTaskID:     int64(math.MaxInt64),
 			BatchSize:     batchSize,
 			NextPageToken: token,
 		})
@@ -1034,8 +1034,8 @@ func (s *TestBase) GetReplicationTasksFromDLQ(
 	return s.ExecutionManager.GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
 		SourceClusterName: sourceCluster,
 		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
-			ReadLevel:     readLevel,
-			MaxReadLevel:  maxReadLevel,
+			MinTaskID:     readLevel,
+			MaxTaskID:     maxReadLevel,
 			BatchSize:     pageSize,
 			NextPageToken: pageToken,
 		},

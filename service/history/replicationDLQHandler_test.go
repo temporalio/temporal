@@ -172,8 +172,8 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
 		SourceClusterName: s.sourceCluster,
 		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
-			ReadLevel:     persistence.EmptyQueueMessageID,
-			MaxReadLevel:  lastMessageID,
+			MinTaskID:     persistence.EmptyQueueMessageID,
+			MaxTaskID:     lastMessageID,
 			BatchSize:     pageSize,
 			NextPageToken: pageToken,
 		},
@@ -255,8 +255,8 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
 		SourceClusterName: s.sourceCluster,
 		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
-			ReadLevel:     persistence.EmptyQueueMessageID,
-			MaxReadLevel:  lastMessageID,
+			MinTaskID:     persistence.EmptyQueueMessageID,
+			MaxTaskID:     lastMessageID,
 			BatchSize:     pageSize,
 			NextPageToken: pageToken,
 		},

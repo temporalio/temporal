@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
@@ -58,14 +57,14 @@ type (
 		RPCFactory                   common.RPCFactory
 		AbstractDatastoreFactory     persistenceClient.AbstractDataStoreFactory
 		PersistenceConfig            config.Persistence
-		ClusterMetadata              cluster.Metadata
+		ClusterMetadataConfig        *config.ClusterMetadata
 		ReplicatorConfig             config.Replicator
 		MetricsClient                metrics.Client
 		ESClient                     client.Client
 		ESConfig                     *config.Elasticsearch
-		DynamicConfig                dynamicconfig.Client
+		DynamicConfigClient          dynamicconfig.Client
 		DCRedirectionPolicy          config.DCRedirectionPolicy
-		PublicClient                 sdkclient.Client
+		SdkClient                    sdkclient.Client
 		ArchivalMetadata             archiver.ArchivalMetadata
 		ArchiverProvider             provider.ArchiverProvider
 		Authorizer                   authorization.Authorizer

@@ -261,11 +261,11 @@ func (s *ContextImpl) GetClusterReplicationLevel(cluster string) int64 {
 	return persistence.EmptyQueueMessageID
 }
 
-func (s *ContextImpl) UpdateClusterReplicationLevel(cluster string, lastTaskID int64) error {
+func (s *ContextImpl) UpdateClusterReplicationLevel(cluster string, ackTaskID int64) error {
 	s.Lock()
 	defer s.Unlock()
 
-	s.shardInfo.ClusterReplicationLevel[cluster] = lastTaskID
+	s.shardInfo.ClusterReplicationLevel[cluster] = ackTaskID
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
 }
@@ -709,6 +709,7 @@ func (s *ContextImpl) AddTasks(
 		s.engine.NotifyNewTransferTasks(request.TransferTasks)
 		s.engine.NotifyNewTimerTasks(request.TimerTasks)
 		s.engine.NotifyNewVisibilityTasks(request.VisibilityTasks)
+		s.engine.NotifyNewReplicationTasks(request.ReplicationTasks)
 		return nil
 	case *persistence.TimeoutError:
 		// noop
@@ -878,7 +879,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 
 func (s *ContextImpl) updateMaxReadLevelLocked(rl int64) {
 	if rl > s.transferMaxReadLevel {
-		s.logger.Debug("Updating MaxReadLevel", tag.MaxLevel(rl))
+		s.logger.Debug("Updating MaxTaskID", tag.MaxLevel(rl))
 		s.transferMaxReadLevel = rl
 	}
 }

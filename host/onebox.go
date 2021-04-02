@@ -37,6 +37,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"google.golang.org/grpc"
 
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -46,7 +47,6 @@ import (
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -88,7 +88,7 @@ type (
 		frontendClient                   workflowservice.WorkflowServiceClient
 		historyClient                    historyservice.HistoryServiceClient
 		logger                           log.Logger
-		clusterMetadata                  cluster.Metadata
+		clusterMetadataConfig            *config.ClusterMetadata
 		persistenceConfig                config.Persistence
 		metadataMgr                      persistence.MetadataManager
 		shardMgr                         persistence.ShardManager
@@ -122,7 +122,7 @@ type (
 
 	// TemporalParams contains everything needed to bootstrap Temporal
 	TemporalParams struct {
-		ClusterMetadata                  cluster.Metadata
+		ClusterMetadataConfig            *config.ClusterMetadata
 		PersistenceConfig                config.Persistence
 		MetadataMgr                      persistence.MetadataManager
 		ShardMgr                         persistence.ShardManager
@@ -154,7 +154,7 @@ type (
 func NewTemporal(params *TemporalParams) Temporal {
 	return &temporalImpl{
 		logger:                           params.Logger,
-		clusterMetadata:                  params.ClusterMetadata,
+		clusterMetadataConfig:            params.ClusterMetadataConfig,
 		persistenceConfig:                params.PersistenceConfig,
 		metadataMgr:                      params.MetadataMgr,
 		visibilityMgr:                    params.VisibilityMgr,
@@ -364,7 +364,7 @@ func (c *temporalImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 }
 
 func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.WaitGroup) {
-	params := new(resource.BootstrapParams)
+	params := &resource.BootstrapParams{}
 	params.DCRedirectionPolicy = config.DCRedirectionPolicy{}
 	params.Name = common.FrontendServiceName
 	params.Logger = c.logger
@@ -375,9 +375,9 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
 	}
-	params.ClusterMetadata = c.clusterMetadata
+	params.ClusterMetadataConfig = c.clusterMetadataConfig
 	params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
-	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNoopClient())
+	params.DynamicConfigClient = newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 	params.ESConfig = c.esConfig
@@ -430,7 +430,7 @@ func (c *temporalImpl) startHistory(
 ) {
 	membershipPorts := c.HistoryServiceAddress(2)
 	for i, grpcPort := range c.HistoryServiceAddress(3) {
-		params := new(resource.BootstrapParams)
+		params := &resource.BootstrapParams{}
 		params.Name = common.HistoryServiceName
 		params.Logger = c.logger
 		params.ThrottledLogger = c.logger
@@ -439,14 +439,14 @@ func (c *temporalImpl) startHistory(
 		params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
 			return newMembershipFactory(params.Name, hosts), nil
 		}
-		params.ClusterMetadata = c.clusterMetadata
+		params.ClusterMetadataConfig = c.clusterMetadataConfig
 		params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 		c.overrideHistoryDynamicConfig(integrationClient)
-		params.DynamicConfig = integrationClient
+		params.DynamicConfigClient = integrationClient
 
 		var err error
-		params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
+		params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
 			HostPort:     c.FrontendGRPCAddress(),
 			Namespace:    common.SystemLocalNamespace,
 			MetricsScope: params.MetricsScope,
@@ -513,7 +513,7 @@ func (c *temporalImpl) startHistory(
 
 func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.WaitGroup) {
 
-	params := new(resource.BootstrapParams)
+	params := &resource.BootstrapParams{}
 	params.Name = common.MatchingServiceName
 	params.Logger = c.logger
 	params.ThrottledLogger = c.logger
@@ -522,9 +522,9 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
 	}
-	params.ClusterMetadata = c.clusterMetadata
+	params.ClusterMetadataConfig = c.clusterMetadataConfig
 	params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
-	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNoopClient())
+	params.DynamicConfigClient = newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
@@ -556,7 +556,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 }
 
 func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.WaitGroup) {
-	params := new(resource.BootstrapParams)
+	params := &resource.BootstrapParams{}
 	params.Name = common.WorkerServiceName
 	params.Logger = c.logger
 	params.ThrottledLogger = c.logger
@@ -565,9 +565,9 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
 	}
-	params.ClusterMetadata = c.clusterMetadata
+	params.ClusterMetadataConfig = c.clusterMetadataConfig
 	params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
-	params.DynamicConfig = newIntegrationConfigClient(dynamicconfig.NewNoopClient())
+	params.DynamicConfigClient = newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
@@ -578,7 +578,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	}
 	params.PersistenceServiceResolver = resolver.NewNoopResolver()
 
-	params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
+	params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
 		HostPort:     c.FrontendGRPCAddress(),
 		Namespace:    common.SystemLocalNamespace,
 		MetricsScope: params.MetricsScope,
@@ -609,18 +609,19 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	c.workerService = service
 	service.Start()
 
+	clusterMetadata := cluster.GetTestClusterMetadata(c.clusterMetadataConfig)
 	var replicatorNamespaceCache cache.NamespaceCache
 	if c.workerConfig.EnableReplicator {
 		metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
-		replicatorNamespaceCache = cache.NewNamespaceCache(metadataManager, params.ClusterMetadata, service.GetMetricsClient(), service.GetLogger())
+		replicatorNamespaceCache = cache.NewNamespaceCache(metadataManager, clusterMetadata, service.GetMetricsClient(), service.GetLogger())
 		replicatorNamespaceCache.Start()
-		c.startWorkerReplicator(params, service, replicatorNamespaceCache)
+		c.startWorkerReplicator(params, service, clusterMetadata)
 	}
 
 	var clientWorkerNamespaceCache cache.NamespaceCache
 	if c.workerConfig.EnableArchiver {
 		metadataProxyManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
-		clientWorkerNamespaceCache = cache.NewNamespaceCache(metadataProxyManager, params.ClusterMetadata, service.GetMetricsClient(), service.GetLogger())
+		clientWorkerNamespaceCache = cache.NewNamespaceCache(metadataProxyManager, clusterMetadata, service.GetMetricsClient(), service.GetLogger())
 		clientWorkerNamespaceCache.Start()
 		c.startWorkerClientWorker(params, service, clientWorkerNamespaceCache)
 	}
@@ -636,7 +637,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	c.shutdownWG.Done()
 }
 
-func (c *temporalImpl) startWorkerReplicator(params *resource.BootstrapParams, service resource.Resource, namespaceCache cache.NamespaceCache) {
+func (c *temporalImpl) startWorkerReplicator(params *resource.BootstrapParams, service resource.Resource, clusterMetadata cluster.Metadata) {
 	workerConfig := worker.NewConfig(params)
 	workerConfig.ReplicationCfg.ReplicatorMessageConcurrency = dynamicconfig.GetIntPropertyFn(10)
 	serviceResolver, err := service.GetMembershipMonitor().GetResolver(common.WorkerServiceName)
@@ -644,7 +645,7 @@ func (c *temporalImpl) startWorkerReplicator(params *resource.BootstrapParams, s
 		c.logger.Fatal("Fail to start replicator when start worker", tag.Error(err))
 	}
 	c.replicator = replicator.NewReplicator(
-		c.clusterMetadata,
+		clusterMetadata,
 		service.GetClientBean(),
 		workerConfig.ReplicationCfg,
 		c.logger,
@@ -662,7 +663,7 @@ func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams,
 	workerConfig.ArchiverConfig.ArchiverConcurrency = dynamicconfig.GetIntPropertyFn(10)
 
 	bc := &archiver.BootstrapContainer{
-		PublicClient:     params.PublicClient,
+		SdkClient:        params.SdkClient,
 		MetricsClient:    service.GetMetricsClient(),
 		Logger:           c.logger,
 		HistoryV2Manager: c.historyV2Mgr,
@@ -678,7 +679,7 @@ func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams,
 }
 
 func (c *temporalImpl) createSystemNamespace() error {
-	err := c.metadataMgr.InitializeSystemNamespaces(c.clusterMetadata.GetCurrentClusterName())
+	err := c.metadataMgr.InitializeSystemNamespaces(c.clusterMetadataConfig.CurrentClusterName)
 	if err != nil {
 		return fmt.Errorf("failed to create temporal-system namespace: %v", err)
 	}

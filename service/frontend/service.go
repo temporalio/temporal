@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
 	"go.temporal.io/server/common/config"
@@ -112,6 +113,22 @@ type Config struct {
 
 	// EnableTokenNamespaceEnforcement enables enforcement that namespace in completion token matches namespace of the request
 	EnableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn
+
+	// gRPC keep alive options
+	// If a client pings too frequently, terminate the connection.
+	KeepAliveMinTime dynamicconfig.DurationPropertyFn
+	//  Allow pings even when there are no active streams (RPCs)
+	KeepAlivePermitWithoutStream dynamicconfig.BoolPropertyFn
+	// Close the connection if a client is idle.
+	KeepAliveMaxConnectionIdle dynamicconfig.DurationPropertyFn
+	// Close the connection if it is too old.
+	KeepAliveMaxConnectionAge dynamicconfig.DurationPropertyFn
+	// Additive period after MaxConnectionAge after which the connection will be forcibly closed.
+	KeepAliveMaxConnectionAgeGrace dynamicconfig.DurationPropertyFn
+	// Ping the client if it is idle to ensure the connection is still active.
+	KeepAliveTime dynamicconfig.DurationPropertyFn
+	// Wait for the ping ack before assuming the connection is dead.
+	KeepAliveTimeout dynamicconfig.DurationPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -152,6 +169,13 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		DefaultWorkflowTaskTimeout:             dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
 		EnableServerVersionCheck:               dc.GetBoolProperty(dynamicconfig.EnableServerVersionCheck, os.Getenv("TEMPORAL_VERSION_CHECK_DISABLED") == ""),
 		EnableTokenNamespaceEnforcement:        dc.GetBoolProperty(dynamicconfig.EnableTokenNamespaceEnforcement, false),
+		KeepAliveMinTime:                       dc.GetDurationProperty(dynamicconfig.KeepAliveMinTime, 10*time.Second),
+		KeepAlivePermitWithoutStream:           dc.GetBoolProperty(dynamicconfig.KeepAlivePermitWithoutStream, true),
+		KeepAliveMaxConnectionIdle:             dc.GetDurationProperty(dynamicconfig.KeepAliveMaxConnectionIdle, 2*time.Minute),
+		KeepAliveMaxConnectionAge:              dc.GetDurationProperty(dynamicconfig.KeepAliveMaxConnectionAge, 5*time.Minute),
+		KeepAliveMaxConnectionAgeGrace:         dc.GetDurationProperty(dynamicconfig.KeepAliveMaxConnectionAgeGrace, 70*time.Second),
+		KeepAliveTime:                          dc.GetDurationProperty(dynamicconfig.KeepAliveTime, 1*time.Minute),
+		KeepAliveTimeout:                       dc.GetDurationProperty(dynamicconfig.KeepAliveTimeout, 10*time.Second),
 	}
 }
 
@@ -161,7 +185,6 @@ type Service struct {
 
 	status int32
 	config *Config
-	params *resource.BootstrapParams
 
 	handler        Handler
 	adminHandler   *AdminHandler
@@ -172,10 +195,10 @@ type Service struct {
 // NewService builds a new frontend service
 func NewService(
 	params *resource.BootstrapParams,
-) (resource.Resource, error) {
+) (*Service, error) {
 
 	isAdvancedVisExistInConfig := len(params.PersistenceConfig.AdvancedVisibilityStore) != 0
-	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger), params.PersistenceConfig.NumHistoryShards, isAdvancedVisExistInConfig)
+	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger), params.PersistenceConfig.NumHistoryShards, isAdvancedVisExistInConfig)
 
 	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
 		VisibilityListMaxQPS:  serviceConfig.VisibilityListMaxQPS,
@@ -221,11 +244,81 @@ func NewService(
 		return nil, err
 	}
 
+	var namespaceReplicationQueue persistence.NamespaceReplicationQueue
+	clusterMetadata := serviceResource.GetClusterMetadata()
+	if clusterMetadata.IsGlobalNamespaceEnabled() {
+		namespaceReplicationQueue = serviceResource.GetNamespaceReplicationQueue()
+	}
+
+	metricsInterceptor := interceptor.NewTelemetryInterceptor(
+		serviceResource.GetNamespaceCache(),
+		serviceResource.GetMetricsClient(),
+		metrics.FrontendAPIMetricsScopes(),
+		serviceResource.GetLogger(),
+	)
+	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
+		func() float64 { return float64(serviceConfig.RPS()) },
+		APIRateLimitOverride,
+	)
+	namespaceRateLimiterInterceptor := interceptor.NewNamespaceRateLimitInterceptor(
+		serviceResource.GetNamespaceCache(),
+		func(namespace string) float64 {
+			return float64(serviceConfig.MaxNamespaceRPSPerInstance(namespace))
+		},
+		APIRateLimitOverride,
+	)
+	namespaceCountLimiterInterceptor := interceptor.NewNamespaceCountLimitInterceptor(
+		serviceResource.GetNamespaceCache(),
+		serviceConfig.MaxNamespaceCountPerInstance,
+		APICountLimitOverride,
+	)
+
+	kep := keepalive.EnforcementPolicy{
+		MinTime:             serviceConfig.KeepAliveMinTime(),
+		PermitWithoutStream: serviceConfig.KeepAlivePermitWithoutStream(),
+	}
+	var kp = keepalive.ServerParameters{
+		MaxConnectionIdle:     serviceConfig.KeepAliveMaxConnectionIdle(),
+		MaxConnectionAge:      serviceConfig.KeepAliveMaxConnectionAge(),
+		MaxConnectionAgeGrace: serviceConfig.KeepAliveMaxConnectionAgeGrace(),
+		Time:                  serviceConfig.KeepAliveTime(),
+		Timeout:               serviceConfig.KeepAliveTimeout(),
+	}
+
+	grpcServerOptions, err := params.RPCFactory.GetFrontendGRPCServerOptions()
+	if err != nil {
+		params.Logger.Fatal("creating gRPC server options failed", tag.Error(err))
+	}
+	grpcServerOptions = append(
+		grpcServerOptions,
+		grpc.KeepaliveParams(kp),
+		grpc.KeepaliveEnforcementPolicy(kep),
+		grpc.ChainUnaryInterceptor(
+			rpc.ServiceErrorInterceptor,
+			metricsInterceptor.Intercept,
+			rateLimiterInterceptor.Intercept,
+			namespaceRateLimiterInterceptor.Intercept,
+			namespaceCountLimiterInterceptor.Intercept,
+			authorization.NewAuthorizationInterceptor(
+				params.ClaimMapper,
+				params.Authorizer,
+				serviceResource.GetMetricsClient(),
+				params.Logger,
+			),
+		),
+	)
+
+	wfHandler := NewWorkflowHandler(serviceResource, serviceConfig, namespaceReplicationQueue)
+	handler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy)
+
 	return &Service{
-		Resource: serviceResource,
-		status:   common.DaemonStatusInitialized,
-		config:   serviceConfig,
-		params:   params,
+		Resource:       serviceResource,
+		status:         common.DaemonStatusInitialized,
+		config:         serviceConfig,
+		server:         grpc.NewServer(grpcServerOptions...),
+		handler:        handler,
+		adminHandler:   NewAdminHandler(serviceResource, params, serviceConfig),
+		versionChecker: NewVersionChecker(serviceConfig, params.MetricsClient, serviceResource.GetClusterMetadataManager()),
 	}, nil
 }
 
@@ -238,66 +331,12 @@ func (s *Service) Start() {
 	logger := s.GetLogger()
 	logger.Info("frontend starting")
 
-	var namespaceReplicationQueue persistence.NamespaceReplicationQueue
-	clusterMetadata := s.GetClusterMetadata()
-	if clusterMetadata.IsGlobalNamespaceEnabled() {
-		namespaceReplicationQueue = s.GetNamespaceReplicationQueue()
-	}
-
-	metricsInterceptor := interceptor.NewTelemetryInterceptor(
-		s.Resource.GetMetricsClient(),
-		metrics.FrontendAPIMetricsScopes(),
-		s.Resource.GetLogger(),
-	)
-	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
-		func() float64 { return float64(s.config.RPS()) },
-		APIRateLimitOverride,
-	)
-	namespaceRateLimiterInterceptor := interceptor.NewNamespaceRateLimitInterceptor(
-		func(namespace string) float64 {
-			return float64(s.config.MaxNamespaceRPSPerInstance(namespace))
-		},
-		APIRateLimitOverride,
-	)
-	namespaceCountLimiterInterceptor := interceptor.NewNamespaceCountLimitInterceptor(
-		s.config.MaxNamespaceCountPerInstance,
-		APICountLimitOverride,
-	)
-
-	opts, err := s.params.RPCFactory.GetFrontendGRPCServerOptions()
-	if err != nil {
-		logger.Fatal("creating grpc server options failed", tag.Error(err))
-	}
-	opts = append(
-		opts,
-		grpc.ChainUnaryInterceptor(
-			rpc.ServiceErrorInterceptor,
-			metricsInterceptor.Intercept,
-			rateLimiterInterceptor.Intercept,
-			namespaceRateLimiterInterceptor.Intercept,
-			namespaceCountLimiterInterceptor.Intercept,
-			authorization.NewAuthorizationInterceptor(
-				s.params.ClaimMapper,
-				s.params.Authorizer,
-				s.Resource.GetMetricsClient(),
-				s.GetLogger(),
-			),
-		),
-	)
-	s.server = grpc.NewServer(opts...)
-
-	wfHandler := NewWorkflowHandler(s, s.config, namespaceReplicationQueue)
-	s.handler = NewDCRedirectionHandler(wfHandler, s.params.DCRedirectionPolicy)
-
 	workflowservice.RegisterWorkflowServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.handler)
 
-	s.adminHandler = NewAdminHandler(s, s.params, s.config)
 	adminservice.RegisterAdminServiceServer(s.server, s.adminHandler)
 
 	reflection.Register(s.server)
-
-	s.versionChecker = NewVersionChecker(s, s.params, s.config)
 
 	// must start resource first
 	s.Resource.Start()
@@ -313,6 +352,8 @@ func (s *Service) Start() {
 
 // Stop stops the service
 func (s *Service) Stop() {
+	logger := s.GetLogger()
+
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
@@ -327,20 +368,20 @@ func (s *Service) Stop() {
 	requestDrainTime := common.MinDuration(time.Second, s.config.ShutdownDrainDuration())
 	failureDetectionTime := common.MaxDuration(0, s.config.ShutdownDrainDuration()-requestDrainTime)
 
-	s.GetLogger().Info("ShutdownHandler: Updating rpc health status to ShuttingDown")
+	logger.Info("ShutdownHandler: Updating rpc health status to ShuttingDown")
 	s.handler.UpdateHealthStatus(HealthStatusShuttingDown)
 
-	s.GetLogger().Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
+	logger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	time.Sleep(failureDetectionTime)
 
 	s.adminHandler.Stop()
 	s.versionChecker.Stop()
 
-	s.GetLogger().Info("ShutdownHandler: Draining traffic")
+	logger.Info("ShutdownHandler: Draining traffic")
 	time.Sleep(requestDrainTime)
 
 	// TODO: Change this to GracefulStop when integration tests are refactored.
 	s.server.Stop()
 	s.Resource.Stop()
-	s.params.Logger.Info("frontend stopped")
+	logger.Info("frontend stopped")
 }

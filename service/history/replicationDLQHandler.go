@@ -117,8 +117,8 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 	resp, err := r.shard.GetExecutionManager().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
 		SourceClusterName: sourceCluster,
 		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
-			ReadLevel:     ackLevel,
-			MaxReadLevel:  lastMessageID,
+			MinTaskID:     ackLevel,
+			MaxTaskID:     lastMessageID,
 			BatchSize:     pageSize,
 			NextPageToken: pageToken,
 		},
