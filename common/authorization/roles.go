@@ -54,7 +54,7 @@ type Claims struct {
 	// Roles within specific namespaces
 	Namespaces map[string]Role
 	// Free form bucket for extra data
-	ExtraData interface{}
+	Extensions interface{}
 }
 
 // @@@SNIPEND
