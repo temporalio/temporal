@@ -52,6 +52,11 @@ const (
 	Internode
 )
 
+const (
+	localhostIPv4 = "127.0.0.1"
+	localhost     = "localhost"
+)
+
 type TestFactory struct {
 	*rpc.RPCFactory
 	serverUsage ServerUsageType
@@ -66,12 +71,12 @@ var (
 	rpcTestCfgDefault = &config.RPC{
 		GRPCPort:       0,
 		MembershipPort: 7600,
-		BindOnIP:       "127.0.0.1",
+		BindOnIP:       localhostIPv4,
 	}
 	serverCfgInsecure = &config.Global{
 		Membership: config.Membership{
 			MaxJoinDuration:  5,
-			BroadcastAddress: "127.0.0.1",
+			BroadcastAddress: localhostIPv4,
 		},
 	}
 )
@@ -130,6 +135,20 @@ func runHelloWorldMultipleDials(
 	}
 }
 
+func runHelloWorldWithRefresh(
+	s suite.Suite,
+	host string,
+	serverFactory *TestFactory,
+	clientFactory *TestFactory,
+	validator func(*credentials.TLSInfo, error)) {
+
+	server, port := startHelloWorldServer(s, serverFactory)
+	defer server.Stop()
+
+	tlsInfo, err := dialHelloAndGetTLSInfo(s, host+":"+port, clientFactory, serverFactory.serverUsage)
+	validator(tlsInfo, err)
+}
+
 func dialHello(s suite.Suite, hostport string, clientFactory *TestFactory, serverType ServerUsageType) error {
 	_, err := dialHelloAndGetTLSInfo(s, hostport, clientFactory, serverType)
 	return err
@@ -167,4 +186,16 @@ func dialHelloAndGetTLSInfo(
 
 	_ = clientConn.Close()
 	return &tlsInfo, err
+}
+
+func certFilePath(dir string) string {
+	return dir + "/cert_pub.pem"
+}
+
+func keyFilePath(dir string) string {
+	return dir + "/cert_priv.pem"
+}
+
+func caFilePath(dir string) string {
+	return dir + "/ca_pub.pem"
 }

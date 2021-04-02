@@ -46,6 +46,11 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 )
 
+const (
+	internodeServerCertSerialNumber = 100
+	frontendServerCertSerialNumber  = 150
+)
+
 type localStoreRPCSuite struct {
 	*require.Assertions
 	suite.Suite
@@ -61,16 +66,24 @@ type localStoreRPCSuite struct {
 	frontendSystemWorkerMutualTLSRPCFactory *TestFactory
 	frontendDynamicTLSFactory               *TestFactory
 	internodeDynamicTLSFactory              *TestFactory
+	internodeMutualTLSRPCRefreshFactory     *TestFactory
+	frontendMutualTLSRPCRefreshFactory      *TestFactory
 
-	internodeCertDir       string
-	frontendCertDir        string
-	frontendAltCertDir     string
-	frontendRollingCertDir string
+	internodeCertDir        string
+	frontendCertDir         string
+	frontendAltCertDir      string
+	frontendRollingCertDir  string
+	internodeRefreshCertDir string
+	frontendRefreshCertDir  string
 
-	internodeChain       CertChain
-	frontendChain        CertChain
-	frontendAltChain     CertChain
-	frontendRollingCerts []*tls.Certificate
+	internodeChain        CertChain
+	frontendChain         CertChain
+	frontendAltChain      CertChain
+	frontendRollingCerts  []*tls.Certificate
+	internodeRefreshChain CertChain
+	internodeRefreshCA    *tls.Certificate
+	frontendRefreshChain  CertChain
+	frontendRefreshCA     *tls.Certificate
 
 	frontendClientCertDir string
 	frontendClientChain   CertChain
@@ -82,10 +95,12 @@ type localStoreRPCSuite struct {
 	frontendConfigRootCAOnly       config.GroupTLS
 	frontendConfigAltRootCAOnly    config.GroupTLS
 	frontendConfigSystemWorker     config.WorkerTLS
+	frontendConfigMutualTLSRefresh config.GroupTLS
 
-	internodeConfigMutualTLS    config.GroupTLS
-	internodeConfigServerTLS    config.GroupTLS
-	internodeConfigAltMutualTLS config.GroupTLS
+	internodeConfigMutualTLS        config.GroupTLS
+	internodeConfigServerTLS        config.GroupTLS
+	internodeConfigAltMutualTLS     config.GroupTLS
+	internodeConfigMutualTLSRefresh config.GroupTLS
 
 	dynamicCACertPool *x509.CertPool
 	wrongCACertPool   *x509.CertPool
@@ -119,27 +134,35 @@ func (s *localStoreRPCSuite) SetupSuite() {
 
 	s.frontendCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteFrontend")
 	s.NoError(err)
-	s.frontendChain = s.GenerateTestChain(s.frontendCertDir, "127.0.0.1")
+	s.frontendChain = s.GenerateTestChain(s.frontendCertDir, localhostIPv4)
 
 	s.internodeCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteInternode")
 	s.NoError(err)
-	s.internodeChain = s.GenerateTestChain(s.internodeCertDir, "127.0.0.1")
+	s.internodeChain = s.GenerateTestChain(s.internodeCertDir, localhostIPv4)
 
 	s.frontendAltCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteFrontendAlt")
 	s.NoError(err)
-	s.frontendAltChain = s.GenerateTestChain(s.frontendAltCertDir, "localhost")
+	s.frontendAltChain = s.GenerateTestChain(s.frontendAltCertDir, localhost)
 
 	s.frontendClientCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteFrontendClient")
 	s.NoError(err)
-	s.frontendClientChain = s.GenerateTestChain(s.frontendClientCertDir, "127.0.0.1")
+	s.frontendClientChain = s.GenerateTestChain(s.frontendClientCertDir, localhostIPv4)
 
 	s.frontendRollingCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteFrontendRolling")
 	s.NoError(err)
-	s.frontendRollingCerts, s.dynamicCACertPool, s.wrongCACertPool = s.GenerateTestCerts(s.frontendRollingCertDir, "127.0.0.1", 2)
+	s.frontendRollingCerts, s.dynamicCACertPool, s.wrongCACertPool = s.GenerateTestCerts(s.frontendRollingCertDir, localhostIPv4, 2)
+
+	s.internodeRefreshCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteInternodeRefresh")
+	s.NoError(err)
+	s.internodeRefreshChain, s.internodeRefreshCA = s.GenerateTestChainWithSN(s.internodeRefreshCertDir, localhostIPv4, internodeServerCertSerialNumber)
+
+	s.frontendRefreshCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteFrontendRefresh")
+	s.NoError(err)
+	s.frontendRefreshChain, s.frontendRefreshCA = s.GenerateTestChainWithSN(s.frontendRefreshCertDir, localhostIPv4, frontendServerCertSerialNumber)
 
 	s.membershipConfig = config.Membership{
 		MaxJoinDuration:  5,
-		BroadcastAddress: "127.0.0.1",
+		BroadcastAddress: localhostIPv4,
 	}
 
 	frontendConfigBase := config.GroupTLS{
@@ -158,7 +181,7 @@ func (s *localStoreRPCSuite) SetupSuite() {
 
 	s.frontendConfigPerHostOverrides = s.frontendConfigServerTLS
 	s.frontendConfigPerHostOverrides.PerHostOverrides = map[string]config.ServerTLS{
-		"localhost": {
+		localhost: {
 			CertFile:          s.frontendAltChain.CertPubFile,
 			KeyFile:           s.frontendAltChain.CertKeyFile,
 			ClientCAFiles:     []string{s.frontendAltChain.CaPubFile},
@@ -217,6 +240,24 @@ func (s *localStoreRPCSuite) SetupSuite() {
 			RootCAFiles: []string{s.frontendAltChain.CaPubFile},
 		},
 	}
+
+	s.internodeConfigMutualTLSRefresh = mutualGroupTLSFromChain(s.internodeRefreshChain)
+	s.frontendConfigMutualTLSRefresh = mutualGroupTLSFromChain(s.frontendRefreshChain)
+}
+
+func mutualGroupTLSFromChain(chain CertChain) config.GroupTLS {
+
+	return config.GroupTLS{
+		Server: config.ServerTLS{
+			CertFile:          chain.CertPubFile,
+			KeyFile:           chain.CertKeyFile,
+			ClientCAFiles:     []string{chain.CaPubFile},
+			RequireClientAuth: true,
+		},
+		Client: config.ClientTLS{
+			RootCAFiles: []string{chain.CaPubFile},
+		},
+	}
 }
 
 func (s *localStoreRPCSuite) SetupTest() {
@@ -249,6 +290,15 @@ func (s *localStoreRPCSuite) setupFrontend() {
 		},
 	}
 
+	localStoreMutualTLSWithRefresh := &config.Global{
+		Membership: s.membershipConfig,
+		TLS: config.RootTLS{
+			Frontend:        s.frontendConfigMutualTLSRefresh,
+			Internode:       s.frontendConfigMutualTLSRefresh,
+			RefreshInterval: time.Second,
+		},
+	}
+
 	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS, nil, nil)
 	s.NoError(err)
 	frontendMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
@@ -264,6 +314,11 @@ func (s *localStoreRPCSuite) setupFrontend() {
 	frontendSystemWorkerMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(frontendSystemWorkerMutualTLSFactory)
 
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSWithRefresh.TLS, nil, nil)
+	s.NoError(err)
+	frontendMutualTLSRefreshFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
+	s.NotNil(frontendMutualTLSRefreshFactory)
+
 	s.frontendMutualTLSRPCFactory = f(frontendMutualTLSFactory)
 	s.frontendServerTLSRPCFactory = f(frontendServerTLSFactory)
 	s.frontendSystemWorkerMutualTLSRPCFactory = f(frontendSystemWorkerMutualTLSFactory)
@@ -278,6 +333,8 @@ func (s *localStoreRPCSuite) setupFrontend() {
 	dynamicServerTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, s.dynamicConfigProvider)
 	s.frontendDynamicTLSFactory = f(dynamicServerTLSFactory)
 	s.internodeDynamicTLSFactory = i(dynamicServerTLSFactory)
+
+	s.frontendMutualTLSRPCRefreshFactory = f(frontendMutualTLSRefreshFactory)
 }
 
 func (s *localStoreRPCSuite) setupInternode() {
@@ -305,6 +362,10 @@ func (s *localStoreRPCSuite) setupInternode() {
 		},
 	}
 
+	localStoreMutualTLSWithRefresh := *localStoreMutualTLS
+	localStoreMutualTLSWithRefresh.TLS.Internode = s.internodeConfigMutualTLSRefresh
+	localStoreMutualTLSWithRefresh.TLS.RefreshInterval = time.Second
+
 	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS, nil, nil)
 	s.NoError(err)
 	internodeMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
@@ -320,27 +381,40 @@ func (s *localStoreRPCSuite) setupInternode() {
 	internodeMutualAltTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
 	s.NotNil(internodeMutualAltTLSFactory)
 
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLSWithRefresh.TLS, nil, nil)
+	s.NoError(err)
+	internodeMutualTLSRefreshFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider)
+	s.NotNil(internodeMutualTLSRefreshFactory)
+
 	s.internodeMutualTLSRPCFactory = i(internodeMutualTLSFactory)
 	s.internodeServerTLSRPCFactory = i(internodeServerTLSFactory)
 	s.internodeAltMutualTLSRPCFactory = i(internodeMutualAltTLSFactory)
+	s.internodeMutualTLSRPCRefreshFactory = i(internodeMutualTLSRefreshFactory)
 }
 
 func (s *localStoreRPCSuite) GenerateTestChain(tempDir string, commonName string) CertChain {
 
-	caPubFile := tempDir + "/ca_pub.pem"
-	certPubFile := tempDir + "/cert_pub.pem"
-	certPrivFile := tempDir + "/cert_priv.pem"
+	chain, _ := s.GenerateTestChainWithSN(tempDir, commonName, 0)
+	return chain
+}
+
+func (s *localStoreRPCSuite) GenerateTestChainWithSN(tempDir string, commonName string, serialNumber int64,
+) (CertChain, *tls.Certificate) {
+
+	caPubFile := caFilePath(tempDir)
+	certPubFile := certFilePath(tempDir)
+	certPrivFile := keyFilePath(tempDir)
 
 	caCert := s.GenerateSelfSignedCA(caPubFile)
-	s.GenerateServerCert(caCert, commonName, 0, certPubFile, certPrivFile)
+	s.GenerateServerCert(caCert, commonName, serialNumber, certPubFile, certPrivFile)
 
-	return CertChain{CaPubFile: caPubFile, CertPubFile: certPubFile, CertKeyFile: certPrivFile}
+	return CertChain{CaPubFile: caPubFile, CertPubFile: certPubFile, CertKeyFile: certPrivFile}, caCert
 }
 
 func (s *localStoreRPCSuite) GenerateTestCerts(tempDir string, commonName string, num int,
 ) (certs []*tls.Certificate, caPool *x509.CertPool, wrongCAPool *x509.CertPool) {
 
-	caCert := s.GenerateSelfSignedCA(tempDir + "/ca_pub.pem")
+	caCert := s.GenerateSelfSignedCA(caFilePath(tempDir))
 	caPool = s.GenerateSelfSignedCAPool(caCert)
 
 	chains := make([]*tls.Certificate, num)
@@ -351,7 +425,7 @@ func (s *localStoreRPCSuite) GenerateTestCerts(tempDir string, commonName string
 		chains[i] = cert
 	}
 
-	wrongCACert := s.GenerateSelfSignedCA(tempDir + "/ca_pub.pem")
+	wrongCACert := s.GenerateSelfSignedCA(caFilePath(tempDir))
 	wrongCAPool = s.GenerateSelfSignedCAPool(wrongCACert)
 
 	return chains, caPool, wrongCAPool
@@ -436,59 +510,59 @@ func convertFileToBase64(file string) string {
 }
 
 func (s *localStoreRPCSuite) TestServerTLS() {
-	runHelloWorldTest(s.Suite, "127.0.0.1", s.internodeServerTLSRPCFactory, s.internodeServerTLSRPCFactory, true)
+	runHelloWorldTest(s.Suite, localhostIPv4, s.internodeServerTLSRPCFactory, s.internodeServerTLSRPCFactory, true)
 }
 
 func (s *localStoreRPCSuite) TestServerTLSInternodeToFrontend() {
-	runHelloWorldTest(s.Suite, "127.0.0.1", s.frontendServerTLSRPCFactory, s.internodeServerTLSRPCFactory, true)
+	runHelloWorldTest(s.Suite, localhostIPv4, s.frontendServerTLSRPCFactory, s.internodeServerTLSRPCFactory, true)
 }
 
 func (s *localStoreRPCSuite) TestMutualTLS() {
-	runHelloWorldTest(s.Suite, "127.0.0.1", s.internodeMutualTLSRPCFactory, s.internodeMutualTLSRPCFactory, true)
+	runHelloWorldTest(s.Suite, localhostIPv4, s.internodeMutualTLSRPCFactory, s.internodeMutualTLSRPCFactory, true)
 }
 
 func (s *localStoreRPCSuite) TestMutualTLSInternodeToFrontend() {
-	runHelloWorldTest(s.Suite, "127.0.0.1", s.frontendMutualTLSRPCFactory, s.internodeMutualTLSRPCFactory, true)
+	runHelloWorldTest(s.Suite, localhostIPv4, s.frontendMutualTLSRPCFactory, s.internodeMutualTLSRPCFactory, true)
 }
 
 func (s *localStoreRPCSuite) TestMutualTLSButClientInsecure() {
-	runHelloWorldTest(s.Suite, "127.0.0.1", s.internodeMutualTLSRPCFactory, s.insecureRPCFactory, false)
+	runHelloWorldTest(s.Suite, localhostIPv4, s.internodeMutualTLSRPCFactory, s.insecureRPCFactory, false)
 }
 
 func (s *localStoreRPCSuite) TestServerTLSButClientInsecure() {
-	runHelloWorldTest(s.Suite, "127.0.0.1", s.internodeServerTLSRPCFactory, s.insecureRPCFactory, false)
+	runHelloWorldTest(s.Suite, localhostIPv4, s.internodeServerTLSRPCFactory, s.insecureRPCFactory, false)
 }
 
 func (s *localStoreRPCSuite) TestMutualTLSButClientNoCert() {
-	runHelloWorldTest(s.Suite, "127.0.0.1", s.internodeMutualTLSRPCFactory, s.internodeServerTLSRPCFactory, false)
+	runHelloWorldTest(s.Suite, localhostIPv4, s.internodeMutualTLSRPCFactory, s.internodeServerTLSRPCFactory, false)
 }
 
 func (s *localStoreRPCSuite) TestServerTLSButClientAddsCert() {
-	runHelloWorldTest(s.Suite, "127.0.0.1", s.internodeServerTLSRPCFactory, s.internodeMutualTLSRPCFactory, true)
+	runHelloWorldTest(s.Suite, localhostIPv4, s.internodeServerTLSRPCFactory, s.internodeMutualTLSRPCFactory, true)
 }
 
 func (s *localStoreRPCSuite) TestServerTLSInternodeToFrontendAlt() {
-	runHelloWorldTest(s.Suite, "localhost", s.frontendMutualTLSRPCFactory, s.internodeAltMutualTLSRPCFactory, true)
+	runHelloWorldTest(s.Suite, localhost, s.frontendMutualTLSRPCFactory, s.internodeAltMutualTLSRPCFactory, true)
 }
 
 func (s *localStoreRPCSuite) TestMutualTLSSystemWorker() {
-	runHelloWorldTest(s.Suite, "127.0.0.1", s.frontendSystemWorkerMutualTLSRPCFactory, s.frontendSystemWorkerMutualTLSRPCFactory, true)
+	runHelloWorldTest(s.Suite, localhostIPv4, s.frontendSystemWorkerMutualTLSRPCFactory, s.frontendSystemWorkerMutualTLSRPCFactory, true)
 }
 
 func (s *localStoreRPCSuite) TestDynamicServerTLSFrontend() {
-	s.testDynamicServerTLS("127.0.0.1", true)
+	s.testDynamicServerTLS(localhostIPv4, true)
 }
 
 func (s *localStoreRPCSuite) TestDynamicServerTLSInternode() {
-	s.testDynamicServerTLS("127.0.0.1", false)
+	s.testDynamicServerTLS(localhostIPv4, false)
 }
 
 func (s *localStoreRPCSuite) TestDynamicServerTLSOverrideFrontend() {
-	s.testDynamicServerTLS("localhost", true)
+	s.testDynamicServerTLS(localhost, true)
 }
 
 func (s *localStoreRPCSuite) TestDynamicServerTLSOverrideInternode() {
-	s.testDynamicServerTLS("localhost", false)
+	s.testDynamicServerTLS(localhost, false)
 }
 
 func (s *localStoreRPCSuite) testDynamicServerTLS(host string, frontend bool) {
@@ -499,29 +573,25 @@ func (s *localStoreRPCSuite) testDynamicServerTLS(host string, frontend bool) {
 	s.dynamicConfigProvider.FrontendClientCertProvider.SetServerName(host)
 	runHelloWorldMultipleDials(s.Suite, host, server, client, 5,
 		func(tlsInfo *credentials.TLSInfo, err error) {
-			s.NoError(err)
-			s.NotNil(tlsInfo)
-			s.NotNil(tlsInfo.State.PeerCertificates)
-			sn := (*tlsInfo.State.PeerCertificates[0].SerialNumber).Int64()
-			s.True(sn == int64((index+1)%2+100))
+			s.validateTLSInfo(tlsInfo, err, int64((index+1)%2+100))
 			index++
 		})
 }
 
 func (s *localStoreRPCSuite) TestDynamicRootCAFrontend() {
-	s.testDynamicRootCA("127.0.0.1", true)
+	s.testDynamicRootCA(localhostIPv4, true)
 }
 
 func (s *localStoreRPCSuite) TestDynamicRootCAInternode() {
-	s.testDynamicRootCA("127.0.0.1", true)
+	s.testDynamicRootCA(localhostIPv4, true)
 }
 
 func (s *localStoreRPCSuite) TestDynamicRootCAOverrideFrontend() {
-	s.testDynamicRootCA("localhost", true)
+	s.testDynamicRootCA(localhost, true)
 }
 
 func (s *localStoreRPCSuite) TestDynamicRootCAOverrideInternode() {
-	s.testDynamicRootCA("localhost", true)
+	s.testDynamicRootCA(localhost, true)
 }
 
 func (s *localStoreRPCSuite) TestCertExpiration() {
@@ -583,4 +653,38 @@ func (s *localStoreRPCSuite) getTestFactory(frontend bool) (server *TestFactory,
 		client = s.internodeDynamicTLSFactory
 	}
 	return server, client
+}
+
+func (s *localStoreRPCSuite) TestServerTLSRefreshInternode() {
+	s.testServerTLSRefresh(s.internodeMutualTLSRPCRefreshFactory, s.internodeRefreshCA, s.internodeRefreshCertDir, internodeServerCertSerialNumber)
+}
+
+func (s *localStoreRPCSuite) TestServerTLSRefreshFrontend() {
+	s.testServerTLSRefresh(s.frontendMutualTLSRPCRefreshFactory, s.frontendRefreshCA, s.frontendRefreshCertDir, frontendServerCertSerialNumber)
+}
+
+func (s *localStoreRPCSuite) testServerTLSRefresh(factory *TestFactory, ca *tls.Certificate, certDir string, serialNumber int64) {
+
+	server, port := startHelloWorldServer(s.Suite, factory)
+	defer server.Stop()
+
+	host := localhostIPv4 + ":" + port
+	tlsInfo, err := dialHelloAndGetTLSInfo(s.Suite, host, factory, factory.serverUsage)
+	s.validateTLSInfo(tlsInfo, err, serialNumber) // serial number of server cert before refresh
+
+	s.GenerateServerCert(ca, localhostIPv4, serialNumber+100, certFilePath(certDir), keyFilePath(certDir))
+
+	time.Sleep(time.Second * 2) // let server refresh certs
+
+	tlsInfo, err = dialHelloAndGetTLSInfo(s.Suite, host, factory, factory.serverUsage)
+	s.validateTLSInfo(tlsInfo, err, serialNumber+100) // serial number of server cert after refresh
+}
+
+func (s *localStoreRPCSuite) validateTLSInfo(tlsInfo *credentials.TLSInfo, err error, serialNumber int64) {
+
+	s.NoError(err)
+	s.NotNil(tlsInfo)
+	s.NotNil(tlsInfo.State.PeerCertificates)
+	sn := (*tlsInfo.State.PeerCertificates[0].SerialNumber).Int64()
+	s.Equal(serialNumber, sn)
 }

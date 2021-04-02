@@ -115,6 +115,8 @@ type (
 		SystemWorker WorkerTLS `yaml:"systemWorker"`
 		// ExpirationChecks defines settings for periodic checks for expiration of certificates
 		ExpirationChecks CertExpirationValidation `yaml:"expirationChecks"`
+		// Interval between refreshes of certificates loaded from files
+		RefreshInterval time.Duration `yaml:"refreshInterval"`
 	}
 
 	// GroupTLS contains an instance client and server TLS settings
