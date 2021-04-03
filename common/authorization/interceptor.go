@@ -39,13 +39,16 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
-var (
-	errUnauthorized = serviceerror.NewPermissionDenied("Request unauthorized.")
+type (
+	contextKeyMappedClaims struct{}
+	contextKeyAuthHeader   struct{}
 )
 
-const (
-	ContextKeyMappedClaims = "auth-mappedClaims"
-	ContextAuthHeader      = "auth-header"
+var (
+	errUnauthorized = serviceerror.NewPermissionDenied("Request unauthorized.")
+
+	MappedClaims contextKeyMappedClaims
+	AuthHeader   contextKeyAuthHeader
 )
 
 func (a *interceptor) Interceptor(
@@ -99,19 +102,20 @@ func (a *interceptor) Interceptor(
 			}
 			mappedClaims, err := a.claimMapper.GetClaims(&authInfo)
 			if err != nil {
-				return nil, a.logAuthError(err)
+				a.logAuthError(err)
+				return nil, errUnauthorized // return a generic error to the caller without disclosing details
 			}
 			claims = mappedClaims
-			ctx = context.WithValue(ctx, ContextKeyMappedClaims, mappedClaims)
+			ctx = context.WithValue(ctx, MappedClaims, mappedClaims)
 			if authHeader != "" {
-				ctx = context.WithValue(ctx, ContextAuthHeader, authHeader)
+				ctx = context.WithValue(ctx, AuthHeader, authHeader)
 			}
 		}
 	}
 
 	if a.authorizer != nil {
 		var namespace string
-		requestWithNamespace, ok := req.(requestWithNamespace)
+		requestWithNamespace, ok := req.(hasNamespace)
 		if ok {
 			namespace = requestWithNamespace.GetNamespace()
 		}
@@ -120,24 +124,28 @@ func (a *interceptor) Interceptor(
 
 		scope := a.getMetricsScope(metrics.AuthorizationScope, namespace)
 		sw := scope.StartTimer(metrics.ServiceAuthorizationLatency)
-		defer sw.Stop()
 
-		result, err := a.authorizer.Authorize(ctx, claims, &CallTarget{Namespace: namespace, APIName: apiName})
+		result, err := a.authorizer.Authorize(ctx, claims, &CallTarget{
+			Namespace: namespace,
+			APIName:   apiName,
+			Request:   req,
+		})
 		if err != nil {
 			scope.IncCounter(metrics.ServiceErrAuthorizeFailedCounter)
-			return nil, a.logAuthError(err)
+			a.logAuthError(err)
+			return nil, errUnauthorized // return a generic error to the caller without disclosing details
 		}
 		if result.Decision != DecisionAllow {
 			scope.IncCounter(metrics.ServiceErrUnauthorizedCounter)
-			return nil, errUnauthorized
+			return nil, errUnauthorized // return a generic error to the caller without disclosing details
 		}
+		sw.Stop()
 	}
 	return handler(ctx, req)
 }
 
-func (a *interceptor) logAuthError(err error) error {
-	a.logger.Error("authorization error", tag.Error(err))
-	return errUnauthorized // return a generic error to the caller without disclosing details
+func (a *interceptor) logAuthError(err error) {
+	a.logger.Error("Authorization error", tag.Error(err))
 }
 
 type interceptor struct {

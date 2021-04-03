@@ -72,7 +72,7 @@ type (
 		so                *serverOptions
 		services          map[string]common.Daemon
 		serviceStoppedChs map[string]chan struct{}
-		stoppedCh         chan struct{}
+		stoppedCh         chan interface{}
 		logger            log.Logger
 	}
 )
@@ -104,7 +104,7 @@ func (s *Server) Start() error {
 		return err
 	}
 
-	s.stoppedCh = make(chan struct{})
+	s.stoppedCh = make(chan interface{})
 
 	s.logger = s.so.logger
 	if s.logger == nil {

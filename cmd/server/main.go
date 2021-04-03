@@ -35,8 +35,10 @@ import (
 
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	tlog "go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"      // needed to load mysql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
 	"go.temporal.io/server/temporal"
@@ -129,18 +131,25 @@ func buildCLI() *cli.App {
 
 				logger := tlog.NewZapLogger(tlog.BuildZapLogger(cfg.Log))
 
-				authorizer, err := authorization.GetAuthorizerFromConfig(&cfg.Global.Authorization)
+				dynamicConfigClient, err := dynamicconfig.NewFileBasedClient(&cfg.DynamicConfigClient, logger, temporal.InterruptCh())
 				if err != nil {
-					return cli.Exit(fmt.Sprintf("Unable to instantiate authorizer: %v.", err), 1)
+					logger.Info("Unable to create file based dynamic config client, use no-op config client instead.", tag.Error(err))
+					dynamicConfigClient = dynamicconfig.NewNoopClient()
 				}
+
+				dc := dynamicconfig.NewCollection(dynamicConfigClient, logger)
+				authorizer, err := authorization.GetAuthorizerFromConfig(
+					&cfg.Global.Authorization,
+					dc.GetBoolProperty(dynamicconfig.EnableCrossNamespaceCommands, true),
+				)
 
 				claimMapper, err := authorization.GetClaimMapperFromConfig(&cfg.Global.Authorization, logger)
 				if err != nil {
 					return cli.Exit(fmt.Sprintf("Unable to instantiate claim mapper: %v.", err), 1)
 				}
-
 				s := temporal.NewServer(
 					temporal.ForServices(services),
+					temporal.WithDynamicConfigClient(dynamicConfigClient),
 					temporal.WithConfig(cfg),
 					temporal.WithLogger(logger),
 					temporal.InterruptOn(temporal.InterruptCh()),

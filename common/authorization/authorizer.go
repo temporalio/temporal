@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination authority_mock.go
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination authorizer_mock.go
 
 package authorization
 
@@ -32,6 +32,7 @@ import (
 	"strings"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 )
 
 const (
@@ -50,6 +51,8 @@ type CallTarget struct {
 	APIName string
 	// If a Namespace is not being targeted this be set to an empty string.
 	Namespace string
+	// If a Namespace is not being targeted this be set to an empty string.
+	Request interface{}
 }
 
 // @@@SNIPEND
@@ -72,17 +75,17 @@ type Authorizer interface {
 
 // @@@SNIPEND
 
-type requestWithNamespace interface {
+type hasNamespace interface {
 	GetNamespace() string
 }
 
-func GetAuthorizerFromConfig(config *config.Authorization) (Authorizer, error) {
+func GetAuthorizerFromConfig(config *config.Authorization, enableCrossNamespaceCommands dynamicconfig.BoolPropertyFn) (Authorizer, error) {
 
 	switch strings.ToLower(config.Authorizer) {
 	case "":
 		return NewNoopAuthorizer(), nil
 	case "default":
-		return NewDefaultAuthorizer(), nil
+		return NewDefaultAuthorizer(enableCrossNamespaceCommands), nil
 	}
 	return nil, fmt.Errorf("unknown authorizer: %s", config.Authorizer)
 }
