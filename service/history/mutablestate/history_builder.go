@@ -978,9 +978,9 @@ func (b *HistoryBuilder) BufferEventSize() int {
 	return len(b.dbBufferBatch) + len(b.memBufferBatch)
 }
 
-func (b *HistoryBuilder) FlushBufferToCurrentBatch() {
+func (b *HistoryBuilder) FlushBufferToCurrentBatch() map[int64]int64 {
 	if len(b.dbBufferBatch) == 0 && len(b.memBufferBatch) == 0 {
-		return
+		return b.scheduleIDToStartedID
 	}
 
 	b.assertMutable()
@@ -1000,6 +1000,8 @@ func (b *HistoryBuilder) FlushBufferToCurrentBatch() {
 	b.wireEventIDs(bufferBatch)
 
 	b.memLatestBatch = append(b.memLatestBatch, bufferBatch...)
+
+	return b.scheduleIDToStartedID
 }
 
 func (b *HistoryBuilder) FlushAndCreateNewBatch() {
@@ -1020,7 +1022,7 @@ func (b *HistoryBuilder) Finish(
 	}()
 
 	if flushBufferEvent {
-		b.FlushBufferToCurrentBatch()
+		_ = b.FlushBufferToCurrentBatch()
 	}
 	b.FlushAndCreateNewBatch()
 
