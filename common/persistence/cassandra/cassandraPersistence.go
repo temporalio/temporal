@@ -159,7 +159,7 @@ const (
 
 	templateCreateWorkflowExecutionQuery = `INSERT INTO executions (` +
 		`shard_id, namespace_id, workflow_id, run_id, type, ` +
-		`execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, db_version, ` +
+		`execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, db_record_version, ` +
 		`visibility_ts, task_id, checksum, checksum_encoding) ` +
 		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS `
 
@@ -192,7 +192,7 @@ const (
 
 	templateGetWorkflowExecutionQuery = `SELECT execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, activity_map, activity_map_encoding, timer_map, timer_map_encoding, ` +
 		`child_executions_map, child_executions_map_encoding, request_cancel_map, request_cancel_map_encoding, signal_map, signal_map_encoding, signal_requested, buffered_events_list, ` +
-		`checksum, checksum_encoding, db_version ` +
+		`checksum, checksum_encoding, db_record_version ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -240,7 +240,7 @@ const (
 		`, execution_state = ? ` +
 		`, execution_state_encoding = ? ` +
 		`, next_event_id = ? ` +
-		`, db_version = ? ` +
+		`, db_record_version = ? ` +
 		`, checksum = ? ` +
 		`, checksum_encoding = ? ` +
 		`WHERE shard_id = ? ` +
@@ -250,7 +250,7 @@ const (
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
 		`and task_id = ? ` +
-		`IF db_version = ? `
+		`IF db_record_version = ? `
 
 	templateUpdateActivityInfoQuery = `UPDATE executions ` +
 		`SET activity_map[ ? ] = ?, activity_map_encoding = ? ` +
@@ -1181,15 +1181,15 @@ func (d *cassandraPersistence) GetWorkflowExecution(
 	state.Checksum = cs
 
 	dbVersion := int64(0)
-	if dbRecordVersion, ok := result["db_version"]; ok {
+	if dbRecordVersion, ok := result["db_record_version"]; ok {
 		dbVersion = dbRecordVersion.(int64)
 	} else {
 		dbVersion = 0
 	}
 
 	return &p.InternalGetWorkflowExecutionResponse{
-		State:     state,
-		DBVersion: dbVersion,
+		State:           state,
+		DBRecordVersion: dbVersion,
 	}, nil
 }
 

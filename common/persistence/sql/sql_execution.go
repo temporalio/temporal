@@ -256,7 +256,7 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 		ExecutionState: executionState,
 		NextEventID:    executionsRow.NextEventID,
 
-		DBVersion: executionsRow.DBVersion,
+		DBRecordVersion: executionsRow.DBRecordVersion,
 	}
 
 	state.ActivityInfos, err = getActivityInfoMap(ctx,
@@ -337,8 +337,8 @@ func (m *sqlExecutionManager) GetWorkflowExecution(
 	}
 
 	return &p.InternalGetWorkflowExecutionResponse{
-		State:     state,
-		DBVersion: executionsRow.DBVersion,
+		State:           state,
+		DBRecordVersion: executionsRow.DBRecordVersion,
 	}, nil
 }
 

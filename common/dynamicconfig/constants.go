@@ -64,7 +64,7 @@ var Keys = map[Key]string{
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate: "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
 
 	// TODO remove this dynamic flag in 1.11.x
-	EnableDBVersion: "system.enableDBVersion",
+	EnableDBRecordVersion: "system.enableDBRecordVersion",
 
 	// system settings
 	EnableVisibilitySampling:               "system.enableVisibilitySampling",
@@ -345,8 +345,8 @@ const (
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate
 
 	// TODO remove this dynamic flag in 1.11.x
-	// EnableDBVersion is key for enable db version
-	EnableDBVersion
+	// EnableDBRecordVersion is key for enable db version
+	EnableDBRecordVersion
 
 	// EnableVisibilitySampling is key for enable visibility sampling
 	EnableVisibilitySampling

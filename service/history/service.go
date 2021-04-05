@@ -169,7 +169,7 @@ func (s *Service) Start() {
 	}
 
 	// TODO remove this dynamic flag in 1.11.x
-	migration.SetDBVersionFlag(s.config.EnableDBVersion())
+	migration.SetDBVersionFlag(s.config.EnableDBRecordVersion())
 
 	logger := s.GetLogger()
 	logger.Info("history starting")

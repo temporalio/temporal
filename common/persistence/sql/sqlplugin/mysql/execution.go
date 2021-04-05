@@ -32,13 +32,13 @@ import (
 )
 
 const (
-	executionsColumns = `shard_id, namespace_id, workflow_id, run_id, next_event_id, last_write_version, data, data_encoding, state, state_encoding, db_version`
+	executionsColumns = `shard_id, namespace_id, workflow_id, run_id, next_event_id, last_write_version, data, data_encoding, state, state_encoding, db_record_version`
 
 	createExecutionQuery = `INSERT INTO executions(` + executionsColumns + `)
- VALUES(:shard_id, :namespace_id, :workflow_id, :run_id, :next_event_id, :last_write_version, :data, :data_encoding, :state, :state_encoding, :db_version)`
+ VALUES(:shard_id, :namespace_id, :workflow_id, :run_id, :next_event_id, :last_write_version, :data, :data_encoding, :state, :state_encoding, :db_record_version)`
 
 	updateExecutionQuery = `UPDATE executions SET
- db_version = :db_version, next_event_id = :next_event_id, last_write_version = :last_write_version, data = :data, data_encoding = :data_encoding, state = :state, state_encoding = :state_encoding
+ db_record_version = :db_record_version, next_event_id = :next_event_id, last_write_version = :last_write_version, data = :data, data_encoding = :data_encoding, state = :state, state_encoding = :state_encoding
  WHERE shard_id = :shard_id AND namespace_id = :namespace_id AND workflow_id = :workflow_id AND run_id = :run_id`
 
 	getExecutionQuery = `SELECT ` + executionsColumns + ` FROM executions
@@ -47,7 +47,7 @@ const (
 	deleteExecutionQuery = `DELETE FROM executions 
  WHERE shard_id = ? AND namespace_id = ? AND workflow_id = ? AND run_id = ?`
 
-	lockExecutionQueryBase = `SELECT db_version, next_event_id FROM executions 
+	lockExecutionQueryBase = `SELECT db_record_version, next_event_id FROM executions 
  WHERE shard_id = ? AND namespace_id = ? AND workflow_id = ? AND run_id = ?`
 
 	writeLockExecutionQuery = lockExecutionQueryBase + ` FOR UPDATE`
@@ -246,7 +246,7 @@ func (mdb *db) ReadLockExecutions(
 		filter.WorkflowID,
 		filter.RunID,
 	)
-	return executionVersion.DBVersion, executionVersion.NextEventID, err
+	return executionVersion.DBRecordVersion, executionVersion.NextEventID, err
 }
 
 // WriteLockExecutions acquires a write lock on a single row in executions table
@@ -263,7 +263,7 @@ func (mdb *db) WriteLockExecutions(
 		filter.WorkflowID,
 		filter.RunID,
 	)
-	return executionVersion.DBVersion, executionVersion.NextEventID, err
+	return executionVersion.DBRecordVersion, executionVersion.NextEventID, err
 }
 
 // InsertIntoCurrentExecutions inserts a single row into current_executions table

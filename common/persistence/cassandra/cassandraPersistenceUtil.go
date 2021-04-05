@@ -62,7 +62,7 @@ func applyWorkflowMutationBatch(
 		workflowMutation.NextEventID,
 		cqlNowTimestampMillis,
 		workflowMutation.Condition,
-		workflowMutation.DBVersion,
+		workflowMutation.DBRecordVersion,
 		workflowMutation.Checksum,
 	); err != nil {
 		return err
@@ -182,7 +182,7 @@ func applyWorkflowSnapshotBatchAsReset(
 		workflowSnapshot.NextEventID,
 		cqlNowTimestampMillis,
 		workflowSnapshot.Condition,
-		workflowSnapshot.DBVersion,
+		workflowSnapshot.DBRecordVersion,
 		workflowSnapshot.Checksum,
 	); err != nil {
 		return err
@@ -292,7 +292,7 @@ func applyWorkflowSnapshotBatchAsNew(
 		workflowSnapshot.ExecutionInfo,
 		workflowSnapshot.ExecutionState,
 		workflowSnapshot.NextEventID,
-		workflowSnapshot.DBVersion,
+		workflowSnapshot.DBRecordVersion,
 		workflowSnapshot.Checksum,
 		cqlNowTimestampMillis,
 	); err != nil {

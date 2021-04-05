@@ -72,7 +72,7 @@ func applyWorkflowMutationTx(
 		workflowID,
 		runIDBytes,
 		workflowMutation.Condition,
-		workflowMutation.DBVersion,
+		workflowMutation.DBRecordVersion,
 	); err != nil {
 		switch err.(type) {
 		case *p.ConditionFailedError:
@@ -88,7 +88,7 @@ func applyWorkflowMutationTx(
 		workflowMutation.ExecutionState,
 		workflowMutation.NextEventID,
 		lastWriteVersion,
-		workflowMutation.DBVersion,
+		workflowMutation.DBRecordVersion,
 		shardID,
 	); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Failed to update executions row. Erorr: %v", err))
@@ -232,7 +232,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowID,
 		runIDBytes,
 		workflowSnapshot.Condition,
-		workflowSnapshot.DBVersion,
+		workflowSnapshot.DBRecordVersion,
 	); err != nil {
 		switch err.(type) {
 		case *p.ConditionFailedError:
@@ -248,7 +248,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowSnapshot.ExecutionState,
 		workflowSnapshot.NextEventID,
 		lastWriteVersion,
-		workflowSnapshot.DBVersion,
+		workflowSnapshot.DBRecordVersion,
 		shardID,
 	); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to update executions row. Erorr: %v", err))
@@ -437,7 +437,7 @@ func (m *sqlExecutionManager) applyWorkflowSnapshotTxAsNew(
 		workflowSnapshot.ExecutionState,
 		workflowSnapshot.NextEventID,
 		lastWriteVersion,
-		workflowSnapshot.DBVersion,
+		workflowSnapshot.DBRecordVersion,
 		shardID,
 	); err != nil {
 		return err
@@ -711,7 +711,7 @@ func lockAndCheckExecution(
 	}
 	if version != dbVersion {
 		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("lockAndCheckExecution failed. DBVersion expected: %v, actually %v.", dbVersion, version),
+			Msg: fmt.Sprintf("lockAndCheckExecution failed. DBRecordVersion expected: %v, actually %v.", dbVersion, version),
 		}
 	}
 
@@ -1260,7 +1260,7 @@ func buildExecutionRow(
 		DataEncoding:     infoBlob.EncodingType.String(),
 		State:            stateBlob.Data,
 		StateEncoding:    stateBlob.EncodingType.String(),
-		DBVersion:        dbVersion,
+		DBRecordVersion:  dbVersion,
 	}, nil
 }
 

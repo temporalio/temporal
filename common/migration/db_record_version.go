@@ -29,19 +29,19 @@ import (
 )
 
 var (
-	enableDBVersion int32
+	enableDBRecordVersion int32
 )
 
 func IsDBVersionEnabled() bool {
-	return atomic.LoadInt32(&enableDBVersion) == 1
+	return atomic.LoadInt32(&enableDBRecordVersion) == 1
 }
 
 func SetDBVersionFlag(
 	enabled bool,
 ) {
 	if enabled {
-		atomic.StoreInt32(&enableDBVersion, 1)
+		atomic.StoreInt32(&enableDBRecordVersion, 1)
 	} else {
-		atomic.StoreInt32(&enableDBVersion, 0)
+		atomic.StoreInt32(&enableDBRecordVersion, 0)
 	}
 }

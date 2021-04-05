@@ -3954,9 +3954,9 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 		TimerTasks:       e.insertTimerTasks,
 		VisibilityTasks:  e.insertVisibilityTasks,
 
-		Condition: e.nextEventIDInDB,
-		DBVersion: e.dbVersion,
-		Checksum:  checksum,
+		Condition:       e.nextEventIDInDB,
+		DBRecordVersion: e.dbVersion,
+		Checksum:        checksum,
 	}
 
 	e.checksum = checksum
@@ -4033,9 +4033,9 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 		TimerTasks:       e.insertTimerTasks,
 		VisibilityTasks:  e.insertVisibilityTasks,
 
-		Condition: e.nextEventIDInDB,
-		DBVersion: e.dbVersion,
-		Checksum:  checksum,
+		Condition:       e.nextEventIDInDB,
+		DBRecordVersion: e.dbVersion,
+		Checksum:        checksum,
 	}
 
 	e.checksum = checksum

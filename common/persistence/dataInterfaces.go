@@ -448,7 +448,7 @@ type (
 	// GetWorkflowExecutionResponse is the response to GetWorkflowExecutionRequest
 	GetWorkflowExecutionResponse struct {
 		State             *persistencespb.WorkflowMutableState
-		DBVersion         int64
+		DBRecordVersion   int64
 		MutableStateStats *MutableStateStats
 	}
 
@@ -538,7 +538,7 @@ type (
 	WorkflowMutation struct {
 		ExecutionInfo  *persistencespb.WorkflowExecutionInfo
 		ExecutionState *persistencespb.WorkflowExecutionState
-		// TODO deprecate NextEventID in favor of DBVersion
+		// TODO deprecate NextEventID in favor of DBRecordVersion
 		NextEventID int64
 
 		UpsertActivityInfos       map[int64]*persistencespb.ActivityInfo
@@ -561,17 +561,17 @@ type (
 		TimerTasks       []Task
 		VisibilityTasks  []Task
 
-		// TODO deprecate Condition in favor of DBVersion
-		Condition int64
-		DBVersion int64
-		Checksum  *persistencespb.Checksum
+		// TODO deprecate Condition in favor of DBRecordVersion
+		Condition       int64
+		DBRecordVersion int64
+		Checksum        *persistencespb.Checksum
 	}
 
 	// WorkflowSnapshot is used as generic workflow execution state snapshot
 	WorkflowSnapshot struct {
 		ExecutionInfo  *persistencespb.WorkflowExecutionInfo
 		ExecutionState *persistencespb.WorkflowExecutionState
-		// TODO deprecate NextEventID in favor of DBVersion
+		// TODO deprecate NextEventID in favor of DBRecordVersion
 		NextEventID int64
 
 		ActivityInfos       map[int64]*persistencespb.ActivityInfo
@@ -586,10 +586,10 @@ type (
 		TimerTasks       []Task
 		VisibilityTasks  []Task
 
-		// TODO deprecate Condition in favor of DBVersion
-		Condition int64
-		DBVersion int64
-		Checksum  *persistencespb.Checksum
+		// TODO deprecate Condition in favor of DBRecordVersion
+		Condition       int64
+		DBRecordVersion int64
+		Checksum        *persistencespb.Checksum
 	}
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution

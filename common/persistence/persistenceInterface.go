@@ -226,9 +226,9 @@ type (
 		ExecutionState      *persistencespb.WorkflowExecutionState
 		NextEventID         int64
 
-		BufferedEvents []*commonpb.DataBlob
-		Checksum       *persistencespb.Checksum
-		DBVersion      int64
+		BufferedEvents  []*commonpb.DataBlob
+		Checksum        *persistencespb.Checksum
+		DBRecordVersion int64
 	}
 
 	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
@@ -264,7 +264,7 @@ type (
 		ExecutionState   *persistencespb.WorkflowExecutionState
 		NextEventID      int64
 		LastWriteVersion int64
-		DBVersion        int64
+		DBRecordVersion  int64
 
 		UpsertActivityInfos       map[int64]*persistencespb.ActivityInfo
 		DeleteActivityInfos       map[int64]struct{}
@@ -297,7 +297,7 @@ type (
 		ExecutionState   *persistencespb.WorkflowExecutionState
 		LastWriteVersion int64
 		NextEventID      int64
-		DBVersion        int64
+		DBRecordVersion  int64
 
 		ActivityInfos       map[int64]*persistencespb.ActivityInfo
 		TimerInfos          map[string]*persistencespb.TimerInfo
@@ -348,8 +348,8 @@ type (
 
 	// InternalGetWorkflowExecutionResponse is the response to GetworkflowExecution for Persistence Interface
 	InternalGetWorkflowExecutionResponse struct {
-		State     *InternalWorkflowMutableState
-		DBVersion int64
+		State           *InternalWorkflowMutableState
+		DBRecordVersion int64
 	}
 
 	// InternalListConcreteExecutionsResponse is the response to ListConcreteExecutions for Persistence Interface

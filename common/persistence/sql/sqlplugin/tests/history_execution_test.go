@@ -293,7 +293,7 @@ func (s *historyExecutionSuite) TestReadLock() {
 	}
 	rowDBVersion, rowNextEventID, err := s.store.ReadLockExecutions(newExecutionContext(), filter)
 	s.NoError(err)
-	s.Equal(execution.DBVersion, rowDBVersion)
+	s.Equal(execution.DBRecordVersion, rowDBVersion)
 	s.Equal(execution.NextEventID, rowNextEventID)
 }
 
@@ -320,7 +320,7 @@ func (s *historyExecutionSuite) TestWriteLock() {
 	}
 	rowDBVersion, rowNextEventID, err := s.store.WriteLockExecutions(newExecutionContext(), filter)
 	s.NoError(err)
-	s.Equal(execution.DBVersion, rowDBVersion)
+	s.Equal(execution.DBRecordVersion, rowDBVersion)
 	s.Equal(execution.NextEventID, rowNextEventID)
 }
 

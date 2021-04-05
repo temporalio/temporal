@@ -47,7 +47,7 @@ type (
 		DataEncoding     string
 		State            []byte
 		StateEncoding    string
-		DBVersion        int64
+		DBRecordVersion  int64
 	}
 
 	// ExecutionsFilter contains the column names within executions table that
@@ -83,8 +83,8 @@ type (
 
 	// TODO remove this block in 1.11.x
 	ExecutionVersion struct {
-		DBVersion   int64
-		NextEventID int64
+		DBRecordVersion int64
+		NextEventID     int64
 	}
 
 	// HistoryExecution is the SQL persistence interface for history executions

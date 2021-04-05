@@ -1,1 +1,1 @@
-ALTER TABLE executions Add db_version bigint;
+ALTER TABLE executions Add db_record_version bigint;
