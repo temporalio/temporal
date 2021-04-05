@@ -1012,7 +1012,11 @@ func (b *HistoryBuilder) NextEventID() int64 {
 func (b *HistoryBuilder) FlushBufferToCurrentBatch() map[int64]int64 {
 	if len(b.dbBufferBatch) == 0 && len(b.memBufferBatch) == 0 {
 		return b.scheduleIDToStartedID
-	} else if b.workflowFinished {
+	}
+
+	b.assertMutable()
+
+	if b.workflowFinished {
 		// in case this case happen
 		// 1. request cancel activity
 		// 2. workflow task complete
@@ -1021,8 +1025,6 @@ func (b *HistoryBuilder) FlushBufferToCurrentBatch() map[int64]int64 {
 		b.memBufferBatch = nil
 		return b.scheduleIDToStartedID
 	}
-
-	b.assertMutable()
 
 	b.dbClearBuffer = b.dbClearBuffer || len(b.dbBufferBatch) > 0
 	bufferBatch := append(b.dbBufferBatch, b.memBufferBatch...)
