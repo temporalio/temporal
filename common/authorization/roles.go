@@ -53,6 +53,8 @@ type Claims struct {
 	System Role
 	// Roles within specific namespaces
 	Namespaces map[string]Role
+	// Free form bucket for extra data
+	Extensions interface{}
 }
 
 // @@@SNIPEND

@@ -43,7 +43,11 @@ const (
 	metricCertsExpiring = "certificates_expiring"
 )
 
-type CertProviderFactory func(tlsSettings *config.GroupTLS, workerTlsSettings *config.WorkerTLS, legacyWorkerSettings *config.ClientTLS) CertProvider
+type CertProviderFactory func(
+	tlsSettings *config.GroupTLS,
+	workerTlsSettings *config.WorkerTLS,
+	legacyWorkerSettings *config.ClientTLS,
+	refreshInterval time.Duration) CertProvider
 
 type localStoreTlsProvider struct {
 	sync.RWMutex
@@ -74,22 +78,22 @@ var _ CertExpirationChecker = (*localStoreTlsProvider)(nil)
 func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope tally.Scope, certProviderFactory CertProviderFactory,
 ) (TLSConfigProvider, error) {
 
-	internodeProvider := certProviderFactory(&tlsConfig.Internode, nil, nil)
+	internodeProvider := certProviderFactory(&tlsConfig.Internode, nil, nil, tlsConfig.RefreshInterval)
 	var workerProvider CertProvider
 	if tlsConfig.SystemWorker.CertFile != "" || tlsConfig.SystemWorker.CertData != "" { // explicit system worker config
-		workerProvider = certProviderFactory(nil, &tlsConfig.SystemWorker, nil)
+		workerProvider = certProviderFactory(nil, &tlsConfig.SystemWorker, nil, tlsConfig.RefreshInterval)
 	} else { // legacy implicit system worker config case
-		internodeWorkerProvider := certProviderFactory(&tlsConfig.Internode, nil, &tlsConfig.Frontend.Client)
+		internodeWorkerProvider := certProviderFactory(&tlsConfig.Internode, nil, &tlsConfig.Frontend.Client, tlsConfig.RefreshInterval)
 		workerProvider = internodeWorkerProvider
 	}
 
 	provider := &localStoreTlsProvider{
 		internodeCertProvider:       internodeProvider,
 		internodeClientCertProvider: internodeProvider,
-		frontendCertProvider:        certProviderFactory(&tlsConfig.Frontend, nil, nil),
+		frontendCertProvider:        certProviderFactory(&tlsConfig.Frontend, nil, nil, tlsConfig.RefreshInterval),
 		workerCertProvider:          workerProvider,
 		frontendPerHostCertProviderMap: newLocalStorePerHostCertProviderMap(
-			tlsConfig.Frontend.PerHostOverrides, certProviderFactory),
+			tlsConfig.Frontend.PerHostOverrides, certProviderFactory, tlsConfig.RefreshInterval),
 		RWMutex:  sync.RWMutex{},
 		settings: tlsConfig,
 		scope:    scope,
