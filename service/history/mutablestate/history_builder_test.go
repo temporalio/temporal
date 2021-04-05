@@ -56,6 +56,7 @@ type (
 		now            time.Time
 		version        int64
 		nextEventID    int64
+		nextTaskID     int64
 		mockTimeSource *clock.EventTimeSource
 
 		historyBuilder *HistoryBuilder
@@ -131,13 +132,16 @@ func (s *historyBuilderSuite) SetupTest() {
 	s.now = time.Now().UTC()
 	s.version = rand.Int63()
 	s.nextEventID = rand.Int63()
+	s.nextTaskID = rand.Int63()
 	s.mockTimeSource = clock.NewEventTimeSource()
 	s.mockTimeSource.Update(s.now)
 
 	s.historyBuilder = NewHistoryBuilder(
 		s.mockTimeSource,
+		s.taskIDGenerator,
 		s.version,
 		s.nextEventID,
+		nil,
 	)
 }
 
@@ -213,7 +217,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID, // TODO
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Version:   s.version,
@@ -336,7 +340,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionMarkerRecord() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_MARKER_RECORDED,
 		Version:   s.version,
@@ -364,7 +368,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionSearchAttribute() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 		Version:   s.version,
@@ -389,7 +393,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionCompleted() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		Version:   s.version,
@@ -416,7 +420,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionFailed() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
 		Version:   s.version,
@@ -438,7 +442,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionTimeout() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
 		Version:   s.version,
@@ -462,7 +466,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionCancelled() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED,
 		Version:   s.version,
@@ -485,7 +489,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionTerminated() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
 		Version:   s.version,
@@ -530,7 +534,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionContinueAsNew() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
 		Version:   s.version,
@@ -570,7 +574,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskScheduled() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		Version:   s.version,
@@ -595,7 +599,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 		Version:   s.version,
@@ -622,7 +626,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskCompleted() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 		Version:   s.version,
@@ -659,7 +663,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskFailed() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
 		Version:   s.version,
@@ -691,7 +695,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskTimeout() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
 		Version:   s.version,
@@ -735,7 +739,7 @@ func (s *historyBuilderSuite) TestActivityTaskScheduled() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 		Version:   s.version,
@@ -797,7 +801,7 @@ func (s *historyBuilderSuite) TestActivityTaskCancelRequested() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCEL_REQUESTED,
 		Version:   s.version,
@@ -943,7 +947,7 @@ func (s *historyBuilderSuite) TestTimerStarted() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_TIMER_STARTED,
 		Version:   s.version,
@@ -993,7 +997,7 @@ func (s *historyBuilderSuite) TestTimerCancelled() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_TIMER_CANCELED,
 		Version:   s.version,
@@ -1029,7 +1033,7 @@ func (s *historyBuilderSuite) TestRequestCancelExternalWorkflowExecutionInitiate
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
 		Version:   s.version,
@@ -1136,7 +1140,7 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionInitiated() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
 		Version:   s.version,
@@ -1262,7 +1266,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
 		EventId:   s.nextEventID,
-		TaskId:    common.EmptyEventTaskID,
+		TaskId:    s.nextTaskID,
 		EventTime: timestamp.TimePtr(s.now),
 		EventType: enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
 		Version:   s.version,
@@ -1549,61 +1553,543 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionTerminated() {
 
 /* child workflow */
 
-func (s *historyBuilderSuite) TestAppendFlushFinishEvent_SingleBatch() {
+func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithoutBuffer_SingleBatch_WithoutFlushBuffer() {
+	s.testAppendFlushFinishEventWithoutBufferSingleBatch(false)
+}
+
+func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithoutBuffer_SingleBatch_WithFlushBuffer() {
+	s.testAppendFlushFinishEventWithoutBufferSingleBatch(true)
+}
+
+func (s *historyBuilderSuite) testAppendFlushFinishEventWithoutBufferSingleBatch(
+	flushBuffer bool,
+) {
+	s.historyBuilder.dbBufferBatch = nil
+	s.historyBuilder.memEventsBatches = nil
+	s.historyBuilder.memLatestBatch = nil
+	s.historyBuilder.memBufferBatch = nil
+
 	event1 := &historypb.HistoryEvent{
-		EventId: rand.Int63(),
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		EventId:   rand.Int63(),
+		TaskId:    common.EmptyEventTaskID,
 	}
 	event2 := &historypb.HistoryEvent{
-		EventId: rand.Int63(),
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		EventId:   rand.Int63(),
+		TaskId:    common.EmptyEventTaskID,
 	}
 
 	s.historyBuilder.appendEvents(event1)
 	s.historyBuilder.appendEvents(event2)
-	eventBatches := s.historyBuilder.Finish()
-	s.Equal([][]*historypb.HistoryEvent{{event1, event2}}, eventBatches)
+	historyMutation, err := s.historyBuilder.Finish(flushBuffer)
+	s.NoError(err)
+	s.assertEventIDTaskID(historyMutation)
+
+	s.Equal(&HistoryMutation{
+		DBEventsBatches:     [][]*historypb.HistoryEvent{{event1, event2}},
+		DBClearBuffer:       false,
+		DBBufferBatch:       nil,
+		MemBufferBatch:      nil,
+		ScheduleIDToStartID: make(map[int64]int64),
+	}, historyMutation)
 }
 
-func (s *historyBuilderSuite) TestAppendFlushFinishEvent_MultiBatch() {
+func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithoutBuffer_MultiBatch_WithoutFlushBuffer() {
+	s.testAppendFlushFinishEventWithoutBufferMultiBatch(false)
+}
+
+func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithoutBuffer_MultiBatch_WithFlushBuffer() {
+	s.testAppendFlushFinishEventWithoutBufferMultiBatch(true)
+}
+
+func (s *historyBuilderSuite) testAppendFlushFinishEventWithoutBufferMultiBatch(
+	flushBuffer bool,
+) {
+	s.historyBuilder.dbBufferBatch = nil
+	s.historyBuilder.memEventsBatches = nil
+	s.historyBuilder.memLatestBatch = nil
+	s.historyBuilder.memBufferBatch = nil
+
 	event11 := &historypb.HistoryEvent{
-		EventId: rand.Int63(),
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		EventId:   rand.Int63(),
+		TaskId:    common.EmptyEventTaskID,
 	}
 	event12 := &historypb.HistoryEvent{
-		EventId: rand.Int63(),
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		EventId:   rand.Int63(),
+		TaskId:    common.EmptyEventTaskID,
 	}
 	event21 := &historypb.HistoryEvent{
-		EventId: rand.Int63(),
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		EventId:   rand.Int63(),
+		TaskId:    common.EmptyEventTaskID,
 	}
 	event22 := &historypb.HistoryEvent{
-		EventId: rand.Int63(),
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		EventId:   rand.Int63(),
+		TaskId:    common.EmptyEventTaskID,
 	}
 	event31 := &historypb.HistoryEvent{
-		EventId: rand.Int63(),
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		EventId:   rand.Int63(),
+		TaskId:    common.EmptyEventTaskID,
 	}
 	event32 := &historypb.HistoryEvent{
-		EventId: rand.Int63(),
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		EventId:   rand.Int63(),
+		TaskId:    common.EmptyEventTaskID,
 	}
 
 	// 1st batch
 	s.historyBuilder.appendEvents(event11)
 	s.historyBuilder.appendEvents(event12)
-	s.historyBuilder.FlushEvents()
+	s.historyBuilder.FlushAndCreateNewBatch()
 
 	// 2nd batch
 	s.historyBuilder.appendEvents(event21)
 	s.historyBuilder.appendEvents(event22)
-	s.historyBuilder.FlushEvents()
+	s.historyBuilder.FlushAndCreateNewBatch()
 
 	// 3rd batch
 	s.historyBuilder.appendEvents(event31)
 	s.historyBuilder.appendEvents(event32)
-	s.historyBuilder.FlushEvents()
+	s.historyBuilder.FlushAndCreateNewBatch()
 
-	eventBatches := s.historyBuilder.Finish()
-	s.Equal([][]*historypb.HistoryEvent{
-		{event11, event12},
-		{event21, event22},
-		{event31, event32},
-	}, eventBatches)
+	historyMutation, err := s.historyBuilder.Finish(flushBuffer)
+	s.NoError(err)
+	s.assertEventIDTaskID(historyMutation)
+
+	s.Equal(&HistoryMutation{
+		DBEventsBatches: [][]*historypb.HistoryEvent{
+			{event11, event12},
+			{event21, event22},
+			{event31, event32},
+		},
+		DBClearBuffer:       false,
+		DBBufferBatch:       nil,
+		MemBufferBatch:      nil,
+		ScheduleIDToStartID: make(map[int64]int64),
+	}, historyMutation)
+}
+
+func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithoutDBBuffer_WithoutFlushBuffer() {
+	s.historyBuilder.dbBufferBatch = nil
+	s.historyBuilder.memEventsBatches = nil
+	s.historyBuilder.memLatestBatch = nil
+	s.historyBuilder.memBufferBatch = nil
+
+	event1 := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}
+	event2 := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}
+
+	s.historyBuilder.appendEvents(event1)
+	s.historyBuilder.appendEvents(event2)
+	historyMutation, err := s.historyBuilder.Finish(false)
+	s.NoError(err)
+	s.assertEventIDTaskID(historyMutation)
+
+	s.Equal(&HistoryMutation{
+		DBEventsBatches:     nil,
+		DBClearBuffer:       false,
+		DBBufferBatch:       []*historypb.HistoryEvent{event1, event2},
+		MemBufferBatch:      []*historypb.HistoryEvent{event1, event2},
+		ScheduleIDToStartID: make(map[int64]int64),
+	}, historyMutation)
+}
+
+func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithoutDBBuffer_WithFlushBuffer() {
+	s.historyBuilder.dbBufferBatch = nil
+	s.historyBuilder.memEventsBatches = nil
+	s.historyBuilder.memLatestBatch = nil
+	s.historyBuilder.memBufferBatch = nil
+
+	event1 := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}
+	event2 := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}
+
+	s.historyBuilder.appendEvents(event1)
+	s.historyBuilder.appendEvents(event2)
+	historyMutation, err := s.historyBuilder.Finish(true)
+	s.NoError(err)
+	s.assertEventIDTaskID(historyMutation)
+
+	s.Equal(&HistoryMutation{
+		DBEventsBatches:     [][]*historypb.HistoryEvent{{event1, event2}},
+		DBClearBuffer:       false,
+		DBBufferBatch:       nil,
+		MemBufferBatch:      nil,
+		ScheduleIDToStartID: make(map[int64]int64),
+	}, historyMutation)
+}
+
+func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithoutBuffer_WithDBBuffer_WithoutFlushBuffer() {
+	event1 := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}
+	event2 := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}
+
+	s.historyBuilder.dbBufferBatch = []*historypb.HistoryEvent{event1, event2}
+	s.historyBuilder.memEventsBatches = nil
+	s.historyBuilder.memLatestBatch = nil
+	s.historyBuilder.memBufferBatch = nil
+
+	historyMutation, err := s.historyBuilder.Finish(false)
+	s.NoError(err)
+	s.assertEventIDTaskID(historyMutation)
+
+	s.Equal(&HistoryMutation{
+		DBEventsBatches:     nil,
+		DBClearBuffer:       false,
+		DBBufferBatch:       nil,
+		MemBufferBatch:      []*historypb.HistoryEvent{event1, event2},
+		ScheduleIDToStartID: make(map[int64]int64),
+	}, historyMutation)
+}
+
+func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithoutBuffer_WithDBBuffer_WithFlushBuffer() {
+	event1 := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}
+	event2 := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}
+
+	s.historyBuilder.dbBufferBatch = []*historypb.HistoryEvent{event1, event2}
+	s.historyBuilder.memEventsBatches = nil
+	s.historyBuilder.memLatestBatch = nil
+	s.historyBuilder.memBufferBatch = nil
+
+	historyMutation, err := s.historyBuilder.Finish(true)
+	s.NoError(err)
+	s.assertEventIDTaskID(historyMutation)
+
+	s.Equal(&HistoryMutation{
+		DBEventsBatches:     [][]*historypb.HistoryEvent{{event1, event2}},
+		DBClearBuffer:       true,
+		DBBufferBatch:       nil,
+		MemBufferBatch:      nil,
+		ScheduleIDToStartID: make(map[int64]int64),
+	}, historyMutation)
+}
+
+func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithDBBuffer_WithoutFlushBuffer() {
+	event0 := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}
+	s.historyBuilder.dbBufferBatch = []*historypb.HistoryEvent{event0}
+	s.historyBuilder.memEventsBatches = nil
+	s.historyBuilder.memLatestBatch = nil
+	s.historyBuilder.memBufferBatch = nil
+
+	event1 := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}
+	event2 := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}
+
+	s.historyBuilder.appendEvents(event1)
+	s.historyBuilder.appendEvents(event2)
+	historyMutation, err := s.historyBuilder.Finish(false)
+	s.NoError(err)
+	s.assertEventIDTaskID(historyMutation)
+
+	s.Equal(&HistoryMutation{
+		DBEventsBatches:     nil,
+		DBClearBuffer:       false,
+		DBBufferBatch:       []*historypb.HistoryEvent{event1, event2},
+		MemBufferBatch:      []*historypb.HistoryEvent{event0, event1, event2},
+		ScheduleIDToStartID: make(map[int64]int64),
+	}, historyMutation)
+}
+
+func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithDBBuffer_WithFlushBuffer() {
+	event0 := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}
+	s.historyBuilder.dbBufferBatch = []*historypb.HistoryEvent{event0}
+	s.historyBuilder.memEventsBatches = nil
+	s.historyBuilder.memLatestBatch = nil
+	s.historyBuilder.memBufferBatch = nil
+
+	event1 := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}
+	event2 := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}
+
+	s.historyBuilder.appendEvents(event1)
+	s.historyBuilder.appendEvents(event2)
+	historyMutation, err := s.historyBuilder.Finish(true)
+	s.NoError(err)
+	s.assertEventIDTaskID(historyMutation)
+
+	s.Equal(&HistoryMutation{
+		DBEventsBatches:     [][]*historypb.HistoryEvent{{event0, event1, event2}},
+		DBClearBuffer:       true,
+		DBBufferBatch:       nil,
+		MemBufferBatch:      nil,
+		ScheduleIDToStartID: make(map[int64]int64),
+	}, historyMutation)
+}
+
+func (s *historyBuilderSuite) TestWireEventIDs_Activity() {
+	scheduleEventID := rand.Int63()
+	startEvent := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{
+			ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
+				ScheduledEventId: scheduleEventID,
+			},
+		},
+	}
+	completeEvent := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+		Attributes: &historypb.HistoryEvent_ActivityTaskCompletedEventAttributes{
+			ActivityTaskCompletedEventAttributes: &historypb.ActivityTaskCompletedEventAttributes{
+				ScheduledEventId: scheduleEventID,
+			},
+		},
+	}
+	failedEvent := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+		Attributes: &historypb.HistoryEvent_ActivityTaskFailedEventAttributes{
+			ActivityTaskFailedEventAttributes: &historypb.ActivityTaskFailedEventAttributes{
+				ScheduledEventId: scheduleEventID,
+			},
+		},
+	}
+	timeoutEvent := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+		Attributes: &historypb.HistoryEvent_ActivityTaskTimedOutEventAttributes{
+			ActivityTaskTimedOutEventAttributes: &historypb.ActivityTaskTimedOutEventAttributes{
+				ScheduledEventId: scheduleEventID,
+			},
+		},
+	}
+	cancelEvent := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+		Attributes: &historypb.HistoryEvent_ActivityTaskCanceledEventAttributes{
+			ActivityTaskCanceledEventAttributes: &historypb.ActivityTaskCanceledEventAttributes{
+				ScheduledEventId: scheduleEventID,
+			},
+		},
+	}
+
+	s.testWireEventIDs(scheduleEventID, startEvent, completeEvent)
+	s.testWireEventIDs(scheduleEventID, startEvent, failedEvent)
+	s.testWireEventIDs(scheduleEventID, startEvent, timeoutEvent)
+	s.testWireEventIDs(scheduleEventID, startEvent, cancelEvent)
+}
+
+func (s *historyBuilderSuite) TestWireEventIDs_ChildWorkflow() {
+	initiatedEventID := rand.Int63()
+	startEvent := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionStartedEventAttributes{
+			ChildWorkflowExecutionStartedEventAttributes: &historypb.ChildWorkflowExecutionStartedEventAttributes{
+				InitiatedEventId: initiatedEventID,
+			},
+		},
+	}
+	completeEvent := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionCompletedEventAttributes{
+			ChildWorkflowExecutionCompletedEventAttributes: &historypb.ChildWorkflowExecutionCompletedEventAttributes{
+				InitiatedEventId: initiatedEventID,
+			},
+		},
+	}
+	failedEvent := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionFailedEventAttributes{
+			ChildWorkflowExecutionFailedEventAttributes: &historypb.ChildWorkflowExecutionFailedEventAttributes{
+				InitiatedEventId: initiatedEventID,
+			},
+		},
+	}
+	timeoutEvent := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionTimedOutEventAttributes{
+			ChildWorkflowExecutionTimedOutEventAttributes: &historypb.ChildWorkflowExecutionTimedOutEventAttributes{
+				InitiatedEventId: initiatedEventID,
+			},
+		},
+	}
+	cancelEvent := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionCanceledEventAttributes{
+			ChildWorkflowExecutionCanceledEventAttributes: &historypb.ChildWorkflowExecutionCanceledEventAttributes{
+				InitiatedEventId: initiatedEventID,
+			},
+		},
+	}
+	terminatedEvent := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionTerminatedEventAttributes{
+			ChildWorkflowExecutionTerminatedEventAttributes: &historypb.ChildWorkflowExecutionTerminatedEventAttributes{
+				InitiatedEventId: initiatedEventID,
+			},
+		},
+	}
+
+	s.testWireEventIDs(initiatedEventID, startEvent, completeEvent)
+	s.testWireEventIDs(initiatedEventID, startEvent, failedEvent)
+	s.testWireEventIDs(initiatedEventID, startEvent, timeoutEvent)
+	s.testWireEventIDs(initiatedEventID, startEvent, cancelEvent)
+	s.testWireEventIDs(initiatedEventID, startEvent, terminatedEvent)
+}
+
+func (s *historyBuilderSuite) testWireEventIDs(
+	scheduleID int64,
+	startEvent *historypb.HistoryEvent,
+	finishEvent *historypb.HistoryEvent,
+) {
+	s.historyBuilder = NewHistoryBuilder(
+		s.mockTimeSource,
+		s.taskIDGenerator,
+		s.version,
+		s.nextEventID,
+		nil,
+	)
+	s.historyBuilder.dbBufferBatch = []*historypb.HistoryEvent{startEvent}
+	s.historyBuilder.memEventsBatches = nil
+	s.historyBuilder.memLatestBatch = nil
+	s.historyBuilder.memBufferBatch = []*historypb.HistoryEvent{finishEvent}
+	s.historyBuilder.FlushBufferToCurrentBatch()
+
+	s.Empty(s.historyBuilder.dbBufferBatch)
+	s.Empty(s.historyBuilder.memEventsBatches)
+	s.Equal([]*historypb.HistoryEvent{startEvent, finishEvent}, s.historyBuilder.memLatestBatch)
+	s.Empty(s.historyBuilder.memBufferBatch)
+
+	s.Equal(map[int64]int64{
+		scheduleID: startEvent.GetEventId(),
+	}, s.historyBuilder.scheduleIDToStartedID)
+
+	switch finishEvent.GetEventType() {
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
+		s.Equal(startEvent.GetEventId(), finishEvent.GetActivityTaskCompletedEventAttributes().GetStartedEventId())
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
+		s.Equal(startEvent.GetEventId(), finishEvent.GetActivityTaskFailedEventAttributes().GetStartedEventId())
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
+		s.Equal(startEvent.GetEventId(), finishEvent.GetActivityTaskTimedOutEventAttributes().GetStartedEventId())
+	case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
+		s.Equal(startEvent.GetEventId(), finishEvent.GetActivityTaskCanceledEventAttributes().GetStartedEventId())
+
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:
+		s.Equal(startEvent.GetEventId(), finishEvent.GetChildWorkflowExecutionCompletedEventAttributes().GetStartedEventId())
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:
+		s.Equal(startEvent.GetEventId(), finishEvent.GetChildWorkflowExecutionFailedEventAttributes().GetStartedEventId())
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:
+		s.Equal(startEvent.GetEventId(), finishEvent.GetChildWorkflowExecutionTimedOutEventAttributes().GetStartedEventId())
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:
+		s.Equal(startEvent.GetEventId(), finishEvent.GetChildWorkflowExecutionCanceledEventAttributes().GetStartedEventId())
+	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
+		s.Equal(startEvent.GetEventId(), finishEvent.GetChildWorkflowExecutionTerminatedEventAttributes().GetStartedEventId())
+	}
+}
+
+func (s *historyBuilderSuite) TestHasBufferEvent() {
+	historyBuilder := NewHistoryBuilder(
+		s.mockTimeSource,
+		s.taskIDGenerator,
+		s.version,
+		s.nextEventID,
+		nil,
+	)
+	historyBuilder.dbBufferBatch = nil
+	historyBuilder.memEventsBatches = nil
+	historyBuilder.memLatestBatch = nil
+	historyBuilder.memBufferBatch = nil
+	s.False(historyBuilder.HasBufferEvents())
+
+	historyBuilder.dbBufferBatch = []*historypb.HistoryEvent{{
+		EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
+	}}
+	historyBuilder.memEventsBatches = nil
+	historyBuilder.memLatestBatch = nil
+	historyBuilder.memBufferBatch = nil
+	s.True(historyBuilder.HasBufferEvents())
+
+	historyBuilder.dbBufferBatch = nil
+	historyBuilder.memEventsBatches = nil
+	historyBuilder.memLatestBatch = nil
+	historyBuilder.memBufferBatch = []*historypb.HistoryEvent{{
+		EventType: enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+	}}
+	s.True(historyBuilder.HasBufferEvents())
+
+	historyBuilder.dbBufferBatch = []*historypb.HistoryEvent{{
+		EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+	}}
+	historyBuilder.memEventsBatches = nil
+	historyBuilder.memLatestBatch = nil
+	historyBuilder.memBufferBatch = []*historypb.HistoryEvent{{
+		EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
+	}}
+	s.True(historyBuilder.HasBufferEvents())
 }
 
 func (s *historyBuilderSuite) TestBufferEvent() {
@@ -1677,13 +2163,63 @@ OtherEventsLoop:
 
 	commandTypes := enumspb.CommandType_name
 	delete(commandTypes, 0) // Remove Unspecified.
-	s.Equal(len(commandTypes), len(commandEvents),
-		"This assertion will be broken a new command is added and no corresponding logic added to shouldBufferEvent()")
+	s.Equal(
+		len(commandTypes),
+		len(commandEvents),
+		"This assertion will be broken a new command is added and no corresponding logic added to shouldBufferEvent()",
+	)
+}
+
+func (s *historyBuilderSuite) assertEventIDTaskID(
+	historyMutation *HistoryMutation,
+) {
+
+	for _, event := range historyMutation.DBBufferBatch {
+		s.Equal(common.BufferedEventID, event.EventId)
+		s.Equal(common.EmptyEventTaskID, event.TaskId)
+	}
+
+	for _, event := range historyMutation.MemBufferBatch {
+		s.Equal(common.BufferedEventID, event.EventId)
+		s.Equal(common.EmptyEventTaskID, event.TaskId)
+	}
+
+	for _, eventBatch := range historyMutation.DBEventsBatches {
+		for _, event := range eventBatch {
+			s.NotEqual(common.BufferedEventID, event.EventId)
+			s.NotEqual(common.EmptyEventTaskID, event.TaskId)
+		}
+	}
 }
 
 func (s *historyBuilderSuite) flush() *historypb.HistoryEvent {
-	eventBatches := s.historyBuilder.Finish()
-	s.Equal(1, len(eventBatches))
-	s.Equal(1, len(eventBatches[0]))
-	return eventBatches[0][0]
+	hasBufferEvents := s.historyBuilder.HasBufferEvents()
+	historyMutation, err := s.historyBuilder.Finish(false)
+	s.NoError(err)
+	s.assertEventIDTaskID(historyMutation)
+	s.Equal(make(map[int64]int64), historyMutation.ScheduleIDToStartID)
+
+	if !hasBufferEvents {
+		s.Equal(1, len(historyMutation.DBEventsBatches))
+		s.Equal(1, len(historyMutation.DBEventsBatches[0]))
+		return historyMutation.DBEventsBatches[0][0]
+	}
+
+	if len(historyMutation.MemBufferBatch) > 0 {
+		s.Equal(1, len(historyMutation.MemBufferBatch))
+		return historyMutation.MemBufferBatch[0]
+	}
+
+	s.Fail("expect one and only event")
+	return nil
+}
+
+func (s *historyBuilderSuite) taskIDGenerator(number int) ([]int64, error) {
+	nextTaskID := s.nextTaskID
+	result := make([]int64, number)
+	for i := 0; i < number; i++ {
+		result[i] = nextTaskID
+		nextTaskID++
+	}
+	return result, nil
 }
