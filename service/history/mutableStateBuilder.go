@@ -3880,8 +3880,10 @@ func (e *mutableStateBuilder) prepareEventsAndReplicationTasks(
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
 			BranchToken: currentBranchToken,
+			PrevTxnID:   e.executionInfo.LastEventTaskId,
 			Events:      eventBatch,
 		}
+		e.GetExecutionInfo().LastEventTaskId = eventBatch[len(eventBatch)-1].GetTaskId()
 	}
 
 	if err := e.validateNoEventsAfterWorkflowFinish(
@@ -3996,7 +3998,6 @@ func (e *mutableStateBuilder) updateWithLastWriteEvent(
 		// already handled in state builder
 		return nil
 	}
-	e.GetExecutionInfo().LastEventTaskId = lastEvent.GetTaskId()
 
 	if e.executionInfo.VersionHistories != nil {
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)

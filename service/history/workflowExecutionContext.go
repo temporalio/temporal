@@ -897,16 +897,18 @@ func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
 	}
 	branchToken := workflowEvents.BranchToken
 	events := workflowEvents.Events
+	prevTxnID := workflowEvents.PrevTxnID
 
 	size, err := c.appendHistoryV2EventsWithRetry(
 		namespaceID,
 		execution,
 		&persistence.AppendHistoryNodesRequest{
-			IsNewBranch: true,
-			Info:        persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, runID),
-			BranchToken: branchToken,
-			Events:      events,
-			// TransactionID is set by shard context
+			IsNewBranch:       true,
+			Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, runID),
+			BranchToken:       branchToken,
+			Events:            events,
+			PrevTransactionID: prevTxnID,
+			TransactionID:     events[len(events)-1].GetTaskId(),
 		},
 	)
 	return size, err
@@ -927,15 +929,17 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 	}
 	branchToken := workflowEvents.BranchToken
 	events := workflowEvents.Events
+	prevTxnID := workflowEvents.PrevTxnID
 
 	size, err := c.appendHistoryV2EventsWithRetry(
 		namespaceID,
 		execution,
 		&persistence.AppendHistoryNodesRequest{
-			IsNewBranch: false,
-			BranchToken: branchToken,
-			Events:      events,
-			// TransactionID is set by shard context
+			IsNewBranch:       false,
+			BranchToken:       branchToken,
+			Events:            events,
+			PrevTransactionID: prevTxnID,
+			TransactionID:     events[len(events)-1].GetTaskId(),
 		},
 	)
 	return size, err
