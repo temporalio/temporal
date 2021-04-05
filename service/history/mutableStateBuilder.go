@@ -145,11 +145,11 @@ type (
 		// indicates the workflow state in DB, can be used to calculate
 		// whether this workflow is pointed by current workflow record
 		stateInDB enumsspb.WorkflowExecutionState
-		// TODO deprecate nextEventIDInDB in favor of dbVersion
+		// TODO deprecate nextEventIDInDB in favor of dbRecordVersion
 		// indicates the next event ID in DB, for conditional update
 		nextEventIDInDB int64
 		// indicates the DB record version, for conditional update
-		dbVersion int64
+		dbRecordVersion int64
 		// namespace entry contains a snapshot of namespace
 		// NOTE: do not use the failover version inside, use currentVersion above
 		namespaceEntry *cache.NamespaceCacheEntry
@@ -223,7 +223,7 @@ func newMutableStateBuilder(
 		hasBufferedEventsInDB: false,
 		stateInDB:             enumsspb.WORKFLOW_EXECUTION_STATE_VOID,
 		nextEventIDInDB:       0,
-		dbVersion:             0,
+		dbRecordVersion:       0,
 		namespaceEntry:        namespaceEntry,
 		appliedEvents:         make(map[string]struct{}),
 
@@ -294,7 +294,7 @@ func (e *mutableStateBuilder) CloneToProto() *persistencespb.WorkflowMutableStat
 
 func (e *mutableStateBuilder) Load(
 	state *persistencespb.WorkflowMutableState,
-	dbVersion int64,
+	dbRecordVersion int64,
 ) error {
 
 	e.pendingActivityInfoIDs = state.ActivityInfos
@@ -324,7 +324,7 @@ func (e *mutableStateBuilder) Load(
 	e.hasBufferedEventsInDB = len(e.bufferedEvents) > 0
 	e.stateInDB = state.ExecutionState.State
 	e.nextEventIDInDB = state.NextEventId
-	e.dbVersion = dbVersion
+	e.dbRecordVersion = dbRecordVersion
 	e.checksum = state.Checksum
 
 	if len(state.Checksum.GetValue()) > 0 {
@@ -3828,15 +3828,15 @@ func (e *mutableStateBuilder) AddTimerTasks(
 
 func (e *mutableStateBuilder) SetUpdateCondition(
 	nextEventIDInDB int64,
-	dbVersion int64,
+	dbRecordVersion int64,
 ) {
 
 	e.nextEventIDInDB = nextEventIDInDB
-	e.dbVersion = dbVersion
+	e.dbRecordVersion = dbRecordVersion
 }
 
 func (e *mutableStateBuilder) GetUpdateCondition() (int64, int64) {
-	return e.nextEventIDInDB, e.dbVersion
+	return e.nextEventIDInDB, e.dbRecordVersion
 }
 
 func (e *mutableStateBuilder) GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus) {
@@ -3923,10 +3923,10 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 	// impact the checksum calculation
 	checksum := e.generateChecksum()
 
-	if e.dbVersion == 0 && !migration.IsDBVersionEnabled() {
+	if e.dbRecordVersion == 0 && !migration.IsDBVersionEnabled() {
 		// noop, existing behavior
 	} else {
-		e.dbVersion += 1
+		e.dbRecordVersion += 1
 	}
 
 	workflowMutation := &persistence.WorkflowMutation{
@@ -3955,7 +3955,7 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 		VisibilityTasks:  e.insertVisibilityTasks,
 
 		Condition:       e.nextEventIDInDB,
-		DBRecordVersion: e.dbVersion,
+		DBRecordVersion: e.dbRecordVersion,
 		Checksum:        checksum,
 	}
 
@@ -4034,7 +4034,7 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 		VisibilityTasks:  e.insertVisibilityTasks,
 
 		Condition:       e.nextEventIDInDB,
-		DBRecordVersion: e.dbVersion,
+		DBRecordVersion: e.dbRecordVersion,
 		Checksum:        checksum,
 	}
 
@@ -4137,7 +4137,7 @@ func (e *mutableStateBuilder) cleanupTransaction(
 	e.hasBufferedEventsInDB = len(e.bufferedEvents) > 0
 	e.stateInDB = e.executionState.State
 	e.nextEventIDInDB = e.GetNextEventID()
-	// e.dbVersion remains the same
+	// e.dbRecordVersion remains the same
 
 	e.insertTransferTasks = nil
 	e.insertReplicationTasks = nil

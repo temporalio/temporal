@@ -218,6 +218,7 @@ const (
 		`and type = ?`
 
 	// TODO deprecate templateUpdateWorkflowExecutionQueryDeprecated in favor of templateUpdateWorkflowExecutionQuery
+	// Deprecated.
 	templateUpdateWorkflowExecutionQueryDeprecated = `UPDATE executions ` +
 		`SET execution = ? ` +
 		`, execution_encoding = ? ` +

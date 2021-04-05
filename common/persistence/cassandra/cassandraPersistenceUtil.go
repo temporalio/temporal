@@ -389,7 +389,7 @@ func createExecution(
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
-	dbVersion int64,
+	dbRecordVersion int64,
 	checksum *persistencespb.Checksum,
 	cqlNowTimestampMillis int64,
 ) error {
@@ -435,7 +435,7 @@ func createExecution(
 		executionStateDatablob.Data,
 		executionStateDatablob.EncodingType.String(),
 		nextEventID,
-		dbVersion,
+		dbRecordVersion,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID,
 		checksumDatablob.Data,
@@ -453,7 +453,7 @@ func updateExecution(
 	nextEventID int64,
 	cqlNowTimestampMillis int64,
 	condition int64,
-	dbVersion int64,
+	dbRecordVersion int64,
 	checksum *persistencespb.Checksum,
 ) error {
 
@@ -486,7 +486,7 @@ func updateExecution(
 		return err
 	}
 
-	if dbVersion == 0 {
+	if dbRecordVersion == 0 {
 		batch.Query(templateUpdateWorkflowExecutionQueryDeprecated,
 			executionDatablob.Data,
 			executionDatablob.EncodingType.String(),
@@ -511,7 +511,7 @@ func updateExecution(
 			executionStateDatablob.Data,
 			executionStateDatablob.EncodingType.String(),
 			nextEventID,
-			dbVersion,
+			dbRecordVersion,
 			checksumDatablob.Data,
 			checksumDatablob.EncodingType.String(),
 			shardID,
@@ -521,7 +521,7 @@ func updateExecution(
 			runID,
 			defaultVisibilityTimestamp,
 			rowTypeExecutionTaskID,
-			dbVersion-1,
+			dbRecordVersion-1,
 		)
 	}
 

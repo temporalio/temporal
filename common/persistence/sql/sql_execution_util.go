@@ -692,7 +692,7 @@ func lockAndCheckExecution(
 	workflowID string,
 	runID primitives.UUID,
 	condition int64,
-	dbVersion int64,
+	dbRecordVersion int64,
 ) error {
 
 	version, nextEventID, err := lockExecution(ctx, tx, shardID, namespaceID, workflowID, runID)
@@ -706,12 +706,12 @@ func lockAndCheckExecution(
 		}
 	}
 
-	if dbVersion != 0 {
-		dbVersion -= 1
+	if dbRecordVersion != 0 {
+		dbRecordVersion -= 1
 	}
-	if version != dbVersion {
+	if version != dbRecordVersion {
 		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("lockAndCheckExecution failed. DBRecordVersion expected: %v, actually %v.", dbVersion, version),
+			Msg: fmt.Sprintf("lockAndCheckExecution failed. DBRecordVersion expected: %v, actually %v.", dbRecordVersion, version),
 		}
 	}
 
@@ -1225,7 +1225,7 @@ func buildExecutionRow(
 	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
 	lastWriteVersion int64,
-	dbVersion int64,
+	dbRecordVersion int64,
 	shardID int32,
 ) (row *sqlplugin.ExecutionsRow, err error) {
 
@@ -1260,7 +1260,7 @@ func buildExecutionRow(
 		DataEncoding:     infoBlob.EncodingType.String(),
 		State:            stateBlob.Data,
 		StateEncoding:    stateBlob.EncodingType.String(),
-		DBRecordVersion:  dbVersion,
+		DBRecordVersion:  dbRecordVersion,
 	}, nil
 }
 
@@ -1271,7 +1271,7 @@ func (m *sqlExecutionManager) createExecution(
 	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
 	lastWriteVersion int64,
-	dbVersion int64,
+	dbRecordVersion int64,
 	shardID int32,
 ) error {
 
@@ -1290,7 +1290,7 @@ func (m *sqlExecutionManager) createExecution(
 		executionState,
 		nextEventID,
 		lastWriteVersion,
-		dbVersion,
+		dbRecordVersion,
 		shardID,
 	)
 	if err != nil {
@@ -1328,7 +1328,7 @@ func updateExecution(
 	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
 	lastWriteVersion int64,
-	dbVersion int64,
+	dbRecordVersion int64,
 	shardID int32,
 ) error {
 
@@ -1347,7 +1347,7 @@ func updateExecution(
 		executionState,
 		nextEventID,
 		lastWriteVersion,
-		dbVersion,
+		dbRecordVersion,
 		shardID,
 	)
 	if err != nil {
