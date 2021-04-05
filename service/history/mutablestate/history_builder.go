@@ -1280,7 +1280,7 @@ func hasActivityFinishEvent(
 	return false
 }
 
-func (b *HistoryBuilder) HasAndRemoveTimerFireEvent(
+func (b *HistoryBuilder) GetAndRemoveTimerFireEvent(
 	timerID string,
 ) *historypb.HistoryEvent {
 	var timerFireEvent *historypb.HistoryEvent
