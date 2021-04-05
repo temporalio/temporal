@@ -1588,6 +1588,7 @@ func (s *historyBuilderSuite) testAppendFlushFinishEventWithoutBufferSingleBatch
 
 	s.Equal(&HistoryMutation{
 		DBEventsBatches:     [][]*historypb.HistoryEvent{{event1, event2}},
+		DBClearBuffer:       false,
 		DBBufferBatch:       nil,
 		MemBufferBatch:      nil,
 		ScheduleIDToStartID: make(map[int64]int64),
@@ -1644,17 +1645,17 @@ func (s *historyBuilderSuite) testAppendFlushFinishEventWithoutBufferMultiBatch(
 	// 1st batch
 	s.historyBuilder.appendEvents(event11)
 	s.historyBuilder.appendEvents(event12)
-	s.historyBuilder.FlushEventsBatch()
+	s.historyBuilder.FlushAndCreateNewBatch()
 
 	// 2nd batch
 	s.historyBuilder.appendEvents(event21)
 	s.historyBuilder.appendEvents(event22)
-	s.historyBuilder.FlushEventsBatch()
+	s.historyBuilder.FlushAndCreateNewBatch()
 
 	// 3rd batch
 	s.historyBuilder.appendEvents(event31)
 	s.historyBuilder.appendEvents(event32)
-	s.historyBuilder.FlushEventsBatch()
+	s.historyBuilder.FlushAndCreateNewBatch()
 
 	historyMutation, err := s.historyBuilder.Finish(flushBuffer)
 	s.NoError(err)
@@ -1666,6 +1667,7 @@ func (s *historyBuilderSuite) testAppendFlushFinishEventWithoutBufferMultiBatch(
 			{event21, event22},
 			{event31, event32},
 		},
+		DBClearBuffer:       false,
 		DBBufferBatch:       nil,
 		MemBufferBatch:      nil,
 		ScheduleIDToStartID: make(map[int64]int64),
@@ -1697,6 +1699,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithoutDBBuf
 
 	s.Equal(&HistoryMutation{
 		DBEventsBatches:     nil,
+		DBClearBuffer:       false,
 		DBBufferBatch:       []*historypb.HistoryEvent{event1, event2},
 		MemBufferBatch:      []*historypb.HistoryEvent{event1, event2},
 		ScheduleIDToStartID: make(map[int64]int64),
@@ -1728,6 +1731,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithoutDBBuf
 
 	s.Equal(&HistoryMutation{
 		DBEventsBatches:     [][]*historypb.HistoryEvent{{event1, event2}},
+		DBClearBuffer:       false,
 		DBBufferBatch:       nil,
 		MemBufferBatch:      nil,
 		ScheduleIDToStartID: make(map[int64]int64),
@@ -1757,6 +1761,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithoutBuffer_WithDBBuf
 
 	s.Equal(&HistoryMutation{
 		DBEventsBatches:     nil,
+		DBClearBuffer:       false,
 		DBBufferBatch:       nil,
 		MemBufferBatch:      []*historypb.HistoryEvent{event1, event2},
 		ScheduleIDToStartID: make(map[int64]int64),
@@ -1786,6 +1791,7 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithoutBuffer_WithDBBuf
 
 	s.Equal(&HistoryMutation{
 		DBEventsBatches:     [][]*historypb.HistoryEvent{{event1, event2}},
+		DBClearBuffer:       true,
 		DBBufferBatch:       nil,
 		MemBufferBatch:      nil,
 		ScheduleIDToStartID: make(map[int64]int64),
@@ -1822,8 +1828,46 @@ func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithDBBuffer
 
 	s.Equal(&HistoryMutation{
 		DBEventsBatches:     nil,
+		DBClearBuffer:       false,
 		DBBufferBatch:       []*historypb.HistoryEvent{event1, event2},
 		MemBufferBatch:      []*historypb.HistoryEvent{event0, event1, event2},
+		ScheduleIDToStartID: make(map[int64]int64),
+	}, historyMutation)
+}
+
+func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithDBBuffer_WithFlushBuffer() {
+	event0 := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}
+	s.historyBuilder.dbBufferBatch = []*historypb.HistoryEvent{event0}
+	s.historyBuilder.memEventsBatches = nil
+	s.historyBuilder.memLatestBatch = nil
+	s.historyBuilder.memBufferBatch = nil
+
+	event1 := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}
+	event2 := &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+		EventId:   common.BufferedEventID,
+		TaskId:    common.EmptyEventTaskID,
+	}
+
+	s.historyBuilder.appendEvents(event1)
+	s.historyBuilder.appendEvents(event2)
+	historyMutation, err := s.historyBuilder.Finish(true)
+	s.NoError(err)
+	s.assertEventIDTaskID(historyMutation)
+
+	s.Equal(&HistoryMutation{
+		DBEventsBatches:     [][]*historypb.HistoryEvent{{event0, event1, event2}},
+		DBClearBuffer:       true,
+		DBBufferBatch:       nil,
+		MemBufferBatch:      nil,
 		ScheduleIDToStartID: make(map[int64]int64),
 	}, historyMutation)
 }
@@ -1973,7 +2017,7 @@ func (s *historyBuilderSuite) testWireEventIDs(
 	s.historyBuilder.memEventsBatches = nil
 	s.historyBuilder.memLatestBatch = nil
 	s.historyBuilder.memBufferBatch = []*historypb.HistoryEvent{finishEvent}
-	s.historyBuilder.FlushBufferEvents()
+	s.historyBuilder.FlushBufferToCurrentBatch()
 
 	s.Empty(s.historyBuilder.dbBufferBatch)
 	s.Empty(s.historyBuilder.memEventsBatches)
@@ -2005,42 +2049,6 @@ func (s *historyBuilderSuite) testWireEventIDs(
 	case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
 		s.Equal(startEvent.GetEventId(), finishEvent.GetChildWorkflowExecutionTerminatedEventAttributes().GetStartedEventId())
 	}
-}
-
-func (s *historyBuilderSuite) TestAppendFlushFinishEvent_WithBuffer_WithDBBuffer_WithFlushBuffer() {
-	event0 := &historypb.HistoryEvent{
-		EventType: enumspb.EVENT_TYPE_TIMER_FIRED,
-		EventId:   common.BufferedEventID,
-		TaskId:    common.EmptyEventTaskID,
-	}
-	s.historyBuilder.dbBufferBatch = []*historypb.HistoryEvent{event0}
-	s.historyBuilder.memEventsBatches = nil
-	s.historyBuilder.memLatestBatch = nil
-	s.historyBuilder.memBufferBatch = nil
-
-	event1 := &historypb.HistoryEvent{
-		EventType: enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
-		EventId:   common.BufferedEventID,
-		TaskId:    common.EmptyEventTaskID,
-	}
-	event2 := &historypb.HistoryEvent{
-		EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
-		EventId:   common.BufferedEventID,
-		TaskId:    common.EmptyEventTaskID,
-	}
-
-	s.historyBuilder.appendEvents(event1)
-	s.historyBuilder.appendEvents(event2)
-	historyMutation, err := s.historyBuilder.Finish(true)
-	s.NoError(err)
-	s.assertEventIDTaskID(historyMutation)
-
-	s.Equal(&HistoryMutation{
-		DBEventsBatches:     [][]*historypb.HistoryEvent{{event0, event1, event2}},
-		DBBufferBatch:       nil,
-		MemBufferBatch:      nil,
-		ScheduleIDToStartID: make(map[int64]int64),
-	}, historyMutation)
 }
 
 func (s *historyBuilderSuite) TestHasBufferEvent() {

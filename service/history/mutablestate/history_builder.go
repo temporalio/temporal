@@ -47,6 +47,7 @@ const (
 	HistoryBuilderStateImmutable                     = 1
 )
 
+// TODO should the reorderFunc functionality be ported?
 type (
 	HistoryBuilderState int
 
@@ -55,6 +56,8 @@ type (
 		DBEventsBatches [][]*historypb.HistoryEvent
 		// events to be buffer in execution table
 		DBBufferBatch []*historypb.HistoryEvent
+		// whether to clear buffer events on DB
+		DBClearBuffer bool
 		// accumulated buffered events, equal to all buffer events from execution table
 		MemBufferBatch []*historypb.HistoryEvent
 		// schedule to start event ID mapping for flushed buffered event
@@ -73,6 +76,7 @@ type (
 
 		// buffer events in DB
 		dbBufferBatch []*historypb.HistoryEvent
+		dbClearBuffer bool
 
 		// in mem events
 		memEventsBatches [][]*historypb.HistoryEvent
@@ -100,6 +104,7 @@ func NewHistoryBuilder(
 		nextEventID: nextEventID,
 
 		dbBufferBatch:         dbBufferBatch,
+		dbClearBuffer:         false,
 		memEventsBatches:      nil,
 		memLatestBatch:        nil,
 		memBufferBatch:        nil,
@@ -969,12 +974,18 @@ func (b *HistoryBuilder) HasBufferEvents() bool {
 	return len(b.dbBufferBatch) > 0 || len(b.memBufferBatch) > 0
 }
 
-func (b *HistoryBuilder) FlushBufferEvents() {
-	b.assertMutable()
+func (b *HistoryBuilder) BufferEventSize() int {
+	return len(b.dbBufferBatch) + len(b.memBufferBatch)
+}
+
+func (b *HistoryBuilder) FlushBufferToCurrentBatch() {
 	if len(b.dbBufferBatch) == 0 && len(b.memBufferBatch) == 0 {
 		return
 	}
 
+	b.assertMutable()
+
+	b.dbClearBuffer = b.dbClearBuffer || len(b.dbBufferBatch) > 0
 	bufferBatch := append(b.dbBufferBatch, b.memBufferBatch...)
 	b.dbBufferBatch = nil
 	b.memBufferBatch = nil
@@ -991,7 +1002,7 @@ func (b *HistoryBuilder) FlushBufferEvents() {
 	b.memLatestBatch = append(b.memLatestBatch, bufferBatch...)
 }
 
-func (b *HistoryBuilder) FlushEventsBatch() {
+func (b *HistoryBuilder) FlushAndCreateNewBatch() {
 	b.assertMutable()
 	if len(b.memLatestBatch) == 0 {
 		return
@@ -1009,11 +1020,12 @@ func (b *HistoryBuilder) Finish(
 	}()
 
 	if flushBufferEvent {
-		b.FlushBufferEvents()
+		b.FlushBufferToCurrentBatch()
 	}
-	b.FlushEventsBatch()
+	b.FlushAndCreateNewBatch()
 
 	dbEventsBatches := b.memEventsBatches
+	dbClearBuffer := b.dbClearBuffer
 	dbBufferBatch := b.memBufferBatch
 	memBufferBatch := b.dbBufferBatch
 	memBufferBatch = append(memBufferBatch, dbBufferBatch...)
@@ -1022,6 +1034,7 @@ func (b *HistoryBuilder) Finish(
 	b.memEventsBatches = nil
 	b.memBufferBatch = nil
 	b.memLatestBatch = nil
+	b.dbClearBuffer = false
 	b.dbBufferBatch = nil
 	b.scheduleIDToStartedID = nil
 
@@ -1031,6 +1044,7 @@ func (b *HistoryBuilder) Finish(
 
 	return &HistoryMutation{
 		DBEventsBatches:     dbEventsBatches,
+		DBClearBuffer:       dbClearBuffer,
 		DBBufferBatch:       dbBufferBatch,
 		MemBufferBatch:      memBufferBatch,
 		ScheduleIDToStartID: scheduleIDToStartedID,
@@ -1202,4 +1216,106 @@ func (b *HistoryBuilder) wireEventIDs(
 			}
 		}
 	}
+}
+
+// TODO remove this function once we keep all info in DB, e.g. activity / timer / child workflow
+//  to deprecate
+//  * HasActivityFinishEvent
+//  * hasActivityFinishEvent
+func (b *HistoryBuilder) HasActivityFinishEvent(
+	scheduleID int64,
+) bool {
+
+	if hasActivityFinishEvent(scheduleID, b.dbBufferBatch) {
+		return true
+	}
+
+	if hasActivityFinishEvent(scheduleID, b.memBufferBatch) {
+		return true
+	}
+
+	if hasActivityFinishEvent(scheduleID, b.memLatestBatch) {
+		return true
+	}
+
+	for _, batch := range b.memEventsBatches {
+		if hasActivityFinishEvent(scheduleID, batch) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func hasActivityFinishEvent(
+	scheduleID int64,
+	events []*historypb.HistoryEvent,
+) bool {
+	for _, event := range events {
+		switch event.GetEventType() {
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
+			if event.GetActivityTaskCompletedEventAttributes().GetScheduledEventId() == scheduleID {
+				return true
+			}
+
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED:
+			if event.GetActivityTaskFailedEventAttributes().GetScheduledEventId() == scheduleID {
+				return true
+			}
+
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
+			if event.GetActivityTaskTimedOutEventAttributes().GetScheduledEventId() == scheduleID {
+				return true
+			}
+
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:
+			if event.GetActivityTaskCanceledEventAttributes().GetScheduledEventId() == scheduleID {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func (b *HistoryBuilder) HasAndRemoveTimerFireEvent(
+	timerID string,
+) *historypb.HistoryEvent {
+	var timerFireEvent *historypb.HistoryEvent
+
+	b.dbBufferBatch, timerFireEvent = deleteTimerFiredEvent(timerID, b.dbBufferBatch)
+	if timerFireEvent != nil {
+		b.dbClearBuffer = true
+		return timerFireEvent
+	}
+
+	b.memBufferBatch, timerFireEvent = deleteTimerFiredEvent(timerID, b.memBufferBatch)
+	if timerFireEvent != nil {
+		b.dbClearBuffer = true
+		return timerFireEvent
+	}
+
+	return nil
+}
+
+func deleteTimerFiredEvent(
+	timerID string,
+	events []*historypb.HistoryEvent,
+) ([]*historypb.HistoryEvent, *historypb.HistoryEvent) {
+	// go over all history events. if we find a timer fired event for the given
+	// timerID, clear it
+	timerFiredIdx := -1
+	for idx, event := range events {
+		if event.GetEventType() == enumspb.EVENT_TYPE_TIMER_FIRED &&
+			event.GetTimerFiredEventAttributes().GetTimerId() == timerID {
+			timerFiredIdx = idx
+			break
+		}
+	}
+	if timerFiredIdx == -1 {
+		return events, nil
+	}
+
+	timerEvent := events[timerFiredIdx]
+	return append(events[:timerFiredIdx], events[timerFiredIdx+1:]...), timerEvent
 }
