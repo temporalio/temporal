@@ -149,8 +149,8 @@ func buildCLI() *cli.App {
 				}
 				s := temporal.NewServer(
 					temporal.ForServices(services),
-					temporal.WithDynamicConfigClient(dynamicConfigClient),
 					temporal.WithConfig(cfg),
+					temporal.WithDynamicConfigClient(dynamicConfigClient),
 					temporal.WithLogger(logger),
 					temporal.InterruptOn(temporal.InterruptCh()),
 					temporal.WithAuthorizer(authorizer),

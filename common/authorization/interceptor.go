@@ -120,16 +120,12 @@ func (a *interceptor) Interceptor(
 			namespace = requestWithNamespace.GetNamespace()
 		}
 
-		apiName := info.FullMethod
-
 		scope := a.getMetricsScope(metrics.AuthorizationScope, namespace)
-		sw := scope.StartTimer(metrics.ServiceAuthorizationLatency)
-
-		result, err := a.authorizer.Authorize(ctx, claims, &CallTarget{
+		result, err := a.authorize(ctx, claims, &CallTarget{
 			Namespace: namespace,
-			APIName:   apiName,
+			APIName:   info.FullMethod,
 			Request:   req,
-		})
+		}, scope)
 		if err != nil {
 			scope.IncCounter(metrics.ServiceErrAuthorizeFailedCounter)
 			a.logAuthError(err)
@@ -139,9 +135,14 @@ func (a *interceptor) Interceptor(
 			scope.IncCounter(metrics.ServiceErrUnauthorizedCounter)
 			return nil, errUnauthorized // return a generic error to the caller without disclosing details
 		}
-		sw.Stop()
 	}
 	return handler(ctx, req)
+}
+
+func (a *interceptor) authorize(ctx context.Context, claims *Claims, callTarget *CallTarget, scope metrics.Scope) (Result, error) {
+	sw := scope.StartTimer(metrics.ServiceAuthorizationLatency)
+	defer sw.Stop()
+	return a.authorizer.Authorize(ctx, claims, callTarget)
 }
 
 func (a *interceptor) logAuthError(err error) {
