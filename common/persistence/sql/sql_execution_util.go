@@ -727,7 +727,7 @@ func lockExecution(
 	runID primitives.UUID,
 ) (int64, int64, error) {
 
-	version, nextEventID, err := tx.WriteLockExecutions(ctx, sqlplugin.ExecutionsFilter{
+	dbRecordVersion, nextEventID, err := tx.WriteLockExecutions(ctx, sqlplugin.ExecutionsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -743,7 +743,7 @@ func lockExecution(
 		}
 		return 0, 0, serviceerror.NewInternal(fmt.Sprintf("lockNextEventID failed. Error: %v", err))
 	}
-	return version, nextEventID, nil
+	return dbRecordVersion, nextEventID, nil
 }
 
 func createTransferTasks(
