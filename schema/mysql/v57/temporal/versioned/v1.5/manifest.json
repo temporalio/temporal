@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.5",
+  "MinCompatibleVersion": "1.0",
+  "Description": "schema update for execution table version",
+  "SchemaUpdateCqlFiles": [
+    "executions.sql"
+  ]
+}

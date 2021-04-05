@@ -448,6 +448,7 @@ type (
 	// GetWorkflowExecutionResponse is the response to GetWorkflowExecutionRequest
 	GetWorkflowExecutionResponse struct {
 		State             *persistencespb.WorkflowMutableState
+		DBRecordVersion   int64
 		MutableStateStats *MutableStateStats
 	}
 
@@ -537,7 +538,8 @@ type (
 	WorkflowMutation struct {
 		ExecutionInfo  *persistencespb.WorkflowExecutionInfo
 		ExecutionState *persistencespb.WorkflowExecutionState
-		NextEventID    int64
+		// TODO deprecate NextEventID in favor of DBRecordVersion
+		NextEventID int64
 
 		UpsertActivityInfos       map[int64]*persistencespb.ActivityInfo
 		DeleteActivityInfos       map[int64]struct{}
@@ -559,15 +561,18 @@ type (
 		TimerTasks       []Task
 		VisibilityTasks  []Task
 
-		Condition int64
-		Checksum  *persistencespb.Checksum
+		// TODO deprecate Condition in favor of DBRecordVersion
+		Condition       int64
+		DBRecordVersion int64
+		Checksum        *persistencespb.Checksum
 	}
 
 	// WorkflowSnapshot is used as generic workflow execution state snapshot
 	WorkflowSnapshot struct {
 		ExecutionInfo  *persistencespb.WorkflowExecutionInfo
 		ExecutionState *persistencespb.WorkflowExecutionState
-		NextEventID    int64
+		// TODO deprecate NextEventID in favor of DBRecordVersion
+		NextEventID int64
 
 		ActivityInfos       map[int64]*persistencespb.ActivityInfo
 		TimerInfos          map[string]*persistencespb.TimerInfo
@@ -581,8 +586,10 @@ type (
 		TimerTasks       []Task
 		VisibilityTasks  []Task
 
-		Condition int64
-		Checksum  *persistencespb.Checksum
+		// TODO deprecate Condition in favor of DBRecordVersion
+		Condition       int64
+		DBRecordVersion int64
+		Checksum        *persistencespb.Checksum
 	}
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution

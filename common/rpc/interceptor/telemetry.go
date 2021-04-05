@@ -112,7 +112,7 @@ func (ti *TelemetryInterceptor) Intercept(
 
 	resp, err := handler(ctx, req)
 	if err != nil {
-		ti.handleError(scope, err)
+		ti.handleError(scope, methodName, err)
 		return nil, err
 	}
 	return resp, nil
@@ -120,6 +120,7 @@ func (ti *TelemetryInterceptor) Intercept(
 
 func (ti *TelemetryInterceptor) handleError(
 	scope int,
+	methodName string,
 	err error,
 ) {
 
@@ -153,13 +154,13 @@ func (ti *TelemetryInterceptor) handleError(
 		ti.metricsClient.IncCounter(scope, metrics.ServiceErrClientVersionNotSupportedCounter)
 	case *serviceerror.DataLoss:
 		ti.metricsClient.IncCounter(scope, metrics.ServiceFailures)
-		ti.logger.Error("internal service error, data loss", tag.Error(err))
+		ti.logger.Error("internal service error, data loss", tag.Operation(methodName), tag.Error(err))
 	case *serviceerror.Internal:
 		ti.metricsClient.IncCounter(scope, metrics.ServiceFailures)
-		ti.logger.Error("internal service error", tag.Error(err))
+		ti.logger.Error("internal service error", tag.Operation(methodName), tag.Error(err))
 	default:
 		ti.metricsClient.IncCounter(scope, metrics.ServiceFailures)
-		ti.logger.Error("uncategorized error", tag.Error(err))
+		ti.logger.Error("uncategorized error", tag.Operation(methodName), tag.Error(err))
 	}
 }
 

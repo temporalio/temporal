@@ -46,6 +46,11 @@ const LoggingCallAtKey = "logging-call-at"
 
 ///////////////////  Common tags defined here ///////////////////
 
+// Operation returns tag for Operation
+func Operation(operation string) ZapTag {
+	return NewStringTag("operation", operation)
+}
+
 // Error returns tag for Error
 func Error(err error) ZapTag {
 	return NewErrorTag(err)

@@ -171,7 +171,7 @@ type (
 		IsWorkflowExecutionRunning() bool
 		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)
-		Load(*persistencespb.WorkflowMutableState) error
+		Load(*persistencespb.WorkflowMutableState, int64) error
 		ReplicateActivityInfo(*historyservice.SyncActivityRequest, bool) error
 		ReplicateActivityTaskCancelRequestedEvent(*historypb.HistoryEvent) error
 		ReplicateActivityTaskCanceledEvent(*historypb.HistoryEvent) error
@@ -228,8 +228,8 @@ type (
 		AddTransferTasks(transferTasks ...persistence.Task)
 		AddTimerTasks(timerTasks ...persistence.Task)
 		AddVisibilityTasks(visibilityTasks ...persistence.Task)
-		SetUpdateCondition(int64)
-		GetUpdateCondition() int64
+		SetUpdateCondition(int64, int64)
+		GetUpdateCondition() (int64, int64)
 
 		StartTransaction(entry *cache.NamespaceCacheEntry) (bool, error)
 		StartTransactionSkipWorkflowTaskFail(entry *cache.NamespaceCacheEntry) error

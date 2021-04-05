@@ -1401,11 +1401,12 @@ func (mr *MockmutableStateMockRecorder) GetStartVersion() *gomock.Call {
 }
 
 // GetUpdateCondition mocks base method.
-func (m *MockmutableState) GetUpdateCondition() int64 {
+func (m *MockmutableState) GetUpdateCondition() (int64, int64) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetUpdateCondition")
 	ret0, _ := ret[0].(int64)
-	return ret0
+	ret1, _ := ret[1].(int64)
+	return ret0, ret1
 }
 
 // GetUpdateCondition indicates an expected call of GetUpdateCondition.
@@ -1643,17 +1644,17 @@ func (mr *MockmutableStateMockRecorder) IsWorkflowExecutionRunning() *gomock.Cal
 }
 
 // Load mocks base method.
-func (m *MockmutableState) Load(arg0 *persistence.WorkflowMutableState) error {
+func (m *MockmutableState) Load(arg0 *persistence.WorkflowMutableState, arg1 int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Load", arg0)
+	ret := m.ctrl.Call(m, "Load", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Load indicates an expected call of Load.
-func (mr *MockmutableStateMockRecorder) Load(arg0 interface{}) *gomock.Call {
+func (mr *MockmutableStateMockRecorder) Load(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Load", reflect.TypeOf((*MockmutableState)(nil).Load), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Load", reflect.TypeOf((*MockmutableState)(nil).Load), arg0, arg1)
 }
 
 // ReplicateActivityInfo mocks base method.
@@ -2304,15 +2305,15 @@ func (mr *MockmutableStateMockRecorder) SetNextEventID(nextEventID interface{}) 
 }
 
 // SetUpdateCondition mocks base method.
-func (m *MockmutableState) SetUpdateCondition(arg0 int64) {
+func (m *MockmutableState) SetUpdateCondition(arg0, arg1 int64) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetUpdateCondition", arg0)
+	m.ctrl.Call(m, "SetUpdateCondition", arg0, arg1)
 }
 
 // SetUpdateCondition indicates an expected call of SetUpdateCondition.
-func (mr *MockmutableStateMockRecorder) SetUpdateCondition(arg0 interface{}) *gomock.Call {
+func (mr *MockmutableStateMockRecorder) SetUpdateCondition(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetUpdateCondition", reflect.TypeOf((*MockmutableState)(nil).SetUpdateCondition), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetUpdateCondition", reflect.TypeOf((*MockmutableState)(nil).SetUpdateCondition), arg0, arg1)
 }
 
 // StartTransaction mocks base method.
