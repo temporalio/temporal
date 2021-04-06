@@ -25,7 +25,6 @@
 package cli
 
 import (
-	"os"
 	"os/exec"
 
 	"github.com/hashicorp/go-hclog"
@@ -35,6 +34,18 @@ import (
 	"go.temporal.io/sdk/converter"
 
 	"go.temporal.io/server/common/headers"
+)
+
+var (
+	pluginClient *plugin.Client
+	pluginMap    = map[string]plugin.Plugin{
+		"DataConverter": &DataConverterPlugin{},
+	}
+	handshakeConfig = plugin.HandshakeConfig{
+		ProtocolVersion:  1,
+		MagicCookieKey:   "TEMPORAL_CLI_PLUGIN_DATA_CONVERTER",
+		MagicCookieValue: "abb3e448baf947eba1847b10a38554db",
+	}
 )
 
 // SetFactory is used to set the ClientFactory global
@@ -100,6 +111,12 @@ func NewCliApp() *cli.App {
 			Value:  "",
 			Usage:  "override for target server name",
 			EnvVar: "TEMPORAL_CLI_TLS_SERVER_NAME",
+		},
+		cli.StringFlag{
+			Name:   FlagDataConverterPluginWithAlias,
+			Value:  "",
+			Usage:  "path to a data converter plugin",
+			EnvVar: "TEMPORAL_CLI_PLUGIN_DATA_CONVERTER",
 		},
 	}
 	app.Commands = []cli.Command{
@@ -227,7 +244,7 @@ func NewCliApp() *cli.App {
 }
 
 func LoadPlugins(ctx *cli.Context) error {
-	plugin_path := os.Getenv("TEMPORAL_PLUGIN_DATA_CONVERTER")
+	plugin_path := ctx.String(FlagDataConverterPlugin)
 	if plugin_path == "" {
 		return nil
 	}
@@ -265,15 +282,3 @@ func KillPlugins(ctx *cli.Context) error {
 
 	return nil
 }
-
-var (
-	pluginClient *plugin.Client
-	pluginMap    = map[string]plugin.Plugin{
-		"DataConverter": &DataConverterPlugin{},
-	}
-	handshakeConfig = plugin.HandshakeConfig{
-		ProtocolVersion:  1,
-		MagicCookieKey:   "TEMPORAL_PLUGIN_DATA_CONVERTER",
-		MagicCookieValue: "abb3e448baf947eba1847b10a38554db",
-	}
-)
