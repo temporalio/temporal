@@ -130,6 +130,8 @@ func NewImmutableHistoryBuilder(
 		version:     lastEvent.GetVersion(),
 		nextEventID: lastEvent.GetEventId() + 1,
 
+		workflowFinished: false,
+
 		dbBufferBatch:         nil,
 		dbClearBuffer:         false,
 		memEventsBatches:      nil,
