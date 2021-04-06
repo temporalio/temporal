@@ -209,6 +209,12 @@ func NewCliApp() *cli.App {
 			Usage:       "Operate Temporal cluster",
 			Subcommands: newClusterCommands(),
 		},
+		{
+			Name:        "dataconverter",
+			Aliases:     []string{"dc"},
+			Usage:       "Data Converter",
+			Subcommands: newDataConverterCommands(),
+		},
 	}
 	app.Before = LoadPlugins
 	app.After = KillPlugins
@@ -268,6 +274,6 @@ var (
 	handshakeConfig = plugin.HandshakeConfig{
 		ProtocolVersion:  1,
 		MagicCookieKey:   "TEMPORAL_PLUGIN_DATA_CONVERTER",
-		MagicCookieValue: "cookie",
+		MagicCookieValue: "abb3e448baf947eba1847b10a38554db",
 	}
 )
