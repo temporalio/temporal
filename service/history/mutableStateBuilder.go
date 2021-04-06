@@ -3986,10 +3986,12 @@ Loop:
 	for scheduleID, startID := range scheduleIDToStartID {
 		if activityInfo, ok := e.GetActivityInfo(scheduleID); ok {
 			activityInfo.StartedId = startID
+			e.updateActivityInfos[activityInfo.ScheduleId] = activityInfo
 			continue Loop
 		}
 		if childInfo, ok := e.GetChildExecutionInfo(scheduleID); ok {
 			childInfo.StartedId = startID
+			e.updateChildExecutionInfos[childInfo.InitiatedId] = childInfo
 			continue Loop
 		}
 	}
