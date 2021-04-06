@@ -211,7 +211,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 		"",
 		int64(0),
 	).Return(&historypb.HistoryEvent{}, nil)
-	s.mockMutableState.EXPECT().FlushBufferedEvents().Return(nil)
+	s.mockMutableState.EXPECT().FlushBufferedEvents()
 
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(lastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()

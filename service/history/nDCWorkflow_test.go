@@ -294,7 +294,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 		"",
 		int64(0),
 	).Return(&historypb.HistoryEvent{}, nil)
-	s.mockMutableState.EXPECT().FlushBufferedEvents().Return(nil)
+	s.mockMutableState.EXPECT().FlushBufferedEvents()
 
 	s.mockMutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
 		lastEventID+1, workflowTerminationReason, gomock.Any(), workflowTerminationIdentity,
