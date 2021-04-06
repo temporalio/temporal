@@ -215,6 +215,7 @@ CREATE TABLE history_node (
   node_id        BIGINT NOT NULL,
   txn_id         BIGINT NOT NULL,
   --
+  prev_txn_id    BIGINT NOT NULL DEFAULT 0,
   data           MEDIUMBLOB NOT NULL,
   data_encoding  VARCHAR(16) NOT NULL,
   PRIMARY KEY (shard_id, tree_id, branch_id, node_id, txn_id)

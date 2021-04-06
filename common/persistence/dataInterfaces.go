@@ -531,6 +531,8 @@ type (
 		WorkflowID  string
 		RunID       string
 		BranchToken []byte
+		PrevTxnID   int64
+		TxnID       int64
 		Events      []*historypb.HistoryEvent
 	}
 
@@ -990,6 +992,8 @@ type (
 		BranchToken []byte
 		// The batch of events to be appended. The first eventID will become the nodeID of this batch
 		Events []*historypb.HistoryEvent
+		// TransactionID for events before these events. For events chaining
+		PrevTransactionID int64
 		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
 		TransactionID int64
 	}

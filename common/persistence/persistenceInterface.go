@@ -340,7 +340,9 @@ type (
 		NodeID int64
 		// The events to be appended
 		Events *commonpb.DataBlob
-		// Requested TransactionID for conditional update
+		// TransactionID for events before these events. For events chaining
+		PrevTransactionID int64
+		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
 		TransactionID int64
 		// Used in sharded data stores to identify which shard to use
 		ShardID int32

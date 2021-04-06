@@ -203,13 +203,14 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(
 	}
 
 	req := &InternalAppendHistoryNodesRequest{
-		IsNewBranch:   request.IsNewBranch,
-		Info:          request.Info,
-		BranchInfo:    branch,
-		NodeID:        nodeID,
-		Events:        blob,
-		TransactionID: request.TransactionID,
-		ShardID:       request.ShardID,
+		IsNewBranch:       request.IsNewBranch,
+		Info:              request.Info,
+		BranchInfo:        branch,
+		NodeID:            nodeID,
+		Events:            blob,
+		PrevTransactionID: request.PrevTransactionID,
+		TransactionID:     request.TransactionID,
+		ShardID:           request.ShardID,
 	}
 
 	err = m.persistence.AppendHistoryNodes(req)
