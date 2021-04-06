@@ -203,14 +203,16 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(
 	}
 
 	req := &InternalAppendHistoryNodesRequest{
-		IsNewBranch:       request.IsNewBranch,
-		Info:              request.Info,
-		BranchInfo:        branch,
-		NodeID:            nodeID,
-		Events:            blob,
-		PrevTransactionID: request.PrevTransactionID,
-		TransactionID:     request.TransactionID,
-		ShardID:           request.ShardID,
+		IsNewBranch: request.IsNewBranch,
+		Info:        request.Info,
+		BranchInfo:  branch,
+		Node: InternalHistoryNode{
+			NodeID:            nodeID,
+			Events:            blob,
+			PrevTransactionID: request.PrevTransactionID,
+			TransactionID:     request.TransactionID,
+		},
+		ShardID: request.ShardID,
 	}
 
 	err = m.persistence.AppendHistoryNodes(req)
@@ -347,34 +349,45 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	}
 
 	req := &InternalReadHistoryBranchRequest{
-		TreeID:            treeID,
-		BranchID:          allBRs[token.CurrentRangeIndex].GetBranchId(),
-		MinNodeID:         minNodeID,
-		MaxNodeID:         maxNodeID,
-		NextPageToken:     token.StoreToken,
-		LastNodeID:        token.LastNodeID,
-		LastTransactionID: token.LastTransactionID,
-		ShardID:           request.ShardID,
-		PageSize:          request.PageSize,
+		TreeID:        treeID,
+		BranchID:      allBRs[token.CurrentRangeIndex].GetBranchId(),
+		MinNodeID:     minNodeID,
+		MaxNodeID:     maxNodeID,
+		NextPageToken: token.StoreToken,
+		ShardID:       request.ShardID,
+		PageSize:      request.PageSize,
+		MetadataOnly:  false,
 	}
 
 	resp, err := m.persistence.ReadHistoryBranch(req)
 	if err != nil {
 		return nil, nil, 0, nil, err
 	}
-	if len(resp.History) == 0 && len(request.NextPageToken) == 0 {
+	if len(resp.Nodes) == 0 && len(request.NextPageToken) == 0 {
 		return nil, nil, 0, nil, serviceerror.NewNotFound("Workflow execution history not found.")
 	}
-
-	dataBlobs := resp.History
-	dataSize := 0
-	for _, dataBlob := range resp.History {
-		dataSize += len(dataBlob.Data)
+	nodes, err := m.filterHistoryNodes(
+		token.LastNodeID,
+		token.LastTransactionID,
+		resp.Nodes,
+	)
+	if err != nil {
+		return nil, nil, 0, nil, err
 	}
 
+	var dataBlobs []*commonpb.DataBlob
+	dataSize := 0
 	token.StoreToken = resp.NextPageToken
-	token.LastNodeID = resp.LastNodeID
-	token.LastTransactionID = resp.LastTransactionID
+	if len(nodes) > 0 {
+		dataBlobs = make([]*commonpb.DataBlob, len(nodes))
+		for index, node := range nodes {
+			dataBlobs[index] = node.Events
+			dataSize += len(node.Events.Data)
+		}
+		lastNode := nodes[len(nodes)-1]
+		token.LastNodeID = lastNode.NodeID
+		token.LastTransactionID = lastNode.TransactionID
+	}
 
 	// NOTE: in this method, we need to make sure eventVersion is NOT
 	// decreasing(otherwise we skip the events), eventID should be contiguous(otherwise return error)
@@ -462,6 +475,42 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 	}
 
 	return historyEvents, historyEventBatches, nextPageToken, dataSize, lastFirstEventID, nil
+}
+
+func (m *historyV2ManagerImpl) filterHistoryNodes(
+	lastNodeID int64,
+	lastTransactionID int64,
+	nodes []InternalHistoryNode,
+) ([]InternalHistoryNode, error) {
+	var result []InternalHistoryNode
+	for _, node := range nodes {
+		// assuming that business logic layer is correct and transaction ID only increase
+		// thus, valid event batch will come with increasing transaction ID
+
+		// event batches with smaller node ID
+		//  -> should not be possible since records are already sorted
+		// event batches with same node ID
+		//  -> batch with higher transaction ID is valid
+		// event batches with larger node ID
+		//  -> batch with lower transaction ID is invalid (happens before)
+		//  -> batch with higher transaction ID is valid
+		if node.TransactionID < lastTransactionID {
+			continue
+		}
+
+		switch {
+		case node.NodeID < lastNodeID:
+			return nil, serviceerror.NewInternal(fmt.Sprintf("corrupted data, nodeID cannot decrease"))
+		case node.NodeID == lastNodeID:
+			return nil, serviceerror.NewInternal(fmt.Sprintf("corrupted data, same nodeID must have smaller txnID"))
+		default: // row.NodeID > lastNodeID:
+			// NOTE: when row.nodeID > lastNodeID, we expect the one with largest txnID comes first
+			lastTransactionID = node.TransactionID
+			lastNodeID = node.NodeID
+			result = append(result, node)
+		}
+	}
+	return result, nil
 }
 
 func (m *historyV2ManagerImpl) deserializeToken(

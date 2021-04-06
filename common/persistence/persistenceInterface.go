@@ -316,16 +316,16 @@ type (
 		Checksum *persistencespb.Checksum
 	}
 
-	// InternalAppendHistoryEventsRequest is used to append new events to workflow execution history  for Persistence Interface
-	InternalAppendHistoryEventsRequest struct {
-		NamespaceID       string
-		Execution         commonpb.WorkflowExecution
-		FirstEventID      int64
-		EventBatchVersion int64
-		RangeID           int64
-		TransactionID     int64
-		Events            *commonpb.DataBlob
-		Overwrite         bool
+	// InternalHistoryNode represent a history node metadata
+	InternalHistoryNode struct {
+		// The first eventID becomes the nodeID to be appended
+		NodeID int64
+		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
+		TransactionID int64
+		// TransactionID for events before these events. For events chaining
+		PrevTransactionID int64
+		// The events to be appended
+		Events *commonpb.DataBlob
 	}
 
 	// InternalAppendHistoryNodesRequest is used to append a batch of history nodes
@@ -336,14 +336,8 @@ type (
 		Info string
 		// The branch to be appended
 		BranchInfo *persistencespb.HistoryBranch
-		// The first eventID becomes the nodeID to be appended
-		NodeID int64
-		// The events to be appended
-		Events *commonpb.DataBlob
-		// TransactionID for events before these events. For events chaining
-		PrevTransactionID int64
-		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
-		TransactionID int64
+		// The history node
+		Node InternalHistoryNode
 		// Used in sharded data stores to identify which shard to use
 		ShardID int32
 	}
@@ -402,12 +396,10 @@ type (
 		PageSize int
 		// Pagination token
 		NextPageToken []byte
-		// LastNodeID is the last known node ID attached to a history node
-		LastNodeID int64
-		// LastTransactionID is the last known transaction ID attached to a history node
-		LastTransactionID int64
 		// Used in sharded data stores to identify which shard to use
 		ShardID int32
+		// whether to only return metadata, excluding node content
+		MetadataOnly bool
 	}
 
 	// InternalCompleteForkBranchRequest is used to update some tree/branch meta data for forking
@@ -422,14 +414,10 @@ type (
 
 	// InternalReadHistoryBranchResponse is the response to ReadHistoryBranchRequest
 	InternalReadHistoryBranchResponse struct {
-		// History events
-		History []*commonpb.DataBlob
+		// History nodes
+		Nodes []InternalHistoryNode
 		// Pagination token
 		NextPageToken []byte
-		// LastNodeID is the last known node ID attached to a history node
-		LastNodeID int64
-		// LastTransactionID is the last known transaction ID attached to a history node
-		LastTransactionID int64
 	}
 
 	// VisibilityWorkflowExecutionInfo is visibility info for internal response

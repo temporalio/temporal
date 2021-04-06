@@ -47,12 +47,14 @@ type (
 	// HistoryNodeSelectFilter contains the column names within history_node table that
 	// can be used to filter results through a WHERE clause
 	HistoryNodeSelectFilter struct {
-		ShardID   int32
-		TreeID    primitives.UUID
-		BranchID  primitives.UUID
-		MinNodeID int64
-		MaxNodeID int64
-		PageSize  int
+		ShardID      int32
+		TreeID       primitives.UUID
+		BranchID     primitives.UUID
+		MinNodeID    int64
+		MinTxnID     int64
+		MaxNodeID    int64
+		PageSize     int
+		MetadataOnly bool
 	}
 
 	// HistoryNodeDeleteFilter contains the column names within history_node table that
