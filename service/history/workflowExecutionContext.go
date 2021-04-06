@@ -898,6 +898,7 @@ func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
 	branchToken := workflowEvents.BranchToken
 	events := workflowEvents.Events
 	prevTxnID := workflowEvents.PrevTxnID
+	txnID := workflowEvents.TxnID
 
 	size, err := c.appendHistoryV2EventsWithRetry(
 		namespaceID,
@@ -908,7 +909,7 @@ func (c *workflowExecutionContextImpl) persistFirstWorkflowEvents(
 			BranchToken:       branchToken,
 			Events:            events,
 			PrevTransactionID: prevTxnID,
-			TransactionID:     events[len(events)-1].GetTaskId(),
+			TransactionID:     txnID,
 		},
 	)
 	return size, err
@@ -930,6 +931,7 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 	branchToken := workflowEvents.BranchToken
 	events := workflowEvents.Events
 	prevTxnID := workflowEvents.PrevTxnID
+	txnID := workflowEvents.TxnID
 
 	size, err := c.appendHistoryV2EventsWithRetry(
 		namespaceID,
@@ -939,7 +941,7 @@ func (c *workflowExecutionContextImpl) persistNonFirstWorkflowEvents(
 			BranchToken:       branchToken,
 			Events:            events,
 			PrevTransactionID: prevTxnID,
-			TransactionID:     events[len(events)-1].GetTaskId(),
+			TransactionID:     txnID,
 		},
 	)
 	return size, err

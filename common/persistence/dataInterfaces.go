@@ -532,6 +532,7 @@ type (
 		RunID       string
 		BranchToken []byte
 		PrevTxnID   int64
+		TxnID       int64
 		Events      []*historypb.HistoryEvent
 	}
 

@@ -3874,16 +3874,22 @@ func (e *mutableStateBuilder) prepareEventsAndReplicationTasks(
 	e.updatePendingEventIDs(historyMutation.ScheduleIDToStartID)
 
 	workflowEventsSeq := make([]*persistence.WorkflowEvents, len(newEventsBatches))
+	historyNodeTxnIDs, err := e.shard.GenerateTransferTaskIDs(len(newEventsBatches))
+	if err != nil {
+		return nil, nil, false, err
+	}
 	for index, eventBatch := range newEventsBatches {
 		workflowEventsSeq[index] = &persistence.WorkflowEvents{
 			NamespaceID: e.executionInfo.NamespaceId,
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
 			BranchToken: currentBranchToken,
-			PrevTxnID:   e.executionInfo.LastEventTaskId,
+			PrevTxnID:   e.executionInfo.LastHistoryNodeTxnId,
+			TxnID:       historyNodeTxnIDs[index],
 			Events:      eventBatch,
 		}
 		e.GetExecutionInfo().LastEventTaskId = eventBatch[len(eventBatch)-1].GetTaskId()
+		e.executionInfo.LastHistoryNodeTxnId = historyNodeTxnIDs[index]
 	}
 
 	if err := e.validateNoEventsAfterWorkflowFinish(
