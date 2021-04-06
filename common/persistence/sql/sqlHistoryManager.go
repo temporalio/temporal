@@ -87,6 +87,7 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 		TreeID:       treeIDBytes,
 		BranchID:     branchIDBytes,
 		NodeID:       request.NodeID,
+		PrevTxnID:    request.PrevTransactionID,
 		TxnID:        request.TransactionID,
 		Data:         request.Events.Data,
 		DataEncoding: request.Events.EncodingType.String(),
@@ -199,7 +200,6 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 
 	for _, row := range rows {
 		eventBlob := p.NewDataBlob(row.Data, row.DataEncoding)
-
 		if row.TxnID < lastTxnID {
 			// assuming that business logic layer is correct and transaction ID only increase
 			// thus, valid event batch will come with increasing transaction ID

@@ -38,6 +38,7 @@ type (
 		TreeID       primitives.UUID
 		BranchID     primitives.UUID
 		NodeID       int64
+		PrevTxnID    int64
 		TxnID        int64
 		Data         []byte
 		DataEncoding string

@@ -43,10 +43,10 @@ import (
 const (
 	// below are templates for history_node table
 	v2templateUpsertData = `INSERT INTO history_node (` +
-		`tree_id, branch_id, node_id, txn_id, data, data_encoding) ` +
-		`VALUES (?, ?, ?, ?, ?, ?) `
+		`tree_id, branch_id, node_id, prev_txn_id, txn_id, data, data_encoding) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?) `
 
-	v2templateReadData = `SELECT node_id, txn_id, data, data_encoding FROM history_node ` +
+	v2templateReadData = `SELECT node_id, prev_txn_id, txn_id, data, data_encoding FROM history_node ` +
 		`WHERE tree_id = ? AND branch_id = ? AND node_id >= ? AND node_id < ? `
 
 	v2templateRangeDeleteData = `DELETE FROM history_node WHERE tree_id = ? AND branch_id = ? AND node_id >= ? `
@@ -108,7 +108,14 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 
 	if !request.IsNewBranch {
 		query := h.session.Query(v2templateUpsertData,
-			branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
+			branchInfo.TreeId,
+			branchInfo.BranchId,
+			request.NodeID,
+			request.PrevTransactionID,
+			request.TransactionID,
+			request.Events.Data,
+			request.Events.EncodingType.String(),
+		)
 		if err := query.Exec(); err != nil {
 			return gocql.ConvertError("AppendHistoryNodes", err)
 		}
@@ -129,9 +136,20 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 
 	batch := h.session.NewBatch(gocql.LoggedBatch)
 	batch.Query(v2templateInsertTree,
-		branchInfo.TreeId, branchInfo.BranchId, treeInfoDataBlob.Data, treeInfoDataBlob.EncodingType.String())
+		branchInfo.TreeId,
+		branchInfo.BranchId,
+		treeInfoDataBlob.Data,
+		treeInfoDataBlob.EncodingType.String(),
+	)
 	batch.Query(v2templateUpsertData,
-		branchInfo.TreeId, branchInfo.BranchId, request.NodeID, request.TransactionID, request.Events.Data, request.Events.EncodingType.String())
+		branchInfo.TreeId,
+		branchInfo.BranchId,
+		request.NodeID,
+		request.PrevTransactionID,
+		request.TransactionID,
+		request.Events.Data,
+		request.Events.EncodingType.String(),
+	)
 	if err = h.session.ExecuteBatch(batch); err != nil {
 		return gocql.ConvertError("AppendHistoryNodes", err)
 	}
@@ -171,8 +189,9 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 		var data []byte
 		var encoding string
 		nodeID := int64(0)
+		prevTxnID := int64(0)
 		txnID := int64(0)
-		if !iter.Scan(&nodeID, &txnID, &data, &encoding) {
+		if !iter.Scan(&nodeID, &prevTxnID, &txnID, &data, &encoding) {
 			break
 		}
 		if txnID < lastTxnID {

@@ -3874,14 +3874,22 @@ func (e *mutableStateBuilder) prepareEventsAndReplicationTasks(
 	e.updatePendingEventIDs(historyMutation.ScheduleIDToStartID)
 
 	workflowEventsSeq := make([]*persistence.WorkflowEvents, len(newEventsBatches))
+	historyNodeTxnIDs, err := e.shard.GenerateTransferTaskIDs(len(newEventsBatches))
+	if err != nil {
+		return nil, nil, false, err
+	}
 	for index, eventBatch := range newEventsBatches {
 		workflowEventsSeq[index] = &persistence.WorkflowEvents{
 			NamespaceID: e.executionInfo.NamespaceId,
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
 			BranchToken: currentBranchToken,
+			PrevTxnID:   e.executionInfo.LastHistoryNodeTxnId,
+			TxnID:       historyNodeTxnIDs[index],
 			Events:      eventBatch,
 		}
+		e.GetExecutionInfo().LastEventTaskId = eventBatch[len(eventBatch)-1].GetTaskId()
+		e.executionInfo.LastHistoryNodeTxnId = historyNodeTxnIDs[index]
 	}
 
 	if err := e.validateNoEventsAfterWorkflowFinish(
@@ -3978,10 +3986,12 @@ Loop:
 	for scheduleID, startID := range scheduleIDToStartID {
 		if activityInfo, ok := e.GetActivityInfo(scheduleID); ok {
 			activityInfo.StartedId = startID
+			e.updateActivityInfos[activityInfo.ScheduleId] = activityInfo
 			continue Loop
 		}
 		if childInfo, ok := e.GetChildExecutionInfo(scheduleID); ok {
 			childInfo.StartedId = startID
+			e.updateChildExecutionInfos[childInfo.InitiatedId] = childInfo
 			continue Loop
 		}
 	}
@@ -3996,7 +4006,6 @@ func (e *mutableStateBuilder) updateWithLastWriteEvent(
 		// already handled in state builder
 		return nil
 	}
-	e.GetExecutionInfo().LastEventTaskId = lastEvent.GetTaskId()
 
 	if e.executionInfo.VersionHistories != nil {
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
