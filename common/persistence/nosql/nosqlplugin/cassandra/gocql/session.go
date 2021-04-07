@@ -153,9 +153,6 @@ func (s *session) MapExecuteBatchCAS(
 	defer func() { s.handleError(retError) }()
 
 	applied, iter, err := s.Value.Load().(*gocql.Session).MapExecuteBatchCAS(b.(*batch).gocqlBatch, previous)
-	if iter == nil {
-		return applied, nil, err
-	}
 	return applied, iter, err
 }
 

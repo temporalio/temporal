@@ -283,10 +283,6 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime)).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
-	if iter == nil {
-		// TODO: should return serviceerror.InvalidArgument if the token is invalid
-		return nil, serviceerror.NewInternal("ListOpenWorkflowExecutions operation failed.  Not able to create query iterator.")
-	}
 
 	response := &p.InternalListWorkflowExecutionsResponse{}
 	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0, request.PageSize)
@@ -314,10 +310,6 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByType(
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
 		request.WorkflowTypeName).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
-	if iter == nil {
-		// TODO: should return serviceerror.InvalidArgument if the token is invalid
-		return nil, serviceerror.NewInternal("ListOpenWorkflowExecutionsByType operation failed.  Not able to create query iterator.")
-	}
 
 	response := &p.InternalListWorkflowExecutionsResponse{}
 	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0, request.PageSize)
@@ -345,10 +337,6 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByWorkflowID(
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
 		request.WorkflowID).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
-	if iter == nil {
-		// TODO: should return serviceerror.InvalidArgument if the token is invalid
-		return nil, serviceerror.NewInternal("ListOpenWorkflowExecutionsByWorkflowID operation failed.  Not able to create query iterator.")
-	}
 
 	response := &p.InternalListWorkflowExecutionsResponse{}
 	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0, request.PageSize)
@@ -375,10 +363,6 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
 		p.UnixNanoToDBTimestamp(request.EarliestStartTime),
 		p.UnixNanoToDBTimestamp(request.LatestStartTime)).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
-	if iter == nil {
-		// TODO: should return serviceerror.InvalidArgument if the token is invalid
-		return nil, serviceerror.NewInternal("ListClosedWorkflowExecutions operation failed.  Not able to create query iterator.")
-	}
 
 	response := &p.InternalListWorkflowExecutionsResponse{}
 	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0, request.PageSize)
@@ -406,10 +390,6 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
 		request.WorkflowTypeName).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
-	if iter == nil {
-		// TODO: should return serviceerror.InvalidArgument if the token is invalid
-		return nil, serviceerror.NewInternal("ListClosedWorkflowExecutionsByType operation failed.  Not able to create query iterator.")
-	}
 
 	response := &p.InternalListWorkflowExecutionsResponse{}
 	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0, request.PageSize)
@@ -437,10 +417,6 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowI
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
 		request.WorkflowID).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
-	if iter == nil {
-		// TODO: should return serviceerror.InvalidArgument if the token is invalid
-		return nil, serviceerror.NewInternal("ListClosedWorkflowExecutionsByWorkflowID operation failed.  Not able to create query iterator.")
-	}
 
 	response := &p.InternalListWorkflowExecutionsResponse{}
 	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0, request.PageSize)
@@ -468,10 +444,6 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByStatus(
 		p.UnixNanoToDBTimestamp(request.LatestStartTime),
 		request.Status).Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
-	if iter == nil {
-		// TODO: should return serviceerror.InvalidArgument if the token is invalid
-		return nil, serviceerror.NewInternal("ListClosedWorkflowExecutionsByStatus operation failed.  Not able to create query iterator.")
-	}
 
 	response := &p.InternalListWorkflowExecutionsResponse{}
 	response.Executions = make([]*p.VisibilityWorkflowExecutionInfo, 0, request.PageSize)
@@ -497,12 +469,9 @@ func (v *cassandraVisibilityPersistence) GetClosedWorkflowExecution(
 		request.NamespaceID,
 		namespacePartition,
 		execution.GetWorkflowId(),
-		execution.GetRunId())
-
+		execution.GetRunId(),
+	)
 	iter := query.Iter()
-	if iter == nil {
-		return nil, serviceerror.NewInternal("GetClosedWorkflowExecution operation failed.  Not able to create query iterator.")
-	}
 
 	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
 	if !has {

@@ -1654,12 +1654,8 @@ func (d *cassandraPersistence) ListConcreteExecutions(
 		templateListWorkflowExecutionQuery,
 		d.shardID,
 		rowTypeExecution,
-	).PageSize(request.PageSize).PageState(request.PageToken)
-
-	iter := query.Iter()
-	if iter == nil {
-		return nil, serviceerror.NewInternal("ListConcreteExecutions operation failed.  Not able to create query iterator.")
-	}
+	)
+	iter := query.PageSize(request.PageSize).PageState(request.PageToken).Iter()
 
 	response := &p.InternalListConcreteExecutionsResponse{}
 	result := make(map[string]interface{})
@@ -1775,12 +1771,8 @@ func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksReque
 		defaultVisibilityTimestamp,
 		request.ReadLevel,
 		request.MaxReadLevel,
-	).PageSize(request.BatchSize).PageState(request.NextPageToken)
-
-	iter := query.Iter()
-	if iter == nil {
-		return nil, serviceerror.NewInternal("GetTransferTasks operation failed.  Not able to create query iterator.")
-	}
+	)
+	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.GetTransferTasksResponse{}
 	var data []byte
@@ -1844,12 +1836,8 @@ func (d *cassandraPersistence) GetVisibilityTasks(request *p.GetVisibilityTasksR
 		defaultVisibilityTimestamp,
 		request.ReadLevel,
 		request.MaxReadLevel,
-	).PageSize(request.BatchSize).PageState(request.NextPageToken)
-
-	iter := query.Iter()
-	if iter == nil {
-		return nil, serviceerror.NewInternal("GetVisibilityTasks operation failed.  Not able to create query iterator.")
-	}
+	)
+	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.GetVisibilityTasksResponse{}
 	var data []byte
@@ -1921,12 +1909,10 @@ func (d *cassandraPersistence) GetReplicationTasks(
 }
 
 func (d *cassandraPersistence) populateGetReplicationTasksResponse(
-	query gocql.Query, operation string,
+	query gocql.Query,
+	operation string,
 ) (*p.GetReplicationTasksResponse, error) {
 	iter := query.Iter()
-	if iter == nil {
-		return nil, serviceerror.NewInternal("GetReplicationTasks operation failed.  Not able to create query iterator.")
-	}
 
 	response := &p.GetReplicationTasksResponse{}
 	var data []byte
@@ -2378,12 +2364,8 @@ func (d *cassandraPersistence) GetTasks(request *p.GetTasksRequest) (*p.GetTasks
 		rowTypeTask,
 		request.ReadLevel,
 		*request.MaxReadLevel,
-	).PageSize(request.BatchSize)
-
-	iter := query.Iter()
-	if iter == nil {
-		return nil, serviceerror.NewInternal("GetTasks operation failed.  Not able to create query iterator.")
-	}
+	)
+	iter := query.PageSize(request.BatchSize).Iter()
 
 	response := &p.GetTasksResponse{}
 	task := make(map[string]interface{})
@@ -2506,12 +2488,8 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksR
 		rowTypeTimerRunID,
 		minTimestamp,
 		maxTimestamp,
-	).PageSize(request.BatchSize).PageState(request.NextPageToken)
-
-	iter := query.Iter()
-	if iter == nil {
-		return nil, serviceerror.NewInternal("GetTimerTasks operation failed.  Not able to create query iterator.")
-	}
+	)
+	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.GetTimerIndexTasksResponse{}
 	var data []byte
