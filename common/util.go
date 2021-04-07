@@ -552,6 +552,7 @@ func CheckEventBlobSizeLimit(
 	logger log.Logger,
 	blobSizeViolationOperationTag tag.ZapTag,
 ) error {
+
 	scope.RecordDistribution(metrics.EventBlobSize, actualSize)
 
 	if actualSize > warnLimit {

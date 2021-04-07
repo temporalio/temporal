@@ -25,6 +25,7 @@
 package searchattribute
 
 import (
+	"errors"
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -36,15 +37,21 @@ import (
 	"go.temporal.io/server/common/payload"
 )
 
-// Validator is used to validate search attributes
-type Validator struct {
-	logger log.Logger
+type (
+	// Validator is used to validate search attributes
+	Validator struct {
+		logger log.Logger
 
-	validSearchAttributes             dynamicconfig.MapPropertyFn
-	searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
-	searchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
-	searchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
-}
+		validSearchAttributes             dynamicconfig.MapPropertyFn
+		searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
+		searchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
+		searchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	}
+)
+
+var (
+	ErrExceedSizeLimit = errors.New("exceeds size limit")
+)
 
 // NewValidator create Validator
 func NewValidator(
@@ -67,31 +74,28 @@ func NewValidator(
 func (v *Validator) ValidateAndLog(searchAttributes *commonpb.SearchAttributes, namespace string) error {
 	err := v.Validate(searchAttributes, namespace)
 	if err != nil {
-		v.logger.Error("Error while validating search attributes.", tag.Error(err), tag.WorkflowNamespace(namespace))
+		v.logger.Warn("Search attributes are invalid.", tag.Error(err), tag.WorkflowNamespace(namespace))
 	}
 	return err
 }
 
-// Validate validate search attributes are valid for writing and not exceed limits
+// Validate validate search attributes are valid for writing.
 func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namespace string) error {
 	if searchAttributes == nil {
 		return nil
 	}
 
-	// verify: number of keys <= limit
 	lengthOfFields := len(searchAttributes.GetIndexedFields())
 	if lengthOfFields > v.searchAttributesNumberOfKeysLimit(namespace) {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("number of search attributes %d exceeds limit %d", lengthOfFields, v.searchAttributesNumberOfKeysLimit(namespace)))
 	}
 
-	totalSize := 0
 	typeMap, err := BuildTypeMap(v.validSearchAttributes)
 	if err != nil {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse search attributes from config: %v", err))
 	}
 
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
-		// verify: saName is whitelisted
 		saType, err := GetType(saName, typeMap)
 		if err != nil {
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is not a valid search attribute name", saName))
@@ -105,21 +109,27 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("%v is not a valid value for search attribute %s", invalidValue, saName))
 		}
 
-		// verify: saName is not system reserved
 		if IsReservedField(saName) {
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is Temporal reserved field name", saName))
 		}
-		// verify: size of single value <= limit
-		dataSize := len(saPayload.GetData())
-		if dataSize > v.searchAttributesSizeOfValueLimit(namespace) {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("search attribute %s exceeds size limit %d", saName, v.searchAttributesSizeOfValueLimit(namespace)))
-		}
-		totalSize += len(saName) + dataSize
+	}
+	return nil
+}
+
+// Validate validate search attributes are valid for writing and not exceed limits
+func (v *Validator) ValidateSize(searchAttributes *commonpb.SearchAttributes, namespace string) error {
+	if searchAttributes == nil {
+		return nil
 	}
 
-	// verify: total size <= limit
-	if totalSize > v.searchAttributesTotalSizeLimit(namespace) {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("total search attributes size %d exceeds limit %d", totalSize, v.searchAttributesTotalSizeLimit(namespace)))
+	for saName, saPayload := range searchAttributes.GetIndexedFields() {
+		if len(saPayload.GetData()) > v.searchAttributesSizeOfValueLimit(namespace) {
+			return fmt.Errorf("search attribute %s value of size %d: %w %d", saName, len(saPayload.GetData()), ErrExceedSizeLimit, v.searchAttributesSizeOfValueLimit(namespace))
+		}
+	}
+
+	if searchAttributes.Size() > v.searchAttributesTotalSizeLimit(namespace) {
+		return fmt.Errorf("total size of search attributes %d: %w %d", searchAttributes.Size(), ErrExceedSizeLimit, v.searchAttributesTotalSizeLimit(namespace))
 	}
 
 	return nil
