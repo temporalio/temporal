@@ -178,9 +178,6 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 	query := h.session.Query(v2templateReadData, treeID, branchID, request.MinNodeID, request.MaxNodeID)
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
-	if iter == nil {
-		return nil, serviceerror.NewInternal("ReadHistoryBranch operation failed.  Not able to create query iterator.")
-	}
 	pagingToken := iter.PageState()
 
 	history := make([]*commonpb.DataBlob, 0, request.PageSize)
@@ -422,9 +419,7 @@ func (h *cassandraHistoryV2Persistence) GetAllHistoryTreeBranches(
 	query := h.session.Query(v2templateScanAllTreeBranches)
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
-	if iter == nil {
-		return nil, serviceerror.NewInternal("GetAllHistoryTreeBranches operation failed.  Not able to create query iterator.")
-	}
+
 	pagingToken := iter.PageState()
 
 	branches := make([]p.HistoryBranchDetail, 0, request.PageSize)
@@ -483,9 +478,6 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 	var iter gocql.Iter
 	for {
 		iter = query.PageSize(pageSize).PageState(pagingToken).Iter()
-		if iter == nil {
-			return nil, serviceerror.NewInternal("GetHistoryTree operation failed.  Not able to create query iterator.")
-		}
 		pagingToken = iter.PageState()
 
 		branchUUID := ""

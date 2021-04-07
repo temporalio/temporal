@@ -268,9 +268,6 @@ func (m *cassandraMetadataPersistenceV2) GetNamespace(request *p.GetNamespaceReq
 func (m *cassandraMetadataPersistenceV2) ListNamespaces(request *p.ListNamespacesRequest) (*p.InternalListNamespacesResponse, error) {
 	query := m.session.Query(templateListNamespaceQueryV2, constNamespacePartition)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
-	if iter == nil {
-		return nil, serviceerror.NewInternal("ListNamespaces operation failed.  Not able to create query iterator.")
-	}
 
 	response := &p.InternalListNamespacesResponse{}
 	for {
