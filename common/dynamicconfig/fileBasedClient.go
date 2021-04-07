@@ -62,12 +62,12 @@ type fileBasedClient struct {
 	values          atomic.Value
 	lastUpdatedTime time.Time
 	config          *FileBasedClientConfig
-	doneCh          chan struct{}
+	doneCh          <-chan interface{}
 	logger          log.Logger
 }
 
 // NewFileBasedClient creates a file based client.
-func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh chan struct{}) (Client, error) {
+func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (Client, error) {
 	if err := validateConfig(config); err != nil {
 		return nil, err
 	}

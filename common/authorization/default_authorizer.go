@@ -24,9 +24,16 @@
 
 package authorization
 
-import "context"
+import (
+	"context"
+)
 
-type defaultAuthorizer struct{}
+type (
+	defaultAuthorizer struct {
+	}
+)
+
+var _ Authorizer = (*defaultAuthorizer)(nil)
 
 // NewDefaultAuthorizer creates a default authorizer
 func NewDefaultAuthorizer() Authorizer {
@@ -54,7 +61,6 @@ func (a *defaultAuthorizer) Authorize(_ context.Context, claims *Claims, target 
 	if !found || roles == RoleUndefined {
 		return Result{Decision: DecisionDeny}, nil
 	}
+
 	return Result{Decision: DecisionAllow}, nil
 }
-
-var _ Authorizer = (*defaultAuthorizer)(nil)

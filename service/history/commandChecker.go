@@ -58,6 +58,7 @@ type (
 		searchAttributesValidator       *searchattribute.Validator
 		getDefaultActivityRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
 		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
+		enableCrossNamespaceCommands    dynamicconfig.BoolPropertyFn
 	}
 
 	workflowSizeChecker struct {
@@ -94,6 +95,7 @@ func newCommandAttrValidator(
 		searchAttributesValidator:       searchAttributesValidator,
 		getDefaultActivityRetrySettings: config.DefaultActivityRetryPolicy,
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
+		enableCrossNamespaceCommands:    config.EnableCrossNamespaceCommands,
 	}
 }
 
@@ -666,6 +668,10 @@ func (v *commandAttrValidator) validateCrossNamespaceCall(
 		return nil
 	}
 
+	if !v.enableCrossNamespaceCommands() {
+		return serviceerror.NewInvalidArgument("cross namespace commands are not allowed")
+	}
+
 	namespaceEntry, err := v.namespaceCache.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
@@ -699,5 +705,5 @@ func (v *commandAttrValidator) createCrossNamespaceCallError(
 	namespaceEntry *cache.NamespaceCacheEntry,
 	targetNamespaceEntry *cache.NamespaceCacheEntry,
 ) error {
-	return serviceerror.NewInvalidArgument(fmt.Sprintf("cannot make cross namespace call between %v and %v", namespaceEntry.GetInfo().Name, targetNamespaceEntry.GetInfo().Name))
+	return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to process cross namespace command between %v and %v", namespaceEntry.GetInfo().Name, targetNamespaceEntry.GetInfo().Name))
 }

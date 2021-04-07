@@ -388,7 +388,7 @@ func initializeDynamicConfig(
 
 	// the done channel is used by dynamic config to stop refreshing
 	// and CLI does not need that, so just close the done channel
-	doneChan := make(chan struct{})
+	doneChan := make(chan interface{})
 	close(doneChan)
 	dynamicConfigClient, err := dynamicconfig.NewFileBasedClient(
 		&serviceConfig.DynamicConfigClient,

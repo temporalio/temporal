@@ -257,6 +257,8 @@ type Config struct {
 	ESProcessorBulkSize               dynamicconfig.IntPropertyFn // max total size of bytes in bulk
 	ESProcessorFlushInterval          dynamicconfig.DurationPropertyFn
 	ESProcessorAckTimeout             dynamicconfig.DurationPropertyFn
+
+	EnableCrossNamespaceCommands dynamicconfig.BoolPropertyFn
 }
 
 const (
@@ -442,6 +444,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		ESProcessorBulkSize:               dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkSize, 2<<24), // 16MB
 		ESProcessorFlushInterval:          dc.GetDurationProperty(dynamicconfig.WorkerESProcessorFlushInterval, 1*time.Second),
 		ESProcessorAckTimeout:             dc.GetDurationProperty(dynamicconfig.WorkerESProcessorAckTimeout, 1*time.Minute),
+
+		EnableCrossNamespaceCommands: dc.GetBoolProperty(dynamicconfig.EnableCrossNamespaceCommands, true),
 	}
 
 	return cfg
