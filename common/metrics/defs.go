@@ -1651,6 +1651,7 @@ const (
 	HistorySize
 	HistoryCount
 	EventBlobSize
+	SearchAttributesSize
 
 	ArchivalConfigFailures
 
@@ -2061,6 +2062,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistorySize:                                         {metricName: "history_size", metricType: Timer},
 		HistoryCount:                                        {metricName: "history_count", metricType: Timer},
 		EventBlobSize:                                       {metricName: "event_blob_size", metricType: Timer},
+		SearchAttributesSize:                                {metricName: "search_attributes_size", metricType: Timer},
 		ArchivalConfigFailures:                              {metricName: "archivalconfig_failures", metricType: Counter},
 		ElasticsearchRequests:                               {metricName: "elasticsearch_requests", metricType: Counter},
 		ElasticsearchFailures:                               {metricName: "elasticsearch_errors", metricType: Counter},
