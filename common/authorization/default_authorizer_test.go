@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/dynamicconfig"
 )
 
 var (
@@ -83,7 +82,7 @@ func TestDefaultAuthorizerSuite(t *testing.T) {
 func (s *defaultAuthorizerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
-	s.authorizer = NewDefaultAuthorizer(dynamicconfig.GetBoolPropertyFn(true))
+	s.authorizer = NewDefaultAuthorizer()
 }
 
 func (s *defaultAuthorizerSuite) TearDownTest() {
@@ -128,7 +127,7 @@ func (s *defaultAuthorizerSuite) TestGetAuthorizerFromConfigUnknown() {
 func (s *defaultAuthorizerSuite) testGetAuthorizerFromConfig(name string, valid bool, authorizerType reflect.Type) {
 
 	cfg := config.Authorization{Authorizer: name}
-	auth, err := GetAuthorizerFromConfig(&cfg, dynamicconfig.GetBoolPropertyFn(true))
+	auth, err := GetAuthorizerFromConfig(&cfg)
 	if valid {
 		s.NoError(err)
 		s.NotNil(auth)

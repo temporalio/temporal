@@ -26,25 +26,18 @@ package authorization
 
 import (
 	"context"
-
-	"go.temporal.io/api/workflowservice/v1"
-
-	"go.temporal.io/server/common/dynamicconfig"
 )
 
 type (
 	defaultAuthorizer struct {
-		enableCrossNamespaceCommands dynamicconfig.BoolPropertyFn
 	}
 )
 
 var _ Authorizer = (*defaultAuthorizer)(nil)
 
 // NewDefaultAuthorizer creates a default authorizer
-func NewDefaultAuthorizer(enableCrossNamespaceCommands dynamicconfig.BoolPropertyFn) Authorizer {
-	return &defaultAuthorizer{
-		enableCrossNamespaceCommands: enableCrossNamespaceCommands,
-	}
+func NewDefaultAuthorizer() Authorizer {
+	return &defaultAuthorizer{}
 }
 
 func (a *defaultAuthorizer) Authorize(_ context.Context, claims *Claims, target *CallTarget) (Result, error) {
@@ -69,31 +62,5 @@ func (a *defaultAuthorizer) Authorize(_ context.Context, claims *Claims, target 
 		return Result{Decision: DecisionDeny}, nil
 	}
 
-	if !a.authorizeCrossNamespaceCommands(target) {
-		return Result{Decision: DecisionDeny}, nil
-	}
-
 	return Result{Decision: DecisionAllow}, nil
-}
-
-func (a *defaultAuthorizer) authorizeCrossNamespaceCommands(target *CallTarget) bool {
-	rwtcRequest, isRwtcRequest := target.Request.(*workflowservice.RespondWorkflowTaskCompletedRequest)
-	if !isRwtcRequest {
-		return true
-	}
-
-	if a.enableCrossNamespaceCommands() {
-		return true
-	}
-
-	for _, command := range rwtcRequest.GetCommands() {
-		if commandWithNamespace, ok := command.GetAttributes().(hasNamespace); ok {
-			commandTargetNamespace := commandWithNamespace.GetNamespace()
-			if commandTargetNamespace != target.Namespace {
-				return false
-			}
-		}
-	}
-
-	return true
 }

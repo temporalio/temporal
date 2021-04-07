@@ -32,7 +32,6 @@ import (
 	"strings"
 
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/dynamicconfig"
 )
 
 const (
@@ -79,13 +78,13 @@ type hasNamespace interface {
 	GetNamespace() string
 }
 
-func GetAuthorizerFromConfig(config *config.Authorization, enableCrossNamespaceCommands dynamicconfig.BoolPropertyFn) (Authorizer, error) {
+func GetAuthorizerFromConfig(config *config.Authorization) (Authorizer, error) {
 
 	switch strings.ToLower(config.Authorizer) {
 	case "":
 		return NewNoopAuthorizer(), nil
 	case "default":
-		return NewDefaultAuthorizer(enableCrossNamespaceCommands), nil
+		return NewDefaultAuthorizer(), nil
 	}
 	return nil, fmt.Errorf("unknown authorizer: %s", config.Authorizer)
 }

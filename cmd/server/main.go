@@ -137,10 +137,8 @@ func buildCLI() *cli.App {
 					dynamicConfigClient = dynamicconfig.NewNoopClient()
 				}
 
-				dc := dynamicconfig.NewCollection(dynamicConfigClient, logger)
 				authorizer, err := authorization.GetAuthorizerFromConfig(
 					&cfg.Global.Authorization,
-					dc.GetBoolProperty(dynamicconfig.EnableCrossNamespaceCommands, true),
 				)
 
 				claimMapper, err := authorization.GetClaimMapperFromConfig(&cfg.Global.Authorization, logger)
