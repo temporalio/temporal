@@ -634,11 +634,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
-	namespaceEntry, err := handler.namespaceCache.GetNamespaceByID(handler.mutableState.GetExecutionInfo().NamespaceId)
-	if err != nil {
-		return err
-	}
-	namespace := namespaceEntry.GetInfo().Name
+	namespace := handler.mutableState.GetNamespaceEntry().GetInfo().Name
 
 	if err := handler.validateCommandAttr(
 		func() error {
@@ -765,7 +761,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 
 	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfSearchAttributesSizeExceedsLimit(
 		attr.GetSearchAttributes(),
-		parentNamespace,
+		targetNamespace,
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION.String()),
 	)
 	if err != nil || failWorkflow {
