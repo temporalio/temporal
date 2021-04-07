@@ -287,7 +287,7 @@ func (e *mutableStateBuilder) CloneProto() (*persistencespb.WorkflowMutableState
 	if err != nil {
 		return nil, err
 	}
-	return serialization.WorkflowMutableStateFromBlob(blob.Data, blob.String())
+	return serialization.WorkflowMutableStateFromBlob(blob.Data, blob.EncodingType.String())
 }
 
 func (e *mutableStateBuilder) Load(
