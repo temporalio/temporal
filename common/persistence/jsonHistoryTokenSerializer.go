@@ -31,9 +31,7 @@ type (
 
 	// historyV2PagingToken is used to serialize/deserialize pagination token for ReadHistoryBranchRequest
 	historyV2PagingToken struct {
-		// TODO remove LastEventVersion once 3+DC is enabled for all workflow
-		LastEventVersion int64
-		LastEventID      int64
+		LastEventID int64
 		// the pagination token passing to persistence
 		StoreToken []byte
 		// recording which branchRange it is reading
@@ -74,7 +72,6 @@ func (j *jsonHistoryTokenSerializer) Serialize(
 func (j *jsonHistoryTokenSerializer) Deserialize(
 	data []byte,
 	defaultLastEventID int64,
-	defaultLastEventVersion int64,
 	defaultLastNodeID int64,
 	defaultLastTransactionID int64,
 ) (*historyV2PagingToken, error) {
@@ -82,7 +79,6 @@ func (j *jsonHistoryTokenSerializer) Deserialize(
 	if len(data) == 0 {
 		token := historyV2PagingToken{
 			LastEventID:       defaultLastEventID,
-			LastEventVersion:  defaultLastEventVersion,
 			CurrentRangeIndex: notStartedIndex,
 			LastNodeID:        defaultLastNodeID,
 			LastTransactionID: defaultLastTransactionID,

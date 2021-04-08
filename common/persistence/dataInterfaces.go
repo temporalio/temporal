@@ -1031,8 +1031,6 @@ type (
 		NextPageToken []byte
 		// Size of history read from store
 		Size int
-		// the first_event_id of last loaded batch
-		LastFirstEventID int64
 	}
 
 	// ReadHistoryBranchByBatchResponse is the response to ReadHistoryBranchRequest
@@ -1045,8 +1043,6 @@ type (
 		NextPageToken []byte
 		// Size of history read from store
 		Size int
-		// the first_event_id of last loaded batch
-		LastFirstEventID int64
 	}
 
 	// ReadRawHistoryBranchResponse is the response to ReadHistoryBranchRequest
@@ -1097,6 +1093,22 @@ type (
 		ShardID int32
 		// branch to be deleted
 		BranchToken []byte
+	}
+
+	// TrimHistoryBranchRequest is used to validate & trim a history branch
+	TrimHistoryBranchRequest struct {
+		// The shard to delete history branch data
+		ShardID int32
+		// branch to be validated & trimmed
+		BranchToken []byte
+		// known valid node ID
+		NodeID int64
+		// known valid transaction ID
+		TransactionID int64
+	}
+
+	// TrimHistoryBranchResponse is the response to TrimHistoryBranchRequest
+	TrimHistoryBranchResponse struct {
 	}
 
 	// GetHistoryTreeRequest is used to retrieve branch info of a history tree
@@ -1308,6 +1320,8 @@ type (
 		// DeleteHistoryBranch removes a branch
 		// If this is the last branch to delete, it will also remove the root node
 		DeleteHistoryBranch(request *DeleteHistoryBranchRequest) error
+		// TrimHistoryBranch validate & trim a history branch
+		TrimHistoryBranch(request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error)
 		// GetHistoryTree returns all branch information of a tree
 		GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees
