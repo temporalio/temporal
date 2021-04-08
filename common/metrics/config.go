@@ -25,6 +25,7 @@
 package metrics
 
 import (
+	"errors"
 	"time"
 
 	"github.com/cactus/go-statsd-client/statsd"
@@ -48,11 +49,13 @@ type (
 		Statsd *StatsdConfig `yaml:"statsd"`
 		// Prometheus is the configuration for prometheus reporter
 		Prometheus *prometheus.Configuration `yaml:"prometheus"`
-		// Config for Opentelemetery Prometheus metrics
-		OTPrometheus *PrometheusConfig `yaml:"otprometheus"`
+		// Using new name for backwards compatibility.
+		// Config for Prometheus metrics reporter for server reported metrics.
+		PrometheusServer *PrometheusConfig `yaml:"prometheusServer"`
+		// {optional} Config for Prometheus metrics reporter for SDK reported metrics.
+		PrometheusSDK *PrometheusConfig `yaml:"prometheusSDK"`
 		// Tags is the set of key-value pairs to be reported as part of every metric
 		Tags map[string]string `yaml:"tags"`
-
 		// Prefix sets the prefix to all outgoing metrics
 		Prefix string `yaml:"prefix"`
 	}
@@ -72,17 +75,29 @@ type (
 		FlushBytes int `yaml:"flushBytes"`
 	}
 
+	// PrometheusConfig is a new format for config for prometheus metrics.
 	PrometheusConfig struct {
+		// Metric framework: Tally/OpenTelemetry
+		Framework string `yaml:framework`
 		// Address for prometheus to serve metrics from.
 		ListenAddress string `yaml:"listenAddress"`
 		// DefaultHistogramBoundaries defines the default histogram bucket
 		// boundaries.
 		DefaultHistogramBoundaries []float64 `yaml:"defaultHistogramBoundaries"`
+		// HandlerPath if specified will be used instead of using the default
+		// HTTP handler path "/metrics".
+		HandlerPath string `yaml:"handlerPath"`
 	}
 )
 
 const (
 	ms = float64(time.Millisecond) / float64(time.Second)
+
+	// Supported framework types
+	// FrameworkTally tally framework id
+	FrameworkTally = "tally"
+	// FrameworkOpentelemetry OpenTelemetry framework id
+	FrameworkOpentelemetry = "opentelemetry"
 )
 
 // tally sanitizer options that satisfy both Prometheus and M3 restrictions.
@@ -111,7 +126,10 @@ var (
 		ReplacementCharacter: tally.DefaultReplacementCharacter,
 	}
 
-	defaultHistogramBuckets = tally.ValueBuckets([]float64{
+	defaultQuantiles = []float64{50, 75, 90, 95, 99}
+
+	//todomigryz: unify with config/metrics.go. Imho better just use default values starting from 1/1000000
+	defaultHistogramBoundaries = []float64{
 		1 * ms,
 		2 * ms,
 		5 * ms,
@@ -131,8 +149,69 @@ var (
 		200000 * ms,
 		500000 * ms,
 		1000000 * ms,
-	})
+	}
 )
+
+// InitMetricReporters is a root function for initalizing metrics clients.
+//
+// Usage pattern
+// serverReporter, sdkReporter, err := c.InitMetricReporters
+// metricsClient := serverReporter.newClient(logger, serviceIdx)
+//
+// returns SeverReporter, SDKReporter, error
+func (c *Config) InitMetricReporters(logger log.Logger, extensionPoint interface{}) (Reporter, Reporter, error) {
+	if c.PrometheusServer == nil {
+		var scope tally.Scope
+		if extensionPoint != nil {
+			scope = c.NewCustomReporterScope(logger, extensionPoint.(tally.BaseStatsReporter))
+		} else {
+			scope = c.NewScope(logger)
+		}
+		reporter := newTallyReporter(scope)
+		return reporter, reporter, nil
+	}
+
+	return c.initReportersFromPrometheusConfig(logger, extensionPoint)
+}
+
+func (c *Config) initReportersFromPrometheusConfig(logger log.Logger, extensionPoint interface{}) (Reporter, Reporter, error) {
+	if extensionPoint != nil {
+		logger.Fatal("Metrics extension point is not implemented.")
+	}
+	serverReporter, err := c.initReporterFromPrometheusConfig(logger, c.PrometheusServer, extensionPoint)
+	if err != nil {
+		return nil, nil, err
+	}
+	sdkReporter := serverReporter
+	if c.PrometheusSDK != nil {
+		sdkReporter, err = c.initReporterFromPrometheusConfig(logger, c.PrometheusSDK, extensionPoint)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return serverReporter, sdkReporter, nil
+}
+
+func (c *Config) initReporterFromPrometheusConfig(logger log.Logger, config *PrometheusConfig, extensionPoint interface{}) (Reporter, error) {
+	switch config.Framework {
+	case FrameworkTally:
+		tallyScope := c.newTallyScopeByPrometheusConfig(logger, config)
+		return newTallyReporter(tallyScope), nil
+	case FrameworkOpentelemetry:
+		return newOpentelemeteryReporter(logger, c.Tags, c.Prefix, config)
+	default:
+		logger.Error(
+			"Unsupported framework type provided: " + config.Framework +
+				". Using NoopMetrics.",
+		)
+		return nil, errors.New("Unsupported framework type: " + config.Framework)
+	}
+}
+
+func (c *Config) newTallyScopeByPrometheusConfig(logger log.Logger, config *PrometheusConfig) tally.Scope {
+	tallyConfig := c.convertPrometheusConfig(config)
+	return c.newPrometheusScope(logger, tallyConfig)
+}
 
 // NewScope builds a new tally scope for this metrics configuration
 //
@@ -149,14 +228,23 @@ func (c *Config) NewScope(logger log.Logger) tally.Scope {
 		return c.newStatsdScope(logger)
 	}
 	if c.Prometheus != nil {
-		return c.newPrometheusScope(logger)
+		return c.newPrometheusScope(logger, c.Prometheus)
 	}
 	return tally.NoopScope
 }
 
+func (c *Config) convertPrometheusConfig(config *PrometheusConfig) *prometheus.Configuration {
+	return &prometheus.Configuration{
+		HandlerPath:             config.HandlerPath,
+		ListenAddress:           config.ListenAddress,
+		TimerType:               "histogram",
+		DefaultHistogramBuckets: histogramBoundariesToHistogramObjectives(config.DefaultHistogramBoundaries),
+	}
+}
+
 func (c *Config) NewCustomReporterScope(logger log.Logger, customReporter tally.BaseStatsReporter) tally.Scope {
 	options := tally.ScopeOptions{
-		DefaultBuckets: defaultHistogramBuckets,
+		DefaultBuckets: histogramBoundariesToValueBuckets(defaultHistogramBoundaries),
 	}
 	if c != nil {
 		options.Tags = c.Tags
@@ -187,7 +275,7 @@ func (c *Config) newM3Scope(logger log.Logger) tally.Scope {
 		Tags:           c.Tags,
 		CachedReporter: reporter,
 		Prefix:         c.Prefix,
-		DefaultBuckets: defaultHistogramBuckets,
+		DefaultBuckets: histogramBoundariesToValueBuckets(defaultHistogramBoundaries),
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
 	return scope
@@ -211,7 +299,7 @@ func (c *Config) newStatsdScope(logger log.Logger) tally.Scope {
 		Tags:           c.Tags,
 		Reporter:       reporter,
 		Prefix:         c.Prefix,
-		DefaultBuckets: defaultHistogramBuckets,
+		DefaultBuckets: histogramBoundariesToValueBuckets(defaultHistogramBoundaries),
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
 	return scope
@@ -219,18 +307,11 @@ func (c *Config) newStatsdScope(logger log.Logger) tally.Scope {
 
 // newPrometheusScope returns a new prometheus scope with
 // a default reporting interval of a second
-func (c *Config) newPrometheusScope(logger log.Logger) tally.Scope {
-	if len(c.Prometheus.DefaultHistogramBuckets) == 0 {
-		for _, value := range defaultHistogramBuckets {
-			c.Prometheus.DefaultHistogramBuckets = append(
-				c.Prometheus.DefaultHistogramBuckets,
-				prometheus.HistogramObjective{
-					Upper: value,
-				},
-			)
-		}
+func (c *Config) newPrometheusScope(logger log.Logger, config *prometheus.Configuration) tally.Scope {
+	if len(config.DefaultHistogramBuckets) == 0 {
+		config.DefaultHistogramBuckets = histogramBoundariesToHistogramObjectives(defaultHistogramBoundaries)
 	}
-	reporter, err := c.Prometheus.NewReporter(
+	reporter, err := config.NewReporter(
 		prometheus.ConfigurationOptions{
 			Registry: prom.NewRegistry(),
 			OnError: func(err error) {
@@ -247,8 +328,25 @@ func (c *Config) newPrometheusScope(logger log.Logger) tally.Scope {
 		Separator:       prometheus.DefaultSeparator,
 		SanitizeOptions: &sanitizeOptions,
 		Prefix:          c.Prefix,
-		DefaultBuckets:  defaultHistogramBuckets,
+		DefaultBuckets:  histogramBoundariesToValueBuckets(defaultHistogramBoundaries),
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
 	return scope
+}
+
+func histogramBoundariesToHistogramObjectives(boundaries []float64) []prometheus.HistogramObjective {
+	var result []prometheus.HistogramObjective
+	for _, value := range boundaries {
+		result = append(
+			result,
+			prometheus.HistogramObjective{
+				Upper: value,
+			},
+		)
+	}
+	return result
+}
+
+func histogramBoundariesToValueBuckets(buckets []float64) tally.ValueBuckets {
+	return tally.ValueBuckets(buckets)
 }

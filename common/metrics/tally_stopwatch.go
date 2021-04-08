@@ -27,49 +27,32 @@ package metrics
 import (
 	"time"
 
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/primitives"
+	"github.com/uber-go/tally"
 )
 
-const (
-	distributionToTimerRatio = int(time.Millisecond / time.Nanosecond)
-)
-
-func mergeMapToRight(src map[string]string, dest map[string]string) {
-	for k, v := range src {
-		dest[k] = v
-	}
+// TallyStopwatch is a helper for simpler tracking of elapsed time, use the
+// Stop() method to report time elapsed since its created back to the
+// timer or histogram.
+type TallyStopwatch struct {
+	start  time.Time
+	timers []tally.Timer
 }
 
-func getMetricDefs(serviceIdx ServiceIdx) map[int]metricDefinition {
-	defs := make(map[int]metricDefinition)
-	for idx, def := range MetricDefs[Common] {
-		defs[idx] = def
-	}
-
-	for idx, def := range MetricDefs[serviceIdx] {
-		defs[idx] = def
-	}
-
-	return defs
+// NewStopwatch creates a new immutable stopwatch for recording the start
+// time to a stopwatch reporter.
+func NewStopwatch(timers ...tally.Timer) Stopwatch {
+	return &TallyStopwatch{time.Now().UTC(), timers}
 }
 
-// GetMetricsServiceIdx returns the metrics name
-func GetMetricsServiceIdx(serviceName string, logger log.Logger) ServiceIdx {
-	switch serviceName {
-	case primitives.FrontendService:
-		return Frontend
-	case primitives.HistoryService:
-		return History
-	case primitives.MatchingService:
-		return Matching
-	case primitives.WorkerService:
-		return Worker
-	default:
-		logger.Fatal("Unknown service name for metrics!", tag.Service(serviceName))
-	}
+// NewTestStopwatch returns a new test stopwatch
+func NewTestStopwatch() Stopwatch {
+	return &TallyStopwatch{time.Now().UTC(), []tally.Timer{}}
+}
 
-	// this should never happen!
-	return NumServices
+// Stop reports time elapsed since the stopwatch start to the recorder.
+func (sw *TallyStopwatch) Stop() {
+	d := time.Since(sw.start)
+	for _, timer := range sw.timers {
+		timer.Record(d)
+	}
 }

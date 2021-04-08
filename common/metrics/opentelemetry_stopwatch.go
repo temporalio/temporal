@@ -25,34 +25,34 @@
 package metrics
 
 import (
+	"context"
 	"time"
 
-	"github.com/uber-go/tally"
+	"go.opentelemetry.io/otel/label"
+	"go.opentelemetry.io/otel/metric"
 )
 
-// Stopwatch is a helper for simpler tracking of elapsed time, use the
-// Stop() method to report time elapsed since its created back to the
-// timer or histogram.
-type TallyStopwatch struct {
-	start  time.Time
-	timers []tally.Timer
+type (
+	opentelemetryStopwatch struct {
+		start   time.Time
+		metrics []openTelemetryStopwatchMetric
+	}
+
+	openTelemetryStopwatchMetric struct {
+		timer  metric.Float64ValueRecorder
+		labels []label.KeyValue
+	}
+)
+
+func newOpenTelemetryStopwatch(metricsMeta []openTelemetryStopwatchMetric) opentelemetryStopwatch {
+	return opentelemetryStopwatch{time.Now().UTC(), metricsMeta}
 }
 
-// NewStopwatch creates a new immutable stopwatch for recording the start
-// time to a stopwatch reporter.
-func NewStopwatch(timers ...tally.Timer) Stopwatch {
-	return &TallyStopwatch{time.Now().UTC(), timers}
-}
+func (o opentelemetryStopwatch) Stop() {
+	ctx := context.Background()
+	d := time.Since(o.start)
 
-// NewTestStopwatch returns a new test stopwatch
-func NewTestStopwatch() Stopwatch {
-	return &TallyStopwatch{time.Now().UTC(), []tally.Timer{}}
-}
-
-// Stop reports time elapsed since the stopwatch start to the recorder.
-func (sw *TallyStopwatch) Stop() {
-	d := time.Since(sw.start)
-	for _, timer := range sw.timers {
-		timer.Record(d)
+	for _, m := range o.metrics {
+		m.timer.Record(ctx, float64(d.Nanoseconds()), m.labels...)
 	}
 }

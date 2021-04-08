@@ -30,20 +30,20 @@ import (
 	"github.com/uber-go/tally"
 )
 
-type metricsScope struct {
+type tallyScope struct {
 	scope             tally.Scope
 	rootScope         tally.Scope
 	defs              map[int]metricDefinition
 	isNamespaceTagged bool
 }
 
-func newMetricsScope(
+func newTallyScope(
 	rootScope tally.Scope,
 	scope tally.Scope,
 	defs map[int]metricDefinition,
 	isNamespace bool,
 ) Scope {
-	return &metricsScope{
+	return &tallyScope{
 		scope:             scope,
 		rootScope:         rootScope,
 		defs:              defs,
@@ -53,18 +53,18 @@ func newMetricsScope(
 
 // NoopScope returns a noop scope of metrics
 func NoopScope(serviceIdx ServiceIdx) Scope {
-	return &metricsScope{
+	return &tallyScope{
 		scope:     tally.NoopScope,
 		rootScope: tally.NoopScope,
 		defs:      getMetricDefs(serviceIdx),
 	}
 }
 
-func (m *metricsScope) IncCounter(id int) {
+func (m *tallyScope) IncCounter(id int) {
 	m.AddCounter(id, 1)
 }
 
-func (m *metricsScope) AddCounter(id int, delta int64) {
+func (m *tallyScope) AddCounter(id int, delta int64) {
 	def := m.defs[id]
 	m.scope.Counter(def.metricName.String()).Inc(delta)
 	if !def.metricRollupName.Empty() {
@@ -72,7 +72,7 @@ func (m *metricsScope) AddCounter(id int, delta int64) {
 	}
 }
 
-func (m *metricsScope) UpdateGauge(id int, value float64) {
+func (m *tallyScope) UpdateGauge(id int, value float64) {
 	def := m.defs[id]
 	m.scope.Gauge(def.metricName.String()).Update(value)
 	if !def.metricRollupName.Empty() {
@@ -80,7 +80,7 @@ func (m *metricsScope) UpdateGauge(id int, value float64) {
 	}
 }
 
-func (m *metricsScope) StartTimer(id int) Stopwatch {
+func (m *tallyScope) StartTimer(id int) Stopwatch {
 	def := m.defs[id]
 	timer := m.scope.Timer(def.metricName.String())
 	switch {
@@ -96,7 +96,7 @@ func (m *metricsScope) StartTimer(id int) Stopwatch {
 	}
 }
 
-func (m *metricsScope) RecordTimer(id int, d time.Duration) {
+func (m *tallyScope) RecordTimer(id int, d time.Duration) {
 	def := m.defs[id]
 	m.scope.Timer(def.metricName.String()).Record(d)
 	switch {
@@ -109,7 +109,7 @@ func (m *metricsScope) RecordTimer(id int, d time.Duration) {
 	}
 }
 
-func (m *metricsScope) RecordDistribution(id int, d int) {
+func (m *tallyScope) RecordDistribution(id int, d int) {
 	dist := time.Duration(d * distributionToTimerRatio)
 	def := m.defs[id]
 	m.scope.Timer(def.metricName.String()).Record(dist)
@@ -123,7 +123,7 @@ func (m *metricsScope) RecordDistribution(id int, d int) {
 	}
 }
 
-func (m *metricsScope) RecordHistogramDuration(id int, value time.Duration) {
+func (m *tallyScope) RecordHistogramDuration(id int, value time.Duration) {
 	def := m.defs[id]
 	m.scope.Histogram(def.metricName.String(), m.getBuckets(id)).RecordDuration(value)
 	if !def.metricRollupName.Empty() {
@@ -131,7 +131,7 @@ func (m *metricsScope) RecordHistogramDuration(id int, value time.Duration) {
 	}
 }
 
-func (m *metricsScope) RecordHistogramValue(id int, value float64) {
+func (m *tallyScope) RecordHistogramValue(id int, value float64) {
 	def := m.defs[id]
 	m.scope.Histogram(def.metricName.String(), m.getBuckets(id)).RecordValue(value)
 	if !def.metricRollupName.Empty() {
@@ -139,7 +139,7 @@ func (m *metricsScope) RecordHistogramValue(id int, value float64) {
 	}
 }
 
-func (m *metricsScope) Tagged(tags ...Tag) Scope {
+func (m *tallyScope) Tagged(tags ...Tag) Scope {
 	namespaceTagged := m.isNamespaceTagged
 	tagMap := make(map[string]string, len(tags))
 	for _, tag := range tags {
@@ -148,10 +148,17 @@ func (m *metricsScope) Tagged(tags ...Tag) Scope {
 		}
 		tagMap[tag.Key()] = tag.Value()
 	}
-	return newMetricsScope(m.rootScope, m.scope.Tagged(tagMap), m.defs, namespaceTagged)
+	return newTallyScope(m.rootScope, m.scope.Tagged(tagMap), m.defs, namespaceTagged)
 }
 
-func (m *metricsScope) getBuckets(id int) tally.Buckets {
+// todo: Add root service definition in metrics and remove after. See use in server.go.
+// Method used to allow reporting metrics outside of services and initializing SDK client.
+// Should be generalized with OpenTelemetry after SDK supports OpenTelemetry.
+func (m *tallyScope) GetScope() tally.Scope {
+	return m.scope
+}
+
+func (m *tallyScope) getBuckets(id int) tally.Buckets {
 	if m.defs[id].buckets != nil {
 		return m.defs[id].buckets
 	}

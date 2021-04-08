@@ -148,12 +148,13 @@ func (s *Server) Start() error {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
 
+	var serverReporter, sdkReporter metrics.Reporter
+	serverReporter, sdkReporter, err = s.so.config.Global.Metrics.InitMetricReporters(s.logger, s.so.metricsReporter)
+
+	// todo: Replace this with Client or Scope implementation.
 	var globalMetricsScope tally.Scope
-	if s.so.metricsReporter != nil {
-		globalMetricsScope = s.so.config.Global.Metrics.NewCustomReporterScope(s.logger, s.so.metricsReporter)
-	} else if s.so.config.Global.Metrics != nil {
-		globalMetricsScope = s.so.config.Global.Metrics.NewScope(s.logger)
-	}
+	tallyReporter := sdkReporter.(*metrics.TallyReporter)
+	globalMetricsScope = tallyReporter.GetScope()
 
 	if s.so.tlsConfigProvider == nil {
 		s.so.tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(s.so.config.Global.TLS, globalMetricsScope, nil)
@@ -163,7 +164,7 @@ func (s *Server) Start() error {
 	}
 
 	for _, svcName := range s.so.serviceNames {
-		params, err := s.newBootstrapParams(svcName, dc, globalMetricsScope)
+		params, err := s.newBootstrapParams(svcName, dc, serverReporter, sdkReporter)
 		if err != nil {
 			return err
 		}
@@ -230,7 +231,8 @@ func (s *Server) Stop() {
 func (s *Server) newBootstrapParams(
 	svcName string,
 	dc *dynamicconfig.Collection,
-	metricsScope tally.Scope,
+	serverReporter metrics.Reporter,
+	sdkReporter metrics.Reporter,
 ) (*resource.BootstrapParams, error) {
 
 	params := resource.BootstrapParams{}
@@ -264,11 +266,17 @@ func (s *Server) newBootstrapParams(
 		}
 
 	params.DCRedirectionPolicy = s.so.config.DCRedirectionPolicy
-	if metricsScope == nil {
-		metricsScope = svcCfg.Metrics.NewScope(s.logger)
+
+	//todo: Replace this hack with actually using sdkReporter, Client or Scope.
+	globalTallyScope := sdkReporter.(*metrics.TallyReporter).GetScope()
+	params.MetricsScope = globalTallyScope
+
+	serviceIdx := metrics.GetMetricsServiceIdx(svcName, s.logger)
+	metricsClient, err := serverReporter.NewClient(s.logger, serviceIdx)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to initialize metrics client #{err}")
 	}
-	params.MetricsScope = metricsScope
-	metricsClient := metrics.NewClient(metricsScope, metrics.GetMetricsServiceIdx(svcName, s.logger))
+
 	params.MetricsClient = metricsClient
 
 	options, err := s.so.tlsConfigProvider.GetFrontendClientConfig()
@@ -279,7 +287,7 @@ func (s *Server) newBootstrapParams(
 	params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
 		HostPort:     s.so.config.PublicClient.HostPort,
 		Namespace:    common.SystemLocalNamespace,
-		MetricsScope: metricsScope,
+		MetricsScope: globalTallyScope,
 		Logger:       log.NewSdkLogger(s.logger),
 		ConnectionOptions: sdkclient.ConnectionOptions{
 			TLS:                options,

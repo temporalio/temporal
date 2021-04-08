@@ -21,6 +21,12 @@ global:
     prometheus:
       timerType: "histogram"
       listenAddress: "127.0.0.1:8000"
+#    prometheusServer:
+#      framework: "opentelemetry"
+#      listenAddress: "127.0.0.1:8000"
+#    prometheusSDK:
+#      framework: "tally"
+#      listenAddress: "127.0.0.1:8001"
 
 services:
   frontend:

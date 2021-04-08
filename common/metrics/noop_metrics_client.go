@@ -53,7 +53,7 @@ func (m NoopMetricsClient) RecordDistribution(scope int, timer int, d int) {}
 func (m NoopMetricsClient) UpdateGauge(scope int, gauge int, value float64) {}
 
 func (m NoopMetricsClient) Scope(scope int, tags ...Tag) Scope {
-	return &metricsScope{
+	return &tallyScope{
 		scope:     tally.NoopScope,
 		rootScope: tally.NoopScope,
 	}
