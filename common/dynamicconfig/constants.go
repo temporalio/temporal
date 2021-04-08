@@ -83,6 +83,7 @@ var Keys = map[Key]string{
 	EnableStickyQuery:                      "system.enableStickyQuery",
 	EnablePriorityTaskProcessor:            "system.enablePriorityTaskProcessor",
 	EnableAuthorization:                    "system.enableAuthorization",
+	EnableCrossNamespaceCommands:           "system.enableCrossNamespaceCommands",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -379,6 +380,8 @@ const (
 	EnablePriorityTaskProcessor
 	// EnableAuthorization is the key to enable authorization for a namespace
 	EnableAuthorization
+	// EnableCrossNamespaceCommands is the key to enable commands for external namespaces
+	EnableCrossNamespaceCommands
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError
 	// BlobSizeLimitWarn is the per event blob size limit for warning

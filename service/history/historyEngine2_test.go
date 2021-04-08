@@ -858,10 +858,6 @@ func (s *engine2Suite) createExecutionStartedState(we commonpb.WorkflowExecution
 	return msBuilder
 }
 
-func (s *engine2Suite) printHistory(builder mutableState) string {
-	return builder.GetHistoryBuilder().GetHistory().String()
-}
-
 func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	namespaceID := testNamespaceID
 	we := commonpb.WorkflowExecution{

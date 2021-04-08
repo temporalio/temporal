@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination authority_mock.go
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination authorizer_mock.go
 
 package authorization
 
@@ -50,6 +50,8 @@ type CallTarget struct {
 	APIName string
 	// If a Namespace is not being targeted this be set to an empty string.
 	Namespace string
+	// If a Namespace is not being targeted this be set to an empty string.
+	Request interface{}
 }
 
 // @@@SNIPEND
@@ -72,7 +74,7 @@ type Authorizer interface {
 
 // @@@SNIPEND
 
-type requestWithNamespace interface {
+type hasNamespace interface {
 	GetNamespace() string
 }
 

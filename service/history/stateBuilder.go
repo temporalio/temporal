@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/mutablestate"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -130,7 +131,6 @@ func (b *stateBuilderImpl) applyEvents(
 				return nil, err
 			}
 		}
-		b.mutableState.GetExecutionInfo().LastEventTaskId = event.GetTaskId()
 
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
@@ -654,9 +654,8 @@ func (b *stateBuilderImpl) applyEvents(
 	}
 
 	b.mutableState.GetExecutionInfo().LastFirstEventId = firstEvent.GetEventId()
-	b.mutableState.SetNextEventID(lastEvent.GetEventId() + 1)
 
-	b.mutableState.SetHistoryBuilder(newHistoryBuilderFromEvents(history))
+	b.mutableState.SetHistoryBuilder(mutablestate.NewImmutableHistoryBuilder(history))
 
 	return newRunMutableStateBuilder, nil
 }

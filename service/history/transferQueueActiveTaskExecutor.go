@@ -921,9 +921,11 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 				return serviceerror.NewNotFound("Pending child execution not found.")
 			}
 
-			_, err := mutableState.AddStartChildWorkflowExecutionFailedEvent(initiatedEventID,
-				enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS, initiatedAttributes)
-
+			_, err := mutableState.AddStartChildWorkflowExecutionFailedEvent(
+				initiatedEventID,
+				enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS,
+				initiatedAttributes,
+			)
 			return err
 		})
 }
@@ -1051,7 +1053,6 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 			}
 
 			_, err := mutableState.AddRequestCancelExternalWorkflowExecutionFailedEvent(
-				common.EmptyEventID,
 				initiatedEventID,
 				targetNamespace,
 				targetWorkflowID,
@@ -1091,7 +1092,6 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 			}
 
 			_, err := mutableState.AddSignalExternalWorkflowExecutionFailedEvent(
-				common.EmptyEventID,
 				initiatedEventID,
 				targetNamespace,
 				targetWorkflowID,

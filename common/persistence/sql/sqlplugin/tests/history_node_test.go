@@ -86,9 +86,10 @@ func (s *historyNodeSuite) TestInsert_Success() {
 	treeID := primitives.NewUUID()
 	branchID := primitives.NewUUID()
 	nodeID := rand.Int63()
+	prevTransactionID := rand.Int63()
 	transactionID := rand.Int63()
 
-	node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, transactionID)
+	node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, prevTransactionID, transactionID)
 	result, err := s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
@@ -101,16 +102,17 @@ func (s *historyNodeSuite) TestInsert_Fail_Duplicate() {
 	treeID := primitives.NewUUID()
 	branchID := primitives.NewUUID()
 	nodeID := rand.Int63()
+	prevTransactionID := rand.Int63()
 	transactionID := rand.Int63()
 
-	node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, transactionID)
+	node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, prevTransactionID, transactionID)
 	result, err := s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	node = s.newRandomNodeRow(shardID, treeID, branchID, nodeID, transactionID)
+	node = s.newRandomNodeRow(shardID, treeID, branchID, nodeID, prevTransactionID, transactionID)
 	_, err = s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
@@ -122,9 +124,10 @@ func (s *historyNodeSuite) TestInsertSelect_Single() {
 	treeID := primitives.NewUUID()
 	branchID := primitives.NewUUID()
 	nodeID := int64(1)
+	prevTransactionID := rand.Int63()
 	transactionID := rand.Int63()
 
-	node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, transactionID)
+	node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, prevTransactionID, transactionID)
 	result, err := s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
@@ -167,7 +170,7 @@ func (s *historyNodeSuite) TestInsertSelect_Multiple() {
 	var nodes []sqlplugin.HistoryNodeRow
 	for i := 0; i < numNodeIDs; i++ {
 		for j := 0; j < nodePerNodeID; j++ {
-			node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, rand.Int63())
+			node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, rand.Int63(), rand.Int63())
 			result, err := s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
 			s.NoError(err)
 			rowsAffected, err := result.RowsAffected()
@@ -276,9 +279,10 @@ func (s *historyNodeSuite) TestInsertDeleteSelect_Single() {
 	treeID := primitives.NewUUID()
 	branchID := primitives.NewUUID()
 	nodeID := int64(1)
+	prevTransactionID := rand.Int63()
 	transactionID := rand.Int63()
 
-	node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, transactionID)
+	node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, prevTransactionID, transactionID)
 	result, err := s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
@@ -330,7 +334,7 @@ func (s *historyNodeSuite) TestInsertDeleteSelect_Multiple() {
 	var nodes []sqlplugin.HistoryNodeRow
 	for i := 0; i < numNodeIDs; i++ {
 		for j := 0; j < nodePerNodeID; j++ {
-			node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, rand.Int63())
+			node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, rand.Int63(), rand.Int63())
 			result, err := s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
 			s.NoError(err)
 			rowsAffected, err := result.RowsAffected()
@@ -376,6 +380,7 @@ func (s *historyNodeSuite) newRandomNodeRow(
 	treeID primitives.UUID,
 	branchID primitives.UUID,
 	nodeID int64,
+	prevTransactionID int64,
 	transactionID int64,
 ) sqlplugin.HistoryNodeRow {
 	return sqlplugin.HistoryNodeRow{
@@ -383,6 +388,7 @@ func (s *historyNodeSuite) newRandomNodeRow(
 		TreeID:       treeID,
 		BranchID:     branchID,
 		NodeID:       nodeID,
+		PrevTxnID:    prevTransactionID,
 		TxnID:        transactionID,
 		Data:         shuffle.Bytes(testHistoryNodeData),
 		DataEncoding: testHistoryNodeEncoding,

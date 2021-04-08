@@ -175,10 +175,6 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
-	if iter == nil {
-		return nil, serviceerror.NewInternal("GetClusterMembers operation failed.  Not able to create query iterator.")
-	}
-
 	var clusterMembers []*p.ClusterMember
 
 	cqlHostID := make([]byte, 0, 16)

@@ -333,7 +333,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success
 
 	event = addTimerFiredEvent(mutableState, timerID)
 	// Flush buffered events so real IDs get assigned
-	_ = mutableState.FlushBufferedEvents()
+	mutableState.FlushBufferedEvents()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -404,7 +404,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multipl
 
 	event = addTimerFiredEvent(mutableState, timerID1)
 	// Flush buffered events so real IDs get assigned
-	_ = mutableState.FlushBufferedEvents()
+	mutableState.FlushBufferedEvents()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -567,7 +567,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success(
 
 	completeEvent := addActivityTaskCompletedEvent(mutableState, scheduledEvent.GetEventId(), startedEvent.GetEventId(), nil, identity)
 	// Flush buffered events so real IDs get assigned
-	_ = mutableState.FlushBufferedEvents()
+	mutableState.FlushBufferedEvents()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, completeEvent.GetEventId(), completeEvent.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -616,7 +616,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Heartbea
 		timerTimeout, timerTimeout, timerTimeout, heartbeatTimerTimeout)
 	startedEvent := addActivityTaskStartedEvent(mutableState, scheduledEvent.GetEventId(), identity)
 	// Flush buffered events so real IDs get assigned
-	_ = mutableState.FlushBufferedEvents()
+	mutableState.FlushBufferedEvents()
 
 	timerSequence := newTimerSequence(s.timeSource, mutableState)
 	mutableState.insertTimerTasks = nil
@@ -718,7 +718,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 
 	completeEvent1 := addActivityTaskCompletedEvent(mutableState, scheduledEvent1.GetEventId(), startedEvent1.GetEventId(), nil, identity)
 	// Flush buffered events so real IDs get assigned
-	_ = mutableState.FlushBufferedEvents()
+	mutableState.FlushBufferedEvents()
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, completeEvent1.GetEventId(), completeEvent1.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
@@ -729,7 +729,9 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 			mutableState.executionInfo.LastUpdateTime = input.UpdateWorkflowMutation.ExecutionInfo.LastUpdateTime
 			input.RangeID = 0
 			input.UpdateWorkflowMutation.ExecutionInfo.LastEventTaskId = 0
+			input.UpdateWorkflowMutation.ExecutionInfo.LastHistoryNodeTxnId = 0
 			mutableState.executionInfo.LastEventTaskId = 0
+			mutableState.executionInfo.LastHistoryNodeTxnId = 0
 			mutableState.executionInfo.WorkflowTaskOriginalScheduledTime = input.UpdateWorkflowMutation.ExecutionInfo.WorkflowTaskOriginalScheduledTime
 			mutableState.executionInfo.ExecutionStats = &persistencespb.ExecutionStats{}
 
@@ -737,7 +739,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 				UpdateWorkflowMutation: persistence.WorkflowMutation{
 					ExecutionInfo:             mutableState.executionInfo,
 					ExecutionState:            mutableState.executionState,
-					NextEventID:               mutableState.nextEventID,
+					NextEventID:               mutableState.GetNextEventID(),
 					TransferTasks:             nil,
 					ReplicationTasks:          nil,
 					TimerTasks:                input.UpdateWorkflowMutation.TimerTasks,
@@ -796,7 +798,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 	di := addWorkflowTaskScheduledEvent(mutableState)
 	startedEvent := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
 	// Flush buffered events so real IDs get assigned
-	_ = mutableState.FlushBufferedEvents()
+	mutableState.FlushBufferedEvents()
 	nextEventID := startedEvent.GetEventId()
 
 	protoTime := s.now
@@ -904,7 +906,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Succ
 	di.StartedID = event.GetEventId()
 	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 	// Flush buffered events so real IDs get assigned
-	_ = mutableState.FlushBufferedEvents()
+	mutableState.FlushBufferedEvents()
 
 	protoTime := s.now
 	s.NoError(err)
@@ -955,7 +957,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 	s.Nil(err)
 
 	// Flush buffered events so real IDs get assigned
-	_ = mutableState.FlushBufferedEvents()
+	mutableState.FlushBufferedEvents()
 	nextEventID := event.GetEventId()
 
 	protoTaskTime := s.now
@@ -1030,7 +1032,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Suc
 
 	di := addWorkflowTaskScheduledEvent(mutableState)
 	// Flush buffered events so real IDs get assigned
-	_ = mutableState.FlushBufferedEvents()
+	mutableState.FlushBufferedEvents()
 
 	protoTaskTime := s.now
 	s.NoError(err)
@@ -1083,7 +1085,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 	di.StartedID = startEvent.GetEventId()
 	completionEvent := addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 	// Flush buffered events so real IDs get assigned
-	_ = mutableState.FlushBufferedEvents()
+	mutableState.FlushBufferedEvents()
 	nextEventID := completionEvent.GetEventId()
 
 	protoTaskTime := s.now
@@ -1163,7 +1165,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success(
 	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
 	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
 	// Flush buffered events so real IDs get assigned
-	_ = mutableState.FlushBufferedEvents()
+	mutableState.FlushBufferedEvents()
 
 	protoTaskTime := s.now
 	s.NoError(err)

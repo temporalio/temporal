@@ -634,9 +634,12 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
+	namespace := handler.mutableState.GetNamespaceEntry().GetInfo().Name
+
 	if err := handler.validateCommandAttr(
 		func() error {
 			return handler.attrValidator.validateContinueAsNewWorkflowExecutionAttributes(
+				namespace,
 				attr,
 				handler.mutableState.GetExecutionInfo(),
 			)
@@ -650,6 +653,16 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION.String()),
 		attr.GetInput().Size(),
 		"ContinueAsNewWorkflowExecutionCommandAttributes. Input exceeds size limit.",
+	)
+	if err != nil || failWorkflow {
+		handler.stopProcessing = true
+		return err
+	}
+
+	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfSearchAttributesSizeExceedsLimit(
+		attr.GetSearchAttributes(),
+		namespace,
+		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION.String()),
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true
@@ -740,6 +753,16 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION.String()),
 		attr.GetInput().Size(),
 		"StartChildWorkflowExecutionCommandAttributes.Input exceeds size limit.",
+	)
+	if err != nil || failWorkflow {
+		handler.stopProcessing = true
+		return err
+	}
+
+	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfSearchAttributesSizeExceedsLimit(
+		attr.GetSearchAttributes(),
+		targetNamespace,
+		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION.String()),
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true
@@ -852,6 +875,16 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES.String()),
 		searchAttributesSize(attr.GetSearchAttributes().GetIndexedFields()),
 		"UpsertWorkflowSearchAttributesCommandAttributes exceeds size limit.",
+	)
+	if err != nil || failWorkflow {
+		handler.stopProcessing = true
+		return err
+	}
+
+	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfSearchAttributesSizeExceedsLimit(
+		attr.GetSearchAttributes(),
+		namespace,
+		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES.String()),
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true

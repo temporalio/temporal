@@ -136,7 +136,7 @@ func (s *historyBuilderSuite) SetupTest() {
 	s.mockTimeSource = clock.NewEventTimeSource()
 	s.mockTimeSource.Update(s.now)
 
-	s.historyBuilder = NewHistoryBuilder(
+	s.historyBuilder = NewMutableHistoryBuilder(
 		s.mockTimeSource,
 		s.taskIDGenerator,
 		s.version,
@@ -2006,7 +2006,7 @@ func (s *historyBuilderSuite) testWireEventIDs(
 	startEvent *historypb.HistoryEvent,
 	finishEvent *historypb.HistoryEvent,
 ) {
-	s.historyBuilder = NewHistoryBuilder(
+	s.historyBuilder = NewMutableHistoryBuilder(
 		s.mockTimeSource,
 		s.taskIDGenerator,
 		s.version,
@@ -2052,7 +2052,7 @@ func (s *historyBuilderSuite) testWireEventIDs(
 }
 
 func (s *historyBuilderSuite) TestHasBufferEvent() {
-	historyBuilder := NewHistoryBuilder(
+	historyBuilder := NewMutableHistoryBuilder(
 		s.mockTimeSource,
 		s.taskIDGenerator,
 		s.version,

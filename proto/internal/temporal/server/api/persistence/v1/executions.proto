@@ -120,6 +120,7 @@ message WorkflowExecutionInfo {
     string first_execution_run_id = 55;
     ExecutionStats execution_stats = 56;
     google.protobuf.Timestamp workflow_run_expiration_time = 57 [(gogoproto.stdtime) = true];
+    int64 last_history_node_txn_id = 58;
 }
 
 message ExecutionStats {

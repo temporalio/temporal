@@ -44,12 +44,12 @@ func TestSearchAttributesValidatorSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
+func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	numOfKeysLimit := 2
 	sizeOfValueLimit := 5
 	sizeOfTotalLimit := 20
 
-	validator := NewValidator(log.NewNoopLogger(),
+	saValidator := NewValidator(log.NewNoopLogger(),
 		dynamicconfig.GetMapPropertyFn(GetDefaultTypeMap()),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
@@ -58,7 +58,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	namespace := "namespace"
 	var attr *commonpb.SearchAttributes
 
-	err := validator.Validate(attr, namespace)
+	err := saValidator.Validate(attr, namespace)
 	s.Nil(err)
 
 	intPayload, err := payload.Encode(1)
@@ -69,7 +69,7 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 	attr = &commonpb.SearchAttributes{
 		IndexedFields: fields,
 	}
-	err = validator.Validate(attr, namespace)
+	err = saValidator.Validate(attr, namespace)
 	s.Nil(err)
 
 	fields = map[string]*commonpb.Payload{
@@ -78,14 +78,16 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 		"CustomBoolField":    payload.EncodeString("true"),
 	}
 	attr.IndexedFields = fields
-	err = validator.Validate(attr, namespace)
+	err = saValidator.Validate(attr, namespace)
+	s.Error(err)
 	s.Equal("number of search attributes 3 exceeds limit 2", err.Error())
 
 	fields = map[string]*commonpb.Payload{
 		"InvalidKey": payload.EncodeString("1"),
 	}
 	attr.IndexedFields = fields
-	err = validator.Validate(attr, namespace)
+	err = saValidator.Validate(attr, namespace)
+	s.Error(err)
 	s.Equal("InvalidKey is not a valid search attribute name", err.Error())
 
 	fields = map[string]*commonpb.Payload{
@@ -93,7 +95,8 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 		"CustomBoolField":   payload.EncodeString("123"),
 	}
 	attr.IndexedFields = fields
-	err = validator.Validate(attr, namespace)
+	err = saValidator.Validate(attr, namespace)
+	s.Error(err)
 	s.Equal("123 is not a valid value for search attribute CustomBoolField", err.Error())
 
 	intArrayPayload, err := payload.Encode([]int{1, 2})
@@ -102,28 +105,49 @@ func (s *searchAttributesValidatorSuite) TestValidateSearchAttributes() {
 		"CustomIntField": intArrayPayload,
 	}
 	attr.IndexedFields = fields
-	err = validator.Validate(attr, namespace)
+	err = saValidator.Validate(attr, namespace)
 	s.NoError(err)
 
 	fields = map[string]*commonpb.Payload{
 		"StartTime": intPayload,
 	}
 	attr.IndexedFields = fields
-	err = validator.Validate(attr, namespace)
+	err = saValidator.Validate(attr, namespace)
+	s.Error(err)
 	s.Equal("StartTime is Temporal reserved field name", err.Error())
+}
 
-	fields = map[string]*commonpb.Payload{
+func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
+	numOfKeysLimit := 2
+	sizeOfValueLimit := 5
+	sizeOfTotalLimit := 20
+
+	saValidator := NewValidator(log.NewNoopLogger(),
+		dynamicconfig.GetMapPropertyFn(GetDefaultTypeMap()),
+		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
+		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
+		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit))
+
+	namespace := "namespace"
+
+	fields := map[string]*commonpb.Payload{
 		"CustomKeywordField": payload.EncodeString("123456"),
 	}
+	attr := &commonpb.SearchAttributes{
+		IndexedFields: fields,
+	}
+
 	attr.IndexedFields = fields
-	err = validator.Validate(attr, namespace)
-	s.Equal("search attribute CustomKeywordField exceeds size limit 5", err.Error())
+	err := saValidator.ValidateSize(attr, namespace)
+	s.Error(err)
+	s.Equal("search attribute CustomKeywordField value of size 8: exceeds size limit 5", err.Error())
 
 	fields = map[string]*commonpb.Payload{
 		"CustomKeywordField": payload.EncodeString("123"),
 		"CustomStringField":  payload.EncodeString("12"),
 	}
 	attr.IndexedFields = fields
-	err = validator.Validate(attr, namespace)
-	s.Equal("total search attributes size 44 exceeds limit 20", err.Error())
+	err = saValidator.ValidateSize(attr, namespace)
+	s.Error(err)
+	s.Equal("total size of search attributes 108: exceeds size limit 20", err.Error())
 }

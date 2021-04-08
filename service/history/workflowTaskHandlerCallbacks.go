@@ -399,6 +399,7 @@ Update_History_Loop:
 				handler.config.HistoryCountLimitError(namespace),
 				completedEvent.GetEventId(),
 				msBuilder,
+				handler.historyEngine.searchAttributesValidator,
 				executionStats,
 				handler.metricsClient.Scope(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.NamespaceTag(namespace)),
 				handler.throttledLogger,
