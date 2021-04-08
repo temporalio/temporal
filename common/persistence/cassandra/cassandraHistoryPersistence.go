@@ -51,6 +51,8 @@ const (
 	v2templateReadHistoryNodeMetadata = `SELECT node_id, prev_txn_id, txn_id FROM history_node ` +
 		`WHERE tree_id = ? AND branch_id = ? AND node_id >= ? AND node_id < ? `
 
+	v2templateDeleteHistoryNode = `DELETE FROM history_node WHERE tree_id = ? AND branch_id = ? AND node_id = ? AND txn_id = ? `
+
 	v2templateRangeDeleteHistoryNode = `DELETE FROM history_node WHERE tree_id = ? AND branch_id = ? AND node_id >= ? `
 
 	// below are templates for history_tree table
@@ -95,17 +97,16 @@ func newHistoryPersistence(
 	}, nil
 }
 
-// AppendHistoryNodes upsert a batch of events as a single node to a history branch
+// AppendHistoryNode upsert a batch of events as a single node to a history branch
 // Note that it's not allowed to append above the branch's ancestors' nodes, which means nodeID >= ForkNodeID
 func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
 
 	branchInfo := request.BranchInfo
-	beginNodeID := p.GetBeginNodeID(branchInfo)
 	node := request.Node
 
-	if node.NodeID < beginNodeID {
+	if node.NodeID < p.GetBeginNodeID(branchInfo) {
 		return &p.InvalidPersistenceRequestError{
 			Msg: fmt.Sprintf("cannot append to ancestors' nodes"),
 		}
@@ -157,6 +158,34 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 	)
 	if err = h.session.ExecuteBatch(batch); err != nil {
 		return gocql.ConvertError("AppendHistoryNodes", err)
+	}
+	return nil
+}
+
+// DeleteHistoryNode delete a history node
+func (h *cassandraHistoryV2Persistence) DeleteHistoryNodes(
+	request *p.InternalDeleteHistoryNodesRequest,
+) error {
+	branchInfo := request.BranchInfo
+	treeID := branchInfo.TreeId
+	branchID := branchInfo.BranchId
+	nodeID := request.NodeID
+	txnID := request.TransactionID
+
+	if nodeID < p.GetBeginNodeID(branchInfo) {
+		return &p.InvalidPersistenceRequestError{
+			Msg: fmt.Sprintf("cannot delete from ancestors' nodes"),
+		}
+	}
+
+	query := h.session.Query(v2templateDeleteHistoryNode,
+		treeID,
+		branchID,
+		nodeID,
+		txnID,
+	)
+	if err := query.Exec(); err != nil {
+		return gocql.ConvertError("DeleteHistoryNodes", err)
 	}
 	return nil
 }

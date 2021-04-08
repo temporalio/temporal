@@ -1294,7 +1294,7 @@ type (
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
 		// For Temporal, treeID is new runID, except for fork(reset), treeID will be the runID that it forks from.
 
-		// AppendHistoryNodes add(or override) a batch of nodes to a history branch
+		// AppendHistoryNodes add a node to history node table
 		AppendHistoryNodes(request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)

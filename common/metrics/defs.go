@@ -595,6 +595,8 @@ const (
 
 	// PersistenceAppendHistoryNodesScope tracks AppendHistoryNodes calls made by service to persistence layer
 	PersistenceAppendHistoryNodesScope
+	// PersistenceDeleteHistoryNodesScope tracks DeleteHistoryNodes calls made by service to persistence layer
+	PersistenceDeleteHistoryNodesScope
 	// PersistenceReadHistoryBranchScope tracks ReadHistoryBranch calls made by service to persistence layer
 	PersistenceReadHistoryBranchScope
 	// PersistenceForkHistoryBranchScope tracks ForkHistoryBranch calls made by service to persistence layer
@@ -1176,6 +1178,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceScanWorkflowExecutionsScope:                   {operation: "ScanWorkflowExecutions"},
 		PersistenceCountWorkflowExecutionsScope:                  {operation: "CountWorkflowExecutions"},
 		PersistenceAppendHistoryNodesScope:                       {operation: "AppendHistoryNodes"},
+		PersistenceDeleteHistoryNodesScope:                       {operation: "DeleteHistoryNodes"},
 		PersistenceReadHistoryBranchScope:                        {operation: "ReadHistoryBranch"},
 		PersistenceForkHistoryBranchScope:                        {operation: "ForkHistoryBranch"},
 		PersistenceDeleteHistoryBranchScope:                      {operation: "DeleteHistoryBranch"},

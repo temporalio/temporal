@@ -45,6 +45,8 @@ const (
 		`WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND ((node_id = ? AND txn_id > ?) OR node_id > ?) AND node_id < ? ` +
 		`ORDER BY shard_id, tree_id, branch_id, node_id, txn_id LIMIT ? `
 
+	deleteHistoryNodeQuery = `DELETE FROM history_node WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND node_id = ? AND txn_id = ? `
+
 	deleteHistoryNodesQuery = `DELETE FROM history_node WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND node_id >= ? `
 
 	// below are templates for history_tree table
@@ -65,7 +67,7 @@ func (mdb *db) InsertIntoHistoryNode(
 	ctx context.Context,
 	row *sqlplugin.HistoryNodeRow,
 ) (sql.Result, error) {
-	// NOTE: Query 5.6 doesn't support clustering order, to workaround, we let txn_id multiple by -1
+	// NOTE: txn_id is *= -1 within DB
 	row.TxnID = -row.TxnID
 	return mdb.conn.NamedExecContext(ctx,
 		addHistoryNodesQuery,
@@ -73,8 +75,25 @@ func (mdb *db) InsertIntoHistoryNode(
 	)
 }
 
+// DeleteFromHistoryNode delete a row from history_node table
+func (mdb *db) DeleteFromHistoryNode(
+	ctx context.Context,
+	row *sqlplugin.HistoryNodeRow,
+) (sql.Result, error) {
+	// NOTE: txn_id is *= -1 within DB
+	row.TxnID = -row.TxnID
+	return mdb.conn.ExecContext(ctx,
+		deleteHistoryNodeQuery,
+		row.ShardID,
+		row.TreeID,
+		row.BranchID,
+		row.NodeID,
+		row.TxnID,
+	)
+}
+
 // SelectFromHistoryNode reads one or more rows from history_node table
-func (mdb *db) SelectFromHistoryNode(
+func (mdb *db) RangeSelectFromHistoryNode(
 	ctx context.Context,
 	filter sqlplugin.HistoryNodeSelectFilter,
 ) ([]sqlplugin.HistoryNodeRow, error) {
@@ -108,7 +127,7 @@ func (mdb *db) SelectFromHistoryNode(
 }
 
 // DeleteFromHistoryNode deletes one or more rows from history_node table
-func (mdb *db) DeleteFromHistoryNode(
+func (mdb *db) RangeDeleteFromHistoryNode(
 	ctx context.Context,
 	filter sqlplugin.HistoryNodeDeleteFilter,
 ) (sql.Result, error) {
