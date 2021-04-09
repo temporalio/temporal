@@ -293,7 +293,7 @@ func (d *namespaceCLIImpl) DescribeNamespace(c *cli.Context) {
 	if namespaceID == "" && namespace == "" {
 		ErrorAndExit("At least namespaceId or namespace must be provided.", nil)
 	}
-	if c.IsSet(FlagNamespace) && namespaceID != "" {
+	if c.GlobalIsSet(FlagNamespace) && namespaceID != "" {
 		ErrorAndExit("Only one of namespaceId or namespace must be provided.", nil)
 	}
 	if namespaceID != "" {
