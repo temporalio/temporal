@@ -105,10 +105,14 @@ func newCQLClient(cfg *CQLClientConfig) (*cqlClient, error) {
 
 	cassandraConfig := cfg.toCassandraConfig()
 	cassandraConfig.ConnectTimeout = time.Duration(cfg.Timeout) * time.Second
+
+	log.Println("validating connection to cassandra cluster")
 	session, err := gocql.NewSession(*cassandraConfig, resolver.NewNoopResolver())
 	if err != nil {
+		log.Printf("connection validation failed: %+v\r\n", err)
 		return nil, err
 	}
+	log.Println("connection validation succeeded")
 
 	return &cqlClient{
 		keyspace:   cfg.Keyspace,
