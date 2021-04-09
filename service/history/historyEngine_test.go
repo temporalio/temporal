@@ -458,6 +458,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 			"testNamespaceID",
 			newExecution,
 			int64(1),
+			int64(0),
 			int64(4),
 			int64(1),
 			[]byte{1},

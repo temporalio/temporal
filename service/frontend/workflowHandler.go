@@ -513,7 +513,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		execution *commonpb.WorkflowExecution,
 		expectedNextEventID int64,
 		currentBranchToken []byte,
-	) ([]byte, string, int64, int64, bool, error) {
+	) ([]byte, string, int64, int64, int64, bool, error) {
 		response, err := wh.GetHistoryClient().PollMutableState(ctx, &historyservice.PollMutableStateRequest{
 			NamespaceId:         namespaceUUID,
 			Execution:           execution,
@@ -522,13 +522,14 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		})
 
 		if err != nil {
-			return nil, "", 0, 0, false, err
+			return nil, "", 0, 0, 0, false, err
 		}
 		isWorkflowRunning := response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
 			response.GetLastFirstEventId(),
+			response.GetLastFirstEventTxnId(),
 			response.GetNextEventId(),
 			isWorkflowRunning,
 			nil
@@ -541,6 +542,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 
 	var runID string
 	lastFirstEventID := common.FirstEventID
+	lastFirstEventTxnID := int64(0)
 	var nextEventID int64
 	var isWorkflowRunning bool
 
@@ -562,7 +564,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 			if !isCloseEventOnly {
 				queryNextEventID = continuationToken.GetNextEventId()
 			}
-			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, err =
+			continuationToken.BranchToken, _, lastFirstEventID, lastFirstEventTxnID, nextEventID, isWorkflowRunning, err =
 				queryHistory(namespaceID, execution, queryNextEventID, continuationToken.BranchToken)
 			if err != nil {
 				return nil, err
@@ -576,7 +578,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
-		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, err =
+		continuationToken.BranchToken, runID, lastFirstEventID, lastFirstEventTxnID, nextEventID, isWorkflowRunning, err =
 			queryHistory(namespaceID, execution, queryNextEventID, nil)
 		if err != nil {
 			return nil, err
@@ -590,6 +592,19 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		continuationToken.IsWorkflowRunning = isWorkflowRunning
 		continuationToken.PersistenceToken = nil
 	}
+
+	defer func() {
+		// lastFirstEventTxnID != 0 exists due to forward / backward compatibility
+		if _, ok := retError.(*serviceerror.DataLoss); ok && lastFirstEventTxnID != 0 {
+			_, _ = wh.GetHistoryManager().TrimHistoryBranch(&persistence.TrimHistoryBranchRequest{
+				ShardID:       common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(), wh.config.NumHistoryShards),
+				BranchToken:   continuationToken.BranchToken,
+				NodeID:        lastFirstEventID,
+				TransactionID: lastFirstEventTxnID,
+			})
+		}
+	}()
+
 	rawHistoryQueryEnabled := wh.config.SendRawWorkflowHistory(request.GetNamespace())
 
 	history := &historypb.History{}
