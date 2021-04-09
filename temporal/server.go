@@ -148,13 +148,15 @@ func (s *Server) Start() error {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
 
-	var serverReporter, sdkReporter metrics.Reporter
-	serverReporter, sdkReporter, err = s.so.config.Global.Metrics.InitMetricReporters(s.logger, s.so.metricsReporter)
-
 	// todo: Replace this with Client or Scope implementation.
-	var globalMetricsScope tally.Scope
-	tallyReporter := sdkReporter.(*metrics.TallyReporter)
-	globalMetricsScope = tallyReporter.GetScope()
+	var globalMetricsScope tally.Scope = nil
+	var serverReporter, sdkReporter metrics.Reporter = nil, nil
+
+	if s.so.config.Global.Metrics != nil {
+		serverReporter, sdkReporter, err = s.so.config.Global.Metrics.InitMetricReporters(s.logger, s.so.metricsReporter)
+		tallyReporter := sdkReporter.(*metrics.TallyReporter)
+		globalMetricsScope = tallyReporter.GetScope()
+	}
 
 	if s.so.tlsConfigProvider == nil {
 		s.so.tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(s.so.config.Global.TLS, globalMetricsScope, nil)
@@ -268,6 +270,13 @@ func (s *Server) newBootstrapParams(
 	params.DCRedirectionPolicy = s.so.config.DCRedirectionPolicy
 
 	//todo: Replace this hack with actually using sdkReporter, Client or Scope.
+	if serverReporter == nil {
+		var err error
+		serverReporter, sdkReporter, err = svcCfg.Metrics.InitMetricReporters(s.logger, nil)
+		if err != nil {
+			s.logger.Fatal("Failed to initialize reporter client.")
+		}
+	}
 	globalTallyScope := sdkReporter.(*metrics.TallyReporter).GetScope()
 	params.MetricsScope = globalTallyScope
 
