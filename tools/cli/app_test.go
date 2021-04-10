@@ -246,24 +246,6 @@ func (s *cliAppSuite) TestNamespaceDescribe_Failed() {
 
 var (
 	eventType = enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED
-
-	getWorkflowExecutionHistoryResponse = &workflowservice.GetWorkflowExecutionHistoryResponse{
-		History: &historypb.History{
-			Events: []*historypb.HistoryEvent{
-				{
-					EventType: eventType,
-					Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-						WorkflowType:        &commonpb.WorkflowType{Name: "TestWorkflow"},
-						TaskQueue:           &taskqueuepb.TaskQueue{Name: "taskQueue"},
-						WorkflowRunTimeout:  timestamp.DurationPtr(60 * time.Second),
-						WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
-						Identity:            "tester",
-					}},
-				},
-			},
-		},
-		NextPageToken: nil,
-	}
 )
 
 func (s *cliAppSuite) TestShowHistory() {
