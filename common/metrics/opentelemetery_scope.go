@@ -62,7 +62,6 @@ func newOpentelemetryScope(
 }
 
 func (m *opentelemetryScope) tagMapToLabelArray(tags map[string]string) []label.KeyValue {
-	// todomigryz: this might require predefined sorting if OT doesn't handle it for us.
 	result := make([]label.KeyValue, len(tags))
 	idx := 0
 	for k, v := range tags {

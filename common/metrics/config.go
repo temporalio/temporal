@@ -128,7 +128,6 @@ var (
 
 	defaultQuantiles = []float64{50, 75, 90, 95, 99}
 
-	//todomigryz: unify with config/metrics.go. Imho better just use default values starting from 1/1000000
 	defaultHistogramBoundaries = []float64{
 		1 * ms,
 		2 * ms,
