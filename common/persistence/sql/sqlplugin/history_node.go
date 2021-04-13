@@ -69,7 +69,8 @@ type (
 	// HistoryNode is the SQL persistence interface for history nodes
 	HistoryNode interface {
 		InsertIntoHistoryNode(ctx context.Context, row *HistoryNodeRow) (sql.Result, error)
-		SelectFromHistoryNode(ctx context.Context, filter HistoryNodeSelectFilter) ([]HistoryNodeRow, error)
-		DeleteFromHistoryNode(ctx context.Context, filter HistoryNodeDeleteFilter) (sql.Result, error)
+		DeleteFromHistoryNode(ctx context.Context, row *HistoryNodeRow) (sql.Result, error)
+		RangeSelectFromHistoryNode(ctx context.Context, filter HistoryNodeSelectFilter) ([]HistoryNodeRow, error)
+		RangeDeleteFromHistoryNode(ctx context.Context, filter HistoryNodeDeleteFilter) (sql.Result, error)
 	}
 )

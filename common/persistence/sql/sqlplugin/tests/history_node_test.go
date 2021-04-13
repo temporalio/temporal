@@ -144,7 +144,7 @@ func (s *historyNodeSuite) TestInsertSelect_Single() {
 		MaxNodeID: math.MaxInt64,
 		PageSize:  pageSize,
 	}
-	rows, err := s.store.SelectFromHistoryNode(newExecutionContext(), selectFilter)
+	rows, err := s.store.RangeSelectFromHistoryNode(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	// NOTE: TxnID is *= -1 within InsertIntoHistoryNode
 	node.TxnID = -node.TxnID
@@ -194,7 +194,7 @@ func (s *historyNodeSuite) TestInsertSelect_Multiple() {
 	}
 	var rows []sqlplugin.HistoryNodeRow
 	for {
-		rowsPerPage, err := s.store.SelectFromHistoryNode(newExecutionContext(), selectFilter)
+		rowsPerPage, err := s.store.RangeSelectFromHistoryNode(newExecutionContext(), selectFilter)
 		s.NoError(err)
 		rows = append(rows, rowsPerPage...)
 
@@ -253,7 +253,7 @@ func (s *historyNodeSuite) TestDeleteSelect() {
 		BranchID:  branchID,
 		MinNodeID: nodeID,
 	}
-	result, err := s.store.DeleteFromHistoryNode(newExecutionContext(), deleteFilter)
+	result, err := s.store.RangeDeleteFromHistoryNode(newExecutionContext(), deleteFilter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -268,7 +268,7 @@ func (s *historyNodeSuite) TestDeleteSelect() {
 		MaxNodeID: math.MaxInt64,
 		PageSize:  pageSize,
 	}
-	rows, err := s.store.SelectFromHistoryNode(newExecutionContext(), selectFilter)
+	rows, err := s.store.RangeSelectFromHistoryNode(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -294,14 +294,10 @@ func (s *historyNodeSuite) TestInsertDeleteSelect_Single() {
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
+	// transaction ID is *= -1 within InsertIntoHistoryNode
+	node.TxnID = -node.TxnID
 
-	deleteFilter := sqlplugin.HistoryNodeDeleteFilter{
-		ShardID:   shardID,
-		TreeID:    treeID,
-		BranchID:  branchID,
-		MinNodeID: nodeID,
-	}
-	result, err = s.store.DeleteFromHistoryNode(newExecutionContext(), deleteFilter)
+	result, err = s.store.DeleteFromHistoryNode(newExecutionContext(), &node)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
@@ -316,7 +312,7 @@ func (s *historyNodeSuite) TestInsertDeleteSelect_Single() {
 		MaxNodeID: math.MaxInt64,
 		PageSize:  pageSize,
 	}
-	rows, err := s.store.SelectFromHistoryNode(newExecutionContext(), selectFilter)
+	rows, err := s.store.RangeSelectFromHistoryNode(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID
@@ -358,7 +354,7 @@ func (s *historyNodeSuite) TestInsertDeleteSelect_Multiple() {
 		BranchID:  branchID,
 		MinNodeID: minNodeID,
 	}
-	result, err := s.store.DeleteFromHistoryNode(newExecutionContext(), deleteFilter)
+	result, err := s.store.RangeDeleteFromHistoryNode(newExecutionContext(), deleteFilter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
@@ -373,7 +369,7 @@ func (s *historyNodeSuite) TestInsertDeleteSelect_Multiple() {
 		MaxNodeID: math.MaxInt64,
 		PageSize:  pageSize,
 	}
-	rows, err := s.store.SelectFromHistoryNode(newExecutionContext(), selectFilter)
+	rows, err := s.store.RangeSelectFromHistoryNode(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	for index := range rows {
 		rows[index].ShardID = shardID

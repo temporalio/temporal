@@ -138,8 +138,10 @@ type (
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
 
-		// AppendHistoryNodes add(or override) a node to a history branch
+		// AppendHistoryNodes add a node to history node table
 		AppendHistoryNodes(request *InternalAppendHistoryNodesRequest) error
+		// DeleteHistoryNodes delete a node from history node table
+		DeleteHistoryNodes(request *InternalDeleteHistoryNodesRequest) error
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(request *InternalReadHistoryBranchRequest) (*InternalReadHistoryBranchResponse, error)
 		// ForkHistoryBranch forks a new branch from a old branch
@@ -372,6 +374,18 @@ type (
 	InternalForkHistoryBranchResponse struct {
 		// branchInfo to represent the new branch
 		NewBranchInfo *persistencespb.HistoryBranch
+	}
+
+	// InternalDeleteHistoryNodesRequest is used to remove a history node
+	InternalDeleteHistoryNodesRequest struct {
+		// Used in sharded data stores to identify which shard to use
+		ShardID int32
+		// The branch to be appended
+		BranchInfo *persistencespb.HistoryBranch
+		// node ID of the history node
+		NodeID int64
+		// transaction ID of the history node
+		TransactionID int64
 	}
 
 	// InternalDeleteHistoryBranchRequest is used to remove a history branch

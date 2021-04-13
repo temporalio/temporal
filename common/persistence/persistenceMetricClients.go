@@ -1180,7 +1180,7 @@ func (p *historyV2PersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-// AppendHistoryNodes add(or override) a node to a history branch
+// AppendHistoryNodes add a node to history node table
 func (p *historyV2PersistenceClient) AppendHistoryNodes(request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceAppendHistoryNodesScope, metrics.PersistenceRequests)
 	sw := p.metricClient.StartTimer(metrics.PersistenceAppendHistoryNodesScope, metrics.PersistenceLatency)

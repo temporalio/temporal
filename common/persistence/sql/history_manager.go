@@ -66,29 +66,28 @@ func newHistoryV2Persistence(
 	}, nil
 }
 
-// AppendHistoryNodes add(or override) a node to a history branch
+// AppendHistoryNode add(or override) a node to a history branch
 func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	branchInfo := request.BranchInfo
-	beginNodeID := p.GetBeginNodeID(branchInfo)
 	node := request.Node
 
-	branchIDBytes, err := primitives.ParseUUID(branchInfo.GetBranchId())
-	if err != nil {
-		return err
+	if node.NodeID < p.GetBeginNodeID(branchInfo) {
+		return &p.InvalidPersistenceRequestError{
+			Msg: fmt.Sprintf("cannot append to ancestors' nodes"),
+		}
 	}
+
 	treeIDBytes, err := primitives.ParseUUID(branchInfo.GetTreeId())
 	if err != nil {
 		return err
 	}
-
-	if node.NodeID < beginNodeID {
-		return &p.InvalidPersistenceRequestError{
-			Msg: fmt.Sprintf("cannot append to ancestors' nodes"),
-		}
+	branchIDBytes, err := primitives.ParseUUID(branchInfo.GetBranchId())
+	if err != nil {
+		return err
 	}
 
 	nodeRow := &sqlplugin.HistoryNodeRow{
@@ -155,7 +154,47 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 		if m.db.IsDupEntryError(err) {
 			return &p.ConditionFailedError{Msg: fmt.Sprintf("AppendHistoryNodes: row already exist: %v", err)}
 		}
-		return serviceerror.NewInternal(fmt.Sprintf("AppendHistoryEvents: %v", err))
+		return serviceerror.NewInternal(fmt.Sprintf("AppendHistoryNodes: %v", err))
+	}
+	return nil
+}
+
+func (m *sqlHistoryV2Manager) DeleteHistoryNodes(
+	request *p.InternalDeleteHistoryNodesRequest,
+) error {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	branchInfo := request.BranchInfo
+	nodeID := request.NodeID
+	txnID := request.TransactionID
+	shardID := request.ShardID
+
+	if nodeID < p.GetBeginNodeID(branchInfo) {
+		return &p.InvalidPersistenceRequestError{
+			Msg: fmt.Sprintf("cannot append to ancestors' nodes"),
+		}
+	}
+
+	treeIDBytes, err := primitives.ParseUUID(branchInfo.GetTreeId())
+	if err != nil {
+		return err
+	}
+	branchIDBytes, err := primitives.ParseUUID(branchInfo.GetBranchId())
+	if err != nil {
+		return err
+	}
+
+	nodeRow := &sqlplugin.HistoryNodeRow{
+		TreeID:   treeIDBytes,
+		BranchID: branchIDBytes,
+		NodeID:   nodeID,
+		TxnID:    txnID,
+		ShardID:  shardID,
+	}
+
+	_, err = m.db.DeleteFromHistoryNode(ctx, nodeRow)
+	if err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("DeleteHistoryNodes: %v", err))
 	}
 	return nil
 }
@@ -193,7 +232,7 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 		}
 	}
 
-	rows, err := m.db.SelectFromHistoryNode(ctx, sqlplugin.HistoryNodeSelectFilter{
+	rows, err := m.db.RangeSelectFromHistoryNode(ctx, sqlplugin.HistoryNodeSelectFilter{
 		ShardID:      request.ShardID,
 		TreeID:       treeIDBytes,
 		BranchID:     branchIDBytes,
@@ -440,7 +479,7 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 				// No any branch is using this range, we can delete all of it
 				deleteFilter.MinNodeID = br.BeginNodeId
 			}
-			_, err := tx.DeleteFromHistoryNode(ctx, deleteFilter)
+			_, err := tx.RangeDeleteFromHistoryNode(ctx, deleteFilter)
 			if err != nil {
 				return err
 			}

@@ -152,7 +152,7 @@ func (m *historyV2ManagerImpl) GetHistoryTree(
 	return m.persistence.GetHistoryTree(request)
 }
 
-// AppendHistoryNodes add(or override) a node to a history branch
+// AppendHistoryNodes add a node to history node table
 func (m *historyV2ManagerImpl) AppendHistoryNodes(
 	request *AppendHistoryNodesRequest,
 ) (*AppendHistoryNodesResponse, error) {
