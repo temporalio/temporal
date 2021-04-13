@@ -142,21 +142,11 @@ func getTransferTaskMetricsScope(
 			return metrics.TransferActiveTaskStartChildExecutionScope
 		}
 		return metrics.TransferStandbyTaskStartChildExecutionScope
-	case enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED:
-		if isActive {
-			return metrics.TransferActiveTaskRecordWorkflowStartedScope
-		}
-		return metrics.TransferStandbyTaskRecordWorkflowStartedScope
 	case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 		if isActive {
 			return metrics.TransferActiveTaskResetWorkflowScope
 		}
 		return metrics.TransferStandbyTaskResetWorkflowScope
-	case enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-		if isActive {
-			return metrics.TransferActiveTaskUpsertWorkflowSearchAttributesScope
-		}
-		return metrics.TransferStandbyTaskUpsertWorkflowSearchAttributesScope
 	default:
 		if isActive {
 			return metrics.TransferActiveQueueProcessorScope

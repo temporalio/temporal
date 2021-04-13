@@ -106,14 +106,10 @@ func (t *transferQueueStandbyTaskExecutor) execute(
 		return t.processSignalExecution(transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
 		return t.processStartChildExecution(transferTask)
-	case enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED:
-		return t.processRecordWorkflowStarted(transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 		// no reset needed for standby
 		// TODO: add error logs
 		return nil
-	case enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-		return t.processUpsertWorkflowSearchAttributes(transferTask)
 	default:
 		return errUnknownTransferTask
 	}
@@ -397,100 +393,6 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			standbyTransferTaskPostActionTaskDiscarded,
 		),
 	)
-}
-
-func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStarted(
-	transferTask *persistencespb.TransferTaskInfo,
-) error {
-
-	processTaskIfClosed := false
-	return t.processTransfer(
-		processTaskIfClosed,
-		transferTask,
-		func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
-			return nil, t.processRecordWorkflowStartedOrUpsertHelper(transferTask, mutableState, true)
-		},
-		standbyTaskPostActionNoOp,
-	)
-}
-
-func (t *transferQueueStandbyTaskExecutor) processUpsertWorkflowSearchAttributes(
-	transferTask *persistencespb.TransferTaskInfo,
-) error {
-
-	processTaskIfClosed := false
-	return t.processTransfer(
-		processTaskIfClosed,
-		transferTask,
-		func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
-			return nil, t.processRecordWorkflowStartedOrUpsertHelper(transferTask, mutableState, false)
-		},
-		standbyTaskPostActionNoOp,
-	)
-}
-
-func (t *transferQueueStandbyTaskExecutor) processRecordWorkflowStartedOrUpsertHelper(
-	transferTask *persistencespb.TransferTaskInfo,
-	mutableState mutableState,
-	isRecordStart bool,
-) error {
-
-	// verify task version for RecordWorkflowStarted.
-	// upsert doesn't require verifyTask, because it is just a sync of mutableState.
-	if isRecordStart {
-		startVersion, err := mutableState.GetStartVersion()
-		if err != nil {
-			return err
-		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, transferTask.GetNamespaceId(), startVersion, transferTask.Version, transferTask)
-		if err != nil || !ok {
-			return err
-		}
-	}
-
-	executionInfo := mutableState.GetExecutionInfo()
-	executionState := mutableState.GetExecutionState()
-	workflowTimeout := executionInfo.WorkflowRunTimeout
-	wfTypeName := executionInfo.WorkflowTypeName
-	startEvent, err := mutableState.GetStartEvent()
-	if err != nil {
-		return err
-	}
-	startTime := timestamp.TimeValue(startEvent.GetEventTime())
-	executionTimestamp := getWorkflowExecutionTime(mutableState, startEvent)
-	visibilityMemo := getWorkflowMemo(executionInfo.Memo)
-	searchAttr := getSearchAttributes(executionInfo.SearchAttributes)
-
-	if isRecordStart {
-		return t.recordWorkflowStarted(
-			transferTask.GetNamespaceId(),
-			transferTask.GetWorkflowId(),
-			transferTask.GetRunId(),
-			wfTypeName,
-			startTime.UnixNano(),
-			executionTimestamp.UnixNano(),
-			workflowTimeout,
-			transferTask.GetTaskId(),
-			executionInfo.TaskQueue,
-			visibilityMemo,
-			searchAttr,
-		)
-	}
-	return t.upsertWorkflowExecution(
-		transferTask.GetNamespaceId(),
-		transferTask.GetWorkflowId(),
-		transferTask.GetRunId(),
-		wfTypeName,
-		startTime.UnixNano(),
-		executionTimestamp.UnixNano(),
-		workflowTimeout,
-		transferTask.GetTaskId(),
-		executionState.GetStatus(),
-		executionInfo.TaskQueue,
-		visibilityMemo,
-		searchAttr,
-	)
-
 }
 
 func (t *transferQueueStandbyTaskExecutor) processTransfer(

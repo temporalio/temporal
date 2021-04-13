@@ -603,7 +603,6 @@ func createTransferTasks(
 		targetWorkflowID := p.TransferTaskTransferTargetWorkflowID
 		targetRunID := ""
 		targetChildWorkflowOnly := false
-		recordVisibility := false
 
 		switch task.GetType() {
 		case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
@@ -615,7 +614,6 @@ func createTransferTasks(
 			targetNamespaceID = task.(*p.WorkflowTask).NamespaceID
 			taskQueue = task.(*p.WorkflowTask).TaskQueue
 			scheduleID = task.(*p.WorkflowTask).ScheduleID
-			recordVisibility = task.(*p.WorkflowTask).RecordVisibility
 
 		case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
 			targetNamespaceID = task.(*p.CancelExecutionTask).TargetNamespaceID
@@ -642,16 +640,11 @@ func createTransferTasks(
 			enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 			// No explicit property needs to be set
 
-		case enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
-			enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-			// TODO (alex): remove
-
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknow transfer type: %v", task.GetType()))
 		}
 
-		// todo ~~~ come back for record visibility
-		p := &persistencespb.TransferTaskInfo{
+		transferTaskInfo := &persistencespb.TransferTaskInfo{
 			NamespaceId:             namespaceID,
 			WorkflowId:              workflowID,
 			RunId:                   runID,
@@ -665,10 +658,9 @@ func createTransferTasks(
 			Version:                 task.GetVersion(),
 			TaskId:                  task.GetTaskID(),
 			VisibilityTime:          timestamp.TimePtr(task.GetVisibilityTimestamp()),
-			RecordVisibility:        recordVisibility,
 		}
 
-		datablob, err := serialization.TransferTaskInfoToBlob(p)
+		dataBlob, err := serialization.TransferTaskInfoToBlob(transferTaskInfo)
 		if err != nil {
 			return err
 		}
@@ -678,8 +670,8 @@ func createTransferTasks(
 			rowTypeTransferNamespaceID,
 			rowTypeTransferWorkflowID,
 			rowTypeTransferRunID,
-			datablob.Data,
-			datablob.EncodingType.String(),
+			dataBlob.Data,
+			dataBlob.EncodingType.String(),
 			defaultVisibilityTimestamp,
 			task.GetTaskID())
 	}

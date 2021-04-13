@@ -150,102 +150,6 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	return err
 }
 
-func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
-	namespaceID string,
-	workflowID string,
-	runID string,
-	workflowTypeName string,
-	startTimeUnixNano int64,
-	executionTimeUnixNano int64,
-	runTimeout *time.Duration,
-	taskID int64,
-	taskQueue string,
-	visibilityMemo *commonpb.Memo,
-	searchAttributes *commonpb.SearchAttributes,
-) error {
-
-	namespace := defaultNamespace
-
-	if namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID); err != nil {
-		if _, ok := err.(*serviceerror.NotFound); !ok {
-			return err
-		}
-	} else {
-		namespace = namespaceEntry.GetInfo().Name
-		// if sampled for longer retention is enabled, only record those sampled events
-		if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
-			!namespaceEntry.IsSampledForLongerRetention(workflowID) {
-			return nil
-		}
-	}
-
-	request := &persistence.RecordWorkflowExecutionStartedRequest{
-		VisibilityRequestBase: &persistence.VisibilityRequestBase{
-			NamespaceID: namespaceID,
-			Namespace:   namespace,
-			Execution: commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      runID,
-			},
-			WorkflowTypeName:   workflowTypeName,
-			StartTimestamp:     startTimeUnixNano,
-			ExecutionTimestamp: executionTimeUnixNano,
-			TaskID:             taskID,
-			Memo:               visibilityMemo,
-			TaskQueue:          taskQueue,
-			SearchAttributes:   searchAttributes,
-		},
-	}
-	return t.visibilityMgr.RecordWorkflowExecutionStarted(request)
-}
-
-func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
-	namespaceID string,
-	workflowID string,
-	runID string,
-	workflowTypeName string,
-	startTimeUnixNano int64,
-	executionTimeUnixNano int64,
-	workflowTimeout *time.Duration,
-	taskID int64,
-	status enumspb.WorkflowExecutionStatus,
-	taskQueue string,
-	visibilityMemo *commonpb.Memo,
-	searchAttributes *commonpb.SearchAttributes,
-) error {
-
-	namespace := defaultNamespace
-	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
-	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); !ok {
-			return err
-		}
-	} else {
-		namespace = namespaceEntry.GetInfo().Name
-	}
-
-	request := &persistence.UpsertWorkflowExecutionRequest{
-		VisibilityRequestBase: &persistence.VisibilityRequestBase{
-			NamespaceID: namespaceID,
-			Namespace:   namespace,
-			Execution: commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      runID,
-			},
-			WorkflowTypeName:   workflowTypeName,
-			StartTimestamp:     startTimeUnixNano,
-			ExecutionTimestamp: executionTimeUnixNano,
-			TaskID:             taskID,
-			Status:             status,
-			Memo:               visibilityMemo,
-			TaskQueue:          taskQueue,
-			SearchAttributes:   searchAttributes,
-		},
-	}
-
-	return t.visibilityMgr.UpsertWorkflowExecution(request)
-}
-
 func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	namespaceID string,
 	workflowID string,
@@ -262,20 +166,17 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
-	// Record closing in visibility store
-	namespace := defaultNamespace
-	archiveVisibility := false
-
 	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
-	if err != nil && !isWorkflowNotExistError(err) {
-		return err
+	if err != nil {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
+			return err
+		}
+		return nil
 	}
 
-	if err == nil {
-		clusterConfiguredForVisibilityArchival := t.shard.GetService().GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
-		namespaceConfiguredForVisibilityArchival := namespaceEntry.GetConfig().VisibilityArchivalState == enumspb.ARCHIVAL_STATE_ENABLED
-		archiveVisibility = clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
-	}
+	clusterConfiguredForVisibilityArchival := t.shard.GetService().GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
+	namespaceConfiguredForVisibilityArchival := namespaceEntry.GetConfig().VisibilityArchivalState == enumspb.ARCHIVAL_STATE_ENABLED
+	archiveVisibility := clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
 
 	if archiveVisibility {
 		ctx, cancel := context.WithTimeout(context.Background(), t.config.TransferProcessorVisibilityArchivalTimeLimit())
@@ -293,7 +194,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		_, err = t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
 			ArchiveRequest: &archiver.ArchiveRequest{
 				NamespaceID:      namespaceID,
-				Namespace:        namespace,
+				Namespace:        namespaceEntry.GetInfo().Name,
 				WorkflowID:       workflowID,
 				RunID:            runID,
 				WorkflowTypeName: workflowTypeName,
@@ -311,13 +212,10 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 			CallerService:        common.HistoryServiceName,
 			AttemptArchiveInline: true, // archive visibility inline by default
 		})
-		return err
+
+		if err != nil {
+			return err
+		}
 	}
 	return nil
-}
-
-// TODO: remove
-func isWorkflowNotExistError(err error) bool {
-	_, ok := err.(*serviceerror.NotFound)
-	return ok
 }

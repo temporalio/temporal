@@ -228,7 +228,6 @@ type (
 		TaskQueue           string
 		ScheduleID          int64
 		Version             int64
-		RecordVisibility    bool
 	}
 
 	// ResetWorkflowTask identifies a transfer task to reset workflow
