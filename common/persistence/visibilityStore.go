@@ -70,7 +70,6 @@ func (v *visibilityManagerImpl) GetName() string {
 func (v *visibilityManagerImpl) RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error {
 	req := &InternalRecordWorkflowExecutionStartedRequest{
 		InternalVisibilityRequestBase: v.newInternalVisibilityRequestBase(request.VisibilityRequestBase),
-		RunTimeout:                    request.RunTimeout,
 	}
 	return v.persistence.RecordWorkflowExecutionStarted(req)
 }
@@ -80,7 +79,7 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionClosed(request *RecordWor
 		InternalVisibilityRequestBase: v.newInternalVisibilityRequestBase(request.VisibilityRequestBase),
 		CloseTimestamp:                request.CloseTimestamp,
 		HistoryLength:                 request.HistoryLength,
-		RetentionSeconds:              request.RetentionSeconds,
+		Retention:                     request.Retention,
 	}
 	return v.persistence.RecordWorkflowExecutionClosed(req)
 }
@@ -88,7 +87,6 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionClosed(request *RecordWor
 func (v *visibilityManagerImpl) UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error {
 	req := &InternalUpsertWorkflowExecutionRequest{
 		InternalVisibilityRequestBase: v.newInternalVisibilityRequestBase(request.VisibilityRequestBase),
-		WorkflowTimeout:               request.WorkflowTimeout,
 	}
 	return v.persistence.UpsertWorkflowExecution(req)
 }
