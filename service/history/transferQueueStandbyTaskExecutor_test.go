@@ -1161,7 +1161,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessRecordWorkflowStarted
 			TaskID:           taskID,
 			TaskQueue:        taskQueueName,
 		},
-		RunTimeout: int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
 	}).Return(nil).Once()
 
 	s.mockShard.SetCurrentTime(s.clusterName, *now)
@@ -1229,7 +1228,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessUpsertWorkflowSearchA
 			TaskQueue:        taskQueueName,
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		},
-		WorkflowTimeout: int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
 	}).Return(nil).Once()
 
 	s.mockShard.SetCurrentTime(s.clusterName, *now)

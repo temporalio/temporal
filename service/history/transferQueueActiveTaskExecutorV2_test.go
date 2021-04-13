@@ -1991,7 +1991,6 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) createRecordWorkflowExecutionSt
 			TaskID:             task.GetTaskId(),
 			TaskQueue:          task.TaskQueue,
 		},
-		RunTimeout: int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
 	}
 }
 
@@ -2124,7 +2123,6 @@ func (s *transferQueueActiveTaskExecutorSuiteV2) createUpsertWorkflowSearchAttri
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			TaskQueue:        task.TaskQueue,
 		},
-		WorkflowTimeout: int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
 	}
 }
 

@@ -25,6 +25,8 @@
 package persistence
 
 import (
+	"time"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -57,21 +59,19 @@ type (
 	// RecordWorkflowExecutionStartedRequest is used to add a record of a newly started execution
 	RecordWorkflowExecutionStartedRequest struct {
 		*VisibilityRequestBase
-		RunTimeout int64 // not persisted, used for cassandra ttl
 	}
 
 	// RecordWorkflowExecutionClosedRequest is used to add a record of a closed execution
 	RecordWorkflowExecutionClosedRequest struct {
 		*VisibilityRequestBase
-		CloseTimestamp   int64
-		HistoryLength    int64
-		RetentionSeconds int64
+		CloseTimestamp int64
+		HistoryLength  int64
+		Retention      *time.Duration // not persisted, used for cassandra ttl
 	}
 
 	// UpsertWorkflowExecutionRequest is used to upsert workflow execution
 	UpsertWorkflowExecutionRequest struct {
 		*VisibilityRequestBase
-		WorkflowTimeout int64 // not persisted, used for cassandra ttl
 	}
 
 	// ListWorkflowExecutionsRequest is used to list executions in a namespace
