@@ -49,11 +49,6 @@ type (
 	}
 )
 
-const (
-	// TODO (alex): change to "default"?
-	defaultNamespace = "defaultNamespace"
-)
-
 func newTransferQueueProcessorBase(
 	shard shard.Context,
 	options *QueueProcessorOptions,

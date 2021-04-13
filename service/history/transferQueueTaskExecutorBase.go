@@ -30,7 +30,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -168,54 +167,50 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 
 	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); !ok {
-			return err
-		}
-		return nil
+		return err
 	}
 
 	clusterConfiguredForVisibilityArchival := t.shard.GetService().GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
 	namespaceConfiguredForVisibilityArchival := namespaceEntry.GetConfig().VisibilityArchivalState == enumspb.ARCHIVAL_STATE_ENABLED
 	archiveVisibility := clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
 
-	if archiveVisibility {
-		ctx, cancel := context.WithTimeout(context.Background(), t.config.TransferProcessorVisibilityArchivalTimeLimit())
-		defer cancel()
-
-		saTypeMap, err := searchattribute.BuildTypeMap(t.config.ValidSearchAttributes)
-		if err != nil {
-			return err
-		}
-
-		// Setting search attributes types here because archival client needs to stringify them
-		// and it might not have access to type map (i.e. type needs to be embedded).
-		searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
-
-		_, err = t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
-			ArchiveRequest: &archiver.ArchiveRequest{
-				NamespaceID:      namespaceID,
-				Namespace:        namespaceEntry.GetInfo().Name,
-				WorkflowID:       workflowID,
-				RunID:            runID,
-				WorkflowTypeName: workflowTypeName,
-				StartTime:        startTime,
-				ExecutionTime:    executionTime,
-				CloseTime:        endTime,
-				Status:           status,
-				HistoryLength:    historyLength,
-				Memo:             visibilityMemo,
-				SearchAttributes: searchAttributes,
-				VisibilityURI:    namespaceEntry.GetConfig().VisibilityArchivalUri,
-				HistoryURI:       namespaceEntry.GetConfig().HistoryArchivalUri,
-				Targets:          []archiver.ArchivalTarget{archiver.ArchiveTargetVisibility},
-			},
-			CallerService:        common.HistoryServiceName,
-			AttemptArchiveInline: true, // archive visibility inline by default
-		})
-
-		if err != nil {
-			return err
-		}
+	if !archiveVisibility {
+		return nil
 	}
-	return nil
+
+	ctx, cancel := context.WithTimeout(context.Background(), t.config.TransferProcessorVisibilityArchivalTimeLimit())
+	defer cancel()
+
+	saTypeMap, err := searchattribute.BuildTypeMap(t.config.ValidSearchAttributes)
+	if err != nil {
+		return err
+	}
+
+	// Setting search attributes types here because archival client needs to stringify them
+	// and it might not have access to type map (i.e. type needs to be embedded).
+	searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
+
+	_, err = t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
+		ArchiveRequest: &archiver.ArchiveRequest{
+			NamespaceID:      namespaceID,
+			Namespace:        namespaceEntry.GetInfo().Name,
+			WorkflowID:       workflowID,
+			RunID:            runID,
+			WorkflowTypeName: workflowTypeName,
+			StartTime:        startTime,
+			ExecutionTime:    executionTime,
+			CloseTime:        endTime,
+			Status:           status,
+			HistoryLength:    historyLength,
+			Memo:             visibilityMemo,
+			SearchAttributes: searchAttributes,
+			VisibilityURI:    namespaceEntry.GetConfig().VisibilityArchivalUri,
+			HistoryURI:       namespaceEntry.GetConfig().HistoryArchivalUri,
+			Targets:          []archiver.ArchivalTarget{archiver.ArchiveTargetVisibility},
+		},
+		CallerService:        common.HistoryServiceName,
+		AttemptArchiveInline: true, // archive visibility inline by default
+	})
+
+	return err
 }
