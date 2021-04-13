@@ -33,6 +33,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/server/common/persistence/cassandra"
 
 	"go.temporal.io/server/common/payload"
 	p "go.temporal.io/server/common/persistence"
@@ -239,11 +240,15 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityShortWorkflow() {
 }
 
 func (s *VisibilityPersistenceSuite) TestVisibilityRetention() {
+	if _, ok := s.VisibilityTestCluster.(*cassandra.TestCluster); !ok {
+		return
+	}
+
 	testNamespaceUUID := uuid.New()
 
 	workflowExecution := commonpb.WorkflowExecution{
-		WorkflowId: "visibility-workflow-test-short-workflow",
-		RunId:      "3c095198-0c33-4136-939a-c29fbbb6a80b",
+		WorkflowId: "visibility-workflow-test-visibility-retention",
+		RunId:      "3c095198-0c33-4136-939a-c29fbbb6a802",
 	}
 
 	startTime := time.Now().UTC().Add(-1 * time.Hour).UnixNano()
