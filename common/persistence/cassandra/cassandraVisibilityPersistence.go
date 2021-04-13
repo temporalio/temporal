@@ -238,17 +238,19 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosedV2(
 
 	// RecordWorkflowExecutionStarted is using StartTimestamp as the timestamp for every query in `open_executions` table.
 	// Due to the fact that cross DC using mutable state creation time as workflow start time and visibility using event time
-	// instead of last update time (https://github.com/uber/cadence/pull/1501) CloseTimestamp can be before StartTimestamp.
-	// Using CloseTimestamp can cause the deletion of open visibility record to be ignored.
+	// instead of last update time (https://github.com/uber/cadence/pull/1501) CloseTimestamp can be before StartTimestamp (or very close it).
+	// In this case, use (StartTimestamp + minWorkflowDuration) for delete operation to guarantee that it is greater than StartTimestamp
+	// and won't be ignored.
 
-	var queryTimestamp int64
-	if request.CloseTimestamp-request.StartTimestamp < time.Millisecond.Nanoseconds() {
-		queryTimestamp = request.StartTimestamp + time.Millisecond.Nanoseconds()
+	const minWorkflowDuration = time.Second
+	var batchTimestamp int64
+	if request.CloseTimestamp-request.StartTimestamp < minWorkflowDuration.Nanoseconds() {
+		batchTimestamp = request.StartTimestamp + minWorkflowDuration.Nanoseconds()
 	} else {
-		queryTimestamp = request.CloseTimestamp
+		batchTimestamp = request.CloseTimestamp
 	}
 
-	batch = batch.WithTimestamp(p.UnixNanoToDBTimestamp(queryTimestamp))
+	batch = batch.WithTimestamp(p.UnixNanoToDBTimestamp(batchTimestamp))
 	err := v.session.ExecuteBatch(batch)
 	return gocql.ConvertError("RecordWorkflowExecutionClosed", err)
 }
