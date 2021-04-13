@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -196,7 +195,6 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 			TaskQueue:          taskQueue,
 			SearchAttributes:   searchAttributes,
 		},
-		RunTimeout: int64(timestamp.DurationValue(runTimeout).Round(time.Second).Seconds()),
 	}
 	return t.visibilityMgr.RecordWorkflowExecutionStarted(request)
 }
@@ -243,7 +241,6 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 			TaskQueue:          taskQueue,
 			SearchAttributes:   searchAttributes,
 		},
-		WorkflowTimeout: int64(timestamp.DurationValue(workflowTimeout).Round(time.Second).Seconds()),
 	}
 
 	return t.visibilityMgr.UpsertWorkflowExecution(request)
@@ -319,6 +316,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	return nil
 }
 
+// TODO: remove
 func isWorkflowNotExistError(err error) bool {
 	_, ok := err.(*serviceerror.NotFound)
 	return ok
