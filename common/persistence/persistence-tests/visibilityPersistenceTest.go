@@ -746,7 +746,6 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 					},
 					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
-				WorkflowTimeout: 0,
 			},
 			expected: nil,
 		},
@@ -764,7 +763,6 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 					SearchAttributes:   nil,
 					Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
-				WorkflowTimeout: 0,
 			},
 			// To avoid blocking the task queue processors on non-ElasticSearch visibility stores
 			// we simply treat any attempts to perform Upserts as "no-ops"
