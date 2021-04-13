@@ -33,6 +33,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/server/common/persistence/cassandra"
 
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/payload"
@@ -138,7 +139,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 		RunId:      "fb15e4b5-356f-466d-8c6d-a29223e5c536",
 	}
 
-	startTime := time.Now().UTC().Add(time.Second * -5).UnixNano()
+	startTime := time.Now().UTC().UnixNano()
 	err0 := s.VisibilityMgr.RecordWorkflowExecutionStarted(&p.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &p.VisibilityRequestBase{
 			NamespaceID:      testNamespaceUUID,
@@ -147,7 +148,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 			StartTimestamp:   startTime,
 		},
 	})
-	s.Nil(err0)
+	s.NoError(err0)
 
 	resp, err1 := s.VisibilityMgr.ListOpenWorkflowExecutions(&p.ListWorkflowExecutionsRequest{
 		NamespaceID:       testNamespaceUUID,
@@ -155,7 +156,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 		EarliestStartTime: startTime,
 		LatestStartTime:   startTime,
 	})
-	s.Nil(err1)
+	s.NoError(err1)
 	s.Equal(1, len(resp.Executions))
 	s.Equal(workflowExecution.WorkflowId, resp.Executions[0].Execution.WorkflowId)
 
@@ -166,9 +167,9 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 			WorkflowTypeName: "visibility-workflow",
 			StartTimestamp:   startTime,
 		},
-		CloseTimestamp: startTime - (10 * time.Second).Nanoseconds(),
+		CloseTimestamp: startTime - (10 * time.Millisecond).Nanoseconds(),
 	})
-	s.Nil(err2)
+	s.NoError(err2)
 
 	resp, err3 := s.VisibilityMgr.ListOpenWorkflowExecutions(&p.ListWorkflowExecutionsRequest{
 		NamespaceID:       testNamespaceUUID,
@@ -176,17 +177,132 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 		EarliestStartTime: startTime,
 		LatestStartTime:   startTime,
 	})
-	s.Nil(err3)
+	s.NoError(err3)
 	s.Equal(0, len(resp.Executions))
 
 	resp, err4 := s.VisibilityMgr.ListClosedWorkflowExecutions(&p.ListWorkflowExecutionsRequest{
 		NamespaceID:       testNamespaceUUID,
 		PageSize:          1,
-		EarliestStartTime: startTime - (15 * time.Second).Nanoseconds(),
-		LatestStartTime:   time.Now().UnixNano(),
+		EarliestStartTime: startTime - (10 * time.Millisecond).Nanoseconds(), // This is actually close_time
+		LatestStartTime:   startTime - (10 * time.Millisecond).Nanoseconds(),
 	})
-	s.Nil(err4)
+	s.NoError(err4)
 	s.Equal(1, len(resp.Executions))
+}
+
+func (s *VisibilityPersistenceSuite) TestBasicVisibilityShortWorkflow() {
+	testNamespaceUUID := uuid.New()
+
+	workflowExecution := commonpb.WorkflowExecution{
+		WorkflowId: "visibility-workflow-test-short-workflow",
+		RunId:      "3c095198-0c33-4136-939a-c29fbbb6a80b",
+	}
+
+	startTime := time.Now().UTC().UnixNano()
+	err0 := s.VisibilityMgr.RecordWorkflowExecutionStarted(&p.RecordWorkflowExecutionStartedRequest{
+		VisibilityRequestBase: &p.VisibilityRequestBase{
+			NamespaceID:      testNamespaceUUID,
+			Execution:        workflowExecution,
+			WorkflowTypeName: "visibility-workflow",
+			StartTimestamp:   startTime,
+		},
+	})
+	s.NoError(err0)
+
+	err2 := s.VisibilityMgr.RecordWorkflowExecutionClosed(&p.RecordWorkflowExecutionClosedRequest{
+		VisibilityRequestBase: &p.VisibilityRequestBase{
+			NamespaceID:      testNamespaceUUID,
+			Execution:        workflowExecution,
+			WorkflowTypeName: "visibility-workflow",
+			StartTimestamp:   startTime,
+		},
+		CloseTimestamp: startTime + (10 * time.Millisecond).Nanoseconds(),
+	})
+	s.NoError(err2)
+
+	resp, err3 := s.VisibilityMgr.ListOpenWorkflowExecutions(&p.ListWorkflowExecutionsRequest{
+		NamespaceID:       testNamespaceUUID,
+		PageSize:          1,
+		EarliestStartTime: startTime,
+		LatestStartTime:   startTime,
+	})
+	s.NoError(err3)
+	s.Equal(0, len(resp.Executions))
+
+	resp, err4 := s.VisibilityMgr.ListClosedWorkflowExecutions(&p.ListWorkflowExecutionsRequest{
+		NamespaceID:       testNamespaceUUID,
+		PageSize:          1,
+		EarliestStartTime: startTime + (10 * time.Millisecond).Nanoseconds(), // This is actually close_time
+		LatestStartTime:   startTime + (10 * time.Millisecond).Nanoseconds(),
+	})
+	s.NoError(err4)
+	s.Equal(1, len(resp.Executions))
+}
+
+func (s *VisibilityPersistenceSuite) TestVisibilityRetention() {
+	if _, ok := s.VisibilityTestCluster.(*cassandra.TestCluster); !ok {
+		return
+	}
+
+	testNamespaceUUID := uuid.New()
+
+	workflowExecution := commonpb.WorkflowExecution{
+		WorkflowId: "visibility-workflow-test-visibility-retention",
+		RunId:      "3c095198-0c33-4136-939a-c29fbbb6a802",
+	}
+
+	startTime := time.Now().UTC().Add(-1 * time.Hour).UnixNano()
+	err0 := s.VisibilityMgr.RecordWorkflowExecutionStarted(&p.RecordWorkflowExecutionStartedRequest{
+		VisibilityRequestBase: &p.VisibilityRequestBase{
+			NamespaceID:      testNamespaceUUID,
+			Execution:        workflowExecution,
+			WorkflowTypeName: "visibility-workflow",
+			StartTimestamp:   startTime,
+		},
+	})
+	s.NoError(err0)
+
+	retention := 1 * time.Second
+	err2 := s.VisibilityMgr.RecordWorkflowExecutionClosed(&p.RecordWorkflowExecutionClosedRequest{
+		VisibilityRequestBase: &p.VisibilityRequestBase{
+			NamespaceID:      testNamespaceUUID,
+			Execution:        workflowExecution,
+			WorkflowTypeName: "visibility-workflow",
+			StartTimestamp:   startTime,
+		},
+		CloseTimestamp: startTime + (1 * time.Minute).Nanoseconds(),
+		Retention:      &retention,
+	})
+	s.NoError(err2)
+
+	resp, err3 := s.VisibilityMgr.ListOpenWorkflowExecutions(&p.ListWorkflowExecutionsRequest{
+		NamespaceID:       testNamespaceUUID,
+		PageSize:          1,
+		EarliestStartTime: startTime,
+		LatestStartTime:   startTime,
+	})
+	s.NoError(err3)
+	s.Equal(0, len(resp.Executions))
+
+	resp, err4 := s.VisibilityMgr.ListClosedWorkflowExecutions(&p.ListWorkflowExecutionsRequest{
+		NamespaceID:       testNamespaceUUID,
+		PageSize:          1,
+		EarliestStartTime: startTime + (1 * time.Minute).Nanoseconds(), // This is actually close_time
+		LatestStartTime:   startTime + (1 * time.Minute).Nanoseconds(),
+	})
+	s.NoError(err4)
+	s.Equal(1, len(resp.Executions))
+
+	// Sleep for retention to fire.
+	time.Sleep(retention)
+	resp2, err5 := s.VisibilityMgr.ListClosedWorkflowExecutions(&p.ListWorkflowExecutionsRequest{
+		NamespaceID:       testNamespaceUUID,
+		PageSize:          1,
+		EarliestStartTime: startTime + (1 * time.Minute).Nanoseconds(), // This is actually close_time
+		LatestStartTime:   startTime + (1 * time.Minute).Nanoseconds(),
+	})
+	s.NoError(err5)
+	s.Equal(0, len(resp2.Executions))
 }
 
 // TestVisibilityPagination test
@@ -746,7 +862,6 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 					},
 					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
-				WorkflowTimeout: 0,
 			},
 			expected: nil,
 		},
@@ -764,7 +879,6 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 					SearchAttributes:   nil,
 					Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
-				WorkflowTimeout: 0,
 			},
 			// To avoid blocking the task queue processors on non-ElasticSearch visibility stores
 			// we simply treat any attempts to perform Upserts as "no-ops"

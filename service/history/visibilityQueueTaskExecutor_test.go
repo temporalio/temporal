@@ -365,7 +365,6 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedR
 			ShardID:            s.mockShard.GetShardID(),
 			TaskQueue:          taskQueueName,
 		},
-		RunTimeout: int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
 	}
 }
 
@@ -395,7 +394,6 @@ func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowSearchAttributesR
 			TaskQueue:        taskQueueName,
 			ShardID:          s.mockShard.GetShardID(),
 		},
-		WorkflowTimeout: int64(timestamp.DurationValue(executionInfo.WorkflowRunTimeout).Round(time.Second).Seconds()),
 	}
 }
 

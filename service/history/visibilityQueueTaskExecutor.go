@@ -162,7 +162,6 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
-	runTimeout := executionInfo.WorkflowRunTimeout
 	wfTypeName := executionInfo.WorkflowTypeName
 
 	startEvent, err := mutableState.GetStartEvent()
@@ -189,7 +188,6 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 			wfTypeName,
 			startTimestamp.UnixNano(),
 			executionTimestamp.UnixNano(),
-			runTimeout,
 			task.GetTaskId(),
 			executionStatus,
 			taskQueue,
@@ -204,7 +202,6 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 		wfTypeName,
 		startTimestamp.UnixNano(),
 		executionTimestamp.UnixNano(),
-		runTimeout,
 		task.GetTaskId(),
 		executionStatus,
 		taskQueue,
@@ -219,7 +216,6 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 	workflowTypeName string,
 	startTimeUnixNano int64,
 	executionTimeUnixNano int64,
-	runTimeout *time.Duration,
 	taskID int64,
 	status enumspb.WorkflowExecutionStatus,
 	taskQueue string,
@@ -260,7 +256,6 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 			TaskQueue:          taskQueue,
 			SearchAttributes:   searchAttributes,
 		},
-		RunTimeout: int64(timestamp.DurationValue(runTimeout).Round(time.Second).Seconds()),
 	}
 	return t.visibilityMgr.RecordWorkflowExecutionStartedV2(request)
 }
@@ -272,7 +267,6 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 	workflowTypeName string,
 	startTimeUnixNano int64,
 	executionTimeUnixNano int64,
-	workflowTimeout *time.Duration,
 	taskID int64,
 	status enumspb.WorkflowExecutionStatus,
 	taskQueue string,
@@ -308,7 +302,6 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 			TaskQueue:          taskQueue,
 			SearchAttributes:   searchAttributes,
 		},
-		WorkflowTimeout: int64(timestamp.DurationValue(workflowTimeout).Round(time.Second).Seconds()),
 	}
 
 	return t.visibilityMgr.UpsertWorkflowExecutionV2(request)
@@ -407,19 +400,20 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
-	// Record closing in visibility store
-	retentionSeconds := int64(0)
+	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	if err != nil {
+		if _, notFound := err.(*serviceerror.NotFound); !notFound {
+			return err
+		}
+	}
+
+	var retention *time.Duration
 	namespace := defaultNamespace
 	recordWorkflowClose := true
 
-	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
-	if err != nil && !isWorkflowNotExistError(err) {
-		return err
-	}
-
-	if err == nil {
-		// retention in namespace config is in days, convert to seconds
-		retentionSeconds = int64(timestamp.DurationFromDays(namespaceEntry.GetRetentionDays(workflowID)).Seconds())
+	if namespaceEntry != nil {
+		// retention in namespace config is in days, convert to time.Duration.
+		retention = timestamp.DurationFromDays(namespaceEntry.GetRetentionDays(workflowID))
 		namespace = namespaceEntry.GetInfo().Name
 		// if sampled for longer retention is enabled, only record those sampled events
 		if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
@@ -447,9 +441,9 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 				TaskQueue:          taskQueue,
 				SearchAttributes:   searchAttributes,
 			},
-			CloseTimestamp:   endTime.UnixNano(),
-			HistoryLength:    historyLength,
-			RetentionSeconds: retentionSeconds,
+			CloseTimestamp: endTime.UnixNano(),
+			HistoryLength:  historyLength,
+			Retention:      retention,
 		})
 	}
 

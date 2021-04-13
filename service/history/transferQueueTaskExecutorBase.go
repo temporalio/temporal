@@ -195,7 +195,6 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
 			TaskQueue:          taskQueue,
 			SearchAttributes:   searchAttributes,
 		},
-		RunTimeout: int64(timestamp.DurationValue(runTimeout).Round(time.Second).Seconds()),
 	}
 	return t.visibilityMgr.RecordWorkflowExecutionStarted(request)
 }
@@ -242,7 +241,6 @@ func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
 			TaskQueue:          taskQueue,
 			SearchAttributes:   searchAttributes,
 		},
-		WorkflowTimeout: int64(timestamp.DurationValue(workflowTimeout).Round(time.Second).Seconds()),
 	}
 
 	return t.visibilityMgr.UpsertWorkflowExecution(request)
@@ -265,7 +263,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 ) error {
 
 	// Record closing in visibility store
-	retentionSeconds := int64(0)
+	var retention *time.Duration
 	namespace := defaultNamespace
 	recordWorkflowClose := true
 	archiveVisibility := false
@@ -277,7 +275,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 
 	if err == nil {
 		// retention in namespace config is in days, convert to seconds
-		retentionSeconds = int64(timestamp.DurationFromDays(namespaceEntry.GetRetentionDays(workflowID)).Seconds())
+		retention = timestamp.DurationFromDays(namespaceEntry.GetRetentionDays(workflowID))
 		namespace = namespaceEntry.GetInfo().Name
 		// if sampled for longer retention is enabled, only record those sampled events
 		if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
@@ -308,9 +306,9 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 				TaskQueue:          taskQueue,
 				SearchAttributes:   searchAttributes,
 			},
-			CloseTimestamp:   endTime.UnixNano(),
-			HistoryLength:    historyLength,
-			RetentionSeconds: retentionSeconds,
+			CloseTimestamp: endTime.UnixNano(),
+			HistoryLength:  historyLength,
+			Retention:      retention,
 		}); err != nil {
 			return err
 		}
@@ -345,6 +343,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	return nil
 }
 
+// TODO: remove
 func isWorkflowNotExistError(err error) bool {
 	_, ok := err.(*serviceerror.NotFound)
 	return ok
