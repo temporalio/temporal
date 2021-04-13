@@ -291,8 +291,15 @@ func (d *namespaceCLIImpl) DescribeNamespace(c *cli.Context) {
 	namespaceID := c.String(FlagNamespaceID)
 
 	if namespaceID == "" && namespace == "" {
-		ErrorAndExit("At least namespaceId or namespace must be provided.", nil)
+		ErrorAndExit("At least namespace_id or namespace must be provided.", nil)
 	}
+	if c.GlobalIsSet(FlagNamespace) && namespaceID != "" {
+		ErrorAndExit("Only one of namespace_id or namespace must be provided.", nil)
+	}
+	if namespaceID != "" {
+		namespace = ""
+	}
+
 	ctx, cancel := newContext(c)
 	defer cancel()
 	resp, err := d.describeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{

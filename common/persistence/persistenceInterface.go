@@ -467,22 +467,19 @@ type (
 	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted
 	InternalRecordWorkflowExecutionStartedRequest struct {
 		*InternalVisibilityRequestBase
-		RunTimeout int64
 	}
 
 	// InternalRecordWorkflowExecutionClosedRequest is request to RecordWorkflowExecutionClosed
 	InternalRecordWorkflowExecutionClosedRequest struct {
 		*InternalVisibilityRequestBase
-		CloseTimestamp   int64
-		HistoryLength    int64
-		RetentionSeconds int64
+		CloseTimestamp int64
+		HistoryLength  int64
+		Retention      *time.Duration
 	}
 
 	// InternalUpsertWorkflowExecutionRequest is request to UpsertWorkflowExecution
 	InternalUpsertWorkflowExecutionRequest struct {
 		*InternalVisibilityRequestBase
-		// TODO (alex): not used, remove
-		WorkflowTimeout int64
 	}
 
 	// InternalCreateNamespaceRequest is used to create the namespace
