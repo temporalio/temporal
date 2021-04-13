@@ -38,7 +38,12 @@ const (
 		`VALUES (:shard_id, :tree_id, :branch_id, :node_id, :prev_txn_id, :txn_id, :data, :data_encoding) `
 
 	getHistoryNodesQuery = `SELECT node_id, prev_txn_id, txn_id, data, data_encoding FROM history_node ` +
-		`WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND node_id >= ? and node_id < ? ORDER BY shard_id, tree_id, branch_id, node_id, txn_id LIMIT ? `
+		`WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND ((node_id = ? AND txn_id > ?) OR node_id > ?) AND node_id < ? ` +
+		`ORDER BY shard_id, tree_id, branch_id, node_id, txn_id LIMIT ? `
+
+	getHistoryNodeMetadataQuery = `SELECT node_id, prev_txn_id, txn_id FROM history_node ` +
+		`WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND ((node_id = ? AND txn_id > ?) OR node_id > ?) AND node_id < ? ` +
+		`ORDER BY shard_id, tree_id, branch_id, node_id, txn_id LIMIT ? `
 
 	deleteHistoryNodesQuery = `DELETE FROM history_node WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND node_id >= ? `
 
@@ -73,13 +78,22 @@ func (mdb *db) SelectFromHistoryNode(
 	ctx context.Context,
 	filter sqlplugin.HistoryNodeSelectFilter,
 ) ([]sqlplugin.HistoryNodeRow, error) {
+	var query string
+	if filter.MetadataOnly {
+		query = getHistoryNodeMetadataQuery
+	} else {
+		query = getHistoryNodesQuery
+	}
+
 	var rows []sqlplugin.HistoryNodeRow
 	if err := mdb.conn.SelectContext(ctx,
 		&rows,
-		getHistoryNodesQuery,
+		query,
 		filter.ShardID,
 		filter.TreeID,
 		filter.BranchID,
+		filter.MinNodeID,
+		-filter.MinTxnID, // NOTE: transaction ID is *= -1 when stored
 		filter.MinNodeID,
 		filter.MaxNodeID,
 		filter.PageSize,

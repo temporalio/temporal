@@ -149,9 +149,6 @@ func (s *historyBuilderSuite) TearDownTest() {
 
 }
 
-// TODO @wxing1292 port & rewrite the tests
-// TODO add validation of task ID
-
 /* workflow */
 func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 	attempt := rand.Int31()
