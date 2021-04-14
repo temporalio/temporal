@@ -52,7 +52,7 @@ func validateNodeChainAndTrim(
 
 	nodeIDToNodes := indexNodeIDToNode(transactionIDToNode)
 
-	nodeChain, err := reverseChainNode(
+	nodeChain, err := reverselyLinkNode(
 		tailNodeID,
 		tailTransactionID,
 		transactionIDToNode,
@@ -86,7 +86,7 @@ func indexNodeIDToNode(
 	return nodeIDToNodes
 }
 
-func reverseChainNode(
+func reverselyLinkNode(
 	tailNodeID int64,
 	tailTransactionID int64,
 	transactionIDToNode map[int64]historyNodeMetadata,
@@ -120,9 +120,20 @@ func reverseChainNode(
 			nodes = append(nodes, node)
 		}
 	}
+
 	// now node should be the first node
 	// node.nodeID == common.FirstEventID
 	// node.prevTransactionID == 0
+	if node.nodeID != common.FirstEventID || node.prevTransactionID != 0 {
+		return nil, serviceerror.NewInternal(
+			fmt.Sprintf("unable to back trace history node, node ID: %v, transaction ID: %v, prev transaction ID: %v",
+				node.nodeID,
+				node.transactionID,
+				node.prevTransactionID,
+			),
+		)
+	}
+
 	return nodes, nil
 }
 
