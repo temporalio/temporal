@@ -97,7 +97,7 @@ func reverseChainNode(
 	// sanity check node ID <-> transaction ID being unique
 	if !ok || node.nodeID != tailNodeID {
 		return nil, serviceerror.NewInternal(
-			fmt.Sprintf("unable to find or varify the tail history node, node ID: %v, transaction ID: %v",
+			fmt.Sprintf("unable to find or verify the tail history node, node ID: %v, transaction ID: %v",
 				tailNodeID,
 				tailTransactionID,
 			),
