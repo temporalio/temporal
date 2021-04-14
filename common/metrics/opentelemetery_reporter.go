@@ -25,7 +25,9 @@
 package metrics
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/metric/prometheus"
@@ -44,10 +46,19 @@ type (
 		tags      map[string]string
 		prefix    string
 		config    *PrometheusConfig
+		server    *http.Server
+	}
+
+	OpentelemetryListener struct {
 	}
 )
 
-func newOpentelemeteryReporter(logger log.Logger, tags map[string]string, prefix string, prometheusConfig *PrometheusConfig) (*OpentelemetryReporter, error) {
+func newOpentelemeteryReporter(
+	logger log.Logger,
+	tags map[string]string,
+	prefix string,
+	prometheusConfig *PrometheusConfig,
+) (*OpentelemetryReporter, error) {
 	histogramBoundaries := prometheusConfig.DefaultHistogramBoundaries
 	if len(histogramBoundaries) == 0 {
 		histogramBoundaries = defaultHistogramBoundaries
@@ -78,19 +89,25 @@ func newOpentelemeteryReporter(logger log.Logger, tags map[string]string, prefix
 	return reporter, nil
 }
 
-func initPrometheusListener(config *PrometheusConfig, logger log.Logger, exporter *prometheus.Exporter) {
+func initPrometheusListener(config *PrometheusConfig, logger log.Logger, exporter *prometheus.Exporter) *http.Server {
 	handlerPath := config.HandlerPath
 	if handlerPath == "" {
 		handlerPath = "/metrics"
 	}
-	http.HandleFunc(handlerPath, exporter.ServeHTTP)
+
+	handler := http.NewServeMux()
+	handler.HandleFunc(handlerPath, exporter.ServeHTTP)
+
+	server := &http.Server{Addr: ":8080", Handler: handler}
+
 	go func() {
-		logger.Info("Starting prometheus listener.", tag.Address(config.ListenAddress))
-		err := http.ListenAndServe(config.ListenAddress, nil)
+		err := server.ListenAndServe()
 		if err != http.ErrServerClosed {
 			logger.Fatal("Failed to initialize prometheus listener.", tag.Address(config.ListenAddress))
 		}
 	}()
+
+	return server
 }
 
 func (r *OpentelemetryReporter) GetMeter() metric.Meter {
@@ -103,4 +120,12 @@ func (r *OpentelemetryReporter) GetMeterMust() metric.MeterMust {
 
 func (r *OpentelemetryReporter) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
 	return newOpentelemeteryClient(r.tags, serviceIdx, r, logger)
+}
+
+func (r *OpentelemetryReporter) Stop(logger log.Logger) {
+	ctx, closeCtx := context.WithTimeout(context.Background(), time.Second)
+	defer closeCtx()
+	if err := r.server.Shutdown(ctx); !(err == nil || err == http.ErrServerClosed) {
+		logger.Error("Prometheus metrics server shutdown failure.", tag.Address(r.config.ListenAddress), tag.Error(err))
+	}
 }

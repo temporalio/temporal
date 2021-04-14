@@ -45,3 +45,7 @@ func (tr *TallyReporter) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Cl
 func (tr *TallyReporter) GetScope() tally.Scope {
 	return tr.scope
 }
+
+func (tr *TallyReporter) Stop(logger log.Logger) {
+	// noop
+}

@@ -74,6 +74,8 @@ type (
 		serviceStoppedChs map[string]chan struct{}
 		stoppedCh         chan interface{}
 		logger            log.Logger
+		serverReporter    metrics.Reporter
+		sdkReporter       metrics.Reporter
 	}
 )
 
@@ -150,11 +152,12 @@ func (s *Server) Start() error {
 
 	// todo: Replace this with Client or Scope implementation.
 	var globalMetricsScope tally.Scope = nil
-	var serverReporter, sdkReporter metrics.Reporter = nil, nil
 
+	s.serverReporter = nil
+	s.sdkReporter = nil
 	if s.so.config.Global.Metrics != nil {
-		serverReporter, sdkReporter, err = s.so.config.Global.Metrics.InitMetricReporters(s.logger, s.so.metricsReporter)
-		tallyReporter := sdkReporter.(*metrics.TallyReporter)
+		s.serverReporter, s.sdkReporter, err = s.so.config.Global.Metrics.InitMetricReporters(s.logger, s.so.metricsReporter)
+		tallyReporter := (s.sdkReporter).(*metrics.TallyReporter)
 		globalMetricsScope = tallyReporter.GetScope()
 	}
 
@@ -166,7 +169,7 @@ func (s *Server) Start() error {
 	}
 
 	for _, svcName := range s.so.serviceNames {
-		params, err := s.newBootstrapParams(svcName, dc, serverReporter, sdkReporter)
+		params, err := s.newBootstrapParams(svcName, dc, s.serverReporter, s.sdkReporter)
 		if err != nil {
 			return err
 		}
@@ -227,6 +230,9 @@ func (s *Server) Stop() {
 		}(svc, svcName, s.serviceStoppedChs[svcName])
 	}
 	wg.Wait()
+
+	s.sdkReporter.Stop(s.logger)
+	s.serverReporter.Stop(s.logger)
 }
 
 // Populates parameters for a service
@@ -276,7 +282,10 @@ func (s *Server) newBootstrapParams(
 		if err != nil {
 			s.logger.Fatal("Failed to initialize reporter client.")
 		}
+		params.ServerMetricsReporter = serverReporter
+		params.SDKMetricsReporter = sdkReporter
 	}
+
 	globalTallyScope := sdkReporter.(*metrics.TallyReporter).GetScope()
 	params.MetricsScope = globalTallyScope
 

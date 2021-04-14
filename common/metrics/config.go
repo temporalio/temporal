@@ -24,6 +24,11 @@
 
 package metrics
 
+// todomigryz:
+//  Backwards compatible config
+//  Http server shutdown
+//  Rename extensibilityPoint
+
 import (
 	"errors"
 	"time"
@@ -48,10 +53,7 @@ type (
 		// Statsd is the configuration for statsd reporter
 		Statsd *StatsdConfig `yaml:"statsd"`
 		// Prometheus is the configuration for prometheus reporter
-		Prometheus *prometheus.Configuration `yaml:"prometheus"`
-		// Using new name for backwards compatibility.
-		// Config for Prometheus metrics reporter for server reported metrics.
-		PrometheusServer *PrometheusConfig `yaml:"prometheusServer"`
+		Prometheus *PrometheusConfig `yaml:"prometheus"`
 		// {optional} Config for Prometheus metrics reporter for SDK reported metrics.
 		PrometheusSDK *PrometheusConfig `yaml:"prometheusSDK"`
 		// Tags is the set of key-value pairs to be reported as part of every metric
@@ -87,8 +89,43 @@ type (
 		// HandlerPath if specified will be used instead of using the default
 		// HTTP handler path "/metrics".
 		HandlerPath string `yaml:"handlerPath"`
+
+		// Configs below are kept for backwards compatibility with previously exposed tally prometheus.Configuration.
+
+		// Deprecated. ListenNetwork if specified will be used instead of using tcp network.
+		// Supported networks: tcp, tcp4, tcp6 and unix.
+		ListenNetwork string `yaml:"listenNetwork"`
+
+		// Deprecated. TimerType is the default Prometheus type to use for Tally timers.
+		TimerType string `yaml:"timerType"`
+
+		// Deprecated. DefaultHistogramBuckets if specified will set the default histogram
+		// buckets to be used by the reporter.
+		DefaultHistogramBuckets []HistogramObjective `yaml:"defaultHistogramBuckets"`
+
+		// Deprecated. DefaultSummaryObjectives if specified will set the default summary
+		// objectives to be used by the reporter.
+		DefaultSummaryObjectives []SummaryObjective `yaml:"defaultSummaryObjectives"`
+
+		// Deprecated. OnError specifies what to do when an error either with listening
+		// on the specified listen address or registering a metric with the
+		// Prometheus. By default the registerer will panic.
+		OnError string `yaml:"onError"`
 	}
 )
+
+// Deprecated. HistogramObjective is a Prometheus histogram bucket.
+// Added for backwards compatibility.
+type HistogramObjective struct {
+	Upper float64 `yaml:"upper"`
+}
+
+// Deprecated. SummaryObjective is a Prometheus summary objective.
+// Added for backwards compatibility.
+type SummaryObjective struct {
+	Percentile   float64 `yaml:"percentile"`
+	AllowedError float64 `yaml:"allowedError"`
+}
 
 const (
 	ms = float64(time.Millisecond) / float64(time.Second)
@@ -151,6 +188,8 @@ var (
 	}
 )
 
+// todomigryz: review logic and test
+
 // InitMetricReporters is a root function for initalizing metrics clients.
 //
 // Usage pattern
@@ -158,11 +197,11 @@ var (
 // metricsClient := serverReporter.newClient(logger, serviceIdx)
 //
 // returns SeverReporter, SDKReporter, error
-func (c *Config) InitMetricReporters(logger log.Logger, extensionPoint interface{}) (Reporter, Reporter, error) {
-	if c.PrometheusServer == nil {
+func (c *Config) InitMetricReporters(logger log.Logger, customReporter interface{}) (Reporter, Reporter, error) {
+	if len(c.Prometheus.Framework) == 0 {
 		var scope tally.Scope
-		if extensionPoint != nil {
-			scope = c.NewCustomReporterScope(logger, extensionPoint.(tally.BaseStatsReporter))
+		if customReporter != nil {
+			scope = c.NewCustomReporterScope(logger, customReporter.(tally.BaseStatsReporter))
 		} else {
 			scope = c.NewScope(logger)
 		}
@@ -170,20 +209,20 @@ func (c *Config) InitMetricReporters(logger log.Logger, extensionPoint interface
 		return reporter, reporter, nil
 	}
 
-	return c.initReportersFromPrometheusConfig(logger, extensionPoint)
+	return c.initReportersFromPrometheusConfig(logger, customReporter)
 }
 
-func (c *Config) initReportersFromPrometheusConfig(logger log.Logger, extensionPoint interface{}) (Reporter, Reporter, error) {
-	if extensionPoint != nil {
+func (c *Config) initReportersFromPrometheusConfig(logger log.Logger, customReporter interface{}) (Reporter, Reporter, error) {
+	if customReporter != nil {
 		logger.Fatal("Metrics extension point is not implemented.")
 	}
-	serverReporter, err := c.initReporterFromPrometheusConfig(logger, c.PrometheusServer, extensionPoint)
+	serverReporter, err := c.initReporterFromPrometheusConfig(logger, c.Prometheus, customReporter)
 	if err != nil {
 		return nil, nil, err
 	}
 	sdkReporter := serverReporter
 	if c.PrometheusSDK != nil {
-		sdkReporter, err = c.initReporterFromPrometheusConfig(logger, c.PrometheusSDK, extensionPoint)
+		sdkReporter, err = c.initReporterFromPrometheusConfig(logger, c.PrometheusSDK, customReporter)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -194,8 +233,7 @@ func (c *Config) initReportersFromPrometheusConfig(logger log.Logger, extensionP
 func (c *Config) initReporterFromPrometheusConfig(logger log.Logger, config *PrometheusConfig, extensionPoint interface{}) (Reporter, error) {
 	switch config.Framework {
 	case FrameworkTally:
-		tallyScope := c.newTallyScopeByPrometheusConfig(logger, config)
-		return newTallyReporter(tallyScope), nil
+		return c.newTallyReporterByPrometheusConfig(logger, config), nil
 	case FrameworkOpentelemetry:
 		return newOpentelemeteryReporter(logger, c.Tags, c.Prefix, config)
 	default:
@@ -207,9 +245,10 @@ func (c *Config) initReporterFromPrometheusConfig(logger log.Logger, config *Pro
 	}
 }
 
-func (c *Config) newTallyScopeByPrometheusConfig(logger log.Logger, config *PrometheusConfig) tally.Scope {
-	tallyConfig := c.convertPrometheusConfig(config)
-	return c.newPrometheusScope(logger, tallyConfig)
+func (c *Config) newTallyReporterByPrometheusConfig(logger log.Logger, config *PrometheusConfig) Reporter {
+	tallyConfig := c.convertPrometheusConfigToTally(config)
+	tallyScope := c.newPrometheusScope(logger, tallyConfig)
+	return newTallyReporter(tallyScope)
 }
 
 // NewScope builds a new tally scope for this metrics configuration
@@ -227,17 +266,39 @@ func (c *Config) NewScope(logger log.Logger) tally.Scope {
 		return c.newStatsdScope(logger)
 	}
 	if c.Prometheus != nil {
-		return c.newPrometheusScope(logger, c.Prometheus)
+		return c.newPrometheusScope(logger, c.convertPrometheusConfigToTally(c.Prometheus))
 	}
 	return tally.NoopScope
 }
 
-func (c *Config) convertPrometheusConfig(config *PrometheusConfig) *prometheus.Configuration {
+func (c *Config) buildHistogramBuckets(config *PrometheusConfig) []prometheus.HistogramObjective {
+	var result []prometheus.HistogramObjective
+	if len(config.DefaultHistogramBuckets) > 0 {
+		result = make([]prometheus.HistogramObjective, len(config.DefaultHistogramBuckets))
+		for i, item := range config.DefaultHistogramBuckets {
+			result[i].Upper = item.Upper
+		}
+	} else if len(config.DefaultHistogramBoundaries) > 0 {
+		result = histogramBoundariesToHistogramObjectives(config.DefaultHistogramBoundaries)
+	}
+	return result
+}
+
+func (c *Config) convertPrometheusConfigToTally(config *PrometheusConfig) *prometheus.Configuration {
+	defaultObjectives := make([]prometheus.SummaryObjective, len(config.DefaultSummaryObjectives))
+	for i, item := range config.DefaultSummaryObjectives {
+		defaultObjectives[i].AllowedError = item.AllowedError
+		defaultObjectives[i].Percentile = item.Percentile
+	}
+
 	return &prometheus.Configuration{
-		HandlerPath:             config.HandlerPath,
-		ListenAddress:           config.ListenAddress,
-		TimerType:               "histogram",
-		DefaultHistogramBuckets: histogramBoundariesToHistogramObjectives(config.DefaultHistogramBoundaries),
+		HandlerPath:              config.HandlerPath,
+		ListenNetwork:            config.ListenNetwork,
+		ListenAddress:            config.ListenAddress,
+		TimerType:                "histogram",
+		DefaultHistogramBuckets:  c.buildHistogramBuckets(config),
+		DefaultSummaryObjectives: defaultObjectives,
+		OnError:                  config.OnError,
 	}
 }
 

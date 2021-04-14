@@ -25,6 +25,7 @@
 package metrics
 
 import (
+	"fmt"
 	"time"
 
 	"go.temporal.io/server/common/log"
@@ -55,7 +56,7 @@ func getMetricDefs(serviceIdx ServiceIdx) map[int]metricDefinition {
 	return defs
 }
 
-// GetMetricsServiceIdx returns the metrics name
+// GetMetricsServiceIdx returns service id corresponding to serviceName
 func GetMetricsServiceIdx(serviceName string, logger log.Logger) ServiceIdx {
 	switch serviceName {
 	case primitives.FrontendService:
@@ -68,8 +69,6 @@ func GetMetricsServiceIdx(serviceName string, logger log.Logger) ServiceIdx {
 		return Worker
 	default:
 		logger.Fatal("Unknown service name for metrics!", tag.Service(serviceName))
+		panic(fmt.Sprintf("Unknown service name for metrics: ", serviceName))
 	}
-
-	// this should never happen!
-	return NumServices
 }

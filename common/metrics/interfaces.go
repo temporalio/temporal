@@ -63,7 +63,7 @@ type (
 		Scope(scope int, tags ...Tag) Scope
 	}
 
-	// Scope is an interface for metrics
+	// Scope is an interface for metric.
 	Scope interface {
 		// IncCounter increments a counter metric
 		IncCounter(counter int)
@@ -87,6 +87,7 @@ type (
 	// Reporter is an interface for base constructor for metrics client.
 	Reporter interface {
 		NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error)
+		Stop(logger log.Logger)
 	}
 )
 
