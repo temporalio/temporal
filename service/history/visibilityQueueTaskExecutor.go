@@ -32,8 +32,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -223,25 +221,20 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
-	namespace := defaultNamespace
+	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	if err != nil {
+		return err
+	}
 
-	if namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID); err != nil {
-		if _, ok := err.(*serviceerror.NotFound); !ok {
-			return err
-		}
-	} else {
-		namespace = namespaceEntry.GetInfo().Name
-		// if sampled for longer retention is enabled, only record those sampled events
-		if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
-			!namespaceEntry.IsSampledForLongerRetention(workflowID) {
-			return nil
-		}
+	// if sampled for longer retention is enabled, only record those sampled events
+	if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) && !namespaceEntry.IsSampledForLongerRetention(workflowID) {
+		return nil
 	}
 
 	request := &persistence.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &persistence.VisibilityRequestBase{
 			NamespaceID: namespaceID,
-			Namespace:   namespace,
+			Namespace:   namespaceEntry.GetInfo().Name,
 			Execution: commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -274,20 +267,15 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
-	namespace := defaultNamespace
 	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); !ok {
-			return err
-		}
-	} else {
-		namespace = namespaceEntry.GetInfo().Name
+		return err
 	}
 
 	request := &persistence.UpsertWorkflowExecutionRequest{
 		VisibilityRequestBase: &persistence.VisibilityRequestBase{
 			NamespaceID: namespaceID,
-			Namespace:   namespace,
+			Namespace:   namespaceEntry.GetInfo().Name,
 			Execution: commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -402,31 +390,24 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 
 	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
-		if _, notFound := err.(*serviceerror.NotFound); !notFound {
-			return err
-		}
+		return err
 	}
 
-	var retention *time.Duration
-	namespace := defaultNamespace
 	recordWorkflowClose := true
 
-	if namespaceEntry != nil {
-		// retention in namespace config is in days, convert to time.Duration.
-		retention = timestamp.DurationFromDays(namespaceEntry.GetRetentionDays(workflowID))
-		namespace = namespaceEntry.GetInfo().Name
-		// if sampled for longer retention is enabled, only record those sampled events
-		if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
-			!namespaceEntry.IsSampledForLongerRetention(workflowID) {
-			recordWorkflowClose = false
-		}
+	// retention in namespace config is in days, convert to time.Duration.
+	retention := timestamp.DurationFromDays(namespaceEntry.GetRetentionDays(workflowID))
+	// if sampled for longer retention is enabled, only record those sampled events
+	if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
+		!namespaceEntry.IsSampledForLongerRetention(workflowID) {
+		recordWorkflowClose = false
 	}
 
 	if recordWorkflowClose {
 		return t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
 			VisibilityRequestBase: &persistence.VisibilityRequestBase{
 				NamespaceID: namespaceID,
-				Namespace:   namespace,
+				Namespace:   namespaceEntry.GetInfo().Name,
 				Execution: commonpb.WorkflowExecution{
 					WorkflowId: workflowID,
 					RunId:      runID,

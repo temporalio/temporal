@@ -83,12 +83,6 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionStarted(
 }
 
 func (s *sqlVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRecordWorkflowExecutionClosedRequest) error {
-	return s.RecordWorkflowExecutionClosedV2(request)
-}
-
-func (s *sqlVisibilityStore) RecordWorkflowExecutionClosedV2(
-	request *p.InternalRecordWorkflowExecutionClosedRequest,
-) error {
 	ctx, cancel := newVisibilityContext()
 	defer cancel()
 	closeTime := time.Unix(0, request.CloseTimestamp).UTC()
@@ -121,10 +115,6 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionClosedV2(
 func (s *sqlVisibilityStore) UpsertWorkflowExecution(
 	_ *p.InternalUpsertWorkflowExecutionRequest,
 ) error {
-	return nil
-}
-
-func (s *sqlVisibilityStore) UpsertWorkflowExecutionV2(_ *p.InternalUpsertWorkflowExecutionRequest) error {
 	return nil
 }
 
