@@ -603,6 +603,8 @@ const (
 	PersistenceForkHistoryBranchScope
 	// PersistenceDeleteHistoryBranchScope tracks DeleteHistoryBranch calls made by service to persistence layer
 	PersistenceDeleteHistoryBranchScope
+	// PersistenceTrimHistoryBranchScope tracks TrimHistoryBranch calls made by service to persistence layer
+	PersistenceTrimHistoryBranchScope
 	// PersistenceCompleteForkBranchScope tracks CompleteForkBranch calls made by service to persistence layer
 	PersistenceCompleteForkBranchScope
 	// PersistenceGetHistoryTreeScope tracks GetHistoryTree calls made by service to persistence layer
@@ -1174,6 +1176,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceReadHistoryBranchScope:                        {operation: "ReadHistoryBranch"},
 		PersistenceForkHistoryBranchScope:                        {operation: "ForkHistoryBranch"},
 		PersistenceDeleteHistoryBranchScope:                      {operation: "DeleteHistoryBranch"},
+		PersistenceTrimHistoryBranchScope:                        {operation: "TrimHistoryBranch"},
 		PersistenceCompleteForkBranchScope:                       {operation: "CompleteForkBranch"},
 		PersistenceGetHistoryTreeScope:                           {operation: "GetHistoryTree"},
 		PersistenceGetAllHistoryTreeBranchesScope:                {operation: "GetAllHistoryTreeBranches"},

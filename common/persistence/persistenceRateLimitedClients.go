@@ -823,6 +823,15 @@ func (p *historyV2RateLimitedPersistenceClient) DeleteHistoryBranch(request *Del
 	return err
 }
 
+// TrimHistoryBranch trims a branch
+func (p *historyV2RateLimitedPersistenceClient) TrimHistoryBranch(request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	resp, err := p.persistence.TrimHistoryBranch(request)
+	return resp, err
+}
+
 // GetHistoryTree returns all branch information of a tree
 func (p *historyV2RateLimitedPersistenceClient) GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
