@@ -174,13 +174,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 	return gocql.ConvertError("RecordWorkflowExecutionStarted", err)
 }
 
-// Deprecated.
 func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(request *p.InternalRecordWorkflowExecutionClosedRequest) error {
-	return v.RecordWorkflowExecutionClosedV2(request)
-}
-
-func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosedV2(
-	request *p.InternalRecordWorkflowExecutionClosedRequest) error {
 	batch := v.session.NewBatch(gocql.LoggedBatch)
 
 	// First, remove execution from the open table

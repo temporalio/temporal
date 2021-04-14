@@ -150,7 +150,7 @@ message TransferTaskInfo {
     int64 version = 11;
     int64 task_id = 12;
     google.protobuf.Timestamp visibility_time = 13 [(gogoproto.stdtime) = true];
-    bool record_visibility = 14;
+    reserved 14;
 }
 
 // replication column

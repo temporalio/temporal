@@ -184,5 +184,5 @@ type (
 
 // NewOperationNotSupportErrorForVis create error for operation not support in visibility
 func NewOperationNotSupportErrorForVis() error {
-	return serviceerror.NewInvalidArgument("Operation not support. Please use on ElasticSearch")
+	return serviceerror.NewInvalidArgument("Operation not support. Please use on Elasticsearch")
 }
