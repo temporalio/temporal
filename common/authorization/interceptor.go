@@ -27,6 +27,7 @@ package authorization
 import (
 	"context"
 	"crypto/x509/pkix"
+	"fmt"
 
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
@@ -133,6 +134,10 @@ func (a *interceptor) Interceptor(
 		}
 		if result.Decision != DecisionAllow {
 			scope.IncCounter(metrics.ServiceErrUnauthorizedCounter)
+			// if a reason is included in the result, include it in the error message
+			if result.Reason != "" {
+				return nil, fmt.Errorf("%w %s", errUnauthorized, result.Reason)
+			}
 			return nil, errUnauthorized // return a generic error to the caller without disclosing details
 		}
 	}

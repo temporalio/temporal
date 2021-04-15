@@ -60,6 +60,8 @@ type (
 	// Result is result from authority.
 	Result struct {
 		Decision Decision
+		// Reason may contain a message explaining the value of the Decision field.
+		Reason string
 	}
 
 	// Decision is enum type for auth decision
