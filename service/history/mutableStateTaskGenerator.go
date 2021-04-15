@@ -214,7 +214,6 @@ func (r *mutableStateTaskGeneratorImpl) generateDelayedWorkflowTasks(
 
 	r.mutableState.AddTimerTasks(&persistence.WorkflowBackoffTimerTask{
 		// TaskID is set by shard
-		// TODO EventID seems not used at all
 		VisibilityTimestamp: executionTimestamp,
 		WorkflowBackoffType: workflowBackoffType,
 		Version:             startVersion,
