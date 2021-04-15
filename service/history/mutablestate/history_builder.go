@@ -141,8 +141,10 @@ func NewImmutableHistoryBuilder(
 	}
 }
 
+// NOTE:
 // originalRunID is the runID when the WorkflowExecutionStarted event is written
 // firstRunID is the very first runID along the chain of ContinueAsNew and Reset
+
 func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 	startTime time.Time,
 	request *historyservice.StartWorkflowExecutionRequest,
@@ -1303,6 +1305,7 @@ func (b *HistoryBuilder) wireEventIDs(
 //  to deprecate
 //  * HasActivityFinishEvent
 //  * hasActivityFinishEvent
+
 func (b *HistoryBuilder) HasActivityFinishEvent(
 	scheduleID int64,
 ) bool {

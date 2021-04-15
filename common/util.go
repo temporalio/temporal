@@ -488,24 +488,30 @@ func FromConfigToDefaultRetrySettings(options map[string]interface{}) DefaultRet
 		MaximumAttempts:            defaultMaximumAttempts,
 	}
 
-	initialIntervalInSeconds, ok := options[initialIntervalInSecondsConfigKey]
-	if ok {
-		defaultSettings.InitialInterval = time.Duration(initialIntervalInSeconds.(int)) * time.Second
+	if seconds, ok := options[initialIntervalInSecondsConfigKey]; ok {
+		defaultSettings.InitialInterval = time.Duration(
+			dynamicconfig.NewNumber(
+				seconds,
+			).ParseInt(int(defaultInitialInterval.Nanoseconds())),
+		) * time.Second
 	}
 
-	maximumIntervalCoefficient, ok := options[maximumIntervalCoefficientConfigKey]
-	if ok {
-		defaultSettings.MaximumIntervalCoefficient = maximumIntervalCoefficient.(float64)
+	if coefficient, ok := options[maximumIntervalCoefficientConfigKey]; ok {
+		defaultSettings.MaximumIntervalCoefficient = dynamicconfig.NewNumber(
+			coefficient,
+		).ParseFloat(defaultMaximumIntervalCoefficient)
 	}
 
-	backoffCoefficient, ok := options[backoffCoefficientConfigKey]
-	if ok {
-		defaultSettings.BackoffCoefficient = backoffCoefficient.(float64)
+	if coefficient, ok := options[backoffCoefficientConfigKey]; ok {
+		defaultSettings.BackoffCoefficient = dynamicconfig.NewNumber(
+			coefficient,
+		).ParseFloat(defaultBackoffCoefficient)
 	}
 
-	maximumAttempts, ok := options[maximumAttemptsConfigKey]
-	if ok {
-		defaultSettings.MaximumAttempts = int32(maximumAttempts.(int))
+	if attempts, ok := options[maximumAttemptsConfigKey]; ok {
+		defaultSettings.MaximumAttempts = int32(dynamicconfig.NewNumber(
+			attempts,
+		).ParseInt(defaultMaximumAttempts))
 	}
 
 	return defaultSettings
