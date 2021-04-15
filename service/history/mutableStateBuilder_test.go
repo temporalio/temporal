@@ -113,7 +113,7 @@ func (s *mutableStateSuite) SetupTest() {
 	s.testScope = s.mockShard.Resource.MetricsScope.(tally.TestScope)
 	s.logger = s.mockShard.GetLogger()
 
-	s.msBuilder = newMutableStateBuilderWithVersionHistories(s.mockShard, s.mockEventsCache, s.logger, testLocalNamespaceEntry, time.Now().UTC())
+	s.msBuilder = newMutableStateBuilder(s.mockShard, s.mockEventsCache, s.logger, testLocalNamespaceEntry, time.Now().UTC())
 }
 
 func (s *mutableStateSuite) TearDownTest() {
@@ -245,7 +245,7 @@ func (s *mutableStateSuite) TestChecksum() {
 
 			// create mutable state and verify checksum is generated on close
 			loadErrors = loadErrorsFunc()
-			_ = s.msBuilder.Load(dbState, 123)
+			s.msBuilder = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, testLocalNamespaceEntry, dbState, 123)
 			s.Equal(loadErrors, loadErrorsFunc()) // no errors expected
 			s.EqualValues(dbState.Checksum, s.msBuilder.checksum)
 			s.msBuilder.namespaceEntry = s.newNamespaceCacheEntry()
@@ -258,7 +258,7 @@ func (s *mutableStateSuite) TestChecksum() {
 
 			// verify checksum is verified on Load
 			dbState.Checksum = csum
-			_ = s.msBuilder.Load(dbState, 123)
+			s.msBuilder = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, testLocalNamespaceEntry, dbState, 123)
 			s.Equal(loadErrors, loadErrorsFunc())
 
 			// generate checksum again and verify its the same
@@ -269,7 +269,7 @@ func (s *mutableStateSuite) TestChecksum() {
 
 			// modify checksum and verify Load fails
 			dbState.Checksum.Value[0]++
-			_ = s.msBuilder.Load(dbState, 123)
+			s.msBuilder = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, testLocalNamespaceEntry, dbState, 123)
 			s.Equal(loadErrors+1, loadErrorsFunc())
 			s.EqualValues(dbState.Checksum, s.msBuilder.checksum)
 
@@ -278,7 +278,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			s.mockConfig.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
 				return float64((s.msBuilder.executionInfo.LastUpdateTime.UnixNano() / int64(time.Second)) + 1)
 			}
-			_ = s.msBuilder.Load(dbState, 123)
+			s.msBuilder = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, testLocalNamespaceEntry, dbState, 123)
 			s.Equal(loadErrors, loadErrorsFunc())
 			s.Nil(s.msBuilder.checksum)
 

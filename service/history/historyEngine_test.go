@@ -458,6 +458,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 			"testNamespaceID",
 			newExecution,
 			int64(1),
+			int64(0),
 			int64(4),
 			int64(1),
 			[]byte{1},
@@ -5246,7 +5247,7 @@ func newMutableStateBuilderWithEventV2(
 	runID string,
 ) *mutableStateBuilder {
 
-	msBuilder := newMutableStateBuilderWithVersionHistories(shard, eventsCache, logger, testLocalNamespaceEntry, time.Now().UTC())
+	msBuilder := newMutableStateBuilder(shard, eventsCache, logger, testLocalNamespaceEntry, time.Now().UTC())
 	_ = msBuilder.SetHistoryTree(runID)
 
 	return msBuilder
@@ -5260,7 +5261,7 @@ func newMutableStateBuilderWithVersionHistoriesForTest(
 	runID string,
 ) *mutableStateBuilder {
 
-	msBuilder := newMutableStateBuilderWithVersionHistories(shard, eventsCache, logger, testLocalNamespaceEntry, time.Now().UTC())
+	msBuilder := newMutableStateBuilder(shard, eventsCache, logger, testLocalNamespaceEntry, time.Now().UTC())
 	_ = msBuilder.UpdateCurrentVersion(version, false)
 	_ = msBuilder.SetHistoryTree(runID)
 

@@ -204,7 +204,7 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 	namespaceEntry *cache.NamespaceCacheEntry,
 	now time.Time,
 ) (mutableState, stateBuilder) {
-	resetMutableStateBuilder := newMutableStateBuilderWithVersionHistories(
+	resetMutableStateBuilder := newMutableStateBuilder(
 		r.shard,
 		r.shard.GetEventsCache(),
 		r.logger,

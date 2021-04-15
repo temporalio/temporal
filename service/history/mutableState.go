@@ -138,7 +138,7 @@ type (
 		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetInFlightWorkflowTask() (*workflowTaskInfo, bool)
 		GetPendingWorkflowTask() (*workflowTaskInfo, bool)
-		GetLastFirstEventID() int64
+		GetLastFirstEventIDTxnID() (int64, int64)
 		GetLastWriteVersion() (int64, error)
 		GetNextEventID() int64
 		GetPreviousStartedEventID() int64
@@ -169,7 +169,6 @@ type (
 		IsWorkflowExecutionRunning() bool
 		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)
-		Load(*persistencespb.WorkflowMutableState, int64) error
 		ReplicateActivityInfo(*historyservice.SyncActivityRequest, bool) error
 		ReplicateActivityTaskCancelRequestedEvent(*historypb.HistoryEvent) error
 		ReplicateActivityTaskCanceledEvent(*historypb.HistoryEvent) error

@@ -467,7 +467,7 @@ func (e *historyEngineImpl) createMutableState(
 
 	var newMutableState mutableState
 	// version history applies to both local and global namespace
-	newMutableState = newMutableStateBuilderWithVersionHistories(
+	newMutableState = newMutableStateBuilder(
 		e.shard,
 		e.shard.GetEventsCache(),
 		e.logger,
@@ -646,7 +646,8 @@ func (e *historyEngineImpl) PollMutableState(
 		NamespaceId:         request.GetNamespaceId(),
 		Execution:           request.Execution,
 		ExpectedNextEventId: request.ExpectedNextEventId,
-		CurrentBranchToken:  request.CurrentBranchToken})
+		CurrentBranchToken:  request.CurrentBranchToken,
+	})
 
 	if err != nil {
 		return nil, err
@@ -657,6 +658,7 @@ func (e *historyEngineImpl) PollMutableState(
 		NextEventId:                           response.NextEventId,
 		PreviousStartedEventId:                response.PreviousStartedEventId,
 		LastFirstEventId:                      response.LastFirstEventId,
+		LastFirstEventTxnId:                   response.LastFirstEventTxnId,
 		TaskQueue:                             response.TaskQueue,
 		StickyTaskQueue:                       response.StickyTaskQueue,
 		StickyTaskQueueScheduleToStartTimeout: response.StickyTaskQueueScheduleToStartTimeout,
@@ -730,6 +732,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 			select {
 			case event := <-channel:
 				response.LastFirstEventId = event.LastFirstEventID
+				response.LastFirstEventTxnId = event.LastFirstEventTxnID
 				response.NextEventId = event.NextEventID
 				response.PreviousStartedEventId = event.PreviousStartedEventID
 				response.WorkflowState = event.WorkflowState
@@ -1005,10 +1008,12 @@ func (e *historyEngineImpl) getMutableState(
 	executionInfo := mutableState.GetExecutionInfo()
 	execution.RunId = context.getExecution().RunId
 	workflowState, workflowStatus := mutableState.GetWorkflowStateStatus()
+	lastFirstEventID, lastFirstEventTxnID := mutableState.GetLastFirstEventIDTxnID()
 	retResp = &historyservice.GetMutableStateResponse{
 		Execution:              &execution,
 		WorkflowType:           &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
-		LastFirstEventId:       mutableState.GetLastFirstEventID(),
+		LastFirstEventId:       lastFirstEventID,
+		LastFirstEventTxnId:    lastFirstEventTxnID,
 		NextEventId:            mutableState.GetNextEventID(),
 		PreviousStartedEventId: mutableState.GetPreviousStartedEventID(),
 		TaskQueue: &taskqueuepb.TaskQueue{
