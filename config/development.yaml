@@ -19,11 +19,13 @@ global:
     port: 7936
   metrics:
     prometheus:
+#      # specify framework to use new approach for initializing metrics and/or use opentelemetry
 #      framework: "opentelemetry"
 #      framework: "tally"
       timerType: "histogram"
       listenAddress: "127.0.0.1:8000"
 #    prometheusSDK:
+#      # SDK only supports Tally for now. So add prometheusSDK config with framework=tally if you want to use OT on server side
 #      framework: "tally"
 #      timerType: "histogram"
 #      listenAddress: "127.0.0.1:8001"
