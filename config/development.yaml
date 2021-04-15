@@ -19,14 +19,13 @@ global:
     port: 7936
   metrics:
     prometheus:
+#      framework: "opentelemetry"
+#      framework: "tally"
       timerType: "histogram"
       listenAddress: "127.0.0.1:8000"
-#    prometheusServer:
-#      framework: "opentelemetry"
-#      listenAddress: "127.0.0.1:8000"
-#      defaultHistogramBoundaries: [1, 1.2, 2]
 #    prometheusSDK:
 #      framework: "tally"
+#      timerType: "histogram"
 #      listenAddress: "127.0.0.1:8001"
 
 services:

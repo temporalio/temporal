@@ -157,8 +157,13 @@ func (s *Server) Start() error {
 	s.sdkReporter = nil
 	if s.so.config.Global.Metrics != nil {
 		s.serverReporter, s.sdkReporter, err = s.so.config.Global.Metrics.InitMetricReporters(s.logger, s.so.metricsReporter)
-		tallyReporter := (s.sdkReporter).(*metrics.TallyReporter)
-		globalMetricsScope = tallyReporter.GetScope()
+		if err != nil {
+			return err
+		}
+		globalMetricsScope, err = s.extractTallyScopeForSDK(s.sdkReporter)
+		if err != nil {
+			return err
+		}
 	}
 
 	if s.so.tlsConfigProvider == nil {
@@ -280,19 +285,24 @@ func (s *Server) newBootstrapParams(
 		var err error
 		serverReporter, sdkReporter, err = svcCfg.Metrics.InitMetricReporters(s.logger, nil)
 		if err != nil {
-			s.logger.Fatal("Failed to initialize reporter client.")
+			return nil, fmt.Errorf(
+				"Failed to initialize per-service metric client. "+
+					"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err)
 		}
 		params.ServerMetricsReporter = serverReporter
 		params.SDKMetricsReporter = sdkReporter
 	}
 
-	globalTallyScope := sdkReporter.(*metrics.TallyReporter).GetScope()
+	globalTallyScope, err := s.extractTallyScopeForSDK(sdkReporter)
+	if err != nil {
+		return nil, err
+	}
 	params.MetricsScope = globalTallyScope
 
 	serviceIdx := metrics.GetMetricsServiceIdx(svcName, s.logger)
 	metricsClient, err := serverReporter.NewClient(s.logger, serviceIdx)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to initialize metrics client #{err}")
+		return nil, fmt.Errorf("Unable to initialize metrics client: %w", err)
 	}
 
 	params.MetricsClient = metricsClient
@@ -473,4 +483,15 @@ func initSystemNamespaces(cfg *config.Persistence, currentClusterName string, pe
 		return fmt.Errorf("unable to register system namespace: %w", err)
 	}
 	return nil
+}
+
+func (s *Server) extractTallyScopeForSDK(sdkReporter metrics.Reporter) (tally.Scope, error) {
+	if sdkTallyReporter, ok := sdkReporter.(*metrics.TallyReporter); ok {
+		return sdkTallyReporter.GetScope(), nil
+	} else {
+		return nil, fmt.Errorf(
+			"Sdk reporter is not of Tally type. Unfortunately, SDK only supports Tally for now. "+
+				"Please specify prometheusSDK in metrics config with framework type %s.", metrics.FrameworkTally,
+		)
+	}
 }

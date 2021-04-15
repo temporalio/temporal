@@ -75,7 +75,7 @@ func newOpentelemeteryReporter(
 		return nil, err
 	}
 
-	initPrometheusListener(prometheusConfig, logger, exporter)
+	metricServer := initPrometheusListener(prometheusConfig, logger, exporter)
 
 	meter := otel.Meter("temporal")
 	reporter := &OpentelemetryReporter{
@@ -85,6 +85,7 @@ func newOpentelemeteryReporter(
 		tags:      tags,
 		prefix:    prefix,
 		config:    prometheusConfig,
+		server:    metricServer,
 	}
 	return reporter, nil
 }

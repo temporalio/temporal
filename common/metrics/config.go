@@ -24,13 +24,8 @@
 
 package metrics
 
-// todomigryz:
-//  Backwards compatible config
-//  Http server shutdown
-//  Rename extensibilityPoint
-
 import (
-	"errors"
+	"fmt"
 	"time"
 
 	"github.com/cactus/go-statsd-client/statsd"
@@ -188,28 +183,36 @@ var (
 	}
 )
 
-// todomigryz: review logic and test
-
 // InitMetricReporters is a root function for initalizing metrics clients.
 //
 // Usage pattern
-// serverReporter, sdkReporter, err := c.InitMetricReporters
+// serverReporter, sdkReporter, err := c.InitMetricReporters(logger, customReporter)
 // metricsClient := serverReporter.newClient(logger, serviceIdx)
+//
+// customReporter Provide this argument if you want to report metrics to a custom metric platform, otherwise use nil.
 //
 // returns SeverReporter, SDKReporter, error
 func (c *Config) InitMetricReporters(logger log.Logger, customReporter interface{}) (Reporter, Reporter, error) {
-	if len(c.Prometheus.Framework) == 0 {
-		var scope tally.Scope
-		if customReporter != nil {
-			scope = c.NewCustomReporterScope(logger, customReporter.(tally.BaseStatsReporter))
-		} else {
-			scope = c.NewScope(logger)
-		}
-		reporter := newTallyReporter(scope)
-		return reporter, reporter, nil
+
+	if c.Prometheus != nil && len(c.Prometheus.Framework) > 0 {
+		return c.initReportersFromPrometheusConfig(logger, customReporter)
 	}
 
-	return c.initReportersFromPrometheusConfig(logger, customReporter)
+	var scope tally.Scope
+	if customReporter != nil {
+		if tallyCustomReporter, ok := customReporter.(tally.BaseStatsReporter); ok {
+			scope = c.NewCustomReporterScope(logger, tallyCustomReporter)
+		} else {
+			return nil, nil, fmt.Errorf(
+				"Specified customReporter is not of expected type tally.BaseStatsReporter "+
+					"as expected for metrics framework \"%s\".", FrameworkTally,
+			)
+		}
+	} else {
+		scope = c.NewScope(logger)
+	}
+	reporter := newTallyReporter(scope)
+	return reporter, reporter, nil
 }
 
 func (c *Config) initReportersFromPrometheusConfig(logger log.Logger, customReporter interface{}) (Reporter, Reporter, error) {
@@ -237,11 +240,9 @@ func (c *Config) initReporterFromPrometheusConfig(logger log.Logger, config *Pro
 	case FrameworkOpentelemetry:
 		return newOpentelemeteryReporter(logger, c.Tags, c.Prefix, config)
 	default:
-		logger.Error(
-			"Unsupported framework type provided: " + config.Framework +
-				". Using NoopMetrics.",
-		)
-		return nil, errors.New("Unsupported framework type: " + config.Framework)
+		err := fmt.Errorf("Unsupported framework type specified in config: %s", config.Framework)
+		logger.Error(err.Error())
+		return nil, err
 	}
 }
 
