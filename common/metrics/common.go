@@ -69,6 +69,6 @@ func GetMetricsServiceIdx(serviceName string, logger log.Logger) ServiceIdx {
 		return Worker
 	default:
 		logger.Fatal("Unknown service name for metrics!", tag.Service(serviceName))
-		panic(fmt.Sprintf("Unknown service name for metrics: ", serviceName))
+		panic(fmt.Sprintf("Unknown service name for metrics: %s", serviceName))
 	}
 }
