@@ -56,6 +56,7 @@ type (
 	Notification struct {
 		ID                     definition.WorkflowIdentifier
 		LastFirstEventID       int64
+		LastFirstEventTxnID    int64
 		NextEventID            int64
 		PreviousStartedEventID int64
 		Timestamp              time.Time
@@ -90,6 +91,7 @@ func NewNotification(
 	namespaceID string,
 	workflowExecution *commonpb.WorkflowExecution,
 	lastFirstEventID int64,
+	lastFirstEventTxnID int64,
 	nextEventID int64,
 	previousStartedEventID int64,
 	currentBranchToken []byte,
@@ -104,6 +106,7 @@ func NewNotification(
 			workflowExecution.GetRunId(),
 		),
 		LastFirstEventID:       lastFirstEventID,
+		LastFirstEventTxnID:    lastFirstEventTxnID,
 		NextEventID:            nextEventID,
 		PreviousStartedEventID: previousStartedEventID,
 		CurrentBranchToken:     currentBranchToken,

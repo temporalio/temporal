@@ -88,12 +88,13 @@ func (s *notifierSuite) TestSingleSubscriberWatchingEvents() {
 		RunId:      "run ID",
 	}
 	lastFirstEventID := int64(3)
+	lastFirstEventTxnID := int64(398)
 	previousStartedEventID := int64(5)
 	nextEventID := int64(18)
 	workflowState := enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
 	workflowStatus := enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	branchToken := make([]byte, 0)
-	historyEvent := NewNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
+	historyEvent := NewNotification(namespaceID, execution, lastFirstEventID, lastFirstEventTxnID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
 	timerChan := time.NewTimer(time.Second * 2).C
 
 	subscriberID, channel, err := s.notifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
@@ -121,12 +122,13 @@ func (s *notifierSuite) TestMultipleSubscriberWatchingEvents() {
 	}
 
 	lastFirstEventID := int64(3)
+	lastFirstEventTxnID := int64(3980)
 	previousStartedEventID := int64(5)
 	nextEventID := int64(18)
 	workflowState := enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
 	workflowStatus := enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	branchToken := make([]byte, 0)
-	historyEvent := NewNotification(namespaceID, execution, lastFirstEventID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
+	historyEvent := NewNotification(namespaceID, execution, lastFirstEventID, lastFirstEventTxnID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
 	timerChan := time.NewTimer(time.Second * 5).C
 
 	subscriberCount := 100
