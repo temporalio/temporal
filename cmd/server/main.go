@@ -134,7 +134,7 @@ func buildCLI() *cli.App {
 				dynamicConfigClient, err := dynamicconfig.NewFileBasedClient(&cfg.DynamicConfigClient, logger, temporal.InterruptCh())
 				if err != nil {
 					logger.Info("Unable to create file based dynamic config client, use no-op config client instead.", tag.Error(err))
-					dynamicConfigClient = dynamicconfig.NewNoopClient()
+					dynamicConfigClient = dynamicconfig.NewNopClient()
 				}
 
 				authorizer, err := authorization.GetAuthorizerFromConfig(
