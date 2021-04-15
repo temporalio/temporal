@@ -333,7 +333,6 @@ type (
 	WorkflowBackoffTimerTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		EventID             int64 // TODO this attribute is not used?
 		Version             int64
 		WorkflowBackoffType enumsspb.WorkflowBackoffType
 	}

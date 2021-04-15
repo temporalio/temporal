@@ -467,7 +467,7 @@ func (e *historyEngineImpl) createMutableState(
 
 	var newMutableState mutableState
 	// version history applies to both local and global namespace
-	newMutableState = newMutableStateBuilderWithVersionHistories(
+	newMutableState = newMutableStateBuilder(
 		e.shard,
 		e.shard.GetEventsCache(),
 		e.logger,

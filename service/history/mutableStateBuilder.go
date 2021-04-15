@@ -185,6 +185,7 @@ func newMutableStateBuilder(
 	eventsCache events.Cache,
 	logger log.Logger,
 	namespaceEntry *cache.NamespaceCacheEntry,
+	startTime time.Time,
 ) *mutableStateBuilder {
 	s := &mutableStateBuilder{
 		updateActivityInfos:            make(map[int64]*persistencespb.ActivityInfo),
@@ -242,6 +243,9 @@ func newMutableStateBuilder(
 		WorkflowTaskAttempt:    1,
 
 		LastProcessedEvent: common.EmptyEventID,
+
+		StartTime:        timestamp.TimePtr(startTime),
+		VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
 	}
 	s.executionState = &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
@@ -259,45 +263,18 @@ func newMutableStateBuilder(
 	return s
 }
 
-func newMutableStateBuilderWithVersionHistories(
+func newMutableStateBuilderFromDB(
 	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
 	namespaceEntry *cache.NamespaceCacheEntry,
-	startTime time.Time,
-) *mutableStateBuilder {
-
-	s := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry)
-	// start time should be set for workflow timeout calculation
-	// NOTE: workflow reset case, this start time is the reset time
-	s.executionInfo.StartTime = timestamp.TimePtr(startTime)
-	s.executionInfo.VersionHistories = versionhistory.NewVersionHistories(&historyspb.VersionHistory{})
-	return s
-}
-
-func (e *mutableStateBuilder) CloneToProto() *persistencespb.WorkflowMutableState {
-	ms := &persistencespb.WorkflowMutableState{
-		ActivityInfos:       e.pendingActivityInfoIDs,
-		TimerInfos:          e.pendingTimerInfoIDs,
-		ChildExecutionInfos: e.pendingChildExecutionInfoIDs,
-		RequestCancelInfos:  e.pendingRequestCancelInfoIDs,
-		SignalInfos:         e.pendingSignalInfoIDs,
-		SignalRequestedIds:  convert.StringSetToSlice(e.pendingSignalRequestedIDs),
-		ExecutionInfo:       e.executionInfo,
-		ExecutionState:      e.executionState,
-		NextEventId:         e.hBuilder.NextEventID(),
-		BufferedEvents:      e.bufferEventsInDB,
-		Checksum:            e.checksum,
-	}
-
-	return proto.Clone(ms).(*persistencespb.WorkflowMutableState)
-}
-
-// TODO unify Load and StartTransaction
-func (e *mutableStateBuilder) Load(
 	state *persistencespb.WorkflowMutableState,
 	dbRecordVersion int64,
-) error {
+) *mutableStateBuilder {
+
+	// startTime will be overridden by DB record
+	startTime := time.Time{}
+	e := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry, startTime)
 
 	e.pendingActivityInfoIDs = state.ActivityInfos
 	for _, activityInfo := range state.ActivityInfos {
@@ -349,7 +326,26 @@ func (e *mutableStateBuilder) Load(
 			}
 		}
 	}
-	return nil
+
+	return e
+}
+
+func (e *mutableStateBuilder) CloneToProto() *persistencespb.WorkflowMutableState {
+	ms := &persistencespb.WorkflowMutableState{
+		ActivityInfos:       e.pendingActivityInfoIDs,
+		TimerInfos:          e.pendingTimerInfoIDs,
+		ChildExecutionInfos: e.pendingChildExecutionInfoIDs,
+		RequestCancelInfos:  e.pendingRequestCancelInfoIDs,
+		SignalInfos:         e.pendingSignalInfoIDs,
+		SignalRequestedIds:  convert.StringSetToSlice(e.pendingSignalRequestedIDs),
+		ExecutionInfo:       e.executionInfo,
+		ExecutionState:      e.executionState,
+		NextEventId:         e.hBuilder.NextEventID(),
+		BufferedEvents:      e.bufferEventsInDB,
+		Checksum:            e.checksum,
+	}
+
+	return proto.Clone(ms).(*persistencespb.WorkflowMutableState)
 }
 
 func (e *mutableStateBuilder) GetCurrentBranchToken() ([]byte, error) {
@@ -771,6 +767,7 @@ func (e *mutableStateBuilder) DeletePendingChildExecution(
 		e.logDataInconsistency()
 	}
 
+	delete(e.updateChildExecutionInfos, initiatedEventID)
 	e.deleteChildExecutionInfos[initiatedEventID] = struct{}{}
 	return nil
 }
@@ -791,6 +788,7 @@ func (e *mutableStateBuilder) DeletePendingRequestCancel(
 		e.logDataInconsistency()
 	}
 
+	delete(e.updateRequestCancelInfos, initiatedEventID)
 	e.deleteRequestCancelInfos[initiatedEventID] = struct{}{}
 	return nil
 }
@@ -811,6 +809,7 @@ func (e *mutableStateBuilder) DeletePendingSignal(
 		e.logDataInconsistency()
 	}
 
+	delete(e.updateSignalInfos, initiatedEventID)
 	e.deleteSignalInfos[initiatedEventID] = struct{}{}
 	return nil
 }
@@ -945,6 +944,7 @@ func (e *mutableStateBuilder) DeleteActivity(
 		e.logDataInconsistency()
 	}
 
+	delete(e.updateActivityInfos, scheduleEventID)
 	e.deleteActivityInfos[scheduleEventID] = struct{}{}
 	return nil
 }
@@ -1024,6 +1024,7 @@ func (e *mutableStateBuilder) DeleteUserTimer(
 		e.logDataInconsistency()
 	}
 
+	delete(e.updateTimerInfos, timerID)
 	e.deleteTimerInfos[timerID] = struct{}{}
 	return nil
 }
@@ -1194,6 +1195,7 @@ func (e *mutableStateBuilder) DeleteSignalRequested(
 ) {
 
 	delete(e.pendingSignalRequestedIDs, requestID)
+	delete(e.updateSignalRequestedIDs, requestID)
 	e.deleteSignalRequestedIDs[requestID] = struct{}{}
 }
 
@@ -2983,7 +2985,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	namespaceID := e.namespaceEntry.GetInfo().Id
 	var newStateBuilder *mutableStateBuilder
 
-	newStateBuilder = newMutableStateBuilderWithVersionHistories(
+	newStateBuilder = newMutableStateBuilder(
 		e.shard,
 		e.shard.GetEventsCache(),
 		e.logger,

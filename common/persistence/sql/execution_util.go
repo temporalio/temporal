@@ -966,7 +966,6 @@ func createTimerTasks(
 			info.ScheduleAttempt = t.Attempt
 
 		case *p.WorkflowBackoffTimerTask:
-			info.EventId = t.EventID
 			info.WorkflowBackoffType = t.WorkflowBackoffType
 
 		case *p.WorkflowTimeoutTask:

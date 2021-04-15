@@ -594,7 +594,7 @@ func (b *stateBuilderImpl) applyEvents(
 
 			// The length of newRunHistory can be zero in resend case
 			if len(newRunHistory) != 0 {
-				newRunMutableStateBuilder = newMutableStateBuilderWithVersionHistories(
+				newRunMutableStateBuilder = newMutableStateBuilder(
 					b.shard,
 					b.shard.GetEventsCache(),
 					b.logger,

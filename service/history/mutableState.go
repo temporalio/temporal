@@ -169,7 +169,6 @@ type (
 		IsWorkflowExecutionRunning() bool
 		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)
-		Load(*persistencespb.WorkflowMutableState, int64) error
 		ReplicateActivityInfo(*historyservice.SyncActivityRequest, bool) error
 		ReplicateActivityTaskCancelRequestedEvent(*historypb.HistoryEvent) error
 		ReplicateActivityTaskCanceledEvent(*historypb.HistoryEvent) error
