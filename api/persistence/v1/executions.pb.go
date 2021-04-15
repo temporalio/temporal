@@ -268,7 +268,8 @@ type WorkflowExecutionInfo struct {
 	FirstExecutionRunId             string                  `protobuf:"bytes,55,opt,name=first_execution_run_id,json=firstExecutionRunId,proto3" json:"first_execution_run_id,omitempty"`
 	ExecutionStats                  *ExecutionStats         `protobuf:"bytes,56,opt,name=execution_stats,json=executionStats,proto3" json:"execution_stats,omitempty"`
 	WorkflowRunExpirationTime       *time.Time              `protobuf:"bytes,57,opt,name=workflow_run_expiration_time,json=workflowRunExpirationTime,proto3,stdtime" json:"workflow_run_expiration_time,omitempty"`
-	LastFirstEventTxnId             int64                   `protobuf:"varint,58,opt,name=last_first_event_txn_id,json=lastFirstEventTxnId,proto3" json:"last_first_event_txn_id,omitempty"`
+	// Transaction Id of the first event in the last batch of events.
+	LastFirstEventTxnId int64 `protobuf:"varint,58,opt,name=last_first_event_txn_id,json=lastFirstEventTxnId,proto3" json:"last_first_event_txn_id,omitempty"`
 }
 
 func (m *WorkflowExecutionInfo) Reset()      { *m = WorkflowExecutionInfo{} }

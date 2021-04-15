@@ -593,6 +593,9 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		continuationToken.PersistenceToken = nil
 	}
 
+	// TODO below is a temporal solution to guard against invalid event batch
+	//  when data inconsistency occurs
+	//  long term solution should check event batch pointing backwards within history store
 	defer func() {
 		// lastFirstEventTxnID != 0 exists due to forward / backward compatibility
 		if _, ok := retError.(*serviceerror.DataLoss); ok && lastFirstEventTxnID != 0 {
