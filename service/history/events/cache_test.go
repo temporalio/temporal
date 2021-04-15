@@ -158,9 +158,8 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 		NextPageToken: nil,
 		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents:    []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6},
-		NextPageToken:    nil,
-		LastFirstEventID: event1.GetEventId(),
+		HistoryEvents: []*historypb.HistoryEvent{event1, event2, event3, event4, event5, event6},
+		NextPageToken: nil,
 	}, nil)
 
 	s.cache.PutEvent(namespaceID, workflowID, runID, event2.GetEventId(), event2)
@@ -216,9 +215,8 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 		NextPageToken: nil,
 		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents:    []*historypb.HistoryEvent{event2},
-		NextPageToken:    nil,
-		LastFirstEventID: event2.GetEventId(),
+		HistoryEvents: []*historypb.HistoryEvent{event2},
+		NextPageToken: nil,
 	}, nil)
 
 	s.cache.PutEvent(namespaceID, workflowID, runID, event1.GetEventId(), event1)

@@ -38,19 +38,13 @@ import (
 
 // Fixed namespace values for now
 const (
-	namespacePartition     = 0
-	defaultCloseTTLSeconds = 86400
-	openExecutionTTLBuffer = int64(86400) // setting it to a day to account for shard going down
+	namespacePartition = 0
 
 	// ref: https://docs.datastax.com/en/dse-trblshoot/doc/troubleshooting/recoveringTtlYear2038Problem.html
 	maxCassandraTTL = int64(315360000) // Cassandra max support time is 2038-01-19T03:14:06+00:00. Updated this to 10 years to support until year 2028
 )
 
 const (
-	templateCreateWorkflowExecutionStartedWithTTL = `INSERT INTO open_executions (` +
-		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
-
 	templateCreateWorkflowExecutionStarted = `INSERT INTO open_executions (` +
 		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -159,49 +153,28 @@ func (v *cassandraVisibilityPersistence) Close() {
 
 func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 	request *p.InternalRecordWorkflowExecutionStartedRequest) error {
-	ttl := request.RunTimeout + openExecutionTTLBuffer
-	var query gocql.Query
 
-	if ttl > maxCassandraTTL {
-		query = v.session.Query(templateCreateWorkflowExecutionStarted,
-			request.NamespaceID,
-			namespacePartition,
-			request.WorkflowID,
-			request.RunID,
-			p.UnixNanoToDBTimestamp(request.StartTimestamp),
-			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
-			request.WorkflowTypeName,
-			request.Memo.Data,
-			request.Memo.EncodingType.String(),
-			request.TaskQueue,
-		)
-	} else {
-		query = v.session.Query(templateCreateWorkflowExecutionStartedWithTTL,
-			request.NamespaceID,
-			namespacePartition,
-			request.WorkflowID,
-			request.RunID,
-			p.UnixNanoToDBTimestamp(request.StartTimestamp),
-			p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
-			request.WorkflowTypeName,
-			request.Memo.Data,
-			request.Memo.EncodingType.String(),
-			request.TaskQueue,
-			ttl,
-		)
-	}
+	query := v.session.Query(templateCreateWorkflowExecutionStarted,
+		request.NamespaceID,
+		namespacePartition,
+		request.WorkflowID,
+		request.RunID,
+		p.UnixNanoToDBTimestamp(request.StartTimestamp),
+		p.UnixNanoToDBTimestamp(request.ExecutionTimestamp),
+		request.WorkflowTypeName,
+		request.Memo.Data,
+		request.Memo.EncodingType.String(),
+		request.TaskQueue,
+	)
+	// It is important to specify timestamp for all `open_executions` queries because
+	// we are using milliseconds instead of default microseconds. If custom timestamp collides with
+	// default timestamp, default one will always win because they are 1000 times bigger.
 	query = query.WithTimestamp(p.UnixNanoToDBTimestamp(request.StartTimestamp))
 	err := query.Exec()
 	return gocql.ConvertError("RecordWorkflowExecutionStarted", err)
 }
 
-// Deprecated.
 func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(request *p.InternalRecordWorkflowExecutionClosedRequest) error {
-	return v.RecordWorkflowExecutionClosedV2(request)
-}
-
-func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosedV2(
-	request *p.InternalRecordWorkflowExecutionClosedRequest) error {
 	batch := v.session.NewBatch(gocql.LoggedBatch)
 
 	// First, remove execution from the open table
@@ -215,12 +188,14 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosedV2(
 	// Next, add a row in the closed table.
 
 	// Find how long to keep the row
-	retention := request.RetentionSeconds
-	if retention == 0 {
-		retention = defaultCloseTTLSeconds
+	var retentionSeconds int64
+	if request.Retention != nil {
+		retentionSeconds = int64(request.Retention.Seconds())
+	} else {
+		retentionSeconds = maxCassandraTTL + 1
 	}
 
-	if retention > maxCassandraTTL {
+	if retentionSeconds > maxCassandraTTL {
 		batch.Query(templateCreateWorkflowExecutionClosed,
 			request.NamespaceID,
 			namespacePartition,
@@ -251,21 +226,25 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosedV2(
 			request.Memo.Data,
 			request.Memo.EncodingType.String(),
 			request.TaskQueue,
-			retention,
+			retentionSeconds,
 		)
 	}
 
-	// RecordWorkflowExecutionStarted is using StartTimestamp as
-	// the timestamp to issue query to Cassandra
-	// due to the fact that cross DC using mutable state creation time as workflow start time
-	// and visibility using event time instead of last update time (#1501)
-	// CloseTimestamp can be before StartTimestamp, meaning using CloseTimestamp
-	// can cause the deletion of open visibility record to be ignored.
-	queryTimeStamp := request.CloseTimestamp
-	if queryTimeStamp < request.StartTimestamp {
-		queryTimeStamp = request.StartTimestamp + time.Second.Nanoseconds()
+	// RecordWorkflowExecutionStarted is using StartTimestamp as the timestamp for every query in `open_executions` table.
+	// Due to the fact that cross DC using mutable state creation time as workflow start time and visibility using event time
+	// instead of last update time (https://github.com/uber/cadence/pull/1501) CloseTimestamp can be before StartTimestamp (or very close it).
+	// In this case, use (StartTimestamp + minWorkflowDuration) for delete operation to guarantee that it is greater than StartTimestamp
+	// and won't be ignored.
+
+	const minWorkflowDuration = time.Second
+	var batchTimestamp int64
+	if request.CloseTimestamp-request.StartTimestamp < minWorkflowDuration.Nanoseconds() {
+		batchTimestamp = request.StartTimestamp + minWorkflowDuration.Nanoseconds()
+	} else {
+		batchTimestamp = request.CloseTimestamp
 	}
-	batch = batch.WithTimestamp(p.UnixNanoToDBTimestamp(queryTimeStamp))
+
+	batch = batch.WithTimestamp(p.UnixNanoToDBTimestamp(batchTimestamp))
 	err := v.session.ExecuteBatch(batch)
 	return gocql.ConvertError("RecordWorkflowExecutionClosed", err)
 }

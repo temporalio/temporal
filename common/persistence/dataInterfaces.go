@@ -228,7 +228,6 @@ type (
 		TaskQueue           string
 		ScheduleID          int64
 		Version             int64
-		RecordVisibility    bool
 	}
 
 	// ResetWorkflowTask identifies a transfer task to reset workflow
@@ -1031,8 +1030,6 @@ type (
 		NextPageToken []byte
 		// Size of history read from store
 		Size int
-		// the first_event_id of last loaded batch
-		LastFirstEventID int64
 	}
 
 	// ReadHistoryBranchByBatchResponse is the response to ReadHistoryBranchRequest
@@ -1045,8 +1042,6 @@ type (
 		NextPageToken []byte
 		// Size of history read from store
 		Size int
-		// the first_event_id of last loaded batch
-		LastFirstEventID int64
 	}
 
 	// ReadRawHistoryBranchResponse is the response to ReadHistoryBranchRequest
@@ -1097,6 +1092,22 @@ type (
 		ShardID int32
 		// branch to be deleted
 		BranchToken []byte
+	}
+
+	// TrimHistoryBranchRequest is used to validate & trim a history branch
+	TrimHistoryBranchRequest struct {
+		// The shard to delete history branch data
+		ShardID int32
+		// branch to be validated & trimmed
+		BranchToken []byte
+		// known valid node ID
+		NodeID int64
+		// known valid transaction ID
+		TransactionID int64
+	}
+
+	// TrimHistoryBranchResponse is the response to TrimHistoryBranchRequest
+	TrimHistoryBranchResponse struct {
 	}
 
 	// GetHistoryTreeRequest is used to retrieve branch info of a history tree
@@ -1294,7 +1305,7 @@ type (
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
 		// For Temporal, treeID is new runID, except for fork(reset), treeID will be the runID that it forks from.
 
-		// AppendHistoryNodes add(or override) a batch of nodes to a history branch
+		// AppendHistoryNodes add a node to history node table
 		AppendHistoryNodes(request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)
@@ -1308,6 +1319,8 @@ type (
 		// DeleteHistoryBranch removes a branch
 		// If this is the last branch to delete, it will also remove the root node
 		DeleteHistoryBranch(request *DeleteHistoryBranchRequest) error
+		// TrimHistoryBranch validate & trim a history branch
+		TrimHistoryBranch(request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error)
 		// GetHistoryTree returns all branch information of a tree
 		GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees
