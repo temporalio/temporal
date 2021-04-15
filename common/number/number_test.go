@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package dynamicconfig
+package number
 
 import (
 	"math/rand"
@@ -65,9 +65,9 @@ func (s *numberSuite) TestInt() {
 		int64(number),
 		int(number),
 	} {
-		s.Equal(float64(number), NewNumber(n).ParseFloat(rand.Float64()))
-		s.Equal(int(number), NewNumber(n).ParseInt(rand.Int()))
-		s.Equal(uint(number), NewNumber(n).ParseUint(uint(rand.Uint64())))
+		s.Equal(float64(number), NewNumber(n).GetFloatOrDefault(rand.Float64()))
+		s.Equal(int(number), NewNumber(n).GetIntOrDefault(rand.Int()))
+		s.Equal(uint(number), NewNumber(n).GetUintOrDefault(uint(rand.Uint64())))
 	}
 }
 
@@ -80,9 +80,9 @@ func (s *numberSuite) TestUint() {
 		uint64(number),
 		uint(number),
 	} {
-		s.Equal(float64(number), NewNumber(n).ParseFloat(rand.Float64()))
-		s.Equal(int(number), NewNumber(n).ParseInt(rand.Int()))
-		s.Equal(uint(number), NewNumber(n).ParseUint(uint(rand.Uint64())))
+		s.Equal(float64(number), NewNumber(n).GetFloatOrDefault(rand.Float64()))
+		s.Equal(int(number), NewNumber(n).GetIntOrDefault(rand.Int()))
+		s.Equal(uint(number), NewNumber(n).GetUintOrDefault(uint(rand.Uint64())))
 	}
 }
 
@@ -92,8 +92,8 @@ func (s *numberSuite) TestFloat() {
 		float32(number),
 		float64(number),
 	} {
-		s.Equal(float64(number), NewNumber(n).ParseFloat(rand.Float64()))
-		s.Equal(int(number), NewNumber(n).ParseInt(rand.Int()))
-		s.Equal(uint(number), NewNumber(n).ParseUint(uint(rand.Uint64())))
+		s.Equal(float64(number), NewNumber(n).GetFloatOrDefault(rand.Float64()))
+		s.Equal(int(number), NewNumber(n).GetIntOrDefault(rand.Int()))
+		s.Equal(uint(number), NewNumber(n).GetUintOrDefault(uint(rand.Uint64())))
 	}
 }

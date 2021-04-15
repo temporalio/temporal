@@ -42,6 +42,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/common/number"
+
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/metrics"
 
@@ -490,28 +492,28 @@ func FromConfigToDefaultRetrySettings(options map[string]interface{}) DefaultRet
 
 	if seconds, ok := options[initialIntervalInSecondsConfigKey]; ok {
 		defaultSettings.InitialInterval = time.Duration(
-			dynamicconfig.NewNumber(
+			number.NewNumber(
 				seconds,
-			).ParseInt(int(defaultInitialInterval.Nanoseconds())),
+			).GetIntOrDefault(int(defaultInitialInterval.Nanoseconds())),
 		) * time.Second
 	}
 
 	if coefficient, ok := options[maximumIntervalCoefficientConfigKey]; ok {
-		defaultSettings.MaximumIntervalCoefficient = dynamicconfig.NewNumber(
+		defaultSettings.MaximumIntervalCoefficient = number.NewNumber(
 			coefficient,
-		).ParseFloat(defaultMaximumIntervalCoefficient)
+		).GetFloatOrDefault(defaultMaximumIntervalCoefficient)
 	}
 
 	if coefficient, ok := options[backoffCoefficientConfigKey]; ok {
-		defaultSettings.BackoffCoefficient = dynamicconfig.NewNumber(
+		defaultSettings.BackoffCoefficient = number.NewNumber(
 			coefficient,
-		).ParseFloat(defaultBackoffCoefficient)
+		).GetFloatOrDefault(defaultBackoffCoefficient)
 	}
 
 	if attempts, ok := options[maximumAttemptsConfigKey]; ok {
-		defaultSettings.MaximumAttempts = int32(dynamicconfig.NewNumber(
+		defaultSettings.MaximumAttempts = int32(number.NewNumber(
 			attempts,
-		).ParseInt(defaultMaximumAttempts))
+		).GetIntOrDefault(defaultMaximumAttempts))
 	}
 
 	return defaultSettings
