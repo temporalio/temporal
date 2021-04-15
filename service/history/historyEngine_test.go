@@ -5027,10 +5027,12 @@ func addWorkflowTaskStartedEvent(builder mutableState, scheduleID int64, taskQue
 
 func addWorkflowTaskStartedEventWithRequestID(builder mutableState, scheduleID int64, requestID string,
 	taskQueue, identity string) *historypb.HistoryEvent {
-	event, _, _ := builder.AddWorkflowTaskStartedEvent(scheduleID, requestID, &workflowservice.PollWorkflowTaskQueueRequest{
-		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
-		Identity:  identity,
-	})
+	event, _, _ := builder.AddWorkflowTaskStartedEvent(
+		scheduleID,
+		requestID,
+		&taskqueuepb.TaskQueue{Name: taskQueue},
+		identity,
+	)
 
 	return event
 }
