@@ -138,7 +138,7 @@ type (
 		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetInFlightWorkflowTask() (*workflowTaskInfo, bool)
 		GetPendingWorkflowTask() (*workflowTaskInfo, bool)
-		GetLastFirstEventID() int64
+		GetLastFirstEventIDTxnID() (int64, int64)
 		GetLastWriteVersion() (int64, error)
 		GetNextEventID() int64
 		GetPreviousStartedEventID() int64

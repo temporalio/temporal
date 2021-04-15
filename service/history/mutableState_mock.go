@@ -1112,18 +1112,19 @@ func (mr *MockmutableStateMockRecorder) GetInFlightWorkflowTask() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInFlightWorkflowTask", reflect.TypeOf((*MockmutableState)(nil).GetInFlightWorkflowTask))
 }
 
-// GetLastFirstEventID mocks base method.
-func (m *MockmutableState) GetLastFirstEventID() int64 {
+// GetLastFirstEventIDTxnID mocks base method.
+func (m *MockmutableState) GetLastFirstEventIDTxnID() (int64, int64) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLastFirstEventID")
+	ret := m.ctrl.Call(m, "GetLastFirstEventIDTxnID")
 	ret0, _ := ret[0].(int64)
-	return ret0
+	ret1, _ := ret[1].(int64)
+	return ret0, ret1
 }
 
-// GetLastFirstEventID indicates an expected call of GetLastFirstEventID.
-func (mr *MockmutableStateMockRecorder) GetLastFirstEventID() *gomock.Call {
+// GetLastFirstEventIDTxnID indicates an expected call of GetLastFirstEventIDTxnID.
+func (mr *MockmutableStateMockRecorder) GetLastFirstEventIDTxnID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLastFirstEventID", reflect.TypeOf((*MockmutableState)(nil).GetLastFirstEventID))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLastFirstEventIDTxnID", reflect.TypeOf((*MockmutableState)(nil).GetLastFirstEventIDTxnID))
 }
 
 // GetLastWriteVersion mocks base method.

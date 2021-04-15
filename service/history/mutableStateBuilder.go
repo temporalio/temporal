@@ -1129,10 +1129,10 @@ func (e *mutableStateBuilder) ClearStickyness() {
 	e.executionInfo.StickyScheduleToStartTimeout = timestamp.DurationFromSeconds(0)
 }
 
-// GetLastFirstEventID returns last first event ID
+// GetLastFirstEventIDTxnID returns last first event ID and corresponding transaction ID
 // first event ID is the ID of a batch of events in a single history events record
-func (e *mutableStateBuilder) GetLastFirstEventID() int64 {
-	return e.executionInfo.LastFirstEventId
+func (e *mutableStateBuilder) GetLastFirstEventIDTxnID() (int64, int64) {
+	return e.executionInfo.LastFirstEventId, e.executionInfo.LastFirstEventTxnId
 }
 
 // GetNextEventID returns next event ID
@@ -3616,9 +3616,7 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 
 	if len(workflowEventsSeq) > 0 {
 		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
-		firstEvent := lastEvents[0]
 		lastEvent := lastEvents[len(lastEvents)-1]
-		e.updateWithLastFirstEvent(firstEvent)
 		if err := e.updateWithLastWriteEvent(
 			lastEvent,
 			transactionPolicy,
@@ -3709,9 +3707,7 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 
 	if len(workflowEventsSeq) > 0 {
 		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
-		firstEvent := lastEvents[0]
 		lastEvent := lastEvents[len(lastEvents)-1]
-		e.updateWithLastFirstEvent(firstEvent)
 		if err := e.updateWithLastWriteEvent(
 			lastEvent,
 			transactionPolicy,
@@ -3886,12 +3882,13 @@ func (e *mutableStateBuilder) prepareEventsAndReplicationTasks(
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
 			BranchToken: currentBranchToken,
-			PrevTxnID:   e.executionInfo.LastHistoryNodeTxnId,
+			PrevTxnID:   e.executionInfo.LastFirstEventTxnId,
 			TxnID:       historyNodeTxnIDs[index],
 			Events:      eventBatch,
 		}
 		e.GetExecutionInfo().LastEventTaskId = eventBatch[len(eventBatch)-1].GetTaskId()
-		e.executionInfo.LastHistoryNodeTxnId = historyNodeTxnIDs[index]
+		e.executionInfo.LastFirstEventId = eventBatch[0].GetEventId()
+		e.executionInfo.LastFirstEventTxnId = historyNodeTxnIDs[index]
 	}
 
 	if err := e.validateNoEventsAfterWorkflowFinish(
@@ -4021,12 +4018,6 @@ func (e *mutableStateBuilder) updateWithLastWriteEvent(
 		}
 	}
 	return nil
-}
-
-func (e *mutableStateBuilder) updateWithLastFirstEvent(
-	lastFirstEvent *historypb.HistoryEvent,
-) {
-	e.GetExecutionInfo().LastFirstEventId = lastFirstEvent.GetEventId()
 }
 
 func (e *mutableStateBuilder) canReplicateEvents() bool {

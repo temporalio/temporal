@@ -55,6 +55,9 @@ type (
 const (
 	defaultLastNodeID        = common.FirstEventID - 1
 	defaultLastTransactionID = int64(0)
+
+	// TrimHistoryBranch will only dump metadata, relatively cheap
+	trimHistoryBranchPageSize = 1000
 )
 
 var _ HistoryManager = (*historyV2ManagerImpl)(nil)
@@ -145,7 +148,7 @@ func (m *historyV2ManagerImpl) TrimHistoryBranch(
 	shardID := request.ShardID
 	minNodeID := common.FirstEventID
 	maxNodeID := request.NodeID + 1
-	pageSize := 1000
+	pageSize := trimHistoryBranchPageSize
 
 	branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 	if err != nil {
