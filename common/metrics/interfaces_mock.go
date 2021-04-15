@@ -339,3 +339,15 @@ func (mr *MockReporterMockRecorder) NewClient(logger, serviceIdx interface{}) *g
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewClient", reflect.TypeOf((*MockReporter)(nil).NewClient), logger, serviceIdx)
 }
+
+// Stop mocks base method.
+func (m *MockReporter) Stop(logger log.Logger) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Stop", logger)
+}
+
+// Stop indicates an expected call of Stop.
+func (mr *MockReporterMockRecorder) Stop(logger interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockReporter)(nil).Stop), logger)
+}
