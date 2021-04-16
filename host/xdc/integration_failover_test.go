@@ -1019,7 +1019,7 @@ GetHistoryLoop2:
 	s.True(eventsReplicated)
 }
 
-func (s *integrationClustersTestSuite) testResetWorkflowRangeScheduleToStart() {
+func (s *integrationClustersTestSuite) TestResetWorkflowFailover() {
 	namespace := "test-reset-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
