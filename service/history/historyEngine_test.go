@@ -5027,10 +5027,12 @@ func addWorkflowTaskStartedEvent(builder mutableState, scheduleID int64, taskQue
 
 func addWorkflowTaskStartedEventWithRequestID(builder mutableState, scheduleID int64, requestID string,
 	taskQueue, identity string) *historypb.HistoryEvent {
-	event, _, _ := builder.AddWorkflowTaskStartedEvent(scheduleID, requestID, &workflowservice.PollWorkflowTaskQueueRequest{
-		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
-		Identity:  identity,
-	})
+	event, _, _ := builder.AddWorkflowTaskStartedEvent(
+		scheduleID,
+		requestID,
+		&taskqueuepb.TaskQueue{Name: taskQueue},
+		identity,
+	)
 
 	return event
 }
@@ -5270,10 +5272,12 @@ func newMutableStateBuilderWithVersionHistoriesForTest(
 
 func createMutableState(ms mutableState) *persistencespb.WorkflowMutableState {
 	builder := ms.(*mutableStateBuilder)
-	builder.FlushBufferedEvents()
+	_, _, _ = builder.CloseTransactionAsMutation(time.Now().UTC(), transactionPolicyActive)
+
 	info := copyWorkflowExecutionInfo(builder.executionInfo)
 	state := copyWorkflowExecutionState(builder.executionState)
 	info.ExecutionStats = &persistencespb.ExecutionStats{}
+	info.VersionHistories = versionhistory.CopyVersionHistories(builder.executionInfo.VersionHistories)
 
 	activityInfos := make(map[int64]*persistencespb.ActivityInfo)
 	for id, info := range builder.pendingActivityInfoIDs {
@@ -5294,12 +5298,6 @@ func createMutableState(ms mutableState) *persistencespb.WorkflowMutableState {
 	childInfos := make(map[int64]*persistencespb.ChildExecutionInfo)
 	for id, info := range builder.pendingChildExecutionInfoIDs {
 		childInfos[id] = copyChildInfo(info)
-	}
-
-	// FlushBuffer will also be called within the CloseTransactionAsMutation
-	_, _, _ = builder.CloseTransactionAsMutation(time.Now().UTC(), transactionPolicyActive)
-	if builder.executionInfo.VersionHistories != nil {
-		info.VersionHistories = versionhistory.CopyVersionHistories(builder.executionInfo.VersionHistories)
 	}
 
 	return &persistencespb.WorkflowMutableState{
@@ -5341,6 +5339,7 @@ func copyWorkflowExecutionInfo(sourceInfo *persistencespb.WorkflowExecutionInfo)
 		WorkflowRunTimeout:                sourceInfo.WorkflowRunTimeout,
 		DefaultWorkflowTaskTimeout:        sourceInfo.DefaultWorkflowTaskTimeout,
 		LastFirstEventId:                  sourceInfo.LastFirstEventId,
+		LastFirstEventTxnId:               sourceInfo.LastFirstEventTxnId,
 		LastEventTaskId:                   sourceInfo.LastEventTaskId,
 		LastProcessedEvent:                sourceInfo.LastProcessedEvent,
 		StartTime:                         sourceInfo.StartTime,

@@ -34,7 +34,6 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/workflowservice/v1"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -211,7 +210,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				return nil, serviceerrors.NewTaskAlreadyStarted("Workflow")
 			}
 
-			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(scheduleID, requestID, req.PollRequest)
+			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
+				scheduleID,
+				requestID,
+				req.PollRequest.TaskQueue,
+				req.PollRequest.Identity,
+			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history
 				return nil, serviceerror.NewInternal("Unable to add WorkflowTaskStarted event to history.")
@@ -475,10 +479,12 @@ Update_History_Loop:
 			if request.GetReturnNewWorkflowTask() {
 				// start the new workflow task if request asked to do so
 				// TODO: replace the poll request
-				_, _, err := msBuilder.AddWorkflowTaskStartedEvent(newWorkflowTask.ScheduleID, "request-from-RespondWorkflowTaskCompleted", &workflowservice.PollWorkflowTaskQueueRequest{
-					TaskQueue: newWorkflowTask.TaskQueue,
-					Identity:  request.Identity,
-				})
+				_, _, err := msBuilder.AddWorkflowTaskStartedEvent(
+					newWorkflowTask.ScheduleID,
+					"request-from-RespondWorkflowTaskCompleted",
+					newWorkflowTask.TaskQueue,
+					request.Identity,
+				)
 				if err != nil {
 					return nil, err
 				}

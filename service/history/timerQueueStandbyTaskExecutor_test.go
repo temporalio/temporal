@@ -690,7 +690,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 	activityType2 := "activity type 2"
 	timerTimeout2 := 20 * time.Second
 	scheduledEvent2, _ := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID2, activityType2, taskqueue, nil,
-		timerTimeout2, timerTimeout2, timerTimeout2, timerTimeout2)
+		timerTimeout2, timerTimeout2, timerTimeout2, 10*time.Second)
 	addActivityTaskStartedEvent(mutableState, scheduledEvent2.GetEventId(), identity)
 	activityInfo2 := mutableState.pendingActivityInfoIDs[scheduledEvent2.GetEventId()]
 	activityInfo2.TimerTaskStatus |= timerTaskStatusCreatedHeartbeat

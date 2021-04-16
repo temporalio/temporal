@@ -162,6 +162,9 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 	if err != nil {
 		return err
 	}
+	if len(targetWorkflowEventsSeq) != 1 {
+		return serviceerror.NewInternal("unable to create 1st event batch")
+	}
 
 	targetWorkflowHistorySize, err := r.persistNewNDCWorkflowEvents(
 		targetWorkflow,
@@ -232,6 +235,9 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	)
 	if err != nil {
 		return err
+	}
+	if len(targetWorkflowEventsSeq) != 1 {
+		return serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
 	targetWorkflowHistorySize, err := r.persistNewNDCWorkflowEvents(

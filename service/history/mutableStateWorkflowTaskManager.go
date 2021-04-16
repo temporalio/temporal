@@ -70,7 +70,8 @@ type (
 		AddWorkflowTaskStartedEvent(
 			scheduleEventID int64,
 			requestID string,
-			request *workflowservice.PollWorkflowTaskQueueRequest,
+			taskQueue *taskqueuepb.TaskQueue,
+			identity string,
 		) (*historypb.HistoryEvent, *workflowTaskInfo, error)
 		AddWorkflowTaskCompletedEvent(
 			scheduleEventID int64,
@@ -413,7 +414,8 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddFirstWorkflowTaskScheduled(
 func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskStartedEvent(
 	scheduleEventID int64,
 	requestID string,
-	request *workflowservice.PollWorkflowTaskQueueRequest,
+	taskQueue *taskqueuepb.TaskQueue,
+	identity string,
 ) (*historypb.HistoryEvent, *workflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	workflowTask, ok := m.GetWorkflowTaskInfo(scheduleEventID)
@@ -433,7 +435,7 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskStartedEvent(
 	if workflowTask.Attempt > 1 && (workflowTask.ScheduleID != m.msb.GetNextEventID() || workflowTask.Version != m.msb.GetCurrentVersion()) {
 		// Also create a new WorkflowTaskScheduledEvent since new events came in when it was scheduled
 		scheduleEvent := m.msb.hBuilder.AddWorkflowTaskScheduledEvent(
-			request.GetTaskQueue(),
+			taskQueue,
 			int32(workflowTask.WorkflowTaskTimeout.Seconds()),
 			1,
 			m.msb.timeSource.Now(),
@@ -448,9 +450,10 @@ func (m *mutableStateWorkflowTaskManagerImpl) AddWorkflowTaskStartedEvent(
 		event = m.msb.hBuilder.AddWorkflowTaskStartedEvent(
 			scheduleID,
 			requestID,
-			request.GetIdentity(),
+			identity,
 			m.msb.timeSource.Now(),
 		)
+		m.msb.hBuilder.FlushAndCreateNewBatch()
 		startedID = event.GetEventId()
 		startTime = timestamp.TimeValue(event.GetEventTime())
 	}
