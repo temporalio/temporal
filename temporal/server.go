@@ -74,6 +74,8 @@ type (
 		serviceStoppedChs map[string]chan struct{}
 		stoppedCh         chan interface{}
 		logger            log.Logger
+		serverReporter    metrics.Reporter
+		sdkReporter       metrics.Reporter
 	}
 )
 
@@ -148,11 +150,20 @@ func (s *Server) Start() error {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
 
-	var globalMetricsScope tally.Scope
-	if s.so.metricsReporter != nil {
-		globalMetricsScope = s.so.config.Global.Metrics.NewCustomReporterScope(s.logger, s.so.metricsReporter)
-	} else if s.so.config.Global.Metrics != nil {
-		globalMetricsScope = s.so.config.Global.Metrics.NewScope(s.logger)
+	// todo: Replace this with Client or Scope implementation.
+	var globalMetricsScope tally.Scope = nil
+
+	s.serverReporter = nil
+	s.sdkReporter = nil
+	if s.so.config.Global.Metrics != nil {
+		s.serverReporter, s.sdkReporter, err = s.so.config.Global.Metrics.InitMetricReporters(s.logger, s.so.metricsReporter)
+		if err != nil {
+			return err
+		}
+		globalMetricsScope, err = s.extractTallyScopeForSDK(s.sdkReporter)
+		if err != nil {
+			return err
+		}
 	}
 
 	if s.so.tlsConfigProvider == nil {
@@ -163,7 +174,7 @@ func (s *Server) Start() error {
 	}
 
 	for _, svcName := range s.so.serviceNames {
-		params, err := s.newBootstrapParams(svcName, dc, globalMetricsScope)
+		params, err := s.newBootstrapParams(svcName, dc, s.serverReporter, s.sdkReporter)
 		if err != nil {
 			return err
 		}
@@ -224,13 +235,17 @@ func (s *Server) Stop() {
 		}(svc, svcName, s.serviceStoppedChs[svcName])
 	}
 	wg.Wait()
+
+	s.sdkReporter.Stop(s.logger)
+	s.serverReporter.Stop(s.logger)
 }
 
 // Populates parameters for a service
 func (s *Server) newBootstrapParams(
 	svcName string,
 	dc *dynamicconfig.Collection,
-	metricsScope tally.Scope,
+	serverReporter metrics.Reporter,
+	sdkReporter metrics.Reporter,
 ) (*resource.BootstrapParams, error) {
 
 	params := resource.BootstrapParams{}
@@ -264,11 +279,32 @@ func (s *Server) newBootstrapParams(
 		}
 
 	params.DCRedirectionPolicy = s.so.config.DCRedirectionPolicy
-	if metricsScope == nil {
-		metricsScope = svcCfg.Metrics.NewScope(s.logger)
+
+	//todo: Replace this hack with actually using sdkReporter, Client or Scope.
+	if serverReporter == nil {
+		var err error
+		serverReporter, sdkReporter, err = svcCfg.Metrics.InitMetricReporters(s.logger, nil)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"Failed to initialize per-service metric client. "+
+					"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err)
+		}
+		params.ServerMetricsReporter = serverReporter
+		params.SDKMetricsReporter = sdkReporter
 	}
-	params.MetricsScope = metricsScope
-	metricsClient := metrics.NewClient(metricsScope, metrics.GetMetricsServiceIdx(svcName, s.logger))
+
+	globalTallyScope, err := s.extractTallyScopeForSDK(sdkReporter)
+	if err != nil {
+		return nil, err
+	}
+	params.MetricsScope = globalTallyScope
+
+	serviceIdx := metrics.GetMetricsServiceIdx(svcName, s.logger)
+	metricsClient, err := serverReporter.NewClient(s.logger, serviceIdx)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to initialize metrics client: %w", err)
+	}
+
 	params.MetricsClient = metricsClient
 
 	options, err := s.so.tlsConfigProvider.GetFrontendClientConfig()
@@ -279,7 +315,7 @@ func (s *Server) newBootstrapParams(
 	params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
 		HostPort:     s.so.config.PublicClient.HostPort,
 		Namespace:    common.SystemLocalNamespace,
-		MetricsScope: metricsScope,
+		MetricsScope: globalTallyScope,
 		Logger:       log.NewSdkLogger(s.logger),
 		ConnectionOptions: sdkclient.ConnectionOptions{
 			TLS:                options,
@@ -447,4 +483,15 @@ func initSystemNamespaces(cfg *config.Persistence, currentClusterName string, pe
 		return fmt.Errorf("unable to register system namespace: %w", err)
 	}
 	return nil
+}
+
+func (s *Server) extractTallyScopeForSDK(sdkReporter metrics.Reporter) (tally.Scope, error) {
+	if sdkTallyReporter, ok := sdkReporter.(*metrics.TallyReporter); ok {
+		return sdkTallyReporter.GetScope(), nil
+	} else {
+		return nil, fmt.Errorf(
+			"Sdk reporter is not of Tally type. Unfortunately, SDK only supports Tally for now. "+
+				"Please specify prometheusSDK in metrics config with framework type %s.", metrics.FrameworkTally,
+		)
+	}
 }

@@ -24,7 +24,14 @@
 
 package metrics
 
-import "time"
+import (
+	"fmt"
+	"time"
+
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/primitives"
+)
 
 const (
 	distributionToTimerRatio = int(time.Millisecond / time.Nanosecond)
@@ -47,4 +54,21 @@ func getMetricDefs(serviceIdx ServiceIdx) map[int]metricDefinition {
 	}
 
 	return defs
+}
+
+// GetMetricsServiceIdx returns service id corresponding to serviceName
+func GetMetricsServiceIdx(serviceName string, logger log.Logger) ServiceIdx {
+	switch serviceName {
+	case primitives.FrontendService:
+		return Frontend
+	case primitives.HistoryService:
+		return History
+	case primitives.MatchingService:
+		return Matching
+	case primitives.WorkerService:
+		return Worker
+	default:
+		logger.Fatal("Unknown service name for metrics!", tag.Service(serviceName))
+		panic(fmt.Sprintf("Unknown service name for metrics: %s", serviceName))
+	}
 }

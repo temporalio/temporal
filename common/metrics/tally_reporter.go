@@ -16,7 +16,7 @@
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
@@ -25,34 +25,27 @@
 package metrics
 
 import (
-	"time"
-
 	"github.com/uber-go/tally"
+	"go.temporal.io/server/common/log"
 )
 
-// Stopwatch is a helper for simpler tracking of elapsed time, use the
-// Stop() method to report time elapsed since its created back to the
-// timer or histogram.
-type TallyStopwatch struct {
-	start  time.Time
-	timers []tally.Timer
+// TallyReporter is a base class for reporting metrics to Tally.
+type TallyReporter struct {
+	scope tally.Scope
 }
 
-// NewStopwatch creates a new immutable stopwatch for recording the start
-// time to a stopwatch reporter.
-func NewStopwatch(timers ...tally.Timer) Stopwatch {
-	return &TallyStopwatch{time.Now().UTC(), timers}
+func newTallyReporter(scope tally.Scope) *TallyReporter {
+	return &TallyReporter{scope: scope}
 }
 
-// NewTestStopwatch returns a new test stopwatch
-func NewTestStopwatch() Stopwatch {
-	return &TallyStopwatch{time.Now().UTC(), []tally.Timer{}}
+func (tr *TallyReporter) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
+	return NewClient(tr.scope, serviceIdx), nil
 }
 
-// Stop reports time elapsed since the stopwatch start to the recorder.
-func (sw *TallyStopwatch) Stop() {
-	d := time.Since(sw.start)
-	for _, timer := range sw.timers {
-		timer.Record(d)
-	}
+func (tr *TallyReporter) GetScope() tally.Scope {
+	return tr.scope
+}
+
+func (tr *TallyReporter) Stop(logger log.Logger) {
+	// noop
 }

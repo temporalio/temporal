@@ -9,7 +9,6 @@ require (
 	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7 // indirect
 	github.com/aws/aws-sdk-go v1.36.17
 	github.com/benbjohnson/clock v1.1.0 // indirect
-	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bitly/go-hostpool v0.1.0 // indirect
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cactus/go-statsd-client/statsd v0.0.0-20200423205355-cb0885a1018c
@@ -39,7 +38,6 @@ require (
 	github.com/m3db/prometheus_procfs v0.8.1 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mattn/go-sqlite3 v1.10.0 // indirect
-	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/olekukonko/tablewriter v0.0.4
 	github.com/olivere/elastic v6.2.35+incompatible
 	github.com/olivere/elastic/v7 v7.0.22
@@ -57,6 +55,8 @@ require (
 	github.com/urfave/cli/v2 v2.3.0
 	github.com/valyala/fastjson v1.6.3
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
+	go.opentelemetry.io/otel v0.15.0
+	go.opentelemetry.io/otel/exporters/metric/prometheus v0.15.0
 	go.temporal.io/api v1.4.1-0.20210319015452-3dc250bb642a
 	go.temporal.io/sdk v1.6.0
 	go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193
