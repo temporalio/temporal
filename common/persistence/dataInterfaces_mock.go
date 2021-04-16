@@ -1146,6 +1146,21 @@ func (mr *MockHistoryManagerMockRecorder) ReadRawHistoryBranch(request interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadRawHistoryBranch", reflect.TypeOf((*MockHistoryManager)(nil).ReadRawHistoryBranch), request)
 }
 
+// TrimHistoryBranch mocks base method.
+func (m *MockHistoryManager) TrimHistoryBranch(request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TrimHistoryBranch", request)
+	ret0, _ := ret[0].(*TrimHistoryBranchResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// TrimHistoryBranch indicates an expected call of TrimHistoryBranch.
+func (mr *MockHistoryManagerMockRecorder) TrimHistoryBranch(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TrimHistoryBranch", reflect.TypeOf((*MockHistoryManager)(nil).TrimHistoryBranch), request)
+}
+
 // MockMetadataManager is a mock of MetadataManager interface.
 type MockMetadataManager struct {
 	ctrl     *gomock.Controller

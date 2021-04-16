@@ -770,7 +770,7 @@ func (p *historyV2RateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-// AppendHistoryNodes add(or override) a node to a history branch
+// AppendHistoryNodes add a node to history node table
 func (p *historyV2RateLimitedPersistenceClient) AppendHistoryNodes(request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
@@ -821,6 +821,15 @@ func (p *historyV2RateLimitedPersistenceClient) DeleteHistoryBranch(request *Del
 	}
 	err := p.persistence.DeleteHistoryBranch(request)
 	return err
+}
+
+// TrimHistoryBranch trims a branch
+func (p *historyV2RateLimitedPersistenceClient) TrimHistoryBranch(request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	resp, err := p.persistence.TrimHistoryBranch(request)
+	return resp, err
 }
 
 // GetHistoryTree returns all branch information of a tree

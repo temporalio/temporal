@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"sort"
 
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -42,14 +41,19 @@ import (
 
 const (
 	// below are templates for history_node table
-	v2templateUpsertData = `INSERT INTO history_node (` +
+	v2templateUpsertHistoryNode = `INSERT INTO history_node (` +
 		`tree_id, branch_id, node_id, prev_txn_id, txn_id, data, data_encoding) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?) `
 
-	v2templateReadData = `SELECT node_id, prev_txn_id, txn_id, data, data_encoding FROM history_node ` +
+	v2templateReadHistoryNode = `SELECT node_id, prev_txn_id, txn_id, data, data_encoding FROM history_node ` +
 		`WHERE tree_id = ? AND branch_id = ? AND node_id >= ? AND node_id < ? `
 
-	v2templateRangeDeleteData = `DELETE FROM history_node WHERE tree_id = ? AND branch_id = ? AND node_id >= ? `
+	v2templateReadHistoryNodeMetadata = `SELECT node_id, prev_txn_id, txn_id FROM history_node ` +
+		`WHERE tree_id = ? AND branch_id = ? AND node_id >= ? AND node_id < ? `
+
+	v2templateDeleteHistoryNode = `DELETE FROM history_node WHERE tree_id = ? AND branch_id = ? AND node_id = ? AND txn_id = ? `
+
+	v2templateRangeDeleteHistoryNode = `DELETE FROM history_node WHERE tree_id = ? AND branch_id = ? AND node_id >= ? `
 
 	// below are templates for history_tree table
 	v2templateInsertTree = `INSERT INTO history_tree (` +
@@ -75,7 +79,9 @@ func NewHistoryV2PersistenceFromSession(
 	logger log.Logger,
 ) p.HistoryStore {
 
-	return &cassandraHistoryV2Persistence{cassandraStore: cassandraStore{session: session, logger: logger}}
+	return &cassandraHistoryV2Persistence{
+		cassandraStore: cassandraStore{session: session, logger: logger},
+	}
 }
 
 // newHistoryPersistence is used to create an instance of HistoryManager implementation
@@ -91,30 +97,30 @@ func newHistoryPersistence(
 	}, nil
 }
 
-// AppendHistoryNodes upsert a batch of events as a single node to a history branch
+// AppendHistoryNode upsert a batch of events as a single node to a history branch
 // Note that it's not allowed to append above the branch's ancestors' nodes, which means nodeID >= ForkNodeID
 func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
 
 	branchInfo := request.BranchInfo
-	beginNodeID := p.GetBeginNodeID(branchInfo)
+	node := request.Node
 
-	if request.NodeID < beginNodeID {
+	if node.NodeID < p.GetBeginNodeID(branchInfo) {
 		return &p.InvalidPersistenceRequestError{
 			Msg: fmt.Sprintf("cannot append to ancestors' nodes"),
 		}
 	}
 
 	if !request.IsNewBranch {
-		query := h.session.Query(v2templateUpsertData,
+		query := h.session.Query(v2templateUpsertHistoryNode,
 			branchInfo.TreeId,
 			branchInfo.BranchId,
-			request.NodeID,
-			request.PrevTransactionID,
-			request.TransactionID,
-			request.Events.Data,
-			request.Events.EncodingType.String(),
+			node.NodeID,
+			node.PrevTransactionID,
+			node.TransactionID,
+			node.Events.Data,
+			node.Events.EncodingType.String(),
 		)
 		if err := query.Exec(); err != nil {
 			return gocql.ConvertError("AppendHistoryNodes", err)
@@ -141,17 +147,45 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 		treeInfoDataBlob.Data,
 		treeInfoDataBlob.EncodingType.String(),
 	)
-	batch.Query(v2templateUpsertData,
+	batch.Query(v2templateUpsertHistoryNode,
 		branchInfo.TreeId,
 		branchInfo.BranchId,
-		request.NodeID,
-		request.PrevTransactionID,
-		request.TransactionID,
-		request.Events.Data,
-		request.Events.EncodingType.String(),
+		node.NodeID,
+		node.PrevTransactionID,
+		node.TransactionID,
+		node.Events.Data,
+		node.Events.EncodingType.String(),
 	)
 	if err = h.session.ExecuteBatch(batch); err != nil {
 		return gocql.ConvertError("AppendHistoryNodes", err)
+	}
+	return nil
+}
+
+// DeleteHistoryNode delete a history node
+func (h *cassandraHistoryV2Persistence) DeleteHistoryNodes(
+	request *p.InternalDeleteHistoryNodesRequest,
+) error {
+	branchInfo := request.BranchInfo
+	treeID := branchInfo.TreeId
+	branchID := branchInfo.BranchId
+	nodeID := request.NodeID
+	txnID := request.TransactionID
+
+	if nodeID < p.GetBeginNodeID(branchInfo) {
+		return &p.InvalidPersistenceRequestError{
+			Msg: fmt.Sprintf("cannot delete from ancestors' nodes"),
+		}
+	}
+
+	query := h.session.Query(v2templateDeleteHistoryNode,
+		treeID,
+		branchID,
+		nodeID,
+		txnID,
+	)
+	if err := query.Exec(); err != nil {
+		return gocql.ConvertError("DeleteHistoryNodes", err)
 	}
 	return nil
 }
@@ -172,51 +206,22 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch - Gocql BranchId UUID cast failed. Error: %v", err))
 	}
 
-	lastNodeID := request.LastNodeID
-	lastTxnID := request.LastTransactionID
-
-	query := h.session.Query(v2templateReadData, treeID, branchID, request.MinNodeID, request.MaxNodeID)
+	var queryString string
+	if request.MetadataOnly {
+		queryString = v2templateReadHistoryNodeMetadata
+	} else {
+		queryString = v2templateReadHistoryNode
+	}
+	query := h.session.Query(queryString, treeID, branchID, request.MinNodeID, request.MaxNodeID)
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	pagingToken := iter.PageState()
 
-	history := make([]*commonpb.DataBlob, 0, request.PageSize)
-
-	for {
-		var data []byte
-		var encoding string
-		nodeID := int64(0)
-		prevTxnID := int64(0)
-		txnID := int64(0)
-		if !iter.Scan(&nodeID, &prevTxnID, &txnID, &data, &encoding) {
-			break
-		}
-		if txnID < lastTxnID {
-			// assuming that business logic layer is correct and transaction ID only increase
-			// thus, valid event batch will come with increasing transaction ID
-
-			// event batches with smaller node ID
-			//  -> should not be possible since records are already sorted
-			// event batches with same node ID
-			//  -> batch with higher transaction ID is valid
-			// event batches with larger node ID
-			//  -> batch with lower transaction ID is invalid (happens before)
-			//  -> batch with higher transaction ID is valid
-			continue
-		}
-
-		switch {
-		case nodeID < lastNodeID:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("corrupted data, nodeID cannot decrease"))
-		case nodeID == lastNodeID:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("corrupted data, same nodeID must have smaller txnID"))
-		default: // row.NodeID > lastNodeID:
-			// NOTE: when row.nodeID > lastNodeID, we expect the one with largest txnID comes first
-			lastTxnID = txnID
-			lastNodeID = nodeID
-			eventBlob := p.NewDataBlob(data, encoding)
-			history = append(history, eventBlob)
-		}
+	nodes := make([]p.InternalHistoryNode, 0, request.PageSize)
+	message := make(map[string]interface{})
+	for iter.MapScan(message) {
+		nodes = append(nodes, convertHistoryNode(message))
+		message = make(map[string]interface{})
 	}
 
 	if err := iter.Close(); err != nil {
@@ -224,10 +229,8 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 	}
 
 	return &p.InternalReadHistoryBranchResponse{
-		History:           history,
-		NextPageToken:     pagingToken,
-		LastNodeID:        lastNodeID,
-		LastTransactionID: lastTxnID,
+		Nodes:         nodes,
+		NextPageToken: pagingToken,
 	}, nil
 }
 
@@ -406,7 +409,7 @@ func (h *cassandraHistoryV2Persistence) deleteBranchRangeNodes(
 	beginNodeID int64,
 ) {
 
-	batch.Query(v2templateRangeDeleteData,
+	batch.Query(v2templateRangeDeleteHistoryNode,
 		treeID,
 		branchID,
 		beginNodeID)
@@ -520,5 +523,26 @@ func (h *cassandraHistoryV2Persistence) sortAncestors(
 		for i := 1; i < len(ans); i++ {
 			(ans)[i].BeginNodeId = (ans)[i-1].GetEndNodeId()
 		}
+	}
+}
+
+func convertHistoryNode(
+	message map[string]interface{},
+) p.InternalHistoryNode {
+	nodeID := message["node_id"].(int64)
+	prevTxnID := message["prev_txn_id"].(int64)
+	txnID := message["txn_id"].(int64)
+
+	var data []byte
+	var dataEncoding string
+	if _, ok := message["data"]; ok {
+		data = message["data"].([]byte)
+		dataEncoding = message["data_encoding"].(string)
+	}
+	return p.InternalHistoryNode{
+		NodeID:            nodeID,
+		PrevTransactionID: prevTxnID,
+		TransactionID:     txnID,
+		Events:            p.NewDataBlob(data, dataEncoding),
 	}
 }

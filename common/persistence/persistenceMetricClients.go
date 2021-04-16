@@ -1180,7 +1180,7 @@ func (p *historyV2PersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-// AppendHistoryNodes add(or override) a node to a history branch
+// AppendHistoryNodes add a node to history node table
 func (p *historyV2PersistenceClient) AppendHistoryNodes(request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceAppendHistoryNodesScope, metrics.PersistenceRequests)
 	sw := p.metricClient.StartTimer(metrics.PersistenceAppendHistoryNodesScope, metrics.PersistenceLatency)
@@ -1250,6 +1250,18 @@ func (p *historyV2PersistenceClient) DeleteHistoryBranch(request *DeleteHistoryB
 		p.updateErrorMetric(metrics.PersistenceDeleteHistoryBranchScope, err)
 	}
 	return err
+}
+
+// TrimHistoryBranch trims a branch
+func (p *historyV2PersistenceClient) TrimHistoryBranch(request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceTrimHistoryBranchScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceTrimHistoryBranchScope, metrics.PersistenceLatency)
+	resp, err := p.persistence.TrimHistoryBranch(request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceTrimHistoryBranchScope, err)
+	}
+	return resp, err
 }
 
 func (p *historyV2PersistenceClient) GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error) {

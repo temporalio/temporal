@@ -690,7 +690,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 	activityType2 := "activity type 2"
 	timerTimeout2 := 20 * time.Second
 	scheduledEvent2, _ := addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID2, activityType2, taskqueue, nil,
-		timerTimeout2, timerTimeout2, timerTimeout2, timerTimeout2)
+		timerTimeout2, timerTimeout2, timerTimeout2, 10*time.Second)
 	addActivityTaskStartedEvent(mutableState, scheduledEvent2.GetEventId(), identity)
 	activityInfo2 := mutableState.pendingActivityInfoIDs[scheduledEvent2.GetEventId()]
 	activityInfo2.TimerTaskStatus |= timerTaskStatusCreatedHeartbeat
@@ -729,9 +729,9 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 			mutableState.executionInfo.LastUpdateTime = input.UpdateWorkflowMutation.ExecutionInfo.LastUpdateTime
 			input.RangeID = 0
 			input.UpdateWorkflowMutation.ExecutionInfo.LastEventTaskId = 0
-			input.UpdateWorkflowMutation.ExecutionInfo.LastHistoryNodeTxnId = 0
+			input.UpdateWorkflowMutation.ExecutionInfo.LastFirstEventTxnId = 0
 			mutableState.executionInfo.LastEventTaskId = 0
-			mutableState.executionInfo.LastHistoryNodeTxnId = 0
+			mutableState.executionInfo.LastFirstEventTxnId = 0
 			mutableState.executionInfo.WorkflowTaskOriginalScheduledTime = input.UpdateWorkflowMutation.ExecutionInfo.WorkflowTaskOriginalScheduledTime
 			mutableState.executionInfo.ExecutionStats = &persistencespb.ExecutionStats{}
 

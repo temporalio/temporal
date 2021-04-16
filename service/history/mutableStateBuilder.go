@@ -185,6 +185,7 @@ func newMutableStateBuilder(
 	eventsCache events.Cache,
 	logger log.Logger,
 	namespaceEntry *cache.NamespaceCacheEntry,
+	startTime time.Time,
 ) *mutableStateBuilder {
 	s := &mutableStateBuilder{
 		updateActivityInfos:            make(map[int64]*persistencespb.ActivityInfo),
@@ -242,6 +243,9 @@ func newMutableStateBuilder(
 		WorkflowTaskAttempt:    1,
 
 		LastProcessedEvent: common.EmptyEventID,
+
+		StartTime:        timestamp.TimePtr(startTime),
+		VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
 	}
 	s.executionState = &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
@@ -259,20 +263,71 @@ func newMutableStateBuilder(
 	return s
 }
 
-func newMutableStateBuilderWithVersionHistories(
+func newMutableStateBuilderFromDB(
 	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
 	namespaceEntry *cache.NamespaceCacheEntry,
-	startTime time.Time,
+	dbRecord *persistencespb.WorkflowMutableState,
+	dbRecordVersion int64,
 ) *mutableStateBuilder {
 
-	s := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry)
-	// start time should be set for workflow timeout calculation
-	// NOTE: workflow reset case, this start time is the reset time
-	s.executionInfo.StartTime = timestamp.TimePtr(startTime)
-	s.executionInfo.VersionHistories = versionhistory.NewVersionHistories(&historyspb.VersionHistory{})
-	return s
+	// startTime will be overridden by DB record
+	startTime := time.Time{}
+	mutableState := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry, startTime)
+
+	mutableState.pendingActivityInfoIDs = dbRecord.ActivityInfos
+	for _, activityInfo := range dbRecord.ActivityInfos {
+		mutableState.pendingActivityIDToEventID[activityInfo.ActivityId] = activityInfo.ScheduleId
+		if (activityInfo.TimerTaskStatus & timerTaskStatusCreatedHeartbeat) > 0 {
+			// Sets last pending timer heartbeat to year 2000.
+			// This ensures at least one heartbeat task will be processed for the pending activity.
+			mutableState.pendingActivityTimerHeartbeats[activityInfo.ScheduleId] = time.Unix(946684800, 0)
+		}
+	}
+	mutableState.pendingTimerInfoIDs = dbRecord.TimerInfos
+	for _, timerInfo := range dbRecord.TimerInfos {
+		mutableState.pendingTimerEventIDToID[timerInfo.GetStartedId()] = timerInfo.GetTimerId()
+	}
+	mutableState.pendingChildExecutionInfoIDs = dbRecord.ChildExecutionInfos
+	mutableState.pendingRequestCancelInfoIDs = dbRecord.RequestCancelInfos
+	mutableState.pendingSignalInfoIDs = dbRecord.SignalInfos
+	mutableState.pendingSignalRequestedIDs = convert.StringSliceToSet(dbRecord.SignalRequestedIds)
+	mutableState.executionInfo = dbRecord.ExecutionInfo
+	mutableState.executionState = dbRecord.ExecutionState
+
+	mutableState.hBuilder = mutablestate.NewMutableHistoryBuilder(
+		mutableState.timeSource,
+		mutableState.shard.GenerateTransferTaskIDs,
+		common.EmptyVersion,
+		dbRecord.NextEventId,
+		dbRecord.BufferedEvents,
+	)
+
+	mutableState.currentVersion = common.EmptyVersion
+	mutableState.bufferEventsInDB = dbRecord.BufferedEvents
+	mutableState.stateInDB = dbRecord.ExecutionState.State
+	mutableState.nextEventIDInDB = dbRecord.NextEventId
+	mutableState.dbRecordVersion = dbRecordVersion
+	mutableState.checksum = dbRecord.Checksum
+
+	if len(dbRecord.Checksum.GetValue()) > 0 {
+		switch {
+		case mutableState.shouldInvalidateCheckum():
+			mutableState.checksum = nil
+			mutableState.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.MutableStateChecksumInvalidated)
+		case mutableState.shouldVerifyChecksum():
+			if err := verifyMutableStateChecksum(mutableState, dbRecord.Checksum); err != nil {
+				// we ignore checksum verification errors for now until this
+				// feature is tested and/or we have mechanisms in place to deal
+				// with these types of errors
+				mutableState.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.MutableStateChecksumMismatch)
+				mutableState.logError("mutable state checksum mismatch", tag.Error(err))
+			}
+		}
+	}
+
+	return mutableState
 }
 
 func (e *mutableStateBuilder) CloneToProto() *persistencespb.WorkflowMutableState {
@@ -291,65 +346,6 @@ func (e *mutableStateBuilder) CloneToProto() *persistencespb.WorkflowMutableStat
 	}
 
 	return proto.Clone(ms).(*persistencespb.WorkflowMutableState)
-}
-
-// TODO unify Load and StartTransaction
-func (e *mutableStateBuilder) Load(
-	state *persistencespb.WorkflowMutableState,
-	dbRecordVersion int64,
-) error {
-
-	e.pendingActivityInfoIDs = state.ActivityInfos
-	for _, activityInfo := range state.ActivityInfos {
-		e.pendingActivityIDToEventID[activityInfo.ActivityId] = activityInfo.ScheduleId
-		if (activityInfo.TimerTaskStatus & timerTaskStatusCreatedHeartbeat) > 0 {
-			// Sets last pending timer heartbeat to year 2000.
-			// This ensures at least one heartbeat task will be processed for the pending activity.
-			e.pendingActivityTimerHeartbeats[activityInfo.ScheduleId] = time.Unix(946684800, 0)
-		}
-	}
-	e.pendingTimerInfoIDs = state.TimerInfos
-	for _, timerInfo := range state.TimerInfos {
-		e.pendingTimerEventIDToID[timerInfo.GetStartedId()] = timerInfo.GetTimerId()
-	}
-	e.pendingChildExecutionInfoIDs = state.ChildExecutionInfos
-	e.pendingRequestCancelInfoIDs = state.RequestCancelInfos
-	e.pendingSignalInfoIDs = state.SignalInfos
-	e.pendingSignalRequestedIDs = convert.StringSliceToSet(state.SignalRequestedIds)
-	e.executionInfo = state.ExecutionInfo
-	e.executionState = state.ExecutionState
-
-	e.hBuilder = mutablestate.NewMutableHistoryBuilder(
-		e.timeSource,
-		e.shard.GenerateTransferTaskIDs,
-		common.EmptyVersion,
-		state.NextEventId,
-		state.BufferedEvents,
-	)
-
-	e.currentVersion = common.EmptyVersion
-	e.bufferEventsInDB = state.BufferedEvents
-	e.stateInDB = state.ExecutionState.State
-	e.nextEventIDInDB = state.NextEventId
-	e.dbRecordVersion = dbRecordVersion
-	e.checksum = state.Checksum
-
-	if len(state.Checksum.GetValue()) > 0 {
-		switch {
-		case e.shouldInvalidateCheckum():
-			e.checksum = nil
-			e.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.MutableStateChecksumInvalidated)
-		case e.shouldVerifyChecksum():
-			if err := verifyMutableStateChecksum(e, state.Checksum); err != nil {
-				// we ignore checksum verification errors for now until this
-				// feature is tested and/or we have mechanisms in place to deal
-				// with these types of errors
-				e.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.MutableStateChecksumMismatch)
-				e.logError("mutable state checksum mismatch", tag.Error(err))
-			}
-		}
-	}
-	return nil
 }
 
 func (e *mutableStateBuilder) GetCurrentBranchToken() ([]byte, error) {
@@ -771,6 +767,7 @@ func (e *mutableStateBuilder) DeletePendingChildExecution(
 		e.logDataInconsistency()
 	}
 
+	delete(e.updateChildExecutionInfos, initiatedEventID)
 	e.deleteChildExecutionInfos[initiatedEventID] = struct{}{}
 	return nil
 }
@@ -791,6 +788,7 @@ func (e *mutableStateBuilder) DeletePendingRequestCancel(
 		e.logDataInconsistency()
 	}
 
+	delete(e.updateRequestCancelInfos, initiatedEventID)
 	e.deleteRequestCancelInfos[initiatedEventID] = struct{}{}
 	return nil
 }
@@ -811,6 +809,7 @@ func (e *mutableStateBuilder) DeletePendingSignal(
 		e.logDataInconsistency()
 	}
 
+	delete(e.updateSignalInfos, initiatedEventID)
 	e.deleteSignalInfos[initiatedEventID] = struct{}{}
 	return nil
 }
@@ -945,6 +944,7 @@ func (e *mutableStateBuilder) DeleteActivity(
 		e.logDataInconsistency()
 	}
 
+	delete(e.updateActivityInfos, scheduleEventID)
 	e.deleteActivityInfos[scheduleEventID] = struct{}{}
 	return nil
 }
@@ -1024,6 +1024,7 @@ func (e *mutableStateBuilder) DeleteUserTimer(
 		e.logDataInconsistency()
 	}
 
+	delete(e.updateTimerInfos, timerID)
 	e.deleteTimerInfos[timerID] = struct{}{}
 	return nil
 }
@@ -1128,10 +1129,10 @@ func (e *mutableStateBuilder) ClearStickyness() {
 	e.executionInfo.StickyScheduleToStartTimeout = timestamp.DurationFromSeconds(0)
 }
 
-// GetLastFirstEventID returns last first event ID
+// GetLastFirstEventIDTxnID returns last first event ID and corresponding transaction ID
 // first event ID is the ID of a batch of events in a single history events record
-func (e *mutableStateBuilder) GetLastFirstEventID() int64 {
-	return e.executionInfo.LastFirstEventId
+func (e *mutableStateBuilder) GetLastFirstEventIDTxnID() (int64, int64) {
+	return e.executionInfo.LastFirstEventId, e.executionInfo.LastFirstEventTxnId
 }
 
 // GetNextEventID returns next event ID
@@ -1194,6 +1195,7 @@ func (e *mutableStateBuilder) DeleteSignalRequested(
 ) {
 
 	delete(e.pendingSignalRequestedIDs, requestID)
+	delete(e.updateSignalRequestedIDs, requestID)
 	e.deleteSignalRequestedIDs[requestID] = struct{}{}
 }
 
@@ -1524,13 +1526,14 @@ func (e *mutableStateBuilder) ReplicateWorkflowTaskScheduledEvent(
 func (e *mutableStateBuilder) AddWorkflowTaskStartedEvent(
 	scheduleEventID int64,
 	requestID string,
-	request *workflowservice.PollWorkflowTaskQueueRequest,
+	taskQueue *taskqueuepb.TaskQueue,
+	identity string,
 ) (*historypb.HistoryEvent, *workflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	return e.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduleEventID, requestID, request)
+	return e.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduleEventID, requestID, taskQueue, identity)
 }
 
 func (e *mutableStateBuilder) ReplicateWorkflowTaskStartedEvent(
@@ -2983,7 +2986,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 	namespaceID := e.namespaceEntry.GetInfo().Id
 	var newStateBuilder *mutableStateBuilder
 
-	newStateBuilder = newMutableStateBuilderWithVersionHistories(
+	newStateBuilder = newMutableStateBuilder(
 		e.shard,
 		e.shard.GetEventsCache(),
 		e.logger,
@@ -3614,9 +3617,7 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 
 	if len(workflowEventsSeq) > 0 {
 		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
-		firstEvent := lastEvents[0]
 		lastEvent := lastEvents[len(lastEvents)-1]
-		e.updateWithLastFirstEvent(firstEvent)
 		if err := e.updateWithLastWriteEvent(
 			lastEvent,
 			transactionPolicy,
@@ -3697,9 +3698,6 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 		return nil, nil, err
 	}
 
-	if len(workflowEventsSeq) > 1 {
-		return nil, nil, serviceerror.NewInternal("cannot generate workflow snapshot with transient events")
-	}
 	if len(bufferEvents) > 0 {
 		// TODO do we need the functionality to generate snapshot with buffered events?
 		return nil, nil, serviceerror.NewInternal("cannot generate workflow snapshot with buffered events")
@@ -3707,9 +3705,7 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 
 	if len(workflowEventsSeq) > 0 {
 		lastEvents := workflowEventsSeq[len(workflowEventsSeq)-1].Events
-		firstEvent := lastEvents[0]
 		lastEvent := lastEvents[len(lastEvents)-1]
-		e.updateWithLastFirstEvent(firstEvent)
 		if err := e.updateWithLastWriteEvent(
 			lastEvent,
 			transactionPolicy,
@@ -3884,12 +3880,13 @@ func (e *mutableStateBuilder) prepareEventsAndReplicationTasks(
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
 			BranchToken: currentBranchToken,
-			PrevTxnID:   e.executionInfo.LastHistoryNodeTxnId,
+			PrevTxnID:   e.executionInfo.LastFirstEventTxnId,
 			TxnID:       historyNodeTxnIDs[index],
 			Events:      eventBatch,
 		}
 		e.GetExecutionInfo().LastEventTaskId = eventBatch[len(eventBatch)-1].GetTaskId()
-		e.executionInfo.LastHistoryNodeTxnId = historyNodeTxnIDs[index]
+		e.executionInfo.LastFirstEventId = eventBatch[0].GetEventId()
+		e.executionInfo.LastFirstEventTxnId = historyNodeTxnIDs[index]
 	}
 
 	if err := e.validateNoEventsAfterWorkflowFinish(
@@ -4019,12 +4016,6 @@ func (e *mutableStateBuilder) updateWithLastWriteEvent(
 		}
 	}
 	return nil
-}
-
-func (e *mutableStateBuilder) updateWithLastFirstEvent(
-	lastFirstEvent *historypb.HistoryEvent,
-) {
-	e.GetExecutionInfo().LastFirstEventId = lastFirstEvent.GetEventId()
 }
 
 func (e *mutableStateBuilder) canReplicateEvents() bool {

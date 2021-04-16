@@ -517,6 +517,6 @@ func TearDownPostgreSQLDatabase(cfg *config.SQL) {
 
 	err = db.DropDatabase(cfg.DatabaseName)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create PostgreSQL database: %v", err))
+		panic(fmt.Sprintf("unable to drop PostgreSQL database: %v", err))
 	}
 }

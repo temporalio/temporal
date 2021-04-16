@@ -511,7 +511,7 @@ func fetchAndVerifyHistoryExists(
 			Details:     err.Error(),
 		})
 		return VerificationResultCheckFailure, nil, nil
-	} else if history == nil || len(history.History) == 0 {
+	} else if history == nil || len(history.Nodes) == 0 {
 		corruptedExecutionWriter.Add(&CorruptedExecution{
 			ShardID:     shardID,
 			NamespaceID: executionInfo.NamespaceId,
@@ -542,7 +542,7 @@ func verifyFirstHistoryEvent(
 	payloadSerializer persistence.PayloadSerializer,
 	history *persistence.InternalReadHistoryBranchResponse,
 ) VerificationResult {
-	firstBatch, err := payloadSerializer.DeserializeEvents(history.History[0])
+	firstBatch, err := payloadSerializer.DeserializeEvents(history.Nodes[0].Events)
 	if err != nil || len(firstBatch) == 0 {
 		checkFailureWriter.Add(&ExecutionCheckFailure{
 			ShardID:     shardID,

@@ -181,7 +181,7 @@ func newNDCHistoryReplicator(
 			startTime time.Time,
 			logger log.Logger,
 		) mutableState {
-			return newMutableStateBuilderWithVersionHistories(
+			return newMutableStateBuilder(
 				shard,
 				shard.GetEventsCache(),
 				logger,

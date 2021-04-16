@@ -80,7 +80,9 @@ func AdminShowWorkflow(c *cli.Context) {
 			ErrorAndExit("ReadHistoryBranch err", err)
 		}
 
-		history = resp.History
+		for _, node := range resp.Nodes {
+			history = append(history, node.Events)
+		}
 	} else {
 		ErrorAndExit("need to specify TreeId/BranchId/ShardId", nil)
 	}

@@ -218,8 +218,15 @@ func (s *cliAppSuite) TestNamespaceUpdate_Failed() {
 
 func (s *cliAppSuite) TestNamespaceDescribe() {
 	resp := describeNamespaceResponseServer
-	s.frontendClient.EXPECT().DescribeNamespace(gomock.Any(), gomock.Any()).Return(resp, nil)
+	s.frontendClient.EXPECT().DescribeNamespace(gomock.Any(), &workflowservice.DescribeNamespaceRequest{Namespace: cliTestNamespace, Id: ""}).Return(resp, nil)
 	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "namespace", "describe"})
+	s.Nil(err)
+}
+
+func (s *cliAppSuite) TestNamespaceDescribe_ById() {
+	resp := describeNamespaceResponseServer
+	s.frontendClient.EXPECT().DescribeNamespace(gomock.Any(), &workflowservice.DescribeNamespaceRequest{Namespace: "", Id: "nid"}).Return(resp, nil)
+	err := s.app.Run([]string{"", "namespace", "describe", "--namespace_id", "nid"})
 	s.Nil(err)
 }
 
@@ -239,24 +246,6 @@ func (s *cliAppSuite) TestNamespaceDescribe_Failed() {
 
 var (
 	eventType = enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED
-
-	getWorkflowExecutionHistoryResponse = &workflowservice.GetWorkflowExecutionHistoryResponse{
-		History: &historypb.History{
-			Events: []*historypb.HistoryEvent{
-				{
-					EventType: eventType,
-					Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-						WorkflowType:        &commonpb.WorkflowType{Name: "TestWorkflow"},
-						TaskQueue:           &taskqueuepb.TaskQueue{Name: "taskQueue"},
-						WorkflowRunTimeout:  timestamp.DurationPtr(60 * time.Second),
-						WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
-						Identity:            "tester",
-					}},
-				},
-			},
-		},
-		NextPageToken: nil,
-	}
 )
 
 func (s *cliAppSuite) TestShowHistory() {

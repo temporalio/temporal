@@ -810,9 +810,7 @@ func createTransferTasks(
 			info.ScheduleId = task.(*p.StartChildExecutionTask).InitiatedID
 
 		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
-			enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
-			enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW,
-			enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+			enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 			// No explicit property needs to be set
 
 		default:
@@ -968,7 +966,6 @@ func createTimerTasks(
 			info.ScheduleAttempt = t.Attempt
 
 		case *p.WorkflowBackoffTimerTask:
-			info.EventId = t.EventID
 			info.WorkflowBackoffType = t.WorkflowBackoffType
 
 		case *p.WorkflowTimeoutTask:

@@ -30,7 +30,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -42,7 +41,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -151,104 +149,6 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	return err
 }
 
-func (t *transferQueueTaskExecutorBase) recordWorkflowStarted(
-	namespaceID string,
-	workflowID string,
-	runID string,
-	workflowTypeName string,
-	startTimeUnixNano int64,
-	executionTimeUnixNano int64,
-	runTimeout *time.Duration,
-	taskID int64,
-	taskQueue string,
-	visibilityMemo *commonpb.Memo,
-	searchAttributes *commonpb.SearchAttributes,
-) error {
-
-	namespace := defaultNamespace
-
-	if namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID); err != nil {
-		if _, ok := err.(*serviceerror.NotFound); !ok {
-			return err
-		}
-	} else {
-		namespace = namespaceEntry.GetInfo().Name
-		// if sampled for longer retention is enabled, only record those sampled events
-		if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
-			!namespaceEntry.IsSampledForLongerRetention(workflowID) {
-			return nil
-		}
-	}
-
-	request := &persistence.RecordWorkflowExecutionStartedRequest{
-		VisibilityRequestBase: &persistence.VisibilityRequestBase{
-			NamespaceID: namespaceID,
-			Namespace:   namespace,
-			Execution: commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      runID,
-			},
-			WorkflowTypeName:   workflowTypeName,
-			StartTimestamp:     startTimeUnixNano,
-			ExecutionTimestamp: executionTimeUnixNano,
-			TaskID:             taskID,
-			Memo:               visibilityMemo,
-			TaskQueue:          taskQueue,
-			SearchAttributes:   searchAttributes,
-		},
-		RunTimeout: int64(timestamp.DurationValue(runTimeout).Round(time.Second).Seconds()),
-	}
-	return t.visibilityMgr.RecordWorkflowExecutionStarted(request)
-}
-
-func (t *transferQueueTaskExecutorBase) upsertWorkflowExecution(
-	namespaceID string,
-	workflowID string,
-	runID string,
-	workflowTypeName string,
-	startTimeUnixNano int64,
-	executionTimeUnixNano int64,
-	workflowTimeout *time.Duration,
-	taskID int64,
-	status enumspb.WorkflowExecutionStatus,
-	taskQueue string,
-	visibilityMemo *commonpb.Memo,
-	searchAttributes *commonpb.SearchAttributes,
-) error {
-
-	namespace := defaultNamespace
-	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
-	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); !ok {
-			return err
-		}
-	} else {
-		namespace = namespaceEntry.GetInfo().Name
-	}
-
-	request := &persistence.UpsertWorkflowExecutionRequest{
-		VisibilityRequestBase: &persistence.VisibilityRequestBase{
-			NamespaceID: namespaceID,
-			Namespace:   namespace,
-			Execution: commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      runID,
-			},
-			WorkflowTypeName:   workflowTypeName,
-			StartTimestamp:     startTimeUnixNano,
-			ExecutionTimestamp: executionTimeUnixNano,
-			TaskID:             taskID,
-			Status:             status,
-			Memo:               visibilityMemo,
-			TaskQueue:          taskQueue,
-			SearchAttributes:   searchAttributes,
-		},
-		WorkflowTimeout: int64(timestamp.DurationValue(workflowTimeout).Round(time.Second).Seconds()),
-	}
-
-	return t.visibilityMgr.UpsertWorkflowExecution(request)
-}
-
 func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	namespaceID string,
 	workflowID string,
@@ -265,61 +165,52 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
-	// Record closing in visibility store
-	namespace := defaultNamespace
-	archiveVisibility := false
-
 	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
-	if err != nil && !isWorkflowNotExistError(err) {
+	if err != nil {
 		return err
 	}
 
-	if err == nil {
-		clusterConfiguredForVisibilityArchival := t.shard.GetService().GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
-		namespaceConfiguredForVisibilityArchival := namespaceEntry.GetConfig().VisibilityArchivalState == enumspb.ARCHIVAL_STATE_ENABLED
-		archiveVisibility = clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
+	clusterConfiguredForVisibilityArchival := t.shard.GetService().GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
+	namespaceConfiguredForVisibilityArchival := namespaceEntry.GetConfig().VisibilityArchivalState == enumspb.ARCHIVAL_STATE_ENABLED
+	archiveVisibility := clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
+
+	if !archiveVisibility {
+		return nil
 	}
 
-	if archiveVisibility {
-		ctx, cancel := context.WithTimeout(context.Background(), t.config.TransferProcessorVisibilityArchivalTimeLimit())
-		defer cancel()
+	ctx, cancel := context.WithTimeout(context.Background(), t.config.TransferProcessorVisibilityArchivalTimeLimit())
+	defer cancel()
 
-		saTypeMap, err := searchattribute.BuildTypeMap(t.config.ValidSearchAttributes)
-		if err != nil {
-			return err
-		}
-
-		// Setting search attributes types here because archival client needs to stringify them
-		// and it might not have access to type map (i.e. type needs to be embedded).
-		searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
-
-		_, err = t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
-			ArchiveRequest: &archiver.ArchiveRequest{
-				NamespaceID:      namespaceID,
-				Namespace:        namespace,
-				WorkflowID:       workflowID,
-				RunID:            runID,
-				WorkflowTypeName: workflowTypeName,
-				StartTime:        startTime,
-				ExecutionTime:    executionTime,
-				CloseTime:        endTime,
-				Status:           status,
-				HistoryLength:    historyLength,
-				Memo:             visibilityMemo,
-				SearchAttributes: searchAttributes,
-				VisibilityURI:    namespaceEntry.GetConfig().VisibilityArchivalUri,
-				HistoryURI:       namespaceEntry.GetConfig().HistoryArchivalUri,
-				Targets:          []archiver.ArchivalTarget{archiver.ArchiveTargetVisibility},
-			},
-			CallerService:        common.HistoryServiceName,
-			AttemptArchiveInline: true, // archive visibility inline by default
-		})
+	saTypeMap, err := searchattribute.BuildTypeMap(t.config.ValidSearchAttributes)
+	if err != nil {
 		return err
 	}
-	return nil
-}
 
-func isWorkflowNotExistError(err error) bool {
-	_, ok := err.(*serviceerror.NotFound)
-	return ok
+	// Setting search attributes types here because archival client needs to stringify them
+	// and it might not have access to type map (i.e. type needs to be embedded).
+	searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
+
+	_, err = t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
+		ArchiveRequest: &archiver.ArchiveRequest{
+			NamespaceID:      namespaceID,
+			Namespace:        namespaceEntry.GetInfo().Name,
+			WorkflowID:       workflowID,
+			RunID:            runID,
+			WorkflowTypeName: workflowTypeName,
+			StartTime:        startTime,
+			ExecutionTime:    executionTime,
+			CloseTime:        endTime,
+			Status:           status,
+			HistoryLength:    historyLength,
+			Memo:             visibilityMemo,
+			SearchAttributes: searchAttributes,
+			VisibilityURI:    namespaceEntry.GetConfig().VisibilityArchivalUri,
+			HistoryURI:       namespaceEntry.GetConfig().HistoryArchivalUri,
+			Targets:          []archiver.ArchivalTarget{archiver.ArchiveTargetVisibility},
+		},
+		CallerService:        common.HistoryServiceName,
+		AttemptArchiveInline: true, // archive visibility inline by default
+	})
+
+	return err
 }

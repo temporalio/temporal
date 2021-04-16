@@ -245,16 +245,14 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 			return nil, err
 		}
 
-		c.mutableState = newMutableStateBuilder(
+		c.mutableState = newMutableStateBuilderFromDB(
 			c.shard,
 			c.shard.GetEventsCache(),
 			c.logger,
 			namespaceEntry,
+			response.State,
+			response.DBRecordVersion,
 		)
-
-		if err := c.mutableState.Load(response.State, response.DBRecordVersion); err != nil {
-			return nil, err
-		}
 
 		c.stats = response.State.ExecutionInfo.ExecutionStats
 		if c.stats == nil {
@@ -327,16 +325,14 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 			return nil, err
 		}
 
-		c.mutableState = newMutableStateBuilder(
+		c.mutableState = newMutableStateBuilderFromDB(
 			c.shard,
 			c.shard.GetEventsCache(),
 			c.logger,
 			namespaceEntry,
+			response.State,
+			response.DBRecordVersion,
 		)
-
-		if err := c.mutableState.Load(response.State, response.DBRecordVersion); err != nil {
-			return nil, err
-		}
 
 		c.stats = response.State.ExecutionInfo.ExecutionStats
 		if c.stats == nil {
@@ -481,12 +477,13 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 			return err
 		}
 		newWorkflowSizeSize := newContext.getHistorySize()
-		startEvents := newWorkflowEventsSeq[0]
-		eventsSize, err := c.persistNewWorkflowEvents(startEvents)
-		if err != nil {
-			return err
+		for _, workflowEvents := range newWorkflowEventsSeq {
+			eventsSize, err := c.persistNewWorkflowEvents(workflowEvents)
+			if err != nil {
+				return err
+			}
+			newWorkflowSizeSize += eventsSize
 		}
-		newWorkflowSizeSize += eventsSize
 		newContext.setHistorySize(newWorkflowSizeSize)
 		newWorkflow.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
 			HistorySize: newWorkflowSizeSize,
@@ -555,10 +552,12 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 
 	workflowState, workflowStatus := resetMutableState.GetWorkflowStateStatus()
 	// Current branch changed and notify the watchers
+	lastFirstEventID, lastFirstEventTxnID := resetMutableState.GetLastFirstEventIDTxnID()
 	c.engine.NotifyNewHistoryEvent(events.NewNotification(
 		c.namespaceID,
 		&c.workflowExecution,
-		resetMutableState.GetLastFirstEventID(),
+		lastFirstEventID,
+		lastFirstEventTxnID,
 		resetMutableState.GetNextEventID(),
 		resetMutableState.GetPreviousStartedEventID(),
 		currentBranchToken,
@@ -723,12 +722,13 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 			return err
 		}
 		newWorkflowSizeSize := newContext.getHistorySize()
-		startEvents := newWorkflowEventsSeq[0]
-		eventsSize, err := c.persistNewWorkflowEvents(startEvents)
-		if err != nil {
-			return err
+		for _, workflowEvents := range newWorkflowEventsSeq {
+			eventsSize, err := c.persistNewWorkflowEvents(workflowEvents)
+			if err != nil {
+				return err
+			}
+			newWorkflowSizeSize += eventsSize
 		}
-		newWorkflowSizeSize += eventsSize
 		newContext.setHistorySize(newWorkflowSizeSize)
 		newWorkflow.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
 			HistorySize: newWorkflowSizeSize,
@@ -771,10 +771,12 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 		return err
 	}
 	workflowState, workflowStatus := c.mutableState.GetWorkflowStateStatus()
+	lastFirstEventID, lastFirstEventTxnID := c.mutableState.GetLastFirstEventIDTxnID()
 	c.engine.NotifyNewHistoryEvent(events.NewNotification(
 		c.namespaceID,
 		&c.workflowExecution,
-		c.mutableState.GetLastFirstEventID(),
+		lastFirstEventID,
+		lastFirstEventTxnID,
 		c.mutableState.GetNextEventID(),
 		c.mutableState.GetPreviousStartedEventID(),
 		currentBranchToken,

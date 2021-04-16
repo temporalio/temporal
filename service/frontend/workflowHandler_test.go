@@ -1069,9 +1069,8 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 				EventId: int64(100),
 			},
 		},
-		NextPageToken:    []byte{},
-		Size:             1,
-		LastFirstEventID: nextEventID,
+		NextPageToken: []byte{},
+		Size:          1,
 	}, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
