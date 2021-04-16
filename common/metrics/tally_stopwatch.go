@@ -30,31 +30,29 @@ import (
 	"github.com/uber-go/tally"
 )
 
-type (
-	NoopMetricsClient struct{}
-)
-
-func NewNoopMetricsClient() *NoopMetricsClient {
-	return &NoopMetricsClient{}
+// TallyStopwatch is a helper for simpler tracking of elapsed time, use the
+// Stop() method to report time elapsed since its created back to the
+// timer or histogram.
+type TallyStopwatch struct {
+	start  time.Time
+	timers []tally.Timer
 }
 
-func (m NoopMetricsClient) IncCounter(scope int, counter int) {}
-
-func (m NoopMetricsClient) AddCounter(scope int, counter int, delta int64) {}
-
-func (m NoopMetricsClient) StartTimer(scope int, timer int) Stopwatch {
-	return NopStopwatch()
+// NewStopwatch creates a new immutable stopwatch for recording the start
+// time to a stopwatch reporter.
+func NewStopwatch(timers ...tally.Timer) Stopwatch {
+	return &TallyStopwatch{time.Now().UTC(), timers}
 }
 
-func (m NoopMetricsClient) RecordTimer(scope int, timer int, d time.Duration) {}
+// NewTestStopwatch returns a new test stopwatch
+func NewTestStopwatch() Stopwatch {
+	return &TallyStopwatch{time.Now().UTC(), []tally.Timer{}}
+}
 
-func (m NoopMetricsClient) RecordDistribution(scope int, timer int, d int) {}
-
-func (m NoopMetricsClient) UpdateGauge(scope int, gauge int, value float64) {}
-
-func (m NoopMetricsClient) Scope(scope int, tags ...Tag) Scope {
-	return &tallyScope{
-		scope:     tally.NoopScope,
-		rootScope: tally.NoopScope,
+// Stop reports time elapsed since the stopwatch start to the recorder.
+func (sw *TallyStopwatch) Stop() {
+	d := time.Since(sw.start)
+	for _, timer := range sw.timers {
+		timer.Record(d)
 	}
 }

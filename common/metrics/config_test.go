@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
 	"github.com/uber-go/tally/m3"
-	"github.com/uber-go/tally/prometheus"
 
 	"go.temporal.io/server/common/log"
 )
@@ -112,7 +111,7 @@ func (s *MetricsSuite) TestM3() {
 }
 
 func (s *MetricsSuite) TestPrometheus() {
-	prom := &prometheus.Configuration{
+	prom := &PrometheusConfig{
 		OnError:       "panic",
 		TimerType:     "histogram",
 		ListenAddress: "127.0.0.1:0",

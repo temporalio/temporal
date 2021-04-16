@@ -1526,13 +1526,14 @@ func (e *mutableStateBuilder) ReplicateWorkflowTaskScheduledEvent(
 func (e *mutableStateBuilder) AddWorkflowTaskStartedEvent(
 	scheduleEventID int64,
 	requestID string,
-	request *workflowservice.PollWorkflowTaskQueueRequest,
+	taskQueue *taskqueuepb.TaskQueue,
+	identity string,
 ) (*historypb.HistoryEvent, *workflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	return e.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduleEventID, requestID, request)
+	return e.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduleEventID, requestID, taskQueue, identity)
 }
 
 func (e *mutableStateBuilder) ReplicateWorkflowTaskStartedEvent(
@@ -3697,9 +3698,6 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 		return nil, nil, err
 	}
 
-	if len(workflowEventsSeq) > 1 {
-		return nil, nil, serviceerror.NewInternal("cannot generate workflow snapshot with transient events")
-	}
 	if len(bufferEvents) > 0 {
 		// TODO do we need the functionality to generate snapshot with buffered events?
 		return nil, nil, serviceerror.NewInternal("cannot generate workflow snapshot with buffered events")

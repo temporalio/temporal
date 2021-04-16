@@ -25,36 +25,34 @@
 package metrics
 
 import (
+	"context"
 	"time"
 
-	"github.com/uber-go/tally"
+	"go.opentelemetry.io/otel/label"
+	"go.opentelemetry.io/otel/metric"
 )
 
 type (
-	NoopMetricsClient struct{}
+	opentelemetryStopwatch struct {
+		start   time.Time
+		metrics []openTelemetryStopwatchMetric
+	}
+
+	openTelemetryStopwatchMetric struct {
+		timer  metric.Float64ValueRecorder
+		labels []label.KeyValue
+	}
 )
 
-func NewNoopMetricsClient() *NoopMetricsClient {
-	return &NoopMetricsClient{}
+func newOpenTelemetryStopwatch(metricsMeta []openTelemetryStopwatchMetric) opentelemetryStopwatch {
+	return opentelemetryStopwatch{time.Now().UTC(), metricsMeta}
 }
 
-func (m NoopMetricsClient) IncCounter(scope int, counter int) {}
+func (o opentelemetryStopwatch) Stop() {
+	ctx := context.Background()
+	d := time.Since(o.start)
 
-func (m NoopMetricsClient) AddCounter(scope int, counter int, delta int64) {}
-
-func (m NoopMetricsClient) StartTimer(scope int, timer int) Stopwatch {
-	return NopStopwatch()
-}
-
-func (m NoopMetricsClient) RecordTimer(scope int, timer int, d time.Duration) {}
-
-func (m NoopMetricsClient) RecordDistribution(scope int, timer int, d int) {}
-
-func (m NoopMetricsClient) UpdateGauge(scope int, gauge int, value float64) {}
-
-func (m NoopMetricsClient) Scope(scope int, tags ...Tag) Scope {
-	return &tallyScope{
-		scope:     tally.NoopScope,
-		rootScope: tally.NoopScope,
+	for _, m := range o.metrics {
+		m.timer.Record(ctx, float64(d.Nanoseconds()), m.labels...)
 	}
 }
