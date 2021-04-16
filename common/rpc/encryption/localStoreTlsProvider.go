@@ -97,6 +97,7 @@ func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope tally.Scope, cert
 		RWMutex:  sync.RWMutex{},
 		settings: tlsConfig,
 		scope:    scope,
+		logger:   log.NewDefaultLogger(),
 	}
 	provider.initialize()
 	return provider, nil
@@ -350,7 +351,10 @@ func (s *localStoreTlsProvider) timerCallback() {
 		}
 		if window != 0 {
 			expiring, expired, err := s.GetExpiringCerts(window)
-			s.logger.Error(fmt.Sprintf("error while checking for certificate expiration: %v", err))
+			if err != nil {
+				s.logger.Error(fmt.Sprintf("error while checking for certificate expiration: %v", err))
+				continue
+			}
 			if s.scope != nil {
 				s.scope.Gauge(metricCertsExpired).Update(float64(len(expired)))
 				s.scope.Gauge(metricCertsExpiring).Update(float64(len(expiring)))
