@@ -121,6 +121,9 @@ func (s *Server) Start() error {
 	}
 
 	err = verifyPersistenceCompatibleVersion(s.so.config.Persistence, s.so.persistenceServiceResolver)
+	if err != nil {
+		return err
+	}
 
 	if err = pprof.NewInitializer(&s.so.config.Global.PProf, s.logger).Start(); err != nil {
 		return fmt.Errorf("unable to start PProf: %w", err)
