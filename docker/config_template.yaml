@@ -23,14 +23,13 @@ persistence:
                 maxConns: {{ default .Env.CASSANDRA_MAX_CONNS "20" }}
                 tls:
                     enabled: {{ default .Env.CASSANDRA_TLS_ENABLED "false" }}
-                    caFile: {{ default .Env.CASSANDRA_CA ""}}
+                    caFile: {{ default .Env.CASSANDRA_CA "" }}
                     certFile: {{ default .Env.CASSANDRA_CERT "" }}
                     keyFile: {{ default .Env.CASSANDRA_CERT_KEY "" }}
                     caData: {{ default .Env.CASSANDRA_CA_DATA "" }}
                     certData: {{ default .Env.CASSANDRA_CERT_DATA "" }}
                     keyData: {{ default .Env.CASSANDRA_CERT_KEY_DATA "" }}
-                    enableHostVerification: {{ default .Env.CASSANDRA_HOST_VERIFICATION "false"}}
-
+                    enableHostVerification: {{ default .Env.CASSANDRA_HOST_VERIFICATION "false" }}
         visibility:
             cassandra:
                 hosts: "{{ default .Env.CASSANDRA_SEEDS "" }}"
@@ -41,13 +40,13 @@ persistence:
                 maxConns: {{ default .Env.CASSANDRA_MAX_CONNS "10" }}
                 tls:
                     enabled: {{ default .Env.CASSANDRA_TLS_ENABLED "false" }}
-                    caFile: {{ default .Env.CASSANDRA_CA ""}}
+                    caFile: {{ default .Env.CASSANDRA_CA "" }}
                     certFile: {{ default .Env.CASSANDRA_CERT "" }}
                     keyFile: {{ default .Env.CASSANDRA_CERT_KEY "" }}
                     caData: {{ default .Env.CASSANDRA_CA_DATA "" }}
                     certData: {{ default .Env.CASSANDRA_CERT_DATA "" }}
                     keyData: {{ default .Env.CASSANDRA_CERT_KEY_DATA "" }}
-                    enableHostVerification: {{ default .Env.CASSANDRA_HOST_VERIFICATION "false"}}
+                    enableHostVerification: {{ default .Env.CASSANDRA_HOST_VERIFICATION "false" }}
         {{- else if eq $db "mysql" }}
         default:
             sql:
@@ -64,6 +63,13 @@ persistence:
                 maxConns: {{ default .Env.SQL_MAX_CONNS "20" }}
                 maxIdleConns: {{ default .Env.SQL_MAX_IDLE_CONNS "20" }}
                 maxConnLifetime: {{ default .Env.SQL_MAX_CONN_TIME "1h" }}
+                tls:
+                    enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
+                    сaFile: {{ default .Env.SQL_CA "" }}
+                    certFile: {{ default .Env.SQL_CERT "" }}
+                    keyFile: {{ default .Env.SQL_CERT_KEY "" }}
+                    enableHostVerification: {{ default .Env.SQL_HOST_VERIFICATION "false" }}
+                    serverName: {{ default .Env.SQL_HOST_NAME "" }}
         visibility:
             sql:
                 pluginName: "mysql"
@@ -79,6 +85,13 @@ persistence:
                 maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "10" }}
                 maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "10" }}
                 maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
+                tls:
+                    enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
+                    сaFile: {{ default .Env.SQL_CA "" }}
+                    certFile: {{ default .Env.SQL_CERT "" }}
+                    keyFile: {{ default .Env.SQL_CERT_KEY "" }}
+                    enableHostVerification: {{ default .Env.SQL_HOST_VERIFICATION "false" }}
+                    serverName: {{ default .Env.SQL_HOST_NAME "" }}
         {{- else if eq $db "postgresql" }}
         default:
             sql:
@@ -91,6 +104,13 @@ persistence:
                 maxConns: {{ default .Env.SQL_MAX_CONNS "20" }}
                 maxIdleConns: {{ default .Env.SQL_MAX_IDLE_CONNS "20" }}
                 maxConnLifetime: {{ default .Env.SQL_MAX_CONN_TIME "1h" }}
+                tls:
+                    enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
+                    сaFile: {{ default .Env.SQL_CA "" }}
+                    certFile: {{ default .Env.SQL_CERT "" }}
+                    keyFile: {{ default .Env.SQL_CERT_KEY "" }}
+                    enableHostVerification: {{ default .Env.SQL_HOST_VERIFICATION "false" }}
+                    serverName: {{ default .Env.SQL_HOST_NAME "" }}
         visibility:
             sql:
                 pluginName: "postgres"
@@ -102,6 +122,13 @@ persistence:
                 maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "10" }}
                 maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "10" }}
                 maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
+                tls:
+                    enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
+                    сaFile: {{ default .Env.SQL_CA "" }}
+                    certFile: {{ default .Env.SQL_CERT "" }}
+                    keyFile: {{ default .Env.SQL_CERT_KEY "" }}
+                    enableHostVerification: {{ default .Env.SQL_HOST_VERIFICATION "false" }}
+                    serverName: {{ default .Env.SQL_HOST_NAME "" }}
         {{- end }}
         {{- if eq $es "true" }}
         es-visibility:
