@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
+	"go.temporal.io/server/common/log"
 )
 
 type (
@@ -62,7 +63,7 @@ type (
 		Scope(scope int, tags ...Tag) Scope
 	}
 
-	// Scope is an interface for metrics
+	// Scope is an interface for metric.
 	Scope interface {
 		// IncCounter increments a counter metric
 		IncCounter(counter int)
@@ -81,6 +82,12 @@ type (
 		// Tagged return an internal scope that can be used to add additional
 		// information to metrics
 		Tagged(tags ...Tag) Scope
+	}
+
+	// Reporter is an interface for base constructor for metrics client.
+	Reporter interface {
+		NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error)
+		Stop(logger log.Logger)
 	}
 )
 

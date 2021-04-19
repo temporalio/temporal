@@ -165,9 +165,9 @@ func (s *localStoreCertProvider) GetExpiringCerts(timeWindow time.Duration,
 		return nil, nil, err
 	}
 
-	checkError := checkTLSCertForExpiration(s.certs.serverCert, when, expiring, expired)
+	checkError := checkTLSCertForExpiration(certs.serverCert, when, expiring, expired)
 	err = appendError(err, checkError)
-	checkError = checkTLSCertForExpiration(s.certs.workerCert, when, expiring, expired)
+	checkError = checkTLSCertForExpiration(certs.workerCert, when, expiring, expired)
 	err = appendError(err, checkError)
 
 	checkCertsForExpiration(certs.clientCACerts, when, expiring, expired)
@@ -521,12 +521,15 @@ func (s *localStoreCertProvider) refreshCerts() {
 			continue
 		}
 
-		if s.certs.isEqual(newCerts) {
+		s.RLock()
+		currentCerts := s.certs
+		s.RUnlock()
+		if currentCerts.isEqual(newCerts) {
 			continue
 		}
 
-		s.Lock()
 		s.logger.Info("loaded new TLS certificates")
+		s.Lock()
 		s.certs = newCerts
 		s.Unlock()
 	}

@@ -123,27 +123,10 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		return nil, 0, err
 	}
 
-	// need to specially handling the first batch, to initialize mutable state & state builder
-	batch, err := iter.Next()
-	switch err.(type) {
-	case nil:
-		// noop
-	case *serviceerror.DataLoss:
-		// log event
-		r.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(baseWorkflowIdentifier.NamespaceID), tag.WorkflowID(baseWorkflowIdentifier.WorkflowID), tag.WorkflowRunID(baseWorkflowIdentifier.RunID))
-		return nil, 0, err
-	default:
-		return nil, 0, err
-	}
-
-	firstEventBatch := batch.(*historypb.History).Events
 	rebuiltMutableState, stateBuilder := r.initializeBuilders(
 		namespaceEntry,
 		now,
 	)
-	if err := r.applyEvents(targetWorkflowIdentifier, stateBuilder, firstEventBatch, requestID); err != nil {
-		return nil, 0, err
-	}
 
 	for iter.HasNext() {
 		batch, err := iter.Next()
@@ -183,7 +166,11 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		baseLastEventID,
 		baseLastEventVersion,
 	)) {
-		return nil, 0, serviceerror.NewInternal(fmt.Sprintf("nDCStateRebuilder unable to rebuild mutable state to event ID: %v, version: %v", baseLastEventID, baseLastEventVersion))
+		return nil, 0, serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"nDCStateRebuilder unable to rebuild mutable state to event ID: %v, version: %v, this event must be at the boundary",
+			baseLastEventID,
+			baseLastEventVersion,
+		))
 	}
 
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.

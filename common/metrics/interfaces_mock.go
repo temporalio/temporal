@@ -33,6 +33,7 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
+	log "go.temporal.io/server/common/log"
 )
 
 // MockStopwatch is a mock of Stopwatch interface.
@@ -299,4 +300,54 @@ func (m *MockScope) UpdateGauge(gauge int, value float64) {
 func (mr *MockScopeMockRecorder) UpdateGauge(gauge, value interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateGauge", reflect.TypeOf((*MockScope)(nil).UpdateGauge), gauge, value)
+}
+
+// MockReporter is a mock of Reporter interface.
+type MockReporter struct {
+	ctrl     *gomock.Controller
+	recorder *MockReporterMockRecorder
+}
+
+// MockReporterMockRecorder is the mock recorder for MockReporter.
+type MockReporterMockRecorder struct {
+	mock *MockReporter
+}
+
+// NewMockReporter creates a new mock instance.
+func NewMockReporter(ctrl *gomock.Controller) *MockReporter {
+	mock := &MockReporter{ctrl: ctrl}
+	mock.recorder = &MockReporterMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockReporter) EXPECT() *MockReporterMockRecorder {
+	return m.recorder
+}
+
+// NewClient mocks base method.
+func (m *MockReporter) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewClient", logger, serviceIdx)
+	ret0, _ := ret[0].(Client)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewClient indicates an expected call of NewClient.
+func (mr *MockReporterMockRecorder) NewClient(logger, serviceIdx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewClient", reflect.TypeOf((*MockReporter)(nil).NewClient), logger, serviceIdx)
+}
+
+// Stop mocks base method.
+func (m *MockReporter) Stop(logger log.Logger) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Stop", logger)
+}
+
+// Stop indicates an expected call of Stop.
+func (mr *MockReporterMockRecorder) Stop(logger interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockReporter)(nil).Stop), logger)
 }

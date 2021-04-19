@@ -477,12 +477,13 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 			return err
 		}
 		newWorkflowSizeSize := newContext.getHistorySize()
-		startEvents := newWorkflowEventsSeq[0]
-		eventsSize, err := c.persistNewWorkflowEvents(startEvents)
-		if err != nil {
-			return err
+		for _, workflowEvents := range newWorkflowEventsSeq {
+			eventsSize, err := c.persistNewWorkflowEvents(workflowEvents)
+			if err != nil {
+				return err
+			}
+			newWorkflowSizeSize += eventsSize
 		}
-		newWorkflowSizeSize += eventsSize
 		newContext.setHistorySize(newWorkflowSizeSize)
 		newWorkflow.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
 			HistorySize: newWorkflowSizeSize,
@@ -721,12 +722,13 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 			return err
 		}
 		newWorkflowSizeSize := newContext.getHistorySize()
-		startEvents := newWorkflowEventsSeq[0]
-		eventsSize, err := c.persistNewWorkflowEvents(startEvents)
-		if err != nil {
-			return err
+		for _, workflowEvents := range newWorkflowEventsSeq {
+			eventsSize, err := c.persistNewWorkflowEvents(workflowEvents)
+			if err != nil {
+				return err
+			}
+			newWorkflowSizeSize += eventsSize
 		}
-		newWorkflowSizeSize += eventsSize
 		newContext.setHistorySize(newWorkflowSizeSize)
 		newWorkflow.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
 			HistorySize: newWorkflowSizeSize,

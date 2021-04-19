@@ -296,6 +296,11 @@ func (s *localStoreRPCSuite) setupFrontend() {
 			Frontend:        s.frontendConfigMutualTLSRefresh,
 			Internode:       s.frontendConfigMutualTLSRefresh,
 			RefreshInterval: time.Second,
+			ExpirationChecks: config.CertExpirationValidation{
+				WarningWindow: time.Hour * 24 * 14,
+				ErrorWindow:   time.Hour * 24 * 7,
+				CheckInterval: time.Second,
+			},
 		},
 	}
 

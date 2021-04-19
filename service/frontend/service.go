@@ -190,6 +190,9 @@ type Service struct {
 	adminHandler   *AdminHandler
 	versionChecker *VersionChecker
 	server         *grpc.Server
+
+	serverMetricsReporter metrics.Reporter
+	sdkMetricsReporter    metrics.Reporter
 }
 
 // NewService builds a new frontend service
@@ -383,5 +386,14 @@ func (s *Service) Stop() {
 	// TODO: Change this to GracefulStop when integration tests are refactored.
 	s.server.Stop()
 	s.Resource.Stop()
+
+	if s.serverMetricsReporter != nil {
+		s.serverMetricsReporter.Stop(logger)
+	}
+
+	if s.sdkMetricsReporter != nil {
+		s.sdkMetricsReporter.Stop(logger)
+	}
+
 	logger.Info("frontend stopped")
 }

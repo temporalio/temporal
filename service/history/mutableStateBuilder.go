@@ -268,66 +268,66 @@ func newMutableStateBuilderFromDB(
 	eventsCache events.Cache,
 	logger log.Logger,
 	namespaceEntry *cache.NamespaceCacheEntry,
-	state *persistencespb.WorkflowMutableState,
+	dbRecord *persistencespb.WorkflowMutableState,
 	dbRecordVersion int64,
 ) *mutableStateBuilder {
 
 	// startTime will be overridden by DB record
 	startTime := time.Time{}
-	e := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry, startTime)
+	mutableState := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry, startTime)
 
-	e.pendingActivityInfoIDs = state.ActivityInfos
-	for _, activityInfo := range state.ActivityInfos {
-		e.pendingActivityIDToEventID[activityInfo.ActivityId] = activityInfo.ScheduleId
+	mutableState.pendingActivityInfoIDs = dbRecord.ActivityInfos
+	for _, activityInfo := range dbRecord.ActivityInfos {
+		mutableState.pendingActivityIDToEventID[activityInfo.ActivityId] = activityInfo.ScheduleId
 		if (activityInfo.TimerTaskStatus & timerTaskStatusCreatedHeartbeat) > 0 {
 			// Sets last pending timer heartbeat to year 2000.
 			// This ensures at least one heartbeat task will be processed for the pending activity.
-			e.pendingActivityTimerHeartbeats[activityInfo.ScheduleId] = time.Unix(946684800, 0)
+			mutableState.pendingActivityTimerHeartbeats[activityInfo.ScheduleId] = time.Unix(946684800, 0)
 		}
 	}
-	e.pendingTimerInfoIDs = state.TimerInfos
-	for _, timerInfo := range state.TimerInfos {
-		e.pendingTimerEventIDToID[timerInfo.GetStartedId()] = timerInfo.GetTimerId()
+	mutableState.pendingTimerInfoIDs = dbRecord.TimerInfos
+	for _, timerInfo := range dbRecord.TimerInfos {
+		mutableState.pendingTimerEventIDToID[timerInfo.GetStartedId()] = timerInfo.GetTimerId()
 	}
-	e.pendingChildExecutionInfoIDs = state.ChildExecutionInfos
-	e.pendingRequestCancelInfoIDs = state.RequestCancelInfos
-	e.pendingSignalInfoIDs = state.SignalInfos
-	e.pendingSignalRequestedIDs = convert.StringSliceToSet(state.SignalRequestedIds)
-	e.executionInfo = state.ExecutionInfo
-	e.executionState = state.ExecutionState
+	mutableState.pendingChildExecutionInfoIDs = dbRecord.ChildExecutionInfos
+	mutableState.pendingRequestCancelInfoIDs = dbRecord.RequestCancelInfos
+	mutableState.pendingSignalInfoIDs = dbRecord.SignalInfos
+	mutableState.pendingSignalRequestedIDs = convert.StringSliceToSet(dbRecord.SignalRequestedIds)
+	mutableState.executionInfo = dbRecord.ExecutionInfo
+	mutableState.executionState = dbRecord.ExecutionState
 
-	e.hBuilder = mutablestate.NewMutableHistoryBuilder(
-		e.timeSource,
-		e.shard.GenerateTransferTaskIDs,
+	mutableState.hBuilder = mutablestate.NewMutableHistoryBuilder(
+		mutableState.timeSource,
+		mutableState.shard.GenerateTransferTaskIDs,
 		common.EmptyVersion,
-		state.NextEventId,
-		state.BufferedEvents,
+		dbRecord.NextEventId,
+		dbRecord.BufferedEvents,
 	)
 
-	e.currentVersion = common.EmptyVersion
-	e.bufferEventsInDB = state.BufferedEvents
-	e.stateInDB = state.ExecutionState.State
-	e.nextEventIDInDB = state.NextEventId
-	e.dbRecordVersion = dbRecordVersion
-	e.checksum = state.Checksum
+	mutableState.currentVersion = common.EmptyVersion
+	mutableState.bufferEventsInDB = dbRecord.BufferedEvents
+	mutableState.stateInDB = dbRecord.ExecutionState.State
+	mutableState.nextEventIDInDB = dbRecord.NextEventId
+	mutableState.dbRecordVersion = dbRecordVersion
+	mutableState.checksum = dbRecord.Checksum
 
-	if len(state.Checksum.GetValue()) > 0 {
+	if len(dbRecord.Checksum.GetValue()) > 0 {
 		switch {
-		case e.shouldInvalidateCheckum():
-			e.checksum = nil
-			e.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.MutableStateChecksumInvalidated)
-		case e.shouldVerifyChecksum():
-			if err := verifyMutableStateChecksum(e, state.Checksum); err != nil {
+		case mutableState.shouldInvalidateCheckum():
+			mutableState.checksum = nil
+			mutableState.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.MutableStateChecksumInvalidated)
+		case mutableState.shouldVerifyChecksum():
+			if err := verifyMutableStateChecksum(mutableState, dbRecord.Checksum); err != nil {
 				// we ignore checksum verification errors for now until this
 				// feature is tested and/or we have mechanisms in place to deal
 				// with these types of errors
-				e.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.MutableStateChecksumMismatch)
-				e.logError("mutable state checksum mismatch", tag.Error(err))
+				mutableState.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.MutableStateChecksumMismatch)
+				mutableState.logError("mutable state checksum mismatch", tag.Error(err))
 			}
 		}
 	}
 
-	return e
+	return mutableState
 }
 
 func (e *mutableStateBuilder) CloneToProto() *persistencespb.WorkflowMutableState {
@@ -1526,13 +1526,14 @@ func (e *mutableStateBuilder) ReplicateWorkflowTaskScheduledEvent(
 func (e *mutableStateBuilder) AddWorkflowTaskStartedEvent(
 	scheduleEventID int64,
 	requestID string,
-	request *workflowservice.PollWorkflowTaskQueueRequest,
+	taskQueue *taskqueuepb.TaskQueue,
+	identity string,
 ) (*historypb.HistoryEvent, *workflowTaskInfo, error) {
 	opTag := tag.WorkflowActionWorkflowTaskStarted
 	if err := e.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	return e.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduleEventID, requestID, request)
+	return e.workflowTaskManager.AddWorkflowTaskStartedEvent(scheduleEventID, requestID, taskQueue, identity)
 }
 
 func (e *mutableStateBuilder) ReplicateWorkflowTaskStartedEvent(
@@ -3697,9 +3698,6 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 		return nil, nil, err
 	}
 
-	if len(workflowEventsSeq) > 1 {
-		return nil, nil, serviceerror.NewInternal("cannot generate workflow snapshot with transient events")
-	}
 	if len(bufferEvents) > 0 {
 		// TODO do we need the functionality to generate snapshot with buffered events?
 		return nil, nil, serviceerror.NewInternal("cannot generate workflow snapshot with buffered events")

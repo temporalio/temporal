@@ -90,7 +90,7 @@ type (
 		AddFirstWorkflowTaskScheduled(*historypb.HistoryEvent) error
 		AddWorkflowTaskScheduledEvent(bypassTaskGeneration bool) (*workflowTaskInfo, error)
 		AddWorkflowTaskScheduledEventAsHeartbeat(bypassTaskGeneration bool, originalScheduledTimestamp *time.Time) (*workflowTaskInfo, error)
-		AddWorkflowTaskStartedEvent(int64, string, *workflowservice.PollWorkflowTaskQueueRequest) (*historypb.HistoryEvent, *workflowTaskInfo, error)
+		AddWorkflowTaskStartedEvent(int64, string, *taskqueuepb.TaskQueue, string) (*historypb.HistoryEvent, *workflowTaskInfo, error)
 		AddWorkflowTaskTimedOutEvent(int64, int64) (*historypb.HistoryEvent, error)
 		AddExternalWorkflowExecutionCancelRequested(int64, string, string, string) (*historypb.HistoryEvent, error)
 		AddExternalWorkflowExecutionSignaled(int64, string, string, string, string) (*historypb.HistoryEvent, error)

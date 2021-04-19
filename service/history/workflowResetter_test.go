@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -262,6 +263,121 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 	s.NoError(err)
 	s.Equal(resetHistorySize, resetWorkflow.getContext().getHistorySize())
 	s.Equal(resetMutableState, resetWorkflow.getMutableState())
+}
+
+func (s *workflowResetterSuite) TestFailWorkflowTask_NoWorkflowTask() {
+	baseRunID := uuid.New()
+	baseRebuildLastEventID := int64(1234)
+	baseRebuildLastEventVersion := int64(5678)
+	resetRunID := uuid.New()
+	resetReason := "some random reset reason"
+
+	mutableState := NewMockmutableState(s.controller)
+	mutableState.EXPECT().GetPendingWorkflowTask().Return(nil, false).AnyTimes()
+
+	err := s.workflowResetter.failWorkflowTask(
+		mutableState,
+		baseRunID,
+		baseRebuildLastEventID,
+		baseRebuildLastEventVersion,
+		resetRunID,
+		resetReason,
+	)
+	s.Error(err)
+}
+
+func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
+	baseRunID := uuid.New()
+	baseRebuildLastEventID := int64(1234)
+	baseRebuildLastEventVersion := int64(5678)
+	resetRunID := uuid.New()
+	resetReason := "some random reset reason"
+
+	mutableState := NewMockmutableState(s.controller)
+	workflowTaskSchedule := &workflowTaskInfo{
+		ScheduleID: baseRebuildLastEventID - 12,
+		StartedID:  common.EmptyEventID,
+		RequestID:  uuid.New(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "random task queue name",
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+	}
+	workflowTaskStart := &workflowTaskInfo{
+		ScheduleID: workflowTaskSchedule.ScheduleID,
+		StartedID:  workflowTaskSchedule.ScheduleID + 1,
+		RequestID:  workflowTaskSchedule.RequestID,
+		TaskQueue:  workflowTaskSchedule.TaskQueue,
+	}
+	mutableState.EXPECT().GetPendingWorkflowTask().Return(workflowTaskSchedule, true).AnyTimes()
+	mutableState.EXPECT().AddWorkflowTaskStartedEvent(
+		workflowTaskSchedule.ScheduleID,
+		workflowTaskSchedule.RequestID,
+		workflowTaskSchedule.TaskQueue,
+		identityHistoryService,
+	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
+	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
+		workflowTaskStart.ScheduleID,
+		workflowTaskStart.StartedID,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
+		failure.NewResetWorkflowFailure(resetReason, nil),
+		identityHistoryService,
+		"",
+		baseRunID,
+		resetRunID,
+		baseRebuildLastEventVersion,
+	).Return(&historypb.HistoryEvent{}, nil)
+
+	err := s.workflowResetter.failWorkflowTask(
+		mutableState,
+		baseRunID,
+		baseRebuildLastEventID,
+		baseRebuildLastEventVersion,
+		resetRunID,
+		resetReason,
+	)
+	s.NoError(err)
+}
+
+func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskStarted() {
+	baseRunID := uuid.New()
+	baseRebuildLastEventID := int64(1234)
+	baseRebuildLastEventVersion := int64(5678)
+	resetRunID := uuid.New()
+	resetReason := "some random reset reason"
+
+	mutableState := NewMockmutableState(s.controller)
+	workflowTask := &workflowTaskInfo{
+		ScheduleID: baseRebuildLastEventID - 12,
+		StartedID:  baseRebuildLastEventID - 10,
+		RequestID:  uuid.New(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: "random task queue name",
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+	}
+	mutableState.EXPECT().GetPendingWorkflowTask().Return(workflowTask, true).AnyTimes()
+	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
+		workflowTask.ScheduleID,
+		workflowTask.StartedID,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
+		failure.NewResetWorkflowFailure(resetReason, nil),
+		identityHistoryService,
+		"",
+		baseRunID,
+		resetRunID,
+		baseRebuildLastEventVersion,
+	).Return(&historypb.HistoryEvent{}, nil)
+
+	err := s.workflowResetter.failWorkflowTask(
+		mutableState,
+		baseRunID,
+		baseRebuildLastEventID,
+		baseRebuildLastEventVersion,
+		resetRunID,
+		resetReason,
+	)
+	s.NoError(err)
 }
 
 func (s *workflowResetterSuite) TestFailInflightActivity() {

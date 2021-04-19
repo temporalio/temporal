@@ -37,7 +37,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/workflowservice/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -410,7 +409,8 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 	_, _, err = s.msBuilder.AddWorkflowTaskStartedEvent(
 		s.msBuilder.GetNextEventID(),
 		uuid.New(),
-		&workflowservice.PollWorkflowTaskQueueRequest{},
+		&taskqueuepb.TaskQueue{},
+		"random identity",
 	)
 	s.NoError(err)
 	s.Equal(0, s.msBuilder.hBuilder.BufferEventSize())
