@@ -30,6 +30,7 @@ persistence:
                     certData: {{ default .Env.CASSANDRA_CERT_DATA "" }}
                     keyData: {{ default .Env.CASSANDRA_CERT_KEY_DATA "" }}
                     enableHostVerification: {{ default .Env.CASSANDRA_HOST_VERIFICATION "false" }}
+                    serverName: {{ default .Env.CASSANDRA_HOST_NAME "" }}
         visibility:
             cassandra:
                 hosts: "{{ default .Env.CASSANDRA_SEEDS "" }}"
@@ -47,6 +48,7 @@ persistence:
                     certData: {{ default .Env.CASSANDRA_CERT_DATA "" }}
                     keyData: {{ default .Env.CASSANDRA_CERT_KEY_DATA "" }}
                     enableHostVerification: {{ default .Env.CASSANDRA_HOST_VERIFICATION "false" }}
+                    serverName: {{ default .Env.CASSANDRA_HOST_NAME "" }}
         {{- else if eq $db "mysql" }}
         default:
             sql:
