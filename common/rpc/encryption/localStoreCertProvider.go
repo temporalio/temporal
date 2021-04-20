@@ -85,6 +85,24 @@ func (s *localStoreCertProvider) initialize() {
 	}
 }
 
+func NewLocalStoreCertProvider(
+	tlsSettings *config.GroupTLS,
+	workerTlsSettings *config.WorkerTLS,
+	legacyWorkerSettings *config.ClientTLS,
+	refreshInterval time.Duration) CertProvider {
+
+	provider := &localStoreCertProvider{
+		tlsSettings:          tlsSettings,
+		workerTLSSettings:    workerTlsSettings,
+		legacyWorkerSettings: legacyWorkerSettings,
+		isLegacyWorkerConfig: legacyWorkerSettings != nil,
+		logger:               log.NewDefaultLogger(),
+		refreshInterval:      refreshInterval,
+	}
+	provider.initialize()
+	return provider
+}
+
 func (s *localStoreCertProvider) Close() {
 
 	if s.ticker != nil {
