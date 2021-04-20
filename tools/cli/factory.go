@@ -192,6 +192,15 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 
 		return tlsConfig, nil
 	}
+	// If we are given a server name, set the TLS server name for DNS resolution
+	if serverName != "" {
+		host = serverName
+		// If server name is provided, we enable host verification
+		// because that's the only reason for providing server name
+		hostNameVerification = true
+		tlsConfig := auth.NewTLSConfigForServer(host, hostNameVerification)
+		return tlsConfig, nil
+	}
 
 	return nil, nil
 }
