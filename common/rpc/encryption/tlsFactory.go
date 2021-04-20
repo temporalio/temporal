@@ -32,7 +32,6 @@ import (
 	"github.com/uber-go/tally"
 
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/log"
 )
 
 type (
@@ -88,25 +87,7 @@ func NewTLSConfigProviderFromConfig(
 ) (TLSConfigProvider, error) {
 
 	if certProviderFactory == nil {
-		certProviderFactory = newLocalStoreCertProvider
+		certProviderFactory = NewLocalStoreCertProvider
 	}
 	return NewLocalStoreTlsProvider(&encryptionSettings, scope, certProviderFactory)
-}
-
-func newLocalStoreCertProvider(
-	tlsSettings *config.GroupTLS,
-	workerTlsSettings *config.WorkerTLS,
-	legacyWorkerSettings *config.ClientTLS,
-	refreshInterval time.Duration) CertProvider {
-
-	provider := &localStoreCertProvider{
-		tlsSettings:          tlsSettings,
-		workerTLSSettings:    workerTlsSettings,
-		legacyWorkerSettings: legacyWorkerSettings,
-		isLegacyWorkerConfig: legacyWorkerSettings != nil,
-		logger:               log.NewDefaultLogger(),
-		refreshInterval:      refreshInterval,
-	}
-	provider.initialize()
-	return provider
 }
