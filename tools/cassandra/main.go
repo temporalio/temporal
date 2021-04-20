@@ -138,7 +138,7 @@ func buildCLIOptions() *cli.App {
 		},
 		cli.BoolFlag{
 			Name:   schema.CLIFlagTLSDisableHostVerification,
-			Usage:  "Cassandra tls verify server hostname",
+			Usage:  "disable tls host name verification (tls must be enabled)",
 			EnvVar: "CASSANDRA_TLS_DISABLE_HOST_VERIFICATION",
 		},
 	}
