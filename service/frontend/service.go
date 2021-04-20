@@ -302,6 +302,7 @@ func NewService(
 			rateLimiterInterceptor.Intercept,
 			namespaceRateLimiterInterceptor.Intercept,
 			namespaceCountLimiterInterceptor.Intercept,
+			metrics.NewServerMetricsContextInjectorInterceptor(),
 			authorization.NewAuthorizationInterceptor(
 				params.ClaimMapper,
 				params.Authorizer,

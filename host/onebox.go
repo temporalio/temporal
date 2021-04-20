@@ -495,7 +495,7 @@ func (c *temporalImpl) startHistory(
 		// However current interface for getting history client doesn't specify which client it needs and the tests that use this API
 		// depends on the fact that there's only one history host.
 		// Need to change those tests and modify the interface for getting history client.
-		historyConnection, err := rpc.Dial(c.HistoryServiceAddress(3)[0], nil)
+		historyConnection, err := rpc.Dial(c.HistoryServiceAddress(3)[0], nil, c.logger)
 		if err != nil {
 			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
@@ -824,7 +824,7 @@ func (c *rpcFactoryImpl) GetRingpopChannel() *tchannel.Channel {
 
 // CreateGRPCConnection creates connection for gRPC calls
 func (c *rpcFactoryImpl) CreateGRPCConnection(hostName string) *grpc.ClientConn {
-	connection, err := rpc.Dial(hostName, nil)
+	connection, err := rpc.Dial(hostName, nil, c.logger)
 	if err != nil {
 		c.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
 	}

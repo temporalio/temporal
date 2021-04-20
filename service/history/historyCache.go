@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"sync/atomic"
+	"time"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -166,6 +167,7 @@ func (c *historyCache) getOrCreateWorkflowExecution(
 
 	scope := metrics.HistoryCacheGetOrCreateScope
 	c.metricsClient.IncCounter(scope, metrics.CacheRequests)
+	start := time.Now()
 	sw := c.metricsClient.StartTimer(scope, metrics.CacheLatency)
 	defer sw.Stop()
 
@@ -174,15 +176,18 @@ func (c *historyCache) getOrCreateWorkflowExecution(
 		return nil, nil, err
 	}
 
-	return c.getOrCreateWorkflowExecutionInternal(
+	weCtx, weReleaseFunc, err := c.getOrCreateWorkflowExecutionInternal(
 		ctx,
 		namespaceID,
 		execution,
 		scope,
 		false,
 	)
-}
 
+	metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency, time.Since(start).Nanoseconds())
+
+	return weCtx, weReleaseFunc, err
+}
 func (c *historyCache) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
 	namespaceID string,

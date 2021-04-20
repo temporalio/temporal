@@ -39,6 +39,7 @@ import (
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/rpc"
 )
 
@@ -162,6 +163,7 @@ func dialHelloAndGetTLSInfo(
 	clientFactory *TestFactory,
 	serverType ServerUsageType) (*credentials.TLSInfo, error) {
 
+	logger := log.NewNoopLogger()
 	var cfg *tls.Config
 	var err error
 	if serverType == Internode {
@@ -171,7 +173,7 @@ func dialHelloAndGetTLSInfo(
 	}
 
 	s.NoError(err)
-	clientConn, err := rpc.Dial(hostport, cfg)
+	clientConn, err := rpc.Dial(hostport, cfg, logger)
 	s.NoError(err)
 	client := helloworld.NewGreeterClient(clientConn)
 

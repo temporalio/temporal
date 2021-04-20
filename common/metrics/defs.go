@@ -72,6 +72,11 @@ const (
 	NumServices
 )
 
+// Values used for metrics propagation
+const (
+	HistoryWorkflowExecutionCacheLatency = "history_workflow_execution_cache_latency"
+)
+
 // Common tags for all services
 const (
 	OperationTagName   = "operation"
@@ -1599,6 +1604,7 @@ const (
 	ServiceFailures
 	ServiceCriticalFailures
 	ServiceLatency
+	ServiceLatencyNoUserLatency
 	ServiceErrInvalidArgumentCounter
 	ServiceErrNamespaceNotActiveCounter
 	ServiceErrResourceExhaustedCounter
@@ -2017,6 +2023,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceFailures:                                     {metricName: "service_errors", metricType: Counter},
 		ServiceCriticalFailures:                             {metricName: "service_errors_critical", metricType: Counter},
 		ServiceLatency:                                      {metricName: "service_latency", metricType: Timer},
+		ServiceLatencyNoUserLatency:                         {metricName: "service_latency_nouserlatency", metricType: Timer},
 		ServiceErrInvalidArgumentCounter:                    {metricName: "service_errors_invalid_argument", metricType: Counter},
 		ServiceErrNamespaceNotActiveCounter:                 {metricName: "service_errors_namespace_not_active", metricType: Counter},
 		ServiceErrResourceExhaustedCounter:                  {metricName: "service_errors_resource_exhausted", metricType: Counter},

@@ -102,23 +102,20 @@ func (m *opentelemetryScope) UpdateGauge(id int, value float64) {
 func (m *opentelemetryScope) StartTimer(id int) Stopwatch {
 	def := m.defs[id]
 
-	timer := openTelemetryStopwatchMetric{
-		timer:  m.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricName.String()),
-		labels: m.labels,
-	}
+	timer := newOpenTelemetryStopwatchMetric(
+		m.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricName.String()),
+		m.labels)
 	switch {
 	case !def.metricRollupName.Empty():
-		timerRollup := openTelemetryStopwatchMetric{
-			timer:  m.rootScope.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricName.String()),
-			labels: m.rootScope.labels,
-		}
+		timerRollup := newOpenTelemetryStopwatchMetric(
+			m.rootScope.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricName.String()),
+			m.rootScope.labels)
 		return newOpenTelemetryStopwatch([]openTelemetryStopwatchMetric{timer, timerRollup})
 	case m.isNamespaceTagged:
 		allScope := m.taggedString(map[string]string{namespace: namespaceAllValue})
-		timerAll := openTelemetryStopwatchMetric{
-			timer:  allScope.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricName.String()),
-			labels: allScope.labels,
-		}
+		timerAll := newOpenTelemetryStopwatchMetric(
+			allScope.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricName.String()),
+			allScope.labels)
 		return newOpenTelemetryStopwatch([]openTelemetryStopwatchMetric{timer, timerAll})
 	default:
 		return newOpenTelemetryStopwatch([]openTelemetryStopwatchMetric{timer})
