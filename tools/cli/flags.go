@@ -215,14 +215,13 @@ const (
 	FlagTLSCertPath                      = "tls_cert_path"
 	FlagTLSKeyPath                       = "tls_key_path"
 	FlagTLSCaPath                        = "tls_ca_path"
-	FlagTLSEnableHostVerification        = "tls_enable_host_verification"
+	FlagTLSDisableHostVerification       = "tls_disable_host_verification"
 	FlagTLSServerName                    = "tls_server_name"
 	FlagDLQType                          = "dlq_type"
 	FlagDLQTypeWithAlias                 = FlagDLQType + ", dt"
 	FlagMaxMessageCount                  = "max_message_count"
 	FlagMaxMessageCountWithAlias         = FlagMaxMessageCount + ", mmc"
 	FlagLastMessageID                    = "last_message_id"
-	FlagLastMessageIDWithAlias           = FlagLastMessageID + ", lm"
 	FlagConcurrency                      = "concurrency"
 	FlagReportRate                       = "report_rate"
 	FlagLowerShardBound                  = "lower_shard_bound"
@@ -637,7 +636,7 @@ func getDBFlags() []cli.Flag {
 			Usage: "DB tls client ca path (tls must be enabled)",
 		},
 		cli.BoolFlag{
-			Name:  FlagTLSEnableHostVerification,
+			Name:  FlagTLSDisableHostVerification,
 			Usage: "DB tls verify hostname and server cert (tls must be enabled)",
 		},
 	}
