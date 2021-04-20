@@ -144,7 +144,7 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 	certPath := c.GlobalString(FlagTLSCertPath)
 	keyPath := c.GlobalString(FlagTLSKeyPath)
 	caPath := c.GlobalString(FlagTLSCaPath)
-	hostNameVerification := c.GlobalBool(FlagTLSEnableHostVerification)
+	hostNameVerification := !c.GlobalBool(FlagTLSDisableHostVerification)
 	serverName := c.GlobalString(FlagTLSServerName)
 
 	var host string

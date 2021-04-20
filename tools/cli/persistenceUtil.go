@@ -85,7 +85,7 @@ func CreateDefaultDBConfig(c *cli.Context) (config.DataStore, error) {
 			CertFile:               c.String(FlagTLSCertPath),
 			KeyFile:                c.String(FlagTLSKeyPath),
 			CaFile:                 c.String(FlagTLSCaPath),
-			EnableHostVerification: c.Bool(FlagTLSEnableHostVerification),
+			EnableHostVerification: !c.Bool(FlagTLSDisableHostVerification),
 		}
 	}
 
