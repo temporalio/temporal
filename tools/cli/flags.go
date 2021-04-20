@@ -229,6 +229,8 @@ const (
 	FlagUpperShardBound                  = "upper_shard_bound"
 	FlagInputDirectory                   = "input_directory"
 	FlagAutoConfirm                      = "auto_confirm"
+	FlagHeadersProviderPlugin            = "headers_provider_plugin"
+	FlagHeadersProviderPluginWithAlias   = FlagHeadersProviderPlugin + ", hpp"
 	FlagVersion                          = "version"
 
 	FlagProtoType  = "type"

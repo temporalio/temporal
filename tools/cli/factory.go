@@ -99,6 +99,7 @@ func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Cl
 			DisableHealthCheck: true,
 			TLS:                tlsConfig,
 		},
+		HeadersProvider: cliHeadersProvider,
 	})
 	if err != nil {
 		b.logger.Fatal("Failed to create SDK client", tag.Error(err))

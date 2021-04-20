@@ -25,9 +25,26 @@
 package cli
 
 import (
+	"fmt"
+	"os/exec"
+
+	"github.com/hashicorp/go-hclog"
+	"github.com/hashicorp/go-plugin"
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/headers"
+)
+
+var (
+	pluginClient *plugin.Client
+	pluginMap    = map[string]plugin.Plugin{
+		"HeadersProvider": &HeadersProviderPlugin{},
+	}
+	handshakeConfig = plugin.HandshakeConfig{
+		ProtocolVersion:  1,
+		MagicCookieKey:   "TEMPORAL_TCTL_PLUGIN",
+		MagicCookieValue: "abb3e448baf947eba1847b10a38554db",
+	}
 )
 
 // SetFactory is used to set the ClientFactory global
@@ -93,6 +110,12 @@ func NewCliApp() *cli.App {
 			Value:  "",
 			Usage:  "override for target server name",
 			EnvVar: "TEMPORAL_CLI_TLS_SERVER_NAME",
+		},
+		cli.StringFlag{
+			Name:   FlagHeadersProviderPluginWithAlias,
+			Value:  "",
+			Usage:  "path to a headers provider plugin",
+			EnvVar: "TEMPORAL_CLI_PLUGIN_HEADERS_PROVIDER",
 		},
 	}
 	app.Commands = []cli.Command{
@@ -203,10 +226,54 @@ func NewCliApp() *cli.App {
 			Subcommands: newClusterCommands(),
 		},
 	}
+	app.Before = LoadPlugins
+	app.After = KillPlugins
 
 	// set builder if not customized
 	if cFactory == nil {
 		SetFactory(NewClientFactory())
 	}
 	return app
+}
+
+func LoadPlugins(ctx *cli.Context) error {
+	headersProviderPluginPath := ctx.String(FlagHeadersProviderPlugin)
+	if headersProviderPluginPath == "" {
+		return nil
+	}
+
+	pluginClient = plugin.NewClient(&plugin.ClientConfig{
+		HandshakeConfig: handshakeConfig,
+		Plugins:         pluginMap,
+		Cmd:             exec.Command(headersProviderPluginPath),
+		Logger: hclog.New(&hclog.LoggerOptions{
+			Name:  "tctl",
+			Level: hclog.LevelFromString("INFO"),
+		}),
+	})
+
+	rpcClient, err := pluginClient.Client()
+	if err != nil {
+		fmt.Fprintf(ctx.App.Writer, "error creating plugin client: %v\n", err)
+		return err
+	}
+
+	raw, err := rpcClient.Dispense("HeadersProvider")
+	if err != nil {
+		fmt.Fprintf(ctx.App.Writer, "error registering plugin: %v\n", err)
+		return err
+	}
+
+	cliHeadersProvider = raw.(HeadersProvider)
+
+	return nil
+}
+
+func KillPlugins(ctx *cli.Context) error {
+	if pluginClient == nil {
+		return nil
+	}
+	pluginClient.Kill()
+
+	return nil
 }
