@@ -48,15 +48,16 @@ type (
 	}
 	// CQLClientConfig contains the configuration for cql client
 	CQLClientConfig struct {
-		Hosts       string
-		Port        int
-		User        string
-		Password    string
-		Keyspace    string
-		Timeout     int
-		numReplicas int
-		Datacenter  string
-		TLS         *auth.TLS
+		Hosts                        string
+		Port                         int
+		User                         string
+		Password                     string
+		Keyspace                     string
+		Timeout                      int
+		numReplicas                  int
+		Datacenter                   string
+		EnableContactPointHostFilter bool
+		TLS                          *auth.TLS
 	}
 )
 
@@ -125,13 +126,14 @@ func newCQLClient(cfg *CQLClientConfig) (*cqlClient, error) {
 
 func (cfg *CQLClientConfig) toCassandraConfig() *config.Cassandra {
 	cassandraConfig := config.Cassandra{
-		Hosts:      cfg.Hosts,
-		Port:       cfg.Port,
-		User:       cfg.User,
-		Password:   cfg.Password,
-		Keyspace:   cfg.Keyspace,
-		TLS:        cfg.TLS,
-		Datacenter: cfg.Datacenter,
+		Hosts:                        cfg.Hosts,
+		Port:                         cfg.Port,
+		User:                         cfg.User,
+		Password:                     cfg.Password,
+		Keyspace:                     cfg.Keyspace,
+		TLS:                          cfg.TLS,
+		Datacenter:                   cfg.Datacenter,
+		EnableContactPointHostFilter: cfg.EnableContactPointHostFilter,
 	}
 
 	return &cassandraConfig

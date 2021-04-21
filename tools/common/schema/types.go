@@ -111,6 +111,8 @@ const (
 	CLIOptQuiet = "quiet"
 	// CLIOptForce is the cli option for force mode
 	CLIOptForce = "force"
+	// CLIEnableContactPointHostFilter filters out cassandra hosts that are initially unreachable
+	CLIEnableContactPointHostFilter = "enable-contact-point-host-filter"
 
 	// CLIFlagEndpoint is the cli flag for endpoint
 	CLIFlagEndpoint = CLIOptEndpoint + ", ep"

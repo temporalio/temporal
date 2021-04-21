@@ -283,6 +283,8 @@ type (
 		TLS *auth.TLS `yaml:"tls"`
 		// Consistency configuration (defaults to LOCAL_QUORUM / LOCAL_SERIAL for all stores if this field not set)
 		Consistency *CassandraStoreConsistency `yaml:"consistency"`
+		// EnableContactPointHostFilter filters out any hosts returned from a cassandra node that are not reachable
+		EnableContactPointHostFilter bool `yaml:"enableContactPointHostFilter"`
 	}
 
 	// CassandraStoreConsistency enables you to set the consistency settings for each Cassandra Persistence Store for Temporal

@@ -31,6 +31,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"strings"
 	"time"
 
@@ -63,9 +64,12 @@ func NewCassandraCluster(
 	if cfg.Keyspace != "" {
 		cluster.Keyspace = cfg.Keyspace
 	}
-	if cfg.Datacenter != "" {
-		cluster.HostFilter = gocql.DataCentreHostFilter(cfg.Datacenter)
-	}
+
+	cluster.HostFilter = createHostFilter(
+		cfg.Datacenter,
+		cfg.EnableContactPointHostFilter,
+		resolvedHosts)
+
 	if cfg.TLS != nil && cfg.TLS.Enabled {
 		if cfg.TLS.CertData != "" && cfg.TLS.CertFile != "" {
 			return nil, errors.New("Cannot specify both certData and certFile properties")
@@ -154,14 +158,45 @@ func NewCassandraCluster(
 	return cluster, nil
 }
 
-// regionHostFilter returns a gocql host filter for the given region name
-func regionHostFilter(region string) gocql.HostFilter {
+func createHostFilter(
+	datacenter string,
+	enableContactPointHostFilter bool,
+	hosts []string) gocql.HostFilter {
+	var datacenterHostFilter gocql.HostFilter
+	var contactPointHostFilter gocql.HostFilter
+
+	if enableContactPointHostFilter {
+		allHosts := make([]string, 0)
+		for _, host := range hosts {
+			allHosts = append(allHosts, host)
+			addrs, err := net.LookupHost(host)
+			if err != nil {
+				fmt.Printf("error encountered! %s \r\n", err)
+				for _, addr := range addrs {
+					if addr != host {
+						allHosts = append(allHosts, addr)
+					}
+				}
+			}
+		}
+
+		contactPointHostFilter = gocql.WhiteListHostFilter(allHosts...)
+	}
+
+	if datacenter != "" {
+		datacenterHostFilter = gocql.DataCentreHostFilter(datacenter)
+	}
+
 	return gocql.HostFilterFunc(func(host *gocql.HostInfo) bool {
-		applicationRegion := region
-		if len(host.DataCenter()) < 3 {
+		if datacenterHostFilter != nil && !datacenterHostFilter.Accept(host) {
 			return false
 		}
-		return host.DataCenter()[:3] == applicationRegion
+
+		if contactPointHostFilter != nil && !contactPointHostFilter.Accept(host) {
+			return false
+		}
+
+		return true
 	})
 }
 

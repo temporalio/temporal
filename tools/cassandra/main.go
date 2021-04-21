@@ -147,6 +147,11 @@ func buildCLIOptions() *cli.App {
 			Usage:  "disable tls host name verification (tls must be enabled)",
 			EnvVar: "CASSANDRA_TLS_DISABLE_HOST_VERIFICATION",
 		},
+		cli.BoolFlag{
+			Name:   schema.CLIEnableContactPointHostFilter,
+			Usage:  "validates temporal is able to reach any discovered cassandra nodes",
+			EnvVar: "CASSANDRA_ENABLE_CONTACT_POINT_HOST_FILTER",
+		},
 	}
 
 	app.Commands = []cli.Command{
