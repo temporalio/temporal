@@ -24,7 +24,7 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
 	github.com/golang/mock v1.5.0
-	github.com/golang/protobuf v1.5.1
+	github.com/golang/protobuf v1.5.2
 	github.com/golang/snappy v0.0.3 // indirect
 	github.com/google/uuid v1.2.0
 	github.com/iancoleman/strcase v0.1.2
@@ -57,7 +57,7 @@ require (
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.opentelemetry.io/otel v0.15.0
 	go.opentelemetry.io/otel/exporters/metric/prometheus v0.15.0
-	go.temporal.io/api v1.4.1-0.20210319015452-3dc250bb642a
+	go.temporal.io/api v1.4.1-0.20210420220407-6f00f7f98373
 	go.temporal.io/sdk v1.6.0
 	go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193
 	go.uber.org/atomic v1.7.0
@@ -68,7 +68,7 @@ require (
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 	google.golang.org/api v0.36.0
-	google.golang.org/grpc v1.36.0
+	google.golang.org/grpc v1.37.0
 	google.golang.org/grpc/examples v0.0.0-20200625174016-7a808837ae92
 	gopkg.in/check.v1 v1.0.0-20200902074654-038fdea0a05b // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1
