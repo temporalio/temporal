@@ -124,6 +124,12 @@ func BuildCLIOptions() *cli.App {
 			Usage:  "sql tls client ca file (tls must be enabled)",
 			EnvVar: "SQL_TLS_CA_FILE",
 		},
+		cli.StringFlag{
+			Name:   schema.CLIFlagTLSHostName,
+			Value:  "",
+			Usage:  "override for target server name",
+			EnvVar: "SQL_TLS_SERVER_NAME",
+		},
 		cli.BoolFlag{
 			Name:   schema.CLIFlagTLSDisableHostVerification,
 			Usage:  "disable tls host name verification (tls must be enabled)",

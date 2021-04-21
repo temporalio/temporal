@@ -161,6 +161,8 @@ const (
 	CLIFlagTLSCaFile = "tls-ca-file"
 	// CLIFlagTLSDisableHostVerification disable tls host verification (tls must be enabled)
 	CLIFlagTLSDisableHostVerification = "tls-disable-host-verification"
+	// CLIFlagTLSHostName specifies the host name for host name verification
+	CLIFlagTLSHostName = "tls-server-name"
 )
 
 var rmspaceRegex = regexp.MustCompile(`\s+`)
