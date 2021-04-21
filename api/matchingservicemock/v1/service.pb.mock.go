@@ -33,7 +33,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	matchingservice "go.temporal.io/server/api/matchingservice/v1"
+	v1 "go.temporal.io/server/api/matchingservice/v1"
 	grpc "google.golang.org/grpc"
 )
 
@@ -61,14 +61,14 @@ func (m *MockMatchingServiceClient) EXPECT() *MockMatchingServiceClientMockRecor
 }
 
 // AddActivityTask mocks base method.
-func (m *MockMatchingServiceClient) AddActivityTask(ctx context.Context, in *matchingservice.AddActivityTaskRequest, opts ...grpc.CallOption) (*matchingservice.AddActivityTaskResponse, error) {
+func (m *MockMatchingServiceClient) AddActivityTask(ctx context.Context, in *v1.AddActivityTaskRequest, opts ...grpc.CallOption) (*v1.AddActivityTaskResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "AddActivityTask", varargs...)
-	ret0, _ := ret[0].(*matchingservice.AddActivityTaskResponse)
+	ret0, _ := ret[0].(*v1.AddActivityTaskResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -81,14 +81,14 @@ func (mr *MockMatchingServiceClientMockRecorder) AddActivityTask(ctx, in interfa
 }
 
 // AddWorkflowTask mocks base method.
-func (m *MockMatchingServiceClient) AddWorkflowTask(ctx context.Context, in *matchingservice.AddWorkflowTaskRequest, opts ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
+func (m *MockMatchingServiceClient) AddWorkflowTask(ctx context.Context, in *v1.AddWorkflowTaskRequest, opts ...grpc.CallOption) (*v1.AddWorkflowTaskResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "AddWorkflowTask", varargs...)
-	ret0, _ := ret[0].(*matchingservice.AddWorkflowTaskResponse)
+	ret0, _ := ret[0].(*v1.AddWorkflowTaskResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -101,14 +101,14 @@ func (mr *MockMatchingServiceClientMockRecorder) AddWorkflowTask(ctx, in interfa
 }
 
 // CancelOutstandingPoll mocks base method.
-func (m *MockMatchingServiceClient) CancelOutstandingPoll(ctx context.Context, in *matchingservice.CancelOutstandingPollRequest, opts ...grpc.CallOption) (*matchingservice.CancelOutstandingPollResponse, error) {
+func (m *MockMatchingServiceClient) CancelOutstandingPoll(ctx context.Context, in *v1.CancelOutstandingPollRequest, opts ...grpc.CallOption) (*v1.CancelOutstandingPollResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "CancelOutstandingPoll", varargs...)
-	ret0, _ := ret[0].(*matchingservice.CancelOutstandingPollResponse)
+	ret0, _ := ret[0].(*v1.CancelOutstandingPollResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -121,14 +121,14 @@ func (mr *MockMatchingServiceClientMockRecorder) CancelOutstandingPoll(ctx, in i
 }
 
 // DescribeTaskQueue mocks base method.
-func (m *MockMatchingServiceClient) DescribeTaskQueue(ctx context.Context, in *matchingservice.DescribeTaskQueueRequest, opts ...grpc.CallOption) (*matchingservice.DescribeTaskQueueResponse, error) {
+func (m *MockMatchingServiceClient) DescribeTaskQueue(ctx context.Context, in *v1.DescribeTaskQueueRequest, opts ...grpc.CallOption) (*v1.DescribeTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "DescribeTaskQueue", varargs...)
-	ret0, _ := ret[0].(*matchingservice.DescribeTaskQueueResponse)
+	ret0, _ := ret[0].(*v1.DescribeTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -141,14 +141,14 @@ func (mr *MockMatchingServiceClientMockRecorder) DescribeTaskQueue(ctx, in inter
 }
 
 // ListTaskQueuePartitions mocks base method.
-func (m *MockMatchingServiceClient) ListTaskQueuePartitions(ctx context.Context, in *matchingservice.ListTaskQueuePartitionsRequest, opts ...grpc.CallOption) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
+func (m *MockMatchingServiceClient) ListTaskQueuePartitions(ctx context.Context, in *v1.ListTaskQueuePartitionsRequest, opts ...grpc.CallOption) (*v1.ListTaskQueuePartitionsResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "ListTaskQueuePartitions", varargs...)
-	ret0, _ := ret[0].(*matchingservice.ListTaskQueuePartitionsResponse)
+	ret0, _ := ret[0].(*v1.ListTaskQueuePartitionsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -161,14 +161,14 @@ func (mr *MockMatchingServiceClientMockRecorder) ListTaskQueuePartitions(ctx, in
 }
 
 // PollActivityTaskQueue mocks base method.
-func (m *MockMatchingServiceClient) PollActivityTaskQueue(ctx context.Context, in *matchingservice.PollActivityTaskQueueRequest, opts ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
+func (m *MockMatchingServiceClient) PollActivityTaskQueue(ctx context.Context, in *v1.PollActivityTaskQueueRequest, opts ...grpc.CallOption) (*v1.PollActivityTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "PollActivityTaskQueue", varargs...)
-	ret0, _ := ret[0].(*matchingservice.PollActivityTaskQueueResponse)
+	ret0, _ := ret[0].(*v1.PollActivityTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -181,14 +181,14 @@ func (mr *MockMatchingServiceClientMockRecorder) PollActivityTaskQueue(ctx, in i
 }
 
 // PollWorkflowTaskQueue mocks base method.
-func (m *MockMatchingServiceClient) PollWorkflowTaskQueue(ctx context.Context, in *matchingservice.PollWorkflowTaskQueueRequest, opts ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+func (m *MockMatchingServiceClient) PollWorkflowTaskQueue(ctx context.Context, in *v1.PollWorkflowTaskQueueRequest, opts ...grpc.CallOption) (*v1.PollWorkflowTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "PollWorkflowTaskQueue", varargs...)
-	ret0, _ := ret[0].(*matchingservice.PollWorkflowTaskQueueResponse)
+	ret0, _ := ret[0].(*v1.PollWorkflowTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -201,14 +201,14 @@ func (mr *MockMatchingServiceClientMockRecorder) PollWorkflowTaskQueue(ctx, in i
 }
 
 // QueryWorkflow mocks base method.
-func (m *MockMatchingServiceClient) QueryWorkflow(ctx context.Context, in *matchingservice.QueryWorkflowRequest, opts ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
+func (m *MockMatchingServiceClient) QueryWorkflow(ctx context.Context, in *v1.QueryWorkflowRequest, opts ...grpc.CallOption) (*v1.QueryWorkflowResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "QueryWorkflow", varargs...)
-	ret0, _ := ret[0].(*matchingservice.QueryWorkflowResponse)
+	ret0, _ := ret[0].(*v1.QueryWorkflowResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -221,14 +221,14 @@ func (mr *MockMatchingServiceClientMockRecorder) QueryWorkflow(ctx, in interface
 }
 
 // RespondQueryTaskCompleted mocks base method.
-func (m *MockMatchingServiceClient) RespondQueryTaskCompleted(ctx context.Context, in *matchingservice.RespondQueryTaskCompletedRequest, opts ...grpc.CallOption) (*matchingservice.RespondQueryTaskCompletedResponse, error) {
+func (m *MockMatchingServiceClient) RespondQueryTaskCompleted(ctx context.Context, in *v1.RespondQueryTaskCompletedRequest, opts ...grpc.CallOption) (*v1.RespondQueryTaskCompletedResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "RespondQueryTaskCompleted", varargs...)
-	ret0, _ := ret[0].(*matchingservice.RespondQueryTaskCompletedResponse)
+	ret0, _ := ret[0].(*v1.RespondQueryTaskCompletedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -264,10 +264,10 @@ func (m *MockMatchingServiceServer) EXPECT() *MockMatchingServiceServerMockRecor
 }
 
 // AddActivityTask mocks base method.
-func (m *MockMatchingServiceServer) AddActivityTask(arg0 context.Context, arg1 *matchingservice.AddActivityTaskRequest) (*matchingservice.AddActivityTaskResponse, error) {
+func (m *MockMatchingServiceServer) AddActivityTask(arg0 context.Context, arg1 *v1.AddActivityTaskRequest) (*v1.AddActivityTaskResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddActivityTask", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.AddActivityTaskResponse)
+	ret0, _ := ret[0].(*v1.AddActivityTaskResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -279,10 +279,10 @@ func (mr *MockMatchingServiceServerMockRecorder) AddActivityTask(arg0, arg1 inte
 }
 
 // AddWorkflowTask mocks base method.
-func (m *MockMatchingServiceServer) AddWorkflowTask(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest) (*matchingservice.AddWorkflowTaskResponse, error) {
+func (m *MockMatchingServiceServer) AddWorkflowTask(arg0 context.Context, arg1 *v1.AddWorkflowTaskRequest) (*v1.AddWorkflowTaskResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddWorkflowTask", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.AddWorkflowTaskResponse)
+	ret0, _ := ret[0].(*v1.AddWorkflowTaskResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -294,10 +294,10 @@ func (mr *MockMatchingServiceServerMockRecorder) AddWorkflowTask(arg0, arg1 inte
 }
 
 // CancelOutstandingPoll mocks base method.
-func (m *MockMatchingServiceServer) CancelOutstandingPoll(arg0 context.Context, arg1 *matchingservice.CancelOutstandingPollRequest) (*matchingservice.CancelOutstandingPollResponse, error) {
+func (m *MockMatchingServiceServer) CancelOutstandingPoll(arg0 context.Context, arg1 *v1.CancelOutstandingPollRequest) (*v1.CancelOutstandingPollResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CancelOutstandingPoll", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.CancelOutstandingPollResponse)
+	ret0, _ := ret[0].(*v1.CancelOutstandingPollResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -309,10 +309,10 @@ func (mr *MockMatchingServiceServerMockRecorder) CancelOutstandingPoll(arg0, arg
 }
 
 // DescribeTaskQueue mocks base method.
-func (m *MockMatchingServiceServer) DescribeTaskQueue(arg0 context.Context, arg1 *matchingservice.DescribeTaskQueueRequest) (*matchingservice.DescribeTaskQueueResponse, error) {
+func (m *MockMatchingServiceServer) DescribeTaskQueue(arg0 context.Context, arg1 *v1.DescribeTaskQueueRequest) (*v1.DescribeTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DescribeTaskQueue", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.DescribeTaskQueueResponse)
+	ret0, _ := ret[0].(*v1.DescribeTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -324,10 +324,10 @@ func (mr *MockMatchingServiceServerMockRecorder) DescribeTaskQueue(arg0, arg1 in
 }
 
 // ListTaskQueuePartitions mocks base method.
-func (m *MockMatchingServiceServer) ListTaskQueuePartitions(arg0 context.Context, arg1 *matchingservice.ListTaskQueuePartitionsRequest) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
+func (m *MockMatchingServiceServer) ListTaskQueuePartitions(arg0 context.Context, arg1 *v1.ListTaskQueuePartitionsRequest) (*v1.ListTaskQueuePartitionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListTaskQueuePartitions", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.ListTaskQueuePartitionsResponse)
+	ret0, _ := ret[0].(*v1.ListTaskQueuePartitionsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -339,10 +339,10 @@ func (mr *MockMatchingServiceServerMockRecorder) ListTaskQueuePartitions(arg0, a
 }
 
 // PollActivityTaskQueue mocks base method.
-func (m *MockMatchingServiceServer) PollActivityTaskQueue(arg0 context.Context, arg1 *matchingservice.PollActivityTaskQueueRequest) (*matchingservice.PollActivityTaskQueueResponse, error) {
+func (m *MockMatchingServiceServer) PollActivityTaskQueue(arg0 context.Context, arg1 *v1.PollActivityTaskQueueRequest) (*v1.PollActivityTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PollActivityTaskQueue", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.PollActivityTaskQueueResponse)
+	ret0, _ := ret[0].(*v1.PollActivityTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -354,10 +354,10 @@ func (mr *MockMatchingServiceServerMockRecorder) PollActivityTaskQueue(arg0, arg
 }
 
 // PollWorkflowTaskQueue mocks base method.
-func (m *MockMatchingServiceServer) PollWorkflowTaskQueue(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+func (m *MockMatchingServiceServer) PollWorkflowTaskQueue(arg0 context.Context, arg1 *v1.PollWorkflowTaskQueueRequest) (*v1.PollWorkflowTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PollWorkflowTaskQueue", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.PollWorkflowTaskQueueResponse)
+	ret0, _ := ret[0].(*v1.PollWorkflowTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -369,10 +369,10 @@ func (mr *MockMatchingServiceServerMockRecorder) PollWorkflowTaskQueue(arg0, arg
 }
 
 // QueryWorkflow mocks base method.
-func (m *MockMatchingServiceServer) QueryWorkflow(arg0 context.Context, arg1 *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error) {
+func (m *MockMatchingServiceServer) QueryWorkflow(arg0 context.Context, arg1 *v1.QueryWorkflowRequest) (*v1.QueryWorkflowResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryWorkflow", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.QueryWorkflowResponse)
+	ret0, _ := ret[0].(*v1.QueryWorkflowResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -384,10 +384,10 @@ func (mr *MockMatchingServiceServerMockRecorder) QueryWorkflow(arg0, arg1 interf
 }
 
 // RespondQueryTaskCompleted mocks base method.
-func (m *MockMatchingServiceServer) RespondQueryTaskCompleted(arg0 context.Context, arg1 *matchingservice.RespondQueryTaskCompletedRequest) (*matchingservice.RespondQueryTaskCompletedResponse, error) {
+func (m *MockMatchingServiceServer) RespondQueryTaskCompleted(arg0 context.Context, arg1 *v1.RespondQueryTaskCompletedRequest) (*v1.RespondQueryTaskCompletedResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RespondQueryTaskCompleted", arg0, arg1)
-	ret0, _ := ret[0].(*matchingservice.RespondQueryTaskCompletedResponse)
+	ret0, _ := ret[0].(*v1.RespondQueryTaskCompletedResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

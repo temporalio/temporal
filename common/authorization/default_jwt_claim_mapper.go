@@ -73,10 +73,10 @@ func (a *defaultJWTClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 
 	parts := strings.Split(authInfo.AuthToken, " ")
 	if len(parts) != 2 {
-		return nil, serviceerror.NewPermissionDenied("unexpected authorization token format")
+		return nil, serviceerror.NewPermissionDenied("unexpected authorization token format", "")
 	}
 	if !strings.EqualFold(parts[0], authorizationBearer) {
-		return nil, serviceerror.NewPermissionDenied("unexpected name in authorization token")
+		return nil, serviceerror.NewPermissionDenied("unexpected name in authorization token", "")
 	}
 	jwtClaims, err := parseJWT(parts[1], a.keyProvider)
 	if err != nil {
@@ -84,7 +84,7 @@ func (a *defaultJWTClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 	}
 	subject, ok := jwtClaims[headerSubject].(string)
 	if !ok {
-		return nil, serviceerror.NewPermissionDenied("unexpected value type of \"sub\" claim")
+		return nil, serviceerror.NewPermissionDenied("unexpected value type of \"sub\" claim", "")
 	}
 	claims.Subject = subject
 	permissions, ok := jwtClaims[a.permissionsClaimName].([]interface{})
@@ -141,7 +141,7 @@ func parseJWT(tokenString string, keyProvider TokenKeyProvider) (jwt.MapClaims, 
 			return keyProvider.EcdsaKey(alg, kid)
 		default:
 			return nil, serviceerror.NewPermissionDenied(
-				fmt.Sprintf("unexpected signing method: %v for algorithm: %v", token.Method, token.Header["alg"]))
+				fmt.Sprintf("unexpected signing method: %v for algorithm: %v", token.Method, token.Header["alg"]), "")
 		}
 	})
 
@@ -152,7 +152,7 @@ func parseJWT(tokenString string, keyProvider TokenKeyProvider) (jwt.MapClaims, 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok {
 		return claims, nil
 	}
-	return nil, serviceerror.NewPermissionDenied("invalid token with no claims")
+	return nil, serviceerror.NewPermissionDenied("invalid token with no claims", "")
 }
 
 func permissionToRole(permission string) Role {
