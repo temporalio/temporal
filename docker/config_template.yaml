@@ -148,7 +148,7 @@ persistence:
 global:
     membership:
         maxJoinDuration: 30s
-        broadcastAddress: {{ default .Env.TEMPORAL_BROADCAST_ADDRESS "" }}
+        broadcastAddress: "{{ default .Env.TEMPORAL_BROADCAST_ADDRESS "" }}"
     tls:
         internode:
             # This server section configures the TLS certificate that internal temporal
@@ -211,7 +211,7 @@ global:
     metrics:
         prometheus:
             timerType: {{ default .Env.PROMETHEUS_TIMER_TYPE "histogram" }}
-            listenAddress: {{ .Env.PROMETHEUS_ENDPOINT }}
+            listenAddress: "{{ .Env.PROMETHEUS_ENDPOINT }}"
     {{- end }}
     authorization:
         jwtKeyProvider:
@@ -293,7 +293,7 @@ namespaceDefaults:
 {{ $publicIp := default .Env.BIND_ON_IP "127.0.0.1" -}}
 {{- $defaultPublicHostPost := (print $publicIp ":" $temporalGrpcPort) -}}
 publicClient:
-    hostPort: {{ default .Env.PUBLIC_FRONTEND_ADDRESS $defaultPublicHostPost }}
+    hostPort: "{{ default .Env.PUBLIC_FRONTEND_ADDRESS $defaultPublicHostPost }}"
 
 dynamicConfigClient:
     filepath: "{{ default .Env.DYNAMIC_CONFIG_FILE_PATH "/etc/temporal/config/dynamicconfig" }}"
