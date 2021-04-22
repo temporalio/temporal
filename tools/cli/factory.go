@@ -144,7 +144,7 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 	certPath := c.GlobalString(FlagTLSCertPath)
 	keyPath := c.GlobalString(FlagTLSKeyPath)
 	caPath := c.GlobalString(FlagTLSCaPath)
-	hostNameVerification := !c.GlobalBool(FlagTLSDisableHostVerification)
+	disableHostNameVerification := c.GlobalBool(FlagTLSDisableHostVerification)
 	serverName := c.GlobalString(FlagTLSServerName)
 
 	var host string
@@ -171,9 +171,6 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 	if caPool != nil || cert != nil {
 		if serverName != "" {
 			host = serverName
-			// If server name is provided, we enable host verification
-			// because that's the only reason for providing server name
-			hostNameVerification = true
 		} else {
 			hostPort := c.GlobalString(FlagAddress)
 			if hostPort == "" {
@@ -182,7 +179,7 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 			// Ignoring error as we'll fail to dial anyway, and that will produce a meaningful error
 			host, _, _ = net.SplitHostPort(hostPort)
 		}
-		tlsConfig := auth.NewTLSConfigForServer(host, hostNameVerification)
+		tlsConfig := auth.NewTLSConfigForServer(host, !disableHostNameVerification)
 		if caPool != nil {
 			tlsConfig.RootCAs = caPool
 		}
@@ -190,6 +187,12 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 			tlsConfig.Certificates = []tls.Certificate{*cert}
 		}
 
+		return tlsConfig, nil
+	}
+	// If we are given a server name, set the TLS server name for DNS resolution
+	if serverName != "" {
+		host = serverName
+		tlsConfig := auth.NewTLSConfigForServer(host, !disableHostNameVerification)
 		return tlsConfig, nil
 	}
 

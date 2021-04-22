@@ -44,8 +44,12 @@ type (
 	contextKeyAuthHeader   struct{}
 )
 
+const (
+	RequestUnauthorized = "Request unauthorized."
+)
+
 var (
-	errUnauthorized = serviceerror.NewPermissionDenied("Request unauthorized.")
+	errUnauthorized = serviceerror.NewPermissionDenied(RequestUnauthorized, "")
 
 	MappedClaims contextKeyMappedClaims
 	AuthHeader   contextKeyAuthHeader
@@ -133,6 +137,10 @@ func (a *interceptor) Interceptor(
 		}
 		if result.Decision != DecisionAllow {
 			scope.IncCounter(metrics.ServiceErrUnauthorizedCounter)
+			// if a reason is included in the result, include it in the error message
+			if result.Reason != "" {
+				return nil, serviceerror.NewPermissionDenied(RequestUnauthorized, result.Reason)
+			}
 			return nil, errUnauthorized // return a generic error to the caller without disclosing details
 		}
 	}
