@@ -49,7 +49,7 @@ const (
 )
 
 var (
-	errUnauthorized = serviceerror.NewPermissionDenied(RequestUnauthorized, "")
+	errUnauthorized = serviceerror.NewPermissionDenied(RequestUnauthorized)
 
 	MappedClaims contextKeyMappedClaims
 	AuthHeader   contextKeyAuthHeader
@@ -139,7 +139,7 @@ func (a *interceptor) Interceptor(
 			scope.IncCounter(metrics.ServiceErrUnauthorizedCounter)
 			// if a reason is included in the result, include it in the error message
 			if result.Reason != "" {
-				return nil, serviceerror.NewPermissionDenied(RequestUnauthorized, result.Reason)
+				return nil, serviceerror.NewPermissionDenied(RequestUnauthorized)
 			}
 			return nil, errUnauthorized // return a generic error to the caller without disclosing details
 		}

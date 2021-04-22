@@ -84,5 +84,5 @@ var (
 	errFailedToUpdateESMappingMessage          = "Failed to update ES mapping, err: %v."
 	errUnableToBuildSearchAttributesMapMessage = "Unable to build valid search attributes map, err: %v."
 
-	errNoPermission = serviceerror.NewPermissionDenied("No permission to do this operation.", "")
+	errNoPermission = serviceerror.NewPermissionDenied("No permission to do this operation.")
 )

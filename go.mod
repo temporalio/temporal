@@ -77,3 +77,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 	honnef.co/go/tools v0.1.0 // indirect
 )
+
+replace go.temporal.io/api => ../api-go
+
+//replace go.temporal.io/api/enums => ../api-go/enums
