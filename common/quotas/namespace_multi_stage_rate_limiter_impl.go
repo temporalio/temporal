@@ -63,7 +63,7 @@ func (r *NamespaceMultiStageRateLimiterImpl) Allow(
 	namespaceID string,
 ) bool {
 
-	return r.AllowN(namespaceID, time.Now().UTC(), 1)
+	return r.AllowN(namespaceID, time.Now(), 1)
 }
 
 // AllowN attempts to allow a request to go through. The method returns
@@ -85,7 +85,7 @@ func (r *NamespaceMultiStageRateLimiterImpl) Reserve(
 	namespaceID string,
 ) Reservation {
 
-	return r.ReserveN(namespaceID, time.Now().UTC(), 1)
+	return r.ReserveN(namespaceID, time.Now(), 1)
 }
 
 // ReserveN returns a Reservation that indicates how long the caller
@@ -138,7 +138,7 @@ func (r *NamespaceMultiStageRateLimiterImpl) getOrInitRateLimiter(
 	for i := 0; i < length; i++ {
 		rateLimiters[i+1] = r.sharedRateLimiters[i]
 	}
-	namespaceRateLimiter := NewMultiStageRateLimiter(rateLimiters)
+	namespaceRateLimiter := NewMultiRateLimiter(rateLimiters)
 
 	r.Lock()
 	defer r.Unlock()

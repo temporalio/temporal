@@ -45,26 +45,12 @@ type (
 		firstReservation  *MockReservation
 		secondReservation *MockReservation
 
-		rateLimiter *MultiStageRateLimiterImpl
-	}
-
-	multiStageReservationSuite struct {
-		suite.Suite
-		*require.Assertions
-
-		controller        *gomock.Controller
-		firstReservation  *MockReservation
-		secondReservation *MockReservation
+		rateLimiter *MultiRateLimiterImpl
 	}
 )
 
 func TestMultiStageRateLimiterSuite(t *testing.T) {
 	s := new(multiStageRateLimiterSuite)
-	suite.Run(t, s)
-}
-
-func TestMultiStageReservationSuite(t *testing.T) {
-	s := new(multiStageReservationSuite)
 	suite.Run(t, s)
 }
 
@@ -85,30 +71,10 @@ func (s *multiStageRateLimiterSuite) SetupTest() {
 	s.firstReservation = NewMockReservation(s.controller)
 	s.secondReservation = NewMockReservation(s.controller)
 
-	s.rateLimiter = NewMultiStageRateLimiter([]RateLimiter{s.firstRateLimiter, s.secondRateLimiter})
+	s.rateLimiter = NewMultiRateLimiter([]RateLimiter{s.firstRateLimiter, s.secondRateLimiter})
 }
 
 func (s *multiStageRateLimiterSuite) TearDownTest() {
-	s.controller.Finish()
-}
-
-func (s *multiStageReservationSuite) SetupSuite() {
-
-}
-
-func (s *multiStageReservationSuite) TearDownSuite() {
-
-}
-
-func (s *multiStageReservationSuite) SetupTest() {
-	s.Assertions = require.New(s.T())
-
-	s.controller = gomock.NewController(s.T())
-	s.firstReservation = NewMockReservation(s.controller)
-	s.secondReservation = NewMockReservation(s.controller)
-}
-
-func (s *multiStageReservationSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
@@ -182,7 +148,7 @@ func (s *multiStageRateLimiterSuite) TestReserveN_NonSuccess() {
 	s.firstRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.firstReservation)
 
 	result := s.rateLimiter.ReserveN(now, numToken)
-	s.Equal(&MultiStageReservationImpl{
+	s.Equal(&MultiReservationImpl{
 		ok:           false,
 		reservations: nil,
 	}, result)
@@ -200,7 +166,7 @@ func (s *multiStageRateLimiterSuite) TestReserveN_SomeSuccess() {
 	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.ReserveN(now, numToken)
-	s.Equal(&MultiStageReservationImpl{
+	s.Equal(&MultiReservationImpl{
 		ok:           false,
 		reservations: nil,
 	}, result)
@@ -217,7 +183,7 @@ func (s *multiStageRateLimiterSuite) TestReserveN_AllSuccess() {
 	s.secondRateLimiter.EXPECT().ReserveN(now, numToken).Return(s.secondReservation)
 
 	result := s.rateLimiter.ReserveN(now, numToken)
-	s.Equal(&MultiStageReservationImpl{
+	s.Equal(&MultiReservationImpl{
 		ok:           true,
 		reservations: []Reservation{s.firstReservation, s.secondReservation},
 	}, result)
@@ -333,54 +299,4 @@ func (s *multiStageRateLimiterSuite) TestBurst() {
 
 	result := s.rateLimiter.Burst()
 	s.Equal(firstRateLimiterBurst, result)
-}
-
-func (s *multiStageReservationSuite) Test_NotOK_OK() {
-	reservation := NewMultiStageReservation(false, nil)
-
-	result := reservation.OK()
-	s.False(result)
-}
-
-func (s *multiStageReservationSuite) Test_NotOK_CancelAt() {
-	now := time.Now()
-	reservation := NewMultiStageReservation(false, nil)
-
-	reservation.CancelAt(now)
-}
-
-func (s *multiStageReservationSuite) Test_NotOK_DelayFrom() {
-	now := time.Now()
-	reservation := NewMultiStageReservation(false, nil)
-
-	result := reservation.DelayFrom(now)
-	s.Equal(InfDuration, result)
-}
-
-func (s *multiStageReservationSuite) Test_OK_OK() {
-	reservation := NewMultiStageReservation(true, []Reservation{s.firstReservation, s.secondReservation})
-
-	result := reservation.OK()
-	s.True(result)
-}
-
-func (s *multiStageReservationSuite) Test_OK_CancelAt() {
-	now := time.Now()
-	s.firstReservation.EXPECT().CancelAt(now)
-	s.secondReservation.EXPECT().CancelAt(now)
-	reservation := NewMultiStageReservation(true, []Reservation{s.firstReservation, s.secondReservation})
-
-	reservation.CancelAt(now)
-}
-
-func (s *multiStageReservationSuite) Test_OK_DelayFrom() {
-	now := time.Now()
-	firstReservationDelay := time.Second
-	secondReservationDelay := time.Minute
-	s.firstReservation.EXPECT().DelayFrom(now).Return(firstReservationDelay)
-	s.secondReservation.EXPECT().DelayFrom(now).Return(secondReservationDelay)
-	reservation := NewMultiStageReservation(true, []Reservation{s.firstReservation, s.secondReservation})
-
-	result := reservation.DelayFrom(now)
-	s.Equal(secondReservationDelay, result)
 }

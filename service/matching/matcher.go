@@ -71,7 +71,7 @@ const (
 func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, scopeFunc func() metrics.Scope) *TaskMatcher {
 	dynamicRate := quotas.NewDynamicRate(defaultTaskDispatchRPS)
 	dynamicBurst := quotas.NewDynamicBurst(int(defaultTaskDispatchRPS))
-	limiter := quotas.NewMultiStageRateLimiter([]quotas.RateLimiter{
+	limiter := quotas.NewMultiRateLimiter([]quotas.RateLimiter{
 		quotas.NewDynamicRateLimiter(
 			dynamicRate.RateFn(),
 			dynamicBurst.BurstFn(),

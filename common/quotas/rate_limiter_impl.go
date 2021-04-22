@@ -27,7 +27,6 @@ package quotas
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -39,7 +38,7 @@ type (
 		sync.RWMutex
 		rate          float64
 		burst         int
-		goRateLimiter atomic.Value
+		goRateLimiter *rate.Limiter
 	}
 )
 
@@ -49,10 +48,11 @@ var _ RateLimiter = (*RateLimiterImpl)(nil)
 // configuration updates
 func NewRateLimiter(newRate float64, newBurst int) *RateLimiterImpl {
 	rl := &RateLimiterImpl{
-		rate:  newRate,
-		burst: newBurst,
+		rate:          newRate,
+		burst:         newBurst,
+		goRateLimiter: rate.NewLimiter(rate.Limit(newRate), newBurst),
 	}
-	rl.goRateLimiter.Store(rate.NewLimiter(rate.Limit(rl.rate), rl.burst))
+
 	return rl
 }
 
@@ -61,7 +61,7 @@ func (rl *RateLimiterImpl) SetRate(rate float64) {
 	rl.refreshInternalRateLimiterImpl(&rate, nil)
 }
 
-// Burst set the burst of the rate limiter
+// SetBurst set the burst of the rate limiter
 func (rl *RateLimiterImpl) SetBurst(burst int) {
 	rl.refreshInternalRateLimiterImpl(nil, &burst)
 }
@@ -74,39 +74,33 @@ func (rl *RateLimiterImpl) SetRateBurst(rate float64, burst int) {
 // Allow immediately returns with true or false indicating if a rate limit
 // token is available or not
 func (rl *RateLimiterImpl) Allow() bool {
-	limiter := rl.goRateLimiter.Load().(*rate.Limiter)
-	return limiter.Allow()
+	return rl.goRateLimiter.Allow()
 }
 
 // AllowN immediately returns with true or false indicating if n rate limit
 // token is available or not
 func (rl *RateLimiterImpl) AllowN(now time.Time, numToken int) bool {
-	limiter := rl.goRateLimiter.Load().(*rate.Limiter)
-	return limiter.AllowN(now, numToken)
+	return rl.goRateLimiter.AllowN(now, numToken)
 }
 
 // Reserve reserves a rate limit token
 func (rl *RateLimiterImpl) Reserve() Reservation {
-	limiter := rl.goRateLimiter.Load().(*rate.Limiter)
-	return limiter.Reserve()
+	return rl.goRateLimiter.Reserve()
 }
 
 // ReserveN reserves n rate limit token
 func (rl *RateLimiterImpl) ReserveN(now time.Time, numToken int) Reservation {
-	limiter := rl.goRateLimiter.Load().(*rate.Limiter)
-	return limiter.ReserveN(now, numToken)
+	return rl.goRateLimiter.ReserveN(now, numToken)
 }
 
 // Wait waits up till deadline for a rate limit token
 func (rl *RateLimiterImpl) Wait(ctx context.Context) error {
-	limiter := rl.goRateLimiter.Load().(*rate.Limiter)
-	return limiter.Wait(ctx)
+	return rl.goRateLimiter.Wait(ctx)
 }
 
 // WaitN waits up till deadline for n rate limit token
 func (rl *RateLimiterImpl) WaitN(ctx context.Context, numToken int) error {
-	limiter := rl.goRateLimiter.Load().(*rate.Limiter)
-	return limiter.WaitN(ctx, numToken)
+	return rl.goRateLimiter.WaitN(ctx, numToken)
 }
 
 // Rate returns the rate per second for this rate limiter
@@ -141,7 +135,8 @@ func (rl *RateLimiterImpl) refreshInternalRateLimiterImpl(
 	}
 
 	if refresh {
-		limiter := rate.NewLimiter(rate.Limit(rl.rate), rl.burst)
-		rl.goRateLimiter.Store(limiter)
+		now := time.Now()
+		rl.goRateLimiter.SetLimitAt(now, rate.Limit(rl.rate))
+		rl.goRateLimiter.SetBurstAt(now, rl.burst)
 	}
 }
