@@ -769,10 +769,23 @@ func (e *historyEngineImpl) QueryWorkflow(
 	if err != nil {
 		return nil, err
 	}
+
+	workflowStatus := mutableStateResp.GetWorkflowStatus()
+	if mutableStateResp.GetWorkflowState() == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED &&
+		workflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return &historyservice.QueryWorkflowResponse{
+			Response: &workflowservice.QueryWorkflowResponse{
+				QueryRejected: &querypb.QueryRejected{
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_CREATED,
+				},
+			},
+		}, nil
+	}
+
 	req := request.GetRequest()
-	if mutableStateResp.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && req.QueryRejectCondition != enumspb.QUERY_REJECT_CONDITION_NONE {
+	if workflowStatus != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && req.QueryRejectCondition != enumspb.QUERY_REJECT_CONDITION_NONE {
 		notOpenReject := req.GetQueryRejectCondition() == enumspb.QUERY_REJECT_CONDITION_NOT_OPEN
-		status := mutableStateResp.GetWorkflowStatus()
+		status := workflowStatus
 		notCompletedCleanlyReject := req.GetQueryRejectCondition() == enumspb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY && status != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 		if notOpenReject || notCompletedCleanlyReject {
 			return &historyservice.QueryWorkflowResponse{
