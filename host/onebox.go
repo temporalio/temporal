@@ -35,6 +35,7 @@ import (
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/server/common/clock"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/cluster"
@@ -91,6 +92,7 @@ type (
 		clusterMetadataConfig            *config.ClusterMetadata
 		persistenceConfig                config.Persistence
 		metadataMgr                      persistence.MetadataManager
+		clusterMetadataMgr               persistence.ClusterMetadataManager
 		shardMgr                         persistence.ShardManager
 		historyV2Mgr                     persistence.HistoryManager
 		taskMgr                          persistence.TaskManager
@@ -125,6 +127,7 @@ type (
 		ClusterMetadataConfig            *config.ClusterMetadata
 		PersistenceConfig                config.Persistence
 		MetadataMgr                      persistence.MetadataManager
+		ClusterMetadataManager           persistence.ClusterMetadataManager
 		ShardMgr                         persistence.ShardManager
 		HistoryV2Mgr                     persistence.HistoryManager
 		ExecutionMgrFactory              persistence.ExecutionManagerFactory
@@ -157,6 +160,7 @@ func NewTemporal(params *TemporalParams) Temporal {
 		clusterMetadataConfig:            params.ClusterMetadataConfig,
 		persistenceConfig:                params.PersistenceConfig,
 		metadataMgr:                      params.MetadataMgr,
+		clusterMetadataMgr:               params.ClusterMetadataManager,
 		visibilityMgr:                    params.VisibilityMgr,
 		shardMgr:                         params.ShardMgr,
 		historyV2Mgr:                     params.HistoryV2Mgr,
@@ -609,7 +613,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	c.workerService = service
 	service.Start()
 
-	clusterMetadata := cluster.GetTestClusterMetadata(c.clusterMetadataConfig)
+	clusterMetadata := cluster.NewTestClusterMetadata(c.clusterMetadataConfig, c.clusterMetadataMgr, clock.NewRealTimeSource())
 	var replicatorNamespaceCache cache.NamespaceCache
 	if c.workerConfig.EnableReplicator {
 		metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)

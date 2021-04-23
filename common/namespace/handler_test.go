@@ -79,10 +79,8 @@ func TestNamespaceHandlerCommonSuite(t *testing.T) {
 }
 
 func (s *namespaceHandlerCommonSuite) SetupSuite() {
-	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{
-		ClusterMetadata: cluster.GetTestClusterMetadata(cluster.GetTestClusterMetadataConfig(true, true)),
-	})
-	s.TestBase.Setup()
+	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
+	s.TestBase.Setup(cluster.NewTestClusterMetadataConfig(true, true))
 }
 
 func (s *namespaceHandlerCommonSuite) TearDownSuite() {

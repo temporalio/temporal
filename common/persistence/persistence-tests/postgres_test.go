@@ -33,56 +33,56 @@ import (
 func TestPostgreSQLHistoryV2PersistenceSuite(t *testing.T) {
 	s := new(HistoryV2PersistenceSuite)
 	s.TestBase = NewTestBaseWithSQL(GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup()
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestPostgreSQLMatchingPersistenceSuite(t *testing.T) {
 	s := new(MatchingPersistenceSuite)
 	s.TestBase = NewTestBaseWithSQL(GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup()
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestPostgreSQLMetadataPersistenceSuiteV2(t *testing.T) {
 	s := new(MetadataPersistenceSuiteV2)
 	s.TestBase = NewTestBaseWithSQL(GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup()
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestPostgreSQLShardPersistenceSuite(t *testing.T) {
 	s := new(ShardPersistenceSuite)
 	s.TestBase = NewTestBaseWithSQL(GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup()
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestPostgreSQLExecutionManagerSuite(t *testing.T) {
 	s := new(ExecutionManagerSuite)
 	s.TestBase = NewTestBaseWithSQL(GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup()
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestPostgreSQLExecutionManagerWithEventsV2(t *testing.T) {
 	s := new(ExecutionManagerSuiteForEventsV2)
 	s.TestBase = NewTestBaseWithSQL(GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup()
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestPostgreSQLVisibilityPersistenceSuite(t *testing.T) {
 	s := new(VisibilityPersistenceSuite)
 	s.TestBase = NewTestBaseWithSQL(GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup()
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestPostgreSQLClusterMetadataPersistence(t *testing.T) {
 	s := new(ClusterMetadataManagerSuite)
 	s.TestBase = NewTestBaseWithSQL(GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup()
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 

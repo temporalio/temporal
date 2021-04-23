@@ -36,6 +36,7 @@ import (
 	"github.com/uber-go/tally"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/clock"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
@@ -611,6 +612,8 @@ func Test_IsSampledForLongerRetention(t *testing.T) {
 func Test_NamespaceCacheEntry_GetNamespaceNotActiveErr(t *testing.T) {
 	clusterMetadata := cluster.NewMetadata(
 		log.NewNoopLogger(),
+		clock.NewRealTimeSource(),
+		nil,
 		true,
 		int64(10),
 		cluster.TestCurrentClusterName,
