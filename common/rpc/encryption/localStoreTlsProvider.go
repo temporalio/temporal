@@ -256,7 +256,7 @@ func newServerTLSConfig(
 		if perHostCertProviderMap != nil {
 			perHostCertProvider, hostClientAuthRequired, err := perHostCertProviderMap.GetCertProvider(c.ServerName)
 			if err != nil {
-				logger.Warn("cannot find a per-host provider for attempted incoming TLS connection",
+				logger.Error("error while looking up per-host provider for attempted incoming TLS connection",
 					tag.HostID(c.ServerName), tag.Address(remoteAddress))
 				return nil, err
 			}
@@ -264,6 +264,8 @@ func newServerTLSConfig(
 			if perHostCertProvider != nil {
 				return getServerTLSConfigFromCertProvider(perHostCertProvider, hostClientAuthRequired, remoteAddress, logger)
 			}
+			logger.Warn("cannot find a per-host provider for attempted incoming TLS connection. returning default TLS configuration",
+				tag.HostID(c.ServerName), tag.Address(remoteAddress))
 			return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, remoteAddress, logger)
 		}
 		return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, remoteAddress, logger)
@@ -304,7 +306,9 @@ func getServerTLSConfigFromCertProvider(
 
 		clientCaPool = ca
 	}
-	logger.Info("returning TLS config for connection", tag.Address(remoteAddress))
+	if remoteAddress != "" { // remoteAddress=="" when we return initial tls.Config object when configuring server
+		logger.Debug("returning TLS config for connection", tag.Address(remoteAddress))
+	}
 	return auth.NewTLSConfigWithCertsAndCAs(
 		clientAuthType,
 		[]tls.Certificate{*serverCert},

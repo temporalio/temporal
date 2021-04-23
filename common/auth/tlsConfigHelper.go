@@ -82,7 +82,7 @@ func NewTLSConfigWithCertsAndCAs(
 	c.Certificates = certificates
 	c.ClientCAs = clientCAs
 	c.VerifyConnection = func(state tls.ConnectionState) error {
-		logger.Info("successfully established incoming TLS connection", tag.HostID(state.ServerName))
+		logger.Debug("successfully established incoming TLS connection", tag.HostID(state.ServerName))
 		return nil
 	}
 	return c
