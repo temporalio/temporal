@@ -168,6 +168,7 @@ copyright-proto:
 clean-bins:
 	@printf $(COLOR) "Delete old binaries..."
 	@rm -f tctl
+	@rm -f tctl-plugin-headers-provider-authorization
 	@rm -f temporal-server
 	@rm -f temporal-cassandra-tool
 	@rm -f temporal-sql-tool
@@ -176,9 +177,13 @@ temporal-server:
 	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
 	CGO_ENABLED=0 go build -ldflags "$(shell ./develop/scripts/go-build-ldflags.sh $(MODULE_ROOT)/ldflags)" -o temporal-server cmd/server/main.go
 
-tctl:
+tctl: tctl-plugin-headers-provider-authorization
 	@printf $(COLOR) "Build tctl with OS: $(GOOS), ARCH: $(GOARCH)..."
 	CGO_ENABLED=0 go build -o tctl cmd/tools/cli/main.go
+
+tctl-plugin-headers-provider-authorization:
+	@printf $(COLOR) "Build tctl-plugin-headers-provider-authorization with OS: $(GOOS), ARCH: $(GOARCH)..."
+	CGO_ENABLED=0 go build -o tctl-plugin-headers-provider-authorization cmd/tools/cli/plugins/tctl-headers-provider-authorization.go
 
 temporal-cassandra-tool:
 	@printf $(COLOR) "Build temporal-cassandra-tool with OS: $(GOOS), ARCH: $(GOARCH)..."

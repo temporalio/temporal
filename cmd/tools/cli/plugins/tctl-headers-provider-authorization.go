@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-
 	"github.com/hashicorp/go-plugin"
 	"go.temporal.io/server/tools/cli"
 )
@@ -15,7 +13,7 @@ var handshakeConfig = plugin.HandshakeConfig{
 
 type provider struct{}
 
-func (*provider) GetHeaders(ctx context.Context) (map[string]string, error) {
+func (provider) GetHeaders(outgoingHeaders map[string][]string) (map[string]string, error) {
 	return map[string]string{
 		"Test": "testing",
 	}, nil
