@@ -243,7 +243,7 @@ func newServerTLSConfig(
 ) (*tls.Config, error) {
 
 	clientAuthRequired := config.Server.RequireClientAuth
-	tlsConfig, err := getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, "", logger)
+	tlsConfig, err := getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, "", "", logger)
 	if err != nil {
 		return nil, err
 	}
@@ -257,18 +257,18 @@ func newServerTLSConfig(
 			perHostCertProvider, hostClientAuthRequired, err := perHostCertProviderMap.GetCertProvider(c.ServerName)
 			if err != nil {
 				logger.Error("error while looking up per-host provider for attempted incoming TLS connection",
-					tag.HostID(c.ServerName), tag.Address(remoteAddress))
+					tag.HostID(c.ServerName), tag.Address(remoteAddress), tag.Error(err))
 				return nil, err
 			}
 
 			if perHostCertProvider != nil {
-				return getServerTLSConfigFromCertProvider(perHostCertProvider, hostClientAuthRequired, remoteAddress, logger)
+				return getServerTLSConfigFromCertProvider(perHostCertProvider, hostClientAuthRequired, remoteAddress, c.ServerName, logger)
 			}
 			logger.Warn("cannot find a per-host provider for attempted incoming TLS connection. returning default TLS configuration",
 				tag.HostID(c.ServerName), tag.Address(remoteAddress))
-			return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, remoteAddress, logger)
+			return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, remoteAddress, c.ServerName, logger)
 		}
-		return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, remoteAddress, logger)
+		return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, remoteAddress, c.ServerName, logger)
 	}
 
 	return tlsConfig, nil
@@ -278,6 +278,7 @@ func getServerTLSConfigFromCertProvider(
 	certProvider CertProvider,
 	requireClientAuth bool,
 	remoteAddress string,
+	serverName string,
 	logger log.Logger) (*tls.Config, error) {
 
 	// Get serverCert from disk
@@ -307,7 +308,7 @@ func getServerTLSConfigFromCertProvider(
 		clientCaPool = ca
 	}
 	if remoteAddress != "" { // remoteAddress=="" when we return initial tls.Config object when configuring server
-		logger.Debug("returning TLS config for connection", tag.Address(remoteAddress))
+		logger.Debug("returning TLS config for connection", tag.Address(remoteAddress), tag.HostID(serverName))
 	}
 	return auth.NewTLSConfigWithCertsAndCAs(
 		clientAuthType,
