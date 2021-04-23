@@ -59,18 +59,18 @@ func (m *MockProvider) EXPECT() *MockProviderMockRecorder {
 }
 
 // GetSearchAttributes mocks base method.
-func (m *MockProvider) GetSearchAttributes(indexName string, bypassCache, includeSystem bool) (map[string]enums.IndexedValueType, error) {
+func (m *MockProvider) GetSearchAttributes(indexName string, bypassCache bool) (map[string]enums.IndexedValueType, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSearchAttributes", indexName, bypassCache, includeSystem)
+	ret := m.ctrl.Call(m, "GetSearchAttributes", indexName, bypassCache)
 	ret0, _ := ret[0].(map[string]enums.IndexedValueType)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetSearchAttributes indicates an expected call of GetSearchAttributes.
-func (mr *MockProviderMockRecorder) GetSearchAttributes(indexName, bypassCache, includeSystem interface{}) *gomock.Call {
+func (mr *MockProviderMockRecorder) GetSearchAttributes(indexName, bypassCache interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockProvider)(nil).GetSearchAttributes), indexName, bypassCache, includeSystem)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockProvider)(nil).GetSearchAttributes), indexName, bypassCache)
 }
 
 // MockSaver is a mock of Saver interface.
