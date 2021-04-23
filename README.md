@@ -35,7 +35,7 @@ We have a number of [HelloWorld type scenarios](https://github.com/temporalio/sa
 
 ### Use CLI
 
-Use [Temporal's command line tool](https://docs.temporal.io/docs/tctl) `tctl` to interact with the local Temporal server.
+Use [Temporal's command line tool](https://docs.temporal.io/docs/system-tools/tctl) `tctl` to interact with the local Temporal server.
 
 ```bash
 alias tctl="docker exec temporal-admin-tools tctl"
