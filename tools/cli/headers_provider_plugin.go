@@ -64,7 +64,7 @@ func (w HeadersProviderPluginWrapper) Kill() {
 func NewHeadersProviderPlugin(name string, args []string) (HeadersProvider, error) {
 	var cmdArgs []string
 	for _, arg := range args {
-		cmdArgs = append(cmdArgs, "-"+arg)
+		cmdArgs = append(cmdArgs, "--"+arg)
 	}
 
 	pluginClient := plugin.NewClient(&plugin.ClientConfig{
