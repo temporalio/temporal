@@ -26,6 +26,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/urfave/cli"
 
@@ -101,6 +102,12 @@ func NewCliApp() *cli.App {
 			Value:  "",
 			Usage:  "headers provider plugin",
 			EnvVar: "TEMPORAL_CLI_PLUGIN_HEADERS_PROVIDER",
+		},
+		cli.StringFlag{
+			Name:   FlagHeadersProviderPluginOptionsWithAlias,
+			Value:  "",
+			Usage:  "headers provider plugin options",
+			EnvVar: "TEMPORAL_CLI_PLUGIN_HEADERS_PROVIDER_OPTIONS",
 		},
 	}
 	app.Commands = []cli.Command{
@@ -224,10 +231,11 @@ func NewCliApp() *cli.App {
 func LoadPlugins(ctx *cli.Context) error {
 	headersProviderPlugin := ctx.String(FlagHeadersProviderPlugin)
 	if headersProviderPlugin != "" {
-		headersProviderPlugin = "tctl-plugin-headers-provider-" + headersProviderPlugin
+		name := "tctl-plugin-headers-provider-" + headersProviderPlugin
+		args := strings.Split(ctx.String(FlagHeadersProviderPluginOptions), ",")
 
 		var err error
-		cliHeadersProvider, err = NewHeadersProviderPlugin(headersProviderPlugin)
+		cliHeadersProvider, err = NewHeadersProviderPlugin(name, args)
 		if err != nil {
 			fmt.Printf("unable to register headers provider plugin %s: %v\n", headersProviderPlugin, err)
 			return err

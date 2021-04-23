@@ -61,14 +61,19 @@ func (w HeadersProviderPluginWrapper) Kill() {
 	w.client.Kill()
 }
 
-func NewHeadersProviderPlugin(name string) (HeadersProvider, error) {
+func NewHeadersProviderPlugin(name string, args []string) (HeadersProvider, error) {
+	var cmdArgs []string
+	for _, arg := range args {
+		cmdArgs = append(cmdArgs, "-"+arg)
+	}
+
 	pluginClient := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig: handshakeConfig,
 		Plugins:         pluginMap,
-		Cmd:             exec.Command(name),
+		Cmd:             exec.Command(name, cmdArgs...),
 		Logger: hclog.New(&hclog.LoggerOptions{
 			Name:  "tctl",
-			Level: hclog.LevelFromString("DEBUG"),
+			Level: hclog.LevelFromString("INFO"),
 		}),
 	})
 
