@@ -27,6 +27,9 @@ package auth
 import (
 	"crypto/tls"
 	"crypto/x509"
+
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 // Helper methods for creating tls.Config structs to ensure MinVersion is 1.3
@@ -72,10 +75,15 @@ func NewTLSConfigWithCertsAndCAs(
 	clientAuth tls.ClientAuthType,
 	certificates []tls.Certificate,
 	clientCAs *x509.CertPool,
+	logger log.Logger,
 ) *tls.Config {
 	c := NewEmptyTLSConfig()
 	c.ClientAuth = clientAuth
 	c.Certificates = certificates
 	c.ClientCAs = clientCAs
+	c.VerifyConnection = func(state tls.ConnectionState) error {
+		logger.Info("successfully established incoming TLS connection", tag.HostID(state.ServerName))
+		return nil
+	}
 	return c
 }
