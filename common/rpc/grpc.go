@@ -50,6 +50,9 @@ const (
 
 	// minConnectTimeout is the minimum amount of time we are willing to give a connection to complete.
 	minConnectTimeout = 20 * time.Second
+
+	// MaxInternodeRecvPayloadSize indicates the internode max receive payload size
+	MaxInternodeRecvPayloadSize = 128 * 1024 * 1024
 )
 
 // Dial creates a client connection to the given target with default options.
@@ -76,9 +79,11 @@ func Dial(hostName string, tlsConfig *tls.Config) (*grpc.ClientConn, error) {
 
 	return grpc.Dial(hostName,
 		grpcSecureOpt,
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(MaxInternodeRecvPayloadSize)),
 		grpc.WithChainUnaryInterceptor(
 			versionHeadersInterceptor,
-			errorInterceptor),
+			errorInterceptor,
+		),
 		grpc.WithDefaultServiceConfig(DefaultServiceConfig),
 		grpc.WithDisableServiceConfig(),
 		grpc.WithConnectParams(cp),
