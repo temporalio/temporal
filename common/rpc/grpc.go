@@ -51,8 +51,8 @@ const (
 	// minConnectTimeout is the minimum amount of time we are willing to give a connection to complete.
 	minConnectTimeout = 20 * time.Second
 
-	// MaxInternodeRecvPayloadSize indicates the internode max receive payload size
-	MaxInternodeRecvPayloadSize = 128 * 1024 * 1024
+	// maxInternodeRecvPayloadSize indicates the internode max receive payload size.
+	maxInternodeRecvPayloadSize = 128 * 1024 * 1024 // 128 Mb
 )
 
 // Dial creates a client connection to the given target with default options.
