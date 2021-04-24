@@ -193,7 +193,7 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 	return ip
 }
 
-// CreateGRPCConnection creates connection for gRPC calls
+// CreateFrontendGRPCConnection creates connection for gRPC calls
 func (d *RPCFactory) CreateFrontendGRPCConnection(hostName string) *grpc.ClientConn {
 	var tlsClientConfig *tls.Config
 	var err error
@@ -207,7 +207,7 @@ func (d *RPCFactory) CreateFrontendGRPCConnection(hostName string) *grpc.ClientC
 	return d.dial(hostName, tlsClientConfig)
 }
 
-// CreateGRPCConnection creates connection for gRPC calls
+// CreateInternodeGRPCConnection creates connection for gRPC calls
 func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.ClientConn {
 	var tlsClientConfig *tls.Config
 	var err error
