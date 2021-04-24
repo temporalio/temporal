@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/uber-go/tally"
+	"go.temporal.io/server/common/log/tag"
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
@@ -154,7 +155,7 @@ func (s *localStoreTlsProvider) GetFrontendServerConfig() (*tls.Config, error) {
 	return s.getOrCreateConfig(
 		&s.cachedFrontendServerConfig,
 		func() (*tls.Config, error) {
-			return newServerTLSConfig(s.frontendCertProvider, s.frontendPerHostCertProviderMap, &s.settings.Frontend)
+			return newServerTLSConfig(s.frontendCertProvider, s.frontendPerHostCertProviderMap, &s.settings.Frontend, s.logger)
 		},
 		s.settings.Frontend.IsEnabled())
 }
@@ -163,7 +164,7 @@ func (s *localStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) 
 	return s.getOrCreateConfig(
 		&s.cachedInternodeServerConfig,
 		func() (*tls.Config, error) {
-			return newServerTLSConfig(s.internodeCertProvider, nil, &s.settings.Internode)
+			return newServerTLSConfig(s.internodeCertProvider, nil, &s.settings.Internode, s.logger)
 		},
 		s.settings.Internode.IsEnabled())
 }
@@ -238,32 +239,48 @@ func newServerTLSConfig(
 	certProvider CertProvider,
 	perHostCertProviderMap PerHostCertProviderMap,
 	config *config.GroupTLS,
+	logger log.Logger,
 ) (*tls.Config, error) {
 
 	clientAuthRequired := config.Server.RequireClientAuth
-	tlsConfig, err := getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired)
+	tlsConfig, err := getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, "", "", logger)
 	if err != nil {
 		return nil, err
 	}
 
 	tlsConfig.GetConfigForClient = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
+
+		remoteAddress := c.Conn.RemoteAddr().String()
+		logger.Info("attempted incoming TLS connection", tag.Address(remoteAddress), tag.HostID(c.ServerName))
+
 		if perHostCertProviderMap != nil {
 			perHostCertProvider, hostClientAuthRequired, err := perHostCertProviderMap.GetCertProvider(c.ServerName)
 			if err != nil {
+				logger.Error("error while looking up per-host provider for attempted incoming TLS connection",
+					tag.HostID(c.ServerName), tag.Address(remoteAddress), tag.Error(err))
 				return nil, err
 			}
 
 			if perHostCertProvider != nil {
-				return getServerTLSConfigFromCertProvider(perHostCertProvider, hostClientAuthRequired)
+				return getServerTLSConfigFromCertProvider(perHostCertProvider, hostClientAuthRequired, remoteAddress, c.ServerName, logger)
 			}
-			return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired)
+			logger.Warn("cannot find a per-host provider for attempted incoming TLS connection. returning default TLS configuration",
+				tag.HostID(c.ServerName), tag.Address(remoteAddress))
+			return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, remoteAddress, c.ServerName, logger)
 		}
-		return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired)
+		return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, remoteAddress, c.ServerName, logger)
 	}
+
 	return tlsConfig, nil
 }
 
-func getServerTLSConfigFromCertProvider(certProvider CertProvider, requireClientAuth bool) (*tls.Config, error) {
+func getServerTLSConfigFromCertProvider(
+	certProvider CertProvider,
+	requireClientAuth bool,
+	remoteAddress string,
+	serverName string,
+	logger log.Logger) (*tls.Config, error) {
+
 	// Get serverCert from disk
 	serverCert, err := certProvider.FetchServerCertificate()
 	if err != nil {
@@ -290,10 +307,14 @@ func getServerTLSConfigFromCertProvider(certProvider CertProvider, requireClient
 
 		clientCaPool = ca
 	}
+	if remoteAddress != "" { // remoteAddress=="" when we return initial tls.Config object when configuring server
+		logger.Debug("returning TLS config for connection", tag.Address(remoteAddress), tag.HostID(serverName))
+	}
 	return auth.NewTLSConfigWithCertsAndCAs(
 		clientAuthType,
 		[]tls.Certificate{*serverCert},
-		clientCaPool), nil
+		clientCaPool,
+		logger), nil
 }
 
 func newClientTLSConfig(clientProvider CertProvider, serverName string, isAuthRequired bool,

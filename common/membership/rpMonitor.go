@@ -376,10 +376,9 @@ func (rpo *ringpopMonitor) GetMemberCount(service string) (int, error) {
 }
 
 func replaceServicePort(address string, servicePort int) (string, error) {
-	parts := strings.Split(address, ":")
-	if len(parts) != 2 {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
 		return "", ErrIncorrectAddressFormat
 	}
-
-	return fmt.Sprintf("%s:%v", parts[0], servicePort), nil
+	return net.JoinHostPort(host, convert.IntToString(servicePort)), nil
 }
