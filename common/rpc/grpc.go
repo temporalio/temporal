@@ -79,7 +79,7 @@ func Dial(hostName string, tlsConfig *tls.Config) (*grpc.ClientConn, error) {
 
 	return grpc.Dial(hostName,
 		grpcSecureOpt,
-		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(MaxInternodeRecvPayloadSize)),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxInternodeRecvPayloadSize)),
 		grpc.WithChainUnaryInterceptor(
 			versionHeadersInterceptor,
 			errorInterceptor,
