@@ -68,6 +68,12 @@ func buildPayloadHandler(context *cli.Context, origin string) func(http.Response
 		for {
 			mt, message, err := c.ReadMessage()
 			if err != nil {
+				if closeError, ok := err.(*websocket.CloseError); ok {
+					if closeError.Code == websocket.CloseNoStatusReceived || closeError.Code == websocket.CloseNormalClosure {
+						break
+					}
+				}
+
 				fmt.Printf("error reading websocket message: %v\n", err)
 				break
 			}
