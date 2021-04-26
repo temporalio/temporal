@@ -1,8 +1,8 @@
 package main
 
 import (
-	"flag"
-	"fmt"
+	"log"
+	"os"
 
 	"github.com/hashicorp/go-plugin"
 	"go.temporal.io/server/tools/cli"
@@ -19,10 +19,6 @@ type provider struct {
 }
 
 func (p provider) GetHeaders(outgoingHeaders map[string][]string) (map[string]string, error) {
-	if p.token == "" {
-		return nil, fmt.Errorf("token is not set")
-	}
-
 	return map[string]string{
 		"Authorization": p.token,
 	}, nil
@@ -31,12 +27,18 @@ func (p provider) GetHeaders(outgoingHeaders map[string][]string) (map[string]st
 func main() {
 	var p provider
 
-	flag.StringVar(&p.token, "token", "", "token to set")
-	flag.Parse()
+	p.token = os.Args[1]
+	if p.token == "" {
+		p.token = os.Getenv("TEMPORAL_CLI_AUTHORIZATION_TOKEN")
+	}
+
+	if p.token == "" {
+		log.Fatalf("authorization token not set")
+	}
 
 	var pluginMap = map[string]plugin.Plugin{
 		"HeadersProvider": &cli.HeadersProviderPlugin{
-			Impl: &p,
+			Impl: &provider{},
 		},
 	}
 
