@@ -997,15 +997,30 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, version)
 
 	// verify two batches of zombie workflow are call reapply API
-	s.mockAdminClient["standby"].(*adminservicemock.MockAdminServiceClient).EXPECT().ReapplyEvents(gomock.Any(), gomock.Any()).Return(&adminservice.ReapplyEventsResponse{}, nil).Times(2)
+	reapplyCount := 0
 	for i := 0; i < 2 && s.generator.HasNextVertex(); i++ {
 		events := s.generator.GetNextVertices()
 		historyEvents := &historypb.History{}
+		reapply := false
 		for _, event := range events {
-			historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
+			historyEvent := event.GetData().(*historypb.HistoryEvent)
+			if historyEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+				reapply = true
+			}
+			historyEvents.Events = append(historyEvents.Events, historyEvent)
+		}
+		if reapply {
+			reapplyCount += 1
 		}
 		historyBatch = append(historyBatch, historyEvents)
 	}
+	s.mockAdminClient["standby"].(*adminservicemock.MockAdminServiceClient).EXPECT().ReapplyEvents(
+		gomock.Any(),
+		gomock.Any(),
+	).Return(
+		&adminservice.ReapplyEventsResponse{},
+		nil,
+	).Times(reapplyCount * 2)
 
 	versionHistory = s.eventBatchesToVersionHistory(nil, historyBatch)
 	s.applyEvents(
