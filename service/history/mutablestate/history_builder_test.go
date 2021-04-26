@@ -2167,6 +2167,43 @@ OtherEventsLoop:
 	)
 }
 
+func (s *historyBuilderSuite) TestReorder() {
+	reorderEventTypes := map[enumspb.EventType]struct{}{
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:             {},
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED:                {},
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:             {},
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED:              {},
+		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED:  {},
+		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED:     {},
+		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT:  {},
+		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED:   {},
+		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED: {},
+	}
+	var reorderEvents []*historypb.HistoryEvent
+	for eventType := range reorderEventTypes {
+		reorderEvents = append(reorderEvents, &historypb.HistoryEvent{
+			EventType: eventType,
+		})
+	}
+
+	var nonReorderEvents []*historypb.HistoryEvent
+	for eventTypeValue := range enumspb.EventType_name {
+		eventType := enumspb.EventType(eventTypeValue)
+		if _, ok := reorderEventTypes[eventType]; ok || eventType == enumspb.EVENT_TYPE_UNSPECIFIED {
+			continue
+		}
+
+		nonReorderEvents = append(nonReorderEvents, &historypb.HistoryEvent{
+			EventType: eventType,
+		})
+	}
+
+	s.Equal(
+		append(nonReorderEvents, reorderEvents...),
+		s.historyBuilder.reorderBuffer(append(reorderEvents, nonReorderEvents...)),
+	)
+}
+
 func (s *historyBuilderSuite) assertEventIDTaskID(
 	historyMutation *HistoryMutation,
 ) {

@@ -35,6 +35,7 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc/encryption"
@@ -123,7 +124,7 @@ func (d *RPCFactory) GetGRPCListener() net.Listener {
 	defer d.Unlock()
 
 	if d.grpcListener == nil {
-		hostAddress := fmt.Sprintf("%v:%v", getListenIP(d.config, d.logger), d.config.GRPCPort)
+		hostAddress := net.JoinHostPort(getListenIP(d.config, d.logger).String(), convert.IntToString(d.config.GRPCPort))
 		var err error
 		d.grpcListener, err = net.Listen("tcp", hostAddress)
 
@@ -148,7 +149,7 @@ func (d *RPCFactory) GetRingpopChannel() *tchannel.Channel {
 
 	if d.ringpopChannel == nil {
 		ringpopServiceName := fmt.Sprintf("%v-ringpop", d.serviceName)
-		ringpopHostAddress := fmt.Sprintf("%v:%v", getListenIP(d.config, d.logger), d.config.MembershipPort)
+		ringpopHostAddress := net.JoinHostPort(getListenIP(d.config, d.logger).String(), convert.IntToString(d.config.MembershipPort))
 
 		var err error
 		d.ringpopChannel, err = tchannel.NewChannel(ringpopServiceName, nil)
@@ -180,10 +181,10 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 
 	if len(cfg.BindOnIP) > 0 {
 		ip := net.ParseIP(cfg.BindOnIP)
-		if ip != nil && ip.To4() != nil {
-			return ip.To4()
+		if ip != nil {
+			return ip
 		}
-		logger.Fatal("ListenIP failed, unable to parse bindOnIP value or it is not IPv4 address", tag.Address(cfg.BindOnIP))
+		logger.Fatal("ListenIP failed, unable to parse bindOnIP value", tag.Address(cfg.BindOnIP))
 	}
 	ip, err := config.ListenIP()
 	if err != nil {
@@ -192,7 +193,7 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 	return ip
 }
 
-// CreateGRPCConnection creates connection for gRPC calls
+// CreateFrontendGRPCConnection creates connection for gRPC calls
 func (d *RPCFactory) CreateFrontendGRPCConnection(hostName string) *grpc.ClientConn {
 	var tlsClientConfig *tls.Config
 	var err error
@@ -206,7 +207,7 @@ func (d *RPCFactory) CreateFrontendGRPCConnection(hostName string) *grpc.ClientC
 	return d.dial(hostName, tlsClientConfig)
 }
 
-// CreateGRPCConnection creates connection for gRPC calls
+// CreateInternodeGRPCConnection creates connection for gRPC calls
 func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.ClientConn {
 	var tlsClientConfig *tls.Config
 	var err error

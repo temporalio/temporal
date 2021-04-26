@@ -306,7 +306,8 @@ func connectToCassandra(c *cli.Context) gocql.Session {
 			CertFile:               c.String(FlagTLSCertPath),
 			KeyFile:                c.String(FlagTLSKeyPath),
 			CaFile:                 c.String(FlagTLSCaPath),
-			EnableHostVerification: c.Bool(FlagTLSEnableHostVerification),
+			ServerName:             c.String(FlagTLSServerName),
+			EnableHostVerification: !c.Bool(FlagTLSDisableHostVerification),
 		}
 	}
 

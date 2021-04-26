@@ -86,9 +86,9 @@ func NewCliApp() *cli.App {
 			EnvVar: "TEMPORAL_CLI_TLS_CA",
 		},
 		cli.BoolFlag{
-			Name:   FlagTLSEnableHostVerification,
-			Usage:  "validates hostname of temporal cluster against server certificate",
-			EnvVar: "TEMPORAL_CLI_TLS_ENABLE_HOST_VERIFICATION",
+			Name:   FlagTLSDisableHostVerification,
+			Usage:  "disable tls host name verification (tls must be enabled)",
+			EnvVar: "TEMPORAL_CLI_TLS_DISABLE_HOST_VERIFICATION",
 		},
 		cli.StringFlag{
 			Name:   FlagTLSServerName,
