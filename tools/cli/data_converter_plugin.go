@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"net/rpc"
 
 	"github.com/hashicorp/go-plugin"
@@ -10,6 +11,20 @@ import (
 
 type DataConverterRPC struct {
 	client *rpc.Client
+}
+
+func NewDataConverterPlugin(name string) (converter.DataConverter, error) {
+	client, err := NewPluginClient("DataConverter", name)
+	if err != nil {
+		return nil, fmt.Errorf("unable to register plugin: %v\n", err)
+	}
+
+	dataConverter, ok := client.(converter.DataConverter)
+	if !ok {
+		return nil, fmt.Errorf("incorrect plugin type")
+	}
+
+	return dataConverter, nil
 }
 
 func (g *DataConverterRPC) FromPayload(payload *commonpb.Payload, valuePtr interface{}) error {

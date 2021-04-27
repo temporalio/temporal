@@ -25,27 +25,14 @@
 package cli
 
 import (
-	"os/exec"
-
-	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
 	"github.com/urfave/cli"
-
-	"go.temporal.io/sdk/converter"
 
 	"go.temporal.io/server/common/headers"
 )
 
 var (
 	pluginClient *plugin.Client
-	pluginMap    = map[string]plugin.Plugin{
-		"DataConverter": &DataConverterPlugin{},
-	}
-	handshakeConfig = plugin.HandshakeConfig{
-		ProtocolVersion:  1,
-		MagicCookieKey:   "TEMPORAL_CLI_PLUGIN_DATA_CONVERTER",
-		MagicCookieValue: "abb3e448baf947eba1847b10a38554db",
-	}
 )
 
 // SetFactory is used to set the ClientFactory global
@@ -244,41 +231,21 @@ func NewCliApp() *cli.App {
 }
 
 func LoadPlugins(ctx *cli.Context) error {
-	plugin_path := ctx.String(FlagDataConverterPlugin)
-	if plugin_path == "" {
-		return nil
+	dc_plugin := ctx.String(FlagDataConverterPlugin)
+	if dc_plugin != "" {
+		dataConverter, err := NewDataConverterPlugin(dc_plugin)
+		if err != nil {
+			return err
+		}
+
+		cliDataConverter = dataConverter
 	}
-
-	pluginClient = plugin.NewClient(&plugin.ClientConfig{
-		HandshakeConfig: handshakeConfig,
-		Plugins:         pluginMap,
-		Cmd:             exec.Command(plugin_path),
-		Logger: hclog.New(&hclog.LoggerOptions{
-			Name:  "tctl",
-			Level: hclog.LevelFromString("INFO"),
-		}),
-	})
-
-	rpcClient, err := pluginClient.Client()
-	if err != nil {
-		return err
-	}
-
-	raw, err := rpcClient.Dispense("DataConverter")
-	if err != nil {
-		return err
-	}
-
-	cliDataConverter = raw.(converter.DataConverter)
 
 	return nil
 }
 
 func KillPlugins(ctx *cli.Context) error {
-	if pluginClient == nil {
-		return nil
-	}
-	pluginClient.Kill()
+	plugin.CleanupClients()
 
 	return nil
 }

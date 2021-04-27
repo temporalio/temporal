@@ -29,7 +29,7 @@ func newDataConverterCommands() []cli.Command {
 		{
 			Name:    "web",
 			Aliases: []string{"web"},
-			Usage:   "Provides a dataconverter for Temporal web",
+			Usage:   "Provides a data converter websocket for Temporal web",
 			Action: func(c *cli.Context) {
 				DataConverter(c)
 			},
