@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -x
+set -ex
 
 # Adding artificial delay for all network calls.
 # In order to verify that there is a delay, you can login to the container and run:
