@@ -233,7 +233,7 @@ api-linter:
 
 buf-lint:
 	@printf $(COLOR) "Run buf linter..."
-	@(cd $(PROTO_ROOT) && buf check lint)
+	@(cd $(PROTO_ROOT) && buf lint)
 
 buf-build:
 	@printf $(COLOR) "Build image.bin with buf..."
