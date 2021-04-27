@@ -82,6 +82,7 @@ PINNED_DEPENDENCIES := \
 	go.opentelemetry.io/otel@v0.15.0 \
 	go.opentelemetry.io/otel/exporters/metric/prometheus@v0.15.0 \
 	github.com/apache/thrift@v0.0.0-20161221203622-b2a4d4ae21c7 \
+	github.com/jmoiron/sqlx@v1.2.1-0.20200615141059-0794cb1f47ee
 
 # Code coverage output files.
 COVER_ROOT                 := ./.coverage
