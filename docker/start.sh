@@ -15,7 +15,12 @@ DEFAULT_NAMESPACE_RETENTION=${DEFAULT_NAMESPACE_RETENTION:-1}
 CASSANDRA_PORT="${CASSANDRA_PORT:-9042}"
 
 # tctl env
-export TEMPORAL_CLI_ADDRESS="${BIND_ON_IP}:7233"
+if [[ "BIND_ON_IP" =~ ":" ]]
+then  # ipv6
+    export TEMPORAL_CLI_ADDRESS="[${BIND_ON_IP}]:7233"
+else  # ipv4
+    export TEMPORAL_CLI_ADDRESS="${BIND_ON_IP}:7233"
+fi
 
 # cassandra env
 export KEYSPACE="${KEYSPACE:-temporal}"

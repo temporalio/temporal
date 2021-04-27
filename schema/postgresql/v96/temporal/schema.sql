@@ -259,7 +259,7 @@ CREATE TABLE cluster_membership
 (
     membership_partition INTEGER NOT NULL,
     host_id              BYTEA NOT NULL,
-    rpc_address          VARCHAR(15) NOT NULL,
+    rpc_address          VARCHAR(128) NOT NULL,
     rpc_port             SMALLINT NOT NULL,
     role                 SMALLINT NOT NULL,
     session_start        TIMESTAMP DEFAULT '1970-01-01 00:00:01',

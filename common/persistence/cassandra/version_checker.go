@@ -25,10 +25,6 @@
 package cassandra
 
 import (
-	"context"
-
-	"golang.org/x/sync/errgroup"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/schema"
@@ -44,16 +40,16 @@ import (
 func VerifyCompatibleVersion(
 	cfg config.Persistence,
 	r resolver.ServiceResolver,
+	checkVisibility bool,
 ) error {
-	g, _ := errgroup.WithContext(context.Background())
-	g.Go(func() error {
-		return checkMainKeyspace(cfg, r)
-	})
-	g.Go(func() error {
-		return checkVisibilityKeyspace(cfg, r)
-	})
 
-	return g.Wait()
+	if err := checkMainKeyspace(cfg, r); err != nil {
+		return err
+	}
+	if checkVisibility {
+		return checkVisibilityKeyspace(cfg, r)
+	}
+	return nil
 }
 
 func checkMainKeyspace(

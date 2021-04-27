@@ -259,7 +259,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 				TaskToken: taskToken, Details: heartbeatDetails})
 			s.NoError(err)
 			// Trigger heartbeat timeout and retry
-			time.Sleep(time.Second * 2)
+			time.Sleep(time.Second * 4)
 		} else if activityExecutedCount == 1 {
 			// return an error and retry
 			err = errors.New("retryable-error")

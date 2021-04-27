@@ -403,12 +403,12 @@ func BuildBroadcastHostPort(listenerPeerInfo tchannel.LocalPeerInfo, broadcastAd
 	if broadcastAddress != "" {
 		// Parse supplied broadcastAddress override
 		ip := net.ParseIP(broadcastAddress)
-		if ip == nil || ip.To4() == nil {
+		if ip == nil {
 			return "", errors.New("broadcastAddress set but unknown failure encountered while parsing")
 		}
 
 		// If no errors, use the parsed IP with the port from our listener
-		return ip.To4().String() + ":" + port, nil
+		return net.JoinHostPort(ip.String(), port), nil
 	}
 
 	listenerIp := net.ParseIP(listenerIpString)

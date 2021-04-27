@@ -1035,6 +1035,10 @@ func (b *HistoryBuilder) FlushBufferToCurrentBatch() map[int64]int64 {
 	b.dbBufferBatch = nil
 	b.memBufferBatch = nil
 
+	// 0th reorder events in case casandra reorder the buffered events
+	// TODO eventually remove this ordering
+	bufferBatch = b.reorderBuffer(bufferBatch)
+
 	// 1st assign event ID
 	for _, event := range bufferBatch {
 		event.EventId = b.nextEventID
@@ -1240,7 +1244,6 @@ func (b *HistoryBuilder) finishEvent(
 func (b *HistoryBuilder) wireEventIDs(
 	bufferEvents []*historypb.HistoryEvent,
 ) {
-
 	for _, event := range bufferEvents {
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED:
@@ -1305,6 +1308,31 @@ func (b *HistoryBuilder) wireEventIDs(
 //  to deprecate
 //  * HasActivityFinishEvent
 //  * hasActivityFinishEvent
+
+func (b *HistoryBuilder) reorderBuffer(
+	bufferEvents []*historypb.HistoryEvent,
+) []*historypb.HistoryEvent {
+	reorderBuffer := make([]*historypb.HistoryEvent, 0, len(bufferEvents))
+	reorderEvents := make([]*historypb.HistoryEvent, 0, len(bufferEvents))
+	for _, event := range bufferEvents {
+		switch event.GetEventType() {
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED,
+			enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED,
+			enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT,
+			enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED,
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED,
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED,
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
+			enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED:
+			reorderBuffer = append(reorderBuffer, event)
+		default:
+			reorderEvents = append(reorderEvents, event)
+		}
+	}
+
+	return append(reorderEvents, reorderBuffer...)
+}
 
 func (b *HistoryBuilder) HasActivityFinishEvent(
 	scheduleID int64,

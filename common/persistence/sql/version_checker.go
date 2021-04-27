@@ -25,10 +25,6 @@
 package sql
 
 import (
-	"context"
-
-	"golang.org/x/sync/errgroup"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
@@ -39,17 +35,16 @@ import (
 func VerifyCompatibleVersion(
 	cfg config.Persistence,
 	r resolver.ServiceResolver,
+	checkVisibility bool,
 ) error {
 
-	g, _ := errgroup.WithContext(context.Background())
-	g.Go(func() error {
-		return checkMainDatabase(cfg, r)
-	})
-	g.Go(func() error {
+	if err := checkMainDatabase(cfg, r); err != nil {
+		return err
+	}
+	if checkVisibility {
 		return checkVisibilityDatabase(cfg, r)
-	})
-
-	return g.Wait()
+	}
+	return nil
 }
 
 func checkMainDatabase(
