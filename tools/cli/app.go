@@ -25,6 +25,8 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/hashicorp/go-plugin"
 	"github.com/urfave/cli"
 
@@ -235,6 +237,7 @@ func LoadPlugins(ctx *cli.Context) error {
 	if dc_plugin != "" {
 		dataConverter, err := NewDataConverterPlugin(dc_plugin)
 		if err != nil {
+			fmt.Printf("data converter: %v", err)
 			return err
 		}
 
