@@ -25,6 +25,7 @@
 package cli
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -37,6 +38,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/metadata"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/auth"
@@ -115,6 +117,19 @@ func (b *clientFactory) HealthClient(c *cli.Context) healthpb.HealthClient {
 	return healthpb.NewHealthClient(connection)
 }
 
+func headersProviderInterceptor(headersProvider HeadersProvider) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		headers, err := headersProvider.GetHeaders(ctx)
+		if err != nil {
+			return err
+		}
+		for k, v := range headers {
+			ctx = metadata.AppendToOutgoingContext(ctx, k, v)
+		}
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
+}
+
 func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, error) {
 	hostPort := c.GlobalString(FlagAddress)
 	if hostPort == "" {
@@ -132,7 +147,14 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 		grpcSecurityOptions = grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig))
 	}
 
-	connection, err := grpc.Dial(hostPort, grpcSecurityOptions)
+	dialOpts := []grpc.DialOption{
+		grpcSecurityOptions,
+	}
+	if cliHeadersProvider != nil {
+		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(headersProviderInterceptor(cliHeadersProvider)))
+	}
+
+	connection, err := grpc.Dial(hostPort, dialOpts...)
 	if err != nil {
 		b.logger.Fatal("Failed to create connection", tag.Error(err))
 		return nil, err
@@ -141,7 +163,6 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 }
 
 func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
-
 	certPath := c.GlobalString(FlagTLSCertPath)
 	keyPath := c.GlobalString(FlagTLSKeyPath)
 	caPath := c.GlobalString(FlagTLSCaPath)
