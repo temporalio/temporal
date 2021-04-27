@@ -92,6 +92,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 			ExecutionState:      response.State.ExecutionState,
 			NextEventId:         response.State.NextEventID,
 		},
+		DBRecordVersion: response.DBRecordVersion,
 	}
 
 	newResponse.State.BufferedEvents, err = m.DeserializeBufferedEvents(response.State.BufferedEvents)
@@ -395,8 +396,9 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 		TimerTasks:       input.TimerTasks,
 		VisibilityTasks:  input.VisibilityTasks,
 
-		Condition: input.Condition,
-		Checksum:  input.Checksum,
+		Condition:       input.Condition,
+		DBRecordVersion: input.DBRecordVersion,
+		Checksum:        input.Checksum,
 	}, nil
 }
 
@@ -432,8 +434,9 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 		TimerTasks:       input.TimerTasks,
 		VisibilityTasks:  input.VisibilityTasks,
 
-		Condition: input.Condition,
-		Checksum:  input.Checksum,
+		Condition:       input.Condition,
+		DBRecordVersion: input.DBRecordVersion,
+		Checksum:        input.Checksum,
 	}, nil
 }
 

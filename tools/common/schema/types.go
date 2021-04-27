@@ -159,8 +159,10 @@ const (
 	CLIFlagTLSKeyFile = "tls-key-file"
 	// CLIFlagTLSCaFile is the optional tls CA file (tls must be enabled)
 	CLIFlagTLSCaFile = "tls-ca-file"
-	// CLIFlagTLSEnableHostVerification enables tls host verification (tls must be enabled)
-	CLIFlagTLSEnableHostVerification = "tls-enable-host-verification"
+	// CLIFlagTLSDisableHostVerification disable tls host verification (tls must be enabled)
+	CLIFlagTLSDisableHostVerification = "tls-disable-host-verification"
+	// CLIFlagTLSHostName specifies the host name for host name verification
+	CLIFlagTLSHostName = "tls-server-name"
 )
 
 var rmspaceRegex = regexp.MustCompile(`\s+`)

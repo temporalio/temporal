@@ -159,9 +159,9 @@ const (
 
 	templateCreateWorkflowExecutionQuery = `INSERT INTO executions (` +
 		`shard_id, namespace_id, workflow_id, run_id, type, ` +
-		`execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, ` +
+		`execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, db_record_version, ` +
 		`visibility_ts, task_id, checksum, checksum_encoding) ` +
-		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS `
+		`VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS `
 
 	templateCreateTransferTaskQuery = `INSERT INTO executions (` +
 		`shard_id, type, namespace_id, workflow_id, run_id, transfer, transfer_encoding, visibility_ts, task_id) ` +
@@ -192,7 +192,7 @@ const (
 
 	templateGetWorkflowExecutionQuery = `SELECT execution, execution_encoding, execution_state, execution_state_encoding, next_event_id, activity_map, activity_map_encoding, timer_map, timer_map_encoding, ` +
 		`child_executions_map, child_executions_map_encoding, request_cancel_map, request_cancel_map_encoding, signal_map, signal_map_encoding, signal_requested, buffered_events_list, ` +
-		`checksum, checksum_encoding ` +
+		`checksum, checksum_encoding, db_record_version ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
@@ -217,18 +217,9 @@ const (
 		`WHERE shard_id = ? ` +
 		`and type = ?`
 
-	templateCheckWorkflowExecutionQuery = `UPDATE executions ` +
-		`SET next_event_id = ? ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and namespace_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ? ` +
-		`IF next_event_id = ?`
-
-	templateUpdateWorkflowExecutionQuery = `UPDATE executions ` +
+	// TODO deprecate templateUpdateWorkflowExecutionQueryDeprecated in favor of templateUpdateWorkflowExecutionQuery
+	// Deprecated.
+	templateUpdateWorkflowExecutionQueryDeprecated = `UPDATE executions ` +
 		`SET execution = ? ` +
 		`, execution_encoding = ? ` +
 		`, execution_state = ? ` +
@@ -244,6 +235,23 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ? ` +
 		`IF next_event_id = ? `
+	templateUpdateWorkflowExecutionQuery = `UPDATE executions ` +
+		`SET execution = ? ` +
+		`, execution_encoding = ? ` +
+		`, execution_state = ? ` +
+		`, execution_state_encoding = ? ` +
+		`, next_event_id = ? ` +
+		`, db_record_version = ? ` +
+		`, checksum = ? ` +
+		`, checksum_encoding = ? ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? ` +
+		`IF db_record_version = ? `
 
 	templateUpdateActivityInfoQuery = `UPDATE executions ` +
 		`SET activity_map[ ? ] = ?, activity_map_encoding = ? ` +
@@ -1075,8 +1083,9 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 	return &p.CreateWorkflowExecutionResponse{}, nil
 }
 
-func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecutionRequest) (
-	*p.InternalGetWorkflowExecutionResponse, error) {
+func (d *cassandraPersistence) GetWorkflowExecution(
+	request *p.GetWorkflowExecutionRequest,
+) (*p.InternalGetWorkflowExecutionResponse, error) {
 	execution := request.Execution
 	query := d.session.Query(templateGetWorkflowExecutionQuery,
 		d.shardID,
@@ -1172,7 +1181,17 @@ func (d *cassandraPersistence) GetWorkflowExecution(request *p.GetWorkflowExecut
 	}
 	state.Checksum = cs
 
-	return &p.InternalGetWorkflowExecutionResponse{State: state}, nil
+	dbVersion := int64(0)
+	if dbRecordVersion, ok := result["db_record_version"]; ok {
+		dbVersion = dbRecordVersion.(int64)
+	} else {
+		dbVersion = 0
+	}
+
+	return &p.InternalGetWorkflowExecutionResponse{
+		State:           state,
+		DBRecordVersion: dbVersion,
+	}, nil
 }
 
 func protoExecutionStateFromRow(result map[string]interface{}) (*persistencespb.WorkflowExecutionState, error) {
@@ -1635,12 +1654,8 @@ func (d *cassandraPersistence) ListConcreteExecutions(
 		templateListWorkflowExecutionQuery,
 		d.shardID,
 		rowTypeExecution,
-	).PageSize(request.PageSize).PageState(request.PageToken)
-
-	iter := query.Iter()
-	if iter == nil {
-		return nil, serviceerror.NewInternal("ListConcreteExecutions operation failed.  Not able to create query iterator.")
-	}
+	)
+	iter := query.PageSize(request.PageSize).PageState(request.PageToken).Iter()
 
 	response := &p.InternalListConcreteExecutionsResponse{}
 	result := make(map[string]interface{})
@@ -1756,12 +1771,8 @@ func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksReque
 		defaultVisibilityTimestamp,
 		request.ReadLevel,
 		request.MaxReadLevel,
-	).PageSize(request.BatchSize).PageState(request.NextPageToken)
-
-	iter := query.Iter()
-	if iter == nil {
-		return nil, serviceerror.NewInternal("GetTransferTasks operation failed.  Not able to create query iterator.")
-	}
+	)
+	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.GetTransferTasksResponse{}
 	var data []byte
@@ -1825,12 +1836,8 @@ func (d *cassandraPersistence) GetVisibilityTasks(request *p.GetVisibilityTasksR
 		defaultVisibilityTimestamp,
 		request.ReadLevel,
 		request.MaxReadLevel,
-	).PageSize(request.BatchSize).PageState(request.NextPageToken)
-
-	iter := query.Iter()
-	if iter == nil {
-		return nil, serviceerror.NewInternal("GetVisibilityTasks operation failed.  Not able to create query iterator.")
-	}
+	)
+	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.GetVisibilityTasksResponse{}
 	var data []byte
@@ -1902,12 +1909,10 @@ func (d *cassandraPersistence) GetReplicationTasks(
 }
 
 func (d *cassandraPersistence) populateGetReplicationTasksResponse(
-	query gocql.Query, operation string,
+	query gocql.Query,
+	operation string,
 ) (*p.GetReplicationTasksResponse, error) {
 	iter := query.Iter()
-	if iter == nil {
-		return nil, serviceerror.NewInternal("GetReplicationTasks operation failed.  Not able to create query iterator.")
-	}
 
 	response := &p.GetReplicationTasksResponse{}
 	var data []byte
@@ -2359,12 +2364,8 @@ func (d *cassandraPersistence) GetTasks(request *p.GetTasksRequest) (*p.GetTasks
 		rowTypeTask,
 		request.ReadLevel,
 		*request.MaxReadLevel,
-	).PageSize(request.BatchSize)
-
-	iter := query.Iter()
-	if iter == nil {
-		return nil, serviceerror.NewInternal("GetTasks operation failed.  Not able to create query iterator.")
-	}
+	)
+	iter := query.PageSize(request.BatchSize).Iter()
 
 	response := &p.GetTasksResponse{}
 	task := make(map[string]interface{})
@@ -2487,12 +2488,8 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksR
 		rowTypeTimerRunID,
 		minTimestamp,
 		maxTimestamp,
-	).PageSize(request.BatchSize).PageState(request.NextPageToken)
-
-	iter := query.Iter()
-	if iter == nil {
-		return nil, serviceerror.NewInternal("GetTimerTasks operation failed.  Not able to create query iterator.")
-	}
+	)
+	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.GetTimerIndexTasksResponse{}
 	var data []byte

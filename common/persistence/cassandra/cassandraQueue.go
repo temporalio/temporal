@@ -169,9 +169,6 @@ func (q *cassandraQueue) ReadMessages(
 	)
 
 	iter := query.Iter()
-	if iter == nil {
-		return nil, serviceerror.NewInternal("ReadMessages operation failed. Not able to create query iterator.")
-	}
 
 	var result []*persistence.QueueMessage
 	message := make(map[string]interface{})
@@ -200,12 +197,8 @@ func (q *cassandraQueue) ReadMessagesFromDLQ(
 		q.getDLQTypeFromQueueType(),
 		firstMessageID,
 		lastMessageID,
-	).PageSize(pageSize).PageState(pageToken)
-
-	iter := query.Iter()
-	if iter == nil {
-		return nil, nil, serviceerror.NewInternal(fmt.Sprintf("ReadMessagesFromDLQ operation failed. Not able to create query iterator."))
-	}
+	)
+	iter := query.PageSize(pageSize).PageState(pageToken).Iter()
 
 	var result []*persistence.QueueMessage
 	message := make(map[string]interface{})

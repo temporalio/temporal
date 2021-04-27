@@ -115,6 +115,8 @@ type (
 		SystemWorker WorkerTLS `yaml:"systemWorker"`
 		// ExpirationChecks defines settings for periodic checks for expiration of certificates
 		ExpirationChecks CertExpirationValidation `yaml:"expirationChecks"`
+		// Interval between refreshes of certificates loaded from files
+		RefreshInterval time.Duration `yaml:"refreshInterval"`
 	}
 
 	// GroupTLS contains an instance client and server TLS settings
@@ -357,9 +359,6 @@ type (
 	ClusterInformation struct {
 		Enabled                bool  `yaml:"enabled"`
 		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
-		// TODO: remove RPCName (not used with gRPC)
-		// RPCName indicate the remote service name
-		RPCName string `yaml:"rpcName"`
 		// Address indicate the remote service address(Host:Port). Host can be DNS name.
 		RPCAddress string `yaml:"rpcAddress"`
 	}

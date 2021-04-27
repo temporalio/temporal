@@ -73,31 +73,31 @@ func (mr *MockAuthorizerMockRecorder) Authorize(ctx, caller, target interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authorize", reflect.TypeOf((*MockAuthorizer)(nil).Authorize), ctx, caller, target)
 }
 
-// MockrequestWithNamespace is a mock of requestWithNamespace interface.
-type MockrequestWithNamespace struct {
+// MockhasNamespace is a mock of hasNamespace interface.
+type MockhasNamespace struct {
 	ctrl     *gomock.Controller
-	recorder *MockrequestWithNamespaceMockRecorder
+	recorder *MockhasNamespaceMockRecorder
 }
 
-// MockrequestWithNamespaceMockRecorder is the mock recorder for MockrequestWithNamespace.
-type MockrequestWithNamespaceMockRecorder struct {
-	mock *MockrequestWithNamespace
+// MockhasNamespaceMockRecorder is the mock recorder for MockhasNamespace.
+type MockhasNamespaceMockRecorder struct {
+	mock *MockhasNamespace
 }
 
-// NewMockrequestWithNamespace creates a new mock instance.
-func NewMockrequestWithNamespace(ctrl *gomock.Controller) *MockrequestWithNamespace {
-	mock := &MockrequestWithNamespace{ctrl: ctrl}
-	mock.recorder = &MockrequestWithNamespaceMockRecorder{mock}
+// NewMockhasNamespace creates a new mock instance.
+func NewMockhasNamespace(ctrl *gomock.Controller) *MockhasNamespace {
+	mock := &MockhasNamespace{ctrl: ctrl}
+	mock.recorder = &MockhasNamespaceMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockrequestWithNamespace) EXPECT() *MockrequestWithNamespaceMockRecorder {
+func (m *MockhasNamespace) EXPECT() *MockhasNamespaceMockRecorder {
 	return m.recorder
 }
 
 // GetNamespace mocks base method.
-func (m *MockrequestWithNamespace) GetNamespace() string {
+func (m *MockhasNamespace) GetNamespace() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNamespace")
 	ret0, _ := ret[0].(string)
@@ -105,7 +105,7 @@ func (m *MockrequestWithNamespace) GetNamespace() string {
 }
 
 // GetNamespace indicates an expected call of GetNamespace.
-func (mr *MockrequestWithNamespaceMockRecorder) GetNamespace() *gomock.Call {
+func (mr *MockhasNamespaceMockRecorder) GetNamespace() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespace", reflect.TypeOf((*MockrequestWithNamespace)(nil).GetNamespace))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespace", reflect.TypeOf((*MockhasNamespace)(nil).GetNamespace))
 }

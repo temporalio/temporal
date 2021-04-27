@@ -117,12 +117,8 @@ func (t *transferQueueActiveTaskExecutor) execute(
 		return t.processSignalExecution(task)
 	case enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
 		return t.processStartChildExecution(task)
-	case enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED:
-		return t.processRecordWorkflowStarted(task)
 	case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 		return t.processResetWorkflow(task)
-	case enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-		return t.processUpsertWorkflowSearchAttributes(task)
 	default:
 		return errUnknownTransferTask
 	}
@@ -649,106 +645,6 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	})
 }
 
-func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStarted(
-	task *persistencespb.TransferTaskInfo,
-) (retError error) {
-
-	return t.processRecordWorkflowStartedOrUpsertHelper(task, true)
-}
-
-func (t *transferQueueActiveTaskExecutor) processUpsertWorkflowSearchAttributes(
-	task *persistencespb.TransferTaskInfo,
-) (retError error) {
-
-	return t.processRecordWorkflowStartedOrUpsertHelper(task, false)
-}
-
-func (t *transferQueueActiveTaskExecutor) processRecordWorkflowStartedOrUpsertHelper(
-	task *persistencespb.TransferTaskInfo,
-	recordStart bool,
-) (retError error) {
-
-	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getNamespaceIDAndWorkflowExecution(task),
-	)
-	if err != nil {
-		return err
-	}
-	defer func() { release(retError) }()
-
-	mutableState, err := loadMutableStateForTransferTask(context, task, t.metricsClient, t.logger)
-	if err != nil {
-		return err
-	}
-	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
-		return nil
-	}
-
-	// verify task version for RecordWorkflowStarted.
-	// upsert doesn't require verifyTask, because it is just a sync of mutableState.
-	if recordStart {
-		startVersion, err := mutableState.GetStartVersion()
-		if err != nil {
-			return err
-		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), startVersion, task.Version, task)
-		if err != nil || !ok {
-			return err
-		}
-	}
-
-	executionInfo := mutableState.GetExecutionInfo()
-	executionState := mutableState.GetExecutionState()
-	executionStatus := executionState.GetStatus()
-	runTimeout := executionInfo.WorkflowRunTimeout
-	wfTypeName := executionInfo.WorkflowTypeName
-	taskQueue := executionInfo.TaskQueue
-
-	startEvent, err := mutableState.GetStartEvent()
-	if err != nil {
-		return err
-	}
-	startTimestamp := timestamp.TimeValue(startEvent.GetEventTime())
-	executionTimestamp := getWorkflowExecutionTime(mutableState, startEvent)
-	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
-	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
-
-	// NOTE: do not access anything related mutable state after this lock release
-	// release the context lock since we no longer need mutable state builder and
-	// the rest of logic is making RPC call, which takes time.
-	release(nil)
-
-	if recordStart {
-		return t.recordWorkflowStarted(
-			task.GetNamespaceId(),
-			task.GetWorkflowId(),
-			task.GetRunId(),
-			wfTypeName,
-			startTimestamp.UnixNano(),
-			executionTimestamp.UnixNano(),
-			runTimeout,
-			task.GetTaskId(),
-			taskQueue,
-			visibilityMemo,
-			searchAttr,
-		)
-	}
-	return t.upsertWorkflowExecution(
-		task.GetNamespaceId(),
-		task.GetWorkflowId(),
-		task.GetRunId(),
-		wfTypeName,
-		startTimestamp.UnixNano(),
-		executionTimestamp.UnixNano(),
-		runTimeout,
-		task.GetTaskId(),
-		executionStatus,
-		taskQueue,
-		visibilityMemo,
-		searchAttr,
-	)
-}
-
 func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
@@ -921,9 +817,11 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 				return serviceerror.NewNotFound("Pending child execution not found.")
 			}
 
-			_, err := mutableState.AddStartChildWorkflowExecutionFailedEvent(initiatedEventID,
-				enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS, initiatedAttributes)
-
+			_, err := mutableState.AddStartChildWorkflowExecutionFailedEvent(
+				initiatedEventID,
+				enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS,
+				initiatedAttributes,
+			)
 			return err
 		})
 }
@@ -1051,7 +949,6 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 			}
 
 			_, err := mutableState.AddRequestCancelExternalWorkflowExecutionFailedEvent(
-				common.EmptyEventID,
 				initiatedEventID,
 				targetNamespace,
 				targetWorkflowID,
@@ -1091,7 +988,6 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 			}
 
 			_, err := mutableState.AddSignalExternalWorkflowExecutionFailedEvent(
-				common.EmptyEventID,
 				initiatedEventID,
 				targetNamespace,
 				targetWorkflowID,

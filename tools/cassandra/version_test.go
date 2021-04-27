@@ -94,7 +94,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 		},
 		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
 	}
-	s.NoError(cassandra.VerifyCompatibleVersion(cfg, resolver.NewNoopResolver()))
+	s.NoError(cassandra.VerifyCompatibleVersion(cfg, resolver.NewNoopResolver(), true))
 }
 
 func (s *VersionTestSuite) createKeyspace(keyspace string) func() {

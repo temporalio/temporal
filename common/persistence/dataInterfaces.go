@@ -228,7 +228,6 @@ type (
 		TaskQueue           string
 		ScheduleID          int64
 		Version             int64
-		RecordVisibility    bool
 	}
 
 	// ResetWorkflowTask identifies a transfer task to reset workflow
@@ -334,7 +333,6 @@ type (
 	WorkflowBackoffTimerTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		EventID             int64 // TODO this attribute is not used?
 		Version             int64
 		WorkflowBackoffType enumsspb.WorkflowBackoffType
 	}
@@ -448,6 +446,7 @@ type (
 	// GetWorkflowExecutionResponse is the response to GetWorkflowExecutionRequest
 	GetWorkflowExecutionResponse struct {
 		State             *persistencespb.WorkflowMutableState
+		DBRecordVersion   int64
 		MutableStateStats *MutableStateStats
 	}
 
@@ -530,6 +529,8 @@ type (
 		WorkflowID  string
 		RunID       string
 		BranchToken []byte
+		PrevTxnID   int64
+		TxnID       int64
 		Events      []*historypb.HistoryEvent
 	}
 
@@ -537,7 +538,8 @@ type (
 	WorkflowMutation struct {
 		ExecutionInfo  *persistencespb.WorkflowExecutionInfo
 		ExecutionState *persistencespb.WorkflowExecutionState
-		NextEventID    int64
+		// TODO deprecate NextEventID in favor of DBRecordVersion
+		NextEventID int64
 
 		UpsertActivityInfos       map[int64]*persistencespb.ActivityInfo
 		DeleteActivityInfos       map[int64]struct{}
@@ -559,15 +561,18 @@ type (
 		TimerTasks       []Task
 		VisibilityTasks  []Task
 
-		Condition int64
-		Checksum  *persistencespb.Checksum
+		// TODO deprecate Condition in favor of DBRecordVersion
+		Condition       int64
+		DBRecordVersion int64
+		Checksum        *persistencespb.Checksum
 	}
 
 	// WorkflowSnapshot is used as generic workflow execution state snapshot
 	WorkflowSnapshot struct {
 		ExecutionInfo  *persistencespb.WorkflowExecutionInfo
 		ExecutionState *persistencespb.WorkflowExecutionState
-		NextEventID    int64
+		// TODO deprecate NextEventID in favor of DBRecordVersion
+		NextEventID int64
 
 		ActivityInfos       map[int64]*persistencespb.ActivityInfo
 		TimerInfos          map[string]*persistencespb.TimerInfo
@@ -581,8 +586,10 @@ type (
 		TimerTasks       []Task
 		VisibilityTasks  []Task
 
-		Condition int64
-		Checksum  *persistencespb.Checksum
+		// TODO deprecate Condition in favor of DBRecordVersion
+		Condition       int64
+		DBRecordVersion int64
+		Checksum        *persistencespb.Checksum
 	}
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution
@@ -983,6 +990,8 @@ type (
 		BranchToken []byte
 		// The batch of events to be appended. The first eventID will become the nodeID of this batch
 		Events []*historypb.HistoryEvent
+		// TransactionID for events before these events. For events chaining
+		PrevTransactionID int64
 		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
 		TransactionID int64
 	}
@@ -1020,8 +1029,6 @@ type (
 		NextPageToken []byte
 		// Size of history read from store
 		Size int
-		// the first_event_id of last loaded batch
-		LastFirstEventID int64
 	}
 
 	// ReadHistoryBranchByBatchResponse is the response to ReadHistoryBranchRequest
@@ -1034,8 +1041,6 @@ type (
 		NextPageToken []byte
 		// Size of history read from store
 		Size int
-		// the first_event_id of last loaded batch
-		LastFirstEventID int64
 	}
 
 	// ReadRawHistoryBranchResponse is the response to ReadHistoryBranchRequest
@@ -1086,6 +1091,22 @@ type (
 		ShardID int32
 		// branch to be deleted
 		BranchToken []byte
+	}
+
+	// TrimHistoryBranchRequest is used to validate & trim a history branch
+	TrimHistoryBranchRequest struct {
+		// The shard to delete history branch data
+		ShardID int32
+		// branch to be validated & trimmed
+		BranchToken []byte
+		// known valid node ID
+		NodeID int64
+		// known valid transaction ID
+		TransactionID int64
+	}
+
+	// TrimHistoryBranchResponse is the response to TrimHistoryBranchRequest
+	TrimHistoryBranchResponse struct {
 	}
 
 	// GetHistoryTreeRequest is used to retrieve branch info of a history tree
@@ -1283,7 +1304,7 @@ type (
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
 		// For Temporal, treeID is new runID, except for fork(reset), treeID will be the runID that it forks from.
 
-		// AppendHistoryNodes add(or override) a batch of nodes to a history branch
+		// AppendHistoryNodes add a node to history node table
 		AppendHistoryNodes(request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)
@@ -1297,6 +1318,8 @@ type (
 		// DeleteHistoryBranch removes a branch
 		// If this is the last branch to delete, it will also remove the root node
 		DeleteHistoryBranch(request *DeleteHistoryBranchRequest) error
+		// TrimHistoryBranch validate & trim a history branch
+		TrimHistoryBranch(request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error)
 		// GetHistoryTree returns all branch information of a tree
 		GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees

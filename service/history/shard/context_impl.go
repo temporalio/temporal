@@ -736,15 +736,7 @@ func (s *ContextImpl) AppendHistoryEvents(
 	execution commonpb.WorkflowExecution,
 ) (int, error) {
 
-	// NOTE: do not use generateNextTransferTaskIDLocked since
-	// generateNextTransferTaskIDLocked is not guarded by lock
-	transactionID, err := s.GenerateTransferTaskID()
-	if err != nil {
-		return 0, err
-	}
-
 	request.ShardID = s.shardID
-	request.TransactionID = transactionID
 
 	size := 0
 	defer func() {

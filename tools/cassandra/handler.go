@@ -170,7 +170,8 @@ func newCQLClientConfig(cli *cli.Context) (*CQLClientConfig, error) {
 			CertFile:               cli.GlobalString(schema.CLIFlagTLSCertFile),
 			KeyFile:                cli.GlobalString(schema.CLIFlagTLSKeyFile),
 			CaFile:                 cli.GlobalString(schema.CLIFlagTLSCaFile),
-			EnableHostVerification: cli.GlobalBool(schema.CLIFlagTLSEnableHostVerification),
+			ServerName:             cli.GlobalString(schema.CLIFlagTLSHostName),
+			EnableHostVerification: !cli.GlobalBool(schema.CLIFlagTLSDisableHostVerification),
 		}
 	}
 

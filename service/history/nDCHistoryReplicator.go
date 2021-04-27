@@ -181,7 +181,7 @@ func newNDCHistoryReplicator(
 			startTime time.Time,
 			logger log.Logger,
 		) mutableState {
-			return newMutableStateBuilderWithVersionHistories(
+			return newMutableStateBuilder(
 				shard,
 				shard.GetEventsCache(),
 				logger,
@@ -536,6 +536,11 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 		return err
 	}
 
+	transactionID, err := r.shard.GenerateTransferTaskID()
+	if err != nil {
+		return err
+	}
+
 	err = r.transactionMgr.backfillWorkflow(
 		ctx,
 		task.getEventTime(),
@@ -552,6 +557,8 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 			WorkflowID:  task.getExecution().GetWorkflowId(),
 			RunID:       task.getExecution().GetRunId(),
 			BranchToken: versionHistory.GetBranchToken(),
+			PrevTxnID:   0, // TODO @wxing1292 events chaining will not work for backfill case
+			TxnID:       transactionID,
 			Events:      task.getEvents(),
 		},
 	)

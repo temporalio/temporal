@@ -391,7 +391,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 			historyW.Events = append(historyW.Events, events...)
 
 			events = s.genRandomEvents([]int64{9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, 1)
-			err = s.appendNewNode(bi, events, 2000)
+			err = s.appendNewNode(bi, events, 4000)
 			s.Nil(err)
 			historyW.Events = append(historyW.Events, events...)
 
@@ -426,37 +426,40 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 			events = s.read(branch, 1, 25)
 			s.Equal(20, len(events))
 
-			// override with greatest txn_id and greater version
-			events = s.genRandomEvents([]int64{5}, 2)
-			err = s.appendNewNode(branch, events, 1000)
+			// override with greatest txn_id
+			events = s.genRandomEvents([]int64{5}, 1)
+			err = s.appendNewNode(branch, events, 3000)
 			s.Nil(err)
 
-			// read to verify override success
-			events = s.read(branch, 1, 25)
+			// read to verify override success, at this point history is corrupted, missing 6/7/8, so we should only see 5 events
+			events = s.read(branch, 1, 6)
 			s.Equal(5, len(events))
-
-			// override with even larger txn_id and same version
-			events = s.genRandomEvents([]int64{5, 6}, 1)
-			err = s.appendNewNode(branch, events, 1001)
-			s.Nil(err)
-
-			// read to verify override success, at this point history is corrupted, missing 7/8, so we should only see 6 events
 			_, err = s.readWithError(branch, 1, 25)
 			_, ok := err.(*serviceerror.DataLoss)
 			s.Equal(true, ok)
 
+			// override with even larger txn_id and same version
+			events = s.genRandomEvents([]int64{5, 6}, 1)
+			err = s.appendNewNode(branch, events, 3001)
+			s.Nil(err)
+
+			// read to verify override success, at this point history is corrupted, missing 7/8, so we should only see 6 events
 			events = s.read(branch, 1, 7)
 			s.Equal(6, len(events))
+			_, err = s.readWithError(branch, 1, 25)
+			_, ok = err.(*serviceerror.DataLoss)
+			s.Equal(true, ok)
 
 			// override more with larger txn_id, this would fix the corrupted hole so that we cna get 20 events again
 			events = s.genRandomEvents([]int64{7, 8}, 1)
-			err = s.appendNewNode(branch, events, 1002)
+			err = s.appendNewNode(branch, events, 3002)
 			s.Nil(err)
+
 			// read to verify override
 			events = s.read(branch, 1, 25)
 			s.Equal(20, len(events))
 			events = s.genRandomEvents([]int64{9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23}, 1)
-			err = s.appendNewNode(branch, events, 2001)
+			err = s.appendNewNode(branch, events, 4001)
 			s.Nil(err)
 			events = s.read(branch, 1, 25)
 			s.Equal(23, len(events))

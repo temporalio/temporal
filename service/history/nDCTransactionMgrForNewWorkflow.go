@@ -162,6 +162,9 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 	if err != nil {
 		return err
 	}
+	if len(targetWorkflowEventsSeq) != 1 {
+		return serviceerror.NewInternal("unable to create 1st event batch")
+	}
 
 	targetWorkflowHistorySize, err := r.persistNewNDCWorkflowEvents(
 		targetWorkflow,
@@ -221,12 +224,20 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		return serviceerror.NewInternal("nDCTransactionMgrForNewWorkflow createAsZombie encounter target workflow policy not being passive")
 	}
 
+	// release lock on current workflow, since current cluster maybe the active cluster
+	// and events maybe reapplied to current workflow
+	currentWorkflow.getReleaseFn()(nil)
+	currentWorkflow = nil
+
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.getMutableState().CloseTransactionAsSnapshot(
 		now,
 		targetWorkflowPolicy,
 	)
 	if err != nil {
 		return err
+	}
+	if len(targetWorkflowEventsSeq) != 1 {
+		return serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
 	targetWorkflowHistorySize, err := r.persistNewNDCWorkflowEvents(

@@ -120,6 +120,8 @@ message WorkflowExecutionInfo {
     string first_execution_run_id = 55;
     ExecutionStats execution_stats = 56;
     google.protobuf.Timestamp workflow_run_expiration_time = 57 [(gogoproto.stdtime) = true];
+    // Transaction Id of the first event in the last batch of events.
+    int64 last_first_event_txn_id = 58;
 }
 
 message ExecutionStats {
@@ -149,7 +151,7 @@ message TransferTaskInfo {
     int64 version = 11;
     int64 task_id = 12;
     google.protobuf.Timestamp visibility_time = 13 [(gogoproto.stdtime) = true];
-    bool record_visibility = 14;
+    reserved 14;
 }
 
 // replication column

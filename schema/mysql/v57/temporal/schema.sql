@@ -39,6 +39,7 @@ CREATE TABLE executions(
   data_encoding VARCHAR(16) NOT NULL,
   state MEDIUMBLOB NOT NULL,
   state_encoding VARCHAR(16) NOT NULL,
+  db_record_version BIGINT NOT NULL DEFAULT 0,
   PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id)
 );
 
@@ -214,6 +215,7 @@ CREATE TABLE history_node (
   node_id        BIGINT NOT NULL,
   txn_id         BIGINT NOT NULL,
   --
+  prev_txn_id    BIGINT NOT NULL DEFAULT 0,
   data           MEDIUMBLOB NOT NULL,
   data_encoding  VARCHAR(16) NOT NULL,
   PRIMARY KEY (shard_id, tree_id, branch_id, node_id, txn_id)
@@ -257,7 +259,7 @@ CREATE TABLE cluster_membership
 (
     membership_partition INT NOT NULL,
     host_id              BINARY(16) NOT NULL,
-    rpc_address          VARCHAR(15) NOT NULL,
+    rpc_address          VARCHAR(128) NOT NULL,
     rpc_port             SMALLINT NOT NULL,
     role                 TINYINT NOT NULL,
     session_start        TIMESTAMP DEFAULT '1970-01-01 00:00:01',

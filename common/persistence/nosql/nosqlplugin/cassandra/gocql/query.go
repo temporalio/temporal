@@ -89,9 +89,6 @@ func (q *query) MapScanCAS(
 
 func (q *query) Iter() Iter {
 	iter := q.gocqlQuery.Iter()
-	if iter == nil {
-		return nil
-	}
 	return iter
 }
 

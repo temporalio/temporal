@@ -39,6 +39,9 @@ import (
 type Config struct {
 	NumberOfShards int32
 
+	// TODO remove this dynamic flag in 1.11.x
+	EnableDBRecordVersion dynamicconfig.BoolPropertyFn
+
 	RPS                           dynamicconfig.IntPropertyFn
 	MaxIDLengthLimit              dynamicconfig.IntPropertyFn
 	PersistenceMaxQPS             dynamicconfig.IntPropertyFn
@@ -255,6 +258,8 @@ type Config struct {
 	ESProcessorBulkSize               dynamicconfig.IntPropertyFn // max total size of bytes in bulk
 	ESProcessorFlushInterval          dynamicconfig.DurationPropertyFn
 	ESProcessorAckTimeout             dynamicconfig.DurationPropertyFn
+
+	EnableCrossNamespaceCommands dynamicconfig.BoolPropertyFn
 }
 
 const (
@@ -264,7 +269,11 @@ const (
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVisConfigExist bool) *Config {
 	cfg := &Config{
-		NumberOfShards:                       numberOfShards,
+		NumberOfShards: numberOfShards,
+
+		// TODO remove this dynamic flag in 1.11.x
+		EnableDBRecordVersion: dc.GetBoolProperty(dynamicconfig.EnableDBRecordVersion, false),
+
 		RPS:                                  dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
 		MaxIDLengthLimit:                     dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		PersistenceMaxQPS:                    dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 9000),
@@ -438,6 +447,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		ESProcessorBulkSize:               dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkSize, 2<<24), // 16MB
 		ESProcessorFlushInterval:          dc.GetDurationProperty(dynamicconfig.WorkerESProcessorFlushInterval, 1*time.Second),
 		ESProcessorAckTimeout:             dc.GetDurationProperty(dynamicconfig.WorkerESProcessorAckTimeout, 1*time.Minute),
+
+		EnableCrossNamespaceCommands: dc.GetBoolProperty(dynamicconfig.EnableCrossNamespaceCommands, true),
 	}
 
 	return cfg

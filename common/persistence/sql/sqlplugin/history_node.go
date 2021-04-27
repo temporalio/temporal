@@ -38,6 +38,7 @@ type (
 		TreeID       primitives.UUID
 		BranchID     primitives.UUID
 		NodeID       int64
+		PrevTxnID    int64
 		TxnID        int64
 		Data         []byte
 		DataEncoding string
@@ -46,12 +47,14 @@ type (
 	// HistoryNodeSelectFilter contains the column names within history_node table that
 	// can be used to filter results through a WHERE clause
 	HistoryNodeSelectFilter struct {
-		ShardID   int32
-		TreeID    primitives.UUID
-		BranchID  primitives.UUID
-		MinNodeID int64
-		MaxNodeID int64
-		PageSize  int
+		ShardID      int32
+		TreeID       primitives.UUID
+		BranchID     primitives.UUID
+		MinNodeID    int64
+		MinTxnID     int64
+		MaxNodeID    int64
+		PageSize     int
+		MetadataOnly bool
 	}
 
 	// HistoryNodeDeleteFilter contains the column names within history_node table that
@@ -66,7 +69,8 @@ type (
 	// HistoryNode is the SQL persistence interface for history nodes
 	HistoryNode interface {
 		InsertIntoHistoryNode(ctx context.Context, row *HistoryNodeRow) (sql.Result, error)
-		SelectFromHistoryNode(ctx context.Context, filter HistoryNodeSelectFilter) ([]HistoryNodeRow, error)
-		DeleteFromHistoryNode(ctx context.Context, filter HistoryNodeDeleteFilter) (sql.Result, error)
+		DeleteFromHistoryNode(ctx context.Context, row *HistoryNodeRow) (sql.Result, error)
+		RangeSelectFromHistoryNode(ctx context.Context, filter HistoryNodeSelectFilter) ([]HistoryNodeRow, error)
+		RangeDeleteFromHistoryNode(ctx context.Context, filter HistoryNodeDeleteFilter) (sql.Result, error)
 	}
 )

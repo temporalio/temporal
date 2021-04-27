@@ -28,7 +28,7 @@ package postgresql
 
 // Version is the Postgres database release version
 // Temporal supports both MySQL and Postgres officially, so upgrade should be perform for both MySQL and Postgres
-const Version = "1.4"
+const Version = "1.5"
 
 // VisibilityVersion is the Postgres visibility database release version
 // Temporal supports both MySQL and Postgres officially, so upgrade should be perform for both MySQL and Postgres

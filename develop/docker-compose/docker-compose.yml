@@ -76,7 +76,7 @@ services:
     volumes:
       - ./grafana/provisioning/:/etc/grafana/provisioning/
   temporal-web:
-    image: temporalio/web:1.7.1
+    image: temporalio/web:1.8.1
     container_name: temporal-dev-web
 
 networks:

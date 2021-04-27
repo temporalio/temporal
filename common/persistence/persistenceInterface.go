@@ -138,8 +138,10 @@ type (
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
 
-		// AppendHistoryNodes add(or override) a node to a history branch
+		// AppendHistoryNodes add a node to history node table
 		AppendHistoryNodes(request *InternalAppendHistoryNodesRequest) error
+		// DeleteHistoryNodes delete a node from history node table
+		DeleteHistoryNodes(request *InternalDeleteHistoryNodesRequest) error
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(request *InternalReadHistoryBranchRequest) (*InternalReadHistoryBranchResponse, error)
 		// ForkHistoryBranch forks a new branch from a old branch
@@ -226,8 +228,9 @@ type (
 		ExecutionState      *persistencespb.WorkflowExecutionState
 		NextEventID         int64
 
-		BufferedEvents []*commonpb.DataBlob
-		Checksum       *persistencespb.Checksum
+		BufferedEvents  []*commonpb.DataBlob
+		Checksum        *persistencespb.Checksum
+		DBRecordVersion int64
 	}
 
 	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
@@ -263,6 +266,7 @@ type (
 		ExecutionState   *persistencespb.WorkflowExecutionState
 		NextEventID      int64
 		LastWriteVersion int64
+		DBRecordVersion  int64
 
 		UpsertActivityInfos       map[int64]*persistencespb.ActivityInfo
 		DeleteActivityInfos       map[int64]struct{}
@@ -295,6 +299,7 @@ type (
 		ExecutionState   *persistencespb.WorkflowExecutionState
 		LastWriteVersion int64
 		NextEventID      int64
+		DBRecordVersion  int64
 
 		ActivityInfos       map[int64]*persistencespb.ActivityInfo
 		TimerInfos          map[string]*persistencespb.TimerInfo
@@ -313,16 +318,16 @@ type (
 		Checksum *persistencespb.Checksum
 	}
 
-	// InternalAppendHistoryEventsRequest is used to append new events to workflow execution history  for Persistence Interface
-	InternalAppendHistoryEventsRequest struct {
-		NamespaceID       string
-		Execution         commonpb.WorkflowExecution
-		FirstEventID      int64
-		EventBatchVersion int64
-		RangeID           int64
-		TransactionID     int64
-		Events            *commonpb.DataBlob
-		Overwrite         bool
+	// InternalHistoryNode represent a history node metadata
+	InternalHistoryNode struct {
+		// The first eventID becomes the nodeID to be appended
+		NodeID int64
+		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
+		TransactionID int64
+		// TransactionID for events before these events. For events chaining
+		PrevTransactionID int64
+		// The events to be appended
+		Events *commonpb.DataBlob
 	}
 
 	// InternalAppendHistoryNodesRequest is used to append a batch of history nodes
@@ -333,19 +338,16 @@ type (
 		Info string
 		// The branch to be appended
 		BranchInfo *persistencespb.HistoryBranch
-		// The first eventID becomes the nodeID to be appended
-		NodeID int64
-		// The events to be appended
-		Events *commonpb.DataBlob
-		// Requested TransactionID for conditional update
-		TransactionID int64
+		// The history node
+		Node InternalHistoryNode
 		// Used in sharded data stores to identify which shard to use
 		ShardID int32
 	}
 
 	// InternalGetWorkflowExecutionResponse is the response to GetworkflowExecution for Persistence Interface
 	InternalGetWorkflowExecutionResponse struct {
-		State *InternalWorkflowMutableState
+		State           *InternalWorkflowMutableState
+		DBRecordVersion int64
 	}
 
 	// InternalListConcreteExecutionsResponse is the response to ListConcreteExecutions for Persistence Interface
@@ -374,6 +376,18 @@ type (
 		NewBranchInfo *persistencespb.HistoryBranch
 	}
 
+	// InternalDeleteHistoryNodesRequest is used to remove a history node
+	InternalDeleteHistoryNodesRequest struct {
+		// Used in sharded data stores to identify which shard to use
+		ShardID int32
+		// The branch to be appended
+		BranchInfo *persistencespb.HistoryBranch
+		// node ID of the history node
+		NodeID int64
+		// transaction ID of the history node
+		TransactionID int64
+	}
+
 	// InternalDeleteHistoryBranchRequest is used to remove a history branch
 	InternalDeleteHistoryBranchRequest struct {
 		// branch to be deleted
@@ -396,12 +410,10 @@ type (
 		PageSize int
 		// Pagination token
 		NextPageToken []byte
-		// LastNodeID is the last known node ID attached to a history node
-		LastNodeID int64
-		// LastTransactionID is the last known transaction ID attached to a history node
-		LastTransactionID int64
 		// Used in sharded data stores to identify which shard to use
 		ShardID int32
+		// whether to only return metadata, excluding node content
+		MetadataOnly bool
 	}
 
 	// InternalCompleteForkBranchRequest is used to update some tree/branch meta data for forking
@@ -416,14 +428,10 @@ type (
 
 	// InternalReadHistoryBranchResponse is the response to ReadHistoryBranchRequest
 	InternalReadHistoryBranchResponse struct {
-		// History events
-		History []*commonpb.DataBlob
+		// History nodes
+		Nodes []InternalHistoryNode
 		// Pagination token
 		NextPageToken []byte
-		// LastNodeID is the last known node ID attached to a history node
-		LastNodeID int64
-		// LastTransactionID is the last known transaction ID attached to a history node
-		LastTransactionID int64
 	}
 
 	// VisibilityWorkflowExecutionInfo is visibility info for internal response
@@ -473,22 +481,19 @@ type (
 	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted
 	InternalRecordWorkflowExecutionStartedRequest struct {
 		*InternalVisibilityRequestBase
-		RunTimeout int64
 	}
 
 	// InternalRecordWorkflowExecutionClosedRequest is request to RecordWorkflowExecutionClosed
 	InternalRecordWorkflowExecutionClosedRequest struct {
 		*InternalVisibilityRequestBase
-		CloseTimestamp   int64
-		HistoryLength    int64
-		RetentionSeconds int64
+		CloseTimestamp int64
+		HistoryLength  int64
+		Retention      *time.Duration
 	}
 
 	// InternalUpsertWorkflowExecutionRequest is request to UpsertWorkflowExecution
 	InternalUpsertWorkflowExecutionRequest struct {
 		*InternalVisibilityRequestBase
-		// TODO (alex): not used, remove
-		WorkflowTimeout int64
 	}
 
 	// InternalCreateNamespaceRequest is used to create the namespace

@@ -32,6 +32,7 @@ import (
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -48,23 +49,26 @@ var (
 
 type (
 	TelemetryInterceptor struct {
-		metricsClient metrics.Client
-		scopes        map[string]int
-		logger        log.Logger
+		namespaceCache cache.NamespaceCache
+		metricsClient  metrics.Client
+		scopes         map[string]int
+		logger         log.Logger
 	}
 )
 
 var _ grpc.UnaryServerInterceptor = (*TelemetryInterceptor)(nil).Intercept
 
 func NewTelemetryInterceptor(
+	namespaceCache cache.NamespaceCache,
 	metricsClient metrics.Client,
 	scopes map[string]int,
 	logger log.Logger,
 ) *TelemetryInterceptor {
 	return &TelemetryInterceptor{
-		metricsClient: metricsClient,
-		scopes:        scopes,
-		logger:        logger,
+		namespaceCache: namespaceCache,
+		metricsClient:  metricsClient,
+		scopes:         scopes,
+		logger:         logger,
 	}
 }
 
@@ -95,7 +99,7 @@ func (ti *TelemetryInterceptor) Intercept(
 	scope, _ := ti.scopes[methodName]
 	scope = ti.overrideScope(scope, methodName, req)
 	var metricsScope metrics.Scope
-	if namespace := GetNamespace(req); namespace != "" {
+	if namespace := GetNamespace(ti.namespaceCache, req); namespace != "" {
 		metricsScope = ti.metricsClient.Scope(scope).Tagged(metrics.NamespaceTag(namespace))
 	} else {
 		metricsScope = ti.metricsClient.Scope(scope).Tagged(metrics.NamespaceUnknownTag())
@@ -108,7 +112,7 @@ func (ti *TelemetryInterceptor) Intercept(
 
 	resp, err := handler(ctx, req)
 	if err != nil {
-		ti.handleError(scope, err)
+		ti.handleError(scope, methodName, err)
 		return nil, err
 	}
 	return resp, nil
@@ -116,6 +120,7 @@ func (ti *TelemetryInterceptor) Intercept(
 
 func (ti *TelemetryInterceptor) handleError(
 	scope int,
+	methodName string,
 	err error,
 ) {
 
@@ -149,13 +154,13 @@ func (ti *TelemetryInterceptor) handleError(
 		ti.metricsClient.IncCounter(scope, metrics.ServiceErrClientVersionNotSupportedCounter)
 	case *serviceerror.DataLoss:
 		ti.metricsClient.IncCounter(scope, metrics.ServiceFailures)
-		ti.logger.Error("internal service error, data loss", tag.Error(err))
+		ti.logger.Error("internal service error, data loss", tag.Operation(methodName), tag.Error(err))
 	case *serviceerror.Internal:
 		ti.metricsClient.IncCounter(scope, metrics.ServiceFailures)
-		ti.logger.Error("internal service error", tag.Error(err))
+		ti.logger.Error("internal service error", tag.Operation(methodName), tag.Error(err))
 	default:
 		ti.metricsClient.IncCounter(scope, metrics.ServiceFailures)
-		ti.logger.Error("uncategorized error", tag.Error(err))
+		ti.logger.Error("uncategorized error", tag.Operation(methodName), tag.Error(err))
 	}
 }
 

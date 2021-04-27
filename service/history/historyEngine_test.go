@@ -458,6 +458,7 @@ func (s *engineSuite) TestGetMutableStateLongPoll_CurrentBranchChanged() {
 			"testNamespaceID",
 			newExecution,
 			int64(1),
+			int64(0),
 			int64(4),
 			int64(1),
 			[]byte{1},
@@ -1137,7 +1138,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedConflictOnUpdate() {
 			Identity:  identity,
 		},
 	})
-	s.Nil(err, s.printHistory(msBuilder))
+	s.NoError(err)
 	s.NotNil(updatedWorkflowMutation)
 	s.Equal(int64(16), updatedWorkflowMutation.NextEventID)
 	s.Equal(workflowTaskStartedEvent2.EventId, updatedWorkflowMutation.ExecutionInfo.LastProcessedEvent)
@@ -1587,7 +1588,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 		})
 
 		if !iVar.expectWorkflowTaskFail {
-			s.NoError(err, s.printHistory(msBuilder))
+			s.NoError(err)
 			executionBuilder := s.getBuilder(testNamespaceID, we)
 			s.Equal(int64(6), executionBuilder.GetNextEventID())
 			s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
@@ -1737,7 +1738,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWor
 			Identity:  identity,
 		},
 	})
-	s.Nil(err, s.printHistory(msBuilder))
+	s.NoError(err)
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
@@ -1933,7 +1934,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowSuccess() 
 			Identity:  identity,
 		},
 	})
-	s.Nil(err, s.printHistory(msBuilder))
+	s.NoError(err)
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
@@ -1986,7 +1987,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowSuccess() {
 			Identity:  identity,
 		},
 	})
-	s.Nil(err, s.printHistory(msBuilder))
+	s.NoError(err)
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
@@ -2044,7 +2045,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowSucc
 			Identity:  identity,
 		},
 	})
-	s.Nil(err, s.printHistory(msBuilder))
+	s.NoError(err)
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
@@ -2100,7 +2101,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithAban
 			Identity:  identity,
 		},
 	})
-	s.Nil(err, s.printHistory(msBuilder))
+	s.NoError(err)
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
@@ -2164,7 +2165,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithTerm
 			Identity:  identity,
 		},
 	})
-	s.Nil(err, s.printHistory(msBuilder))
+	s.NoError(err)
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
@@ -2643,7 +2644,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 			Identity:  identity,
 		},
 	})
-	s.Nil(err, s.printHistory(msBuilder))
+	s.NoError(err)
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
@@ -2750,7 +2751,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 			Identity:  identity,
 		},
 	})
-	s.Nil(err, s.printHistory(msBuilder))
+	s.NoError(err)
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(9), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
@@ -2811,7 +2812,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 			Identity:  identity,
 		},
 	})
-	s.Nil(err, s.printHistory(msBuilder))
+	s.NoError(err)
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(9), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
@@ -3186,7 +3187,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 			Identity:  identity,
 		},
 	})
-	s.Nil(err, s.printHistory(msBuilder))
+	s.NoError(err)
 	executionBuilder := s.getBuilder(testNamespaceID, we)
 	s.Equal(int64(12), executionBuilder.GetNextEventID())
 	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
@@ -4979,10 +4980,6 @@ func (s *engineSuite) getActivityScheduledEvent(msBuilder mutableState,
 	return event
 }
 
-func (s *engineSuite) printHistory(builder mutableState) string {
-	return builder.GetHistoryBuilder().GetHistory().String()
-}
-
 func addWorkflowExecutionStartedEventWithParent(builder mutableState, workflowExecution commonpb.WorkflowExecution,
 	workflowType, taskQueue string, input *commonpb.Payloads, executionTimeout, runTimeout, taskTimeout time.Duration,
 	parentInfo *workflowspb.ParentExecutionInfo, identity string) *historypb.HistoryEvent {
@@ -5030,10 +5027,12 @@ func addWorkflowTaskStartedEvent(builder mutableState, scheduleID int64, taskQue
 
 func addWorkflowTaskStartedEventWithRequestID(builder mutableState, scheduleID int64, requestID string,
 	taskQueue, identity string) *historypb.HistoryEvent {
-	event, _, _ := builder.AddWorkflowTaskStartedEvent(scheduleID, requestID, &workflowservice.PollWorkflowTaskQueueRequest{
-		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
-		Identity:  identity,
-	})
+	event, _, _ := builder.AddWorkflowTaskStartedEvent(
+		scheduleID,
+		requestID,
+		&taskqueuepb.TaskQueue{Name: taskQueue},
+		identity,
+	)
 
 	return event
 }
@@ -5250,7 +5249,7 @@ func newMutableStateBuilderWithEventV2(
 	runID string,
 ) *mutableStateBuilder {
 
-	msBuilder := newMutableStateBuilderWithVersionHistories(shard, eventsCache, logger, testLocalNamespaceEntry, time.Now().UTC())
+	msBuilder := newMutableStateBuilder(shard, eventsCache, logger, testLocalNamespaceEntry, time.Now().UTC())
 	_ = msBuilder.SetHistoryTree(runID)
 
 	return msBuilder
@@ -5264,7 +5263,7 @@ func newMutableStateBuilderWithVersionHistoriesForTest(
 	runID string,
 ) *mutableStateBuilder {
 
-	msBuilder := newMutableStateBuilderWithVersionHistories(shard, eventsCache, logger, testLocalNamespaceEntry, time.Now().UTC())
+	msBuilder := newMutableStateBuilder(shard, eventsCache, logger, testLocalNamespaceEntry, time.Now().UTC())
 	_ = msBuilder.UpdateCurrentVersion(version, false)
 	_ = msBuilder.SetHistoryTree(runID)
 
@@ -5273,10 +5272,12 @@ func newMutableStateBuilderWithVersionHistoriesForTest(
 
 func createMutableState(ms mutableState) *persistencespb.WorkflowMutableState {
 	builder := ms.(*mutableStateBuilder)
-	_ = builder.FlushBufferedEvents() // nolint:errcheck
+	_, _, _ = builder.CloseTransactionAsMutation(time.Now().UTC(), transactionPolicyActive)
+
 	info := copyWorkflowExecutionInfo(builder.executionInfo)
 	state := copyWorkflowExecutionState(builder.executionState)
 	info.ExecutionStats = &persistencespb.ExecutionStats{}
+	info.VersionHistories = versionhistory.CopyVersionHistories(builder.executionInfo.VersionHistories)
 
 	activityInfos := make(map[int64]*persistencespb.ActivityInfo)
 	for id, info := range builder.pendingActivityInfoIDs {
@@ -5299,26 +5300,13 @@ func createMutableState(ms mutableState) *persistencespb.WorkflowMutableState {
 		childInfos[id] = copyChildInfo(info)
 	}
 
-	// FlushBuffer will also be called within the CloseTransactionAsMutation
-	_, _, _ = builder.CloseTransactionAsMutation(time.Now().UTC(), transactionPolicyActive)
-	var bufferedEvents []*historypb.HistoryEvent
-	if len(builder.bufferedEvents) > 0 {
-		bufferedEvents = append(bufferedEvents, builder.bufferedEvents...)
-	}
-	if len(builder.updateBufferedEvents) > 0 {
-		bufferedEvents = append(bufferedEvents, builder.updateBufferedEvents...)
-	}
-	if builder.executionInfo.VersionHistories != nil {
-		info.VersionHistories = versionhistory.CopyVersionHistories(builder.executionInfo.VersionHistories)
-	}
-
 	return &persistencespb.WorkflowMutableState{
 		ExecutionInfo:       info,
 		ExecutionState:      state,
 		NextEventId:         builder.GetNextEventID(),
 		ActivityInfos:       activityInfos,
 		TimerInfos:          timerInfos,
-		BufferedEvents:      bufferedEvents,
+		BufferedEvents:      builder.bufferEventsInDB,
 		SignalInfos:         signalInfos,
 		RequestCancelInfos:  cancellationInfos,
 		ChildExecutionInfos: childInfos,
@@ -5351,6 +5339,7 @@ func copyWorkflowExecutionInfo(sourceInfo *persistencespb.WorkflowExecutionInfo)
 		WorkflowRunTimeout:                sourceInfo.WorkflowRunTimeout,
 		DefaultWorkflowTaskTimeout:        sourceInfo.DefaultWorkflowTaskTimeout,
 		LastFirstEventId:                  sourceInfo.LastFirstEventId,
+		LastFirstEventTxnId:               sourceInfo.LastFirstEventTxnId,
 		LastEventTaskId:                   sourceInfo.LastEventTaskId,
 		LastProcessedEvent:                sourceInfo.LastProcessedEvent,
 		StartTime:                         sourceInfo.StartTime,

@@ -9,7 +9,6 @@ require (
 	github.com/apache/thrift v0.0.0-20161221203622-b2a4d4ae21c7 // indirect
 	github.com/aws/aws-sdk-go v1.36.17
 	github.com/benbjohnson/clock v1.1.0 // indirect
-	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bitly/go-hostpool v0.1.0 // indirect
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cactus/go-statsd-client/statsd v0.0.0-20200423205355-cb0885a1018c
@@ -21,12 +20,12 @@ require (
 	github.com/emirpasic/gods v0.0.0-20190624094223-e689965507ab
 	github.com/fatih/color v1.10.0
 	github.com/go-sql-driver/mysql v1.5.0
-	github.com/gocql/gocql v0.0.0-20201215165327-e49edf966d90
+	github.com/gocql/gocql v0.0.0-20210413161705-87a5d7a5ff74
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
 	github.com/golang/mock v1.5.0
-	github.com/golang/protobuf v1.5.1
-	github.com/golang/snappy v0.0.2 // indirect
+	github.com/golang/protobuf v1.5.2
+	github.com/golang/snappy v0.0.3 // indirect
 	github.com/google/uuid v1.2.0
 	github.com/gorilla/websocket v1.4.2
 	github.com/hashicorp/go-hclog v0.14.1
@@ -42,7 +41,6 @@ require (
 	github.com/m3db/prometheus_procfs v0.8.1 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mattn/go-sqlite3 v1.10.0 // indirect
-	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/olekukonko/tablewriter v0.0.4
 	github.com/olivere/elastic v6.2.35+incompatible
 	github.com/olivere/elastic/v7 v7.0.22
@@ -60,8 +58,10 @@ require (
 	github.com/urfave/cli/v2 v2.3.0
 	github.com/valyala/fastjson v1.6.3
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.temporal.io/api v1.4.1-0.20210319015452-3dc250bb642a
-	go.temporal.io/sdk v1.5.1-0.20210318225734-a39bbe82b2ba
+	go.opentelemetry.io/otel v0.15.0
+	go.opentelemetry.io/otel/exporters/metric/prometheus v0.15.0
+	go.temporal.io/api v1.4.1-0.20210420220407-6f00f7f98373
+	go.temporal.io/sdk v1.6.0
 	go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193
 	go.uber.org/atomic v1.7.0
 	go.uber.org/multierr v1.6.0
@@ -71,7 +71,7 @@ require (
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 	google.golang.org/api v0.36.0
-	google.golang.org/grpc v1.36.0
+	google.golang.org/grpc v1.37.0
 	google.golang.org/grpc/examples v0.0.0-20200625174016-7a808837ae92
 	gopkg.in/check.v1 v1.0.0-20200902074654-038fdea0a05b // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1

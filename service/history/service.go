@@ -31,15 +31,15 @@ import (
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"go.temporal.io/server/common/config"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/masker"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/migration"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
@@ -55,7 +55,6 @@ type Service struct {
 
 	status  int32
 	handler *Handler
-	params  *resource.BootstrapParams
 	config  *configs.Config
 
 	server *grpc.Server
@@ -64,10 +63,14 @@ type Service struct {
 // NewService builds a new history service
 func NewService(
 	params *resource.BootstrapParams,
-) (resource.Resource, error) {
-	serviceConfig := configs.NewConfig(dynamicconfig.NewCollection(params.DynamicConfig, params.Logger),
+) (*Service, error) {
+	logger := params.Logger
+
+	serviceConfig := configs.NewConfig(
+		dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger),
 		params.PersistenceConfig.NumHistoryShards,
-		params.PersistenceConfig.IsAdvancedVisibilityConfigExist())
+		params.PersistenceConfig.IsAdvancedVisibilityConfigExist(),
+	)
 
 	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
 		VisibilityOpenMaxQPS:   serviceConfig.VisibilityOpenMaxQPS,
@@ -84,6 +87,7 @@ func NewService(
 
 		var visibilityFromES persistence.VisibilityManager
 		if params.ESConfig != nil {
+			logger.Info("Elasticsearch config", tag.ESConfig(masker.MaskStruct(params.ESConfig, masker.DefaultFieldNames)))
 			visibilityIndexName := params.ESConfig.GetVisibilityIndex()
 
 			esProcessorConfig := &espersistence.ProcessorConfig{
@@ -125,10 +129,35 @@ func NewService(
 		return nil, err
 	}
 
+	metricsInterceptor := interceptor.NewTelemetryInterceptor(
+		serviceResource.GetNamespaceCache(),
+		serviceResource.GetMetricsClient(),
+		metrics.HistoryAPIMetricsScopes(),
+		logger,
+	)
+	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
+		func() float64 { return float64(serviceConfig.RPS()) },
+		map[string]int{},
+	)
+
+	grpcServerOptions, err := params.RPCFactory.GetInternodeGRPCServerOptions()
+	if err != nil {
+		logger.Fatal("creating gRPC server options failed", tag.Error(err))
+	}
+	grpcServerOptions = append(
+		grpcServerOptions,
+		grpc.ChainUnaryInterceptor(
+			rpc.ServiceErrorInterceptor,
+			metricsInterceptor.Intercept,
+			rateLimiterInterceptor.Intercept,
+		),
+	)
+
 	return &Service{
 		Resource: serviceResource,
 		status:   common.DaemonStatusInitialized,
-		params:   params,
+		server:   grpc.NewServer(grpcServerOptions...),
+		handler:  NewHandler(serviceResource, serviceConfig),
 		config:   serviceConfig,
 	}, nil
 }
@@ -139,39 +168,16 @@ func (s *Service) Start() {
 		return
 	}
 
-	logger := s.GetLogger()
-	logger.Info("elastic search config", tag.ESConfig(masker.MaskStruct(s.params.ESConfig, masker.DefaultFieldNames)))
-	logger.Info("history starting")
+	// TODO remove this dynamic flag in 1.11.x
+	migration.SetDBVersionFlag(s.config.EnableDBRecordVersion())
 
-	s.handler = NewHandler(s.Resource, s.config)
+	logger := s.GetLogger()
+	logger.Info("history starting")
 
 	// must start resource first
 	s.Resource.Start()
 	s.handler.Start()
 
-	metricsInterceptor := interceptor.NewTelemetryInterceptor(
-		s.Resource.GetMetricsClient(),
-		metrics.HistoryAPIMetricsScopes(),
-		s.Resource.GetLogger(),
-	)
-	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
-		func() float64 { return float64(s.config.RPS()) },
-		map[string]int{},
-	)
-
-	opts, err := s.params.RPCFactory.GetInternodeGRPCServerOptions()
-	if err != nil {
-		logger.Fatal("creating grpc server options failed", tag.Error(err))
-	}
-	opts = append(
-		opts,
-		grpc.ChainUnaryInterceptor(
-			rpc.ServiceErrorInterceptor,
-			metricsInterceptor.Intercept,
-			rateLimiterInterceptor.Intercept,
-		),
-	)
-	s.server = grpc.NewServer(opts...)
 	historyservice.RegisterHistoryServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.handler)
 
@@ -184,6 +190,7 @@ func (s *Service) Start() {
 
 // Stop stops the service
 func (s *Service) Stop() {
+	logger := s.GetLogger()
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
@@ -205,18 +212,18 @@ func (s *Service) Stop() {
 
 	remainingTime := s.config.ShutdownDrainDuration()
 
-	s.GetLogger().Info("ShutdownHandler: Evicting self from membership ring")
+	logger.Info("ShutdownHandler: Evicting self from membership ring")
 	_ = s.GetMembershipMonitor().EvictSelf()
 
-	s.GetLogger().Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
+	logger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	remainingTime = s.sleep(gossipPropagationDelay, remainingTime)
 
-	s.GetLogger().Info("ShutdownHandler: Initiating shardController shutdown")
+	logger.Info("ShutdownHandler: Initiating shardController shutdown")
 	s.handler.controller.PrepareToStop()
-	s.GetLogger().Info("ShutdownHandler: Waiting for traffic to drain")
+	logger.Info("ShutdownHandler: Waiting for traffic to drain")
 	remainingTime = s.sleep(shardOwnershipTransferDelay, remainingTime)
 
-	s.GetLogger().Info("ShutdownHandler: No longer taking rpc requests")
+	logger.Info("ShutdownHandler: No longer taking rpc requests")
 	remainingTime = s.sleep(gracePeriod, remainingTime)
 
 	// TODO: Change this to GracefulStop when integration tests are refactored.
@@ -225,7 +232,7 @@ func (s *Service) Stop() {
 	s.handler.Stop()
 	s.Resource.Stop()
 
-	s.GetLogger().Info("history stopped")
+	logger.Info("history stopped")
 }
 
 // sleep sleeps for the minimum of desired and available duration

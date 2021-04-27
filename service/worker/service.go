@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -53,10 +54,10 @@ type (
 	Service struct {
 		resource.Resource
 
-		status int32
-		stopC  chan struct{}
-		params *resource.BootstrapParams
-		config *Config
+		status    int32
+		stopC     chan struct{}
+		sdkClient sdkclient.Client
+		config    *Config
 	}
 
 	// Config contains all the service config for worker
@@ -75,7 +76,7 @@ type (
 // NewService builds a new worker service
 func NewService(
 	params *resource.BootstrapParams,
-) (resource.Resource, error) {
+) (*Service, error) {
 
 	serviceConfig := NewConfig(params)
 
@@ -97,17 +98,17 @@ func NewService(
 	}
 
 	return &Service{
-		Resource: serviceResource,
-		status:   common.DaemonStatusInitialized,
-		config:   serviceConfig,
-		params:   params,
-		stopC:    make(chan struct{}),
+		Resource:  serviceResource,
+		status:    common.DaemonStatusInitialized,
+		config:    serviceConfig,
+		sdkClient: params.SdkClient,
+		stopC:     make(chan struct{}),
 	}, nil
 }
 
 // NewConfig builds the new Config for worker service
 func NewConfig(params *resource.BootstrapParams) *Config {
-	dc := dynamicconfig.NewCollection(params.DynamicConfig, params.Logger)
+	dc := dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger)
 	config := &Config{
 		ReplicationCfg: &replicator.Config{
 			PersistenceMaxQPS:                  dc.GetIntProperty(dynamicconfig.WorkerPersistenceMaxQPS, 500),
@@ -129,14 +130,11 @@ func NewConfig(params *resource.BootstrapParams) *Config {
 		ScannerCfg: &scanner.Config{
 			PersistenceMaxQPS:        dc.GetIntProperty(dynamicconfig.ScannerPersistenceMaxQPS, 100),
 			Persistence:              &params.PersistenceConfig,
-			ClusterMetadata:          params.ClusterMetadata,
 			TaskQueueScannerEnabled:  dc.GetBoolProperty(dynamicconfig.TaskQueueScannerEnabled, true),
 			HistoryScannerEnabled:    dc.GetBoolProperty(dynamicconfig.HistoryScannerEnabled, true),
 			ExecutionsScannerEnabled: dc.GetBoolProperty(dynamicconfig.ExecutionsScannerEnabled, false),
 		},
-		BatcherCfg: &batcher.Config{
-			ClusterMetadata: params.ClusterMetadata,
-		},
+		BatcherCfg:                    &batcher.Config{},
 		EnableBatcher:                 dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
 		EnableParentClosePolicyWorker: dc.GetBoolProperty(dynamicconfig.EnableParentClosePolicyWorker, true),
 		ThrottledLogRPS:               dc.GetIntProperty(dynamicconfig.WorkerThrottledLogRPS, 20),
@@ -178,6 +176,7 @@ func (s *Service) Start() {
 
 // Stop is called to stop the service
 func (s *Service) Stop() {
+	logger := s.GetLogger()
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
@@ -186,12 +185,12 @@ func (s *Service) Stop() {
 
 	s.Resource.Stop()
 
-	s.params.Logger.Info("worker stopped", tag.ComponentWorker)
+	logger.Info("worker stopped", tag.ComponentWorker)
 }
 
 func (s *Service) startParentClosePolicyProcessor() {
 	params := &parentclosepolicy.BootstrapParams{
-		ServiceClient: s.params.PublicClient,
+		ServiceClient: s.sdkClient,
 		MetricsClient: s.GetMetricsClient(),
 		Logger:        s.GetLogger(),
 		ClientBean:    s.GetClientBean(),
@@ -205,7 +204,7 @@ func (s *Service) startParentClosePolicyProcessor() {
 func (s *Service) startBatcher() {
 	params := &batcher.BootstrapParams{
 		Config:        *s.config.BatcherCfg,
-		ServiceClient: s.params.PublicClient,
+		ServiceClient: s.sdkClient,
 		MetricsClient: s.GetMetricsClient(),
 		Logger:        s.GetLogger(),
 		ClientBean:    s.GetClientBean(),
@@ -245,7 +244,7 @@ func (s *Service) startReplicator() {
 
 func (s *Service) startArchiver() {
 	bc := &archiver.BootstrapContainer{
-		PublicClient:     s.GetSDKClient(),
+		SdkClient:        s.GetSDKClient(),
 		MetricsClient:    s.GetMetricsClient(),
 		Logger:           s.GetLogger(),
 		HistoryV2Manager: s.GetHistoryManager(),

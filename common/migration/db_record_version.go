@@ -22,37 +22,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package metrics
+package migration
 
 import (
-	"time"
-
-	"github.com/uber-go/tally"
+	"sync/atomic"
 )
 
-// Stopwatch is a helper for simpler tracking of elapsed time, use the
-// Stop() method to report time elapsed since its created back to the
-// timer or histogram.
-type TallyStopwatch struct {
-	start  time.Time
-	timers []tally.Timer
+var (
+	enableDBRecordVersion int32
+)
+
+func IsDBVersionEnabled() bool {
+	return atomic.LoadInt32(&enableDBRecordVersion) == 1
 }
 
-// NewStopwatch creates a new immutable stopwatch for recording the start
-// time to a stopwatch reporter.
-func NewStopwatch(timers ...tally.Timer) Stopwatch {
-	return &TallyStopwatch{time.Now().UTC(), timers}
-}
-
-// NewTestStopwatch returns a new test stopwatch
-func NewTestStopwatch() Stopwatch {
-	return &TallyStopwatch{time.Now().UTC(), []tally.Timer{}}
-}
-
-// Stop reports time elapsed since the stopwatch start to the recorder.
-func (sw *TallyStopwatch) Stop() {
-	d := time.Since(sw.start)
-	for _, timer := range sw.timers {
-		timer.Record(d)
+func SetDBVersionFlag(
+	enabled bool,
+) {
+	if enabled {
+		atomic.StoreInt32(&enableDBRecordVersion, 1)
+	} else {
+		atomic.StoreInt32(&enableDBRecordVersion, 0)
 	}
 }

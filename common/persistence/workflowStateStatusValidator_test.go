@@ -27,6 +27,7 @@ package persistence
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 
@@ -36,6 +37,7 @@ import (
 type (
 	workflowStateStatusSuite struct {
 		suite.Suite
+		*require.Assertions
 	}
 )
 
@@ -52,7 +54,7 @@ func (s *workflowStateStatusSuite) TearDownSuite() {
 }
 
 func (s *workflowStateStatusSuite) SetupTest() {
-
+	s.Assertions = require.New(s.T())
 }
 
 func (s *workflowStateStatusSuite) TearDownTest() {

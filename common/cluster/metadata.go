@@ -108,8 +108,8 @@ func NewMetadata(
 		}
 		versionToClusterName[info.InitialFailoverVersion] = clusterName
 
-		if info.Enabled && (len(info.RPCName) == 0 || len(info.RPCAddress) == 0) {
-			panic(fmt.Sprintf("Cluster %v: rpc name / address is empty", clusterName))
+		if info.Enabled && info.RPCAddress == "" {
+			panic(fmt.Sprintf("Cluster %v: RPCAddress is empty", clusterName))
 		}
 	}
 

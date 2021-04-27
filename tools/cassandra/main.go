@@ -136,10 +136,16 @@ func buildCLIOptions() *cli.App {
 			Usage:  "TLS CA file",
 			EnvVar: "CASSANDRA_TLS_CA",
 		},
+		cli.StringFlag{
+			Name:   schema.CLIFlagTLSHostName,
+			Value:  "",
+			Usage:  "override for target server name",
+			EnvVar: "CASSANDRA_TLS_SERVER_NAME",
+		},
 		cli.BoolFlag{
-			Name:   schema.CLIFlagTLSEnableHostVerification,
-			Usage:  "TLS host verification",
-			EnvVar: "CASSANDRA_TLS_VERIFY_HOST",
+			Name:   schema.CLIFlagTLSDisableHostVerification,
+			Usage:  "disable tls host name verification (tls must be enabled)",
+			EnvVar: "CASSANDRA_TLS_DISABLE_HOST_VERIFICATION",
 		},
 	}
 

@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 )
 
 type TestDynamicTLSConfigProvider struct {
@@ -47,10 +48,12 @@ type TestDynamicTLSConfigProvider struct {
 	internodeClientConfig *tls.Config
 	frontendServerConfig  *tls.Config
 	frontendClientConfig  *tls.Config
+
+	logger log.Logger
 }
 
 func (t *TestDynamicTLSConfigProvider) GetInternodeServerConfig() (*tls.Config, error) {
-	return newServerTLSConfig(t.InternodeCertProvider, nil, &t.settings.Internode)
+	return newServerTLSConfig(t.InternodeCertProvider, nil, &t.settings.Internode, t.logger)
 }
 
 func (t *TestDynamicTLSConfigProvider) GetInternodeClientConfig() (*tls.Config, error) {
@@ -58,7 +61,7 @@ func (t *TestDynamicTLSConfigProvider) GetInternodeClientConfig() (*tls.Config, 
 }
 
 func (t *TestDynamicTLSConfigProvider) GetFrontendServerConfig() (*tls.Config, error) {
-	return newServerTLSConfig(t.FrontendCertProvider, t.FrontendPerHostCertProviderMap, &t.settings.Frontend)
+	return newServerTLSConfig(t.FrontendCertProvider, t.FrontendPerHostCertProviderMap, &t.settings.Frontend, t.logger)
 }
 
 func (t *TestDynamicTLSConfigProvider) GetFrontendClientConfig() (*tls.Config, error) {
@@ -91,5 +94,6 @@ func NewTestDynamicTLSConfigProvider(
 		WorkerCertProvider:             frontendProvider,
 		FrontendPerHostCertProviderMap: frontendProvider,
 		settings:                       tlsConfig,
+		logger:                         log.NewDefaultLogger(),
 	}, nil
 }

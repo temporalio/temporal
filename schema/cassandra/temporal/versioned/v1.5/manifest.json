@@ -1,0 +1,9 @@
+{
+  "CurrVersion": "1.5",
+  "MinCompatibleVersion": "1.0",
+  "Description": "schema update for execution & history node table version",
+  "SchemaUpdateCqlFiles": [
+    "event.cql",
+    "executions.cql"
+  ]
+}

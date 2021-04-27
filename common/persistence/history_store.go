@@ -55,6 +55,9 @@ type (
 const (
 	defaultLastNodeID        = common.FirstEventID - 1
 	defaultLastTransactionID = int64(0)
+
+	// TrimHistoryBranch will only dump metadata, relatively cheap
+	trimHistoryBranchPageSize = 1000
 )
 
 var _ HistoryManager = (*historyV2ManagerImpl)(nil)
@@ -137,6 +140,101 @@ func (m *historyV2ManagerImpl) DeleteHistoryBranch(
 	return m.persistence.DeleteHistoryBranch(req)
 }
 
+// TrimHistoryBranch trims a branch
+func (m *historyV2ManagerImpl) TrimHistoryBranch(
+	request *TrimHistoryBranchRequest,
+) (*TrimHistoryBranchResponse, error) {
+
+	shardID := request.ShardID
+	minNodeID := common.FirstEventID
+	maxNodeID := request.NodeID + 1
+	pageSize := trimHistoryBranchPageSize
+
+	branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
+	if err != nil {
+		return nil, err
+	}
+	treeID := branch.TreeId
+	branchID := branch.BranchId
+	branchAncestors := branch.Ancestors
+
+	// merge tree ID & branch ID into branch ancestors so the processing logic is simple
+	beginNodeID := common.FirstEventID
+	if len(branch.Ancestors) > 0 {
+		beginNodeID = branch.Ancestors[len(branch.Ancestors)-1].GetEndNodeId()
+	}
+	branchAncestors = append(branchAncestors, &persistencespb.HistoryBranchRange{
+		BranchId:    branchID,
+		BeginNodeId: beginNodeID,
+		EndNodeId:   maxNodeID,
+	})
+
+	var pageToken []byte
+	transactionIDToNode := map[int64]historyNodeMetadata{}
+	for doContinue := true; doContinue; doContinue = len(pageToken) > 0 {
+		token, err := m.deserializeToken(pageToken, minNodeID-1)
+		if err != nil {
+			return nil, err
+		}
+
+		nodes, token, err := m.readRawHistoryBranch(
+			shardID,
+			treeID,
+			branchAncestors,
+			minNodeID,
+			maxNodeID,
+			token,
+			pageSize,
+			true,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		branchID := branchAncestors[token.CurrentRangeIndex].BranchId
+		for _, node := range nodes {
+			transactionIDToNode[node.TransactionID] = historyNodeMetadata{
+				branchInfo: &persistencespb.HistoryBranch{
+					TreeId:    treeID,
+					BranchId:  branchID,
+					Ancestors: branchAncestors[0:token.CurrentRangeIndex],
+				},
+				nodeID:            node.NodeID,
+				transactionID:     node.TransactionID,
+				prevTransactionID: node.PrevTransactionID,
+			}
+		}
+
+		pageToken, err = m.serializeToken(token)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	nodesToTrim, err := validateNodeChainAndTrim(
+		request.NodeID,
+		request.TransactionID,
+		transactionIDToNode,
+	)
+	if err != nil {
+		m.logger.Debug("unable to trim history branch due to existing history node not fully onboarded", tag.Error(err))
+		return &TrimHistoryBranchResponse{}, nil
+	}
+
+	for _, node := range nodesToTrim {
+		if err := m.persistence.DeleteHistoryNodes(&InternalDeleteHistoryNodesRequest{
+			ShardID:       shardID,
+			BranchInfo:    node.branchInfo,
+			NodeID:        node.nodeID,
+			TransactionID: node.transactionID,
+		}); err != nil {
+			return nil, err
+		}
+	}
+
+	return &TrimHistoryBranchResponse{}, nil
+}
+
 // GetHistoryTree returns all branch information of a tree
 func (m *historyV2ManagerImpl) GetHistoryTree(
 	request *GetHistoryTreeRequest,
@@ -152,7 +250,7 @@ func (m *historyV2ManagerImpl) GetHistoryTree(
 	return m.persistence.GetHistoryTree(request)
 }
 
-// AppendHistoryNodes add(or override) a node to a history branch
+// AppendHistoryNodes add a node to history node table
 func (m *historyV2ManagerImpl) AppendHistoryNodes(
 	request *AppendHistoryNodesRequest,
 ) (*AppendHistoryNodesResponse, error) {
@@ -203,13 +301,16 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(
 	}
 
 	req := &InternalAppendHistoryNodesRequest{
-		IsNewBranch:   request.IsNewBranch,
-		Info:          request.Info,
-		BranchInfo:    branch,
-		NodeID:        nodeID,
-		Events:        blob,
-		TransactionID: request.TransactionID,
-		ShardID:       request.ShardID,
+		IsNewBranch: request.IsNewBranch,
+		Info:        request.Info,
+		BranchInfo:  branch,
+		Node: InternalHistoryNode{
+			NodeID:            nodeID,
+			Events:            blob,
+			PrevTransactionID: request.PrevTransactionID,
+			TransactionID:     request.TransactionID,
+		},
+		ShardID: request.ShardID,
 	}
 
 	err = m.persistence.AppendHistoryNodes(req)
@@ -227,7 +328,7 @@ func (m *historyV2ManagerImpl) ReadHistoryBranchByBatch(
 
 	resp := &ReadHistoryBranchByBatchResponse{}
 	var err error
-	_, resp.History, resp.NextPageToken, resp.Size, resp.LastFirstEventID, err = m.readHistoryBranch(true, request)
+	_, resp.History, resp.NextPageToken, resp.Size, err = m.readHistoryBranch(true, request)
 	return resp, err
 }
 
@@ -239,7 +340,7 @@ func (m *historyV2ManagerImpl) ReadHistoryBranch(
 
 	resp := &ReadHistoryBranchResponse{}
 	var err error
-	resp.HistoryEvents, _, resp.NextPageToken, resp.Size, resp.LastFirstEventID, err = m.readHistoryBranch(false, request)
+	resp.HistoryEvents, _, resp.NextPageToken, resp.Size, err = m.readHistoryBranch(false, request)
 	return resp, err
 }
 
@@ -250,7 +351,7 @@ func (m *historyV2ManagerImpl) ReadRawHistoryBranch(
 	request *ReadHistoryBranchRequest,
 ) (*ReadRawHistoryBranchResponse, error) {
 
-	dataBlobs, token, dataSize, _, err := m.readRawHistoryBranch(request)
+	dataBlobs, token, dataSize, err := m.readRawHistoryBranchAndFilter(request)
 	if err != nil {
 		return nil, err
 	}
@@ -275,56 +376,24 @@ func (m *historyV2ManagerImpl) GetAllHistoryTreeBranches(
 }
 
 func (m *historyV2ManagerImpl) readRawHistoryBranch(
-	request *ReadHistoryBranchRequest,
-) ([]*commonpb.DataBlob, *historyV2PagingToken, int, log.Logger, error) {
-
-	branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
-	if err != nil {
-		return nil, nil, 0, nil, err
-	}
-	treeID := branch.TreeId
-	branchID := branch.BranchId
-
-	if request.PageSize <= 0 || request.MinEventID >= request.MaxEventID {
-		return nil, nil, 0, nil, &InvalidPersistenceRequestError{
-			Msg: fmt.Sprintf(
-				"no events can be found for pageSize %v, minEventID %v, maxEventID: %v",
-				request.PageSize,
-				request.MinEventID,
-				request.MaxEventID,
-			),
-		}
-	}
-
-	defaultLastEventID := request.MinEventID - 1
-	token, err := m.deserializeToken(
-		request.NextPageToken,
-		defaultLastEventID,
-	)
-	if err != nil {
-		return nil, nil, 0, nil, err
-	}
-
-	allBRs := branch.Ancestors
-	// We may also query the current branch from beginNodeID
-	beginNodeID := common.FirstEventID
-	if len(branch.Ancestors) > 0 {
-		beginNodeID = branch.Ancestors[len(branch.Ancestors)-1].GetEndNodeId()
-	}
-	allBRs = append(allBRs, &persistencespb.HistoryBranchRange{
-		BranchId:    branchID,
-		BeginNodeId: beginNodeID,
-		EndNodeId:   request.MaxEventID,
-	})
+	shardID int32,
+	treeID string,
+	branchAncestors []*persistencespb.HistoryBranchRange,
+	minNodeID int64,
+	maxNodeID int64,
+	token *historyV2PagingToken,
+	pageSize int,
+	metadataOnly bool,
+) ([]InternalHistoryNode, *historyV2PagingToken, error) {
 
 	if token.CurrentRangeIndex == notStartedIndex {
-		for idx, br := range allBRs {
+		for idx, br := range branchAncestors {
 			// this range won't contain any nodes needed
-			if request.MinEventID >= br.GetEndNodeId() {
+			if minNodeID >= br.GetEndNodeId() {
 				continue
 			}
 			// similarly, the ranges and the rest won't contain any nodes needed,
-			if request.MaxEventID <= br.GetBeginNodeId() {
+			if maxNodeID <= br.GetBeginNodeId() {
 				break
 			}
 
@@ -335,76 +404,131 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 		}
 
 		if token.CurrentRangeIndex == notStartedIndex {
-			return nil, nil, 0, nil, serviceerror.NewDataLoss("branchRange is corrupted")
+			return nil, nil, serviceerror.NewDataLoss("branchRange is corrupted")
 		}
 	}
 
-	minNodeID := request.MinEventID
-	maxNodeID := allBRs[token.CurrentRangeIndex].GetEndNodeId()
-	if request.MaxEventID < maxNodeID {
-		maxNodeID = request.MaxEventID
-	}
-
-	req := &InternalReadHistoryBranchRequest{
-		TreeID:            treeID,
-		BranchID:          allBRs[token.CurrentRangeIndex].GetBranchId(),
-		MinNodeID:         minNodeID,
-		MaxNodeID:         maxNodeID,
-		NextPageToken:     token.StoreToken,
-		LastNodeID:        token.LastNodeID,
-		LastTransactionID: token.LastTransactionID,
-		ShardID:           request.ShardID,
-		PageSize:          request.PageSize,
-	}
-
-	resp, err := m.persistence.ReadHistoryBranch(req)
+	currentBranch := branchAncestors[token.CurrentRangeIndex]
+	// minNodeID remains the same, since caller can read from the middle
+	// maxNodeID need to be shortened since this branch can contain additional history nodes
+	maxNodeID = currentBranch.GetEndNodeId()
+	branchID := currentBranch.GetBranchId()
+	resp, err := m.persistence.ReadHistoryBranch(&InternalReadHistoryBranchRequest{
+		ShardID:       shardID,
+		TreeID:        treeID,
+		BranchID:      branchID,
+		MinNodeID:     minNodeID,
+		MaxNodeID:     maxNodeID,
+		NextPageToken: token.StoreToken,
+		PageSize:      pageSize,
+		MetadataOnly:  metadataOnly,
+	})
 	if err != nil {
-		return nil, nil, 0, nil, err
+		return nil, nil, err
 	}
-	if len(resp.History) == 0 && len(request.NextPageToken) == 0 {
-		return nil, nil, 0, nil, serviceerror.NewNotFound("Workflow execution history not found.")
-	}
-
-	dataBlobs := resp.History
-	dataSize := 0
-	for _, dataBlob := range resp.History {
-		dataSize += len(dataBlob.Data)
-	}
-
 	token.StoreToken = resp.NextPageToken
-	token.LastNodeID = resp.LastNodeID
-	token.LastTransactionID = resp.LastTransactionID
+	return resp.Nodes, token, nil
+}
 
-	// NOTE: in this method, we need to make sure eventVersion is NOT
-	// decreasing(otherwise we skip the events), eventID should be contiguous(otherwise return error)
-	logger := log.With(m.logger, tag.WorkflowBranchID(branch.BranchId), tag.WorkflowTreeID(branch.TreeId))
+func (m *historyV2ManagerImpl) readRawHistoryBranchAndFilter(
+	request *ReadHistoryBranchRequest,
+) ([]*commonpb.DataBlob, *historyV2PagingToken, int, error) {
 
-	return dataBlobs, token, dataSize, logger, nil
+	shardID := request.ShardID
+	branchToken := request.BranchToken
+	minNodeID := request.MinEventID
+	maxNodeID := request.MaxEventID
+
+	branch, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	treeID := branch.TreeId
+	branchID := branch.BranchId
+	branchAncestors := branch.Ancestors
+
+	// merge tree ID & branch ID into branch ancestors so the processing logic is simple
+	beginNodeID := common.FirstEventID
+	if len(branch.Ancestors) > 0 {
+		beginNodeID = branch.Ancestors[len(branch.Ancestors)-1].GetEndNodeId()
+	}
+	branchAncestors = append(branchAncestors, &persistencespb.HistoryBranchRange{
+		BranchId:    branchID,
+		BeginNodeId: beginNodeID,
+		EndNodeId:   maxNodeID,
+	})
+
+	token, err := m.deserializeToken(
+		request.NextPageToken,
+		request.MinEventID-1,
+	)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+
+	nodes, token, err := m.readRawHistoryBranch(
+		shardID,
+		treeID,
+		branchAncestors,
+		minNodeID,
+		maxNodeID,
+		token,
+		request.PageSize,
+		false,
+	)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	if len(nodes) == 0 && len(request.NextPageToken) == 0 {
+		return nil, nil, 0, serviceerror.NewNotFound("Workflow execution history not found.")
+	}
+
+	nodes, err = m.filterHistoryNodes(
+		token.LastNodeID,
+		token.LastTransactionID,
+		nodes,
+	)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+
+	var dataBlobs []*commonpb.DataBlob
+	dataSize := 0
+	if len(nodes) > 0 {
+		dataBlobs = make([]*commonpb.DataBlob, len(nodes))
+		for index, node := range nodes {
+			dataBlobs[index] = node.Events
+			dataSize += len(node.Events.Data)
+		}
+		lastNode := nodes[len(nodes)-1]
+		token.LastNodeID = lastNode.NodeID
+		token.LastTransactionID = lastNode.TransactionID
+	}
+
+	return dataBlobs, token, dataSize, nil
 }
 
 func (m *historyV2ManagerImpl) readHistoryBranch(
 	byBatch bool,
 	request *ReadHistoryBranchRequest,
-) ([]*historypb.HistoryEvent, []*historypb.History, []byte, int, int64, error) {
+) ([]*historypb.HistoryEvent, []*historypb.History, []byte, int, error) {
 
-	dataBlobs, token, dataSize, logger, err := m.readRawHistoryBranch(request)
+	dataBlobs, token, dataSize, err := m.readRawHistoryBranchAndFilter(request)
 	if err != nil {
-		return nil, nil, nil, 0, 0, err
+		return nil, nil, nil, 0, err
 	}
-	defaultLastEventID := request.MinEventID - 1
 
 	historyEvents := make([]*historypb.HistoryEvent, 0, request.PageSize)
 	historyEventBatches := make([]*historypb.History, 0, request.PageSize)
-	// first_event_id of the last batch
-	lastFirstEventID := common.EmptyEventID
+
 	for _, batch := range dataBlobs {
 		events, err := m.historySerializer.DeserializeEvents(batch)
 		if err != nil {
-			return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, err
+			return historyEvents, historyEventBatches, nil, dataSize, err
 		}
 		if len(events) == 0 {
-			logger.Error("Empty events in a batch")
-			return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, serviceerror.NewDataLoss(fmt.Sprintf("corrupted history event batch, empty events"))
+			m.logger.Error("Empty events in a batch")
+			return historyEvents, historyEventBatches, nil, dataSize, serviceerror.NewDataLoss(fmt.Sprintf("corrupted history event batch, empty events"))
 		}
 
 		firstEvent := events[0]           // first
@@ -413,54 +537,70 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 
 		if firstEvent.GetVersion() != lastEvent.GetVersion() || firstEvent.GetEventId()+int64(eventCount-1) != lastEvent.GetEventId() {
 			// in a single batch, version should be the same, and ID should be contiguous
-			logger.Error("Corrupted event batch",
+			m.logger.Error("Corrupted event batch",
 				tag.FirstEventVersion(firstEvent.GetVersion()), tag.WorkflowFirstEventID(firstEvent.GetEventId()),
 				tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
 				tag.Counter(eventCount))
-			return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, serviceerror.NewDataLoss("corrupted history event batch, wrong version and IDs")
-		}
-
-		if firstEvent.GetVersion() < token.LastEventVersion {
-			// version decrease means the this batch are all stale events, we should skip
-			logger.Info("Stale event batch with smaller version", tag.FirstEventVersion(firstEvent.GetVersion()), tag.TokenLastEventVersion(token.LastEventVersion))
-			continue
-		}
-		if firstEvent.GetEventId() <= token.LastEventID {
-			// we could see it because first batch of next page has a smaller txn_id
-			logger.Info("Stale event batch with eventID", tag.WorkflowFirstEventID(firstEvent.GetEventId()), tag.TokenLastEventID(token.LastEventID))
-			continue
+			return historyEvents, historyEventBatches, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, wrong version and IDs")
 		}
 		if firstEvent.GetEventId() != token.LastEventID+1 {
-			// We assume application layer want to read from MinEventID(inclusive)
-			// However, for getting history from remote cluster, there is scenario that we have to read from middle without knowing the firstEventID.
-			// In that case we don't validate history continuousness for the first page
-			// TODO: in this case, some events returned can be invalid(stale). application layer need to make sure it won't make any problems to XDC
-			if defaultLastEventID == 0 || token.LastEventID != defaultLastEventID {
-				logger.Error("Corrupted non-contiguous event batch",
-					tag.FirstEventVersion(firstEvent.GetVersion()), tag.WorkflowFirstEventID(firstEvent.GetEventId()),
-					tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
-					tag.TokenLastEventVersion(token.LastEventVersion), tag.TokenLastEventID(token.LastEventID),
-					tag.Counter(eventCount))
-				return historyEvents, historyEventBatches, nil, dataSize, lastFirstEventID, serviceerror.NewDataLoss("corrupted history event batch, eventID is not contiguous")
-			}
+			m.logger.Error("Corrupted non-contiguous event batch",
+				tag.WorkflowFirstEventID(firstEvent.GetEventId()),
+				tag.WorkflowNextEventID(lastEvent.GetEventId()),
+				tag.TokenLastEventID(token.LastEventID),
+				tag.Counter(eventCount))
+			return historyEvents, historyEventBatches, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, eventID is not contiguous")
 		}
 
-		token.LastEventVersion = firstEvent.GetVersion()
-		token.LastEventID = lastEvent.GetEventId()
 		if byBatch {
 			historyEventBatches = append(historyEventBatches, &historypb.History{Events: events})
 		} else {
 			historyEvents = append(historyEvents, events...)
 		}
-		lastFirstEventID = firstEvent.GetEventId()
+		token.LastEventID = lastEvent.GetEventId()
 	}
 
 	nextPageToken, err := m.serializeToken(token)
 	if err != nil {
-		return nil, nil, nil, 0, 0, err
+		return nil, nil, nil, 0, err
 	}
+	return historyEvents, historyEventBatches, nextPageToken, dataSize, nil
+}
 
-	return historyEvents, historyEventBatches, nextPageToken, dataSize, lastFirstEventID, nil
+func (m *historyV2ManagerImpl) filterHistoryNodes(
+	lastNodeID int64,
+	lastTransactionID int64,
+	nodes []InternalHistoryNode,
+) ([]InternalHistoryNode, error) {
+	var result []InternalHistoryNode
+	for _, node := range nodes {
+		// assuming that business logic layer is correct and transaction ID only increase
+		// thus, valid event batch will come with increasing transaction ID
+
+		// event batches with smaller node ID
+		//  -> should not be possible since records are already sorted
+		// event batches with same node ID
+		//  -> batch with higher transaction ID is valid
+		// event batches with larger node ID
+		//  -> batch with lower transaction ID is invalid (happens before)
+		//  -> batch with higher transaction ID is valid
+		if node.TransactionID < lastTransactionID {
+			continue
+		}
+
+		switch {
+		case node.NodeID < lastNodeID:
+			return nil, serviceerror.NewInternal(fmt.Sprintf("corrupted data, nodeID cannot decrease"))
+		case node.NodeID == lastNodeID:
+			return nil, serviceerror.NewInternal(fmt.Sprintf("corrupted data, same nodeID must have smaller txnID"))
+		default: // row.NodeID > lastNodeID:
+			// NOTE: when row.nodeID > lastNodeID, we expect the one with largest txnID comes first
+			lastTransactionID = node.TransactionID
+			lastNodeID = node.NodeID
+			result = append(result, node)
+		}
+	}
+	return result, nil
 }
 
 func (m *historyV2ManagerImpl) deserializeToken(
@@ -471,7 +611,6 @@ func (m *historyV2ManagerImpl) deserializeToken(
 	return m.pagingTokenSerializer.Deserialize(
 		token,
 		defaultLastEventID,
-		common.EmptyVersion,
 		defaultLastNodeID,
 		defaultLastTransactionID,
 	)

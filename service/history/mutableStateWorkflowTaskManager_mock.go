@@ -153,9 +153,9 @@ func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) AddWorkflowTaskSchedu
 }
 
 // AddWorkflowTaskStartedEvent mocks base method.
-func (m *MockmutableStateWorkflowTaskManager) AddWorkflowTaskStartedEvent(scheduleEventID int64, requestID string, request *workflowservice.PollWorkflowTaskQueueRequest) (*history.HistoryEvent, *workflowTaskInfo, error) {
+func (m *MockmutableStateWorkflowTaskManager) AddWorkflowTaskStartedEvent(scheduleEventID int64, requestID string, taskQueue *taskqueue.TaskQueue, identity string) (*history.HistoryEvent, *workflowTaskInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddWorkflowTaskStartedEvent", scheduleEventID, requestID, request)
+	ret := m.ctrl.Call(m, "AddWorkflowTaskStartedEvent", scheduleEventID, requestID, taskQueue, identity)
 	ret0, _ := ret[0].(*history.HistoryEvent)
 	ret1, _ := ret[1].(*workflowTaskInfo)
 	ret2, _ := ret[2].(error)
@@ -163,9 +163,9 @@ func (m *MockmutableStateWorkflowTaskManager) AddWorkflowTaskStartedEvent(schedu
 }
 
 // AddWorkflowTaskStartedEvent indicates an expected call of AddWorkflowTaskStartedEvent.
-func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) AddWorkflowTaskStartedEvent(scheduleEventID, requestID, request interface{}) *gomock.Call {
+func (mr *MockmutableStateWorkflowTaskManagerMockRecorder) AddWorkflowTaskStartedEvent(scheduleEventID, requestID, taskQueue, identity interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskStartedEvent", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).AddWorkflowTaskStartedEvent), scheduleEventID, requestID, request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowTaskStartedEvent", reflect.TypeOf((*MockmutableStateWorkflowTaskManager)(nil).AddWorkflowTaskStartedEvent), scheduleEventID, requestID, taskQueue, identity)
 }
 
 // AddWorkflowTaskTimedOutEvent mocks base method.

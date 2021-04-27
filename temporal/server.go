@@ -33,13 +33,12 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	sdkclient "go.temporal.io/sdk/client"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -47,7 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/elasticsearch/client"
+	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
@@ -62,14 +61,20 @@ import (
 	"go.temporal.io/server/service/worker"
 )
 
+const (
+	mismatchLogMessage = "Supplied configuration key/value mismatches persisted cluster metadata. Continuing with the persisted value as this value cannot be changed once initialized."
+)
+
 type (
 	// Server is temporal server.
 	Server struct {
 		so                *serverOptions
 		services          map[string]common.Daemon
 		serviceStoppedChs map[string]chan struct{}
-		stoppedCh         chan struct{}
+		stoppedCh         chan interface{}
 		logger            log.Logger
+		serverReporter    metrics.Reporter
+		sdkReporter       metrics.Reporter
 	}
 )
 
@@ -100,7 +105,7 @@ func (s *Server) Start() error {
 		return err
 	}
 
-	s.stoppedCh = make(chan struct{})
+	s.stoppedCh = make(chan interface{})
 
 	s.logger = s.so.logger
 	if s.logger == nil {
@@ -110,59 +115,75 @@ func (s *Server) Start() error {
 	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))
 	s.logger.Debug(s.so.config.String())
 
-	err = s.validate()
+	if s.so.persistenceServiceResolver == nil {
+		s.so.persistenceServiceResolver = resolver.NewNoopResolver()
+	}
+
+	if s.so.dynamicConfigClient == nil {
+		s.so.dynamicConfigClient, err = dynamicconfig.NewFileBasedClient(&s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
+		if err != nil {
+			s.logger.Info("Error creating file based dynamic config client, use no-op config client instead.", tag.Error(err))
+			s.so.dynamicConfigClient = dynamicconfig.NewNoopClient()
+		}
+	}
+	dc := dynamicconfig.NewCollection(s.so.dynamicConfigClient, s.logger)
+
+	advancedVisibilityWritingMode := dc.GetStringProperty(dynamicconfig.AdvancedVisibilityWritingMode, common.GetDefaultAdvancedVisibilityWritingMode(s.so.config.Persistence.IsAdvancedVisibilityConfigExist()))()
+
+	err = verifyPersistenceCompatibleVersion(s.so.config.Persistence, s.so.persistenceServiceResolver, advancedVisibilityWritingMode != common.AdvancedVisibilityWritingModeOn)
 	if err != nil {
 		return err
 	}
 
-	var dynamicConfig dynamicconfig.Client
-	if s.so.dynamicConfigClient != nil {
-		dynamicConfig = s.so.dynamicConfigClient
-	} else {
-		dynamicConfig, err = dynamicconfig.NewFileBasedClient(&s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
-		if err != nil {
-			s.logger.Info("Error creating file based dynamic config client, use no-op config client instead.", tag.Error(err))
-			dynamicConfig = dynamicconfig.NewNoopClient()
-		}
+	if err = pprof.NewInitializer(&s.so.config.Global.PProf, s.logger).Start(); err != nil {
+		return fmt.Errorf("unable to start PProf: %w", err)
 	}
-	dc := dynamicconfig.NewCollection(dynamicConfig, s.logger)
 
-	// This call performs a config check against the configured persistence store for immutable cluster metadata.
-	// If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
-	// This is to keep this check hidden from independent downstream daemons and keep this in a single place.
-	err = s.immutableClusterMetadataInitialization(dc)
+	err = ringpop.ValidateRingpopConfig(&s.so.config.Global.Membership)
+	if err != nil {
+		return fmt.Errorf("ringpop config validation error: %w", err)
+	}
+
+	err = updateClusterMetadataConfig(s.so.config, s.so.persistenceServiceResolver, s.logger)
 	if err != nil {
 		return fmt.Errorf("unable to initialize cluster metadata: %w", err)
 	}
 
-	clusterMetadata := cluster.NewMetadata(
-		s.logger,
-		s.so.config.ClusterMetadata.EnableGlobalNamespace,
-		s.so.config.ClusterMetadata.FailoverVersionIncrement,
-		s.so.config.ClusterMetadata.MasterClusterName,
-		s.so.config.ClusterMetadata.CurrentClusterName,
-		s.so.config.ClusterMetadata.ClusterInformation,
-	)
-
-	var globalMetricsScope tally.Scope
-	if s.so.metricsReporter != nil {
-		globalMetricsScope = s.so.config.Global.Metrics.NewCustomReporterScope(s.logger, s.so.metricsReporter)
-	} else if s.so.config.Global.Metrics != nil {
-		globalMetricsScope = s.so.config.Global.Metrics.NewScope(s.logger)
+	err = initSystemNamespaces(&s.so.config.Persistence, s.so.config.ClusterMetadata.CurrentClusterName, s.so.persistenceServiceResolver, s.logger)
+	if err != nil {
+		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
 
-	var tlsFactory encryption.TLSConfigProvider
-	if s.so.tlsConfigProvider != nil {
-		tlsFactory = s.so.tlsConfigProvider
-	} else {
-		tlsFactory, err = encryption.NewTLSConfigProviderFromConfig(s.so.config.Global.TLS, globalMetricsScope, nil)
+	// todo: Replace this with Client or Scope implementation.
+	var globalMetricsScope tally.Scope = nil
+
+	s.serverReporter = nil
+	s.sdkReporter = nil
+	if s.so.config.Global.Metrics != nil {
+		s.serverReporter, s.sdkReporter, err = s.so.config.Global.Metrics.InitMetricReporters(s.logger, s.so.metricsReporter)
+		if err != nil {
+			return err
+		}
+		globalMetricsScope, err = s.extractTallyScopeForSDK(s.sdkReporter)
+		if err != nil {
+			return err
+		}
+	}
+
+	if s.so.tlsConfigProvider == nil {
+		s.so.tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(s.so.config.Global.TLS, globalMetricsScope, nil)
 		if err != nil {
 			return fmt.Errorf("TLS provider initialization error: %w", err)
 		}
 	}
 
+	esConfig, esClient, err := s.getESConfigClient(advancedVisibilityWritingMode)
+	if err != nil {
+		return err
+	}
+
 	for _, svcName := range s.so.serviceNames {
-		params, err := s.getServiceParams(svcName, dynamicConfig, tlsFactory, clusterMetadata, dc, globalMetricsScope)
+		params, err := s.newBootstrapParams(svcName, dc, s.serverReporter, s.sdkReporter, esConfig, esClient)
 		if err != nil {
 			return err
 		}
@@ -223,33 +244,41 @@ func (s *Server) Stop() {
 		}(svc, svcName, s.serviceStoppedChs[svcName])
 	}
 	wg.Wait()
+
+	s.sdkReporter.Stop(s.logger)
+	s.serverReporter.Stop(s.logger)
 }
 
 // Populates parameters for a service
-func (s *Server) getServiceParams(
+func (s *Server) newBootstrapParams(
 	svcName string,
-	dynamicConfig dynamicconfig.Client,
-	tlsFactory encryption.TLSConfigProvider,
-	clusterMetadata cluster.Metadata,
 	dc *dynamicconfig.Collection,
-	metricsScope tally.Scope,
+	serverReporter metrics.Reporter,
+	sdkReporter metrics.Reporter,
+	esConfig *config.Elasticsearch,
+	esClient esclient.Client,
 ) (*resource.BootstrapParams, error) {
 
-	params := resource.BootstrapParams{}
-	params.Name = svcName
-	params.Logger = s.logger
-	params.PersistenceConfig = s.so.config.Persistence
-	params.DynamicConfig = dynamicConfig
+	params := &resource.BootstrapParams{
+		Name:                  svcName,
+		Logger:                s.logger,
+		PersistenceConfig:     s.so.config.Persistence,
+		DynamicConfigClient:   s.so.dynamicConfigClient,
+		ClusterMetadataConfig: s.so.config.ClusterMetadata,
+		DCRedirectionPolicy:   s.so.config.DCRedirectionPolicy,
+		ESConfig:              esConfig,
+		ESClient:              esClient,
+	}
 
 	svcCfg := s.so.config.Services[svcName]
-	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, s.logger, tlsFactory)
+	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, s.logger, s.so.tlsConfigProvider)
 	params.RPCFactory = rpcFactory
 
 	// Ringpop uses a different port to register handlers, this map is needed to resolve
 	// services to correct addresses used by clients through ServiceResolver lookup API
 	servicePortMap := make(map[string]int)
-	for svcName, svcCfg := range s.so.config.Services {
-		servicePortMap[svcName] = svcCfg.RPC.GRPCPort
+	for sn, sc := range s.so.config.Services {
+		servicePortMap[sn] = sc.RPC.GRPCPort
 	}
 
 	params.MembershipFactoryInitializer =
@@ -264,24 +293,42 @@ func (s *Server) getServiceParams(
 			)
 		}
 
-	params.DCRedirectionPolicy = s.so.config.DCRedirectionPolicy
-	if metricsScope == nil {
-		metricsScope = svcCfg.Metrics.NewScope(s.logger)
+	// todo: Replace this hack with actually using sdkReporter, Client or Scope.
+	if serverReporter == nil {
+		var err error
+		serverReporter, sdkReporter, err = svcCfg.Metrics.InitMetricReporters(s.logger, nil)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"Failed to initialize per-service metric client. "+
+					"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err)
+		}
+		params.ServerMetricsReporter = serverReporter
+		params.SDKMetricsReporter = sdkReporter
 	}
-	params.MetricsScope = metricsScope
-	metricsClient := metrics.NewClient(metricsScope, metrics.GetMetricsServiceIdx(svcName, s.logger))
-	params.MetricsClient = metricsClient
-	params.ClusterMetadata = clusterMetadata
 
-	options, err := tlsFactory.GetFrontendClientConfig()
+	globalTallyScope, err := s.extractTallyScopeForSDK(sdkReporter)
+	if err != nil {
+		return nil, err
+	}
+	params.MetricsScope = globalTallyScope
+
+	serviceIdx := metrics.GetMetricsServiceIdx(svcName, s.logger)
+	metricsClient, err := serverReporter.NewClient(s.logger, serviceIdx)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to initialize metrics client: %w", err)
+	}
+
+	params.MetricsClient = metricsClient
+
+	options, err := s.so.tlsConfigProvider.GetFrontendClientConfig()
 	if err != nil {
 		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
 	}
 
-	params.PublicClient, err = sdkclient.NewClient(sdkclient.Options{
+	params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
 		HostPort:     s.so.config.PublicClient.HostPort,
 		Namespace:    common.SystemLocalNamespace,
-		MetricsScope: metricsScope,
+		MetricsScope: globalTallyScope,
 		Logger:       log.NewSdkLogger(s.logger),
 		ConnectionOptions: sdkclient.ConnectionOptions{
 			TLS:                options,
@@ -290,40 +337,6 @@ func (s *Server) getServiceParams(
 	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to create public client: %w", err)
-	}
-
-	advancedVisMode := dc.GetStringProperty(
-		dynamicconfig.AdvancedVisibilityWritingMode,
-		common.GetDefaultAdvancedVisibilityWritingMode(s.so.config.Persistence.IsAdvancedVisibilityConfigExist()),
-	)()
-
-	if advancedVisMode != common.AdvancedVisibilityWritingModeOff {
-		// verify config of advanced visibility store
-		advancedVisStoreKey := s.so.config.Persistence.AdvancedVisibilityStore
-		advancedVisStore, ok := s.so.config.Persistence.DataStores[advancedVisStoreKey]
-		if !ok {
-			return nil, fmt.Errorf("unable to find advanced visibility store in config for %q key", advancedVisStoreKey)
-		}
-
-		if s.so.elasticseachHttpClient == nil {
-			s.so.elasticseachHttpClient, err = client.NewAwsHttpClient(advancedVisStore.ElasticSearch.AWSRequestSigning)
-			if err != nil {
-				return nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
-			}
-		}
-
-		esClient, err := client.NewClient(advancedVisStore.ElasticSearch, s.so.elasticseachHttpClient, s.logger)
-		if err != nil {
-			return nil, fmt.Errorf("unable to create Elasticsearch client: %w", err)
-		}
-		params.ESConfig = advancedVisStore.ElasticSearch
-		params.ESClient = esClient
-
-		// verify index name
-		indexName := advancedVisStore.ElasticSearch.GetVisibilityIndex()
-		if len(indexName) == 0 {
-			return nil, errors.New("visibility index in missing in Elasticsearch config")
-		}
 	}
 
 	params.ArchivalMetadata = archiver.NewArchivalMetadata(
@@ -351,44 +364,64 @@ func (s *Server) getServiceParams(
 
 	params.PersistenceServiceResolver = s.so.persistenceServiceResolver
 
-	return &params, nil
+	return params, nil
 }
 
-// Validates configuration of dependencies
-func (s *Server) validate() error {
-	if s.so.persistenceServiceResolver == nil {
-		s.so.persistenceServiceResolver = resolver.NewNoopResolver()
+func (s *Server) getESConfigClient(advancedVisibilityWritingMode string) (*config.Elasticsearch, esclient.Client, error) {
+	if advancedVisibilityWritingMode == common.AdvancedVisibilityWritingModeOff {
+		return nil, nil, nil
 	}
 
+	advancedVisibilityStore, ok := s.so.config.Persistence.DataStores[s.so.config.Persistence.AdvancedVisibilityStore]
+	if !ok {
+		return nil, nil, fmt.Errorf("unable to find advanced visibility store in config for %q key", s.so.config.Persistence.AdvancedVisibilityStore)
+	}
+
+	indexName := advancedVisibilityStore.ElasticSearch.GetVisibilityIndex()
+	if len(indexName) == 0 {
+		return nil, nil, errors.New("visibility index in missing in Elasticsearch config")
+	}
+
+	if s.so.elasticseachHttpClient == nil {
+		var err error
+		s.so.elasticseachHttpClient, err = esclient.NewAwsHttpClient(advancedVisibilityStore.ElasticSearch.AWSRequestSigning)
+		if err != nil {
+			return nil, nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
+		}
+	}
+
+	esClient, err := esclient.NewClient(advancedVisibilityStore.ElasticSearch, s.so.elasticseachHttpClient, s.logger)
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to create Elasticsearch client: %w", err)
+	}
+
+	return advancedVisibilityStore.ElasticSearch, esClient, nil
+}
+
+func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceServiceResolver resolver.ServiceResolver, checkVisibility bool) error {
 	// cassandra schema version validation
-	if err := cassandra.VerifyCompatibleVersion(s.so.config.Persistence, s.so.persistenceServiceResolver); err != nil {
+	if err := cassandra.VerifyCompatibleVersion(config, persistenceServiceResolver, checkVisibility); err != nil {
 		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
 	}
 	// sql schema version validation
-	if err := sql.VerifyCompatibleVersion(s.so.config.Persistence, s.so.persistenceServiceResolver); err != nil {
+	if err := sql.VerifyCompatibleVersion(config, persistenceServiceResolver, checkVisibility); err != nil {
 		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
-	}
-
-	if err := pprof.NewInitializer(&s.so.config.Global.PProf, s.logger).Start(); err != nil {
-		return fmt.Errorf("unable to start PProf: %w", err)
-	}
-
-	err := ringpop.ValidateRingpopConfig(&s.so.config.Global.Membership)
-	if err != nil {
-		return fmt.Errorf("ringpop config validation error: %w", err)
 	}
 	return nil
 }
 
-func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collection) error {
-	logger := log.With(s.logger, tag.ComponentMetadataInitializer)
+// updateClusterMetadataConfig performs a config check against the configured persistence store for cluster metadata.
+// If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
+// This is to keep this check hidden from downstream calls.
+func updateClusterMetadataConfig(cfg *config.Config, persistenceServiceResolver resolver.ServiceResolver, logger log.Logger) error {
+	logger = log.With(logger, tag.ComponentMetadataInitializer)
 
 	factory := persistenceClient.NewFactory(
-		&s.so.config.Persistence,
-		s.so.persistenceServiceResolver,
-		dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 3000),
+		&cfg.Persistence,
+		persistenceServiceResolver,
 		nil,
-		s.so.config.ClusterMetadata.CurrentClusterName,
+		nil,
+		cfg.ClusterMetadata.CurrentClusterName,
 		nil,
 		logger,
 	)
@@ -402,56 +435,73 @@ func (s *Server) immutableClusterMetadataInitialization(dc *dynamicconfig.Collec
 	applied, err := clusterMetadataManager.SaveClusterMetadata(
 		&persistence.SaveClusterMetadataRequest{
 			ClusterMetadata: persistencespb.ClusterMetadata{
-				HistoryShardCount: s.so.config.Persistence.NumHistoryShards,
-				ClusterName:       s.so.config.ClusterMetadata.CurrentClusterName,
+				HistoryShardCount: cfg.Persistence.NumHistoryShards,
+				ClusterName:       cfg.ClusterMetadata.CurrentClusterName,
 				ClusterId:         uuid.New(),
 			}})
 	if err != nil {
-		logger.Warn(fmt.Sprintf("Failed to save cluster metadata: %v", err))
+		logger.Warn("Failed to save cluster metadata.", tag.Error(err))
 	}
 	if applied {
 		logger.Info("Successfully saved cluster metadata.")
-	} else {
-		resp, err := clusterMetadataManager.GetClusterMetadata()
-		if err != nil {
-			return fmt.Errorf("error while fetching cluster metadata: %w", err)
-		}
-		if s.so.config.ClusterMetadata.CurrentClusterName != resp.ClusterName {
-			s.logImmutableMismatch(logger,
-				"ClusterMetadata.CurrentClusterName",
-				s.so.config.ClusterMetadata.CurrentClusterName,
-				resp.ClusterName)
-
-			s.so.config.ClusterMetadata.CurrentClusterName = resp.ClusterName
-		}
-
-		var persistedShardCount = resp.HistoryShardCount
-		if s.so.config.Persistence.NumHistoryShards != persistedShardCount {
-			s.logImmutableMismatch(logger,
-				"Persistence.NumHistoryShards",
-				s.so.config.Persistence.NumHistoryShards,
-				persistedShardCount)
-
-			s.so.config.Persistence.NumHistoryShards = persistedShardCount
-		}
+		return nil
 	}
+
+	resp, err := clusterMetadataManager.GetClusterMetadata()
+	if err != nil {
+		return fmt.Errorf("error while fetching cluster metadata: %w", err)
+	}
+	if cfg.ClusterMetadata.CurrentClusterName != resp.ClusterName {
+		logger.Error(
+			mismatchLogMessage,
+			tag.Key("clusterMetadata.currentClusterName"),
+			tag.IgnoredValue(cfg.ClusterMetadata.CurrentClusterName),
+			tag.Value(resp.ClusterName))
+		cfg.ClusterMetadata.CurrentClusterName = resp.ClusterName
+	}
+
+	var persistedShardCount = resp.HistoryShardCount
+	if cfg.Persistence.NumHistoryShards != persistedShardCount {
+		logger.Error(
+			mismatchLogMessage,
+			tag.Key("persistence.numHistoryShards"),
+			tag.IgnoredValue(cfg.Persistence.NumHistoryShards),
+			tag.Value(persistedShardCount))
+		cfg.Persistence.NumHistoryShards = persistedShardCount
+	}
+
+	return nil
+}
+
+func initSystemNamespaces(cfg *config.Persistence, currentClusterName string, persistenceServiceResolver resolver.ServiceResolver, logger log.Logger) error {
+	factory := persistenceClient.NewFactory(
+		cfg,
+		persistenceServiceResolver,
+		nil,
+		nil,
+		currentClusterName,
+		nil,
+		logger,
+	)
 
 	metadataManager, err := factory.NewMetadataManager()
 	if err != nil {
-		return fmt.Errorf("error initializing metadata manager: %w", err)
+		return fmt.Errorf("unable to initialize metadata manager: %w", err)
 	}
 	defer metadataManager.Close()
-	if err = metadataManager.InitializeSystemNamespaces(s.so.config.ClusterMetadata.CurrentClusterName); err != nil {
+	if err = metadataManager.InitializeSystemNamespaces(currentClusterName); err != nil {
 		return fmt.Errorf("unable to register system namespace: %w", err)
 	}
 	return nil
 }
 
-func (s *Server) logImmutableMismatch(logger log.Logger, key string, ignored interface{}, value interface{}) {
-	logger.Error(
-		"Supplied configuration key/value mismatches persisted ImmutableClusterMetadata. "+
-			"Continuing with the persisted value as this value cannot be changed once initialized.",
-		tag.Key(key),
-		tag.IgnoredValue(ignored),
-		tag.Value(value))
+func (s *Server) extractTallyScopeForSDK(sdkReporter metrics.Reporter) (tally.Scope, error) {
+	if sdkTallyReporter, ok := sdkReporter.(*metrics.TallyReporter); ok {
+		return sdkTallyReporter.GetScope(), nil
+	} else {
+		return nil, fmt.Errorf(
+			"Sdk reporter is not of Tally type. Unfortunately, SDK only supports Tally for now. "+
+				"Please specify prometheusSDK in metrics config with framework type %s.", metrics.FrameworkTally,
+		)
+	}
 }

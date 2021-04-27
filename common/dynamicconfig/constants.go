@@ -63,6 +63,9 @@ var Keys = map[Key]string{
 	AdminMatchingNamespaceToPartitionDispatchRate:          "admin.matchingNamespaceToPartitionDispatchRate",
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate: "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
 
+	// TODO remove this dynamic flag in 1.11.x
+	EnableDBRecordVersion: "system.enableDBRecordVersion",
+
 	// system settings
 	EnableVisibilitySampling:               "system.enableVisibilitySampling",
 	AdvancedVisibilityWritingMode:          "system.advancedVisibilityWritingMode",
@@ -80,6 +83,7 @@ var Keys = map[Key]string{
 	EnableStickyQuery:                      "system.enableStickyQuery",
 	EnablePriorityTaskProcessor:            "system.enablePriorityTaskProcessor",
 	EnableAuthorization:                    "system.enableAuthorization",
+	EnableCrossNamespaceCommands:           "system.enableCrossNamespaceCommands",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -118,6 +122,13 @@ var Keys = map[Key]string{
 	VisibilityArchivalQueryMaxQPS:         "frontend.visibilityArchivalQueryMaxQPS",
 	EnableServerVersionCheck:              "frontend.enableServerVersionCheck",
 	EnableTokenNamespaceEnforcement:       "frontend.enableTokenNamespaceEnforcement",
+	KeepAliveMinTime:                      "frontend.keepAliveMinTime",
+	KeepAlivePermitWithoutStream:          "frontend.keepAlivePermitWithoutStream",
+	KeepAliveMaxConnectionIdle:            "frontend.keepAliveMaxConnectionIdle",
+	KeepAliveMaxConnectionAge:             "frontend.keepAliveMaxConnectionAge",
+	KeepAliveMaxConnectionAgeGrace:        "frontend.keepAliveMaxConnectionAgeGrace",
+	KeepAliveTime:                         "frontend.keepAliveTime",
+	KeepAliveTimeout:                      "frontend.keepAliveTimeout",
 
 	// matching settings
 	MatchingRPS:                             "matching.rps",
@@ -334,6 +345,10 @@ const (
 	// AdminMatchingNamespaceTaskqueueToPartitionDispatchRate is the max qps of a task queue partition for a given namespace & task queue
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate
 
+	// TODO remove this dynamic flag in 1.11.x
+	// EnableDBRecordVersion is key for enable db version
+	EnableDBRecordVersion
+
 	// EnableVisibilitySampling is key for enable visibility sampling
 	EnableVisibilitySampling
 	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility
@@ -365,6 +380,8 @@ const (
 	EnablePriorityTaskProcessor
 	// EnableAuthorization is the key to enable authorization for a namespace
 	EnableAuthorization
+	// EnableCrossNamespaceCommands is the key to enable commands for external namespaces
+	EnableCrossNamespaceCommands
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError
 	// BlobSizeLimitWarn is the per event blob size limit for warning
@@ -437,6 +454,32 @@ const (
 	EnableServerVersionCheck
 	// EnableTokenNamespaceEnforcement enables enforcement that namespace in completion token matches namespace of the request
 	EnableTokenNamespaceEnforcement
+	// KeepAliveMinTime is the minimum amount of time a client should wait before sending a keepalive ping.
+	KeepAliveMinTime
+	// KeepAlivePermitWithoutStream If true, server allows keepalive pings even when there are no active
+	// streams(RPCs). If false, and client sends ping when there are no active
+	// streams, server will send GOAWAY and close the connection.
+	KeepAlivePermitWithoutStream
+	// KeepAliveMaxConnectionIdle is a duration for the amount of time after which an
+	// idle connection would be closed by sending a GoAway. Idleness duration is
+	// defined since the most recent time the number of outstanding RPCs became
+	// zero or the connection establishment.
+	KeepAliveMaxConnectionIdle
+	// KeepAliveMaxConnectionAge is a duration for the maximum amount of time a
+	// connection may exist before it will be closed by sending a GoAway. A
+	// random jitter of +/-10% will be added to MaxConnectionAge to spread out
+	// connection storms.
+	KeepAliveMaxConnectionAge
+	// KeepAliveMaxConnectionAgeGrace is an additive period after MaxConnectionAge after
+	// which the connection will be forcibly closed.
+	KeepAliveMaxConnectionAgeGrace
+	// KeepAliveTime After a duration of this time if the server doesn't see any activity it
+	// pings the client to see if the transport is still alive.
+	// If set below 1s, a minimum value of 1s will be used instead.
+	KeepAliveTime
+	// KeepAliveTimeout After having pinged for keepalive check, the server waits for a duration
+	// of Timeout and if no activity is seen even after that the connection is closed.
+	KeepAliveTimeout
 
 	// key for matching
 

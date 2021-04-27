@@ -203,8 +203,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		executionInfo.WorkflowExecutionExpirationTime = timestamp.TimeNowPtrUtcAddDuration(weTimeout)
 	}
 
-	baseLastEventVersion := resetMutableState.GetCurrentVersion()
-	if baseLastEventVersion > resetWorkflowVersion {
+	if resetMutableState.GetCurrentVersion() > resetWorkflowVersion {
 		return nil, serviceerror.NewInternal("workflowResetter encounter version mismatch.")
 	}
 	if err := resetMutableState.UpdateCurrentVersion(
@@ -214,27 +213,18 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		return nil, err
 	}
 
-	// TODO add checking of reset until event ID == workflow task started ID + 1
-	workflowTask, ok := resetMutableState.GetInFlightWorkflowTask()
-	if !ok || workflowTask.StartedID+1 != resetMutableState.GetNextEventID() {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Can only reset workflow to WorkflowTaskStarted + 1: %v", baseRebuildLastEventID+1))
-	}
 	if len(resetMutableState.GetPendingChildExecutionInfos()) > 0 {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Can only reset workflow with pending child workflows"))
 	}
 
-	resetFailure := failure.NewResetWorkflowFailure(resetReason, nil)
-	_, err = resetMutableState.AddWorkflowTaskFailedEvent(
-		workflowTask.ScheduleID,
-		workflowTask.StartedID, enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
-		resetFailure,
-		identityHistoryService,
-		"",
+	if err := r.failWorkflowTask(
+		resetMutableState,
 		baseRunID,
+		baseRebuildLastEventID,
+		baseRebuildLastEventVersion,
 		resetRunID,
-		baseLastEventVersion,
-	)
-	if err != nil {
+		resetReason,
+	); err != nil {
 		return nil, err
 	}
 
@@ -295,11 +285,14 @@ func (r *workflowResetterImpl) persistToDB(
 	if err != nil {
 		return err
 	}
-	resetHistorySize, err := resetWorkflow.getContext().persistNonFirstWorkflowEvents(resetWorkflowEventsSeq[0])
-	if err != nil {
-		return err
+	var resetHistorySize int64
+	for _, workflowEvents := range resetWorkflowEventsSeq {
+		size, err := resetWorkflow.getContext().persistNonFirstWorkflowEvents(workflowEvents)
+		if err != nil {
+			return err
+		}
+		resetHistorySize += size
 	}
-
 	return resetWorkflow.getContext().createWorkflowExecution(
 		resetWorkflowSnapshot,
 		resetHistorySize,
@@ -375,6 +368,54 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		resetMutableState,
 		noopReleaseFn,
 	), nil
+}
+
+func (r *workflowResetterImpl) failWorkflowTask(
+	resetMutableState mutableState,
+	baseRunID string,
+	baseRebuildLastEventID int64,
+	baseRebuildLastEventVersion int64,
+	resetRunID string,
+	resetReason string,
+) error {
+
+	workflowTask, ok := resetMutableState.GetPendingWorkflowTask()
+	if !ok {
+		// TODO if resetMutableState.HasProcessedOrPendingWorkflowTask() == true
+		//  meaning workflow history has NO workflow task ever
+		//  should also allow workflow reset, the only remaining issues are
+		//  * what if workflow is a cron workflow, e.g. should add a workflow task directly or still respect the cron job
+		return serviceerror.NewInvalidArgument(fmt.Sprintf(
+			"Can only reset workflow to event ID in range [WorkflowTaskScheduled +1, WorkflowTaskStarted + 1]: %v",
+			baseRebuildLastEventID+1,
+		))
+	}
+
+	var err error
+	if workflowTask.StartedID == common.EmptyVersion {
+		_, workflowTask, err = resetMutableState.AddWorkflowTaskStartedEvent(
+			workflowTask.ScheduleID,
+			workflowTask.RequestID,
+			workflowTask.TaskQueue,
+			identityHistoryService,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = resetMutableState.AddWorkflowTaskFailedEvent(
+		workflowTask.ScheduleID,
+		workflowTask.StartedID,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
+		failure.NewResetWorkflowFailure(resetReason, nil),
+		identityHistoryService,
+		"",
+		baseRunID,
+		resetRunID,
+		baseRebuildLastEventVersion,
+	)
+	return err
 }
 
 func (r *workflowResetterImpl) failInflightActivity(

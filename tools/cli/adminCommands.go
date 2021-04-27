@@ -80,7 +80,9 @@ func AdminShowWorkflow(c *cli.Context) {
 			ErrorAndExit("ReadHistoryBranch err", err)
 		}
 
-		history = resp.History
+		for _, node := range resp.Nodes {
+			history = append(history, node.Events)
+		}
 	} else {
 		ErrorAndExit("need to specify TreeId/BranchId/ShardId", nil)
 	}
@@ -304,7 +306,8 @@ func connectToCassandra(c *cli.Context) gocql.Session {
 			CertFile:               c.String(FlagTLSCertPath),
 			KeyFile:                c.String(FlagTLSKeyPath),
 			CaFile:                 c.String(FlagTLSCaPath),
-			EnableHostVerification: c.Bool(FlagTLSEnableHostVerification),
+			ServerName:             c.String(FlagTLSServerName),
+			EnableHostVerification: !c.Bool(FlagTLSDisableHostVerification),
 		}
 	}
 

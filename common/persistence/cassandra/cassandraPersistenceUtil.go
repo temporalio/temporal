@@ -62,6 +62,7 @@ func applyWorkflowMutationBatch(
 		workflowMutation.NextEventID,
 		cqlNowTimestampMillis,
 		workflowMutation.Condition,
+		workflowMutation.DBRecordVersion,
 		workflowMutation.Checksum,
 	); err != nil {
 		return err
@@ -172,7 +173,6 @@ func applyWorkflowSnapshotBatchAsReset(
 	namespaceID := workflowSnapshot.ExecutionInfo.NamespaceId
 	workflowID := workflowSnapshot.ExecutionInfo.WorkflowId
 	runID := workflowSnapshot.ExecutionState.RunId
-	condition := workflowSnapshot.Condition
 
 	if err := updateExecution(
 		batch,
@@ -181,7 +181,8 @@ func applyWorkflowSnapshotBatchAsReset(
 		workflowSnapshot.ExecutionState,
 		workflowSnapshot.NextEventID,
 		cqlNowTimestampMillis,
-		condition,
+		workflowSnapshot.Condition,
+		workflowSnapshot.DBRecordVersion,
 		workflowSnapshot.Checksum,
 	); err != nil {
 		return err
@@ -291,6 +292,7 @@ func applyWorkflowSnapshotBatchAsNew(
 		workflowSnapshot.ExecutionInfo,
 		workflowSnapshot.ExecutionState,
 		workflowSnapshot.NextEventID,
+		workflowSnapshot.DBRecordVersion,
 		workflowSnapshot.Checksum,
 		cqlNowTimestampMillis,
 	); err != nil {
@@ -387,6 +389,7 @@ func createExecution(
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
+	dbRecordVersion int64,
 	checksum *persistencespb.Checksum,
 	cqlNowTimestampMillis int64,
 ) error {
@@ -432,6 +435,7 @@ func createExecution(
 		executionStateDatablob.Data,
 		executionStateDatablob.EncodingType.String(),
 		nextEventID,
+		dbRecordVersion,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID,
 		checksumDatablob.Data,
@@ -449,6 +453,7 @@ func updateExecution(
 	nextEventID int64,
 	cqlNowTimestampMillis int64,
 	condition int64,
+	dbRecordVersion int64,
 	checksum *persistencespb.Checksum,
 ) error {
 
@@ -481,24 +486,44 @@ func updateExecution(
 		return err
 	}
 
-	// TODO also need to set the start / current / last write version
-	batch.Query(templateUpdateWorkflowExecutionQuery,
-		executionDatablob.Data,
-		executionDatablob.EncodingType.String(),
-		executionStateDatablob.Data,
-		executionStateDatablob.EncodingType.String(),
-		nextEventID,
-		checksumDatablob.Data,
-		checksumDatablob.EncodingType.String(),
-		shardID,
-		rowTypeExecution,
-		namespaceID,
-		workflowID,
-		runID,
-		defaultVisibilityTimestamp,
-		rowTypeExecutionTaskID,
-		condition,
-	)
+	if dbRecordVersion == 0 {
+		batch.Query(templateUpdateWorkflowExecutionQueryDeprecated,
+			executionDatablob.Data,
+			executionDatablob.EncodingType.String(),
+			executionStateDatablob.Data,
+			executionStateDatablob.EncodingType.String(),
+			nextEventID,
+			checksumDatablob.Data,
+			checksumDatablob.EncodingType.String(),
+			shardID,
+			rowTypeExecution,
+			namespaceID,
+			workflowID,
+			runID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID,
+			condition,
+		)
+	} else {
+		batch.Query(templateUpdateWorkflowExecutionQuery,
+			executionDatablob.Data,
+			executionDatablob.EncodingType.String(),
+			executionStateDatablob.Data,
+			executionStateDatablob.EncodingType.String(),
+			nextEventID,
+			dbRecordVersion,
+			checksumDatablob.Data,
+			checksumDatablob.EncodingType.String(),
+			shardID,
+			rowTypeExecution,
+			namespaceID,
+			workflowID,
+			runID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID,
+			dbRecordVersion-1,
+		)
+	}
 
 	return nil
 }
@@ -578,7 +603,6 @@ func createTransferTasks(
 		targetWorkflowID := p.TransferTaskTransferTargetWorkflowID
 		targetRunID := ""
 		targetChildWorkflowOnly := false
-		recordVisibility := false
 
 		switch task.GetType() {
 		case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
@@ -590,7 +614,6 @@ func createTransferTasks(
 			targetNamespaceID = task.(*p.WorkflowTask).NamespaceID
 			taskQueue = task.(*p.WorkflowTask).TaskQueue
 			scheduleID = task.(*p.WorkflowTask).ScheduleID
-			recordVisibility = task.(*p.WorkflowTask).RecordVisibility
 
 		case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
 			targetNamespaceID = task.(*p.CancelExecutionTask).TargetNamespaceID
@@ -617,16 +640,11 @@ func createTransferTasks(
 			enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 			// No explicit property needs to be set
 
-		case enumsspb.TASK_TYPE_TRANSFER_RECORD_WORKFLOW_STARTED,
-			enumsspb.TASK_TYPE_TRANSFER_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-			// TODO (alex): remove
-
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknow transfer type: %v", task.GetType()))
 		}
 
-		// todo ~~~ come back for record visibility
-		p := &persistencespb.TransferTaskInfo{
+		transferTaskInfo := &persistencespb.TransferTaskInfo{
 			NamespaceId:             namespaceID,
 			WorkflowId:              workflowID,
 			RunId:                   runID,
@@ -640,10 +658,9 @@ func createTransferTasks(
 			Version:                 task.GetVersion(),
 			TaskId:                  task.GetTaskID(),
 			VisibilityTime:          timestamp.TimePtr(task.GetVisibilityTimestamp()),
-			RecordVisibility:        recordVisibility,
 		}
 
-		datablob, err := serialization.TransferTaskInfoToBlob(p)
+		dataBlob, err := serialization.TransferTaskInfoToBlob(transferTaskInfo)
 		if err != nil {
 			return err
 		}
@@ -653,8 +670,8 @@ func createTransferTasks(
 			rowTypeTransferNamespaceID,
 			rowTypeTransferWorkflowID,
 			rowTypeTransferRunID,
-			datablob.Data,
-			datablob.EncodingType.String(),
+			dataBlob.Data,
+			dataBlob.EncodingType.String(),
 			defaultVisibilityTimestamp,
 			task.GetTaskID())
 	}
@@ -819,7 +836,6 @@ func createTimerTasks(
 			attempt = t.Attempt
 
 		case *p.WorkflowBackoffTimerTask:
-			eventID = t.EventID
 			workflowBackoffType = t.WorkflowBackoffType
 
 		case *p.WorkflowTimeoutTask:

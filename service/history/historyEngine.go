@@ -467,7 +467,7 @@ func (e *historyEngineImpl) createMutableState(
 
 	var newMutableState mutableState
 	// version history applies to both local and global namespace
-	newMutableState = newMutableStateBuilderWithVersionHistories(
+	newMutableState = newMutableStateBuilder(
 		e.shard,
 		e.shard.GetEventsCache(),
 		e.logger,
@@ -567,6 +567,10 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
+	if len(newWorkflowEventsSeq) != 1 {
+		return nil, serviceerror.NewInternal("unable to create 1st event batch")
+	}
+
 	historySize, err := weContext.persistFirstWorkflowEvents(newWorkflowEventsSeq[0])
 	if err != nil {
 		return nil, err
@@ -646,7 +650,8 @@ func (e *historyEngineImpl) PollMutableState(
 		NamespaceId:         request.GetNamespaceId(),
 		Execution:           request.Execution,
 		ExpectedNextEventId: request.ExpectedNextEventId,
-		CurrentBranchToken:  request.CurrentBranchToken})
+		CurrentBranchToken:  request.CurrentBranchToken,
+	})
 
 	if err != nil {
 		return nil, err
@@ -657,6 +662,7 @@ func (e *historyEngineImpl) PollMutableState(
 		NextEventId:                           response.NextEventId,
 		PreviousStartedEventId:                response.PreviousStartedEventId,
 		LastFirstEventId:                      response.LastFirstEventId,
+		LastFirstEventTxnId:                   response.LastFirstEventTxnId,
 		TaskQueue:                             response.TaskQueue,
 		StickyTaskQueue:                       response.StickyTaskQueue,
 		StickyTaskQueueScheduleToStartTimeout: response.StickyTaskQueueScheduleToStartTimeout,
@@ -730,6 +736,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 			select {
 			case event := <-channel:
 				response.LastFirstEventId = event.LastFirstEventID
+				response.LastFirstEventTxnId = event.LastFirstEventTxnID
 				response.NextEventId = event.NextEventID
 				response.PreviousStartedEventId = event.PreviousStartedEventID
 				response.WorkflowState = event.WorkflowState
@@ -1005,10 +1012,12 @@ func (e *historyEngineImpl) getMutableState(
 	executionInfo := mutableState.GetExecutionInfo()
 	execution.RunId = context.getExecution().RunId
 	workflowState, workflowStatus := mutableState.GetWorkflowStateStatus()
+	lastFirstEventID, lastFirstEventTxnID := mutableState.GetLastFirstEventIDTxnID()
 	retResp = &historyservice.GetMutableStateResponse{
 		Execution:              &execution,
 		WorkflowType:           &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
-		LastFirstEventId:       mutableState.GetLastFirstEventID(),
+		LastFirstEventId:       lastFirstEventID,
+		LastFirstEventTxnId:    lastFirstEventTxnID,
 		NextEventId:            mutableState.GetNextEventID(),
 		PreviousStartedEventId: mutableState.GetPreviousStartedEventID(),
 		TaskQueue: &taskqueuepb.TaskQueue{
@@ -1984,6 +1993,10 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
+	if len(newWorkflowEventsSeq) != 1 {
+		return nil, serviceerror.NewInternal("unable to create 1st event batch")
+	}
+
 	historySize, err := context.persistFirstWorkflowEvents(newWorkflowEventsSeq[0])
 	if err != nil {
 		return nil, err
@@ -2564,7 +2577,12 @@ func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
 	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
 		return err
 	}
-	if err := e.searchAttributesValidator.ValidateAndLog(request.SearchAttributes, namespace); err != nil {
+	if err := e.searchAttributesValidator.Validate(request.SearchAttributes, namespace); err != nil {
+		e.logger.Warn("Search attributes are invalid.", tag.Error(err), tag.WorkflowNamespace(namespace))
+		return err
+	}
+	if err := e.searchAttributesValidator.ValidateSize(request.SearchAttributes, namespace); err != nil {
+		e.logger.Warn("Search attributes are invalid.", tag.Error(err), tag.WorkflowNamespace(namespace))
 		return err
 	}
 

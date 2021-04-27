@@ -27,8 +27,8 @@ package sql
 import (
 	"database/sql"
 	"fmt"
+	"math"
 
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -41,9 +41,16 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-type sqlHistoryV2Manager struct {
-	sqlStore
-}
+type (
+	sqlHistoryV2Manager struct {
+		sqlStore
+	}
+)
+
+const (
+	// NOTE: transaction ID is *= -1 in DB
+	MinTxnID = math.MaxInt64
+)
 
 // newHistoryV2Persistence creates an instance of HistoryManager
 func newHistoryV2Persistence(
@@ -59,37 +66,38 @@ func newHistoryV2Persistence(
 	}, nil
 }
 
-// AppendHistoryNodes add(or override) a node to a history branch
+// AppendHistoryNode add(or override) a node to a history branch
 func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	branchInfo := request.BranchInfo
-	beginNodeID := p.GetBeginNodeID(branchInfo)
+	node := request.Node
 
-	branchIDBytes, err := primitives.ParseUUID(branchInfo.GetBranchId())
-	if err != nil {
-		return err
-	}
-	treeIDBytes, err := primitives.ParseUUID(branchInfo.GetTreeId())
-	if err != nil {
-		return err
-	}
-
-	if request.NodeID < beginNodeID {
+	if node.NodeID < p.GetBeginNodeID(branchInfo) {
 		return &p.InvalidPersistenceRequestError{
 			Msg: fmt.Sprintf("cannot append to ancestors' nodes"),
 		}
 	}
 
+	treeIDBytes, err := primitives.ParseUUID(branchInfo.GetTreeId())
+	if err != nil {
+		return err
+	}
+	branchIDBytes, err := primitives.ParseUUID(branchInfo.GetBranchId())
+	if err != nil {
+		return err
+	}
+
 	nodeRow := &sqlplugin.HistoryNodeRow{
 		TreeID:       treeIDBytes,
 		BranchID:     branchIDBytes,
-		NodeID:       request.NodeID,
-		TxnID:        request.TransactionID,
-		Data:         request.Events.Data,
-		DataEncoding: request.Events.EncodingType.String(),
+		NodeID:       node.NodeID,
+		PrevTxnID:    node.PrevTransactionID,
+		TxnID:        node.TransactionID,
+		Data:         node.Events.Data,
+		DataEncoding: node.Events.EncodingType.String(),
 		ShardID:      request.ShardID,
 	}
 
@@ -146,7 +154,47 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 		if m.db.IsDupEntryError(err) {
 			return &p.ConditionFailedError{Msg: fmt.Sprintf("AppendHistoryNodes: row already exist: %v", err)}
 		}
-		return serviceerror.NewInternal(fmt.Sprintf("AppendHistoryEvents: %v", err))
+		return serviceerror.NewInternal(fmt.Sprintf("AppendHistoryNodes: %v", err))
+	}
+	return nil
+}
+
+func (m *sqlHistoryV2Manager) DeleteHistoryNodes(
+	request *p.InternalDeleteHistoryNodesRequest,
+) error {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	branchInfo := request.BranchInfo
+	nodeID := request.NodeID
+	txnID := request.TransactionID
+	shardID := request.ShardID
+
+	if nodeID < p.GetBeginNodeID(branchInfo) {
+		return &p.InvalidPersistenceRequestError{
+			Msg: fmt.Sprintf("cannot append to ancestors' nodes"),
+		}
+	}
+
+	treeIDBytes, err := primitives.ParseUUID(branchInfo.GetTreeId())
+	if err != nil {
+		return err
+	}
+	branchIDBytes, err := primitives.ParseUUID(branchInfo.GetBranchId())
+	if err != nil {
+		return err
+	}
+
+	nodeRow := &sqlplugin.HistoryNodeRow{
+		TreeID:   treeIDBytes,
+		BranchID: branchIDBytes,
+		NodeID:   nodeID,
+		TxnID:    txnID,
+		ShardID:  shardID,
+	}
+
+	_, err = m.db.DeleteFromHistoryNode(ctx, nodeRow)
+	if err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("DeleteHistoryNodes: %v", err))
 	}
 	return nil
 }
@@ -166,86 +214,69 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 		return nil, err
 	}
 
-	minNodeID := request.MinNodeID
-	maxNodeID := request.MaxNodeID
-
-	lastNodeID := request.LastNodeID
-	lastTxnID := request.LastTransactionID
-
-	if len(request.NextPageToken) > 0 {
-		var lastNodeID int64
-		var err error
-		// TODO the inner pagination token can be replaced by a dummy token
-		//  since lastNodeID & lastTxnID are both provided
-		if lastNodeID, err = deserializePageToken(request.NextPageToken); err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("invalid next page token %v", request.NextPageToken))
+	var token historyNodePaginationToken
+	if len(request.NextPageToken) == 0 {
+		token = newHistoryNodePaginationToken(request.MinNodeID, MinTxnID)
+	} else if len(request.NextPageToken) == 8 {
+		// TODO @wxing1292 remove this block in 1.10.x
+		//  this else if block exists to handle forward / backwards compatibility
+		lastNodeID, err := deserializePageToken(request.NextPageToken)
+		if err != nil {
+			return nil, err
 		}
-		minNodeID = lastNodeID + 1
+		token = newHistoryNodePaginationToken(lastNodeID+1, MinTxnID)
+	} else {
+		token, err = deserializeHistoryNodePaginationToken(request.NextPageToken)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	rows, err := m.db.SelectFromHistoryNode(ctx, sqlplugin.HistoryNodeSelectFilter{
-		ShardID:   request.ShardID,
-		TreeID:    treeIDBytes,
-		BranchID:  branchIDBytes,
-		MinNodeID: minNodeID,
-		MaxNodeID: maxNodeID,
-		PageSize:  request.PageSize,
+	rows, err := m.db.RangeSelectFromHistoryNode(ctx, sqlplugin.HistoryNodeSelectFilter{
+		ShardID:      request.ShardID,
+		TreeID:       treeIDBytes,
+		BranchID:     branchIDBytes,
+		MinNodeID:    token.LastNodeID,
+		MinTxnID:     token.LastTxnID,
+		MaxNodeID:    request.MaxNodeID,
+		PageSize:     request.PageSize,
+		MetadataOnly: request.MetadataOnly,
 	})
-	if err == sql.ErrNoRows || (err == nil && len(rows) == 0) {
-		return &p.InternalReadHistoryBranchResponse{}, nil
+	switch err {
+	case nil:
+		// noop
+	case sql.ErrNoRows:
+		// noop
+	default:
+		return nil, err
 	}
 
-	history := make([]*commonpb.DataBlob, 0, request.PageSize)
-
+	nodes := make([]p.InternalHistoryNode, 0, len(rows))
 	for _, row := range rows {
-		eventBlob := p.NewDataBlob(row.Data, row.DataEncoding)
-
-		if row.TxnID < lastTxnID {
-			// assuming that business logic layer is correct and transaction ID only increase
-			// thus, valid event batch will come with increasing transaction ID
-
-			// event batches with smaller node ID
-			//  -> should not be possible since records are already sorted
-			// event batches with same node ID
-			//  -> batch with higher transaction ID is valid
-			// event batches with larger node ID
-			//  -> batch with lower transaction ID is invalid (happens before)
-			//  -> batch with higher transaction ID is valid
-			if row.NodeID < lastNodeID {
-				return nil, serviceerror.NewInternal(fmt.Sprintf("corrupted data, nodeID cannot decrease"))
-			} else if row.NodeID > lastNodeID {
-				// update lastNodeID so that our pagination can make progress in the corner case that
-				// the page are all rows with smaller txnID
-				// because next page we always have minNodeID = lastNodeID+1
-				lastNodeID = row.NodeID
-			}
-			continue
-		}
-
-		switch {
-		case row.NodeID < lastNodeID:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("corrupted data, nodeID cannot decrease"))
-		case row.NodeID == lastNodeID:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("corrupted data, same nodeID must have smaller txnID"))
-		default: // row.NodeID > lastNodeID:
-			// NOTE: when row.nodeID > lastNodeID, we expect the one with largest txnID comes first
-			lastTxnID = row.TxnID
-			lastNodeID = row.NodeID
-			history = append(history, eventBlob)
-			eventBlob = &commonpb.DataBlob{}
-		}
+		nodes = append(nodes, p.InternalHistoryNode{
+			NodeID:            row.NodeID,
+			PrevTransactionID: row.PrevTxnID,
+			TransactionID:     row.TxnID,
+			Events:            p.NewDataBlob(row.Data, row.DataEncoding),
+		})
 	}
 
 	var pagingToken []byte
-	if len(rows) >= request.PageSize {
-		pagingToken = serializePageToken(lastNodeID)
+	if len(rows) < request.PageSize {
+		pagingToken = nil
+	} else {
+		lastRow := rows[len(rows)-1]
+		pagingToken, err = serializeHistoryNodePaginationToken(
+			newHistoryNodePaginationToken(lastRow.NodeID, lastRow.TxnID),
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &p.InternalReadHistoryBranchResponse{
-		History:           history,
-		NextPageToken:     pagingToken,
-		LastNodeID:        lastNodeID,
-		LastTransactionID: lastTxnID,
+		Nodes:         nodes,
+		NextPageToken: pagingToken,
 	}, nil
 }
 
@@ -448,7 +479,7 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 				// No any branch is using this range, we can delete all of it
 				deleteFilter.MinNodeID = br.BeginNodeId
 			}
-			_, err := tx.DeleteFromHistoryNode(ctx, deleteFilter)
+			_, err := tx.RangeDeleteFromHistoryNode(ctx, deleteFilter)
 			if err != nil {
 				return err
 			}

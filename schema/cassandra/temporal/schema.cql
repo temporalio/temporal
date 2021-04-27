@@ -45,6 +45,7 @@ CREATE TABLE executions (
   workflow_state                 int,
   checksum                       blob,
   checksum_encoding              text,
+  db_record_version              bigint,
   PRIMARY KEY  (shard_id, type, namespace_id, workflow_id, run_id, visibility_ts, task_id)
 ) WITH COMPACTION = {
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
@@ -55,6 +56,7 @@ CREATE TABLE history_node (
   branch_id         uuid,
   node_id           bigint, -- node_id: first eventID in a batch of events
   txn_id            bigint, -- for override the same node_id: bigger txn_id wins
+  prev_txn_id       bigint, -- pointing to the previous node: event chaining
   data                blob, -- Batch of workflow execution history events as a blob
   data_encoding       text, -- Protocol used for history serialization
   PRIMARY KEY ((tree_id), branch_id, node_id, txn_id )

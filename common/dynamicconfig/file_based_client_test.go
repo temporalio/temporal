@@ -38,7 +38,7 @@ type fileBasedClientSuite struct {
 	suite.Suite
 	*require.Assertions
 	client Client
-	doneCh chan struct{}
+	doneCh chan interface{}
 }
 
 func TestFileBasedClientSuite(t *testing.T) {
@@ -48,7 +48,7 @@ func TestFileBasedClientSuite(t *testing.T) {
 
 func (s *fileBasedClientSuite) SetupSuite() {
 	var err error
-	s.doneCh = make(chan struct{})
+	s.doneCh = make(chan interface{})
 	s.client, err = NewFileBasedClient(&FileBasedClientConfig{
 		Filepath:     "config/testConfig.yaml",
 		PollInterval: time.Second * 5,

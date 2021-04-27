@@ -58,6 +58,7 @@ type (
 		searchAttributesValidator       *searchattribute.Validator
 		getDefaultActivityRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
 		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
+		enableCrossNamespaceCommands    dynamicconfig.BoolPropertyFn
 	}
 
 	workflowSizeChecker struct {
@@ -70,11 +71,12 @@ type (
 		historyCountLimitWarn  int
 		historyCountLimitError int
 
-		completedID    int64
-		mutableState   mutableState
-		executionStats *persistencespb.ExecutionStats
-		metricsScope   metrics.Scope
-		logger         log.Logger
+		completedID               int64
+		mutableState              mutableState
+		searchAttributesValidator *searchattribute.Validator
+		executionStats            *persistencespb.ExecutionStats
+		metricsScope              metrics.Scope
+		logger                    log.Logger
 	}
 )
 
@@ -94,6 +96,7 @@ func newCommandAttrValidator(
 		searchAttributesValidator:       searchAttributesValidator,
 		getDefaultActivityRetrySettings: config.DefaultActivityRetryPolicy,
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
+		enableCrossNamespaceCommands:    config.EnableCrossNamespaceCommands,
 	}
 }
 
@@ -106,22 +109,24 @@ func newWorkflowSizeChecker(
 	historyCountLimitError int,
 	completedID int64,
 	mutableState mutableState,
+	searchAttributesValidator *searchattribute.Validator,
 	executionStats *persistencespb.ExecutionStats,
 	metricsScope metrics.Scope,
 	logger log.Logger,
 ) *workflowSizeChecker {
 	return &workflowSizeChecker{
-		blobSizeLimitWarn:      blobSizeLimitWarn,
-		blobSizeLimitError:     blobSizeLimitError,
-		historySizeLimitWarn:   historySizeLimitWarn,
-		historySizeLimitError:  historySizeLimitError,
-		historyCountLimitWarn:  historyCountLimitWarn,
-		historyCountLimitError: historyCountLimitError,
-		completedID:            completedID,
-		mutableState:           mutableState,
-		executionStats:         executionStats,
-		metricsScope:           metricsScope,
-		logger:                 logger,
+		blobSizeLimitWarn:         blobSizeLimitWarn,
+		blobSizeLimitError:        blobSizeLimitError,
+		historySizeLimitWarn:      historySizeLimitWarn,
+		historySizeLimitError:     historySizeLimitError,
+		historyCountLimitWarn:     historyCountLimitWarn,
+		historyCountLimitError:    historyCountLimitError,
+		completedID:               completedID,
+		mutableState:              mutableState,
+		searchAttributesValidator: searchAttributesValidator,
+		executionStats:            executionStats,
+		metricsScope:              metricsScope,
+		logger:                    logger,
 	}
 }
 
@@ -150,6 +155,31 @@ func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 
 	attributes := &commandpb.FailWorkflowExecutionCommandAttributes{
 		Failure: failure.NewServerFailure(message, true),
+	}
+
+	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func (c *workflowSizeChecker) failWorkflowIfSearchAttributesSizeExceedsLimit(
+	searchAttributes *commonpb.SearchAttributes,
+	namespace string,
+	commandTypeTag metrics.Tag,
+) (bool, error) {
+	c.metricsScope.Tagged(commandTypeTag).RecordDistribution(metrics.SearchAttributesSize, searchAttributes.Size())
+
+	err := c.searchAttributesValidator.ValidateSize(searchAttributes, namespace)
+	if err == nil {
+		return false, nil
+	}
+
+	c.logger.Warn("Search attributes size exceeds limits. Fail workflow.", tag.Error(err), tag.WorkflowNamespace(namespace))
+
+	attributes := &commandpb.FailWorkflowExecutionCommandAttributes{
+		Failure: failure.NewServerFailure(err.Error(), true),
 	}
 
 	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes); err != nil {
@@ -455,6 +485,7 @@ func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
 }
 
 func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
+	namespace string,
 	attributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 ) error {
@@ -499,11 +530,7 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 		attributes.WorkflowTaskTimeout = timestamp.DurationPtr(timestamp.DurationValue(executionInfo.DefaultWorkflowTaskTimeout))
 	}
 
-	namespaceEntry, err := v.namespaceCache.GetNamespaceByID(executionInfo.NamespaceId)
-	if err != nil {
-		return err
-	}
-	return v.searchAttributesValidator.ValidateAndLog(attributes.GetSearchAttributes(), namespaceEntry.GetInfo().Name)
+	return v.searchAttributesValidator.ValidateAndLog(attributes.GetSearchAttributes(), namespace)
 }
 
 func (v *commandAttrValidator) validateStartChildExecutionAttributes(
@@ -666,6 +693,10 @@ func (v *commandAttrValidator) validateCrossNamespaceCall(
 		return nil
 	}
 
+	if !v.enableCrossNamespaceCommands() {
+		return serviceerror.NewInvalidArgument("cross namespace commands are not allowed")
+	}
+
 	namespaceEntry, err := v.namespaceCache.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
@@ -699,5 +730,5 @@ func (v *commandAttrValidator) createCrossNamespaceCallError(
 	namespaceEntry *cache.NamespaceCacheEntry,
 	targetNamespaceEntry *cache.NamespaceCacheEntry,
 ) error {
-	return serviceerror.NewInvalidArgument(fmt.Sprintf("cannot make cross namespace call between %v and %v", namespaceEntry.GetInfo().Name, targetNamespaceEntry.GetInfo().Name))
+	return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to process cross namespace command between %v and %v", namespaceEntry.GetInfo().Name, targetNamespaceEntry.GetInfo().Name))
 }

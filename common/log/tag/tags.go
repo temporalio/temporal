@@ -46,6 +46,11 @@ const LoggingCallAtKey = "logging-call-at"
 
 ///////////////////  Common tags defined here ///////////////////
 
+// Operation returns tag for Operation
+func Operation(operation string) ZapTag {
+	return NewStringTag("operation", operation)
+}
+
 // Error returns tag for Error
 func Error(err error) ZapTag {
 	return NewErrorTag(err)
@@ -815,4 +820,19 @@ func MaxQueryLevel(s time.Time) ZapTag {
 // BootstrapHostPorts returns tag for bootstrap host ports
 func BootstrapHostPorts(s string) ZapTag {
 	return NewStringTag("bootstrap-hostports", s)
+}
+
+// TLSCertFile returns tag for TLS cert file name
+func TLSCertFile(filePath string) ZapTag {
+	return NewStringTag("tls-cert-file", filePath)
+}
+
+// TLSKeyFile returns tag for TLS key file
+func TLSKeyFile(filePath string) ZapTag {
+	return NewStringTag("tls-key-file", filePath)
+}
+
+// TLSCertFiles returns tag for TLS cert file names
+func TLSCertFiles(filePaths []string) ZapTag {
+	return NewStringsTag("tls-cert-files", filePaths)
 }

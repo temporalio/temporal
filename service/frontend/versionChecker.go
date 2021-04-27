@@ -38,28 +38,30 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/resource"
 )
 
 const VersionCheckInterval = 24 * time.Hour
 
 type VersionChecker struct {
-	resource.Resource
-	config       *Config
-	params       *resource.BootstrapParams
-	shutdownChan chan struct{}
-	metricsScope metrics.Scope
-	startOnce    sync.Once
-	stopOnce     sync.Once
+	config                 *Config
+	shutdownChan           chan struct{}
+	metricsScope           metrics.Scope
+	clusterMetadataManager persistence.ClusterMetadataManager
+	startOnce              sync.Once
+	stopOnce               sync.Once
 }
 
 func NewVersionChecker(
-	resource resource.Resource,
-	params *resource.BootstrapParams,
 	config *Config,
+	metricsClient metrics.Client,
+	clusterMetadataManager persistence.ClusterMetadataManager,
 ) *VersionChecker {
-	return &VersionChecker{Resource: resource, config: config, params: params, shutdownChan: make(chan struct{}),
-		metricsScope: resource.GetMetricsClient().Scope(metrics.VersionCheckScope)}
+	return &VersionChecker{
+		config:                 config,
+		shutdownChan:           make(chan struct{}),
+		metricsScope:           metricsClient.Scope(metrics.VersionCheckScope),
+		clusterMetadataManager: clusterMetadataManager,
+	}
 }
 
 func (vc *VersionChecker) Start() {
@@ -95,8 +97,7 @@ func (vc *VersionChecker) versionCheckLoop() {
 func (vc *VersionChecker) performVersionCheck() {
 	sw := vc.metricsScope.StartTimer(metrics.VersionCheckLatency)
 	defer sw.Stop()
-	clusterMetadataManager := vc.GetClusterMetadataManager()
-	metadata, err := clusterMetadataManager.GetClusterMetadata()
+	metadata, err := vc.clusterMetadataManager.GetClusterMetadata()
 	if err != nil {
 		vc.metricsScope.IncCounter(metrics.VersionCheckFailedCount)
 		return
@@ -136,7 +137,7 @@ func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClu
 		Version:   headers.ServerVersion,
 		Arch:      runtime.GOARCH,
 		OS:        runtime.GOOS,
-		DB:        vc.GetClusterMetadataManager().GetName(),
+		DB:        vc.clusterMetadataManager.GetName(),
 		ClusterID: metadata.ClusterId,
 		Timestamp: time.Now().UnixNano(),
 	}, nil
@@ -147,13 +148,12 @@ func (vc *VersionChecker) getVersionInfo(req *check.VersionCheckRequest) (*check
 }
 
 func (vc *VersionChecker) saveVersionInfo(resp *check.VersionCheckResponse) error {
-	clusterMetadataManager := vc.GetClusterMetadataManager()
-	metadata, err := clusterMetadataManager.GetClusterMetadata()
+	metadata, err := vc.clusterMetadataManager.GetClusterMetadata()
 	if err != nil {
 		return err
 	}
 	metadata.VersionInfo = toVersionInfo(resp)
-	saved, err := clusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+	saved, err := vc.clusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: metadata.ClusterMetadata, Version: metadata.Version})
 	if err != nil {
 		return err

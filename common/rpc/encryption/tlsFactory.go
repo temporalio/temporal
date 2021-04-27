@@ -87,21 +87,7 @@ func NewTLSConfigProviderFromConfig(
 ) (TLSConfigProvider, error) {
 
 	if certProviderFactory == nil {
-		certProviderFactory = newLocalStoreCertProvider
+		certProviderFactory = NewLocalStoreCertProvider
 	}
 	return NewLocalStoreTlsProvider(&encryptionSettings, scope, certProviderFactory)
-}
-
-func newLocalStoreCertProvider(
-	tlsSettings *config.GroupTLS,
-	workerTlsSettings *config.WorkerTLS,
-	legacyWorkerSettings *config.ClientTLS) CertProvider {
-
-	provider := &localStoreCertProvider{
-		tlsSettings:          tlsSettings,
-		workerTLSSettings:    workerTlsSettings,
-		legacyWorkerSettings: legacyWorkerSettings,
-		isLegacyWorkerConfig: legacyWorkerSettings != nil,
-	}
-	return provider
 }
