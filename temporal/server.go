@@ -368,33 +368,34 @@ func (s *Server) newBootstrapParams(
 }
 
 func (s *Server) getESConfigClient(advancedVisibilityWritingMode string) (*config.Elasticsearch, esclient.Client, error) {
-	if advancedVisibilityWritingMode != common.AdvancedVisibilityWritingModeOff {
-		advancedVisibilityStore, ok := s.so.config.Persistence.DataStores[s.so.config.Persistence.AdvancedVisibilityStore]
-		if !ok {
-			return nil, nil, fmt.Errorf("unable to find advanced visibility store in config for %q key", s.so.config.Persistence.AdvancedVisibilityStore)
-		}
-
-		indexName := advancedVisibilityStore.ElasticSearch.GetVisibilityIndex()
-		if len(indexName) == 0 {
-			return nil, nil, errors.New("visibility index in missing in Elasticsearch config")
-		}
-
-		if s.so.elasticseachHttpClient == nil {
-			var err error
-			s.so.elasticseachHttpClient, err = esclient.NewAwsHttpClient(advancedVisibilityStore.ElasticSearch.AWSRequestSigning)
-			if err != nil {
-				return nil, nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
-			}
-		}
-
-		esClient, err := esclient.NewClient(advancedVisibilityStore.ElasticSearch, s.so.elasticseachHttpClient, s.logger)
-		if err != nil {
-			return nil, nil, fmt.Errorf("unable to create Elasticsearch client: %w", err)
-		}
-
-		return advancedVisibilityStore.ElasticSearch, esClient, nil
+	if advancedVisibilityWritingMode == common.AdvancedVisibilityWritingModeOff {
+		return nil, nil, nil
 	}
-	return nil, nil, nil
+
+	advancedVisibilityStore, ok := s.so.config.Persistence.DataStores[s.so.config.Persistence.AdvancedVisibilityStore]
+	if !ok {
+		return nil, nil, fmt.Errorf("unable to find advanced visibility store in config for %q key", s.so.config.Persistence.AdvancedVisibilityStore)
+	}
+
+	indexName := advancedVisibilityStore.ElasticSearch.GetVisibilityIndex()
+	if len(indexName) == 0 {
+		return nil, nil, errors.New("visibility index in missing in Elasticsearch config")
+	}
+
+	if s.so.elasticseachHttpClient == nil {
+		var err error
+		s.so.elasticseachHttpClient, err = esclient.NewAwsHttpClient(advancedVisibilityStore.ElasticSearch.AWSRequestSigning)
+		if err != nil {
+			return nil, nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
+		}
+	}
+
+	esClient, err := esclient.NewClient(advancedVisibilityStore.ElasticSearch, s.so.elasticseachHttpClient, s.logger)
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to create Elasticsearch client: %w", err)
+	}
+
+	return advancedVisibilityStore.ElasticSearch, esClient, nil
 }
 
 func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceServiceResolver resolver.ServiceResolver, checkVisibility bool) error {
