@@ -1,6 +1,5 @@
 persistence:
   defaultStore: mysql-default
-  visibilityStore: mysql-visibility
   advancedVisibilityStore: es-visibility
   numHistoryShards: 4
   datastores:
@@ -14,17 +13,6 @@ persistence:
         password: "temporal"
         maxConns: 20
         maxIdleConns: 20
-        maxConnLifetime: "1h"
-    mysql-visibility:
-      sql:
-        pluginName: "mysql"
-        databaseName: "temporal_visibility"
-        connectAddr: "127.0.0.1:3306"
-        connectProtocol: "tcp"
-        user: "temporal"
-        password: "temporal"
-        maxConns: 2
-        maxIdleConns: 2
         maxConnLifetime: "1h"
     es-visibility:
       elasticsearch:
