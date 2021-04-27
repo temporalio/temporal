@@ -2810,10 +2810,6 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	queryMessageID int64,
 ) (*replicationspb.ReplicationMessages, error) {
 
-	scope := metrics.HistoryGetReplicationMessagesScope
-	sw := e.metricsClient.StartTimer(scope, metrics.GetReplicationMessagesForShardLatency)
-	defer sw.Stop()
-
 	if ackMessageID != persistence.EmptyQueueMessageID {
 		if err := e.shard.UpdateClusterReplicationLevel(
 			pollingCluster,
@@ -2840,10 +2836,6 @@ func (e *historyEngineImpl) GetDLQReplicationMessages(
 	ctx context.Context,
 	taskInfos []*replicationspb.ReplicationTaskInfo,
 ) ([]*replicationspb.ReplicationTask, error) {
-
-	scope := metrics.HistoryGetDLQReplicationMessagesScope
-	sw := e.metricsClient.StartTimer(scope, metrics.GetDLQReplicationMessagesLatency)
-	defer sw.Stop()
 
 	tasks := make([]*replicationspb.ReplicationTask, 0, len(taskInfos))
 	for _, taskInfo := range taskInfos {

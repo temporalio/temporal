@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
@@ -630,11 +629,6 @@ func (h *Handler) DescribeMutableState(ctx context.Context, request *historyserv
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryRecordActivityTaskHeartbeatScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -658,11 +652,6 @@ func (h *Handler) DescribeMutableState(ctx context.Context, request *historyserv
 func (h *Handler) GetMutableState(ctx context.Context, request *historyservice.GetMutableStateRequest) (_ *historyservice.GetMutableStateResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
-
-	scope := metrics.HistoryGetMutableStateScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
 
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
@@ -688,11 +677,6 @@ func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryPollMutableStateScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -717,11 +701,6 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *histor
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryDescribeWorkflowExecutionScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	namespaceID := request.GetNamespaceId()
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -745,11 +724,6 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *histor
 func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *historyservice.RequestCancelWorkflowExecutionRequest) (_ *historyservice.RequestCancelWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
-
-	scope := metrics.HistoryRequestCancelWorkflowExecutionScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
 
 	if h.isStopped() {
 		return nil, errShuttingDown
@@ -787,11 +761,6 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistorySignalWorkflowExecutionScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	if h.isStopped() {
 		return nil, errShuttingDown
 	}
@@ -824,11 +793,6 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request *historyservice.SignalWithStartWorkflowExecutionRequest) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
-
-	scope := metrics.HistorySignalWithStartWorkflowExecutionScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
 
 	if h.isStopped() {
 		return nil, errShuttingDown
@@ -886,11 +850,6 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryRemoveSignalMutableStateScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	if h.isStopped() {
 		return nil, errShuttingDown
 	}
@@ -920,11 +879,6 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *historyservice.TerminateWorkflowExecutionRequest) (_ *historyservice.TerminateWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
-
-	scope := metrics.HistoryTerminateWorkflowExecutionScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
 
 	if h.isStopped() {
 		return nil, errShuttingDown
@@ -956,11 +910,6 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	scope := metrics.HistoryResetWorkflowExecutionScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
-
 	if h.isStopped() {
 		return nil, errShuttingDown
 	}
@@ -989,11 +938,6 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.QueryWorkflowRequest) (_ *historyservice.QueryWorkflowResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
-
-	scope := metrics.HistoryQueryWorkflowScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
 
 	if h.isStopped() {
 		return nil, errShuttingDown
@@ -1025,11 +969,6 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 func (h *Handler) ScheduleWorkflowTask(ctx context.Context, request *historyservice.ScheduleWorkflowTaskRequest) (_ *historyservice.ScheduleWorkflowTaskResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
-
-	scope := metrics.HistoryScheduleWorkflowTaskScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
 
 	if h.isStopped() {
 		return nil, errShuttingDown
@@ -1064,11 +1003,6 @@ func (h *Handler) ScheduleWorkflowTask(ctx context.Context, request *historyserv
 func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *historyservice.RecordChildExecutionCompletedRequest) (_ *historyservice.RecordChildExecutionCompletedResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
-
-	scope := metrics.HistoryRecordChildExecutionCompletedScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
 
 	if h.isStopped() {
 		return nil, errShuttingDown
@@ -1106,11 +1040,6 @@ func (h *Handler) ResetStickyTaskQueue(ctx context.Context, request *historyserv
 
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
-
-	scope := metrics.HistoryResetStickyTaskQueueScope
-	h.GetMetricsClient().IncCounter(scope, metrics.ServiceRequests)
-	sw := h.GetMetricsClient().StartTimer(scope, metrics.ServiceLatency)
-	defer sw.Stop()
 
 	if h.isStopped() {
 		return nil, errShuttingDown
