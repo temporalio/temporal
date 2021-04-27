@@ -103,10 +103,10 @@ update-checkers:
 	@printf $(COLOR) "Install/update check tools..."
 	@go install golang.org/x/tools/cmd/goimports
 	@go install golang.org/x/lint/golint
-	@go install honnef.co/go/tools/cmd/staticcheck@v0.1.0
-	@go install github.com/kisielk/errcheck@v1.4.0
-	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.10.0
-	@go install github.com/bufbuild/buf/cmd/buf@v0.33.0
+	@go install honnef.co/go/tools/cmd/staticcheck@v0.1.3
+	@go install github.com/kisielk/errcheck@v1.6.0
+	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.22.0
+	@go install github.com/bufbuild/buf/cmd/buf@v0.41.0
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
