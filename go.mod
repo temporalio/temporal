@@ -69,12 +69,12 @@ require (
 	golang.org/x/net v0.0.0-20210423184538-5f58ad60dda6 // indirect
 	golang.org/x/oauth2 v0.0.0-20210413134643-5e61552d6c78
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20210426080607-c94f62235c83 // indirect
+	golang.org/x/sys v0.0.0-20210426230700-d19ff857e887 // indirect
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 	google.golang.org/api v0.45.0
-	google.golang.org/genproto v0.0.0-20210423144448-3a41ef94ed2b // indirect
+	google.golang.org/genproto v0.0.0-20210426193834-eac7f76ac494 // indirect
 	google.golang.org/grpc v1.37.0
-	google.golang.org/grpc/examples v0.0.0-20210424002626-9572fd6faeae
+	google.golang.org/grpc/examples v0.0.0-20210426212906-52a707c0dafe
 	gopkg.in/check.v1 v1.0.0-20200902074654-038fdea0a05b // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1
 	gopkg.in/validator.v2 v2.0.0-20210331031555-b37d688a7fb0

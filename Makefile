@@ -77,6 +77,12 @@ TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_DIRS))
 UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
 
+PINNED_DEPENDENCIES := \
+	github.com/DataDog/sketches-go@v0.0.1 \
+	go.opentelemetry.io/otel@v0.15.0 \
+	go.opentelemetry.io/otel/exporters/metric/prometheus@v0.15.0 \
+	github.com/apache/thrift@v0.0.0-20161221203622-b2a4d4ae21c7 \
+
 # Code coverage output files.
 COVER_ROOT                 := ./.coverage
 UNIT_COVER_PROFILE         := $(COVER_ROOT)/unit_coverprofile.out
@@ -422,6 +428,11 @@ mocks: go-generate external-mocks
 ##### Auxilary #####
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
+	@go mod tidy
+
+update-dependencies:
+	@printf $(COLOR) "Update dependencies..."
+	@go get -u -t $(PINNED_DEPENDENCIES) ./...
 	@go mod tidy
 
 ensure-no-changes:
