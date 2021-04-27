@@ -513,8 +513,10 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 	attr *commandpb.CancelWorkflowExecutionCommandAttributes,
 ) error {
 
-	handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.CommandTypeCancelWorkflowCounter)
+	handler.metricsClient.IncCounter(
+		metrics.HistoryRespondWorkflowTaskCompletedScope,
+		metrics.CommandTypeCancelWorkflowCounter,
+	)
 
 	if handler.hasBufferedEvents {
 		return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
