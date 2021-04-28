@@ -49,6 +49,9 @@ var _ RateLimiter = (*MultiRateLimiterImpl)(nil)
 func NewMultiRateLimiter(
 	rateLimiters []RateLimiter,
 ) *MultiRateLimiterImpl {
+	if len(rateLimiters) == 0 {
+		panic("expect at least one rate limiter")
+	}
 	return &MultiRateLimiterImpl{
 		rateLimiters: rateLimiters,
 	}
@@ -158,28 +161,24 @@ func (rl *MultiRateLimiterImpl) WaitN(ctx context.Context, numToken int) error {
 
 // Rate returns the rate per second for this rate limiter
 func (rl *MultiRateLimiterImpl) Rate() float64 {
-	var result *float64
+	result := rl.rateLimiters[0].Rate()
 	for _, rateLimiter := range rl.rateLimiters {
-		rate := rateLimiter.Rate()
-		if result == nil || *result > rate {
-			result = &rate
+		newRate := rateLimiter.Rate()
+		if result > newRate {
+			result = newRate
 		}
 	}
-	// assuming at least one rate limiter within
-	// if not, fail fast
-	return *result
+	return result
 }
 
 // Burst returns the burst for this rate limiter
 func (rl *MultiRateLimiterImpl) Burst() int {
-	var result *int
+	result := rl.rateLimiters[0].Burst()
 	for _, rateLimiter := range rl.rateLimiters {
-		burst := rateLimiter.Burst()
-		if result == nil || *result > burst {
-			result = &burst
+		newBurst := rateLimiter.Burst()
+		if result > newBurst {
+			result = newBurst
 		}
 	}
-	// assuming at least one rate limiter within
-	// if not, fail fast
-	return *result
+	return result
 }

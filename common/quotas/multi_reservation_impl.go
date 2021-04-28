@@ -41,6 +41,9 @@ func NewMultiReservation(
 	ok bool,
 	reservations []Reservation,
 ) *MultiReservationImpl {
+	if len(reservations) == 0 {
+		panic("expect at least one reservation")
+	}
 	return &MultiReservationImpl{
 		ok:           ok,
 		reservations: reservations,
@@ -83,14 +86,12 @@ func (r *MultiReservationImpl) DelayFrom(now time.Time) time.Duration {
 		return InfDuration
 	}
 
-	var result *time.Duration
+	result := r.reservations[0].DelayFrom(now)
 	for _, reservation := range r.reservations {
 		duration := reservation.DelayFrom(now)
-		if result == nil || *result < duration {
-			result = &duration
+		if result < duration {
+			result = duration
 		}
 	}
-	// assuming at least one rate limiter within
-	// if not, fail fast
-	return *result
+	return result
 }

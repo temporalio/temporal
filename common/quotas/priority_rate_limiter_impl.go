@@ -38,7 +38,7 @@ type (
 		priorityToRateLimiters map[int]RateLimiter
 
 		// priority value 0 means highest priority
-		// sorted rate limiter from lot priority value to high priority value
+		// sorted rate limiter from low priority value to high priority value
 		priorityToIndex map[int]int
 		rateLimiters    []RateLimiter
 	}
@@ -62,6 +62,13 @@ func NewPriorityRateLimiter(
 	for index, priority := range priorities {
 		priorityToIndex[priority] = index
 		rateLimiters = append(rateLimiters, priorityToRateLimiters[priority])
+	}
+
+	// sanity check priority within apiToPriority appears in priorityToRateLimiters
+	for _, priority := range apiToPriority {
+		if _, ok := priorityToRateLimiters[priority]; !ok {
+			panic("API to priority & priority to rate limiter does not match")
+		}
 	}
 
 	return &PriorityRateLimiterImpl{
