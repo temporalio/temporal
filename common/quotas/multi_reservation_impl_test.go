@@ -111,8 +111,8 @@ func (s *multiReservationSuite) Test_OK_DelayFrom() {
 	now := time.Now()
 	firstReservationDelay := time.Second
 	secondReservationDelay := time.Minute
-	s.firstReservation.EXPECT().DelayFrom(now).Return(firstReservationDelay)
-	s.secondReservation.EXPECT().DelayFrom(now).Return(secondReservationDelay)
+	s.firstReservation.EXPECT().DelayFrom(now).Return(firstReservationDelay).AnyTimes()
+	s.secondReservation.EXPECT().DelayFrom(now).Return(secondReservationDelay).AnyTimes()
 	reservation := NewMultiReservation(true, []Reservation{s.firstReservation, s.secondReservation})
 
 	result := reservation.DelayFrom(now)

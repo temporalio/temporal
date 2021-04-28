@@ -41,7 +41,7 @@ func NewMultiReservation(
 	ok bool,
 	reservations []Reservation,
 ) *MultiReservationImpl {
-	if len(reservations) == 0 {
+	if ok && len(reservations) == 0 {
 		panic("expect at least one reservation")
 	}
 	return &MultiReservationImpl{

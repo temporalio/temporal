@@ -204,8 +204,8 @@ func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithExpiration_Error()
 
 	firstReservationDelay := 2 * time.Second
 	secondReservationDelay := 3 * time.Second
-	s.firstReservation.EXPECT().DelayFrom(gomock.Any()).Return(firstReservationDelay)
-	s.secondReservation.EXPECT().DelayFrom(gomock.Any()).Return(secondReservationDelay)
+	s.firstReservation.EXPECT().DelayFrom(gomock.Any()).Return(firstReservationDelay).AnyTimes()
+	s.secondReservation.EXPECT().DelayFrom(gomock.Any()).Return(secondReservationDelay).AnyTimes()
 	s.firstReservation.EXPECT().CancelAt(gomock.Any())
 	s.secondReservation.EXPECT().CancelAt(gomock.Any())
 
@@ -229,8 +229,8 @@ func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithExpiration_Cancell
 
 	firstReservationDelay := 20 * time.Second
 	secondReservationDelay := 30 * time.Second
-	s.firstReservation.EXPECT().DelayFrom(gomock.Any()).Return(firstReservationDelay)
-	s.secondReservation.EXPECT().DelayFrom(gomock.Any()).Return(secondReservationDelay)
+	s.firstReservation.EXPECT().DelayFrom(gomock.Any()).Return(firstReservationDelay).AnyTimes()
+	s.secondReservation.EXPECT().DelayFrom(gomock.Any()).Return(secondReservationDelay).AnyTimes()
 	s.firstReservation.EXPECT().CancelAt(gomock.Any())
 	s.secondReservation.EXPECT().CancelAt(gomock.Any())
 
@@ -249,8 +249,8 @@ func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithExpiration_NoError
 
 	firstReservationDelay := 2 * time.Second
 	secondReservationDelay := 3 * time.Second
-	s.firstReservation.EXPECT().DelayFrom(gomock.Any()).Return(firstReservationDelay)
-	s.secondReservation.EXPECT().DelayFrom(gomock.Any()).Return(secondReservationDelay)
+	s.firstReservation.EXPECT().DelayFrom(gomock.Any()).Return(firstReservationDelay).AnyTimes()
+	s.secondReservation.EXPECT().DelayFrom(gomock.Any()).Return(secondReservationDelay).AnyTimes()
 
 	s.firstReservation.EXPECT().OK().Return(true).AnyTimes()
 	s.firstRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.firstReservation)
@@ -267,8 +267,8 @@ func (s *multiStageRateLimiterSuite) TestWaitN_NotExpired_WithoutExpiration() {
 
 	firstReservationDelay := 2 * time.Second
 	secondReservationDelay := 3 * time.Second
-	s.firstReservation.EXPECT().DelayFrom(gomock.Any()).Return(firstReservationDelay)
-	s.secondReservation.EXPECT().DelayFrom(gomock.Any()).Return(secondReservationDelay)
+	s.firstReservation.EXPECT().DelayFrom(gomock.Any()).Return(firstReservationDelay).AnyTimes()
+	s.secondReservation.EXPECT().DelayFrom(gomock.Any()).Return(secondReservationDelay).AnyTimes()
 
 	s.firstReservation.EXPECT().OK().Return(true).AnyTimes()
 	s.firstRateLimiter.EXPECT().ReserveN(gomock.Any(), numToken).Return(s.firstReservation)
