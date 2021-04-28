@@ -37,48 +37,35 @@ const (
 )
 
 type (
-	// MultiStageRateLimiterImpl is a wrapper around the limiter interface
-	MultiStageRateLimiterImpl struct {
+	// MultiRateLimiterImpl is a wrapper around the limiter interface
+	MultiRateLimiterImpl struct {
 		rateLimiters []RateLimiter
-	}
-
-	MultiStageReservationImpl struct {
-		ok           bool
-		reservations []Reservation
 	}
 )
 
-var _ RateLimiter = (*MultiStageRateLimiterImpl)(nil)
-var _ Reservation = (*MultiStageReservationImpl)(nil)
+var _ RateLimiter = (*MultiRateLimiterImpl)(nil)
 
-// NewMultiStageRateLimiter returns a new rate limiter that have multiple stage
-func NewMultiStageRateLimiter(
+// NewMultiRateLimiter returns a new rate limiter that have multiple stage
+func NewMultiRateLimiter(
 	rateLimiters []RateLimiter,
-) *MultiStageRateLimiterImpl {
-	return &MultiStageRateLimiterImpl{
-		rateLimiters: rateLimiters,
+) *MultiRateLimiterImpl {
+	if len(rateLimiters) == 0 {
+		panic("expect at least one rate limiter")
 	}
-}
-
-func NewMultiStageReservation(
-	ok bool,
-	reservations []Reservation,
-) *MultiStageReservationImpl {
-	return &MultiStageReservationImpl{
-		ok:           ok,
-		reservations: reservations,
+	return &MultiRateLimiterImpl{
+		rateLimiters: rateLimiters,
 	}
 }
 
 // Allow immediately returns with true or false indicating if a rate limit
 // token is available or not
-func (rl *MultiStageRateLimiterImpl) Allow() bool {
+func (rl *MultiRateLimiterImpl) Allow() bool {
 	return rl.AllowN(time.Now(), 1)
 }
 
 // AllowN immediately returns with true or false indicating if n rate limit
 // token is available or not
-func (rl *MultiStageRateLimiterImpl) AllowN(now time.Time, numToken int) bool {
+func (rl *MultiRateLimiterImpl) AllowN(now time.Time, numToken int) bool {
 	length := len(rl.rateLimiters)
 	reservations := make([]Reservation, 0, length)
 
@@ -103,13 +90,13 @@ func (rl *MultiStageRateLimiterImpl) AllowN(now time.Time, numToken int) bool {
 
 // Reserve returns a Reservation that indicates how long the caller
 // must wait before event happen.
-func (rl *MultiStageRateLimiterImpl) Reserve() Reservation {
+func (rl *MultiRateLimiterImpl) Reserve() Reservation {
 	return rl.ReserveN(time.Now(), 1)
 }
 
 // ReserveN returns a Reservation that indicates how long the caller
 // must wait before event happen.
-func (rl *MultiStageRateLimiterImpl) ReserveN(now time.Time, numToken int) Reservation {
+func (rl *MultiRateLimiterImpl) ReserveN(now time.Time, numToken int) Reservation {
 	length := len(rl.rateLimiters)
 	reservations := make([]Reservation, 0, length)
 
@@ -120,21 +107,21 @@ func (rl *MultiStageRateLimiterImpl) ReserveN(now time.Time, numToken int) Reser
 			for _, reservation := range reservations {
 				reservation.CancelAt(now)
 			}
-			return NewMultiStageReservation(false, nil)
+			return NewMultiReservation(false, nil)
 		}
 		reservations = append(reservations, reservation)
 	}
 
-	return NewMultiStageReservation(true, reservations)
+	return NewMultiReservation(true, reservations)
 }
 
 // Wait waits up till deadline for a rate limit token
-func (rl *MultiStageRateLimiterImpl) Wait(ctx context.Context) error {
+func (rl *MultiRateLimiterImpl) Wait(ctx context.Context) error {
 	return rl.WaitN(ctx, 1)
 }
 
 // WaitN waits up till deadline for n rate limit token
-func (rl *MultiStageRateLimiterImpl) WaitN(ctx context.Context, numToken int) error {
+func (rl *MultiRateLimiterImpl) WaitN(ctx context.Context, numToken int) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -167,83 +154,31 @@ func (rl *MultiStageRateLimiterImpl) WaitN(ctx context.Context, numToken int) er
 		return nil
 
 	case <-ctx.Done():
-		reservation.CancelAt(time.Now().UTC())
+		reservation.CancelAt(time.Now())
 		return ctx.Err()
 	}
 }
 
 // Rate returns the rate per second for this rate limiter
-func (rl *MultiStageRateLimiterImpl) Rate() float64 {
-	var result *float64
+func (rl *MultiRateLimiterImpl) Rate() float64 {
+	result := rl.rateLimiters[0].Rate()
 	for _, rateLimiter := range rl.rateLimiters {
-		rate := rateLimiter.Rate()
-		if result == nil || *result > rate {
-			result = &rate
+		newRate := rateLimiter.Rate()
+		if result > newRate {
+			result = newRate
 		}
 	}
-	// assuming at least one rate limiter within
-	// if not, fail fast
-	return *result
+	return result
 }
 
 // Burst returns the burst for this rate limiter
-func (rl *MultiStageRateLimiterImpl) Burst() int {
-	var result *int
+func (rl *MultiRateLimiterImpl) Burst() int {
+	result := rl.rateLimiters[0].Burst()
 	for _, rateLimiter := range rl.rateLimiters {
-		burst := rateLimiter.Burst()
-		if result == nil || *result > burst {
-			result = &burst
+		newBurst := rateLimiter.Burst()
+		if result > newBurst {
+			result = newBurst
 		}
 	}
-	// assuming at least one rate limiter within
-	// if not, fail fast
-	return *result
-}
-
-// OK returns whether the limiter can provide the requested number of tokens
-func (r *MultiStageReservationImpl) OK() bool {
-	return r.ok
-}
-
-// Cancel indicates that the reservation holder will not perform the reserved action
-// and reverses the effects of this Reservation on the rate limit as much as possible
-func (r *MultiStageReservationImpl) Cancel() {
-	r.CancelAt(time.Now().UTC())
-}
-
-// Cancel indicates that the reservation holder will not perform the reserved action
-// and reverses the effects of this Reservation on the rate limit as much as possible
-func (r *MultiStageReservationImpl) CancelAt(now time.Time) {
-	if !r.ok {
-		return
-	}
-
-	for _, reservation := range r.reservations {
-		reservation.CancelAt(now)
-	}
-}
-
-// Delay returns the duration for which the reservation holder must wait
-// before taking the reserved action.  Zero duration means act immediately.
-func (r *MultiStageReservationImpl) Delay() time.Duration {
-	return r.DelayFrom(time.Now().UTC())
-}
-
-// Delay returns the duration for which the reservation holder must wait
-// before taking the reserved action.  Zero duration means act immediately.
-func (r *MultiStageReservationImpl) DelayFrom(now time.Time) time.Duration {
-	if !r.ok {
-		return InfDuration
-	}
-
-	var result *time.Duration
-	for _, reservation := range r.reservations {
-		duration := reservation.DelayFrom(now)
-		if result == nil || *result < duration {
-			result = &duration
-		}
-	}
-	// assuming at least one rate limiter within
-	// if not, fail fast
-	return *result
+	return result
 }
