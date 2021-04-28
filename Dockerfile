@@ -38,14 +38,14 @@ COPY --from=temporal-builder /temporal/schema /etc/temporal/schema
 COPY --from=temporal-builder /temporal/temporal-cassandra-tool /usr/local/bin
 COPY --from=temporal-builder /temporal/temporal-sql-tool /usr/local/bin
 
-##### Debug configuration for Temporal with additional set of tools #####
-FROM temporal-auto-setup as temporal-debug
+##### Development configuration for Temporal with additional set of tools #####
+FROM temporal-auto-setup as temporal-develop
 # iproute2 contains tc, which can be used for traffic shaping in resiliancy testing. 
 RUN apk add iproute2
 
-CMD ["autosetup", "debug"]
+CMD ["autosetup", "develop"]
 
-COPY docker/debug.sh /etc/temporal/debug.sh
+COPY docker/setup-develop.sh /etc/temporal/setup-develop.sh
 
 ##### Temporal CLI (tctl) #####
 FROM temporalio/base-server:1.0.0 AS temporal-tctl
