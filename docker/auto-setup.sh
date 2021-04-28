@@ -176,9 +176,11 @@ setup_schema() {
 # === Elasticsearch functions ===
 
 validate_es_env() {
-    if [ -z "$ES_SEEDS" ]; then
-        echo "ES_SEEDS env must be set if ENABLE_ES is $ENABLE_ES"
-        exit 1
+    if [ "$ENABLE_ES" == true ]; then
+        if [ -z "$ES_SEEDS" ]; then
+            echo "ES_SEEDS env must be set if ENABLE_ES is $ENABLE_ES"
+            exit 1
+        fi
     fi
 }
 
