@@ -2,6 +2,8 @@
 
 set -ex
 
+# === Auto setup defaults ===
+
 DB="${DB:-cassandra}"
 
 # Cassandra
@@ -10,7 +12,7 @@ VISIBILITY_KEYSPACE="${VISIBILITY_KEYSPACE:-temporal_visibility}"
 CASSANDRA_PORT="${CASSANDRA_PORT:-9042}"
 CASSANDRA_REPLICATION_FACTOR=${CASSANDRA_REPLICATION_FACTOR:-1}
 
-# MySQL
+# MySQL/PostgreSQL
 DBNAME="${DBNAME:-temporal}"
 VISIBILITY_DBNAME="${VISIBILITY_DBNAME:-temporal_visibility}"
 DB_PORT=${DB_PORT:-3306}
@@ -26,6 +28,83 @@ ES_VIS_INDEX="${ES_VIS_INDEX:-temporal-visibility-dev}"
 # Default namespace
 DEFAULT_NAMESPACE="${DEFAULT_NAMESPACE:-default}"
 DEFAULT_NAMESPACE_RETENTION=${DEFAULT_NAMESPACE_RETENTION:-1}
+
+# === Main database functions ===
+
+validate_db_env() {
+    if [ "$DB" == "mysql" ]; then
+        if [ -z "$MYSQL_SEEDS" ]; then
+            echo "MYSQL_SEEDS env must be set if DB is $DB."
+            exit 1
+        fi
+    elif [ "$DB" == "postgresql" ]; then
+        if [ -z "$POSTGRES_SEEDS" ]; then
+            echo "POSTGRES_SEEDS env must be set if DB is $DB."
+            exit 1
+        fi
+    elif [ "$DB" == "cassandra" ]; then
+        if [ -z "$CASSANDRA_SEEDS" ]; then
+            echo "CASSANDRA_SEEDS env must be set if DB is $DB."
+            exit 1
+        fi
+    else
+        echo "Unsupported DB type: $DB."
+        exit 1
+    fi
+}
+
+wait_for_cassandra() {
+    # TODO (alex): Remove exports
+    export CASSANDRA_USER=$CASSANDRA_USER
+    export CASSANDRA_PORT=$CASSANDRA_PORT
+    export CASSANDRA_ENABLE_TLS=$CASSANDRA_TLS_ENABLED
+    export CASSANDRA_TLS_CERT=$CASSANDRA_CERT
+    export CASSANDRA_TLS_KEY=$CASSANDRA_CERT_KEY
+    export CASSANDRA_TLS_CA=$CASSANDRA_CA
+
+    { export CASSANDRA_PASSWORD=$CASSANDRA_PASSWORD; } 2> /dev/null
+
+    until temporal-cassandra-tool --ep $CASSANDRA_SEEDS validate-health < /dev/null; do
+        echo 'Waiting for Cassandra to start up.'
+        sleep 1
+    done
+    echo 'Cassandra started.'
+}
+
+wait_for_mysql() {
+    SERVER=`echo $MYSQL_SEEDS | awk -F ',' '{print $1}'`
+    nc -z $SERVER $DB_PORT < /dev/null
+    until [ $? -eq 0 ]; do
+        echo 'Waiting for MySQL to start up.'
+        sleep 1
+        nc -z $SERVER $DB_PORT < /dev/null
+    done
+    echo 'MySQL started.'
+}
+
+wait_for_postgres() {
+    SERVER=`echo $POSTGRES_SEEDS | awk -F ',' '{print $1}'`
+    nc -z $SERVER $DB_PORT < /dev/null
+    until [ $? -eq 0 ]; do
+        echo 'Waiting for PostgreSQL to start up.'
+        sleep 1
+        nc -z $SERVER $DB_PORT < /dev/null
+    done
+    echo 'PostgreSQL started.'
+}
+
+wait_for_db() {
+    if [ "$DB" == "mysql" ]; then
+        wait_for_mysql
+    elif [ "$DB" == "postgresql" ]; then
+        wait_for_postgres
+    elif [ "$DB" == "cassandra" ]; then
+        wait_for_cassandra
+    else
+        echo "Unsupported DB type: $DB."
+        exit 1
+    fi
+}
 
 setup_cassandra_schema() {
     # TODO (alex): Remove exports
@@ -94,53 +173,13 @@ setup_schema() {
     fi
 }
 
-wait_for_cassandra() {
-    # TODO (alex): Remove exports
-    export CASSANDRA_USER=$CASSANDRA_USER
-    export CASSANDRA_PORT=$CASSANDRA_PORT
-    export CASSANDRA_ENABLE_TLS=$CASSANDRA_TLS_ENABLED
-    export CASSANDRA_TLS_CERT=$CASSANDRA_CERT
-    export CASSANDRA_TLS_KEY=$CASSANDRA_CERT_KEY
-    export CASSANDRA_TLS_CA=$CASSANDRA_CA
+# === Elasticsearch functions ===
 
-    { export CASSANDRA_PASSWORD=$CASSANDRA_PASSWORD; } 2> /dev/null
-
-    until temporal-cassandra-tool --ep $CASSANDRA_SEEDS validate-health < /dev/null; do
-        echo 'Waiting for Cassandra to start up.'
-        sleep 1
-    done
-    echo 'Cassandra started.'
-}
-
-wait_for_mysql() {
-    ES_SERVER=`echo $MYSQL_SEEDS | awk -F ',' '{print $1}'`
-    nc -z $ES_SERVER $DB_PORT < /dev/null
-    until [ $? -eq 0 ]; do
-        echo 'Waiting for MySQL to start up.'
-        sleep 1
-        nc -z $ES_SERVER $DB_PORT < /dev/null
-    done
-    echo 'MySQL started.'
-}
-
-wait_for_postgres() {
-    ES_SERVER=`echo $POSTGRES_SEEDS | awk -F ',' '{print $1}'`
-    nc -z $ES_SERVER $DB_PORT < /dev/null
-    until [ $? -eq 0 ]; do
-        echo 'Waiting for PostgreSQL to start up.'
-        sleep 1
-        nc -z $ES_SERVER $DB_PORT < /dev/null
-    done
-    echo 'PostgreSQL started.'
-}
-
-setup_es_template() {
-    SCHEMA_FILE=$TEMPORAL_HOME/schema/elasticsearch/${ES_VERSION}/visibility/index_template.json
-    ES_SERVER=`echo $ES_SEEDS | awk -F ',' '{print $1}'`
-    URL="${ES_SCHEME}://$ES_SERVER:$ES_PORT/_template/temporal-visibility-template"
-    curl -X PUT $URL -H 'Content-Type: application/json' --data-binary "@$SCHEMA_FILE"
-    URL="${ES_SCHEME}://$ES_SERVER:$ES_PORT/$ES_VIS_INDEX"
-    curl -X PUT $URL
+validate_es_env() {
+    if [ -z "$ES_SEEDS" ]; then
+        echo "ES_SEEDS env must be set if ENABLE_ES is $ENABLE_ES"
+        exit 1
+    fi
 }
 
 wait_for_es() {
@@ -166,18 +205,19 @@ wait_for_es() {
     echo 'Elasticsearch started.'
 }
 
-wait_for_db() {
-    if [ "$DB" == "mysql" ]; then
-        wait_for_mysql
-    elif [ "$DB" == "postgresql" ]; then
-        wait_for_postgres
-    else
-        wait_for_cassandra
-    fi
+setup_es_template() {
+    SCHEMA_FILE=$TEMPORAL_HOME/schema/elasticsearch/${ES_VERSION}/visibility/index_template.json
+    ES_SERVER=`echo $ES_SEEDS | awk -F ',' '{print $1}'`
+    URL="${ES_SCHEME}://$ES_SERVER:$ES_PORT/_template/temporal-visibility-template"
+    curl -X PUT $URL -H 'Content-Type: application/json' --data-binary "@$SCHEMA_FILE"
+    URL="${ES_SCHEME}://$ES_SERVER:$ES_PORT/$ES_VIS_INDEX"
+    curl -X PUT $URL
 }
 
+# === Default namespace functions ===
+
 register_default_namespace() {
-    echo "Temporal CLI Address: $TEMPORAL_CLI_ADDRESS."
+    echo "Temporal CLI address: $TEMPORAL_CLI_ADDRESS."
     sleep 5
     echo "Registering default namespace: $DEFAULT_NAMESPACE."
     until tctl --ns $DEFAULT_NAMESPACE namespace describe < /dev/null; do
@@ -188,20 +228,20 @@ register_default_namespace() {
     echo "Default namespace registration complete."
 }
 
-auto_setup() {
-    if [ "$SKIP_SCHEMA_SETUP" != true ]; then
-        wait_for_db
-        setup_schema
-    fi
+# === Main ===
 
-    if [ "$ENABLE_ES" == true ]; then
-        wait_for_es
-        setup_es_template
-    fi
+if [ "$SKIP_SCHEMA_SETUP" != true ]; then
+    validate_db_env
+    wait_for_db
+    setup_schema
+fi
 
-    if [ "$SKIP_DEFAULT_NAMESPACE_CREATION" != true ]; then
-        register_default_namespace &
-    fi
-}
+if [ "$ENABLE_ES" == true ]; then
+    validate_es_env
+    wait_for_es
+    setup_es_template
+fi
 
-auto_setup
+if [ "$SKIP_DEFAULT_NAMESPACE_CREATION" != true ]; then
+    register_default_namespace &
+fi
