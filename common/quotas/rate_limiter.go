@@ -56,7 +56,7 @@ type (
 		// to go through.
 		Wait(ctx context.Context) error
 
-		// Wait waits till the deadline for n rate limit token to allow the request
+		// WaitN waits till the deadline for n rate limit token to allow the request
 		// to go through.
 		WaitN(ctx context.Context, numToken int) error
 
