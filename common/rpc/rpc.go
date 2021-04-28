@@ -222,7 +222,7 @@ func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.Client
 }
 
 func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config) *grpc.ClientConn {
-	connection, err := Dial(hostName, tlsClientConfig)
+	connection, err := Dial(hostName, tlsClientConfig, d.logger)
 	if err != nil {
 		d.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
 	}

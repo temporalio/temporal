@@ -98,6 +98,8 @@ func NewService(
 		grpcServerOptions,
 		grpc.ChainUnaryInterceptor(
 			rpc.ServiceErrorInterceptor,
+			metrics.NewServerMetricsContextInjectorInterceptor(),
+			metrics.NewServerMetricsTrailerPropagatorInterceptor(logger),
 			metricsInterceptor.Intercept,
 			rateLimiterInterceptor.Intercept,
 		),
