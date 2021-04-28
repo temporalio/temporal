@@ -77,6 +77,13 @@ TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_DIRS))
 UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
 
+PINNED_DEPENDENCIES := \
+	github.com/DataDog/sketches-go@v0.0.1 \
+	go.opentelemetry.io/otel@v0.15.0 \
+	go.opentelemetry.io/otel/exporters/metric/prometheus@v0.15.0 \
+	github.com/apache/thrift@v0.0.0-20161221203622-b2a4d4ae21c7 \
+	github.com/jmoiron/sqlx@v1.2.1-0.20200615141059-0794cb1f47ee
+
 # Code coverage output files.
 COVER_ROOT                 := ./.coverage
 UNIT_COVER_PROFILE         := $(COVER_ROOT)/unit_coverprofile.out
@@ -97,10 +104,10 @@ update-checkers:
 	@printf $(COLOR) "Install/update check tools..."
 	@go install golang.org/x/tools/cmd/goimports
 	@go install golang.org/x/lint/golint
-	@go install honnef.co/go/tools/cmd/staticcheck@v0.1.0
-	@go install github.com/kisielk/errcheck@v1.4.0
-	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.10.0
-	@go install github.com/bufbuild/buf/cmd/buf@v0.33.0
+	@go install honnef.co/go/tools/cmd/staticcheck@v0.1.3
+	@go install github.com/kisielk/errcheck@v1.6.0
+	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.22.0
+	@go install github.com/bufbuild/buf/cmd/buf@v0.41.0
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
@@ -227,7 +234,7 @@ api-linter:
 
 buf-lint:
 	@printf $(COLOR) "Run buf linter..."
-	@(cd $(PROTO_ROOT) && buf check lint)
+	@(cd $(PROTO_ROOT) && buf lint)
 
 buf-build:
 	@printf $(COLOR) "Build image.bin with buf..."
@@ -422,6 +429,11 @@ mocks: go-generate external-mocks
 ##### Auxilary #####
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
+	@go mod tidy
+
+update-dependencies:
+	@printf $(COLOR) "Update dependencies..."
+	@go get -u -t $(PINNED_DEPENDENCIES) ./...
 	@go mod tidy
 
 ensure-no-changes:

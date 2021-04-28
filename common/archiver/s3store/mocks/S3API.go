@@ -5105,3 +5105,53 @@ func (mr *MockS3APIMockRecorder) WaitUntilObjectNotExistsWithContext(arg0, arg1 
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitUntilObjectNotExistsWithContext", reflect.TypeOf((*MockS3API)(nil).WaitUntilObjectNotExistsWithContext), varargs...)
 }
+
+// WriteGetObjectResponse mocks base method.
+func (m *MockS3API) WriteGetObjectResponse(arg0 *s3.WriteGetObjectResponseInput) (*s3.WriteGetObjectResponseOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WriteGetObjectResponse", arg0)
+	ret0, _ := ret[0].(*s3.WriteGetObjectResponseOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WriteGetObjectResponse indicates an expected call of WriteGetObjectResponse.
+func (mr *MockS3APIMockRecorder) WriteGetObjectResponse(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteGetObjectResponse", reflect.TypeOf((*MockS3API)(nil).WriteGetObjectResponse), arg0)
+}
+
+// WriteGetObjectResponseRequest mocks base method.
+func (m *MockS3API) WriteGetObjectResponseRequest(arg0 *s3.WriteGetObjectResponseInput) (*request.Request, *s3.WriteGetObjectResponseOutput) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WriteGetObjectResponseRequest", arg0)
+	ret0, _ := ret[0].(*request.Request)
+	ret1, _ := ret[1].(*s3.WriteGetObjectResponseOutput)
+	return ret0, ret1
+}
+
+// WriteGetObjectResponseRequest indicates an expected call of WriteGetObjectResponseRequest.
+func (mr *MockS3APIMockRecorder) WriteGetObjectResponseRequest(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteGetObjectResponseRequest", reflect.TypeOf((*MockS3API)(nil).WriteGetObjectResponseRequest), arg0)
+}
+
+// WriteGetObjectResponseWithContext mocks base method.
+func (m *MockS3API) WriteGetObjectResponseWithContext(arg0 aws.Context, arg1 *s3.WriteGetObjectResponseInput, arg2 ...request.Option) (*s3.WriteGetObjectResponseOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "WriteGetObjectResponseWithContext", varargs...)
+	ret0, _ := ret[0].(*s3.WriteGetObjectResponseOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WriteGetObjectResponseWithContext indicates an expected call of WriteGetObjectResponseWithContext.
+func (mr *MockS3APIMockRecorder) WriteGetObjectResponseWithContext(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteGetObjectResponseWithContext", reflect.TypeOf((*MockS3API)(nil).WriteGetObjectResponseWithContext), varargs...)
+}

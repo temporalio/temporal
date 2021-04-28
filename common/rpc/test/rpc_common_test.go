@@ -43,7 +43,9 @@ import (
 )
 
 // HelloServer is used to implement helloworld.GreeterServer.
-type HelloServer struct{}
+type HelloServer struct {
+	helloworld.UnimplementedGreeterServer
+}
 
 type ServerUsageType int32
 
