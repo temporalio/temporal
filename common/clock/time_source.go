@@ -25,12 +25,12 @@
 package clock
 
 import (
+	"sync/atomic"
 	"time"
 
 	// clockwork is not currently used but it is useful to have the option to use this in testing code
 	// this comment is needed to stop lint from complaining about this _ import
 	_ "github.com/jonboulle/clockwork"
-	"go.uber.org/atomic"
 )
 
 type (
@@ -46,7 +46,7 @@ type (
 
 	// EventTimeSource serves fake controlled time
 	EventTimeSource struct {
-		now atomic.Int64
+		now int64
 	}
 )
 
@@ -69,11 +69,11 @@ func NewEventTimeSource() *EventTimeSource {
 
 // Now return the fake current time
 func (ts *EventTimeSource) Now() time.Time {
-	return time.Unix(0, ts.now.Load()).UTC()
+	return time.Unix(0, atomic.LoadInt64(&ts.now)).UTC()
 }
 
 // Update update the fake current time
 func (ts *EventTimeSource) Update(now time.Time) *EventTimeSource {
-	ts.now.Store(now.UnixNano())
+	atomic.StoreInt64(&ts.now, now.UnixNano())
 	return ts
 }
