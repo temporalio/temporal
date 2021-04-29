@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -eu -o pipefail
 
 export BIND_ON_IP="${BIND_ON_IP:-$(hostname -i)}"
 
@@ -15,12 +15,12 @@ fi
 dockerize -template ./config/config_template.yaml:./config/docker.yaml
 
 # Automatically setup Temporal Server (databases, Elasticsearch, default namespace) if "autosetup" is passed as an argument.
-for arg in "$@" ; do [[ $arg == "autosetup" ]] && ./auto-setup.sh && break ; done
+for arg in "$@" ; do [[ ${arg} == "autosetup" ]] && ./auto-setup.sh && break ; done
 
 # Setup Temporal Server in development mode if "develop" is passed as an argument.
-for arg in "$@" ; do [[ $arg == "develop" ]] && ./setup-develop.sh && break ; done
+for arg in "$@" ; do [[ ${arg} == "develop" ]] && ./setup-develop.sh && break ; done
 
 # Run bash instead of Temporal Server if "bash" is passed as an argument (convenient to debug docker image).
-for arg in "$@" ; do [[ $arg == "bash" ]] && bash && exit 0 ; done
+for arg in "$@" ; do [[ ${arg} == "bash" ]] && bash && exit 0 ; done
 
 ./start-temporal.sh

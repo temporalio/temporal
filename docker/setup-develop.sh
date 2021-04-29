@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -ex
+set -eux -o pipefail
 
 # Adding artificial delay for all network calls.
 # In order to verify that there is a delay, you can login to the container and run:
@@ -10,6 +10,6 @@ set -ex
 #
 # Read more about what's possible with tc here:
 # https://www.badunetworks.com/traffic-shaping-with-tc/
-if [ ! -z "$TEMPORAL_DBG_NETWORK_DELAY_MS" ]; then
+if [ ! -z "${TEMPORAL_DBG_NETWORK_DELAY_MS}" ]; then
 	tc qdisc add dev eth0 root netem delay "${TEMPORAL_DBG_NETWORK_DELAY_MS}ms" 
 fi
