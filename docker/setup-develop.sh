@@ -2,6 +2,8 @@
 
 set -eux -o pipefail
 
+TEMPORAL_DBG_NETWORK_DELAY_MS="${TEMPORAL_DBG_NETWORK_DELAY_MS:-}"
+
 # Adding artificial delay for all network calls.
 # In order to verify that there is a delay, you can login to the container and run:
 # > tc qdisc show dev eth0
