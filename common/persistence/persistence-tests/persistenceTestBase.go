@@ -40,8 +40,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/server/common/clock"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -221,10 +219,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *config.ClusterMetadata) {
 	s.ClusterMetadataManager, err = factory.NewClusterMetadataManager()
 	s.fatalOnError("NewClusterMetadataManager", err)
 
-	s.ClusterMetadata = cluster.NewTestClusterMetadata(
-		clusterMetadataConfig,
-		s.ClusterMetadataManager,
-		clock.NewRealTimeSource())
+	s.ClusterMetadata = cluster.NewTestClusterMetadata(clusterMetadataConfig)
 
 	s.MetadataManager, err = factory.NewMetadataManager()
 	s.fatalOnError("NewMetadataManager", err)

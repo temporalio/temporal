@@ -28,30 +28,14 @@ package cluster
 
 import (
 	"fmt"
-	"sync"
-	"sync/atomic"
-	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/searchattribute"
-)
-
-const (
-	searchAttributeCacheRefreshInterval = 60 * time.Second
 )
 
 type (
 	// Metadata provides information about clusters
 	Metadata interface {
-		searchattribute.Provider
-		searchattribute.Saver
-
 		// IsGlobalNamespaceEnabled whether the global namespace is enabled,
 		// this attr should be discarded when cross DC is made public
 		IsGlobalNamespaceEnabled() bool
@@ -71,15 +55,7 @@ type (
 		ClusterNameForFailoverVersion(failoverVersion int64) string
 	}
 
-	searchAttributesCache struct {
-		searchAttributes map[string]*persistencespb.IndexSearchAttributes
-		dbVersion        int64
-		lastRefresh      time.Time
-	}
-
 	metadataImpl struct {
-		logger     log.Logger
-		timeSource clock.TimeSource
 		// EnableGlobalNamespace whether the global namespace is enabled,
 		enableGlobalNamespace bool
 		// failoverVersionIncrement is the increment of each cluster's version when failover happen
@@ -93,19 +69,11 @@ type (
 		clusterInfo map[string]config.ClusterInformation
 		// versionToClusterName contains all initial version -> corresponding cluster name
 		versionToClusterName map[int64]string
-
-		searchAttributesCacheUpdateMutex sync.Mutex
-		searchAttributesCache            atomic.Value
-
-		clusterMetadataManager persistence.ClusterMetadataManager
 	}
 )
 
 // NewMetadata create a new instance of Metadata
 func NewMetadata(
-	logger log.Logger,
-	timeSource clock.TimeSource,
-	clusterMetadataManager persistence.ClusterMetadataManager,
 	enableGlobalNamespace bool,
 	failoverVersionIncrement int64,
 	masterClusterName string,
@@ -152,20 +120,13 @@ func NewMetadata(
 		panic("Cluster info initial versions have duplicates")
 	}
 
-	var saCache atomic.Value
-	saCache.Store(searchAttributesCache{})
-
 	return &metadataImpl{
-		logger:                   logger,
 		enableGlobalNamespace:    enableGlobalNamespace,
 		failoverVersionIncrement: failoverVersionIncrement,
 		masterClusterName:        masterClusterName,
 		currentClusterName:       currentClusterName,
 		clusterInfo:              clusterInfo,
 		versionToClusterName:     versionToClusterName,
-		timeSource:               timeSource,
-		searchAttributesCache:    saCache,
-		clusterMetadataManager:   clusterMetadataManager,
 	}
 }
 
@@ -238,80 +199,4 @@ func (m *metadataImpl) ClusterNameForFailoverVersion(failoverVersion int64) stri
 		))
 	}
 	return clusterName
-}
-
-// GetSearchAttributes returns all search attributes (including system and build-in) for specified index.
-func (m *metadataImpl) GetSearchAttributes(indexName string, bypassCache bool) (map[string]enumspb.IndexedValueType, error) {
-	refreshCache := func(bypassCache bool, saCache searchAttributesCache, now time.Time) bool {
-		return bypassCache ||
-			saCache.lastRefresh.Add(searchAttributeCacheRefreshInterval).Before(now) ||
-			saCache.searchAttributes == nil
-	}
-
-	now := m.timeSource.Now()
-	saCache := m.searchAttributesCache.Load().(searchAttributesCache)
-
-	if refreshCache(bypassCache, saCache, now) {
-		m.searchAttributesCacheUpdateMutex.Lock()
-		saCache = m.searchAttributesCache.Load().(searchAttributesCache)
-		if refreshCache(bypassCache, saCache, now) {
-			clusterMetadata, err := m.clusterMetadataManager.GetClusterMetadata()
-			if err != nil {
-				m.searchAttributesCacheUpdateMutex.Unlock()
-				return nil, err
-			}
-			if clusterMetadata.Version > saCache.dbVersion {
-				indexSearchAttributes := clusterMetadata.GetIndexSearchAttributes()
-
-				// Append system search attributes to every index because they are not stored in metadata but cache should have everything ready to use.
-				for _, customSearchAttributes := range indexSearchAttributes {
-					searchattribute.AddSystemTo(customSearchAttributes.SearchAttributes)
-				}
-
-				saCache = searchAttributesCache{
-					searchAttributes: indexSearchAttributes,
-					lastRefresh:      now,
-					dbVersion:        clusterMetadata.Version,
-				}
-			} else {
-				saCache.lastRefresh = now
-			}
-			m.searchAttributesCache.Store(saCache)
-		}
-		m.searchAttributesCacheUpdateMutex.Unlock()
-	}
-
-	var searchAttributes map[string]enumspb.IndexedValueType
-	if indexSearchAttributes, ok := saCache.searchAttributes[indexName]; ok {
-		searchAttributes = indexSearchAttributes.GetSearchAttributes()
-	}
-	if searchAttributes == nil {
-		return map[string]enumspb.IndexedValueType{}, nil
-	}
-	return searchAttributes, nil
-}
-
-// SaveSearchAttributes saves search attributes to cluster metadata.
-func (m *metadataImpl) SaveSearchAttributes(indexName string, newCustomSearchAttributes map[string]enumspb.IndexedValueType) error {
-	clusterMetadataResponse, err := m.clusterMetadataManager.GetClusterMetadata()
-	if err != nil {
-		return err
-	}
-
-	clusterMetadata := clusterMetadataResponse.ClusterMetadata
-	if clusterMetadata.IndexSearchAttributes == nil {
-		clusterMetadata.IndexSearchAttributes = map[string]*persistencespb.IndexSearchAttributes{indexName: nil}
-	}
-	clusterMetadata.IndexSearchAttributes[indexName] = &persistencespb.IndexSearchAttributes{SearchAttributes: newCustomSearchAttributes}
-	_, err = m.clusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
-		ClusterMetadata: clusterMetadata,
-		Version:         clusterMetadataResponse.Version,
-	})
-	if err != nil {
-		return err
-	}
-
-	// Flush local cache.
-	m.searchAttributesCache.Store(searchAttributesCache{})
-	return nil
 }

@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cluster
+package persistence
 
 import (
 	"sync"
@@ -36,12 +36,11 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
-	metadataSuite struct {
+	searchAttributesManagerSuite struct {
 		suite.Suite
 		*require.Assertions
 
@@ -49,41 +48,41 @@ type (
 
 		logger                     log.Logger
 		timeSource                 *clock.EventTimeSource
-		mockClusterMetadataManager *persistence.MockClusterMetadataManager
-		metadata                   Metadata
+		mockClusterMetadataManager *MockClusterMetadataManager
+		manager                    *SearchAttributesManager
 	}
 )
 
-func TestNamespaceCacheSuite(t *testing.T) {
-	suite.Run(t, &metadataSuite{})
+func TestSearchAttributesManagerSuite(t *testing.T) {
+	suite.Run(t, &searchAttributesManagerSuite{})
 }
 
-func (s *metadataSuite) SetupSuite() {
+func (s *searchAttributesManagerSuite) SetupSuite() {
 }
 
-func (s *metadataSuite) TearDownSuite() {
+func (s *searchAttributesManagerSuite) TearDownSuite() {
 
 }
 
-func (s *metadataSuite) SetupTest() {
+func (s *searchAttributesManagerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
 
 	s.logger = log.NewDefaultLogger()
 	s.timeSource = clock.NewEventTimeSource()
-	s.mockClusterMetadataManager = persistence.NewMockClusterMetadataManager(s.controller)
-	s.metadata = NewTestClusterMetadata(NewTestClusterMetadataConfig(false, true), s.mockClusterMetadataManager, s.timeSource)
+	s.mockClusterMetadataManager = NewMockClusterMetadataManager(s.controller)
+	s.manager = NewSearchAttributesManager(s.timeSource, s.mockClusterMetadataManager)
 }
 
-func (s *metadataSuite) TearDownTest() {
+func (s *searchAttributesManagerSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *metadataSuite) TestGetSearchAttributesCache() {
+func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache() {
 	s.timeSource.Update(time.Date(2020, 8, 22, 1, 0, 0, 0, time.UTC))
 	// Initial call
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(&persistence.GetClusterMetadataResponse{
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(&GetClusterMetadataResponse{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name": {
@@ -94,7 +93,7 @@ func (s *metadataSuite) TestGetSearchAttributesCache() {
 		Version: 1,
 	}, nil)
 	// Second call, no changes in DB (version is the same)
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(&persistence.GetClusterMetadataResponse{
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(&GetClusterMetadataResponse{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name": {
@@ -105,7 +104,7 @@ func (s *metadataSuite) TestGetSearchAttributesCache() {
 		Version: 1,
 	}, nil)
 	// Third call, DB changed
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(&persistence.GetClusterMetadataResponse{
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(&GetClusterMetadataResponse{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name": {
@@ -121,7 +120,7 @@ func (s *metadataSuite) TestGetSearchAttributesCache() {
 	for goroutine := 0; goroutine < 10; goroutine++ {
 		go func(goroutine int) {
 			for i := 1; i < 1500; i++ {
-				searchAttributes, err := s.metadata.GetSearchAttributes("index-name", false)
+				searchAttributes, err := s.manager.GetSearchAttributes("index-name", false)
 				s.NoError(err)
 				searchAttributes = searchattribute.FilterCustom(searchAttributes)
 				s.Len(searchAttributes, 1)
@@ -137,8 +136,8 @@ func (s *metadataSuite) TestGetSearchAttributesCache() {
 	wg.Wait()
 }
 
-func (s *metadataSuite) TestSaveSearchAttributes_UpdateIndex() {
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(&persistence.GetClusterMetadataResponse{
+func (s *searchAttributesManagerSuite) TestSaveSearchAttributes_UpdateIndex() {
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(&GetClusterMetadataResponse{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name": {
@@ -149,7 +148,7 @@ func (s *metadataSuite) TestSaveSearchAttributes_UpdateIndex() {
 		Version: 1,
 	}, nil)
 
-	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(&SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name": {
@@ -160,13 +159,13 @@ func (s *metadataSuite) TestSaveSearchAttributes_UpdateIndex() {
 		Version: 1,
 	}).Return(false, nil)
 
-	err := s.metadata.SaveSearchAttributes("index-name", map[string]enumspb.IndexedValueType{
+	err := s.manager.SaveSearchAttributes("index-name", map[string]enumspb.IndexedValueType{
 		"OrderId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	})
 	s.NoError(err)
 }
-func (s *metadataSuite) TestSaveSearchAttributes_NewIndex() {
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(&persistence.GetClusterMetadataResponse{
+func (s *searchAttributesManagerSuite) TestSaveSearchAttributes_NewIndex() {
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(&GetClusterMetadataResponse{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name-2": {
@@ -177,7 +176,7 @@ func (s *metadataSuite) TestSaveSearchAttributes_NewIndex() {
 		Version: 1,
 	}, nil)
 
-	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(&SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name-2": {
@@ -192,7 +191,7 @@ func (s *metadataSuite) TestSaveSearchAttributes_NewIndex() {
 		Version: 1,
 	}).Return(false, nil)
 
-	err := s.metadata.SaveSearchAttributes("index-name", map[string]enumspb.IndexedValueType{
+	err := s.manager.SaveSearchAttributes("index-name", map[string]enumspb.IndexedValueType{
 		"OrderId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	})
 	s.NoError(err)

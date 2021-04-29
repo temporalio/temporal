@@ -25,10 +25,7 @@
 package cluster
 
 import (
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/persistence"
 )
 
 const (
@@ -104,11 +101,8 @@ func NewTestClusterMetadataConfig(enableGlobalNamespace bool, isMasterCluster bo
 }
 
 // NewTestClusterMetadata return an cluster metadata instance, which is initialized
-func NewTestClusterMetadata(cfg *config.ClusterMetadata, clusterMetadataManager persistence.ClusterMetadataManager, timeSource clock.TimeSource) Metadata {
+func NewTestClusterMetadata(cfg *config.ClusterMetadata) Metadata {
 	return NewMetadata(
-		log.NewNoopLogger(),
-		timeSource,
-		clusterMetadataManager,
 		cfg.EnableGlobalNamespace,
 		cfg.FailoverVersionIncrement,
 		cfg.MasterClusterName,

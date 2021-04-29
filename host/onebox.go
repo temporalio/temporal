@@ -35,7 +35,6 @@ import (
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/server/common/clock"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/cluster"
@@ -613,7 +612,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	c.workerService = service
 	service.Start()
 
-	clusterMetadata := cluster.NewTestClusterMetadata(c.clusterMetadataConfig, c.clusterMetadataMgr, clock.NewRealTimeSource())
+	clusterMetadata := cluster.NewTestClusterMetadata(c.clusterMetadataConfig)
 	var replicatorNamespaceCache cache.NamespaceCache
 	if c.workerConfig.EnableReplicator {
 		metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)

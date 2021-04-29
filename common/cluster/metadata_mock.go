@@ -32,7 +32,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	enums "go.temporal.io/api/enums/v1"
 	config "go.temporal.io/server/common/config"
 )
 
@@ -129,21 +128,6 @@ func (mr *MockMetadataMockRecorder) GetNextFailoverVersion(arg0, arg1 interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNextFailoverVersion", reflect.TypeOf((*MockMetadata)(nil).GetNextFailoverVersion), arg0, arg1)
 }
 
-// GetSearchAttributes mocks base method.
-func (m *MockMetadata) GetSearchAttributes(indexName string, bypassCache bool) (map[string]enums.IndexedValueType, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSearchAttributes", indexName, bypassCache)
-	ret0, _ := ret[0].(map[string]enums.IndexedValueType)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetSearchAttributes indicates an expected call of GetSearchAttributes.
-func (mr *MockMetadataMockRecorder) GetSearchAttributes(indexName, bypassCache interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockMetadata)(nil).GetSearchAttributes), indexName, bypassCache)
-}
-
 // IsGlobalNamespaceEnabled mocks base method.
 func (m *MockMetadata) IsGlobalNamespaceEnabled() bool {
 	m.ctrl.T.Helper()
@@ -184,18 +168,4 @@ func (m *MockMetadata) IsVersionFromSameCluster(version1, version2 int64) bool {
 func (mr *MockMetadataMockRecorder) IsVersionFromSameCluster(version1, version2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsVersionFromSameCluster", reflect.TypeOf((*MockMetadata)(nil).IsVersionFromSameCluster), version1, version2)
-}
-
-// SaveSearchAttributes mocks base method.
-func (m *MockMetadata) SaveSearchAttributes(indexName string, newCustomSearchAttributes map[string]enums.IndexedValueType) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SaveSearchAttributes", indexName, newCustomSearchAttributes)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SaveSearchAttributes indicates an expected call of SaveSearchAttributes.
-func (mr *MockMetadataMockRecorder) SaveSearchAttributes(indexName, newCustomSearchAttributes interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveSearchAttributes", reflect.TypeOf((*MockMetadata)(nil).SaveSearchAttributes), indexName, newCustomSearchAttributes)
 }
