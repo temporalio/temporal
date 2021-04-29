@@ -299,12 +299,13 @@ func (r *workflowResetterImpl) persistToDB(
 		resetHistorySize += size
 	}
 	return resetWorkflow.getContext().createWorkflowExecution(
-		resetWorkflowSnapshot,
-		resetHistorySize,
 		now,
 		persistence.CreateWorkflowModeContinueAsNew,
 		currentRunID,
 		currentLastWriteVersion,
+		resetWorkflow.getMutableState(),
+		resetWorkflowSnapshot,
+		resetHistorySize,
 	)
 }
 
