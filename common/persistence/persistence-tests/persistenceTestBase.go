@@ -40,7 +40,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -76,10 +75,9 @@ type (
 		DBUsername      string
 		DBPassword      string
 		DBHost          string
-		DBPort          int              `yaml:"-"`
-		StoreType       string           `yaml:"-"`
-		SchemaDir       string           `yaml:"-"`
-		ClusterMetadata cluster.Metadata `yaml:"-"`
+		DBPort          int    `yaml:"-"`
+		StoreType       string `yaml:"-"`
+		SchemaDir       string `yaml:"-"`
 	}
 
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
@@ -129,7 +127,7 @@ func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
 	}
 	logger := log.NewDefaultLogger()
 	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, logger)
-	return newTestBase(options, testCluster, logger)
+	return newTestBase(testCluster, logger)
 }
 
 // NewTestBaseWithSQL returns a new persistence test base backed by SQL
@@ -160,7 +158,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 		}
 	}
 	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, logger)
-	return newTestBase(options, testCluster, logger)
+	return newTestBase(testCluster, logger)
 }
 
 // NewTestBase returns a persistence test base backed by either cassandra or sql
@@ -175,19 +173,12 @@ func NewTestBase(options *TestBaseOptions) TestBase {
 	}
 }
 
-func newTestBase(options *TestBaseOptions, testCluster PersistenceTestCluster, logger log.Logger) TestBase {
-	metadata := options.ClusterMetadata
-	if metadata == nil {
-		metadata = cluster.GetTestClusterMetadata(cluster.GetTestClusterMetadataConfig(false, false))
-	}
-	options.ClusterMetadata = metadata
-	base := TestBase{
+func newTestBase(testCluster PersistenceTestCluster, logger log.Logger) TestBase {
+	return TestBase{
 		DefaultTestCluster:    testCluster,
 		VisibilityTestCluster: testCluster,
-		ClusterMetadata:       metadata,
+		logger:                logger,
 	}
-	base.logger = logger
-	return base
 }
 
 // Config returns the persistence configuration for this test
@@ -203,10 +194,14 @@ func (s *TestBase) Config() config.Persistence {
 }
 
 // Setup sets up the test base, must be called as part of SetupSuite
-func (s *TestBase) Setup() {
+func (s *TestBase) Setup(clusterMetadataConfig *config.ClusterMetadata) {
 	var err error
 	shardID := int32(10)
-	clusterName := s.ClusterMetadata.GetCurrentClusterName()
+	if clusterMetadataConfig == nil {
+		clusterMetadataConfig = cluster.NewTestClusterMetadataConfig(false, false)
+	}
+
+	clusterName := clusterMetadataConfig.CurrentClusterName
 
 	s.DefaultTestCluster.SetupTestDatabase()
 	if s.VisibilityTestCluster != s.DefaultTestCluster {
@@ -223,6 +218,8 @@ func (s *TestBase) Setup() {
 
 	s.ClusterMetadataManager, err = factory.NewClusterMetadataManager()
 	s.fatalOnError("NewClusterMetadataManager", err)
+
+	s.ClusterMetadata = cluster.NewTestClusterMetadata(clusterMetadataConfig)
 
 	s.MetadataManager, err = factory.NewMetadataManager()
 	s.fatalOnError("NewMetadataManager", err)
