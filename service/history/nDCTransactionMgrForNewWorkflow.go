@@ -184,12 +184,13 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 			return err
 		}
 		return targetWorkflow.getContext().createWorkflowExecution(
-			targetWorkflowSnapshot,
-			targetWorkflowHistorySize,
 			now,
 			createMode,
 			prevRunID,
 			prevLastWriteVersion,
+			targetWorkflow.getMutableState(),
+			targetWorkflowSnapshot,
+			targetWorkflowHistorySize,
 		)
 	}
 
@@ -198,12 +199,13 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	return targetWorkflow.getContext().createWorkflowExecution(
-		targetWorkflowSnapshot,
-		targetWorkflowHistorySize,
 		now,
 		createMode,
 		prevRunID,
 		prevLastWriteVersion,
+		targetWorkflow.getMutableState(),
+		targetWorkflowSnapshot,
+		targetWorkflowHistorySize,
 	)
 }
 
@@ -258,12 +260,13 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	err = targetWorkflow.getContext().createWorkflowExecution(
-		targetWorkflowSnapshot,
-		targetWorkflowHistorySize,
 		now,
 		createMode,
 		prevRunID,
 		prevLastWriteVersion,
+		targetWorkflow.getMutableState(),
+		targetWorkflowSnapshot,
+		targetWorkflowHistorySize,
 	)
 	switch err.(type) {
 	case nil:

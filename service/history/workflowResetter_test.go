@@ -197,12 +197,13 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	).Return(resetSnapshot, resetEventsSeq, nil)
 	resetContext.EXPECT().persistNonFirstWorkflowEvents(resetEventsSeq[0]).Return(resetEventsSize, nil)
 	resetContext.EXPECT().createWorkflowExecution(
-		resetSnapshot,
-		resetEventsSize,
 		gomock.Any(),
 		persistence.CreateWorkflowModeContinueAsNew,
 		s.currentRunID,
 		currentLastWriteVersion,
+		resetMutableState,
+		resetSnapshot,
+		resetEventsSize,
 	).Return(nil)
 
 	err := s.workflowResetter.persistToDB(false, currentWorkflow, resetWorkflow)

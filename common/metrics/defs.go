@@ -1650,6 +1650,7 @@ const (
 	NamespaceCachePrepareCallbacksLatency
 	NamespaceCacheCallbacksLatency
 
+	StateTransitionCount
 	HistorySize
 	HistoryCount
 	EventBlobSize
@@ -2068,6 +2069,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceAuthorizationLatency:                         {metricName: "service_authorization_latency", metricType: Timer},
 		NamespaceCachePrepareCallbacksLatency:               {metricName: "namespace_cache_prepare_callbacks_latency", metricType: Timer},
 		NamespaceCacheCallbacksLatency:                      {metricName: "namespace_cache_callbacks_latency", metricType: Timer},
+		StateTransitionCount:                                {metricName: "state_transition_count", metricType: Timer},
 		HistorySize:                                         {metricName: "history_size", metricType: Timer},
 		HistoryCount:                                        {metricName: "history_count", metricType: Timer},
 		EventBlobSize:                                       {metricName: "event_blob_size", metricType: Timer},
