@@ -119,6 +119,7 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache() {
 	wg.Add(10)
 	for goroutine := 0; goroutine < 10; goroutine++ {
 		go func(goroutine int) {
+			defer wg.Done()
 			for i := 1; i < 1500; i++ {
 				searchAttributes, err := s.manager.GetSearchAttributes("index-name", false)
 				s.NoError(err)
@@ -130,7 +131,6 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache() {
 					s.timeSource.Update(s.timeSource.Now().Add(searchAttributeCacheRefreshInterval).Add(time.Second))
 				}
 			}
-			wg.Done()
 		}(goroutine)
 	}
 	wg.Wait()

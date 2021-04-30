@@ -40,6 +40,7 @@ const (
 )
 
 type (
+	// TODO (alex): move this to searchattribute package
 	SearchAttributesManager struct {
 		searchattribute.Provider
 		searchattribute.Saver
@@ -70,42 +71,24 @@ func NewSearchAttributesManager(timeSource clock.TimeSource, clusterMetadataMana
 }
 
 // GetSearchAttributes returns all search attributes (including system and build-in) for specified index.
-func (m *SearchAttributesManager) GetSearchAttributes(indexName string, bypassCache bool) (map[string]enumspb.IndexedValueType, error) {
-	refreshCache := func(bypassCache bool, saCache searchAttributesCache, now time.Time) bool {
-		return bypassCache ||
-			saCache.lastRefresh.Add(searchAttributeCacheRefreshInterval).Before(now) ||
-			saCache.searchAttributes == nil
-	}
+func (m *SearchAttributesManager) GetSearchAttributes(
+	indexName string,
+	forceRefreshCache bool,
+) (map[string]enumspb.IndexedValueType, error) {
 
 	now := m.timeSource.Now()
 	saCache := m.cache.Load().(searchAttributesCache)
 
-	if refreshCache(bypassCache, saCache, now) {
+	if m.needRefreshCache(saCache, forceRefreshCache, now) {
 		m.cacheUpdateMutex.Lock()
 		saCache = m.cache.Load().(searchAttributesCache)
-		if refreshCache(bypassCache, saCache, now) {
-			clusterMetadata, err := m.clusterMetadataManager.GetClusterMetadata()
+		if m.needRefreshCache(saCache, forceRefreshCache, now) {
+			var err error
+			saCache, err = m.refreshCache(saCache, now)
 			if err != nil {
 				m.cacheUpdateMutex.Unlock()
 				return nil, err
 			}
-			if clusterMetadata.Version > saCache.dbVersion {
-				indexSearchAttributes := clusterMetadata.GetIndexSearchAttributes()
-
-				// Append system search attributes to every index because they are not stored in DB but cache should have everything ready to use.
-				for _, customSearchAttributes := range indexSearchAttributes {
-					searchattribute.AddSystemTo(customSearchAttributes.SearchAttributes)
-				}
-
-				saCache = searchAttributesCache{
-					searchAttributes: indexSearchAttributes,
-					lastRefresh:      now,
-					dbVersion:        clusterMetadata.Version,
-				}
-			} else {
-				saCache.lastRefresh = now
-			}
-			m.cache.Store(saCache)
 		}
 		m.cacheUpdateMutex.Unlock()
 	}
@@ -118,6 +101,40 @@ func (m *SearchAttributesManager) GetSearchAttributes(indexName string, bypassCa
 		return map[string]enumspb.IndexedValueType{}, nil
 	}
 	return searchAttributes, nil
+}
+
+func (m *SearchAttributesManager) needRefreshCache(saCache searchAttributesCache, forceRefreshCache bool, now time.Time) bool {
+	return forceRefreshCache ||
+		saCache.lastRefresh.Add(searchAttributeCacheRefreshInterval).Before(now) ||
+		saCache.searchAttributes == nil
+}
+
+func (m *SearchAttributesManager) refreshCache(saCache searchAttributesCache, now time.Time) (searchAttributesCache, error) {
+	clusterMetadata, err := m.clusterMetadataManager.GetClusterMetadata()
+	if err != nil {
+		return saCache, err
+	}
+
+	if clusterMetadata.Version <= saCache.dbVersion {
+		saCache.lastRefresh = now
+		m.cache.Store(saCache)
+		return saCache, nil
+	}
+
+	indexSearchAttributes := clusterMetadata.GetIndexSearchAttributes()
+
+	// Append system search attributes to every index because they are not stored in DB but cache should have everything ready to use.
+	for _, customSearchAttributes := range indexSearchAttributes {
+		searchattribute.AddSystemTo(customSearchAttributes.SearchAttributes)
+	}
+
+	saCache = searchAttributesCache{
+		searchAttributes: indexSearchAttributes,
+		lastRefresh:      now,
+		dbVersion:        clusterMetadata.Version,
+	}
+	m.cache.Store(saCache)
+	return saCache, nil
 }
 
 // SaveSearchAttributes saves search attributes to cluster metadata.
