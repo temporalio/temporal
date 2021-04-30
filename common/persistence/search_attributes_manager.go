@@ -59,7 +59,11 @@ type (
 	}
 )
 
-func NewSearchAttributesManager(timeSource clock.TimeSource, clusterMetadataManager ClusterMetadataManager) *SearchAttributesManager {
+func NewSearchAttributesManager(
+	timeSource clock.TimeSource,
+	clusterMetadataManager ClusterMetadataManager,
+) *SearchAttributesManager {
+
 	var saCache atomic.Value
 	saCache.Store(searchAttributesCache{})
 
@@ -138,7 +142,11 @@ func (m *SearchAttributesManager) refreshCache(saCache searchAttributesCache, no
 }
 
 // SaveSearchAttributes saves search attributes to cluster metadata.
-func (m *SearchAttributesManager) SaveSearchAttributes(indexName string, newCustomSearchAttributes map[string]enumspb.IndexedValueType) error {
+func (m *SearchAttributesManager) SaveSearchAttributes(
+	indexName string,
+	newCustomSearchAttributes map[string]enumspb.IndexedValueType,
+) error {
+
 	clusterMetadataResponse, err := m.clusterMetadataManager.GetClusterMetadata()
 	if err != nil {
 		return err
