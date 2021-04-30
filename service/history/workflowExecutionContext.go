@@ -86,12 +86,13 @@ type (
 		) (int64, error)
 
 		createWorkflowExecution(
-			newWorkflow *persistence.WorkflowSnapshot,
-			historySize int64,
 			now time.Time,
 			createMode persistence.CreateWorkflowMode,
 			prevRunID string,
 			prevLastWriteVersion int64,
+			newMutableState mutableState,
+			newWorkflow *persistence.WorkflowSnapshot,
+			historySize int64,
 		) error
 		conflictResolveWorkflowExecution(
 			now time.Time,
@@ -379,12 +380,13 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 }
 
 func (c *workflowExecutionContextImpl) createWorkflowExecution(
-	newWorkflow *persistence.WorkflowSnapshot,
-	historySize int64,
 	now time.Time,
 	createMode persistence.CreateWorkflowMode,
 	prevRunID string,
 	prevLastWriteVersion int64,
+	newMutableState mutableState,
+	newWorkflow *persistence.WorkflowSnapshot,
+	historySize int64,
 ) (retError error) {
 
 	defer func() {
@@ -419,6 +421,8 @@ func (c *workflowExecutionContextImpl) createWorkflowExecution(
 		newWorkflow.ReplicationTasks,
 		newWorkflow.VisibilityTasks,
 	)
+	emitStateTransitionCount(c.metricsClient, newMutableState)
+
 	return nil
 }
 
@@ -587,6 +591,10 @@ func (c *workflowExecutionContextImpl) conflictResolveWorkflowExecution(
 			currentWorkflow.VisibilityTasks,
 		)
 	}
+
+	emitStateTransitionCount(c.metricsClient, resetMutableState)
+	emitStateTransitionCount(c.metricsClient, newMutableState)
+	emitStateTransitionCount(c.metricsClient, currentMutableState)
 
 	return nil
 }
@@ -801,6 +809,9 @@ func (c *workflowExecutionContextImpl) updateWorkflowExecutionWithNew(
 			newWorkflow.VisibilityTasks,
 		)
 	}
+
+	emitStateTransitionCount(c.metricsClient, c.mutableState)
+	emitStateTransitionCount(c.metricsClient, newMutableState)
 
 	// finally emit session stats
 	namespace := c.getNamespace()
@@ -1264,4 +1275,18 @@ func (c *workflowExecutionContextImpl) persistNewWorkflowEvents(
 		return c.persistFirstWorkflowEvents(newWorkflowEvents)
 	}
 	return c.persistNonFirstWorkflowEvents(newWorkflowEvents)
+}
+
+func emitStateTransitionCount(
+	metricsClient metrics.Client,
+	mutableState mutableState,
+) {
+	if mutableState == nil {
+		return
+	}
+
+	metricsClient.Scope(
+		metrics.WorkflowContextScope,
+		metrics.NamespaceTag(mutableState.GetNamespaceEntry().GetInfo().Name),
+	).RecordDistribution(metrics.StateTransitionCount, int(mutableState.GetExecutionInfo().StateTransitionCount))
 }

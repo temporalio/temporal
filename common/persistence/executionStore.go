@@ -160,6 +160,7 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		ExecutionStats:                    info.ExecutionStats,
 		StartVersion:                      info.StartVersion,
 		HistorySize:                       info.HistorySize,
+		StateTransitionCount:              info.StateTransitionCount,
 		CancelRequestId:                   info.CancelRequestId,
 		VersionHistories:                  info.VersionHistories,
 		WorkflowRunExpirationTime:         info.WorkflowRunExpirationTime,
@@ -280,11 +281,12 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		WorkflowRunExpirationTime:         info.WorkflowRunExpirationTime,
 		WorkflowExecutionExpirationTime:   info.WorkflowExecutionExpirationTime,
 
-		ExecutionStats:   info.ExecutionStats,
-		VersionHistories: info.VersionHistories,
-		CancelRequestId:  info.CancelRequestId,
-		HistorySize:      info.HistorySize,
-		StartVersion:     info.StartVersion,
+		ExecutionStats:       info.ExecutionStats,
+		VersionHistories:     info.VersionHistories,
+		CancelRequestId:      info.CancelRequestId,
+		HistorySize:          info.HistorySize,
+		StateTransitionCount: info.StateTransitionCount,
+		StartVersion:         info.StartVersion,
 	}, nil
 }
 
