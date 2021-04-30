@@ -1621,6 +1621,7 @@ const (
 	ServiceErrNonDeterministicCounter
 	ServiceErrUnauthorizedCounter
 	ServiceErrAuthorizeFailedCounter
+
 	PersistenceRequests
 	PersistenceFailures
 	PersistenceLatency
@@ -1653,6 +1654,10 @@ const (
 	HistoryCount
 	EventBlobSize
 	SearchAttributesSize
+
+	LockRequests
+	LockFailures
+	LockLatency
 
 	ArchivalConfigFailures
 
@@ -2067,6 +2072,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistoryCount:                                        {metricName: "history_count", metricType: Timer},
 		EventBlobSize:                                       {metricName: "event_blob_size", metricType: Timer},
 		SearchAttributesSize:                                {metricName: "search_attributes_size", metricType: Timer},
+		LockRequests:                                        {metricName: "lock_requests", metricType: Counter},
+		LockFailures:                                        {metricName: "lock_failures", metricType: Counter},
+		LockLatency:                                         {metricName: "lock_latency", metricType: Timer},
 		ArchivalConfigFailures:                              {metricName: "archivalconfig_failures", metricType: Counter},
 		ElasticsearchRequests:                               {metricName: "elasticsearch_requests", metricType: Counter},
 		ElasticsearchFailures:                               {metricName: "elasticsearch_errors", metricType: Counter},
