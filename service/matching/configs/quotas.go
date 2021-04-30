@@ -22,63 +22,36 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package interceptor
+package configs
 
 import (
-	"context"
-	"time"
-
-	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc"
-
 	"go.temporal.io/server/common/quotas"
 )
 
-const (
-	RateLimitDefaultToken = 1
-)
-
 var (
-	RateLimitServerBusy = serviceerror.NewResourceExhausted("service rate limit exceeded")
-)
+	APIToPriority = map[string]int{
+		"AddActivityTask":           0,
+		"AddWorkflowTask":           0,
+		"CancelOutstandingPoll":     0,
+		"DescribeTaskQueue":         0,
+		"ListTaskQueuePartitions":   0,
+		"PollActivityTaskQueue":     0,
+		"PollWorkflowTaskQueue":     0,
+		"QueryWorkflow":             0,
+		"RespondQueryTaskCompleted": 0,
+	}
 
-type (
-	RateLimitInterceptor struct {
-		rateLimiter quotas.RequestRateLimiter
-		tokens      map[string]int
+	APIPriorities = map[int]struct{}{
+		0: {},
 	}
 )
 
-var _ grpc.UnaryServerInterceptor = (*RateLimitInterceptor)(nil).Intercept
-
-func NewRateLimitInterceptor(
-	rateLimiter quotas.RequestRateLimiter,
-	tokens map[string]int,
-) *RateLimitInterceptor {
-	return &RateLimitInterceptor{
-		rateLimiter: rateLimiter,
-		tokens:      tokens,
+func NewPriorityRateLimiter(
+	rateFn quotas.RateFn,
+) quotas.RequestRateLimiter {
+	rateLimiters := make(map[int]quotas.RateLimiter)
+	for priority := range APIPriorities {
+		rateLimiters[priority] = quotas.NewDefaultIncomingDynamicRateLimiter(rateFn)
 	}
-}
-
-func (i *RateLimitInterceptor) Intercept(
-	ctx context.Context,
-	req interface{},
-	info *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (interface{}, error) {
-	_, methodName := splitMethodName(info.FullMethod)
-	token, ok := i.tokens[methodName]
-	if !ok {
-		token = RateLimitDefaultToken
-	}
-
-	if !i.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
-		methodName,
-		token,
-		"", // this interceptor layer does not throttle based on caller
-	)) {
-		return nil, RateLimitServerBusy
-	}
-	return handler(ctx, req)
+	return quotas.NewPriorityRateLimiter(APIToPriority, rateLimiters)
 }

@@ -35,6 +35,10 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
+	"go.temporal.io/server/service/frontend/configs"
+
+	"go.temporal.io/server/common/quotas"
+
 	"go.temporal.io/server/common/config"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -144,8 +148,8 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		ESVisibilityListMaxQPS:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendESVisibilityListMaxQPS, 10),
 		ESIndexMaxResultWindow:                 dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
 		HistoryMaxPageSize:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
-		RPS:                                    dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
-		MaxNamespaceRPSPerInstance:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 1200),
+		RPS:                                    dc.GetIntProperty(dynamicconfig.FrontendRPS, 2400),
+		MaxNamespaceRPSPerInstance:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
 		MaxNamespaceCountPerInstance:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceCountPerInstance, 1200),
 		GlobalNamespaceRPS:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceRPS, 0),
 		MaxIDLengthLimit:                       dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
@@ -260,20 +264,24 @@ func NewService(
 		serviceResource.GetLogger(),
 	)
 	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
-		func() float64 { return float64(serviceConfig.RPS()) },
-		APIRateLimitOverride,
+		configs.NewRequestToRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
+		map[string]int{},
 	)
 	namespaceRateLimiterInterceptor := interceptor.NewNamespaceRateLimitInterceptor(
 		serviceResource.GetNamespaceCache(),
-		func(namespace string) float64 {
-			return float64(serviceConfig.MaxNamespaceRPSPerInstance(namespace))
-		},
-		APIRateLimitOverride,
+		quotas.NewNamespaceRateLimiter(
+			func(req quotas.Request) quotas.RequestRateLimiter {
+				return configs.NewRequestToRateLimiter(func() float64 {
+					return float64(serviceConfig.MaxNamespaceRPSPerInstance(req.Caller))
+				})
+			},
+		),
+		map[string]int{},
 	)
 	namespaceCountLimiterInterceptor := interceptor.NewNamespaceCountLimitInterceptor(
 		serviceResource.GetNamespaceCache(),
 		serviceConfig.MaxNamespaceCountPerInstance,
-		APICountLimitOverride,
+		configs.ExecutionAPICountLimitOverride,
 	)
 
 	kep := keepalive.EnforcementPolicy{

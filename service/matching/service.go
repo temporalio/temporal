@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/service/matching/configs"
 )
 
 // Service represents the matching service
@@ -86,7 +87,7 @@ func NewService(
 		logger,
 	)
 	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
-		func() float64 { return float64(serviceConfig.RPS()) },
+		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
 		map[string]int{},
 	)
 

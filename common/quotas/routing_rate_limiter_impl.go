@@ -26,81 +26,62 @@ package quotas
 
 import (
 	"context"
-	"sync"
 	"time"
 )
 
 type (
-	// NamespaceRateLimiterImpl is a rate limiter special built for multi-tenancy
-	NamespaceRateLimiterImpl struct {
-		namespaceRateLimiterFn RequestRateLimiterFn
-
-		sync.RWMutex
-		namespaceRateLimiters map[string]RequestRateLimiter
+	// RoutingRateLimiterImpl is a rate limiter special built for multi-tenancy
+	RoutingRateLimiterImpl struct {
+		apiToRateLimiter map[string]RequestRateLimiter
 	}
 )
 
-var _ RequestRateLimiter = (*NamespaceRateLimiterImpl)(nil)
+var _ RequestRateLimiter = (*RoutingRateLimiterImpl)(nil)
 
-func NewNamespaceRateLimiter(
-	namespaceRateLimiterFn RequestRateLimiterFn,
-) *NamespaceRateLimiterImpl {
-	return &NamespaceRateLimiterImpl{
-		namespaceRateLimiterFn: namespaceRateLimiterFn,
-
-		namespaceRateLimiters: make(map[string]RequestRateLimiter),
+func NewRoutingRateLimiter(
+	apiToRateLimiter map[string]RequestRateLimiter,
+) *RoutingRateLimiterImpl {
+	return &RoutingRateLimiterImpl{
+		apiToRateLimiter: apiToRateLimiter,
 	}
 }
 
 // Allow attempts to allow a request to go through. The method returns
 // immediately with a true or false indicating if the request can make
 // progress
-func (r *NamespaceRateLimiterImpl) Allow(
+func (r *RoutingRateLimiterImpl) Allow(
 	now time.Time,
 	request Request,
 ) bool {
-	rateLimiter := r.getOrInitRateLimiter(request)
+	rateLimiter, ok := r.apiToRateLimiter[request.API]
+	if !ok {
+		return true
+	}
 	return rateLimiter.Allow(now, request)
 }
 
 // Reserve returns a Reservation that indicates how long the caller
 // must wait before event happen.
-func (r *NamespaceRateLimiterImpl) Reserve(
+func (r *RoutingRateLimiterImpl) Reserve(
 	now time.Time,
 	request Request,
 ) Reservation {
-	rateLimiter := r.getOrInitRateLimiter(request)
+	rateLimiter, ok := r.apiToRateLimiter[request.API]
+	if !ok {
+		return NewNoopReservation()
+	}
 	return rateLimiter.Reserve(now, request)
 }
 
 // Wait waits till the deadline for a rate limit token to allow the request
 // to go through.
-func (r *NamespaceRateLimiterImpl) Wait(
+func (r *RoutingRateLimiterImpl) Wait(
 	ctx context.Context,
 	request Request,
 ) error {
-	rateLimiter := r.getOrInitRateLimiter(request)
+	rateLimiter, ok := r.apiToRateLimiter[request.API]
+	if !ok {
+		return nil
+	}
 	return rateLimiter.Wait(ctx, request)
-}
-
-func (r *NamespaceRateLimiterImpl) getOrInitRateLimiter(
-	req Request,
-) RequestRateLimiter {
-	r.RLock()
-	rateLimiter, ok := r.namespaceRateLimiters[req.Caller]
-	r.RUnlock()
-	if ok {
-		return rateLimiter
-	}
-
-	newRateLimiter := r.namespaceRateLimiterFn(req)
-	r.Lock()
-	defer r.Unlock()
-
-	rateLimiter, ok = r.namespaceRateLimiters[req.Caller]
-	if ok {
-		return rateLimiter
-	}
-	r.namespaceRateLimiters[req.Caller] = newRateLimiter
-	return newRateLimiter
 }
