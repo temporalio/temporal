@@ -101,7 +101,7 @@ const (
 // NewCluster creates and sets up the test cluster
 func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, error) {
 
-	clusterMetadataConfig := cluster.GetTestClusterMetadataConfig(
+	clusterMetadataConfig := cluster.NewTestClusterMetadataConfig(
 		options.ClusterMetadata.EnableGlobalNamespace,
 		options.IsMasterCluster,
 	)
@@ -139,9 +139,8 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		panic(fmt.Sprintf("unknown store type: %v", options.Persistence.StoreType))
 	}
 
-	options.Persistence.ClusterMetadata = cluster.GetTestClusterMetadata(clusterMetadataConfig)
 	testBase := persistencetests.NewTestBase(&options.Persistence)
-	testBase.Setup()
+	testBase.Setup(nil)
 	setupShards(testBase, options.HistoryConfig.NumHistoryShards, logger)
 	archiverBase := newArchiverBase(options.EnableArchival, logger)
 	var esClient client.Client
@@ -188,6 +187,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		ClusterMetadataConfig:            clusterMetadataConfig,
 		PersistenceConfig:                pConfig,
 		MetadataMgr:                      testBase.MetadataManager,
+		ClusterMetadataManager:           testBase.ClusterMetadataManager,
 		ShardMgr:                         testBase.ShardMgr,
 		HistoryV2Mgr:                     testBase.HistoryV2Mgr,
 		ExecutionMgrFactory:              testBase.ExecutionMgrFactory,

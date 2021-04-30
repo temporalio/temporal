@@ -36,6 +36,8 @@ import (
 	strings "strings"
 
 	proto "github.com/gogo/protobuf/proto"
+	github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
+	v11 "go.temporal.io/api/enums/v1"
 	v1 "go.temporal.io/api/version/v1"
 )
 
@@ -52,10 +54,11 @@ const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // data column
 type ClusterMetadata struct {
-	ClusterName       string          `protobuf:"bytes,1,opt,name=cluster_name,json=clusterName,proto3" json:"cluster_name,omitempty"`
-	HistoryShardCount int32           `protobuf:"varint,2,opt,name=history_shard_count,json=historyShardCount,proto3" json:"history_shard_count,omitempty"`
-	ClusterId         string          `protobuf:"bytes,3,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
-	VersionInfo       *v1.VersionInfo `protobuf:"bytes,4,opt,name=version_info,json=versionInfo,proto3" json:"version_info,omitempty"`
+	ClusterName           string                            `protobuf:"bytes,1,opt,name=cluster_name,json=clusterName,proto3" json:"cluster_name,omitempty"`
+	HistoryShardCount     int32                             `protobuf:"varint,2,opt,name=history_shard_count,json=historyShardCount,proto3" json:"history_shard_count,omitempty"`
+	ClusterId             string                            `protobuf:"bytes,3,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
+	VersionInfo           *v1.VersionInfo                   `protobuf:"bytes,4,opt,name=version_info,json=versionInfo,proto3" json:"version_info,omitempty"`
+	IndexSearchAttributes map[string]*IndexSearchAttributes `protobuf:"bytes,5,rep,name=index_search_attributes,json=indexSearchAttributes,proto3" json:"index_search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
 func (m *ClusterMetadata) Reset()      { *m = ClusterMetadata{} }
@@ -118,8 +121,61 @@ func (m *ClusterMetadata) GetVersionInfo() *v1.VersionInfo {
 	return nil
 }
 
+func (m *ClusterMetadata) GetIndexSearchAttributes() map[string]*IndexSearchAttributes {
+	if m != nil {
+		return m.IndexSearchAttributes
+	}
+	return nil
+}
+
+type IndexSearchAttributes struct {
+	SearchAttributes map[string]v11.IndexedValueType `protobuf:"bytes,1,rep,name=search_attributes,json=searchAttributes,proto3" json:"search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3,enum=temporal.api.enums.v1.IndexedValueType"`
+}
+
+func (m *IndexSearchAttributes) Reset()      { *m = IndexSearchAttributes{} }
+func (*IndexSearchAttributes) ProtoMessage() {}
+func (*IndexSearchAttributes) Descriptor() ([]byte, []int) {
+	return fileDescriptor_1f4771d63f405884, []int{1}
+}
+func (m *IndexSearchAttributes) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *IndexSearchAttributes) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_IndexSearchAttributes.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *IndexSearchAttributes) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_IndexSearchAttributes.Merge(m, src)
+}
+func (m *IndexSearchAttributes) XXX_Size() int {
+	return m.Size()
+}
+func (m *IndexSearchAttributes) XXX_DiscardUnknown() {
+	xxx_messageInfo_IndexSearchAttributes.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_IndexSearchAttributes proto.InternalMessageInfo
+
+func (m *IndexSearchAttributes) GetSearchAttributes() map[string]v11.IndexedValueType {
+	if m != nil {
+		return m.SearchAttributes
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterType((*ClusterMetadata)(nil), "temporal.server.api.persistence.v1.ClusterMetadata")
+	proto.RegisterMapType((map[string]*IndexSearchAttributes)(nil), "temporal.server.api.persistence.v1.ClusterMetadata.IndexSearchAttributesEntry")
+	proto.RegisterType((*IndexSearchAttributes)(nil), "temporal.server.api.persistence.v1.IndexSearchAttributes")
+	proto.RegisterMapType((map[string]v11.IndexedValueType)(nil), "temporal.server.api.persistence.v1.IndexSearchAttributes.SearchAttributesEntry")
 }
 
 func init() {
@@ -127,28 +183,39 @@ func init() {
 }
 
 var fileDescriptor_1f4771d63f405884 = []byte{
-	// 330 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x91, 0xbf, 0x4e, 0xf3, 0x30,
-	0x14, 0xc5, 0xe3, 0xef, 0x03, 0xa4, 0xba, 0x95, 0x10, 0x61, 0x89, 0x90, 0xb8, 0x2a, 0x15, 0x48,
-	0x9d, 0x1c, 0x15, 0x58, 0x10, 0x1b, 0x1d, 0x50, 0x07, 0x18, 0x8a, 0xc4, 0xc0, 0x12, 0x99, 0xe6,
-	0xb6, 0x35, 0x6a, 0xe2, 0xc8, 0x76, 0x23, 0xb1, 0xf1, 0x08, 0x3c, 0x06, 0x8f, 0xc2, 0xc0, 0xd0,
-	0xb1, 0x23, 0x75, 0x17, 0xc6, 0x3e, 0x02, 0x4a, 0xe3, 0xfe, 0x59, 0xd8, 0x7c, 0xef, 0xf1, 0xf9,
-	0x1d, 0x5f, 0x5f, 0x7a, 0x65, 0x30, 0xc9, 0xa4, 0xe2, 0xa3, 0x50, 0xa3, 0xca, 0x51, 0x85, 0x3c,
-	0x13, 0x61, 0x86, 0x4a, 0x0b, 0x6d, 0x30, 0xed, 0x61, 0x98, 0xb7, 0xc2, 0xde, 0x68, 0xac, 0x0d,
-	0xaa, 0x28, 0x41, 0xc3, 0x63, 0x6e, 0x38, 0xcb, 0x94, 0x34, 0xd2, 0x6f, 0xac, 0xac, 0xac, 0xb4,
-	0x32, 0x9e, 0x09, 0xb6, 0x65, 0x65, 0x79, 0xeb, 0xe8, 0x6c, 0x8d, 0x2f, 0xb8, 0x79, 0x21, 0xca,
-	0xb4, 0x60, 0x26, 0xa8, 0x35, 0x1f, 0x60, 0x89, 0x6a, 0x7c, 0x11, 0xba, 0xdf, 0x2e, 0x53, 0xee,
-	0x5c, 0x88, 0x7f, 0x42, 0x6b, 0xab, 0xe0, 0x94, 0x27, 0x18, 0x90, 0x3a, 0x69, 0x56, 0xba, 0x55,
-	0xd7, 0xbb, 0xe7, 0x09, 0xfa, 0x8c, 0x1e, 0x0e, 0x85, 0x36, 0x52, 0xbd, 0x46, 0x7a, 0xc8, 0x55,
-	0x1c, 0xf5, 0xe4, 0x38, 0x35, 0xc1, 0xbf, 0x3a, 0x69, 0xee, 0x76, 0x0f, 0x9c, 0xf4, 0x50, 0x28,
-	0xed, 0x42, 0xf0, 0x8f, 0x29, 0x5d, 0x21, 0x45, 0x1c, 0xfc, 0x5f, 0x02, 0x2b, 0xae, 0xd3, 0x89,
-	0xfd, 0x5b, 0x5a, 0x73, 0x2f, 0x8c, 0x44, 0xda, 0x97, 0xc1, 0x4e, 0x9d, 0x34, 0xab, 0xe7, 0xa7,
-	0x6c, 0x3d, 0x67, 0x31, 0xa0, 0xbb, 0xc1, 0xf2, 0x16, 0x7b, 0x2c, 0x8f, 0x9d, 0xb4, 0x2f, 0xbb,
-	0xd5, 0x7c, 0x53, 0xdc, 0xbc, 0x4c, 0x66, 0xe0, 0x4d, 0x67, 0xe0, 0x2d, 0x66, 0x40, 0xde, 0x2c,
-	0x90, 0x0f, 0x0b, 0xe4, 0xd3, 0x02, 0x99, 0x58, 0x20, 0xdf, 0x16, 0xc8, 0x8f, 0x05, 0x6f, 0x61,
-	0x81, 0xbc, 0xcf, 0xc1, 0x9b, 0xcc, 0xc1, 0x9b, 0xce, 0xc1, 0x7b, 0xba, 0x1c, 0xc8, 0x4d, 0x94,
-	0x90, 0x7f, 0x2f, 0xe4, 0x7a, 0xab, 0x7c, 0xde, 0x5b, 0xfe, 0xe0, 0xc5, 0x6f, 0x00, 0x00, 0x00,
-	0xff, 0xff, 0xeb, 0xca, 0x77, 0xc3, 0xc9, 0x01, 0x00, 0x00,
+	// 500 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x93, 0x4f, 0x6b, 0x13, 0x41,
+	0x18, 0xc6, 0x77, 0x1a, 0x23, 0x74, 0xb6, 0x68, 0xbb, 0x12, 0x5c, 0x02, 0x0e, 0x31, 0x28, 0xe6,
+	0x34, 0x4b, 0xa2, 0x07, 0xab, 0x78, 0xd0, 0x22, 0x92, 0x83, 0x2d, 0x6c, 0xa5, 0x07, 0x2f, 0xcb,
+	0x34, 0xfb, 0xb6, 0x19, 0xcd, 0xce, 0x2c, 0x33, 0xb3, 0x8b, 0x01, 0x0f, 0x42, 0xc1, 0xb3, 0x1f,
+	0xc3, 0x8f, 0xe2, 0x31, 0xc7, 0x82, 0x17, 0xb3, 0xb9, 0x78, 0xec, 0x47, 0x90, 0xfd, 0x93, 0x34,
+	0xad, 0x29, 0x16, 0x6f, 0x33, 0xf3, 0x3e, 0xef, 0xf3, 0x3e, 0xfc, 0x98, 0x17, 0x6f, 0x1b, 0x88,
+	0x62, 0xa9, 0xd8, 0xc8, 0xd3, 0xa0, 0x52, 0x50, 0x1e, 0x8b, 0xb9, 0x17, 0x83, 0xd2, 0x5c, 0x1b,
+	0x10, 0x03, 0xf0, 0xd2, 0xae, 0x37, 0x18, 0x25, 0xda, 0x80, 0x0a, 0x22, 0x30, 0x2c, 0x64, 0x86,
+	0xd1, 0x58, 0x49, 0x23, 0x9d, 0xf6, 0xbc, 0x95, 0x96, 0xad, 0x94, 0xc5, 0x9c, 0x2e, 0xb5, 0xd2,
+	0xb4, 0xdb, 0x5c, 0x68, 0x0a, 0x5f, 0x10, 0x49, 0xa4, 0x0b, 0x47, 0x19, 0x45, 0x52, 0x94, 0x3e,
+	0xcd, 0x87, 0x17, 0x34, 0x69, 0x6e, 0x20, 0x45, 0xae, 0x8a, 0x40, 0x6b, 0x76, 0x0c, 0xa5, 0xac,
+	0xfd, 0xb3, 0x86, 0x6f, 0xef, 0x94, 0x49, 0xde, 0x56, 0x41, 0x9c, 0xfb, 0x78, 0x63, 0x1e, 0x4e,
+	0xb0, 0x08, 0x5c, 0xd4, 0x42, 0x9d, 0x75, 0xdf, 0xae, 0xde, 0x76, 0x59, 0x04, 0x0e, 0xc5, 0x77,
+	0x86, 0x5c, 0x1b, 0xa9, 0xc6, 0x81, 0x1e, 0x32, 0x15, 0x06, 0x03, 0x99, 0x08, 0xe3, 0xae, 0xb5,
+	0x50, 0xa7, 0xee, 0x6f, 0x55, 0xa5, 0xfd, 0xbc, 0xb2, 0x93, 0x17, 0x9c, 0x7b, 0x18, 0xcf, 0x2d,
+	0x79, 0xe8, 0xd6, 0x0a, 0xc3, 0xf5, 0xea, 0xa5, 0x1f, 0x3a, 0x6f, 0xf0, 0x46, 0x95, 0x30, 0xe0,
+	0xe2, 0x48, 0xba, 0x37, 0x5a, 0xa8, 0x63, 0xf7, 0x1e, 0xd0, 0x05, 0x8b, 0x1c, 0x42, 0xa5, 0xa0,
+	0x69, 0x97, 0x1e, 0x94, 0xc7, 0xbe, 0x38, 0x92, 0xbe, 0x9d, 0x9e, 0x5f, 0x9c, 0xaf, 0x08, 0xdf,
+	0xe5, 0x22, 0x84, 0x4f, 0x81, 0x06, 0xa6, 0x06, 0xc3, 0x80, 0x19, 0xa3, 0xf8, 0x61, 0x62, 0x40,
+	0xbb, 0xf5, 0x56, 0xad, 0x63, 0xf7, 0x76, 0xe9, 0xbf, 0x01, 0xd3, 0x4b, 0x44, 0x68, 0x3f, 0xb7,
+	0xdc, 0x2f, 0x1c, 0x5f, 0x2e, 0x0c, 0x5f, 0x0b, 0xa3, 0xc6, 0x7e, 0x83, 0xaf, 0xaa, 0x35, 0x4f,
+	0x10, 0x6e, 0x5e, 0xdd, 0xe5, 0x6c, 0xe2, 0xda, 0x47, 0x18, 0x57, 0x64, 0xf3, 0xa3, 0xb3, 0x87,
+	0xeb, 0x29, 0x1b, 0x25, 0x50, 0x30, 0xb4, 0x7b, 0xdb, 0xd7, 0x89, 0xb9, 0x72, 0x80, 0x5f, 0xfa,
+	0x3c, 0x5b, 0x7b, 0x8a, 0xda, 0x27, 0x6b, 0xb8, 0xb1, 0x52, 0xe4, 0x7c, 0xc6, 0x5b, 0x7f, 0x13,
+	0x42, 0x05, 0xa1, 0xbd, 0xff, 0x1e, 0x4d, 0x57, 0x23, 0xda, 0xd4, 0x97, 0xe9, 0x8c, 0x70, 0xe3,
+	0xba, 0x5c, 0x5e, 0x2c, 0x73, 0xb9, 0xd5, 0x7b, 0x74, 0xf1, 0x4f, 0x14, 0x7f, 0x7f, 0x91, 0x07,
+	0xc2, 0x83, 0x5c, 0xfa, 0x6e, 0x1c, 0xc3, 0x12, 0x85, 0x57, 0x1f, 0x26, 0x53, 0x62, 0x9d, 0x4e,
+	0x89, 0x75, 0x36, 0x25, 0xe8, 0x4b, 0x46, 0xd0, 0xf7, 0x8c, 0xa0, 0x1f, 0x19, 0x41, 0x93, 0x8c,
+	0xa0, 0x5f, 0x19, 0x41, 0xbf, 0x33, 0x62, 0x9d, 0x65, 0x04, 0x7d, 0x9b, 0x11, 0x6b, 0x32, 0x23,
+	0xd6, 0xe9, 0x8c, 0x58, 0xef, 0x9f, 0x1c, 0xcb, 0xf3, 0x59, 0x5c, 0x5e, 0xbd, 0xc9, 0xcf, 0x97,
+	0xae, 0x87, 0x37, 0x8b, 0xb5, 0x7a, 0xfc, 0x27, 0x00, 0x00, 0xff, 0xff, 0x24, 0x7b, 0x0f, 0x56,
+	0x02, 0x04, 0x00, 0x00,
 }
 
 func (this *ClusterMetadata) Equal(that interface{}) bool {
@@ -182,19 +249,91 @@ func (this *ClusterMetadata) Equal(that interface{}) bool {
 	if !this.VersionInfo.Equal(that1.VersionInfo) {
 		return false
 	}
+	if len(this.IndexSearchAttributes) != len(that1.IndexSearchAttributes) {
+		return false
+	}
+	for i := range this.IndexSearchAttributes {
+		if !this.IndexSearchAttributes[i].Equal(that1.IndexSearchAttributes[i]) {
+			return false
+		}
+	}
+	return true
+}
+func (this *IndexSearchAttributes) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*IndexSearchAttributes)
+	if !ok {
+		that2, ok := that.(IndexSearchAttributes)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if len(this.SearchAttributes) != len(that1.SearchAttributes) {
+		return false
+	}
+	for i := range this.SearchAttributes {
+		if this.SearchAttributes[i] != that1.SearchAttributes[i] {
+			return false
+		}
+	}
 	return true
 }
 func (this *ClusterMetadata) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 8)
+	s := make([]string, 0, 9)
 	s = append(s, "&persistence.ClusterMetadata{")
 	s = append(s, "ClusterName: "+fmt.Sprintf("%#v", this.ClusterName)+",\n")
 	s = append(s, "HistoryShardCount: "+fmt.Sprintf("%#v", this.HistoryShardCount)+",\n")
 	s = append(s, "ClusterId: "+fmt.Sprintf("%#v", this.ClusterId)+",\n")
 	if this.VersionInfo != nil {
 		s = append(s, "VersionInfo: "+fmt.Sprintf("%#v", this.VersionInfo)+",\n")
+	}
+	keysForIndexSearchAttributes := make([]string, 0, len(this.IndexSearchAttributes))
+	for k, _ := range this.IndexSearchAttributes {
+		keysForIndexSearchAttributes = append(keysForIndexSearchAttributes, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForIndexSearchAttributes)
+	mapStringForIndexSearchAttributes := "map[string]*IndexSearchAttributes{"
+	for _, k := range keysForIndexSearchAttributes {
+		mapStringForIndexSearchAttributes += fmt.Sprintf("%#v: %#v,", k, this.IndexSearchAttributes[k])
+	}
+	mapStringForIndexSearchAttributes += "}"
+	if this.IndexSearchAttributes != nil {
+		s = append(s, "IndexSearchAttributes: "+mapStringForIndexSearchAttributes+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *IndexSearchAttributes) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 5)
+	s = append(s, "&persistence.IndexSearchAttributes{")
+	keysForSearchAttributes := make([]string, 0, len(this.SearchAttributes))
+	for k, _ := range this.SearchAttributes {
+		keysForSearchAttributes = append(keysForSearchAttributes, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForSearchAttributes)
+	mapStringForSearchAttributes := "map[string]v11.IndexedValueType{"
+	for _, k := range keysForSearchAttributes {
+		mapStringForSearchAttributes += fmt.Sprintf("%#v: %#v,", k, this.SearchAttributes[k])
+	}
+	mapStringForSearchAttributes += "}"
+	if this.SearchAttributes != nil {
+		s = append(s, "SearchAttributes: "+mapStringForSearchAttributes+",\n")
 	}
 	s = append(s, "}")
 	return strings.Join(s, "")
@@ -227,6 +366,32 @@ func (m *ClusterMetadata) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if len(m.IndexSearchAttributes) > 0 {
+		for k := range m.IndexSearchAttributes {
+			v := m.IndexSearchAttributes[k]
+			baseI := i
+			if v != nil {
+				{
+					size, err := v.MarshalToSizedBuffer(dAtA[:i])
+					if err != nil {
+						return 0, err
+					}
+					i -= size
+					i = encodeVarintClusterMetadata(dAtA, i, uint64(size))
+				}
+				i--
+				dAtA[i] = 0x12
+			}
+			i -= len(k)
+			copy(dAtA[i:], k)
+			i = encodeVarintClusterMetadata(dAtA, i, uint64(len(k)))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintClusterMetadata(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0x2a
+		}
+	}
 	if m.VersionInfo != nil {
 		{
 			size, err := m.VersionInfo.MarshalToSizedBuffer(dAtA[:i])
@@ -257,6 +422,46 @@ func (m *ClusterMetadata) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i = encodeVarintClusterMetadata(dAtA, i, uint64(len(m.ClusterName)))
 		i--
 		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *IndexSearchAttributes) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *IndexSearchAttributes) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *IndexSearchAttributes) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.SearchAttributes) > 0 {
+		for k := range m.SearchAttributes {
+			v := m.SearchAttributes[k]
+			baseI := i
+			i = encodeVarintClusterMetadata(dAtA, i, uint64(v))
+			i--
+			dAtA[i] = 0x10
+			i -= len(k)
+			copy(dAtA[i:], k)
+			i = encodeVarintClusterMetadata(dAtA, i, uint64(len(k)))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintClusterMetadata(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0xa
+		}
 	}
 	return len(dAtA) - i, nil
 }
@@ -293,6 +498,36 @@ func (m *ClusterMetadata) Size() (n int) {
 		l = m.VersionInfo.Size()
 		n += 1 + l + sovClusterMetadata(uint64(l))
 	}
+	if len(m.IndexSearchAttributes) > 0 {
+		for k, v := range m.IndexSearchAttributes {
+			_ = k
+			_ = v
+			l = 0
+			if v != nil {
+				l = v.Size()
+				l += 1 + sovClusterMetadata(uint64(l))
+			}
+			mapEntrySize := 1 + len(k) + sovClusterMetadata(uint64(len(k))) + l
+			n += mapEntrySize + 1 + sovClusterMetadata(uint64(mapEntrySize))
+		}
+	}
+	return n
+}
+
+func (m *IndexSearchAttributes) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.SearchAttributes) > 0 {
+		for k, v := range m.SearchAttributes {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovClusterMetadata(uint64(len(k))) + 1 + sovClusterMetadata(uint64(v))
+			n += mapEntrySize + 1 + sovClusterMetadata(uint64(mapEntrySize))
+		}
+	}
 	return n
 }
 
@@ -306,11 +541,42 @@ func (this *ClusterMetadata) String() string {
 	if this == nil {
 		return "nil"
 	}
+	keysForIndexSearchAttributes := make([]string, 0, len(this.IndexSearchAttributes))
+	for k, _ := range this.IndexSearchAttributes {
+		keysForIndexSearchAttributes = append(keysForIndexSearchAttributes, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForIndexSearchAttributes)
+	mapStringForIndexSearchAttributes := "map[string]*IndexSearchAttributes{"
+	for _, k := range keysForIndexSearchAttributes {
+		mapStringForIndexSearchAttributes += fmt.Sprintf("%v: %v,", k, this.IndexSearchAttributes[k])
+	}
+	mapStringForIndexSearchAttributes += "}"
 	s := strings.Join([]string{`&ClusterMetadata{`,
 		`ClusterName:` + fmt.Sprintf("%v", this.ClusterName) + `,`,
 		`HistoryShardCount:` + fmt.Sprintf("%v", this.HistoryShardCount) + `,`,
 		`ClusterId:` + fmt.Sprintf("%v", this.ClusterId) + `,`,
 		`VersionInfo:` + strings.Replace(fmt.Sprintf("%v", this.VersionInfo), "VersionInfo", "v1.VersionInfo", 1) + `,`,
+		`IndexSearchAttributes:` + mapStringForIndexSearchAttributes + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *IndexSearchAttributes) String() string {
+	if this == nil {
+		return "nil"
+	}
+	keysForSearchAttributes := make([]string, 0, len(this.SearchAttributes))
+	for k, _ := range this.SearchAttributes {
+		keysForSearchAttributes = append(keysForSearchAttributes, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForSearchAttributes)
+	mapStringForSearchAttributes := "map[string]v11.IndexedValueType{"
+	for _, k := range keysForSearchAttributes {
+		mapStringForSearchAttributes += fmt.Sprintf("%v: %v,", k, this.SearchAttributes[k])
+	}
+	mapStringForSearchAttributes += "}"
+	s := strings.Join([]string{`&IndexSearchAttributes{`,
+		`SearchAttributes:` + mapStringForSearchAttributes + `,`,
 		`}`,
 	}, "")
 	return s
@@ -470,6 +736,301 @@ func (m *ClusterMetadata) Unmarshal(dAtA []byte) error {
 			if err := m.VersionInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IndexSearchAttributes", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClusterMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthClusterMetadata
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthClusterMetadata
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.IndexSearchAttributes == nil {
+				m.IndexSearchAttributes = make(map[string]*IndexSearchAttributes)
+			}
+			var mapkey string
+			var mapvalue *IndexSearchAttributes
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowClusterMetadata
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowClusterMetadata
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthClusterMetadata
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthClusterMetadata
+					}
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					var mapmsglen int
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowClusterMetadata
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapmsglen |= int(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					if mapmsglen < 0 {
+						return ErrInvalidLengthClusterMetadata
+					}
+					postmsgIndex := iNdEx + mapmsglen
+					if postmsgIndex < 0 {
+						return ErrInvalidLengthClusterMetadata
+					}
+					if postmsgIndex > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapvalue = &IndexSearchAttributes{}
+					if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
+						return err
+					}
+					iNdEx = postmsgIndex
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipClusterMetadata(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthClusterMetadata
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.IndexSearchAttributes[mapkey] = mapvalue
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipClusterMetadata(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthClusterMetadata
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthClusterMetadata
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *IndexSearchAttributes) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowClusterMetadata
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: IndexSearchAttributes: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: IndexSearchAttributes: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SearchAttributes", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClusterMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthClusterMetadata
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthClusterMetadata
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.SearchAttributes == nil {
+				m.SearchAttributes = make(map[string]v11.IndexedValueType)
+			}
+			var mapkey string
+			var mapvalue v11.IndexedValueType
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowClusterMetadata
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowClusterMetadata
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthClusterMetadata
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthClusterMetadata
+					}
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowClusterMetadata
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapvalue |= v11.IndexedValueType(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipClusterMetadata(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthClusterMetadata
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.SearchAttributes[mapkey] = mapvalue
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

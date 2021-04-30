@@ -23,6 +23,7 @@ syntax = "proto3";
 package temporal.server.api.persistence.v1;
 option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
+import "temporal/api/enums/v1/common.proto";
 import "temporal/api/version/v1/message.proto";
 
 // data column
@@ -31,4 +32,9 @@ message ClusterMetadata {
     int32 history_shard_count = 2;
     string cluster_id = 3;
     temporal.api.version.v1.VersionInfo version_info = 4;
+    map<string,temporal.server.api.persistence.v1.IndexSearchAttributes> index_search_attributes = 5;
+}
+
+message IndexSearchAttributes{
+    map<string,temporal.api.enums.v1.IndexedValueType> search_attributes = 1;
 }

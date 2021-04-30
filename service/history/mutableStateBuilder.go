@@ -3728,6 +3728,12 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 	// impact the checksum calculation
 	checksum := e.generateChecksum()
 
+	if e.dbRecordVersion == 0 && !migration.IsDBVersionEnabled() {
+		// noop, existing behavior
+	} else {
+		e.dbRecordVersion += 1
+	}
+
 	workflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:  e.executionInfo,
 		ExecutionState: e.executionState,

@@ -182,8 +182,6 @@ func New(
 	}
 
 	clusterMetadata := cluster.NewMetadata(
-		logger,
-		// persistenceBean.GetClusterMetadataManager().GetClusterMetadata(),
 		params.ClusterMetadataConfig.EnableGlobalNamespace,
 		params.ClusterMetadataConfig.FailoverVersionIncrement,
 		params.ClusterMetadataConfig.MasterClusterName,

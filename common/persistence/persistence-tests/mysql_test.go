@@ -33,62 +33,62 @@ import (
 func TestMySQLHistoryV2PersistenceSuite(t *testing.T) {
 	s := new(HistoryV2PersistenceSuite)
 	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
-	s.TestBase.Setup()
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestMySQLMatchingPersistenceSuite(t *testing.T) {
 	s := new(MatchingPersistenceSuite)
 	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
-	s.TestBase.Setup()
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestMySQLMetadataPersistenceSuiteV2(t *testing.T) {
 	s := new(MetadataPersistenceSuiteV2)
 	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
-	s.TestBase.Setup()
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestMySQLShardPersistenceSuite(t *testing.T) {
 	s := new(ShardPersistenceSuite)
 	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
-	s.TestBase.Setup()
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestMySQLExecutionManagerSuite(t *testing.T) {
 	s := new(ExecutionManagerSuite)
 	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
-	s.TestBase.Setup()
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestMySQLExecutionManagerWithEventsV2(t *testing.T) {
 	s := new(ExecutionManagerSuiteForEventsV2)
 	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
-	s.TestBase.Setup()
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestMySQLVisibilityPersistenceSuite(t *testing.T) {
 	s := new(VisibilityPersistenceSuite)
 	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
-	s.TestBase.Setup()
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestMySQLQueuePersistence(t *testing.T) {
 	s := new(QueuePersistenceSuite)
 	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
-	s.TestBase.Setup()
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestMySQLClusterMetadataPersistence(t *testing.T) {
 	s := new(ClusterMetadataManagerSuite)
 	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
-	s.TestBase.Setup()
+	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
