@@ -48,6 +48,11 @@ type (
 	Saver interface {
 		SaveSearchAttributes(indexName string, newCustomSearchAttributes map[string]enumspb.IndexedValueType) error
 	}
+
+	Manager interface {
+		Provider
+		Saver
+	}
 )
 
 var (
@@ -110,7 +115,7 @@ func ApplyTypeMap(searchAttributes *commonpb.SearchAttributes, typeMap map[strin
 	}
 }
 
-func GetESType(t enumspb.IndexedValueType) string {
+func MapESType(t enumspb.IndexedValueType) string {
 	switch t {
 	case enumspb.INDEXED_VALUE_TYPE_STRING:
 		return "text"
