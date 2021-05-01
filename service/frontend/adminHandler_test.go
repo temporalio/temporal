@@ -503,7 +503,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	s.Equal(convertFailedTest.Expected, err)
 	s.Nil(resp)
 
-	esClient.EXPECT().PutMapping(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+	esClient.EXPECT().PutMapping(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(errors.New("error"))
 	esErrorTest := test{
 		Name: "es error",
