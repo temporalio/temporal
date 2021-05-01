@@ -190,7 +190,7 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 		if len(esType) == 0 {
 			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errUnknownValueTypeMessage, v)), scope)
 		}
-		err := adh.ESClient.PutMapping(ctx, index, searchattribute.Attr, k, esType)
+		_, err := adh.ESClient.PutMapping(ctx, index, searchattribute.Attr, map[string]string{k: esType})
 		if err != nil {
 			return nil, adh.error(serviceerror.NewInternal(fmt.Sprintf(errFailedToUpdateESMappingMessage, err)), scope)
 		}
