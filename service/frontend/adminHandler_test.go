@@ -504,7 +504,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	s.Nil(resp)
 
 	esClient.EXPECT().PutMapping(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(errors.New("error"))
+		Return(true, errors.New("error"))
 	esErrorTest := test{
 		Name: "es error",
 		Request: &adminservice.AddSearchAttributeRequest{
