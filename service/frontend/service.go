@@ -211,6 +211,7 @@ func NewService(
 
 	visibilityManagerInitializer := func(
 		persistenceBean persistenceClient.Bean,
+		searchAttributesProvider searchattribute.Provider,
 		logger log.Logger,
 	) (persistence.VisibilityManager, error) {
 		visibilityFromDB := persistenceBean.GetVisibilityManager()

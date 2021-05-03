@@ -148,7 +148,7 @@ func (adh *AdminHandler) Stop() {
 func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *adminservice.AddSearchAttributeRequest) (_ *adminservice.AddSearchAttributeResponse, retError error) {
 	defer log.CapturePanic(adh.GetLogger(), &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminAddSearchAttributeScope)
+	scope, sw := adh.startRequestProfile(metrics.AdminAddSearchAttributesScope)
 	defer sw.Stop()
 
 	// validate request
@@ -186,7 +186,7 @@ func (adh *AdminHandler) AddSearchAttribute(ctx context.Context, request *admins
 	// update elasticsearch mapping, new added field will not be able to remove or update
 	index := adh.ESConfig.GetVisibilityIndex()
 	for k, v := range searchAttr {
-		esType := searchattribute.GetESType(v)
+		esType := searchattribute.MapESType(v)
 		if len(esType) == 0 {
 			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errUnknownValueTypeMessage, v)), scope)
 		}
