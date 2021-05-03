@@ -26,6 +26,7 @@ package metrics
 
 import (
 	"context"
+	"sync"
 
 	metricspb "go.temporal.io/server/api/metrics/v1"
 	"go.temporal.io/server/common/log"
@@ -35,7 +36,15 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-type baggageContextKey struct{}
+type (
+	baggageContextKey struct{}
+
+	// contextBaggage is used to propagate metrics across single gRPC call within server
+	contextBaggage struct {
+		CountersInt *sync.Map
+	}
+)
+
 
 var (
 	// "-bin" suffix is a reserved in gRPC that signals that metadata string value is actually a byte data
@@ -109,12 +118,20 @@ func NewServerMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryS
 		default:
 		}
 
-		baggage := GetMetricsBaggageFromContext(ctx)
-		if baggage == nil {
+		contextBaggage := GetMetricsBaggageFromContext(ctx)
+		if contextBaggage == nil {
 			return resp, err
 		}
 
-		bytes, marshalErr := baggage.Marshal()
+
+		trailerBaggage := &metricspb.Baggage{CountersInt: make(map[string]int64)}
+
+		contextBaggage.CountersInt.Range(func(k interface{}, v interface{}) bool {
+			trailerBaggage.CountersInt[k.(string)] = v.(int64)
+			return true
+		})
+
+		bytes, marshalErr := trailerBaggage.Marshal()
 		if marshalErr != nil {
 			logger.Error("unable to marshal metric baggage", tag.Error(marshalErr))
 		}
@@ -131,18 +148,18 @@ func NewServerMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryS
 }
 
 // GetMetricsBaggageFromContext extracts metrics context from golang context.
-func GetMetricsBaggageFromContext(ctx context.Context) *metricspb.Baggage {
+func GetMetricsBaggageFromContext(ctx context.Context) *contextBaggage {
 	metricsBaggage := ctx.Value(baggageCtxKey)
 	if metricsBaggage == nil {
 		return nil
 	}
 
-	return metricsBaggage.(*metricspb.Baggage)
+	return metricsBaggage.(*contextBaggage)
 }
 
 func AddMetricsBaggageToContext(ctx context.Context) context.Context {
-	metricsBaggage := &metricspb.Baggage{}
-	return context.WithValue(ctx, baggageCtxKey, metricsBaggage)
+	metricsContextBaggage := &contextBaggage{CountersInt: &sync.Map{}}
+	return context.WithValue(ctx, baggageCtxKey, metricsContextBaggage)
 }
 
 // ContextCounterAdd adds value to counter within metrics context.
@@ -153,11 +170,13 @@ func ContextCounterAdd(ctx context.Context, name string, value int64) {
 		return
 	}
 
-	if metricsBaggage.CountersInt == nil {
-		metricsBaggage.CountersInt = make(map[string]int64)
+	for done := false; !done;  {
+		metricInterface, _ := metricsBaggage.CountersInt.LoadAndDelete(name)
+		var newValue = value
+		if metricInterface != nil {
+			newValue += metricInterface.(int64)
+		}
+		_, loaded := metricsBaggage.CountersInt.LoadOrStore(name, newValue)
+		done = !loaded
 	}
-
-	metricValue, _ := metricsBaggage.CountersInt[name]
-	metricValue += value
-	metricsBaggage.CountersInt[name] = metricValue
 }

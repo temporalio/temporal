@@ -178,8 +178,8 @@ func (s *grpcSuite) TestContextCounterAdd() {
 	ContextCounterAdd(ctx, testCounterName, 20)
 	ContextCounterAdd(ctx, testCounterName, 3)
 
-	metricsBaggage := GetMetricsBaggageFromContext(ctx)
-	value, ok := metricsBaggage.CountersInt[testCounterName]
+	contextBaggage := GetMetricsBaggageFromContext(ctx)
+	value, ok := contextBaggage.CountersInt.Load(testCounterName)
 	s.True(ok)
 	s.Equal(int64(123), value)
 }
