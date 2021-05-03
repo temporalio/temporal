@@ -45,7 +45,6 @@ type (
 	}
 )
 
-
 var (
 	// "-bin" suffix is a reserved in gRPC that signals that metadata string value is actually a byte data
 	// If trailer key has such a suffix, value will be base64 encoded.
@@ -123,7 +122,6 @@ func NewServerMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryS
 			return resp, err
 		}
 
-
 		trailerBaggage := &metricspb.Baggage{CountersInt: make(map[string]int64)}
 
 		contextBaggage.CountersInt.Range(func(k interface{}, v interface{}) bool {
@@ -170,7 +168,7 @@ func ContextCounterAdd(ctx context.Context, name string, value int64) {
 		return
 	}
 
-	for done := false; !done;  {
+	for done := false; !done; {
 		metricInterface, _ := metricsBaggage.CountersInt.LoadAndDelete(name)
 		var newValue = value
 		if metricInterface != nil {
