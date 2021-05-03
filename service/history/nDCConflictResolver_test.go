@@ -267,7 +267,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	).Return(mockRebuildMutableState, historySize, nil)
 
 	s.mockContext.EXPECT().clear()
-	s.mockContext.EXPECT().setHistorySize(int64(historySize))
+	s.mockContext.EXPECT().setHistorySize(historySize)
 	rebuiltMutableState, isRebuilt, err := s.nDCConflictResolver.prepareMutableState(ctx, 1, incomingVersion)
 	s.NoError(err)
 	s.NotNil(rebuiltMutableState)

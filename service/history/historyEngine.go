@@ -581,8 +581,13 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	err = weContext.createWorkflowExecution(
-		newWorkflow, historySize, now,
-		createMode, prevRunID, prevLastWriteVersion,
+		now,
+		createMode,
+		prevRunID,
+		prevLastWriteVersion,
+		mutableState,
+		newWorkflow,
+		historySize,
 	)
 	if err != nil {
 		if t, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
@@ -617,8 +622,13 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 				return nil, err
 			}
 			err = weContext.createWorkflowExecution(
-				newWorkflow, historySize, now,
-				createMode, prevRunID, prevLastWriteVersion,
+				now,
+				createMode,
+				prevRunID,
+				prevLastWriteVersion,
+				mutableState,
+				newWorkflow,
+				historySize,
 			)
 		}
 	}
@@ -1150,13 +1160,14 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				WorkflowId: executionInfo.WorkflowId,
 				RunId:      executionState.RunId,
 			},
-			Type:             &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
-			StartTime:        executionInfo.StartTime,
-			HistoryLength:    mutableState.GetNextEventID() - common.FirstEventID,
-			AutoResetPoints:  executionInfo.AutoResetPoints,
-			Memo:             &commonpb.Memo{Fields: executionInfo.Memo},
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
-			Status:           executionState.Status,
+			Type:                 &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
+			StartTime:            executionInfo.StartTime,
+			HistoryLength:        mutableState.GetNextEventID() - common.FirstEventID,
+			AutoResetPoints:      executionInfo.AutoResetPoints,
+			Memo:                 &commonpb.Memo{Fields: executionInfo.Memo},
+			SearchAttributes:     &commonpb.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
+			Status:               executionState.Status,
+			StateTransitionCount: executionInfo.StateTransitionCount,
 		},
 	}
 
@@ -2019,8 +2030,13 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		}
 	}
 	err = context.createWorkflowExecution(
-		newWorkflow, historySize, now,
-		createMode, prevRunID, prevLastWriteVersion,
+		now,
+		createMode,
+		prevRunID,
+		prevLastWriteVersion,
+		mutableState,
+		newWorkflow,
+		historySize,
 	)
 
 	if t, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {

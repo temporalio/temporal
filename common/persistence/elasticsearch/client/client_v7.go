@@ -151,17 +151,29 @@ func (c *clientV7) RunBulkProcessor(ctx context.Context, p *BulkProcessorParamet
 	return newBulkProcessorV7(esBulkProcessor), err
 }
 
-func (c *clientV7) PutMapping(ctx context.Context, index, root, key, valueType string) error {
-	body := c.buildPutMappingBody(root, key, valueType)
-	_, err := c.esClient.PutMapping().Index(index).BodyJson(body).Do(ctx)
-	if elastic.IsNotFound(err) {
-		_, err = c.CreateIndex(ctx, index)
-		if err != nil {
-			return err
-		}
-		_, err = c.esClient.PutMapping().Index(index).BodyJson(body).Do(ctx)
+func (c *clientV7) PutMapping(ctx context.Context, index string, root string, mapping map[string]string) (bool, error) {
+	body := buildMappingBody(root, mapping)
+	resp, err := c.esClient.PutMapping().Index(index).BodyJson(body).Do(ctx)
+	if err != nil {
+		return false, err
 	}
-	return err
+	return resp.Acknowledged, err
+}
+
+func (c *clientV7) WaitForYellowStatus(ctx context.Context, index string) (string, error) {
+	resp, err := c.esClient.ClusterHealth().Index(index).WaitForYellowStatus().Do(ctx)
+	if err != nil {
+		return "", err
+	}
+	return resp.Status, err
+}
+
+func (c *clientV7) GetMapping(ctx context.Context, index string) (map[string]string, error) {
+	resp, err := c.esClient.GetMapping().Index(index).Do(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return convertMappingBody(resp, index), err
 }
 
 func (c *clientV7) CreateIndex(ctx context.Context, index string) (bool, error) {
@@ -170,28 +182,6 @@ func (c *clientV7) CreateIndex(ctx context.Context, index string) (bool, error) 
 		return false, err
 	}
 	return resp.Acknowledged, nil
-}
-
-func (c *clientV7) buildPutMappingBody(root, key, valueType string) map[string]interface{} {
-	body := make(map[string]interface{})
-	if len(root) != 0 {
-		body["properties"] = map[string]interface{}{
-			root: map[string]interface{}{
-				"properties": map[string]interface{}{
-					key: map[string]interface{}{
-						"type": valueType,
-					},
-				},
-			},
-		}
-	} else {
-		body["properties"] = map[string]interface{}{
-			key: map[string]interface{}{
-				"type": valueType,
-			},
-		}
-	}
-	return body
 }
 
 func (c *clientV7) IsNotFoundError(err error) bool {
@@ -258,4 +248,71 @@ func getLoggerOptions(logLevel string, logger log.Logger) []elastic.ClientOption
 	default:
 		return nil
 	}
+}
+
+func buildMappingBody(root string, mapping map[string]string) map[string]interface{} {
+	properties := make(map[string]interface{}, len(mapping))
+	for fieldName, fieldType := range mapping {
+		properties[fieldName] = map[string]interface{}{
+			"type": fieldType,
+		}
+	}
+
+	body := make(map[string]interface{})
+	if len(root) != 0 {
+		body["properties"] = map[string]interface{}{
+			root: map[string]interface{}{
+				"properties": properties,
+			},
+		}
+	} else {
+		body["properties"] = properties
+	}
+	return body
+}
+
+func convertMappingBody(esMapping map[string]interface{}, indexName string) map[string]string {
+	result := make(map[string]string)
+	index, ok := esMapping[indexName]
+	if !ok {
+		return result
+	}
+	indexMap, ok := index.(map[string]interface{})
+	if !ok {
+		return result
+	}
+	mappings, ok := indexMap["mappings"]
+	if !ok {
+		return result
+	}
+	mappingsMap, ok := mappings.(map[string]interface{})
+	if !ok {
+		return result
+	}
+	properties, ok := mappingsMap["properties"]
+	if !ok {
+		return result
+	}
+	propMap, ok := properties.(map[string]interface{})
+	if !ok {
+		return result
+	}
+
+	for fieldName, fieldProp := range propMap {
+		fieldPropMap, ok := fieldProp.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		tYpe, ok := fieldPropMap["type"]
+		if !ok {
+			continue
+		}
+		typeStr, ok := tYpe.(string)
+		if !ok {
+			continue
+		}
+		result[fieldName] = typeStr
+	}
+
+	return result
 }

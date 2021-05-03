@@ -52,6 +52,7 @@ message WorkflowExecutionInfo {
     temporal.api.common.v1.Memo memo = 10;
     SearchAttributes search_attributes = 11;
     temporal.api.workflow.v1.ResetPoints auto_reset_points = 12;
+    int64 state_transition_count = 13;
 }
 
 message PendingActivityInfo {
