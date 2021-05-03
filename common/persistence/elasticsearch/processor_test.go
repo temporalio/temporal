@@ -415,13 +415,6 @@ func (s *processorSuite) TestIsResponseSuccess() {
 	}
 }
 
-func (s *processorSuite) TestIsResponseRetryable() {
-	status := []int{408, 429, 500, 503, 507}
-	for _, code := range status {
-		s.True(isRetryableStatus(code))
-	}
-}
-
 func (s *processorSuite) TestErrorReasonFromResponse() {
 	reason := "error reason"
 	resp := &elastic.BulkResponseItem{Status: 400}

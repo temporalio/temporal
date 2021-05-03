@@ -74,18 +74,34 @@ func (mr *MockClientMockRecorder) Count(ctx, index, query interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockClient)(nil).Count), ctx, index, query)
 }
 
-// PutMapping mocks base method.
-func (m *MockClient) PutMapping(ctx context.Context, index, root, key, valueType string) error {
+// GetMapping mocks base method.
+func (m *MockClient) GetMapping(ctx context.Context, index string) (map[string]string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PutMapping", ctx, index, root, key, valueType)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "GetMapping", ctx, index)
+	ret0, _ := ret[0].(map[string]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMapping indicates an expected call of GetMapping.
+func (mr *MockClientMockRecorder) GetMapping(ctx, index interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMapping", reflect.TypeOf((*MockClient)(nil).GetMapping), ctx, index)
+}
+
+// PutMapping mocks base method.
+func (m *MockClient) PutMapping(ctx context.Context, index, root string, mapping map[string]string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PutMapping", ctx, index, root, mapping)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // PutMapping indicates an expected call of PutMapping.
-func (mr *MockClientMockRecorder) PutMapping(ctx, index, root, key, valueType interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) PutMapping(ctx, index, root, mapping interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutMapping", reflect.TypeOf((*MockClient)(nil).PutMapping), ctx, index, root, key, valueType)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutMapping", reflect.TypeOf((*MockClient)(nil).PutMapping), ctx, index, root, mapping)
 }
 
 // RunBulkProcessor mocks base method.
@@ -165,6 +181,21 @@ func (mr *MockClientMockRecorder) SearchWithDSL(ctx, index, query interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchWithDSL", reflect.TypeOf((*MockClient)(nil).SearchWithDSL), ctx, index, query)
 }
 
+// WaitForYellowStatus mocks base method.
+func (m *MockClient) WaitForYellowStatus(ctx context.Context, index string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WaitForYellowStatus", ctx, index)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WaitForYellowStatus indicates an expected call of WaitForYellowStatus.
+func (mr *MockClientMockRecorder) WaitForYellowStatus(ctx, index interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForYellowStatus", reflect.TypeOf((*MockClient)(nil).WaitForYellowStatus), ctx, index)
+}
+
 // MockCLIClient is a mock of CLIClient interface.
 type MockCLIClient struct {
 	ctrl     *gomock.Controller
@@ -232,18 +263,34 @@ func (mr *MockCLIClientMockRecorder) Count(ctx, index, query interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockCLIClient)(nil).Count), ctx, index, query)
 }
 
-// PutMapping mocks base method.
-func (m *MockCLIClient) PutMapping(ctx context.Context, index, root, key, valueType string) error {
+// GetMapping mocks base method.
+func (m *MockCLIClient) GetMapping(ctx context.Context, index string) (map[string]string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PutMapping", ctx, index, root, key, valueType)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "GetMapping", ctx, index)
+	ret0, _ := ret[0].(map[string]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMapping indicates an expected call of GetMapping.
+func (mr *MockCLIClientMockRecorder) GetMapping(ctx, index interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMapping", reflect.TypeOf((*MockCLIClient)(nil).GetMapping), ctx, index)
+}
+
+// PutMapping mocks base method.
+func (m *MockCLIClient) PutMapping(ctx context.Context, index, root string, mapping map[string]string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PutMapping", ctx, index, root, mapping)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // PutMapping indicates an expected call of PutMapping.
-func (mr *MockCLIClientMockRecorder) PutMapping(ctx, index, root, key, valueType interface{}) *gomock.Call {
+func (mr *MockCLIClientMockRecorder) PutMapping(ctx, index, root, mapping interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutMapping", reflect.TypeOf((*MockCLIClient)(nil).PutMapping), ctx, index, root, key, valueType)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutMapping", reflect.TypeOf((*MockCLIClient)(nil).PutMapping), ctx, index, root, mapping)
 }
 
 // RunBulkProcessor mocks base method.
@@ -321,6 +368,21 @@ func (m *MockCLIClient) SearchWithDSL(ctx context.Context, index, query string) 
 func (mr *MockCLIClientMockRecorder) SearchWithDSL(ctx, index, query interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchWithDSL", reflect.TypeOf((*MockCLIClient)(nil).SearchWithDSL), ctx, index, query)
+}
+
+// WaitForYellowStatus mocks base method.
+func (m *MockCLIClient) WaitForYellowStatus(ctx context.Context, index string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WaitForYellowStatus", ctx, index)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WaitForYellowStatus indicates an expected call of WaitForYellowStatus.
+func (mr *MockCLIClientMockRecorder) WaitForYellowStatus(ctx, index interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForYellowStatus", reflect.TypeOf((*MockCLIClient)(nil).WaitForYellowStatus), ctx, index)
 }
 
 // MockIntegrationTestsClient is a mock of IntegrationTestsClient interface.
