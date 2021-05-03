@@ -136,7 +136,7 @@ func AddSearchAttributesWorkflow(ctx workflow.Context, params WorkflowParams) er
 	}
 
 	// TODO: anything better?
-	workflow.GetMetricsScope(ctx).SubScope("AddSearchAttributesWorkflow").Counter("add_search_attributes_success").Inc(1)
+	workflow.GetMetricsScope(ctx).SubScope("AddSearchAttributesWorkflow").Counter("add_search_attributes_workflow_success").Inc(1)
 	logger.Info("Workflow finished successfully.", "wf-type", WorkflowName)
 	return nil
 }
