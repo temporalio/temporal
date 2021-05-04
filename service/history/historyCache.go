@@ -116,15 +116,14 @@ func (c *historyCache) getAndCreateWorkflowExecution(
 	execution commonpb.WorkflowExecution,
 ) (workflowExecutionContext, workflowExecutionContext, releaseWorkflowExecutionFunc, bool, error) {
 
+	if err := c.validateWorkflowExecutionInfo(namespaceID, &execution); err != nil {
+		return nil, nil, nil, false, err
+	}
+
 	scope := metrics.HistoryCacheGetAndCreateScope
 	c.metricsClient.IncCounter(scope, metrics.CacheRequests)
 	sw := c.metricsClient.StartTimer(scope, metrics.CacheLatency)
 	defer sw.Stop()
-
-	if err := c.validateWorkflowExecutionInfo(namespaceID, &execution); err != nil {
-		c.metricsClient.IncCounter(scope, metrics.CacheFailures)
-		return nil, nil, nil, false, err
-	}
 
 	key := definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId())
 	contextFromCache, cacheHit := c.Get(key).(workflowExecutionContext)
@@ -164,15 +163,14 @@ func (c *historyCache) getOrCreateWorkflowExecution(
 	execution commonpb.WorkflowExecution,
 ) (workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
 
+	if err := c.validateWorkflowExecutionInfo(namespaceID, &execution); err != nil {
+		return nil, nil, err
+	}
+
 	scope := metrics.HistoryCacheGetOrCreateScope
 	c.metricsClient.IncCounter(scope, metrics.CacheRequests)
 	sw := c.metricsClient.StartTimer(scope, metrics.CacheLatency)
 	defer sw.Stop()
-
-	if err := c.validateWorkflowExecutionInfo(namespaceID, &execution); err != nil {
-		c.metricsClient.IncCounter(scope, metrics.CacheFailures)
-		return nil, nil, err
-	}
 
 	return c.getOrCreateWorkflowExecutionInternal(
 		ctx,

@@ -61,6 +61,7 @@ type (
 		shardID          int32
 		rangeID          int64
 		executionManager persistence.ExecutionManager
+		metricsClient    metrics.Client
 		EventsCache      events.Cache
 		closeCallback    func(int32, *historyShardsItem)
 		closed           int32
@@ -69,7 +70,7 @@ type (
 		throttledLogger  log.Logger
 		engine           Engine
 
-		sync.RWMutex
+		rwLock                    sync.RWMutex
 		lastUpdated               time.Time
 		shardInfo                 *persistence.ShardInfoWithFailover
 		transferSequenceNumber    int64
@@ -1085,6 +1086,32 @@ func (s *ContextImpl) GetLastUpdatedTime() time.Time {
 	return s.lastUpdated
 }
 
+func (s *ContextImpl) Lock() {
+	scope := metrics.ShardInfoScope
+	s.metricsClient.IncCounter(scope, metrics.LockRequests)
+	sw := s.metricsClient.StartTimer(scope, metrics.LockLatency)
+	defer sw.Stop()
+
+	s.rwLock.Lock()
+}
+
+func (s *ContextImpl) RLock() {
+	scope := metrics.ShardInfoScope
+	s.metricsClient.IncCounter(scope, metrics.LockRequests)
+	sw := s.metricsClient.StartTimer(scope, metrics.LockLatency)
+	defer sw.Stop()
+
+	s.rwLock.RLock()
+}
+
+func (s *ContextImpl) Unlock() {
+	s.rwLock.Unlock()
+}
+
+func (s *ContextImpl) RUnlock() {
+	s.rwLock.RUnlock()
+}
+
 func acquireShard(
 	shardItem *historyShardsItem,
 	closeCallback func(int32, *historyShardsItem),
@@ -1169,6 +1196,7 @@ func acquireShard(
 		shardItem:                      shardItem,
 		shardID:                        shardItem.shardID,
 		executionManager:               executionMgr,
+		metricsClient:                  shardItem.GetMetricsClient(),
 		shardInfo:                      updatedShardInfo,
 		closeCallback:                  closeCallback,
 		config:                         shardItem.config,
