@@ -25,49 +25,29 @@
 package client
 
 import (
-	"fmt"
-	"testing"
-
 	"github.com/olivere/elastic/v7"
-	"github.com/stretchr/testify/require"
 )
 
-func Test_BuildPutMappingBody(t *testing.T) {
-	tests := []struct {
-		root     string
-		expected string
-	}{
-		{
-			root:     "Attr",
-			expected: "map[properties:map[Attr:map[properties:map[testKey:map[type:text]]]]]",
-		},
-		{
-			root:     "",
-			expected: "map[properties:map[testKey:map[type:text]]]",
-		},
-	}
-	k := "testKey"
-	v := "text"
-
-	for _, test := range tests {
-		require.Equal(t, test.expected, fmt.Sprintf("%v", buildMappingBody(test.root, map[string]string{k: v})))
+func IsRetryableError(err error) bool {
+	switch e := err.(type) {
+	case *elastic.Error:
+		return IsRetryableStatus(e.Status)
+	default:
+		return false
 	}
 }
-func Test_ConvertV7Sorters(t *testing.T) {
-	sortersV7 := make([]elastic.Sorter, 2)
-	sortersV7[0] = elastic.NewFieldSort("test")
-	sortersV7[1] = elastic.NewFieldSort("test2")
 
-	sortersV6 := convertV7SortersToV6(sortersV7)
-	require.NotNil(t, sortersV6[0])
-	source0, err0 := sortersV6[0].Source()
-	require.NoError(t, err0)
-	require.NotNil(t, source0)
-}
-
-func TestIsResponseRetryable(t *testing.T) {
-	status := []int{408, 429, 500, 503, 507}
-	for _, code := range status {
-		require.True(t, IsRetryableStatus(code))
+// IsRetryableStatus is complaint with elastic.BulkProcessorService.RetryItemStatusCodes
+// responses with these status will be kept in queue and retried until success
+// 408 - Request Timeout
+// 429 - Too Many Requests
+// 500 - Node not connected
+// 503 - Service Unavailable
+// 507 - Insufficient Storage
+func IsRetryableStatus(status int) bool {
+	switch status {
+	case 408, 429, 500, 503, 507:
+		return true
 	}
+	return false
 }

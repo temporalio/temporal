@@ -206,7 +206,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 		// This happens after configured retry, which means something bad happens on cluster or index
 		// When cluster back to live, processor will re-commit those failure requests
 
-		isRetryable := isRetryableError(err)
+		isRetryable := client.IsRetryableError(err)
 		p.logger.Error("Unable to commit bulk ES request.", tag.Error(err), tag.Bool(isRetryable))
 		for _, request := range requests {
 			p.logger.Error("ES request failed.", tag.ESRequest(request.String()))
@@ -246,7 +246,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 		switch {
 		case isSuccessStatus(responseItem.Status):
 			p.sendToAckChan(visibilityTaskKey, true)
-		case !isRetryableStatus(responseItem.Status):
+		case !client.IsRetryableStatus(responseItem.Status):
 			p.logger.Error("ES request failed.",
 				tag.ESResponseStatus(responseItem.Status),
 				tag.ESResponseError(extractErrorReason(responseItem)),
@@ -360,30 +360,6 @@ func isSuccessStatus(status int) bool {
 		return true
 	}
 	return false
-}
-
-// isRetryableStatus is complaint with elastic.BulkProcessorService.RetryItemStatusCodes
-// responses with these status will be kept in queue and retried until success
-// 408 - Request Timeout
-// 429 - Too Many Requests
-// 500 - Node not connected
-// 503 - Service Unavailable
-// 507 - Insufficient Storage
-func isRetryableStatus(status int) bool {
-	switch status {
-	case 408, 429, 500, 503, 507:
-		return true
-	}
-	return false
-}
-
-func isRetryableError(err error) bool {
-	switch e := err.(type) {
-	case *elastic.Error:
-		return isRetryableStatus(e.Status)
-	default:
-		return false
-	}
 }
 
 func extractErrorReason(resp *elastic.BulkResponseItem) string {
