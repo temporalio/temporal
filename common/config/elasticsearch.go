@@ -25,6 +25,7 @@
 package config
 
 import (
+	"fmt"
 	"net/url"
 )
 
@@ -75,4 +76,15 @@ type (
 // GetVisibilityIndex return visibility index name
 func (cfg *Elasticsearch) GetVisibilityIndex() string {
 	return cfg.Indices[VisibilityAppName]
+}
+
+func (cfg *Elasticsearch) validate(storeName string) error {
+	if len(cfg.Indices) < 1 {
+		return fmt.Errorf("persistence config: advanced visibility datastore %q: missing indices", storeName)
+
+	}
+	if cfg.GetVisibilityIndex() == "" {
+		return fmt.Errorf("persistence config: advanced visibility datastore %q: missing %q key", storeName, VisibilityAppName)
+	}
+	return nil
 }
