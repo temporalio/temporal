@@ -103,6 +103,12 @@ func NewServerMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryS
 		// we want to return original handler response, so don't override err
 		resp, err := handler(ctx, req)
 
+		select {
+		case <-ctx.Done():
+			return resp, err
+		default:
+		}
+
 		baggage := GetMetricsBaggageFromContext(ctx)
 		if baggage == nil {
 			return resp, err
@@ -114,6 +120,7 @@ func NewServerMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryS
 		}
 
 		md := metadata.Pairs(baggageTrailerKey, string(bytes))
+
 		marshalErr = grpc.SetTrailer(ctx, md)
 		if marshalErr != nil {
 			logger.Error("unable to add metrics baggage to gRPC trailer", tag.Error(marshalErr))
