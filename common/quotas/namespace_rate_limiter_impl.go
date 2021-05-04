@@ -59,7 +59,7 @@ func (r *NamespaceRateLimiterImpl) Allow(
 	namespaceID string,
 ) bool {
 
-	return r.AllowN(namespaceID, time.Now().UTC(), 1)
+	return r.AllowN(namespaceID, time.Now(), 1)
 }
 
 // AllowN attempts to allow a request to go through. The method returns
@@ -81,7 +81,7 @@ func (r *NamespaceRateLimiterImpl) Reserve(
 	namespaceID string,
 ) Reservation {
 
-	return r.ReserveN(namespaceID, time.Now().UTC(), 1)
+	return r.ReserveN(namespaceID, time.Now(), 1)
 }
 
 // ReserveN returns a Reservation that indicates how long the caller

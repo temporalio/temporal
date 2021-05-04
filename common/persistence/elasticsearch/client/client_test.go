@@ -49,9 +49,8 @@ func Test_BuildPutMappingBody(t *testing.T) {
 	k := "testKey"
 	v := "text"
 
-	var client clientV6
 	for _, test := range tests {
-		require.Equal(t, test.expected, fmt.Sprintf("%v", client.buildPutMappingBody(test.root, k, v)))
+		require.Equal(t, test.expected, fmt.Sprintf("%v", buildMappingBody(test.root, map[string]string{k: v})))
 	}
 }
 func Test_ConvertV7Sorters(t *testing.T) {
@@ -64,4 +63,11 @@ func Test_ConvertV7Sorters(t *testing.T) {
 	source0, err0 := sortersV6[0].Source()
 	require.NoError(t, err0)
 	require.NotNil(t, source0)
+}
+
+func TestIsResponseRetryable(t *testing.T) {
+	status := []int{408, 429, 500, 503, 507}
+	for _, code := range status {
+		require.True(t, IsRetryableStatus(code))
+	}
 }

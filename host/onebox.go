@@ -91,6 +91,7 @@ type (
 		clusterMetadataConfig            *config.ClusterMetadata
 		persistenceConfig                config.Persistence
 		metadataMgr                      persistence.MetadataManager
+		clusterMetadataMgr               persistence.ClusterMetadataManager
 		shardMgr                         persistence.ShardManager
 		historyV2Mgr                     persistence.HistoryManager
 		taskMgr                          persistence.TaskManager
@@ -125,6 +126,7 @@ type (
 		ClusterMetadataConfig            *config.ClusterMetadata
 		PersistenceConfig                config.Persistence
 		MetadataMgr                      persistence.MetadataManager
+		ClusterMetadataManager           persistence.ClusterMetadataManager
 		ShardMgr                         persistence.ShardManager
 		HistoryV2Mgr                     persistence.HistoryManager
 		ExecutionMgrFactory              persistence.ExecutionManagerFactory
@@ -157,6 +159,7 @@ func NewTemporal(params *TemporalParams) Temporal {
 		clusterMetadataConfig:            params.ClusterMetadataConfig,
 		persistenceConfig:                params.PersistenceConfig,
 		metadataMgr:                      params.MetadataMgr,
+		clusterMetadataMgr:               params.ClusterMetadataManager,
 		visibilityMgr:                    params.VisibilityMgr,
 		shardMgr:                         params.ShardMgr,
 		historyV2Mgr:                     params.HistoryV2Mgr,
@@ -495,7 +498,7 @@ func (c *temporalImpl) startHistory(
 		// However current interface for getting history client doesn't specify which client it needs and the tests that use this API
 		// depends on the fact that there's only one history host.
 		// Need to change those tests and modify the interface for getting history client.
-		historyConnection, err := rpc.Dial(c.HistoryServiceAddress(3)[0], nil)
+		historyConnection, err := rpc.Dial(c.HistoryServiceAddress(3)[0], nil, c.logger)
 		if err != nil {
 			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
@@ -609,7 +612,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	c.workerService = service
 	service.Start()
 
-	clusterMetadata := cluster.GetTestClusterMetadata(c.clusterMetadataConfig)
+	clusterMetadata := cluster.NewTestClusterMetadata(c.clusterMetadataConfig)
 	var replicatorNamespaceCache cache.NamespaceCache
 	if c.workerConfig.EnableReplicator {
 		metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
@@ -824,7 +827,7 @@ func (c *rpcFactoryImpl) GetRingpopChannel() *tchannel.Channel {
 
 // CreateGRPCConnection creates connection for gRPC calls
 func (c *rpcFactoryImpl) CreateGRPCConnection(hostName string) *grpc.ClientConn {
-	connection, err := rpc.Dial(hostName, nil)
+	connection, err := rpc.Dial(hostName, nil, c.logger)
 	if err != nil {
 		c.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
 	}

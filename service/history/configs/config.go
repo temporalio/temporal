@@ -272,7 +272,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		NumberOfShards: numberOfShards,
 
 		// TODO remove this dynamic flag in 1.11.x
-		EnableDBRecordVersion: dc.GetBoolProperty(dynamicconfig.EnableDBRecordVersion, false),
+		EnableDBRecordVersion: dc.GetBoolProperty(dynamicconfig.EnableDBRecordVersion, true),
 
 		RPS:                                  dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
 		MaxIDLengthLimit:                     dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),

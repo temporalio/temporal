@@ -899,17 +899,18 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 
 	info := resp.GetWorkflowExecutionInfo()
 	executionInfo := &clispb.WorkflowExecutionInfo{
-		Execution:         info.GetExecution(),
-		Type:              info.GetType(),
-		CloseTime:         info.GetCloseTime(),
-		StartTime:         info.GetStartTime(),
-		Status:            info.GetStatus(),
-		HistoryLength:     info.GetHistoryLength(),
-		ParentNamespaceId: info.GetParentNamespaceId(),
-		ParentExecution:   info.GetParentExecution(),
-		Memo:              info.GetMemo(),
-		SearchAttributes:  convertSearchAttributes(info.GetSearchAttributes()),
-		AutoResetPoints:   info.GetAutoResetPoints(),
+		Execution:            info.GetExecution(),
+		Type:                 info.GetType(),
+		CloseTime:            info.GetCloseTime(),
+		StartTime:            info.GetStartTime(),
+		Status:               info.GetStatus(),
+		HistoryLength:        info.GetHistoryLength(),
+		ParentNamespaceId:    info.GetParentNamespaceId(),
+		ParentExecution:      info.GetParentExecution(),
+		Memo:                 info.GetMemo(),
+		SearchAttributes:     convertSearchAttributes(info.GetSearchAttributes()),
+		AutoResetPoints:      info.GetAutoResetPoints(),
+		StateTransitionCount: info.GetStateTransitionCount(),
 	}
 
 	var pendingActivitiesStr []*clispb.PendingActivityInfo

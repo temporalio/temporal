@@ -162,7 +162,7 @@ func (s *Scavenger) run() {
 				s.metrics,
 				s.logger,
 				s,
-				quotas.NewMultiStageRateLimiter([]quotas.RateLimiter{
+				quotas.NewMultiRateLimiter([]quotas.RateLimiter{
 					quotas.NewDefaultOutgoingDynamicRateLimiter(
 						func() float64 { return float64(ratePerShard) },
 					),

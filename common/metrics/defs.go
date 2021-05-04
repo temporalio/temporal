@@ -72,6 +72,11 @@ const (
 	NumServices
 )
 
+// Values used for metrics propagation
+const (
+	HistoryWorkflowExecutionCacheLatency = "history_workflow_execution_cache_latency"
+)
+
 // Common tags for all services
 const (
 	OperationTagName   = "operation"
@@ -134,6 +139,7 @@ const (
 	UnknownScope = iota
 
 	// -- Common Operation scopes --
+
 	// PersistenceCreateShardScope tracks CreateShard calls made by service to persistence layer
 	PersistenceCreateShardScope
 	// PersistenceGetShardScope tracks GetShard calls made by service to persistence layer
@@ -344,9 +350,9 @@ const (
 	HistoryClientScheduleWorkflowTaskScope
 	// HistoryClientRecordChildExecutionCompletedScope tracks RPC calls to history service
 	HistoryClientRecordChildExecutionCompletedScope
-	// HistoryClientSyncShardStatusScope tracks RPC calls to history service
+	// HistoryClientReplicateEventsV2Scope tracks RPC calls to history service
 	HistoryClientReplicateEventsV2Scope
-	// HistoryClientReplicateRawEventsV2Scope tracks RPC calls to history service
+	// HistoryClientSyncShardStatusScope tracks RPC calls to history service
 	HistoryClientSyncShardStatusScope
 	// HistoryClientSyncActivityScope tracks RPC calls to history service
 	HistoryClientSyncActivityScope
@@ -575,9 +581,9 @@ const (
 	// DCRedirectionListTaskQueuePartitionsScope tracks RPC calls for dc redirection
 	DCRedirectionListTaskQueuePartitionsScope
 
-	// MessagingPublishScope tracks Publish calls made by service to messaging layer
+	// MessagingClientPublishScope tracks Publish calls made by service to messaging layer
 	MessagingClientPublishScope
-	// MessagingPublishBatchScope tracks Publish calls made by service to messaging layer
+	// MessagingClientPublishBatchScope tracks Publish calls made by service to messaging layer
 	MessagingClientPublishBatchScope
 
 	// NamespaceCacheScope tracks namespace cache callbacks
@@ -721,7 +727,7 @@ const (
 const (
 	// FrontendStartWorkflowExecutionScope is the metric scope for frontend.StartWorkflowExecution
 	FrontendStartWorkflowExecutionScope = iota + NumAdminScopes
-	// PollWorkflowTaskQueueScope is the metric scope for frontend.PollWorkflowTaskQueue
+	// FrontendPollWorkflowTaskQueueScope is the metric scope for frontend.PollWorkflowTaskQueue
 	FrontendPollWorkflowTaskQueueScope
 	// FrontendPollActivityTaskQueueScope is the metric scope for frontend.PollActivityTaskQueue
 	FrontendPollActivityTaskQueueScope
@@ -741,15 +747,15 @@ const (
 	FrontendRespondActivityTaskFailedScope
 	// FrontendRespondActivityTaskCanceledScope is the metric scope for frontend.RespondActivityTaskCanceled
 	FrontendRespondActivityTaskCanceledScope
-	// FrontendRespondActivityTaskCompletedScope is the metric scope for frontend.RespondActivityTaskCompletedById
+	// FrontendRespondActivityTaskCompletedByIdScope is the metric scope for frontend.RespondActivityTaskCompletedById
 	FrontendRespondActivityTaskCompletedByIdScope
-	// FrontendRespondActivityTaskFailedScope is the metric scope for frontend.RespondActivityTaskFailedById
+	// FrontendRespondActivityTaskFailedByIdScope is the metric scope for frontend.RespondActivityTaskFailedById
 	FrontendRespondActivityTaskFailedByIdScope
-	// FrontendRespondActivityTaskCanceledScope is the metric scope for frontend.RespondActivityTaskCanceledById
+	// FrontendRespondActivityTaskCanceledByIdScope is the metric scope for frontend.RespondActivityTaskCanceledById
 	FrontendRespondActivityTaskCanceledByIdScope
 	// FrontendGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
 	FrontendGetWorkflowExecutionHistoryScope
-	// FrontendGetWorkflowExecutionHistoryScope is the metric scope for long poll case of frontend.GetWorkflowExecutionHistory
+	// FrontendPollWorkflowExecutionHistoryScope is the metric scope for long poll case of frontend.GetWorkflowExecutionHistory
 	FrontendPollWorkflowExecutionHistoryScope
 	// FrontendGetWorkflowExecutionRawHistoryScope is the metric scope for frontend.GetWorkflowExecutionRawHistory
 	FrontendGetWorkflowExecutionRawHistoryScope
@@ -789,7 +795,7 @@ const (
 	FrontendDescribeWorkflowExecutionScope
 	// FrontendDescribeTaskQueueScope is the metric scope for frontend.DescribeTaskQueue
 	FrontendDescribeTaskQueueScope
-	// FrontendResetStickyTaskQueueScope is the metric scope for frontend.ResetStickyTaskQueue
+	// FrontendListTaskQueuePartitionsScope is the metric scope for frontend.ResetStickyTaskQueue
 	FrontendListTaskQueuePartitionsScope
 	// FrontendResetStickyTaskQueueScope is the metric scope for frontend.ResetStickyTaskQueue
 	FrontendResetStickyTaskQueueScope
@@ -858,7 +864,7 @@ const (
 	HistorySyncActivityScope
 	// HistoryDescribeMutableStateScope tracks HistoryActivity API calls received by service
 	HistoryDescribeMutableStateScope
-	// GetReplicationMessages tracks GetReplicationMessages API calls received by service
+	// HistoryGetReplicationMessagesScope tracks GetReplicationMessages API calls received by service
 	HistoryGetReplicationMessagesScope
 	// HistoryGetDLQReplicationMessagesScope tracks GetReplicationMessages API calls received by service
 	HistoryGetDLQReplicationMessagesScope
@@ -938,7 +944,7 @@ const (
 	TimerQueueProcessorScope
 	// TimerActiveQueueProcessorScope is the scope used by all metric emitted by timer queue processor
 	TimerActiveQueueProcessorScope
-	// TimerQueueProcessorScope is the scope used by all metric emitted by timer queue processor
+	// TimerStandbyQueueProcessorScope is the scope used by all metric emitted by timer queue processor
 	TimerStandbyQueueProcessorScope
 	// TimerActiveTaskActivityTimeoutScope is the scope used by metric emitted by timer queue processor for processing activity timeouts
 	TimerActiveTaskActivityTimeoutScope
@@ -1031,9 +1037,9 @@ const (
 
 // -- Operation scopes for Matching service --
 const (
-	// PollWorkflowTaskQueueScope tracks PollWorkflowTaskQueue API calls received by service
+	// MatchingPollWorkflowTaskQueueScope tracks PollWorkflowTaskQueue API calls received by service
 	MatchingPollWorkflowTaskQueueScope = iota + NumHistoryScopes
-	// PollActivityTaskQueueScope tracks PollActivityTaskQueue API calls received by service
+	// MatchingPollActivityTaskQueueScope tracks PollActivityTaskQueue API calls received by service
 	MatchingPollActivityTaskQueueScope
 	// MatchingAddActivityTaskScope tracks AddActivityTask API calls received by service
 	MatchingAddActivityTaskScope
@@ -1057,7 +1063,7 @@ const (
 
 // -- Operation scopes for Worker service --
 const (
-	// ReplicationScope is the scope used by all metric emitted by replicator
+	// ReplicatorScope is the scope used by all metric emitted by replicator
 	ReplicatorScope = iota + NumMatchingScopes
 	// NamespaceReplicationTaskScope is the scope used by namespace task replication processing
 	NamespaceReplicationTaskScope
@@ -1598,6 +1604,7 @@ const (
 	ServiceFailures
 	ServiceCriticalFailures
 	ServiceLatency
+	ServiceLatencyNoUserLatency
 	ServiceErrInvalidArgumentCounter
 	ServiceErrNamespaceNotActiveCounter
 	ServiceErrResourceExhaustedCounter
@@ -1614,6 +1621,7 @@ const (
 	ServiceErrNonDeterministicCounter
 	ServiceErrUnauthorizedCounter
 	ServiceErrAuthorizeFailedCounter
+
 	PersistenceRequests
 	PersistenceFailures
 	PersistenceLatency
@@ -1642,10 +1650,15 @@ const (
 	NamespaceCachePrepareCallbacksLatency
 	NamespaceCacheCallbacksLatency
 
+	StateTransitionCount
 	HistorySize
 	HistoryCount
 	EventBlobSize
 	SearchAttributesSize
+
+	LockRequests
+	LockFailures
+	LockLatency
 
 	ArchivalConfigFailures
 
@@ -1679,6 +1692,7 @@ const (
 
 	// The following metrics are only used by internal history archiver implemention.
 	// TODO: move them to internal repo once temporal plugin model is in place.
+
 	HistoryArchiverBlobExistsCount
 	HistoryArchiverBlobSize
 	HistoryArchiverRunningDeterministicConstructionCheckCount
@@ -1699,6 +1713,7 @@ const (
 	NamespaceReplicationDLQMaxLevelGauge
 
 	// common metrics that are emitted per task queue
+
 	ServiceRequestsPerTaskQueue
 	ServiceFailuresPerTaskQueue
 	ServiceLatencyPerTaskQueue
@@ -2014,6 +2029,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceFailures:                                     {metricName: "service_errors", metricType: Counter},
 		ServiceCriticalFailures:                             {metricName: "service_errors_critical", metricType: Counter},
 		ServiceLatency:                                      {metricName: "service_latency", metricType: Timer},
+		ServiceLatencyNoUserLatency:                         {metricName: "service_latency_nouserlatency", metricType: Timer},
 		ServiceErrInvalidArgumentCounter:                    {metricName: "service_errors_invalid_argument", metricType: Counter},
 		ServiceErrNamespaceNotActiveCounter:                 {metricName: "service_errors_namespace_not_active", metricType: Counter},
 		ServiceErrResourceExhaustedCounter:                  {metricName: "service_errors_resource_exhausted", metricType: Counter},
@@ -2053,10 +2069,14 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceAuthorizationLatency:                         {metricName: "service_authorization_latency", metricType: Timer},
 		NamespaceCachePrepareCallbacksLatency:               {metricName: "namespace_cache_prepare_callbacks_latency", metricType: Timer},
 		NamespaceCacheCallbacksLatency:                      {metricName: "namespace_cache_callbacks_latency", metricType: Timer},
+		StateTransitionCount:                                {metricName: "state_transition_count", metricType: Timer},
 		HistorySize:                                         {metricName: "history_size", metricType: Timer},
 		HistoryCount:                                        {metricName: "history_count", metricType: Timer},
 		EventBlobSize:                                       {metricName: "event_blob_size", metricType: Timer},
 		SearchAttributesSize:                                {metricName: "search_attributes_size", metricType: Timer},
+		LockRequests:                                        {metricName: "lock_requests", metricType: Counter},
+		LockFailures:                                        {metricName: "lock_failures", metricType: Counter},
+		LockLatency:                                         {metricName: "lock_latency", metricType: Timer},
 		ArchivalConfigFailures:                              {metricName: "archivalconfig_failures", metricType: Counter},
 		ElasticsearchRequests:                               {metricName: "elasticsearch_requests", metricType: Counter},
 		ElasticsearchFailures:                               {metricName: "elasticsearch_errors", metricType: Counter},

@@ -24,35 +24,70 @@
 
 package metrics
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination opentelemetry_stopwatch_mocks.go
+
 import (
 	"context"
 	"time"
 
 	"go.opentelemetry.io/otel/label"
 	"go.opentelemetry.io/otel/metric"
+
+	"go.temporal.io/server/common/clock"
 )
 
 type (
 	opentelemetryStopwatch struct {
-		start   time.Time
-		metrics []openTelemetryStopwatchMetric
+		timeP       clock.TimeSource
+		start       time.Time
+		toSubstract time.Duration
+		metrics     []openTelemetryStopwatchMetric
 	}
 
-	openTelemetryStopwatchMetric struct {
+	openTelemetryStopwatchMetric interface {
+		Record(ctx context.Context, value time.Duration)
+	}
+
+	openTelemetryStopwatchMetricImpl struct {
 		timer  metric.Float64ValueRecorder
 		labels []label.KeyValue
 	}
 )
 
-func newOpenTelemetryStopwatch(metricsMeta []openTelemetryStopwatchMetric) opentelemetryStopwatch {
-	return opentelemetryStopwatch{time.Now().UTC(), metricsMeta}
+func newOpenTelemetryStopwatchMetric(
+	timer metric.Float64ValueRecorder,
+	labels []label.KeyValue,
+) *openTelemetryStopwatchMetricImpl {
+	return &openTelemetryStopwatchMetricImpl{
+		timer:  timer,
+		labels: labels,
+	}
 }
 
-func (o opentelemetryStopwatch) Stop() {
+func newOpenTelemetryStopwatchCustomTimer(
+	metricsMeta []openTelemetryStopwatchMetric, timeP clock.TimeSource,
+) *opentelemetryStopwatch {
+	return &opentelemetryStopwatch{timeP, timeP.Now(), 0, metricsMeta}
+}
+
+func newOpenTelemetryStopwatch(metricsMeta []openTelemetryStopwatchMetric) *opentelemetryStopwatch {
+	return newOpenTelemetryStopwatchCustomTimer(metricsMeta, clock.NewRealTimeSource())
+}
+
+func (o *opentelemetryStopwatch) Stop() {
 	ctx := context.Background()
-	d := time.Since(o.start)
+	d := o.timeP.Now().Sub(o.start)
+	d -= o.toSubstract
 
 	for _, m := range o.metrics {
-		m.timer.Record(ctx, float64(d.Nanoseconds()), m.labels...)
+		m.Record(ctx, d)
 	}
+}
+
+func (o *opentelemetryStopwatch) Subtract(toSubstract time.Duration) {
+	o.toSubstract = o.toSubstract + toSubstract
+}
+
+func (om *openTelemetryStopwatchMetricImpl) Record(ctx context.Context, d time.Duration) {
+	om.timer.Record(ctx, float64(d.Nanoseconds()), om.labels...)
 }

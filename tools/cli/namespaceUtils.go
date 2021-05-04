@@ -32,7 +32,6 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/urfave/cli"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/common/config"
 
 	"go.temporal.io/server/common"
@@ -222,16 +221,20 @@ func initializeAdminNamespaceHandler(
 	configuration := loadConfig(context)
 	metricsClient := initializeMetricsClient()
 	logger := log.NewZapLogger(log.BuildZapLogger(configuration.Log))
-	clusterMetadata := initializeClusterMetadata(
+
+	factory := initializePersistenceFactory(
 		configuration,
-		logger,
-	)
-	metadataMgr := initializeMetadataMgr(
-		configuration,
-		clusterMetadata,
 		metricsClient,
 		logger,
 	)
+
+	metadataMgr, err := factory.NewMetadataManager()
+	if err != nil {
+		ErrorAndExit("Unable to initialize metadata manager.", err)
+	}
+
+	clusterMetadata := initializeClusterMetadata(configuration)
+
 	dynamicConfig := initializeDynamicConfig(configuration, logger)
 	return initializeNamespaceHandler(
 		logger,
@@ -275,12 +278,11 @@ func initializeNamespaceHandler(
 	)
 }
 
-func initializeMetadataMgr(
+func initializePersistenceFactory(
 	serviceConfig *config.Config,
-	clusterMetadata cluster.Metadata,
 	metricsClient metrics.Client,
 	logger log.Logger,
-) persistence.MetadataManager {
+) client.Factory {
 
 	pConfig := serviceConfig.Persistence
 	pConfig.VisibilityConfig = &config.VisibilityConfig{
@@ -293,25 +295,19 @@ func initializeMetadataMgr(
 		resolver.NewNoopResolver(),
 		dynamicconfig.GetIntPropertyFn(dependencyMaxQPS),
 		nil, // TODO propagate abstract datastore factory from the CLI.
-		clusterMetadata.GetCurrentClusterName(),
+		"",
 		metricsClient,
 		logger,
 	)
-	metadata, err := pFactory.NewMetadataManager()
-	if err != nil {
-		ErrorAndExit("Unable to initialize metadata manager.", err)
-	}
-	return metadata
+	return pFactory
 }
 
 func initializeClusterMetadata(
 	serviceConfig *config.Config,
-	logger log.Logger,
 ) cluster.Metadata {
 
 	clusterMetadata := serviceConfig.ClusterMetadata
 	return cluster.NewMetadata(
-		logger,
 		clusterMetadata.EnableGlobalNamespace,
 		clusterMetadata.FailoverVersionIncrement,
 		clusterMetadata.MasterClusterName,

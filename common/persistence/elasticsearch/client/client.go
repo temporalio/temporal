@@ -48,7 +48,11 @@ type (
 		ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error)
 		Count(ctx context.Context, index, query string) (int64, error)
 		RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error)
-		PutMapping(ctx context.Context, index, root, key, valueType string) error
+
+		// TODO (alex): move this to some admin client (and join with IntegrationTestsClient)
+		PutMapping(ctx context.Context, index string, root string, mapping map[string]string) (bool, error)
+		WaitForYellowStatus(ctx context.Context, index string) (string, error)
+		GetMapping(ctx context.Context, index string) (map[string]string, error)
 	}
 
 	CLIClient interface {

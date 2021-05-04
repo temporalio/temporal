@@ -3630,6 +3630,7 @@ func (e *mutableStateBuilder) CloseTransactionAsMutation(
 
 	// update last update time
 	e.executionInfo.LastUpdateTime = &now
+	e.executionInfo.StateTransitionCount += 1
 
 	// we generate checksum here based on the assumption that the returned
 	// snapshot object is considered immutable. As of this writing, the only
@@ -3718,6 +3719,7 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 
 	// update last update time
 	e.executionInfo.LastUpdateTime = &now
+	e.executionInfo.StateTransitionCount += 1
 
 	// we generate checksum here based on the assumption that the returned
 	// snapshot object is considered immutable. As of this writing, the only
@@ -3725,6 +3727,12 @@ func (e *mutableStateBuilder) CloseTransactionAsSnapshot(
 	// currently, the updates done inside workflowExecutionContext.resetWorkflowExecution doesn't
 	// impact the checksum calculation
 	checksum := e.generateChecksum()
+
+	if e.dbRecordVersion == 0 && !migration.IsDBVersionEnabled() {
+		// noop, existing behavior
+	} else {
+		e.dbRecordVersion += 1
+	}
 
 	workflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo:  e.executionInfo,

@@ -138,7 +138,7 @@ func NewReplicationTaskProcessor(
 		metricsClient:           metricsClient,
 		logger:                  shard.GetLogger(),
 		replicationTaskExecutor: replicationTaskExecutor,
-		rateLimiter: quotas.NewMultiStageRateLimiter([]quotas.RateLimiter{
+		rateLimiter: quotas.NewMultiRateLimiter([]quotas.RateLimiter{
 			quotas.NewDefaultOutgoingDynamicRateLimiter(
 				func() float64 { return config.ReplicationTaskProcessorShardQPS() },
 			),

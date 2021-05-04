@@ -581,8 +581,13 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	err = weContext.createWorkflowExecution(
-		newWorkflow, historySize, now,
-		createMode, prevRunID, prevLastWriteVersion,
+		now,
+		createMode,
+		prevRunID,
+		prevLastWriteVersion,
+		mutableState,
+		newWorkflow,
+		historySize,
 	)
 	if err != nil {
 		if t, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
@@ -617,8 +622,13 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 				return nil, err
 			}
 			err = weContext.createWorkflowExecution(
-				newWorkflow, historySize, now,
-				createMode, prevRunID, prevLastWriteVersion,
+				now,
+				createMode,
+				prevRunID,
+				prevLastWriteVersion,
+				mutableState,
+				newWorkflow,
+				historySize,
 			)
 		}
 	}
@@ -1150,13 +1160,14 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				WorkflowId: executionInfo.WorkflowId,
 				RunId:      executionState.RunId,
 			},
-			Type:             &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
-			StartTime:        executionInfo.StartTime,
-			HistoryLength:    mutableState.GetNextEventID() - common.FirstEventID,
-			AutoResetPoints:  executionInfo.AutoResetPoints,
-			Memo:             &commonpb.Memo{Fields: executionInfo.Memo},
-			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
-			Status:           executionState.Status,
+			Type:                 &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
+			StartTime:            executionInfo.StartTime,
+			HistoryLength:        mutableState.GetNextEventID() - common.FirstEventID,
+			AutoResetPoints:      executionInfo.AutoResetPoints,
+			Memo:                 &commonpb.Memo{Fields: executionInfo.Memo},
+			SearchAttributes:     &commonpb.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
+			Status:               executionState.Status,
+			StateTransitionCount: executionInfo.StateTransitionCount,
 		},
 	}
 
@@ -2014,8 +2025,13 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		}
 	}
 	err = context.createWorkflowExecution(
-		newWorkflow, historySize, now,
-		createMode, prevRunID, prevLastWriteVersion,
+		now,
+		createMode,
+		prevRunID,
+		prevLastWriteVersion,
+		mutableState,
+		newWorkflow,
+		historySize,
 	)
 
 	if t, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
@@ -2810,10 +2826,6 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	queryMessageID int64,
 ) (*replicationspb.ReplicationMessages, error) {
 
-	scope := metrics.HistoryGetReplicationMessagesScope
-	sw := e.metricsClient.StartTimer(scope, metrics.GetReplicationMessagesForShardLatency)
-	defer sw.Stop()
-
 	if ackMessageID != persistence.EmptyQueueMessageID {
 		if err := e.shard.UpdateClusterReplicationLevel(
 			pollingCluster,
@@ -2840,10 +2852,6 @@ func (e *historyEngineImpl) GetDLQReplicationMessages(
 	ctx context.Context,
 	taskInfos []*replicationspb.ReplicationTaskInfo,
 ) ([]*replicationspb.ReplicationTask, error) {
-
-	scope := metrics.HistoryGetDLQReplicationMessagesScope
-	sw := e.metricsClient.StartTimer(scope, metrics.GetDLQReplicationMessagesLatency)
-	defer sw.Stop()
 
 	tasks := make([]*replicationspb.ReplicationTask, 0, len(taskInfos))
 	for _, taskInfo := range taskInfos {

@@ -26,7 +26,6 @@ package cluster
 
 import (
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/log"
 )
 
 const (
@@ -75,8 +74,8 @@ var (
 	}
 )
 
-// GetTestClusterMetadataConfig return an cluster metadata config
-func GetTestClusterMetadataConfig(enableGlobalNamespace bool, isMasterCluster bool) *config.ClusterMetadata {
+// NewTestClusterMetadataConfig return an cluster metadata config
+func NewTestClusterMetadataConfig(enableGlobalNamespace bool, isMasterCluster bool) *config.ClusterMetadata {
 	masterClusterName := TestCurrentClusterName
 	if !isMasterCluster {
 		masterClusterName = TestAlternativeClusterName
@@ -101,10 +100,9 @@ func GetTestClusterMetadataConfig(enableGlobalNamespace bool, isMasterCluster bo
 	}
 }
 
-// GetTestClusterMetadata return an cluster metadata instance, which is initialized
-func GetTestClusterMetadata(cfg *config.ClusterMetadata) Metadata {
+// NewTestClusterMetadata return an cluster metadata instance, which is initialized
+func NewTestClusterMetadata(cfg *config.ClusterMetadata) Metadata {
 	return NewMetadata(
-		log.NewNoopLogger(),
 		cfg.EnableGlobalNamespace,
 		cfg.FailoverVersionIncrement,
 		cfg.MasterClusterName,

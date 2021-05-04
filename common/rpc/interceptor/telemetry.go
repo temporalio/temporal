@@ -26,6 +26,7 @@ package interceptor
 
 import (
 	"context"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -109,12 +110,23 @@ func (ti *TelemetryInterceptor) Intercept(
 
 	timer := metricsScope.StartTimer(metrics.ServiceLatency)
 	defer timer.Stop()
+	timerNoUserLatency := metricsScope.StartTimer(metrics.ServiceLatencyNoUserLatency)
+	defer timerNoUserLatency.Stop()
 
 	resp, err := handler(ctx, req)
+
+	metricsBaggage := metrics.GetMetricsBaggageFromContext(ctx)
+	if metricsBaggage != nil {
+		if val, ok := metricsBaggage.CountersInt[metrics.HistoryWorkflowExecutionCacheLatency]; ok {
+			timerNoUserLatency.Subtract(time.Duration(val))
+		}
+	}
+
 	if err != nil {
 		ti.handleError(scope, methodName, err)
 		return nil, err
 	}
+
 	return resp, nil
 }
 
