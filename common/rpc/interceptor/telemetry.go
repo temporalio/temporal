@@ -115,11 +115,8 @@ func (ti *TelemetryInterceptor) Intercept(
 
 	resp, err := handler(ctx, req)
 
-	metricsBaggage := metrics.GetMetricsBaggageFromContext(ctx)
-	if metricsBaggage != nil {
-		if val, ok := metricsBaggage.CountersInt.Load(metrics.HistoryWorkflowExecutionCacheLatency); ok {
-			timerNoUserLatency.Subtract(time.Duration(val.(int64)))
-		}
+	if val, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency); ok {
+		timerNoUserLatency.Subtract(time.Duration(val))
 	}
 
 	if err != nil {

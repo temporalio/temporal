@@ -41,7 +41,8 @@ type (
 
 	// contextBaggage is used to propagate metrics across single gRPC call within server
 	contextBaggage struct {
-		CountersInt *sync.Map
+		mu sync.Mutex
+		CountersInt map[string]int64
 	}
 )
 
@@ -124,10 +125,11 @@ func NewServerMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryS
 
 		trailerBaggage := &metricspb.Baggage{CountersInt: make(map[string]int64)}
 
-		contextBaggage.CountersInt.Range(func(k interface{}, v interface{}) bool {
-			trailerBaggage.CountersInt[k.(string)] = v.(int64)
-			return true
-		})
+		contextBaggage.mu.Lock()
+		for k, v := range contextBaggage.CountersInt {
+			trailerBaggage.CountersInt[k] = v
+		}
+		contextBaggage.mu.Unlock()
 
 		bytes, marshalErr := trailerBaggage.Marshal()
 		if marshalErr != nil {
@@ -156,25 +158,45 @@ func GetMetricsBaggageFromContext(ctx context.Context) *contextBaggage {
 }
 
 func AddMetricsBaggageToContext(ctx context.Context) context.Context {
-	metricsContextBaggage := &contextBaggage{CountersInt: &sync.Map{}}
+	metricsContextBaggage := &contextBaggage{}
 	return context.WithValue(ctx, baggageCtxKey, metricsContextBaggage)
 }
 
+
 // ContextCounterAdd adds value to counter within metrics context.
-func ContextCounterAdd(ctx context.Context, name string, value int64) {
+func ContextCounterAdd(ctx context.Context, name string, value int64) bool {
 	metricsBaggage := GetMetricsBaggageFromContext(ctx)
 
 	if metricsBaggage == nil {
-		return
+		return false
 	}
 
-	for done := false; !done; {
-		metricInterface, _ := metricsBaggage.CountersInt.LoadAndDelete(name)
-		var newValue = value
-		if metricInterface != nil {
-			newValue += metricInterface.(int64)
-		}
-		_, loaded := metricsBaggage.CountersInt.LoadOrStore(name, newValue)
-		done = !loaded
+	metricsBaggage.mu.Lock()
+	defer metricsBaggage.mu.Unlock()
+
+	if metricsBaggage.CountersInt == nil {
+		metricsBaggage.CountersInt = make(map[string]int64)
 	}
+
+	val := metricsBaggage.CountersInt[name]
+	val += value
+	metricsBaggage.CountersInt[name] = val
+
+	return true
+}
+
+// ContextCounterGet returns value and true if successfully retrieved value
+func ContextCounterGet(ctx context.Context, name string) (int64, bool) {
+	metricsBaggage := GetMetricsBaggageFromContext(ctx)
+
+	if metricsBaggage == nil {
+		return 0, false
+	}
+
+	if metricsBaggage.CountersInt == nil {
+		return 0, false
+	}
+
+	result, _ := metricsBaggage.CountersInt[name]
+	return result, true
 }
