@@ -214,7 +214,7 @@ type (
 		// DefaultStore is the name of the default data store to use
 		DefaultStore string `yaml:"defaultStore" validate:"nonzero"`
 		// VisibilityStore is the name of the datastore to be used for visibility records
-		VisibilityStore string `yaml:"visibilityStore" validate:"nonzero"`
+		VisibilityStore string `yaml:"visibilityStore"`
 		// AdvancedVisibilityStore is the name of the datastore to be used for visibility records
 		AdvancedVisibilityStore string `yaml:"advancedVisibilityStore"`
 		// NumHistoryShards is the desired number of history shards. This config doesn't

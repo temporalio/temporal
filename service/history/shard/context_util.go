@@ -57,6 +57,7 @@ func NewTestContext(
 		shardID:                   shardInfo.GetShardId(),
 		rangeID:                   shardInfo.GetRangeId(),
 		shardInfo:                 shardInfo,
+		metricsClient:             resource.MetricsClient,
 		executionManager:          resource.ExecutionMgr,
 		config:                    config,
 		logger:                    resource.GetLogger(),
