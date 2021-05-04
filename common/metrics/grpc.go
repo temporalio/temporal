@@ -41,7 +41,7 @@ type (
 
 	// contextBaggage is used to propagate metrics across single gRPC call within server
 	contextBaggage struct {
-		mu          sync.Mutex
+		sync.Mutex
 		CountersInt map[string]int64
 	}
 )
@@ -125,11 +125,11 @@ func NewServerMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryS
 
 		trailerBaggage := &metricspb.Baggage{CountersInt: make(map[string]int64)}
 
-		contextBaggage.mu.Lock()
+		contextBaggage.Lock()
 		for k, v := range contextBaggage.CountersInt {
 			trailerBaggage.CountersInt[k] = v
 		}
-		contextBaggage.mu.Unlock()
+		contextBaggage.Unlock()
 
 		bytes, marshalErr := trailerBaggage.Marshal()
 		if marshalErr != nil {
@@ -170,8 +170,8 @@ func ContextCounterAdd(ctx context.Context, name string, value int64) bool {
 		return false
 	}
 
-	metricsBaggage.mu.Lock()
-	defer metricsBaggage.mu.Unlock()
+	metricsBaggage.Lock()
+	defer metricsBaggage.Unlock()
 
 	if metricsBaggage.CountersInt == nil {
 		metricsBaggage.CountersInt = make(map[string]int64)
@@ -191,6 +191,9 @@ func ContextCounterGet(ctx context.Context, name string) (int64, bool) {
 	if metricsBaggage == nil {
 		return 0, false
 	}
+
+	metricsBaggage.Lock()
+	defer metricsBaggage.Unlock()
 
 	if metricsBaggage.CountersInt == nil {
 		return 0, false
