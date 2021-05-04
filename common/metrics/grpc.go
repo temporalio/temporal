@@ -37,10 +37,10 @@ import (
 )
 
 type (
-	baggageContextKey struct{}
+	metricsContextKey struct{}
 
-	// contextBaggage is used to propagate metrics across single gRPC call within server
-	contextBaggage struct {
+	// metricsContext is used to propagate metrics across single gRPC call within server
+	metricsContext struct {
 		sync.Mutex
 		CountersInt map[string]int64
 	}
@@ -49,8 +49,8 @@ type (
 var (
 	// "-bin" suffix is a reserved in gRPC that signals that metadata string value is actually a byte data
 	// If trailer key has such a suffix, value will be base64 encoded.
-	baggageTrailerKey = "metrics-baggage-bin"
-	baggageCtxKey     = baggageContextKey{}
+	metricsTrailerKey = "metrics-trailer-bin"
+	metricsCtxKey     = metricsContextKey{}
 )
 
 // NewServerMetricsContextInjectorInterceptor returns grpc server interceptor that adds metrics context to golang
@@ -62,7 +62,7 @@ func NewServerMetricsContextInjectorInterceptor() grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (interface{}, error) {
-		ctxWithMetricsBaggage := AddMetricsBaggageToContext(ctx)
+		ctxWithMetricsBaggage := addMetricsContext(ctx)
 		return handler(ctxWithMetricsBaggage, req)
 	}
 }
@@ -78,7 +78,7 @@ func NewClientMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryC
 		optsWithTrailer := append(opts, grpc.Trailer(&trailer))
 		err := invoker(ctx, method, req, reply, cc, optsWithTrailer...)
 
-		baggageStrings := trailer.Get(baggageTrailerKey)
+		baggageStrings := trailer.Get(metricsTrailerKey)
 		if len(baggageStrings) == 0 {
 			return err
 		}
@@ -118,25 +118,25 @@ func NewServerMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryS
 		default:
 		}
 
-		contextBaggage := GetMetricsBaggageFromContext(ctx)
-		if contextBaggage == nil {
+		metricsCtx := getMetricsContext(ctx)
+		if metricsCtx == nil {
 			return resp, err
 		}
 
-		trailerBaggage := &metricspb.Baggage{CountersInt: make(map[string]int64)}
+		metricsBaggage := &metricspb.Baggage{CountersInt: make(map[string]int64)}
 
-		contextBaggage.Lock()
-		for k, v := range contextBaggage.CountersInt {
-			trailerBaggage.CountersInt[k] = v
+		metricsCtx.Lock()
+		for k, v := range metricsCtx.CountersInt {
+			metricsBaggage.CountersInt[k] = v
 		}
-		contextBaggage.Unlock()
+		metricsCtx.Unlock()
 
-		bytes, marshalErr := trailerBaggage.Marshal()
+		bytes, marshalErr := metricsBaggage.Marshal()
 		if marshalErr != nil {
 			logger.Error("unable to marshal metric baggage", tag.Error(marshalErr))
 		}
 
-		md := metadata.Pairs(baggageTrailerKey, string(bytes))
+		md := metadata.Pairs(metricsTrailerKey, string(bytes))
 
 		marshalErr = grpc.SetTrailer(ctx, md)
 		if marshalErr != nil {
@@ -147,58 +147,58 @@ func NewServerMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryS
 	}
 }
 
-// GetMetricsBaggageFromContext extracts metrics context from golang context.
-func GetMetricsBaggageFromContext(ctx context.Context) *contextBaggage {
-	metricsBaggage := ctx.Value(baggageCtxKey)
-	if metricsBaggage == nil {
+// getMetricsContext extracts metrics context from golang context.
+func getMetricsContext(ctx context.Context) *metricsContext {
+	metricsCtx := ctx.Value(metricsCtxKey)
+	if metricsCtx == nil {
 		return nil
 	}
 
-	return metricsBaggage.(*contextBaggage)
+	return metricsCtx.(*metricsContext)
 }
 
-func AddMetricsBaggageToContext(ctx context.Context) context.Context {
-	metricsContextBaggage := &contextBaggage{}
-	return context.WithValue(ctx, baggageCtxKey, metricsContextBaggage)
+func addMetricsContext(ctx context.Context) context.Context {
+	metricsCtx := &metricsContext{}
+	return context.WithValue(ctx, metricsCtxKey, metricsCtx)
 }
 
 // ContextCounterAdd adds value to counter within metrics context.
 func ContextCounterAdd(ctx context.Context, name string, value int64) bool {
-	metricsBaggage := GetMetricsBaggageFromContext(ctx)
+	metricsCtx := getMetricsContext(ctx)
 
-	if metricsBaggage == nil {
+	if metricsCtx == nil {
 		return false
 	}
 
-	metricsBaggage.Lock()
-	defer metricsBaggage.Unlock()
+	metricsCtx.Lock()
+	defer metricsCtx.Unlock()
 
-	if metricsBaggage.CountersInt == nil {
-		metricsBaggage.CountersInt = make(map[string]int64)
+	if metricsCtx.CountersInt == nil {
+		metricsCtx.CountersInt = make(map[string]int64)
 	}
 
-	val := metricsBaggage.CountersInt[name]
+	val := metricsCtx.CountersInt[name]
 	val += value
-	metricsBaggage.CountersInt[name] = val
+	metricsCtx.CountersInt[name] = val
 
 	return true
 }
 
 // ContextCounterGet returns value and true if successfully retrieved value
 func ContextCounterGet(ctx context.Context, name string) (int64, bool) {
-	metricsBaggage := GetMetricsBaggageFromContext(ctx)
+	metricsCtx := getMetricsContext(ctx)
 
-	if metricsBaggage == nil {
+	if metricsCtx == nil {
 		return 0, false
 	}
 
-	metricsBaggage.Lock()
-	defer metricsBaggage.Unlock()
+	metricsCtx.Lock()
+	defer metricsCtx.Unlock()
 
-	if metricsBaggage.CountersInt == nil {
+	if metricsCtx.CountersInt == nil {
 		return 0, false
 	}
 
-	result, _ := metricsBaggage.CountersInt[name]
+	result, _ := metricsCtx.CountersInt[name]
 	return result, true
 }

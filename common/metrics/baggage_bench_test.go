@@ -37,10 +37,10 @@ import (
 
 type (
 	// baggageBenchTest Was used to compare the behavior of sync.Map vs map+mutex in the context of usage for
-	// contextBaggage.
+	// metricsContext.
 	// See testMapBaggage for test logic.
 	// As a summary, using mutex performed considerably faster than sync.Map.
-	// These results are to be reviewed if the usage scenario of contextBaggage changes.
+	// These results are to be reviewed if the usage scenario of metricsContext changes.
 	baggageBenchTest struct {
 		suite.Suite
 		*require.Assertions
