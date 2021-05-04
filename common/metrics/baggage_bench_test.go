@@ -36,6 +36,11 @@ import (
 )
 
 type (
+	// baggageBenchTest Was used to compare the behavior of sync.Map vs map+mutex in the context of usage for
+	// contextBaggage.
+	// See testMapBaggage for test logic.
+	// As a summary, using mutex performed considerably faster than sync.Map.
+	// These results are to be reviewed if the usage scenario of contextBaggage changes.
 	baggageBenchTest struct {
 		suite.Suite
 		*require.Assertions
@@ -52,7 +57,7 @@ type (
 	}
 
 	baggageMutexMap struct {
-		mu   sync.Mutex
+		sync.Mutex
 		data map[string]int64
 	}
 )
@@ -90,8 +95,8 @@ func (b *baggageSyncMap) Get(k string) int64 {
 }
 
 func (b *baggageMutexMap) Add(k string, v int64) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.Lock()
+	defer b.Unlock()
 
 	value, _ := b.data[k]
 	value += v
@@ -99,8 +104,8 @@ func (b *baggageMutexMap) Add(k string, v int64) {
 }
 
 func (b *baggageMutexMap) Get(k string) int64 {
-	b.mu.Lock()
-	defer b.mu.Unlock()
+	b.Lock()
+	defer b.Unlock()
 	return b.data[k]
 }
 
