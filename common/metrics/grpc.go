@@ -41,7 +41,7 @@ type (
 
 	// contextBaggage is used to propagate metrics across single gRPC call within server
 	contextBaggage struct {
-		mu sync.Mutex
+		mu          sync.Mutex
 		CountersInt map[string]int64
 	}
 )
@@ -161,7 +161,6 @@ func AddMetricsBaggageToContext(ctx context.Context) context.Context {
 	metricsContextBaggage := &contextBaggage{}
 	return context.WithValue(ctx, baggageCtxKey, metricsContextBaggage)
 }
-
 
 // ContextCounterAdd adds value to counter within metrics context.
 func ContextCounterAdd(ctx context.Context, name string, value int64) bool {

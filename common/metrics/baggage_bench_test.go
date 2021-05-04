@@ -52,7 +52,7 @@ type (
 	}
 
 	baggageMutexMap struct {
-		mu sync.Mutex
+		mu   sync.Mutex
 		data map[string]int64
 	}
 )
@@ -104,12 +104,11 @@ func (b *baggageMutexMap) Get(k string) int64 {
 	return b.data[k]
 }
 
-
 // roughly 1.7s/7.5s for mutex/sync
 //baggageCount := 1000
 //threadCount := 20
 //updatesPerThread := 1000
-func testMapBaggage(createTestObj func () testBaggage) {
+func testMapBaggage(createTestObj func() testBaggage) {
 	baggageCount := 10
 	threadCount := 10
 	updatesPerThread := 10
@@ -122,7 +121,7 @@ func testMapBaggage(createTestObj func () testBaggage) {
 		wg := sync.WaitGroup{}
 		wg.Add(threadCount)
 		for th := 0; th < threadCount; th++ {
-			go func (key string) {
+			go func(key string) {
 				for upd := 0; upd < updatesPerThread; upd++ {
 					testObj.Add(key, rand.Int63())
 				}
@@ -138,11 +137,9 @@ func testMapBaggage(createTestObj func () testBaggage) {
 }
 
 func (s *baggageBenchTest) TestSyncMapBaggage() {
-	testMapBaggage(func()testBaggage{return &baggageSyncMap{data: &sync.Map{}}})
+	testMapBaggage(func() testBaggage { return &baggageSyncMap{data: &sync.Map{}} })
 }
 
 func (s *baggageBenchTest) TestMutexMapBaggage() {
-	testMapBaggage(func()testBaggage{return &baggageMutexMap{data: make(map[string]int64)}})
+	testMapBaggage(func() testBaggage { return &baggageMutexMap{data: make(map[string]int64)} })
 }
-
-
