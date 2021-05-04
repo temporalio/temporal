@@ -102,21 +102,12 @@ func (s *stringifySuite) TestAnyToString_DecodeMapValues() {
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		Memo:   &commonpb.Memo{Fields: fields},
 	}
-<<<<<<< HEAD
-	s.Equal(`{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:"testValue"}}}`, AnyToString(execution, true, 0, dataConverter))
+	s.Equal(`{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:"testValue"}}, StateTransitionCount:0}`, AnyToString(execution, true, 0, dataConverter))
 
 	fields["TestKey2"] = payload.EncodeString("anotherTestValue")
 	execution.Memo = &commonpb.Memo{Fields: fields}
 	got := AnyToString(execution, true, 0, dataConverter)
-	expected := `{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:"testValue", TestKey2:"anotherTestValue"}}}`
-=======
-	s.Equal(`{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:"testValue"}}, StateTransitionCount:0}`, AnyToString(execution, true, 0))
-
-	fields["TestKey2"] = payload.EncodeString("anotherTestValue")
-	execution.Memo = &commonpb.Memo{Fields: fields}
-	got := AnyToString(execution, true, 0)
 	expected := `{Status:Running, HistoryLength:0, Memo:{Fields:map{TestKey:"testValue", TestKey2:"anotherTestValue"}}, StateTransitionCount:0}`
->>>>>>> master
 	s.Equal(expected, got)
 }
 
