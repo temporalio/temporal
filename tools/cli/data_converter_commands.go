@@ -46,6 +46,50 @@ type PayloadResponse struct {
 	Content   string `json:"content"`
 }
 
+func processMessage(c *websocket.Conn) error {
+	mt, message, err := c.ReadMessage()
+	if err != nil {
+		if closeError, ok := err.(*websocket.CloseError); ok {
+			if closeError.Code == websocket.CloseNoStatusReceived ||
+				closeError.Code == websocket.CloseNormalClosure {
+				return nil
+			}
+		}
+
+		return fmt.Errorf("error reading websocket message: %v\n", err)
+	}
+
+	var payloadRequest PayloadRequest
+	err = json.Unmarshal(message, &payloadRequest)
+	if err != nil {
+		return fmt.Errorf("invalid payload request: %v", err)
+	}
+
+	var payload commonpb.Payload
+	err = jsonpb.UnmarshalString(string(payloadRequest.Payload), &payload)
+	if err != nil {
+		return fmt.Errorf("invalid payload data: %v\n", err)
+	}
+
+	payloadResponse := PayloadResponse{
+		RequestID: payloadRequest.RequestID,
+		Content:   cliDataConverter.ToString(&payload),
+	}
+
+	var response []byte
+	response, err = json.Marshal(payloadResponse)
+	if err != nil {
+		return fmt.Errorf("unable to marshal response: %v\n", err)
+	}
+
+	err = c.WriteMessage(mt, response)
+	if err != nil {
+		return fmt.Errorf("unable to write response: %v\n", err)
+	}
+
+	return nil
+}
+
 func buildPayloadHandler(context *cli.Context, origin string) func(http.ResponseWriter, *http.Request) {
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -66,49 +110,8 @@ func buildPayloadHandler(context *cli.Context, origin string) func(http.Response
 		defer c.Close()
 
 		for {
-			mt, message, err := c.ReadMessage()
-			if err != nil {
-				if closeError, ok := err.(*websocket.CloseError); ok {
-					if closeError.Code == websocket.CloseNoStatusReceived ||
-						closeError.Code == websocket.CloseNormalClosure {
-						break
-					}
-				}
-
-				fmt.Printf("error reading websocket message: %v\n", err)
-				break
-			}
-
-			var payloadRequest PayloadRequest
-			err = json.Unmarshal(message, &payloadRequest)
-			if err != nil {
-				fmt.Printf("invalid payload request: %v", err)
-				break
-			}
-
-			var payload commonpb.Payload
-			err = jsonpb.UnmarshalString(string(payloadRequest.Payload), &payload)
-			if err != nil {
-				fmt.Printf("invalid payload data: %v\n", err)
-				break
-			}
-
-			payloadResponse := PayloadResponse{
-				RequestID: payloadRequest.RequestID,
-				Content:   cliDataConverter.ToString(&payload),
-			}
-
-			var response []byte
-			response, err = json.Marshal(payloadResponse)
-			if err != nil {
-				fmt.Printf("unable to marshal response: %v\n", err)
-				break
-			}
-
-			err = c.WriteMessage(mt, response)
-			if err != nil {
-				fmt.Printf("unable to write response: %v\n", err)
-				break
+			if err := processMessage(c); err != nil {
+				return
 			}
 		}
 	}
