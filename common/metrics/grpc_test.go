@@ -89,7 +89,7 @@ func (s *grpcSuite) TestMetadataMetricInjection() {
 								s.Fail("failed to marshal values")
 							}
 							*trailer.TrailerAddr = metadata.MD{}
-							trailer.TrailerAddr.Append(baggageTrailerKey, string(data))
+							trailer.TrailerAddr.Append(metricsTrailerKey, string(data))
 							return nil
 						},
 					)
@@ -99,7 +99,7 @@ func (s *grpcSuite) TestMetadataMetricInjection() {
 
 			s.Nil(err)
 			s.Equal(len(ssts.trailers), 1)
-			propagationContextBlobs := ssts.trailers[0].Get(baggageTrailerKey)
+			propagationContextBlobs := ssts.trailers[0].Get(metricsTrailerKey)
 			s.NotNil(propagationContextBlobs)
 			s.Equal(1, len(propagationContextBlobs))
 			baggage := &metricspb.Baggage{}
@@ -144,7 +144,7 @@ func (s *grpcSuite) TestMetadataMetricInjection_NoMetricPresent() {
 								s.Fail("failed to marshal values")
 							}
 							trailer.TrailerAddr = &metadata.MD{}
-							trailer.TrailerAddr.Append(baggageTrailerKey, string(data))
+							trailer.TrailerAddr.Append(metricsTrailerKey, string(data))
 							return nil
 						},
 					)
@@ -154,7 +154,7 @@ func (s *grpcSuite) TestMetadataMetricInjection_NoMetricPresent() {
 
 			s.Nil(err)
 			s.Equal(len(ssts.trailers), 1)
-			propagationContextBlobs := ssts.trailers[0].Get(baggageTrailerKey)
+			propagationContextBlobs := ssts.trailers[0].Get(metricsTrailerKey)
 			s.NotNil(propagationContextBlobs)
 			s.Equal(1, len(propagationContextBlobs))
 			baggage := &metricspb.Baggage{}
@@ -171,15 +171,14 @@ func (s *grpcSuite) TestMetadataMetricInjection_NoMetricPresent() {
 }
 
 func (s *grpcSuite) TestContextCounterAdd() {
-	ctx := AddMetricsBaggageToContext(context.Background())
+	ctx := addMetricsContext(context.Background())
 
 	testCounterName := "test_counter"
 	ContextCounterAdd(ctx, testCounterName, 100)
 	ContextCounterAdd(ctx, testCounterName, 20)
 	ContextCounterAdd(ctx, testCounterName, 3)
 
-	metricsBaggage := GetMetricsBaggageFromContext(ctx)
-	value, ok := metricsBaggage.CountersInt[testCounterName]
+	value, ok := ContextCounterGet(ctx, testCounterName)
 	s.True(ok)
 	s.Equal(int64(123), value)
 }

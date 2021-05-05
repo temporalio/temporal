@@ -1409,12 +1409,13 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 
 	var activityStartedTime time.Time
 	var taskQueue string
+	var workflowTypeName string
 	err = e.updateWorkflowExecution(ctx, namespaceID, workflowExecution, true,
 		func(context workflowExecutionContext, mutableState mutableState) error {
+			workflowTypeName = mutableState.GetWorkflowType().GetName()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
 			}
-
 			scheduleID := token.GetScheduleId()
 			if scheduleID == common.EmptyEventID { // client call CompleteActivityById, so get scheduleID by activityID
 				scheduleID, err0 = getScheduleID(token.GetActivityId(), mutableState)
@@ -1448,7 +1449,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskCompletedScope).
 			Tagged(
 				metrics.NamespaceTag(namespace),
-				metrics.WorkflowTypeTag(token.WorkflowType),
+				metrics.WorkflowTypeTag(workflowTypeName),
 				metrics.ActivityTypeTag(token.ActivityType),
 				metrics.TaskQueueTag(taskQueue),
 			)
@@ -1483,8 +1484,10 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 
 	var activityStartedTime time.Time
 	var taskQueue string
+	var workflowTypeName string
 	err = e.updateWorkflowExecutionWithAction(ctx, namespaceID, workflowExecution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
+			workflowTypeName = mutableState.GetWorkflowType().GetName()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
 			}
@@ -1533,7 +1536,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskFailedScope).
 			Tagged(
 				metrics.NamespaceTag(namespace),
-				metrics.WorkflowTypeTag(token.WorkflowType),
+				metrics.WorkflowTypeTag(workflowTypeName),
 				metrics.ActivityTypeTag(token.ActivityType),
 				metrics.TaskQueueTag(taskQueue),
 			)
@@ -1568,8 +1571,10 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 
 	var activityStartedTime time.Time
 	var taskQueue string
+	var workflowTypeName string
 	err = e.updateWorkflowExecution(ctx, namespaceID, workflowExecution, true,
 		func(context workflowExecutionContext, mutableState mutableState) error {
+			workflowTypeName = mutableState.GetWorkflowType().GetName()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return ErrWorkflowCompleted
 			}
@@ -1610,10 +1615,10 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 			return nil
 		})
 	if err == nil && !activityStartedTime.IsZero() {
-		scope := e.metricsClient.Scope(metrics.HistoryClientRespondActivityTaskCanceledScope).
+		scope := e.metricsClient.Scope(metrics.HistoryRespondActivityTaskCanceledScope).
 			Tagged(
 				metrics.NamespaceTag(namespace),
-				metrics.WorkflowTypeTag(token.WorkflowType),
+				metrics.WorkflowTypeTag(workflowTypeName),
 				metrics.ActivityTypeTag(token.ActivityType),
 				metrics.TaskQueueTag(taskQueue),
 			)
