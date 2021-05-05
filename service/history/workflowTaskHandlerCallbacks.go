@@ -121,7 +121,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 		RunId:      req.WorkflowExecution.RunId,
 	}
 
-	return handler.historyEngine.updateWorkflowExecutionWithAction(ctx, namespaceID, execution,
+	return handler.historyEngine.updateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
@@ -167,7 +170,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 	requestID := req.GetRequestId()
 
 	var resp *historyservice.RecordWorkflowTaskStartedResponse
-	err = handler.historyEngine.updateWorkflowExecutionWithAction(ctx, namespaceID, execution,
+	err = handler.historyEngine.updateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
@@ -180,7 +186,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			if !isRunning && scheduleID >= mutableState.GetNextEventID() {
 				handler.metricsClient.IncCounter(metrics.HistoryRecordWorkflowTaskStartedScope, metrics.StaleMutableStateCounter)
 				// Reload workflow execution history
-				// ErrStaleState will trigger updateWorkflowExecutionWithAction function to reload the mutable state
+				// ErrStaleState will trigger updateWorkflowExecution function to reload the mutable state
 				return nil, ErrStaleState
 			}
 
@@ -256,21 +262,30 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 		RunId:      token.GetRunId(),
 	}
 
-	return handler.historyEngine.updateWorkflowExecution(ctx, namespaceID, workflowExecution, true,
-		func(context workflowExecutionContext, mutableState mutableState) error {
+	return handler.historyEngine.updateWorkflowExecution(
+		ctx,
+		namespaceID,
+		workflowExecution,
+		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return ErrWorkflowCompleted
+				return nil, ErrWorkflowCompleted
 			}
 
 			scheduleID := token.GetScheduleId()
 			workflowTask, isRunning := mutableState.GetWorkflowTaskInfo(scheduleID)
 			if !isRunning || workflowTask.Attempt != token.ScheduleAttempt || workflowTask.StartedID == common.EmptyEventID {
-				return serviceerror.NewNotFound("Workflow task not found.")
+				return nil, serviceerror.NewNotFound("Workflow task not found.")
 			}
 
 			_, err := mutableState.AddWorkflowTaskFailedEvent(workflowTask.ScheduleID, workflowTask.StartedID, request.GetCause(), request.GetFailure(),
 				request.GetIdentity(), request.GetBinaryChecksum(), "", "", 0)
-			return err
+			if err != nil {
+				return nil, err
+			}
+			return &updateWorkflowAction{
+				noop:               false,
+				createWorkflowTask: true,
+			}, nil
 		})
 }
 
