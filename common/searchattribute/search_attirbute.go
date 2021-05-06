@@ -45,13 +45,9 @@ type (
 		GetSearchAttributes(indexName string, bypassCache bool) (map[string]enumspb.IndexedValueType, error)
 	}
 
-	Saver interface {
-		SaveSearchAttributes(indexName string, newCustomSearchAttributes map[string]enumspb.IndexedValueType) error
-	}
-
 	Manager interface {
 		Provider
-		Saver
+		SaveSearchAttributes(indexName string, newCustomSearchAttributes map[string]enumspb.IndexedValueType) error
 	}
 )
 

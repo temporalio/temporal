@@ -73,43 +73,6 @@ func (mr *MockProviderMockRecorder) GetSearchAttributes(indexName, bypassCache i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockProvider)(nil).GetSearchAttributes), indexName, bypassCache)
 }
 
-// MockSaver is a mock of Saver interface.
-type MockSaver struct {
-	ctrl     *gomock.Controller
-	recorder *MockSaverMockRecorder
-}
-
-// MockSaverMockRecorder is the mock recorder for MockSaver.
-type MockSaverMockRecorder struct {
-	mock *MockSaver
-}
-
-// NewMockSaver creates a new mock instance.
-func NewMockSaver(ctrl *gomock.Controller) *MockSaver {
-	mock := &MockSaver{ctrl: ctrl}
-	mock.recorder = &MockSaverMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockSaver) EXPECT() *MockSaverMockRecorder {
-	return m.recorder
-}
-
-// SaveSearchAttributes mocks base method.
-func (m *MockSaver) SaveSearchAttributes(indexName string, newCustomSearchAttributes map[string]enums.IndexedValueType) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SaveSearchAttributes", indexName, newCustomSearchAttributes)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SaveSearchAttributes indicates an expected call of SaveSearchAttributes.
-func (mr *MockSaverMockRecorder) SaveSearchAttributes(indexName, newCustomSearchAttributes interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveSearchAttributes", reflect.TypeOf((*MockSaver)(nil).SaveSearchAttributes), indexName, newCustomSearchAttributes)
-}
-
 // MockManager is a mock of Manager interface.
 type MockManager struct {
 	ctrl     *gomock.Controller
