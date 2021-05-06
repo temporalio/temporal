@@ -441,3 +441,5 @@ ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."
 	@printf $(COLOR) "========================================================================"
 	@git diff --name-status --exit-code || (printf $(COLOR) "========================================================================"; printf $(RED) "Above files are not regenerated properly. Regenerate them and try again."; exit 1)
+
+#test
