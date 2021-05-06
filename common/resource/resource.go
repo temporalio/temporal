@@ -29,6 +29,7 @@ import (
 
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/server/common/searchattribute"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -59,6 +60,7 @@ type (
 		GetHostInfo() *membership.HostInfo
 		GetArchivalMetadata() archiver.ArchivalMetadata
 		GetClusterMetadata() cluster.Metadata
+		GetSearchAttributesProvider() searchattribute.Provider
 
 		// other common resources
 
