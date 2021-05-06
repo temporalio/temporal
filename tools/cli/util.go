@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/tools/cli/dataconverter"
 	"go.temporal.io/server/tools/cli/stringify"
 )
 
@@ -77,7 +78,7 @@ func GetHistory(ctx context.Context, workflowClient sdkclient.Client, workflowID
 // HistoryEventToString convert HistoryEvent to string
 func HistoryEventToString(e *historypb.HistoryEvent, printFully bool, maxFieldLength int) string {
 	data := getEventAttributes(e)
-	return stringify.AnyToString(data, printFully, maxFieldLength, cliDataConverter)
+	return stringify.AnyToString(data, printFully, maxFieldLength, dataconverter.GetDataConverter())
 }
 
 // ColorEvent takes an event and return string with color

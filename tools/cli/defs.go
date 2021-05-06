@@ -31,7 +31,6 @@ import (
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/sdk/converter"
 )
 
 const (
@@ -126,8 +125,4 @@ var (
 		"cont":      enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 		"timeout":   enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
-)
-
-var (
-	cliDataConverter converter.DataConverter = converter.GetDefaultDataConverter()
 )

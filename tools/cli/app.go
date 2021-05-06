@@ -30,6 +30,7 @@ import (
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/tools/cli/dataconverter"
 	"go.temporal.io/server/tools/cli/plugin"
 )
 
@@ -237,7 +238,7 @@ func loadPlugins(ctx *cli.Context) error {
 			return err
 		}
 
-		cliDataConverter = dataConverter
+		dataconverter.SetDataConverter(dataConverter)
 	}
 
 	return nil
