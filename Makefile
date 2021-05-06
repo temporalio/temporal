@@ -427,6 +427,21 @@ go-generate:
 
 mocks: go-generate external-mocks
 
+##### Fossa #####
+fossa-install:
+	curl -H 'Cache-Control: no-cache' https://raw.githubusercontent.com/fossas/fossa-cli/master/install.sh | bash
+
+fossa-init:
+	fossa init --include-all --no-ansi
+
+fossa-analyze:
+	fossa analyze --no-ansi
+
+fossa-test:
+	fossa test --timeout 1800 --no-ansi
+
+build-fossa: bins fossa-init fossa-analyze fossa-test
+
 ##### Auxilary #####
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
