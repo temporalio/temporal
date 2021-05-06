@@ -435,7 +435,7 @@ fossa-init:
 	fossa init --include-all --no-ansi
 
 fossa-analyze:
-	fossa analyze --no-ansi
+	fossa analyze --no-ansi -b $(git branch --show-current)
 
 fossa-test:
 	fossa test --timeout 1800 --no-ansi
