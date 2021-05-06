@@ -12,6 +12,6 @@ TEMPORAL_DBG_NETWORK_DELAY_MS="${TEMPORAL_DBG_NETWORK_DELAY_MS:-}"
 #
 # Read more about what's possible with tc here:
 # https://www.badunetworks.com/traffic-shaping-with-tc/
-if [ ! -z "${TEMPORAL_DBG_NETWORK_DELAY_MS}" ]; then
+if [ -n "${TEMPORAL_DBG_NETWORK_DELAY_MS}" ]; then
 	tc qdisc add dev eth0 root netem delay "${TEMPORAL_DBG_NETWORK_DELAY_MS}ms" 
 fi

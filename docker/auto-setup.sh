@@ -85,7 +85,7 @@ wait_for_cassandra() {
 
     { export CASSANDRA_PASSWORD=${CASSANDRA_PASSWORD}; } 2> /dev/null
 
-    until temporal-cassandra-tool --ep ${CASSANDRA_SEEDS} validate-health; do
+    until temporal-cassandra-tool --ep "${CASSANDRA_SEEDS}" validate-health; do
         echo 'Waiting for Cassandra to start up.'
         sleep 1
     done
@@ -93,8 +93,8 @@ wait_for_cassandra() {
 }
 
 wait_for_mysql() {
-    SERVER=`echo ${MYSQL_SEEDS} | awk -F ',' '{print $1}'`
-    until nc -z ${SERVER} ${DB_PORT}; do
+    SERVER=$(echo "${MYSQL_SEEDS}" | awk -F ',' '{print $1}')
+    until nc -z "${SERVER}" "${DB_PORT}"; do
         echo 'Waiting for MySQL to start up.'
       sleep 1
     done
@@ -103,8 +103,8 @@ wait_for_mysql() {
 }
 
 wait_for_postgres() {
-    SERVER=`echo ${POSTGRES_SEEDS} | awk -F ',' '{print $1}'`
-    until nc -z ${SERVER} ${DB_PORT}; do
+    SERVER=$(echo "${POSTGRES_SEEDS}" | awk -F ',' '{print $1}')
+    until nc -z "${SERVER}" "${DB_PORT}"; do
       echo 'Waiting for PostgreSQL to startup.'
       sleep 1
     done
@@ -137,14 +137,14 @@ setup_cassandra_schema() {
     { export CASSANDRA_PASSWORD=${CASSANDRA_PASSWORD}; } 2> /dev/null
 
     SCHEMA_DIR=${TEMPORAL_HOME}/schema/cassandra/temporal/versioned
-    temporal-cassandra-tool --ep ${CASSANDRA_SEEDS} create -k ${KEYSPACE} --rf ${CASSANDRA_REPLICATION_FACTOR}
-    temporal-cassandra-tool --ep ${CASSANDRA_SEEDS} -k ${KEYSPACE} setup-schema -v 0.0
-    temporal-cassandra-tool --ep ${CASSANDRA_SEEDS} -k ${KEYSPACE} update-schema -d ${SCHEMA_DIR}
+    temporal-cassandra-tool --ep "${CASSANDRA_SEEDS}" create -k "${KEYSPACE}" --rf "${CASSANDRA_REPLICATION_FACTOR}"
+    temporal-cassandra-tool --ep "${CASSANDRA_SEEDS}" -k "${KEYSPACE}" setup-schema -v 0.0
+    temporal-cassandra-tool --ep "${CASSANDRA_SEEDS}" -k "${KEYSPACE}" update-schema -d "${SCHEMA_DIR}"
 
     VISIBILITY_SCHEMA_DIR=${TEMPORAL_HOME}/schema/cassandra/visibility/versioned
-    temporal-cassandra-tool --ep ${CASSANDRA_SEEDS} create -k ${VISIBILITY_KEYSPACE} --rf ${CASSANDRA_REPLICATION_FACTOR}
-    temporal-cassandra-tool --ep ${CASSANDRA_SEEDS} -k ${VISIBILITY_KEYSPACE} setup-schema -v 0.0
-    temporal-cassandra-tool --ep ${CASSANDRA_SEEDS} -k ${VISIBILITY_KEYSPACE} update-schema -d ${VISIBILITY_SCHEMA_DIR}
+    temporal-cassandra-tool --ep "${CASSANDRA_SEEDS}" create -k "${VISIBILITY_KEYSPACE}" --rf "${CASSANDRA_REPLICATION_FACTOR}"
+    temporal-cassandra-tool --ep "${CASSANDRA_SEEDS}" -k "${VISIBILITY_KEYSPACE}" setup-schema -v 0.0
+    temporal-cassandra-tool --ep "${CASSANDRA_SEEDS}" -k "${VISIBILITY_KEYSPACE}" update-schema -d "${VISIBILITY_SCHEMA_DIR}"
 }
 
 setup_mysql_schema() {
@@ -159,13 +159,13 @@ setup_mysql_schema() {
     fi
 
     SCHEMA_DIR=${TEMPORAL_HOME}/schema/mysql/v57/temporal/versioned
-    temporal-sql-tool --ep ${MYSQL_SEEDS} -u ${MYSQL_USER} ${MYSQL_CONNECT_ATTR} create --db ${DBNAME}
-    temporal-sql-tool --ep ${MYSQL_SEEDS} -u ${MYSQL_USER} ${MYSQL_CONNECT_ATTR} --db ${DBNAME} setup-schema -v 0.0
-    temporal-sql-tool --ep ${MYSQL_SEEDS} -u ${MYSQL_USER} ${MYSQL_CONNECT_ATTR} --db ${DBNAME} update-schema -d ${SCHEMA_DIR}
+    temporal-sql-tool --ep "${MYSQL_SEEDS}" -u "${MYSQL_USER}" "${MYSQL_CONNECT_ATTR}" create --db "${DBNAME}"
+    temporal-sql-tool --ep "${MYSQL_SEEDS}" -u "${MYSQL_USER}" "${MYSQL_CONNECT_ATTR}" --db "${DBNAME}" setup-schema -v 0.0
+    temporal-sql-tool --ep "${MYSQL_SEEDS}" -u "${MYSQL_USER}" "${MYSQL_CONNECT_ATTR}" --db "${DBNAME}" update-schema -d "${SCHEMA_DIR}"
     VISIBILITY_SCHEMA_DIR=${TEMPORAL_HOME}/schema/mysql/v57/visibility/versioned
-    temporal-sql-tool --ep ${MYSQL_SEEDS} -u ${MYSQL_USER} ${MYSQL_CONNECT_ATTR} create --db ${VISIBILITY_DBNAME}
-    temporal-sql-tool --ep ${MYSQL_SEEDS} -u ${MYSQL_USER} ${MYSQL_CONNECT_ATTR} --db ${VISIBILITY_DBNAME} setup-schema -v 0.0
-    temporal-sql-tool --ep ${MYSQL_SEEDS} -u ${MYSQL_USER} ${MYSQL_CONNECT_ATTR} --db ${VISIBILITY_DBNAME} update-schema -d ${VISIBILITY_SCHEMA_DIR}
+    temporal-sql-tool --ep "${MYSQL_SEEDS}" -u "${MYSQL_USER}" "${MYSQL_CONNECT_ATTR}" create --db "${VISIBILITY_DBNAME}"
+    temporal-sql-tool --ep "${MYSQL_SEEDS}" -u "${MYSQL_USER}" "${MYSQL_CONNECT_ATTR}" --db "${VISIBILITY_DBNAME}" setup-schema -v 0.0
+    temporal-sql-tool --ep "${MYSQL_SEEDS}" -u "${MYSQL_USER}" "${MYSQL_CONNECT_ATTR}" --db "${VISIBILITY_DBNAME}" update-schema -d "${VISIBILITY_SCHEMA_DIR}"
 }
 
 setup_postgres_schema() {
@@ -173,13 +173,13 @@ setup_postgres_schema() {
     { export SQL_PASSWORD=${POSTGRES_PWD}; } 2> /dev/null
 
     SCHEMA_DIR=${TEMPORAL_HOME}/schema/postgresql/v96/temporal/versioned
-    temporal-sql-tool --plugin postgres --ep ${POSTGRES_SEEDS} -u ${POSTGRES_USER} -p ${DB_PORT} create --db ${DBNAME}
-    temporal-sql-tool --plugin postgres --ep ${POSTGRES_SEEDS} -u ${POSTGRES_USER} -p ${DB_PORT} --db ${DBNAME} setup-schema -v 0.0
-    temporal-sql-tool --plugin postgres --ep ${POSTGRES_SEEDS} -u ${POSTGRES_USER} -p ${DB_PORT} --db ${DBNAME} update-schema -d ${SCHEMA_DIR}
+    temporal-sql-tool --plugin postgres --ep "${POSTGRES_SEEDS}" -u "${POSTGRES_USER}" -p "${DB_PORT}" create --db "${DBNAME}"
+    temporal-sql-tool --plugin postgres --ep "${POSTGRES_SEEDS}" -u "${POSTGRES_USER}" -p "${DB_PORT}" --db "${DBNAME}" setup-schema -v 0.0
+    temporal-sql-tool --plugin postgres --ep "${POSTGRES_SEEDS}" -u "${POSTGRES_USER}" -p "${DB_PORT}" --db "${DBNAME}" update-schema -d "${SCHEMA_DIR}"
     VISIBILITY_SCHEMA_DIR=${TEMPORAL_HOME}/schema/postgresql/v96/visibility/versioned
-    temporal-sql-tool --plugin postgres --ep ${POSTGRES_SEEDS} -u ${POSTGRES_USER} -p ${DB_PORT} create --db ${VISIBILITY_DBNAME}
-    temporal-sql-tool --plugin postgres --ep ${POSTGRES_SEEDS} -u ${POSTGRES_USER} -p ${DB_PORT} --db ${VISIBILITY_DBNAME} setup-schema -v 0.0
-    temporal-sql-tool --plugin postgres --ep ${POSTGRES_SEEDS} -u ${POSTGRES_USER} -p ${DB_PORT} --db ${VISIBILITY_DBNAME} update-schema -d ${VISIBILITY_SCHEMA_DIR}
+    temporal-sql-tool --plugin postgres --ep "${POSTGRES_SEEDS}" -u "${POSTGRES_USER}" -p "${DB_PORT}" create --db "${VISIBILITY_DBNAME}"
+    temporal-sql-tool --plugin postgres --ep "${POSTGRES_SEEDS}" -u "${POSTGRES_USER}" -p "${DB_PORT}" --db "${VISIBILITY_DBNAME}" setup-schema -v 0.0
+    temporal-sql-tool --plugin postgres --ep "${POSTGRES_SEEDS}" -u "${POSTGRES_USER}" -p "${DB_PORT}" --db "${VISIBILITY_DBNAME}" update-schema -d "${VISIBILITY_SCHEMA_DIR}"
 }
 
 setup_schema() {
@@ -209,13 +209,13 @@ validate_es_env() {
 wait_for_es() {
     SECONDS=0
 
-    ES_SERVER=`echo ${ES_SEEDS} | awk -F ',' '{print $1}'`
+    ES_SERVER=$(echo "${ES_SEEDS}" | awk -F ',' '{print $1}')
     URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}"
 
-    until curl -s ${URL} 2>&1 > /dev/null; do
+    until curl -s "${URL}" > /dev/null 2>&1; do
         DURATION=${SECONDS}
 
-        if [ ${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS} -gt 0 ] && [ ${DURATION} -ge ${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS} ]; then
+        if [ "${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS}" -gt 0 ] && [ ${DURATION} -ge "${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS}" ]; then
             echo 'WARNING: timed out waiting for Elasticsearch to start up. Skipping index creation.'
             return;
         fi
@@ -229,11 +229,11 @@ wait_for_es() {
 
 setup_es_template() {
     SCHEMA_FILE=${TEMPORAL_HOME}/schema/elasticsearch/${ES_VERSION}/visibility/index_template.json
-    ES_SERVER=`echo ${ES_SEEDS} | awk -F ',' '{print $1}'`
+    ES_SERVER=$(echo "${ES_SEEDS}" | awk -F ',' '{print $1}')
     URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/_template/temporal-visibility-template"
-    curl -X PUT ${URL} -H 'Content-Type: application/json' --data-binary "@${SCHEMA_FILE}"
+    curl -X PUT "${URL}" -H 'Content-Type: application/json' --data-binary "@${SCHEMA_FILE}"
     URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/${ES_VIS_INDEX}"
-    curl -X PUT ${URL}
+    curl -X PUT "${URL}"
 }
 
 # === Default namespace functions ===
@@ -242,10 +242,10 @@ register_default_namespace() {
     echo "Temporal CLI address: ${TEMPORAL_CLI_ADDRESS}."
     sleep 5
     echo "Registering default namespace: ${DEFAULT_NAMESPACE}."
-    until tctl --ns ${DEFAULT_NAMESPACE} namespace describe; do
+    until tctl --ns "${DEFAULT_NAMESPACE}" namespace describe; do
         echo "Default namespace ${DEFAULT_NAMESPACE} not found. Creating..."
         sleep 1
-        tctl --ns ${DEFAULT_NAMESPACE} namespace register --rd ${DEFAULT_NAMESPACE_RETENTION} --desc "Default namespace for Temporal Server."
+        tctl --ns "${DEFAULT_NAMESPACE}" namespace register --rd "${DEFAULT_NAMESPACE_RETENTION}" --desc "Default namespace for Temporal Server."
     done
     echo "Default namespace registration complete."
 }

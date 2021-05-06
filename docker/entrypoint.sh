@@ -4,7 +4,7 @@ set -eu -o pipefail
 
 export BIND_ON_IP="${BIND_ON_IP:-$(hostname -i)}"
 
-if [[ "BIND_ON_IP" =~ ":" ]]; then
+if [[ "${BIND_ON_IP}" =~ ":" ]]; then
     # ipv6
     export TEMPORAL_CLI_ADDRESS="[${BIND_ON_IP}]:7233"
 else
