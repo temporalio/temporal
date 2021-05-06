@@ -12,4 +12,4 @@ if [ -n "${SERVICES}" ]; then
     SERVICE_ARGS=$(printf -- "--service=%s " "${SERVICE_LIST[@]}")
 fi
 
-exec temporal-server --env docker start "${SERVICE_ARGS}"
+exec temporal-server --env docker start "${SERVICE_ARGS[@]}"
