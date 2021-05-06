@@ -222,8 +222,8 @@ func NewCliApp() *cli.App {
 			Subcommands: newDataConverterCommands(),
 		},
 	}
-	app.Before = LoadPlugins
-	app.After = KillPlugins
+	app.Before = loadPlugins
+	app.After = killPlugins
 
 	// set builder if not customized
 	if cFactory == nil {
@@ -232,10 +232,10 @@ func NewCliApp() *cli.App {
 	return app
 }
 
-func LoadPlugins(ctx *cli.Context) error {
-	dc_plugin := ctx.String(FlagDataConverterPlugin)
-	if dc_plugin != "" {
-		dataConverter, err := NewDataConverterPlugin(dc_plugin)
+func loadPlugins(ctx *cli.Context) error {
+	dcPlugin := ctx.String(FlagDataConverterPlugin)
+	if dcPlugin != "" {
+		dataConverter, err := NewDataConverterPlugin(dcPlugin)
 		if err != nil {
 			fmt.Printf("data converter: %v", err)
 			return err
@@ -247,7 +247,7 @@ func LoadPlugins(ctx *cli.Context) error {
 	return nil
 }
 
-func KillPlugins(ctx *cli.Context) error {
+func killPlugins(ctx *cli.Context) error {
 	plugin.CleanupClients()
 
 	return nil
