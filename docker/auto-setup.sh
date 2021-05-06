@@ -85,7 +85,7 @@ wait_for_cassandra() {
 
     { export CASSANDRA_PASSWORD=${CASSANDRA_PASSWORD}; } 2> /dev/null
 
-    until temporal-cassandra-tool --ep ${CASSANDRA_SEEDS} validate-health < /dev/null; do
+    until temporal-cassandra-tool --ep ${CASSANDRA_SEEDS} validate-health; do
         echo 'Waiting for Cassandra to start up.'
         sleep 1
     done
@@ -94,7 +94,7 @@ wait_for_cassandra() {
 
 wait_for_mysql() {
     SERVER=`echo ${MYSQL_SEEDS} | awk -F ',' '{print $1}'`
-    until nc -z ${SERVER} ${DB_PORT} < /dev/null; do
+    until nc -z ${SERVER} ${DB_PORT}; do
         echo 'Waiting for MySQL to start up.'
       sleep 1
     done
@@ -104,7 +104,7 @@ wait_for_mysql() {
 
 wait_for_postgres() {
     SERVER=`echo ${POSTGRES_SEEDS} | awk -F ',' '{print $1}'`
-    until nc -z ${SERVER} ${DB_PORT} < /dev/null; do
+    until nc -z ${SERVER} ${DB_PORT}; do
       echo 'Waiting for PostgreSQL to startup.'
       sleep 1
     done
@@ -151,8 +151,11 @@ setup_mysql_schema() {
     # TODO (alex): Remove exports
     { export SQL_PASSWORD=${MYSQL_PWD}; } 2> /dev/null
 
+    MYSQL_CONNECT_ATTR=''
     if [ "${MYSQL_TX_ISOLATION_COMPAT}" == "true" ]; then
         MYSQL_CONNECT_ATTR='--connect-attributes tx_isolation=READ-COMMITTED'
+    else
+        MYSQL_CONNECT_ATTR=''
     fi
 
     SCHEMA_DIR=${TEMPORAL_HOME}/schema/mysql/v57/temporal/versioned
@@ -208,9 +211,8 @@ wait_for_es() {
 
     ES_SERVER=`echo ${ES_SEEDS} | awk -F ',' '{print $1}'`
     URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}"
-    curl -s ${URL} 2>&1 > /dev/null
 
-    until [ $? -eq 0 ]; do
+    until curl -s ${URL} 2>&1 > /dev/null; do
         DURATION=${SECONDS}
 
         if [ ${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS} -gt 0 ] && [ ${DURATION} -ge ${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS} ]; then
@@ -220,7 +222,6 @@ wait_for_es() {
 
         echo 'Waiting for Elasticsearch to start up.'
         sleep 1
-        curl -s ${URL} 2>&1 > /dev/null
     done
 
     echo 'Elasticsearch started.'
@@ -241,7 +242,7 @@ register_default_namespace() {
     echo "Temporal CLI address: ${TEMPORAL_CLI_ADDRESS}."
     sleep 5
     echo "Registering default namespace: ${DEFAULT_NAMESPACE}."
-    until tctl --ns ${DEFAULT_NAMESPACE} namespace describe < /dev/null; do
+    until tctl --ns ${DEFAULT_NAMESPACE} namespace describe; do
         echo "Default namespace ${DEFAULT_NAMESPACE} not found. Creating..."
         sleep 1
         tctl --ns ${DEFAULT_NAMESPACE} namespace register --rd ${DEFAULT_NAMESPACE_RETENTION} --desc "Default namespace for Temporal Server."
