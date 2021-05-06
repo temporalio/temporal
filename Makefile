@@ -435,6 +435,7 @@ fossa-init:
 	fossa init --include-all --no-ansi
 
 fossa-analyze:
+	echo $$(git branch --show-current)
 	fossa analyze --no-ansi -b $$(git branch --show-current)
 
 fossa-test:
