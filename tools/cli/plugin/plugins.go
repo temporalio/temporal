@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cli
+package plugin
 
 import (
 	"fmt"
@@ -28,6 +28,10 @@ import (
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
+)
+
+const (
+	DATA_CONVERTER_PLUGIN_TYPE = "DataConverter"
 )
 
 var (
@@ -38,11 +42,11 @@ var (
 	}
 
 	pluginMap = map[string]plugin.Plugin{
-		"DataConverter": &DataConverterPlugin{},
+		DATA_CONVERTER_PLUGIN_TYPE: &DataConverterPlugin{},
 	}
 )
 
-func NewPluginClient(kind string, name string) (interface{}, error) {
+func newPluginClient(kind string, name string) (interface{}, error) {
 	pluginClient := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig: PluginHandshakeConfig,
 		Plugins:         pluginMap,
@@ -60,4 +64,8 @@ func NewPluginClient(kind string, name string) (interface{}, error) {
 	}
 
 	return rpcClient.Dispense(kind)
+}
+
+func StopPlugins() {
+	plugin.CleanupClients()
 }

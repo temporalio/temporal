@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cli
+package plugin
 
 import (
 	"fmt"
@@ -36,7 +36,7 @@ type DataConverterRPC struct {
 }
 
 func NewDataConverterPlugin(name string) (converter.DataConverter, error) {
-	client, err := NewPluginClient("DataConverter", "tctl-plugin-dataconverter-"+name)
+	client, err := newPluginClient(DATA_CONVERTER_PLUGIN_TYPE, "tctl-plugin-dataconverter-"+name)
 	if err != nil {
 		return nil, fmt.Errorf("unable to register plugin: %v\n", err)
 	}

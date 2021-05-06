@@ -27,14 +27,10 @@ package cli
 import (
 	"fmt"
 
-	"github.com/hashicorp/go-plugin"
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/headers"
-)
-
-var (
-	pluginClient *plugin.Client
+	"go.temporal.io/server/tools/cli/plugin"
 )
 
 // SetFactory is used to set the ClientFactory global
@@ -223,7 +219,7 @@ func NewCliApp() *cli.App {
 		},
 	}
 	app.Before = loadPlugins
-	app.After = killPlugins
+	app.After = stopPlugins
 
 	// set builder if not customized
 	if cFactory == nil {
@@ -235,7 +231,7 @@ func NewCliApp() *cli.App {
 func loadPlugins(ctx *cli.Context) error {
 	dcPlugin := ctx.String(FlagDataConverterPlugin)
 	if dcPlugin != "" {
-		dataConverter, err := NewDataConverterPlugin(dcPlugin)
+		dataConverter, err := plugin.NewDataConverterPlugin(dcPlugin)
 		if err != nil {
 			fmt.Printf("data converter: %v", err)
 			return err
@@ -247,8 +243,8 @@ func loadPlugins(ctx *cli.Context) error {
 	return nil
 }
 
-func killPlugins(ctx *cli.Context) error {
-	plugin.CleanupClients()
+func stopPlugins(ctx *cli.Context) error {
+	plugin.StopPlugins()
 
 	return nil
 }
