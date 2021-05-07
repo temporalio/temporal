@@ -127,6 +127,7 @@ var (
 	ComponentWorker                   = component("worker")
 	ComponentServiceResolver          = component("service-resolver")
 	ComponentMetadataInitializer      = component("metadata-initializer")
+	ComponentAddSearchAttributes      = component("add-search-attributes")
 	VersionChecker                    = component("version-checker")
 )
 

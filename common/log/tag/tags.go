@@ -609,6 +609,18 @@ func ESConfig(c interface{}) ZapTag {
 	return NewAnyTag("es-config", c)
 }
 
+func ESIndex(index string) ZapTag {
+	return NewStringTag("es-index", index)
+}
+
+func ESMapping(mapping map[string]string) ZapTag {
+	return NewAnyTag("es-mapping", mapping)
+}
+
+func ESClusterStatus(status string) ZapTag {
+	return NewStringTag("es-cluster-status", status)
+}
+
 // ESField returns tag for ESField
 func ESField(ESField string) ZapTag {
 	return NewStringTag("es-Field", ESField)

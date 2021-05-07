@@ -478,8 +478,10 @@ const (
 	FrontendClientGetClusterInfoScope
 	// FrontendClientListTaskQueuePartitionsScope tracks RPC calls to frontend service
 	FrontendClientListTaskQueuePartitionsScope
-	// AdminClientAddSearchAttributeScope tracks RPC calls to admin service
-	AdminClientAddSearchAttributeScope
+	// AdminClientAddSearchAttributesScope tracks RPC calls to admin service
+	AdminClientAddSearchAttributesScope
+	// AdminClientGetSearchAttributesScope tracks RPC calls to admin service
+	AdminClientGetSearchAttributesScope
 	// AdminClientCloseShardScope tracks RPC calls to admin service
 	AdminClientCloseShardScope
 	// AdminClientDescribeHistoryHostScope tracks RPC calls to admin service
@@ -689,8 +691,10 @@ const (
 const (
 	// AdminDescribeHistoryHostScope is the metric scope for admin.AdminDescribeHistoryHostScope
 	AdminDescribeHistoryHostScope = iota + NumCommonScopes
-	// AdminAddSearchAttributeScope is the metric scope for admin.AdminAddSearchAttributeScope
-	AdminAddSearchAttributeScope
+	// AdminAddSearchAttributesScope is the metric scope for admin.AdminAddSearchAttributesScope
+	AdminAddSearchAttributesScope
+	// AdminGetSearchAttributesScope is the metric scope for admin.AdminGetSearchAttributesScope
+	AdminGetSearchAttributesScope
 	// AdminDescribeWorkflowExecutionScope is the metric scope for admin.AdminDescribeWorkflowExecutionScope
 	AdminDescribeWorkflowExecutionScope
 	// AdminGetWorkflowExecutionRawHistoryScope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
@@ -1101,6 +1105,8 @@ const (
 	HistoryScavengerScope
 	// ParentClosePolicyProcessorScope is scope used by all metrics emitted by worker.ParentClosePolicyProcessor
 	ParentClosePolicyProcessorScope
+	// AddSearchAttributesWorkflowScope is scope used by all metrics emitted by worker.AddSearchAttributesWorkflowScope module
+	AddSearchAttributesWorkflowScope
 
 	NumWorkerScopes
 )
@@ -1291,7 +1297,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientReapplyEventsScope:                      {operation: "FrontendClientReapplyEventsScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetClusterInfoScope:                     {operation: "FrontendClientGetClusterInfoScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListTaskQueuePartitionsScope:            {operation: "FrontendClientListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-		AdminClientAddSearchAttributeScope:                    {operation: "AdminClientAddSearchAttribute", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientAddSearchAttributesScope:                   {operation: "AdminClientAddSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetSearchAttributesScope:                   {operation: "AdminClientGetSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeHistoryHostScope:                   {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeWorkflowMutableStateScope:          {operation: "AdminClientDescribeWorkflowMutableState", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetWorkflowExecutionRawHistoryScope:        {operation: "AdminClientGetWorkflowExecutionRawHistory", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1391,7 +1398,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminPurgeDLQMessagesScope:                 {operation: "AdminPurgeDLQMessages"},
 		AdminMergeDLQMessagesScope:                 {operation: "AdminMergeDLQMessages"},
 		AdminDescribeHistoryHostScope:              {operation: "DescribeHistoryHost"},
-		AdminAddSearchAttributeScope:               {operation: "AddSearchAttribute"},
+		AdminAddSearchAttributesScope:              {operation: "AdminAddSearchAttributes"},
+		AdminGetSearchAttributesScope:              {operation: "AdminGetSearchAttributes"},
 		AdminDescribeWorkflowExecutionScope:        {operation: "DescribeWorkflowExecution"},
 		AdminGetWorkflowExecutionRawHistoryScope:   {operation: "GetWorkflowExecutionRawHistory"},
 		AdminGetWorkflowExecutionRawHistoryV2Scope: {operation: "GetWorkflowExecutionRawHistoryV2"},
@@ -1595,6 +1603,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryScavengerScope:                  {operation: "historyscavenger"},
 		BatcherScope:                           {operation: "batcher"},
 		ParentClosePolicyProcessorScope:        {operation: "ParentClosePolicyProcessor"},
+		AddSearchAttributesWorkflowScope:       {operation: "AddSearchAttributesWorkflow"},
 	},
 }
 
@@ -1741,6 +1750,8 @@ const (
 	ParentClosePolicyProcessorSuccess
 	ParentClosePolicyProcessorFailures
 
+	AddSearchAttributesWorkflowSuccessCount
+	AddSearchAttributesWorkflowFailuresCount
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
 
@@ -2018,6 +2029,7 @@ const (
 	NamespaceReplicationEnqueueDLQCount
 	ScavengerValidationRequestsCount
 	ScavengerValidationFailuresCount
+	AddSearchAttributesFailuresCount
 
 	NumWorkerMetrics
 )
@@ -2119,6 +2131,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 
 		ParentClosePolicyProcessorSuccess:  {metricName: "parent_close_policy_processor_requests", metricType: Counter},
 		ParentClosePolicyProcessorFailures: {metricName: "parent_close_policy_processor_errors", metricType: Counter},
+
+		AddSearchAttributesWorkflowSuccessCount:  {metricName: "add_search_attributes_workflow_success", metricType: Counter},
+		AddSearchAttributesWorkflowFailuresCount: {metricName: "add_search_attributes_workflow_failure", metricType: Counter},
 
 		MatchingClientForwardedCounter:     {metricName: "forwarded", metricType: Counter},
 		MatchingClientInvalidTaskQueueName: {metricName: "invalid_task_queue_name", metricType: Counter},
@@ -2449,6 +2464,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		NamespaceReplicationEnqueueDLQCount:           {metricName: "namespace_replication_dlq_enqueue_requests", metricType: Counter},
 		ScavengerValidationRequestsCount:              {metricName: "scavenger_validation_requests", metricType: Counter},
 		ScavengerValidationFailuresCount:              {metricName: "scavenger_validation_failures", metricType: Counter},
+		AddSearchAttributesFailuresCount:              {metricName: "add_search_attributes_failures", metricType: Counter},
 	},
 }
 

@@ -5,3 +5,6 @@ RUN apk add --update --no-cache \
     git \
     protobuf \
     build-base
+
+RUN wget -O- https://raw.githubusercontent.com/fossas/fossa-cli/master/install.sh | sh
+

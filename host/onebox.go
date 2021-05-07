@@ -35,6 +35,7 @@ import (
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/cluster"
@@ -601,6 +602,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		dynamicconfig.GetIntPropertyFn(10000),
 		func(
 			persistenceBean persistenceClient.Bean,
+			searchAttributesProvider searchattribute.Provider,
 			logger log.Logger,
 		) (persistence.VisibilityManager, error) {
 			return persistenceBean.GetVisibilityManager(), nil
