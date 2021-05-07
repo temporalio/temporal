@@ -102,11 +102,21 @@ func (v *visibilityManagerWrapper) RecordWorkflowExecutionClosed(request *Record
 }
 
 func (v *visibilityManagerWrapper) UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error {
-	if v.esVisibilityManager == nil { // return operation not support
+	switch v.advancedVisWritingMode() {
+	case common.AdvancedVisibilityWritingModeOff:
+		// no op on SQL/Cassandra persistence.
 		return v.visibilityManager.UpsertWorkflowExecution(request)
+	case common.AdvancedVisibilityWritingModeOn:
+		return v.esVisibilityManager.UpsertWorkflowExecution(request)
+	case common.AdvancedVisibilityWritingModeDual:
+		if err := v.esVisibilityManager.UpsertWorkflowExecution(request); err != nil {
+			return err
+		}
+		// no op on SQL/Cassandra persistence.
+		return v.visibilityManager.UpsertWorkflowExecution(request)
+	default:
+		return serviceerror.NewInternal(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisWritingMode()))
 	}
-
-	return v.esVisibilityManager.UpsertWorkflowExecution(request)
 }
 
 func (v *visibilityManagerWrapper) ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
@@ -150,12 +160,19 @@ func (v *visibilityManagerWrapper) GetClosedWorkflowExecution(request *GetClosed
 }
 
 func (v *visibilityManagerWrapper) DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error {
-	if v.esVisibilityManager != nil {
+	switch v.advancedVisWritingMode() {
+	case common.AdvancedVisibilityWritingModeOff:
+		return v.visibilityManager.DeleteWorkflowExecution(request)
+	case common.AdvancedVisibilityWritingModeOn:
+		return v.esVisibilityManager.DeleteWorkflowExecution(request)
+	case common.AdvancedVisibilityWritingModeDual:
 		if err := v.esVisibilityManager.DeleteWorkflowExecution(request); err != nil {
 			return err
 		}
+		return v.visibilityManager.DeleteWorkflowExecution(request)
+	default:
+		return serviceerror.NewInternal(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisWritingMode()))
 	}
-	return v.visibilityManager.DeleteWorkflowExecution(request)
 }
 
 func (v *visibilityManagerWrapper) ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error) {
