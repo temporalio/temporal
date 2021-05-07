@@ -435,6 +435,7 @@ fossa-init:
 	fossa init --include-all --no-ansi
 
 fossa-analyze:
+	echo $$BUILDKITE_BRANCH
 	echo $$(git branch --show-current)
 	fossa analyze --no-ansi -b $$(git branch --show-current)
 
