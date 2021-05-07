@@ -435,8 +435,6 @@ fossa-init:
 	fossa init --include-all --no-ansi
 
 fossa-analyze:
-
-#	br=$(if $($$BUILDKITE_BRANCH), $($$BUILDKITE_BRANCH), $())
 	br=$${BUILDKITE_BRANCH:=$$(git branch --show-current)}; fossa analyze --no-ansi -b $$br
 
 fossa-test:
