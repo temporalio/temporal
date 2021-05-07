@@ -435,9 +435,9 @@ fossa-init:
 	fossa init --include-all --no-ansi
 
 fossa-analyze:
-	echo $$BUILDKITE_BRANCH
-	echo $$(git branch --show-current)
-	fossa analyze --no-ansi -b $$(git branch --show-current)
+
+#	br=$(if $($$BUILDKITE_BRANCH), $($$BUILDKITE_BRANCH), $())
+	br=$${BUILDKITE_BRANCH:=$$(git branch --show-current)}; fossa analyze --no-ansi -b $$br
 
 fossa-test:
 	fossa test --timeout 1800 --no-ansi
