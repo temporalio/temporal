@@ -435,7 +435,7 @@ fossa-init:
 	fossa init --include-all --no-ansi
 
 fossa-analyze:
-	br=$${BUILDKITE_BRANCH:=$$(git branch --show-current)}; fossa analyze --no-ansi -b $$br
+	fossa analyze --no-ansi -b $${BUILDKITE_BRANCH:-$$(git branch --show-current)}	
 
 fossa-test:
 	fossa test --timeout 1800 --no-ansi
