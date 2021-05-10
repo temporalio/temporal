@@ -39,7 +39,7 @@ import (
 type Config struct {
 	NumberOfShards int32
 
-	// TODO remove this dynamic flag in 1.11.x
+	// TODO remove this dynamic flag in 1.12.x
 	EnableDBRecordVersion dynamicconfig.BoolPropertyFn
 
 	RPS                           dynamicconfig.IntPropertyFn
@@ -271,8 +271,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 	cfg := &Config{
 		NumberOfShards: numberOfShards,
 
-		// TODO remove this dynamic flag in 1.11.x
-		EnableDBRecordVersion: dc.GetBoolProperty(dynamicconfig.EnableDBRecordVersion, true),
+		// TODO remove this dynamic flag in 1.12.x
+		EnableDBRecordVersion: dc.GetBoolProperty(dynamicconfig.EnableDBRecordVersion, false),
 
 		RPS:                                  dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
 		MaxIDLengthLimit:                     dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
