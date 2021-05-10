@@ -1,5 +1,6 @@
 persistence:
   defaultStore: cass-default
+  visibilityStore:
   advancedVisibilityStore: es-visibility
   numHistoryShards: 4
   datastores:

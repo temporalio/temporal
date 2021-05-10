@@ -110,6 +110,7 @@ func (s *localStoreTlsProvider) initialize() {
 	if period != 0 {
 		s.stop = make(chan bool)
 		s.ticker = time.NewTicker(period)
+		s.checkCertExpiration() // perform initial check to emit metrics and logs right away
 		go s.timerCallback()
 	}
 }
@@ -358,31 +359,41 @@ func (s *localStoreTlsProvider) timerCallback() {
 		case <-s.ticker.C:
 		}
 
-		var errorTime time.Time
-		if s.settings.ExpirationChecks.ErrorWindow != 0 {
-			errorTime = time.Now().UTC().Add(s.settings.ExpirationChecks.ErrorWindow)
-		} else {
-			errorTime = time.Now().UTC().AddDate(10, 0, 0)
-		}
+		s.checkCertExpiration()
+	}
+}
 
-		window := s.settings.ExpirationChecks.WarningWindow
-		// if only ErrorWindow is set, we set WarningWindow to the same value, so that the checks do happen
-		if window == 0 && s.settings.ExpirationChecks.ErrorWindow != 0 {
-			window = s.settings.ExpirationChecks.ErrorWindow
+func (s *localStoreTlsProvider) checkCertExpiration() {
+
+	defer func() {
+		var retError error
+		log.CapturePanic(s.logger, &retError)
+	}()
+
+	var errorTime time.Time
+	if s.settings.ExpirationChecks.ErrorWindow != 0 {
+		errorTime = time.Now().UTC().Add(s.settings.ExpirationChecks.ErrorWindow)
+	} else {
+		errorTime = time.Now().UTC().AddDate(10, 0, 0)
+	}
+
+	window := s.settings.ExpirationChecks.WarningWindow
+	// if only ErrorWindow is set, we set WarningWindow to the same value, so that the checks do happen
+	if window == 0 && s.settings.ExpirationChecks.ErrorWindow != 0 {
+		window = s.settings.ExpirationChecks.ErrorWindow
+	}
+	if window != 0 {
+		expiring, expired, err := s.GetExpiringCerts(window)
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("error while checking for certificate expiration: %v", err))
+			return
 		}
-		if window != 0 {
-			expiring, expired, err := s.GetExpiringCerts(window)
-			if err != nil {
-				s.logger.Error(fmt.Sprintf("error while checking for certificate expiration: %v", err))
-				continue
-			}
-			if s.scope != nil {
-				s.scope.Gauge(metricCertsExpired).Update(float64(len(expired)))
-				s.scope.Gauge(metricCertsExpiring).Update(float64(len(expiring)))
-			}
-			s.logCerts(expired, true, errorTime)
-			s.logCerts(expiring, false, errorTime)
+		if s.scope != nil {
+			s.scope.Gauge(metricCertsExpired).Update(float64(len(expired)))
+			s.scope.Gauge(metricCertsExpiring).Update(float64(len(expiring)))
 		}
+		s.logCerts(expired, true, errorTime)
+		s.logCerts(expiring, false, errorTime)
 	}
 }
 

@@ -42,9 +42,6 @@ const (
 type (
 	// TODO (alex): move this to searchattribute package
 	SearchAttributesManager struct {
-		searchattribute.Provider
-		searchattribute.Saver
-
 		timeSource             clock.TimeSource
 		clusterMetadataManager ClusterMetadataManager
 
@@ -58,6 +55,8 @@ type (
 		lastRefresh      time.Time
 	}
 )
+
+var _ searchattribute.Manager = (*SearchAttributesManager)(nil)
 
 func NewSearchAttributesManager(
 	timeSource clock.TimeSource,

@@ -33,6 +33,8 @@ import (
 	"go.temporal.io/api/workflowservicemock/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkmocks "go.temporal.io/sdk/mocks"
+	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
+	"go.temporal.io/server/common/searchattribute"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -57,8 +59,9 @@ import (
 type (
 	// Test is the test implementation used for testing
 	Test struct {
-		MetricsScope    tally.Scope
-		ClusterMetadata *cluster.MockMetadata
+		MetricsScope             tally.Scope
+		ClusterMetadata          *cluster.MockMetadata
+		SearchAttributesProvider *searchattribute.MockProvider
 
 		// other common resources
 
@@ -79,13 +82,14 @@ type (
 
 		// internal services clients
 
-		SDKClient            sdkclient.Client
+		SDKClient            *sdkmocks.Client
 		FrontendClient       *workflowservicemock.MockWorkflowServiceClient
 		MatchingClient       *matchingservicemock.MockMatchingServiceClient
 		HistoryClient        *historyservicemock.MockHistoryServiceClient
 		RemoteAdminClient    *adminservicemock.MockAdminServiceClient
 		RemoteFrontendClient *workflowservicemock.MockWorkflowServiceClient
 		ClientBean           *client.MockBean
+		ESClient             *esclient.MockClient
 
 		// persistence clients
 
@@ -166,8 +170,9 @@ func NewTest(
 	scope := tally.NewTestScope("test", nil)
 
 	return &Test{
-		MetricsScope:    scope,
-		ClusterMetadata: cluster.NewMockMetadata(controller),
+		MetricsScope:             scope,
+		ClusterMetadata:          cluster.NewMockMetadata(controller),
+		SearchAttributesProvider: searchattribute.NewMockProvider(controller),
 
 		// other common resources
 
@@ -195,6 +200,7 @@ func NewTest(
 		RemoteAdminClient:    remoteAdminClient,
 		RemoteFrontendClient: remoteFrontendClient,
 		ClientBean:           clientBean,
+		ESClient:             esclient.NewMockClient(controller),
 
 		// persistence clients
 
@@ -429,4 +435,8 @@ func (s *Test) GetThrottledLogger() log.Logger {
 // GetGRPCListener for testing
 func (s *Test) GetGRPCListener() net.Listener {
 	panic("user should implement this method for test")
+}
+
+func (h *Test) GetSearchAttributesProvider() searchattribute.Provider {
+	return h.SearchAttributesProvider
 }

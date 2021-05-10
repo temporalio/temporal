@@ -173,6 +173,16 @@ steps:
           run: integration-test-xdc-postgresql
           config: ./develop/buildkite/docker-compose.yml
 
+  - label: ":golang: fossa"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make build-fossa"
+    plugins:
+      - docker-compose#v3.1.0:
+          run: build
+          config: ./develop/buildkite/docker-compose.yml
+
   - wait
 
   - label: ":golang: coverage-report"

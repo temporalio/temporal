@@ -231,6 +231,6 @@ func Test_GetESType(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		assert.Equal(test.expected, GetESType(test.input))
+		assert.Equal(test.expected, MapESType(test.input))
 	}
 }

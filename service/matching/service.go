@@ -28,6 +28,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -71,6 +72,7 @@ func NewService(
 		serviceConfig.ThrottledLogRPS,
 		func(
 			persistenceBean persistenceClient.Bean,
+			searchAttributesProvider searchattribute.Provider,
 			logger log.Logger,
 		) (persistence.VisibilityManager, error) {
 			return persistenceBean.GetVisibilityManager(), nil

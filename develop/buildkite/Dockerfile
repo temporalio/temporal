@@ -1,2 +1,2 @@
-FROM temporalio/base-builder:1.0.0
+FROM temporalio/base-builder:1.1.0
 WORKDIR /temporal
