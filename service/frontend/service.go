@@ -25,6 +25,7 @@
 package frontend
 
 import (
+	"math"
 	"os"
 	"sync/atomic"
 	"time"
@@ -34,6 +35,8 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
+
+	"go.temporal.io/server/common/membership"
 
 	"go.temporal.io/server/service/frontend/configs"
 
@@ -273,7 +276,11 @@ func NewService(
 		quotas.NewNamespaceRateLimiter(
 			func(req quotas.Request) quotas.RequestRateLimiter {
 				return configs.NewRequestToRateLimiter(func() float64 {
-					return float64(serviceConfig.MaxNamespaceRPSPerInstance(req.Caller))
+					return namespaceRPS(
+						serviceConfig,
+						serviceResource.GetFrontendServiceResolver(),
+						req.Caller,
+					)
 				})
 			},
 		),
@@ -406,4 +413,33 @@ func (s *Service) Stop() {
 	}
 
 	logger.Info("frontend stopped")
+}
+
+func namespaceRPS(
+	config *Config,
+	frontendResolver membership.ServiceResolver,
+	namespace string,
+) float64 {
+	hostRPS := float64(config.MaxNamespaceRPSPerInstance(namespace))
+	globalRPS := float64(config.GlobalNamespaceRPS(namespace))
+	hosts := float64(numFrontendHosts(frontendResolver))
+
+	rps := hostRPS + globalRPS*math.Exp((1.0-hosts)/8.0)
+	return rps
+}
+
+func numFrontendHosts(
+	frontendResolver membership.ServiceResolver,
+) int {
+
+	defaultHosts := 1
+	if frontendResolver == nil {
+		return defaultHosts
+	}
+
+	ringSize := frontendResolver.MemberCount()
+	if ringSize < defaultHosts {
+		return defaultHosts
+	}
+	return ringSize
 }
