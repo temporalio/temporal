@@ -22,63 +22,58 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package interceptor
+package configs
 
 import (
-	"context"
-	"time"
+	"reflect"
+	"testing"
 
-	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/common/quotas"
-)
-
-const (
-	RateLimitDefaultToken = 1
-)
-
-var (
-	RateLimitServerBusy = serviceerror.NewResourceExhausted("service rate limit exceeded")
+	"go.temporal.io/server/api/historyservice/v1"
 )
 
 type (
-	RateLimitInterceptor struct {
-		rateLimiter quotas.RequestRateLimiter
-		tokens      map[string]int
+	quotasSuite struct {
+		suite.Suite
+		*require.Assertions
 	}
 )
 
-var _ grpc.UnaryServerInterceptor = (*RateLimitInterceptor)(nil).Intercept
-
-func NewRateLimitInterceptor(
-	rateLimiter quotas.RequestRateLimiter,
-	tokens map[string]int,
-) *RateLimitInterceptor {
-	return &RateLimitInterceptor{
-		rateLimiter: rateLimiter,
-		tokens:      tokens,
-	}
+func TestQuotasSuite(t *testing.T) {
+	s := new(quotasSuite)
+	suite.Run(t, s)
 }
 
-func (i *RateLimitInterceptor) Intercept(
-	ctx context.Context,
-	req interface{},
-	info *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (interface{}, error) {
-	_, methodName := splitMethodName(info.FullMethod)
-	token, ok := i.tokens[methodName]
-	if !ok {
-		token = RateLimitDefaultToken
-	}
+func (s *quotasSuite) SetupSuite() {
+}
 
-	if !i.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
-		methodName,
-		token,
-		"", // this interceptor layer does not throttle based on caller
-	)) {
-		return nil, RateLimitServerBusy
+func (s *quotasSuite) TearDownSuite() {
+}
+
+func (s *quotasSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+}
+
+func (s *quotasSuite) TearDownTest() {
+}
+
+func (s *quotasSuite) TestAPIToPriorityMapping() {
+	mapping := make(map[int]struct{})
+	for _, priority := range APIToPriority {
+		mapping[priority] = struct{}{}
 	}
-	return handler(ctx, req)
+	s.Equal(mapping, APIPriorities)
+}
+
+func (s *quotasSuite) TestAPIs() {
+	var service historyservice.HistoryServiceServer
+	t := reflect.TypeOf(&service).Elem()
+	apiToPriority := make(map[string]int, t.NumMethod())
+	for i := 0; i < t.NumMethod(); i++ {
+		apiName := t.Method(i).Name
+		apiToPriority[apiName] = APIToPriority[apiName]
+	}
+	s.Equal(apiToPriority, APIToPriority)
 }
