@@ -177,7 +177,7 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make build-fossa"
+    command: "make fossa-init fossa-analyze"
     plugins:
       - docker-compose#v3.1.0:
           run: build
