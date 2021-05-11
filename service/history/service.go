@@ -138,7 +138,7 @@ func NewService(
 		logger,
 	)
 	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
-		func() float64 { return float64(serviceConfig.RPS()) },
+		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
 		map[string]int{},
 	)
 

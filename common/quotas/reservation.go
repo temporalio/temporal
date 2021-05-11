@@ -22,63 +22,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package interceptor
+package quotas
 
 import (
-	"context"
 	"time"
-
-	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc"
-
-	"go.temporal.io/server/common/quotas"
 )
 
-const (
-	RateLimitDefaultToken = 1
-)
-
-var (
-	RateLimitServerBusy = serviceerror.NewResourceExhausted("service rate limit exceeded")
-)
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination reservation_mock.go
 
 type (
-	RateLimitInterceptor struct {
-		rateLimiter quotas.RequestRateLimiter
-		tokens      map[string]int
+	// Reservation holds information about events that are permitted by a Limiter to happen after a delay
+	Reservation interface {
+		// OK returns whether the limiter can provide the requested number of tokens
+		OK() bool
+
+		// Cancel indicates that the reservation holder will not perform the reserved action
+		// and reverses the effects of this Reservation on the rate limit as much as possible
+		Cancel()
+
+		// CancelAt indicates that the reservation holder will not perform the reserved action
+		// and reverses the effects of this Reservation on the rate limit as much as possible
+		CancelAt(now time.Time)
+
+		// Delay returns the duration for which the reservation holder must wait
+		// before taking the reserved action.  Zero duration means act immediately.
+		Delay() time.Duration
+
+		// DelayFrom returns the duration for which the reservation holder must wait
+		// before taking the reserved action.  Zero duration means act immediately.
+		DelayFrom(now time.Time) time.Duration
 	}
 )
-
-var _ grpc.UnaryServerInterceptor = (*RateLimitInterceptor)(nil).Intercept
-
-func NewRateLimitInterceptor(
-	rateLimiter quotas.RequestRateLimiter,
-	tokens map[string]int,
-) *RateLimitInterceptor {
-	return &RateLimitInterceptor{
-		rateLimiter: rateLimiter,
-		tokens:      tokens,
-	}
-}
-
-func (i *RateLimitInterceptor) Intercept(
-	ctx context.Context,
-	req interface{},
-	info *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (interface{}, error) {
-	_, methodName := splitMethodName(info.FullMethod)
-	token, ok := i.tokens[methodName]
-	if !ok {
-		token = RateLimitDefaultToken
-	}
-
-	if !i.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
-		methodName,
-		token,
-		"", // this interceptor layer does not throttle based on caller
-	)) {
-		return nil, RateLimitServerBusy
-	}
-	return handler(ctx, req)
-}

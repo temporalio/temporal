@@ -49,6 +49,7 @@ services:
       - "MYSQL_SEEDS=mysql"
       - "POSTGRES_SEEDS=postgresql"
       - BUILDKITE_AGENT_ACCESS_TOKEN
+      - BUILDKITE_BRANCH
       - BUILDKITE_JOB_ID
       - BUILDKITE_BUILD_ID
       - BUILDKITE_BUILD_NUMBER

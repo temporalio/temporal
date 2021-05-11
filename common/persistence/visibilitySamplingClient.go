@@ -33,9 +33,9 @@ import (
 )
 
 type visibilitySamplingClient struct {
-	rateLimitersForOpen   quotas.NamespaceRateLimiter
-	rateLimitersForClosed quotas.NamespaceRateLimiter
-	rateLimitersForList   quotas.NamespaceRateLimiter
+	rateLimitersForOpen   *quotas.NamespaceMultiStageRateLimiterImpl
+	rateLimitersForClosed *quotas.NamespaceMultiStageRateLimiterImpl
+	rateLimitersForList   *quotas.NamespaceMultiStageRateLimiterImpl
 	persistence           VisibilityManager
 	config                *config.VisibilityConfig
 	metricClient          metrics.Client
