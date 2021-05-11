@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package integration
 
 import (
 	"fmt"
@@ -56,31 +56,18 @@ const (
 
 	// TODO hard code this dir for now
 	//  need to merge persistence test config / initialization in one place
-	testPostgreSQLExecutionSchema  = "../../../schema/postgresql/v96/temporal/schema.sql"
-	testPostgreSQLVisibilitySchema = "../../../schema/postgresql/v96/visibility/schema.sql"
+	testPostgreSQLExecutionSchema  = "../../schema/postgresql/v96/temporal/schema.sql"
+	testPostgreSQLVisibilitySchema = "../../schema/postgresql/v96/visibility/schema.sql"
 )
 
-func TestPostgreSQLHistoryStoreSuite(t *testing.T) {
+func TestPostgreSQLSizeLimitSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
 	SetupPostgreSQLSchema(cfg)
 	logger := log.NewNoopLogger()
-	factory := sql.NewFactory(
-		*cfg,
-		resolver.NewNoopResolver(),
-		testPostgreSQLClusterName,
-		logger,
-	)
-	store, err := factory.NewHistoryStore()
-	if err != nil {
-		t.Fatalf("unable to create PostgreSQL DB: %v", err)
-	}
-	defer func() {
-		factory.Close()
-		TearDownPostgreSQLDatabase(cfg)
-	}()
+	defer func() { TearDownPostgreSQLDatabase(cfg) }()
 
-	s := newHistoryEventsSuite(t, store, logger)
+	s := newSizeLimitSuite(t, logger)
 	suite.Run(t, s)
 }
 

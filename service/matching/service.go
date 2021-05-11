@@ -28,7 +28,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -43,6 +42,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/matching/configs"
 )
 

@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package integration
 
 import (
 	"fmt"
@@ -38,7 +38,7 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/environment"
@@ -46,84 +46,71 @@ import (
 
 // TODO merge the initialization with existing persistence setup
 const (
-	testPostgreSQLClusterName = "temporal_postgresql_cluster"
+	testMySQLClusterName = "temporal_mysql_cluster"
 
-	testPostgreSQLUser               = "temporal"
-	testPostgreSQLPassword           = "temporal"
-	testPostgreSQLConnectionProtocol = "tcp"
-	testPostgreSQLDatabaseNamePrefix = "test_"
-	testPostgreSQLDatabaseNameSuffix = "temporal_persistence"
+	testMySQLUser               = "temporal"
+	testMySQLPassword           = "temporal"
+	testMySQLConnectionProtocol = "tcp"
+	testMySQLDatabaseNamePrefix = "test_"
+	testMySQLDatabaseNameSuffix = "temporal_persistence"
 
 	// TODO hard code this dir for now
 	//  need to merge persistence test config / initialization in one place
-	testPostgreSQLExecutionSchema  = "../../../schema/postgresql/v96/temporal/schema.sql"
-	testPostgreSQLVisibilitySchema = "../../../schema/postgresql/v96/visibility/schema.sql"
+	testMySQLExecutionSchema  = "../../schema/mysql/v57/temporal/schema.sql"
+	testMySQLVisibilitySchema = "../../schema/mysql/v57/visibility/schema.sql"
 )
 
-func TestPostgreSQLHistoryStoreSuite(t *testing.T) {
-	cfg := NewPostgreSQLConfig()
-	SetupPostgreSQLDatabase(cfg)
-	SetupPostgreSQLSchema(cfg)
+func TestMySQLSizeLimitSuite(t *testing.T) {
+	cfg := NewMySQLConfig()
+	SetupMySQLDatabase(cfg)
+	SetupMySQLSchema(cfg)
 	logger := log.NewNoopLogger()
-	factory := sql.NewFactory(
-		*cfg,
-		resolver.NewNoopResolver(),
-		testPostgreSQLClusterName,
-		logger,
-	)
-	store, err := factory.NewHistoryStore()
-	if err != nil {
-		t.Fatalf("unable to create PostgreSQL DB: %v", err)
-	}
-	defer func() {
-		factory.Close()
-		TearDownPostgreSQLDatabase(cfg)
-	}()
+	defer func() { TearDownMySQLDatabase(cfg) }()
 
-	s := newHistoryEventsSuite(t, store, logger)
+	s := newSizeLimitSuite(t, logger)
 	suite.Run(t, s)
 }
 
-// NewPostgreSQLConfig returns a new MySQL config for test
-func NewPostgreSQLConfig() *config.SQL {
+// NewMySQLConfig returns a new MySQL config for test
+func NewMySQLConfig() *config.SQL {
 	return &config.SQL{
-		User:     testPostgreSQLUser,
-		Password: testPostgreSQLPassword,
+		User:     testMySQLUser,
+		Password: testMySQLPassword,
 		ConnectAddr: net.JoinHostPort(
-			environment.GetPostgreSQLAddress(),
-			strconv.Itoa(environment.GetPostgreSQLPort()),
+			environment.GetMySQLAddress(),
+			strconv.Itoa(environment.GetMySQLPort()),
 		),
-		ConnectProtocol: testPostgreSQLConnectionProtocol,
-		PluginName:      "postgres",
-		DatabaseName:    testPostgreSQLDatabaseNamePrefix + shuffle.String(testPostgreSQLDatabaseNameSuffix),
+		ConnectProtocol: testMySQLConnectionProtocol,
+		PluginName:      "mysql",
+		DatabaseName:    testMySQLDatabaseNamePrefix + shuffle.String(testMySQLDatabaseNameSuffix),
 	}
 }
 
-func SetupPostgreSQLDatabase(cfg *config.SQL) {
+func SetupMySQLDatabase(cfg *config.SQL) {
 	adminCfg := *cfg
 	// NOTE need to connect with empty name to create new database
 	adminCfg.DatabaseName = ""
 
 	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver())
 	if err != nil {
-		panic(fmt.Sprintf("unable to create PostgreSQL admin DB: %v", err))
+		panic(fmt.Sprintf("unable to create MySQL admin DB: %v", err))
 	}
 	defer func() { _ = db.Close() }()
 
 	err = db.CreateDatabase(cfg.DatabaseName)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create PostgreSQL database: %v", err))
+		panic(fmt.Sprintf("unable to create MySQL database: %v", err))
 	}
 }
 
-func SetupPostgreSQLSchema(cfg *config.SQL) {
+func SetupMySQLSchema(cfg *config.SQL) {
 	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver())
 	if err != nil {
-		panic(fmt.Sprintf("unable to create PostgreSQL admin DB: %v", err))
+		panic(fmt.Sprintf("unable to create MySQL admin DB: %v", err))
 	}
 	defer func() { _ = db.Close() }()
 
-	schemaPath, err := filepath.Abs(testPostgreSQLExecutionSchema)
+	schemaPath, err := filepath.Abs(testMySQLExecutionSchema)
 	if err != nil {
 		panic(err)
 	}
@@ -139,7 +126,7 @@ func SetupPostgreSQLSchema(cfg *config.SQL) {
 		}
 	}
 
-	schemaPath, err = filepath.Abs(testPostgreSQLVisibilitySchema)
+	schemaPath, err = filepath.Abs(testMySQLVisibilitySchema)
 	if err != nil {
 		panic(err)
 	}
@@ -156,19 +143,19 @@ func SetupPostgreSQLSchema(cfg *config.SQL) {
 	}
 }
 
-func TearDownPostgreSQLDatabase(cfg *config.SQL) {
+func TearDownMySQLDatabase(cfg *config.SQL) {
 	adminCfg := *cfg
 	// NOTE need to connect with empty name to create new database
 	adminCfg.DatabaseName = ""
 
 	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver())
 	if err != nil {
-		panic(fmt.Sprintf("unable to create PostgreSQL admin DB: %v", err))
+		panic(fmt.Sprintf("unable to create MySQL admin DB: %v", err))
 	}
 	defer func() { _ = db.Close() }()
 
 	err = db.DropDatabase(cfg.DatabaseName)
 	if err != nil {
-		panic(fmt.Sprintf("unable to drop PostgreSQL database: %v", err))
+		panic(fmt.Sprintf("unable to drop MySQL database: %v", err))
 	}
 }

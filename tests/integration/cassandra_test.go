@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tests
+package integration
 
 import (
 	"fmt"
@@ -53,31 +53,18 @@ const (
 
 	// TODO hard code this dir for now
 	//  need to merge persistence test config / initialization in one place
-	testCassandraExecutionSchema  = "../../../schema/cassandra/temporal/schema.cql"
-	testCassandraVisibilitySchema = "../../../schema/cassandra/visibility/schema.cql"
+	testCassandraExecutionSchema  = "../../schema/cassandra/temporal/schema.cql"
+	testCassandraVisibilitySchema = "../../schema/cassandra/visibility/schema.cql"
 )
 
-func TestCassandraHistoryStoreSuite(t *testing.T) {
+func TestCassandraSizeLimitSuite(t *testing.T) {
 	cfg := NewCassandraConfig()
 	SetupCassandraDatabase(cfg)
 	SetupCassandraSchema(cfg)
 	logger := log.NewNoopLogger()
-	factory := cassandra.NewFactory(
-		*cfg,
-		resolver.NewNoopResolver(),
-		testCassandraClusterName,
-		logger,
-	)
-	store, err := factory.NewHistoryStore()
-	if err != nil {
-		t.Fatalf("unable to create Cassandra DB: %v", err)
-	}
-	defer func() {
-		factory.Close()
-		TearDownCassandraKeyspace(cfg)
-	}()
+	defer func() { TearDownCassandraKeyspace(cfg) }()
 
-	s := newHistoryEventsSuite(t, store, logger)
+	s := newSizeLimitSuite(t, logger)
 	suite.Run(t, s)
 }
 

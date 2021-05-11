@@ -28,7 +28,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -47,6 +46,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 )
 
@@ -172,7 +172,7 @@ func (s *Service) Start() {
 		return
 	}
 
-	// TODO remove this dynamic flag in 1.11.x
+	// TODO remove this dynamic flag in 1.12.x
 	migration.SetDBVersionFlag(s.config.EnableDBRecordVersion())
 
 	logger := s.GetLogger()
