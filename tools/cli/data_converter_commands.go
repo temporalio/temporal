@@ -67,7 +67,7 @@ func processMessage(c *websocket.Conn) error {
 	}
 
 	var payload commonpb.Payload
-	err = jsonpb.UnmarshalString(string(payloadRequest.Payload), &payload)
+	err = jsonpb.UnmarshalString(payloadRequest.Payload, &payload)
 	if err != nil {
 		return fmt.Errorf("invalid payload data: %v\n", err)
 	}
