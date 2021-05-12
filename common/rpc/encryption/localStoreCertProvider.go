@@ -89,14 +89,15 @@ func NewLocalStoreCertProvider(
 	tlsSettings *config.GroupTLS,
 	workerTlsSettings *config.WorkerTLS,
 	legacyWorkerSettings *config.ClientTLS,
-	refreshInterval time.Duration) CertProvider {
+	refreshInterval time.Duration,
+	logger log.Logger) CertProvider {
 
 	provider := &localStoreCertProvider{
 		tlsSettings:          tlsSettings,
 		workerTLSSettings:    workerTlsSettings,
 		legacyWorkerSettings: legacyWorkerSettings,
 		isLegacyWorkerConfig: legacyWorkerSettings != nil,
-		logger:               log.NewDefaultLogger(),
+		logger:               logger,
 		refreshInterval:      refreshInterval,
 	}
 	provider.initialize()
