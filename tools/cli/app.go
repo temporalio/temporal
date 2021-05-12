@@ -213,7 +213,7 @@ func NewCliApp() *cli.App {
 		{
 			Name:        "dataconverter",
 			Aliases:     []string{"dc"},
-			Usage:       "Data Converter",
+			Usage:       "Operate Custom Data Converter",
 			Subcommands: newDataConverterCommands(),
 		},
 	}
