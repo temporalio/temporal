@@ -152,7 +152,7 @@ func AdminIndex(c *cli.Context) {
 		ValidSearchAttributes:    dc.GetMapPropertyFn(searchattribute.GetDefaultTypeMap()),
 	}
 
-	logger := log.NewTestLogger()
+	logger := log.NewCLILogger()
 
 	esProcessor := espersistence.NewProcessor(esProcessorConfig, esClient, logger, metrics.NewNoopMetricsClient())
 	esProcessor.Start()

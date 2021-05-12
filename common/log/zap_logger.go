@@ -59,6 +59,13 @@ func NewTestLogger() *zapLogger {
 	}))
 }
 
+// NewCLILogger returns a logger at debug level and log into STDERR for logging from within CLI tools
+func NewCLILogger() *zapLogger {
+	return NewZapLogger(BuildZapLogger(Config{
+		Level: "debug",
+	}))
+}
+
 // NewZapLogger returns a new zap based logger from zap.Logger
 func NewZapLogger(zl *zap.Logger) *zapLogger {
 	return &zapLogger{
