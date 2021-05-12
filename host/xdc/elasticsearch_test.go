@@ -102,7 +102,7 @@ var (
 )
 
 func (s *esCrossDCTestSuite) SetupSuite() {
-	s.logger = log.NewDefaultLogger()
+	s.logger = log.NewTestLogger()
 
 	fileName := "../testdata/xdc_integration_es_clusters.yaml"
 	if host.TestFlags.TestClusterConfigFile != "" {

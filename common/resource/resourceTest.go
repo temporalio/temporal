@@ -123,7 +123,7 @@ func NewTest(
 	serviceMetricsIndex metrics.ServiceIdx,
 ) *Test {
 
-	logger := log.NewDefaultLogger()
+	logger := log.NewTestLogger()
 
 	frontendClient := workflowservicemock.NewMockWorkflowServiceClient(controller)
 	matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)

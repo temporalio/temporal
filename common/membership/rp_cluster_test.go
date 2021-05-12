@@ -60,7 +60,7 @@ func NewTestRingpopCluster(
 	serviceName string,
 	broadcastAddress string,
 ) *TestRingpopCluster {
-	logger := log.NewDefaultLogger()
+	logger := log.NewTestLogger()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 

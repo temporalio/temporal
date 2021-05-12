@@ -107,7 +107,7 @@ func TestNDCIntegrationTestSuite(t *testing.T) {
 }
 
 func (s *nDCIntegrationTestSuite) SetupSuite() {
-	s.logger = log.NewDefaultLogger()
+	s.logger = log.NewTestLogger()
 	s.serializer = persistence.NewPayloadSerializer()
 
 	fileName := "../testdata/ndc_integration_test_clusters.yaml"
