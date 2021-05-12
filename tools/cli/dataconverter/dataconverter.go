@@ -28,7 +28,7 @@ var (
 	dataConverter = converter.GetDefaultDataConverter()
 )
 
-func SetDataConverter(dc converter.DataConverter) {
+func SetCurrent(dc converter.DataConverter) {
 	dataConverter = dc
 }
 
