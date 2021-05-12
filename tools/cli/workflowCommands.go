@@ -120,7 +120,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 				}
 				prevEvent = *e
 			}
-			fmt.Println(stringify.AnyToString(e, true, maxFieldLength, dataconverter.GetDataConverter()))
+			fmt.Println(stringify.AnyToString(e, true, maxFieldLength, dataconverter.GetCurrent()))
 		}
 	} else if c.IsSet(FlagEventID) { // only dump that event
 		eventID := c.Int(FlagEventID)
@@ -128,7 +128,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 			ErrorAndExit("EventId out of range.", fmt.Errorf("number should be 1 - %d inclusive", len(history.Events)))
 		}
 		e := history.Events[eventID-1]
-		fmt.Println(stringify.AnyToString(e, true, 0, dataconverter.GetDataConverter()))
+		fmt.Println(stringify.AnyToString(e, true, 0, dataconverter.GetCurrent()))
 	} else { // use table to pretty output, will trim long text
 		table := tablewriter.NewWriter(os.Stdout)
 		table.SetBorder(false)

@@ -57,19 +57,19 @@ func processMessage(c *websocket.Conn) error {
 			}
 		}
 
-		return fmt.Errorf("error reading websocket message: %v\n", err)
+		return fmt.Errorf("error reading websocket message: %w", err)
 	}
 
 	var payloadRequest PayloadRequest
 	err = json.Unmarshal(message, &payloadRequest)
 	if err != nil {
-		return fmt.Errorf("invalid payload request: %v", err)
+		return fmt.Errorf("invalid payload request: %w", err)
 	}
 
 	var payload commonpb.Payload
 	err = jsonpb.UnmarshalString(payloadRequest.Payload, &payload)
 	if err != nil {
-		return fmt.Errorf("invalid payload data: %v\n", err)
+		return fmt.Errorf("invalid payload data: %w", err)
 	}
 
 	payloadResponse := PayloadResponse{
@@ -80,12 +80,12 @@ func processMessage(c *websocket.Conn) error {
 	var response []byte
 	response, err = json.Marshal(payloadResponse)
 	if err != nil {
-		return fmt.Errorf("unable to marshal response: %v\n", err)
+		return fmt.Errorf("unable to marshal response: %w", err)
 	}
 
 	err = c.WriteMessage(mt, response)
 	if err != nil {
-		return fmt.Errorf("unable to write response: %v\n", err)
+		return fmt.Errorf("unable to write response: %w", err)
 	}
 
 	return nil

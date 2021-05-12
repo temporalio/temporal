@@ -78,7 +78,7 @@ func GetHistory(ctx context.Context, workflowClient sdkclient.Client, workflowID
 // HistoryEventToString convert HistoryEvent to string
 func HistoryEventToString(e *historypb.HistoryEvent, printFully bool, maxFieldLength int) string {
 	data := getEventAttributes(e)
-	return stringify.AnyToString(data, printFully, maxFieldLength, dataconverter.GetDataConverter())
+	return stringify.AnyToString(data, printFully, maxFieldLength, dataconverter.GetCurrent())
 }
 
 // ColorEvent takes an event and return string with color

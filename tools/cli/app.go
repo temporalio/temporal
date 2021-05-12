@@ -25,8 +25,6 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/headers"
@@ -234,11 +232,10 @@ func loadPlugins(ctx *cli.Context) error {
 	if dcPlugin != "" {
 		dataConverter, err := plugin.NewDataConverterPlugin(dcPlugin)
 		if err != nil {
-			fmt.Printf("data converter: %v", err)
-			return err
+			ErrorAndExit("unable to load data converter plugin", err)
 		}
 
-		dataconverter.SetDataConverter(dataConverter)
+		dataconverter.SetCurrent(dataConverter)
 	}
 
 	return nil
