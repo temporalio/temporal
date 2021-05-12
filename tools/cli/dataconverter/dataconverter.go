@@ -32,6 +32,6 @@ func SetCurrent(dc converter.DataConverter) {
 	dataConverter = dc
 }
 
-func GetDataConverter() converter.DataConverter {
+func GetCurrent() converter.DataConverter {
 	return dataConverter
 }
