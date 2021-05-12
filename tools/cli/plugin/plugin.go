@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	DATA_CONVERTER_PLUGIN_TYPE = "DataConverter"
+	DataConverterPluginType = "DataConverter"
 )
 
 var (
@@ -42,7 +42,7 @@ var (
 	}
 
 	pluginMap = map[string]plugin.Plugin{
-		DATA_CONVERTER_PLUGIN_TYPE: &DataConverterPlugin{},
+		DataConverterPluginType: &DataConverterPlugin{},
 	}
 )
 
