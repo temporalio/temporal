@@ -74,7 +74,7 @@ func processMessage(c *websocket.Conn) error {
 
 	payloadResponse := PayloadResponse{
 		RequestID: payloadRequest.RequestID,
-		Content:   dataconverter.GetDataConverter().ToString(&payload),
+		Content:   dataconverter.GetCurrent().ToString(&payload),
 	}
 
 	var response []byte
@@ -120,16 +120,11 @@ func buildPayloadHandler(context *cli.Context, origin string) func(http.Response
 
 // DataConverter provides a data converter over a websocket for Temporal web
 func DataConverter(c *cli.Context) {
-	if !c.Args().Present() {
-		ErrorAndExit("Argument origin is required.", nil)
-	}
-
-	origin := c.Args().First()
-
 	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
 		ErrorAndExit("Unable to create listener", err)
 	}
+	origin := c.String(FlagWebURL)
 	port := listener.Addr().(*net.TCPAddr).Port
 	url := origin + "/data-converter/" + fmt.Sprint(port)
 

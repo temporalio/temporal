@@ -230,6 +230,7 @@ const (
 	FlagAutoConfirm                      = "auto_confirm"
 	FlagDataConverterPlugin              = "data_converter_plugin"
 	FlagDataConverterPluginWithAlias     = FlagDataConverterPlugin + ", dcp"
+	FlagWebURL                           = "web_url"
 	FlagVersion                          = "version"
 
 	FlagProtoType  = "type"

@@ -29,6 +29,13 @@ func newDataConverterCommands() []cli.Command {
 		{
 			Name:  "web",
 			Usage: "Provides a data converter websocket for Temporal web",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:     FlagWebURL,
+					Usage:    "Web UI URL",
+					Required: true,
+				},
+			},
 			Action: func(c *cli.Context) {
 				DataConverter(c)
 			},

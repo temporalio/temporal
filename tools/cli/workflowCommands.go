@@ -1341,9 +1341,9 @@ func printListResults(executions []*workflowpb.WorkflowExecutionInfo, inJSON boo
 			}
 		} else {
 			if more || i < len(executions)-1 {
-				fmt.Println(stringify.AnyToString(execution, true, 0, dataconverter.GetDataConverter()) + ",")
+				fmt.Println(stringify.AnyToString(execution, true, 0, dataconverter.GetCurrent()) + ",")
 			} else {
-				fmt.Println(stringify.AnyToString(execution, true, 0, dataconverter.GetDataConverter()))
+				fmt.Println(stringify.AnyToString(execution, true, 0, dataconverter.GetCurrent()))
 			}
 		}
 	}
