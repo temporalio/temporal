@@ -36,9 +36,9 @@ type DataConverterRPC struct {
 }
 
 func NewDataConverterPlugin(name string) (converter.DataConverter, error) {
-	client, err := newPluginClient(DataConverterPluginType, "tctl-plugin-dataconverter-"+name)
+	client, err := newPluginClient(DataConverterPluginType, name)
 	if err != nil {
-		return nil, fmt.Errorf("unable to register plugin: %v\n", err)
+		return nil, fmt.Errorf("unable to register plugin: %w", err)
 	}
 
 	dataConverter, ok := client.(converter.DataConverter)
