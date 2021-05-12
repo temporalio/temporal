@@ -172,7 +172,7 @@ func (s *Server) Start() error {
 
 	if s.so.tlsConfigProvider == nil {
 		s.so.tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(
-			s.so.config.Global.TLS, globalMetricsScope, s.so.logger, nil)
+			s.so.config.Global.TLS, globalMetricsScope, s.logger, nil)
 		if err != nil {
 			return fmt.Errorf("TLS provider initialization error: %w", err)
 		}
