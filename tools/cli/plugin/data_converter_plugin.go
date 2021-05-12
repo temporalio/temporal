@@ -43,7 +43,7 @@ func NewDataConverterPlugin(name string) (converter.DataConverter, error) {
 
 	dataConverter, ok := client.(converter.DataConverter)
 	if !ok {
-		return nil, fmt.Errorf("incorrect plugin type")
+		return nil, fmt.Errorf("constructed plugin client type %T doesn't implement converter.DataConverter interface", client)
 	}
 
 	return dataConverter, nil
