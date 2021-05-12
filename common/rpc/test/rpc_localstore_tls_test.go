@@ -124,7 +124,7 @@ func (s *localStoreRPCSuite) TearDownSuite() {
 }
 func (s *localStoreRPCSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
-	s.logger = log.NewDefaultLogger()
+	s.logger = log.NewTestLogger()
 
 	provider, err := encryption.NewTLSConfigProviderFromConfig(serverCfgInsecure.TLS, nil, s.logger, nil)
 	s.NoError(err)

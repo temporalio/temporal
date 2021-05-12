@@ -69,7 +69,7 @@ func (s *searchAttributesManagerSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
-	s.logger = log.NewDefaultLogger()
+	s.logger = log.NewTestLogger()
 	s.timeSource = clock.NewEventTimeSource()
 	s.mockClusterMetadataManager = NewMockClusterMetadataManager(s.controller)
 	s.manager = NewSearchAttributesManager(s.timeSource, s.mockClusterMetadataManager)
