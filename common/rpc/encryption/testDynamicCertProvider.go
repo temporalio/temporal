@@ -105,3 +105,7 @@ func (t *TestDynamicCertProvider) GetExpiringCerts(_ time.Duration,
 func (t *TestDynamicCertProvider) Initialize(refreshInterval time.Duration) {
 	panic("implement me")
 }
+
+func (t *TestDynamicCertProvider) NumberOfHosts() int {
+	return 1
+}

@@ -252,9 +252,9 @@ func newServerTLSConfig(
 	tlsConfig.GetConfigForClient = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
 
 		remoteAddress := c.Conn.RemoteAddr().String()
-		logger.Info("attempted incoming TLS connection", tag.Address(remoteAddress), tag.HostID(c.ServerName))
+		logger.Debug("attempted incoming TLS connection", tag.Address(remoteAddress), tag.HostID(c.ServerName))
 
-		if perHostCertProviderMap != nil {
+		if perHostCertProviderMap != nil && perHostCertProviderMap.NumberOfHosts() > 0 {
 			perHostCertProvider, hostClientAuthRequired, err := perHostCertProviderMap.GetCertProvider(c.ServerName)
 			if err != nil {
 				logger.Error("error while looking up per-host provider for attempted incoming TLS connection",

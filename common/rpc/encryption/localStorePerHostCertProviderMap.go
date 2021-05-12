@@ -95,3 +95,11 @@ func (f *localStorePerHostCertProviderMap) GetExpiringCerts(timeWindow time.Dura
 	}
 	return expiring, expired, err
 }
+
+func (f *localStorePerHostCertProviderMap) NumberOfHosts() int {
+
+	if f.certProviderCache != nil {
+		return len(f.certProviderCache)
+	}
+	return 0
+}

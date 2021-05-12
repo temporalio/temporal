@@ -57,6 +57,7 @@ type (
 	PerHostCertProviderMap interface {
 		GetCertProvider(hostName string) (provider CertProvider, clientAuthRequired bool, err error)
 		GetExpiringCerts(timeWindow time.Duration) (expiring CertExpirationMap, expired CertExpirationMap, err error)
+		NumberOfHosts() int
 	}
 
 	CertThumbprint [16]byte
