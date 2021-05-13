@@ -27,13 +27,13 @@ import (
 )
 
 var (
-	headersProvider plugin.HeadersProvider = nil
+	headersProvider plugin.HeadersProviderSDK = nil
 )
 
-func SetCurrent(hp plugin.HeadersProvider) {
+func SetCurrent(hp plugin.HeadersProviderSDK) {
 	headersProvider = hp
 }
 
-func GetCurrent() plugin.HeadersProvider {
+func GetCurrent() plugin.HeadersProviderSDK {
 	return headersProvider
 }

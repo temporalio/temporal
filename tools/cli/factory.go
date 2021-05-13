@@ -119,7 +119,7 @@ func (b *clientFactory) HealthClient(c *cli.Context) healthpb.HealthClient {
 	return healthpb.NewHealthClient(connection)
 }
 
-func headersProviderInterceptor(headersProvider plugin.HeadersProvider) grpc.UnaryClientInterceptor {
+func headersProviderInterceptor(headersProvider plugin.HeadersProviderSDK) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		headers, err := headersProvider.GetHeaders(ctx)
 		if err != nil {

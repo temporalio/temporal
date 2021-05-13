@@ -23,7 +23,6 @@
 package main
 
 import (
-	"log"
 	"os"
 
 	"github.com/hashicorp/go-plugin"
@@ -43,13 +42,11 @@ func (p provider) GetHeaders(outgoingHeaders map[string][]string) (map[string]st
 func main() {
 	var p provider
 
-	p.token = os.Args[1]
+	if len(os.Args) > 1 {
+		p.token = os.Args[1]
+	}
 	if p.token == "" {
 		p.token = os.Getenv("TEMPORAL_CLI_AUTHORIZATION_TOKEN")
-	}
-
-	if p.token == "" {
-		log.Fatalf("authorization token not set")
 	}
 
 	var pluginMap = map[string]plugin.Plugin{
