@@ -52,14 +52,7 @@ type PayloadResponse struct {
 func processMessage(c *websocket.Conn) error {
 	mt, message, err := c.ReadMessage()
 	if err != nil {
-		if closeError, ok := err.(*websocket.CloseError); ok {
-			if closeError.Code == websocket.CloseNoStatusReceived ||
-				closeError.Code == websocket.CloseNormalClosure {
-				return nil
-			}
-		}
-
-		return fmt.Errorf("error reading websocket message: %w", err)
+		return err
 	}
 
 	var payloadRequest PayloadRequest
@@ -107,13 +100,22 @@ func buildPayloadHandler(context *cli.Context, origin string) func(http.Response
 	return func(res http.ResponseWriter, req *http.Request) {
 		c, err := upgrader.Upgrade(res, req, nil)
 		if err != nil {
-			fmt.Printf("websocket upgrade failed: %v\n", err)
+			fmt.Printf("data converter websocket upgrade failed: %v\n", err)
 			return
 		}
 		defer c.Close()
 
 		for {
-			if err := processMessage(c); err != nil {
+			err := processMessage(c)
+			if err != nil {
+				if closeError, ok := err.(*websocket.CloseError); ok {
+					if closeError.Code == websocket.CloseNoStatusReceived ||
+						closeError.Code == websocket.CloseNormalClosure {
+						return
+					}
+				}
+				fmt.Printf("data converter websocket error: %v\n", err)
+
 				return
 			}
 		}
