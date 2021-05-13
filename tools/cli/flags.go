@@ -228,6 +228,9 @@ const (
 	FlagUpperShardBound                  = "upper_shard_bound"
 	FlagInputDirectory                   = "input_directory"
 	FlagAutoConfirm                      = "auto_confirm"
+	FlagDataConverterPlugin              = "data_converter_plugin"
+	FlagDataConverterPluginWithAlias     = FlagDataConverterPlugin + ", dcp"
+	FlagWebURL                           = "web_ui_url"
 	FlagVersion                          = "version"
 
 	FlagProtoType  = "type"
