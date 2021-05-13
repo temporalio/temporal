@@ -172,7 +172,10 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 		indexName = adh.ESConfig.GetVisibilityIndex()
 	}
 
-	currentSearchAttributes, _ := adh.Resource.GetSearchAttributesProvider().GetSearchAttributes(indexName, true)
+	currentSearchAttributes, err := adh.Resource.GetSearchAttributesProvider().GetSearchAttributes(indexName, true)
+	if err != nil {
+		return nil, adh.error(serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err)), scope)
+	}
 
 	for saName, saType := range request.GetSearchAttributes() {
 		if searchattribute.IsReservedField(saName) {

@@ -2485,7 +2485,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 
 	searchAttributes, err := wh.Resource.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 
 	archiverResponse, err := visibilityArchiver.Query(
@@ -2627,7 +2627,7 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 
 	searchAttributes, err := wh.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 	resp := &workflowservice.GetSearchAttributesResponse{
 		Keys: searchAttributes.All(),
@@ -2868,7 +2868,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 
 	searchAttributes, err := wh.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 	searchattribute.ApplyTypeMap(response.GetWorkflowExecutionInfo().GetSearchAttributes(), searchAttributes)
 
