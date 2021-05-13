@@ -82,14 +82,15 @@ func (m NameTypeMap) GetType(name string) (enumspb.IndexedValueType, error) {
 	if name == NamespaceID {
 		return namespaceIDType, nil
 	}
-	if tYpe, isSystem := system[name]; isSystem {
-		return tYpe, nil
-	}
+	// Check custom search attributes first, because it is most common use case.
 	if len(m.customSearchAttributes) != 0 {
 		tYpe, isCustom := m.customSearchAttributes[name]
 		if isCustom {
 			return tYpe, nil
 		}
+	}
+	if tYpe, isSystem := system[name]; isSystem {
+		return tYpe, nil
 	}
 	return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, fmt.Errorf("%w: %s", ErrInvalidName, name)
 }

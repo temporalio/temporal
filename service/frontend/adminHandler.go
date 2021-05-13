@@ -163,8 +163,9 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 	if len(request.GetSearchAttributes()) == 0 {
 		return nil, adh.error(errSearchAttributesNotSet, scope)
 	}
+
 	if err := adh.validateConfigForAdvanceVisibility(); err != nil {
-		return nil, adh.error(errAdvancedVisibilityStoreIsNotConfigured, scope)
+		return nil, adh.error(err, scope)
 	}
 
 	indexName := request.GetIndexName()
@@ -270,9 +271,12 @@ func (adh *AdminHandler) getSearchAttributes(ctx context.Context, indexName, run
 		lastErr = serviceerror.NewInternal(fmt.Sprintf("unable to read custom search attributes: %v", err))
 	}
 
-	esMapping, err := adh.ESClient.GetMapping(ctx, indexName)
-	if err != nil {
-		lastErr = serviceerror.NewInternal(fmt.Sprintf("unable to get mapping from Elasticsearch: %v", err))
+	var esMapping map[string]string
+	if adh.ESClient != nil {
+		esMapping, err = adh.ESClient.GetMapping(ctx, indexName)
+		if err != nil {
+			lastErr = serviceerror.NewInternal(fmt.Sprintf("unable to get mapping from Elasticsearch: %v", err))
+		}
 	}
 
 	return &adminservice.GetSearchAttributesResponse{
@@ -1027,8 +1031,10 @@ func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 }
 
 func (adh *AdminHandler) validateConfigForAdvanceVisibility() error {
-	if adh.ESConfig == nil || adh.ESClient == nil {
-		return errors.New("ES related config not found")
+	if adh.ESConfig == nil ||
+		adh.ESClient == nil ||
+		adh.ESConfig.GetVisibilityIndex() == "" {
+		return errAdvancedVisibilityStoreIsNotConfigured
 	}
 	return nil
 }

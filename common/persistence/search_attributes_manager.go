@@ -25,6 +25,7 @@
 package persistence
 
 import (
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -60,6 +61,10 @@ type (
 
 var _ searchattribute.Manager = (*SearchAttributesManager)(nil)
 
+var (
+	ErrEmptyIndexName = errors.New("indexName is empty")
+)
+
 func NewSearchAttributesManager(
 	timeSource clock.TimeSource,
 	clusterMetadataManager ClusterMetadataManager,
@@ -84,6 +89,11 @@ func (m *SearchAttributesManager) GetSearchAttributes(
 	indexName string,
 	forceRefreshCache bool,
 ) (searchattribute.NameTypeMap, error) {
+
+	// Empty indexName means advanced visibility is not enabled.
+	if indexName == "" {
+		return searchattribute.NameTypeMap{}, nil
+	}
 
 	now := m.timeSource.Now()
 	saCache := m.cache.Load().(searchAttributesCache)
@@ -144,6 +154,11 @@ func (m *SearchAttributesManager) SaveSearchAttributes(
 	indexName string,
 	newCustomSearchAttributes map[string]enumspb.IndexedValueType,
 ) error {
+
+	// Empty indexName means advanced visibility is not enabled.
+	if indexName == "" {
+		return ErrEmptyIndexName
+	}
 
 	clusterMetadataResponse, err := m.clusterMetadataManager.GetClusterMetadata()
 	if err != nil {

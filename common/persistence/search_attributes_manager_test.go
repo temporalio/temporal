@@ -161,6 +161,12 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_NotFoundErro
 	s.Len(searchAttributes.Custom(), 0)
 }
 
+func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_EmptyIndex() {
+	searchAttributes, err := s.manager.GetSearchAttributes("", false)
+	s.NoError(err)
+	s.Len(searchAttributes.Custom(), 0)
+}
+
 func (s *searchAttributesManagerSuite) TestSaveSearchAttributes_UpdateIndex() {
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(&GetClusterMetadataResponse{
 		ClusterMetadata: persistencespb.ClusterMetadata{
@@ -220,4 +226,12 @@ func (s *searchAttributesManagerSuite) TestSaveSearchAttributes_NewIndex() {
 		"OrderId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	})
 	s.NoError(err)
+}
+
+func (s *searchAttributesManagerSuite) TestSaveSearchAttributesCache_EmptyIndex() {
+	err := s.manager.SaveSearchAttributes("", map[string]enumspb.IndexedValueType{
+		"OrderId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	})
+	s.Error(err)
+	s.ErrorIs(err, ErrEmptyIndexName)
 }
