@@ -26,27 +26,25 @@ import (
 	"context"
 	"fmt"
 	"net/rpc"
-	"os/exec"
 
-	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc/metadata"
 )
 
-type HeadersProvider interface {
+type HeadersProviderSDK interface {
 	GetHeaders(context.Context) (map[string]string, error)
 }
 
-type HeadersProviderInternal interface {
+type HeadersProvider interface {
 	GetHeaders(map[string][]string) (map[string]string, error)
 }
 
 type HeadersProviderRPCServer struct {
-	Impl HeadersProviderInternal
+	Impl HeadersProvider
 }
 
 type HeadersProviderPlugin struct {
-	Impl HeadersProviderInternal
+	Impl HeadersProvider
 }
 
 type HeadersProviderRPC struct {
@@ -54,8 +52,7 @@ type HeadersProviderRPC struct {
 }
 
 type HeadersProviderPluginWrapper struct {
-	client   *plugin.Client
-	provider HeadersProviderInternal
+	provider HeadersProvider
 }
 
 func (w HeadersProviderPluginWrapper) GetHeaders(ctx context.Context) (map[string]string, error) {
@@ -67,34 +64,18 @@ func (w HeadersProviderPluginWrapper) GetHeaders(ctx context.Context) (map[strin
 	return w.provider.GetHeaders(outgoingHeaders)
 }
 
-func NewHeadersProviderPlugin(name string) (HeadersProvider, error) {
-	pluginClient := plugin.NewClient(&plugin.ClientConfig{
-		HandshakeConfig: PluginHandshakeConfig,
-		Plugins:         pluginMap,
-		Cmd:             exec.Command(name),
-		Logger: hclog.New(&hclog.LoggerOptions{
-			Name:  "tctl",
-			Level: hclog.LevelFromString("INFO"),
-		}),
-	})
-
-	rpcClient, err := pluginClient.Client()
+func NewHeadersProviderPlugin(name string) (HeadersProviderSDK, error) {
+	client, err := newPluginClient(HeadersProviderPluginType, name)
 	if err != nil {
-		return nil, fmt.Errorf("error creating plugin client: %w", err)
+		return nil, fmt.Errorf("unable to register plugin: %w", err)
 	}
 
-	raw, err := rpcClient.Dispense("HeadersProvider")
-	if err != nil {
-		return nil, fmt.Errorf("error registering plugin: %w", err)
-	}
-
-	headersProvider, ok := raw.(HeadersProviderInternal)
+	headersProvider, ok := client.(HeadersProvider)
 	if !ok {
-		return nil, fmt.Errorf("incorrect plugin type")
+		return nil, fmt.Errorf("constructed plugin client type %T doesn't implement HeadersProvider interface", client)
 	}
 
 	return HeadersProviderPluginWrapper{
-		client:   pluginClient,
 		provider: headersProvider,
 	}, nil
 }

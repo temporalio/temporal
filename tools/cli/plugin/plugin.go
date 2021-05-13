@@ -62,7 +62,7 @@ func newPluginClient(kind string, name string) (interface{}, error) {
 
 	rpcClient, err := pluginClient.Client()
 	if err != nil {
-		return nil, fmt.Errorf("unable to create plugin client: %v\n", err)
+		return nil, fmt.Errorf("unable to create plugin client: %w", err)
 	}
 
 	return rpcClient.Dispense(kind)
