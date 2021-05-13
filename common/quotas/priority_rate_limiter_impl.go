@@ -44,6 +44,8 @@ type (
 	}
 )
 
+var _ RequestRateLimiter = (*PriorityRateLimiterImpl)(nil)
+
 // NewPriorityRateLimiter returns a new rate limiter that can handle dynamic
 // configuration updates
 func NewPriorityRateLimiter(

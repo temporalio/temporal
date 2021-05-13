@@ -34,15 +34,11 @@ import (
 	"github.com/stretchr/testify/suite"
 	historypb "go.temporal.io/api/history/v1"
 
-	"go.temporal.io/server/common/primitives/timestamp"
-
 	"go.temporal.io/server/common"
-
 	"go.temporal.io/server/common/dynamicconfig"
-
 	"go.temporal.io/server/common/log"
-
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 // TODO add UT for the following

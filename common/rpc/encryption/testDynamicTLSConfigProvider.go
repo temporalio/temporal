@@ -94,6 +94,6 @@ func NewTestDynamicTLSConfigProvider(
 		WorkerCertProvider:             frontendProvider,
 		FrontendPerHostCertProviderMap: frontendProvider,
 		settings:                       tlsConfig,
-		logger:                         log.NewDefaultLogger(),
+		logger:                         log.NewTestLogger(),
 	}, nil
 }

@@ -68,7 +68,7 @@ func (s *dlqMessageHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
-	logger := log.NewDefaultLogger()
+	logger := log.NewTestLogger()
 	s.mockReplicationTaskExecutor = NewMockReplicationTaskExecutor(s.controller)
 	s.mockReplicationQueue = persistence.NewMockNamespaceReplicationQueue(s.controller)
 

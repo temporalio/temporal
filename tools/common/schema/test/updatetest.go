@@ -54,7 +54,7 @@ type UpdateSchemaTestBase struct {
 // SetupSuiteBase sets up the test suite
 func (tb *UpdateSchemaTestBase) SetupSuiteBase(db DB, pluginName string) {
 	tb.Assertions = require.New(tb.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, tb.T() will return nil
-	tb.Log = log.NewDefaultLogger()
+	tb.Log = log.NewTestLogger()
 	tb.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	tb.DBName = fmt.Sprintf("update_test_%v", tb.rand.Int63())
 	err := db.CreateDatabase(tb.DBName)

@@ -32,13 +32,17 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
@@ -57,6 +61,7 @@ type (
 		status    int32
 		stopC     chan struct{}
 		sdkClient sdkclient.Client
+		esClient  esclient.Client
 		config    *Config
 	}
 
@@ -88,6 +93,7 @@ func NewService(
 		serviceConfig.ThrottledLogRPS,
 		func(
 			persistenceBean persistenceClient.Bean,
+			searchAttributesProvider searchattribute.Provider,
 			logger log.Logger,
 		) (persistence.VisibilityManager, error) {
 			return persistenceBean.GetVisibilityManager(), nil
@@ -102,6 +108,7 @@ func NewService(
 		status:    common.DaemonStatusInitialized,
 		config:    serviceConfig,
 		sdkClient: params.SdkClient,
+		esClient:  params.ESClient,
 		stopC:     make(chan struct{}),
 	}, nil
 }
@@ -169,6 +176,9 @@ func (s *Service) Start() {
 	if s.config.EnableParentClosePolicyWorker() {
 		s.startParentClosePolicyProcessor()
 	}
+	if s.esClient != nil {
+		s.startAddSearchAttributes()
+	}
 
 	logger.Info("worker started", tag.ComponentWorker)
 	<-s.stopC
@@ -211,6 +221,19 @@ func (s *Service) startBatcher() {
 	}
 	if err := batcher.New(params).Start(); err != nil {
 		s.GetLogger().Fatal("error starting batcher", tag.Error(err))
+	}
+}
+
+func (s *Service) startAddSearchAttributes() {
+	addSearchAttributesService := addsearchattributes.New(
+		s.sdkClient,
+		s.esClient,
+		persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), s.GetClusterMetadataManager()),
+		s.GetMetricsClient(),
+		s.GetLogger(),
+	)
+	if err := addSearchAttributesService.Start(); err != nil {
+		s.GetLogger().Fatal("error starting add search attributes service", tag.Error(err))
 	}
 }
 

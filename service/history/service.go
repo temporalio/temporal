@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 )
 
@@ -81,6 +82,7 @@ func NewService(
 
 	visibilityManagerInitializer := func(
 		persistenceBean persistenceClient.Bean,
+		searchAttributesProvider searchattribute.Provider,
 		logger log.Logger,
 	) (persistence.VisibilityManager, error) {
 		visibilityFromDB := persistenceBean.GetVisibilityManager()
@@ -136,7 +138,7 @@ func NewService(
 		logger,
 	)
 	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
-		func() float64 { return float64(serviceConfig.RPS()) },
+		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
 		map[string]int{},
 	)
 
@@ -170,7 +172,7 @@ func (s *Service) Start() {
 		return
 	}
 
-	// TODO remove this dynamic flag in 1.11.x
+	// TODO remove this dynamic flag in 1.12.x
 	migration.SetDBVersionFlag(s.config.EnableDBRecordVersion())
 
 	logger := s.GetLogger()
