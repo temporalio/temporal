@@ -122,7 +122,7 @@ func buildPayloadHandler(context *cli.Context, origin string) func(http.Response
 
 // DataConverter provides a data converter over a websocket for Temporal web
 func DataConverter(c *cli.Context) {
-	listener, err := net.Listen("tcp", ":0")
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		ErrorAndExit("Unable to create listener", err)
 	}
