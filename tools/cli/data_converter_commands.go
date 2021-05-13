@@ -130,7 +130,8 @@ func DataConverter(c *cli.Context) {
 	port := listener.Addr().(*net.TCPAddr).Port
 	url := fmt.Sprintf(dataConverterURL, origin, port)
 
-	fmt.Printf("Please follow this link for the web UI: %s\n", url)
+	fmt.Printf("To configure your Web UI session to use the local data converter use this URL:\n")
+	fmt.Printf("\t%s\n", url)
 
 	http.HandleFunc("/", buildPayloadHandler(c, origin))
 	if err := http.Serve(listener, nil); err != nil {
