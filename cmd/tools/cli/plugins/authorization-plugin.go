@@ -53,7 +53,7 @@ func main() {
 	}
 
 	var pluginMap = map[string]plugin.Plugin{
-		"HeadersProvider": &cliplugin.HeadersProviderPlugin{
+		cliplugin.HeadersProviderPluginType: &cliplugin.HeadersProviderPlugin{
 			Impl: &provider{},
 		},
 	}
