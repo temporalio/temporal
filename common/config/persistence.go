@@ -25,6 +25,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -49,17 +50,20 @@ func (c *Persistence) DefaultStoreType() string {
 
 // Validate validates the persistence config
 func (c *Persistence) Validate() error {
-	stores := []string{c.DefaultStore, c.VisibilityStore}
+	stores := []string{c.DefaultStore}
+	if c.VisibilityStore != "" {
+		stores = append(stores, c.VisibilityStore)
+	}
 	for _, st := range stores {
 		ds, ok := c.DataStores[st]
 		if !ok {
-			return fmt.Errorf("persistence config: missing config for datastore %v", st)
+			return fmt.Errorf("persistence config: missing config for datastore %q", st)
 		}
 		if ds.SQL == nil && ds.Cassandra == nil {
-			return fmt.Errorf("persistence config: datastore %v: must provide config for one of cassandra or sql stores", st)
+			return fmt.Errorf("persistence config: datastore %q: must provide config for one of cassandra or sql stores", st)
 		}
 		if ds.SQL != nil && ds.Cassandra != nil {
-			return fmt.Errorf("persistence config: datastore %v: only one of SQL or cassandra can be specified", st)
+			return fmt.Errorf("persistence config: datastore %q: only one of SQL or cassandra can be specified", st)
 		}
 		if ds.SQL != nil && ds.SQL.TaskScanPartitions == 0 {
 			ds.SQL.TaskScanPartitions = 1
@@ -70,12 +74,42 @@ func (c *Persistence) Validate() error {
 			}
 		}
 	}
+
+	if err := c.validateAdvancedVisibility(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 // IsAdvancedVisibilityConfigExist returns whether user specified advancedVisibilityStore in config
 func (c *Persistence) IsAdvancedVisibilityConfigExist() bool {
-	return len(c.AdvancedVisibilityStore) != 0
+	return c.AdvancedVisibilityStore != ""
+}
+
+func (c *Persistence) validateAdvancedVisibility() error {
+	if c.VisibilityStore == "" && c.AdvancedVisibilityStore == "" {
+		return errors.New("persistence config: one of visibilityStore or advancedVisibilityStore must be specified")
+	}
+
+	if c.AdvancedVisibilityStore == "" {
+		return nil
+	}
+
+	advancedVisibilityDataStore, ok := c.DataStores[c.AdvancedVisibilityStore]
+	if !ok {
+		return fmt.Errorf("persistence config: advanced visibility datastore %q: missing config", c.AdvancedVisibilityStore)
+	}
+
+	if advancedVisibilityDataStore.ElasticSearch == nil {
+		return fmt.Errorf("persistence config: advanced visibility datastore %q: must provide config for elasticsearch store", c.AdvancedVisibilityStore)
+	}
+
+	if err := advancedVisibilityDataStore.ElasticSearch.validate(c.AdvancedVisibilityStore); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // GetConsistency returns the gosql.Consistency setting from the configuration for the given store type

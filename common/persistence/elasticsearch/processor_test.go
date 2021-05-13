@@ -69,7 +69,7 @@ func (s *processorSuite) SetupSuite() {
 }
 
 func (s *processorSuite) SetupTest() {
-	logger := log.NewDefaultLogger()
+	logger := log.NewTestLogger()
 
 	s.controller = gomock.NewController(s.T())
 
@@ -412,13 +412,6 @@ func (s *processorSuite) TestIsResponseSuccess() {
 	status = []int{100, 199, 300, 400, 500, 408, 429, 503, 507}
 	for _, code := range status {
 		s.False(isSuccessStatus(code))
-	}
-}
-
-func (s *processorSuite) TestIsResponseRetryable() {
-	status := []int{408, 429, 500, 503, 507}
-	for _, code := range status {
-		s.True(isRetryableStatus(code))
 	}
 }
 

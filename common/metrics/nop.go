@@ -26,16 +26,14 @@ package metrics
 
 import (
 	"time"
-
-	"github.com/uber-go/tally"
 )
 
-type nopStopwatchRecorder struct{}
+type nopStopwatch struct{}
 
-// RecordStopwatch is a nop impl for replay mode
-func (n *nopStopwatchRecorder) RecordStopwatch(stopwatchStart time.Time) {}
+func (n nopStopwatch) Stop()                       {}
+func (n nopStopwatch) Subtract(nsec time.Duration) {}
 
 // NopStopwatch return a fake tally stop watch
 func NopStopwatch() Stopwatch {
-	return tally.NewStopwatch(time.Now().UTC(), &nopStopwatchRecorder{})
+	return nopStopwatch{}
 }

@@ -37,16 +37,14 @@ import (
 	"github.com/fatih/color"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
-	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/sdk/converter"
 )
 
 const (
 	maxWordLength = 120 // if text length is larger than maxWordLength, it will be inserted spaces
 )
 
-func AnyToString(val interface{}, printFully bool, maxFieldLength int) string {
+func AnyToString(val interface{}, printFully bool, maxFieldLength int, dc converter.DataConverter) string {
 	v := reflect.ValueOf(val)
 	if val == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
 		return ""
@@ -62,9 +60,9 @@ func AnyToString(val interface{}, printFully bool, maxFieldLength int) string {
 		}
 		return tVal.String()
 	case *commonpb.Payload:
-		return payload.ToString(tVal)
+		return dc.ToString(tVal)
 	case *commonpb.Payloads:
-		return payloads.ToString(tVal)
+		return fmt.Sprintf("[%s]", strings.Join(dc.ToStrings(tVal), ", "))
 	case int:
 		return strconv.FormatInt(int64(tVal), 10)
 	case int64:
@@ -91,9 +89,9 @@ func AnyToString(val interface{}, printFully bool, maxFieldLength int) string {
 		return ""
 	case reflect.Slice:
 		// All but []byte which is already handled.
-		return sliceToString(v, printFully, maxFieldLength)
+		return sliceToString(v, printFully, maxFieldLength, dc)
 	case reflect.Ptr:
-		return AnyToString(v.Elem().Interface(), printFully, maxFieldLength)
+		return AnyToString(v.Elem().Interface(), printFully, maxFieldLength, dc)
 	case reflect.Map:
 		type keyValuePair struct {
 			key   string
@@ -108,11 +106,11 @@ func AnyToString(val interface{}, printFully bool, maxFieldLength int) string {
 			if !mapKey.CanInterface() || !mapVal.CanInterface() {
 				continue
 			}
-			mapKeyStr := AnyToString(mapKey.Interface(), true, 0)
+			mapKeyStr := AnyToString(mapKey.Interface(), true, 0, dc)
 			if mapKeyStr == "" {
 				continue
 			}
-			mapValStr := AnyToString(mapVal.Interface(), true, 0)
+			mapValStr := AnyToString(mapVal.Interface(), true, 0, dc)
 			if mapValStr == "" {
 				continue
 			}
@@ -153,7 +151,7 @@ func AnyToString(val interface{}, printFully bool, maxFieldLength int) string {
 			}
 
 			fieldName := t.Field(i).Name
-			fieldStr := AnyToString(f.Interface(), printFully, maxFieldLength)
+			fieldStr := AnyToString(f.Interface(), printFully, maxFieldLength, dc)
 			if fieldStr == "" {
 				continue
 			}
@@ -194,12 +192,12 @@ func AnyToString(val interface{}, printFully bool, maxFieldLength int) string {
 	}
 }
 
-func sliceToString(slice reflect.Value, printFully bool, maxFieldLength int) string {
+func sliceToString(slice reflect.Value, printFully bool, maxFieldLength int, dc converter.DataConverter) string {
 	var b strings.Builder
 	b.WriteRune('[')
 	for i := 0; i < slice.Len(); i++ {
 		if i == 0 || printFully {
-			b.WriteString(AnyToString(slice.Index(i).Interface(), printFully, maxFieldLength))
+			b.WriteString(AnyToString(slice.Index(i).Interface(), printFully, maxFieldLength, dc))
 			if i < slice.Len()-1 {
 				b.WriteRune(',')
 			}

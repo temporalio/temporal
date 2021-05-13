@@ -52,8 +52,15 @@ type (
 
 var _ Logger = (*zapLogger)(nil)
 
-// NewDefaultLogger returns a logger at debug level and log into STDERR
-func NewDefaultLogger() *zapLogger {
+// NewTestLogger returns a logger at debug level and log into STDERR
+func NewTestLogger() *zapLogger {
+	return NewZapLogger(BuildZapLogger(Config{
+		Level: "debug",
+	}))
+}
+
+// NewCLILogger returns a logger at debug level and log into STDERR for logging from within CLI tools
+func NewCLILogger() *zapLogger {
 	return NewZapLogger(BuildZapLogger(Config{
 		Level: "debug",
 	}))

@@ -42,6 +42,8 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/matching/configs"
 )
 
 // Service represents the matching service
@@ -70,6 +72,7 @@ func NewService(
 		serviceConfig.ThrottledLogRPS,
 		func(
 			persistenceBean persistenceClient.Bean,
+			searchAttributesProvider searchattribute.Provider,
 			logger log.Logger,
 		) (persistence.VisibilityManager, error) {
 			return persistenceBean.GetVisibilityManager(), nil
@@ -86,7 +89,7 @@ func NewService(
 		logger,
 	)
 	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
-		func() float64 { return float64(serviceConfig.RPS()) },
+		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
 		map[string]int{},
 	)
 
@@ -98,6 +101,8 @@ func NewService(
 		grpcServerOptions,
 		grpc.ChainUnaryInterceptor(
 			rpc.ServiceErrorInterceptor,
+			metrics.NewServerMetricsContextInjectorInterceptor(),
+			metrics.NewServerMetricsTrailerPropagatorInterceptor(logger),
 			metricsInterceptor.Intercept,
 			rateLimiterInterceptor.Intercept,
 		),

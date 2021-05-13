@@ -77,10 +77,8 @@ func TestNamespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite(t *testing.
 }
 
 func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) SetupSuite() {
-	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{
-		ClusterMetadata: cluster.GetTestClusterMetadata(cluster.GetTestClusterMetadataConfig(true, false)),
-	})
-	s.TestBase.Setup()
+	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
+	s.TestBase.Setup(cluster.NewTestClusterMetadataConfig(true, false))
 }
 
 func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TearDownSuite() {

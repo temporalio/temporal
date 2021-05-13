@@ -61,7 +61,7 @@ type (
 // SetupSuiteBase sets up the test suite
 func (tb *DBTestBase) SetupSuiteBase(db DB) {
 	tb.Assertions = require.New(tb.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, tb.T() will return nil
-	tb.Log = log.NewDefaultLogger()
+	tb.Log = log.NewTestLogger()
 	rand := rand.New(rand.NewSource(time.Now().UnixNano()))
 	tb.DBName = fmt.Sprintf("db_client_test_%v", rand.Int63())
 	err := db.CreateDatabase(tb.DBName)

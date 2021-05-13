@@ -27,14 +27,8 @@ import (
 	"os"
 
 	"github.com/hashicorp/go-plugin"
-	"go.temporal.io/server/tools/cli"
+	cliplugin "go.temporal.io/server/tools/cli/plugin"
 )
-
-var handshakeConfig = plugin.HandshakeConfig{
-	ProtocolVersion:  1,
-	MagicCookieKey:   "TEMPORAL_TCTL_PLUGIN",
-	MagicCookieValue: "abb3e448baf947eba1847b10a38554db",
-}
 
 type provider struct {
 	token string
@@ -59,13 +53,13 @@ func main() {
 	}
 
 	var pluginMap = map[string]plugin.Plugin{
-		"HeadersProvider": &cli.HeadersProviderPlugin{
+		"HeadersProvider": &cliplugin.HeadersProviderPlugin{
 			Impl: &provider{},
 		},
 	}
 
 	plugin.Serve(&plugin.ServeConfig{
-		HandshakeConfig: handshakeConfig,
+		HandshakeConfig: cliplugin.PluginHandshakeConfig,
 		Plugins:         pluginMap,
 	})
 }

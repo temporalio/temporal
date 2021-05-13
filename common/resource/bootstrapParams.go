@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/elasticsearch/client"
+	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -62,7 +62,7 @@ type (
 		ServerMetricsReporter        metrics.Reporter
 		SDKMetricsReporter           metrics.Reporter
 		MetricsClient                metrics.Client
-		ESClient                     client.Client
+		ESClient                     esclient.Client
 		ESConfig                     *config.Elasticsearch
 		DynamicConfigClient          dynamicconfig.Client
 		DCRedirectionPolicy          config.DCRedirectionPolicy

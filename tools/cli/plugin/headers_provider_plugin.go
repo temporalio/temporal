@@ -1,4 +1,4 @@
-package cli
+package plugin
 
 import (
 	"context"
@@ -9,18 +9,6 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc/metadata"
-)
-
-var (
-	pluginClient *plugin.Client
-	pluginMap    = map[string]plugin.Plugin{
-		"HeadersProvider": &HeadersProviderPlugin{},
-	}
-	handshakeConfig = plugin.HandshakeConfig{
-		ProtocolVersion:  1,
-		MagicCookieKey:   "TEMPORAL_TCTL_PLUGIN",
-		MagicCookieValue: "abb3e448baf947eba1847b10a38554db",
-	}
 )
 
 type HeadersProvider interface {
@@ -63,7 +51,7 @@ func (w HeadersProviderPluginWrapper) Kill() {
 
 func NewHeadersProviderPlugin(name string) (HeadersProvider, error) {
 	pluginClient := plugin.NewClient(&plugin.ClientConfig{
-		HandshakeConfig: handshakeConfig,
+		HandshakeConfig: PluginHandshakeConfig,
 		Plugins:         pluginMap,
 		Cmd:             exec.Command(name),
 		Logger: hclog.New(&hclog.LoggerOptions{

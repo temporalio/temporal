@@ -77,6 +77,14 @@ TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_DIRS))
 UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
 
+PINNED_DEPENDENCIES := \
+	github.com/DataDog/sketches-go@v0.0.1 \
+	go.opentelemetry.io/otel@v0.15.0 \
+	go.opentelemetry.io/otel/exporters/metric/prometheus@v0.15.0 \
+	github.com/apache/thrift@v0.0.0-20161221203622-b2a4d4ae21c7 \
+	github.com/go-sql-driver/mysql@v1.5.0 \
+	github.com/jmoiron/sqlx@v1.2.1-0.20200615141059-0794cb1f47ee
+
 # Code coverage output files.
 COVER_ROOT                 := ./.coverage
 UNIT_COVER_PROFILE         := $(COVER_ROOT)/unit_coverprofile.out
@@ -90,17 +98,17 @@ SUMMARY_COVER_PROFILE      := $(COVER_ROOT)/summary_coverprofile.out
 #   Apply coverage analysis in each test to the given list of packages.
 #   The default is for each test to analyze only the package being tested.
 #   Packages are specified as import paths.
-GOCOVERPKG_ARG := -coverpkg="$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/...,$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/tools/..."
+INTEG_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/..."
 
 ##### Tools #####
 update-checkers:
 	@printf $(COLOR) "Install/update check tools..."
 	@go install golang.org/x/tools/cmd/goimports
 	@go install golang.org/x/lint/golint
-	@go install honnef.co/go/tools/cmd/staticcheck@v0.1.0
-	@go install github.com/kisielk/errcheck@v1.4.0
-	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.10.0
-	@go install github.com/bufbuild/buf/cmd/buf@v0.33.0
+	@go install honnef.co/go/tools/cmd/staticcheck@v0.1.3
+	@go install github.com/kisielk/errcheck@v1.6.0
+	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.22.0
+	@go install github.com/bufbuild/buf/cmd/buf@v0.41.0
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
@@ -177,13 +185,13 @@ temporal-server:
 	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
 	CGO_ENABLED=0 go build -ldflags "$(shell ./develop/scripts/go-build-ldflags.sh $(MODULE_ROOT)/ldflags)" -o temporal-server cmd/server/main.go
 
-tctl: tctl-plugin-headers-provider-authorization
+tctl: tctl-authorization-plugin
 	@printf $(COLOR) "Build tctl with OS: $(GOOS), ARCH: $(GOARCH)..."
 	CGO_ENABLED=0 go build -o tctl cmd/tools/cli/main.go
 
-tctl-plugin-headers-provider-authorization:
-	@printf $(COLOR) "Build tctl-plugin-headers-provider-authorization with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=0 go build -o tctl-plugin-headers-provider-authorization cmd/tools/cli/plugins/tctl-headers-provider-authorization.go
+tctl-authorization-plugin:
+	@printf $(COLOR) "Build tctl-authorization-plugin with OS: $(GOOS), ARCH: $(GOARCH)..."
+	CGO_ENABLED=0 go build -o tctl-authorization-plugin cmd/tools/cli/plugins/authorization-plugin.go
 
 temporal-cassandra-tool:
 	@printf $(COLOR) "Build temporal-cassandra-tool with OS: $(GOOS), ARCH: $(GOARCH)..."
@@ -232,7 +240,7 @@ api-linter:
 
 buf-lint:
 	@printf $(COLOR) "Run buf linter..."
-	@(cd $(PROTO_ROOT) && buf check lint)
+	@(cd $(PROTO_ROOT) && buf lint)
 
 buf-build:
 	@printf $(COLOR) "Build image.bin with buf..."
@@ -256,17 +264,17 @@ build-tests:
 unit-test: clean-test-results
 	@printf $(COLOR) "Run unit tests..."
 	$(foreach UNIT_TEST_DIR,$(UNIT_TEST_DIRS),\
-		@go test -timeout $(TEST_TIMEOUT) -race $(UNIT_TEST_DIR) $(TEST_TAG) | tee -a test.log \
+		@go test $(UNIT_TEST_DIR) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log \
 	$(NEWLINE))
 	@! grep -q "^--- FAIL" test.log
 
 integration-test: clean-test-results
 	@printf $(COLOR) "Run integration tests..."
 	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS),\
-		@go test -timeout $(TEST_TIMEOUT) -race $(INTEG_TEST_DIR) $(TEST_TAG) | tee -a test.log \
+		@go test $(INTEG_TEST_DIR) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log \
 	$(NEWLINE))
 # Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
-	@go test -timeout $(TEST_TIMEOUT) $(INTEG_TEST_XDC_ROOT) $(TEST_TAG) | tee -a test.log
+	@go test $(INTEG_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
 test: unit-test integration-test
@@ -280,21 +288,21 @@ unit-test-coverage: $(COVER_ROOT)
 	@echo "mode: atomic" > $(UNIT_COVER_PROFILE)
 	$(foreach UNIT_TEST_DIR,$(patsubst ./%/,%,$(UNIT_TEST_DIRS)),\
 		@mkdir -p $(COVER_ROOT)/$(UNIT_TEST_DIR); \
-		go test ./$(UNIT_TEST_DIR) -timeout $(TEST_TIMEOUT) -race -coverprofile=$(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out || exit 1; \
+		go test ./$(UNIT_TEST_DIR) -timeout=$(TEST_TIMEOUT) -race -coverprofile=$(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out || exit 1; \
 		grep -v -e "^mode: \w\+" $(COVER_ROOT)/$(UNIT_TEST_DIR)/coverprofile.out >> $(UNIT_COVER_PROFILE) || true \
 	$(NEWLINE))
 
 integration-test-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run integration tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@go test $(INTEG_TEST_ROOT) -timeout $(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(INTEG_COVER_PROFILE)
+	@go test $(INTEG_TEST_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(INTEG_TEST_COVERPKG) -coverprofile=$(INTEG_COVER_PROFILE)
 
 integration-test-xdc-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run integration test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@go test $(INTEG_TEST_XDC_ROOT) -timeout $(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(INTEG_XDC_COVER_PROFILE)
+	@go test $(INTEG_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(INTEG_TEST_COVERPKG) -coverprofile=$(INTEG_XDC_COVER_PROFILE)
 
 integration-test-ndc-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run integration test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	@go test $(INTEG_TEST_NDC_ROOT) -timeout $(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(GOCOVERPKG_ARG) -coverprofile=$(INTEG_NDC_COVER_PROFILE)
+	@go test $(INTEG_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(INTEG_TEST_COVERPKG) -coverprofile=$(INTEG_NDC_COVER_PROFILE)
 
 $(SUMMARY_COVER_PROFILE): $(COVER_ROOT)
 	@printf $(COLOR) "Combine coverage reports to $(SUMMARY_COVER_PROFILE)..."
@@ -424,9 +432,29 @@ go-generate:
 
 mocks: go-generate external-mocks
 
+##### Fossa #####
+fossa-install:
+	curl -H 'Cache-Control: no-cache' https://raw.githubusercontent.com/fossas/fossa-cli/master/install.sh | bash
+
+fossa-init:
+	fossa init --include-all --no-ansi
+
+fossa-analyze:
+	fossa analyze --no-ansi -b $${BUILDKITE_BRANCH:-$$(git branch --show-current)}
+
+fossa-test:
+	fossa test --timeout 1800 --no-ansi
+
+build-fossa: bins fossa-init fossa-analyze fossa-test
+
 ##### Auxilary #####
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
+	@go mod tidy
+
+update-dependencies:
+	@printf $(COLOR) "Update dependencies..."
+	@go get -u -t $(PINNED_DEPENDENCIES) ./...
 	@go mod tidy
 
 ensure-no-changes:

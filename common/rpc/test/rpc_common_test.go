@@ -39,11 +39,14 @@ import (
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/rpc"
 )
 
 // HelloServer is used to implement helloworld.GreeterServer.
-type HelloServer struct{}
+type HelloServer struct {
+	helloworld.UnimplementedGreeterServer
+}
 
 type ServerUsageType int32
 
@@ -160,6 +163,7 @@ func dialHelloAndGetTLSInfo(
 	clientFactory *TestFactory,
 	serverType ServerUsageType) (*credentials.TLSInfo, error) {
 
+	logger := log.NewNoopLogger()
 	var cfg *tls.Config
 	var err error
 	if serverType == Internode {
@@ -169,7 +173,7 @@ func dialHelloAndGetTLSInfo(
 	}
 
 	s.NoError(err)
-	clientConn, err := rpc.Dial(hostport, cfg)
+	clientConn, err := rpc.Dial(hostport, cfg, logger)
 	s.NoError(err)
 	client := helloworld.NewGreeterClient(clientConn)
 

@@ -126,7 +126,3 @@ var (
 		"timeout":   enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 )
-
-var (
-	cliHeadersProvider HeadersProvider
-)

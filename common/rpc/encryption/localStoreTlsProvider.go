@@ -48,7 +48,8 @@ type CertProviderFactory func(
 	tlsSettings *config.GroupTLS,
 	workerTlsSettings *config.WorkerTLS,
 	legacyWorkerSettings *config.ClientTLS,
-	refreshInterval time.Duration) CertProvider
+	refreshInterval time.Duration,
+	logger log.Logger) CertProvider
 
 type localStoreTlsProvider struct {
 	sync.RWMutex
@@ -76,29 +77,29 @@ type localStoreTlsProvider struct {
 var _ TLSConfigProvider = (*localStoreTlsProvider)(nil)
 var _ CertExpirationChecker = (*localStoreTlsProvider)(nil)
 
-func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope tally.Scope, certProviderFactory CertProviderFactory,
+func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope tally.Scope, logger log.Logger, certProviderFactory CertProviderFactory,
 ) (TLSConfigProvider, error) {
 
-	internodeProvider := certProviderFactory(&tlsConfig.Internode, nil, nil, tlsConfig.RefreshInterval)
+	internodeProvider := certProviderFactory(&tlsConfig.Internode, nil, nil, tlsConfig.RefreshInterval, logger)
 	var workerProvider CertProvider
 	if tlsConfig.SystemWorker.CertFile != "" || tlsConfig.SystemWorker.CertData != "" { // explicit system worker config
-		workerProvider = certProviderFactory(nil, &tlsConfig.SystemWorker, nil, tlsConfig.RefreshInterval)
+		workerProvider = certProviderFactory(nil, &tlsConfig.SystemWorker, nil, tlsConfig.RefreshInterval, logger)
 	} else { // legacy implicit system worker config case
-		internodeWorkerProvider := certProviderFactory(&tlsConfig.Internode, nil, &tlsConfig.Frontend.Client, tlsConfig.RefreshInterval)
+		internodeWorkerProvider := certProviderFactory(&tlsConfig.Internode, nil, &tlsConfig.Frontend.Client, tlsConfig.RefreshInterval, logger)
 		workerProvider = internodeWorkerProvider
 	}
 
 	provider := &localStoreTlsProvider{
 		internodeCertProvider:       internodeProvider,
 		internodeClientCertProvider: internodeProvider,
-		frontendCertProvider:        certProviderFactory(&tlsConfig.Frontend, nil, nil, tlsConfig.RefreshInterval),
+		frontendCertProvider:        certProviderFactory(&tlsConfig.Frontend, nil, nil, tlsConfig.RefreshInterval, logger),
 		workerCertProvider:          workerProvider,
 		frontendPerHostCertProviderMap: newLocalStorePerHostCertProviderMap(
-			tlsConfig.Frontend.PerHostOverrides, certProviderFactory, tlsConfig.RefreshInterval),
+			tlsConfig.Frontend.PerHostOverrides, certProviderFactory, tlsConfig.RefreshInterval, logger),
 		RWMutex:  sync.RWMutex{},
 		settings: tlsConfig,
 		scope:    scope,
-		logger:   log.NewDefaultLogger(),
+		logger:   logger,
 	}
 	provider.initialize()
 	return provider, nil
@@ -110,6 +111,7 @@ func (s *localStoreTlsProvider) initialize() {
 	if period != 0 {
 		s.stop = make(chan bool)
 		s.ticker = time.NewTicker(period)
+		s.checkCertExpiration() // perform initial check to emit metrics and logs right away
 		go s.timerCallback()
 	}
 }
@@ -251,9 +253,9 @@ func newServerTLSConfig(
 	tlsConfig.GetConfigForClient = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
 
 		remoteAddress := c.Conn.RemoteAddr().String()
-		logger.Info("attempted incoming TLS connection", tag.Address(remoteAddress), tag.HostID(c.ServerName))
+		logger.Debug("attempted incoming TLS connection", tag.Address(remoteAddress), tag.HostID(c.ServerName))
 
-		if perHostCertProviderMap != nil {
+		if perHostCertProviderMap != nil && perHostCertProviderMap.NumberOfHosts() > 0 {
 			perHostCertProvider, hostClientAuthRequired, err := perHostCertProviderMap.GetCertProvider(c.ServerName)
 			if err != nil {
 				logger.Error("error while looking up per-host provider for attempted incoming TLS connection",
@@ -358,31 +360,41 @@ func (s *localStoreTlsProvider) timerCallback() {
 		case <-s.ticker.C:
 		}
 
-		var errorTime time.Time
-		if s.settings.ExpirationChecks.ErrorWindow != 0 {
-			errorTime = time.Now().UTC().Add(s.settings.ExpirationChecks.ErrorWindow)
-		} else {
-			errorTime = time.Now().UTC().AddDate(10, 0, 0)
-		}
+		s.checkCertExpiration()
+	}
+}
 
-		window := s.settings.ExpirationChecks.WarningWindow
-		// if only ErrorWindow is set, we set WarningWindow to the same value, so that the checks do happen
-		if window == 0 && s.settings.ExpirationChecks.ErrorWindow != 0 {
-			window = s.settings.ExpirationChecks.ErrorWindow
+func (s *localStoreTlsProvider) checkCertExpiration() {
+
+	defer func() {
+		var retError error
+		log.CapturePanic(s.logger, &retError)
+	}()
+
+	var errorTime time.Time
+	if s.settings.ExpirationChecks.ErrorWindow != 0 {
+		errorTime = time.Now().UTC().Add(s.settings.ExpirationChecks.ErrorWindow)
+	} else {
+		errorTime = time.Now().UTC().AddDate(10, 0, 0)
+	}
+
+	window := s.settings.ExpirationChecks.WarningWindow
+	// if only ErrorWindow is set, we set WarningWindow to the same value, so that the checks do happen
+	if window == 0 && s.settings.ExpirationChecks.ErrorWindow != 0 {
+		window = s.settings.ExpirationChecks.ErrorWindow
+	}
+	if window != 0 {
+		expiring, expired, err := s.GetExpiringCerts(window)
+		if err != nil {
+			s.logger.Error(fmt.Sprintf("error while checking for certificate expiration: %v", err))
+			return
 		}
-		if window != 0 {
-			expiring, expired, err := s.GetExpiringCerts(window)
-			if err != nil {
-				s.logger.Error(fmt.Sprintf("error while checking for certificate expiration: %v", err))
-				continue
-			}
-			if s.scope != nil {
-				s.scope.Gauge(metricCertsExpired).Update(float64(len(expired)))
-				s.scope.Gauge(metricCertsExpiring).Update(float64(len(expiring)))
-			}
-			s.logCerts(expired, true, errorTime)
-			s.logCerts(expiring, false, errorTime)
+		if s.scope != nil {
+			s.scope.Gauge(metricCertsExpired).Update(float64(len(expired)))
+			s.scope.Gauge(metricCertsExpiring).Update(float64(len(expiring)))
 		}
+		s.logCerts(expired, true, errorTime)
+		s.logCerts(expiring, false, errorTime)
 	}
 }
 

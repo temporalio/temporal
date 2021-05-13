@@ -1,6 +1,6 @@
 persistence:
   defaultStore: cass-default
-  visibilityStore: cass-visibility
+  visibilityStore:
   advancedVisibilityStore: es-visibility
   numHistoryShards: 4
   datastores:
@@ -8,10 +8,6 @@ persistence:
       cassandra:
         hosts: "127.0.0.1"
         keyspace: "temporal"
-    cass-visibility:
-      cassandra:
-        hosts: "127.0.0.1"
-        keyspace: "temporal_visibility"
     es-visibility:
       elasticsearch:
         version: "v7"

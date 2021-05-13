@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"sync/atomic"
+	"time"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -116,15 +117,14 @@ func (c *historyCache) getAndCreateWorkflowExecution(
 	execution commonpb.WorkflowExecution,
 ) (workflowExecutionContext, workflowExecutionContext, releaseWorkflowExecutionFunc, bool, error) {
 
+	if err := c.validateWorkflowExecutionInfo(namespaceID, &execution); err != nil {
+		return nil, nil, nil, false, err
+	}
+
 	scope := metrics.HistoryCacheGetAndCreateScope
 	c.metricsClient.IncCounter(scope, metrics.CacheRequests)
 	sw := c.metricsClient.StartTimer(scope, metrics.CacheLatency)
 	defer sw.Stop()
-
-	if err := c.validateWorkflowExecutionInfo(namespaceID, &execution); err != nil {
-		c.metricsClient.IncCounter(scope, metrics.CacheFailures)
-		return nil, nil, nil, false, err
-	}
 
 	key := definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId())
 	contextFromCache, cacheHit := c.Get(key).(workflowExecutionContext)
@@ -164,25 +164,28 @@ func (c *historyCache) getOrCreateWorkflowExecution(
 	execution commonpb.WorkflowExecution,
 ) (workflowExecutionContext, releaseWorkflowExecutionFunc, error) {
 
-	scope := metrics.HistoryCacheGetOrCreateScope
-	c.metricsClient.IncCounter(scope, metrics.CacheRequests)
-	sw := c.metricsClient.StartTimer(scope, metrics.CacheLatency)
-	defer sw.Stop()
-
 	if err := c.validateWorkflowExecutionInfo(namespaceID, &execution); err != nil {
-		c.metricsClient.IncCounter(scope, metrics.CacheFailures)
 		return nil, nil, err
 	}
 
-	return c.getOrCreateWorkflowExecutionInternal(
+	scope := metrics.HistoryCacheGetOrCreateScope
+	c.metricsClient.IncCounter(scope, metrics.CacheRequests)
+	start := time.Now()
+	sw := c.metricsClient.StartTimer(scope, metrics.CacheLatency)
+	defer sw.Stop()
+
+	weCtx, weReleaseFunc, err := c.getOrCreateWorkflowExecutionInternal(
 		ctx,
 		namespaceID,
 		execution,
 		scope,
 		false,
 	)
-}
 
+	metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency, time.Since(start).Nanoseconds())
+
+	return weCtx, weReleaseFunc, err
+}
 func (c *historyCache) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
 	namespaceID string,

@@ -25,11 +25,12 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/tools/cli/dataconverter"
+	"go.temporal.io/server/tools/cli/headersprovider"
+	"go.temporal.io/server/tools/cli/plugin"
 )
 
 // SetFactory is used to set the ClientFactory global
@@ -101,6 +102,12 @@ func NewCliApp() *cli.App {
 			Value:  "",
 			Usage:  "headers provider plugin",
 			EnvVar: "TEMPORAL_CLI_PLUGIN_HEADERS_PROVIDER",
+		},
+		cli.StringFlag{
+			Name:   FlagDataConverterPluginWithAlias,
+			Value:  "",
+			Usage:  "data converter plugin executable name",
+			EnvVar: "TEMPORAL_CLI_PLUGIN_DATA_CONVERTER",
 		},
 	}
 	app.Commands = []cli.Command{
@@ -210,9 +217,15 @@ func NewCliApp() *cli.App {
 			Usage:       "Operate Temporal cluster",
 			Subcommands: newClusterCommands(),
 		},
+		{
+			Name:        "dataconverter",
+			Aliases:     []string{"dc"},
+			Usage:       "Operate Custom Data Converter",
+			Subcommands: newDataConverterCommands(),
+		},
 	}
-	app.Before = LoadPlugins
-	app.After = KillPlugins
+	app.Before = loadPlugins
+	app.After = stopPlugins
 
 	// set builder if not customized
 	if cFactory == nil {
@@ -221,26 +234,32 @@ func NewCliApp() *cli.App {
 	return app
 }
 
-func LoadPlugins(ctx *cli.Context) error {
-	headersProviderPlugin := ctx.String(FlagHeadersProviderPlugin)
-	if headersProviderPlugin != "" {
-		name := "tctl-plugin-headers-provider-" + headersProviderPlugin
-
-		var err error
-		cliHeadersProvider, err = NewHeadersProviderPlugin(name)
+func loadPlugins(ctx *cli.Context) error {
+	dcPlugin := ctx.String(FlagDataConverterPlugin)
+	if dcPlugin != "" {
+		dataConverter, err := plugin.NewDataConverterPlugin(dcPlugin)
 		if err != nil {
-			fmt.Printf("unable to register headers provider plugin %s: %v\n", headersProviderPlugin, err)
-			return err
+			ErrorAndExit("unable to load data converter plugin", err)
 		}
+
+		dataconverter.SetCurrent(dataConverter)
+	}
+
+	hpPlugin := ctx.String(FlagHeadersProviderPlugin)
+	if hpPlugin != "" {
+		headersProvider, err := plugin.NewHeadersProviderPlugin(hpPlugin)
+		if err != nil {
+			ErrorAndExit("unable to load headers provider plugin", err)
+		}
+
+		headersprovider.SetCurrent(headersProvider)
 	}
 
 	return nil
 }
 
-func KillPlugins(ctx *cli.Context) error {
-	if cliHeadersProvider != nil {
-		cliHeadersProvider.(HeadersProviderPluginWrapper).Kill()
-	}
+func stopPlugins(ctx *cli.Context) error {
+	plugin.StopPlugins()
 
 	return nil
 }

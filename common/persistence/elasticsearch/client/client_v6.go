@@ -159,18 +159,29 @@ func (c *clientV6) RunBulkProcessor(ctx context.Context, p *BulkProcessorParamet
 	return newBulkProcessorV6(esBulkProcessor), convertV6ErrorToV7(err)
 }
 
-// root is for nested object like Attr property for search attributes.
-func (c *clientV6) PutMapping(ctx context.Context, index, root, key, valueType string) error {
-	body := c.buildPutMappingBody(root, key, valueType)
-	_, err := c.esClient.PutMapping().Index(index).Type(docTypeV6).BodyJson(body).Do(ctx)
-	if elastic6.IsNotFound(err) {
-		_, err = c.CreateIndex(ctx, index)
-		if err != nil {
-			return convertV6ErrorToV7(err)
-		}
-		_, err = c.esClient.PutMapping().Index(index).Type(docTypeV6).BodyJson(body).Do(ctx)
+func (c *clientV6) PutMapping(ctx context.Context, index string, root string, mapping map[string]string) (bool, error) {
+	body := buildMappingBody(root, mapping)
+	resp, err := c.esClient.PutMapping().Index(index).Type(docTypeV6).BodyJson(body).Do(ctx)
+	if err != nil {
+		return false, convertV6ErrorToV7(err)
 	}
-	return convertV6ErrorToV7(err)
+	return resp.Acknowledged, nil
+}
+
+func (c *clientV6) WaitForYellowStatus(ctx context.Context, index string) (string, error) {
+	resp, err := c.esClient.ClusterHealth().Index(index).WaitForYellowStatus().Do(ctx)
+	if err != nil {
+		return "", convertV6ErrorToV7(err)
+	}
+	return resp.Status, nil
+}
+
+func (c *clientV6) GetMapping(ctx context.Context, index string) (map[string]string, error) {
+	resp, err := c.esClient.GetMapping().Index(index).Type(docTypeV6).Do(ctx)
+	if err != nil {
+		return nil, convertV6ErrorToV7(err)
+	}
+	return convertMappingBody(resp, index), nil
 }
 
 func (c *clientV6) CreateIndex(ctx context.Context, index string) (bool, error) {
@@ -179,28 +190,6 @@ func (c *clientV6) CreateIndex(ctx context.Context, index string) (bool, error) 
 		return false, convertV6ErrorToV7(err)
 	}
 	return resp.Acknowledged, nil
-}
-
-func (c *clientV6) buildPutMappingBody(root, key, valueType string) map[string]interface{} {
-	body := make(map[string]interface{})
-	if len(root) != 0 {
-		body["properties"] = map[string]interface{}{
-			root: map[string]interface{}{
-				"properties": map[string]interface{}{
-					key: map[string]interface{}{
-						"type": valueType,
-					},
-				},
-			},
-		}
-	} else {
-		body["properties"] = map[string]interface{}{
-			key: map[string]interface{}{
-				"type": valueType,
-			},
-		}
-	}
-	return body
 }
 
 func (c *clientV6) CatIndices(ctx context.Context) (elastic.CatIndicesResponse, error) {

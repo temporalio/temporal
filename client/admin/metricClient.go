@@ -54,14 +54,14 @@ func (c *metricClient) AddSearchAttribute(
 	opts ...grpc.CallOption,
 ) (*adminservice.AddSearchAttributeResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.AdminClientAddSearchAttributeScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.AdminClientAddSearchAttributesScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.AdminClientAddSearchAttributeScope, metrics.ClientLatency)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientAddSearchAttributesScope, metrics.ClientLatency)
 	resp, err := c.client.AddSearchAttribute(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientAddSearchAttributeScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.AdminClientAddSearchAttributesScope, metrics.ClientFailures)
 	}
 	return resp, err
 }

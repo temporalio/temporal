@@ -33,7 +33,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	sdkclient "go.temporal.io/sdk/client"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -47,7 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/elasticsearch/client"
+	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
@@ -120,7 +119,18 @@ func (s *Server) Start() error {
 		s.so.persistenceServiceResolver = resolver.NewNoopResolver()
 	}
 
-	err = verifyPersistenceCompatibleVersion(s.so.config.Persistence, s.so.persistenceServiceResolver)
+	if s.so.dynamicConfigClient == nil {
+		s.so.dynamicConfigClient, err = dynamicconfig.NewFileBasedClient(&s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
+		if err != nil {
+			s.logger.Info("Error creating file based dynamic config client, use no-op config client instead.", tag.Error(err))
+			s.so.dynamicConfigClient = dynamicconfig.NewNoopClient()
+		}
+	}
+	dc := dynamicconfig.NewCollection(s.so.dynamicConfigClient, s.logger)
+
+	advancedVisibilityWritingMode := dc.GetStringProperty(dynamicconfig.AdvancedVisibilityWritingMode, common.GetDefaultAdvancedVisibilityWritingMode(s.so.config.Persistence.IsAdvancedVisibilityConfigExist()))()
+
+	err = verifyPersistenceCompatibleVersion(s.so.config.Persistence, s.so.persistenceServiceResolver, advancedVisibilityWritingMode != common.AdvancedVisibilityWritingModeOn)
 	if err != nil {
 		return err
 	}
@@ -133,15 +143,6 @@ func (s *Server) Start() error {
 	if err != nil {
 		return fmt.Errorf("ringpop config validation error: %w", err)
 	}
-
-	if s.so.dynamicConfigClient == nil {
-		s.so.dynamicConfigClient, err = dynamicconfig.NewFileBasedClient(&s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
-		if err != nil {
-			s.logger.Info("Error creating file based dynamic config client, use no-op config client instead.", tag.Error(err))
-			s.so.dynamicConfigClient = dynamicconfig.NewNoopClient()
-		}
-	}
-	dc := dynamicconfig.NewCollection(s.so.dynamicConfigClient, s.logger)
 
 	err = updateClusterMetadataConfig(s.so.config, s.so.persistenceServiceResolver, s.logger)
 	if err != nil {
@@ -170,14 +171,20 @@ func (s *Server) Start() error {
 	}
 
 	if s.so.tlsConfigProvider == nil {
-		s.so.tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(s.so.config.Global.TLS, globalMetricsScope, nil)
+		s.so.tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(
+			s.so.config.Global.TLS, globalMetricsScope, s.logger, nil)
 		if err != nil {
 			return fmt.Errorf("TLS provider initialization error: %w", err)
 		}
 	}
 
+	esConfig, esClient, err := s.getESConfigClient(advancedVisibilityWritingMode)
+	if err != nil {
+		return err
+	}
+
 	for _, svcName := range s.so.serviceNames {
-		params, err := s.newBootstrapParams(svcName, dc, s.serverReporter, s.sdkReporter)
+		params, err := s.newBootstrapParams(svcName, dc, s.serverReporter, s.sdkReporter, esConfig, esClient)
 		if err != nil {
 			return err
 		}
@@ -249,14 +256,20 @@ func (s *Server) newBootstrapParams(
 	dc *dynamicconfig.Collection,
 	serverReporter metrics.Reporter,
 	sdkReporter metrics.Reporter,
+	esConfig *config.Elasticsearch,
+	esClient esclient.Client,
 ) (*resource.BootstrapParams, error) {
 
-	params := resource.BootstrapParams{}
-	params.Name = svcName
-	params.Logger = s.logger
-	params.PersistenceConfig = s.so.config.Persistence
-	params.DynamicConfigClient = s.so.dynamicConfigClient
-	params.ClusterMetadataConfig = s.so.config.ClusterMetadata
+	params := &resource.BootstrapParams{
+		Name:                  svcName,
+		Logger:                s.logger,
+		PersistenceConfig:     s.so.config.Persistence,
+		DynamicConfigClient:   s.so.dynamicConfigClient,
+		ClusterMetadataConfig: s.so.config.ClusterMetadata,
+		DCRedirectionPolicy:   s.so.config.DCRedirectionPolicy,
+		ESConfig:              esConfig,
+		ESClient:              esClient,
+	}
 
 	svcCfg := s.so.config.Services[svcName]
 	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, s.logger, s.so.tlsConfigProvider)
@@ -265,8 +278,8 @@ func (s *Server) newBootstrapParams(
 	// Ringpop uses a different port to register handlers, this map is needed to resolve
 	// services to correct addresses used by clients through ServiceResolver lookup API
 	servicePortMap := make(map[string]int)
-	for svcName, svcCfg := range s.so.config.Services {
-		servicePortMap[svcName] = svcCfg.RPC.GRPCPort
+	for sn, sc := range s.so.config.Services {
+		servicePortMap[sn] = sc.RPC.GRPCPort
 	}
 
 	params.MembershipFactoryInitializer =
@@ -281,15 +294,13 @@ func (s *Server) newBootstrapParams(
 			)
 		}
 
-	params.DCRedirectionPolicy = s.so.config.DCRedirectionPolicy
-
-	//todo: Replace this hack with actually using sdkReporter, Client or Scope.
+	// todo: Replace this hack with actually using sdkReporter, Client or Scope.
 	if serverReporter == nil {
 		var err error
 		serverReporter, sdkReporter, err = svcCfg.Metrics.InitMetricReporters(s.logger, nil)
 		if err != nil {
 			return nil, fmt.Errorf(
-				"Failed to initialize per-service metric client. "+
+				"unable to initialize per-service metric client. "+
 					"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err)
 		}
 		params.ServerMetricsReporter = serverReporter
@@ -305,7 +316,7 @@ func (s *Server) newBootstrapParams(
 	serviceIdx := metrics.GetMetricsServiceIdx(svcName, s.logger)
 	metricsClient, err := serverReporter.NewClient(s.logger, serviceIdx)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to initialize metrics client: %w", err)
+		return nil, fmt.Errorf("unable to initialize metrics client: %w", err)
 	}
 
 	params.MetricsClient = metricsClient
@@ -327,40 +338,6 @@ func (s *Server) newBootstrapParams(
 	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to create public client: %w", err)
-	}
-
-	advancedVisMode := dc.GetStringProperty(
-		dynamicconfig.AdvancedVisibilityWritingMode,
-		common.GetDefaultAdvancedVisibilityWritingMode(s.so.config.Persistence.IsAdvancedVisibilityConfigExist()),
-	)()
-
-	if advancedVisMode != common.AdvancedVisibilityWritingModeOff {
-		// verify config of advanced visibility store
-		advancedVisStoreKey := s.so.config.Persistence.AdvancedVisibilityStore
-		advancedVisStore, ok := s.so.config.Persistence.DataStores[advancedVisStoreKey]
-		if !ok {
-			return nil, fmt.Errorf("unable to find advanced visibility store in config for %q key", advancedVisStoreKey)
-		}
-
-		if s.so.elasticseachHttpClient == nil {
-			s.so.elasticseachHttpClient, err = client.NewAwsHttpClient(advancedVisStore.ElasticSearch.AWSRequestSigning)
-			if err != nil {
-				return nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
-			}
-		}
-
-		esClient, err := client.NewClient(advancedVisStore.ElasticSearch, s.so.elasticseachHttpClient, s.logger)
-		if err != nil {
-			return nil, fmt.Errorf("unable to create Elasticsearch client: %w", err)
-		}
-		params.ESConfig = advancedVisStore.ElasticSearch
-		params.ESClient = esClient
-
-		// verify index name
-		indexName := advancedVisStore.ElasticSearch.GetVisibilityIndex()
-		if len(indexName) == 0 {
-			return nil, errors.New("visibility index in missing in Elasticsearch config")
-		}
 	}
 
 	params.ArchivalMetadata = archiver.NewArchivalMetadata(
@@ -388,16 +365,47 @@ func (s *Server) newBootstrapParams(
 
 	params.PersistenceServiceResolver = s.so.persistenceServiceResolver
 
-	return &params, nil
+	return params, nil
 }
 
-func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceServiceResolver resolver.ServiceResolver) error {
+func (s *Server) getESConfigClient(advancedVisibilityWritingMode string) (*config.Elasticsearch, esclient.Client, error) {
+	if advancedVisibilityWritingMode == common.AdvancedVisibilityWritingModeOff {
+		return nil, nil, nil
+	}
+
+	advancedVisibilityStore, ok := s.so.config.Persistence.DataStores[s.so.config.Persistence.AdvancedVisibilityStore]
+	if !ok {
+		return nil, nil, fmt.Errorf("unable to find advanced visibility store in config for %q key", s.so.config.Persistence.AdvancedVisibilityStore)
+	}
+
+	indexName := advancedVisibilityStore.ElasticSearch.GetVisibilityIndex()
+	if len(indexName) == 0 {
+		return nil, nil, errors.New("visibility index in missing in Elasticsearch config")
+	}
+
+	if s.so.elasticseachHttpClient == nil {
+		var err error
+		s.so.elasticseachHttpClient, err = esclient.NewAwsHttpClient(advancedVisibilityStore.ElasticSearch.AWSRequestSigning)
+		if err != nil {
+			return nil, nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
+		}
+	}
+
+	esClient, err := esclient.NewClient(advancedVisibilityStore.ElasticSearch, s.so.elasticseachHttpClient, s.logger)
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to create Elasticsearch client: %w", err)
+	}
+
+	return advancedVisibilityStore.ElasticSearch, esClient, nil
+}
+
+func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceServiceResolver resolver.ServiceResolver, checkVisibility bool) error {
 	// cassandra schema version validation
-	if err := cassandra.VerifyCompatibleVersion(config, persistenceServiceResolver); err != nil {
+	if err := cassandra.VerifyCompatibleVersion(config, persistenceServiceResolver, checkVisibility); err != nil {
 		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
 	}
 	// sql schema version validation
-	if err := sql.VerifyCompatibleVersion(config, persistenceServiceResolver); err != nil {
+	if err := sql.VerifyCompatibleVersion(config, persistenceServiceResolver, checkVisibility); err != nil {
 		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
 	}
 	return nil

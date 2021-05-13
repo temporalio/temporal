@@ -29,6 +29,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -228,7 +229,11 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		return nil, err
 	}
 
-	if err := r.failInflightActivity(resetMutableState, resetReason); err != nil {
+	if err := r.failInflightActivity(
+		*resetMutableState.GetExecutionInfo().StartTime,
+		resetMutableState,
+		resetReason,
+	); err != nil {
 		return nil, err
 	}
 
@@ -294,12 +299,13 @@ func (r *workflowResetterImpl) persistToDB(
 		resetHistorySize += size
 	}
 	return resetWorkflow.getContext().createWorkflowExecution(
-		resetWorkflowSnapshot,
-		resetHistorySize,
 		now,
 		persistence.CreateWorkflowModeContinueAsNew,
 		currentRunID,
 		currentLastWriteVersion,
+		resetWorkflow.getMutableState(),
+		resetWorkflowSnapshot,
+		resetHistorySize,
 	)
 }
 
@@ -419,6 +425,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 }
 
 func (r *workflowResetterImpl) failInflightActivity(
+	now time.Time,
 	mutableState mutableState,
 	terminateReason string,
 ) error {
@@ -427,10 +434,17 @@ func (r *workflowResetterImpl) failInflightActivity(
 		switch ai.StartedId {
 		case common.EmptyEventID:
 			// activity not started, noop
+			// override the activity time to now
+			ai.ScheduledTime = timestamp.TimePtr(now)
+			if err := mutableState.UpdateActivity(ai); err != nil {
+				return err
+			}
+
 		case common.TransientEventID:
 			// activity is started (with retry policy)
 			// should not encounter this case when rebuilding mutable state
 			return serviceerror.NewInternal("workflowResetter encounter transient activity")
+
 		default:
 			if _, err := mutableState.AddActivityTaskFailedEvent(
 				ai.ScheduleId,

@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination search_attribute_mock.go
+
 package searchattribute
 
 import (
@@ -36,6 +38,17 @@ import (
 
 const (
 	MetadataType = "type"
+)
+
+type (
+	Provider interface {
+		GetSearchAttributes(indexName string, bypassCache bool) (map[string]enumspb.IndexedValueType, error)
+	}
+
+	Manager interface {
+		Provider
+		SaveSearchAttributes(indexName string, newCustomSearchAttributes map[string]enumspb.IndexedValueType) error
+	}
 )
 
 var (
@@ -98,7 +111,7 @@ func ApplyTypeMap(searchAttributes *commonpb.SearchAttributes, typeMap map[strin
 	}
 }
 
-func GetESType(t enumspb.IndexedValueType) string {
+func MapESType(t enumspb.IndexedValueType) string {
 	switch t {
 	case enumspb.INDEXED_VALUE_TYPE_STRING:
 		return "text"

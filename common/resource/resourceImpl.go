@@ -35,6 +35,7 @@ import (
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/server/common/searchattribute"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -64,6 +65,7 @@ type (
 	// for visibility manager initialization
 	VisibilityManagerInitializer func(
 		persistenceBean persistenceClient.Bean,
+		searchAttributesProvider searchattribute.Provider,
 		logger log.Logger,
 	) (persistence.VisibilityManager, error)
 
@@ -79,6 +81,7 @@ type (
 		hostInfo        *membership.HostInfo
 		metricsScope    tally.Scope
 		clusterMetadata cluster.Metadata
+		saProvider      searchattribute.Provider
 
 		// other common resources
 
@@ -182,8 +185,6 @@ func New(
 	}
 
 	clusterMetadata := cluster.NewMetadata(
-		logger,
-		// persistenceBean.GetClusterMetadataManager().GetClusterMetadata(),
 		params.ClusterMetadataConfig.EnableGlobalNamespace,
 		params.ClusterMetadataConfig.FailoverVersionIncrement,
 		params.ClusterMetadataConfig.MasterClusterName,
@@ -237,8 +238,11 @@ func New(
 		return nil, err
 	}
 
+	saProvider := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
+
 	visibilityMgr, err := visibilityManagerInitializer(
 		persistenceBean,
+		saProvider,
 		logger,
 	)
 	if err != nil {
@@ -307,6 +311,7 @@ func New(
 		hostName:        hostName,
 		metricsScope:    params.MetricsScope,
 		clusterMetadata: clusterMetadata,
+		saProvider:      saProvider,
 
 		// other common resources
 
@@ -616,4 +621,8 @@ func (h *Impl) GetThrottledLogger() log.Logger {
 // GetGRPCListener return GRPC listener, used for registering handlers
 func (h *Impl) GetGRPCListener() net.Listener {
 	return h.grpcListener
+}
+
+func (h *Impl) GetSearchAttributesProvider() searchattribute.Provider {
+	return h.saProvider
 }

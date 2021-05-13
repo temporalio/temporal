@@ -134,7 +134,7 @@ func (s *VersionTestSuite) TestVerifyCompatibleVersion() {
 		},
 		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
 	}
-	s.NoError(persistencesql.VerifyCompatibleVersion(cfg, resolver.NewNoopResolver()))
+	s.NoError(persistencesql.VerifyCompatibleVersion(cfg, resolver.NewNoopResolver(), true))
 }
 
 func (s *VersionTestSuite) createDatabase(database string) func() {

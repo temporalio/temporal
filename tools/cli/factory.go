@@ -44,6 +44,8 @@ import (
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/tools/cli/headersprovider"
+	"go.temporal.io/server/tools/cli/plugin"
 )
 
 // ClientFactory is used to construct rpc clients
@@ -60,7 +62,7 @@ type clientFactory struct {
 
 // NewClientFactory creates a new ClientFactory
 func NewClientFactory() ClientFactory {
-	logger := log.NewDefaultLogger()
+	logger := log.NewCLILogger()
 
 	return &clientFactory{
 		logger: logger,
@@ -101,7 +103,7 @@ func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Cl
 			DisableHealthCheck: true,
 			TLS:                tlsConfig,
 		},
-		HeadersProvider: cliHeadersProvider,
+		HeadersProvider: headersprovider.GetCurrent(),
 	})
 	if err != nil {
 		b.logger.Fatal("Failed to create SDK client", tag.Error(err))
@@ -117,7 +119,7 @@ func (b *clientFactory) HealthClient(c *cli.Context) healthpb.HealthClient {
 	return healthpb.NewHealthClient(connection)
 }
 
-func headersProviderInterceptor(headersProvider HeadersProvider) grpc.UnaryClientInterceptor {
+func headersProviderInterceptor(headersProvider plugin.HeadersProvider) grpc.UnaryClientInterceptor {
 	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		headers, err := headersProvider.GetHeaders(ctx)
 		if err != nil {
@@ -150,8 +152,9 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 	dialOpts := []grpc.DialOption{
 		grpcSecurityOptions,
 	}
-	if cliHeadersProvider != nil {
-		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(headersProviderInterceptor(cliHeadersProvider)))
+	headersProvider := headersprovider.GetCurrent()
+	if headersProvider != nil {
+		dialOpts = append(dialOpts, grpc.WithUnaryInterceptor(headersProviderInterceptor(headersProvider)))
 	}
 
 	connection, err := grpc.Dial(hostPort, dialOpts...)

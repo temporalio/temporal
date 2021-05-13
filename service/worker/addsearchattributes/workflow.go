@@ -1,0 +1,203 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package addsearchattributes
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
+	"go.temporal.io/server/common/searchattribute"
+
+	"go.temporal.io/server/common/log"
+)
+
+const (
+	// TaskQueueName is the task queue name.
+	TaskQueueName = "temporal-sys-add-search-attributes-task-queue"
+	// WorkflowName is the workflow name.
+	WorkflowName = "temporal-sys-add-search-attributes-workflow"
+)
+
+type (
+	// WorkflowParams is the parameters for add search attributes workflow.
+	WorkflowParams struct {
+		// ES index name.
+		IndexName string
+		// Search attributes that need to be added to the index.
+		CustomAttributesToAdd map[string]enumspb.IndexedValueType
+	}
+
+	activities struct {
+		esClient      esclient.Client
+		saManager     searchattribute.Manager
+		metricsClient metrics.Client
+		logger        log.Logger
+	}
+)
+
+var (
+	addESMappingFieldActivityOptions = workflow.ActivityOptions{
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: 1 * time.Second,
+		},
+		StartToCloseTimeout:    10 * time.Second,
+		ScheduleToCloseTimeout: 30 * time.Second,
+	}
+
+	waitForYellowStatusActivityOptions = workflow.ActivityOptions{
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: 5 * time.Second,
+		},
+		StartToCloseTimeout:    20 * time.Second,
+		ScheduleToCloseTimeout: 60 * time.Second,
+	}
+
+	updateClusterMetadataActivityOptions = workflow.ActivityOptions{
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: 1 * time.Second,
+		},
+		StartToCloseTimeout:    2 * time.Second,
+		ScheduleToCloseTimeout: 10 * time.Second,
+	}
+
+	ErrUnableToUpdateESMapping      = errors.New("unable to update Elasticsearch mapping")
+	ErrUnableToExecuteActivity      = errors.New("unable to execute activity")
+	ErrUnableToGetSearchAttributes  = errors.New("unable to get search attributes from cluster metadata")
+	ErrUnableToSaveSearchAttributes = errors.New("unable to save search attributes to cluster metadata")
+)
+
+func newActivities(
+	esClient esclient.Client,
+	saManager searchattribute.Manager,
+	metricsClient metrics.Client,
+	logger log.Logger,
+) *activities {
+	return &activities{
+		esClient:      esClient,
+		saManager:     saManager,
+		metricsClient: metricsClient,
+		logger:        logger,
+	}
+}
+
+// AddSearchAttributesWorkflow is the workflow that
+func AddSearchAttributesWorkflow(ctx workflow.Context, params WorkflowParams) error {
+	logger := workflow.GetLogger(ctx)
+	logger.Info("Workflow started.", "wf-type", WorkflowName)
+
+	var a *activities
+
+	ctx1 := workflow.WithActivityOptions(ctx, addESMappingFieldActivityOptions)
+	err := workflow.ExecuteActivity(ctx1, a.AddESMappingFieldActivity, params).Get(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("%w: AddESMappingFieldActivity: %v", ErrUnableToExecuteActivity, err)
+	}
+
+	ctx2 := workflow.WithActivityOptions(ctx, waitForYellowStatusActivityOptions)
+	err = workflow.ExecuteActivity(ctx2, a.WaitForYellowStatusActivity, params.IndexName).Get(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("%w: WaitForYellowStatusActivity: %v", ErrUnableToExecuteActivity, err)
+	}
+
+	ctx3 := workflow.WithActivityOptions(ctx, updateClusterMetadataActivityOptions)
+	err = workflow.ExecuteActivity(ctx3, a.UpdateClusterMetadataActivity, params).Get(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("%w: UpdateClusterMetadataActivity: %v", ErrUnableToExecuteActivity, err)
+	}
+
+	// TODO: anything better?
+	workflow.GetMetricsScope(ctx).SubScope("AddSearchAttributesWorkflow").Counter("add_search_attributes_workflow_success").Inc(1)
+	logger.Info("Workflow finished successfully.", "wf-type", WorkflowName)
+	return nil
+}
+
+func (a *activities) AddESMappingFieldActivity(ctx context.Context, params WorkflowParams) error {
+	mapping := make(map[string]string, len(params.CustomAttributesToAdd))
+	for saName, saType := range params.CustomAttributesToAdd {
+		esType := searchattribute.MapESType(saType)
+		if esType == "" {
+			return temporal.NewNonRetryableApplicationError(fmt.Sprintf("Unknown search attribute type: %v", saType), "", nil)
+		}
+		mapping[saName] = esType
+	}
+
+	a.logger.Info("Creating Elasticsearch mapping.", tag.ESIndex(params.IndexName), tag.ESMapping(mapping))
+	_, err := a.esClient.PutMapping(ctx, params.IndexName, searchattribute.Attr, mapping)
+	if err != nil {
+		a.metricsClient.IncCounter(metrics.AddSearchAttributesWorkflowScope, metrics.AddSearchAttributesFailuresCount)
+		if esclient.IsRetryableError(err) {
+			a.logger.Error("Unable to update Elasticsearch mapping (retryable error).", tag.ESIndex(params.IndexName), tag.Error(err))
+			return fmt.Errorf("%w: %v", ErrUnableToUpdateESMapping, err)
+		}
+		a.logger.Error("Unable to update Elasticsearch mapping (non-retryable error).", tag.ESIndex(params.IndexName), tag.Error(err))
+		return temporal.NewNonRetryableApplicationError(fmt.Sprintf("%v: %v", ErrUnableToUpdateESMapping, err), "", nil)
+	}
+	a.logger.Info("Elasticsearch mapping created.", tag.ESIndex(params.IndexName), tag.ESMapping(mapping))
+
+	return nil
+}
+
+func (a *activities) WaitForYellowStatusActivity(ctx context.Context, index string) error {
+	status, err := a.esClient.WaitForYellowStatus(ctx, index)
+	if err != nil {
+		a.logger.Error("Unable to get Elasticsearch cluster status.", tag.ESIndex(index), tag.Error(err))
+		a.metricsClient.IncCounter(metrics.AddSearchAttributesWorkflowScope, metrics.AddSearchAttributesFailuresCount)
+		return err
+	}
+	a.logger.Info("Elasticsearch cluster status.", tag.ESIndex(index), tag.ESClusterStatus(status))
+	return nil
+}
+
+func (a *activities) UpdateClusterMetadataActivity(_ context.Context, params WorkflowParams) error {
+	oldSearchAttributes, err := a.saManager.GetSearchAttributes(params.IndexName, true)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrUnableToGetSearchAttributes, err)
+	}
+
+	oldCustomSearchAttributes := searchattribute.FilterCustom(oldSearchAttributes)
+	newCustomSearchAttributes := map[string]enumspb.IndexedValueType{}
+	for saName, saType := range oldCustomSearchAttributes {
+		newCustomSearchAttributes[saName] = saType
+	}
+	for saName, saType := range params.CustomAttributesToAdd {
+		newCustomSearchAttributes[saName] = saType
+	}
+	err = a.saManager.SaveSearchAttributes(params.IndexName, newCustomSearchAttributes)
+	if err != nil {
+		a.logger.Info("Unable to save search attributes to cluster metadata.", tag.ESIndex(params.IndexName), tag.Error(err))
+		a.metricsClient.IncCounter(metrics.AddSearchAttributesWorkflowScope, metrics.AddSearchAttributesFailuresCount)
+		return fmt.Errorf("%w: %v", ErrUnableToSaveSearchAttributes, err)
+	}
+	a.logger.Info("Search attributes saved to cluster metadata.", tag.ESIndex(params.IndexName))
+	return nil
+}

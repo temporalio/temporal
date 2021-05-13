@@ -36,6 +36,8 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -59,7 +61,7 @@ const (
 // The hostName syntax is defined in
 // https://github.com/grpc/grpc/blob/master/doc/naming.md.
 // e.g. to use dns resolver, a "dns:///" prefix should be applied to the target.
-func Dial(hostName string, tlsConfig *tls.Config) (*grpc.ClientConn, error) {
+func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger) (*grpc.ClientConn, error) {
 	// Default to insecure
 	grpcSecureOpt := grpc.WithInsecure()
 	if tlsConfig != nil {
@@ -77,11 +79,13 @@ func Dial(hostName string, tlsConfig *tls.Config) (*grpc.ClientConn, error) {
 	}
 	cp.Backoff.MaxDelay = MaxBackoffDelay
 
-	return grpc.Dial(hostName,
+	return grpc.Dial(
+		hostName,
 		grpcSecureOpt,
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxInternodeRecvPayloadSize)),
 		grpc.WithChainUnaryInterceptor(
 			versionHeadersInterceptor,
+			metrics.NewClientMetricsTrailerPropagatorInterceptor(logger),
 			errorInterceptor,
 		),
 		grpc.WithDefaultServiceConfig(DefaultServiceConfig),
@@ -90,18 +94,37 @@ func Dial(hostName string, tlsConfig *tls.Config) (*grpc.ClientConn, error) {
 	)
 }
 
-func errorInterceptor(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+func errorInterceptor(
+	ctx context.Context,
+	method string,
+	req, reply interface{},
+	cc *grpc.ClientConn,
+	invoker grpc.UnaryInvoker,
+	opts ...grpc.CallOption,
+) error {
 	err := invoker(ctx, method, req, reply, cc, opts...)
 	err = serviceerrors.FromStatus(status.Convert(err))
 	return err
 }
 
-func versionHeadersInterceptor(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+func versionHeadersInterceptor(
+	ctx context.Context,
+	method string,
+	req, reply interface{},
+	cc *grpc.ClientConn,
+	invoker grpc.UnaryInvoker,
+	opts ...grpc.CallOption,
+) error {
 	ctx = headers.PropagateVersions(ctx)
 	return invoker(ctx, method, req, reply, cc, opts...)
 }
 
-func ServiceErrorInterceptor(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+func ServiceErrorInterceptor(
+	ctx context.Context,
+	req interface{},
+	_ *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
 	resp, err := handler(ctx, req)
 	return resp, serviceerror.ToStatus(err).Err()
 }
