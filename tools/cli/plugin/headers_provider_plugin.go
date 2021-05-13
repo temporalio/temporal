@@ -67,10 +67,6 @@ func (w HeadersProviderPluginWrapper) GetHeaders(ctx context.Context) (map[strin
 	return w.provider.GetHeaders(outgoingHeaders)
 }
 
-func (w HeadersProviderPluginWrapper) Kill() {
-	w.client.Kill()
-}
-
 func NewHeadersProviderPlugin(name string) (HeadersProvider, error) {
 	pluginClient := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig: PluginHandshakeConfig,
@@ -84,12 +80,12 @@ func NewHeadersProviderPlugin(name string) (HeadersProvider, error) {
 
 	rpcClient, err := pluginClient.Client()
 	if err != nil {
-		return nil, fmt.Errorf("error creating plugin client: %v\n", err)
+		return nil, fmt.Errorf("error creating plugin client: %w", err)
 	}
 
 	raw, err := rpcClient.Dispense("HeadersProvider")
 	if err != nil {
-		return nil, fmt.Errorf("error registering plugin: %v\n", err)
+		return nil, fmt.Errorf("error registering plugin: %w", err)
 	}
 
 	headersProvider, ok := raw.(HeadersProviderInternal)
