@@ -134,6 +134,6 @@ func DataConverter(c *cli.Context) {
 
 	http.HandleFunc("/", buildPayloadHandler(c, origin))
 	if err := http.Serve(listener, nil); err != nil {
-		ErrorAndExit("Server error.", err)
+		ErrorAndExit("Unable to start HTTP server for data converter listener.", err)
 	}
 }
