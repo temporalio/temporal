@@ -37,6 +37,8 @@ import (
 	"go.temporal.io/server/tools/cli/dataconverter"
 )
 
+const dataConverterURL = "%s/data-converter/%d"
+
 type PayloadRequest struct {
 	RequestID string `json:"requestId"`
 	Payload   string `json:"payload"`
@@ -126,7 +128,7 @@ func DataConverter(c *cli.Context) {
 	}
 	origin := c.String(FlagWebURL)
 	port := listener.Addr().(*net.TCPAddr).Port
-	url := origin + "/data-converter/" + fmt.Sprint(port)
+	url := fmt.Sprintf(dataConverterURL, origin, port)
 
 	fmt.Printf("Please follow this link for the web UI: %s\n", url)
 
