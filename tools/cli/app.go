@@ -99,7 +99,7 @@ func NewCliApp() *cli.App {
 		cli.StringFlag{
 			Name:   FlagDataConverterPluginWithAlias,
 			Value:  "",
-			Usage:  "data converter plugin",
+			Usage:  "data converter plugin executable name",
 			EnvVar: "TEMPORAL_CLI_PLUGIN_DATA_CONVERTER",
 		},
 	}
