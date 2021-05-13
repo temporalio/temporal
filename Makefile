@@ -176,7 +176,7 @@ copyright-proto:
 clean-bins:
 	@printf $(COLOR) "Delete old binaries..."
 	@rm -f tctl
-	@rm -f tctl-plugin-headers-provider-authorization
+	@rm -f tctl-authorization-plugin
 	@rm -f temporal-server
 	@rm -f temporal-cassandra-tool
 	@rm -f temporal-sql-tool
