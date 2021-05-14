@@ -179,7 +179,7 @@ func (qv *VisibilityQueryValidator) validateComparisonExpr(expr sqlparser.Expr, 
 	if err != nil {
 		return err
 	}
-	if searchAttributes.IsValid(colNameStr) {
+	if searchAttributes.IsDefined(colNameStr) {
 		if !searchattribute.NoAttrPrefix(colNameStr) { // add search attribute prefix
 			comparisonExpr.Left = &sqlparser.ColName{
 				Metadata:  colName.Metadata,
@@ -203,7 +203,7 @@ func (qv *VisibilityQueryValidator) validateRangeExpr(expr sqlparser.Expr, index
 	if err != nil {
 		return err
 	}
-	if searchAttributes.IsValid(colNameStr) {
+	if searchAttributes.IsDefined(colNameStr) {
 		if !searchattribute.NoAttrPrefix(colNameStr) { // add search attribute prefix
 			rangeCond.Left = &sqlparser.ColName{
 				Metadata:  colName.Metadata,
@@ -227,7 +227,7 @@ func (qv *VisibilityQueryValidator) validateOrderByExpr(orderBy sqlparser.OrderB
 		if err != nil {
 			return err
 		}
-		if searchAttributes.IsValid(colNameStr) {
+		if searchAttributes.IsDefined(colNameStr) {
 			if !searchattribute.NoAttrPrefix(colNameStr) { // add search attribute prefix
 				orderByExpr.Expr = &sqlparser.ColName{
 					Metadata:  colName.Metadata,

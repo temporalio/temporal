@@ -182,7 +182,7 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 		if searchattribute.IsReservedField(saName) {
 			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeIsReservedMessage, saName)), scope)
 		}
-		if currentSearchAttributes.IsValid(saName) {
+		if currentSearchAttributes.IsDefined(saName) {
 			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName)), scope)
 		}
 		if _, ok := enumspb.IndexedValueType_name[int32(saType)]; !ok {
@@ -253,7 +253,7 @@ func (adh *AdminHandler) GetSearchAttributes(ctx context.Context, request *admin
 	return resp, nil
 }
 
-func (adh *AdminHandler) getSearchAttributes(ctx context.Context, indexName, runID string) (*adminservice.GetSearchAttributesResponse, error) {
+func (adh *AdminHandler) getSearchAttributes(ctx context.Context, indexName string, runID string) (*adminservice.GetSearchAttributesResponse, error) {
 	var lastErr error
 	descResp, err := adh.GetSDKClient().DescribeWorkflowExecution(ctx, addsearchattributes.WorkflowName, runID)
 	var wfInfo *workflowpb.WorkflowExecutionInfo

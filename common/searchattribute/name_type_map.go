@@ -66,7 +66,7 @@ func (m NameTypeMap) All() map[string]enumspb.IndexedValueType {
 	return allSearchAttributes
 }
 
-func (m NameTypeMap) IsValid(name string) bool {
+func (m NameTypeMap) IsDefined(name string) bool {
 	if _, isSystem := system[name]; isSystem {
 		return true
 	}

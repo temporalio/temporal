@@ -40,19 +40,19 @@ func Test_IsValid(t *testing.T) {
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
 	}}
 
-	isValid := typeMap.IsValid("RunId")
-	assert.True(isValid)
-	isValid = typeMap.IsValid("TemporalChangeVersion")
-	assert.True(isValid)
-	isValid = typeMap.IsValid("key1")
-	assert.True(isValid)
+	isDefined := typeMap.IsDefined("RunId")
+	assert.True(isDefined)
+	isDefined = typeMap.IsDefined("TemporalChangeVersion")
+	assert.True(isDefined)
+	isDefined = typeMap.IsDefined("key1")
+	assert.True(isDefined)
 
-	isValid = NameTypeMap{}.IsValid("key1")
-	assert.False(isValid)
-	isValid = typeMap.IsValid("key4")
-	assert.False(isValid)
-	isValid = typeMap.IsValid("NamespaceId")
-	assert.False(isValid)
+	isDefined = NameTypeMap{}.IsDefined("key1")
+	assert.False(isDefined)
+	isDefined = typeMap.IsDefined("key4")
+	assert.False(isDefined)
+	isDefined = typeMap.IsDefined("NamespaceId")
+	assert.False(isDefined)
 }
 
 func Test_GetType(t *testing.T) {

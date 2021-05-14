@@ -417,7 +417,13 @@ func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceSe
 }
 
 // TODO: remove this func after 1.10 release
-func copyCustomSearchAttributesFromDynamicConfigToClusterMetadata(cfg *config.Config, persistenceServiceResolver resolver.ServiceResolver, logger log.Logger, dc *dynamicconfig.Collection) {
+func copyCustomSearchAttributesFromDynamicConfigToClusterMetadata(
+	cfg *config.Config,
+	persistenceServiceResolver resolver.ServiceResolver,
+	logger log.Logger,
+	dc *dynamicconfig.Collection,
+) {
+
 	if !cfg.Persistence.IsAdvancedVisibilityConfigExist() {
 		logger.Debug("Advanced visibility is not configured. Search attributes migration is cancelled.")
 		return
