@@ -7,3 +7,10 @@ workerconfig:
   enablearchiver: true
   enablereplicator: true
   enableindexer: false
+esconfig:
+  version: "${ES_VERSION}"
+  url:
+    scheme: "http"
+    host: "${ES_SEEDS}:9200"
+  indices:
+    visibility: integration-test-index
