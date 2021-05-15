@@ -193,12 +193,14 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		return nil, err
 	}
 
-	err = testBase.SearchAttributesManager.SaveSearchAttributes(
-		options.ESConfig.GetVisibilityIndex(),
-		searchattribute.TestNameTypeMap.Custom(),
-	)
-	if err != nil {
-		return nil, err
+	if advancedVisibilityWritingMode() != common.AdvancedVisibilityWritingModeOff {
+		err = testBase.SearchAttributesManager.SaveSearchAttributes(
+			options.ESConfig.GetVisibilityIndex(),
+			searchattribute.TestNameTypeMap.Custom(),
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	temporalParams := &TemporalParams{
