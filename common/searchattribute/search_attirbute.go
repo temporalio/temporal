@@ -86,7 +86,10 @@ func ApplyTypeMap(searchAttributes *commonpb.SearchAttributes, typeMap NameTypeM
 		if metadataHasValueType {
 			continue
 		}
-		valueType, _ := typeMap.GetType(saName)
+		valueType, err := typeMap.GetType(saName)
+		if err != nil {
+			continue
+		}
 		setMetadataType(saPayload, valueType)
 	}
 }
