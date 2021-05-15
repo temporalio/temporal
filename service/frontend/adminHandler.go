@@ -221,7 +221,7 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 	resp, err := adh.getSearchAttributes(ctx, indexName, run.GetRunID())
 	if err != nil {
 		// Don't return error in case of getSearchAttributes error. Just log it.
-		adh.GetLogger().Warn("Unable to get search attributes back while adding them.", tag.Error(err))
+		adh.GetLogger().Error("Unable to get search attributes back while adding them.", tag.Error(err))
 		metricsGetSearchAttributesScope := adh.GetMetricsClient().Scope(metrics.AdminGetSearchAttributesScope)
 		metricsGetSearchAttributesScope.IncCounter(metrics.ServiceFailures)
 	}
@@ -261,14 +261,10 @@ func (adh *AdminHandler) getSearchAttributes(ctx context.Context, indexName stri
 		// NotFound can happen when no search attributes were added and the workflow has never been executed.
 		if _, notFound := err.(*serviceerror.NotFound); !notFound {
 			lastErr = serviceerror.NewInternal(fmt.Sprintf("unable to get %s workflow state: %v", addsearchattributes.WorkflowName, err))
+			adh.GetLogger().Error("getSearchAttributes error", tag.Error(lastErr))
 		}
 	} else {
 		wfInfo = descResp.GetWorkflowExecutionInfo()
-	}
-
-	searchAttributes, err := adh.Resource.GetSearchAttributesProvider().GetSearchAttributes(indexName, true)
-	if err != nil {
-		lastErr = serviceerror.NewInternal(fmt.Sprintf("unable to read custom search attributes: %v", err))
 	}
 
 	var esMapping map[string]string
@@ -276,7 +272,14 @@ func (adh *AdminHandler) getSearchAttributes(ctx context.Context, indexName stri
 		esMapping, err = adh.ESClient.GetMapping(ctx, indexName)
 		if err != nil {
 			lastErr = serviceerror.NewInternal(fmt.Sprintf("unable to get mapping from Elasticsearch: %v", err))
+			adh.GetLogger().Error("getSearchAttributes error", tag.Error(lastErr))
 		}
+	}
+
+	searchAttributes, err := adh.Resource.GetSearchAttributesProvider().GetSearchAttributes(indexName, true)
+	if err != nil {
+		lastErr = serviceerror.NewInternal(fmt.Sprintf("unable to read custom search attributes: %v", err))
+		adh.GetLogger().Error("getSearchAttributes error", tag.Error(lastErr))
 	}
 
 	return &adminservice.GetSearchAttributesResponse{
