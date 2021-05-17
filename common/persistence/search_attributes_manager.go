@@ -25,11 +25,13 @@
 package persistence
 
 import (
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/searchattribute"
@@ -40,7 +42,7 @@ const (
 )
 
 type (
-	// TODO (alex): move this to searchattribute package
+	// TODO (alex): move this to searchattribute package (after breaking package cycle)
 	SearchAttributesManager struct {
 		timeSource             clock.TimeSource
 		clusterMetadataManager ClusterMetadataManager
@@ -50,7 +52,8 @@ type (
 	}
 
 	searchAttributesCache struct {
-		searchAttributes map[string]*persistencespb.IndexSearchAttributes
+		// indexName -> NameTypeMap
+		searchAttributes map[string]searchattribute.NameTypeMap
 		dbVersion        int64
 		lastRefresh      time.Time
 	}
@@ -58,13 +61,21 @@ type (
 
 var _ searchattribute.Manager = (*SearchAttributesManager)(nil)
 
+var (
+	ErrEmptyIndexName = errors.New("indexName is empty")
+)
+
 func NewSearchAttributesManager(
 	timeSource clock.TimeSource,
 	clusterMetadataManager ClusterMetadataManager,
 ) *SearchAttributesManager {
 
 	var saCache atomic.Value
-	saCache.Store(searchAttributesCache{})
+	saCache.Store(searchAttributesCache{
+		searchAttributes: map[string]searchattribute.NameTypeMap{},
+		dbVersion:        0,
+		lastRefresh:      time.Time{},
+	})
 
 	return &SearchAttributesManager{
 		timeSource:             timeSource,
@@ -77,7 +88,12 @@ func NewSearchAttributesManager(
 func (m *SearchAttributesManager) GetSearchAttributes(
 	indexName string,
 	forceRefreshCache bool,
-) (map[string]enumspb.IndexedValueType, error) {
+) (searchattribute.NameTypeMap, error) {
+
+	// Empty indexName means advanced visibility is not enabled.
+	if indexName == "" {
+		return searchattribute.NameTypeMap{}, nil
+	}
 
 	now := m.timeSource.Now()
 	saCache := m.cache.Load().(searchAttributesCache)
@@ -90,49 +106,42 @@ func (m *SearchAttributesManager) GetSearchAttributes(
 			saCache, err = m.refreshCache(saCache, now)
 			if err != nil {
 				m.cacheUpdateMutex.Unlock()
-				return nil, err
+				return searchattribute.NameTypeMap{}, err
 			}
 		}
 		m.cacheUpdateMutex.Unlock()
 	}
 
-	var searchAttributes map[string]enumspb.IndexedValueType
-	if indexSearchAttributes, ok := saCache.searchAttributes[indexName]; ok {
-		searchAttributes = indexSearchAttributes.GetSearchAttributes()
+	indexSearchAttributes, ok := saCache.searchAttributes[indexName]
+	if !ok {
+		return searchattribute.NameTypeMap{}, nil
 	}
-	if searchAttributes == nil {
-		return map[string]enumspb.IndexedValueType{}, nil
-	}
-	return searchAttributes, nil
+
+	return indexSearchAttributes, nil
 }
 
 func (m *SearchAttributesManager) needRefreshCache(saCache searchAttributesCache, forceRefreshCache bool, now time.Time) bool {
-	return forceRefreshCache ||
-		saCache.lastRefresh.Add(searchAttributeCacheRefreshInterval).Before(now) ||
-		saCache.searchAttributes == nil
+	return forceRefreshCache || saCache.lastRefresh.Add(searchAttributeCacheRefreshInterval).Before(now)
 }
 
 func (m *SearchAttributesManager) refreshCache(saCache searchAttributesCache, now time.Time) (searchAttributesCache, error) {
 	clusterMetadata, err := m.clusterMetadataManager.GetClusterMetadata()
 	if err != nil {
-		return saCache, err
+		if _, isNotFoundErr := err.(*serviceerror.NotFound); !isNotFoundErr {
+			return saCache, err
+		}
 	}
 
-	if clusterMetadata.Version <= saCache.dbVersion {
+	// clusterMetadata == nil means cluster metadata was never persisted and search attributes are not defined.
+	// clusterMetadata.Version <= saCache.dbVersion means DB is not changed.
+	if clusterMetadata == nil || clusterMetadata.Version <= saCache.dbVersion {
 		saCache.lastRefresh = now
 		m.cache.Store(saCache)
 		return saCache, nil
 	}
 
-	indexSearchAttributes := clusterMetadata.GetIndexSearchAttributes()
-
-	// Append system search attributes to every index because they are not stored in DB but cache should have everything ready to use.
-	for _, customSearchAttributes := range indexSearchAttributes {
-		searchattribute.AddSystemTo(customSearchAttributes.SearchAttributes)
-	}
-
 	saCache = searchAttributesCache{
-		searchAttributes: indexSearchAttributes,
+		searchAttributes: searchattribute.BuildIndexNameTypeMap(clusterMetadata.GetIndexSearchAttributes()),
 		lastRefresh:      now,
 		dbVersion:        clusterMetadata.Version,
 	}
@@ -146,6 +155,11 @@ func (m *SearchAttributesManager) SaveSearchAttributes(
 	newCustomSearchAttributes map[string]enumspb.IndexedValueType,
 ) error {
 
+	// Empty indexName means advanced visibility is not enabled.
+	if indexName == "" {
+		return ErrEmptyIndexName
+	}
+
 	clusterMetadataResponse, err := m.clusterMetadataManager.GetClusterMetadata()
 	if err != nil {
 		return err
@@ -155,7 +169,7 @@ func (m *SearchAttributesManager) SaveSearchAttributes(
 	if clusterMetadata.IndexSearchAttributes == nil {
 		clusterMetadata.IndexSearchAttributes = map[string]*persistencespb.IndexSearchAttributes{indexName: nil}
 	}
-	clusterMetadata.IndexSearchAttributes[indexName] = &persistencespb.IndexSearchAttributes{SearchAttributes: newCustomSearchAttributes}
+	clusterMetadata.IndexSearchAttributes[indexName] = &persistencespb.IndexSearchAttributes{CustomSearchAttributes: newCustomSearchAttributes}
 	_, err = m.clusterMetadataManager.SaveClusterMetadata(&SaveClusterMetadataRequest{
 		ClusterMetadata: clusterMetadata,
 		Version:         clusterMetadataResponse.Version,

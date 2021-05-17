@@ -25,50 +25,11 @@
 package cli
 
 import (
-	"fmt"
-
-	"github.com/fatih/color"
 	"github.com/urfave/cli"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 )
-
-// AdminAddSearchAttribute to whitelist search attribute
-func AdminAddSearchAttribute(c *cli.Context) {
-	key := getRequiredOption(c, FlagSearchAttributesKey)
-	valTypeStr := getRequiredOption(c, FlagSearchAttributesType)
-	valTypeInt, err := stringToEnum(valTypeStr, enumspb.IndexedValueType_value)
-	if err != nil {
-		ErrorAndExit("Failed to parse Search Attribute Type", err)
-	}
-
-	// ask user for confirmation
-	promptMsg := fmt.Sprintf(
-		"Are you trying to add key [%s] with Type [%s]? Y/N",
-		color.YellowString(key),
-		color.YellowString(enumspb.IndexedValueType_name[valTypeInt]),
-	)
-
-	prompt(promptMsg, c.GlobalBool(FlagAutoConfirm))
-
-	adminClient := cFactory.AdminClient(c)
-	ctx, cancel := newContext(c)
-	defer cancel()
-	request := &adminservice.AddSearchAttributeRequest{
-		SearchAttribute: map[string]enumspb.IndexedValueType{
-			key: enumspb.IndexedValueType(valTypeInt),
-		},
-		SecurityToken: c.String(FlagSecurityToken),
-	}
-
-	_, err = adminClient.AddSearchAttribute(ctx, request)
-	if err != nil {
-		ErrorAndExit("Add search attribute failed.", err)
-	}
-	fmt.Println("Success")
-}
 
 // AdminDescribeCluster is used to dump information about the cluster
 func AdminDescribeCluster(c *cli.Context) {
@@ -84,7 +45,7 @@ func AdminDescribeCluster(c *cli.Context) {
 	prettyPrintJSONObject(response)
 }
 
-// AdminDescribeCluster is used to dump information about the cluster
+// AdminClusterMetadata is used to dump information about the cluster
 func AdminClusterMetadata(c *cli.Context) {
 	frontendClient := cFactory.FrontendClient(c)
 	ctx, cancel := newContext(c)

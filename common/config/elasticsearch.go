@@ -75,6 +75,9 @@ type (
 
 // GetVisibilityIndex return visibility index name
 func (cfg *Elasticsearch) GetVisibilityIndex() string {
+	if cfg == nil {
+		return ""
+	}
 	return cfg.Indices[VisibilityAppName]
 }
 

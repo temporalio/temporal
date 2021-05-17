@@ -25,6 +25,7 @@
 package persistence
 
 import (
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -33,10 +34,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -86,7 +87,7 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache() {
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name": {
-					SearchAttributes: map[string]enumspb.IndexedValueType{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
 						"OrderId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 					}}},
 		},
@@ -97,7 +98,7 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache() {
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name": {
-					SearchAttributes: map[string]enumspb.IndexedValueType{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
 						"OrderId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 					}}},
 		},
@@ -108,7 +109,7 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache() {
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name": {
-					SearchAttributes: map[string]enumspb.IndexedValueType{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
 						"OrderId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 					}}},
 		},
@@ -123,9 +124,10 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache() {
 			for i := 1; i < 1500; i++ {
 				searchAttributes, err := s.manager.GetSearchAttributes("index-name", false)
 				s.NoError(err)
-				searchAttributes = searchattribute.FilterCustom(searchAttributes)
-				s.Len(searchAttributes, 1)
-				s.Equal(enumspb.INDEXED_VALUE_TYPE_KEYWORD, searchAttributes["OrderId"])
+				s.Len(searchAttributes.Custom(), 1)
+				t, err := searchAttributes.GetType("OrderId")
+				s.NoError(err)
+				s.Equal(enumspb.INDEXED_VALUE_TYPE_KEYWORD, t)
 				if i%500 == 0 && goroutine == 5 {
 					// This moves time two times.
 					s.timeSource.Update(s.timeSource.Now().Add(searchAttributeCacheRefreshInterval).Add(time.Second))
@@ -136,12 +138,41 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache() {
 	wg.Wait()
 }
 
+func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_Error() {
+	s.timeSource.Update(time.Date(2020, 8, 22, 1, 0, 0, 0, time.UTC))
+	// Initial call
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(nil, errors.New("random error"))
+	searchAttributes, err := s.manager.GetSearchAttributes("index-name", false)
+	s.Error(err)
+	s.Len(searchAttributes.Custom(), 0)
+}
+
+func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_NotFoundError() {
+	s.timeSource.Update(time.Date(2020, 8, 22, 1, 0, 0, 0, time.UTC))
+
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(nil, serviceerror.NewNotFound("not found"))
+	searchAttributes, err := s.manager.GetSearchAttributes("index-name", false)
+	s.NoError(err)
+	s.Len(searchAttributes.Custom(), 0)
+
+	// GetClusterMetadata() shouldn't be called, because results are cached.
+	searchAttributes, err = s.manager.GetSearchAttributes("index-name", false)
+	s.NoError(err)
+	s.Len(searchAttributes.Custom(), 0)
+}
+
+func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_EmptyIndex() {
+	searchAttributes, err := s.manager.GetSearchAttributes("", false)
+	s.NoError(err)
+	s.Len(searchAttributes.Custom(), 0)
+}
+
 func (s *searchAttributesManagerSuite) TestSaveSearchAttributes_UpdateIndex() {
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(&GetClusterMetadataResponse{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name": {
-					SearchAttributes: map[string]enumspb.IndexedValueType{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
 						"OrderIdOld": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 					}}},
 		},
@@ -152,7 +183,7 @@ func (s *searchAttributesManagerSuite) TestSaveSearchAttributes_UpdateIndex() {
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name": {
-					SearchAttributes: map[string]enumspb.IndexedValueType{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
 						"OrderId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 					}}},
 		},
@@ -169,7 +200,7 @@ func (s *searchAttributesManagerSuite) TestSaveSearchAttributes_NewIndex() {
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name-2": {
-					SearchAttributes: map[string]enumspb.IndexedValueType{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
 						"OrderId2": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 					}}},
 		},
@@ -180,11 +211,11 @@ func (s *searchAttributesManagerSuite) TestSaveSearchAttributes_NewIndex() {
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
 				"index-name-2": {
-					SearchAttributes: map[string]enumspb.IndexedValueType{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
 						"OrderId2": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 					}},
 				"index-name": {
-					SearchAttributes: map[string]enumspb.IndexedValueType{
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
 						"OrderId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 					}}},
 		},
@@ -195,4 +226,12 @@ func (s *searchAttributesManagerSuite) TestSaveSearchAttributes_NewIndex() {
 		"OrderId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	})
 	s.NoError(err)
+}
+
+func (s *searchAttributesManagerSuite) TestSaveSearchAttributesCache_EmptyIndex() {
+	err := s.manager.SaveSearchAttributes("", map[string]enumspb.IndexedValueType{
+		"OrderId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	})
+	s.Error(err)
+	s.ErrorIs(err, ErrEmptyIndexName)
 }

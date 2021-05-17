@@ -1585,19 +1585,6 @@ func ResetInBatch(c *cli.Context) {
 	wg.Wait()
 }
 
-// sort helper for search attributes
-type byKey [][]string
-
-func (s byKey) Len() int {
-	return len(s)
-}
-func (s byKey) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-func (s byKey) Less(i, j int) bool {
-	return s[i][0] < s[j][0]
-}
-
 func printErrorAndReturn(msg string, err error) error {
 	fmt.Println(msg)
 	return err

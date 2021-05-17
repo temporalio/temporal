@@ -29,7 +29,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/searchattribute"
@@ -37,10 +36,11 @@ import (
 
 type (
 	visibilityManagerImpl struct {
-		serializer            PayloadSerializer
-		persistence           VisibilityStore
-		validSearchAttributes dynamicconfig.MapPropertyFn
-		logger                log.Logger
+		serializer                 PayloadSerializer
+		persistence                VisibilityStore
+		searchAttributesProvider   searchattribute.Provider
+		defaultVisibilityIndexName string
+		logger                     log.Logger
 	}
 )
 
@@ -50,12 +50,13 @@ const VisibilityEncoding = enumspb.ENCODING_TYPE_PROTO3
 var _ VisibilityManager = (*visibilityManagerImpl)(nil)
 
 // NewVisibilityManagerImpl returns new VisibilityManager
-func NewVisibilityManagerImpl(persistence VisibilityStore, validSearchAttributes dynamicconfig.MapPropertyFn, logger log.Logger) VisibilityManager {
+func NewVisibilityManagerImpl(persistence VisibilityStore, searchAttributesProvider searchattribute.Provider, defaultVisibilityIndexName string, logger log.Logger) VisibilityManager {
 	return &visibilityManagerImpl{
-		serializer:            NewPayloadSerializer(),
-		persistence:           persistence,
-		validSearchAttributes: validSearchAttributes,
-		logger:                logger,
+		serializer:                 NewPayloadSerializer(),
+		persistence:                persistence,
+		searchAttributesProvider:   searchAttributesProvider,
+		defaultVisibilityIndexName: defaultVisibilityIndexName,
+		logger:                     logger,
 	}
 }
 
@@ -202,9 +203,9 @@ func (v *visibilityManagerImpl) convertInternalGetResponse(internalResp *Interna
 	}
 
 	resp := &GetClosedWorkflowExecutionResponse{}
-	saTypeMap, err := searchattribute.BuildTypeMap(v.validSearchAttributes)
+	saTypeMap, err := v.searchAttributesProvider.GetSearchAttributes(v.defaultVisibilityIndexName, false)
 	if err != nil {
-		v.logger.Error("Unable to build valid search attributes map", tag.Error(err))
+		v.logger.Error("Unable to read valid search attributes.", tag.Error(err))
 	}
 	resp.Execution = v.convertVisibilityWorkflowExecutionInfo(internalResp.Execution, saTypeMap)
 	return resp
@@ -217,9 +218,9 @@ func (v *visibilityManagerImpl) convertInternalListResponse(internalResp *Intern
 
 	resp := &ListWorkflowExecutionsResponse{}
 	resp.Executions = make([]*workflowpb.WorkflowExecutionInfo, len(internalResp.Executions))
-	saTypeMap, err := searchattribute.BuildTypeMap(v.validSearchAttributes)
+	saTypeMap, err := v.searchAttributesProvider.GetSearchAttributes(v.defaultVisibilityIndexName, false)
 	if err != nil {
-		v.logger.Error("Unable to build valid search attributes map", tag.Error(err))
+		v.logger.Error("Unable to read valid search attributes.", tag.Error(err))
 	}
 	for i, execution := range internalResp.Executions {
 		resp.Executions[i] = v.convertVisibilityWorkflowExecutionInfo(execution, saTypeMap)
@@ -229,7 +230,7 @@ func (v *visibilityManagerImpl) convertInternalListResponse(internalResp *Intern
 	return resp
 }
 
-func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution *VisibilityWorkflowExecutionInfo, saTypeMap map[string]enumspb.IndexedValueType) *workflowpb.WorkflowExecutionInfo {
+func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution *VisibilityWorkflowExecutionInfo, saTypeMap searchattribute.NameTypeMap) *workflowpb.WorkflowExecutionInfo {
 	// special handling of ExecutionTime for cron or retry
 	if execution.ExecutionTime.UnixNano() == 0 {
 		execution.ExecutionTime = execution.StartTime
@@ -242,7 +243,7 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 			tag.WorkflowRunID(execution.RunID),
 			tag.Error(err))
 	}
-	searchAttributes, err := searchattribute.Encode(execution.SearchAttributes, saTypeMap)
+	searchAttributes, err := searchattribute.Encode(execution.SearchAttributes, &saTypeMap)
 	if err != nil {
 		v.logger.Error("failed to encode search attributes",
 			tag.WorkflowID(execution.WorkflowID),

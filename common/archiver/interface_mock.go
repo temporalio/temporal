@@ -33,8 +33,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	v1 "go.temporal.io/api/enums/v1"
-	v10 "go.temporal.io/server/api/archiver/v1"
+	v1 "go.temporal.io/server/api/archiver/v1"
+	searchattribute "go.temporal.io/server/common/searchattribute"
 )
 
 // MockHistoryArchiver is a mock of HistoryArchiver interface.
@@ -132,7 +132,7 @@ func (m *MockVisibilityArchiver) EXPECT() *MockVisibilityArchiverMockRecorder {
 }
 
 // Archive mocks base method.
-func (m *MockVisibilityArchiver) Archive(ctx context.Context, uri URI, request *v10.VisibilityRecord, opts ...ArchiveOption) error {
+func (m *MockVisibilityArchiver) Archive(ctx context.Context, uri URI, request *v1.VisibilityRecord, opts ...ArchiveOption) error {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, uri, request}
 	for _, a := range opts {
@@ -151,7 +151,7 @@ func (mr *MockVisibilityArchiverMockRecorder) Archive(ctx, uri, request interfac
 }
 
 // Query mocks base method.
-func (m *MockVisibilityArchiver) Query(ctx context.Context, uri URI, request *QueryVisibilityRequest, saTypeMap map[string]v1.IndexedValueType) (*QueryVisibilityResponse, error) {
+func (m *MockVisibilityArchiver) Query(ctx context.Context, uri URI, request *QueryVisibilityRequest, saTypeMap searchattribute.NameTypeMap) (*QueryVisibilityResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Query", ctx, uri, request, saTypeMap)
 	ret0, _ := ret[0].(*QueryVisibilityResponse)

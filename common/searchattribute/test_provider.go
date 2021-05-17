@@ -22,27 +22,33 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cli
+package searchattribute
 
-import "github.com/urfave/cli"
+import (
+	enumspb "go.temporal.io/api/enums/v1"
+)
 
-func newClusterCommands() []cli.Command {
-	return []cli.Command{
-		{
-			Name:    "health",
-			Aliases: []string{"h"},
-			Usage:   "Check health of frontend service",
-			Action: func(c *cli.Context) {
-				HealthCheck(c)
-			},
-		},
-		{
-			Name:    "get-search-attributes",
-			Usage:   "List search attributes that can be used in list workflow query",
-			Aliases: []string{"gsa"},
-			Action: func(c *cli.Context) {
-				GetSearchAttributes(c)
-			},
+type (
+	TestProvider struct{}
+)
+
+var (
+	TestNameTypeMap = NameTypeMap{
+		customSearchAttributes: map[string]enumspb.IndexedValueType{
+			"CustomIntField":      enumspb.INDEXED_VALUE_TYPE_INT,
+			"CustomStringField":   enumspb.INDEXED_VALUE_TYPE_STRING,
+			"CustomKeywordField":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			"CustomDatetimeField": enumspb.INDEXED_VALUE_TYPE_DATETIME,
+			"CustomDoubleField":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			"CustomBoolField":     enumspb.INDEXED_VALUE_TYPE_BOOL,
 		},
 	}
+)
+
+func NewTestProvider() *TestProvider {
+	return &TestProvider{}
+}
+
+func (s *TestProvider) GetSearchAttributes(_ string, _ bool) (NameTypeMap, error) {
+	return TestNameTypeMap, nil
 }

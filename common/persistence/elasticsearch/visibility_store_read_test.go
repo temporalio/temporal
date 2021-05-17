@@ -43,9 +43,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/config"
-
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -55,16 +53,18 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 )
 
-type ESVisibilitySuite struct {
-	suite.Suite
-	// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
-	*require.Assertions
-	controller        *gomock.Controller
-	visibilityStore   *visibilityStore
-	mockESClient      *client.MockClient
-	mockProcessor     *MockProcessor
-	mockMetricsClient *metrics.MockClient
-}
+type (
+	ESVisibilitySuite struct {
+		suite.Suite
+		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
+		*require.Assertions
+		controller        *gomock.Controller
+		visibilityStore   *visibilityStore
+		mockESClient      *client.MockClient
+		mockProcessor     *MockProcessor
+		mockMetricsClient *metrics.MockClient
+	}
+)
 
 var (
 	testIndex        = "test-index"
@@ -108,7 +108,6 @@ func (s *ESVisibilitySuite) SetupTest() {
 
 	cfg := &config.VisibilityConfig{
 		ESIndexMaxResultWindow: dynamicconfig.GetIntPropertyFn(3),
-		ValidSearchAttributes:  dynamicconfig.GetMapPropertyFn(searchattribute.GetDefaultTypeMap()),
 		ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 	}
 
@@ -116,7 +115,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
-	s.visibilityStore = NewVisibilityStore(s.mockESClient, testIndex, s.mockProcessor, cfg, log.NewNoopLogger(), s.mockMetricsClient)
+	s.visibilityStore = NewVisibilityStore(s.mockESClient, testIndex, searchattribute.NewTestProvider(), s.mockProcessor, cfg, log.NewNoopLogger(), s.mockMetricsClient)
 }
 
 func (s *ESVisibilitySuite) TearDownTest() {
@@ -954,7 +953,7 @@ func (s *ESVisibilitySuite) TestGetValueOfSearchAfterInJSON() {
 
 	// Int field
 	token := s.getTokenHelper(123)
-	sortField := searchattribute.CustomIntField
+	sortField := "CustomIntField"
 	res, err := v.getValueOfSearchAfterInJSON(token, sortField)
 	s.Nil(err)
 	s.Equal(`[123, "t"]`, res)
@@ -979,7 +978,7 @@ func (s *ESVisibilitySuite) TestGetValueOfSearchAfterInJSON() {
 
 	// Double field
 	token = s.getTokenHelper(1.11)
-	sortField = searchattribute.CustomDoubleField
+	sortField = "CustomDoubleField"
 	res, err = v.getValueOfSearchAfterInJSON(token, sortField)
 	s.Nil(err)
 	s.Equal(`[1.11, "t"]`, res)
@@ -995,7 +994,7 @@ func (s *ESVisibilitySuite) TestGetValueOfSearchAfterInJSON() {
 
 	// Keyword field
 	token = s.getTokenHelper("keyword")
-	sortField = searchattribute.CustomKeywordField
+	sortField = "CustomKeywordField"
 	res, err = v.getValueOfSearchAfterInJSON(token, sortField)
 	s.Nil(err)
 	s.Equal(`["keyword", "t"]`, res)

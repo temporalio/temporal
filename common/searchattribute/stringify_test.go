@@ -53,17 +53,19 @@ func (s *StringifySuite) TearDownTest() {
 }
 
 func (s *StringifySuite) Test_Stringify() {
-	typeMap := map[string]enumspb.IndexedValueType{
-		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
-		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
-		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+	typeMap := NameTypeMap{
+		customSearchAttributes: map[string]enumspb.IndexedValueType{
+			"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+			"key2": enumspb.INDEXED_VALUE_TYPE_INT,
+			"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+		},
 	}
 
 	sa, err := Encode(map[string]interface{}{
 		"key1": "val1",
 		"key2": 2,
 		"key3": true,
-	}, typeMap)
+	}, &typeMap)
 	s.NoError(err)
 
 	saStr, err := Stringify(sa, nil)
@@ -78,7 +80,7 @@ func (s *StringifySuite) Test_Stringify() {
 	delete(sa.IndexedFields["key2"].Metadata, "type")
 	delete(sa.IndexedFields["key3"].Metadata, "type")
 
-	saStr, err = Stringify(sa, typeMap)
+	saStr, err = Stringify(sa, &typeMap)
 	s.NoError(err)
 	s.Len(saStr, 3)
 	s.Equal("val1", saStr["key1"])
@@ -96,17 +98,19 @@ func (s *StringifySuite) Test_Stringify() {
 }
 
 func (s *StringifySuite) Test_Stringify_Array() {
-	typeMap := map[string]enumspb.IndexedValueType{
-		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
-		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
-		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+	typeMap := NameTypeMap{
+		customSearchAttributes: map[string]enumspb.IndexedValueType{
+			"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+			"key2": enumspb.INDEXED_VALUE_TYPE_INT,
+			"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+		},
 	}
 
 	sa, err := Encode(map[string]interface{}{
 		"key1": []string{"val1", "val2"},
 		"key2": []int64{2, 3, 4},
 		"key3": []bool{true, false, true},
-	}, typeMap)
+	}, &typeMap)
 	s.NoError(err)
 
 	saStr, err := Stringify(sa, nil)
@@ -121,7 +125,7 @@ func (s *StringifySuite) Test_Stringify_Array() {
 	delete(sa.IndexedFields["key2"].Metadata, "type")
 	delete(sa.IndexedFields["key3"].Metadata, "type")
 
-	saStr, err = Stringify(sa, typeMap)
+	saStr, err = Stringify(sa, &typeMap)
 	s.NoError(err)
 	s.Len(saStr, 3)
 	s.Equal(`["val1","val2"]`, saStr["key1"])
@@ -143,11 +147,12 @@ func (s *StringifySuite) Test_Parse_ValidTypeMap() {
 		"key1": "val1",
 		"key2": "2",
 		"key3": "true",
-	}, map[string]enumspb.IndexedValueType{
-		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
-		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
-		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
-	})
+	}, &NameTypeMap{
+		customSearchAttributes: map[string]enumspb.IndexedValueType{
+			"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+			"key2": enumspb.INDEXED_VALUE_TYPE_INT,
+			"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+		}})
 
 	s.NoError(err)
 	s.Len(sa.IndexedFields, 3)
@@ -177,10 +182,11 @@ func (s *StringifySuite) Test_Parse_WrongTypesInTypeMap() {
 	sa, err := Parse(map[string]string{
 		"key1": "val1",
 		"key2": "2",
-	}, map[string]enumspb.IndexedValueType{
-		"key1": enumspb.INDEXED_VALUE_TYPE_INT,
-		"key2": enumspb.INDEXED_VALUE_TYPE_STRING,
-	})
+	}, &NameTypeMap{
+		customSearchAttributes: map[string]enumspb.IndexedValueType{
+			"key1": enumspb.INDEXED_VALUE_TYPE_INT,
+			"key2": enumspb.INDEXED_VALUE_TYPE_STRING,
+		}})
 
 	s.Error(err)
 	s.Len(sa.IndexedFields, 2)
@@ -193,10 +199,11 @@ func (s *StringifySuite) Test_Parse_MissedFieldsInTypeMap() {
 	sa, err := Parse(map[string]string{
 		"key1": "val1",
 		"key2": "2",
-	}, map[string]enumspb.IndexedValueType{
-		"key3": enumspb.INDEXED_VALUE_TYPE_STRING,
-		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
-	})
+	}, &NameTypeMap{
+		customSearchAttributes: map[string]enumspb.IndexedValueType{
+			"key3": enumspb.INDEXED_VALUE_TYPE_STRING,
+			"key2": enumspb.INDEXED_VALUE_TYPE_INT,
+		}})
 
 	s.NoError(err)
 	s.Len(sa.IndexedFields, 2)
@@ -210,10 +217,11 @@ func (s *StringifySuite) Test_Parse_Array() {
 	sa, err := Parse(map[string]string{
 		"key1": ` ["val1", "val2"] `,
 		"key2": "[2,3,4]",
-	}, map[string]enumspb.IndexedValueType{
-		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
-		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
-	})
+	}, &NameTypeMap{
+		customSearchAttributes: map[string]enumspb.IndexedValueType{
+			"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+			"key2": enumspb.INDEXED_VALUE_TYPE_INT,
+		}})
 
 	s.NoError(err)
 	s.Len(sa.IndexedFields, 2)

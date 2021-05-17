@@ -24,7 +24,12 @@
 
 package cli
 
-import "github.com/urfave/cli"
+import (
+	"fmt"
+
+	"github.com/urfave/cli"
+	enumspb "go.temporal.io/api/enums/v1"
+)
 
 func newAdminWorkflowCommands() []cli.Command {
 	return []cli.Command{
@@ -583,25 +588,41 @@ func newAdminTaskQueueCommands() []cli.Command {
 func newAdminClusterCommands() []cli.Command {
 	return []cli.Command{
 		{
-			Name:    "add_search_attr",
+			Name:    "add-search-attributes",
 			Aliases: []string{"asa"},
-			Usage:   "whitelist search attribute",
+			Usage:   "Add custom search attributes",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  FlagSearchAttributesKey,
-					Usage: "Search Attribute key to be whitelisted",
+					Name:   FlagIndex,
+					Usage:  "ES index name (optional)",
+					Hidden: true, // don't show it for now
 				},
-				cli.StringFlag{
-					Name:  FlagSearchAttributesType,
-					Usage: "Search Attribute value type. [string, keyword, int, double, bool, datetime]",
+				cli.StringSliceFlag{
+					Name:  FlagNameWithAlias,
+					Usage: "Search attribute name",
 				},
-				cli.StringFlag{
-					Name:  FlagSecurityTokenWithAlias,
-					Usage: "Optional token for security check",
+				cli.StringSliceFlag{
+					Name:  FlagTypeWithAlias,
+					Usage: fmt.Sprintf("Search attribute type: %v", allowedEnumValues(enumspb.IndexedValueType_name)),
 				},
 			},
 			Action: func(c *cli.Context) {
-				AdminAddSearchAttribute(c)
+				AdminAddSearchAttributes(c)
+			},
+		},
+		{
+			Name:    "get-search-attributes",
+			Aliases: []string{"gsa"},
+			Usage:   "Show exiting search attributes",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:   FlagIndex,
+					Usage:  "ES index name (optional)",
+					Hidden: true, // don't show it for now
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminGetSearchAttributes(c)
 			},
 		},
 		{

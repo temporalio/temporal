@@ -63,18 +63,32 @@ func NewClient(
 	}
 }
 
-func (c *clientImpl) AddSearchAttribute(
+func (c *clientImpl) AddSearchAttributes(
 	ctx context.Context,
-	request *adminservice.AddSearchAttributeRequest,
+	request *adminservice.AddSearchAttributesRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.AddSearchAttributeResponse, error) {
+) (*adminservice.AddSearchAttributesResponse, error) {
 	client, err := c.getRandomClient()
 	if err != nil {
 		return nil, err
 	}
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
-	return client.AddSearchAttribute(ctx, request, opts...)
+	return client.AddSearchAttributes(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetSearchAttributes(
+	ctx context.Context,
+	request *adminservice.GetSearchAttributesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetSearchAttributesResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetSearchAttributes(ctx, request, opts...)
 }
 
 func (c *clientImpl) DescribeHistoryHost(

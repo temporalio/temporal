@@ -28,7 +28,6 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"

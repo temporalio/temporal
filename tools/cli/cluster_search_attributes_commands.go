@@ -24,25 +24,20 @@
 
 package cli
 
-import "github.com/urfave/cli"
+import (
+	"github.com/urfave/cli"
+)
 
-func newClusterCommands() []cli.Command {
-	return []cli.Command{
-		{
-			Name:    "health",
-			Aliases: []string{"h"},
-			Usage:   "Check health of frontend service",
-			Action: func(c *cli.Context) {
-				HealthCheck(c)
-			},
-		},
-		{
-			Name:    "get-search-attributes",
-			Usage:   "List search attributes that can be used in list workflow query",
-			Aliases: []string{"gsa"},
-			Action: func(c *cli.Context) {
-				GetSearchAttributes(c)
-			},
-		},
+// GetSearchAttributes get valid search attributes
+func GetSearchAttributes(c *cli.Context) {
+	wfClient := getWorkflowClientWithOptionalNamespace(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	resp, err := wfClient.GetSearchAttributes(ctx)
+	if err != nil {
+		ErrorAndExit("Unable to get search attributes.", err)
 	}
+
+	printSearchAttributes(resp.GetKeys(), "Search attributes")
 }

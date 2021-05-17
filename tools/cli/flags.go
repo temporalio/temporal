@@ -140,6 +140,8 @@ const (
 	FlagVisibilityArchivalURIWithAlias   = FlagVisibilityArchivalURI + ", vuri"
 	FlagName                             = "name"
 	FlagNameWithAlias                    = FlagName + ", n"
+	FlagType                             = "type"
+	FlagTypeWithAlias                    = FlagType + ", t"
 	FlagOutputFilename                   = "output_filename"
 	FlagOutputFilenameWithAlias          = FlagOutputFilename + ", of"
 	FlagOutputFormat                     = "output"

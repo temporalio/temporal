@@ -32,29 +32,29 @@ import (
 	"github.com/xwb1989/sqlparser"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/searchattribute"
 )
 
 // VisibilityQueryValidator for sql query validation
-type VisibilityQueryValidator struct {
-	validSearchAttributes dynamicconfig.MapPropertyFn
-}
+type (
+	VisibilityQueryValidator struct {
+		searchAttributesProvider searchattribute.Provider
+	}
+)
 
 // NewQueryValidator create VisibilityQueryValidator
-func NewQueryValidator(validSearchAttributes dynamicconfig.MapPropertyFn) *VisibilityQueryValidator {
+func NewQueryValidator(searchAttributesProvider searchattribute.Provider) *VisibilityQueryValidator {
 	return &VisibilityQueryValidator{
-		validSearchAttributes: validSearchAttributes,
+		searchAttributesProvider: searchAttributesProvider,
 	}
 }
 
 // ValidateListRequestForQuery validate that search attributes in listRequest query is legal,
 // and add prefix for custom keys
-func (qv *VisibilityQueryValidator) ValidateListRequestForQuery(listRequest *workflowservice.ListWorkflowExecutionsRequest) error {
+func (qv *VisibilityQueryValidator) ValidateListRequestForQuery(listRequest *workflowservice.ListWorkflowExecutionsRequest, indexName string) error {
 	whereClause := listRequest.GetQuery()
-	newQuery, err := qv.validateListOrCountRequestForQuery(whereClause)
+	newQuery, err := qv.validateListOrCountRequestForQuery(whereClause, indexName)
 	if err != nil {
 		return err
 	}
@@ -62,9 +62,9 @@ func (qv *VisibilityQueryValidator) ValidateListRequestForQuery(listRequest *wor
 	return nil
 }
 
-func (qv *VisibilityQueryValidator) ValidateScanRequestForQuery(listRequest *workflowservice.ScanWorkflowExecutionsRequest) error {
+func (qv *VisibilityQueryValidator) ValidateScanRequestForQuery(listRequest *workflowservice.ScanWorkflowExecutionsRequest, indexName string) error {
 	whereClause := listRequest.GetQuery()
-	newQuery, err := qv.validateListOrCountRequestForQuery(whereClause)
+	newQuery, err := qv.validateListOrCountRequestForQuery(whereClause, indexName)
 	if err != nil {
 		return err
 	}
@@ -74,9 +74,9 @@ func (qv *VisibilityQueryValidator) ValidateScanRequestForQuery(listRequest *wor
 
 // ValidateCountRequestForQuery validate that search attributes in countRequest query is legal,
 // and add prefix for custom keys
-func (qv *VisibilityQueryValidator) ValidateCountRequestForQuery(countRequest *workflowservice.CountWorkflowExecutionsRequest) error {
+func (qv *VisibilityQueryValidator) ValidateCountRequestForQuery(countRequest *workflowservice.CountWorkflowExecutionsRequest, indexName string) error {
 	whereClause := countRequest.GetQuery()
-	newQuery, err := qv.validateListOrCountRequestForQuery(whereClause)
+	newQuery, err := qv.validateListOrCountRequestForQuery(whereClause, indexName)
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func (qv *VisibilityQueryValidator) ValidateCountRequestForQuery(countRequest *w
 
 // validateListOrCountRequestForQuery valid sql for visibility API
 // it also adds attr prefix for customized fields
-func (qv *VisibilityQueryValidator) validateListOrCountRequestForQuery(whereClause string) (string, error) {
+func (qv *VisibilityQueryValidator) validateListOrCountRequestForQuery(whereClause string, indexName string) (string, error) {
 	if len(whereClause) != 0 {
 		// Build a placeholder query that allows us to easily parse the contents of the where clause.
 		// IMPORTANT: This query is never executed, it is just used to parse and validate whereClause
@@ -111,14 +111,14 @@ func (qv *VisibilityQueryValidator) validateListOrCountRequestForQuery(whereClau
 		buf := sqlparser.NewTrackedBuffer(nil)
 		// validate where expr
 		if sel.Where != nil {
-			err = qv.validateWhereExpr(sel.Where.Expr)
+			err = qv.validateWhereExpr(sel.Where.Expr, indexName)
 			if err != nil {
 				return "", serviceerror.NewInvalidArgument(err.Error())
 			}
 			sel.Where.Expr.Format(buf)
 		}
 		// validate order by
-		err = qv.validateOrderByExpr(sel.OrderBy)
+		err = qv.validateOrderByExpr(sel.OrderBy, indexName)
 		if err != nil {
 			return "", serviceerror.NewInvalidArgument(err.Error())
 		}
@@ -129,27 +129,27 @@ func (qv *VisibilityQueryValidator) validateListOrCountRequestForQuery(whereClau
 	return whereClause, nil
 }
 
-func (qv *VisibilityQueryValidator) validateWhereExpr(expr sqlparser.Expr) error {
+func (qv *VisibilityQueryValidator) validateWhereExpr(expr sqlparser.Expr, indexName string) error {
 	if expr == nil {
 		return nil
 	}
 
 	switch expr := expr.(type) {
 	case *sqlparser.AndExpr, *sqlparser.OrExpr:
-		return qv.validateAndOrExpr(expr)
+		return qv.validateAndOrExpr(expr, indexName)
 	case *sqlparser.ComparisonExpr:
-		return qv.validateComparisonExpr(expr)
+		return qv.validateComparisonExpr(expr, indexName)
 	case *sqlparser.RangeCond:
-		return qv.validateRangeExpr(expr)
+		return qv.validateRangeExpr(expr, indexName)
 	case *sqlparser.ParenExpr:
-		return qv.validateWhereExpr(expr.Expr)
+		return qv.validateWhereExpr(expr.Expr, indexName)
 	default:
 		return errors.New("invalid where clause")
 	}
 
 }
 
-func (qv *VisibilityQueryValidator) validateAndOrExpr(expr sqlparser.Expr) error {
+func (qv *VisibilityQueryValidator) validateAndOrExpr(expr sqlparser.Expr, indexName string) error {
 	var leftExpr sqlparser.Expr
 	var rightExpr sqlparser.Expr
 
@@ -162,21 +162,25 @@ func (qv *VisibilityQueryValidator) validateAndOrExpr(expr sqlparser.Expr) error
 		rightExpr = expr.Right
 	}
 
-	if err := qv.validateWhereExpr(leftExpr); err != nil {
+	if err := qv.validateWhereExpr(leftExpr, indexName); err != nil {
 		return err
 	}
-	return qv.validateWhereExpr(rightExpr)
+	return qv.validateWhereExpr(rightExpr, indexName)
 }
 
-func (qv *VisibilityQueryValidator) validateComparisonExpr(expr sqlparser.Expr) error {
+func (qv *VisibilityQueryValidator) validateComparisonExpr(expr sqlparser.Expr, indexName string) error {
 	comparisonExpr := expr.(*sqlparser.ComparisonExpr)
 	colName, ok := comparisonExpr.Left.(*sqlparser.ColName)
 	if !ok {
 		return errors.New("invalid comparison expression")
 	}
 	colNameStr := colName.Name.String()
-	if qv.isValidSearchAttributes(colNameStr) {
-		if !searchattribute.IsSystem(colNameStr) { // add search attribute prefix
+	searchAttributes, err := qv.searchAttributesProvider.GetSearchAttributes(indexName, false)
+	if err != nil {
+		return err
+	}
+	if searchAttributes.IsDefined(colNameStr) {
+		if !searchattribute.NoAttrPrefix(colNameStr) { // add search attribute prefix
 			comparisonExpr.Left = &sqlparser.ColName{
 				Metadata:  colName.Metadata,
 				Name:      sqlparser.NewColIdent(searchattribute.Attr + "." + colNameStr),
@@ -188,15 +192,19 @@ func (qv *VisibilityQueryValidator) validateComparisonExpr(expr sqlparser.Expr) 
 	return errors.New("invalid search attribute")
 }
 
-func (qv *VisibilityQueryValidator) validateRangeExpr(expr sqlparser.Expr) error {
+func (qv *VisibilityQueryValidator) validateRangeExpr(expr sqlparser.Expr, indexName string) error {
 	rangeCond := expr.(*sqlparser.RangeCond)
 	colName, ok := rangeCond.Left.(*sqlparser.ColName)
 	if !ok {
 		return errors.New("invalid range expression")
 	}
 	colNameStr := colName.Name.String()
-	if qv.isValidSearchAttributes(colNameStr) {
-		if !searchattribute.IsSystem(colNameStr) { // add search attribute prefix
+	searchAttributes, err := qv.searchAttributesProvider.GetSearchAttributes(indexName, false)
+	if err != nil {
+		return err
+	}
+	if searchAttributes.IsDefined(colNameStr) {
+		if !searchattribute.NoAttrPrefix(colNameStr) { // add search attribute prefix
 			rangeCond.Left = &sqlparser.ColName{
 				Metadata:  colName.Metadata,
 				Name:      sqlparser.NewColIdent(searchattribute.Attr + "." + colNameStr),
@@ -208,15 +216,19 @@ func (qv *VisibilityQueryValidator) validateRangeExpr(expr sqlparser.Expr) error
 	return errors.New("invalid search attribute")
 }
 
-func (qv *VisibilityQueryValidator) validateOrderByExpr(orderBy sqlparser.OrderBy) error {
+func (qv *VisibilityQueryValidator) validateOrderByExpr(orderBy sqlparser.OrderBy, indexName string) error {
 	for _, orderByExpr := range orderBy {
 		colName, ok := orderByExpr.Expr.(*sqlparser.ColName)
 		if !ok {
 			return errors.New("invalid order by expression")
 		}
 		colNameStr := colName.Name.String()
-		if qv.isValidSearchAttributes(colNameStr) {
-			if !searchattribute.IsSystem(colNameStr) { // add search attribute prefix
+		searchAttributes, err := qv.searchAttributesProvider.GetSearchAttributes(indexName, false)
+		if err != nil {
+			return err
+		}
+		if searchAttributes.IsDefined(colNameStr) {
+			if !searchattribute.NoAttrPrefix(colNameStr) { // add search attribute prefix
 				orderByExpr.Expr = &sqlparser.ColName{
 					Metadata:  colName.Metadata,
 					Name:      sqlparser.NewColIdent(searchattribute.Attr + "." + colNameStr),
@@ -228,11 +240,4 @@ func (qv *VisibilityQueryValidator) validateOrderByExpr(orderBy sqlparser.OrderB
 		}
 	}
 	return nil
-}
-
-// isValidSearchAttributes return true if key is registered
-func (qv *VisibilityQueryValidator) isValidSearchAttributes(key string) bool {
-	validAttr := qv.validSearchAttributes()
-	_, isValidKey := validAttr[key]
-	return isValidKey
 }

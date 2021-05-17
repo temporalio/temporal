@@ -74,7 +74,6 @@ type (
 		ESProcessorBulkActions   dynamicconfig.IntPropertyFn // max number of requests in bulk
 		ESProcessorBulkSize      dynamicconfig.IntPropertyFn // max total size of bytes in bulk
 		ESProcessorFlushInterval dynamicconfig.DurationPropertyFn
-		ValidSearchAttributes    dynamicconfig.MapPropertyFn
 	}
 
 	ackChanWithStopwatch struct { // value of processorImpl.mapToAckChan
