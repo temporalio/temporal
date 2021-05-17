@@ -31,6 +31,7 @@ package host
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -1123,6 +1124,307 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 	failedEventAttr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, failedEventAttr.GetCause())
 	s.NotNil(failedEventAttr.GetFailure())
+}
+
+// TestContinueAsNewWorkflow same as TestContinueAsNewWorkflow in integration_test.go but with search attributes.
+// TODO: needs to be simplified to check only that search attributes being passed correctly.
+func (s *elasticsearchIntegrationSuite) TestContinueAsNewWorkflow() {
+	id := "es-integration-continue-as-new-workflow-test"
+	wt := "es-integration-continue-as-new-workflow-test-type"
+	tl := "es-integration-continue-as-new-workflow-test-taskqueue"
+	identity := "worker1"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+
+	header := &commonpb.Header{
+		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample payload")},
+	}
+	memo := &commonpb.Memo{
+		Fields: map[string]*commonpb.Payload{"memoKey": payload.EncodeString("memoVal")},
+	}
+	searchAttrPayload := payload.EncodeString("random keyword")
+	searchAttr := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": searchAttrPayload,
+		},
+	}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		Header:              header,
+		Memo:                memo,
+		SearchAttributes:    searchAttr,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+		Identity:            identity,
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err0)
+
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	workflowComplete := false
+	continueAsNewCount := int32(10)
+	continueAsNewCounter := int32(0)
+	var previousRunID string
+	var lastRunStartedEvent *historypb.HistoryEvent
+	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		if continueAsNewCounter < continueAsNewCount {
+			previousRunID = execution.GetRunId()
+			continueAsNewCounter++
+			buf := new(bytes.Buffer)
+			s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
+
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+					WorkflowType:        workflowType,
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+					Input:               payloads.EncodeBytes(buf.Bytes()),
+					Header:              header,
+					Memo:                memo,
+					SearchAttributes:    searchAttr,
+					WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+					WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
+				}},
+			}}, nil
+		}
+
+		lastRunStartedEvent = history.Events[0]
+		workflowComplete = true
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+				Result: payloads.EncodeString("Done"),
+			}},
+		}}, nil
+	}
+
+	poller := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueue,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandler,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	for i := 0; i < 10; i++ {
+		_, err := poller.PollAndProcessWorkflowTask(false, false)
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+		s.NoError(err, strconv.Itoa(i))
+	}
+
+	s.False(workflowComplete)
+	_, err := poller.PollAndProcessWorkflowTask(true, false)
+	s.NoError(err)
+	s.True(workflowComplete)
+	s.Equal(previousRunID, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId())
+	s.Equal(header, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
+	s.Equal(memo, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Memo)
+	s.Equal(searchAttr, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().SearchAttributes)
+}
+
+// TestChildWorkflowExecution same as TestChildWorkflowExecution in integration_test.go but with search attributes.
+// TODO: needs to be simplified to check only that search attributes being passed correctly.
+func (s *elasticsearchIntegrationSuite) TestChildWorkflowExecution() {
+	parentID := "es-integration-child-workflow-test-parent"
+	childID := "es-integration-child-workflow-test-child"
+	wtParent := "es-integration-child-workflow-test-parent-type"
+	wtChild := "es-integration-child-workflow-test-child-type"
+	tlParent := "es-integration-child-workflow-test-parent-taskqueue"
+	tlChild := "es-integration-child-workflow-test-child-taskqueue"
+	identity := "worker1"
+
+	parentWorkflowType := &commonpb.WorkflowType{}
+	parentWorkflowType.Name = wtParent
+
+	childWorkflowType := &commonpb.WorkflowType{}
+	childWorkflowType.Name = wtChild
+
+	taskQueueParent := &taskqueuepb.TaskQueue{}
+	taskQueueParent.Name = tlParent
+	taskQueueChild := &taskqueuepb.TaskQueue{}
+	taskQueueChild.Name = tlChild
+
+	header := &commonpb.Header{
+		Fields: map[string]*commonpb.Payload{"tracing": payload.EncodeString("sample payload")},
+	}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          parentID,
+		WorkflowType:        parentWorkflowType,
+		TaskQueue:           taskQueueParent,
+		Input:               nil,
+		Header:              header,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err0)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	// workflow logic
+	childComplete := false
+	childExecutionStarted := false
+	var startedEvent *historypb.HistoryEvent
+	var completedEvent *historypb.HistoryEvent
+
+	memo := &commonpb.Memo{
+		Fields: map[string]*commonpb.Payload{
+			"Info": payload.EncodeString("memo"),
+		},
+	}
+	attrValPayload := payload.EncodeString("attrVal")
+	searchAttr := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": attrValPayload,
+		},
+	}
+
+	// Parent workflow logic
+	wtHandlerParent := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		s.Logger.Info("Processing workflow task for ", tag.WorkflowID(execution.WorkflowId))
+
+		if execution.WorkflowId == parentID {
+			if !childExecutionStarted {
+				s.Logger.Info("Starting child execution")
+				childExecutionStarted = true
+
+				return []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
+						WorkflowId:          childID,
+						WorkflowType:        childWorkflowType,
+						TaskQueue:           taskQueueChild,
+						Input:               payloads.EncodeString("child-workflow-input"),
+						Header:              header,
+						WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
+						WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
+						Control:             "",
+						Memo:                memo,
+						SearchAttributes:    searchAttr,
+					}},
+				}}, nil
+			} else if previousStartedEventID > 0 {
+				for _, event := range history.Events[previousStartedEventID:] {
+					if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED {
+						startedEvent = event
+						return []*commandpb.Command{}, nil
+					}
+
+					if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED {
+						completedEvent = event
+						return []*commandpb.Command{{
+							CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+							Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+								Result: payloads.EncodeString("Done"),
+							}},
+						}}, nil
+					}
+				}
+			}
+		}
+
+		return nil, nil
+	}
+
+	var childStartedEvent *historypb.HistoryEvent
+	// Child workflow logic
+	wtHandlerChild := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		if previousStartedEventID <= 0 {
+			childStartedEvent = history.Events[0]
+		}
+
+		s.Logger.Info("Processing workflow task for Child ", tag.WorkflowID(execution.WorkflowId))
+		childComplete = true
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+				Result: payloads.EncodeString("Child Done"),
+			}},
+		}}, nil
+	}
+
+	pollerParent := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueueParent,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandlerParent,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	pollerChild := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueueChild,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandlerChild,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// Make first workflow task to start child execution
+	_, err := pollerParent.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
+	s.True(childExecutionStarted)
+
+	// Process ChildExecution Started event and Process Child Execution and complete it
+	_, err = pollerParent.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
+
+	_, err = pollerChild.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
+	s.NotNil(startedEvent)
+	s.True(childComplete)
+	s.NotNil(childStartedEvent)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, childStartedEvent.GetEventType())
+	s.Equal(s.namespace, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetParentWorkflowNamespace())
+	s.Equal(parentID, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().ParentWorkflowExecution.GetWorkflowId())
+	s.Equal(we.GetRunId(), childStartedEvent.GetWorkflowExecutionStartedEventAttributes().ParentWorkflowExecution.GetRunId())
+	s.Equal(startedEvent.GetChildWorkflowExecutionStartedEventAttributes().GetInitiatedEventId(),
+		childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetParentInitiatedEventId())
+	s.Equal(header, startedEvent.GetChildWorkflowExecutionStartedEventAttributes().Header)
+	s.Equal(header, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
+	s.Equal(memo, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetMemo())
+	s.Equal(searchAttr, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes())
+	s.Equal(time.Duration(0), timestamp.DurationValue(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowExecutionTimeout()))
+	s.Equal(200*time.Second, timestamp.DurationValue(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeout()))
+
+	// Process ChildExecution completed event and complete parent execution
+	_, err = pollerParent.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
+	s.NotNil(completedEvent)
+	completedAttributes := completedEvent.GetChildWorkflowExecutionCompletedEventAttributes()
+	s.Equal(s.namespace, completedAttributes.Namespace)
+	s.Equal(childID, completedAttributes.WorkflowExecution.WorkflowId)
+	s.Equal(wtChild, completedAttributes.WorkflowType.Name)
+	var r string
+	err = payloads.Decode(completedAttributes.GetResult(), &r)
+	s.NoError(err)
+	s.Equal("Child Done", r)
 }
 
 func (s *elasticsearchIntegrationSuite) putIndexSettings(indexName string, maxResultWindowSize int) {
