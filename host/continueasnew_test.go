@@ -64,12 +64,6 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{"memoKey": payload.EncodeString("memoVal")},
 	}
-	searchAttrPayload := payload.EncodeString("random keyword")
-	searchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payload{
-			"CustomKeywordField": searchAttrPayload,
-		},
-	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -80,7 +74,6 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 		Input:               nil,
 		Header:              header,
 		Memo:                memo,
-		SearchAttributes:    searchAttr,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 		Identity:            identity,
@@ -112,7 +105,6 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 					Input:               payloads.EncodeBytes(buf.Bytes()),
 					Header:              header,
 					Memo:                memo,
-					SearchAttributes:    searchAttr,
 					WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 					WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
 				}},
@@ -152,7 +144,6 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	s.Equal(previousRunID, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId())
 	s.Equal(header, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
 	s.Equal(memo, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Memo)
-	s.Equal(searchAttr, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().SearchAttributes)
 }
 
 func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
