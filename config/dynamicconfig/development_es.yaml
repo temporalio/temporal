@@ -34,3 +34,26 @@ system.advancedVisibilityWritingMode:
 system.enableReadVisibilityFromES:
   - value: true
     constraints: {}
+frontend.validSearchAttributes:
+  - value:
+      NamespaceId: "Keyword"
+      WorkflowId: "Keyword"
+      RunId: "Keyword"
+      WorkflowType: "Keyword"
+      StartTime: "Int"
+      ExecutionTime: "Int"
+      CloseTime: "Int"
+      ExecutionStatus: "Int"
+      TaskQueue: "Keyword"
+      CustomStringField: "String"
+      CustomKeywordField: "Keyword"
+      CustomIntField: "Int"
+      CustomDoubleField: "Double"
+      CustomBoolField: "Bool"
+      CustomDatetimeField: "Datetime"
+      TemporalChangeVersion: "Keyword"
+      BinaryChecksums: "Keyword"
+      CustomNamespace: "Keyword"
+      Operator: "Keyword"
+
+

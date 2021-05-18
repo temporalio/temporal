@@ -46,6 +46,24 @@
           "TemporalChangeVersion": {
             "type": "keyword"
           },
+          "CustomStringField": {
+            "type": "text"
+          },
+          "CustomKeywordField": {
+            "type": "keyword"
+          },
+          "CustomIntField": {
+            "type": "long"
+          },
+          "CustomDoubleField": {
+            "type": "double"
+          },
+          "CustomBoolField": {
+            "type": "boolean"
+          },
+          "CustomDatetimeField": {
+            "type": "date"
+          },
           "CustomNamespace": {
             "type": "keyword"
           },
