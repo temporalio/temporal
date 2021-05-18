@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -413,15 +412,6 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 			Request:  &adminservice.AddSearchAttributesRequest{},
 			Expected: &serviceerror.InvalidArgument{Message: "SearchAttributes are not set on request."},
 		},
-		{
-			Name: "no advanced config",
-			Request: &adminservice.AddSearchAttributesRequest{
-				SearchAttributes: map[string]enumspb.IndexedValueType{
-					"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_STRING,
-				},
-			},
-			Expected: &serviceerror.InvalidArgument{Message: "AdvancedVisibilityStore is not configured for this cluster."},
-		},
 	}
 	for _, testCase := range testCases1 {
 		s.T().Run(testCase.Name, func(t *testing.T) {
@@ -431,20 +421,11 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 		})
 	}
 
-	dynamicConfigClient := dynamicconfig.NewMockClient(s.controller)
-	handler.DynamicConfigClient = dynamicConfigClient
-	// add advanced visibility store related config
-	handler.ESConfig = &config.Elasticsearch{
-		Indices: map[string]string{
-			"visibility": "temporal-visibility-dev",
-		},
-	}
-
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
-
-	testCases2 := []test{
+	// Elasticsearch is not configured
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	testCases3 := []test{
 		{
-			Name: "reserved key",
+			Name: "reserved key (empty index)",
 			Request: &adminservice.AddSearchAttributesRequest{
 				SearchAttributes: map[string]enumspb.IndexedValueType{
 					"WorkflowId": enumspb.INDEXED_VALUE_TYPE_STRING,
@@ -453,7 +434,43 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 			Expected: &serviceerror.InvalidArgument{Message: "Search attribute WorkflowId is reserved by system."},
 		},
 		{
-			Name: "key already whitelisted",
+			Name: "key already whitelisted (empty index)",
+			Request: &adminservice.AddSearchAttributesRequest{
+				SearchAttributes: map[string]enumspb.IndexedValueType{
+					"CustomStringField": enumspb.INDEXED_VALUE_TYPE_STRING,
+				},
+			},
+			Expected: &serviceerror.InvalidArgument{Message: "Search attribute CustomStringField already exists."},
+		},
+	}
+	for _, testCase := range testCases3 {
+		s.T().Run(testCase.Name, func(t *testing.T) {
+			resp, err := handler.AddSearchAttributes(ctx, testCase.Request)
+			s.Equal(testCase.Expected, err)
+			s.Nil(resp)
+		})
+	}
+
+	// Configure Elasticsearch: add advanced visibility store config with index name.
+	handler.ESConfig = &config.Elasticsearch{
+		Indices: map[string]string{
+			"visibility": "temporal-visibility-dev",
+		},
+	}
+
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("temporal-visibility-dev", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	testCases2 := []test{
+		{
+			Name: "reserved key (ES configured)",
+			Request: &adminservice.AddSearchAttributesRequest{
+				SearchAttributes: map[string]enumspb.IndexedValueType{
+					"WorkflowId": enumspb.INDEXED_VALUE_TYPE_STRING,
+				},
+			},
+			Expected: &serviceerror.InvalidArgument{Message: "Search attribute WorkflowId is reserved by system."},
+		},
+		{
+			Name: "key already whitelisted (ES configured)",
 			Request: &adminservice.AddSearchAttributesRequest{
 				SearchAttributes: map[string]enumspb.IndexedValueType{
 					"CustomStringField": enumspb.INDEXED_VALUE_TYPE_STRING,
