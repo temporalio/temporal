@@ -2121,6 +2121,12 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 			"Info": payload.EncodeString("memo"),
 		},
 	}
+	attrValPayload := payload.EncodeString("attrVal")
+	searchAttr := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": attrValPayload,
+		},
+	}
 
 	// Parent workflow logic
 	wtHandlerParent := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
@@ -2144,6 +2150,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 						WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
 						Control:             "",
 						Memo:                memo,
+						SearchAttributes:    searchAttr,
 					}},
 				}}, nil
 			} else if previousStartedEventID > 0 {
@@ -2233,6 +2240,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(header, startedEvent.GetChildWorkflowExecutionStartedEventAttributes().Header)
 	s.Equal(header, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
 	s.Equal(memo, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetMemo())
+	s.Equal(searchAttr, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes())
 	s.Equal(time.Duration(0), timestamp.DurationValue(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowExecutionTimeout()))
 	s.Equal(200*time.Second, timestamp.DurationValue(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeout()))
 
