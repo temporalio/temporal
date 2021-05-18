@@ -174,7 +174,7 @@ func (m *SearchAttributesManager) SaveSearchAttributes(
 		ClusterMetadata: clusterMetadata,
 		Version:         clusterMetadataResponse.Version,
 	})
-	// Flush local cache, even there was an error, which is most likely version mismatch (=stale cache).
+	// Flush local cache, even if there was an error, which is most likely version mismatch (=stale cache).
 	m.cache.Store(searchAttributesCache{})
 
 	return err
