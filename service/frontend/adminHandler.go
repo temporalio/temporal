@@ -164,10 +164,6 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 		return nil, adh.error(errSearchAttributesNotSet, scope)
 	}
 
-	if err := adh.validateConfigForAdvanceVisibility(); err != nil {
-		return nil, adh.error(err, scope)
-	}
-
 	indexName := request.GetIndexName()
 	if indexName == "" {
 		indexName = adh.ESConfig.GetVisibilityIndex()
@@ -1029,15 +1025,6 @@ func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 	if (request.GetEndEventId() != common.EmptyEventID && request.GetEndEventVersion() == common.EmptyVersion) ||
 		(request.GetEndEventId() == common.EmptyEventID && request.GetEndEventVersion() != common.EmptyVersion) {
 		return errInvalidEndEventCombination
-	}
-	return nil
-}
-
-func (adh *AdminHandler) validateConfigForAdvanceVisibility() error {
-	if adh.ESConfig == nil ||
-		adh.ESClient == nil ||
-		adh.ESConfig.GetVisibilityIndex() == "" {
-		return errAdvancedVisibilityStoreIsNotConfigured
 	}
 	return nil
 }

@@ -86,7 +86,7 @@ func AdminAddSearchAttributes(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Unable to add search attributes.", err)
 	}
-	printSearchAttributesResponse(resp)
+	printSearchAttributesResponse(resp, request.GetIndexName())
 	color.HiGreen("Search attributes have been added successfully.")
 }
 
@@ -103,14 +103,17 @@ func AdminGetSearchAttributes(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Unable to get search attributes.", err)
 	}
-	printSearchAttributesResponse(resp)
+	printSearchAttributesResponse(resp, request.GetIndexName())
 }
 
-func printSearchAttributesResponse(resp searchAttributesResponse) {
-	printSearchAttributes(resp.GetCustomAttributes(), "Custom search attributes")
+func printSearchAttributesResponse(resp searchAttributesResponse, indexName string) {
+	if indexName != "" {
+		indexName = fmt.Sprintf(" (%s)", indexName)
+	}
+	printSearchAttributes(resp.GetCustomAttributes(), fmt.Sprintf("Custom search attributes%s", indexName))
 	printSearchAttributes(resp.GetSystemAttributes(), "System search attributes")
 
-	color.Cyan("Storage mappings:\n")
+	color.Cyan("Storage mappings%s:\n", indexName)
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"Column name", "Column type"})
 	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)

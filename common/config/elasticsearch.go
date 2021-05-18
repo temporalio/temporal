@@ -73,9 +73,10 @@ type (
 	}
 )
 
-// GetVisibilityIndex return visibility index name
+// GetVisibilityIndex return visibility index name from Elasticsearch config or empty string if it is not defined.
 func (cfg *Elasticsearch) GetVisibilityIndex() string {
 	if cfg == nil {
+		// Empty string will be used as default index name when Elasticsearch is not configured.
 		return ""
 	}
 	return cfg.Indices[VisibilityAppName]
@@ -86,7 +87,7 @@ func (cfg *Elasticsearch) validate(storeName string) error {
 		return fmt.Errorf("persistence config: advanced visibility datastore %q: missing indices", storeName)
 
 	}
-	if cfg.GetVisibilityIndex() == "" {
+	if cfg.Indices[VisibilityAppName] == "" {
 		return fmt.Errorf("persistence config: advanced visibility datastore %q: missing %q key", storeName, VisibilityAppName)
 	}
 	return nil
