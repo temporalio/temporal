@@ -36,8 +36,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/server/service/worker/addsearchattributes"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -49,7 +47,6 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -61,6 +58,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/worker/addsearchattributes"
 )
 
 const (
@@ -77,7 +75,6 @@ type (
 		numberOfHistoryShards int32
 		ESConfig              *config.Elasticsearch
 		ESClient              esclient.Client
-		DynamicConfigClient   dynamicconfig.Client
 		config                *Config
 		namespaceDLQHandler   namespace.DLQMessageHandler
 		eventSerializer       persistence.PayloadSerializer
@@ -112,10 +109,9 @@ func NewAdminHandler(
 			resource.GetNamespaceReplicationQueue(),
 			resource.GetLogger(),
 		),
-		eventSerializer:     persistence.NewPayloadSerializer(),
-		DynamicConfigClient: params.DynamicConfigClient,
-		ESConfig:            params.ESConfig,
-		ESClient:            params.ESClient,
+		eventSerializer: persistence.NewPayloadSerializer(),
+		ESConfig:        params.ESConfig,
+		ESClient:        params.ESClient,
 	}
 }
 
