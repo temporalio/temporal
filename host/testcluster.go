@@ -193,16 +193,14 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		return nil, err
 	}
 
-	if advancedVisibilityWritingMode() != common.AdvancedVisibilityWritingModeOff {
-		// This will save custom test search attributes to cluster metadata.
-		// Actual Elasticsearch fields are created from index template (testdata/es_v7_index_template.json).
-		err = testBase.SearchAttributesManager.SaveSearchAttributes(
-			options.ESConfig.GetVisibilityIndex(),
-			searchattribute.TestNameTypeMap.Custom(),
-		)
-		if err != nil {
-			return nil, err
-		}
+	// This will save custom test search attributes to cluster metadata.
+	// Actual Elasticsearch fields are created from index template (testdata/es_v7_index_template.json).
+	err = testBase.SearchAttributesManager.SaveSearchAttributes(
+		options.ESConfig.GetVisibilityIndex(),
+		searchattribute.TestNameTypeMap.Custom(),
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	temporalParams := &TemporalParams{

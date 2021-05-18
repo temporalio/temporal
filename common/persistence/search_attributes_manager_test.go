@@ -162,9 +162,20 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_NotFoundErro
 }
 
 func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_EmptyIndex() {
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(&GetClusterMetadataResponse{
+		ClusterMetadata: persistencespb.ClusterMetadata{
+			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
+				"": {
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"OrderId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					}}},
+		},
+		Version: 1,
+	}, nil)
+
 	searchAttributes, err := s.manager.GetSearchAttributes("", false)
 	s.NoError(err)
-	s.Len(searchAttributes.Custom(), 0)
+	s.Len(searchAttributes.Custom(), 1)
 }
 
 func (s *searchAttributesManagerSuite) TestSaveSearchAttributes_UpdateIndex() {
@@ -229,9 +240,34 @@ func (s *searchAttributesManagerSuite) TestSaveSearchAttributes_NewIndex() {
 }
 
 func (s *searchAttributesManagerSuite) TestSaveSearchAttributesCache_EmptyIndex() {
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(&GetClusterMetadataResponse{
+		ClusterMetadata: persistencespb.ClusterMetadata{
+			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
+				"index-name-2": {
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"OrderId2": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					}}},
+		},
+		Version: 1,
+	}, nil)
+
+	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(&SaveClusterMetadataRequest{
+		ClusterMetadata: persistencespb.ClusterMetadata{
+			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
+				"index-name-2": {
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"OrderId2": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					}},
+				"": {
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"OrderId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					}}},
+		},
+		Version: 1,
+	}).Return(false, nil)
+
 	err := s.manager.SaveSearchAttributes("", map[string]enumspb.IndexedValueType{
 		"OrderId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	})
-	s.Error(err)
-	s.ErrorIs(err, ErrEmptyIndexName)
+	s.NoError(err)
 }

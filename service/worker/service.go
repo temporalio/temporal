@@ -176,9 +176,8 @@ func (s *Service) Start() {
 	if s.config.EnableParentClosePolicyWorker() {
 		s.startParentClosePolicyProcessor()
 	}
-	if s.esClient != nil {
-		s.startAddSearchAttributes()
-	}
+
+	s.startAddSearchAttributes()
 
 	logger.Info("worker started", tag.ComponentWorker)
 	<-s.stopC

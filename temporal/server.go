@@ -32,6 +32,7 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
+	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -424,31 +425,35 @@ func copyCustomSearchAttributesFromDynamicConfigToClusterMetadata(
 	dc *dynamicconfig.Collection,
 ) {
 
-	if !cfg.Persistence.IsAdvancedVisibilityConfigExist() {
-		logger.Debug("Advanced visibility is not configured. Search attributes migration is cancelled.")
-		return
+	var visibilityIndex string
+	if cfg.Persistence.IsAdvancedVisibilityConfigExist() {
+		advancedVisibilityDataStore, ok := cfg.Persistence.DataStores[cfg.Persistence.AdvancedVisibilityStore]
+		if ok {
+			visibilityIndex = advancedVisibilityDataStore.ElasticSearch.GetVisibilityIndex()
+		}
 	}
 
-	advancedVisibilityDataStore, ok := cfg.Persistence.DataStores[cfg.Persistence.AdvancedVisibilityStore]
-	if !ok {
-		logger.Debug("Advanced visibility data store is not configured. Search attributes migration is cancelled.")
-		return
-	}
-
-	visibilityIndex := advancedVisibilityDataStore.ElasticSearch.GetVisibilityIndex()
 	if visibilityIndex == "" {
-		logger.Debug("Advanced visibility Elasticsearch index is not configured. Search attributes migration is cancelled.")
-		return
+		logger.Debug("Advanced visibility Elasticsearch index is not configured. Search attributes migration will use empty string as index name.")
 	}
 
-	dcSearchAttributes, err := searchattribute.BuildTypeMap(dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, map[string]interface{}{}))
+	defaultTypeMap := map[string]interface{}{
+		"CustomStringField":   enumspb.INDEXED_VALUE_TYPE_STRING,
+		"CustomKeywordField":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"CustomIntField":      enumspb.INDEXED_VALUE_TYPE_INT,
+		"CustomDoubleField":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+		"CustomBoolField":     enumspb.INDEXED_VALUE_TYPE_BOOL,
+		"CustomDatetimeField": enumspb.INDEXED_VALUE_TYPE_DATETIME,
+	}
+
+	dcSearchAttributes, err := searchattribute.BuildTypeMap(dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, defaultTypeMap))
 	if err != nil {
 		logger.Error("Unable to read search attributes from dynamic config. Search attributes migration is cancelled.", tag.Error(err))
 		return
 	}
 	dcCustomSearchAttributes := searchattribute.FilterCustomOnly(dcSearchAttributes)
 	if len(dcCustomSearchAttributes) == 0 {
-		logger.Debug("Search attributes are not defined in dynamic config. Search attributes migration is cancelled.", tag.Error(err))
+		logger.Debug("Custom search attributes are not defined in dynamic config. Search attributes migration is cancelled.", tag.Error(err))
 		return
 	}
 
@@ -473,7 +478,7 @@ func copyCustomSearchAttributesFromDynamicConfigToClusterMetadata(
 
 	existingSearchAttributes, err := saManager.GetSearchAttributes(visibilityIndex, true)
 	if err != nil {
-		logger.Error("Unable to read current search attributes from cluster metadata. Search attributes migration is cancelled.", tag.Error(err))
+		logger.Error("Unable to read current search attributes from cluster metadata. Search attributes migration is cancelled.", tag.Error(err), tag.ESIndex(visibilityIndex))
 		return
 	}
 
@@ -484,11 +489,11 @@ func copyCustomSearchAttributesFromDynamicConfigToClusterMetadata(
 
 	err = saManager.SaveSearchAttributes(visibilityIndex, dcCustomSearchAttributes)
 	if err != nil {
-		logger.Error("Unable to save search attributes to cluster metadata. Search attributes migration is cancelled.", tag.Error(err))
+		logger.Error("Unable to save search attributes to cluster metadata. Search attributes migration is cancelled.", tag.Error(err), tag.ESIndex(visibilityIndex))
 		return
 	}
 
-	logger.Info("Search attributes are successfully saved from dynamic config to cluster metadata.", tag.Value(dcCustomSearchAttributes))
+	logger.Info("Search attributes are successfully saved from dynamic config to cluster metadata.", tag.Value(dcCustomSearchAttributes), tag.ESIndex(visibilityIndex))
 }
 
 // updateClusterMetadataConfig performs a config check against the configured persistence store for cluster metadata.

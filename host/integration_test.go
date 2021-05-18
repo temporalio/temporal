@@ -1084,12 +1084,11 @@ func (s *integrationSuite) TestCronWorkflow() {
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{"memoKey": payload.EncodeString("memoVal")},
 	}
-	// Search attributes are not supported here because Elasticsearch is not configured and default index name is not defined.
-	// searchAttr := &commonpb.SearchAttributes{
-	// 	IndexedFields: map[string]*commonpb.Payload{
-	// 		"CustomKeywordField": payload.EncodeString(`"1"`),
-	// 	},
-	// }
+	searchAttr := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": payload.EncodeString(`"1"`),
+		},
+	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
@@ -1103,7 +1102,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		Identity:            identity,
 		CronSchedule:        cronSchedule, // minimum interval by standard spec is 1m (* * * * *, use non-standard descriptor for short interval for test
 		Memo:                memo,
-		// SearchAttributes:    searchAttr,
+		SearchAttributes:    searchAttr,
 	}
 
 	startWorkflowTS := time.Now().UTC()
@@ -1225,7 +1224,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal("cron-test-error", attributes.GetFailure().GetMessage())
 	s.Nil(attributes.GetLastCompletionResult())
 	s.Equal(memo, attributes.Memo)
-	// s.Equal(searchAttr, attributes.SearchAttributes)
+	s.Equal(searchAttr, attributes.SearchAttributes)
 
 	events = s.getHistory(s.namespace, executions[1])
 	lastEvent = events[len(events)-1]
@@ -1239,7 +1238,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.NoError(err)
 	s.Equal("cron-test-result", r)
 	s.Equal(memo, attributes.Memo)
-	// s.Equal(searchAttr, attributes.SearchAttributes)
+	s.Equal(searchAttr, attributes.SearchAttributes)
 
 	events = s.getHistory(s.namespace, executions[2])
 	lastEvent = events[len(events)-1]
@@ -1252,7 +1251,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.NoError(err)
 	s.Equal("cron-test-result", r)
 	s.Equal(memo, attributes.Memo)
-	// s.Equal(searchAttr, attributes.SearchAttributes)
+	s.Equal(searchAttr, attributes.SearchAttributes)
 
 	startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
 	var closedExecutions []*workflowpb.WorkflowExecutionInfo
@@ -2121,6 +2120,12 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 			"Info": payload.EncodeString("memo"),
 		},
 	}
+	attrValPayload := payload.EncodeString("attrVal")
+	searchAttr := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": attrValPayload,
+		},
+	}
 
 	// Parent workflow logic
 	wtHandlerParent := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
@@ -2144,6 +2149,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 						WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
 						Control:             "",
 						Memo:                memo,
+						SearchAttributes:    searchAttr,
 					}},
 				}}, nil
 			} else if previousStartedEventID > 0 {
@@ -2233,6 +2239,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(header, startedEvent.GetChildWorkflowExecutionStartedEventAttributes().Header)
 	s.Equal(header, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
 	s.Equal(memo, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetMemo())
+	s.Equal(searchAttr, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes())
 	s.Equal(time.Duration(0), timestamp.DurationValue(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowExecutionTimeout()))
 	s.Equal(200*time.Second, timestamp.DurationValue(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeout()))
 
