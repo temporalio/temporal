@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 )
 
 var _ PerHostCertProviderMap = (*localStorePerHostCertProviderMap)(nil)
@@ -40,7 +41,10 @@ type localStorePerHostCertProviderMap struct {
 }
 
 func newLocalStorePerHostCertProviderMap(
-	overrides map[string]config.ServerTLS, certProviderFactory CertProviderFactory, refreshInterval time.Duration,
+	overrides map[string]config.ServerTLS,
+	certProviderFactory CertProviderFactory,
+	refreshInterval time.Duration,
+	logger log.Logger,
 ) *localStorePerHostCertProviderMap {
 
 	providerMap := &localStorePerHostCertProviderMap{}
@@ -54,7 +58,7 @@ func newLocalStorePerHostCertProviderMap(
 	for host, settings := range overrides {
 		lcHost := strings.ToLower(host)
 
-		provider := certProviderFactory(&config.GroupTLS{Server: settings}, nil, nil, refreshInterval)
+		provider := certProviderFactory(&config.GroupTLS{Server: settings}, nil, nil, refreshInterval, logger)
 		providerMap.certProviderCache[lcHost] = provider
 		providerMap.clientAuthCache[lcHost] = settings.RequireClientAuth
 	}
@@ -94,4 +98,12 @@ func (f *localStorePerHostCertProviderMap) GetExpiringCerts(timeWindow time.Dura
 		}
 	}
 	return expiring, expired, err
+}
+
+func (f *localStorePerHostCertProviderMap) NumberOfHosts() int {
+
+	if f.certProviderCache != nil {
+		return len(f.certProviderCache)
+	}
+	return 0
 }

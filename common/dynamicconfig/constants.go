@@ -63,7 +63,7 @@ var Keys = map[Key]string{
 	AdminMatchingNamespaceToPartitionDispatchRate:          "admin.matchingNamespaceToPartitionDispatchRate",
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate: "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
 
-	// TODO remove this dynamic flag in 1.11.x
+	// TODO remove this dynamic flag in 1.12.x
 	EnableDBRecordVersion: "system.enableDBRecordVersion",
 
 	// system settings
@@ -345,7 +345,8 @@ const (
 	// AdminMatchingNamespaceTaskqueueToPartitionDispatchRate is the max qps of a task queue partition for a given namespace & task queue
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate
 
-	// TODO remove this dynamic flag in 1.11.x
+	// TODO remove this dynamic flag in 1.12.x
+
 	// EnableDBRecordVersion is key for enable db version
 	EnableDBRecordVersion
 
@@ -435,6 +436,8 @@ const (
 	// FrontendMaxBadBinaries is the max number of bad binaries in namespace config
 	FrontendMaxBadBinaries
 	// ValidSearchAttributes is legal indexed keys that can be used in list APIs
+	// TODO: remove after 1.10.0 release
+	// Deprecated.
 	ValidSearchAttributes
 	// SendRawWorkflowHistory is whether to enable raw history retrieving
 	SendRawWorkflowHistory

@@ -149,20 +149,20 @@ func AdminIndex(c *cli.Context) {
 		ESProcessorBulkActions:   dc.GetIntPropertyFn(numOfBatches),
 		ESProcessorBulkSize:      dc.GetIntPropertyFn(2 << 20),
 		ESProcessorFlushInterval: dc.GetDurationPropertyFn(1 * time.Second),
-		ValidSearchAttributes:    dc.GetMapPropertyFn(searchattribute.GetDefaultTypeMap()),
 	}
 
-	logger := log.NewDefaultLogger()
+	logger := log.NewCLILogger()
 
 	esProcessor := espersistence.NewProcessor(esProcessorConfig, esClient, logger, metrics.NewNoopMetricsClient())
 	esProcessor.Start()
 
 	visibilityConfigForES := &config.VisibilityConfig{
 		ESIndexMaxResultWindow: dc.GetIntPropertyFn(10000),
-		ValidSearchAttributes:  dc.GetMapPropertyFn(searchattribute.GetDefaultTypeMap()),
 		ESProcessorAckTimeout:  dc.GetDurationPropertyFn(1 * time.Minute),
 	}
-	visibilityManager := espersistence.NewVisibilityManager(indexName, esClient, visibilityConfigForES, esProcessor, metrics.NewNoopMetricsClient(), logger)
+
+	// TODO: build search attribute provider to get search attributes from command line args.
+	visibilityManager := espersistence.NewVisibilityManager(indexName, esClient, visibilityConfigForES, searchattribute.NewSystemProvider(), esProcessor, metrics.NewNoopMetricsClient(), logger)
 
 	successLines := &atomic.Int32{}
 	wg := &sync.WaitGroup{}

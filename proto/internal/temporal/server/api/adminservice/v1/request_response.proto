@@ -29,6 +29,7 @@ import "dependencies/gogoproto/gogo.proto";
 
 import "temporal/api/enums/v1/common.proto";
 import "temporal/api/common/v1/message.proto";
+import "temporal/api/workflow/v1/message.proto";
 
 import "temporal/server/api/cluster/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
@@ -146,12 +147,29 @@ message ReapplyEventsRequest {
 message ReapplyEventsResponse {
 }
 
-message AddSearchAttributeRequest {
-    map<string, temporal.api.enums.v1.IndexedValueType> search_attribute = 1;
-    string security_token = 2;
+message AddSearchAttributesRequest {
+    map<string, temporal.api.enums.v1.IndexedValueType> search_attributes = 1;
+    string index_name = 2;
 }
 
-message AddSearchAttributeResponse {
+message AddSearchAttributesResponse {
+    map<string, temporal.api.enums.v1.IndexedValueType> custom_attributes = 1;
+    map<string, temporal.api.enums.v1.IndexedValueType> system_attributes = 2;
+    map<string, string> mapping = 3;
+    // State of the workflow that adds search attributes to the system.
+    temporal.api.workflow.v1.WorkflowExecutionInfo add_workflow_execution_info = 4;
+}
+
+message GetSearchAttributesRequest {
+    string index_name = 1;
+}
+
+message GetSearchAttributesResponse {
+    map<string, temporal.api.enums.v1.IndexedValueType> custom_attributes = 1;
+    map<string, temporal.api.enums.v1.IndexedValueType> system_attributes = 2;
+    map<string, string> mapping = 3;
+    // State of the workflow that adds search attributes to the system.
+    temporal.api.workflow.v1.WorkflowExecutionInfo add_workflow_execution_info = 4;
 }
 
 message DescribeClusterRequest {

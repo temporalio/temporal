@@ -31,15 +31,15 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/task"
 )
 
 // Config represents configuration for history service
 type Config struct {
-	NumberOfShards int32
+	NumberOfShards             int32
+	DefaultVisibilityIndexName string
 
-	// TODO remove this dynamic flag in 1.11.x
+	// TODO remove this dynamic flag in 1.12.x
 	EnableDBRecordVersion dynamicconfig.BoolPropertyFn
 
 	RPS                           dynamicconfig.IntPropertyFn
@@ -245,8 +245,6 @@ type Config struct {
 	VisibilityProcessorEnablePriorityTaskProcessor         dynamicconfig.BoolPropertyFn
 	VisibilityProcessorVisibilityArchivalTimeLimit         dynamicconfig.DurationPropertyFn
 
-	// ValidSearchAttributes is legal indexed keys that can be used in list APIs
-	ValidSearchAttributes             dynamicconfig.MapPropertyFn
 	SearchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -267,12 +265,13 @@ const (
 )
 
 // NewConfig returns new service config with default values
-func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVisConfigExist bool) *Config {
+func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVisConfigExist bool, defaultVisibilityIndex string) *Config {
 	cfg := &Config{
-		NumberOfShards: numberOfShards,
+		NumberOfShards:             numberOfShards,
+		DefaultVisibilityIndexName: defaultVisibilityIndex,
 
-		// TODO remove this dynamic flag in 1.11.x
-		EnableDBRecordVersion: dc.GetBoolProperty(dynamicconfig.EnableDBRecordVersion, true),
+		// TODO remove this dynamic flag in 1.12.x
+		EnableDBRecordVersion: dc.GetBoolProperty(dynamicconfig.EnableDBRecordVersion, false),
 
 		RPS:                                  dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
 		MaxIDLengthLimit:                     dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
@@ -435,7 +434,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		VisibilityProcessorEnablePriorityTaskProcessor:         dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnablePriorityTaskProcessor, false),
 		VisibilityProcessorVisibilityArchivalTimeLimit:         dc.GetDurationProperty(dynamicconfig.VisibilityProcessorVisibilityArchivalTimeLimit, 200*time.Millisecond),
 
-		ValidSearchAttributes:             dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, searchattribute.GetDefaultTypeMap()),
 		SearchAttributesNumberOfKeysLimit: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
 		SearchAttributesSizeOfValueLimit:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
 		SearchAttributesTotalSizeLimit:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
@@ -461,7 +459,7 @@ func (config *Config) GetShardID(namespaceID, workflowID string) int32 {
 
 func NewDynamicConfigForTest() *Config {
 	dc := dynamicconfig.NewNoopCollection()
-	config := NewConfig(dc, 1, false)
+	config := NewConfig(dc, 1, false, "")
 	// reduce the duration of long poll to increase test speed
 	config.LongPollExpirationInterval = dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.HistoryLongPollExpirationInterval, 10*time.Second)
 	return config

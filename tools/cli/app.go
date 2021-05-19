@@ -28,6 +28,8 @@ import (
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/tools/cli/dataconverter"
+	"go.temporal.io/server/tools/cli/plugin"
 )
 
 // SetFactory is used to set the ClientFactory global
@@ -93,6 +95,12 @@ func NewCliApp() *cli.App {
 			Value:  "",
 			Usage:  "override for target server name",
 			EnvVar: "TEMPORAL_CLI_TLS_SERVER_NAME",
+		},
+		cli.StringFlag{
+			Name:   FlagDataConverterPluginWithAlias,
+			Value:  "",
+			Usage:  "data converter plugin executable name",
+			EnvVar: "TEMPORAL_CLI_PLUGIN_DATA_CONVERTER",
 		},
 	}
 	app.Commands = []cli.Command{
@@ -202,11 +210,39 @@ func NewCliApp() *cli.App {
 			Usage:       "Operate Temporal cluster",
 			Subcommands: newClusterCommands(),
 		},
+		{
+			Name:        "dataconverter",
+			Aliases:     []string{"dc"},
+			Usage:       "Operate Custom Data Converter",
+			Subcommands: newDataConverterCommands(),
+		},
 	}
+	app.Before = loadPlugins
+	app.After = stopPlugins
 
 	// set builder if not customized
 	if cFactory == nil {
 		SetFactory(NewClientFactory())
 	}
 	return app
+}
+
+func loadPlugins(ctx *cli.Context) error {
+	dcPlugin := ctx.String(FlagDataConverterPlugin)
+	if dcPlugin != "" {
+		dataConverter, err := plugin.NewDataConverterPlugin(dcPlugin)
+		if err != nil {
+			ErrorAndExit("unable to load data converter plugin", err)
+		}
+
+		dataconverter.SetCurrent(dataConverter)
+	}
+
+	return nil
+}
+
+func stopPlugins(ctx *cli.Context) error {
+	plugin.StopPlugins()
+
+	return nil
 }

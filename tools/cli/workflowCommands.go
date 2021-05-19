@@ -65,6 +65,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history"
+	"go.temporal.io/server/tools/cli/dataconverter"
 	"go.temporal.io/server/tools/cli/stringify"
 )
 
@@ -119,7 +120,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 				}
 				prevEvent = *e
 			}
-			fmt.Println(stringify.AnyToString(e, true, maxFieldLength))
+			fmt.Println(stringify.AnyToString(e, true, maxFieldLength, dataconverter.GetCurrent()))
 		}
 	} else if c.IsSet(FlagEventID) { // only dump that event
 		eventID := c.Int(FlagEventID)
@@ -127,7 +128,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 			ErrorAndExit("EventId out of range.", fmt.Errorf("number should be 1 - %d inclusive", len(history.Events)))
 		}
 		e := history.Events[eventID-1]
-		fmt.Println(stringify.AnyToString(e, true, 0))
+		fmt.Println(stringify.AnyToString(e, true, 0, dataconverter.GetCurrent()))
 	} else { // use table to pretty output, will trim long text
 		table := tablewriter.NewWriter(os.Stdout)
 		table.SetBorder(false)
@@ -1340,9 +1341,9 @@ func printListResults(executions []*workflowpb.WorkflowExecutionInfo, inJSON boo
 			}
 		} else {
 			if more || i < len(executions)-1 {
-				fmt.Println(stringify.AnyToString(execution, true, 0) + ",")
+				fmt.Println(stringify.AnyToString(execution, true, 0, dataconverter.GetCurrent()) + ",")
 			} else {
-				fmt.Println(stringify.AnyToString(execution, true, 0))
+				fmt.Println(stringify.AnyToString(execution, true, 0, dataconverter.GetCurrent()))
 			}
 		}
 	}
@@ -1582,19 +1583,6 @@ func ResetInBatch(c *cli.Context) {
 	close(done)
 	fmt.Println("wait for all goroutines...")
 	wg.Wait()
-}
-
-// sort helper for search attributes
-type byKey [][]string
-
-func (s byKey) Len() int {
-	return len(s)
-}
-func (s byKey) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-func (s byKey) Less(i, j int) bool {
-	return s[i][0] < s[j][0]
 }
 
 func printErrorAndReturn(msg string, err error) error {

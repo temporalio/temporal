@@ -40,10 +40,10 @@ import (
 
 // Stringify converts search attributes to map of strings using (in order):
 // 1. type from MetadataType field,
-// 2. type for typeMap (can be nil).
+// 2. type from typeMap (can be nil).
 // In case of error, it will continue to next search attribute and return last error.
 // Single values are converted using strconv, arrays are converted using json.Marshal.
-func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap map[string]enumspb.IndexedValueType) (map[string]string, error) {
+func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap *NameTypeMap) (map[string]string, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil, nil
 	}
@@ -52,7 +52,10 @@ func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap map[string]e
 	var lastErr error
 
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
-		saType, _ := GetType(saName, typeMap)
+		saType := enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
+		if typeMap != nil {
+			saType, _ = typeMap.GetType(saName)
+		}
 		saValue, err := DecodeValue(saPayload, saType)
 		if err != nil {
 			// If DecodeValue failed, save error and use raw JSON from Data field.
@@ -95,7 +98,7 @@ func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap map[string]e
 // typeMap can be nil (values will be parsed with strconv and MetadataType field won't be set).
 // In case of error, it will continue to next search attribute and return last error.
 // Single values are parsed using strconv, arrays are parsed using json.Unmarshal.
-func Parse(searchAttributesStr map[string]string, typeMap map[string]enumspb.IndexedValueType) (*commonpb.SearchAttributes, error) {
+func Parse(searchAttributesStr map[string]string, typeMap *NameTypeMap) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributesStr) == 0 {
 		return nil, nil
 	}
@@ -107,11 +110,8 @@ func Parse(searchAttributesStr map[string]string, typeMap map[string]enumspb.Ind
 
 	for saName, saValStr := range searchAttributesStr {
 		saType := enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
-		if len(typeMap) > 0 {
-			ivt, isDefined := typeMap[saName]
-			if isDefined {
-				saType = ivt
-			}
+		if typeMap != nil {
+			saType, _ = typeMap.GetType(saName)
 		}
 		saValPayload, err := parseValueOrArray(saValStr, saType)
 		if err != nil {

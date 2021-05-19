@@ -128,7 +128,7 @@ func NewWorkflowHandler(
 			resource.GetArchivalMetadata(),
 			resource.GetArchiverProvider(),
 		),
-		visibilityQueryValidator:        validator.NewQueryValidator(config.ValidSearchAttributes),
+		visibilityQueryValidator:        validator.NewQueryValidator(resource.GetSearchAttributesProvider()),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 	}
 
@@ -2392,7 +2392,7 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errPageSizeTooBigMessage, wh.config.ESIndexMaxResultWindow()))
 	}
 
-	if err := wh.visibilityQueryValidator.ValidateListRequestForQuery(request); err != nil {
+	if err := wh.visibilityQueryValidator.ValidateListRequestForQuery(request, wh.config.ESIndexName); err != nil {
 		return nil, err
 	}
 
@@ -2483,16 +2483,16 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		Query:         request.GetQuery(),
 	}
 
-	saTypeMap, err := searchattribute.BuildTypeMap(wh.config.ValidSearchAttributes)
+	searchAttributes, err := wh.Resource.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToBuildSearchAttributesMapMessage, err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 
 	archiverResponse, err := visibilityArchiver.Query(
 		ctx,
 		URI,
 		archiverRequest,
-		saTypeMap)
+		searchAttributes)
 	if err != nil {
 		return nil, err
 	}
@@ -2538,7 +2538,7 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errPageSizeTooBigMessage, wh.config.ESIndexMaxResultWindow()))
 	}
 
-	if err := wh.visibilityQueryValidator.ValidateScanRequestForQuery(request); err != nil {
+	if err := wh.visibilityQueryValidator.ValidateScanRequestForQuery(request, wh.config.ESIndexName); err != nil {
 		return nil, err
 	}
 
@@ -2587,7 +2587,7 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 		return nil, errNamespaceNotSet
 	}
 
-	if err := wh.visibilityQueryValidator.ValidateCountRequestForQuery(request); err != nil {
+	if err := wh.visibilityQueryValidator.ValidateCountRequestForQuery(request, wh.config.ESIndexName); err != nil {
 		return nil, err
 	}
 
@@ -2625,12 +2625,12 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 		return nil, err
 	}
 
-	saTypeMap, err := searchattribute.BuildTypeMap(wh.config.ValidSearchAttributes)
+	searchAttributes, err := wh.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToBuildSearchAttributesMapMessage, err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 	resp := &workflowservice.GetSearchAttributesResponse{
-		Keys: saTypeMap,
+		Keys: searchAttributes.All(),
 	}
 	return resp, nil
 }
@@ -2866,11 +2866,11 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		return nil, err
 	}
 
-	saTypeMap, err := searchattribute.BuildTypeMap(wh.config.ValidSearchAttributes)
+	searchAttributes, err := wh.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToBuildSearchAttributesMapMessage, err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
-	searchattribute.ApplyTypeMap(response.GetWorkflowExecutionInfo().GetSearchAttributes(), saTypeMap)
+	searchattribute.ApplyTypeMap(response.GetWorkflowExecutionInfo().GetSearchAttributes(), searchAttributes)
 
 	return &workflowservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig:       response.GetExecutionConfig(),

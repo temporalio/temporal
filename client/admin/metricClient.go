@@ -48,20 +48,38 @@ func NewMetricClient(client adminservice.AdminServiceClient, metricsClient metri
 	}
 }
 
-func (c *metricClient) AddSearchAttribute(
+func (c *metricClient) AddSearchAttributes(
 	ctx context.Context,
-	request *adminservice.AddSearchAttributeRequest,
+	request *adminservice.AddSearchAttributesRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.AddSearchAttributeResponse, error) {
+) (*adminservice.AddSearchAttributesResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.AdminClientAddSearchAttributeScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.AdminClientAddSearchAttributesScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.AdminClientAddSearchAttributeScope, metrics.ClientLatency)
-	resp, err := c.client.AddSearchAttribute(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientAddSearchAttributesScope, metrics.ClientLatency)
+	resp, err := c.client.AddSearchAttributes(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientAddSearchAttributeScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.AdminClientAddSearchAttributesScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) GetSearchAttributes(
+	ctx context.Context,
+	request *adminservice.GetSearchAttributesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetSearchAttributesResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientGetSearchAttributesScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientGetSearchAttributesScope, metrics.ClientLatency)
+	resp, err := c.client.GetSearchAttributes(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientGetSearchAttributesScope, metrics.ClientFailures)
 	}
 	return resp, err
 }

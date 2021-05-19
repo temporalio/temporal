@@ -33,17 +33,15 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/common/log"
-
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/shuffle"
 	"go.temporal.io/server/environment"
-
-	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 )
 
 // TODO merge the initialization with existing persistence setup

@@ -81,7 +81,7 @@ type (
 		RunID       primitives.UUID
 	}
 
-	// TODO remove this block in 1.11.x
+	// TODO remove this block in 1.12.x
 	ExecutionVersion struct {
 		DBRecordVersion int64
 		NextEventID     int64

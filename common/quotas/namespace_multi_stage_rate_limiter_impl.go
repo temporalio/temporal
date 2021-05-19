@@ -34,7 +34,7 @@ type (
 	// NamespaceMultiStageRateLimiterImpl is a multi stage rate limiter
 	// special built for multi-tenancy
 	NamespaceMultiStageRateLimiterImpl struct {
-		namespaceRateLimiterFn NamespaceRateLimiterFn
+		namespaceRateLimiterFn func(namespaceID string) RateLimiter
 		sharedRateLimiters     []RateLimiter
 
 		sync.RWMutex
@@ -42,10 +42,8 @@ type (
 	}
 )
 
-var _ NamespaceRateLimiter = (*NamespaceMultiStageRateLimiterImpl)(nil)
-
 func NewNamespaceMultiStageRateLimiter(
-	namespaceRateLimiterFn NamespaceRateLimiterFn,
+	namespaceRateLimiterFn func(namespaceID string) RateLimiter,
 	sharedRateLimiters []RateLimiter,
 ) *NamespaceMultiStageRateLimiterImpl {
 	return &NamespaceMultiStageRateLimiterImpl{

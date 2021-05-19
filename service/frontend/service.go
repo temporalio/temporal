@@ -25,6 +25,7 @@
 package frontend
 
 import (
+	"math"
 	"os"
 	"sync/atomic"
 	"time"
@@ -35,28 +36,31 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
-	"go.temporal.io/server/common/config"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/frontend/configs"
 )
 
 // Config represents configuration for frontend service
 type Config struct {
 	NumHistoryShards             int32
+	ESIndexName                  string
 	PersistenceMaxQPS            dynamicconfig.IntPropertyFn
 	PersistenceGlobalMaxQPS      dynamicconfig.IntPropertyFn
 	VisibilityMaxPageSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -90,8 +94,6 @@ type Config struct {
 	// Namespace specific config
 	EnableNamespaceNotActiveAutoForwarding dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	// ValidSearchAttributes is legal indexed keys that can be used in list APIs
-	ValidSearchAttributes             dynamicconfig.MapPropertyFn
 	SearchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -132,9 +134,10 @@ type Config struct {
 }
 
 // NewConfig returns new service config with default values
-func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadFromES bool) *Config {
+func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName string, enableReadFromES bool) *Config {
 	return &Config{
 		NumHistoryShards:                       numHistoryShards,
+		ESIndexName:                            esIndexName,
 		PersistenceMaxQPS:                      dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
 		PersistenceGlobalMaxQPS:                dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
 		VisibilityMaxPageSize:                  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
@@ -144,8 +147,8 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		ESVisibilityListMaxQPS:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendESVisibilityListMaxQPS, 10),
 		ESIndexMaxResultWindow:                 dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
 		HistoryMaxPageSize:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
-		RPS:                                    dc.GetIntProperty(dynamicconfig.FrontendRPS, 1200),
-		MaxNamespaceRPSPerInstance:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 1200),
+		RPS:                                    dc.GetIntProperty(dynamicconfig.FrontendRPS, 2400),
+		MaxNamespaceRPSPerInstance:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
 		MaxNamespaceCountPerInstance:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceCountPerInstance, 1200),
 		GlobalNamespaceRPS:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceRPS, 0),
 		MaxIDLengthLimit:                       dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
@@ -157,7 +160,6 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		ShutdownDrainDuration:                  dc.GetDurationProperty(dynamicconfig.FrontendShutdownDrainDuration, 0),
 		EnableNamespaceNotActiveAutoForwarding: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableNamespaceNotActiveAutoForwarding, true),
 		EnableClientVersionCheck:               dc.GetBoolProperty(dynamicconfig.EnableClientVersionCheck, true),
-		ValidSearchAttributes:                  dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, searchattribute.GetDefaultTypeMap()),
 		SearchAttributesNumberOfKeysLimit:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
 		SearchAttributesSizeOfValueLimit:       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
 		SearchAttributesTotalSizeLimit:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
@@ -201,16 +203,20 @@ func NewService(
 ) (*Service, error) {
 
 	isAdvancedVisExistInConfig := len(params.PersistenceConfig.AdvancedVisibilityStore) != 0
-	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger), params.PersistenceConfig.NumHistoryShards, isAdvancedVisExistInConfig)
+	serviceConfig := NewConfig(
+		dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger),
+		params.PersistenceConfig.NumHistoryShards,
+		params.ESConfig.GetVisibilityIndex(),
+		isAdvancedVisExistInConfig)
 
 	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityListMaxQPS:  serviceConfig.VisibilityListMaxQPS,
-		EnableSampling:        serviceConfig.EnableVisibilitySampling,
-		ValidSearchAttributes: serviceConfig.ValidSearchAttributes,
+		VisibilityListMaxQPS: serviceConfig.VisibilityListMaxQPS,
+		EnableSampling:       serviceConfig.EnableVisibilitySampling,
 	}
 
 	visibilityManagerInitializer := func(
 		persistenceBean persistenceClient.Bean,
+		searchAttributesProvider searchattribute.Provider,
 		logger log.Logger,
 	) (persistence.VisibilityManager, error) {
 		visibilityFromDB := persistenceBean.GetVisibilityManager()
@@ -222,10 +228,9 @@ func NewService(
 				MaxQPS:                 serviceConfig.PersistenceMaxQPS,
 				VisibilityListMaxQPS:   serviceConfig.ESVisibilityListMaxQPS,
 				ESIndexMaxResultWindow: serviceConfig.ESIndexMaxResultWindow,
-				ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
 			}
 			visibilityFromES = espersistence.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
-				nil, params.MetricsClient, logger)
+				searchAttributesProvider, nil, params.MetricsClient, logger)
 		}
 		return persistence.NewVisibilityManagerWrapper(
 			visibilityFromDB,
@@ -260,20 +265,28 @@ func NewService(
 		serviceResource.GetLogger(),
 	)
 	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
-		func() float64 { return float64(serviceConfig.RPS()) },
-		APIRateLimitOverride,
+		configs.NewRequestToRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
+		map[string]int{},
 	)
 	namespaceRateLimiterInterceptor := interceptor.NewNamespaceRateLimitInterceptor(
 		serviceResource.GetNamespaceCache(),
-		func(namespace string) float64 {
-			return float64(serviceConfig.MaxNamespaceRPSPerInstance(namespace))
-		},
-		APIRateLimitOverride,
+		quotas.NewNamespaceRateLimiter(
+			func(req quotas.Request) quotas.RequestRateLimiter {
+				return configs.NewRequestToRateLimiter(func() float64 {
+					return namespaceRPS(
+						serviceConfig,
+						serviceResource.GetFrontendServiceResolver(),
+						req.Caller,
+					)
+				})
+			},
+		),
+		map[string]int{},
 	)
 	namespaceCountLimiterInterceptor := interceptor.NewNamespaceCountLimitInterceptor(
 		serviceResource.GetNamespaceCache(),
 		serviceConfig.MaxNamespaceCountPerInstance,
-		APICountLimitOverride,
+		configs.ExecutionAPICountLimitOverride,
 	)
 
 	kep := keepalive.EnforcementPolicy{
@@ -397,4 +410,33 @@ func (s *Service) Stop() {
 	}
 
 	logger.Info("frontend stopped")
+}
+
+func namespaceRPS(
+	config *Config,
+	frontendResolver membership.ServiceResolver,
+	namespace string,
+) float64 {
+	hostRPS := float64(config.MaxNamespaceRPSPerInstance(namespace))
+	globalRPS := float64(config.GlobalNamespaceRPS(namespace))
+	hosts := float64(numFrontendHosts(frontendResolver))
+
+	rps := hostRPS + globalRPS*math.Exp((1.0-hosts)/8.0)
+	return rps
+}
+
+func numFrontendHosts(
+	frontendResolver membership.ServiceResolver,
+) int {
+
+	defaultHosts := 1
+	if frontendResolver == nil {
+		return defaultHosts
+	}
+
+	ringSize := frontendResolver.MemberCount()
+	if ringSize < defaultHosts {
+		return defaultHosts
+	}
+	return ringSize
 }

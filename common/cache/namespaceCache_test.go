@@ -36,6 +36,7 @@ import (
 	"github.com/uber-go/tally"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -75,7 +76,7 @@ func (s *namespaceCacheSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
-	s.logger = log.NewDefaultLogger()
+	s.logger = log.NewTestLogger()
 	s.clusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.metadataMgr = persistence.NewMockMetadataManager(s.controller)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)

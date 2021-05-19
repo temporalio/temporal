@@ -25,7 +25,6 @@
 package searchattribute
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -104,34 +103,6 @@ func Test_GetTypeMap(t *testing.T) {
 	assert.Len(result, 0)
 }
 
-func Test_GetType(t *testing.T) {
-	assert := assert.New(t)
-	typeMap := map[string]enumspb.IndexedValueType{
-		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
-		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
-		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
-	}
-
-	ivt, err := GetType("key1", typeMap)
-	assert.NoError(err)
-	assert.Equal(enumspb.INDEXED_VALUE_TYPE_STRING, ivt)
-	ivt, err = GetType("key2", typeMap)
-	assert.NoError(err)
-	assert.Equal(enumspb.INDEXED_VALUE_TYPE_INT, ivt)
-	ivt, err = GetType("key3", typeMap)
-	assert.NoError(err)
-	assert.Equal(enumspb.INDEXED_VALUE_TYPE_BOOL, ivt)
-
-	ivt, err = GetType("key1", nil)
-	assert.Error(err)
-	assert.True(errors.Is(err, ErrTypeMapIsEmpty))
-	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
-	ivt, err = GetType("key4", typeMap)
-	assert.Error(err)
-	assert.True(errors.Is(err, ErrInvalidName))
-	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
-}
-
 func Test_ApplyTypeMap_Success(t *testing.T) {
 	assert := assert.New(t)
 
@@ -146,12 +117,12 @@ func Test_ApplyTypeMap_Success(t *testing.T) {
 		},
 	}
 
-	validSearchAttributes := map[string]enumspb.IndexedValueType{
+	validSearchAttributes := NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
 		"key2": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		"key3": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key4": enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-	}
+	}}
 
 	ApplyTypeMap(sa, validSearchAttributes)
 	assert.Equal("String", string(sa.GetIndexedFields()["key1"].Metadata["type"]))
@@ -174,19 +145,19 @@ func Test_ApplyTypeMap_Skip(t *testing.T) {
 		},
 	}
 
-	validSearchAttributes := map[string]enumspb.IndexedValueType{
+	validSearchAttributes := NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
 		"key2": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		"key3": enumspb.INDEXED_VALUE_TYPE_INT,
-	}
+	}}
 
 	ApplyTypeMap(sa, validSearchAttributes)
 	assert.Nil(sa.GetIndexedFields()["UnknownKey"].Metadata["type"])
 	assert.Equal("String", string(sa.GetIndexedFields()["key3"].Metadata["type"]))
 
-	validSearchAttributes = map[string]enumspb.IndexedValueType{
+	validSearchAttributes = NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key4": enumspb.IndexedValueType(100),
-	}
+	}}
 
 	assert.Panics(func() {
 		ApplyTypeMap(sa, validSearchAttributes)
@@ -231,6 +202,6 @@ func Test_GetESType(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		assert.Equal(test.expected, GetESType(test.input))
+		assert.Equal(test.expected, MapESType(test.input))
 	}
 }

@@ -46,29 +46,31 @@ import (
 
 type (
 	timerQueueTaskExecutorBase struct {
-		shard          shard.Context
-		historyService *historyEngineImpl
-		cache          *historyCache
-		logger         log.Logger
-		metricsClient  metrics.Client
-		config         *configs.Config
+		shard                    shard.Context
+		historyService           *historyEngineImpl
+		cache                    *historyCache
+		logger                   log.Logger
+		metricsClient            metrics.Client
+		config                   *configs.Config
+		searchAttributesProvider searchattribute.Provider
 	}
 )
 
 func newTimerQueueTaskExecutorBase(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	historyEngine *historyEngineImpl,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *configs.Config,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{
-		shard:          shard,
-		historyService: historyService,
-		cache:          historyService.historyCache,
-		logger:         logger,
-		metricsClient:  metricsClient,
-		config:         config,
+		shard:                    shard,
+		historyService:           historyEngine,
+		cache:                    historyEngine.historyCache,
+		logger:                   logger,
+		metricsClient:            metricsClient,
+		config:                   config,
+		searchAttributesProvider: shard.GetService().GetSearchAttributesProvider(),
 	}
 }
 
@@ -181,7 +183,7 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 		req.AttemptArchiveInline = true
 	}
 
-	saTypeMap, err := searchattribute.BuildTypeMap(t.config.ValidSearchAttributes)
+	saTypeMap, err := t.searchAttributesProvider.GetSearchAttributes(t.config.DefaultVisibilityIndexName, false)
 	if err != nil {
 		return err
 	}

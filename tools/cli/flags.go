@@ -140,6 +140,8 @@ const (
 	FlagVisibilityArchivalURIWithAlias   = FlagVisibilityArchivalURI + ", vuri"
 	FlagName                             = "name"
 	FlagNameWithAlias                    = FlagName + ", n"
+	FlagType                             = "type"
+	FlagTypeWithAlias                    = FlagType + ", t"
 	FlagOutputFilename                   = "output_filename"
 	FlagOutputFilenameWithAlias          = FlagOutputFilename + ", of"
 	FlagOutputFormat                     = "output"
@@ -228,6 +230,9 @@ const (
 	FlagUpperShardBound                  = "upper_shard_bound"
 	FlagInputDirectory                   = "input_directory"
 	FlagAutoConfirm                      = "auto_confirm"
+	FlagDataConverterPlugin              = "data_converter_plugin"
+	FlagDataConverterPluginWithAlias     = FlagDataConverterPlugin + ", dcp"
+	FlagWebURL                           = "web_ui_url"
 	FlagVersion                          = "version"
 
 	FlagProtoType  = "type"

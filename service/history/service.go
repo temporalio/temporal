@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 )
 
@@ -70,17 +71,18 @@ func NewService(
 		dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger),
 		params.PersistenceConfig.NumHistoryShards,
 		params.PersistenceConfig.IsAdvancedVisibilityConfigExist(),
+		params.ESConfig.GetVisibilityIndex(),
 	)
 
 	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
 		VisibilityOpenMaxQPS:   serviceConfig.VisibilityOpenMaxQPS,
 		VisibilityClosedMaxQPS: serviceConfig.VisibilityClosedMaxQPS,
 		EnableSampling:         serviceConfig.EnableVisibilitySampling,
-		ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
 	}
 
 	visibilityManagerInitializer := func(
 		persistenceBean persistenceClient.Bean,
+		searchAttributesProvider searchattribute.Provider,
 		logger log.Logger,
 	) (persistence.VisibilityManager, error) {
 		visibilityFromDB := persistenceBean.GetVisibilityManager()
@@ -96,7 +98,6 @@ func NewService(
 				ESProcessorBulkActions:   serviceConfig.ESProcessorBulkActions,
 				ESProcessorBulkSize:      serviceConfig.ESProcessorBulkSize,
 				ESProcessorFlushInterval: serviceConfig.ESProcessorFlushInterval,
-				ValidSearchAttributes:    serviceConfig.ValidSearchAttributes,
 			}
 
 			esProcessor := espersistence.NewProcessor(esProcessorConfig, params.ESClient, logger, params.MetricsClient)
@@ -104,10 +105,9 @@ func NewService(
 
 			visibilityConfigForES := &config.VisibilityConfig{
 				ESIndexMaxResultWindow: serviceConfig.ESIndexMaxResultWindow,
-				ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
 				ESProcessorAckTimeout:  serviceConfig.ESProcessorAckTimeout,
 			}
-			visibilityFromES = espersistence.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES, esProcessor, params.MetricsClient, logger)
+			visibilityFromES = espersistence.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES, searchAttributesProvider, esProcessor, params.MetricsClient, logger)
 		}
 		return persistence.NewVisibilityManagerWrapper(
 			visibilityFromDB,
@@ -136,7 +136,7 @@ func NewService(
 		logger,
 	)
 	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
-		func() float64 { return float64(serviceConfig.RPS()) },
+		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
 		map[string]int{},
 	)
 
@@ -170,7 +170,7 @@ func (s *Service) Start() {
 		return
 	}
 
-	// TODO remove this dynamic flag in 1.11.x
+	// TODO remove this dynamic flag in 1.12.x
 	migration.SetDBVersionFlag(s.config.EnableDBRecordVersion())
 
 	logger := s.GetLogger()

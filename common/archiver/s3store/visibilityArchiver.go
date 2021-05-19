@@ -32,8 +32,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/searchattribute"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/archiver"
@@ -167,7 +167,7 @@ func (v *visibilityArchiver) Query(
 	ctx context.Context,
 	URI archiver.URI,
 	request *archiver.QueryVisibilityRequest,
-	saTypeMap map[string]enumspb.IndexedValueType,
+	saTypeMap searchattribute.NameTypeMap,
 ) (*archiver.QueryVisibilityResponse, error) {
 
 	if err := softValidateURI(URI); err != nil {
@@ -200,7 +200,7 @@ func (v *visibilityArchiver) query(
 	ctx context.Context,
 	URI archiver.URI,
 	request *queryVisibilityRequest,
-	saTypeMap map[string]enumspb.IndexedValueType,
+	saTypeMap searchattribute.NameTypeMap,
 ) (*archiver.QueryVisibilityResponse, error) {
 	ctx, cancel := ensureContextTimeout(ctx)
 	defer cancel()

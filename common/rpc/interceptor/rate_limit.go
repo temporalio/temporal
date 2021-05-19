@@ -44,7 +44,7 @@ var (
 
 type (
 	RateLimitInterceptor struct {
-		rateLimiter quotas.RateLimiter
+		rateLimiter quotas.RequestRateLimiter
 		tokens      map[string]int
 	}
 )
@@ -52,11 +52,11 @@ type (
 var _ grpc.UnaryServerInterceptor = (*RateLimitInterceptor)(nil).Intercept
 
 func NewRateLimitInterceptor(
-	rate quotas.RateFn,
+	rateLimiter quotas.RequestRateLimiter,
 	tokens map[string]int,
 ) *RateLimitInterceptor {
 	return &RateLimitInterceptor{
-		rateLimiter: quotas.NewDefaultIncomingDynamicRateLimiter(rate),
+		rateLimiter: rateLimiter,
 		tokens:      tokens,
 	}
 }
@@ -73,7 +73,11 @@ func (i *RateLimitInterceptor) Intercept(
 		token = RateLimitDefaultToken
 	}
 
-	if !i.rateLimiter.AllowN(time.Now().UTC(), token) {
+	if !i.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
+		methodName,
+		token,
+		"", // this interceptor layer does not throttle based on caller
+	)) {
 		return nil, RateLimitServerBusy
 	}
 	return handler(ctx, req)

@@ -29,15 +29,17 @@ import "github.com/urfave/cli"
 func newClusterCommands() []cli.Command {
 	return []cli.Command{
 		{
-			Name:  "health",
-			Usage: "check health of frontend service.",
+			Name:    "health",
+			Aliases: []string{"h"},
+			Usage:   "Check health of frontend service",
 			Action: func(c *cli.Context) {
 				HealthCheck(c)
 			},
 		},
 		{
-			Name:  "get-search-attr",
-			Usage: "get list of legal search attributes that can be used in list workflow query.",
+			Name:    "get-search-attributes",
+			Usage:   "List search attributes that can be used in list workflow query",
+			Aliases: []string{"gsa"},
 			Action: func(c *cli.Context) {
 				GetSearchAttributes(c)
 			},

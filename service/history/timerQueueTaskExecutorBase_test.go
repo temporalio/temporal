@@ -31,6 +31,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/searchattribute"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -53,12 +54,13 @@ type (
 		mockWorkflowExecutionContext *MockworkflowExecutionContext
 		mockMutableState             *MockmutableState
 
-		mockExecutionManager  *persistence.MockExecutionManager
-		mockVisibilityManager *persistence.MockVisibilityManager
-		mockHistoryMgr        *persistence.MockHistoryManager
-		mockArchivalClient    *archiver.MockClient
-		mockNamespaceCache    *cache.MockNamespaceCache
-		mockClusterMetadata   *cluster.MockMetadata
+		mockExecutionManager         *persistence.MockExecutionManager
+		mockVisibilityManager        *persistence.MockVisibilityManager
+		mockHistoryMgr               *persistence.MockHistoryManager
+		mockArchivalClient           *archiver.MockClient
+		mockNamespaceCache           *cache.MockNamespaceCache
+		mockClusterMetadata          *cluster.MockMetadata
+		mockSearchAttributesProvider *searchattribute.MockProvider
 
 		timerQueueTaskExecutorBase *timerQueueTaskExecutorBase
 	}
@@ -104,16 +106,18 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 	s.mockArchivalClient = archiver.NewMockClient(s.controller)
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
+	s.mockSearchAttributesProvider = s.mockShard.Resource.SearchAttributesProvider
 
 	logger := s.mockShard.GetLogger()
 
 	h := &historyEngineImpl{
-		shard:          s.mockShard,
-		logger:         logger,
-		metricsClient:  s.mockShard.GetMetricsClient(),
-		visibilityMgr:  s.mockVisibilityManager,
-		historyV2Mgr:   s.mockHistoryMgr,
-		archivalClient: s.mockArchivalClient,
+		shard:           s.mockShard,
+		logger:          logger,
+		metricsClient:   s.mockShard.GetMetricsClient(),
+		visibilityMgr:   s.mockVisibilityManager,
+		historyV2Mgr:    s.mockHistoryMgr,
+		archivalClient:  s.mockArchivalClient,
+		clusterMetadata: s.mockClusterMetadata,
 	}
 
 	s.timerQueueTaskExecutorBase = newTimerQueueTaskExecutorBase(
@@ -180,6 +184,8 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchiva
 			HistoryArchivedInline: false,
 		}, nil)
 
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
+
 	namespaceCacheEntry := cache.NewNamespaceCacheEntryForTest(&persistencespb.NamespaceInfo{}, &persistencespb.NamespaceConfig{}, false, nil, 0, nil)
 	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceCacheEntry)
@@ -197,6 +203,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_SendSignalErr() {
 
 	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), archiverClientRequestMatcher{inline: false}).
 		Return(nil, errors.New("failed to send signal"))
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
 
 	namespaceCacheEntry := cache.NewNamespaceCacheEntryForTest(&persistencespb.NamespaceInfo{}, &persistencespb.NamespaceConfig{}, false, nil, 0, nil)
 	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistencespb.TimerTaskInfo{

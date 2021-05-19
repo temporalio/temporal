@@ -58,7 +58,7 @@ type clientFactory struct {
 
 // NewClientFactory creates a new ClientFactory
 func NewClientFactory() ClientFactory {
-	logger := log.NewDefaultLogger()
+	logger := log.NewCLILogger()
 
 	return &clientFactory{
 		logger: logger,

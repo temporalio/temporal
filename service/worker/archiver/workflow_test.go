@@ -158,7 +158,7 @@ func (s *workflowSuite) TestArchivalWorkflow_Success() {
 }
 
 func (s *workflowSuite) TestReplayArchiveHistoryWorkflow() {
-	logger := log.NewDefaultLogger()
+	logger := log.NewTestLogger()
 	globalLogger = workflowTestLogger
 	globalMetricsClient = metrics.NewClient(tally.NewTestScope("replay", nil), metrics.Worker)
 	globalConfig = &Config{
