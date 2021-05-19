@@ -152,7 +152,8 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	s.Equal(previousRunID, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId())
 	s.Equal(header, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
 	s.Equal(memo, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Memo)
-	s.Equal(searchAttr, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().SearchAttributes)
+	s.Equal(searchAttr.GetIndexedFields()["CustomKeywordField"].GetData(), lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["CustomKeywordField"].GetData())
+	s.Equal([]byte("Keyword"), lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["CustomKeywordField"].GetMetadata()["type"])
 }
 
 func (s *integrationSuite) TestContinueAsNewRun_Timeout() {
