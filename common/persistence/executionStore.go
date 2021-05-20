@@ -164,6 +164,7 @@ func (m *executionManagerImpl) DeserializeExecutionInfo(
 		VersionHistories:                  info.VersionHistories,
 		WorkflowRunExpirationTime:         info.WorkflowRunExpirationTime,
 		WorkflowExecutionExpirationTime:   info.WorkflowExecutionExpirationTime,
+		LastFirstEventTxnId:               info.LastFirstEventTxnId,
 	}
 
 	if newInfo.AutoResetPoints == nil {
@@ -279,6 +280,7 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		SearchAttributes:                  info.SearchAttributes,
 		WorkflowRunExpirationTime:         info.WorkflowRunExpirationTime,
 		WorkflowExecutionExpirationTime:   info.WorkflowExecutionExpirationTime,
+		LastFirstEventTxnId:               info.LastFirstEventTxnId,
 
 		ExecutionStats:   info.ExecutionStats,
 		VersionHistories: info.VersionHistories,
