@@ -27,8 +27,6 @@ package temporal
 import (
 	"net/http"
 
-	"github.com/uber-go/tally"
-
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -96,8 +94,11 @@ func WithClaimMapper(claimMapper func(cfg *config.Config) authorization.ClaimMap
 	})
 }
 
-// Set custom tally metric reporter
-func WithCustomMetricsReporter(reporter tally.BaseStatsReporter) ServerOption {
+// Set custom metric reporter
+// for (deprecated) Tally it should be tally.BaseStatsReporter
+// for Prometheus with framework metrics.FrameworkCustom it should be metrics.Reporter
+// not used otherwise
+func WithCustomMetricsReporter(reporter interface{}) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.metricsReporter = reporter
 	})

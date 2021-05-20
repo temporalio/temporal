@@ -28,8 +28,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/uber-go/tally"
-
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -54,7 +52,7 @@ type (
 		authorizer                 authorization.Authorizer
 		tlsConfigProvider          encryption.TLSConfigProvider
 		claimMapper                authorization.ClaimMapper
-		metricsReporter            tally.BaseStatsReporter
+		metricsReporter            interface{}
 		persistenceServiceResolver resolver.ServiceResolver
 		elasticseachHttpClient     *http.Client
 		dynamicConfigClient        dynamicconfig.Client

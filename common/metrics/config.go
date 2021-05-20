@@ -130,6 +130,8 @@ const (
 	FrameworkTally = "tally"
 	// FrameworkOpentelemetry OpenTelemetry framework id
 	FrameworkOpentelemetry = "opentelemetry"
+	// FrameworkCustom Custom framework id
+	FrameworkCustom = "custom"
 )
 
 // tally sanitizer options that satisfy both Prometheus and M3 restrictions.
@@ -193,7 +195,6 @@ var (
 //
 // returns SeverReporter, SDKReporter, error
 func (c *Config) InitMetricReporters(logger log.Logger, customReporter interface{}) (Reporter, Reporter, error) {
-
 	if c.Prometheus != nil && len(c.Prometheus.Framework) > 0 {
 		return c.initReportersFromPrometheusConfig(logger, customReporter)
 	}
@@ -233,12 +234,26 @@ func (c *Config) initReportersFromPrometheusConfig(logger log.Logger, customRepo
 	return serverReporter, sdkReporter, nil
 }
 
-func (c *Config) initReporterFromPrometheusConfig(logger log.Logger, config *PrometheusConfig, extensionPoint interface{}) (Reporter, error) {
+func (c *Config) initReporterFromPrometheusConfig(logger log.Logger, config *PrometheusConfig, customReporter interface{}) (Reporter, error) {
 	switch config.Framework {
 	case FrameworkTally:
 		return c.newTallyReporterByPrometheusConfig(logger, config), nil
 	case FrameworkOpentelemetry:
 		return newOpentelemeteryReporter(logger, c.Tags, c.Prefix, config)
+	case FrameworkCustom:
+		if customReporter == nil {
+			err := fmt.Errorf("customReporter is not provided when %s framework type is specified", FrameworkCustom)
+			logger.Error(err.Error())
+			return nil, err
+		}
+		if cReporter, ok := customReporter.(Reporter); ok {
+			return cReporter, nil
+		} else {
+			err := fmt.Errorf("customReporter is not of metrics.Reporter type when %s framework type is specified",
+				FrameworkCustom)
+			logger.Error(err.Error())
+			return nil, err
+		}
 	default:
 		err := fmt.Errorf("unsupported framework type specified in config: %q", config.Framework)
 		logger.Error(err.Error())
