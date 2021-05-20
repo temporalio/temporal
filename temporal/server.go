@@ -32,7 +32,6 @@ import (
 
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
-	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -437,14 +436,7 @@ func copyCustomSearchAttributesFromDynamicConfigToClusterMetadata(
 		logger.Debug("Advanced visibility Elasticsearch index is not configured. Search attributes migration will use empty string as index name.")
 	}
 
-	defaultTypeMap := map[string]interface{}{
-		"CustomStringField":   enumspb.INDEXED_VALUE_TYPE_STRING,
-		"CustomKeywordField":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		"CustomIntField":      enumspb.INDEXED_VALUE_TYPE_INT,
-		"CustomDoubleField":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-		"CustomBoolField":     enumspb.INDEXED_VALUE_TYPE_BOOL,
-		"CustomDatetimeField": enumspb.INDEXED_VALUE_TYPE_DATETIME,
-	}
+	defaultTypeMap := map[string]interface{}{}
 
 	dcSearchAttributes, err := searchattribute.BuildTypeMap(dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, defaultTypeMap))
 	if err != nil {
