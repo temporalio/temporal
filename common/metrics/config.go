@@ -34,7 +34,6 @@ import (
 	"github.com/uber-go/tally/m3"
 	"github.com/uber-go/tally/prometheus"
 	tallystatsdreporter "github.com/uber-go/tally/statsd"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	statsdreporter "go.temporal.io/server/common/metrics/tally/statsd"
@@ -126,12 +125,11 @@ const (
 	ms = float64(time.Millisecond) / float64(time.Second)
 
 	// Supported framework types
+
 	// FrameworkTally tally framework id
 	FrameworkTally = "tally"
 	// FrameworkOpentelemetry OpenTelemetry framework id
 	FrameworkOpentelemetry = "opentelemetry"
-	// FrameworkCustom Custom framework id
-	FrameworkCustom = "custom"
 )
 
 // tally sanitizer options that satisfy both Prometheus and M3 restrictions.
@@ -195,38 +193,37 @@ var (
 //
 // returns SeverReporter, SDKReporter, error
 func (c *Config) InitMetricReporters(logger log.Logger, customReporter interface{}) (Reporter, Reporter, error) {
-	if c.Prometheus != nil && len(c.Prometheus.Framework) > 0 {
-		return c.initReportersFromPrometheusConfig(logger, customReporter)
+	if customReporter == nil {
+		if c.Prometheus != nil && len(c.Prometheus.Framework) > 0 {
+			return c.initReportersFromPrometheusConfig(logger, customReporter)
+		}
+
+		scope := c.NewScope(logger)
+		reporter := newTallyReporter(scope)
+		return reporter, reporter, nil
 	}
 
-	var scope tally.Scope
-	if customReporter != nil {
-		if tallyCustomReporter, ok := customReporter.(tally.BaseStatsReporter); ok {
-			scope = c.NewCustomReporterScope(logger, tallyCustomReporter)
-		} else {
-			return nil, nil, fmt.Errorf(
-				"specified customReporter is not of expected type tally.BaseStatsReporter "+
-					"as expected for metrics framework %q", FrameworkTally,
-			)
-		}
-	} else {
-		scope = c.NewScope(logger)
+	switch cReporter := customReporter.(type) {
+	case tally.BaseStatsReporter:
+		scope := c.NewCustomReporterScope(logger, cReporter)
+		reporter := newTallyReporter(scope)
+		return reporter, reporter, nil
+	case Reporter:
+		return cReporter, cReporter, nil
+	default:
+		return nil, nil, fmt.Errorf(
+			"specified customReporter does not implement tally.BaseStatsReporter or metrics.Reporter")
 	}
-	reporter := newTallyReporter(scope)
-	return reporter, reporter, nil
 }
 
 func (c *Config) initReportersFromPrometheusConfig(logger log.Logger, customReporter interface{}) (Reporter, Reporter, error) {
-	if customReporter != nil {
-		logger.Fatal("Metrics extension point is not implemented.")
-	}
-	serverReporter, err := c.initReporterFromPrometheusConfig(logger, c.Prometheus, customReporter)
+	serverReporter, err := c.initReporterFromPrometheusConfig(logger, c.Prometheus)
 	if err != nil {
 		return nil, nil, err
 	}
 	sdkReporter := serverReporter
 	if c.PrometheusSDK != nil {
-		sdkReporter, err = c.initReporterFromPrometheusConfig(logger, c.PrometheusSDK, customReporter)
+		sdkReporter, err = c.initReporterFromPrometheusConfig(logger, c.PrometheusSDK)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -234,26 +231,12 @@ func (c *Config) initReportersFromPrometheusConfig(logger log.Logger, customRepo
 	return serverReporter, sdkReporter, nil
 }
 
-func (c *Config) initReporterFromPrometheusConfig(logger log.Logger, config *PrometheusConfig, customReporter interface{}) (Reporter, error) {
+func (c *Config) initReporterFromPrometheusConfig(logger log.Logger, config *PrometheusConfig) (Reporter, error) {
 	switch config.Framework {
 	case FrameworkTally:
 		return c.newTallyReporterByPrometheusConfig(logger, config), nil
 	case FrameworkOpentelemetry:
 		return newOpentelemeteryReporter(logger, c.Tags, c.Prefix, config)
-	case FrameworkCustom:
-		if customReporter == nil {
-			err := fmt.Errorf("customReporter is not provided when %s framework type is specified", FrameworkCustom)
-			logger.Error(err.Error())
-			return nil, err
-		}
-		if cReporter, ok := customReporter.(Reporter); ok {
-			return cReporter, nil
-		} else {
-			err := fmt.Errorf("customReporter is not of metrics.Reporter type when %s framework type is specified",
-				FrameworkCustom)
-			logger.Error(err.Error())
-			return nil, err
-		}
 	default:
 		err := fmt.Errorf("unsupported framework type specified in config: %q", config.Framework)
 		logger.Error(err.Error())
