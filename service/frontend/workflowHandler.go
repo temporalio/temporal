@@ -3117,9 +3117,39 @@ func (wh *WorkflowHandler) getHistory(
 		historyEvents = append(historyEvents, transientWorkflowTaskInfo.ScheduledEvent, transientWorkflowTaskInfo.StartedEvent)
 	}
 
-	executionHistory := &historypb.History{}
-	executionHistory.Events = historyEvents
+	if err := wh.applySearchAttributesTypeMap(historyEvents); err != nil {
+		return nil, nil, err
+	}
+
+	executionHistory := &historypb.History{
+		Events: historyEvents,
+	}
 	return executionHistory, nextPageToken, nil
+}
+
+func (wh *WorkflowHandler) applySearchAttributesTypeMap(events []*historypb.HistoryEvent) error {
+	saTypeMap, err := wh.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
+	if err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+	}
+	for _, event := range events {
+		var searchAttributes *commonpb.SearchAttributes
+		switch event.EventType {
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
+			searchAttributes = event.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes()
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
+			searchAttributes = event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetSearchAttributes()
+		case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
+			searchAttributes = event.GetStartChildWorkflowExecutionInitiatedEventAttributes().GetSearchAttributes()
+		case enumspb.EVENT_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+			searchAttributes = event.GetUpsertWorkflowSearchAttributesEventAttributes().GetSearchAttributes()
+		}
+		if searchAttributes != nil {
+			searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
+		}
+	}
+
+	return nil
 }
 
 func (wh *WorkflowHandler) validateTransientWorkflowTaskEvents(

@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute"
 
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -1051,7 +1052,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 func (s *workflowHandlerSuite) TestGetHistory() {
 	namespaceID := uuid.New()
 	firstEventID := int64(100)
-	nextEventID := int64(101)
+	nextEventID := int64(102)
 	branchToken := []byte{1}
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wid",
@@ -1062,19 +1063,35 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
-		PageSize:      1,
+		PageSize:      2,
 		NextPageToken: []byte{},
 		ShardID:       shardID,
 	}
 	s.mockHistoryMgr.EXPECT().ReadHistoryBranch(req).Return(&persistence.ReadHistoryBranchResponse{
 		HistoryEvents: []*historypb.HistoryEvent{
 			{
-				EventId: int64(100),
+				EventId:   int64(100),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			},
+			{
+				EventId:   int64(101),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+						SearchAttributes: &commonpb.SearchAttributes{
+							IndexedFields: map[string]*commonpb.Payload{
+								"CustomKeywordField": payload.EncodeString("random-keyword"),
+							},
+						},
+					},
+				},
 			},
 		},
 		NextPageToken: []byte{},
 		Size:          1,
 	}, nil)
+
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1084,7 +1101,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		we,
 		firstEventID,
 		nextEventID,
-		1,
+		2,
 		[]byte{},
 		nil,
 		branchToken,
@@ -1092,6 +1109,9 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	s.NoError(err)
 	s.NotNil(history)
 	s.Equal([]byte{}, token)
+
+	s.Equal([]byte("Keyword"),
+		history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["CustomKeywordField"].GetMetadata()["type"])
 }
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidRequest() {
