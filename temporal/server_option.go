@@ -98,7 +98,7 @@ func WithClaimMapper(claimMapper func(cfg *config.Config) authorization.ClaimMap
 // for (deprecated) Tally it should be tally.BaseStatsReporter
 // for Prometheus with framework metrics.FrameworkCustom it should be metrics.Reporter
 // not used otherwise
-// TODO: replace with metricsReporter once tally is deprecated.
+// TODO: replace argument type with metrics.Reporter once tally is deprecated.
 func WithCustomMetricsReporter(reporter interface{}) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.metricsReporter = reporter
