@@ -46,7 +46,7 @@ ES_VERSION="${ES_VERSION:-v6}"
 ES_VIS_INDEX="${ES_VIS_INDEX:-temporal-visibility-dev}"
 ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS="${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS:-0}"
 
-# Post setup
+# Server setup
 TEMPORAL_CLI_ADDRESS="${TEMPORAL_CLI_ADDRESS:-}"
 
 SKIP_DEFAULT_NAMESPACE_CREATION="${SKIP_DEFAULT_NAMESPACE_CREATION:-false}"
@@ -240,7 +240,7 @@ setup_es_template() {
     curl --user "${ES_USER}":"${ES_PWD}" -X PUT "${INDEX_URL}" --write-out "\n"
 }
 
-# === Post setup ===
+# === Server setup ===
 
 register_default_namespace() {
     echo "Registering default namespace: ${DEFAULT_NAMESPACE}."
