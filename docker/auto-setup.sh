@@ -262,8 +262,9 @@ add_custom_search_attributes() {
         --name CustomBoolField --type Bool
 }
 
-run_post_setup(){
+setup_server(){
     echo "Temporal CLI address: ${TEMPORAL_CLI_ADDRESS}."
+
     until tctl cluster health | grep SERVING; do
         echo "Waiting for Temporal server to start..."
         sleep 1
@@ -294,5 +295,5 @@ if [ "${ENABLE_ES}" == true ]; then
 fi
 
 # Run this func in parallel process. It will wait for server to start and then run required steps.
-run_post_setup &
+setup_server &
 
