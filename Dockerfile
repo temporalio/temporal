@@ -18,33 +18,34 @@ WORKDIR /etc/temporal
 ENV TEMPORAL_HOME /etc/temporal
 ENV SERVICES "history:matching:frontend:worker"
 EXPOSE 6933 6934 6935 6939 7233 7234 7235 7239
-ENTRYPOINT ["/entrypoint.sh"]
-CMD /start.sh
+ENTRYPOINT ["./entrypoint.sh"]
 
-COPY docker/entrypoint.sh /entrypoint.sh
 COPY config/dynamicconfig /etc/temporal/config/dynamicconfig
 COPY docker/config_template.yaml /etc/temporal/config/config_template.yaml
-COPY docker/start-temporal.sh /start-temporal.sh
-COPY docker/start.sh /start.sh
+COPY docker/entrypoint.sh /etc/temporal/entrypoint.sh
+COPY docker/start-temporal.sh /etc/temporal/start-temporal.sh
 
-COPY --from=temporal-builder /temporal/schema /etc/temporal/schema
-COPY --from=temporal-builder /temporal/temporal-cassandra-tool /usr/local/bin
-COPY --from=temporal-builder /temporal/temporal-sql-tool /usr/local/bin
 COPY --from=temporal-builder /temporal/tctl /usr/local/bin
 COPY --from=temporal-builder /temporal/temporal-server /usr/local/bin
 
 ##### Auto setup Temporal server #####
 FROM temporal-server AS temporal-auto-setup
-CMD /start.sh autosetup
+CMD ["autosetup"]
 
-##### Debug configuration for Temporal with additional set of tools #####
-FROM temporal-server as temporal-debug
+COPY docker/auto-setup.sh /etc/temporal/auto-setup.sh
+
+COPY --from=temporal-builder /temporal/schema /etc/temporal/schema
+COPY --from=temporal-builder /temporal/temporal-cassandra-tool /usr/local/bin
+COPY --from=temporal-builder /temporal/temporal-sql-tool /usr/local/bin
+
+##### Development configuration for Temporal with additional set of tools #####
+FROM temporal-auto-setup as temporal-develop
 # iproute2 contains tc, which can be used for traffic shaping in resiliancy testing. 
 RUN apk add iproute2
-# Add debug configuration file.
-COPY docker/debug-configure.sh /debug-configure.sh
-# Run configuration script before the service startup.
-CMD /debug-configure.sh && /start.sh autosetup
+
+CMD ["autosetup", "develop"]
+
+COPY docker/setup-develop.sh /etc/temporal/setup-develop.sh
 
 ##### Temporal CLI (tctl) #####
 FROM temporalio/base-server:1.0.0 AS temporal-tctl

@@ -4756,7 +4756,50 @@ func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest() {
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(&persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil)
+
+	err = s.mockHistoryEngine.SignalWorkflowExecution(context.Background(), signalRequest)
+	s.Nil(err)
+}
+
+// Test signal workflow task by dedup request ID & workflow finished
+func (s *engineSuite) TestSignalWorkflowExecution_DuplicateRequest_Completed() {
+	signalRequest := &historyservice.SignalWorkflowExecutionRequest{}
+	err := s.mockHistoryEngine.SignalWorkflowExecution(context.Background(), signalRequest)
+	s.EqualError(err, "Missing namespace UUID.")
+
+	we := commonpb.WorkflowExecution{
+		WorkflowId: "wId2",
+		RunId:      testRunID,
+	}
+	taskqueue := "testTaskQueue"
+	identity := "testIdentity"
+	signalName := "my signal name 2"
+	input := payloads.EncodeString("test input 2")
+	requestID := uuid.New()
+	signalRequest = &historyservice.SignalWorkflowExecutionRequest{
+		NamespaceId: testNamespaceID,
+		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+			Namespace:         testNamespaceID,
+			WorkflowExecution: &we,
+			Identity:          identity,
+			SignalName:        signalName,
+			Input:             input,
+			RequestId:         requestID,
+		},
+	}
+
+	msBuilder := newMutableStateBuilderWithEventV2(s.mockHistoryEngine.shard, s.eventsCache,
+		log.NewTestLogger(), we.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowTaskScheduledEvent(msBuilder)
+	ms := createMutableState(msBuilder)
+	// assume duplicate request id
+	ms.SignalRequestedIds = []string{requestID}
+	ms.ExecutionInfo.NamespaceId = testNamespaceID
+	ms.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
 
 	err = s.mockHistoryEngine.SignalWorkflowExecution(context.Background(), signalRequest)
 	s.Nil(err)
