@@ -41,7 +41,7 @@ COPY --from=temporal-builder /temporal/temporal-sql-tool /usr/local/bin
 ##### Development configuration for Temporal with additional set of tools #####
 FROM temporal-auto-setup as temporal-develop
 # iproute2 contains tc, which can be used for traffic shaping in resiliancy testing. 
-RUN apk add iproute2
+ONBUILD RUN apk add iproute2
 
 CMD ["autosetup", "develop"]
 
