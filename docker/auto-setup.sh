@@ -40,6 +40,8 @@ ENABLE_ES="${ENABLE_ES:-false}"
 ES_SCHEME="${ES_SCHEME:-http}"
 ES_SEEDS="${ES_SEEDS:-}"
 ES_PORT="${ES_PORT:-9200}"
+ES_USER="${ES_USER:-}"
+ES_PWD="${ES_PWD:-}"
 ES_VERSION="${ES_VERSION:-v6}"
 ES_VIS_INDEX="${ES_VIS_INDEX:-temporal-visibility-dev}"
 ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS="${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS:-0}"
@@ -211,7 +213,7 @@ wait_for_es() {
     ES_SERVER=$(echo "${ES_SEEDS}" | awk -F ',' '{print $1}')
     URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}"
 
-    until curl -s "${URL}" > /dev/null 2>&1; do
+    until curl --silent --fail --user "${ES_USER}":"${ES_PWD}" "${URL}" > /dev/null 2>&1; do
         DURATION=${SECONDS}
 
         if [ "${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS}" -gt 0 ] && [ ${DURATION} -ge "${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS}" ]; then
@@ -229,10 +231,10 @@ wait_for_es() {
 setup_es_template() {
     SCHEMA_FILE=${TEMPORAL_HOME}/schema/elasticsearch/${ES_VERSION}/visibility/index_template.json
     ES_SERVER=$(echo "${ES_SEEDS}" | awk -F ',' '{print $1}')
-    URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/_template/temporal-visibility-template"
-    curl -X PUT "${URL}" -H 'Content-Type: application/json' --data-binary "@${SCHEMA_FILE}"
-    URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/${ES_VIS_INDEX}"
-    curl -X PUT "${URL}"
+    TEMPLATE_URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/_template/temporal-visibility-template"
+    INDEX_URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/${ES_VIS_INDEX}"
+    curl --user "${ES_USER}":"${ES_PWD}" -X PUT "${TEMPLATE_URL}" -H 'Content-Type: application/json' --data-binary "@${SCHEMA_FILE}" --write-out "\n"
+    curl --user "${ES_USER}":"${ES_PWD}" -X PUT "${INDEX_URL}" --write-out "\n"
 }
 
 # === Default namespace functions ===
