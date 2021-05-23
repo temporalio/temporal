@@ -247,19 +247,25 @@ register_default_namespace() {
     if ! tctl --ns "${DEFAULT_NAMESPACE}" namespace describe; then
         echo "Default namespace ${DEFAULT_NAMESPACE} not found. Creating..."
         tctl --ns "${DEFAULT_NAMESPACE}" namespace register --rd "${DEFAULT_NAMESPACE_RETENTION}" --desc "Default namespace for Temporal Server."
+        echo "Default namespace ${DEFAULT_NAMESPACE} registration complete."
+    else
+        echo "Default namespace ${DEFAULT_NAMESPACE} already registered."
     fi
-    echo "Default namespace registration complete."
 }
 
 add_custom_search_attributes() {
-    echo "Adding Custom*Field search attributes."
-    tctl --auto_confirm admin cluster add-search-attributes \
-        --name CustomKeywordField --type Keyword \
-        --name CustomStringField --type String \
-        --name CustomIntField --type Int \
-        --name CustomDatetimeField --type Datetime \
-        --name CustomDoubleField --type Double \
-        --name CustomBoolField --type Bool
+    if ! tctl cluster get-search-attributes | grep CustomKeywordField; then
+        echo "Adding Custom*Field search attributes."
+        tctl --auto_confirm admin cluster add-search-attributes \
+            --name CustomKeywordField --type Keyword \
+            --name CustomStringField --type String \
+            --name CustomIntField --type Int \
+            --name CustomDatetimeField --type Datetime \
+            --name CustomDoubleField --type Double \
+            --name CustomBoolField --type Bool
+    else
+        echo "CustomKeywordField search attribute already exist. Skip search attributes creation."
+    fi
 }
 
 setup_server(){
