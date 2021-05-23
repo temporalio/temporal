@@ -2,7 +2,7 @@ ARG TARGET=server
 ARG GOPROXY
 
 ##### Temporal builder #####
-FROM temporalio/base-builder:1.0.0 AS temporal-builder
+FROM temporalio/base-builder:1.2.0 AS temporal-builder
 
 WORKDIR /temporal
 

@@ -1,16 +1,16 @@
-#!/bin/bash
+#!/bin/sh
 
-set -ex
+set -eu
 
 git fetch origin master
 MASTER_SHA=$(git rev-parse origin/master)
 
-if [ "$BUILDKITE_COMMIT" != "$MASTER_SHA" ]; then
-    echo "Skipping docker-push for this commit since tip of master is already ahead"
+if [ "${BUILDKITE_COMMIT}" != "${MASTER_SHA}" ]; then
+    echo "Skipping docker-push for this commit since tip of master is already ahead."
     exit 0
 fi
 
-echo "Building docker image for $BUILDKITE_MESSAGE ($BUILDKITE_COMMIT)"
+echo "Building docker image for ${BUILDKITE_MESSAGE} (${BUILDKITE_COMMIT})"
 
 docker build . -t temporalio/server:latest --build-arg TARGET=server
 docker push temporalio/server:latest
