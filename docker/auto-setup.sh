@@ -46,11 +46,14 @@ ES_VERSION="${ES_VERSION:-v6}"
 ES_VIS_INDEX="${ES_VIS_INDEX:-temporal-visibility-dev}"
 ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS="${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS:-0}"
 
-# Default namespace
+# Server setup
 TEMPORAL_CLI_ADDRESS="${TEMPORAL_CLI_ADDRESS:-}"
+
 SKIP_DEFAULT_NAMESPACE_CREATION="${SKIP_DEFAULT_NAMESPACE_CREATION:-false}"
 DEFAULT_NAMESPACE="${DEFAULT_NAMESPACE:-default}"
 DEFAULT_NAMESPACE_RETENTION=${DEFAULT_NAMESPACE_RETENTION:-1}
+
+SKIP_ADD_CUSTOM_SEARCH_ATTRIBUTES="${SKIP_ADD_CUSTOM_SEARCH_ATTRIBUTES:-false}"
 
 # === Main database functions ===
 
@@ -237,18 +240,50 @@ setup_es_template() {
     curl --user "${ES_USER}":"${ES_PWD}" -X PUT "${INDEX_URL}" --write-out "\n"
 }
 
-# === Default namespace functions ===
+# === Server setup ===
 
 register_default_namespace() {
-    echo "Temporal CLI address: ${TEMPORAL_CLI_ADDRESS}."
-    sleep 5
     echo "Registering default namespace: ${DEFAULT_NAMESPACE}."
-    until tctl --ns "${DEFAULT_NAMESPACE}" namespace describe; do
+    if ! tctl --ns "${DEFAULT_NAMESPACE}" namespace describe; then
         echo "Default namespace ${DEFAULT_NAMESPACE} not found. Creating..."
-        sleep 1
         tctl --ns "${DEFAULT_NAMESPACE}" namespace register --rd "${DEFAULT_NAMESPACE_RETENTION}" --desc "Default namespace for Temporal Server."
+        echo "Default namespace ${DEFAULT_NAMESPACE} registration complete."
+    else
+        echo "Default namespace ${DEFAULT_NAMESPACE} already registered."
+    fi
+}
+
+add_custom_search_attributes() {
+    if ! tctl cluster get-search-attributes | grep CustomKeywordField; then
+        echo "Adding Custom*Field search attributes."
+        tctl --auto_confirm admin cluster add-search-attributes \
+            --name CustomKeywordField --type Keyword \
+            --name CustomStringField --type String \
+            --name CustomIntField --type Int \
+            --name CustomDatetimeField --type Datetime \
+            --name CustomDoubleField --type Double \
+            --name CustomBoolField --type Bool
+    else
+        echo "CustomKeywordField search attribute already exist. Skip search attributes creation."
+    fi
+}
+
+setup_server(){
+    echo "Temporal CLI address: ${TEMPORAL_CLI_ADDRESS}."
+
+    until tctl cluster health | grep SERVING; do
+        echo "Waiting for Temporal server to start..."
+        sleep 1
     done
-    echo "Default namespace registration complete."
+    echo "Temporal server started."
+
+    if [ "${SKIP_DEFAULT_NAMESPACE_CREATION}" != true ]; then
+        register_default_namespace
+    fi
+
+    if [ "${SKIP_ADD_CUSTOM_SEARCH_ATTRIBUTES}" != true ]; then
+        add_custom_search_attributes
+    fi
 }
 
 # === Main ===
@@ -265,6 +300,6 @@ if [ "${ENABLE_ES}" == true ]; then
     setup_es_template
 fi
 
-if [ "${SKIP_DEFAULT_NAMESPACE_CREATION}" != true ]; then
-    register_default_namespace &
-fi
+# Run this func in parallel process. It will wait for server to start and then run required steps.
+setup_server &
+
