@@ -168,7 +168,7 @@ func (q *sqlQueue) UpdateAckLevel(
 		}
 
 		// Ignore possibly delayed message
-		if queueMetadata.ClusterAckLevels[clusterName] > messageID {
+		if ack, ok := queueMetadata.ClusterAckLevels[clusterName]; ok && ack > messageID {
 			return nil
 		}
 		queueMetadata.ClusterAckLevels[clusterName] = messageID
@@ -353,7 +353,7 @@ func (q *sqlQueue) UpdateDLQAckLevel(
 		}
 
 		// Ignore possibly delayed message
-		if queueMetadata.ClusterAckLevels[clusterName] > messageID {
+		if ack, ok := queueMetadata.ClusterAckLevels[clusterName]; ok && ack > messageID {
 			return nil
 		}
 		queueMetadata.ClusterAckLevels[clusterName] = messageID

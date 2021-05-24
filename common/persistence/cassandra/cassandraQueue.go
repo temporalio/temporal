@@ -373,11 +373,11 @@ func (q *cassandraQueue) updateAckLevel(
 
 	queueMetadata, err := q.getQueueMetadata(queueType)
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err))
+		return serviceerror.NewInternal(fmt.Sprintf("updateAckLevel operation failed. Error %v", err))
 	}
 
 	// Ignore possibly delayed message
-	if queueMetadata.clusterAckLevels[clusterName] > messageID {
+	if ack, ok := queueMetadata.clusterAckLevels[clusterName]; ok && ack > messageID {
 		return nil
 	}
 
