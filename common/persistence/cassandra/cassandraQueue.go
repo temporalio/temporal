@@ -381,6 +381,10 @@ func (q *cassandraQueue) updateAckLevel(
 		return nil
 	}
 
+	// TODO remove this block in 1.12.x
+	delete(queueMetadata.clusterAckLevels, "")
+	// TODO remove this block in 1.12.x
+
 	queueMetadata.clusterAckLevels[clusterName] = messageID
 	queueMetadata.version++
 
