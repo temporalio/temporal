@@ -42,7 +42,7 @@ type (
 	Validator struct {
 		logger log.Logger
 
-		validSearchAttributes             dynamicconfig.MapPropertyFn
+		searchAttributesProvider          Provider
 		searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 		searchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 		searchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -56,31 +56,31 @@ var (
 // NewValidator create Validator
 func NewValidator(
 	logger log.Logger,
-	validSearchAttributes dynamicconfig.MapPropertyFn,
+	searchAttributesProvider Provider,
 	searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesSizeOfValueLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesTotalSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 ) *Validator {
 	return &Validator{
 		logger:                            logger,
-		validSearchAttributes:             validSearchAttributes,
+		searchAttributesProvider:          searchAttributesProvider,
 		searchAttributesNumberOfKeysLimit: searchAttributesNumberOfKeysLimit,
 		searchAttributesSizeOfValueLimit:  searchAttributesSizeOfValueLimit,
 		searchAttributesTotalSizeLimit:    searchAttributesTotalSizeLimit,
 	}
 }
 
-// Validate validate search attributes are valid for writing and not exceed limits
-func (v *Validator) ValidateAndLog(searchAttributes *commonpb.SearchAttributes, namespace string) error {
-	err := v.Validate(searchAttributes, namespace)
+// ValidateAndLog validate search attributes are valid for writing and not exceed limits
+func (v *Validator) ValidateAndLog(searchAttributes *commonpb.SearchAttributes, namespace string, indexName string) error {
+	err := v.Validate(searchAttributes, namespace, indexName)
 	if err != nil {
-		v.logger.Warn("Search attributes are invalid.", tag.Error(err), tag.WorkflowNamespace(namespace))
+		v.logger.Warn("Search attributes are invalid.", tag.Error(err), tag.WorkflowNamespace(namespace), tag.ESIndex(indexName))
 	}
 	return err
 }
 
 // Validate validate search attributes are valid for writing.
-func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namespace string) error {
+func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namespace string, indexName string) error {
 	if searchAttributes == nil {
 		return nil
 	}
@@ -90,13 +90,17 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("number of search attributes %d exceeds limit %d", lengthOfFields, v.searchAttributesNumberOfKeysLimit(namespace)))
 	}
 
-	typeMap, err := BuildTypeMap(v.validSearchAttributes)
+	typeMap, err := v.searchAttributesProvider.GetSearchAttributes(indexName, false)
 	if err != nil {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse search attributes from config: %v", err))
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to get search attributes from cluster metadata: %v", err))
 	}
 
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
-		saType, err := GetType(saName, typeMap)
+		if IsReservedField(saName) {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is Temporal reserved field name", saName))
+		}
+
+		saType, err := typeMap.GetType(saName)
 		if err != nil {
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is not a valid search attribute name", saName))
 		}
@@ -106,17 +110,13 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 			if err := payload.Decode(saPayload, &invalidValue); err != nil {
 				invalidValue = fmt.Sprintf("value from <%s>", saPayload.String())
 			}
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("%v is not a valid value for search attribute %s", invalidValue, saName))
-		}
-
-		if IsReservedField(saName) {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is Temporal reserved field name", saName))
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%v is not a valid value for search attribute %s of type %s", invalidValue, saName, saType))
 		}
 	}
 	return nil
 }
 
-// Validate validate search attributes are valid for writing and not exceed limits
+// ValidateSize validate search attributes are valid for writing and not exceed limits
 func (v *Validator) ValidateSize(searchAttributes *commonpb.SearchAttributes, namespace string) error {
 	if searchAttributes == nil {
 		return nil

@@ -644,6 +644,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 				namespace,
 				attr,
 				handler.mutableState.GetExecutionInfo(),
+				handler.config.DefaultVisibilityIndexName,
 			)
 		},
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES,
@@ -744,6 +745,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 				attr,
 				handler.mutableState.GetExecutionInfo(),
 				handler.config.DefaultWorkflowTaskTimeout,
+				handler.config.DefaultVisibilityIndexName,
 			)
 		},
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES,
@@ -865,6 +867,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 			return handler.attrValidator.validateUpsertWorkflowSearchAttributes(
 				namespace,
 				attr,
+				handler.config.DefaultVisibilityIndexName,
 			)
 		},
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES,

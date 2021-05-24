@@ -155,16 +155,6 @@ func (d *dynamicClient) GetDurationValue(
 	return d.client.GetDurationValue(name, filters, defaultValue)
 }
 
-func (d *dynamicClient) UpdateValue(name dynamicconfig.Key, value interface{}) error {
-	if name == dynamicconfig.AdvancedVisibilityWritingMode { // override for es integration tests
-		d.Lock()
-		defer d.Unlock()
-		d.overrides[dynamicconfig.AdvancedVisibilityWritingMode] = value.(string)
-		return nil
-	}
-	return d.client.UpdateValue(name, value)
-}
-
 func (d *dynamicClient) OverrideValue(name dynamicconfig.Key, value interface{}) {
 	d.Lock()
 	defer d.Unlock()

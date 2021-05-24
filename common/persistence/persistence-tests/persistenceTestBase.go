@@ -45,6 +45,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
@@ -59,6 +60,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/environment"
 )
 
@@ -96,6 +98,7 @@ type (
 		ShardInfo                 *persistencespb.ShardInfo
 		TaskIDGenerator           TransferTaskIDGenerator
 		ClusterMetadata           cluster.Metadata
+		SearchAttributesManager   searchattribute.Manager
 		ReadLevel                 int64
 		ReplicationReadLevel      int64
 		DefaultTestCluster        PersistenceTestCluster
@@ -220,6 +223,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *config.ClusterMetadata) {
 	s.fatalOnError("NewClusterMetadataManager", err)
 
 	s.ClusterMetadata = cluster.NewTestClusterMetadata(clusterMetadataConfig)
+	s.SearchAttributesManager = persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), s.ClusterMetadataManager)
 
 	s.MetadataManager, err = factory.NewMetadataManager()
 	s.fatalOnError("NewMetadataManager", err)

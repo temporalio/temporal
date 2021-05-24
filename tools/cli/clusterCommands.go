@@ -26,10 +26,7 @@ package cli
 
 import (
 	"fmt"
-	"os"
-	"sort"
 
-	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
@@ -37,30 +34,6 @@ import (
 const (
 	fullWorkflowServiceName = "temporal.api.workflowservice.v1.WorkflowService"
 )
-
-// GetSearchAttributes get valid search attributes
-func GetSearchAttributes(c *cli.Context) {
-	wfClient := getWorkflowClientWithOptionalNamespace(c)
-	ctx, cancel := newContext(c)
-	defer cancel()
-
-	resp, err := wfClient.GetSearchAttributes(ctx)
-	if err != nil {
-		ErrorAndExit("Failed to get search attributes.", err)
-	}
-
-	table := tablewriter.NewWriter(os.Stdout)
-	header := []string{"Key", "Value type"}
-	table.SetHeader(header)
-	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
-	rows := [][]string{}
-	for k, v := range resp.Keys {
-		rows = append(rows, []string{k, v.String()})
-	}
-	sort.Sort(byKey(rows))
-	table.AppendBulk(rows)
-	table.Render()
-}
 
 // HealthCheck check frontend health.
 func HealthCheck(c *cli.Context) {
@@ -74,7 +47,7 @@ func HealthCheck(c *cli.Context) {
 	resp, err := healthClient.Check(ctx, request)
 
 	if err != nil {
-		ErrorAndExit(fmt.Sprintf("Failed to get %q health check status.", request.GetService()), err)
+		ErrorAndExit(fmt.Sprintf("Unable to get %q health check status.", request.GetService()), err)
 	}
 
 	fmt.Printf("%s: ", request.GetService())

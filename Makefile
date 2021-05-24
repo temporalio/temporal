@@ -9,7 +9,7 @@ bins: clean-bins temporal-server tctl temporal-cassandra-tool temporal-sql-tool
 all: update-tools clean proto bins check test
 
 # Used by Buildkite.
-ci-build: bins build-tests update-tools check proto mocks gomodtidy ensure-no-changes
+ci-build: bins build-tests update-tools shell-check check proto mocks gomodtidy ensure-no-changes
 
 # Delete all build artefacts.
 clean: clean-bins clean-test-results
@@ -77,13 +77,14 @@ TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_DIRS))
 UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
 
+ALL_SCRIPTS     := $(shell find . -name "*.sh")
+
 PINNED_DEPENDENCIES := \
 	github.com/DataDog/sketches-go@v0.0.1 \
 	go.opentelemetry.io/otel@v0.15.0 \
 	go.opentelemetry.io/otel/exporters/metric/prometheus@v0.15.0 \
 	github.com/apache/thrift@v0.0.0-20161221203622-b2a4d4ae21c7 \
-	github.com/go-sql-driver/mysql@v1.5.0 \
-	github.com/jmoiron/sqlx@v1.2.1-0.20200615141059-0794cb1f47ee
+	github.com/go-sql-driver/mysql@v1.5.0
 
 # Code coverage output files.
 COVER_ROOT                 := ./.coverage
@@ -244,6 +245,10 @@ buf-build:
 buf-breaking:
 	@printf $(COLOR) "Run buf breaking changes check against image.bin..."
 	@(cd $(PROTO_ROOT) && buf check breaking --against image.bin)
+
+shell-check:
+	@printf $(COLOR) "Run shellcheck for script files..."
+	@shellcheck $(ALL_SCRIPTS)
 
 check: copyright-check goimports-check lint vet staticcheck errcheck
 

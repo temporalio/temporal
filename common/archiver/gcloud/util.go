@@ -36,7 +36,6 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
@@ -155,8 +154,8 @@ func deserializeQueryVisibilityToken(bytes []byte) (*queryVisibilityToken, error
 	return token, err
 }
 
-func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap map[string]enumspb.IndexedValueType) (*workflowpb.WorkflowExecutionInfo, error) {
-	searchAttributes, err := searchattribute.Parse(record.SearchAttributes, saTypeMap)
+func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap searchattribute.NameTypeMap) (*workflowpb.WorkflowExecutionInfo, error) {
+	searchAttributes, err := searchattribute.Parse(record.SearchAttributes, &saTypeMap)
 	if err != nil {
 		return nil, err
 	}

@@ -62,7 +62,6 @@ var (
 	errClusterIsNotConfiguredForReadingArchivalVisibility = serviceerror.NewInvalidArgument("Cluster is not configured for reading archived visibility records.")
 	errNamespaceIsNotConfiguredForVisibilityArchival      = serviceerror.NewInvalidArgument("Namespace is not configured for visibility archival.")
 	errSearchAttributesNotSet                             = serviceerror.NewInvalidArgument("SearchAttributes are not set on request.")
-	errAdvancedVisibilityStoreIsNotConfigured             = serviceerror.NewInvalidArgument("AdvancedVisibilityStore is not configured for this cluster.")
 	errInvalidPageSize                                    = serviceerror.NewInvalidArgument("Invalid PageSize.")
 	errInvalidPaginationToken                             = serviceerror.NewInvalidArgument("Invalid pagination token.")
 	errInvalidFirstNextEventCombination                   = serviceerror.NewInvalidArgument("Invalid FirstEventId and NextEventId combination.")
@@ -76,13 +75,14 @@ var (
 	errTokenNamespaceMismatch                             = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
 	errShuttingDown                                       = serviceerror.NewInternal("Shutting down")
 
-	errPageSizeTooBigMessage                   = "PageSize is larger than allowed %d."
-	errKeyIsReservedBySystemMessage            = "Key [%s] is reserved by system."
-	errKeyIsAlreadyWhitelistedMessage          = "Key [%s] is already whitelist."
-	errUnknownValueTypeMessage                 = "Unknown value type, %v."
-	errFailedUpdateDynamicConfigMessage        = "Failed to update dynamic config, err: %v."
-	errFailedToUpdateESMappingMessage          = "Failed to update ES mapping, err: %v."
-	errUnableToBuildSearchAttributesMapMessage = "Unable to build valid search attributes map, err: %v."
+	errPageSizeTooBigMessage = "PageSize is larger than allowed %d."
+
+	errSearchAttributeIsReservedMessage    = "Search attribute %s is reserved by system."
+	errSearchAttributeAlreadyExistsMessage = "Search attribute %s already exists."
+	errUnknownSearchAttributeTypeMessage   = "Unknown search attribute type: %v."
+	errUnableToGetSearchAttributesMessage  = "Unable to get search attributes: %v."
+	errUnableToStartWorkflowMessage        = "Unable to start %s workflow: %v."
+	errWorkflowReturnedErrorMessage        = "Workflow %s returned an error: %v."
 
 	errNoPermission = serviceerror.NewPermissionDenied("No permission to do this operation.", "")
 )

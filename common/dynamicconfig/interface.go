@@ -46,6 +46,4 @@ type Client interface {
 	GetDurationValue(
 		name Key, filters map[Filter]interface{}, defaultValue time.Duration,
 	) (time.Duration, error)
-	// UpdateValue takes value as map and updates by overriding. It doesn't support update with filters.
-	UpdateValue(name Key, value interface{}) error
 }

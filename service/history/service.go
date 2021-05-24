@@ -71,13 +71,13 @@ func NewService(
 		dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger),
 		params.PersistenceConfig.NumHistoryShards,
 		params.PersistenceConfig.IsAdvancedVisibilityConfigExist(),
+		params.ESConfig.GetVisibilityIndex(),
 	)
 
 	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
 		VisibilityOpenMaxQPS:   serviceConfig.VisibilityOpenMaxQPS,
 		VisibilityClosedMaxQPS: serviceConfig.VisibilityClosedMaxQPS,
 		EnableSampling:         serviceConfig.EnableVisibilitySampling,
-		ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
 	}
 
 	visibilityManagerInitializer := func(
@@ -98,7 +98,6 @@ func NewService(
 				ESProcessorBulkActions:   serviceConfig.ESProcessorBulkActions,
 				ESProcessorBulkSize:      serviceConfig.ESProcessorBulkSize,
 				ESProcessorFlushInterval: serviceConfig.ESProcessorFlushInterval,
-				ValidSearchAttributes:    serviceConfig.ValidSearchAttributes,
 			}
 
 			esProcessor := espersistence.NewProcessor(esProcessorConfig, params.ESClient, logger, params.MetricsClient)
@@ -106,10 +105,9 @@ func NewService(
 
 			visibilityConfigForES := &config.VisibilityConfig{
 				ESIndexMaxResultWindow: serviceConfig.ESIndexMaxResultWindow,
-				ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
 				ESProcessorAckTimeout:  serviceConfig.ESProcessorAckTimeout,
 			}
-			visibilityFromES = espersistence.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES, esProcessor, params.MetricsClient, logger)
+			visibilityFromES = espersistence.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES, searchAttributesProvider, esProcessor, params.MetricsClient, logger)
 		}
 		return persistence.NewVisibilityManagerWrapper(
 			visibilityFromDB,

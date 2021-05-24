@@ -28,12 +28,11 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
-
-	"go.temporal.io/server/common/log"
 )
 
 type (

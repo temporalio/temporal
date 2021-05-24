@@ -177,17 +177,3 @@ func (mr *MockClientMockRecorder) GetValueWithFilters(name, filters, defaultValu
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValueWithFilters", reflect.TypeOf((*MockClient)(nil).GetValueWithFilters), name, filters, defaultValue)
 }
-
-// UpdateValue mocks base method.
-func (m *MockClient) UpdateValue(name Key, value interface{}) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateValue", name, value)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateValue indicates an expected call of UpdateValue.
-func (mr *MockClientMockRecorder) UpdateValue(name, value interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValue", reflect.TypeOf((*MockClient)(nil).UpdateValue), name, value)
-}

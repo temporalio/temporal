@@ -39,11 +39,11 @@ func Test_Encode_Success(t *testing.T) {
 		"key1": "val1",
 		"key2": 2,
 		"key3": true,
-	}, map[string]enumspb.IndexedValueType{
+	}, &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
 		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
-	})
+	}})
 
 	assert.NoError(err)
 	assert.Len(sa.IndexedFields, 3)
@@ -54,8 +54,7 @@ func Test_Encode_Success(t *testing.T) {
 	assert.Equal("true", string(sa.IndexedFields["key3"].GetData()))
 	assert.Equal("Bool", string(sa.IndexedFields["key3"].GetMetadata()["type"]))
 }
-
-func Test_Encode_Error(t *testing.T) {
+func Test_Encode_NilMap(t *testing.T) {
 	assert := assert.New(t)
 
 	sa, err := Encode(map[string]interface{}{
@@ -64,22 +63,24 @@ func Test_Encode_Error(t *testing.T) {
 		"key3": true,
 	}, nil)
 
-	assert.Error(err)
-	assert.True(errors.Is(err, ErrTypeMapIsEmpty))
+	assert.NoError(err)
 	assert.Len(sa.IndexedFields, 3)
 	assert.Equal(`"val1"`, string(sa.IndexedFields["key1"].GetData()))
 	assert.Equal("2", string(sa.IndexedFields["key2"].GetData()))
 	assert.Equal("true", string(sa.IndexedFields["key3"].GetData()))
+}
 
-	sa, err = Encode(map[string]interface{}{
+func Test_Encode_Error(t *testing.T) {
+	assert := assert.New(t)
+	sa, err := Encode(map[string]interface{}{
 		"key1": "val1",
 		"key2": 2,
 		"key3": true,
-	}, map[string]enumspb.IndexedValueType{
+	}, &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
 		"key4": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
-	})
+	}})
 
 	assert.Error(err)
 	assert.True(errors.Is(err, ErrInvalidName))
@@ -94,11 +95,11 @@ func Test_Encode_Error(t *testing.T) {
 func Test_Decode_Success(t *testing.T) {
 	assert := assert.New(t)
 
-	typeMap := map[string]enumspb.IndexedValueType{
+	typeMap := &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
 		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
-	}
+	}}
 	sa, err := Encode(map[string]interface{}{
 		"key1": "val1",
 		"key2": 2,
@@ -125,14 +126,13 @@ func Test_Decode_Success(t *testing.T) {
 	assert.Equal(true, vals["key3"])
 }
 
-func Test_Decode_Error(t *testing.T) {
+func Test_Decode_NilMap(t *testing.T) {
 	assert := assert.New(t)
-
-	typeMap := map[string]enumspb.IndexedValueType{
+	typeMap := &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
 		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
-	}
+	}}
 	sa, err := Encode(map[string]interface{}{
 		"key1": "val1",
 		"key2": 2,
@@ -141,18 +141,34 @@ func Test_Decode_Error(t *testing.T) {
 	assert.NoError(err)
 
 	vals, err := Decode(sa, nil)
-	assert.Error(err)
-	assert.True(errors.Is(err, ErrTypeMapIsEmpty))
+	assert.NoError(err)
 	assert.Len(sa.IndexedFields, 3)
 	assert.Equal("val1", vals["key1"])
 	assert.Equal(int64(2), vals["key2"])
 	assert.Equal(true, vals["key3"])
 
-	vals, err = Decode(sa, map[string]enumspb.IndexedValueType{
+}
+
+func Test_Decode_Error(t *testing.T) {
+	assert := assert.New(t)
+
+	typeMap := &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
+		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
+		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+	}}
+	sa, err := Encode(map[string]interface{}{
+		"key1": "val1",
+		"key2": 2,
+		"key3": true,
+	}, typeMap)
+	assert.NoError(err)
+
+	vals, err := Decode(sa, &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
 		"key4": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
-	})
+	}})
 	assert.Error(err)
 	assert.True(errors.Is(err, ErrInvalidName))
 	assert.Len(sa.IndexedFields, 3)

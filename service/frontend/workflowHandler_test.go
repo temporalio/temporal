@@ -43,6 +43,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute"
 
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
@@ -76,12 +78,13 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller          *gomock.Controller
-		mockResource        *resource.Test
-		mockNamespaceCache  *cache.MockNamespaceCache
-		mockHistoryClient   *historyservicemock.MockHistoryServiceClient
-		mockClusterMetadata *cluster.MockMetadata
-		mockMatchingClient  *matchingservicemock.MockMatchingServiceClient
+		controller                   *gomock.Controller
+		mockResource                 *resource.Test
+		mockNamespaceCache           *cache.MockNamespaceCache
+		mockHistoryClient            *historyservicemock.MockHistoryServiceClient
+		mockClusterMetadata          *cluster.MockMetadata
+		mockSearchAttributesProvider *searchattribute.MockProvider
+		mockMatchingClient           *matchingservicemock.MockMatchingServiceClient
 
 		mockProducer           *persistence.MockNamespaceReplicationQueue
 		mockMetadataMgr        *persistence.MockMetadataManager
@@ -123,6 +126,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.mockHistoryClient = s.mockResource.HistoryClient
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
+	s.mockSearchAttributesProvider = s.mockResource.SearchAttributesProvider
 	s.mockMetadataMgr = s.mockResource.MetadataMgr
 	s.mockHistoryMgr = s.mockResource.HistoryMgr
 	s.mockVisibilityMgr = s.mockResource.VisibilityMgr
@@ -1048,7 +1052,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 func (s *workflowHandlerSuite) TestGetHistory() {
 	namespaceID := uuid.New()
 	firstEventID := int64(100)
-	nextEventID := int64(101)
+	nextEventID := int64(102)
 	branchToken := []byte{1}
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wid",
@@ -1059,19 +1063,35 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
-		PageSize:      1,
+		PageSize:      2,
 		NextPageToken: []byte{},
 		ShardID:       shardID,
 	}
 	s.mockHistoryMgr.EXPECT().ReadHistoryBranch(req).Return(&persistence.ReadHistoryBranchResponse{
 		HistoryEvents: []*historypb.HistoryEvent{
 			{
-				EventId: int64(100),
+				EventId:   int64(100),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			},
+			{
+				EventId:   int64(101),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+						SearchAttributes: &commonpb.SearchAttributes{
+							IndexedFields: map[string]*commonpb.Payload{
+								"CustomKeywordField": payload.EncodeString("random-keyword"),
+							},
+						},
+					},
+				},
 			},
 		},
 		NextPageToken: []byte{},
 		Size:          1,
 	}, nil)
+
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1081,7 +1101,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		we,
 		firstEventID,
 		nextEventID,
-		1,
+		2,
 		[]byte{},
 		nil,
 		branchToken,
@@ -1089,6 +1109,9 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	s.NoError(err)
 	s.NotNil(history)
 	s.Equal([]byte{}, token)
+
+	s.Equal([]byte("Keyword"),
+		history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["CustomKeywordField"].GetMetadata()["type"])
 }
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidRequest() {
@@ -1170,6 +1193,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Success() {
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI")).Times(2)
 	s.mockVisibilityArchiver.EXPECT().Query(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&archiver.QueryVisibilityResponse{}, nil)
 	s.mockArchiverProvider.EXPECT().GetVisibilityArchiver(gomock.Any(), gomock.Any()).Return(s.mockVisibilityArchiver, nil)
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes("", false)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1182,6 +1206,7 @@ func (s *workflowHandlerSuite) TestGetSearchAttributes() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	ctx := context.Background()
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
 	resp, err := wh.GetSearchAttributes(ctx, &workflowservice.GetSearchAttributesRequest{})
 	s.NoError(err)
 	s.NotNil(resp)
@@ -1192,6 +1217,7 @@ func (s *workflowHandlerSuite) TestListWorkflowExecutions() {
 	wh := s.getWorkflowHandler(config)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().ListWorkflowExecutions(gomock.Any()).Return(&persistence.ListWorkflowExecutionsResponse{}, nil)
 
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
@@ -1221,6 +1247,7 @@ func (s *workflowHandlerSuite) TestScanWorkflowExecutions() {
 	wh := s.getWorkflowHandler(config)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().ScanWorkflowExecutions(gomock.Any()).Return(&persistence.ListWorkflowExecutionsResponse{}, nil)
 
 	scanRequest := &workflowservice.ScanWorkflowExecutionsRequest{
@@ -1253,6 +1280,7 @@ func (s *workflowHandlerSuite) TestCountWorkflowExecutions() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any()).Return(&persistence.CountWorkflowExecutionsResponse{}, nil)
 
 	countRequest := &workflowservice.CountWorkflowExecutionsRequest{
@@ -1384,7 +1412,7 @@ func (s *workflowHandlerSuite) checkResponse(err error, response interface{},
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {
-	return NewConfig(dc.NewCollection(dc.NewNoopClient(), s.mockResource.GetLogger()), numHistoryShards, false)
+	return NewConfig(dc.NewCollection(dc.NewNoopClient(), s.mockResource.GetLogger()), numHistoryShards, "", false)
 }
 
 func (s *workflowHandlerSuite) newRespondActivityTaskCompletedRequest(tokenNamespaceId string) *workflowservice.RespondActivityTaskCompletedRequest {

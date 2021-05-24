@@ -32,7 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	enums "go.temporal.io/api/enums/v1"
+	v1 "go.temporal.io/api/enums/v1"
 )
 
 // MockProvider is a mock of Provider interface.
@@ -59,18 +59,18 @@ func (m *MockProvider) EXPECT() *MockProviderMockRecorder {
 }
 
 // GetSearchAttributes mocks base method.
-func (m *MockProvider) GetSearchAttributes(indexName string, bypassCache bool) (map[string]enums.IndexedValueType, error) {
+func (m *MockProvider) GetSearchAttributes(indexName string, forceRefreshCache bool) (NameTypeMap, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSearchAttributes", indexName, bypassCache)
-	ret0, _ := ret[0].(map[string]enums.IndexedValueType)
+	ret := m.ctrl.Call(m, "GetSearchAttributes", indexName, forceRefreshCache)
+	ret0, _ := ret[0].(NameTypeMap)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetSearchAttributes indicates an expected call of GetSearchAttributes.
-func (mr *MockProviderMockRecorder) GetSearchAttributes(indexName, bypassCache interface{}) *gomock.Call {
+func (mr *MockProviderMockRecorder) GetSearchAttributes(indexName, forceRefreshCache interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockProvider)(nil).GetSearchAttributes), indexName, bypassCache)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockProvider)(nil).GetSearchAttributes), indexName, forceRefreshCache)
 }
 
 // MockManager is a mock of Manager interface.
@@ -97,22 +97,22 @@ func (m *MockManager) EXPECT() *MockManagerMockRecorder {
 }
 
 // GetSearchAttributes mocks base method.
-func (m *MockManager) GetSearchAttributes(indexName string, bypassCache bool) (map[string]enums.IndexedValueType, error) {
+func (m *MockManager) GetSearchAttributes(indexName string, forceRefreshCache bool) (NameTypeMap, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSearchAttributes", indexName, bypassCache)
-	ret0, _ := ret[0].(map[string]enums.IndexedValueType)
+	ret := m.ctrl.Call(m, "GetSearchAttributes", indexName, forceRefreshCache)
+	ret0, _ := ret[0].(NameTypeMap)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetSearchAttributes indicates an expected call of GetSearchAttributes.
-func (mr *MockManagerMockRecorder) GetSearchAttributes(indexName, bypassCache interface{}) *gomock.Call {
+func (mr *MockManagerMockRecorder) GetSearchAttributes(indexName, forceRefreshCache interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockManager)(nil).GetSearchAttributes), indexName, bypassCache)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockManager)(nil).GetSearchAttributes), indexName, forceRefreshCache)
 }
 
 // SaveSearchAttributes mocks base method.
-func (m *MockManager) SaveSearchAttributes(indexName string, newCustomSearchAttributes map[string]enums.IndexedValueType) error {
+func (m *MockManager) SaveSearchAttributes(indexName string, newCustomSearchAttributes map[string]v1.IndexedValueType) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SaveSearchAttributes", indexName, newCustomSearchAttributes)
 	ret0, _ := ret[0].(error)

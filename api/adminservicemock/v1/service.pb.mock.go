@@ -60,24 +60,24 @@ func (m *MockAdminServiceClient) EXPECT() *MockAdminServiceClientMockRecorder {
 	return m.recorder
 }
 
-// AddSearchAttribute mocks base method.
-func (m *MockAdminServiceClient) AddSearchAttribute(ctx context.Context, in *adminservice.AddSearchAttributeRequest, opts ...grpc.CallOption) (*adminservice.AddSearchAttributeResponse, error) {
+// AddSearchAttributes mocks base method.
+func (m *MockAdminServiceClient) AddSearchAttributes(ctx context.Context, in *adminservice.AddSearchAttributesRequest, opts ...grpc.CallOption) (*adminservice.AddSearchAttributesResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "AddSearchAttribute", varargs...)
-	ret0, _ := ret[0].(*adminservice.AddSearchAttributeResponse)
+	ret := m.ctrl.Call(m, "AddSearchAttributes", varargs...)
+	ret0, _ := ret[0].(*adminservice.AddSearchAttributesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// AddSearchAttribute indicates an expected call of AddSearchAttribute.
-func (mr *MockAdminServiceClientMockRecorder) AddSearchAttribute(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+// AddSearchAttributes indicates an expected call of AddSearchAttributes.
+func (mr *MockAdminServiceClientMockRecorder) AddSearchAttributes(ctx, in interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttribute", reflect.TypeOf((*MockAdminServiceClient)(nil).AddSearchAttribute), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttributes", reflect.TypeOf((*MockAdminServiceClient)(nil).AddSearchAttributes), varargs...)
 }
 
 // CloseShard mocks base method.
@@ -238,6 +238,26 @@ func (mr *MockAdminServiceClientMockRecorder) GetReplicationMessages(ctx, in int
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockAdminServiceClient)(nil).GetReplicationMessages), varargs...)
+}
+
+// GetSearchAttributes mocks base method.
+func (m *MockAdminServiceClient) GetSearchAttributes(ctx context.Context, in *adminservice.GetSearchAttributesRequest, opts ...grpc.CallOption) (*adminservice.GetSearchAttributesResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetSearchAttributes", varargs...)
+	ret0, _ := ret[0].(*adminservice.GetSearchAttributesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSearchAttributes indicates an expected call of GetSearchAttributes.
+func (mr *MockAdminServiceClientMockRecorder) GetSearchAttributes(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockAdminServiceClient)(nil).GetSearchAttributes), varargs...)
 }
 
 // GetWorkflowExecutionRawHistoryV2 mocks base method.
@@ -403,19 +423,19 @@ func (m *MockAdminServiceServer) EXPECT() *MockAdminServiceServerMockRecorder {
 	return m.recorder
 }
 
-// AddSearchAttribute mocks base method.
-func (m *MockAdminServiceServer) AddSearchAttribute(arg0 context.Context, arg1 *adminservice.AddSearchAttributeRequest) (*adminservice.AddSearchAttributeResponse, error) {
+// AddSearchAttributes mocks base method.
+func (m *MockAdminServiceServer) AddSearchAttributes(arg0 context.Context, arg1 *adminservice.AddSearchAttributesRequest) (*adminservice.AddSearchAttributesResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddSearchAttribute", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.AddSearchAttributeResponse)
+	ret := m.ctrl.Call(m, "AddSearchAttributes", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.AddSearchAttributesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// AddSearchAttribute indicates an expected call of AddSearchAttribute.
-func (mr *MockAdminServiceServerMockRecorder) AddSearchAttribute(arg0, arg1 interface{}) *gomock.Call {
+// AddSearchAttributes indicates an expected call of AddSearchAttributes.
+func (mr *MockAdminServiceServerMockRecorder) AddSearchAttributes(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttribute", reflect.TypeOf((*MockAdminServiceServer)(nil).AddSearchAttribute), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttributes", reflect.TypeOf((*MockAdminServiceServer)(nil).AddSearchAttributes), arg0, arg1)
 }
 
 // CloseShard mocks base method.
@@ -536,6 +556,21 @@ func (m *MockAdminServiceServer) GetReplicationMessages(arg0 context.Context, ar
 func (mr *MockAdminServiceServerMockRecorder) GetReplicationMessages(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockAdminServiceServer)(nil).GetReplicationMessages), arg0, arg1)
+}
+
+// GetSearchAttributes mocks base method.
+func (m *MockAdminServiceServer) GetSearchAttributes(arg0 context.Context, arg1 *adminservice.GetSearchAttributesRequest) (*adminservice.GetSearchAttributesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSearchAttributes", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.GetSearchAttributesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSearchAttributes indicates an expected call of GetSearchAttributes.
+func (mr *MockAdminServiceServerMockRecorder) GetSearchAttributes(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockAdminServiceServer)(nil).GetSearchAttributes), arg0, arg1)
 }
 
 // GetWorkflowExecutionRawHistoryV2 mocks base method.

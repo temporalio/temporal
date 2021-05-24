@@ -548,14 +548,14 @@ func (s *cliAppSuite) TestAdminDescribeWorkflow_Failed() {
 }
 
 func (s *cliAppSuite) TestAdminAddSearchAttribute() {
-	request := &adminservice.AddSearchAttributeRequest{
-		SearchAttribute: map[string]enumspb.IndexedValueType{
+	request := &adminservice.AddSearchAttributesRequest{
+		SearchAttributes: map[string]enumspb.IndexedValueType{
 			"testKey": enumspb.IndexedValueType(2),
 		},
 	}
-	s.serverAdminClient.EXPECT().AddSearchAttribute(gomock.Any(), request)
+	s.serverAdminClient.EXPECT().AddSearchAttributes(gomock.Any(), request)
 
-	err := s.app.Run([]string{"", "--auto_confirm", "--ns", cliTestNamespace, "admin", "cl", "asa", "--search_attr_key", "testKey", "--search_attr_type", "keyword"})
+	err := s.app.Run([]string{"", "--auto_confirm", "--ns", cliTestNamespace, "admin", "cl", "asa", "--name", "testKey", "--type", "keyword"})
 	s.Nil(err)
 }
 
@@ -701,12 +701,12 @@ func (s *cliAppSuite) TestParseTimeDateRange() {
 
 func (s *cliAppSuite) TestGetSearchAttributes() {
 	s.sdkClient.On("GetSearchAttributes", mock.Anything).Return(&workflowservice.GetSearchAttributesResponse{}, nil).Once()
-	err := s.app.Run([]string{"", "cluster", "get-search-attr"})
+	err := s.app.Run([]string{"", "cluster", "get-search-attributes"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 
 	s.sdkClient.On("GetSearchAttributes", mock.Anything).Return(&workflowservice.GetSearchAttributesResponse{}, nil).Once()
-	err = s.app.Run([]string{"", "--ns", cliTestNamespace, "cluster", "get-search-attr"})
+	err = s.app.Run([]string{"", "--ns", cliTestNamespace, "cluster", "get-search-attributes"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
