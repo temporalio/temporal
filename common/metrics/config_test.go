@@ -27,6 +27,7 @@ package metrics
 import (
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally"
@@ -76,6 +77,7 @@ func (u unsupportedNullStatsReporter) Flush() {
 type MetricsSuite struct {
 	*require.Assertions
 	suite.Suite
+	controller *gomock.Controller
 }
 
 func TestMetricsSuite(t *testing.T) {
@@ -84,6 +86,7 @@ func TestMetricsSuite(t *testing.T) {
 
 func (s *MetricsSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.controller = gomock.NewController(s.T())
 }
 
 func (s *MetricsSuite) TestStatsd() {
@@ -146,4 +149,20 @@ func (s *MetricsSuite) TestUnsupportedReporter() {
 	config := &Config{}
 	scope := config.NewCustomReporterScope(log.NewNoopLogger(), UnsupportedNullStatsReporter)
 	s.Equal(tally.NoopScope, scope)
+}
+
+func (s *MetricsSuite) TestOTCustomReporter() {
+	prom := &PrometheusConfig{
+		Framework:     "custom",
+		OnError:       "panic",
+		TimerType:     "histogram",
+		ListenAddress: "127.0.0.1:0",
+	}
+	config := &Config{}
+	config.Prometheus = prom
+	mockReporter := NewMockReporter(s.controller)
+	reporter, sdkReporter, err := config.InitMetricReporters(log.NewNoopLogger(), mockReporter)
+	s.Equal(mockReporter, reporter)
+	s.Equal(mockReporter, sdkReporter)
+	s.Nil(err)
 }
