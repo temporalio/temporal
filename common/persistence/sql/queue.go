@@ -168,9 +168,14 @@ func (q *sqlQueue) UpdateAckLevel(
 		}
 
 		// Ignore possibly delayed message
-		if queueMetadata.ClusterAckLevels[clusterName] > messageID {
+		if ack, ok := queueMetadata.ClusterAckLevels[clusterName]; ok && ack > messageID {
 			return nil
 		}
+
+		// TODO remove this block in 1.12.x
+		delete(queueMetadata.ClusterAckLevels, "")
+		// TODO remove this block in 1.12.x
+
 		queueMetadata.ClusterAckLevels[clusterName] = messageID
 
 		blob, err := serialization.QueueMetadataToBlob(queueMetadata)
@@ -353,9 +358,14 @@ func (q *sqlQueue) UpdateDLQAckLevel(
 		}
 
 		// Ignore possibly delayed message
-		if queueMetadata.ClusterAckLevels[clusterName] > messageID {
+		if ack, ok := queueMetadata.ClusterAckLevels[clusterName]; ok && ack > messageID {
 			return nil
 		}
+
+		// TODO remove this block in 1.12.x
+		delete(queueMetadata.ClusterAckLevels, "")
+		// TODO remove this block in 1.12.x
+
 		queueMetadata.ClusterAckLevels[clusterName] = messageID
 
 		blob, err := serialization.QueueMetadataToBlob(queueMetadata)

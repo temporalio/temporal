@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/client"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -638,8 +639,7 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, re
 
 	lastMessageID := request.GetLastRetrievedMessageId()
 	if request.GetLastRetrievedMessageId() == defaultLastMessageID {
-		clusterAckLevels, err := adh.GetNamespaceReplicationQueue().GetAckLevels()
-		if err == nil {
+		if clusterAckLevels, err := adh.GetNamespaceReplicationQueue().GetAckLevels(); err == nil {
 			if ackLevel, ok := clusterAckLevels[request.GetClusterName()]; ok {
 				lastMessageID = ackLevel
 			}
@@ -647,14 +647,18 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, re
 	}
 
 	replicationTasks, lastMessageID, err := adh.GetNamespaceReplicationQueue().GetReplicationMessages(
-		lastMessageID, getNamespaceReplicationMessageBatchSize)
+		lastMessageID,
+		getNamespaceReplicationMessageBatchSize,
+	)
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
 
 	if request.GetLastProcessedMessageId() != defaultLastMessageID {
-		err := adh.GetNamespaceReplicationQueue().UpdateAckLevel(request.GetLastProcessedMessageId(), request.GetClusterName())
-		if err != nil {
+		if err := adh.GetNamespaceReplicationQueue().UpdateAckLevel(
+			request.GetLastProcessedMessageId(),
+			request.GetClusterName(),
+		); err != nil {
 			adh.GetLogger().Warn("Failed to update namespace replication queue ack level",
 				tag.TaskID(request.GetLastProcessedMessageId()),
 				tag.ClusterName(request.GetClusterName()))
