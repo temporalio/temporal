@@ -40,10 +40,8 @@ See https://www.ecyrd.com/cassandracalculator for an easy way to determine how m
 You can only upgrade to a new version after the initial setup done above.
 
 ```
-./temporal-cassandra-tool -ep 127.0.0.1 -k temporal update-schema -d ./schema/cassandra/temporal/versioned -v x.x -y -- executes a dryrun of upgrade to version x.x
-./temporal-cassandra-tool -ep 127.0.0.1 -k temporal update-schema -d ./schema/cassandra/temporal/versioned -v x.x    -- actually executes the upgrade to version x.x
+./temporal-cassandra-tool -ep 127.0.0.1 -k temporal update-schema -d ./schema/cassandra/temporal/versioned -v x.x    -- executes the upgrade to version x.x
 
-./temporal-cassandra-tool -ep 127.0.0.1 -k temporal_visibility update-schema -d ./schema/cassandra/visibility/versioned -v x.x -y -- executes a dryrun of upgrade to version x.x
-./temporal-cassandra-tool -ep 127.0.0.1 -k temporal_visibility update-schema -d ./schema/cassandra/visibility/versioned -v x.x    -- actually executes the upgrade to version x.x
+./temporal-cassandra-tool -ep 127.0.0.1 -k temporal_visibility update-schema -d ./schema/cassandra/visibility/versioned -v x.x    -- executes the upgrade to version x.x
 ```
 
