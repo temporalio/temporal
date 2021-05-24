@@ -29,7 +29,6 @@ package persistence
 import (
 	"errors"
 	"fmt"
-	"math"
 	"sync/atomic"
 	"time"
 
@@ -285,21 +284,23 @@ func (q *namespaceReplicationQueueImpl) purgeAckedMessages() error {
 		return nil
 	}
 
-	minAckLevel := int64(math.MaxInt64)
+	var minAckLevel *int64
 	for _, ackLevel := range ackLevelByCluster {
-		if ackLevel < minAckLevel {
-			minAckLevel = ackLevel
+		if minAckLevel == nil || ackLevel < *minAckLevel {
+			minAckLevel = &ackLevel
 		}
 	}
 
-	err = q.queue.DeleteMessagesBefore(minAckLevel)
-	if err != nil {
-		return fmt.Errorf("failed to purge messages: %v", err)
+	if minAckLevel != nil {
+		err = q.queue.DeleteMessagesBefore(*minAckLevel)
+		if err != nil {
+			return fmt.Errorf("failed to purge messages: %v", err)
+		}
+		q.metricsClient.
+			Scope(metrics.PersistenceNamespaceReplicationQueueScope).
+			UpdateGauge(metrics.NamespaceReplicationTaskAckLevelGauge, float64(*minAckLevel))
 	}
 
-	q.metricsClient.
-		Scope(metrics.PersistenceNamespaceReplicationQueueScope).
-		UpdateGauge(metrics.NamespaceReplicationTaskAckLevelGauge, float64(minAckLevel))
 	return nil
 }
 
