@@ -39,13 +39,13 @@ import (
 
 // DescribeTaskQueue show pollers info of a given taskqueue
 func DescribeTaskQueue(c *cli.Context) {
-	wfClient := getWorkflowClient(c)
+	sdkClient := getSDKClient(c)
 	taskQueue := getRequiredOption(c, FlagTaskQueue)
 	taskQueueType := strToTaskQueueType(c.String(FlagTaskQueueType)) // default type is workflow
 
 	ctx, cancel := newContext(c)
 	defer cancel()
-	response, err := wfClient.DescribeTaskQueue(ctx, taskQueue, taskQueueType)
+	response, err := sdkClient.DescribeTaskQueue(ctx, taskQueue, taskQueueType)
 	if err != nil {
 		ErrorAndExit("Operation DescribeTaskQueue failed.", err)
 	}

@@ -406,16 +406,9 @@ func ErrorAndExit(msg string, err error) {
 	osExit(1)
 }
 
-func getWorkflowClient(c *cli.Context) sdkclient.Client {
+func getSDKClient(c *cli.Context) sdkclient.Client {
 	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	return cFactory.SDKClient(c, namespace)
-}
-
-func getWorkflowClientWithOptionalNamespace(c *cli.Context) sdkclient.Client {
-	if !c.GlobalIsSet(FlagNamespace) {
-		_ = c.GlobalSet(FlagNamespace, "system-namespace")
-	}
-	return getWorkflowClient(c)
 }
 
 func getRequiredOption(c *cli.Context, optionName string) string {
