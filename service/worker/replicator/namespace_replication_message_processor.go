@@ -53,6 +53,7 @@ const (
 )
 
 func newNamespaceReplicationMessageProcessor(
+	currentCluster string,
 	sourceCluster string,
 	logger log.Logger,
 	remotePeer adminservice.AdminServiceClient,
@@ -70,6 +71,7 @@ func newNamespaceReplicationMessageProcessor(
 		hostInfo:                  hostInfo,
 		serviceResolver:           serviceResolver,
 		status:                    common.DaemonStatusInitialized,
+		currentCluster:            currentCluster,
 		sourceCluster:             sourceCluster,
 		logger:                    logger,
 		remotePeer:                remotePeer,
@@ -88,6 +90,7 @@ type (
 		hostInfo                  *membership.HostInfo
 		serviceResolver           membership.ServiceResolver
 		status                    int32
+		currentCluster            string
 		sourceCluster             string
 		logger                    log.Logger
 		remotePeer                adminservice.AdminServiceClient
@@ -143,6 +146,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(fetchTaskRequestTimeout)
 	request := &adminservice.GetNamespaceReplicationMessagesRequest{
+		ClusterName:            p.currentCluster,
 		LastRetrievedMessageId: p.lastRetrievedMessageID,
 		LastProcessedMessageId: p.lastProcessedMessageID,
 	}
