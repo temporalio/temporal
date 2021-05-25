@@ -404,7 +404,6 @@ func (e *DeserializationError) Error() string {
 	return fmt.Sprintf("deserialization error: %v", e.msg)
 }
 
-
 func (t *serializerImpl) ShardInfoToBlob(info *persistencespb.ShardInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	return proto3EncodeBlob(info, encodingType)
 }
@@ -489,12 +488,12 @@ func (t *serializerImpl) ActivityInfoToBlob(info *persistencespb.ActivityInfo, e
 	return proto3EncodeBlob(info, encodingType)
 }
 
-func (t *serializerImpl)ActivityInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ActivityInfo, error) {
+func (t *serializerImpl) ActivityInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ActivityInfo, error) {
 	result := &persistencespb.ActivityInfo{}
 	return result, proto3DecodeBlob(data, result)
 }
 
-func (t *serializerImpl)ChildExecutionInfoToBlob(info *persistencespb.ChildExecutionInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+func (t *serializerImpl) ChildExecutionInfoToBlob(info *persistencespb.ChildExecutionInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	return proto3EncodeBlob(info, encodingType)
 }
 
@@ -503,7 +502,7 @@ func (t *serializerImpl) ChildExecutionInfoFromBlob(data *commonpb.DataBlob) (*p
 	return result, proto3DecodeBlob(data, result)
 }
 
-func(t *serializerImpl) SignalInfoToBlob(info *persistencespb.SignalInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+func (t *serializerImpl) SignalInfoToBlob(info *persistencespb.SignalInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	return proto3EncodeBlob(info, encodingType)
 }
 
@@ -512,7 +511,7 @@ func (t *serializerImpl) SignalInfoFromBlob(data *commonpb.DataBlob) (*persisten
 	return result, proto3DecodeBlob(data, result)
 }
 
-func(t *serializerImpl) RequestCancelInfoToBlob(info *persistencespb.RequestCancelInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+func (t *serializerImpl) RequestCancelInfoToBlob(info *persistencespb.RequestCancelInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	return proto3EncodeBlob(info, encodingType)
 }
 
@@ -584,7 +583,7 @@ func (t *serializerImpl) VisibilityTaskInfoFromBlob(data *commonpb.DataBlob) (*p
 	return result, proto3DecodeBlob(data, result)
 }
 
-func(t *serializerImpl) ChecksumToBlob(checksum *persistencespb.Checksum, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+func (t *serializerImpl) ChecksumToBlob(checksum *persistencespb.Checksum, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	// nil is replaced with empty object because it is not supported for "checksum" field in DB.
 	if checksum == nil {
 		checksum = &persistencespb.Checksum{}
@@ -606,12 +605,12 @@ func (t *serializerImpl) QueueMetadataToBlob(metadata *persistencespb.QueueMetad
 	return encodeBlob(metadata, encodingType)
 }
 
-func(t *serializerImpl) QueueMetadataFromBlob(data *commonpb.DataBlob) (*persistencespb.QueueMetadata, error) {
+func (t *serializerImpl) QueueMetadataFromBlob(data *commonpb.DataBlob) (*persistencespb.QueueMetadata, error) {
 	result := &persistencespb.QueueMetadata{}
 	return result, decodeBlob(data, result)
 }
 
-func(t *serializerImpl) ReplicationTaskToBlob(replicationTask *replicationspb.ReplicationTask, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
+func (t *serializerImpl) ReplicationTaskToBlob(replicationTask *replicationspb.ReplicationTask, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	return proto3EncodeBlob(replicationTask, encodingType)
 }
 
@@ -686,7 +685,7 @@ func proto3EncodeBlob(m proto.Message, encoding enumspb.EncodingType) (*commonpb
 		return nil, NewUnknownEncodingTypeError(encoding)
 	}
 
-	if m == nil || (reflect.ValueOf(m).Kind() == reflect.Ptr && reflect.ValueOf(m).IsNil()){
+	if m == nil || (reflect.ValueOf(m).Kind() == reflect.Ptr && reflect.ValueOf(m).IsNil()) {
 		// TODO: is this expected?
 		return &commonpb.DataBlob{
 			Data:         nil,

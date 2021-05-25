@@ -25,12 +25,13 @@
 package serialization
 
 import (
-	v14 "go.temporal.io/server/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"reflect"
 	"sync"
 	"testing"
 	"time"
+
+	v14 "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -125,12 +126,12 @@ func (s *temporalSerializerSuite) TestSerializer() {
 	}
 
 	visibilityTaskInfo0 := &persistencespb.VisibilityTaskInfo{
-		NamespaceId: "test-namespace-id",
-		WorkflowId: "test-workflow-id",
-		RunId: "test-run-id",
+		NamespaceId:    "test-namespace-id",
+		WorkflowId:     "test-workflow-id",
+		RunId:          "test-run-id",
 		TaskType:       v14.TASK_TYPE_VISIBILITY_START_EXECUTION,
-		Version: 0,
-		TaskId: 123,
+		Version:        0,
+		TaskId:         123,
 		VisibilityTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 	}
 
