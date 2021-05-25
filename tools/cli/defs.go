@@ -58,6 +58,7 @@ const (
 	defaultContextTimeout                        = defaultContextTimeoutInSeconds * time.Second
 	defaultContextTimeoutForLongPoll             = 2 * time.Minute
 	defaultContextTimeoutForListArchivedWorkflow = 3 * time.Minute
+	defaultContextTimeoutForVisibility           = 10
 
 	defaultWorkflowTaskTimeoutInSeconds = 10
 	defaultPageSizeForList              = 500
