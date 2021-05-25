@@ -592,6 +592,10 @@ func newContext(c *cli.Context) (context.Context, context.CancelFunc) {
 	return newContextWithTimeout(c, defaultContextTimeout)
 }
 
+func newContextForVisibility(c *cli.Context) (context.Context, context.CancelFunc) {
+	return newContextWithTimeout(c, defaultContextTimeoutForVisibility)
+}
+
 func newContextForLongPoll(c *cli.Context) (context.Context, context.CancelFunc) {
 	return newContextWithTimeout(c, defaultContextTimeoutForLongPoll)
 }

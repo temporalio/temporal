@@ -704,7 +704,7 @@ func CountWorkflow(c *cli.Context) {
 		Query: query,
 	}
 
-	ctx, cancel := newContext(c)
+	ctx, cancel := newContextForVisibility(c)
 	defer cancel()
 	response, err := sdkClient.CountWorkflow(ctx, request)
 	if err != nil {
@@ -1140,7 +1140,7 @@ func listWorkflowExecutions(sdkClient sdkclient.Client, pageSize int, nextPageTo
 		Query:         query,
 	}
 
-	ctx, cancel := newContext(c)
+	ctx, cancel := newContextForVisibility(c)
 	defer cancel()
 	response, err := sdkClient.ListWorkflow(ctx, request)
 	if err != nil {
@@ -1168,7 +1168,7 @@ func listOpenWorkflow(sdkClient sdkclient.Client, pageSize int, earliestTime, la
 		request.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{TypeFilter: &filterpb.WorkflowTypeFilter{Name: workflowType}}
 	}
 
-	ctx, cancel := newContext(c)
+	ctx, cancel := newContextForVisibility(c)
 	defer cancel()
 	response, err := sdkClient.ListOpenWorkflow(ctx, request)
 	if err != nil {
@@ -1198,7 +1198,7 @@ func listClosedWorkflow(sdkClient sdkclient.Client, pageSize int, earliestTime, 
 		request.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_StatusFilter{StatusFilter: &filterpb.StatusFilter{Status: workflowStatus}}
 	}
 
-	ctx, cancel := newContext(c)
+	ctx, cancel := newContextForVisibility(c)
 	defer cancel()
 	response, err := sdkClient.ListClosedWorkflow(ctx, request)
 	if err != nil {
@@ -1264,7 +1264,7 @@ func scanWorkflowExecutions(sdkClient sdkclient.Client, pageSize int, nextPageTo
 		Query:         query,
 	}
 
-	ctx, cancel := newContext(c)
+	ctx, cancel := newContextForVisibility(c)
 	defer cancel()
 	response, err := sdkClient.ScanWorkflow(ctx, request)
 	if err != nil {
