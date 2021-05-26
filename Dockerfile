@@ -1,8 +1,19 @@
 ARG TARGET=server
+ARG image_base_builder=temporalio/base-builder:1.2.0
+ARG image_base_server=temporalio/base-server:1.0.0 
+ARG image_base_admin=temporalio/base-admin-tools:1.0.0
 ARG GOPROXY
 
 ##### Temporal builder #####
-FROM temporalio/base-builder:1.2.0 AS temporal-builder
+FROM ${image_base_builder} AS temporal-base-builder
+
+##### base server image #####
+FROM ${image_base_server} AS temporal-base-server
+
+FROM ${image_base_admin} as temporal-base-admin
+
+##### temporal-builder target #####
+FROM temporal-base-builder AS temporal-builder
 
 WORKDIR /temporal
 
@@ -12,8 +23,8 @@ RUN go mod download
 COPY . .
 RUN make bins
 
-##### Temporal server #####
-FROM temporalio/base-server:1.0.0 AS temporal-server
+##### temporal-server target #####
+FROM temporal-base-server AS temporal-server
 WORKDIR /etc/temporal
 ENV TEMPORAL_HOME /etc/temporal
 ENV SERVICES "history:matching:frontend:worker"
@@ -48,13 +59,13 @@ CMD ["autosetup", "develop"]
 COPY docker/setup-develop.sh /etc/temporal/setup-develop.sh
 
 ##### Temporal CLI (tctl) #####
-FROM temporalio/base-server:1.0.0 AS temporal-tctl
+FROM temporal-base-server AS temporal-tctl
 WORKDIR /etc/temporal
 ENTRYPOINT ["tctl"]
 COPY --from=temporal-builder /temporal/tctl /usr/local/bin
 
 ##### Temporal admin tools #####
-FROM temporalio/base-admin-tools:1.0.0 as temporal-admin-tools
+FROM temporal-base-admin as temporal-admin-tools
 WORKDIR /etc/temporal
 # Keep the container running.
 ENTRYPOINT ["tail", "-f", "/dev/null"]
