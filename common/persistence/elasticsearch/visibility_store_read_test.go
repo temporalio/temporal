@@ -43,6 +43,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -88,7 +89,8 @@ var (
 	testSearchResult = &elastic.SearchResult{
 		Hits: &elastic.SearchHits{},
 	}
-	errTestESSearch = errors.New("ES error")
+	errTestESSearch     = errors.New("ES error")
+	errTestESBadRequest = &elastic.Error{Status: 400}
 
 	filterOpen              = fmt.Sprintf("map[match:map[ExecutionStatus:map[query:%d]]]", enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 	filterClose             = fmt.Sprintf("map[match:map[ExecutionStatus:map[query:%d]]]", enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
@@ -138,6 +140,13 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutions() {
 	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ListOpenWorkflowExecutions failed"))
+
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESBadRequest)
+	_, err = s.visibilityStore.ListOpenWorkflowExecutions(testRequest)
+	s.Error(err)
+	_, ok = err.(*serviceerror.InvalidArgument)
+	s.True(ok)
+	s.True(strings.Contains(err.Error(), "ListOpenWorkflowExecutions failed"))
 }
 
 func (s *ESVisibilitySuite) TestListClosedWorkflowExecutions() {
@@ -154,6 +163,13 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutions() {
 	_, err = s.visibilityStore.ListClosedWorkflowExecutions(testRequest)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
+	s.True(ok)
+	s.True(strings.Contains(err.Error(), "ListClosedWorkflowExecutions failed"))
+
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESBadRequest)
+	_, err = s.visibilityStore.ListClosedWorkflowExecutions(testRequest)
+	s.Error(err)
+	_, ok = err.(*serviceerror.InvalidArgument)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ListClosedWorkflowExecutions failed"))
 }
@@ -180,6 +196,13 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByType() {
 	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ListOpenWorkflowExecutionsByType failed"))
+
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESBadRequest)
+	_, err = s.visibilityStore.ListOpenWorkflowExecutionsByType(request)
+	s.Error(err)
+	_, ok = err.(*serviceerror.InvalidArgument)
+	s.True(ok)
+	s.True(strings.Contains(err.Error(), "ListOpenWorkflowExecutionsByType failed"))
 }
 
 func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByType() {
@@ -202,6 +225,13 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByType() {
 	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByType(request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
+	s.True(ok)
+	s.True(strings.Contains(err.Error(), "ListClosedWorkflowExecutionsByType failed"))
+
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESBadRequest)
+	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByType(request)
+	s.Error(err)
+	_, ok = err.(*serviceerror.InvalidArgument)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ListClosedWorkflowExecutionsByType failed"))
 }
@@ -228,6 +258,13 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ListOpenWorkflowExecutionsByWorkflowID failed"))
+
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESBadRequest)
+	_, err = s.visibilityStore.ListOpenWorkflowExecutionsByWorkflowID(request)
+	s.Error(err)
+	_, ok = err.(*serviceerror.InvalidArgument)
+	s.True(ok)
+	s.True(strings.Contains(err.Error(), "ListOpenWorkflowExecutionsByWorkflowID failed"))
 }
 
 func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByWorkflowID() {
@@ -252,6 +289,13 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByWorkflowID() {
 	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ListClosedWorkflowExecutionsByWorkflowID failed"))
+
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESBadRequest)
+	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByWorkflowID(request)
+	s.Error(err)
+	_, ok = err.(*serviceerror.InvalidArgument)
+	s.True(ok)
+	s.True(strings.Contains(err.Error(), "ListClosedWorkflowExecutionsByWorkflowID failed"))
 }
 
 func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
@@ -273,6 +317,13 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
 	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByStatus(request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
+	s.True(ok)
+	s.True(strings.Contains(err.Error(), "ListClosedWorkflowExecutionsByStatus failed"))
+
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESBadRequest)
+	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByStatus(request)
+	s.Error(err)
+	_, ok = err.(*serviceerror.InvalidArgument)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ListClosedWorkflowExecutionsByStatus failed"))
 }
@@ -300,6 +351,13 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution() {
 	_, err = s.visibilityStore.GetClosedWorkflowExecution(request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
+	s.True(ok)
+	s.True(strings.Contains(err.Error(), "GetClosedWorkflowExecution failed"))
+
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESBadRequest)
+	_, err = s.visibilityStore.GetClosedWorkflowExecution(request)
+	s.Error(err)
+	_, ok = err.(*serviceerror.InvalidArgument)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "GetClosedWorkflowExecution failed"))
 }
