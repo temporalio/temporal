@@ -100,7 +100,7 @@ func NewCliApp() *cli.App {
 		cli.StringFlag{
 			Name:   FlagHeadersProviderPluginWithAlias,
 			Value:  "",
-			Usage:  "headers provider plugin",
+			Usage:  "headers provider plugin executable name",
 			EnvVar: "TEMPORAL_CLI_PLUGIN_HEADERS_PROVIDER",
 		},
 		cli.StringFlag{
@@ -234,8 +234,8 @@ func NewCliApp() *cli.App {
 	return app
 }
 
-func loadPlugins(ctx *cli.Context) error {
-	dcPlugin := ctx.String(FlagDataConverterPlugin)
+func loadPlugins(c *cli.Context) error {
+	dcPlugin := c.String(FlagDataConverterPlugin)
 	if dcPlugin != "" {
 		dataConverter, err := plugin.NewDataConverterPlugin(dcPlugin)
 		if err != nil {
@@ -245,7 +245,7 @@ func loadPlugins(ctx *cli.Context) error {
 		dataconverter.SetCurrent(dataConverter)
 	}
 
-	hpPlugin := ctx.String(FlagHeadersProviderPlugin)
+	hpPlugin := c.String(FlagHeadersProviderPlugin)
 	if hpPlugin != "" {
 		headersProvider, err := plugin.NewHeadersProviderPlugin(hpPlugin)
 		if err != nil {
@@ -258,7 +258,7 @@ func loadPlugins(ctx *cli.Context) error {
 	return nil
 }
 
-func stopPlugins(ctx *cli.Context) error {
+func stopPlugins(c *cli.Context) error {
 	plugin.StopPlugins()
 
 	return nil

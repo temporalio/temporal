@@ -31,29 +31,31 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-type HeadersProviderSDK interface {
-	GetHeaders(context.Context) (map[string]string, error)
-}
+type (
+	HeadersProviderSDK interface {
+		GetHeaders(context.Context) (map[string]string, error)
+	}
 
-type HeadersProvider interface {
-	GetHeaders(map[string][]string) (map[string]string, error)
-}
+	HeadersProvider interface {
+		GetHeaders(map[string][]string) (map[string]string, error)
+	}
 
-type HeadersProviderRPCServer struct {
-	Impl HeadersProvider
-}
+	HeadersProviderRPCServer struct {
+		Impl HeadersProvider
+	}
 
-type HeadersProviderPlugin struct {
-	Impl HeadersProvider
-}
+	HeadersProviderPlugin struct {
+		Impl HeadersProvider
+	}
 
-type HeadersProviderRPC struct {
-	client *rpc.Client
-}
+	HeadersProviderRPC struct {
+		client *rpc.Client
+	}
 
-type HeadersProviderPluginWrapper struct {
-	provider HeadersProvider
-}
+	HeadersProviderPluginWrapper struct {
+		provider HeadersProvider
+	}
+)
 
 func (w HeadersProviderPluginWrapper) GetHeaders(ctx context.Context) (map[string]string, error) {
 	var outgoingHeaders map[string][]string
