@@ -62,12 +62,13 @@ const (
 
 type (
 	visibilityStore struct {
-		esClient      client.Client
-		index         string
-		logger        log.Logger
-		config        *config.VisibilityConfig
-		metricsClient metrics.Client
-		processor     Processor
+		esClient                 client.Client
+		index                    string
+		searchAttributesProvider searchattribute.Provider
+		logger                   log.Logger
+		config                   *config.VisibilityConfig
+		metricsClient            metrics.Client
+		processor                Processor
 	}
 
 	visibilityPageToken struct {
@@ -106,6 +107,7 @@ var (
 func NewVisibilityStore(
 	esClient client.Client,
 	index string,
+	searchAttributesProvider searchattribute.Provider,
 	processor Processor,
 	cfg *config.VisibilityConfig,
 	logger log.Logger,
@@ -113,12 +115,13 @@ func NewVisibilityStore(
 ) *visibilityStore {
 
 	return &visibilityStore{
-		esClient:      esClient,
-		index:         index,
-		processor:     processor,
-		logger:        log.With(logger, tag.ComponentESVisibilityManager),
-		config:        cfg,
-		metricsClient: metricsClient,
+		esClient:                 esClient,
+		index:                    index,
+		searchAttributesProvider: searchAttributesProvider,
+		processor:                processor,
+		logger:                   log.With(logger, tag.ComponentESVisibilityManager),
+		config:                   cfg,
+		metricsClient:            metricsClient,
 	}
 }
 
@@ -231,13 +234,13 @@ func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityR
 		doc[searchattribute.Encoding] = request.Memo.GetEncodingType().String()
 	}
 
-	typeMap, err := searchattribute.BuildTypeMap(s.config.ValidSearchAttributes)
+	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
-		s.logger.Error("Unable to parse search attributes from config.", tag.Error(err))
+		s.logger.Error("Unable to read search attribute types.", tag.Error(err))
 		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
 
-	attr, err := searchattribute.Decode(request.SearchAttributes, typeMap)
+	attr, err := searchattribute.Decode(request.SearchAttributes, &typeMap)
 	if err != nil {
 		s.logger.Error("Unable to decode search attributes.", tag.Error(err))
 		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
@@ -707,15 +710,11 @@ func (s *visibilityStore) getFieldType(fieldName string) enumspb.IndexedValueTyp
 	if strings.HasPrefix(fieldName, searchattribute.Attr) {
 		fieldName = fieldName[len(searchattribute.Attr)+1:] // remove prefix
 	}
-	typeMap, err := searchattribute.BuildTypeMap(s.config.ValidSearchAttributes)
+	searchAttributes, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
-		s.logger.Error("Unable to parse search attributes from config.", tag.Error(err))
+		s.logger.Error("Unable to read search attribute types.", tag.Error(err))
 	}
-
-	fieldType, err := searchattribute.GetType(fieldName, typeMap)
-	if err != nil {
-		s.logger.Error("Unable to get search attribute type.", tag.Value(fieldName), tag.Error(err))
-	}
+	fieldType, _ := searchAttributes.GetType(fieldName)
 	return fieldType
 }
 

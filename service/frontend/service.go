@@ -60,6 +60,7 @@ import (
 // Config represents configuration for frontend service
 type Config struct {
 	NumHistoryShards             int32
+	ESIndexName                  string
 	PersistenceMaxQPS            dynamicconfig.IntPropertyFn
 	PersistenceGlobalMaxQPS      dynamicconfig.IntPropertyFn
 	VisibilityMaxPageSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -93,8 +94,6 @@ type Config struct {
 	// Namespace specific config
 	EnableNamespaceNotActiveAutoForwarding dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	// ValidSearchAttributes is legal indexed keys that can be used in list APIs
-	ValidSearchAttributes             dynamicconfig.MapPropertyFn
 	SearchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -135,9 +134,10 @@ type Config struct {
 }
 
 // NewConfig returns new service config with default values
-func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadFromES bool) *Config {
+func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName string, enableReadFromES bool) *Config {
 	return &Config{
 		NumHistoryShards:                       numHistoryShards,
+		ESIndexName:                            esIndexName,
 		PersistenceMaxQPS:                      dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
 		PersistenceGlobalMaxQPS:                dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
 		VisibilityMaxPageSize:                  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
@@ -160,7 +160,6 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, enableReadF
 		ShutdownDrainDuration:                  dc.GetDurationProperty(dynamicconfig.FrontendShutdownDrainDuration, 0),
 		EnableNamespaceNotActiveAutoForwarding: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableNamespaceNotActiveAutoForwarding, true),
 		EnableClientVersionCheck:               dc.GetBoolProperty(dynamicconfig.EnableClientVersionCheck, true),
-		ValidSearchAttributes:                  dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, searchattribute.GetDefaultTypeMap()),
 		SearchAttributesNumberOfKeysLimit:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
 		SearchAttributesSizeOfValueLimit:       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
 		SearchAttributesTotalSizeLimit:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
@@ -204,12 +203,15 @@ func NewService(
 ) (*Service, error) {
 
 	isAdvancedVisExistInConfig := len(params.PersistenceConfig.AdvancedVisibilityStore) != 0
-	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger), params.PersistenceConfig.NumHistoryShards, isAdvancedVisExistInConfig)
+	serviceConfig := NewConfig(
+		dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger),
+		params.PersistenceConfig.NumHistoryShards,
+		params.ESConfig.GetVisibilityIndex(),
+		isAdvancedVisExistInConfig)
 
 	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityListMaxQPS:  serviceConfig.VisibilityListMaxQPS,
-		EnableSampling:        serviceConfig.EnableVisibilitySampling,
-		ValidSearchAttributes: serviceConfig.ValidSearchAttributes,
+		VisibilityListMaxQPS: serviceConfig.VisibilityListMaxQPS,
+		EnableSampling:       serviceConfig.EnableVisibilitySampling,
 	}
 
 	visibilityManagerInitializer := func(
@@ -226,10 +228,9 @@ func NewService(
 				MaxQPS:                 serviceConfig.PersistenceMaxQPS,
 				VisibilityListMaxQPS:   serviceConfig.ESVisibilityListMaxQPS,
 				ESIndexMaxResultWindow: serviceConfig.ESIndexMaxResultWindow,
-				ValidSearchAttributes:  serviceConfig.ValidSearchAttributes,
 			}
 			visibilityFromES = espersistence.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
-				nil, params.MetricsClient, logger)
+				searchAttributesProvider, nil, params.MetricsClient, logger)
 		}
 		return persistence.NewVisibilityManagerWrapper(
 			visibilityFromDB,

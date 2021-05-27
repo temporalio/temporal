@@ -1,19 +1,26 @@
 #!/bin/bash
 
-export HOST_IP=`hostname -i`
+set -eu -o pipefail
 
-if [ "$BIND_ON_LOCALHOST" == true ] || [ "$BIND_ON_IP" == "127.0.0.1" ]; then
-    export BIND_ON_IP="127.0.0.1"
-    export HOST_IP="127.0.0.1"
-elif [ -z "$BIND_ON_IP" ]; then
-    # not binding to localhost and bind_on_ip is empty - use default host ip addr
-    export BIND_ON_IP=$HOST_IP
-elif [ "$BIND_ON_IP" != "0.0.0.0" ]; then
-    # binding to a user specified addr, make sure HOST_IP also uses the same addr
-    export HOST_IP=$BIND_ON_IP
+export BIND_ON_IP="${BIND_ON_IP:-$(hostname -i)}"
+
+if [[ "${BIND_ON_IP}" =~ ":" ]]; then
+    # ipv6
+    export TEMPORAL_CLI_ADDRESS="[${BIND_ON_IP}]:7233"
+else
+    # ipv4
+    export TEMPORAL_CLI_ADDRESS="${BIND_ON_IP}:7233"
 fi
 
-# this env variable is deprecated
-export BIND_ON_LOCALHOST=false
+dockerize -template ./config/config_template.yaml:./config/docker.yaml
 
-exec "$@"
+# Automatically setup Temporal Server (databases, Elasticsearch, default namespace) if "autosetup" is passed as an argument.
+for arg in "$@" ; do [[ ${arg} == "autosetup" ]] && ./auto-setup.sh && break ; done
+
+# Setup Temporal Server in development mode if "develop" is passed as an argument.
+for arg in "$@" ; do [[ ${arg} == "develop" ]] && ./setup-develop.sh && break ; done
+
+# Run bash instead of Temporal Server if "bash" is passed as an argument (convenient to debug docker image).
+for arg in "$@" ; do [[ ${arg} == "bash" ]] && bash && exit 0 ; done
+
+./start-temporal.sh

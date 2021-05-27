@@ -33,12 +33,11 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
-
-	"go.temporal.io/server/common/log"
 )
 
 const (
@@ -51,7 +50,7 @@ const (
 type (
 	// WorkflowParams is the parameters for add search attributes workflow.
 	WorkflowParams struct {
-		// ES index name.
+		// Elasticsearch index name. Can be empty string if Elasticsearch is not configured.
 		IndexName string
 		// Search attributes that need to be added to the index.
 		CustomAttributesToAdd map[string]enumspb.IndexedValueType
@@ -110,7 +109,7 @@ func newActivities(
 	}
 }
 
-// AddSearchAttributesWorkflow is the workflow that
+// AddSearchAttributesWorkflow is the workflow that adds search attributes to the cluster for specific index.
 func AddSearchAttributesWorkflow(ctx workflow.Context, params WorkflowParams) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Workflow started.", "wf-type", WorkflowName)
@@ -135,13 +134,16 @@ func AddSearchAttributesWorkflow(ctx workflow.Context, params WorkflowParams) er
 		return fmt.Errorf("%w: UpdateClusterMetadataActivity: %v", ErrUnableToExecuteActivity, err)
 	}
 
-	// TODO: anything better?
-	workflow.GetMetricsScope(ctx).SubScope("AddSearchAttributesWorkflow").Counter("add_search_attributes_workflow_success").Inc(1)
 	logger.Info("Workflow finished successfully.", "wf-type", WorkflowName)
 	return nil
 }
 
 func (a *activities) AddESMappingFieldActivity(ctx context.Context, params WorkflowParams) error {
+	if a.esClient == nil {
+		a.logger.Info("Elasticsearch client is not configured. Skipping mapping update.")
+		return nil
+	}
+
 	mapping := make(map[string]string, len(params.CustomAttributesToAdd))
 	for saName, saType := range params.CustomAttributesToAdd {
 		esType := searchattribute.MapESType(saType)
@@ -167,14 +169,19 @@ func (a *activities) AddESMappingFieldActivity(ctx context.Context, params Workf
 	return nil
 }
 
-func (a *activities) WaitForYellowStatusActivity(ctx context.Context, index string) error {
-	status, err := a.esClient.WaitForYellowStatus(ctx, index)
+func (a *activities) WaitForYellowStatusActivity(ctx context.Context, indexName string) error {
+	if a.esClient == nil {
+		a.logger.Info("Elasticsearch client is not configures. Skipping Elasticsearch status check.")
+		return nil
+	}
+
+	status, err := a.esClient.WaitForYellowStatus(ctx, indexName)
 	if err != nil {
-		a.logger.Error("Unable to get Elasticsearch cluster status.", tag.ESIndex(index), tag.Error(err))
+		a.logger.Error("Unable to get Elasticsearch cluster status.", tag.ESIndex(indexName), tag.Error(err))
 		a.metricsClient.IncCounter(metrics.AddSearchAttributesWorkflowScope, metrics.AddSearchAttributesFailuresCount)
 		return err
 	}
-	a.logger.Info("Elasticsearch cluster status.", tag.ESIndex(index), tag.ESClusterStatus(status))
+	a.logger.Info("Elasticsearch cluster status.", tag.ESIndex(indexName), tag.ESClusterStatus(status))
 	return nil
 }
 
@@ -184,9 +191,8 @@ func (a *activities) UpdateClusterMetadataActivity(_ context.Context, params Wor
 		return fmt.Errorf("%w: %v", ErrUnableToGetSearchAttributes, err)
 	}
 
-	oldCustomSearchAttributes := searchattribute.FilterCustom(oldSearchAttributes)
 	newCustomSearchAttributes := map[string]enumspb.IndexedValueType{}
-	for saName, saType := range oldCustomSearchAttributes {
+	for saName, saType := range oldSearchAttributes.Custom() {
 		newCustomSearchAttributes[saName] = saType
 	}
 	for saName, saType := range params.CustomAttributesToAdd {

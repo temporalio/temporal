@@ -112,8 +112,7 @@ func (s *TestCluster) Config() config.Persistence {
 		},
 		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
 		VisibilityConfig: &config.VisibilityConfig{
-			ValidSearchAttributes: nil,
-			EnableSampling:        dynamicconfig.GetBoolPropertyFn(false),
+			EnableSampling: dynamicconfig.GetBoolPropertyFn(false),
 		},
 	}
 }

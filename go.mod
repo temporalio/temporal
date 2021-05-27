@@ -31,7 +31,7 @@ require (
 	github.com/hashicorp/go-hclog v0.16.0
 	github.com/hashicorp/go-plugin v1.4.0
 	github.com/iancoleman/strcase v0.1.3
-	github.com/jmoiron/sqlx v1.2.1-0.20200615141059-0794cb1f47ee
+	github.com/jmoiron/sqlx v1.3.4
 	github.com/jonboulle/clockwork v0.2.2
 	github.com/kr/pretty v0.2.1 // indirect
 	github.com/lib/pq v1.10.1
@@ -62,16 +62,16 @@ require (
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.opentelemetry.io/otel v0.15.0
 	go.opentelemetry.io/otel/exporters/metric/prometheus v0.15.0
-	go.temporal.io/api v1.4.1-0.20210429002340-277727e03039
-	go.temporal.io/sdk v1.6.0
+	go.temporal.io/api v1.4.1-0.20210429213054-a9a257b5cf16
+	go.temporal.io/sdk v1.6.1-0.20210525221837-b434b501f9d5
 	go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193
 	go.uber.org/atomic v1.7.0
 	go.uber.org/multierr v1.6.0
 	go.uber.org/zap v1.16.0
 	golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b // indirect
-	golang.org/x/mod v0.4.2 // indirect
 	golang.org/x/oauth2 v0.0.0-20210413134643-5e61552d6c78
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
+	golang.org/x/tools v0.1.1 // indirect
 	google.golang.org/api v0.45.0
 	google.golang.org/grpc v1.37.0
 	google.golang.org/grpc/examples v0.0.0-20210426212906-52a707c0dafe

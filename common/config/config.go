@@ -254,8 +254,6 @@ type (
 		ESIndexMaxResultWindow dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
 		// MaxQPS is overall max QPS
 		MaxQPS dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
-		// ValidSearchAttributes is legal indexed keys that can be used in list APIs
-		ValidSearchAttributes dynamicconfig.MapPropertyFn `yaml:"-" json:"-"`
 		// ESProcessorAckTimeout is the timeout that store will wait to get ack signal from ES processor.
 		// Should be at least ESProcessorFlushInterval+<time to process request>.
 		ESProcessorAckTimeout dynamicconfig.DurationPropertyFn `yaml:"-" json:"-"`

@@ -436,6 +436,8 @@ const (
 	// FrontendMaxBadBinaries is the max number of bad binaries in namespace config
 	FrontendMaxBadBinaries
 	// ValidSearchAttributes is legal indexed keys that can be used in list APIs
+	// TODO: remove after 1.10.0 release
+	// Deprecated.
 	ValidSearchAttributes
 	// SendRawWorkflowHistory is whether to enable raw history retrieving
 	SendRawWorkflowHistory

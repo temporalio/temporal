@@ -44,7 +44,8 @@ import (
 	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 	v1 "go.temporal.io/api/common/v1"
 	v16 "go.temporal.io/api/enums/v1"
-	v17 "go.temporal.io/server/api/cluster/v1"
+	v17 "go.temporal.io/api/workflow/v1"
+	v18 "go.temporal.io/server/api/cluster/v1"
 	v13 "go.temporal.io/server/api/enums/v1"
 	v14 "go.temporal.io/server/api/history/v1"
 	v12 "go.temporal.io/server/api/namespace/v1"
@@ -1056,22 +1057,22 @@ func (m *ReapplyEventsResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ReapplyEventsResponse proto.InternalMessageInfo
 
-type AddSearchAttributeRequest struct {
-	SearchAttribute map[string]v16.IndexedValueType `protobuf:"bytes,1,rep,name=search_attribute,json=searchAttribute,proto3" json:"search_attribute,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3,enum=temporal.api.enums.v1.IndexedValueType"`
-	SecurityToken   string                          `protobuf:"bytes,2,opt,name=security_token,json=securityToken,proto3" json:"security_token,omitempty"`
+type AddSearchAttributesRequest struct {
+	SearchAttributes map[string]v16.IndexedValueType `protobuf:"bytes,1,rep,name=search_attributes,json=searchAttributes,proto3" json:"search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3,enum=temporal.api.enums.v1.IndexedValueType"`
+	IndexName        string                          `protobuf:"bytes,2,opt,name=index_name,json=indexName,proto3" json:"index_name,omitempty"`
 }
 
-func (m *AddSearchAttributeRequest) Reset()      { *m = AddSearchAttributeRequest{} }
-func (*AddSearchAttributeRequest) ProtoMessage() {}
-func (*AddSearchAttributeRequest) Descriptor() ([]byte, []int) {
+func (m *AddSearchAttributesRequest) Reset()      { *m = AddSearchAttributesRequest{} }
+func (*AddSearchAttributesRequest) ProtoMessage() {}
+func (*AddSearchAttributesRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_cc07c1a2abe7cb51, []int{18}
 }
-func (m *AddSearchAttributeRequest) XXX_Unmarshal(b []byte) error {
+func (m *AddSearchAttributesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *AddSearchAttributeRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *AddSearchAttributesRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_AddSearchAttributeRequest.Marshal(b, m, deterministic)
+		return xxx_messageInfo_AddSearchAttributesRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -1081,46 +1082,51 @@ func (m *AddSearchAttributeRequest) XXX_Marshal(b []byte, deterministic bool) ([
 		return b[:n], nil
 	}
 }
-func (m *AddSearchAttributeRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_AddSearchAttributeRequest.Merge(m, src)
+func (m *AddSearchAttributesRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AddSearchAttributesRequest.Merge(m, src)
 }
-func (m *AddSearchAttributeRequest) XXX_Size() int {
+func (m *AddSearchAttributesRequest) XXX_Size() int {
 	return m.Size()
 }
-func (m *AddSearchAttributeRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_AddSearchAttributeRequest.DiscardUnknown(m)
+func (m *AddSearchAttributesRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_AddSearchAttributesRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_AddSearchAttributeRequest proto.InternalMessageInfo
+var xxx_messageInfo_AddSearchAttributesRequest proto.InternalMessageInfo
 
-func (m *AddSearchAttributeRequest) GetSearchAttribute() map[string]v16.IndexedValueType {
+func (m *AddSearchAttributesRequest) GetSearchAttributes() map[string]v16.IndexedValueType {
 	if m != nil {
-		return m.SearchAttribute
+		return m.SearchAttributes
 	}
 	return nil
 }
 
-func (m *AddSearchAttributeRequest) GetSecurityToken() string {
+func (m *AddSearchAttributesRequest) GetIndexName() string {
 	if m != nil {
-		return m.SecurityToken
+		return m.IndexName
 	}
 	return ""
 }
 
-type AddSearchAttributeResponse struct {
+type AddSearchAttributesResponse struct {
+	CustomAttributes map[string]v16.IndexedValueType `protobuf:"bytes,1,rep,name=custom_attributes,json=customAttributes,proto3" json:"custom_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3,enum=temporal.api.enums.v1.IndexedValueType"`
+	SystemAttributes map[string]v16.IndexedValueType `protobuf:"bytes,2,rep,name=system_attributes,json=systemAttributes,proto3" json:"system_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3,enum=temporal.api.enums.v1.IndexedValueType"`
+	Mapping          map[string]string               `protobuf:"bytes,3,rep,name=mapping,proto3" json:"mapping,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	// State of the workflow that adds search attributes to the system.
+	AddWorkflowExecutionInfo *v17.WorkflowExecutionInfo `protobuf:"bytes,4,opt,name=add_workflow_execution_info,json=addWorkflowExecutionInfo,proto3" json:"add_workflow_execution_info,omitempty"`
 }
 
-func (m *AddSearchAttributeResponse) Reset()      { *m = AddSearchAttributeResponse{} }
-func (*AddSearchAttributeResponse) ProtoMessage() {}
-func (*AddSearchAttributeResponse) Descriptor() ([]byte, []int) {
+func (m *AddSearchAttributesResponse) Reset()      { *m = AddSearchAttributesResponse{} }
+func (*AddSearchAttributesResponse) ProtoMessage() {}
+func (*AddSearchAttributesResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_cc07c1a2abe7cb51, []int{19}
 }
-func (m *AddSearchAttributeResponse) XXX_Unmarshal(b []byte) error {
+func (m *AddSearchAttributesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *AddSearchAttributeResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *AddSearchAttributesResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_AddSearchAttributeResponse.Marshal(b, m, deterministic)
+		return xxx_messageInfo_AddSearchAttributesResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -1130,17 +1136,156 @@ func (m *AddSearchAttributeResponse) XXX_Marshal(b []byte, deterministic bool) (
 		return b[:n], nil
 	}
 }
-func (m *AddSearchAttributeResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_AddSearchAttributeResponse.Merge(m, src)
+func (m *AddSearchAttributesResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AddSearchAttributesResponse.Merge(m, src)
 }
-func (m *AddSearchAttributeResponse) XXX_Size() int {
+func (m *AddSearchAttributesResponse) XXX_Size() int {
 	return m.Size()
 }
-func (m *AddSearchAttributeResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_AddSearchAttributeResponse.DiscardUnknown(m)
+func (m *AddSearchAttributesResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_AddSearchAttributesResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_AddSearchAttributeResponse proto.InternalMessageInfo
+var xxx_messageInfo_AddSearchAttributesResponse proto.InternalMessageInfo
+
+func (m *AddSearchAttributesResponse) GetCustomAttributes() map[string]v16.IndexedValueType {
+	if m != nil {
+		return m.CustomAttributes
+	}
+	return nil
+}
+
+func (m *AddSearchAttributesResponse) GetSystemAttributes() map[string]v16.IndexedValueType {
+	if m != nil {
+		return m.SystemAttributes
+	}
+	return nil
+}
+
+func (m *AddSearchAttributesResponse) GetMapping() map[string]string {
+	if m != nil {
+		return m.Mapping
+	}
+	return nil
+}
+
+func (m *AddSearchAttributesResponse) GetAddWorkflowExecutionInfo() *v17.WorkflowExecutionInfo {
+	if m != nil {
+		return m.AddWorkflowExecutionInfo
+	}
+	return nil
+}
+
+type GetSearchAttributesRequest struct {
+	IndexName string `protobuf:"bytes,1,opt,name=index_name,json=indexName,proto3" json:"index_name,omitempty"`
+}
+
+func (m *GetSearchAttributesRequest) Reset()      { *m = GetSearchAttributesRequest{} }
+func (*GetSearchAttributesRequest) ProtoMessage() {}
+func (*GetSearchAttributesRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cc07c1a2abe7cb51, []int{20}
+}
+func (m *GetSearchAttributesRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetSearchAttributesRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetSearchAttributesRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetSearchAttributesRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetSearchAttributesRequest.Merge(m, src)
+}
+func (m *GetSearchAttributesRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *GetSearchAttributesRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetSearchAttributesRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetSearchAttributesRequest proto.InternalMessageInfo
+
+func (m *GetSearchAttributesRequest) GetIndexName() string {
+	if m != nil {
+		return m.IndexName
+	}
+	return ""
+}
+
+type GetSearchAttributesResponse struct {
+	CustomAttributes map[string]v16.IndexedValueType `protobuf:"bytes,1,rep,name=custom_attributes,json=customAttributes,proto3" json:"custom_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3,enum=temporal.api.enums.v1.IndexedValueType"`
+	SystemAttributes map[string]v16.IndexedValueType `protobuf:"bytes,2,rep,name=system_attributes,json=systemAttributes,proto3" json:"system_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3,enum=temporal.api.enums.v1.IndexedValueType"`
+	Mapping          map[string]string               `protobuf:"bytes,3,rep,name=mapping,proto3" json:"mapping,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	// State of the workflow that adds search attributes to the system.
+	AddWorkflowExecutionInfo *v17.WorkflowExecutionInfo `protobuf:"bytes,4,opt,name=add_workflow_execution_info,json=addWorkflowExecutionInfo,proto3" json:"add_workflow_execution_info,omitempty"`
+}
+
+func (m *GetSearchAttributesResponse) Reset()      { *m = GetSearchAttributesResponse{} }
+func (*GetSearchAttributesResponse) ProtoMessage() {}
+func (*GetSearchAttributesResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cc07c1a2abe7cb51, []int{21}
+}
+func (m *GetSearchAttributesResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetSearchAttributesResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetSearchAttributesResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetSearchAttributesResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetSearchAttributesResponse.Merge(m, src)
+}
+func (m *GetSearchAttributesResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *GetSearchAttributesResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetSearchAttributesResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetSearchAttributesResponse proto.InternalMessageInfo
+
+func (m *GetSearchAttributesResponse) GetCustomAttributes() map[string]v16.IndexedValueType {
+	if m != nil {
+		return m.CustomAttributes
+	}
+	return nil
+}
+
+func (m *GetSearchAttributesResponse) GetSystemAttributes() map[string]v16.IndexedValueType {
+	if m != nil {
+		return m.SystemAttributes
+	}
+	return nil
+}
+
+func (m *GetSearchAttributesResponse) GetMapping() map[string]string {
+	if m != nil {
+		return m.Mapping
+	}
+	return nil
+}
+
+func (m *GetSearchAttributesResponse) GetAddWorkflowExecutionInfo() *v17.WorkflowExecutionInfo {
+	if m != nil {
+		return m.AddWorkflowExecutionInfo
+	}
+	return nil
+}
 
 type DescribeClusterRequest struct {
 }
@@ -1148,7 +1293,7 @@ type DescribeClusterRequest struct {
 func (m *DescribeClusterRequest) Reset()      { *m = DescribeClusterRequest{} }
 func (*DescribeClusterRequest) ProtoMessage() {}
 func (*DescribeClusterRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{20}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{22}
 }
 func (m *DescribeClusterRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1180,13 +1325,13 @@ var xxx_messageInfo_DescribeClusterRequest proto.InternalMessageInfo
 type DescribeClusterResponse struct {
 	SupportedClients map[string]string   `protobuf:"bytes,1,rep,name=supported_clients,json=supportedClients,proto3" json:"supported_clients,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	ServerVersion    string              `protobuf:"bytes,2,opt,name=server_version,json=serverVersion,proto3" json:"server_version,omitempty"`
-	MembershipInfo   *v17.MembershipInfo `protobuf:"bytes,3,opt,name=membership_info,json=membershipInfo,proto3" json:"membership_info,omitempty"`
+	MembershipInfo   *v18.MembershipInfo `protobuf:"bytes,3,opt,name=membership_info,json=membershipInfo,proto3" json:"membership_info,omitempty"`
 }
 
 func (m *DescribeClusterResponse) Reset()      { *m = DescribeClusterResponse{} }
 func (*DescribeClusterResponse) ProtoMessage() {}
 func (*DescribeClusterResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{21}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{23}
 }
 func (m *DescribeClusterResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1229,7 +1374,7 @@ func (m *DescribeClusterResponse) GetServerVersion() string {
 	return ""
 }
 
-func (m *DescribeClusterResponse) GetMembershipInfo() *v17.MembershipInfo {
+func (m *DescribeClusterResponse) GetMembershipInfo() *v18.MembershipInfo {
 	if m != nil {
 		return m.MembershipInfo
 	}
@@ -1248,7 +1393,7 @@ type GetDLQMessagesRequest struct {
 func (m *GetDLQMessagesRequest) Reset()      { *m = GetDLQMessagesRequest{} }
 func (*GetDLQMessagesRequest) ProtoMessage() {}
 func (*GetDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{22}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{24}
 }
 func (m *GetDLQMessagesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1328,7 +1473,7 @@ type GetDLQMessagesResponse struct {
 func (m *GetDLQMessagesResponse) Reset()      { *m = GetDLQMessagesResponse{} }
 func (*GetDLQMessagesResponse) ProtoMessage() {}
 func (*GetDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{23}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{25}
 }
 func (m *GetDLQMessagesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1388,7 +1533,7 @@ type PurgeDLQMessagesRequest struct {
 func (m *PurgeDLQMessagesRequest) Reset()      { *m = PurgeDLQMessagesRequest{} }
 func (*PurgeDLQMessagesRequest) ProtoMessage() {}
 func (*PurgeDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{24}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{26}
 }
 func (m *PurgeDLQMessagesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1451,7 +1596,7 @@ type PurgeDLQMessagesResponse struct {
 func (m *PurgeDLQMessagesResponse) Reset()      { *m = PurgeDLQMessagesResponse{} }
 func (*PurgeDLQMessagesResponse) ProtoMessage() {}
 func (*PurgeDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{25}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{27}
 }
 func (m *PurgeDLQMessagesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1492,7 +1637,7 @@ type MergeDLQMessagesRequest struct {
 func (m *MergeDLQMessagesRequest) Reset()      { *m = MergeDLQMessagesRequest{} }
 func (*MergeDLQMessagesRequest) ProtoMessage() {}
 func (*MergeDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{26}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{28}
 }
 func (m *MergeDLQMessagesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1570,7 +1715,7 @@ type MergeDLQMessagesResponse struct {
 func (m *MergeDLQMessagesResponse) Reset()      { *m = MergeDLQMessagesResponse{} }
 func (*MergeDLQMessagesResponse) ProtoMessage() {}
 func (*MergeDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{27}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{29}
 }
 func (m *MergeDLQMessagesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1614,7 +1759,7 @@ type RefreshWorkflowTasksRequest struct {
 func (m *RefreshWorkflowTasksRequest) Reset()      { *m = RefreshWorkflowTasksRequest{} }
 func (*RefreshWorkflowTasksRequest) ProtoMessage() {}
 func (*RefreshWorkflowTasksRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{28}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{30}
 }
 func (m *RefreshWorkflowTasksRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1663,7 +1808,7 @@ type RefreshWorkflowTasksResponse struct {
 func (m *RefreshWorkflowTasksResponse) Reset()      { *m = RefreshWorkflowTasksResponse{} }
 func (*RefreshWorkflowTasksResponse) ProtoMessage() {}
 func (*RefreshWorkflowTasksResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{29}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{31}
 }
 func (m *RefreshWorkflowTasksResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1706,7 +1851,7 @@ type ResendReplicationTasksRequest struct {
 func (m *ResendReplicationTasksRequest) Reset()      { *m = ResendReplicationTasksRequest{} }
 func (*ResendReplicationTasksRequest) ProtoMessage() {}
 func (*ResendReplicationTasksRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{30}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{32}
 }
 func (m *ResendReplicationTasksRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1797,7 +1942,7 @@ type ResendReplicationTasksResponse struct {
 func (m *ResendReplicationTasksResponse) Reset()      { *m = ResendReplicationTasksResponse{} }
 func (*ResendReplicationTasksResponse) ProtoMessage() {}
 func (*ResendReplicationTasksResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{31}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{33}
 }
 func (m *ResendReplicationTasksResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1846,9 +1991,17 @@ func init() {
 	proto.RegisterType((*GetDLQReplicationMessagesResponse)(nil), "temporal.server.api.adminservice.v1.GetDLQReplicationMessagesResponse")
 	proto.RegisterType((*ReapplyEventsRequest)(nil), "temporal.server.api.adminservice.v1.ReapplyEventsRequest")
 	proto.RegisterType((*ReapplyEventsResponse)(nil), "temporal.server.api.adminservice.v1.ReapplyEventsResponse")
-	proto.RegisterType((*AddSearchAttributeRequest)(nil), "temporal.server.api.adminservice.v1.AddSearchAttributeRequest")
-	proto.RegisterMapType((map[string]v16.IndexedValueType)(nil), "temporal.server.api.adminservice.v1.AddSearchAttributeRequest.SearchAttributeEntry")
-	proto.RegisterType((*AddSearchAttributeResponse)(nil), "temporal.server.api.adminservice.v1.AddSearchAttributeResponse")
+	proto.RegisterType((*AddSearchAttributesRequest)(nil), "temporal.server.api.adminservice.v1.AddSearchAttributesRequest")
+	proto.RegisterMapType((map[string]v16.IndexedValueType)(nil), "temporal.server.api.adminservice.v1.AddSearchAttributesRequest.SearchAttributesEntry")
+	proto.RegisterType((*AddSearchAttributesResponse)(nil), "temporal.server.api.adminservice.v1.AddSearchAttributesResponse")
+	proto.RegisterMapType((map[string]v16.IndexedValueType)(nil), "temporal.server.api.adminservice.v1.AddSearchAttributesResponse.CustomAttributesEntry")
+	proto.RegisterMapType((map[string]string)(nil), "temporal.server.api.adminservice.v1.AddSearchAttributesResponse.MappingEntry")
+	proto.RegisterMapType((map[string]v16.IndexedValueType)(nil), "temporal.server.api.adminservice.v1.AddSearchAttributesResponse.SystemAttributesEntry")
+	proto.RegisterType((*GetSearchAttributesRequest)(nil), "temporal.server.api.adminservice.v1.GetSearchAttributesRequest")
+	proto.RegisterType((*GetSearchAttributesResponse)(nil), "temporal.server.api.adminservice.v1.GetSearchAttributesResponse")
+	proto.RegisterMapType((map[string]v16.IndexedValueType)(nil), "temporal.server.api.adminservice.v1.GetSearchAttributesResponse.CustomAttributesEntry")
+	proto.RegisterMapType((map[string]string)(nil), "temporal.server.api.adminservice.v1.GetSearchAttributesResponse.MappingEntry")
+	proto.RegisterMapType((map[string]v16.IndexedValueType)(nil), "temporal.server.api.adminservice.v1.GetSearchAttributesResponse.SystemAttributesEntry")
 	proto.RegisterType((*DescribeClusterRequest)(nil), "temporal.server.api.adminservice.v1.DescribeClusterRequest")
 	proto.RegisterType((*DescribeClusterResponse)(nil), "temporal.server.api.adminservice.v1.DescribeClusterResponse")
 	proto.RegisterMapType((map[string]string)(nil), "temporal.server.api.adminservice.v1.DescribeClusterResponse.SupportedClientsEntry")
@@ -1869,123 +2022,134 @@ func init() {
 }
 
 var fileDescriptor_cc07c1a2abe7cb51 = []byte{
-	// 1854 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xdc, 0x59, 0xcd, 0x6f, 0x1b, 0xd7,
-	0x11, 0xd7, 0x92, 0xd6, 0x07, 0x47, 0x12, 0x65, 0x6d, 0x24, 0x8b, 0x66, 0x1c, 0x5a, 0x5e, 0xa7,
-	0xb1, 0x62, 0x14, 0xab, 0x5a, 0x29, 0x12, 0x37, 0x45, 0x51, 0x58, 0xb2, 0xaa, 0x10, 0xb0, 0x02,
-	0x67, 0x65, 0xc8, 0x45, 0x81, 0x82, 0x5d, 0x72, 0x47, 0xd4, 0x42, 0xdc, 0x8f, 0xbe, 0xf7, 0x96,
-	0x36, 0x0d, 0x34, 0xed, 0xa1, 0x05, 0x7a, 0xf4, 0xb9, 0x7f, 0x41, 0x2f, 0x45, 0x6f, 0xbd, 0xf7,
-	0x96, 0xa3, 0xd1, 0x53, 0xd0, 0x1e, 0x52, 0xcb, 0x97, 0xf6, 0x96, 0x53, 0xcf, 0xc5, 0xfb, 0xda,
-	0x5d, 0x92, 0x2b, 0x5a, 0xae, 0xd3, 0x1c, 0x7c, 0xe3, 0xce, 0x9b, 0x99, 0x9d, 0xf9, 0xcd, 0xbc,
-	0xdf, 0x9b, 0xb7, 0x84, 0x8f, 0x19, 0x06, 0x71, 0x44, 0xdc, 0xde, 0x26, 0x45, 0xd2, 0x47, 0xb2,
-	0xe9, 0xc6, 0xfe, 0xa6, 0xeb, 0x05, 0x7e, 0xc8, 0x9f, 0xfd, 0x0e, 0x6e, 0xf6, 0x6f, 0x6d, 0x12,
-	0xfc, 0x65, 0x82, 0x94, 0xb5, 0x08, 0xd2, 0x38, 0x0a, 0x29, 0xda, 0x31, 0x89, 0x58, 0x64, 0x5e,
-	0xd7, 0xb6, 0xb6, 0xb4, 0xb5, 0xdd, 0xd8, 0xb7, 0xf3, 0xb6, 0x76, 0xff, 0x56, 0xfd, 0x6a, 0x37,
-	0x8a, 0xba, 0x3d, 0xdc, 0x14, 0x26, 0xed, 0xe4, 0x68, 0x93, 0xf9, 0x01, 0x52, 0xe6, 0x06, 0xb1,
-	0xf4, 0x52, 0xbf, 0xe6, 0x61, 0x8c, 0xa1, 0x87, 0x61, 0xc7, 0x47, 0xba, 0xd9, 0x8d, 0xba, 0x91,
-	0x90, 0x8b, 0x5f, 0x4a, 0xc5, 0x4a, 0x83, 0xe4, 0xd1, 0x61, 0x98, 0x04, 0x94, 0x87, 0xd5, 0x89,
-	0x82, 0x20, 0x0a, 0x95, 0xce, 0xbb, 0x43, 0x3a, 0x72, 0x89, 0x2b, 0x05, 0x48, 0xa9, 0xdb, 0x55,
-	0x21, 0xd7, 0xbf, 0x5b, 0x94, 0x6e, 0xa7, 0x97, 0x50, 0x86, 0x64, 0x5c, 0xfb, 0xfd, 0x22, 0xed,
-	0xe2, 0xd7, 0xdf, 0x98, 0xa8, 0xca, 0x5c, 0x7a, 0xa2, 0x14, 0xed, 0x22, 0xc5, 0xd0, 0x0d, 0x90,
-	0xc6, 0xae, 0x44, 0xfb, 0x1c, 0x11, 0x1f, 0xfb, 0x94, 0x45, 0x64, 0x30, 0xae, 0xfd, 0xbd, 0x22,
-	0x6d, 0x82, 0x71, 0xcf, 0xef, 0xb8, 0xcc, 0x2f, 0x42, 0xe4, 0xc7, 0x45, 0x16, 0x31, 0x12, 0xea,
-	0x53, 0x86, 0xa1, 0x8c, 0xe8, 0x51, 0x44, 0x4e, 0x8e, 0x7a, 0xd1, 0xa3, 0x56, 0x90, 0x30, 0xb7,
-	0xdd, 0xc3, 0x16, 0x65, 0x2e, 0x53, 0x0e, 0xac, 0xdf, 0x1a, 0xf0, 0xf6, 0x5d, 0xa4, 0x1d, 0xe2,
-	0xb7, 0x71, 0x5f, 0xae, 0x1f, 0xf0, 0x65, 0x47, 0x36, 0x8d, 0x79, 0x05, 0x2a, 0x69, 0x7a, 0x35,
-	0x63, 0xdd, 0xd8, 0xa8, 0x38, 0x99, 0xc0, 0xdc, 0x83, 0x0a, 0x3e, 0xc6, 0x4e, 0xc2, 0x83, 0xab,
-	0x95, 0xd6, 0x8d, 0x8d, 0xf9, 0xad, 0xf7, 0x53, 0x88, 0x44, 0x43, 0x29, 0x98, 0xfb, 0xb7, 0xec,
-	0x87, 0x2a, 0x8c, 0x5d, 0x6d, 0xe0, 0x64, 0xb6, 0xd6, 0x5f, 0x4a, 0x70, 0xa5, 0x38, 0x0c, 0xd9,
-	0xb3, 0xe6, 0x65, 0x98, 0xa3, 0xc7, 0x2e, 0xf1, 0x5a, 0xbe, 0xa7, 0xc2, 0x98, 0x15, 0xcf, 0x4d,
-	0xcf, 0xbc, 0x06, 0x0b, 0x0a, 0xd1, 0x96, 0xeb, 0x79, 0x44, 0xc4, 0x51, 0x71, 0xe6, 0x95, 0xec,
-	0x8e, 0xe7, 0x11, 0xf3, 0x18, 0xde, 0xea, 0xb8, 0x9d, 0x63, 0x1c, 0x86, 0xa0, 0x56, 0x16, 0x11,
-	0xdf, 0xb6, 0x8b, 0x76, 0x42, 0x0e, 0xc4, 0x7c, 0xf4, 0x43, 0xc1, 0x2d, 0x0b, 0xa7, 0x79, 0x91,
-	0x19, 0xc2, 0x25, 0xcf, 0x65, 0x6e, 0xdb, 0xa5, 0xa3, 0x2f, 0xbb, 0xf0, 0x9a, 0x2f, 0x5b, 0xd1,
-	0x7e, 0xf3, 0x52, 0xeb, 0x6f, 0x06, 0xd4, 0x35, 0x70, 0x9f, 0xc8, 0x8c, 0x3f, 0x89, 0x28, 0xd3,
-	0xe5, 0xe3, 0xd8, 0x44, 0x94, 0x09, 0x60, 0x90, 0x52, 0x05, 0xdd, 0x3c, 0x97, 0xdd, 0x91, 0xa2,
-	0x21, 0x64, 0x39, 0x74, 0xd3, 0x19, 0xb2, 0x43, 0xc5, 0x2f, 0x8f, 0x16, 0xff, 0xa7, 0x60, 0xa6,
-	0xad, 0x95, 0x75, 0xc1, 0x85, 0x57, 0xed, 0x82, 0xe5, 0x47, 0xa3, 0x22, 0xeb, 0x69, 0x29, 0x6b,
-	0xca, 0xa1, 0xa4, 0x54, 0x33, 0x5c, 0x87, 0x45, 0x11, 0x22, 0x6d, 0x85, 0x49, 0xd0, 0x46, 0x22,
-	0xd2, 0x9a, 0x76, 0x16, 0xa4, 0xf0, 0x53, 0x21, 0x33, 0xdf, 0x86, 0x8a, 0xce, 0x8b, 0xd6, 0x4a,
-	0xeb, 0xe5, 0x8d, 0x69, 0x67, 0x4e, 0x25, 0x46, 0xcd, 0x9f, 0xc3, 0x52, 0x9a, 0x48, 0x4b, 0x54,
-	0x51, 0x35, 0xc3, 0xf7, 0x0b, 0xeb, 0x93, 0xea, 0xf2, 0x14, 0x3e, 0xd5, 0x0f, 0x3b, 0xdc, 0xae,
-	0x19, 0x1e, 0x45, 0x4e, 0x35, 0x1c, 0x92, 0x99, 0x1f, 0xc2, 0x9a, 0x7c, 0x77, 0x27, 0x0a, 0x19,
-	0x89, 0x7a, 0x3d, 0x24, 0xa2, 0x0b, 0x12, 0x2a, 0xf0, 0xa9, 0x38, 0xab, 0x62, 0x79, 0x27, 0x5d,
-	0x3d, 0x10, 0x8b, 0x66, 0x0d, 0x66, 0x75, 0xa5, 0xa6, 0x65, 0x93, 0xab, 0x47, 0xcb, 0x86, 0xe5,
-	0x9d, 0x5e, 0x44, 0xf1, 0x80, 0xdb, 0xe9, 0xea, 0x8e, 0x6e, 0x8a, 0xac, 0x74, 0xd6, 0x0a, 0x98,
-	0x79, 0x7d, 0x09, 0x9c, 0xf5, 0x77, 0x03, 0x96, 0x1d, 0x0c, 0xa2, 0x3e, 0x3e, 0x70, 0xe9, 0xc9,
-	0xcb, 0xdd, 0x98, 0x3f, 0x81, 0xb9, 0x8e, 0xcb, 0xb0, 0x1b, 0x91, 0x81, 0x68, 0x8e, 0xea, 0xd6,
-	0xcd, 0x42, 0x80, 0x04, 0x57, 0x72, 0x70, 0xb8, 0xdf, 0x1d, 0x65, 0xe1, 0xa4, 0xb6, 0xe6, 0x1a,
-	0xcc, 0x72, 0x16, 0xe5, 0x6f, 0xe0, 0x38, 0x97, 0x9d, 0x19, 0xfe, 0xd8, 0xf4, 0xcc, 0x26, 0x2c,
-	0xf5, 0x7d, 0xea, 0xb7, 0xfd, 0x9e, 0xcf, 0x06, 0x2d, 0x7e, 0xba, 0xa8, 0x0e, 0xaa, 0xdb, 0xf2,
-	0xe8, 0xb1, 0xf5, 0xd1, 0x63, 0x3f, 0xd0, 0x47, 0xcf, 0xf6, 0x85, 0xa7, 0x5f, 0x5d, 0x35, 0x9c,
-	0x6a, 0x66, 0xc8, 0x97, 0x78, 0xca, 0xf9, 0xdc, 0x54, 0xca, 0xbf, 0x2f, 0xc3, 0x8d, 0x3d, 0x64,
-	0xe3, 0x7d, 0xe7, 0x3e, 0x52, 0xad, 0x75, 0xb8, 0xf5, 0xed, 0x92, 0x9d, 0xf9, 0x2e, 0x54, 0x29,
-	0x73, 0x09, 0x6b, 0x61, 0x1f, 0x43, 0x96, 0x61, 0xb2, 0x20, 0xa4, 0xbb, 0x5c, 0xd8, 0xf4, 0x4c,
-	0x1b, 0xde, 0xca, 0x6b, 0xf5, 0x39, 0x45, 0xa8, 0xfd, 0x55, 0x76, 0x96, 0x33, 0xd5, 0x43, 0xb9,
-	0x60, 0xae, 0xc3, 0x02, 0x86, 0x5e, 0xe6, 0x73, 0x5a, 0x28, 0x02, 0x86, 0x9e, 0xf6, 0x78, 0x13,
-	0x96, 0x33, 0x0d, 0xed, 0x6f, 0x46, 0xa8, 0x2d, 0x69, 0x35, 0xed, 0xed, 0x26, 0x2c, 0x07, 0xee,
-	0x63, 0x3f, 0x48, 0x82, 0x56, 0xec, 0x76, 0xb1, 0x45, 0xfd, 0x27, 0x58, 0x9b, 0x15, 0xcd, 0xb1,
-	0xa4, 0x16, 0xee, 0xbb, 0x5d, 0x3c, 0xf0, 0x9f, 0xa0, 0xf9, 0x1e, 0x2c, 0x85, 0xf8, 0x98, 0x49,
-	0x45, 0x16, 0x9d, 0x60, 0x58, 0x9b, 0x5b, 0x37, 0x36, 0x16, 0x9c, 0x45, 0x2e, 0xe6, 0x6a, 0x0f,
-	0xb8, 0xd0, 0xfa, 0x8f, 0x01, 0x1b, 0x2f, 0x2f, 0x85, 0xda, 0xe3, 0x05, 0x4e, 0x8d, 0x02, 0xa7,
-	0xbc, 0x81, 0x34, 0xfb, 0xb7, 0x5d, 0xd6, 0x39, 0x46, 0xb9, 0xd9, 0xe7, 0xb7, 0xd6, 0xcf, 0xaa,
-	0xcd, 0x5d, 0x97, 0xb9, 0xdb, 0xbd, 0xa8, 0xed, 0x54, 0x95, 0xe1, 0xb6, 0xb4, 0x33, 0x1f, 0xc2,
-	0x92, 0x42, 0xa5, 0xa5, 0x56, 0x14, 0x29, 0xd8, 0x85, 0x3d, 0xaf, 0x74, 0xb8, 0x4b, 0x85, 0x9a,
-	0xca, 0xc2, 0xa9, 0xf6, 0x87, 0x9e, 0xad, 0xa7, 0x06, 0xbc, 0xb3, 0x87, 0xcc, 0xc9, 0x4e, 0xf2,
-	0x7d, 0x79, 0x8a, 0x53, 0xdd, 0x79, 0xf7, 0x60, 0x46, 0xe4, 0xc8, 0x19, 0xba, 0x7c, 0x26, 0x0d,
-	0xe5, 0x46, 0x01, 0xfe, 0xd6, 0x9c, 0x3f, 0x81, 0x85, 0xa3, 0x7c, 0x70, 0xd6, 0x57, 0x53, 0x51,
-	0x8b, 0xb7, 0xaf, 0x3e, 0x11, 0x95, 0x8c, 0xf3, 0x97, 0xf5, 0x87, 0x12, 0x34, 0xce, 0x0a, 0x49,
-	0x55, 0xe0, 0x57, 0x50, 0x95, 0xb4, 0xa0, 0x46, 0x0e, 0x1d, 0xdb, 0xa1, 0x7d, 0x8e, 0xc9, 0xd1,
-	0x9e, 0xec, 0xdc, 0x16, 0xbc, 0xa4, 0xa5, 0xbb, 0x21, 0x23, 0x03, 0x47, 0x72, 0xba, 0x96, 0xd5,
-	0x07, 0x60, 0x8e, 0x2b, 0x99, 0x17, 0xa1, 0x7c, 0x82, 0x03, 0x45, 0x53, 0xfc, 0xa7, 0xb9, 0x0f,
-	0xd3, 0x7d, 0xb7, 0x97, 0xa0, 0xda, 0x92, 0x1f, 0xbd, 0x22, 0x72, 0x69, 0x64, 0xd2, 0xcb, 0xc7,
-	0xa5, 0xdb, 0x86, 0xf5, 0x57, 0x03, 0xde, 0xdb, 0x43, 0x96, 0x12, 0xfd, 0x84, 0xc2, 0xfd, 0x00,
-	0x2e, 0xf7, 0x5c, 0x31, 0x5c, 0x33, 0xe2, 0x63, 0x1f, 0x53, 0xb4, 0x34, 0x99, 0x96, 0x9d, 0x4b,
-	0x5c, 0xc1, 0xd1, 0xeb, 0xca, 0x41, 0xd3, 0x4b, 0x4d, 0x63, 0x12, 0x75, 0x90, 0xd2, 0x61, 0xd3,
-	0x52, 0x66, 0x7a, 0x5f, 0xaf, 0x67, 0xa6, 0xa3, 0x05, 0x2e, 0x8f, 0x17, 0xf8, 0x73, 0x41, 0x7b,
-	0x93, 0x53, 0x50, 0x85, 0x3e, 0x80, 0xb9, 0x5c, 0x89, 0x5f, 0x0b, 0xc4, 0xd4, 0x91, 0xf5, 0x04,
-	0xd6, 0xf7, 0x90, 0xdd, 0xbd, 0xf7, 0xd9, 0x04, 0xf0, 0x0e, 0x01, 0xe4, 0xa9, 0x10, 0x1e, 0x45,
-	0xba, 0xbb, 0x5e, 0xf5, 0xd5, 0x9c, 0xec, 0xc5, 0x19, 0x5c, 0x61, 0xea, 0x17, 0xb5, 0x7e, 0x67,
-	0xc0, 0xb5, 0x09, 0x2f, 0x57, 0x69, 0xff, 0x02, 0x96, 0x73, 0x6e, 0x5b, 0xdc, 0x5c, 0x07, 0xf1,
-	0xc1, 0xff, 0x10, 0x84, 0x73, 0x91, 0x0c, 0x0b, 0xa8, 0xf5, 0x85, 0x01, 0x2b, 0x0e, 0xba, 0x71,
-	0xdc, 0x1b, 0x08, 0x72, 0xa5, 0xe7, 0x3b, 0x68, 0x8a, 0x07, 0xab, 0xd2, 0xeb, 0x0f, 0x56, 0xe6,
-	0x6d, 0x98, 0x11, 0xec, 0x4f, 0x15, 0xb1, 0xbd, 0x9c, 0x23, 0x95, 0xbe, 0xb5, 0x06, 0xab, 0x23,
-	0x99, 0xa8, 0xf3, 0xf5, 0xcf, 0x25, 0xb8, 0x7c, 0xc7, 0xf3, 0x0e, 0xd0, 0x25, 0x9d, 0xe3, 0x3b,
-	0x8c, 0x11, 0xbf, 0x9d, 0x64, 0xd7, 0x87, 0xcf, 0xe1, 0x22, 0x15, 0x2b, 0x2d, 0x57, 0x2f, 0x29,
-	0x88, 0x0f, 0xce, 0xc5, 0x22, 0x67, 0x7a, 0xb6, 0x47, 0xc4, 0x92, 0x42, 0x96, 0xe8, 0xb0, 0xd4,
-	0xfc, 0x0e, 0x54, 0x29, 0x76, 0x12, 0x22, 0x86, 0x0b, 0x71, 0x88, 0x48, 0x2e, 0x5c, 0xd4, 0x52,
-	0x41, 0x9c, 0xf5, 0x13, 0x58, 0x29, 0xf2, 0x97, 0x67, 0x9b, 0x8a, 0x64, 0x9b, 0x1f, 0xe5, 0xd9,
-	0xa6, 0xba, 0x75, 0x63, 0x18, 0xc0, 0x74, 0x0c, 0x6a, 0x86, 0x1e, 0x3e, 0x46, 0xef, 0x90, 0xab,
-	0x3e, 0x18, 0xc4, 0x98, 0x67, 0x97, 0x2b, 0x50, 0x2f, 0x4a, 0x4b, 0xe1, 0x59, 0x83, 0x4b, 0x7a,
-	0xf4, 0xdd, 0x91, 0xdb, 0x59, 0x65, 0x6c, 0x7d, 0x55, 0x82, 0xb5, 0xb1, 0x25, 0xd5, 0xcb, 0xbf,
-	0x86, 0x65, 0x9a, 0xc4, 0x71, 0x44, 0x18, 0x7a, 0xad, 0x4e, 0xcf, 0x17, 0x35, 0x96, 0x40, 0x3b,
-	0xe7, 0x02, 0xfa, 0x0c, 0xc7, 0xf6, 0x81, 0xf6, 0xba, 0x23, 0x9d, 0x4a, 0x9c, 0x2f, 0xd2, 0x11,
-	0xb1, 0x04, 0x9a, 0x7b, 0x4f, 0x07, 0x8b, 0x14, 0x68, 0x2e, 0xd5, 0x63, 0xc5, 0x43, 0x58, 0x0a,
-	0x90, 0x8f, 0xe7, 0xf4, 0xd8, 0x8f, 0xc5, 0xbe, 0x9f, 0x78, 0xc4, 0x2a, 0x42, 0xe3, 0x01, 0xee,
-	0xa7, 0x66, 0x72, 0xe2, 0x0e, 0x86, 0x9e, 0xeb, 0x3b, 0xb0, 0x5a, 0x18, 0x6a, 0x41, 0x09, 0x57,
-	0xf2, 0x25, 0xac, 0xe4, 0x2b, 0xf3, 0xa7, 0x12, 0xac, 0x4a, 0xde, 0x18, 0x65, 0xaa, 0x5d, 0xb8,
-	0xc0, 0x06, 0xb1, 0xdc, 0xab, 0xd5, 0xad, 0x5b, 0x93, 0x67, 0xe0, 0xbb, 0xe8, 0x7a, 0xf7, 0x90,
-	0x31, 0x24, 0x9f, 0x25, 0xa8, 0xea, 0x2f, 0xcc, 0x27, 0xdd, 0xb5, 0x38, 0x80, 0x51, 0x42, 0xf8,
-	0x75, 0x44, 0x26, 0xad, 0x48, 0x7d, 0x51, 0x4a, 0x55, 0x5d, 0xcc, 0x8f, 0xa0, 0xe6, 0x87, 0x5c,
-	0xc3, 0xef, 0x63, 0x8b, 0x4f, 0x73, 0xb9, 0x33, 0x43, 0x8e, 0x86, 0xab, 0xe9, 0xfa, 0x6e, 0x98,
-	0x3b, 0x32, 0x0a, 0x07, 0xba, 0xe9, 0x73, 0x0f, 0x74, 0x33, 0x45, 0x03, 0xdd, 0xbf, 0x0d, 0xb8,
-	0x34, 0x8a, 0x97, 0x6a, 0xc8, 0x6f, 0x08, 0xb0, 0x42, 0x8e, 0x2e, 0x7d, 0x83, 0x1c, 0x5d, 0x94,
-	0x6b, 0xb9, 0x28, 0xd7, 0x7f, 0x18, 0xb0, 0x76, 0x3f, 0x21, 0x5d, 0x7c, 0x13, 0xbb, 0xc3, 0xaa,
-	0x43, 0x6d, 0x3c, 0xb9, 0x8c, 0xe1, 0xd7, 0xf6, 0xf1, 0x0d, 0xcd, 0xfc, 0xff, 0xb2, 0x2f, 0xb6,
-	0xa1, 0x36, 0x0e, 0xd8, 0xab, 0xdd, 0x6b, 0xc4, 0x87, 0x39, 0x07, 0x8f, 0x08, 0xd2, 0x63, 0x7d,
-	0xb4, 0x8b, 0x86, 0xfd, 0x96, 0x3f, 0xcc, 0x35, 0xe0, 0x4a, 0x71, 0x14, 0x59, 0x73, 0xbc, 0xe3,
-	0x20, 0xc5, 0xd0, 0x1b, 0xd9, 0x6a, 0x34, 0xf7, 0x09, 0x2a, 0xfb, 0xd4, 0x92, 0x7e, 0xbd, 0x9b,
-	0x4f, 0x65, 0x4d, 0xcf, 0xbc, 0x0a, 0xf3, 0xe9, 0xc0, 0xa3, 0x3a, 0xa0, 0xe2, 0x80, 0x16, 0x35,
-	0x3d, 0x73, 0x15, 0x66, 0x48, 0x12, 0xea, 0x9b, 0x72, 0xc5, 0x99, 0x26, 0x49, 0x28, 0x7b, 0x83,
-	0x60, 0x10, 0xb1, 0xac, 0x37, 0xe4, 0xd7, 0x95, 0x45, 0x29, 0xd5, 0xbd, 0x31, 0x7e, 0xdf, 0x9e,
-	0x2e, 0xb8, 0x6f, 0x5f, 0x87, 0x45, 0xa9, 0x35, 0x7c, 0x33, 0x96, 0x4a, 0x67, 0x5d, 0xb2, 0x67,
-	0xc7, 0x2e, 0xd9, 0x57, 0x61, 0x9e, 0x6b, 0x68, 0x27, 0x73, 0xa9, 0x82, 0x72, 0x61, 0xad, 0x43,
-	0xe3, 0x2c, 0xc0, 0x24, 0xa6, 0xdb, 0xbd, 0x67, 0xcf, 0x1b, 0x53, 0x5f, 0x3e, 0x6f, 0x4c, 0x7d,
-	0xfd, 0xbc, 0x61, 0xfc, 0xe6, 0xb4, 0x61, 0xfc, 0xf1, 0xb4, 0x61, 0x7c, 0x71, 0xda, 0x30, 0x9e,
-	0x9d, 0x36, 0x8c, 0x7f, 0x9e, 0x36, 0x8c, 0x7f, 0x9d, 0x36, 0xa6, 0xbe, 0x3e, 0x6d, 0x18, 0x4f,
-	0x5f, 0x34, 0xa6, 0x9e, 0xbd, 0x68, 0x4c, 0x7d, 0xf9, 0xa2, 0x31, 0xf5, 0xb3, 0x0f, 0xbb, 0x51,
-	0x56, 0x61, 0x3f, 0x9a, 0xf0, 0x8f, 0xc0, 0x0f, 0xf3, 0xcf, 0xed, 0x19, 0xf1, 0x81, 0xe5, 0x83,
-	0xff, 0x06, 0x00, 0x00, 0xff, 0xff, 0x07, 0xb7, 0xc3, 0x76, 0x4c, 0x18, 0x00, 0x00,
+	// 2025 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xec, 0x59, 0xcd, 0x6f, 0x1b, 0xd7,
+	0x11, 0xd7, 0x92, 0xd6, 0x07, 0x47, 0x12, 0x65, 0x6e, 0x2c, 0x8b, 0xa1, 0x6d, 0x5a, 0xa6, 0x53,
+	0xdb, 0x31, 0x8a, 0x55, 0xad, 0x14, 0x89, 0xeb, 0xa0, 0x28, 0x2c, 0x59, 0x55, 0x04, 0x58, 0x81,
+	0xb3, 0x72, 0xe5, 0xa2, 0x40, 0xb1, 0x7d, 0xe4, 0x8e, 0xa8, 0x85, 0xb8, 0x1f, 0xdd, 0xf7, 0x48,
+	0x9b, 0x06, 0xfa, 0x81, 0x7e, 0x00, 0x3d, 0xfa, 0x9c, 0xbf, 0xa0, 0x97, 0xb6, 0xb7, 0xde, 0x7b,
+	0xcb, 0xd1, 0xe8, 0x29, 0x68, 0x0f, 0xa9, 0xe5, 0x4b, 0x7b, 0xcb, 0xa9, 0xe7, 0xe2, 0x7d, 0xed,
+	0x2e, 0xc9, 0x15, 0x2d, 0xc5, 0x1f, 0x28, 0x82, 0xdc, 0xf8, 0xe6, 0xcd, 0xcc, 0x9b, 0xf9, 0xcd,
+	0xc7, 0x7b, 0x3b, 0x84, 0x5b, 0x0c, 0xfd, 0x28, 0x8c, 0x49, 0x67, 0x85, 0x62, 0xdc, 0xc3, 0x78,
+	0x85, 0x44, 0xde, 0x0a, 0x71, 0x7d, 0x2f, 0xe0, 0x6b, 0xaf, 0x85, 0x2b, 0xbd, 0x1b, 0x2b, 0x31,
+	0xfe, 0xbc, 0x8b, 0x94, 0x39, 0x31, 0xd2, 0x28, 0x0c, 0x28, 0x5a, 0x51, 0x1c, 0xb2, 0xd0, 0xbc,
+	0xac, 0x65, 0x2d, 0x29, 0x6b, 0x91, 0xc8, 0xb3, 0xb2, 0xb2, 0x56, 0xef, 0x46, 0xed, 0x62, 0x3b,
+	0x0c, 0xdb, 0x1d, 0x5c, 0x11, 0x22, 0xcd, 0xee, 0xde, 0x0a, 0xf3, 0x7c, 0xa4, 0x8c, 0xf8, 0x91,
+	0xd4, 0x52, 0xbb, 0xe4, 0x62, 0x84, 0x81, 0x8b, 0x41, 0xcb, 0x43, 0xba, 0xd2, 0x0e, 0xdb, 0xa1,
+	0xa0, 0x8b, 0x5f, 0x8a, 0xa5, 0x91, 0x18, 0xc9, 0xad, 0xc3, 0xa0, 0xeb, 0x53, 0x6e, 0x56, 0x2b,
+	0xf4, 0xfd, 0x30, 0x50, 0x3c, 0xef, 0x0c, 0xf0, 0xc8, 0x2d, 0xce, 0xe4, 0x23, 0xa5, 0xa4, 0xad,
+	0x4c, 0xae, 0x5d, 0x19, 0xe0, 0x7a, 0x18, 0xc6, 0x07, 0x7b, 0x9d, 0xf0, 0xe1, 0x28, 0xdf, 0xb7,
+	0xf3, 0x60, 0x69, 0x75, 0xba, 0x94, 0x61, 0x3c, 0xca, 0xfd, 0x6e, 0x1e, 0x77, 0xbe, 0x99, 0x57,
+	0xc7, 0xb2, 0x32, 0x42, 0x0f, 0x14, 0xa3, 0x95, 0xc7, 0x18, 0x10, 0x1f, 0x69, 0x44, 0x64, 0x54,
+	0x8e, 0x61, 0xf1, 0xbe, 0x47, 0x59, 0x18, 0xf7, 0x47, 0xb9, 0xbf, 0x93, 0xc7, 0x1d, 0x63, 0xd4,
+	0xf1, 0x5a, 0x84, 0x79, 0x79, 0xc8, 0xfd, 0x20, 0x4f, 0x22, 0xc2, 0x98, 0x7a, 0x94, 0x61, 0x20,
+	0x2d, 0xd2, 0x78, 0x3a, 0x7e, 0x97, 0x91, 0x66, 0x07, 0x1d, 0xca, 0x08, 0x53, 0x0a, 0x1a, 0xbf,
+	0x33, 0xe0, 0xdc, 0x1d, 0xa4, 0xad, 0xd8, 0x6b, 0xe2, 0xb6, 0xdc, 0xdf, 0xe1, 0xdb, 0xb6, 0x4c,
+	0x2e, 0xf3, 0x3c, 0x94, 0x12, 0xf7, 0xaa, 0xc6, 0xb2, 0x71, 0xad, 0x64, 0xa7, 0x04, 0x73, 0x13,
+	0x4a, 0xf8, 0x08, 0x5b, 0x5d, 0x6e, 0x5c, 0xb5, 0xb0, 0x6c, 0x5c, 0x9b, 0x5d, 0x7d, 0x37, 0x81,
+	0x48, 0x24, 0x9e, 0x82, 0xb9, 0x77, 0xc3, 0x7a, 0xa0, 0xcc, 0xd8, 0xd0, 0x02, 0x76, 0x2a, 0xdb,
+	0xf8, 0x6b, 0x01, 0xce, 0xe7, 0x9b, 0x21, 0x73, 0xdb, 0x7c, 0x1b, 0x66, 0xe8, 0x3e, 0x89, 0x5d,
+	0xc7, 0x73, 0x95, 0x19, 0xd3, 0x62, 0xbd, 0xe5, 0x9a, 0x97, 0x60, 0x4e, 0x21, 0xea, 0x10, 0xd7,
+	0x8d, 0x85, 0x1d, 0x25, 0x7b, 0x56, 0xd1, 0x6e, 0xbb, 0x6e, 0x6c, 0xee, 0xc3, 0x5b, 0x2d, 0xd2,
+	0xda, 0xc7, 0x41, 0x08, 0xaa, 0x45, 0x61, 0xf1, 0x4d, 0x2b, 0xaf, 0x62, 0x32, 0x20, 0x66, 0xad,
+	0x1f, 0x30, 0xae, 0x22, 0x94, 0x66, 0x49, 0x66, 0x00, 0x67, 0x5d, 0xc2, 0x48, 0x93, 0xd0, 0xe1,
+	0xc3, 0x4e, 0xbd, 0xe4, 0x61, 0x67, 0xb4, 0xde, 0x2c, 0xb5, 0xf1, 0x77, 0x03, 0x6a, 0x1a, 0xb8,
+	0x8f, 0xa4, 0xc7, 0x1f, 0x85, 0x94, 0xe9, 0xf0, 0x71, 0x6c, 0x42, 0xca, 0x04, 0x30, 0x48, 0xa9,
+	0x82, 0x6e, 0x96, 0xd3, 0x6e, 0x4b, 0xd2, 0x00, 0xb2, 0x1c, 0xba, 0xc9, 0x14, 0xd9, 0x81, 0xe0,
+	0x17, 0x87, 0x83, 0xff, 0x63, 0x30, 0x93, 0xd4, 0x4a, 0xb3, 0xe0, 0xd4, 0x49, 0xb3, 0xa0, 0xf2,
+	0x70, 0x98, 0xd4, 0x78, 0x52, 0x48, 0x93, 0x72, 0xc0, 0x29, 0x95, 0x0c, 0x97, 0x61, 0x5e, 0x98,
+	0x48, 0x9d, 0xa0, 0xeb, 0x37, 0x31, 0x16, 0x6e, 0x4d, 0xda, 0x73, 0x92, 0xf8, 0xb1, 0xa0, 0x99,
+	0xe7, 0xa0, 0xa4, 0xfd, 0xa2, 0xd5, 0xc2, 0x72, 0xf1, 0xda, 0xa4, 0x3d, 0xa3, 0x1c, 0xa3, 0xe6,
+	0x4f, 0x61, 0x21, 0x71, 0xc4, 0x11, 0x51, 0x54, 0xc9, 0xf0, 0xdd, 0xdc, 0xf8, 0x24, 0xbc, 0xdc,
+	0x85, 0x8f, 0xf5, 0x62, 0x9d, 0xcb, 0x6d, 0x05, 0x7b, 0xa1, 0x5d, 0x0e, 0x06, 0x68, 0xe6, 0xfb,
+	0xb0, 0x24, 0xcf, 0x6e, 0x85, 0x01, 0x8b, 0xc3, 0x4e, 0x07, 0x63, 0x91, 0x05, 0x5d, 0x2a, 0xf0,
+	0x29, 0xd9, 0x8b, 0x62, 0x7b, 0x3d, 0xd9, 0xdd, 0x11, 0x9b, 0x66, 0x15, 0xa6, 0x75, 0xa4, 0x26,
+	0x65, 0x92, 0xab, 0x65, 0xc3, 0x82, 0xca, 0x7a, 0x27, 0xa4, 0xb8, 0xc3, 0xe5, 0x74, 0x74, 0x87,
+	0x8b, 0x22, 0x0d, 0x5d, 0xe3, 0x0c, 0x98, 0x59, 0x7e, 0x09, 0x5c, 0xe3, 0x1f, 0x06, 0x54, 0x6c,
+	0xf4, 0xc3, 0x1e, 0xde, 0x27, 0xf4, 0xe0, 0xc5, 0x6a, 0xcc, 0x1f, 0xc2, 0x4c, 0x8b, 0x30, 0x6c,
+	0x87, 0x71, 0x5f, 0x24, 0x47, 0x79, 0xf5, 0x7a, 0x2e, 0x40, 0xa2, 0x57, 0x72, 0x70, 0xb8, 0xde,
+	0x75, 0x25, 0x61, 0x27, 0xb2, 0xe6, 0x12, 0x4c, 0xf3, 0x2e, 0xca, 0x4f, 0xe0, 0x38, 0x17, 0xed,
+	0x29, 0xbe, 0xdc, 0x72, 0xcd, 0x2d, 0x58, 0xe8, 0x79, 0xd4, 0x6b, 0x7a, 0x1d, 0x8f, 0xf5, 0x1d,
+	0x7e, 0x0b, 0xa9, 0x0c, 0xaa, 0x59, 0xf2, 0x8a, 0xb2, 0xf4, 0x15, 0x65, 0xdd, 0xd7, 0x57, 0xd4,
+	0xda, 0xa9, 0x27, 0x5f, 0x5c, 0x34, 0xec, 0x72, 0x2a, 0xc8, 0xb7, 0xb8, 0xcb, 0x59, 0xdf, 0x94,
+	0xcb, 0x7f, 0x28, 0xc2, 0xd5, 0x4d, 0x64, 0xa3, 0x79, 0x47, 0x1e, 0xaa, 0xd4, 0xda, 0x5d, 0x7d,
+	0xb3, 0xcd, 0xce, 0x7c, 0x07, 0xca, 0x94, 0x91, 0x98, 0x39, 0xd8, 0xc3, 0x80, 0xa5, 0x98, 0xcc,
+	0x09, 0xea, 0x06, 0x27, 0x6e, 0xb9, 0xa6, 0x05, 0x6f, 0x65, 0xb9, 0x7a, 0xbc, 0x45, 0xa8, 0xfa,
+	0x2a, 0xda, 0x95, 0x94, 0x75, 0x57, 0x6e, 0x98, 0xcb, 0x30, 0x87, 0x81, 0x9b, 0xea, 0x9c, 0x14,
+	0x8c, 0x80, 0x81, 0xab, 0x35, 0x5e, 0x87, 0x4a, 0xca, 0xa1, 0xf5, 0x4d, 0x09, 0xb6, 0x05, 0xcd,
+	0xa6, 0xb5, 0x5d, 0x87, 0x8a, 0x4f, 0x1e, 0x79, 0x7e, 0xd7, 0x77, 0x22, 0xd2, 0x46, 0x87, 0x7a,
+	0x8f, 0xb1, 0x3a, 0x2d, 0x92, 0x63, 0x41, 0x6d, 0xdc, 0x23, 0x6d, 0xdc, 0xf1, 0x1e, 0xa3, 0x79,
+	0x05, 0x16, 0x02, 0x7c, 0xc4, 0x24, 0x23, 0x0b, 0x0f, 0x30, 0xa8, 0xce, 0x2c, 0x1b, 0xd7, 0xe6,
+	0xec, 0x79, 0x4e, 0xe6, 0x6c, 0xf7, 0x39, 0xb1, 0xf1, 0x5f, 0x03, 0xae, 0xbd, 0x38, 0x14, 0xaa,
+	0xc6, 0x73, 0x94, 0x1a, 0x39, 0x4a, 0x79, 0x02, 0xe9, 0xee, 0xdf, 0x24, 0xac, 0xb5, 0x8f, 0xb2,
+	0xd8, 0x67, 0x57, 0x97, 0x8f, 0x8a, 0xcd, 0x1d, 0xc2, 0xc8, 0x5a, 0x27, 0x6c, 0xda, 0x65, 0x25,
+	0xb8, 0x26, 0xe5, 0xcc, 0x07, 0xb0, 0xa0, 0x50, 0x71, 0xd4, 0x8e, 0x6a, 0x0a, 0x56, 0x6e, 0xce,
+	0x2b, 0x1e, 0xae, 0x52, 0xa1, 0xa6, 0xbc, 0xb0, 0xcb, 0xbd, 0x81, 0x75, 0xe3, 0x89, 0x01, 0x17,
+	0x36, 0x91, 0xd9, 0xe9, 0x4d, 0xbe, 0x2d, 0x6f, 0x71, 0xaa, 0x33, 0xef, 0x2e, 0x4c, 0x09, 0x1f,
+	0x79, 0x87, 0x2e, 0x1e, 0xd9, 0x86, 0x32, 0x4f, 0x01, 0x7e, 0x6a, 0x46, 0x9f, 0xc0, 0xc2, 0x56,
+	0x3a, 0x78, 0xd7, 0x57, 0xaf, 0x22, 0x87, 0xa7, 0xaf, 0xbe, 0x11, 0x15, 0x8d, 0xf7, 0xaf, 0xc6,
+	0xa7, 0x05, 0xa8, 0x1f, 0x65, 0x92, 0x8a, 0xc0, 0x2f, 0xa0, 0x2c, 0xdb, 0x82, 0x7a, 0x72, 0x68,
+	0xdb, 0x76, 0xad, 0x63, 0xbc, 0x30, 0xad, 0xf1, 0xca, 0x2d, 0xd1, 0x97, 0x34, 0x75, 0x23, 0x60,
+	0x71, 0xdf, 0x96, 0x3d, 0x5d, 0xd3, 0x6a, 0x7d, 0x30, 0x47, 0x99, 0xcc, 0xd3, 0x50, 0x3c, 0xc0,
+	0xbe, 0x6a, 0x53, 0xfc, 0xa7, 0xb9, 0x0d, 0x93, 0x3d, 0xd2, 0xe9, 0xa2, 0x2a, 0xc9, 0x0f, 0x4e,
+	0x88, 0x5c, 0x62, 0x99, 0xd4, 0x72, 0xab, 0x70, 0xd3, 0x68, 0xfc, 0xcd, 0x80, 0x2b, 0x9b, 0xc8,
+	0x92, 0x46, 0x3f, 0x26, 0x70, 0xdf, 0x83, 0xb7, 0x3b, 0x44, 0x3c, 0xc2, 0x59, 0xec, 0x61, 0x0f,
+	0x13, 0xb4, 0x74, 0x33, 0x2d, 0xda, 0x67, 0x39, 0x83, 0xad, 0xf7, 0x95, 0x82, 0x2d, 0x37, 0x11,
+	0x8d, 0xe2, 0xb0, 0x85, 0x94, 0x0e, 0x8a, 0x16, 0x52, 0xd1, 0x7b, 0x7a, 0x3f, 0x15, 0x1d, 0x0e,
+	0x70, 0x71, 0x34, 0xc0, 0xbf, 0x14, 0x6d, 0x6f, 0xbc, 0x0b, 0x2a, 0xd0, 0x3b, 0x30, 0x93, 0x09,
+	0xf1, 0x4b, 0x81, 0x98, 0x28, 0x6a, 0x3c, 0x86, 0xe5, 0x4d, 0x64, 0x77, 0xee, 0x7e, 0x32, 0x06,
+	0xbc, 0x5d, 0x00, 0x79, 0x2b, 0x04, 0x7b, 0xa1, 0xce, 0xae, 0x93, 0x1e, 0xcd, 0x9b, 0xbd, 0xb8,
+	0x83, 0x4b, 0x4c, 0xfd, 0xa2, 0x8d, 0xdf, 0x1b, 0x70, 0x69, 0xcc, 0xe1, 0xca, 0xed, 0x9f, 0x41,
+	0x25, 0xa3, 0xd6, 0xe1, 0xe2, 0xda, 0x88, 0xf7, 0xbe, 0x82, 0x11, 0xf6, 0xe9, 0x78, 0x90, 0x40,
+	0x1b, 0x9f, 0x19, 0x70, 0xc6, 0x46, 0x12, 0x45, 0x9d, 0xbe, 0x68, 0xae, 0xf4, 0x78, 0x17, 0x4d,
+	0xfe, 0xc3, 0xaa, 0xf0, 0xf2, 0x0f, 0x2b, 0xf3, 0x26, 0x4c, 0x89, 0xee, 0x4f, 0x55, 0x63, 0x7b,
+	0x71, 0x8f, 0x54, 0xfc, 0x8d, 0x25, 0x58, 0x1c, 0xf2, 0x44, 0xdd, 0xaf, 0x7f, 0x2e, 0x40, 0xed,
+	0xb6, 0xeb, 0xee, 0x20, 0x89, 0x5b, 0xfb, 0xb7, 0x19, 0x8b, 0xbd, 0x66, 0x97, 0xa5, 0x21, 0xfe,
+	0x8d, 0x01, 0x15, 0x2a, 0xf6, 0x1c, 0x92, 0x6c, 0x2a, 0x94, 0x7f, 0x74, 0xac, 0x46, 0x72, 0xb4,
+	0x72, 0x6b, 0x98, 0x2e, 0xfb, 0xc8, 0x69, 0x3a, 0x44, 0x36, 0x2f, 0x00, 0x78, 0x81, 0x8b, 0x8f,
+	0xb2, 0xdd, 0xb0, 0x24, 0x28, 0xbc, 0x3e, 0x6a, 0x1d, 0x58, 0xcc, 0xd5, 0x94, 0x6d, 0x36, 0x25,
+	0xd9, 0x6c, 0xbe, 0x9f, 0x6d, 0x36, 0xe5, 0xd5, 0xab, 0x83, 0xf8, 0x25, 0xaf, 0xa0, 0x2d, 0xae,
+	0x1b, 0xdd, 0x5d, 0xce, 0x7a, 0xbf, 0x1f, 0x61, 0xb6, 0xb9, 0x7c, 0x3a, 0x05, 0xe7, 0x72, 0x7d,
+	0x52, 0x69, 0xf9, 0x5b, 0x03, 0x2a, 0xad, 0x2e, 0x65, 0xa1, 0x3f, 0x8a, 0xd8, 0xee, 0x57, 0x47,
+	0x4c, 0xf5, 0xdd, 0x75, 0xa1, 0x79, 0x04, 0xb2, 0xd6, 0x10, 0x59, 0x58, 0x41, 0xfb, 0x94, 0xe1,
+	0x80, 0x15, 0x85, 0x57, 0x64, 0xc5, 0x8e, 0xd0, 0x3c, 0x1a, 0xb8, 0x21, 0xb2, 0xd9, 0x86, 0x69,
+	0x9f, 0x44, 0x91, 0x17, 0xb4, 0xab, 0x45, 0x71, 0xf4, 0xf6, 0x4b, 0x1f, 0xbd, 0x2d, 0xf5, 0xc9,
+	0x13, 0xb5, 0x76, 0x33, 0x80, 0x73, 0xc4, 0x75, 0x9d, 0xd1, 0xb2, 0x13, 0xbd, 0x49, 0x3d, 0x49,
+	0x57, 0x06, 0xa3, 0xad, 0x99, 0x73, 0xab, 0x4f, 0xb4, 0xa4, 0x2a, 0x71, 0xdd, 0xdc, 0x1d, 0x9e,
+	0x72, 0xb9, 0x91, 0x78, 0x2d, 0x29, 0x27, 0x12, 0x3c, 0x0f, 0xf1, 0xd7, 0x73, 0xda, 0x2d, 0x98,
+	0xcb, 0x82, 0x9c, 0x73, 0xc8, 0x99, 0xec, 0x21, 0xa5, 0x6c, 0x71, 0x7c, 0x08, 0xb5, 0x4d, 0x64,
+	0x47, 0x35, 0x93, 0xc1, 0x3a, 0x36, 0x86, 0xea, 0x58, 0x54, 0x56, 0xae, 0xf4, 0x2b, 0xab, 0xac,
+	0x31, 0xda, 0xdf, 0x60, 0x65, 0x8d, 0xb3, 0xe2, 0x35, 0x57, 0xd6, 0xb8, 0xa3, 0xbf, 0xa9, 0xac,
+	0xff, 0xe7, 0xca, 0xaa, 0xc2, 0x59, 0x3d, 0x52, 0x59, 0x97, 0xcf, 0x44, 0x55, 0x55, 0x8d, 0x2f,
+	0x0a, 0xb0, 0x34, 0xb2, 0xa5, 0x4a, 0xe6, 0x57, 0x50, 0xa1, 0xdd, 0x28, 0x0a, 0x63, 0x86, 0xae,
+	0xd3, 0xea, 0x78, 0xe2, 0xed, 0x20, 0x2b, 0xc6, 0x3e, 0x56, 0xc2, 0x1c, 0xa1, 0xd8, 0xda, 0xd1,
+	0x5a, 0xd7, 0xa5, 0x52, 0x9d, 0xa7, 0x43, 0x64, 0xf3, 0x5b, 0x50, 0x96, 0xda, 0x93, 0x0f, 0x56,
+	0xe9, 0xd9, 0xbc, 0xa4, 0xea, 0xcf, 0xd5, 0x07, 0xb0, 0xe0, 0xa3, 0xdf, 0xc4, 0x98, 0xee, 0x7b,
+	0x91, 0xcc, 0xac, 0x71, 0x9f, 0x6e, 0xea, 0xa1, 0xcc, 0x0d, 0xdc, 0x4e, 0xc4, 0xe4, 0x24, 0xc7,
+	0x1f, 0x58, 0xd7, 0xd6, 0x61, 0x31, 0xd7, 0xd4, 0x13, 0x61, 0xff, 0xa7, 0x02, 0x2c, 0xca, 0xf7,
+	0xe8, 0xf0, 0x0b, 0x78, 0x03, 0x4e, 0xb1, 0x7e, 0x24, 0x7b, 0x59, 0x79, 0xf5, 0xc6, 0xf8, 0xd9,
+	0xca, 0x1d, 0x24, 0xee, 0x5d, 0x64, 0x0c, 0xe3, 0x4f, 0xba, 0xa8, 0xb2, 0x43, 0x88, 0x8f, 0x9b,
+	0xe1, 0x71, 0x00, 0xc3, 0x6e, 0xdc, 0x42, 0x47, 0x39, 0xad, 0x3e, 0x16, 0xe6, 0x25, 0x55, 0xc5,
+	0xc5, 0xfc, 0x00, 0xaa, 0x5e, 0xc0, 0x39, 0xbc, 0x1e, 0x3a, 0x18, 0x0c, 0x7c, 0x8b, 0xc8, 0x91,
+	0xc3, 0x62, 0xb2, 0xbf, 0x11, 0x64, 0x3e, 0x45, 0x72, 0x07, 0x05, 0x93, 0xc7, 0x1e, 0x14, 0x4c,
+	0xe5, 0x0d, 0x0a, 0xfe, 0x63, 0xc0, 0xd9, 0x61, 0xbc, 0x54, 0x42, 0xbe, 0x22, 0xc0, 0x72, 0xdf,
+	0xfe, 0x85, 0x57, 0xf8, 0xf6, 0xcf, 0xf3, 0xb5, 0x98, 0xe7, 0xeb, 0x3f, 0x0d, 0x58, 0xba, 0xd7,
+	0x8d, 0xdb, 0xf8, 0x75, 0xcc, 0x8e, 0x46, 0x0d, 0xaa, 0xa3, 0xce, 0xa9, 0x2f, 0x87, 0xbf, 0x14,
+	0x60, 0x69, 0x1b, 0xbf, 0xa6, 0x9e, 0xbf, 0x96, 0xba, 0x58, 0x83, 0xea, 0x28, 0x60, 0x27, 0x9b,
+	0x97, 0x89, 0x3f, 0x7c, 0x6c, 0xdc, 0x8b, 0x91, 0xee, 0xeb, 0x0b, 0x54, 0x24, 0xec, 0x1b, 0xfe,
+	0xc3, 0xa7, 0x0e, 0xe7, 0xf3, 0xad, 0x48, 0x93, 0xe3, 0x82, 0x8d, 0x14, 0x03, 0x77, 0xa8, 0xd4,
+	0x68, 0xe6, 0xaf, 0x8d, 0x74, 0x84, 0x9f, 0xfc, 0x2b, 0x34, 0x9b, 0xd0, 0xb6, 0x5c, 0xf3, 0x22,
+	0xcc, 0x26, 0xef, 0x0e, 0x95, 0x01, 0x25, 0x1b, 0x34, 0x69, 0xcb, 0x35, 0x17, 0x61, 0x2a, 0xee,
+	0x06, 0x7a, 0x02, 0x5b, 0xb2, 0x27, 0xe3, 0x6e, 0x20, 0x73, 0x23, 0x46, 0x3f, 0x64, 0x69, 0x6e,
+	0xc8, 0xa9, 0xfd, 0xbc, 0xa4, 0xea, 0xdc, 0x18, 0x9d, 0xe3, 0x4e, 0xe6, 0xcc, 0x71, 0x2f, 0xc3,
+	0xbc, 0xe4, 0x1a, 0x9c, 0xb8, 0x4a, 0xa6, 0xa3, 0x86, 0xb7, 0xd3, 0x23, 0xc3, 0xdb, 0x8b, 0x30,
+	0xcb, 0x39, 0xb4, 0x92, 0x99, 0x84, 0x41, 0xa9, 0x68, 0x2c, 0x43, 0xfd, 0x28, 0xc0, 0x24, 0xa6,
+	0x6b, 0x9d, 0xa7, 0xcf, 0xea, 0x13, 0x9f, 0x3f, 0xab, 0x4f, 0x7c, 0xf9, 0xac, 0x6e, 0xfc, 0xfa,
+	0xb0, 0x6e, 0xfc, 0xf1, 0xb0, 0x6e, 0x7c, 0x76, 0x58, 0x37, 0x9e, 0x1e, 0xd6, 0x8d, 0x7f, 0x1d,
+	0xd6, 0x8d, 0x7f, 0x1f, 0xd6, 0x27, 0xbe, 0x3c, 0xac, 0x1b, 0x4f, 0x9e, 0xd7, 0x27, 0x9e, 0x3e,
+	0xaf, 0x4f, 0x7c, 0xfe, 0xbc, 0x3e, 0xf1, 0x93, 0xf7, 0xdb, 0x61, 0x1a, 0x61, 0x2f, 0x1c, 0xf3,
+	0x8f, 0xf4, 0x87, 0xd9, 0x75, 0x73, 0x4a, 0x0c, 0xee, 0xdf, 0xfb, 0x5f, 0x00, 0x00, 0x00, 0xff,
+	0xff, 0xa0, 0x70, 0x01, 0x97, 0xcc, 0x1e, 0x00, 0x00,
 }
 
 func (this *DescribeMutableStateRequest) Equal(that interface{}) bool {
@@ -2529,14 +2693,14 @@ func (this *ReapplyEventsResponse) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *AddSearchAttributeRequest) Equal(that interface{}) bool {
+func (this *AddSearchAttributesRequest) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*AddSearchAttributeRequest)
+	that1, ok := that.(*AddSearchAttributesRequest)
 	if !ok {
-		that2, ok := that.(AddSearchAttributeRequest)
+		that2, ok := that.(AddSearchAttributesRequest)
 		if ok {
 			that1 = &that2
 		} else {
@@ -2548,27 +2712,27 @@ func (this *AddSearchAttributeRequest) Equal(that interface{}) bool {
 	} else if this == nil {
 		return false
 	}
-	if len(this.SearchAttribute) != len(that1.SearchAttribute) {
+	if len(this.SearchAttributes) != len(that1.SearchAttributes) {
 		return false
 	}
-	for i := range this.SearchAttribute {
-		if this.SearchAttribute[i] != that1.SearchAttribute[i] {
+	for i := range this.SearchAttributes {
+		if this.SearchAttributes[i] != that1.SearchAttributes[i] {
 			return false
 		}
 	}
-	if this.SecurityToken != that1.SecurityToken {
+	if this.IndexName != that1.IndexName {
 		return false
 	}
 	return true
 }
-func (this *AddSearchAttributeResponse) Equal(that interface{}) bool {
+func (this *AddSearchAttributesResponse) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*AddSearchAttributeResponse)
+	that1, ok := that.(*AddSearchAttributesResponse)
 	if !ok {
-		that2, ok := that.(AddSearchAttributeResponse)
+		that2, ok := that.(AddSearchAttributesResponse)
 		if ok {
 			that1 = &that2
 		} else {
@@ -2578,6 +2742,105 @@ func (this *AddSearchAttributeResponse) Equal(that interface{}) bool {
 	if that1 == nil {
 		return this == nil
 	} else if this == nil {
+		return false
+	}
+	if len(this.CustomAttributes) != len(that1.CustomAttributes) {
+		return false
+	}
+	for i := range this.CustomAttributes {
+		if this.CustomAttributes[i] != that1.CustomAttributes[i] {
+			return false
+		}
+	}
+	if len(this.SystemAttributes) != len(that1.SystemAttributes) {
+		return false
+	}
+	for i := range this.SystemAttributes {
+		if this.SystemAttributes[i] != that1.SystemAttributes[i] {
+			return false
+		}
+	}
+	if len(this.Mapping) != len(that1.Mapping) {
+		return false
+	}
+	for i := range this.Mapping {
+		if this.Mapping[i] != that1.Mapping[i] {
+			return false
+		}
+	}
+	if !this.AddWorkflowExecutionInfo.Equal(that1.AddWorkflowExecutionInfo) {
+		return false
+	}
+	return true
+}
+func (this *GetSearchAttributesRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*GetSearchAttributesRequest)
+	if !ok {
+		that2, ok := that.(GetSearchAttributesRequest)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.IndexName != that1.IndexName {
+		return false
+	}
+	return true
+}
+func (this *GetSearchAttributesResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*GetSearchAttributesResponse)
+	if !ok {
+		that2, ok := that.(GetSearchAttributesResponse)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if len(this.CustomAttributes) != len(that1.CustomAttributes) {
+		return false
+	}
+	for i := range this.CustomAttributes {
+		if this.CustomAttributes[i] != that1.CustomAttributes[i] {
+			return false
+		}
+	}
+	if len(this.SystemAttributes) != len(that1.SystemAttributes) {
+		return false
+	}
+	for i := range this.SystemAttributes {
+		if this.SystemAttributes[i] != that1.SystemAttributes[i] {
+			return false
+		}
+	}
+	if len(this.Mapping) != len(that1.Mapping) {
+		return false
+	}
+	for i := range this.Mapping {
+		if this.Mapping[i] != that1.Mapping[i] {
+			return false
+		}
+	}
+	if !this.AddWorkflowExecutionInfo.Equal(that1.AddWorkflowExecutionInfo) {
 		return false
 	}
 	return true
@@ -3188,35 +3451,138 @@ func (this *ReapplyEventsResponse) GoString() string {
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *AddSearchAttributeRequest) GoString() string {
+func (this *AddSearchAttributesRequest) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 6)
-	s = append(s, "&adminservice.AddSearchAttributeRequest{")
-	keysForSearchAttribute := make([]string, 0, len(this.SearchAttribute))
-	for k, _ := range this.SearchAttribute {
-		keysForSearchAttribute = append(keysForSearchAttribute, k)
+	s = append(s, "&adminservice.AddSearchAttributesRequest{")
+	keysForSearchAttributes := make([]string, 0, len(this.SearchAttributes))
+	for k, _ := range this.SearchAttributes {
+		keysForSearchAttributes = append(keysForSearchAttributes, k)
 	}
-	github_com_gogo_protobuf_sortkeys.Strings(keysForSearchAttribute)
-	mapStringForSearchAttribute := "map[string]v16.IndexedValueType{"
-	for _, k := range keysForSearchAttribute {
-		mapStringForSearchAttribute += fmt.Sprintf("%#v: %#v,", k, this.SearchAttribute[k])
+	github_com_gogo_protobuf_sortkeys.Strings(keysForSearchAttributes)
+	mapStringForSearchAttributes := "map[string]v16.IndexedValueType{"
+	for _, k := range keysForSearchAttributes {
+		mapStringForSearchAttributes += fmt.Sprintf("%#v: %#v,", k, this.SearchAttributes[k])
 	}
-	mapStringForSearchAttribute += "}"
-	if this.SearchAttribute != nil {
-		s = append(s, "SearchAttribute: "+mapStringForSearchAttribute+",\n")
+	mapStringForSearchAttributes += "}"
+	if this.SearchAttributes != nil {
+		s = append(s, "SearchAttributes: "+mapStringForSearchAttributes+",\n")
 	}
-	s = append(s, "SecurityToken: "+fmt.Sprintf("%#v", this.SecurityToken)+",\n")
+	s = append(s, "IndexName: "+fmt.Sprintf("%#v", this.IndexName)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *AddSearchAttributeResponse) GoString() string {
+func (this *AddSearchAttributesResponse) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 4)
-	s = append(s, "&adminservice.AddSearchAttributeResponse{")
+	s := make([]string, 0, 8)
+	s = append(s, "&adminservice.AddSearchAttributesResponse{")
+	keysForCustomAttributes := make([]string, 0, len(this.CustomAttributes))
+	for k, _ := range this.CustomAttributes {
+		keysForCustomAttributes = append(keysForCustomAttributes, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForCustomAttributes)
+	mapStringForCustomAttributes := "map[string]v16.IndexedValueType{"
+	for _, k := range keysForCustomAttributes {
+		mapStringForCustomAttributes += fmt.Sprintf("%#v: %#v,", k, this.CustomAttributes[k])
+	}
+	mapStringForCustomAttributes += "}"
+	if this.CustomAttributes != nil {
+		s = append(s, "CustomAttributes: "+mapStringForCustomAttributes+",\n")
+	}
+	keysForSystemAttributes := make([]string, 0, len(this.SystemAttributes))
+	for k, _ := range this.SystemAttributes {
+		keysForSystemAttributes = append(keysForSystemAttributes, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForSystemAttributes)
+	mapStringForSystemAttributes := "map[string]v16.IndexedValueType{"
+	for _, k := range keysForSystemAttributes {
+		mapStringForSystemAttributes += fmt.Sprintf("%#v: %#v,", k, this.SystemAttributes[k])
+	}
+	mapStringForSystemAttributes += "}"
+	if this.SystemAttributes != nil {
+		s = append(s, "SystemAttributes: "+mapStringForSystemAttributes+",\n")
+	}
+	keysForMapping := make([]string, 0, len(this.Mapping))
+	for k, _ := range this.Mapping {
+		keysForMapping = append(keysForMapping, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForMapping)
+	mapStringForMapping := "map[string]string{"
+	for _, k := range keysForMapping {
+		mapStringForMapping += fmt.Sprintf("%#v: %#v,", k, this.Mapping[k])
+	}
+	mapStringForMapping += "}"
+	if this.Mapping != nil {
+		s = append(s, "Mapping: "+mapStringForMapping+",\n")
+	}
+	if this.AddWorkflowExecutionInfo != nil {
+		s = append(s, "AddWorkflowExecutionInfo: "+fmt.Sprintf("%#v", this.AddWorkflowExecutionInfo)+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *GetSearchAttributesRequest) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 5)
+	s = append(s, "&adminservice.GetSearchAttributesRequest{")
+	s = append(s, "IndexName: "+fmt.Sprintf("%#v", this.IndexName)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *GetSearchAttributesResponse) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 8)
+	s = append(s, "&adminservice.GetSearchAttributesResponse{")
+	keysForCustomAttributes := make([]string, 0, len(this.CustomAttributes))
+	for k, _ := range this.CustomAttributes {
+		keysForCustomAttributes = append(keysForCustomAttributes, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForCustomAttributes)
+	mapStringForCustomAttributes := "map[string]v16.IndexedValueType{"
+	for _, k := range keysForCustomAttributes {
+		mapStringForCustomAttributes += fmt.Sprintf("%#v: %#v,", k, this.CustomAttributes[k])
+	}
+	mapStringForCustomAttributes += "}"
+	if this.CustomAttributes != nil {
+		s = append(s, "CustomAttributes: "+mapStringForCustomAttributes+",\n")
+	}
+	keysForSystemAttributes := make([]string, 0, len(this.SystemAttributes))
+	for k, _ := range this.SystemAttributes {
+		keysForSystemAttributes = append(keysForSystemAttributes, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForSystemAttributes)
+	mapStringForSystemAttributes := "map[string]v16.IndexedValueType{"
+	for _, k := range keysForSystemAttributes {
+		mapStringForSystemAttributes += fmt.Sprintf("%#v: %#v,", k, this.SystemAttributes[k])
+	}
+	mapStringForSystemAttributes += "}"
+	if this.SystemAttributes != nil {
+		s = append(s, "SystemAttributes: "+mapStringForSystemAttributes+",\n")
+	}
+	keysForMapping := make([]string, 0, len(this.Mapping))
+	for k, _ := range this.Mapping {
+		keysForMapping = append(keysForMapping, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForMapping)
+	mapStringForMapping := "map[string]string{"
+	for _, k := range keysForMapping {
+		mapStringForMapping += fmt.Sprintf("%#v: %#v,", k, this.Mapping[k])
+	}
+	mapStringForMapping += "}"
+	if this.Mapping != nil {
+		s = append(s, "Mapping: "+mapStringForMapping+",\n")
+	}
+	if this.AddWorkflowExecutionInfo != nil {
+		s = append(s, "AddWorkflowExecutionInfo: "+fmt.Sprintf("%#v", this.AddWorkflowExecutionInfo)+",\n")
+	}
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -4186,7 +4552,7 @@ func (m *ReapplyEventsResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *AddSearchAttributeRequest) Marshal() (dAtA []byte, err error) {
+func (m *AddSearchAttributesRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -4196,26 +4562,26 @@ func (m *AddSearchAttributeRequest) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *AddSearchAttributeRequest) MarshalTo(dAtA []byte) (int, error) {
+func (m *AddSearchAttributesRequest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *AddSearchAttributeRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *AddSearchAttributesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
-	if len(m.SecurityToken) > 0 {
-		i -= len(m.SecurityToken)
-		copy(dAtA[i:], m.SecurityToken)
-		i = encodeVarintRequestResponse(dAtA, i, uint64(len(m.SecurityToken)))
+	if len(m.IndexName) > 0 {
+		i -= len(m.IndexName)
+		copy(dAtA[i:], m.IndexName)
+		i = encodeVarintRequestResponse(dAtA, i, uint64(len(m.IndexName)))
 		i--
 		dAtA[i] = 0x12
 	}
-	if len(m.SearchAttribute) > 0 {
-		for k := range m.SearchAttribute {
-			v := m.SearchAttribute[k]
+	if len(m.SearchAttributes) > 0 {
+		for k := range m.SearchAttributes {
+			v := m.SearchAttributes[k]
 			baseI := i
 			i = encodeVarintRequestResponse(dAtA, i, uint64(v))
 			i--
@@ -4233,7 +4599,7 @@ func (m *AddSearchAttributeRequest) MarshalToSizedBuffer(dAtA []byte) (int, erro
 	return len(dAtA) - i, nil
 }
 
-func (m *AddSearchAttributeResponse) Marshal() (dAtA []byte, err error) {
+func (m *AddSearchAttributesResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -4243,16 +4609,199 @@ func (m *AddSearchAttributeResponse) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *AddSearchAttributeResponse) MarshalTo(dAtA []byte) (int, error) {
+func (m *AddSearchAttributesResponse) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *AddSearchAttributeResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *AddSearchAttributesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
+	if m.AddWorkflowExecutionInfo != nil {
+		{
+			size, err := m.AddWorkflowExecutionInfo.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintRequestResponse(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
+	}
+	if len(m.Mapping) > 0 {
+		for k := range m.Mapping {
+			v := m.Mapping[k]
+			baseI := i
+			i -= len(v)
+			copy(dAtA[i:], v)
+			i = encodeVarintRequestResponse(dAtA, i, uint64(len(v)))
+			i--
+			dAtA[i] = 0x12
+			i -= len(k)
+			copy(dAtA[i:], k)
+			i = encodeVarintRequestResponse(dAtA, i, uint64(len(k)))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintRequestResponse(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
+	if len(m.SystemAttributes) > 0 {
+		for k := range m.SystemAttributes {
+			v := m.SystemAttributes[k]
+			baseI := i
+			i = encodeVarintRequestResponse(dAtA, i, uint64(v))
+			i--
+			dAtA[i] = 0x10
+			i -= len(k)
+			copy(dAtA[i:], k)
+			i = encodeVarintRequestResponse(dAtA, i, uint64(len(k)))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintRequestResponse(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if len(m.CustomAttributes) > 0 {
+		for k := range m.CustomAttributes {
+			v := m.CustomAttributes[k]
+			baseI := i
+			i = encodeVarintRequestResponse(dAtA, i, uint64(v))
+			i--
+			dAtA[i] = 0x10
+			i -= len(k)
+			copy(dAtA[i:], k)
+			i = encodeVarintRequestResponse(dAtA, i, uint64(len(k)))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintRequestResponse(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *GetSearchAttributesRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetSearchAttributesRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetSearchAttributesRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.IndexName) > 0 {
+		i -= len(m.IndexName)
+		copy(dAtA[i:], m.IndexName)
+		i = encodeVarintRequestResponse(dAtA, i, uint64(len(m.IndexName)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *GetSearchAttributesResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetSearchAttributesResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetSearchAttributesResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.AddWorkflowExecutionInfo != nil {
+		{
+			size, err := m.AddWorkflowExecutionInfo.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintRequestResponse(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x22
+	}
+	if len(m.Mapping) > 0 {
+		for k := range m.Mapping {
+			v := m.Mapping[k]
+			baseI := i
+			i -= len(v)
+			copy(dAtA[i:], v)
+			i = encodeVarintRequestResponse(dAtA, i, uint64(len(v)))
+			i--
+			dAtA[i] = 0x12
+			i -= len(k)
+			copy(dAtA[i:], k)
+			i = encodeVarintRequestResponse(dAtA, i, uint64(len(k)))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintRequestResponse(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
+	if len(m.SystemAttributes) > 0 {
+		for k := range m.SystemAttributes {
+			v := m.SystemAttributes[k]
+			baseI := i
+			i = encodeVarintRequestResponse(dAtA, i, uint64(v))
+			i--
+			dAtA[i] = 0x10
+			i -= len(k)
+			copy(dAtA[i:], k)
+			i = encodeVarintRequestResponse(dAtA, i, uint64(len(k)))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintRequestResponse(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0x12
+		}
+	}
+	if len(m.CustomAttributes) > 0 {
+		for k := range m.CustomAttributes {
+			v := m.CustomAttributes[k]
+			baseI := i
+			i = encodeVarintRequestResponse(dAtA, i, uint64(v))
+			i--
+			dAtA[i] = 0x10
+			i -= len(k)
+			copy(dAtA[i:], k)
+			i = encodeVarintRequestResponse(dAtA, i, uint64(len(k)))
+			i--
+			dAtA[i] = 0xa
+			i = encodeVarintRequestResponse(dAtA, i, uint64(baseI-i))
+			i--
+			dAtA[i] = 0xa
+		}
+	}
 	return len(dAtA) - i, nil
 }
 
@@ -5112,33 +5661,111 @@ func (m *ReapplyEventsResponse) Size() (n int) {
 	return n
 }
 
-func (m *AddSearchAttributeRequest) Size() (n int) {
+func (m *AddSearchAttributesRequest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if len(m.SearchAttribute) > 0 {
-		for k, v := range m.SearchAttribute {
+	if len(m.SearchAttributes) > 0 {
+		for k, v := range m.SearchAttributes {
 			_ = k
 			_ = v
 			mapEntrySize := 1 + len(k) + sovRequestResponse(uint64(len(k))) + 1 + sovRequestResponse(uint64(v))
 			n += mapEntrySize + 1 + sovRequestResponse(uint64(mapEntrySize))
 		}
 	}
-	l = len(m.SecurityToken)
+	l = len(m.IndexName)
 	if l > 0 {
 		n += 1 + l + sovRequestResponse(uint64(l))
 	}
 	return n
 }
 
-func (m *AddSearchAttributeResponse) Size() (n int) {
+func (m *AddSearchAttributesResponse) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
+	if len(m.CustomAttributes) > 0 {
+		for k, v := range m.CustomAttributes {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovRequestResponse(uint64(len(k))) + 1 + sovRequestResponse(uint64(v))
+			n += mapEntrySize + 1 + sovRequestResponse(uint64(mapEntrySize))
+		}
+	}
+	if len(m.SystemAttributes) > 0 {
+		for k, v := range m.SystemAttributes {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovRequestResponse(uint64(len(k))) + 1 + sovRequestResponse(uint64(v))
+			n += mapEntrySize + 1 + sovRequestResponse(uint64(mapEntrySize))
+		}
+	}
+	if len(m.Mapping) > 0 {
+		for k, v := range m.Mapping {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovRequestResponse(uint64(len(k))) + 1 + len(v) + sovRequestResponse(uint64(len(v)))
+			n += mapEntrySize + 1 + sovRequestResponse(uint64(mapEntrySize))
+		}
+	}
+	if m.AddWorkflowExecutionInfo != nil {
+		l = m.AddWorkflowExecutionInfo.Size()
+		n += 1 + l + sovRequestResponse(uint64(l))
+	}
+	return n
+}
+
+func (m *GetSearchAttributesRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.IndexName)
+	if l > 0 {
+		n += 1 + l + sovRequestResponse(uint64(l))
+	}
+	return n
+}
+
+func (m *GetSearchAttributesResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.CustomAttributes) > 0 {
+		for k, v := range m.CustomAttributes {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovRequestResponse(uint64(len(k))) + 1 + sovRequestResponse(uint64(v))
+			n += mapEntrySize + 1 + sovRequestResponse(uint64(mapEntrySize))
+		}
+	}
+	if len(m.SystemAttributes) > 0 {
+		for k, v := range m.SystemAttributes {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovRequestResponse(uint64(len(k))) + 1 + sovRequestResponse(uint64(v))
+			n += mapEntrySize + 1 + sovRequestResponse(uint64(mapEntrySize))
+		}
+	}
+	if len(m.Mapping) > 0 {
+		for k, v := range m.Mapping {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovRequestResponse(uint64(len(k))) + 1 + len(v) + sovRequestResponse(uint64(len(v)))
+			n += mapEntrySize + 1 + sovRequestResponse(uint64(mapEntrySize))
+		}
+	}
+	if m.AddWorkflowExecutionInfo != nil {
+		l = m.AddWorkflowExecutionInfo.Size()
+		n += 1 + l + sovRequestResponse(uint64(l))
+	}
 	return n
 }
 
@@ -5613,32 +6240,119 @@ func (this *ReapplyEventsResponse) String() string {
 	}, "")
 	return s
 }
-func (this *AddSearchAttributeRequest) String() string {
+func (this *AddSearchAttributesRequest) String() string {
 	if this == nil {
 		return "nil"
 	}
-	keysForSearchAttribute := make([]string, 0, len(this.SearchAttribute))
-	for k, _ := range this.SearchAttribute {
-		keysForSearchAttribute = append(keysForSearchAttribute, k)
+	keysForSearchAttributes := make([]string, 0, len(this.SearchAttributes))
+	for k, _ := range this.SearchAttributes {
+		keysForSearchAttributes = append(keysForSearchAttributes, k)
 	}
-	github_com_gogo_protobuf_sortkeys.Strings(keysForSearchAttribute)
-	mapStringForSearchAttribute := "map[string]v16.IndexedValueType{"
-	for _, k := range keysForSearchAttribute {
-		mapStringForSearchAttribute += fmt.Sprintf("%v: %v,", k, this.SearchAttribute[k])
+	github_com_gogo_protobuf_sortkeys.Strings(keysForSearchAttributes)
+	mapStringForSearchAttributes := "map[string]v16.IndexedValueType{"
+	for _, k := range keysForSearchAttributes {
+		mapStringForSearchAttributes += fmt.Sprintf("%v: %v,", k, this.SearchAttributes[k])
 	}
-	mapStringForSearchAttribute += "}"
-	s := strings.Join([]string{`&AddSearchAttributeRequest{`,
-		`SearchAttribute:` + mapStringForSearchAttribute + `,`,
-		`SecurityToken:` + fmt.Sprintf("%v", this.SecurityToken) + `,`,
+	mapStringForSearchAttributes += "}"
+	s := strings.Join([]string{`&AddSearchAttributesRequest{`,
+		`SearchAttributes:` + mapStringForSearchAttributes + `,`,
+		`IndexName:` + fmt.Sprintf("%v", this.IndexName) + `,`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *AddSearchAttributeResponse) String() string {
+func (this *AddSearchAttributesResponse) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&AddSearchAttributeResponse{`,
+	keysForCustomAttributes := make([]string, 0, len(this.CustomAttributes))
+	for k, _ := range this.CustomAttributes {
+		keysForCustomAttributes = append(keysForCustomAttributes, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForCustomAttributes)
+	mapStringForCustomAttributes := "map[string]v16.IndexedValueType{"
+	for _, k := range keysForCustomAttributes {
+		mapStringForCustomAttributes += fmt.Sprintf("%v: %v,", k, this.CustomAttributes[k])
+	}
+	mapStringForCustomAttributes += "}"
+	keysForSystemAttributes := make([]string, 0, len(this.SystemAttributes))
+	for k, _ := range this.SystemAttributes {
+		keysForSystemAttributes = append(keysForSystemAttributes, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForSystemAttributes)
+	mapStringForSystemAttributes := "map[string]v16.IndexedValueType{"
+	for _, k := range keysForSystemAttributes {
+		mapStringForSystemAttributes += fmt.Sprintf("%v: %v,", k, this.SystemAttributes[k])
+	}
+	mapStringForSystemAttributes += "}"
+	keysForMapping := make([]string, 0, len(this.Mapping))
+	for k, _ := range this.Mapping {
+		keysForMapping = append(keysForMapping, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForMapping)
+	mapStringForMapping := "map[string]string{"
+	for _, k := range keysForMapping {
+		mapStringForMapping += fmt.Sprintf("%v: %v,", k, this.Mapping[k])
+	}
+	mapStringForMapping += "}"
+	s := strings.Join([]string{`&AddSearchAttributesResponse{`,
+		`CustomAttributes:` + mapStringForCustomAttributes + `,`,
+		`SystemAttributes:` + mapStringForSystemAttributes + `,`,
+		`Mapping:` + mapStringForMapping + `,`,
+		`AddWorkflowExecutionInfo:` + strings.Replace(fmt.Sprintf("%v", this.AddWorkflowExecutionInfo), "WorkflowExecutionInfo", "v17.WorkflowExecutionInfo", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *GetSearchAttributesRequest) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&GetSearchAttributesRequest{`,
+		`IndexName:` + fmt.Sprintf("%v", this.IndexName) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *GetSearchAttributesResponse) String() string {
+	if this == nil {
+		return "nil"
+	}
+	keysForCustomAttributes := make([]string, 0, len(this.CustomAttributes))
+	for k, _ := range this.CustomAttributes {
+		keysForCustomAttributes = append(keysForCustomAttributes, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForCustomAttributes)
+	mapStringForCustomAttributes := "map[string]v16.IndexedValueType{"
+	for _, k := range keysForCustomAttributes {
+		mapStringForCustomAttributes += fmt.Sprintf("%v: %v,", k, this.CustomAttributes[k])
+	}
+	mapStringForCustomAttributes += "}"
+	keysForSystemAttributes := make([]string, 0, len(this.SystemAttributes))
+	for k, _ := range this.SystemAttributes {
+		keysForSystemAttributes = append(keysForSystemAttributes, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForSystemAttributes)
+	mapStringForSystemAttributes := "map[string]v16.IndexedValueType{"
+	for _, k := range keysForSystemAttributes {
+		mapStringForSystemAttributes += fmt.Sprintf("%v: %v,", k, this.SystemAttributes[k])
+	}
+	mapStringForSystemAttributes += "}"
+	keysForMapping := make([]string, 0, len(this.Mapping))
+	for k, _ := range this.Mapping {
+		keysForMapping = append(keysForMapping, k)
+	}
+	github_com_gogo_protobuf_sortkeys.Strings(keysForMapping)
+	mapStringForMapping := "map[string]string{"
+	for _, k := range keysForMapping {
+		mapStringForMapping += fmt.Sprintf("%v: %v,", k, this.Mapping[k])
+	}
+	mapStringForMapping += "}"
+	s := strings.Join([]string{`&GetSearchAttributesResponse{`,
+		`CustomAttributes:` + mapStringForCustomAttributes + `,`,
+		`SystemAttributes:` + mapStringForSystemAttributes + `,`,
+		`Mapping:` + mapStringForMapping + `,`,
+		`AddWorkflowExecutionInfo:` + strings.Replace(fmt.Sprintf("%v", this.AddWorkflowExecutionInfo), "WorkflowExecutionInfo", "v17.WorkflowExecutionInfo", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -5669,7 +6383,7 @@ func (this *DescribeClusterResponse) String() string {
 	s := strings.Join([]string{`&DescribeClusterResponse{`,
 		`SupportedClients:` + mapStringForSupportedClients + `,`,
 		`ServerVersion:` + fmt.Sprintf("%v", this.ServerVersion) + `,`,
-		`MembershipInfo:` + strings.Replace(fmt.Sprintf("%v", this.MembershipInfo), "MembershipInfo", "v17.MembershipInfo", 1) + `,`,
+		`MembershipInfo:` + strings.Replace(fmt.Sprintf("%v", this.MembershipInfo), "MembershipInfo", "v18.MembershipInfo", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -8151,7 +8865,7 @@ func (m *ReapplyEventsResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *AddSearchAttributeRequest) Unmarshal(dAtA []byte) error {
+func (m *AddSearchAttributesRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -8174,15 +8888,15 @@ func (m *AddSearchAttributeRequest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: AddSearchAttributeRequest: wiretype end group for non-group")
+			return fmt.Errorf("proto: AddSearchAttributesRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: AddSearchAttributeRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: AddSearchAttributesRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SearchAttribute", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field SearchAttributes", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -8209,8 +8923,8 @@ func (m *AddSearchAttributeRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.SearchAttribute == nil {
-				m.SearchAttribute = make(map[string]v16.IndexedValueType)
+			if m.SearchAttributes == nil {
+				m.SearchAttributes = make(map[string]v16.IndexedValueType)
 			}
 			var mapkey string
 			var mapvalue v16.IndexedValueType
@@ -8291,11 +9005,11 @@ func (m *AddSearchAttributeRequest) Unmarshal(dAtA []byte) error {
 					iNdEx += skippy
 				}
 			}
-			m.SearchAttribute[mapkey] = mapvalue
+			m.SearchAttributes[mapkey] = mapvalue
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SecurityToken", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field IndexName", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -8323,7 +9037,7 @@ func (m *AddSearchAttributeRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.SecurityToken = string(dAtA[iNdEx:postIndex])
+			m.IndexName = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -8349,7 +9063,7 @@ func (m *AddSearchAttributeRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *AddSearchAttributeResponse) Unmarshal(dAtA []byte) error {
+func (m *AddSearchAttributesResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -8372,12 +9086,928 @@ func (m *AddSearchAttributeResponse) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: AddSearchAttributeResponse: wiretype end group for non-group")
+			return fmt.Errorf("proto: AddSearchAttributesResponse: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: AddSearchAttributeResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: AddSearchAttributesResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CustomAttributes", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.CustomAttributes == nil {
+				m.CustomAttributes = make(map[string]v16.IndexedValueType)
+			}
+			var mapkey string
+			var mapvalue v16.IndexedValueType
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowRequestResponse
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowRequestResponse
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowRequestResponse
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapvalue |= v16.IndexedValueType(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipRequestResponse(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.CustomAttributes[mapkey] = mapvalue
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SystemAttributes", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.SystemAttributes == nil {
+				m.SystemAttributes = make(map[string]v16.IndexedValueType)
+			}
+			var mapkey string
+			var mapvalue v16.IndexedValueType
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowRequestResponse
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowRequestResponse
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowRequestResponse
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapvalue |= v16.IndexedValueType(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipRequestResponse(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.SystemAttributes[mapkey] = mapvalue
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Mapping", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Mapping == nil {
+				m.Mapping = make(map[string]string)
+			}
+			var mapkey string
+			var mapvalue string
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowRequestResponse
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowRequestResponse
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					var stringLenmapvalue uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowRequestResponse
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapvalue |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapvalue := int(stringLenmapvalue)
+					if intStringLenmapvalue < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					postStringIndexmapvalue := iNdEx + intStringLenmapvalue
+					if postStringIndexmapvalue < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					if postStringIndexmapvalue > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapvalue = string(dAtA[iNdEx:postStringIndexmapvalue])
+					iNdEx = postStringIndexmapvalue
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipRequestResponse(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.Mapping[mapkey] = mapvalue
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AddWorkflowExecutionInfo", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.AddWorkflowExecutionInfo == nil {
+				m.AddWorkflowExecutionInfo = &v17.WorkflowExecutionInfo{}
+			}
+			if err := m.AddWorkflowExecutionInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRequestResponse(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetSearchAttributesRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRequestResponse
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetSearchAttributesRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetSearchAttributesRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IndexName", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.IndexName = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRequestResponse(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetSearchAttributesResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRequestResponse
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetSearchAttributesResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetSearchAttributesResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CustomAttributes", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.CustomAttributes == nil {
+				m.CustomAttributes = make(map[string]v16.IndexedValueType)
+			}
+			var mapkey string
+			var mapvalue v16.IndexedValueType
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowRequestResponse
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowRequestResponse
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowRequestResponse
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapvalue |= v16.IndexedValueType(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipRequestResponse(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.CustomAttributes[mapkey] = mapvalue
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SystemAttributes", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.SystemAttributes == nil {
+				m.SystemAttributes = make(map[string]v16.IndexedValueType)
+			}
+			var mapkey string
+			var mapvalue v16.IndexedValueType
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowRequestResponse
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowRequestResponse
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowRequestResponse
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapvalue |= v16.IndexedValueType(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipRequestResponse(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.SystemAttributes[mapkey] = mapvalue
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Mapping", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Mapping == nil {
+				m.Mapping = make(map[string]string)
+			}
+			var mapkey string
+			var mapvalue string
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowRequestResponse
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= uint64(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowRequestResponse
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					var stringLenmapvalue uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowRequestResponse
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapvalue |= uint64(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapvalue := int(stringLenmapvalue)
+					if intStringLenmapvalue < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					postStringIndexmapvalue := iNdEx + intStringLenmapvalue
+					if postStringIndexmapvalue < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					if postStringIndexmapvalue > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapvalue = string(dAtA[iNdEx:postStringIndexmapvalue])
+					iNdEx = postStringIndexmapvalue
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipRequestResponse(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthRequestResponse
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.Mapping[mapkey] = mapvalue
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AddWorkflowExecutionInfo", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.AddWorkflowExecutionInfo == nil {
+				m.AddWorkflowExecutionInfo = &v17.WorkflowExecutionInfo{}
+			}
+			if err := m.AddWorkflowExecutionInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipRequestResponse(dAtA[iNdEx:])
@@ -8673,7 +10303,7 @@ func (m *DescribeClusterResponse) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.MembershipInfo == nil {
-				m.MembershipInfo = &v17.MembershipInfo{}
+				m.MembershipInfo = &v18.MembershipInfo{}
 			}
 			if err := m.MembershipInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err

@@ -252,8 +252,7 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 	}
 
 	// It is safe to pass nil to typeMap here because search attributes type must be embedded by caller.
-	var searchAttributes map[string]string
-	searchAttributes, err = searchattribute.Stringify(request.ArchiveRequest.SearchAttributes, nil)
+	searchAttributes, err := searchattribute.Stringify(request.ArchiveRequest.SearchAttributes, nil)
 	if err != nil {
 		logger.Error("Unable to stringify search attributes.", tag.Error(err))
 		return

@@ -189,33 +189,6 @@ func (fc *fileBasedClient) GetDurationValue(
 	return durationVal, nil
 }
 
-func (fc *fileBasedClient) UpdateValue(name Key, value interface{}) error {
-	keyName := Keys[name]
-	currentValues := make(map[string][]*constrainedValue)
-
-	confContent, err := ioutil.ReadFile(fc.config.Filepath)
-	if err != nil {
-		return fmt.Errorf("failed to read dynamic config file %v: %v", fc.config.Filepath, err)
-	}
-
-	if err = yaml.Unmarshal(confContent, currentValues); err != nil {
-		return fmt.Errorf("failed to decode dynamic config %v", err)
-	}
-
-	cVal := &constrainedValue{
-		Value: value,
-	}
-	currentValues[keyName] = []*constrainedValue{cVal}
-	newBytes, _ := yaml.Marshal(currentValues)
-
-	err = ioutil.WriteFile(fc.config.Filepath, newBytes, fileMode)
-	if err != nil {
-		return fmt.Errorf("failed to write config file, err: %v", err)
-	}
-
-	return fc.storeValues(currentValues)
-}
-
 func (fc *fileBasedClient) update() error {
 	defer func() {
 		fc.lastUpdatedTime = time.Now().UTC()

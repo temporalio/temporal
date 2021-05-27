@@ -235,6 +235,8 @@ const (
 	FlagHeadersProviderPluginWithAlias        = FlagHeadersProviderPlugin + ", hpp"
 	FlagHeadersProviderPluginOptions          = "headers_provider_plugin_options"
 	FlagHeadersProviderPluginOptionsWithAlias = FlagHeadersProviderPluginOptions + ", hppo"
+	FlagType                                  = "type"
+	FlagTypeWithAlias                         = FlagType + ", t"
 	FlagVersion                               = "version"
 
 	FlagProtoType  = "type"

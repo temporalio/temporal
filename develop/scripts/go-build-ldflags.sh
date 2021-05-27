@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -eu
+
 BASE_PACKAGE=$1
 
 GIT_REVISION=$(git rev-parse --short HEAD)
@@ -18,4 +20,4 @@ LD_FLAGS="-X ${BASE_PACKAGE}.GitRevision=${GIT_REVISION} \
 -X ${BASE_PACKAGE}.BuildPlatform=${BUILD_PLATFORM} \
 -X ${BASE_PACKAGE}.GoVersion=${GO_VERSION}"
 
-echo $LD_FLAGS
+echo "${LD_FLAGS}"

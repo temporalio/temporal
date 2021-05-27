@@ -29,12 +29,12 @@ package persistence
 import (
 	"errors"
 	"fmt"
-	"math"
 	"sync/atomic"
 	"time"
 
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -285,21 +285,23 @@ func (q *namespaceReplicationQueueImpl) purgeAckedMessages() error {
 		return nil
 	}
 
-	minAckLevel := int64(math.MaxInt64)
+	var minAckLevel *int64
 	for _, ackLevel := range ackLevelByCluster {
-		if ackLevel < minAckLevel {
-			minAckLevel = ackLevel
+		if minAckLevel == nil || ackLevel < *minAckLevel {
+			minAckLevel = convert.Int64Ptr(ackLevel)
 		}
 	}
+	if minAckLevel == nil {
+		return nil
+	}
 
-	err = q.queue.DeleteMessagesBefore(minAckLevel)
+	err = q.queue.DeleteMessagesBefore(*minAckLevel)
 	if err != nil {
 		return fmt.Errorf("failed to purge messages: %v", err)
 	}
-
 	q.metricsClient.
 		Scope(metrics.PersistenceNamespaceReplicationQueueScope).
-		UpdateGauge(metrics.NamespaceReplicationTaskAckLevelGauge, float64(minAckLevel))
+		UpdateGauge(metrics.NamespaceReplicationTaskAckLevelGauge, float64(*minAckLevel))
 	return nil
 }
 

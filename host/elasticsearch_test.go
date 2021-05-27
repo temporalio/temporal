@@ -94,7 +94,7 @@ func (s *elasticsearchIntegrationSuite) TearDownSuite() {
 func (s *elasticsearchIntegrationSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	s.testSearchAttributeKey = searchattribute.CustomStringField
+	s.testSearchAttributeKey = "CustomStringField"
 	s.testSearchAttributeVal = "test value"
 }
 
@@ -306,7 +306,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	// start 3 workflows
-	key := searchattribute.CustomIntField
+	key := "CustomIntField"
 	attrValBytes, _ := payload.Encode(1)
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
@@ -469,10 +469,10 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 			timeVal, _ := payload.Encode(time.Now().UTC())
 			searchAttr := &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
-					searchattribute.CustomIntField:      intVal,
-					searchattribute.CustomDoubleField:   doubleVal,
-					searchattribute.CustomKeywordField:  strVal,
-					searchattribute.CustomDatetimeField: timeVal,
+					"CustomIntField":      intVal,
+					"CustomDoubleField":   doubleVal,
+					"CustomKeywordField":  strVal,
+					"CustomDatetimeField": timeVal,
 				},
 			}
 			startRequest.SearchAttributes = searchAttr
@@ -542,17 +542,17 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 			s.NoError(err)
 			var v1, v2 interface{}
 			switch searchAttrKey {
-			case searchattribute.CustomIntField:
+			case "CustomIntField":
 				v1, _ = prevVal.(json.Number).Int64()
 				v2, _ = currVal.(json.Number).Int64()
 				s.True(v1.(int64) >= v2.(int64))
-			case searchattribute.CustomDoubleField:
+			case "CustomDoubleField":
 				v1, _ = prevVal.(json.Number).Float64()
 				v2, _ = currVal.(json.Number).Float64()
 				s.True(v1.(float64) >= v2.(float64))
-			case searchattribute.CustomKeywordField:
+			case "CustomKeywordField":
 				s.True(prevVal.(string) >= currVal.(string))
-			case searchattribute.CustomDatetimeField:
+			case "CustomDatetimeField":
 				v1, _ = time.Parse(time.RFC3339, prevVal.(string))
 				v2, _ = time.Parse(time.RFC3339, currVal.(string))
 				s.True(v1.(time.Time).After(v2.(time.Time)))
@@ -566,25 +566,25 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 	}
 
 	// order by CustomIntField desc
-	field := searchattribute.CustomIntField
+	field := "CustomIntField"
 	query := fmt.Sprintf(queryTemplate, wt, field, desc)
 	var int1, int2 int
 	testHelper(query, field, int1, int2)
 
 	// order by CustomDoubleField desc
-	field = searchattribute.CustomDoubleField
+	field = "CustomDoubleField"
 	query = fmt.Sprintf(queryTemplate, wt, field, desc)
 	var double1, double2 float64
 	testHelper(query, field, double1, double2)
 
 	// order by CustomKeywordField desc
-	field = searchattribute.CustomKeywordField
+	field = "CustomKeywordField"
 	query = fmt.Sprintf(queryTemplate, wt, field, desc)
 	var s1, s2 string
 	testHelper(query, field, s1, s2)
 
 	// order by CustomDatetimeField desc
-	field = searchattribute.CustomDatetimeField
+	field = "CustomDatetimeField"
 	query = fmt.Sprintf(queryTemplate, wt, field, desc)
 	var t1, t2 time.Time
 	testHelper(query, field, t1, t2)
@@ -1015,7 +1015,7 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 				s.NoError(err)
 				s.Equal("another string", searchVal)
 
-				searchValBytes2 := fields[searchattribute.CustomIntField]
+				searchValBytes2 := fields["CustomIntField"]
 				var searchVal2 int
 				err = payload.Decode(searchValBytes2, &searchVal2)
 				s.NoError(err)
@@ -1043,9 +1043,9 @@ func getUpsertSearchAttributes() *commonpb.SearchAttributes {
 
 	upsertSearchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			searchattribute.CustomStringField: stringAttrPayload,
-			searchattribute.CustomIntField:    intAttrPayload,
-			searchattribute.BinaryChecksums:   binaryChecksumsPayload,
+			"CustomStringField":             stringAttrPayload,
+			"CustomIntField":                intAttrPayload,
+			searchattribute.BinaryChecksums: binaryChecksumsPayload,
 		},
 	}
 	return upsertSearchAttr

@@ -36,10 +36,8 @@ temporal-sql-tool --ep $SQL_HOST_ADDR -p $port create --plugin mysql --db tempor
 You can only upgrade to a new version after the initial setup done above.
 
 ```
-./temporal-sql-tool --ep $SQL_HOST_ADDR -p $port --plugin mysql --db temporal update-schema -d ./schema/mysql/v57/temporal/versioned -v x.x -y -- executes a dryrun of upgrade to version x.x
-./temporal-sql-tool --ep $SQL_HOST_ADDR -p $port --plugin mysql --db temporal update-schema -d ./schema/mysql/v57/temporal/versioned -v x.x    -- actually executes the upgrade to version x.x
+./temporal-sql-tool --ep $SQL_HOST_ADDR -p $port --plugin mysql --db temporal update-schema -d ./schema/mysql/v57/temporal/versioned -v x.x    -- executes the upgrade to version x.x
 
-./temporal-sql-tool --ep $SQL_HOST_ADDR -p $port --plugin mysql --db temporal_visibility update-schema -d ./schema/mysql/v57/visibility/versioned -v x.x -y -- executes a dryrun of upgrade to version x.x
-./temporal-sql-tool --ep $SQL_HOST_ADDR -p $port --plugin mysql --db temporal_visibility update-schema -d ./schema/mysql/v57/visibility/versioned -v x.x    -- actually executes the upgrade to version x.x
+./temporal-sql-tool --ep $SQL_HOST_ADDR -p $port --plugin mysql --db temporal_visibility update-schema -d ./schema/mysql/v57/visibility/versioned -v x.x    -- executes the upgrade to version x.x
 ```
 

@@ -1,12 +1,15 @@
 #!/bin/bash
 
-set -ex
+set -eu -o pipefail
 
-dockerize -template /etc/temporal/config/config_template.yaml:/etc/temporal/config/docker.yaml
+SERVICES="${SERVICES:-}"
+SERVICE_FLAGS="${SERVICE_FLAGS:-}"
 
-# Convert semicolon (or comma for backward compatibility) separated string (i.e. "history:matching")
-# to valid flags list (i.e. "--service=history --service=matching").
-IFS=':,' read -ra SERVICE_LIST <<< "$SERVICES"
-SERVICE_ARGS=$(printf -- "--service=%s " "${SERVICE_LIST[@]}")
+if [ -z "${SERVICE_FLAGS}" ] && [ -n "${SERVICES}" ]; then
+    # Convert semicolon (or comma, for backward compatibility) separated string (i.e. "history:matching")
+    # to valid flag list (i.e. "--service=history --service=matching").
+    IFS=':,' read -ra SERVICE_FLAGS <<< "${SERVICES}"
+    for i in "${!SERVICE_FLAGS[@]}"; do SERVICE_FLAGS[$i]="--service=${SERVICE_FLAGS[$i]}"; done
+fi
 
-exec temporal-server --root $TEMPORAL_HOME --env docker start $SERVICE_ARGS
+exec temporal-server --env docker start "${SERVICE_FLAGS[@]}"

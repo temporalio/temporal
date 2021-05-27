@@ -249,7 +249,7 @@ func NewEngineWithShardContext(
 
 	historyEngImpl.searchAttributesValidator = searchattribute.NewValidator(
 		logger,
-		config.ValidSearchAttributes,
+		shard.GetService().GetSearchAttributesProvider(),
 		config.SearchAttributesNumberOfKeysLimit,
 		config.SearchAttributesSizeOfValueLimit,
 		config.SearchAttributesTotalSizeLimit,
@@ -1830,19 +1830,22 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 		namespaceID,
 		execution,
 		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
-			executionInfo := mutableState.GetExecutionInfo()
-			createWorkflowTask := true
-			// Do not create workflow task when the workflow is cron and the cron has not been started yet
-			if mutableState.GetExecutionInfo().CronSchedule != "" && !mutableState.HasProcessedOrPendingWorkflowTask() {
-				createWorkflowTask = false
-			}
-			postActions := &updateWorkflowAction{
-				noop:               false,
-				createWorkflowTask: createWorkflowTask,
+			if request.GetRequestId() != "" && mutableState.IsSignalRequested(request.GetRequestId()) {
+				return &updateWorkflowAction{
+					noop:               true,
+					createWorkflowTask: false,
+				}, nil
 			}
 
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, ErrWorkflowCompleted
+			}
+
+			executionInfo := mutableState.GetExecutionInfo()
+			createWorkflowTask := true
+			// Do not create workflow task when the workflow is cron and the cron has not been started yet
+			if executionInfo.CronSchedule != "" && !mutableState.HasProcessedOrPendingWorkflowTask() {
+				createWorkflowTask = false
 			}
 
 			maxAllowedSignals := e.config.MaximumSignalsPerExecution(namespaceEntry.GetInfo().Name)
@@ -1863,14 +1866,9 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 				}
 			}
 
-			// deduplicate by request id for signal workflow task
-			if requestID := request.GetRequestId(); requestID != "" {
-				if mutableState.IsSignalRequested(requestID) {
-					return postActions, nil
-				}
-				mutableState.AddSignalRequested(requestID)
+			if request.GetRequestId() != "" {
+				mutableState.AddSignalRequested(request.GetRequestId())
 			}
-
 			if _, err := mutableState.AddWorkflowExecutionSignaled(
 				request.GetSignalName(),
 				request.GetInput(),
@@ -1878,7 +1876,10 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 				return nil, serviceerror.NewInternal("Unable to signal workflow execution.")
 			}
 
-			return postActions, nil
+			return &updateWorkflowAction{
+				noop:               false,
+				createWorkflowTask: createWorkflowTask,
+			}, nil
 		})
 }
 
@@ -2621,7 +2622,7 @@ func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
 	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
 		return err
 	}
-	if err := e.searchAttributesValidator.Validate(request.SearchAttributes, namespace); err != nil {
+	if err := e.searchAttributesValidator.Validate(request.SearchAttributes, namespace, e.config.DefaultVisibilityIndexName); err != nil {
 		e.logger.Warn("Search attributes are invalid.", tag.Error(err), tag.WorkflowNamespace(namespace))
 		return err
 	}
