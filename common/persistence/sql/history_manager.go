@@ -27,6 +27,7 @@ package sql
 import (
 	"database/sql"
 	"fmt"
+	commonpb "go.temporal.io/api/common/v1"
 	"math"
 
 	"go.temporal.io/api/serviceerror"
@@ -380,7 +381,12 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 
 	// validBRsMaxEndNode is to for each branch range that is being used, we want to know what is the max nodeID referred by other valid branch
 	validBRsMaxEndNode := map[string]int64{}
-	for _, b := range rsp.Branches {
+	for _, blob := range rsp.Branches {
+		b, err := serialization.HistoryBranchFromBlob(blob.Data, blob.EncodingType.String())
+		if err != nil {
+			return err
+		}
+
 		for _, br := range b.Ancestors {
 			curr, ok := validBRsMaxEndNode[br.GetBranchId()]
 			if !ok || curr < br.GetEndNodeId() {
@@ -432,7 +438,7 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 
 func (m *sqlHistoryV2Manager) GetAllHistoryTreeBranches(
 	request *p.GetAllHistoryTreeBranchesRequest,
-) (*p.GetAllHistoryTreeBranchesResponse, error) {
+) (*p.InternalGetAllHistoryTreeBranchesResponse, error) {
 
 	// TODO https://github.com/uber/cadence/issues/2458
 	// Implement it when we need
@@ -442,7 +448,7 @@ func (m *sqlHistoryV2Manager) GetAllHistoryTreeBranches(
 // GetHistoryTree returns all branch information of a tree
 func (m *sqlHistoryV2Manager) GetHistoryTree(
 	request *p.GetHistoryTreeRequest,
-) (*p.GetHistoryTreeResponse, error) {
+) (*p.InternalGetHistoryTreeResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	treeID, err := primitives.ParseUUID(request.TreeID)
@@ -455,18 +461,17 @@ func (m *sqlHistoryV2Manager) GetHistoryTree(
 		ShardID: *request.ShardID,
 	})
 	if err == sql.ErrNoRows || (err == nil && len(rows) == 0) {
-		return &p.GetHistoryTreeResponse{}, nil
+		return &p.InternalGetHistoryTreeResponse{}, nil
 	}
-	branches := make([]*persistencespb.HistoryBranch, 0, len(rows))
+	branches := make([]*commonpb.DataBlob, 0, len(rows))
 	for _, row := range rows {
-		treeInfo, err := serialization.HistoryTreeInfoFromBlob(row.Data, row.DataEncoding)
 		if err != nil {
 			return nil, err
 		}
-		branches = append(branches, treeInfo.BranchInfo)
+		branches = append(branches, p.NewDataBlob(row.Data, row.DataEncoding))
 	}
 
-	return &p.GetHistoryTreeResponse{
+	return &p.InternalGetHistoryTreeResponse{
 		Branches: branches,
 	}, nil
 }

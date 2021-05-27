@@ -28,8 +28,8 @@ import (
 	"fmt"
 	"sort"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -311,7 +311,11 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 
 	// validBRsMaxEndNode is to know each branch range that is being used, we want to know what is the max nodeID referred by other valid branch
 	validBRsMaxEndNode := map[string]int64{}
-	for _, b := range rsp.Branches {
+	for _, blob := range rsp.Branches {
+		b, err := serialization.HistoryBranchFromBlob(blob.Data, blob.EncodingType.String())
+		if err != nil {
+			return err
+		}
 		for _, br := range b.Ancestors {
 			curr, ok := validBRsMaxEndNode[br.GetBranchId()]
 			if !ok || curr < br.GetEndNodeId() {
@@ -356,7 +360,7 @@ func (h *cassandraHistoryV2Persistence) deleteBranchRangeNodes(
 
 func (h *cassandraHistoryV2Persistence) GetAllHistoryTreeBranches(
 	request *p.GetAllHistoryTreeBranchesRequest,
-) (*p.GetAllHistoryTreeBranchesResponse, error) {
+) (*p.InternalGetAllHistoryTreeBranchesResponse, error) {
 
 	query := h.session.Query(v2templateScanAllTreeBranches)
 
@@ -364,25 +368,20 @@ func (h *cassandraHistoryV2Persistence) GetAllHistoryTreeBranches(
 
 	pagingToken := iter.PageState()
 
-	branches := make([]p.HistoryBranchDetail, 0, request.PageSize)
+	branches := make([]p.InternalHistoryBranchDetail, 0, request.PageSize)
 	treeUUID := ""
 	branchUUID := ""
 	var data []byte
 	var encoding string
 
 	for iter.Scan(&treeUUID, &branchUUID, &data, &encoding) {
-		hti, err := serialization.HistoryTreeInfoFromBlob(data, encoding)
-		if err != nil {
-			return nil, gocql.ConvertError("GetAllHistoryTreeBranches", err)
-		}
-
-		branchDetail := p.HistoryBranchDetail{
-			TreeID:   treeUUID,
+		branch := p.InternalHistoryBranchDetail{
+			TreeID: treeUUID,
 			BranchID: branchUUID,
-			ForkTime: hti.ForkTime,
-			Info:     hti.Info,
+			Data: data,
+			Encoding:  encoding,
 		}
-		branches = append(branches, branchDetail)
+		branches = append(branches, branch)
 
 		treeUUID = ""
 		branchUUID = ""
@@ -394,7 +393,7 @@ func (h *cassandraHistoryV2Persistence) GetAllHistoryTreeBranches(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetAllHistoryTreeBranches. Close operation failed. Error: %v", err))
 	}
 
-	response := &p.GetAllHistoryTreeBranchesResponse{
+	response := &p.InternalGetAllHistoryTreeBranchesResponse{
 		Branches:      branches,
 		NextPageToken: pagingToken,
 	}
@@ -405,7 +404,7 @@ func (h *cassandraHistoryV2Persistence) GetAllHistoryTreeBranches(
 // GetHistoryTree returns all branch information of a tree
 func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 	request *p.GetHistoryTreeRequest,
-) (*p.GetHistoryTreeResponse, error) {
+) (*p.InternalGetHistoryTreeResponse, error) {
 
 	treeID, err := primitives.ValidateUUID(request.TreeID)
 	if err != nil {
@@ -415,7 +414,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 
 	pageSize := 100
 	var pagingToken []byte
-	branches := make([]*persistencespb.HistoryBranch, 0, pageSize)
+	branches := make([]*commonpb.DataBlob, 0, pageSize)
 
 	var iter gocql.Iter
 	for {
@@ -426,12 +425,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 		var data []byte
 		var encoding string
 		for iter.Scan(&branchUUID, &data, &encoding) {
-			br, err := serialization.HistoryTreeInfoFromBlob(data, encoding)
-			if err != nil {
-				return nil, gocql.ConvertError("GetHistoryTree", err)
-			}
-
-			branches = append(branches, br.BranchInfo)
+			branches = append(branches, p.NewDataBlob(data, encoding))
 
 			branchUUID = ""
 			data = []byte{}
@@ -447,7 +441,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 		}
 	}
 
-	return &p.GetHistoryTreeResponse{
+	return &p.InternalGetHistoryTreeResponse{
 		Branches: branches,
 	}, nil
 }

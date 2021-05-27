@@ -149,9 +149,9 @@ type (
 		// DeleteHistoryBranch removes a branch
 		DeleteHistoryBranch(request *InternalDeleteHistoryBranchRequest) error
 		// GetHistoryTree returns all branch information of a tree
-		GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error)
+		GetHistoryTree(request *GetHistoryTreeRequest) (*InternalGetHistoryTreeResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees
-		GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error)
+		GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*InternalGetAllHistoryTreeBranchesResponse, error)
 	}
 
 	// VisibilityStore is the store interface for visibility
@@ -398,6 +398,8 @@ type (
 		BranchInfo *persistencespb.HistoryBranch
 		// Used in sharded data stores to identify which shard to use
 		ShardID int32
+		// Max EndNodeID of each  branch. This is used to determine the range of nodes that
+		BranchesMaxEndNodeID map[string]int64
 	}
 
 	// InternalReadHistoryBranchRequest is used to read a history branch
@@ -436,6 +438,30 @@ type (
 		Nodes []InternalHistoryNode
 		// Pagination token
 		NextPageToken []byte
+	}
+
+	// InternalGetAllHistoryTreeBranchesResponse is response to GetAllHistoryTreeBranches
+	// Only used by persistence layer
+	InternalGetAllHistoryTreeBranchesResponse struct {
+		// pagination token
+		NextPageToken []byte
+		// all branches of all trees
+		Branches []InternalHistoryBranchDetail
+	}
+
+	// InternalHistoryBranchDetail used by InternalGetAllHistoryTreeBranchesResponse
+	InternalHistoryBranchDetail struct {
+		TreeID   string
+		BranchID string
+		Encoding string
+		Data []byte
+	}
+
+	// InternalGetHistoryTreeResponse is response to GetHistoryTree
+	// Only used by persistence layer
+	InternalGetHistoryTreeResponse struct {
+		// all branches of a tree
+		Branches []*commonpb.DataBlob
 	}
 
 	// VisibilityWorkflowExecutionInfo is visibility info for internal response

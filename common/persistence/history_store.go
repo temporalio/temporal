@@ -289,7 +289,19 @@ func (m *historyV2ManagerImpl) GetHistoryTree(
 		}
 		request.TreeID = branch.GetTreeId()
 	}
-	return m.persistence.GetHistoryTree(request)
+	resp, err := m.persistence.GetHistoryTree(request)
+	if err != nil {
+		return nil, err
+	}
+	branches := make([]*persistencespb.HistoryBranch, 0, len(resp.Branches))
+	for _, blob := range resp.Branches {
+		br, err := m.historySerializer.HistoryTreeInfoFromBlob(blob)
+		if err != nil {
+			return nil, err
+		}
+		branches = append(branches, br.BranchInfo)
+	}
+	return &GetHistoryTreeResponse{Branches: branches}, nil
 }
 
 // AppendHistoryNodes add a node to history node table
@@ -434,8 +446,31 @@ func (m *historyV2ManagerImpl) ReadRawHistoryBranch(
 func (m *historyV2ManagerImpl) GetAllHistoryTreeBranches(
 	request *GetAllHistoryTreeBranchesRequest,
 ) (*GetAllHistoryTreeBranchesResponse, error) {
+	resp, err := m.persistence.GetAllHistoryTreeBranches(request)
+	if err != nil {
+		return nil, err
+	}
+	branches := make([]HistoryBranchDetail, 0, len(resp.Branches))
+	for _, branch := range resp.Branches {
+		blob := NewDataBlob(branch.Data, branch.Encoding)
+		treeInfo, err := m.historySerializer.HistoryTreeInfoFromBlob(blob)
+		if err != nil {
+			return nil, err
+		}
 
-	return m.persistence.GetAllHistoryTreeBranches(request)
+		branchDetail := HistoryBranchDetail{
+			TreeID:   branch.TreeID,
+			BranchID: branch.BranchID,
+			ForkTime: treeInfo.ForkTime,
+			Info:     treeInfo.Info,
+		}
+		branches = append(branches, branchDetail)
+	}
+
+	return &GetAllHistoryTreeBranchesResponse{
+		NextPageToken: resp.NextPageToken,
+		Branches: branches,
+	}, nil
 }
 
 func (m *historyV2ManagerImpl) readRawHistoryBranch(
