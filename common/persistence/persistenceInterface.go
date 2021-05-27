@@ -145,7 +145,7 @@ type (
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(request *InternalReadHistoryBranchRequest) (*InternalReadHistoryBranchResponse, error)
 		// ForkHistoryBranch forks a new branch from a old branch
-		ForkHistoryBranch(request *InternalForkHistoryBranchRequest) (*InternalForkHistoryBranchResponse, error)
+		ForkHistoryBranch(request *InternalForkHistoryBranchRequest) error
 		// DeleteHistoryBranch removes a branch
 		DeleteHistoryBranch(request *InternalDeleteHistoryBranchRequest) error
 		// GetHistoryTree returns all branch information of a tree
@@ -338,6 +338,8 @@ type (
 		Info string
 		// The branch to be appended
 		BranchInfo *persistencespb.HistoryBranch
+		// Serialized TreeInfo
+		TreeInfo *commonpb.DataBlob
 		// The history node
 		Node InternalHistoryNode
 		// Used in sharded data stores to identify which shard to use
@@ -360,6 +362,8 @@ type (
 	InternalForkHistoryBranchRequest struct {
 		// The base branch to fork from
 		ForkBranchInfo *persistencespb.HistoryBranch
+		// Serialized TreeInfo
+		TreeInfo *commonpb.DataBlob
 		// The nodeID to fork from, the new branch will start from ( inclusive ), the base branch will stop at(exclusive)
 		ForkNodeID int64
 		// branchID of the new branch

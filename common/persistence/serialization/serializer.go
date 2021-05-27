@@ -622,7 +622,7 @@ func (t *serializerImpl) ReplicationTaskFromBlob(data *commonpb.DataBlob) (*repl
 func proto3DecodeBlob(data *commonpb.DataBlob, result proto.Message) error {
 	if data == nil {
 		// TODO: should we return nil or error?
-		return fmt.Errorf("cannot decode nil")
+		return NewDeserializationError("cannot decode nil")
 	}
 
 	if data.EncodingType != enumspb.ENCODING_TYPE_PROTO3 {
@@ -638,7 +638,7 @@ func proto3DecodeBlob(data *commonpb.DataBlob, result proto.Message) error {
 func decodeBlob(data *commonpb.DataBlob, result proto.Message) error {
 	if data == nil {
 		// TODO: should we return nil or error?
-		return fmt.Errorf("cannot decode nil")
+		return NewDeserializationError("cannot decode nil")
 	}
 
 	if data.Data == nil {
@@ -676,7 +676,7 @@ func encodeBlob(o proto.Message, encoding enumspb.EncodingType) (*commonpb.DataB
 	case enumspb.ENCODING_TYPE_PROTO3:
 		return proto3EncodeBlob(o, enumspb.ENCODING_TYPE_PROTO3)
 	default:
-		return nil, fmt.Errorf("unknown encoding type: %v", encoding)
+		return nil, NewUnknownEncodingTypeError(encoding)
 	}
 }
 
@@ -696,7 +696,7 @@ func proto3EncodeBlob(m proto.Message, encoding enumspb.EncodingType) (*commonpb
 	blob := &commonpb.DataBlob{EncodingType: enumspb.ENCODING_TYPE_PROTO3}
 	data, err := proto.Marshal(m)
 	if err != nil {
-		return nil, fmt.Errorf("error serializing struct to blob using %v encoding: %w", enumspb.ENCODING_TYPE_PROTO3, err)
+		return nil, NewSerializationError(err.Error())
 	}
 	blob.Data = data
 	return blob, nil

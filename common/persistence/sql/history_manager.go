@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -66,7 +65,7 @@ func newHistoryV2Persistence(
 	}, nil
 }
 
-// AppendHistoryNode add(or override) a node to a history branch
+// AppendHistoryNodes add(or override) a node to a history branch
 func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
@@ -74,12 +73,6 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 	defer cancel()
 	branchInfo := request.BranchInfo
 	node := request.Node
-
-	if node.NodeID < p.GetBeginNodeID(branchInfo) {
-		return &p.InvalidPersistenceRequestError{
-			Msg: fmt.Sprintf("cannot append to ancestors' nodes"),
-		}
-	}
 
 	treeIDBytes, err := primitives.ParseUUID(branchInfo.GetTreeId())
 	if err != nil {
@@ -101,62 +94,52 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 		ShardID:      request.ShardID,
 	}
 
-	if request.IsNewBranch {
-		treeInfo := &persistencespb.HistoryTreeInfo{
-			BranchInfo: branchInfo,
-			Info:       request.Info,
-			ForkTime:   timestamp.TimeNowPtrUtc(),
+	if !request.IsNewBranch {
+		_, err = m.db.InsertIntoHistoryNode(ctx, nodeRow)
+		if err != nil {
+			if m.db.IsDupEntryError(err) {
+				return &p.ConditionFailedError{Msg: fmt.Sprintf("AppendHistoryNodes: row already exist: %v", err)}
+			}
+			return serviceerror.NewInternal(fmt.Sprintf("AppendHistoryNodes: %v", err))
 		}
+		return nil
+	}
 
-		blob, err := serialization.HistoryTreeInfoToBlob(treeInfo)
+	treeInfoBlob := request.TreeInfo
+	treeRow := &sqlplugin.HistoryTreeRow{
+		ShardID:      request.ShardID,
+		TreeID:       treeIDBytes,
+		BranchID:     branchIDBytes,
+		Data:         treeInfoBlob.Data,
+		DataEncoding: treeInfoBlob.EncodingType.String(),
+	}
+
+	return m.txExecute(ctx, "AppendHistoryNodes", func(tx sqlplugin.Tx) error {
+		result, err := tx.InsertIntoHistoryNode(ctx, nodeRow)
 		if err != nil {
 			return err
 		}
-
-		treeRow := &sqlplugin.HistoryTreeRow{
-			ShardID:      request.ShardID,
-			TreeID:       treeIDBytes,
-			BranchID:     branchIDBytes,
-			Data:         blob.Data,
-			DataEncoding: blob.EncodingType.String(),
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if rowsAffected != 1 {
+			return fmt.Errorf("expected 1 row to be affected for node table, got %v", rowsAffected)
 		}
 
-		return m.txExecute(ctx, "AppendHistoryNodes", func(tx sqlplugin.Tx) error {
-			result, err := tx.InsertIntoHistoryNode(ctx, nodeRow)
-			if err != nil {
-				return err
-			}
-			rowsAffected, err := result.RowsAffected()
-			if err != nil {
-				return err
-			}
-			if rowsAffected != 1 {
-				return fmt.Errorf("expected 1 row to be affected for node table, got %v", rowsAffected)
-			}
-
-			result, err = tx.InsertIntoHistoryTree(ctx, treeRow)
-			if err != nil {
-				return err
-			}
-			rowsAffected, err = result.RowsAffected()
-			if err != nil {
-				return err
-			}
-			if !(rowsAffected == 1 || rowsAffected == 2) {
-				return fmt.Errorf("expected 1 or 2 rows to be affected for tree table as we allow upserts, got %v", rowsAffected)
-			}
-			return nil
-		})
-	}
-
-	_, err = m.db.InsertIntoHistoryNode(ctx, nodeRow)
-	if err != nil {
-		if m.db.IsDupEntryError(err) {
-			return &p.ConditionFailedError{Msg: fmt.Sprintf("AppendHistoryNodes: row already exist: %v", err)}
+		result, err = tx.InsertIntoHistoryTree(ctx, treeRow)
+		if err != nil {
+			return err
 		}
-		return serviceerror.NewInternal(fmt.Sprintf("AppendHistoryNodes: %v", err))
-	}
-	return nil
+		rowsAffected, err = result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if !(rowsAffected == 1 || rowsAffected == 2) {
+			return fmt.Errorf("expected 1 or 2 rows to be affected for tree table as we allow upserts, got %v", rowsAffected)
+		}
+		return nil
+	})
 }
 
 func (m *sqlHistoryV2Manager) DeleteHistoryNodes(
@@ -326,85 +309,41 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 //
 func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 	request *p.InternalForkHistoryBranchRequest,
-) (*p.InternalForkHistoryBranchResponse, error) {
+) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	forkB := request.ForkBranchInfo
-	treeID := forkB.TreeId
-
-	newAncestors := make([]*persistencespb.HistoryBranchRange, 0, len(forkB.Ancestors)+1)
-
-	beginNodeID := p.GetBeginNodeID(forkB)
-	if beginNodeID >= request.ForkNodeID {
-		// this is the case that new branch's ancestors doesn't include the forking branch
-		for _, br := range forkB.Ancestors {
-			if br.GetEndNodeId() >= request.ForkNodeID {
-				newAncestors = append(newAncestors, &persistencespb.HistoryBranchRange{
-					BranchId:    br.GetBranchId(),
-					BeginNodeId: br.GetBeginNodeId(),
-					EndNodeId:   request.ForkNodeID,
-				})
-				break
-			} else {
-				newAncestors = append(newAncestors, br)
-			}
-		}
-	} else {
-		// this is the case the new branch will inherit all ancestors from forking branch
-		newAncestors = forkB.Ancestors
-		newAncestors = append(newAncestors, &persistencespb.HistoryBranchRange{
-			BranchId:    forkB.BranchId,
-			BeginNodeId: beginNodeID,
-			EndNodeId:   request.ForkNodeID,
-		})
-	}
-
-	treeInfo := &persistencespb.HistoryTreeInfo{
-		BranchInfo: &persistencespb.HistoryBranch{
-			TreeId:    treeID,
-			BranchId:  request.NewBranchID,
-			Ancestors: newAncestors,
-		},
-		Info:     request.Info,
-		ForkTime: timestamp.TimeNowPtrUtc(),
-	}
-
-	blob, err := serialization.HistoryTreeInfoToBlob(treeInfo)
-	if err != nil {
-		return nil, err
-	}
-
+	treeInfoBlob := request.TreeInfo
 	newBranchIdBytes, err := primitives.ParseUUID(request.NewBranchID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	treeIDBytes, err := primitives.ParseUUID(forkB.GetTreeId())
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	row := &sqlplugin.HistoryTreeRow{
 		ShardID:      request.ShardID,
 		TreeID:       treeIDBytes,
 		BranchID:     newBranchIdBytes,
-		Data:         blob.Data,
-		DataEncoding: blob.EncodingType.String(),
+		Data:         treeInfoBlob.Data,
+		DataEncoding: treeInfoBlob.EncodingType.String(),
 	}
 
 	result, err := m.db.InsertIntoHistoryTree(ctx, row)
 	if err != nil {
-		return nil, err
+		return err
 	}
+
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if rowsAffected != 1 {
-		return nil, fmt.Errorf("expected 1 row to be affected for tree table, got %v", rowsAffected)
+		return fmt.Errorf("expected 1 row to be affected for tree table, got %v", rowsAffected)
 	}
-	return &p.InternalForkHistoryBranchResponse{
-		NewBranchInfo: treeInfo.BranchInfo,
-	}, nil
+	return nil
 }
 
 // DeleteHistoryBranch removes a branch

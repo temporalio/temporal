@@ -26,8 +26,8 @@ package persistence
 
 import (
 	historypb "go.temporal.io/api/history/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"sort"
 )
 
 // ReadFullPageV2Events reads a full page of history events from HistoryManager. Due to storage format of V2 History
@@ -82,4 +82,15 @@ func GetBeginNodeID(bi *persistencespb.HistoryBranch) int64 {
 	}
 	idx := len(bi.Ancestors) - 1
 	return bi.Ancestors[idx].GetEndNodeId()
+}
+
+func sortAncestors(ans []*persistencespb.HistoryBranchRange) {
+	if len(ans) > 0 {
+		// sort ans based onf EndNodeID so that we can set BeginNodeID
+		sort.Slice(ans, func(i, j int) bool { return (ans)[i].GetEndNodeId() < (ans)[j].GetEndNodeId() })
+		(ans)[0].BeginNodeId = int64(1)
+		for i := 1; i < len(ans); i++ {
+			(ans)[i].BeginNodeId = (ans)[i-1].GetEndNodeId()
+		}
+	}
 }
