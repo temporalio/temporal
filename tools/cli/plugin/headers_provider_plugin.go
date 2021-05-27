@@ -58,12 +58,12 @@ type (
 )
 
 func (w HeadersProviderPluginWrapper) GetHeaders(ctx context.Context) (map[string]string, error) {
-	var outgoingHeaders map[string][]string
-	if headers, ok := metadata.FromIncomingContext(ctx); ok {
-		outgoingHeaders = headers
+	var currentHeaders map[string][]string
+	if headers, ok := metadata.FromOutgoingContext(ctx); ok {
+		currentHeaders = headers
 	}
 
-	return w.provider.GetHeaders(outgoingHeaders)
+	return w.provider.GetHeaders(currentHeaders)
 }
 
 func NewHeadersProviderPlugin(name string) (HeadersProviderSDK, error) {
