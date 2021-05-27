@@ -2100,9 +2100,17 @@ func DBTimestampToUnixNano(milliseconds int64) int64 {
 	return (time.Duration(milliseconds) * time.Millisecond).Nanoseconds()
 }
 
-// UnixNanoToDBTimestamp converts UnixNano to CQL timestamp
-func UnixNanoToDBTimestamp(timestamp int64) int64 {
-	return time.Duration(timestamp).Milliseconds()
+func UnixMilliseconds(timestamp time.Time) int64 {
+	if timestamp.IsZero() {
+		return 0
+	}
+
+	unixNano := timestamp.UnixNano()
+	if unixNano < 0 {
+		// Time is before January 1, 1970 UTC
+		return 0
+	}
+	return unixNano / int64(time.Millisecond)
 }
 
 // NewHistoryBranchToken return a new branch token

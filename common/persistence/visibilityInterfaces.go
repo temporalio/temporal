@@ -47,9 +47,9 @@ type (
 		Namespace          string // not persisted, used as config filter key
 		Execution          commonpb.WorkflowExecution
 		WorkflowTypeName   string
-		StartTimestamp     int64
+		StartTimestamp     time.Time
 		Status             enumspb.WorkflowExecutionStatus
-		ExecutionTimestamp int64
+		ExecutionTimestamp time.Time
 		TaskID             int64 // not persisted, used as condition update version for ES
 		ShardID            int32 // not persisted
 		Memo               *commonpb.Memo
@@ -65,7 +65,7 @@ type (
 	// RecordWorkflowExecutionClosedRequest is used to add a record of a closed execution
 	RecordWorkflowExecutionClosedRequest struct {
 		*VisibilityRequestBase
-		CloseTimestamp int64
+		CloseTimestamp time.Time
 		HistoryLength  int64
 		Retention      *time.Duration // not persisted, used for cassandra ttl
 	}
@@ -79,8 +79,8 @@ type (
 	ListWorkflowExecutionsRequest struct {
 		NamespaceID       string
 		Namespace         string // namespace name is not persisted, but used as config filter key
-		EarliestStartTime int64
-		LatestStartTime   int64
+		EarliestStartTime time.Time
+		LatestStartTime   time.Time
 		// Maximum number of workflow executions per page
 		PageSize int
 		// Token to continue reading next page of workflow executions.

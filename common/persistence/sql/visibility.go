@@ -71,8 +71,8 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionStarted(
 		NamespaceID:      request.NamespaceID,
 		WorkflowID:       request.WorkflowID,
 		RunID:            request.RunID,
-		StartTime:        time.Unix(0, request.StartTimestamp).UTC(),
-		ExecutionTime:    time.Unix(0, request.ExecutionTimestamp).UTC(),
+		StartTime:        request.StartTimestamp,
+		ExecutionTime:    request.ExecutionTimestamp,
 		WorkflowTypeName: request.WorkflowTypeName,
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING), // Underlying value (1) is hardcoded in SQL queries.
 		Memo:             request.Memo.Data,
@@ -85,15 +85,14 @@ func (s *sqlVisibilityStore) RecordWorkflowExecutionStarted(
 func (s *sqlVisibilityStore) RecordWorkflowExecutionClosed(request *p.InternalRecordWorkflowExecutionClosedRequest) error {
 	ctx, cancel := newVisibilityContext()
 	defer cancel()
-	closeTime := time.Unix(0, request.CloseTimestamp).UTC()
 	result, err := s.db.ReplaceIntoVisibility(ctx, &sqlplugin.VisibilityRow{
 		NamespaceID:      request.NamespaceID,
 		WorkflowID:       request.WorkflowID,
 		RunID:            request.RunID,
-		StartTime:        time.Unix(0, request.StartTimestamp).UTC(),
-		ExecutionTime:    time.Unix(0, request.ExecutionTimestamp).UTC(),
+		StartTime:        request.StartTimestamp,
+		ExecutionTime:    request.ExecutionTimestamp,
 		WorkflowTypeName: request.WorkflowTypeName,
-		CloseTime:        &closeTime,
+		CloseTime:        &request.CloseTimestamp,
 		Status:           int32(request.Status),
 		HistoryLength:    &request.HistoryLength,
 		Memo:             request.Memo.Data,
@@ -130,10 +129,9 @@ func (s *sqlVisibilityStore) ListOpenWorkflowExecutions(
 		request.LatestStartTime,
 		false,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
-			minStartTime := time.Unix(0, request.EarliestStartTime).UTC()
 			return s.db.SelectFromVisibility(ctx, sqlplugin.VisibilitySelectFilter{
 				NamespaceID: request.NamespaceID,
-				MinTime:     &minStartTime,
+				MinTime:     &request.EarliestStartTime,
 				MaxTime:     &readLevel.Time,
 				RunID:       &readLevel.RunID,
 				PageSize:    &request.PageSize,
@@ -153,10 +151,9 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutions(
 		request.LatestStartTime,
 		true,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
-			minStartTime := time.Unix(0, request.EarliestStartTime).UTC()
 			return s.db.SelectFromVisibility(ctx, sqlplugin.VisibilitySelectFilter{
 				NamespaceID: request.NamespaceID,
-				MinTime:     &minStartTime,
+				MinTime:     &request.EarliestStartTime,
 				MaxTime:     &readLevel.Time,
 				RunID:       &readLevel.RunID,
 				PageSize:    &request.PageSize,
@@ -175,10 +172,9 @@ func (s *sqlVisibilityStore) ListOpenWorkflowExecutionsByType(
 		request.LatestStartTime,
 		false,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
-			minStartTime := time.Unix(0, request.EarliestStartTime).UTC()
 			return s.db.SelectFromVisibility(ctx, sqlplugin.VisibilitySelectFilter{
 				NamespaceID:      request.NamespaceID,
-				MinTime:          &minStartTime,
+				MinTime:          &request.EarliestStartTime,
 				MaxTime:          &readLevel.Time,
 				RunID:            &readLevel.RunID,
 				WorkflowTypeName: &request.WorkflowTypeName,
@@ -199,10 +195,9 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutionsByType(
 		request.LatestStartTime,
 		true,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
-			minStartTime := time.Unix(0, request.EarliestStartTime).UTC()
 			return s.db.SelectFromVisibility(ctx, sqlplugin.VisibilitySelectFilter{
 				NamespaceID:      request.NamespaceID,
-				MinTime:          &minStartTime,
+				MinTime:          &request.EarliestStartTime,
 				MaxTime:          &readLevel.Time,
 				RunID:            &readLevel.RunID,
 				WorkflowTypeName: &request.WorkflowTypeName,
@@ -222,10 +217,9 @@ func (s *sqlVisibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 		request.LatestStartTime,
 		false,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
-			minStartTime := time.Unix(0, request.EarliestStartTime).UTC()
 			return s.db.SelectFromVisibility(ctx, sqlplugin.VisibilitySelectFilter{
 				NamespaceID: request.NamespaceID,
-				MinTime:     &minStartTime,
+				MinTime:     &request.EarliestStartTime,
 				MaxTime:     &readLevel.Time,
 				RunID:       &readLevel.RunID,
 				WorkflowID:  &request.WorkflowID,
@@ -246,10 +240,9 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 		request.LatestStartTime,
 		true,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
-			minStartTime := time.Unix(0, request.EarliestStartTime).UTC()
 			return s.db.SelectFromVisibility(ctx, sqlplugin.VisibilitySelectFilter{
 				NamespaceID: request.NamespaceID,
-				MinTime:     &minStartTime,
+				MinTime:     &request.EarliestStartTime,
 				MaxTime:     &readLevel.Time,
 				RunID:       &readLevel.RunID,
 				WorkflowID:  &request.WorkflowID,
@@ -269,10 +262,9 @@ func (s *sqlVisibilityStore) ListClosedWorkflowExecutionsByStatus(
 		request.LatestStartTime,
 		true,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
-			minStartTime := time.Unix(0, request.EarliestStartTime).UTC()
 			return s.db.SelectFromVisibility(ctx, sqlplugin.VisibilitySelectFilter{
 				NamespaceID: request.NamespaceID,
-				MinTime:     &minStartTime,
+				MinTime:     &request.EarliestStartTime,
 				MaxTime:     &readLevel.Time,
 				RunID:       &readLevel.RunID,
 				Status:      int32(request.Status),
@@ -365,8 +357,8 @@ func (s *sqlVisibilityStore) rowToInfo(
 func (s *sqlVisibilityStore) listWorkflowExecutions(
 	opName string,
 	pageToken []byte,
-	earliestTime int64,
-	latestTime int64,
+	earliestTime time.Time,
+	latestTime time.Time,
 	closeQuery bool,
 	selectOp func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error),
 ) (*p.InternalListWorkflowExecutionsResponse, error) {
@@ -378,7 +370,7 @@ func (s *sqlVisibilityStore) listWorkflowExecutions(
 			return nil, err
 		}
 	} else {
-		readLevel = &visibilityPageToken{Time: time.Unix(0, latestTime).UTC(), RunID: ""}
+		readLevel = &visibilityPageToken{Time: latestTime, RunID: ""}
 	}
 	rows, err := selectOp(readLevel)
 	if err != nil {
@@ -399,7 +391,7 @@ func (s *sqlVisibilityStore) listWorkflowExecutions(
 		lastTime = *lastRow.CloseTime
 	}
 
-	if lastTime.Sub(time.Unix(0, earliestTime).UTC()).Nanoseconds() > 0 {
+	if lastTime.After(earliestTime) {
 		nextPageToken, err = s.serializePageToken(&visibilityPageToken{
 			Time:  lastTime,
 			RunID: lastRow.RunID,
