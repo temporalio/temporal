@@ -370,12 +370,14 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
 
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
 	request *p.ListWorkflowExecutionsByTypeRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
-	query := v.session.Query(templateGetClosedWorkflowExecutionsByType,
-		request.NamespaceID,
-		namespacePartition,
-		p.UnixMilliseconds(request.EarliestStartTime),
-		p.UnixMilliseconds(request.LatestStartTime),
-		request.WorkflowTypeName).Consistency(v.lowConslevel)
+	query := v.session.
+		Query(templateGetClosedWorkflowExecutionsByType,
+			request.NamespaceID,
+			namespacePartition,
+			p.UnixMilliseconds(request.EarliestStartTime),
+			p.UnixMilliseconds(request.LatestStartTime),
+			request.WorkflowTypeName).
+		Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalListWorkflowExecutionsResponse{}
@@ -397,12 +399,14 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
 
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowID(
 	request *p.ListWorkflowExecutionsByWorkflowIDRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
-	query := v.session.Query(templateGetClosedWorkflowExecutionsByID,
-		request.NamespaceID,
-		namespacePartition,
-		p.UnixMilliseconds(request.EarliestStartTime),
-		p.UnixMilliseconds(request.LatestStartTime),
-		request.WorkflowID).Consistency(v.lowConslevel)
+	query := v.session.
+		Query(templateGetClosedWorkflowExecutionsByID,
+			request.NamespaceID,
+			namespacePartition,
+			p.UnixMilliseconds(request.EarliestStartTime),
+			p.UnixMilliseconds(request.LatestStartTime),
+			request.WorkflowID).
+		Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalListWorkflowExecutionsResponse{}
@@ -424,12 +428,14 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowI
 
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByStatus(
 	request *p.ListClosedWorkflowExecutionsByStatusRequest) (*p.InternalListWorkflowExecutionsResponse, error) {
-	query := v.session.Query(templateGetClosedWorkflowExecutionsByStatus,
-		request.NamespaceID,
-		namespacePartition,
-		p.UnixMilliseconds(request.EarliestStartTime),
-		p.UnixMilliseconds(request.LatestStartTime),
-		request.Status).Consistency(v.lowConslevel)
+	query := v.session.
+		Query(templateGetClosedWorkflowExecutionsByStatus,
+			request.NamespaceID,
+			namespacePartition,
+			p.UnixMilliseconds(request.EarliestStartTime),
+			p.UnixMilliseconds(request.LatestStartTime),
+			request.Status).
+		Consistency(v.lowConslevel)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalListWorkflowExecutionsResponse{}
@@ -452,12 +458,13 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByStatus(
 func (v *cassandraVisibilityPersistence) GetClosedWorkflowExecution(
 	request *p.GetClosedWorkflowExecutionRequest) (*p.InternalGetClosedWorkflowExecutionResponse, error) {
 	execution := request.Execution
-	query := v.session.Query(templateGetClosedWorkflowExecution,
-		request.NamespaceID,
-		namespacePartition,
-		execution.GetWorkflowId(),
-		execution.GetRunId(),
-	)
+	query := v.session.
+		Query(templateGetClosedWorkflowExecution,
+			request.NamespaceID,
+			namespacePartition,
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		)
 	iter := query.Iter()
 
 	wfexecution, has := readClosedWorkflowExecutionRecord(iter)

@@ -147,7 +147,7 @@ func (s *visibilityStore) RecordWorkflowExecutionClosed(request *persistence.Int
 	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
 	doc := s.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
 
-	doc[searchattribute.CloseTime] = request.CloseTimestamp
+	doc[searchattribute.CloseTime] = request.CloseTimestamp.UnixNano()
 	doc[searchattribute.HistoryLength] = request.HistoryLength
 
 	return s.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
@@ -223,8 +223,8 @@ func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityR
 		searchattribute.WorkflowID:        request.WorkflowID,
 		searchattribute.RunID:             request.RunID,
 		searchattribute.WorkflowType:      request.WorkflowTypeName,
-		searchattribute.StartTime:         request.StartTimestamp,
-		searchattribute.ExecutionTime:     request.ExecutionTimestamp,
+		searchattribute.StartTime:         request.StartTimestamp.UnixNano(),
+		searchattribute.ExecutionTime:     request.ExecutionTimestamp.UnixNano(),
 		searchattribute.ExecutionStatus:   request.Status,
 		searchattribute.TaskQueue:         request.TaskQueue,
 	}
