@@ -454,7 +454,7 @@ type (
 		TreeID   string
 		BranchID string
 		Encoding string
-		Data []byte
+		Data     []byte
 	}
 
 	// InternalGetHistoryTreeResponse is response to GetHistoryTree

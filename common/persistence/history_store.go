@@ -26,6 +26,7 @@ package persistence
 
 import (
 	"fmt"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -131,8 +132,8 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(
 	}
 	treeInfo := &persistencespb.HistoryTreeInfo{
 		BranchInfo: newBranchInfo,
-		ForkTime: timestamp.TimeNowPtrUtc(),
-		Info:     request.Info,
+		ForkTime:   timestamp.TimeNowPtrUtc(),
+		Info:       request.Info,
 	}
 
 	treeInfoBlob, err := m.historySerializer.HistoryTreeInfoToBlob(treeInfo, enumspb.ENCODING_TYPE_PROTO3)
@@ -142,7 +143,7 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(
 
 	req := &InternalForkHistoryBranchRequest{
 		ForkBranchInfo: forkBranch,
-		TreeInfo: 		treeInfoBlob,
+		TreeInfo:       treeInfoBlob,
 		ForkNodeID:     request.ForkNodeID,
 		NewBranchID:    newBranchInfo.BranchId,
 		Info:           request.Info,
@@ -469,7 +470,7 @@ func (m *historyV2ManagerImpl) GetAllHistoryTreeBranches(
 
 	return &GetAllHistoryTreeBranchesResponse{
 		NextPageToken: resp.NextPageToken,
-		Branches: branches,
+		Branches:      branches,
 	}, nil
 }
 

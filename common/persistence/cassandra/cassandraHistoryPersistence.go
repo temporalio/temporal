@@ -376,10 +376,10 @@ func (h *cassandraHistoryV2Persistence) GetAllHistoryTreeBranches(
 
 	for iter.Scan(&treeUUID, &branchUUID, &data, &encoding) {
 		branch := p.InternalHistoryBranchDetail{
-			TreeID: treeUUID,
+			TreeID:   treeUUID,
 			BranchID: branchUUID,
-			Data: data,
-			Encoding:  encoding,
+			Data:     data,
+			Encoding: encoding,
 		}
 		branches = append(branches, branch)
 

@@ -27,8 +27,9 @@ package sql
 import (
 	"database/sql"
 	"fmt"
-	commonpb "go.temporal.io/api/common/v1"
 	"math"
+
+	commonpb "go.temporal.io/api/common/v1"
 
 	"go.temporal.io/api/serviceerror"
 
