@@ -80,21 +80,6 @@ type (
 		// for ES scroll API
 		ScrollID string
 	}
-
-	visibilityRecord struct {
-		WorkflowID      string
-		RunID           string
-		WorkflowType    string
-		StartTime       int64
-		ExecutionTime   int64
-		CloseTime       int64
-		ExecutionStatus enumspb.WorkflowExecutionStatus
-		HistoryLength   int64
-		Memo            []byte
-		Encoding        string
-		TaskQueue       string
-		Attr            map[string]interface{}
-	}
 )
 
 var _ persistence.VisibilityStore = (*visibilityStore)(nil)
@@ -214,40 +199,6 @@ func (s *visibilityStore) addBulkRequestAndWait(bulkRequest *client.BulkableRequ
 	case <-ackTimeoutTimer.C:
 		return newVisibilityTaskAckTimeoutError(visibilityTaskKey, s.config.ESProcessorAckTimeout())
 	}
-}
-
-func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityRequestBase, visibilityTaskKey string) map[string]interface{} {
-	doc := map[string]interface{}{
-		searchattribute.VisibilityTaskKey: visibilityTaskKey,
-		searchattribute.NamespaceID:       request.NamespaceID,
-		searchattribute.WorkflowID:        request.WorkflowID,
-		searchattribute.RunID:             request.RunID,
-		searchattribute.WorkflowType:      request.WorkflowTypeName,
-		searchattribute.StartTime:         request.StartTimestamp.UnixNano(),
-		searchattribute.ExecutionTime:     request.ExecutionTimestamp.UnixNano(),
-		searchattribute.ExecutionStatus:   request.Status,
-		searchattribute.TaskQueue:         request.TaskQueue,
-	}
-
-	if len(request.Memo.GetData()) > 0 {
-		doc[searchattribute.Memo] = request.Memo.GetData()
-		doc[searchattribute.Encoding] = request.Memo.GetEncodingType().String()
-	}
-
-	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
-	if err != nil {
-		s.logger.Error("Unable to read search attribute types.", tag.Error(err))
-		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
-	}
-
-	attr, err := searchattribute.Decode(request.SearchAttributes, &typeMap)
-	if err != nil {
-		s.logger.Error("Unable to decode search attributes.", tag.Error(err))
-		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
-	}
-	doc[searchattribute.Attr] = attr
-
-	return doc
 }
 
 func (s *visibilityStore) ListOpenWorkflowExecutions(
@@ -424,12 +375,18 @@ func (s *visibilityStore) GetClosedWorkflowExecution(
 	}
 
 	response := &persistence.InternalGetClosedWorkflowExecutionResponse{}
-	actualHits := searchResult.Hits.Hits
-	if len(actualHits) == 0 {
+	if len(searchResult.Hits.Hits) == 0 {
 		return response, nil
 	}
-	response.Execution = s.convertSearchResultToVisibilityRecord(actualHits[0])
 
+	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
+	if err != nil {
+		s.logger.Error("Unable to read search attribute types.", tag.Error(err))
+		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
+		return nil, err
+	}
+
+	response.Execution = s.parseESDoc(searchResult.Hits.Hits[0], typeMap)
 	return response, nil
 }
 
@@ -840,17 +797,20 @@ func (s *visibilityStore) getScanWorkflowExecutionsResponse(searchHits *elastic.
 	token *visibilityPageToken, pageSize int, scrollID string, isLastPage bool) (
 	*persistence.InternalListWorkflowExecutionsResponse, error) {
 
-	response := &persistence.InternalListWorkflowExecutionsResponse{}
-	actualHits := searchHits.Hits
-	numOfActualHits := len(actualHits)
-
-	response.Executions = make([]*persistence.VisibilityWorkflowExecutionInfo, 0)
-	for i := 0; i < numOfActualHits; i++ {
-		workflowExecutionInfo := s.convertSearchResultToVisibilityRecord(actualHits[i])
-		response.Executions = append(response.Executions, workflowExecutionInfo)
+	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
+	if err != nil {
+		s.logger.Error("Unable to read search attribute types.", tag.Error(err))
+		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
+		return nil, err
 	}
 
-	if numOfActualHits == pageSize && !isLastPage {
+	response := &persistence.InternalListWorkflowExecutionsResponse{}
+	response.Executions = make([]*persistence.VisibilityWorkflowExecutionInfo, len(searchHits.Hits))
+	for i := 0; i < len(searchHits.Hits); i++ {
+		response.Executions[i] = s.parseESDoc(searchHits.Hits[i], typeMap)
+	}
+
+	if len(searchHits.Hits) == pageSize && !isLastPage {
 		nextPageToken, err := s.serializePageToken(&visibilityPageToken{ScrollID: scrollID})
 		if err != nil {
 			return nil, err
@@ -865,31 +825,36 @@ func (s *visibilityStore) getScanWorkflowExecutionsResponse(searchHits *elastic.
 func (s *visibilityStore) getListWorkflowExecutionsResponse(searchHits *elastic.SearchHits,
 	token *visibilityPageToken, pageSize int, isRecordValid func(rec *persistence.VisibilityWorkflowExecutionInfo) bool) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
-	response := &persistence.InternalListWorkflowExecutionsResponse{}
-	actualHits := searchHits.Hits
-	numOfActualHits := len(actualHits)
+	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
+	if err != nil {
+		s.logger.Error("Unable to read search attribute types.", tag.Error(err))
+		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
+		return nil, err
+	}
 
-	response.Executions = make([]*persistence.VisibilityWorkflowExecutionInfo, 0)
-	for i := 0; i < numOfActualHits; i++ {
-		workflowExecutionInfo := s.convertSearchResultToVisibilityRecord(actualHits[i])
+	response := &persistence.InternalListWorkflowExecutionsResponse{}
+
+	response.Executions = make([]*persistence.VisibilityWorkflowExecutionInfo, len(searchHits.Hits))
+	for i := 0; i < len(searchHits.Hits); i++ {
+		workflowExecutionInfo := s.parseESDoc(searchHits.Hits[i], typeMap)
 		if isRecordValid == nil || isRecordValid(workflowExecutionInfo) {
 			// for old APIs like ListOpenWorkflowExecutions, we added 1 ms to range query to overcome ES limitation
 			// (see getSearchResult function), but manually dropped records beyond request range here.
-			response.Executions = append(response.Executions, workflowExecutionInfo)
+			response.Executions[i] = workflowExecutionInfo
 		}
 	}
 
-	if numOfActualHits == pageSize { // this means the response is not the last page
+	if len(searchHits.Hits) == pageSize { // this means the response is not the last page
 		var nextPageToken []byte
 		var err error
 
 		// ES Search API support pagination using From and PageSize, but has limit that From+PageSize cannot exceed a threshold
 		// to retrieve deeper pages, use ES SearchAfter
 		if searchHits.TotalHits.Value <= int64(s.config.ESIndexMaxResultWindow()-pageSize) { // use ES Search From+Size
-			nextPageToken, err = s.serializePageToken(&visibilityPageToken{From: token.From + numOfActualHits})
+			nextPageToken, err = s.serializePageToken(&visibilityPageToken{From: token.From + len(searchHits.Hits)})
 		} else { // use ES Search After
 			var sortVal interface{}
-			sortVals := actualHits[len(response.Executions)-1].Sort
+			sortVals := searchHits.Hits[len(response.Executions)-1].Sort
 			sortVal = sortVals[0]
 			tieBreaker := sortVals[1].(string)
 
@@ -925,30 +890,157 @@ func (s *visibilityStore) serializePageToken(token *visibilityPageToken) ([]byte
 	return data, nil
 }
 
-func (s *visibilityStore) convertSearchResultToVisibilityRecord(hit *elastic.SearchHit) *persistence.VisibilityWorkflowExecutionInfo {
-	var source *visibilityRecord
-	// TODO (alex): use hit.Fields instead
-	err := json.Unmarshal(hit.Source, &source)
-	if err != nil { // log and skip error
-		s.logger.Error("unable to unmarshal search hit source",
-			tag.Error(err), tag.ESDocID(hit.Id))
+func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityRequestBase, visibilityTaskKey string) map[string]interface{} {
+	doc := map[string]interface{}{
+		searchattribute.VisibilityTaskKey: visibilityTaskKey,
+		searchattribute.NamespaceID:       request.NamespaceID,
+		searchattribute.WorkflowID:        request.WorkflowID,
+		searchattribute.RunID:             request.RunID,
+		searchattribute.WorkflowType:      request.WorkflowTypeName,
+		searchattribute.StartTime:         request.StartTimestamp,
+		searchattribute.ExecutionTime:     request.ExecutionTimestamp,
+		searchattribute.ExecutionStatus:   request.Status,
+		searchattribute.TaskQueue:         request.TaskQueue,
+	}
+
+	if len(request.Memo.GetData()) > 0 {
+		doc[searchattribute.Memo] = request.Memo.GetData()
+		doc[searchattribute.Encoding] = request.Memo.GetEncodingType().String()
+	}
+
+	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
+	if err != nil {
+		s.logger.Error("Unable to read search attribute types.", tag.Error(err))
+		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
+	}
+
+	attr, err := searchattribute.Decode(request.SearchAttributes, &typeMap)
+	if err != nil {
+		s.logger.Error("Unable to decode search attributes.", tag.Error(err))
+		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
+	}
+	doc[searchattribute.Attr] = attr
+
+	return doc
+}
+
+func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchattribute.NameTypeMap) *persistence.VisibilityWorkflowExecutionInfo {
+	logUnexpectedType := func(fieldName string, fieldValue interface{}) {
+		s.logger.Error("Unexpected field type.", tag.Name(fieldName), tag.ValueType(fieldValue), tag.ESDocID(hit.Id))
+	}
+	logNumberParseError := func(fieldName string, fieldValue json.Number, err error) {
+		s.logger.Error("Unable to parse json.Number.", tag.Name(fieldName), tag.ValueType(fieldValue), tag.Error(err), tag.ESDocID(hit.Id))
+	}
+
+	var sourceMap map[string]interface{}
+	d := json.NewDecoder(bytes.NewReader(hit.Source))
+	d.UseNumber()
+	if err := d.Decode(&sourceMap); err != nil {
+		s.logger.Error("Unable to unmarshal search hit source.", tag.Error(err), tag.ESDocID(hit.Id))
 		return nil
 	}
 
-	record := &persistence.VisibilityWorkflowExecutionInfo{
-		WorkflowID:       source.WorkflowID,
-		RunID:            source.RunID,
-		TypeName:         source.WorkflowType,
-		StartTime:        time.Unix(0, source.StartTime).UTC(),
-		ExecutionTime:    time.Unix(0, source.ExecutionTime).UTC(),
-		Memo:             persistence.NewDataBlob(source.Memo, source.Encoding),
-		TaskQueue:        source.TaskQueue,
-		SearchAttributes: source.Attr,
-		Status:           source.ExecutionStatus,
+	var isValidType bool
+	var memo []byte
+	var memoEncoding string
+	record := &persistence.VisibilityWorkflowExecutionInfo{}
+	for fieldName, fieldValue := range sourceMap {
+		switch fieldName {
+		case searchattribute.WorkflowID:
+			if record.WorkflowID, isValidType = fieldValue.(string); !isValidType {
+				logUnexpectedType(fieldName, fieldValue)
+			}
+		case searchattribute.RunID:
+			if record.RunID, isValidType = fieldValue.(string); !isValidType {
+				logUnexpectedType(fieldName, fieldValue)
+			}
+		case searchattribute.WorkflowType:
+			if record.TypeName, isValidType = fieldValue.(string); !isValidType {
+				logUnexpectedType(fieldName, fieldValue)
+			}
+		case searchattribute.StartTime:
+			var startTime json.Number
+			if startTime, isValidType = fieldValue.(json.Number); !isValidType {
+				logUnexpectedType(fieldName, fieldValue)
+			}
+			startTimeInt64, err := startTime.Int64()
+			if err != nil {
+				logNumberParseError(fieldName, startTime, err)
+			}
+			record.StartTime = time.Unix(0, startTimeInt64).UTC()
+		case searchattribute.ExecutionTime:
+			var executionTime json.Number
+			if executionTime, isValidType = fieldValue.(json.Number); !isValidType {
+				logUnexpectedType(fieldName, fieldValue)
+			}
+			executionTimeInt64, err := executionTime.Int64()
+			if err != nil {
+				logNumberParseError(fieldName, executionTime, err)
+			}
+			record.ExecutionTime = time.Unix(0, executionTimeInt64).UTC()
+		case searchattribute.CloseTime:
+			var closeTime json.Number
+			if closeTime, isValidType = fieldValue.(json.Number); !isValidType {
+				logUnexpectedType(fieldName, fieldValue)
+			}
+			closeTimeInt64, err := closeTime.Int64()
+			if err != nil {
+				logNumberParseError(fieldName, closeTime, err)
+			}
+			record.CloseTime = time.Unix(0, closeTimeInt64).UTC()
+		case searchattribute.Memo:
+			if memo, isValidType = fieldValue.([]byte); !isValidType {
+				logUnexpectedType(fieldName, fieldValue)
+			}
+		case searchattribute.Encoding:
+			if memoEncoding, isValidType = fieldValue.(string); !isValidType {
+				logUnexpectedType(fieldName, fieldValue)
+			}
+		case searchattribute.TaskQueue:
+			if record.TaskQueue, isValidType = fieldValue.(string); !isValidType {
+				logUnexpectedType(fieldName, fieldValue)
+			}
+		case searchattribute.ExecutionStatus:
+			var executionStatus json.Number
+			if executionStatus, isValidType = fieldValue.(json.Number); !isValidType {
+				logUnexpectedType(fieldName, fieldValue)
+			}
+			executionStatusInt64, err := executionStatus.Int64()
+			if err != nil {
+				logNumberParseError(fieldName, executionStatus, err)
+			}
+			record.Status = enumspb.WorkflowExecutionStatus(executionStatusInt64)
+		case searchattribute.HistoryLength:
+			var historyLength json.Number
+			if historyLength, isValidType = fieldValue.(json.Number); !isValidType {
+				logUnexpectedType(fieldName, fieldValue)
+			}
+			historyLengthInt64, err := historyLength.Int64()
+			if err != nil {
+				logNumberParseError(fieldName, historyLength, err)
+			}
+			record.HistoryLength = historyLengthInt64
+		case searchattribute.Attr:
+			var searchAttributes map[string]interface{}
+			if searchAttributes, isValidType = fieldValue.(map[string]interface{}); !isValidType {
+				logUnexpectedType(fieldName, fieldValue)
+			}
+			record.SearchAttributes = make(map[string]interface{}, len(searchAttributes))
+			for saName, saValue := range searchAttributes {
+				if !saTypeMap.IsDefined(saName) {
+					s.logger.Warn("Undefined search attribute in Elasticsearch document.", tag.Name(saName), tag.ESDocID(hit.Id))
+				}
+				record.SearchAttributes[saName] = saValue
+			}
+		default:
+			s.logger.Warn("Undefined field in Elasticsearch document.", tag.Name(fieldName), tag.ESDocID(hit.Id))
+		}
 	}
-	if source.CloseTime != 0 {
-		record.CloseTime = time.Unix(0, source.CloseTime).UTC()
-		record.HistoryLength = source.HistoryLength
+
+	if memoEncoding != "" {
+		record.Memo = persistence.NewDataBlob(memo, memoEncoding)
+	} else if memo != nil {
+		s.logger.Error("Encoding field is missing in Elasticsearch document.", tag.ESDocID(hit.Id))
 	}
 
 	return record

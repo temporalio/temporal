@@ -537,8 +537,29 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 	s.Equal(newToken.TieBreaker, token.TieBreaker)
 }
 
-func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
-	data := []byte(`{"ExecutionStatus": 2,
+func (s *ESVisibilitySuite) TestParseESDoc() {
+	searchHit := &elastic.SearchHit{
+		Source: []byte(`{"ExecutionStatus": 1,
+          "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
+          "HistoryLength": 29,
+          "VisibilityTaskKey": "7-619",
+          "RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
+          "StartTime": 1547596872371000000,
+          "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
+          "WorkflowType": "TestWorkflowExecute"}`),
+	}
+	// test for open
+	info := s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap)
+	s.NotNil(info)
+	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
+	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", info.RunID)
+	s.Equal("TestWorkflowExecute", info.TypeName)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.Status)
+	s.Equal(int64(1547596872371000000), info.StartTime.UnixNano())
+
+	// test for close
+	searchHit = &elastic.SearchHit{
+		Source: []byte(`{"ExecutionStatus": 2,
           "CloseTime": 1547596872817380000,
           "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
@@ -546,22 +567,9 @@ func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
           "RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
           "StartTime": 1547596872371000000,
           "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
-          "WorkflowType": "TestWorkflowExecute"}`)
-	source := json.RawMessage(data)
-	searchHit := &elastic.SearchHit{
-		Source: source,
+          "WorkflowType": "TestWorkflowExecute"}`),
 	}
-
-	// test for open
-	info := s.visibilityStore.convertSearchResultToVisibilityRecord(searchHit)
-	s.NotNil(info)
-	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
-	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", info.RunID)
-	s.Equal("TestWorkflowExecute", info.TypeName)
-	s.Equal(int64(1547596872371000000), info.StartTime.UnixNano())
-
-	// test for close
-	info = s.visibilityStore.convertSearchResultToVisibilityRecord(searchHit)
+	info = s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap)
 	s.NotNil(info)
 	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", info.RunID)
@@ -572,12 +580,10 @@ func (s *ESVisibilitySuite) TestConvertSearchResultToVisibilityRecord() {
 	s.Equal(int64(29), info.HistoryLength)
 
 	// test for error case
-	badData := []byte(`corrupted data`)
-	source = json.RawMessage(badData)
 	searchHit = &elastic.SearchHit{
-		Source: source,
+		Source: []byte(`corrupted data`),
 	}
-	info = s.visibilityStore.convertSearchResultToVisibilityRecord(searchHit)
+	info = s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap)
 	s.Nil(info)
 }
 
