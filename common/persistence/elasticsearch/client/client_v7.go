@@ -153,8 +153,8 @@ func (c *clientV7) RunBulkProcessor(ctx context.Context, p *BulkProcessorParamet
 	return newBulkProcessorV7(esBulkProcessor), err
 }
 
-func (c *clientV7) PutMapping(ctx context.Context, index string, root string, mapping map[string]string) (bool, error) {
-	body := buildMappingBody(root, mapping)
+func (c *clientV7) PutMapping(ctx context.Context, index string, mapping map[string]string) (bool, error) {
+	body := buildMappingBody(mapping)
 	resp, err := c.esClient.PutMapping().Index(index).BodyJson(body).Do(ctx)
 	if err != nil {
 		return false, err
@@ -252,7 +252,7 @@ func getLoggerOptions(logLevel string, logger log.Logger) []elastic.ClientOption
 	}
 }
 
-func buildMappingBody(root string, mapping map[string]string) map[string]interface{} {
+func buildMappingBody(mapping map[string]string) map[string]interface{} {
 	properties := make(map[string]interface{}, len(mapping))
 	for fieldName, fieldType := range mapping {
 		properties[fieldName] = map[string]interface{}{
@@ -260,15 +260,8 @@ func buildMappingBody(root string, mapping map[string]string) map[string]interfa
 		}
 	}
 
-	body := make(map[string]interface{})
-	if len(root) != 0 {
-		body["properties"] = map[string]interface{}{
-			root: map[string]interface{}{
-				"properties": properties,
-			},
-		}
-	} else {
-		body["properties"] = properties
+	body := map[string]interface{}{
+		"properties": properties,
 	}
 	return body
 }

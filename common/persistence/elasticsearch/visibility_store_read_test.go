@@ -949,11 +949,6 @@ func (s *ESVisibilitySuite) TestProcessAllValuesForKey() {
 	s.Equal(expectedProcessedValue, processedValue)
 }
 
-func (s *ESVisibilitySuite) TestGetFieldType() {
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_INT, s.visibilityStore.getFieldType("StartTime"))
-	s.Equal(enumspb.INDEXED_VALUE_TYPE_DATETIME, s.visibilityStore.getFieldType("Attr.CustomDatetimeField"))
-}
-
 func (s *ESVisibilitySuite) TestGetValueOfSearchAfterInJSON() {
 	v := s.visibilityStore
 
@@ -1020,23 +1015,4 @@ func (s *ESVisibilitySuite) getTokenHelper(sortValue interface{}) *visibilityPag
 	encoded, _ := v.serializePageToken(token) // necessary, otherwise token is fake and not json decoded
 	token, _ = v.deserializePageToken(encoded)
 	return token
-}
-
-func (s *ESVisibilitySuite) TestCleanDSL() {
-	// dsl without `field`
-	dsl := `{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"2b8344db-0ed6-47a4-92fd-bdeb6ead93e3"}}},{"bool":{"must":[{"match_phrase":{"Attr.CustomIntField":{"query":"1"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunId":"desc"}]}`
-	res := cleanDSL(dsl)
-	s.Equal(dsl, res)
-
-	// dsl with `field`
-	dsl = `{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"2b8344db-0ed6-47a4-92fd-bdeb6ead93e3"}}},{"bool":{"must":[{"range":{"` + "`Attr.CustomIntField`" + `":{"from":"1","to":"5"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunId":"desc"}]}`
-	res = cleanDSL(dsl)
-	expected := `{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"2b8344db-0ed6-47a4-92fd-bdeb6ead93e3"}}},{"bool":{"must":[{"range":{"Attr.CustomIntField":{"from":"1","to":"5"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunId":"desc"}]}`
-	s.Equal(expected, res)
-
-	// dsl with mixed
-	dsl = `{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"2b8344db-0ed6-47a4-92fd-bdeb6ead93e3"}}},{"bool":{"must":[{"range":{"` + "`Attr.CustomIntField`" + `":{"from":"1","to":"5"}}},{"range":{"` + "`Attr.CustomDoubleField`" + `":{"from":"1.0","to":"2.0"}}},{"range":{"StartTime":{"gt":"0"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunId":"desc"}]}`
-	res = cleanDSL(dsl)
-	expected = `{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"2b8344db-0ed6-47a4-92fd-bdeb6ead93e3"}}},{"bool":{"must":[{"range":{"Attr.CustomIntField":{"from":"1","to":"5"}}},{"range":{"Attr.CustomDoubleField":{"from":"1.0","to":"2.0"}}},{"range":{"StartTime":{"gt":"0"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunId":"desc"}]}`
-	s.Equal(expected, res)
 }

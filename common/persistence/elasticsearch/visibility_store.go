@@ -545,9 +545,7 @@ func (s *visibilityStore) getESQueryDSL(request *persistence.ListWorkflowExecuti
 		dsl.Set(dslFieldFrom, fastjson.MustParse(strconv.Itoa(token.From)))
 	}
 
-	dslStr := cleanDSL(dsl.String())
-
-	return dslStr, nil
+	return dsl.String(), nil
 }
 
 func getSQLFromListRequest(request *persistence.ListWorkflowExecutionsRequestV2) string {
@@ -657,9 +655,6 @@ func (s *visibilityStore) processSortField(dsl *fastjson.Value) (string, error) 
 }
 
 func (s *visibilityStore) getFieldType(fieldName string) enumspb.IndexedValueType {
-	if strings.HasPrefix(fieldName, searchattribute.Attr) {
-		fieldName = fieldName[len(searchattribute.Attr)+1:] // remove prefix
-	}
 	searchAttributes, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
 		s.logger.Error("Unable to read search attribute types.", tag.Error(err))
@@ -914,12 +909,14 @@ func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityR
 		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
 
-	attr, err := searchattribute.Decode(request.SearchAttributes, &typeMap)
+	searchAttributes, err := searchattribute.Decode(request.SearchAttributes, &typeMap)
 	if err != nil {
 		s.logger.Error("Unable to decode search attributes.", tag.Error(err))
 		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
-	doc[searchattribute.Attr] = attr
+	for saName, saValue := range searchAttributes {
+		doc[saName] = saValue
+	}
 
 	return doc
 }
@@ -927,9 +924,11 @@ func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityR
 func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchattribute.NameTypeMap) *persistence.VisibilityWorkflowExecutionInfo {
 	logUnexpectedType := func(fieldName string, fieldValue interface{}) {
 		s.logger.Error("Unexpected field type.", tag.Name(fieldName), tag.ValueType(fieldValue), tag.ESDocID(hit.Id))
+		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
 	logNumberParseError := func(fieldName string, fieldValue json.Number, err error) {
 		s.logger.Error("Unable to parse json.Number.", tag.Name(fieldName), tag.ValueType(fieldValue), tag.Error(err), tag.ESDocID(hit.Id))
+		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
 
 	var sourceMap map[string]interface{}
@@ -946,6 +945,8 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 	record := &persistence.VisibilityWorkflowExecutionInfo{}
 	for fieldName, fieldValue := range sourceMap {
 		switch fieldName {
+		case searchattribute.NamespaceID:
+			// Ignore NamespaceID
 		case searchattribute.WorkflowID:
 			if record.WorkflowID, isValidType = fieldValue.(string); !isValidType {
 				logUnexpectedType(fieldName, fieldValue)
@@ -1020,20 +1021,15 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 				logNumberParseError(fieldName, historyLength, err)
 			}
 			record.HistoryLength = historyLengthInt64
-		case searchattribute.Attr:
-			var searchAttributes map[string]interface{}
-			if searchAttributes, isValidType = fieldValue.(map[string]interface{}); !isValidType {
-				logUnexpectedType(fieldName, fieldValue)
-			}
-			record.SearchAttributes = make(map[string]interface{}, len(searchAttributes))
-			for saName, saValue := range searchAttributes {
-				if !saTypeMap.IsDefined(saName) {
-					s.logger.Warn("Undefined search attribute in Elasticsearch document.", tag.Name(saName), tag.ESDocID(hit.Id))
-				}
-				record.SearchAttributes[saName] = saValue
-			}
 		default:
-			s.logger.Warn("Undefined field in Elasticsearch document.", tag.Name(fieldName), tag.ESDocID(hit.Id))
+			// All custom search attributes are handled here.
+			// Add only defined search attributes.
+			if saTypeMap.IsDefined(fieldName) {
+				if record.SearchAttributes == nil {
+					record.SearchAttributes = map[string]interface{}{}
+				}
+				record.SearchAttributes[fieldName] = fieldValue
+			}
 		}
 	}
 
@@ -1111,12 +1107,4 @@ func timeProcessFunc(obj *fastjson.Object, key string, value *fastjson.Value) er
 		obj.Set(key, fastjson.MustParse(fmt.Sprintf(`"%v"`, parsedTime.UnixNano())))
 		return nil
 	})
-}
-
-// elasticsql may transfer `Attr.Name` to "`Attr.Name`" instead of "Attr.Name" in dsl in some operator like "between and"
-// this function is used to clean up
-func cleanDSL(input string) string {
-	var re = regexp.MustCompile("(`)(Attr.\\w+)(`)")
-	result := re.ReplaceAllString(input, `$2`)
-	return result
 }

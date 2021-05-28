@@ -40,22 +40,17 @@
       "TaskQueue": {
         "type": "keyword"
       },
-
-      "Attr": {
-        "properties": {
-          "TemporalChangeVersion": {
-            "type": "keyword"
-          },
-          "CustomNamespace": {
-            "type": "keyword"
-          },
-          "Operator": {
-            "type": "keyword"
-          },
-          "BinaryChecksums": {
-            "type": "keyword"
-          }
-        }
+      "TemporalChangeVersion": {
+        "type": "keyword"
+      },
+      "CustomNamespace": {
+        "type": "keyword"
+      },
+      "Operator": {
+        "type": "keyword"
+      },
+      "BinaryChecksums": {
+        "type": "keyword"
       }
     }
   },

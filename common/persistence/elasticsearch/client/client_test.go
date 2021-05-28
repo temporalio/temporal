@@ -38,10 +38,6 @@ func Test_BuildPutMappingBody(t *testing.T) {
 		expected string
 	}{
 		{
-			root:     "Attr",
-			expected: "map[properties:map[Attr:map[properties:map[testKey:map[type:text]]]]]",
-		},
-		{
 			root:     "",
 			expected: "map[properties:map[testKey:map[type:text]]]",
 		},
@@ -50,7 +46,7 @@ func Test_BuildPutMappingBody(t *testing.T) {
 	v := "text"
 
 	for _, test := range tests {
-		require.Equal(t, test.expected, fmt.Sprintf("%v", buildMappingBody(test.root, map[string]string{k: v})))
+		require.Equal(t, test.expected, fmt.Sprintf("%v", buildMappingBody(map[string]string{k: v})))
 	}
 }
 func Test_ConvertV7Sorters(t *testing.T) {

@@ -90,18 +90,18 @@ func (mr *MockClientMockRecorder) GetMapping(ctx, index interface{}) *gomock.Cal
 }
 
 // PutMapping mocks base method.
-func (m *MockClient) PutMapping(ctx context.Context, index, root string, mapping map[string]string) (bool, error) {
+func (m *MockClient) PutMapping(ctx context.Context, index string, mapping map[string]string) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PutMapping", ctx, index, root, mapping)
+	ret := m.ctrl.Call(m, "PutMapping", ctx, index, mapping)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // PutMapping indicates an expected call of PutMapping.
-func (mr *MockClientMockRecorder) PutMapping(ctx, index, root, mapping interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) PutMapping(ctx, index, mapping interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutMapping", reflect.TypeOf((*MockClient)(nil).PutMapping), ctx, index, root, mapping)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutMapping", reflect.TypeOf((*MockClient)(nil).PutMapping), ctx, index, mapping)
 }
 
 // RunBulkProcessor mocks base method.
@@ -279,18 +279,18 @@ func (mr *MockCLIClientMockRecorder) GetMapping(ctx, index interface{}) *gomock.
 }
 
 // PutMapping mocks base method.
-func (m *MockCLIClient) PutMapping(ctx context.Context, index, root string, mapping map[string]string) (bool, error) {
+func (m *MockCLIClient) PutMapping(ctx context.Context, index string, mapping map[string]string) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PutMapping", ctx, index, root, mapping)
+	ret := m.ctrl.Call(m, "PutMapping", ctx, index, mapping)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // PutMapping indicates an expected call of PutMapping.
-func (mr *MockCLIClientMockRecorder) PutMapping(ctx, index, root, mapping interface{}) *gomock.Call {
+func (mr *MockCLIClientMockRecorder) PutMapping(ctx, index, mapping interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutMapping", reflect.TypeOf((*MockCLIClient)(nil).PutMapping), ctx, index, root, mapping)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutMapping", reflect.TypeOf((*MockCLIClient)(nil).PutMapping), ctx, index, mapping)
 }
 
 // RunBulkProcessor mocks base method.

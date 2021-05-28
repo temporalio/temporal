@@ -75,12 +75,12 @@ func (s *queryValidatorSuite) TestValidateListRequestForQuery() {
 	query = "CustomStringField = 'custom'"
 	listRequest.Query = query
 	s.Nil(qv.ValidateListRequestForQuery(listRequest, "index-name"))
-	s.Equal("`Attr.CustomStringField` = 'custom'", listRequest.GetQuery())
+	s.Equal("CustomStringField = 'custom'", listRequest.GetQuery())
 
 	query = "WorkflowId = 'wid' and ((CustomStringField = 'custom') or CustomIntField between 1 and 10)"
 	listRequest.Query = query
 	s.Nil(qv.ValidateListRequestForQuery(listRequest, "index-name"))
-	s.Equal("WorkflowId = 'wid' and ((`Attr.CustomStringField` = 'custom') or `Attr.CustomIntField` between 1 and 10)", listRequest.GetQuery())
+	s.Equal("WorkflowId = 'wid' and ((CustomStringField = 'custom') or CustomIntField between 1 and 10)", listRequest.GetQuery())
 
 	query = "Invalid SQL"
 	listRequest.Query = query
@@ -103,12 +103,12 @@ func (s *queryValidatorSuite) TestValidateListRequestForQuery() {
 	// Invalid search attribute in comparison
 	query = "Invalid = 'a' and 1 < 2"
 	listRequest.Query = query
-	s.Equal("invalid search attribute", qv.ValidateListRequestForQuery(listRequest, "index-name").Error())
+	s.Equal("invalid search attribute: Invalid", qv.ValidateListRequestForQuery(listRequest, "index-name").Error())
 
 	// Invalid search attribute in range
 	query = "Invalid between 1 and 2 or WorkflowId = 'wid'"
 	listRequest.Query = query
-	s.Equal("invalid search attribute", qv.ValidateListRequestForQuery(listRequest, "index-name").Error())
+	s.Equal("invalid search attribute: Invalid", qv.ValidateListRequestForQuery(listRequest, "index-name").Error())
 
 	// only order by
 	query = "order by CloseTime desc"
@@ -120,7 +120,7 @@ func (s *queryValidatorSuite) TestValidateListRequestForQuery() {
 	query = "order by CustomIntField desc"
 	listRequest.Query = query
 	s.Nil(qv.ValidateListRequestForQuery(listRequest, "index-name"))
-	s.Equal(" order by `Attr.CustomIntField` desc", listRequest.GetQuery())
+	s.Equal(" order by CustomIntField desc", listRequest.GetQuery())
 
 	// condition + order by
 	query = "WorkflowId = 'wid' order by CloseTime desc"
@@ -131,7 +131,7 @@ func (s *queryValidatorSuite) TestValidateListRequestForQuery() {
 	// invalid order by attribute
 	query = "order by InvalidField desc"
 	listRequest.Query = query
-	s.Equal("invalid order by attribute", qv.ValidateListRequestForQuery(listRequest, "index-name").Error())
+	s.Equal("invalid order by attribute: InvalidField", qv.ValidateListRequestForQuery(listRequest, "index-name").Error())
 
 	// invalid order by attribute expr
 	query = "order by 123"
