@@ -1,0 +1,15 @@
+{
+  "conflicts": "proceed",
+  "source": {
+    "index": "temporal-visibility-dev"
+  },
+  "dest": {
+    "index": "temporal-visibility2-dev",
+    "version_type": "external",
+    "op_type": "index"
+  },
+  "script": {
+    "lang": "painless",
+    "source": "${SCRIPT}"
+  }
+}
