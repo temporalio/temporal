@@ -125,14 +125,18 @@ func (d *plugin) tryConnect(
 	// database name not provided
 	// try defaults
 	defer func() { cfg.DatabaseName = "" }()
+
+	var errors []error
 	for _, databaseName := range defaultDatabaseNames {
 		cfg.DatabaseName = databaseName
 		if sqlxDB, err := sqlx.Connect(PluginName, buildDSN(cfg, r)); err == nil {
 			return sqlxDB, nil
+		} else {
+			errors = append(errors, err)
 		}
 	}
 	return nil, serviceerror.NewInternal(
-		fmt.Sprintf("unable to connect to DB, tried default DB names: %v", strings.Join(defaultDatabaseNames, ",")),
+		fmt.Sprintf("unable to connect to DB, tried default DB names: %v, errors: %v", strings.Join(defaultDatabaseNames, ","), errors),
 	)
 }
 
