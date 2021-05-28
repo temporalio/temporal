@@ -919,11 +919,11 @@ func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityR
 
 func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchattribute.NameTypeMap) *persistence.VisibilityWorkflowExecutionInfo {
 	logUnexpectedType := func(fieldName string, fieldValue interface{}) {
-		s.logger.Error("Unexpected field type.", tag.Name(fieldName), tag.ValueType(fieldValue), tag.ESDocID(hit.Id))
+		s.logger.Error("Unexpected field type while parsing Elasticsearch document.", tag.Name(fieldName), tag.ValueType(fieldValue), tag.ESDocID(hit.Id))
 		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
 	logNumberParseError := func(fieldName string, fieldValue json.Number, err error) {
-		s.logger.Error("Unable to parse json.Number.", tag.Name(fieldName), tag.ValueType(fieldValue), tag.Error(err), tag.ESDocID(hit.Id))
+		s.logger.Error("Unable to parse JSON number while parsing Elasticsearch document.", tag.Name(fieldName), tag.ValueType(fieldValue), tag.Error(err), tag.ESDocID(hit.Id))
 		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
 
@@ -931,7 +931,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 	d := json.NewDecoder(bytes.NewReader(hit.Source))
 	d.UseNumber()
 	if err := d.Decode(&sourceMap); err != nil {
-		s.logger.Error("Unable to unmarshal search hit source.", tag.Error(err), tag.ESDocID(hit.Id))
+		s.logger.Error("Unable to JSON unmarshal Elasticsearch SearchHit.Source.", tag.Error(err), tag.ESDocID(hit.Id))
 		return nil
 	}
 
@@ -1019,7 +1019,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 			record.HistoryLength = historyLengthInt64
 		default:
 			// All custom search attributes are handled here.
-			// Add only defined search attributes.
+			// Add only defined search attributes and ignore all unknown fields.
 			if saTypeMap.IsDefined(fieldName) {
 				if record.SearchAttributes == nil {
 					record.SearchAttributes = map[string]interface{}{}
@@ -1033,6 +1033,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 		record.Memo = persistence.NewDataBlob(memo, memoEncoding)
 	} else if memo != nil {
 		s.logger.Error("Encoding field is missing in Elasticsearch document.", tag.ESDocID(hit.Id))
+		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
 
 	return record
