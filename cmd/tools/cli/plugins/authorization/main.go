@@ -33,7 +33,7 @@ type provider struct {
 	token string
 }
 
-func (p provider) GetHeaders(outgoingHeaders map[string][]string) (map[string]string, error) {
+func (p provider) GetHeaders(currentHeaders map[string][]string) (map[string]string, error) {
 	return map[string]string{
 		"Authorization": p.token,
 	}, nil

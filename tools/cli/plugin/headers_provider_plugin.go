@@ -82,10 +82,10 @@ func NewHeadersProviderPlugin(name string) (HeadersProviderSDK, error) {
 	}, nil
 }
 
-func (g *HeadersProviderRPC) GetHeaders(outgoingHeaders map[string][]string) (map[string]string, error) {
+func (g *HeadersProviderRPC) GetHeaders(currentHeaders map[string][]string) (map[string]string, error) {
 	var result map[string]string
 
-	err := g.client.Call("Plugin.GetHeaders", outgoingHeaders, &result)
+	err := g.client.Call("Plugin.GetHeaders", currentHeaders, &result)
 	if err != nil {
 		return nil, err
 	}
@@ -93,9 +93,9 @@ func (g *HeadersProviderRPC) GetHeaders(outgoingHeaders map[string][]string) (ma
 	return result, nil
 }
 
-func (s *HeadersProviderRPCServer) GetHeaders(outgoingHeaders map[string][]string, resp *map[string]string) error {
+func (s *HeadersProviderRPCServer) GetHeaders(currentHeaders map[string][]string, resp *map[string]string) error {
 	var err error
-	*resp, err = s.Impl.GetHeaders(outgoingHeaders)
+	*resp, err = s.Impl.GetHeaders(currentHeaders)
 	return err
 }
 
