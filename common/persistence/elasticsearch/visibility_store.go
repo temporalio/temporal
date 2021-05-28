@@ -382,7 +382,6 @@ func (s *visibilityStore) GetClosedWorkflowExecution(
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
 		s.logger.Error("Unable to read search attribute types.", tag.Error(err))
-		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 		return nil, err
 	}
 
@@ -795,7 +794,6 @@ func (s *visibilityStore) getScanWorkflowExecutionsResponse(searchHits *elastic.
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
 		s.logger.Error("Unable to read search attribute types.", tag.Error(err))
-		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 		return nil, err
 	}
 
@@ -823,7 +821,6 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(searchHits *elastic.
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
 		s.logger.Error("Unable to read search attribute types.", tag.Error(err))
-		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 		return nil, err
 	}
 
@@ -906,7 +903,6 @@ func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityR
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
 		s.logger.Error("Unable to read search attribute types.", tag.Error(err))
-		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
 
 	searchAttributes, err := searchattribute.Decode(request.SearchAttributes, &typeMap)
