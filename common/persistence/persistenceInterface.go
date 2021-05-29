@@ -454,14 +454,14 @@ type (
 		TreeID   string
 		BranchID string
 		Encoding string
-		Data     []byte
+		Data     []byte // HistoryTreeInfo blob
 	}
 
 	// InternalGetHistoryTreeResponse is response to GetHistoryTree
 	// Only used by persistence layer
 	InternalGetHistoryTreeResponse struct {
-		// all branches of a tree
-		Branches []*commonpb.DataBlob
+		// TreeInfos
+		TreeInfos []*commonpb.DataBlob
 	}
 
 	// VisibilityWorkflowExecutionInfo is visibility info for internal response

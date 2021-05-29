@@ -29,6 +29,7 @@ import (
 	"sort"
 
 	commonpb "go.temporal.io/api/common/v1"
+
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -143,7 +144,7 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 	return nil
 }
 
-// DeleteHistoryNode delete a history node
+// DeleteHistoryNodes delete a history node
 func (h *cassandraHistoryV2Persistence) DeleteHistoryNodes(
 	request *p.InternalDeleteHistoryNodesRequest,
 ) error {
@@ -311,12 +312,12 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 
 	// validBRsMaxEndNode is to know each branch range that is being used, we want to know what is the max nodeID referred by other valid branch
 	validBRsMaxEndNode := map[string]int64{}
-	for _, blob := range rsp.Branches {
-		b, err := serialization.HistoryBranchFromBlob(blob.Data, blob.EncodingType.String())
+	for _, blob := range rsp.TreeInfos {
+		treeInfo, err := serialization.HistoryTreeInfoFromBlob(blob.Data, blob.EncodingType.String())
 		if err != nil {
 			return err
 		}
-		for _, br := range b.Ancestors {
+		for _, br := range treeInfo.BranchInfo.Ancestors {
 			curr, ok := validBRsMaxEndNode[br.GetBranchId()]
 			if !ok || curr < br.GetEndNodeId() {
 				validBRsMaxEndNode[br.GetBranchId()] = br.GetEndNodeId()
@@ -414,7 +415,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 
 	pageSize := 100
 	var pagingToken []byte
-	branches := make([]*commonpb.DataBlob, 0, pageSize)
+	treeInfos := make([]*commonpb.DataBlob, 0, pageSize)
 
 	var iter gocql.Iter
 	for {
@@ -425,7 +426,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 		var data []byte
 		var encoding string
 		for iter.Scan(&branchUUID, &data, &encoding) {
-			branches = append(branches, p.NewDataBlob(data, encoding))
+			treeInfos = append(treeInfos, p.NewDataBlob(data, encoding))
 
 			branchUUID = ""
 			data = []byte{}
@@ -442,7 +443,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 	}
 
 	return &p.InternalGetHistoryTreeResponse{
-		Branches: branches,
+		TreeInfos: treeInfos,
 	}, nil
 }
 

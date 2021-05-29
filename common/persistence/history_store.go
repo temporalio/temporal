@@ -294,9 +294,9 @@ func (m *historyV2ManagerImpl) GetHistoryTree(
 	if err != nil {
 		return nil, err
 	}
-	branches := make([]*persistencespb.HistoryBranch, 0, len(resp.Branches))
-	for _, blob := range resp.Branches {
-		br, err := m.historySerializer.HistoryTreeInfoFromBlob(blob)
+	branches := make([]*persistencespb.HistoryBranch, 0, len(resp.TreeInfos))
+	for _, blob := range resp.TreeInfos {
+		br, err := m.historySerializer.HistoryTreeInfoFromBlob(NewDataBlob(blob.Data, blob.EncodingType.String()))
 		if err != nil {
 			return nil, err
 		}

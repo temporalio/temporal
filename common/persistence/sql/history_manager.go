@@ -382,13 +382,13 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 
 	// validBRsMaxEndNode is to for each branch range that is being used, we want to know what is the max nodeID referred by other valid branch
 	validBRsMaxEndNode := map[string]int64{}
-	for _, blob := range rsp.Branches {
-		b, err := serialization.HistoryBranchFromBlob(blob.Data, blob.EncodingType.String())
+	for _, blob := range rsp.TreeInfos {
+		treeInfo, err := serialization.HistoryTreeInfoFromBlob(blob.Data, blob.EncodingType.String())
 		if err != nil {
 			return err
 		}
 
-		for _, br := range b.Ancestors {
+		for _, br := range treeInfo.BranchInfo.Ancestors {
 			curr, ok := validBRsMaxEndNode[br.GetBranchId()]
 			if !ok || curr < br.GetEndNodeId() {
 				validBRsMaxEndNode[br.GetBranchId()] = br.GetEndNodeId()
@@ -464,15 +464,12 @@ func (m *sqlHistoryV2Manager) GetHistoryTree(
 	if err == sql.ErrNoRows || (err == nil && len(rows) == 0) {
 		return &p.InternalGetHistoryTreeResponse{}, nil
 	}
-	branches := make([]*commonpb.DataBlob, 0, len(rows))
+	treeInfos := make([]*commonpb.DataBlob, 0, len(rows))
 	for _, row := range rows {
-		if err != nil {
-			return nil, err
-		}
-		branches = append(branches, p.NewDataBlob(row.Data, row.DataEncoding))
+		treeInfos = append(treeInfos, p.NewDataBlob(row.Data, row.DataEncoding))
 	}
 
 	return &p.InternalGetHistoryTreeResponse{
-		Branches: branches,
+		TreeInfos: treeInfos,
 	}, nil
 }
