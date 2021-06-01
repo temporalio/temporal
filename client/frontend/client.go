@@ -37,7 +37,7 @@ import (
 
 const (
 	// DefaultTimeout is the default timeout used to make calls
-	DefaultTimeout = 10 * time.Second
+	DefaultTimeout = time.Second * 10
 	// DefaultLongPollTimeout is the long poll default timeout used to make calls
 	DefaultLongPollTimeout = time.Minute * 3
 )

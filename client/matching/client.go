@@ -39,7 +39,7 @@ var _ matchingservice.MatchingServiceClient = (*clientImpl)(nil)
 
 const (
 	// DefaultTimeout is the default timeout used to make calls
-	DefaultTimeout = time.Minute
+	DefaultTimeout = time.Second * 10
 	// DefaultLongPollTimeout is the long poll default timeout used to make calls
 	DefaultLongPollTimeout = time.Minute * 2
 )
@@ -158,7 +158,7 @@ func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.createContext(ctx)
+	ctx, cancel := c.createLongPollContext(ctx)
 	defer cancel()
 	return client.QueryWorkflow(ctx, request, opts...)
 }

@@ -45,7 +45,7 @@ var _ historyservice.HistoryServiceClient = (*clientImpl)(nil)
 
 const (
 	// DefaultTimeout is the default timeout used to make calls
-	DefaultTimeout = time.Second * 30
+	DefaultTimeout = time.Second * 10
 )
 
 type clientImpl struct {
