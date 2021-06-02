@@ -20,54 +20,43 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package plugin
+package main
 
 import (
-	"fmt"
-	"os/exec"
+	"os"
 
-	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
+	cliplugin "go.temporal.io/server/tools/cli/plugin"
 )
 
-const (
-	DataConverterPluginType   = "DataConverter"
-	HeadersProviderPluginType = "HeadersProvider"
-)
-
-var (
-	PluginHandshakeConfig = plugin.HandshakeConfig{
-		ProtocolVersion:  1,
-		MagicCookieKey:   "TEMPORAL_CLI_PLUGIN",
-		MagicCookieValue: "abb3e448baf947eba1847b10a38554db",
-	}
-
-	pluginMap = map[string]plugin.Plugin{
-		DataConverterPluginType:   &DataConverterPlugin{},
-		HeadersProviderPluginType: &HeadersProviderPlugin{},
-	}
-)
-
-func newPluginClient(kind string, name string) (interface{}, error) {
-	pluginClient := plugin.NewClient(&plugin.ClientConfig{
-		HandshakeConfig: PluginHandshakeConfig,
-		Plugins:         pluginMap,
-		Cmd:             exec.Command(name),
-		Managed:         true,
-		Logger: hclog.New(&hclog.LoggerOptions{
-			Name:  "tctl",
-			Level: hclog.LevelFromString("INFO"),
-		}),
-	})
-
-	rpcClient, err := pluginClient.Client()
-	if err != nil {
-		return nil, fmt.Errorf("unable to create plugin client: %w", err)
-	}
-
-	return rpcClient.Dispense(kind)
+type provider struct {
+	token string
 }
 
-func StopPlugins() {
-	plugin.CleanupClients()
+func (p provider) GetHeaders(currentHeaders map[string][]string) (map[string]string, error) {
+	return map[string]string{
+		"Authorization": p.token,
+	}, nil
+}
+
+func main() {
+	var p provider
+
+	if len(os.Args) > 1 {
+		p.token = os.Args[1]
+	}
+	if p.token == "" {
+		p.token = os.Getenv("TEMPORAL_CLI_AUTHORIZATION_TOKEN")
+	}
+
+	var pluginMap = map[string]plugin.Plugin{
+		cliplugin.HeadersProviderPluginType: &cliplugin.HeadersProviderPlugin{
+			Impl: &provider{},
+		},
+	}
+
+	plugin.Serve(&plugin.ServeConfig{
+		HandshakeConfig: cliplugin.PluginHandshakeConfig,
+		Plugins:         pluginMap,
+	})
 }
