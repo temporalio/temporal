@@ -145,13 +145,13 @@ type (
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(request *InternalReadHistoryBranchRequest) (*InternalReadHistoryBranchResponse, error)
 		// ForkHistoryBranch forks a new branch from a old branch
-		ForkHistoryBranch(request *InternalForkHistoryBranchRequest) (*InternalForkHistoryBranchResponse, error)
+		ForkHistoryBranch(request *InternalForkHistoryBranchRequest) error
 		// DeleteHistoryBranch removes a branch
 		DeleteHistoryBranch(request *InternalDeleteHistoryBranchRequest) error
 		// GetHistoryTree returns all branch information of a tree
-		GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error)
+		GetHistoryTree(request *GetHistoryTreeRequest) (*InternalGetHistoryTreeResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees
-		GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error)
+		GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*InternalGetAllHistoryTreeBranchesResponse, error)
 	}
 
 	// VisibilityStore is the store interface for visibility
@@ -338,6 +338,8 @@ type (
 		Info string
 		// The branch to be appended
 		BranchInfo *persistencespb.HistoryBranch
+		// Serialized TreeInfo
+		TreeInfo *commonpb.DataBlob
 		// The history node
 		Node InternalHistoryNode
 		// Used in sharded data stores to identify which shard to use
@@ -360,6 +362,8 @@ type (
 	InternalForkHistoryBranchRequest struct {
 		// The base branch to fork from
 		ForkBranchInfo *persistencespb.HistoryBranch
+		// Serialized TreeInfo
+		TreeInfo *commonpb.DataBlob
 		// The nodeID to fork from, the new branch will start from ( inclusive ), the base branch will stop at(exclusive)
 		ForkNodeID int64
 		// branchID of the new branch
@@ -394,6 +398,8 @@ type (
 		BranchInfo *persistencespb.HistoryBranch
 		// Used in sharded data stores to identify which shard to use
 		ShardID int32
+		// Max EndNodeID of each  branch. This is used to determine the range of nodes that
+		BranchesMaxEndNodeID map[string]int64
 	}
 
 	// InternalReadHistoryBranchRequest is used to read a history branch
@@ -432,6 +438,30 @@ type (
 		Nodes []InternalHistoryNode
 		// Pagination token
 		NextPageToken []byte
+	}
+
+	// InternalGetAllHistoryTreeBranchesResponse is response to GetAllHistoryTreeBranches
+	// Only used by persistence layer
+	InternalGetAllHistoryTreeBranchesResponse struct {
+		// pagination token
+		NextPageToken []byte
+		// all branches of all trees
+		Branches []InternalHistoryBranchDetail
+	}
+
+	// InternalHistoryBranchDetail used by InternalGetAllHistoryTreeBranchesResponse
+	InternalHistoryBranchDetail struct {
+		TreeID   string
+		BranchID string
+		Encoding string
+		Data     []byte // HistoryTreeInfo blob
+	}
+
+	// InternalGetHistoryTreeResponse is response to GetHistoryTree
+	// Only used by persistence layer
+	InternalGetHistoryTreeResponse struct {
+		// TreeInfos
+		TreeInfos []*commonpb.DataBlob
 	}
 
 	// VisibilityWorkflowExecutionInfo is visibility info for internal response
