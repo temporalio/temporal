@@ -498,9 +498,9 @@ type (
 		WorkflowID         string
 		RunID              string
 		WorkflowTypeName   string
-		StartTimestamp     int64
+		StartTimestamp     time.Time
 		Status             enumspb.WorkflowExecutionStatus
-		ExecutionTimestamp int64
+		ExecutionTimestamp time.Time
 		TaskID             int64
 		ShardID            int32
 		Memo               *commonpb.DataBlob
@@ -516,7 +516,7 @@ type (
 	// InternalRecordWorkflowExecutionClosedRequest is request to RecordWorkflowExecutionClosed
 	InternalRecordWorkflowExecutionClosedRequest struct {
 		*InternalVisibilityRequestBase
-		CloseTimestamp int64
+		CloseTimestamp time.Time
 		HistoryLength  int64
 		Retention      *time.Duration
 	}
