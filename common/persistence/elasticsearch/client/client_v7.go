@@ -26,11 +26,13 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/olivere/elastic/v7"
+	"go.temporal.io/server/common/searchattribute"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -299,7 +301,7 @@ func convertMappingBody(esMapping map[string]interface{}, indexName string) map[
 	}
 
 	for fieldName, fieldProp := range propMap {
-		if fieldName == "Attr" {
+		if fieldName == searchattribute.Attr {
 			attrFieldMap, ok := fieldProp.(map[string]interface{})
 			if !ok {
 				continue
@@ -325,7 +327,7 @@ func convertMappingBody(esMapping map[string]interface{}, indexName string) map[
 				if !ok {
 					continue
 				}
-				result["Attr."+fieldName] = typeStr
+				result[fmt.Sprintf("%s.%s", searchattribute.Attr, fieldName)] = typeStr
 			}
 		}
 
