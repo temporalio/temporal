@@ -36,6 +36,15 @@ ifndef GOPATH
 GOPATH := $(shell go env GOPATH)
 endif
 
+# Name resolution requires cgo to be enabled on macOS and Windows: https://golang.org/pkg/net/#hdr-Name_Resolution.
+ifndef CGO_ENABLED
+	ifeq ($(GOOS),linux)
+	CGO_ENABLED := 0
+	else
+	CGO_ENABLED := 1
+	endif
+endif
+
 GOBIN := $(if $(shell go env GOBIN),$(shell go env GOBIN),$(GOPATH)/bin)
 PATH := $(GOBIN):$(PATH)
 
@@ -184,23 +193,23 @@ clean-bins:
 
 temporal-server:
 	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=0 go build -ldflags "$(shell ./develop/scripts/go-build-ldflags.sh $(MODULE_ROOT)/ldflags)" -o temporal-server cmd/server/main.go
+	CGO_ENABLED=$(CGO_ENABLED) go build -ldflags "$(shell ./develop/scripts/go-build-ldflags.sh $(MODULE_ROOT)/ldflags)" -o temporal-server cmd/server/main.go
 
 tctl:
 	@printf $(COLOR) "Build tctl with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=0 go build -o tctl cmd/tools/cli/main.go
+	CGO_ENABLED=$(CGO_ENABLED) go build -o tctl cmd/tools/cli/main.go
 
 plugins:
 	@printf $(COLOR) "Build tctl-authorization-plugin with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=0 go build -o tctl-authorization-plugin cmd/tools/cli/plugins/authorization/main.go
+	CGO_ENABLED=$(CGO_ENABLED) go build -o tctl-authorization-plugin cmd/tools/cli/plugins/authorization/main.go
 
 temporal-cassandra-tool:
 	@printf $(COLOR) "Build temporal-cassandra-tool with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=0 go build -o temporal-cassandra-tool cmd/tools/cassandra/main.go
+	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-cassandra-tool cmd/tools/cassandra/main.go
 
 temporal-sql-tool:
 	@printf $(COLOR) "Build temporal-sql-tool with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=0 go build -o temporal-sql-tool cmd/tools/sql/main.go
+	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-sql-tool cmd/tools/sql/main.go
 
 ##### Checks #####
 copyright-check:
