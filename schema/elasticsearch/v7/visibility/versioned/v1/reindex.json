@@ -4,12 +4,11 @@
     "index": "temporal-visibility-dev"
   },
   "dest": {
-    "index": "temporal-visibility2-dev",
-    "version_type": "external",
-    "op_type": "index"
+    "index": "temporal-visibility-v1-dev",
+    "version_type": "external"
   },
   "script": {
     "lang": "painless",
-    "source": "${SCRIPT}"
+    "source": "${REINDEX_SCRIPT}"
   }
 }

@@ -1,0 +1,6 @@
+if (ctx._source.Attr != null) {
+    for (attr in ctx._source.Attr.entrySet()){
+        ctx._source[attr.getKey()] = attr.getValue();
+    }
+    ctx._source.remove('Attr');
+}

@@ -1,7 +1,7 @@
 {
   "order": 0,
   "index_patterns": [
-    "temporal-visibility-v1-*"
+    "temporal-visibility-*"
   ],
   "settings": {
     "index": {
@@ -40,17 +40,22 @@
       "TaskQueue": {
         "type": "keyword"
       },
-      "TemporalChangeVersion": {
-        "type": "keyword"
-      },
-      "CustomNamespace": {
-        "type": "keyword"
-      },
-      "Operator": {
-        "type": "keyword"
-      },
-      "BinaryChecksums": {
-        "type": "keyword"
+
+      "Attr": {
+        "properties": {
+          "TemporalChangeVersion": {
+            "type": "keyword"
+          },
+          "CustomNamespace": {
+            "type": "keyword"
+          },
+          "Operator": {
+            "type": "keyword"
+          },
+          "BinaryChecksums": {
+            "type": "keyword"
+          }
+        }
       }
     }
   },
