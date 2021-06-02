@@ -299,6 +299,36 @@ func convertMappingBody(esMapping map[string]interface{}, indexName string) map[
 	}
 
 	for fieldName, fieldProp := range propMap {
+		if fieldName == "Attr" {
+			attrFieldMap, ok := fieldProp.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			attrFieldProp, ok := attrFieldMap["properties"]
+			if !ok {
+				continue
+			}
+			attrBodyMap, ok := attrFieldProp.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			for fieldName, fieldProp := range attrBodyMap {
+				fieldPropMap, ok := fieldProp.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				tYpe, ok := fieldPropMap["type"]
+				if !ok {
+					continue
+				}
+				typeStr, ok := tYpe.(string)
+				if !ok {
+					continue
+				}
+				result["Attr."+fieldName] = typeStr
+			}
+		}
+
 		fieldPropMap, ok := fieldProp.(map[string]interface{})
 		if !ok {
 			continue
