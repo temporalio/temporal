@@ -29,13 +29,11 @@ import (
 	"sort"
 
 	commonpb "go.temporal.io/api/common/v1"
-
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 )
 
@@ -289,57 +287,15 @@ func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
 func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
-
-	branch := request.BranchInfo
-	treeID := branch.TreeId
-
-	brsToDelete := branch.Ancestors
-	beginNodeID := p.GetBeginNodeID(branch)
-	brsToDelete = append(brsToDelete, &persistencespb.HistoryBranchRange{
-		BranchId:    branch.GetBranchId(),
-		BeginNodeId: beginNodeID,
-	})
-
-	rsp, err := h.GetHistoryTree(&p.GetHistoryTreeRequest{
-		TreeID: treeID,
-	})
-	if err != nil {
-		return err
-	}
-
 	batch := h.session.NewBatch(gocql.LoggedBatch)
-	batch.Query(v2templateDeleteBranch, treeID, branch.BranchId)
+	batch.Query(v2templateDeleteBranch, request.TreeId, request.BranchId)
 
-	// validBRsMaxEndNode is to know each branch range that is being used, we want to know what is the max nodeID referred by other valid branch
-	validBRsMaxEndNode := map[string]int64{}
-	for _, blob := range rsp.TreeInfos {
-		treeInfo, err := serialization.HistoryTreeInfoFromBlob(blob.Data, blob.EncodingType.String())
-		if err != nil {
-			return err
-		}
-		for _, br := range treeInfo.BranchInfo.Ancestors {
-			curr, ok := validBRsMaxEndNode[br.GetBranchId()]
-			if !ok || curr < br.GetEndNodeId() {
-				validBRsMaxEndNode[br.GetBranchId()] = br.GetEndNodeId()
-			}
-		}
+	// delete each branch range
+	for _, br := range request.BranchRanges {
+		h.deleteBranchRangeNodes(batch, br.TreeId, br.BranchId, br.BeginNodeId)
 	}
 
-	// for each branch range to delete, we iterate from bottom to up, and delete up to the point according to validBRsEndNode
-	for i := len(brsToDelete) - 1; i >= 0; i-- {
-		br := brsToDelete[i]
-		maxReferredEndNodeID, ok := validBRsMaxEndNode[br.GetBranchId()]
-		if ok {
-			// we can only delete from the maxEndNode and stop here
-			h.deleteBranchRangeNodes(batch, treeID, br.GetBranchId(), maxReferredEndNodeID)
-			break
-		} else {
-			// No any branch is using this range, we can delete all of it
-			h.deleteBranchRangeNodes(batch, treeID, br.GetBranchId(), br.GetBeginNodeId())
-		}
-	}
-
-	err = h.session.ExecuteBatch(batch)
+	err := h.session.ExecuteBatch(batch)
 	if err != nil {
 		return gocql.ConvertError("DeleteHistoryBranch", err)
 	}

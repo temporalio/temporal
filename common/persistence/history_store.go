@@ -175,11 +175,68 @@ func (m *historyV2ManagerImpl) DeleteHistoryBranch(
 		return err
 	}
 
-	req := &InternalDeleteHistoryBranchRequest{
-		BranchInfo: branch,
-		ShardID:    request.ShardID,
+	// We need to delete the target branch and its ancestors if they are not referenced by any other branches.
+	// However, it is possible that part of the target branch (or its ancestors) is used as ancestors by other branch.
+	// We need to avoid deleting those referenced parts. This is similar to reference count in garbage collection.
+	brsToDelete := branch.Ancestors
+	brsToDelete = append(brsToDelete, &persistencespb.HistoryBranchRange{
+		BranchId:    branch.GetBranchId(),
+		BeginNodeId: GetBeginNodeID(branch),
+	})
+
+	// Get the entire history tree, so we know if any part of the target branch is referenced by other branches.
+	historyTreeResp, err := m.GetHistoryTree(&GetHistoryTreeRequest{
+		TreeID:      branch.TreeId,
+		ShardID:     &request.ShardID,
+		BranchToken: request.BranchToken,
+	})
+	if err != nil {
+		return err
 	}
 
+	// usedBranches record branches referenced by others
+	usedBranches := map[string]int64{}
+	for _, br := range historyTreeResp.Branches {
+		if br.BranchId == branch.BranchId {
+			// skip the target branch
+			continue
+		}
+		for _, ancestor := range br.Ancestors {
+			if curr, ok := usedBranches[ancestor.GetBranchId()]; !ok || curr < ancestor.GetEndNodeId() {
+				usedBranches[ancestor.GetBranchId()] = ancestor.GetEndNodeId()
+			}
+		}
+	}
+
+	var deleteRanges []InternalDeleteHistoryBranchRange
+	// for each branch range to delete, we iterate from bottom up, and stop when the range is also used by others
+	for i := len(brsToDelete) - 1; i >= 0; i-- {
+		br := brsToDelete[i]
+		if maxEndNode, ok := usedBranches[br.GetBranchId()]; ok {
+			// branch is used by others, we can only delete from the maxEndNode
+			deleteRanges = append(deleteRanges, InternalDeleteHistoryBranchRange{
+				TreeId:      branch.TreeId,
+				BranchId:    br.BranchId,
+				BeginNodeId: maxEndNode,
+			})
+			// all ancestor is also used, no need to go up further,
+			break
+		} else {
+			// No any branch is using this range, we can delete all of it
+			deleteRanges = append(deleteRanges, InternalDeleteHistoryBranchRange{
+				TreeId:      branch.TreeId,
+				BranchId:    br.BranchId,
+				BeginNodeId: br.BeginNodeId,
+			})
+		}
+	}
+
+	req := &InternalDeleteHistoryBranchRequest{
+		ShardID:      request.ShardID,
+		TreeId:       branch.TreeId,
+		BranchId:     branch.BranchId,
+		BranchRanges: deleteRanges,
+	}
 	return m.persistence.DeleteHistoryBranch(req)
 }
 
