@@ -1,6 +1,8 @@
 if (ctx._source.Attr != null) {
     for (attr in ctx._source.Attr.entrySet()){
-        ctx._source[attr.getKey()] = attr.getValue();
+        if (params['reindexCustomFields'] == 'true' || !attr.getKey().startsWith('Custom')){
+            ctx._source[attr.getKey()] = attr.getValue();
+        }
     }
-    ctx._source.remove('Attr');
 }
+ctx._source.remove('Attr');
