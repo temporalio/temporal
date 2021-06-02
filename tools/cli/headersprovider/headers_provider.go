@@ -20,54 +20,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package plugin
+package headersprovider
 
 import (
-	"fmt"
-	"os/exec"
-
-	"github.com/hashicorp/go-hclog"
-	"github.com/hashicorp/go-plugin"
-)
-
-const (
-	DataConverterPluginType   = "DataConverter"
-	HeadersProviderPluginType = "HeadersProvider"
+	"go.temporal.io/server/tools/cli/plugin"
 )
 
 var (
-	PluginHandshakeConfig = plugin.HandshakeConfig{
-		ProtocolVersion:  1,
-		MagicCookieKey:   "TEMPORAL_CLI_PLUGIN",
-		MagicCookieValue: "abb3e448baf947eba1847b10a38554db",
-	}
-
-	pluginMap = map[string]plugin.Plugin{
-		DataConverterPluginType:   &DataConverterPlugin{},
-		HeadersProviderPluginType: &HeadersProviderPlugin{},
-	}
+	headersProvider plugin.HeadersProviderSDK = nil
 )
 
-func newPluginClient(kind string, name string) (interface{}, error) {
-	pluginClient := plugin.NewClient(&plugin.ClientConfig{
-		HandshakeConfig: PluginHandshakeConfig,
-		Plugins:         pluginMap,
-		Cmd:             exec.Command(name),
-		Managed:         true,
-		Logger: hclog.New(&hclog.LoggerOptions{
-			Name:  "tctl",
-			Level: hclog.LevelFromString("INFO"),
-		}),
-	})
-
-	rpcClient, err := pluginClient.Client()
-	if err != nil {
-		return nil, fmt.Errorf("unable to create plugin client: %w", err)
-	}
-
-	return rpcClient.Dispense(kind)
+func SetCurrent(hp plugin.HeadersProviderSDK) {
+	headersProvider = hp
 }
 
-func StopPlugins() {
-	plugin.CleanupClients()
+func GetCurrent() plugin.HeadersProviderSDK {
+	return headersProvider
 }
