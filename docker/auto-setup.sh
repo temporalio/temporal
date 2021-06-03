@@ -232,7 +232,7 @@ wait_for_es() {
 }
 
 setup_es_template() {
-    SCHEMA_FILE=${TEMPORAL_HOME}/schema/elasticsearch/${ES_VERSION}/visibility/index_template.json
+    SCHEMA_FILE=${TEMPORAL_HOME}/schema/elasticsearch/visibility/index_template_${ES_VERSION}.json
     ES_SERVER=$(echo "${ES_SEEDS}" | awk -F ',' '{print $1}')
     TEMPLATE_URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/_template/temporal-visibility-template"
     INDEX_URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/${ES_VIS_INDEX}"
