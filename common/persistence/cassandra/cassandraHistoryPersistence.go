@@ -292,7 +292,7 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 
 	// delete each branch range
 	for _, br := range request.BranchRanges {
-		h.deleteBranchRangeNodes(batch, br.TreeId, br.BranchId, br.BeginNodeId)
+		h.deleteBranchRangeNodes(batch, request.TreeId, br.BranchId, br.BeginNodeId)
 	}
 
 	err := h.session.ExecuteBatch(batch)

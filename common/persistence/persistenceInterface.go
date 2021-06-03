@@ -404,7 +404,6 @@ type (
 
 	// InternalDeleteHistoryBranchRange is used to delete a range of branch
 	InternalDeleteHistoryBranchRange struct {
-		TreeId      string
 		BranchId    string
 		BeginNodeId int64 // delete nodes with ID <= BeginNodeId
 	}

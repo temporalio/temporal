@@ -215,16 +215,14 @@ func (m *historyV2ManagerImpl) DeleteHistoryBranch(
 		if maxEndNode, ok := usedBranches[br.GetBranchId()]; ok {
 			// branch is used by others, we can only delete from the maxEndNode
 			deleteRanges = append(deleteRanges, InternalDeleteHistoryBranchRange{
-				TreeId:      branch.TreeId,
 				BranchId:    br.BranchId,
 				BeginNodeId: maxEndNode,
 			})
-			// all ancestor is also used, no need to go up further,
+			// all ancestors are also used, no need to go up further,
 			break
 		} else {
-			// No any branch is using this range, we can delete all of it
+			// No other branch is using this range, we can delete all of it
 			deleteRanges = append(deleteRanges, InternalDeleteHistoryBranchRange{
-				TreeId:      branch.TreeId,
 				BranchId:    br.BranchId,
 				BeginNodeId: br.BeginNodeId,
 			})
