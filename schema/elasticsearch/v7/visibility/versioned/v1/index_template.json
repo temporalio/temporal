@@ -1,7 +1,7 @@
 {
   "order": 0,
   "index_patterns": [
-    "temporal-visibility-v1-*"
+    "temporal-visibility-v1*"
   ],
   "settings": {
     "index": {

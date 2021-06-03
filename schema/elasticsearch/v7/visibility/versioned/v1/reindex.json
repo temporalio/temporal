@@ -1,10 +1,10 @@
 {
   "conflicts": "proceed",
   "source": {
-    "index": "temporal-visibility-dev"
+    "index": "${ES_VIS_INDEX_V0}"
   },
   "dest": {
-    "index": "temporal-visibility-v1-dev",
+    "index": "${ES_VIS_INDEX_V1}",
     "version_type": "external"
   },
   "script": {
