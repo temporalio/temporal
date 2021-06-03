@@ -14,7 +14,7 @@ REINDEX_CUSTOM_FIELDS="${REINDEX_CUSTOM_FIELDS:-true}"
 
 DIR_NAME=$(dirname "$0")
 # Convert multiline script to single line and remove repeated spaces.
-REINDEX_SCRIPT=$(tr --delete "\n" < "${DIR_NAME}/reindex.painless" | tr --squeeze-repeats " ")
+REINDEX_SCRIPT=$(tr -d "\n" < "${DIR_NAME}/reindex.painless" | tr -s " ")
 # Substitute envs in reindex.json (envsubst is not available in alpine by default).
 REINDEX_JSON=$(sed \
   -e "s/\${REINDEX_SCRIPT}/${REINDEX_SCRIPT}/" \
