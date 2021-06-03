@@ -50,7 +50,15 @@ type (
 	// ////////////////////////////////////////////////////////////////////
 
 	// ShardStore is a lower level of ShardManager
-	ShardStore = ShardManager
+	ShardStore interface {
+		Closeable
+		GetName() string
+		GetClusterName() string
+		CreateShard(request *InternalCreateShardRequest) error
+		GetShard(request *InternalGetShardRequest) (*InternalGetShardResponse, error)
+		UpdateShard(request *InternalUpdateShardRequest) error
+	}
+
 	// TaskStore is a lower level of TaskManager
 	TaskStore = TaskManager
 	// MetadataStore is a lower level of MetadataManager
@@ -198,6 +206,31 @@ type (
 		ID        int64     `json:"message_id"`
 		Data      []byte    `json:"message_payload"`
 		Encoding  string    `json:"message_encoding"`
+	}
+
+	// InternalCreateShardRequest is used by ShardStore to create new shard
+	InternalCreateShardRequest struct {
+		ShardID int32
+		RangeID int64
+		ShardInfo *commonpb.DataBlob
+	}
+
+	// InternalGetShardRequest is used by ShardStore to retrieve a shard
+	InternalGetShardRequest struct {
+		ShardID int32
+	}
+
+	// InternalGetShardResponse is the response to GetShard
+	InternalGetShardResponse struct {
+		ShardInfo *commonpb.DataBlob
+	}
+
+	// InternalUpdateShardRequest is used by ShardStore to update a shard
+	InternalUpdateShardRequest struct {
+		ShardID int32
+		RangeID int64
+		ShardInfo *commonpb.DataBlob
+		PreviousRangeID int64
 	}
 
 	// DataBlob represents a blob for any binary data.
