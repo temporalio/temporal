@@ -210,6 +210,7 @@ func (m *historyV2ManagerImpl) DeleteHistoryBranch(
 
 	var deleteRanges []InternalDeleteHistoryBranchRange
 	// for each branch range to delete, we iterate from bottom up, and stop when the range is also used by others
+	findDeleteRanges:
 	for i := len(brsToDelete) - 1; i >= 0; i-- {
 		br := brsToDelete[i]
 		if maxEndNode, ok := usedBranches[br.GetBranchId()]; ok {
@@ -219,7 +220,7 @@ func (m *historyV2ManagerImpl) DeleteHistoryBranch(
 				BeginNodeId: maxEndNode,
 			})
 			// all ancestors are also used, no need to go up further,
-			break
+			break findDeleteRanges
 		} else {
 			// No other branch is using this range, we can delete all of it
 			deleteRanges = append(deleteRanges, InternalDeleteHistoryBranchRange{
