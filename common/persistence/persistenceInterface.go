@@ -394,12 +394,18 @@ type (
 
 	// InternalDeleteHistoryBranchRequest is used to remove a history branch
 	InternalDeleteHistoryBranchRequest struct {
-		// branch to be deleted
-		BranchInfo *persistencespb.HistoryBranch
 		// Used in sharded data stores to identify which shard to use
-		ShardID int32
-		// Max EndNodeID of each  branch. This is used to determine the range of nodes that
-		BranchesMaxEndNodeID map[string]int64
+		ShardID  int32
+		TreeId   string // TreeId, BranchId is used to delete target history branch itself.
+		BranchId string
+		// branch ranges is used to delete range of history nodes from target branch and it ancestors.
+		BranchRanges []InternalDeleteHistoryBranchRange
+	}
+
+	// InternalDeleteHistoryBranchRange is used to delete a range of history nodes of a branch
+	InternalDeleteHistoryBranchRange struct {
+		BranchId    string
+		BeginNodeId int64 // delete nodes with ID >= BeginNodeId
 	}
 
 	// InternalReadHistoryBranchRequest is used to read a history branch
