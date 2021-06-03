@@ -2,10 +2,7 @@
 FROM golang:1.16-alpine AS dockerize-builder
 
 RUN apk add --update --no-cache \
-    make \
-    git \
-    protobuf \
-    build-base
+    git
 
 RUN mkdir -p /xsrc && \
     git clone https://github.com/jwilder/dockerize.git && \

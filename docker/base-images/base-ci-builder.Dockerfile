@@ -1,4 +1,4 @@
-FROM golang:1.16-alpine AS base-ci
+FROM golang:1.16-alpine AS base-ci-builder
 
 RUN apk add --update --no-cache \
     make \
