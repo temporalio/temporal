@@ -2214,8 +2214,8 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		Namespace:         namespace,
 		PageSize:          int(request.GetMaximumPageSize()),
 		NextPageToken:     request.NextPageToken,
-		EarliestStartTime: timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).UnixNano(),
-		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()).UnixNano(),
+		EarliestStartTime: timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()),
+		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()),
 	}
 
 	var persistenceResp *persistence.ListWorkflowExecutionsResponse
@@ -2307,8 +2307,8 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		Namespace:         namespace,
 		PageSize:          int(request.GetMaximumPageSize()),
 		NextPageToken:     request.NextPageToken,
-		EarliestStartTime: timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()).UnixNano(),
-		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()).UnixNano(),
+		EarliestStartTime: timestamp.TimeValue(request.StartTimeFilter.GetEarliestTime()),
+		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()),
 	}
 
 	var persistenceResp *persistence.ListWorkflowExecutionsResponse

@@ -530,8 +530,8 @@ func TaskVersion(taskVersion int64) ZapTag {
 }
 
 // TaskVisibilityTimestamp returns tag for task visibilityTimestamp
-func TaskVisibilityTimestamp(timestamp int64) ZapTag {
-	return NewInt64("queue-task-visibility-timestamp", timestamp)
+func TaskVisibilityTimestamp(timestamp time.Time) ZapTag {
+	return NewTimeTag("queue-task-visibility-timestamp", timestamp)
 }
 
 // NumberProcessed returns tag for NumberProcessed

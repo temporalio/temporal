@@ -48,7 +48,7 @@ func applyWorkflowMutationBatch(
 	workflowMutation *p.InternalWorkflowMutation,
 ) error {
 
-	cqlNowTimestampMillis := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
+	cqlNowTimestampMillis := p.UnixMilliseconds(time.Now().UTC())
 
 	namespaceID := workflowMutation.ExecutionInfo.NamespaceId
 	workflowID := workflowMutation.ExecutionInfo.WorkflowId
@@ -168,7 +168,7 @@ func applyWorkflowSnapshotBatchAsReset(
 	workflowSnapshot *p.InternalWorkflowSnapshot,
 ) error {
 
-	cqlNowTimestampMillis := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
+	cqlNowTimestampMillis := p.UnixMilliseconds(time.Now().UTC())
 
 	namespaceID := workflowSnapshot.ExecutionInfo.NamespaceId
 	workflowID := workflowSnapshot.ExecutionInfo.WorkflowId
@@ -280,7 +280,7 @@ func applyWorkflowSnapshotBatchAsNew(
 	workflowSnapshot *p.InternalWorkflowSnapshot,
 ) error {
 
-	cqlNowTimestampMillis := p.UnixNanoToDBTimestamp(time.Now().UnixNano())
+	cqlNowTimestampMillis := p.UnixMilliseconds(time.Now().UTC())
 
 	namespaceID := workflowSnapshot.ExecutionInfo.NamespaceId
 	workflowID := workflowSnapshot.ExecutionInfo.WorkflowId
@@ -850,7 +850,7 @@ func createTimerTasks(
 
 		// Ignoring possible type cast errors.
 		goTs := task.GetVisibilityTimestamp()
-		dbTs := p.UnixNanoToDBTimestamp(goTs.UnixNano())
+		dbTs := p.UnixMilliseconds(goTs)
 
 		datablob, err := serialization.TimerTaskInfoToBlob(&persistencespb.TimerTaskInfo{
 			NamespaceId:         namespaceID,

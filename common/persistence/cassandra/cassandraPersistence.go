@@ -710,7 +710,7 @@ const (
 
 var (
 	defaultDateTime            = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
-	defaultVisibilityTimestamp = p.UnixNanoToDBTimestamp(defaultDateTime.UnixNano())
+	defaultVisibilityTimestamp = p.UnixMilliseconds(defaultDateTime)
 )
 
 type (
@@ -2031,7 +2031,7 @@ func (d *cassandraPersistence) RangeCompleteReplicationTask(
 }
 
 func (d *cassandraPersistence) CompleteTimerTask(request *p.CompleteTimerTaskRequest) error {
-	ts := p.UnixNanoToDBTimestamp(request.VisibilityTimestamp.UnixNano())
+	ts := p.UnixMilliseconds(request.VisibilityTimestamp)
 	query := d.session.Query(templateCompleteTimerTaskQuery,
 		d.shardID,
 		rowTypeTimerTask,
@@ -2046,8 +2046,8 @@ func (d *cassandraPersistence) CompleteTimerTask(request *p.CompleteTimerTaskReq
 }
 
 func (d *cassandraPersistence) RangeCompleteTimerTask(request *p.RangeCompleteTimerTaskRequest) error {
-	start := p.UnixNanoToDBTimestamp(request.InclusiveBeginTimestamp.UnixNano())
-	end := p.UnixNanoToDBTimestamp(request.ExclusiveEndTimestamp.UnixNano())
+	start := p.UnixMilliseconds(request.InclusiveBeginTimestamp)
+	end := p.UnixMilliseconds(request.ExclusiveEndTimestamp)
 	query := d.session.Query(templateRangeCompleteTimerTaskQuery,
 		d.shardID,
 		rowTypeTimerTask,
@@ -2478,8 +2478,8 @@ func (d *cassandraPersistence) GetTimerTask(request *p.GetTimerTaskRequest) (*p.
 func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksRequest) (*p.GetTimerIndexTasksResponse,
 	error) {
 	// Reading timer tasks need to be quorum level consistent, otherwise we could lose tasks
-	minTimestamp := p.UnixNanoToDBTimestamp(request.MinTimestamp.UnixNano())
-	maxTimestamp := p.UnixNanoToDBTimestamp(request.MaxTimestamp.UnixNano())
+	minTimestamp := p.UnixMilliseconds(request.MinTimestamp)
+	maxTimestamp := p.UnixMilliseconds(request.MaxTimestamp)
 	query := d.session.Query(templateGetTimerTasksQuery,
 		d.shardID,
 		rowTypeTimerTask,

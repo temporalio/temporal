@@ -37,7 +37,6 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -3208,18 +3207,8 @@ func copyWorkflowExecutionState(sourceState *persistencespb.WorkflowExecutionSta
 // ref: https://docs.datastax.com/en/cql/3.3/cql/cql_reference/timestamp_type_r.html
 // so to use equal function, we need to do conversion, getting rid of sub milliseconds
 func timestampConvertor(t time.Time) *time.Time {
-	r := time.Unix(
-		0,
-		p.DBTimestampToUnixNano(p.UnixNanoToDBTimestamp(t.UnixNano()))).UTC()
-
+	r := t.Round(time.Millisecond)
 	return &r
-}
-
-func timeComparator(r1, r2 *types.Timestamp, timeTolerance time.Duration) bool {
-	t1, _ := types.TimestampFromProto(r1)
-	t2, _ := types.TimestampFromProto(r2)
-
-	return timeComparatorGo(t1, t2, timeTolerance)
 }
 
 func timeComparatorGoPtr(t1, t2 *time.Time, timeTolerance time.Duration) bool {

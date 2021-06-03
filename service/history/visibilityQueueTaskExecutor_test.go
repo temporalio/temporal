@@ -354,8 +354,8 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedR
 			NamespaceID:        task.GetNamespaceId(),
 			Execution:          *execution,
 			WorkflowTypeName:   executionInfo.WorkflowTypeName,
-			StartTimestamp:     timestamp.TimeValue(startEvent.GetEventTime()).UnixNano(),
-			ExecutionTimestamp: executionTimestamp.UnixNano(),
+			StartTimestamp:     timestamp.TimeValue(startEvent.GetEventTime()),
+			ExecutionTimestamp: executionTimestamp,
 			TaskID:             task.GetTaskId(),
 			Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			ShardID:            s.mockShard.GetShardID(),
@@ -380,15 +380,16 @@ func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowSearchAttributesR
 
 	return &persistence.UpsertWorkflowExecutionRequest{
 		VisibilityRequestBase: &p.VisibilityRequestBase{
-			Namespace:        namespace,
-			NamespaceID:      task.GetNamespaceId(),
-			Execution:        *execution,
-			WorkflowTypeName: executionInfo.WorkflowTypeName,
-			StartTimestamp:   timestamp.TimeValue(startEvent.GetEventTime()).UnixNano(),
-			TaskID:           task.GetTaskId(),
-			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			TaskQueue:        taskQueueName,
-			ShardID:          s.mockShard.GetShardID(),
+			Namespace:          namespace,
+			NamespaceID:        task.GetNamespaceId(),
+			Execution:          *execution,
+			WorkflowTypeName:   executionInfo.WorkflowTypeName,
+			StartTimestamp:     timestamp.TimeValue(startEvent.GetEventTime()),
+			ExecutionTimestamp: getWorkflowExecutionTime(mutableState, startEvent),
+			TaskID:             task.GetTaskId(),
+			Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			TaskQueue:          taskQueueName,
+			ShardID:            s.mockShard.GetShardID(),
 		},
 	}
 }
