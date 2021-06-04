@@ -780,26 +780,22 @@ func (d *cassandraPersistence) GetShardID() int32 {
 	return d.shardID
 }
 
-func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error {
-	shardInfo := request.ShardInfo
-	shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
-	data, err := serialization.ShardInfoToBlob(shardInfo)
+func (d *cassandraPersistence) GetClusterName() string {
+	return d.currentClusterName
+}
 
-	if err != nil {
-		return gocql.ConvertError("CreateShard", err)
-	}
-
+func (d *cassandraPersistence) CreateShard(request *p.InternalCreateShardRequest) error {
 	query := d.session.Query(templateCreateShardQuery,
-		shardInfo.GetShardId(),
+		request.ShardID,
 		rowTypeShard,
 		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
 		rowTypeShardRunID,
 		defaultVisibilityTimestamp,
 		rowTypeShardTaskID,
-		data.Data,
-		data.EncodingType.String(),
-		shardInfo.GetRangeId())
+		request.ShardInfo.Data,
+		request.ShardInfo.EncodingType.String(),
+		request.RangeID)
 
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
@@ -808,20 +804,14 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 	}
 
 	if !applied {
-		data := previous["shard"].([]byte)
-		encoding := previous["shard_encoding"].(string)
-		shard, _ := serialization.ShardInfoFromBlob(data, encoding, d.currentClusterName)
-
 		return &p.ShardAlreadyExistError{
-			Msg: fmt.Sprintf("Shard already exists in executions table.  ShardId: %v, RangeId: %v",
-				shard.GetShardId(), shard.GetRangeId()),
+			Msg: fmt.Sprintf("Shard already exists in executions table.  ShardId: %v.", request.ShardID),
 		}
 	}
-
 	return nil
 }
 
-func (d *cassandraPersistence) GetShard(request *p.GetShardRequest) (*p.GetShardResponse, error) {
+func (d *cassandraPersistence) GetShard(request *p.InternalGetShardRequest) (*p.InternalGetShardResponse, error) {
 	shardID := request.ShardID
 	query := d.session.Query(templateGetShardQuery,
 		shardID,
@@ -838,29 +828,15 @@ func (d *cassandraPersistence) GetShard(request *p.GetShardRequest) (*p.GetShard
 		return nil, gocql.ConvertError("GetShard", err)
 	}
 
-	info, err := serialization.ShardInfoFromBlob(data, encoding, d.currentClusterName)
-
-	if err != nil {
-		return nil, gocql.ConvertError("GetShard", err)
-	}
-
-	return &p.GetShardResponse{ShardInfo: info}, nil
+	return &p.InternalGetShardResponse{ShardInfo: p.NewDataBlob(data, encoding)}, nil
 }
 
-func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error {
-	shardInfo := request.ShardInfo
-	shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
-	data, err := serialization.ShardInfoToBlob(shardInfo)
-
-	if err != nil {
-		return gocql.ConvertError("UpdateShard", err)
-	}
-
+func (d *cassandraPersistence) UpdateShard(request *p.InternalUpdateShardRequest) error {
 	query := d.session.Query(templateUpdateShardQuery,
-		data.Data,
-		data.EncodingType.String(),
-		shardInfo.GetRangeId(),
-		shardInfo.GetShardId(), // Where
+		request.ShardInfo.Data,
+		request.ShardInfo.EncodingType.String(),
+		request.RangeID,
+		request.ShardID,
 		rowTypeShard,
 		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
