@@ -918,12 +918,12 @@ func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityR
 }
 
 func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchattribute.NameTypeMap) *persistence.VisibilityWorkflowExecutionInfo {
-	logUnexpectedType := func(fieldName string, fieldValue interface{}) {
-		s.logger.Error("Unexpected field type while parsing Elasticsearch document.", tag.Name(fieldName), tag.ValueType(fieldValue), tag.ESDocID(hit.Id))
+	logUnexpectedType := func(fieldName string, fieldValue interface{}, docID string) {
+		s.logger.Error("Unexpected field type while parsing Elasticsearch document.", tag.Name(fieldName), tag.ValueType(fieldValue), tag.ESDocID(docID))
 		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
-	logNumberParseError := func(fieldName string, fieldValue json.Number, err error) {
-		s.logger.Error("Unable to parse JSON number while parsing Elasticsearch document.", tag.Name(fieldName), tag.ValueType(fieldValue), tag.Error(err), tag.ESDocID(hit.Id))
+	logNumberParseError := func(fieldName string, fieldValue json.Number, err error, docID string) {
+		s.logger.Error("Unable to parse JSON number while parsing Elasticsearch document.", tag.Name(fieldName), tag.ValueType(fieldValue), tag.Error(err), tag.ESDocID(docID))
 		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
 
@@ -945,76 +945,76 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 			// Ignore NamespaceID
 		case searchattribute.WorkflowID:
 			if record.WorkflowID, isValidType = fieldValue.(string); !isValidType {
-				logUnexpectedType(fieldName, fieldValue)
+				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
 		case searchattribute.RunID:
 			if record.RunID, isValidType = fieldValue.(string); !isValidType {
-				logUnexpectedType(fieldName, fieldValue)
+				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
 		case searchattribute.WorkflowType:
 			if record.TypeName, isValidType = fieldValue.(string); !isValidType {
-				logUnexpectedType(fieldName, fieldValue)
+				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
 		case searchattribute.StartTime:
 			var startTime json.Number
 			if startTime, isValidType = fieldValue.(json.Number); !isValidType {
-				logUnexpectedType(fieldName, fieldValue)
+				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
 			startTimeInt64, err := startTime.Int64()
 			if err != nil {
-				logNumberParseError(fieldName, startTime, err)
+				logNumberParseError(fieldName, startTime, err, hit.Id)
 			}
 			record.StartTime = time.Unix(0, startTimeInt64).UTC()
 		case searchattribute.ExecutionTime:
 			var executionTime json.Number
 			if executionTime, isValidType = fieldValue.(json.Number); !isValidType {
-				logUnexpectedType(fieldName, fieldValue)
+				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
 			executionTimeInt64, err := executionTime.Int64()
 			if err != nil {
-				logNumberParseError(fieldName, executionTime, err)
+				logNumberParseError(fieldName, executionTime, err, hit.Id)
 			}
 			record.ExecutionTime = time.Unix(0, executionTimeInt64).UTC()
 		case searchattribute.CloseTime:
 			var closeTime json.Number
 			if closeTime, isValidType = fieldValue.(json.Number); !isValidType {
-				logUnexpectedType(fieldName, fieldValue)
+				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
 			closeTimeInt64, err := closeTime.Int64()
 			if err != nil {
-				logNumberParseError(fieldName, closeTime, err)
+				logNumberParseError(fieldName, closeTime, err, hit.Id)
 			}
 			record.CloseTime = time.Unix(0, closeTimeInt64).UTC()
 		case searchattribute.Memo:
 			if memo, isValidType = fieldValue.([]byte); !isValidType {
-				logUnexpectedType(fieldName, fieldValue)
+				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
 		case searchattribute.Encoding:
 			if memoEncoding, isValidType = fieldValue.(string); !isValidType {
-				logUnexpectedType(fieldName, fieldValue)
+				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
 		case searchattribute.TaskQueue:
 			if record.TaskQueue, isValidType = fieldValue.(string); !isValidType {
-				logUnexpectedType(fieldName, fieldValue)
+				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
 		case searchattribute.ExecutionStatus:
 			var executionStatus json.Number
 			if executionStatus, isValidType = fieldValue.(json.Number); !isValidType {
-				logUnexpectedType(fieldName, fieldValue)
+				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
 			executionStatusInt64, err := executionStatus.Int64()
 			if err != nil {
-				logNumberParseError(fieldName, executionStatus, err)
+				logNumberParseError(fieldName, executionStatus, err, hit.Id)
 			}
 			record.Status = enumspb.WorkflowExecutionStatus(executionStatusInt64)
 		case searchattribute.HistoryLength:
 			var historyLength json.Number
 			if historyLength, isValidType = fieldValue.(json.Number); !isValidType {
-				logUnexpectedType(fieldName, fieldValue)
+				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
 			historyLengthInt64, err := historyLength.Int64()
 			if err != nil {
-				logNumberParseError(fieldName, historyLength, err)
+				logNumberParseError(fieldName, historyLength, err, hit.Id)
 			}
 			record.HistoryLength = historyLengthInt64
 		default:
