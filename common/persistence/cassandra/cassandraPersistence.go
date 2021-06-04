@@ -836,7 +836,7 @@ func (d *cassandraPersistence) UpdateShard(request *p.InternalUpdateShardRequest
 		request.ShardInfo.Data,
 		request.ShardInfo.EncodingType.String(),
 		request.RangeID,
-		request.ShardID, // Where
+		request.ShardID,
 		rowTypeShard,
 		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
