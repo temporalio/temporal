@@ -210,8 +210,8 @@ type (
 
 	// InternalCreateShardRequest is used by ShardStore to create new shard
 	InternalCreateShardRequest struct {
-		ShardID int32
-		RangeID int64
+		ShardID   int32
+		RangeID   int64
 		ShardInfo *commonpb.DataBlob
 	}
 
@@ -227,9 +227,9 @@ type (
 
 	// InternalUpdateShardRequest is used by ShardStore to update a shard
 	InternalUpdateShardRequest struct {
-		ShardID int32
-		RangeID int64
-		ShardInfo *commonpb.DataBlob
+		ShardID         int32
+		RangeID         int64
+		ShardInfo       *commonpb.DataBlob
 		PreviousRangeID int64
 	}
 

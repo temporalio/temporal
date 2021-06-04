@@ -123,9 +123,9 @@ func (m *sqlShardStore) UpdateShard(
 			return err
 		}
 		result, err := tx.UpdateShards(ctx, &sqlplugin.ShardsRow{
-			ShardID: request.ShardID,
-			RangeID: request.RangeID,
-			Data: request.ShardInfo.Data,
+			ShardID:      request.ShardID,
+			RangeID:      request.RangeID,
+			Data:         request.ShardInfo.Data,
 			DataEncoding: request.ShardInfo.EncodingType.String(),
 		})
 		if err != nil {
