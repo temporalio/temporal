@@ -85,10 +85,6 @@ var (
 			Usage: "Namespace data of key value pairs, in format of k1:v1,k2:v2,k3:v3",
 		},
 		cli.StringFlag{
-			Name:  FlagSecurityTokenWithAlias,
-			Usage: "Optional token for security check",
-		},
-		cli.StringFlag{
 			Name:  FlagHistoryArchivalStateWithAlias,
 			Usage: "Flag to set history archival state, valid values are \"disabled\" and \"enabled\"",
 		},
@@ -133,10 +129,6 @@ var (
 		cli.StringFlag{
 			Name:  FlagNamespaceDataWithAlias,
 			Usage: "Namespace data of key value pairs, in format of k1:v1,k2:v2,k3:v3 ",
-		},
-		cli.StringFlag{
-			Name:  FlagSecurityTokenWithAlias,
-			Usage: "Optional token for security check",
 		},
 		cli.StringFlag{
 			Name:  FlagHistoryArchivalStateWithAlias,
