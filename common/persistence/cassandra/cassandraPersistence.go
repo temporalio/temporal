@@ -107,7 +107,6 @@ const (
 
 const (
 	taskQueueTaskID = -12345
-	initialRangeID  = 1 // Id of the first range of a new task queue
 )
 
 const (
@@ -2038,12 +2037,36 @@ func (d *cassandraPersistence) RangeCompleteTimerTask(request *p.RangeCompleteTi
 	return gocql.ConvertError("RangeCompleteTimerTask", err)
 }
 
-// From TaskManager interface
-func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) (*p.LeaseTaskQueueResponse, error) {
-	if len(request.TaskQueue) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue requires non empty task queue"))
+func (d *cassandraPersistence) CreateTaskQueue(request *p.InternalCreateTaskQueueRequest) error {
+	query := d.session.Query(templateInsertTaskQueueQuery,
+		request.NamespaceID,
+		request.TaskQueue,
+		request.TaskType,
+		rowTypeTaskQueue,
+		taskQueueTaskID,
+		request.RangeID,
+		request.TaskQueueInfo.Data,
+		request.TaskQueueInfo.EncodingType.String(),
+	)
+
+	previous := make(map[string]interface{})
+	applied, err := query.MapScanCAS(previous)
+	if err != nil {
+		return gocql.ConvertError("LeaseTaskQueue", err)
 	}
-	now := timestamp.TimeNowPtrUtc()
+
+	if !applied {
+		previousRangeID := previous["range_id"]
+		return &p.ConditionFailedError{
+			Msg: fmt.Sprintf("CreateTaskQueue: TaskQueue:%v, TaskQueueType:%v, PreviousRangeID:%v",
+				request.TaskQueue, request.TaskType, previousRangeID),
+		}
+	}
+
+	return nil
+}
+
+func (d *cassandraPersistence) GetTaskQueue(request *p.InternalGetTaskQueueRequest) (*p.InternalGetTaskQueueResponse, error) {
 	query := d.session.Query(templateGetTaskQueue,
 		request.NamespaceID,
 		request.TaskQueue,
@@ -2051,99 +2074,57 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 		rowTypeTaskQueue,
 		taskQueueTaskID,
 	)
+
 	var rangeID int64
 	var tlBytes []byte
 	var tlEncoding string
 	err := query.Scan(&rangeID, &tlBytes, &tlEncoding)
-	var tl *p.PersistedTaskQueueInfo
-	if err != nil {
-		if gocql.IsNotFoundError(err) { // First time task queue is used
-			tl = &p.PersistedTaskQueueInfo{
-				Data: &persistencespb.TaskQueueInfo{
-					NamespaceId:    request.NamespaceID,
-					Name:           request.TaskQueue,
-					TaskType:       request.TaskType,
-					Kind:           request.TaskQueueKind,
-					AckLevel:       0,
-					ExpiryTime:     nil,
-					LastUpdateTime: now,
-				},
-				RangeID: initialRangeID,
-			}
-			datablob, err := serialization.TaskQueueInfoToBlob(tl.Data)
-
-			if err != nil {
-				return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed during serialization. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
-			}
-
-			query = d.session.Query(templateInsertTaskQueueQuery,
-				request.NamespaceID,
-				request.TaskQueue,
-				request.TaskType,
-				rowTypeTaskQueue,
-				taskQueueTaskID,
-				initialRangeID,
-				datablob.Data,
-				datablob.EncodingType.String(),
-			)
-		} else if gocql.IsThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("LeaseTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
-		} else {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
-		}
-	} else {
-		// if request.RangeID is > 0, we are trying to renew an already existing
-		// lease on the task queue. If request.RangeID=0, we are trying to steal
-		// the taskqueue from its current owner
-		if request.RangeID > 0 && request.RangeID != rangeID {
-			return nil, &p.ConditionFailedError{
-				Msg: fmt.Sprintf("leaseTaskQueue:renew failed: taskQueue:%v, taskQueueType:%v, haveRangeID:%v, gotRangeID:%v",
-					request.TaskQueue, request.TaskType, request.RangeID, rangeID),
-			}
-		}
-
-		tli, err := serialization.TaskQueueInfoFromBlob(tlBytes, tlEncoding)
-		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed during serialization. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
-		}
-
-		tli.LastUpdateTime = now
-		tl = &p.PersistedTaskQueueInfo{
-			Data:    tli,
-			RangeID: rangeID + 1,
-		}
-
-		datablob, err := serialization.TaskQueueInfoToBlob(tl.Data)
-		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed during serialization. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
-		}
-
-		query = d.session.Query(templateUpdateTaskQueueQuery,
-			rangeID+1,
-			datablob.Data,
-			datablob.EncodingType.String(),
-			request.NamespaceID,
-			&request.TaskQueue,
-			request.TaskType,
-			rowTypeTaskQueue,
-			taskQueueTaskID,
-			rangeID,
-		)
+	if err == nil {
+		return &p.InternalGetTaskQueueResponse{
+			RangeID:       rangeID,
+			TaskQueueInfo: p.NewDataBlob(tlBytes, tlEncoding),
+		}, nil
+	} else if gocql.IsNotFoundError(err) {
+		return nil, serviceerror.NewNotFound(
+			fmt.Sprintf("GetTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v",
+				request.TaskQueue, request.TaskType, err))
+	} else if gocql.IsThrottlingError(err) {
+		return nil, serviceerror.NewResourceExhausted(
+			fmt.Sprintf("GetTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v",
+				request.TaskQueue, request.TaskType, err))
 	}
+	return nil, serviceerror.NewInternal(
+		fmt.Sprintf("GetTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v",
+			request.TaskQueue, request.TaskType, err))
+}
+
+func (d *cassandraPersistence) ExtendLease(request *p.InternalLeaseTaskQueueRequest) error {
+	query := d.session.Query(templateUpdateTaskQueueQuery,
+		request.RangeID+1,
+		request.TaskQueueInfo.Data,
+		request.TaskQueueInfo.EncodingType.String(),
+		request.NamespaceID,
+		&request.TaskQueue,
+		request.TaskType,
+		rowTypeTaskQueue,
+		taskQueueTaskID,
+		request.RangeID,
+	)
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
-		return nil, gocql.ConvertError("LeaseTaskQueue", err)
+		return gocql.ConvertError("LeaseTaskQueue", err)
 	}
+
 	if !applied {
 		previousRangeID := previous["range_id"]
-		return nil, &p.ConditionFailedError{
-			Msg: fmt.Sprintf("leaseTaskQueue: taskQueue:%v, taskQueueType:%v, haveRangeID:%v, gotRangeID:%v",
-				request.TaskQueue, request.TaskType, rangeID, previousRangeID),
+		return &p.ConditionFailedError{
+			Msg: fmt.Sprintf("LeaseTaskQueue: taskQueue:%v, taskQueueType:%v, haveRangeID:%v, gotRangeID:%v",
+				request.TaskQueue, request.TaskType, request.RangeID, previousRangeID),
 		}
 	}
 
-	return &p.LeaseTaskQueueResponse{TaskQueueInfo: tl}, nil
+	return nil
 }
 
 // From TaskManager interface
