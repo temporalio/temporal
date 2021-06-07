@@ -30,11 +30,11 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/dgryski/go-farm"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"math"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -535,7 +535,7 @@ func (m *sqlTaskManager) CreateTasks(
 
 func (m *sqlTaskManager) GetTasks(
 	request *persistence.GetTasksRequest,
-) (*persistence.GetTasksResponse, error) {
+) (*persistence.InternalGetTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
@@ -555,17 +555,47 @@ func (m *sqlTaskManager) GetTasks(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTasks operation failed. Failed to get rows. Error: %v", err))
 	}
 
-	var tasks = make([]*persistencespb.AllocatedTaskInfo, len(rows))
+	var tasks = make([]*commonpb.DataBlob, len(rows))
 	for i, v := range rows {
-		info, err := serialization.TaskInfoFromBlob(v.Data, v.DataEncoding)
-		if err != nil {
-			return nil, err
-		}
-		tasks[i] = info
+		tasks[i] = persistence.NewDataBlob(v.Data, v.DataEncoding)
 	}
 
-	return &persistence.GetTasksResponse{Tasks: tasks}, nil
+	return &persistence.InternalGetTasksResponse{Tasks: tasks}, nil
 }
+
+//func (m *sqlTaskManager) GetTasks(
+//	request *persistence.GetTasksRequest,
+//) (*persistence.GetTasksResponse, error) {
+//	ctx, cancel := newExecutionContext()
+//	defer cancel()
+//	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
+//	if err != nil {
+//		return nil, serviceerror.NewInternal(err.Error())
+//	}
+//
+//	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
+//	rows, err := m.db.SelectFromTasks(ctx, sqlplugin.TasksFilter{
+//		RangeHash:   tqHash,
+//		TaskQueueID: tqId,
+//		MinTaskID:   &request.ReadLevel,
+//		MaxTaskID:   request.MaxReadLevel,
+//		PageSize:    &request.BatchSize,
+//	})
+//	if err != nil {
+//		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTasks operation failed. Failed to get rows. Error: %v", err))
+//	}
+//
+//	var tasks = make([]*persistencespb.AllocatedTaskInfo, len(rows))
+//	for i, v := range rows {
+//		info, err := serialization.TaskInfoFromBlob(v.Data, v.DataEncoding)
+//		if err != nil {
+//			return nil, err
+//		}
+//		tasks[i] = info
+//	}
+//
+//	return &persistence.GetTasksResponse{Tasks: tasks}, nil
+//}
 
 func (m *sqlTaskManager) CompleteTask(
 	request *persistence.CompleteTaskRequest,

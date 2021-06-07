@@ -2437,7 +2437,7 @@ func (d *cassandraPersistence) GetTasks(request *p.GetTasksRequest) (*p.Internal
 	)
 	iter := query.PageSize(request.BatchSize).Iter()
 
-	response := &p.GetTasksResponse{}
+	response := &p.InternalGetTasksResponse{}
 	task := make(map[string]interface{})
 PopulateTasks:
 	for iter.MapScan(task) {
@@ -2467,7 +2467,7 @@ PopulateTasks:
 			return nil, newPersistedTypeMismatchError("task_encoding", byteSliceType, rawEncoding, task)
 		}
 
-		response.Tasks = append(response.Tasks, p.NewDataBlob())
+		response.Tasks = append(response.Tasks, p.NewDataBlob(taskVal, encodingVal))
 		if len(response.Tasks) == request.BatchSize {
 			break PopulateTasks
 		}

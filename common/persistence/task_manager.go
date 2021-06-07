@@ -212,7 +212,21 @@ func (m *taskManagerImpl) CreateTasks(request *CreateTasksRequest) (*CreateTasks
 }
 
 func (m *taskManagerImpl) GetTasks(request *GetTasksRequest) (*GetTasksResponse, error) {
-	return m.taskStore.GetTasks(request)
+	internalResp, err := m.taskStore.GetTasks(request)
+	if err != nil {
+		return nil, err
+	}
+	var tasks []*persistencespb.AllocatedTaskInfo
+	for _, taskBlob := range internalResp.Tasks {
+		task, err := m.serializer.TaskInfoFromBlob(taskBlob)
+		if err != nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTasks failed to deserialize task: %s", err.Error()))
+		}
+		tasks = append(tasks, task)
+	}
+	return &GetTasksResponse{
+		Tasks: tasks,
+	}, nil
 }
 
 func (m *taskManagerImpl) CompleteTask(request *CompleteTaskRequest) error {
