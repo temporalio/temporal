@@ -67,7 +67,7 @@ func newTaskPersistence(
 	db sqlplugin.DB,
 	taskScanPartitions int,
 	log log.Logger,
-) (persistence.TaskManager, error) {
+) (persistence.TaskStore, error) {
 	return &sqlTaskManager{
 		sqlStore: sqlStore{
 			db:     db,
@@ -77,70 +77,77 @@ func newTaskPersistence(
 	}, nil
 }
 
-func (m *sqlTaskManager) LeaseTaskQueue(
-	request *persistence.LeaseTaskQueueRequest,
-) (*persistence.LeaseTaskQueueResponse, error) {
+func (m *sqlTaskManager) CreateTaskQueue(request *persistence.InternalCreateTaskQueueRequest) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	var rangeID int64
-	var ackLevel int64
+	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
+	if err != nil {
+		return serviceerror.NewInternal(err.Error())
+	}
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
+
+	row := sqlplugin.TaskQueuesRow{
+		RangeHash:    tqHash,
+		TaskQueueID:  tqId,
+		RangeID:      request.RangeID,
+		Data:         request.TaskQueueInfo.Data,
+		DataEncoding: request.TaskQueueInfo.EncodingType.String(),
+	}
+	if _, err := m.db.InsertIntoTaskQueues(ctx, &row); err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("CreateTaskQueue operation failed. Failed to make task queue %v of type %v. Error: %v", request.TaskQueue, request.TaskType, err))
+	}
+
+	return nil
+}
+
+func (m *sqlTaskManager) GetTaskQueue(request *persistence.InternalGetTaskQueueRequest) (*persistence.InternalGetTaskQueueResponse, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
 		return nil, serviceerror.NewInternal(err.Error())
 	}
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
-	var row sqlplugin.TaskQueuesRow
 	rows, err := m.db.SelectFromTaskQueues(ctx, sqlplugin.TaskQueuesFilter{
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
 	})
+
 	switch err {
 	case nil:
-		row = rows[0]
+		if len(rows) != 1 {
+			return nil, serviceerror.NewInternal(
+				fmt.Sprintf("GetTaskQueue operation failed. Expect exactly one result row, but got %d for task queue %v of type %v",
+					len(rows), request.TaskQueue, request.TaskType))
+		}
+		row := rows[0]
+		return &persistence.InternalGetTaskQueueResponse{
+			RangeID:       row.RangeID,
+			TaskQueueInfo: persistence.NewDataBlob(row.Data, row.DataEncoding),
+		}, nil
 	case sql.ErrNoRows:
-		namespaceID := request.NamespaceID
-		tqInfo := &persistencespb.TaskQueueInfo{
-			NamespaceId:    namespaceID,
-			Name:           request.TaskQueue,
-			TaskType:       request.TaskType,
-			AckLevel:       ackLevel,
-			Kind:           request.TaskQueueKind,
-			ExpiryTime:     nil,
-			LastUpdateTime: timestamp.TimeNowPtrUtc(),
-		}
-		blob, err := serialization.TaskQueueInfoToBlob(tqInfo)
-		if err != nil {
-			return nil, err
-		}
-		row = sqlplugin.TaskQueuesRow{
-			RangeHash:    tqHash,
-			TaskQueueID:  tqId,
-			RangeID:      0,
-			Data:         blob.Data,
-			DataEncoding: blob.EncodingType.String(),
-		}
-		if _, err := m.db.InsertIntoTaskQueues(ctx, &row); err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed. Failed to make task queue %v of type %v. Error: %v", request.TaskQueue, request.TaskType, err))
-		}
+		return nil, serviceerror.NewNotFound(
+			fmt.Sprintf("GetTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v",
+				request.TaskQueue, request.TaskType, err))
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed. Failed to check if task queue %v of type %v existed. Error: %v", request.TaskQueue, request.TaskType, err))
+		return nil, serviceerror.NewInternal(
+			fmt.Sprintf("GetTaskQueue operation failed. Failed to check if task queue %v of type %v existed. Error: %v",
+				request.TaskQueue, request.TaskType, err))
 	}
+}
 
-	if request.RangeID > 0 && request.RangeID != row.RangeID {
-		return nil, &persistence.ConditionFailedError{
-			Msg: fmt.Sprintf("leaseTaskQueue:renew failed:taskQueue:%v, taskQueueType:%v, haveRangeID:%v, gotRangeID:%v",
-				request.TaskQueue, request.TaskType, rangeID, row.RangeID),
-		}
-	}
-
-	tqInfo, err := serialization.TaskQueueInfoFromBlob(row.Data, row.DataEncoding)
+func (m *sqlTaskManager) ExtendLease(
+	request *persistence.InternalExtendLeaseRequest,
+) error {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
-		return nil, err
+		return serviceerror.NewInternal(err.Error())
 	}
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
 
-	var resp *persistence.LeaseTaskQueueResponse
 	err = m.txExecute(ctx, "LeaseTaskQueue", func(tx sqlplugin.Tx) error {
-		rangeID = row.RangeID
 		// We need to separately check the condition and do the
 		// update because we want to throw different error codes.
 		// Since we need to do things separately (in a transaction), we need to take a lock.
@@ -148,24 +155,17 @@ func (m *sqlTaskManager) LeaseTaskQueue(
 			tx,
 			tqHash,
 			tqId,
-			rangeID,
+			request.RangeID,
 		); err != nil {
 			return err
 		}
 
-		// todo: we shoudnt edit protobufs
-		tqInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
-
-		blob, err := serialization.TaskQueueInfoToBlob(tqInfo)
-		if err != nil {
-			return err
-		}
 		result, err := tx.UpdateTaskQueues(ctx, &sqlplugin.TaskQueuesRow{
 			RangeHash:    tqHash,
 			TaskQueueID:  tqId,
-			RangeID:      row.RangeID + 1,
-			Data:         blob.Data,
-			DataEncoding: blob.EncodingType.String(),
+			RangeID:      request.RangeID + 1,
+			Data:         request.TaskQueueInfo.Data,
+			DataEncoding: request.TaskQueueInfo.EncodingType.String(),
 		})
 		if err != nil {
 			return err
@@ -177,15 +177,9 @@ func (m *sqlTaskManager) LeaseTaskQueue(
 		if rowsAffected == 0 {
 			return fmt.Errorf("%v rows affected instead of 1", rowsAffected)
 		}
-		resp = &persistence.LeaseTaskQueueResponse{
-			TaskQueueInfo: &persistence.PersistedTaskQueueInfo{
-				Data:    tqInfo,
-				RangeID: row.RangeID + 1,
-			},
-		}
 		return nil
 	})
-	return resp, err
+	return err
 }
 
 func (m *sqlTaskManager) UpdateTaskQueue(

@@ -60,7 +60,20 @@ type (
 	}
 
 	// TaskStore is a lower level of TaskManager
-	TaskStore = TaskManager
+	TaskStore interface {
+		Closeable
+		GetName() string
+		CreateTaskQueue(request *InternalCreateTaskQueueRequest) error
+		GetTaskQueue(request *InternalGetTaskQueueRequest) (*InternalGetTaskQueueResponse, error)
+		ExtendLease(request *InternalExtendLeaseRequest) error
+		UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
+		ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error)
+		DeleteTaskQueue(request *DeleteTaskQueueRequest) error
+		CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error)
+		GetTasks(request *GetTasksRequest) (*GetTasksResponse, error)
+		CompleteTask(request *CompleteTaskRequest) error
+		CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error)
+	}
 	// MetadataStore is a lower level of MetadataManager
 	MetadataStore interface {
 		Closeable
@@ -231,6 +244,33 @@ type (
 		RangeID         int64
 		ShardInfo       *commonpb.DataBlob
 		PreviousRangeID int64
+	}
+
+	InternalCreateTaskQueueRequest struct {
+		NamespaceID   string
+		TaskQueue     string
+		TaskType      enumspb.TaskQueueType
+		RangeID       int64
+		TaskQueueInfo *commonpb.DataBlob
+	}
+
+	InternalGetTaskQueueRequest struct {
+		NamespaceID string
+		TaskQueue   string
+		TaskType    enumspb.TaskQueueType
+	}
+
+	InternalGetTaskQueueResponse struct {
+		RangeID       int64
+		TaskQueueInfo *commonpb.DataBlob
+	}
+
+	InternalExtendLeaseRequest struct {
+		NamespaceID   string
+		TaskQueue     string
+		TaskType      enumspb.TaskQueueType
+		RangeID       int64
+		TaskQueueInfo *commonpb.DataBlob
 	}
 
 	// DataBlob represents a blob for any binary data.
