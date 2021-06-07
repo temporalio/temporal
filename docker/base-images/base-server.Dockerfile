@@ -12,6 +12,7 @@ RUN mkdir -p /xsrc && \
     go build -o /usr/local/bin/dockerize . && \
     rm -rf /xsrc
 
+##### base-server target #####
 FROM alpine:3.12 AS base-server
 
 RUN apk add --update --no-cache \
