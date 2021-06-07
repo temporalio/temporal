@@ -26,15 +26,18 @@ package persistence
 
 import (
 	"fmt"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"time"
 )
 
-const initialRangeID = 1 // Id of the first range of a new task queue
+const (
+	initialRangeID = 1 // Id of the first range of a new task queue
+	stickyTaskQueueTTL = 24 * time.Hour
+)
 
 type taskManagerImpl struct {
 	taskStore  TaskStore
@@ -145,9 +148,28 @@ func (m *taskManagerImpl) LeaseTaskQueue(request *LeaseTaskQueueRequest) (*Lease
 	}
 }
 
-// TODO: below part will be refactored in separate PR.
 func (m *taskManagerImpl) UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error) {
-	return m.taskStore.UpdateTaskQueue(request)
+	taskQueueInfo := request.TaskQueueInfo
+	taskQueueInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
+	if taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
+		taskQueueInfo.ExpiryTime = timestamp.TimePtr(time.Now().UTC().Add(stickyTaskQueueTTL))
+	}
+	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo, enumspb.ENCODING_TYPE_PROTO3)
+	if err != nil {
+		return nil, err
+	}
+
+	internalRequest := &InternalUpdateTaskQueueRequest{
+		NamespaceID: request.TaskQueueInfo.GetNamespaceId(),
+		TaskQueue: request.TaskQueueInfo.GetName(),
+		TaskType: request.TaskQueueInfo.GetTaskType(),
+		TaskQueueKind:request.TaskQueueInfo.GetKind(),
+		RangeID: request.RangeID,
+		ExpiryTime: taskQueueInfo.ExpiryTime,
+		TaskQueueInfo: taskQueueInfoBlob,
+	}
+
+	return m.taskStore.UpdateTaskQueue(internalRequest)
 }
 
 func (m *taskManagerImpl) ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error) {
@@ -159,7 +181,34 @@ func (m *taskManagerImpl) DeleteTaskQueue(request *DeleteTaskQueueRequest) error
 }
 
 func (m *taskManagerImpl) CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error) {
-	return m.taskStore.CreateTasks(request)
+	taskQueueInfo := request.TaskQueueInfo.Data
+	taskQueueInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
+	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo, enumspb.ENCODING_TYPE_PROTO3)
+	if err != nil {
+		return nil, err
+	}
+
+	var tasks []*InternalCreateTask
+	for _, task := range request.Tasks {
+		taskBlob, err := m.serializer.TaskInfoToBlob(task, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", err))
+		}
+		tasks = append(tasks, &InternalCreateTask{
+			TaskId: task.GetTaskId(),
+			ExpiryTime: task.Data.ExpiryTime,
+			Task: taskBlob,
+		})
+	}
+	internalRequest := &InternalCreateTasksRequest{
+		NamespaceID: request.TaskQueueInfo.Data.GetNamespaceId(),
+		TaskQueue: request.TaskQueueInfo.Data.GetName(),
+		TaskType: request.TaskQueueInfo.Data.GetTaskType(),
+		RangeID: request.TaskQueueInfo.RangeID,
+		TaskQueueInfo:  taskQueueInfoBlob,
+		Tasks: tasks,
+	}
+	return m.taskStore.CreateTasks(internalRequest)
 }
 
 func (m *taskManagerImpl) GetTasks(request *GetTasksRequest) (*GetTasksResponse, error) {

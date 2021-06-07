@@ -69,7 +69,7 @@ type (
 		UpdateTaskQueue(request *InternalUpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
 		ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error)
 		DeleteTaskQueue(request *DeleteTaskQueueRequest) error
-		CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error)
+		CreateTasks(request *InternalCreateTasksRequest) (*CreateTasksResponse, error)
 		GetTasks(request *GetTasksRequest) (*GetTasksResponse, error)
 		CompleteTask(request *CompleteTaskRequest) error
 		CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error)
@@ -279,7 +279,23 @@ type (
 		TaskType      enumspb.TaskQueueType
 		TaskQueueKind enumspb.TaskQueueKind
 		RangeID       int64
+		ExpiryTime    *time.Time
 		TaskQueueInfo *commonpb.DataBlob
+	}
+
+	InternalCreateTasksRequest struct {
+		NamespaceID   string
+		TaskQueue     string
+		TaskType      enumspb.TaskQueueType
+		RangeID int64
+		TaskQueueInfo *commonpb.DataBlob
+		Tasks         []*InternalCreateTask
+	}
+
+	InternalCreateTask struct {
+		TaskId int64
+		ExpiryTime *time.Time
+		Task *commonpb.DataBlob
 	}
 
 	// DataBlob represents a blob for any binary data.
