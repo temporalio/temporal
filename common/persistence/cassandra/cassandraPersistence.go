@@ -2078,24 +2078,14 @@ func (d *cassandraPersistence) GetTaskQueue(request *p.InternalGetTaskQueueReque
 	var rangeID int64
 	var tlBytes []byte
 	var tlEncoding string
-	err := query.Scan(&rangeID, &tlBytes, &tlEncoding)
-	if err == nil {
-		return &p.InternalGetTaskQueueResponse{
-			RangeID:       rangeID,
-			TaskQueueInfo: p.NewDataBlob(tlBytes, tlEncoding),
-		}, nil
-	} else if gocql.IsNotFoundError(err) {
-		return nil, serviceerror.NewNotFound(
-			fmt.Sprintf("GetTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v",
-				request.TaskQueue, request.TaskType, err))
-	} else if gocql.IsThrottlingError(err) {
-		return nil, serviceerror.NewResourceExhausted(
-			fmt.Sprintf("GetTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v",
-				request.TaskQueue, request.TaskType, err))
+	if err := query.Scan(&rangeID, &tlBytes, &tlEncoding); err != nil {
+		return nil, gocql.ConvertError("GetTaskQueue", err)
 	}
-	return nil, serviceerror.NewInternal(
-		fmt.Sprintf("GetTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v",
-			request.TaskQueue, request.TaskType, err))
+
+	return &p.InternalGetTaskQueueResponse{
+		RangeID:       rangeID,
+		TaskQueueInfo: p.NewDataBlob(tlBytes, tlEncoding),
+	}, nil
 }
 
 func (d *cassandraPersistence) ExtendLease(request *p.InternalExtendLeaseRequest) error {

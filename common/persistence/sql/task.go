@@ -115,6 +115,11 @@ func (m *sqlTaskManager) GetTaskQueue(request *persistence.InternalGetTaskQueueR
 
 	switch err {
 	case nil:
+		if len(rows) != 1 {
+			return nil, serviceerror.NewInternal(
+				fmt.Sprintf("GetTaskQueue operation failed. Expect exactly one result row, but got %d for task queue %v of type %v",
+					len(rows), request.TaskQueue, request.TaskType))
+		}
 		row := rows[0]
 		return &persistence.InternalGetTaskQueueResponse{
 			RangeID:       row.RangeID,
@@ -125,7 +130,9 @@ func (m *sqlTaskManager) GetTaskQueue(request *persistence.InternalGetTaskQueueR
 			fmt.Sprintf("GetTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v",
 				request.TaskQueue, request.TaskType, err))
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed. Failed to check if task queue %v of type %v existed. Error: %v", request.TaskQueue, request.TaskType, err))
+		return nil, serviceerror.NewInternal(
+			fmt.Sprintf("GetTaskQueue operation failed. Failed to check if task queue %v of type %v existed. Error: %v",
+				request.TaskQueue, request.TaskType, err))
 	}
 }
 
