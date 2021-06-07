@@ -70,7 +70,7 @@ type (
 		ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error)
 		DeleteTaskQueue(request *DeleteTaskQueueRequest) error
 		CreateTasks(request *InternalCreateTasksRequest) (*CreateTasksResponse, error)
-		GetTasks(request *GetTasksRequest) (*GetTasksResponse, error)
+		GetTasks(request *GetTasksRequest) (*InternalGetTasksResponse, error)
 		CompleteTask(request *CompleteTaskRequest) error
 		CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error)
 	}
@@ -296,6 +296,10 @@ type (
 		TaskId int64
 		ExpiryTime *time.Time
 		Task *commonpb.DataBlob
+	}
+
+	InternalGetTasksResponse struct {
+		Tasks []*commonpb.DataBlob
 	}
 
 	// DataBlob represents a blob for any binary data.

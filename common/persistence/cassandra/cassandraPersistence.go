@@ -2418,12 +2418,12 @@ func GetTaskTTL(expireTime *time.Time) int64 {
 }
 
 // From TaskManager interface
-func (d *cassandraPersistence) GetTasks(request *p.GetTasksRequest) (*p.GetTasksResponse, error) {
+func (d *cassandraPersistence) GetTasks(request *p.GetTasksRequest) (*p.InternalGetTasksResponse, error) {
 	if request.MaxReadLevel == nil {
 		return nil, serviceerror.NewInternal("getTasks: both readLevel and maxReadLevel MUST be specified for cassandra persistence")
 	}
 	if request.ReadLevel > *request.MaxReadLevel {
-		return &p.GetTasksResponse{}, nil
+		return &p.InternalGetTasksResponse{}, nil
 	}
 
 	// Reading taskqueue tasks need to be quorum level consistent, otherwise we could lose tasks
@@ -2467,12 +2467,7 @@ PopulateTasks:
 			return nil, newPersistedTypeMismatchError("task_encoding", byteSliceType, rawEncoding, task)
 		}
 
-		t, err := serialization.TaskInfoFromBlob(taskVal, encodingVal)
-		if err != nil {
-			return nil, gocql.ConvertError("GetTasks", err)
-		}
-
-		response.Tasks = append(response.Tasks, t)
+		response.Tasks = append(response.Tasks, p.NewDataBlob())
 		if len(response.Tasks) == request.BatchSize {
 			break PopulateTasks
 		}
@@ -2485,6 +2480,74 @@ PopulateTasks:
 
 	return response, nil
 }
+
+//func (d *cassandraPersistence) GetTasks(request *p.GetTasksRequest) (*p.GetTasksResponse, error) {
+//	if request.MaxReadLevel == nil {
+//		return nil, serviceerror.NewInternal("getTasks: both readLevel and maxReadLevel MUST be specified for cassandra persistence")
+//	}
+//	if request.ReadLevel > *request.MaxReadLevel {
+//		return &p.GetTasksResponse{}, nil
+//	}
+//
+//	// Reading taskqueue tasks need to be quorum level consistent, otherwise we could lose tasks
+//	query := d.session.Query(templateGetTasksQuery,
+//		request.NamespaceID,
+//		request.TaskQueue,
+//		request.TaskType,
+//		rowTypeTask,
+//		request.ReadLevel,
+//		*request.MaxReadLevel,
+//	)
+//	iter := query.PageSize(request.BatchSize).Iter()
+//
+//	response := &p.GetTasksResponse{}
+//	task := make(map[string]interface{})
+//PopulateTasks:
+//	for iter.MapScan(task) {
+//		_, ok := task["task_id"]
+//		if !ok { // no tasks, but static column record returned
+//			continue
+//		}
+//
+//		rawTask, ok := task["task"]
+//		if !ok {
+//			return nil, newFieldNotFoundError("task", task)
+//		}
+//		taskVal, ok := rawTask.([]byte)
+//		if !ok {
+//			var byteSliceType []byte
+//			return nil, newPersistedTypeMismatchError("task", byteSliceType, rawTask, task)
+//
+//		}
+//
+//		rawEncoding, ok := task["task_encoding"]
+//		if !ok {
+//			return nil, newFieldNotFoundError("task_encoding", task)
+//		}
+//		encodingVal, ok := rawEncoding.(string)
+//		if !ok {
+//			var byteSliceType []byte
+//			return nil, newPersistedTypeMismatchError("task_encoding", byteSliceType, rawEncoding, task)
+//		}
+//
+//		t, err := serialization.TaskInfoFromBlob(taskVal, encodingVal)
+//		if err != nil {
+//			return nil, gocql.ConvertError("GetTasks", err)
+//		}
+//
+//		response.Tasks = append(response.Tasks, t)
+//		if len(response.Tasks) == request.BatchSize {
+//			break PopulateTasks
+//		}
+//		task = make(map[string]interface{}) // Reinitialize map as initialized fails on unmarshalling
+//	}
+//
+//	if err := iter.Close(); err != nil {
+//		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTasks operation failed. Error: %v", err))
+//	}
+//
+//	return response, nil
+//}
 
 // From TaskManager interface
 func (d *cassandraPersistence) CompleteTask(request *p.CompleteTaskRequest) error {
