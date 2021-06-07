@@ -2118,22 +2118,16 @@ func (d *cassandraPersistence) ExtendLease(request *p.InternalExtendLeaseRequest
 }
 
 // From TaskManager interface
-func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest) (*p.UpdateTaskQueueResponse, error) {
-	tli := *request.TaskQueueInfo
-	tli.LastUpdateTime = timestamp.TimeNowPtrUtc()
-	datablob, err := serialization.TaskQueueInfoToBlob(&tli)
-	if err != nil {
-		return nil, gocql.ConvertError("UpdateTaskQueue", err)
-	}
-
+func (d *cassandraPersistence) UpdateTaskQueue(request *p.InternalUpdateTaskQueueRequest) (*p.UpdateTaskQueueResponse, error) {
+	var err error
 	var applied bool
 	previous := make(map[string]interface{})
-	if tli.Kind == enumspb.TASK_QUEUE_KIND_STICKY { // if task_queue is sticky, then update with TTL
+	if request.TaskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY { // if task_queue is sticky, then update with TTL
 		batch := d.session.NewBatch(gocql.LoggedBatch)
 		batch.Query(templateUpdateTaskQueueQueryWithTTLPart1,
-			tli.GetNamespaceId(),
-			&tli.Name,
-			tli.TaskType,
+			request.NamespaceID,
+			&request.TaskQueue,
+			request.TaskType,
 			rowTypeTaskQueue,
 			taskQueueTaskID,
 			stickyTaskQueueTTL,
@@ -2141,11 +2135,11 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 		batch.Query(templateUpdateTaskQueueQueryWithTTLPart2,
 			stickyTaskQueueTTL,
 			request.RangeID,
-			datablob.Data,
-			datablob.EncodingType.String(),
-			tli.GetNamespaceId(),
-			&tli.Name,
-			tli.TaskType,
+			request.TaskQueueInfo.Data,
+			request.TaskQueueInfo.EncodingType.String(),
+			request.NamespaceID,
+			&request.TaskQueue,
+			request.TaskType,
 			rowTypeTaskQueue,
 			taskQueueTaskID,
 			request.RangeID,
@@ -2154,11 +2148,11 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 	} else {
 		query := d.session.Query(templateUpdateTaskQueueQuery,
 			request.RangeID,
-			datablob.Data,
-			datablob.EncodingType.String(),
-			tli.GetNamespaceId(),
-			&tli.Name,
-			tli.TaskType,
+			request.TaskQueueInfo.Data,
+			request.TaskQueueInfo.EncodingType.String(),
+			request.NamespaceID,
+			&request.TaskQueue,
+			request.TaskType,
 			rowTypeTaskQueue,
 			taskQueueTaskID,
 			request.RangeID,
@@ -2178,12 +2172,79 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 
 		return nil, &p.ConditionFailedError{
 			Msg: fmt.Sprintf("Failed to update task queue. name: %v, type: %v, rangeID: %v, columns: (%v)",
-				tli.Name, tli.TaskType, request.RangeID, strings.Join(columns, ",")),
+				request.TaskQueue, request.TaskType, request.RangeID, strings.Join(columns, ",")),
 		}
 	}
 
 	return &p.UpdateTaskQueueResponse{}, nil
 }
+
+//func (d *cassandraPersistence) UpdateTaskQueue(request *p.InternalUpdateTaskQueueRequest) (*p.UpdateTaskQueueResponse, error) {
+//	tli := *request.TaskQueueInfo
+//	tli.LastUpdateTime = timestamp.TimeNowPtrUtc()
+//	datablob, err := serialization.TaskQueueInfoToBlob(&tli)
+//	if err != nil {
+//		return nil, gocql.ConvertError("UpdateTaskQueue", err)
+//	}
+//
+//	var applied bool
+//	previous := make(map[string]interface{})
+//	if tli.Kind == enumspb.TASK_QUEUE_KIND_STICKY { // if task_queue is sticky, then update with TTL
+//		batch := d.session.NewBatch(gocql.LoggedBatch)
+//		batch.Query(templateUpdateTaskQueueQueryWithTTLPart1,
+//			tli.GetNamespaceId(),
+//			&tli.Name,
+//			tli.TaskType,
+//			rowTypeTaskQueue,
+//			taskQueueTaskID,
+//			stickyTaskQueueTTL,
+//		)
+//		batch.Query(templateUpdateTaskQueueQueryWithTTLPart2,
+//			stickyTaskQueueTTL,
+//			request.RangeID,
+//			datablob.Data,
+//			datablob.EncodingType.String(),
+//			tli.GetNamespaceId(),
+//			&tli.Name,
+//			tli.TaskType,
+//			rowTypeTaskQueue,
+//			taskQueueTaskID,
+//			request.RangeID,
+//		)
+//		applied, _, err = d.session.MapExecuteBatchCAS(batch, previous)
+//	} else {
+//		query := d.session.Query(templateUpdateTaskQueueQuery,
+//			request.RangeID,
+//			datablob.Data,
+//			datablob.EncodingType.String(),
+//			tli.GetNamespaceId(),
+//			&tli.Name,
+//			tli.TaskType,
+//			rowTypeTaskQueue,
+//			taskQueueTaskID,
+//			request.RangeID,
+//		)
+//		applied, err = query.MapScanCAS(previous)
+//	}
+//
+//	if err != nil {
+//		return nil, gocql.ConvertError("UpdateTaskQueue", err)
+//	}
+//
+//	if !applied {
+//		var columns []string
+//		for k, v := range previous {
+//			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
+//		}
+//
+//		return nil, &p.ConditionFailedError{
+//			Msg: fmt.Sprintf("Failed to update task queue. name: %v, type: %v, rangeID: %v, columns: (%v)",
+//				tli.Name, tli.TaskType, request.RangeID, strings.Join(columns, ",")),
+//		}
+//	}
+//
+//	return &p.UpdateTaskQueueResponse{}, nil
+//}
 
 func (d *cassandraPersistence) ListTaskQueue(_ *p.ListTaskQueueRequest) (*p.ListTaskQueueResponse, error) {
 	return nil, serviceerror.NewInternal(fmt.Sprintf("unsupported operation"))

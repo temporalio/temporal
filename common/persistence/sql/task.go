@@ -183,21 +183,20 @@ func (m *sqlTaskManager) ExtendLease(
 }
 
 func (m *sqlTaskManager) UpdateTaskQueue(
-	request *persistence.UpdateTaskQueueRequest,
+	request *persistence.InternalUpdateTaskQueueRequest,
 ) (*persistence.UpdateTaskQueueResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	nidBytes, err := primitives.ParseUUID(request.TaskQueueInfo.GetNamespaceId())
+	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
 		return nil, serviceerror.NewInternal(err.Error())
 	}
 
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueueInfo.Name, request.TaskQueueInfo.TaskType)
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
 	tq := request.TaskQueueInfo
-	tq.LastUpdateTime = timestamp.TimeNowPtrUtc()
 
 	var resp *persistence.UpdateTaskQueueResponse
-	if request.TaskQueueInfo.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
+	if request.TaskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
 		tq.ExpiryTime = stickyTaskQueueTTL()
 	}
 	blob, err := serialization.TaskQueueInfoToBlob(tq)
@@ -235,6 +234,60 @@ func (m *sqlTaskManager) UpdateTaskQueue(
 	})
 	return resp, err
 }
+
+//func (m *sqlTaskManager) UpdateTaskQueue(
+//	request *persistence.UpdateTaskQueueRequest,
+//) (*persistence.UpdateTaskQueueResponse, error) {
+//	ctx, cancel := newExecutionContext()
+//	defer cancel()
+//	nidBytes, err := primitives.ParseUUID(request.TaskQueueInfo.GetNamespaceId())
+//	if err != nil {
+//		return nil, serviceerror.NewInternal(err.Error())
+//	}
+//
+//	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueueInfo.Name, request.TaskQueueInfo.TaskType)
+//	tq := request.TaskQueueInfo
+//	tq.LastUpdateTime = timestamp.TimeNowPtrUtc()
+//
+//	var resp *persistence.UpdateTaskQueueResponse
+//	if request.TaskQueueInfo.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
+//		tq.ExpiryTime = stickyTaskQueueTTL()
+//	}
+//	blob, err := serialization.TaskQueueInfoToBlob(tq)
+//	if err != nil {
+//		return nil, err
+//	}
+//	err = m.txExecute(ctx, "UpdateTaskQueue", func(tx sqlplugin.Tx) error {
+//		if err := lockTaskQueue(ctx,
+//			tx,
+//			tqHash,
+//			tqId,
+//			request.RangeID,
+//		); err != nil {
+//			return err
+//		}
+//		result, err := tx.UpdateTaskQueues(ctx, &sqlplugin.TaskQueuesRow{
+//			RangeHash:    tqHash,
+//			TaskQueueID:  tqId,
+//			RangeID:      request.RangeID,
+//			Data:         blob.Data,
+//			DataEncoding: blob.EncodingType.String(),
+//		})
+//		if err != nil {
+//			return err
+//		}
+//		rowsAffected, err := result.RowsAffected()
+//		if err != nil {
+//			return err
+//		}
+//		if rowsAffected != 1 {
+//			return fmt.Errorf("%v rows were affected instead of 1", rowsAffected)
+//		}
+//		resp = &persistence.UpdateTaskQueueResponse{}
+//		return nil
+//	})
+//	return resp, err
+//}
 
 func (m *sqlTaskManager) ListTaskQueue(request *persistence.ListTaskQueueRequest) (*persistence.ListTaskQueueResponse, error) {
 	ctx, cancel := newExecutionContext()

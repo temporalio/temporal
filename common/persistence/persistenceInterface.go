@@ -66,7 +66,7 @@ type (
 		CreateTaskQueue(request *InternalCreateTaskQueueRequest) error
 		GetTaskQueue(request *InternalGetTaskQueueRequest) (*InternalGetTaskQueueResponse, error)
 		ExtendLease(request *InternalExtendLeaseRequest) error
-		UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
+		UpdateTaskQueue(request *InternalUpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
 		ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error)
 		DeleteTaskQueue(request *DeleteTaskQueueRequest) error
 		CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error)
@@ -269,6 +269,15 @@ type (
 		NamespaceID   string
 		TaskQueue     string
 		TaskType      enumspb.TaskQueueType
+		RangeID       int64
+		TaskQueueInfo *commonpb.DataBlob
+	}
+
+	InternalUpdateTaskQueueRequest struct {
+		NamespaceID   string
+		TaskQueue     string
+		TaskType      enumspb.TaskQueueType
+		TaskQueueKind enumspb.TaskQueueKind
 		RangeID       int64
 		TaskQueueInfo *commonpb.DataBlob
 	}
