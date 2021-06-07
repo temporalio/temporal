@@ -75,7 +75,7 @@ func NewTelemetryInterceptor(
 
 // Use this method to override scope used for reporting a metric.
 // Ideally this method should never be used.
-func (ti *TelemetryInterceptor) overrideScope(scope int, methodName string, req interface{}) int {
+func (ti *TelemetryInterceptor) overrideScope(scope int, req interface{}) int {
 	// GetWorkflowExecutionHistory method handles both long poll and regular calls.
 	// Current plan is to eventually split GetWorkflowExecutionHistory into two APIs,
 	// remove this if case when that is done.
@@ -95,16 +95,8 @@ func (ti *TelemetryInterceptor) Intercept(
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 	_, methodName := splitMethodName(info.FullMethod)
-	// if the method name is not defined, will default to
-	// unknown scope, which carries value 0
-	scope, _ := ti.scopes[methodName]
-	scope = ti.overrideScope(scope, methodName, req)
-	var metricsScope metrics.Scope
-	if namespace := GetNamespace(ti.namespaceCache, req); namespace != "" {
-		metricsScope = ti.metricsClient.Scope(scope).Tagged(metrics.NamespaceTag(namespace))
-	} else {
-		metricsScope = ti.metricsClient.Scope(scope).Tagged(metrics.NamespaceUnknownTag())
-	}
+	metricsScope, logTags := ti.metricsScopeLogTags(req, methodName)
+
 	ctx = context.WithValue(ctx, metricsCtxKey, metricsScope)
 	metricsScope.IncCounter(metrics.ServiceRequests)
 
@@ -120,56 +112,76 @@ func (ti *TelemetryInterceptor) Intercept(
 	}
 
 	if err != nil {
-		ti.handleError(scope, methodName, err)
+		ti.handleError(metricsScope, logTags, err)
 		return nil, err
 	}
 
 	return resp, nil
 }
 
-func (ti *TelemetryInterceptor) handleError(
-	scope int,
+func (ti *TelemetryInterceptor) metricsScopeLogTags(
+	req interface{},
 	methodName string,
+) (metrics.Scope, []tag.Tag) {
+
+	// if the method name is not defined, will default to
+	// unknown scope, which carries value 0
+	scopeDef, _ := ti.scopes[methodName]
+	scopeDef = ti.overrideScope(scopeDef, req)
+
+	namespace := GetNamespace(ti.namespaceCache, req)
+	if namespace == "" {
+		return ti.metricsClient.Scope(scopeDef).Tagged(metrics.NamespaceUnknownTag()), []tag.Tag{tag.Operation(methodName)}
+	}
+	return ti.metricsClient.Scope(scopeDef).Tagged(metrics.NamespaceTag(namespace)), []tag.Tag{
+		tag.Operation(methodName),
+		tag.WorkflowNamespace(namespace),
+	}
+}
+
+func (ti *TelemetryInterceptor) handleError(
+	scope metrics.Scope,
+	logTags []tag.Tag,
 	err error,
 ) {
 
 	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
-		ti.metricsClient.IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)
+		scope.IncCounter(metrics.ServiceErrContextTimeoutCounter)
 		return
 	}
 
 	switch err := err.(type) {
 	case *serviceerrors.ShardOwnershipLost:
-		ti.metricsClient.IncCounter(scope, metrics.ServiceErrShardOwnershipLostCounter)
+		scope.IncCounter(metrics.ServiceErrShardOwnershipLostCounter)
 	case *serviceerrors.TaskAlreadyStarted:
-		ti.metricsClient.IncCounter(scope, metrics.ServiceErrTaskAlreadyStartedCounter)
+		scope.IncCounter(metrics.ServiceErrTaskAlreadyStartedCounter)
 	case *serviceerror.InvalidArgument:
-		ti.metricsClient.IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
+		scope.IncCounter(metrics.ServiceErrInvalidArgumentCounter)
 	case *serviceerror.NamespaceNotActive:
-		ti.metricsClient.IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
+		scope.IncCounter(metrics.ServiceErrInvalidArgumentCounter)
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
-		ti.metricsClient.IncCounter(scope, metrics.ServiceErrExecutionAlreadyStartedCounter)
+		scope.IncCounter(metrics.ServiceErrExecutionAlreadyStartedCounter)
 	case *serviceerror.NotFound:
-		ti.metricsClient.IncCounter(scope, metrics.ServiceErrNotFoundCounter)
+		scope.IncCounter(metrics.ServiceErrNotFoundCounter)
 	case *serviceerror.ResourceExhausted:
-		ti.metricsClient.IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
+		scope.IncCounter(metrics.ServiceErrResourceExhaustedCounter)
 	case *serviceerrors.RetryReplication:
-		ti.metricsClient.IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
+		scope.IncCounter(metrics.ServiceErrRetryTaskCounter)
 	case *serviceerror.NamespaceAlreadyExists:
-		ti.metricsClient.IncCounter(scope, metrics.ServiceErrNamespaceAlreadyExistsCounter)
+		scope.IncCounter(metrics.ServiceErrNamespaceAlreadyExistsCounter)
 	case *serviceerror.QueryFailed:
-		ti.metricsClient.IncCounter(scope, metrics.ServiceErrQueryFailedCounter)
+		scope.IncCounter(metrics.ServiceErrQueryFailedCounter)
 	case *serviceerror.ClientVersionNotSupported:
-		ti.metricsClient.IncCounter(scope, metrics.ServiceErrClientVersionNotSupportedCounter)
+		scope.IncCounter(metrics.ServiceErrClientVersionNotSupportedCounter)
 	case *serviceerror.DataLoss:
-		ti.metricsClient.IncCounter(scope, metrics.ServiceFailures)
-		ti.logger.Error("internal service error, data loss", tag.Operation(methodName), tag.Error(err))
+		scope.IncCounter(metrics.ServiceFailures)
+		ti.logger.Error("internal service error, data loss", append(logTags, tag.Error(err))...)
 	case *serviceerror.Internal:
-		ti.metricsClient.IncCounter(scope, metrics.ServiceFailures)
-		ti.logger.Error("internal service error", tag.Operation(methodName), tag.Error(err))
+		scope.IncCounter(metrics.ServiceFailures)
+		ti.logger.Error("internal service error", append(logTags, tag.Error(err))...)
 	default:
-		ti.metricsClient.IncCounter(scope, metrics.ServiceFailures)
-		ti.logger.Error("uncategorized error", tag.Operation(methodName), tag.Error(err))
+		scope.IncCounter(metrics.ServiceFailures)
+		ti.logger.Error("uncategorized error", append(logTags, tag.Error(err))...)
 	}
 }
 

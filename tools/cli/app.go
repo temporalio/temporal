@@ -29,6 +29,7 @@ import (
 
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/tools/cli/dataconverter"
+	"go.temporal.io/server/tools/cli/headersprovider"
 	"go.temporal.io/server/tools/cli/plugin"
 )
 
@@ -95,6 +96,12 @@ func NewCliApp() *cli.App {
 			Value:  "",
 			Usage:  "override for target server name",
 			EnvVar: "TEMPORAL_CLI_TLS_SERVER_NAME",
+		},
+		cli.StringFlag{
+			Name:   FlagHeadersProviderPluginWithAlias,
+			Value:  "",
+			Usage:  "headers provider plugin executable name",
+			EnvVar: "TEMPORAL_CLI_PLUGIN_HEADERS_PROVIDER",
 		},
 		cli.StringFlag{
 			Name:   FlagDataConverterPluginWithAlias,
@@ -227,8 +234,8 @@ func NewCliApp() *cli.App {
 	return app
 }
 
-func loadPlugins(ctx *cli.Context) error {
-	dcPlugin := ctx.String(FlagDataConverterPlugin)
+func loadPlugins(c *cli.Context) error {
+	dcPlugin := c.String(FlagDataConverterPlugin)
 	if dcPlugin != "" {
 		dataConverter, err := plugin.NewDataConverterPlugin(dcPlugin)
 		if err != nil {
@@ -238,10 +245,20 @@ func loadPlugins(ctx *cli.Context) error {
 		dataconverter.SetCurrent(dataConverter)
 	}
 
+	hpPlugin := c.String(FlagHeadersProviderPlugin)
+	if hpPlugin != "" {
+		headersProvider, err := plugin.NewHeadersProviderPlugin(hpPlugin)
+		if err != nil {
+			ErrorAndExit("unable to load headers provider plugin", err)
+		}
+
+		headersprovider.SetCurrent(headersProvider)
+	}
+
 	return nil
 }
 
-func stopPlugins(ctx *cli.Context) error {
+func stopPlugins(c *cli.Context) error {
 	plugin.StopPlugins()
 
 	return nil

@@ -33,7 +33,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dgrijalva/jwt-go"
+	"github.com/dgrijalva/jwt-go/v4"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -212,7 +212,7 @@ type (
 	}
 )
 
-func (CustomClaims) Valid() error {
+func (CustomClaims) Valid(*jwt.ValidationHelper) error {
 	return nil
 }
 
@@ -220,7 +220,7 @@ func (tg *tokenGenerator) generateToken(subject string, permissions []string, op
 	claims := CustomClaims{
 		permissions,
 		jwt.StandardClaims{
-			ExpiresAt: time.Now().Add(time.Hour).Unix(),
+			ExpiresAt: jwt.At(time.Now().Add(time.Hour)),
 			Issuer:    "test",
 		},
 	}

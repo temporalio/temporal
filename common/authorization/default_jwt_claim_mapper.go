@@ -28,7 +28,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dgrijalva/jwt-go"
+	"github.com/dgrijalva/jwt-go/v4"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/config"

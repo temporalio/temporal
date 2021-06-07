@@ -3,7 +3,7 @@
 install: update-tools bins
 
 # Rebuild binaries (used by Dockerfile).
-bins: clean-bins temporal-server tctl temporal-cassandra-tool temporal-sql-tool
+bins: clean-bins temporal-server tctl plugins temporal-cassandra-tool temporal-sql-tool
 
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
 all: update-tools clean proto bins check test
@@ -177,6 +177,7 @@ copyright-proto:
 clean-bins:
 	@printf $(COLOR) "Delete old binaries..."
 	@rm -f tctl
+	@rm -f tctl-authorization-plugin
 	@rm -f temporal-server
 	@rm -f temporal-cassandra-tool
 	@rm -f temporal-sql-tool
@@ -188,6 +189,10 @@ temporal-server:
 tctl:
 	@printf $(COLOR) "Build tctl with OS: $(GOOS), ARCH: $(GOARCH)..."
 	CGO_ENABLED=0 go build -o tctl cmd/tools/cli/main.go
+
+plugins:
+	@printf $(COLOR) "Build tctl-authorization-plugin with OS: $(GOOS), ARCH: $(GOARCH)..."
+	CGO_ENABLED=0 go build -o tctl-authorization-plugin cmd/tools/cli/plugins/authorization/main.go
 
 temporal-cassandra-tool:
 	@printf $(COLOR) "Build temporal-cassandra-tool with OS: $(GOOS), ARCH: $(GOARCH)..."

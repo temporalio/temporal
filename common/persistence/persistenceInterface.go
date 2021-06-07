@@ -50,7 +50,15 @@ type (
 	// ////////////////////////////////////////////////////////////////////
 
 	// ShardStore is a lower level of ShardManager
-	ShardStore = ShardManager
+	ShardStore interface {
+		Closeable
+		GetName() string
+		GetClusterName() string
+		CreateShard(request *InternalCreateShardRequest) error
+		GetShard(request *InternalGetShardRequest) (*InternalGetShardResponse, error)
+		UpdateShard(request *InternalUpdateShardRequest) error
+	}
+
 	// TaskStore is a lower level of TaskManager
 	TaskStore = TaskManager
 	// MetadataStore is a lower level of MetadataManager
@@ -145,13 +153,13 @@ type (
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(request *InternalReadHistoryBranchRequest) (*InternalReadHistoryBranchResponse, error)
 		// ForkHistoryBranch forks a new branch from a old branch
-		ForkHistoryBranch(request *InternalForkHistoryBranchRequest) (*InternalForkHistoryBranchResponse, error)
+		ForkHistoryBranch(request *InternalForkHistoryBranchRequest) error
 		// DeleteHistoryBranch removes a branch
 		DeleteHistoryBranch(request *InternalDeleteHistoryBranchRequest) error
 		// GetHistoryTree returns all branch information of a tree
-		GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error)
+		GetHistoryTree(request *GetHistoryTreeRequest) (*InternalGetHistoryTreeResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees
-		GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error)
+		GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*InternalGetAllHistoryTreeBranchesResponse, error)
 	}
 
 	// VisibilityStore is the store interface for visibility
@@ -198,6 +206,31 @@ type (
 		ID        int64     `json:"message_id"`
 		Data      []byte    `json:"message_payload"`
 		Encoding  string    `json:"message_encoding"`
+	}
+
+	// InternalCreateShardRequest is used by ShardStore to create new shard
+	InternalCreateShardRequest struct {
+		ShardID   int32
+		RangeID   int64
+		ShardInfo *commonpb.DataBlob
+	}
+
+	// InternalGetShardRequest is used by ShardStore to retrieve a shard
+	InternalGetShardRequest struct {
+		ShardID int32
+	}
+
+	// InternalGetShardResponse is the response to GetShard
+	InternalGetShardResponse struct {
+		ShardInfo *commonpb.DataBlob
+	}
+
+	// InternalUpdateShardRequest is used by ShardStore to update a shard
+	InternalUpdateShardRequest struct {
+		ShardID         int32
+		RangeID         int64
+		ShardInfo       *commonpb.DataBlob
+		PreviousRangeID int64
 	}
 
 	// DataBlob represents a blob for any binary data.
@@ -338,6 +371,8 @@ type (
 		Info string
 		// The branch to be appended
 		BranchInfo *persistencespb.HistoryBranch
+		// Serialized TreeInfo
+		TreeInfo *commonpb.DataBlob
 		// The history node
 		Node InternalHistoryNode
 		// Used in sharded data stores to identify which shard to use
@@ -360,6 +395,8 @@ type (
 	InternalForkHistoryBranchRequest struct {
 		// The base branch to fork from
 		ForkBranchInfo *persistencespb.HistoryBranch
+		// Serialized TreeInfo
+		TreeInfo *commonpb.DataBlob
 		// The nodeID to fork from, the new branch will start from ( inclusive ), the base branch will stop at(exclusive)
 		ForkNodeID int64
 		// branchID of the new branch
@@ -390,10 +427,18 @@ type (
 
 	// InternalDeleteHistoryBranchRequest is used to remove a history branch
 	InternalDeleteHistoryBranchRequest struct {
-		// branch to be deleted
-		BranchInfo *persistencespb.HistoryBranch
 		// Used in sharded data stores to identify which shard to use
-		ShardID int32
+		ShardID  int32
+		TreeId   string // TreeId, BranchId is used to delete target history branch itself.
+		BranchId string
+		// branch ranges is used to delete range of history nodes from target branch and it ancestors.
+		BranchRanges []InternalDeleteHistoryBranchRange
+	}
+
+	// InternalDeleteHistoryBranchRange is used to delete a range of history nodes of a branch
+	InternalDeleteHistoryBranchRange struct {
+		BranchId    string
+		BeginNodeId int64 // delete nodes with ID >= BeginNodeId
 	}
 
 	// InternalReadHistoryBranchRequest is used to read a history branch
@@ -434,6 +479,30 @@ type (
 		NextPageToken []byte
 	}
 
+	// InternalGetAllHistoryTreeBranchesResponse is response to GetAllHistoryTreeBranches
+	// Only used by persistence layer
+	InternalGetAllHistoryTreeBranchesResponse struct {
+		// pagination token
+		NextPageToken []byte
+		// all branches of all trees
+		Branches []InternalHistoryBranchDetail
+	}
+
+	// InternalHistoryBranchDetail used by InternalGetAllHistoryTreeBranchesResponse
+	InternalHistoryBranchDetail struct {
+		TreeID   string
+		BranchID string
+		Encoding string
+		Data     []byte // HistoryTreeInfo blob
+	}
+
+	// InternalGetHistoryTreeResponse is response to GetHistoryTree
+	// Only used by persistence layer
+	InternalGetHistoryTreeResponse struct {
+		// TreeInfos
+		TreeInfos []*commonpb.DataBlob
+	}
+
 	// VisibilityWorkflowExecutionInfo is visibility info for internal response
 	VisibilityWorkflowExecutionInfo struct {
 		WorkflowID       string
@@ -468,9 +537,9 @@ type (
 		WorkflowID         string
 		RunID              string
 		WorkflowTypeName   string
-		StartTimestamp     int64
+		StartTimestamp     time.Time
 		Status             enumspb.WorkflowExecutionStatus
-		ExecutionTimestamp int64
+		ExecutionTimestamp time.Time
 		TaskID             int64
 		ShardID            int32
 		Memo               *commonpb.DataBlob
@@ -486,7 +555,7 @@ type (
 	// InternalRecordWorkflowExecutionClosedRequest is request to RecordWorkflowExecutionClosed
 	InternalRecordWorkflowExecutionClosedRequest struct {
 		*InternalVisibilityRequestBase
-		CloseTimestamp int64
+		CloseTimestamp time.Time
 		HistoryLength  int64
 		Retention      *time.Duration
 	}

@@ -84,7 +84,6 @@ func (d *namespaceCLIImpl) RegisterNamespace(c *cli.Context) {
 	if c.IsSet(FlagRetentionDays) {
 		retentionDays = c.Int(FlagRetentionDays)
 	}
-	securityToken := c.String(FlagSecurityToken)
 	var err error
 
 	var isGlobalNamespace bool
@@ -136,7 +135,6 @@ func (d *namespaceCLIImpl) RegisterNamespace(c *cli.Context) {
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(time.Duration(retentionDays) * time.Hour * 24),
 		Clusters:                         clusters,
 		ActiveClusterName:                activeClusterName,
-		SecurityToken:                    securityToken,
 		HistoryArchivalState:             archivalState(c, FlagHistoryArchivalState),
 		HistoryArchivalUri:               c.String(FlagHistoryArchivalURI),
 		VisibilityArchivalState:          archivalState(c, FlagVisibilityArchivalState),
@@ -271,8 +269,6 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 		}
 	}
 
-	securityToken := c.String(FlagSecurityToken)
-	updateRequest.SecurityToken = securityToken
 	err := d.updateNamespace(ctx, updateRequest)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {

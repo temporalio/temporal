@@ -29,16 +29,14 @@ import (
 	"fmt"
 	"math"
 
+	commonpb "go.temporal.io/api/common/v1"
+
 	"go.temporal.io/api/serviceerror"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -66,7 +64,7 @@ func newHistoryV2Persistence(
 	}, nil
 }
 
-// AppendHistoryNode add(or override) a node to a history branch
+// AppendHistoryNodes add(or override) a node to a history branch
 func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
@@ -74,12 +72,6 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 	defer cancel()
 	branchInfo := request.BranchInfo
 	node := request.Node
-
-	if node.NodeID < p.GetBeginNodeID(branchInfo) {
-		return &p.InvalidPersistenceRequestError{
-			Msg: fmt.Sprintf("cannot append to ancestors' nodes"),
-		}
-	}
 
 	treeIDBytes, err := primitives.ParseUUID(branchInfo.GetTreeId())
 	if err != nil {
@@ -101,62 +93,52 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 		ShardID:      request.ShardID,
 	}
 
-	if request.IsNewBranch {
-		treeInfo := &persistencespb.HistoryTreeInfo{
-			BranchInfo: branchInfo,
-			Info:       request.Info,
-			ForkTime:   timestamp.TimeNowPtrUtc(),
+	if !request.IsNewBranch {
+		_, err = m.db.InsertIntoHistoryNode(ctx, nodeRow)
+		if err != nil {
+			if m.db.IsDupEntryError(err) {
+				return &p.ConditionFailedError{Msg: fmt.Sprintf("AppendHistoryNodes: row already exist: %v", err)}
+			}
+			return serviceerror.NewInternal(fmt.Sprintf("AppendHistoryNodes: %v", err))
 		}
+		return nil
+	}
 
-		blob, err := serialization.HistoryTreeInfoToBlob(treeInfo)
+	treeInfoBlob := request.TreeInfo
+	treeRow := &sqlplugin.HistoryTreeRow{
+		ShardID:      request.ShardID,
+		TreeID:       treeIDBytes,
+		BranchID:     branchIDBytes,
+		Data:         treeInfoBlob.Data,
+		DataEncoding: treeInfoBlob.EncodingType.String(),
+	}
+
+	return m.txExecute(ctx, "AppendHistoryNodes", func(tx sqlplugin.Tx) error {
+		result, err := tx.InsertIntoHistoryNode(ctx, nodeRow)
 		if err != nil {
 			return err
 		}
-
-		treeRow := &sqlplugin.HistoryTreeRow{
-			ShardID:      request.ShardID,
-			TreeID:       treeIDBytes,
-			BranchID:     branchIDBytes,
-			Data:         blob.Data,
-			DataEncoding: blob.EncodingType.String(),
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if rowsAffected != 1 {
+			return fmt.Errorf("expected 1 row to be affected for node table, got %v", rowsAffected)
 		}
 
-		return m.txExecute(ctx, "AppendHistoryNodes", func(tx sqlplugin.Tx) error {
-			result, err := tx.InsertIntoHistoryNode(ctx, nodeRow)
-			if err != nil {
-				return err
-			}
-			rowsAffected, err := result.RowsAffected()
-			if err != nil {
-				return err
-			}
-			if rowsAffected != 1 {
-				return fmt.Errorf("expected 1 row to be affected for node table, got %v", rowsAffected)
-			}
-
-			result, err = tx.InsertIntoHistoryTree(ctx, treeRow)
-			if err != nil {
-				return err
-			}
-			rowsAffected, err = result.RowsAffected()
-			if err != nil {
-				return err
-			}
-			if !(rowsAffected == 1 || rowsAffected == 2) {
-				return fmt.Errorf("expected 1 or 2 rows to be affected for tree table as we allow upserts, got %v", rowsAffected)
-			}
-			return nil
-		})
-	}
-
-	_, err = m.db.InsertIntoHistoryNode(ctx, nodeRow)
-	if err != nil {
-		if m.db.IsDupEntryError(err) {
-			return &p.ConditionFailedError{Msg: fmt.Sprintf("AppendHistoryNodes: row already exist: %v", err)}
+		result, err = tx.InsertIntoHistoryTree(ctx, treeRow)
+		if err != nil {
+			return err
 		}
-		return serviceerror.NewInternal(fmt.Sprintf("AppendHistoryNodes: %v", err))
-	}
-	return nil
+		rowsAffected, err = result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if !(rowsAffected == 1 || rowsAffected == 2) {
+			return fmt.Errorf("expected 1 or 2 rows to be affected for tree table as we allow upserts, got %v", rowsAffected)
+		}
+		return nil
+	})
 }
 
 func (m *sqlHistoryV2Manager) DeleteHistoryNodes(
@@ -326,85 +308,41 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 //
 func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 	request *p.InternalForkHistoryBranchRequest,
-) (*p.InternalForkHistoryBranchResponse, error) {
+) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	forkB := request.ForkBranchInfo
-	treeID := forkB.TreeId
-
-	newAncestors := make([]*persistencespb.HistoryBranchRange, 0, len(forkB.Ancestors)+1)
-
-	beginNodeID := p.GetBeginNodeID(forkB)
-	if beginNodeID >= request.ForkNodeID {
-		// this is the case that new branch's ancestors doesn't include the forking branch
-		for _, br := range forkB.Ancestors {
-			if br.GetEndNodeId() >= request.ForkNodeID {
-				newAncestors = append(newAncestors, &persistencespb.HistoryBranchRange{
-					BranchId:    br.GetBranchId(),
-					BeginNodeId: br.GetBeginNodeId(),
-					EndNodeId:   request.ForkNodeID,
-				})
-				break
-			} else {
-				newAncestors = append(newAncestors, br)
-			}
-		}
-	} else {
-		// this is the case the new branch will inherit all ancestors from forking branch
-		newAncestors = forkB.Ancestors
-		newAncestors = append(newAncestors, &persistencespb.HistoryBranchRange{
-			BranchId:    forkB.BranchId,
-			BeginNodeId: beginNodeID,
-			EndNodeId:   request.ForkNodeID,
-		})
-	}
-
-	treeInfo := &persistencespb.HistoryTreeInfo{
-		BranchInfo: &persistencespb.HistoryBranch{
-			TreeId:    treeID,
-			BranchId:  request.NewBranchID,
-			Ancestors: newAncestors,
-		},
-		Info:     request.Info,
-		ForkTime: timestamp.TimeNowPtrUtc(),
-	}
-
-	blob, err := serialization.HistoryTreeInfoToBlob(treeInfo)
-	if err != nil {
-		return nil, err
-	}
-
+	treeInfoBlob := request.TreeInfo
 	newBranchIdBytes, err := primitives.ParseUUID(request.NewBranchID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	treeIDBytes, err := primitives.ParseUUID(forkB.GetTreeId())
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	row := &sqlplugin.HistoryTreeRow{
 		ShardID:      request.ShardID,
 		TreeID:       treeIDBytes,
 		BranchID:     newBranchIdBytes,
-		Data:         blob.Data,
-		DataEncoding: blob.EncodingType.String(),
+		Data:         treeInfoBlob.Data,
+		DataEncoding: treeInfoBlob.EncodingType.String(),
 	}
 
 	result, err := m.db.InsertIntoHistoryTree(ctx, row)
 	if err != nil {
-		return nil, err
+		return err
 	}
+
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if rowsAffected != 1 {
-		return nil, fmt.Errorf("expected 1 row to be affected for tree table, got %v", rowsAffected)
+		return fmt.Errorf("expected 1 row to be affected for tree table, got %v", rowsAffected)
 	}
-	return &p.InternalForkHistoryBranchResponse{
-		NewBranchInfo: treeInfo.BranchInfo,
-	}, nil
+	return nil
 }
 
 // DeleteHistoryBranch removes a branch
@@ -413,41 +351,14 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	branch := request.BranchInfo
-	treeID := branch.TreeId
-	branchIDBytes, err := primitives.ParseUUID(branch.GetBranchId())
+
+	branchIDBytes, err := primitives.ParseUUID(request.BranchId)
 	if err != nil {
 		return err
 	}
-	treeIDBytes, err := primitives.ParseUUID(branch.GetTreeId())
+	treeIDBytes, err := primitives.ParseUUID(request.TreeId)
 	if err != nil {
 		return err
-	}
-
-	brsToDelete := branch.Ancestors
-	beginNodeID := p.GetBeginNodeID(branch)
-	brsToDelete = append(brsToDelete, &persistencespb.HistoryBranchRange{
-		BranchId:    branch.BranchId,
-		BeginNodeId: beginNodeID,
-	})
-
-	rsp, err := m.GetHistoryTree(&p.GetHistoryTreeRequest{
-		TreeID:  treeID,
-		ShardID: convert.Int32Ptr(request.ShardID),
-	})
-	if err != nil {
-		return err
-	}
-
-	// validBRsMaxEndNode is to for each branch range that is being used, we want to know what is the max nodeID referred by other valid branch
-	validBRsMaxEndNode := map[string]int64{}
-	for _, b := range rsp.Branches {
-		for _, br := range b.Ancestors {
-			curr, ok := validBRsMaxEndNode[br.GetBranchId()]
-			if !ok || curr < br.GetEndNodeId() {
-				validBRsMaxEndNode[br.GetBranchId()] = br.GetEndNodeId()
-			}
-		}
 	}
 
 	return m.txExecute(ctx, "DeleteHistoryBranch", func(tx sqlplugin.Tx) error {
@@ -460,31 +371,22 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 			return err
 		}
 
-		done := false
-		// for each branch range to delete, we iterate from bottom to up, and delete up to the point according to validBRsEndNode
-		for i := len(brsToDelete) - 1; i >= 0; i-- {
-			br := brsToDelete[i]
-			maxReferredEndNodeID, ok := validBRsMaxEndNode[br.GetBranchId()]
-			deleteFilter := sqlplugin.HistoryNodeDeleteFilter{
-				ShardID:  request.ShardID,
-				TreeID:   treeIDBytes,
-				BranchID: branchIDBytes,
-			}
-
-			if ok {
-				// we can only delete from the maxEndNode and stop here
-				deleteFilter.MinNodeID = maxReferredEndNodeID
-				done = true
-			} else {
-				// No any branch is using this range, we can delete all of it
-				deleteFilter.MinNodeID = br.BeginNodeId
-			}
-			_, err := tx.RangeDeleteFromHistoryNode(ctx, deleteFilter)
+		// delete each branch range
+		for _, br := range request.BranchRanges {
+			branchIDBytes, err := primitives.ParseUUID(br.BranchId)
 			if err != nil {
 				return err
 			}
-			if done {
-				break
+
+			deleteFilter := sqlplugin.HistoryNodeDeleteFilter{
+				ShardID:   request.ShardID,
+				TreeID:    treeIDBytes,
+				BranchID:  branchIDBytes,
+				MinNodeID: br.BeginNodeId,
+			}
+			_, err = tx.RangeDeleteFromHistoryNode(ctx, deleteFilter)
+			if err != nil {
+				return err
 			}
 		}
 		return nil
@@ -493,7 +395,7 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 
 func (m *sqlHistoryV2Manager) GetAllHistoryTreeBranches(
 	request *p.GetAllHistoryTreeBranchesRequest,
-) (*p.GetAllHistoryTreeBranchesResponse, error) {
+) (*p.InternalGetAllHistoryTreeBranchesResponse, error) {
 
 	// TODO https://github.com/uber/cadence/issues/2458
 	// Implement it when we need
@@ -503,7 +405,7 @@ func (m *sqlHistoryV2Manager) GetAllHistoryTreeBranches(
 // GetHistoryTree returns all branch information of a tree
 func (m *sqlHistoryV2Manager) GetHistoryTree(
 	request *p.GetHistoryTreeRequest,
-) (*p.GetHistoryTreeResponse, error) {
+) (*p.InternalGetHistoryTreeResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	treeID, err := primitives.ParseUUID(request.TreeID)
@@ -516,18 +418,14 @@ func (m *sqlHistoryV2Manager) GetHistoryTree(
 		ShardID: *request.ShardID,
 	})
 	if err == sql.ErrNoRows || (err == nil && len(rows) == 0) {
-		return &p.GetHistoryTreeResponse{}, nil
+		return &p.InternalGetHistoryTreeResponse{}, nil
 	}
-	branches := make([]*persistencespb.HistoryBranch, 0, len(rows))
+	treeInfos := make([]*commonpb.DataBlob, 0, len(rows))
 	for _, row := range rows {
-		treeInfo, err := serialization.HistoryTreeInfoFromBlob(row.Data, row.DataEncoding)
-		if err != nil {
-			return nil, err
-		}
-		branches = append(branches, treeInfo.BranchInfo)
+		treeInfos = append(treeInfos, p.NewDataBlob(row.Data, row.DataEncoding))
 	}
 
-	return &p.GetHistoryTreeResponse{
-		Branches: branches,
+	return &p.InternalGetHistoryTreeResponse{
+		TreeInfos: treeInfos,
 	}, nil
 }
