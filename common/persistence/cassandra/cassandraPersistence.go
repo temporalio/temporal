@@ -2098,7 +2098,7 @@ func (d *cassandraPersistence) GetTaskQueue(request *p.InternalGetTaskQueueReque
 			request.TaskQueue, request.TaskType, err))
 }
 
-func (d *cassandraPersistence) ExtendLease(request *p.InternalLeaseTaskQueueRequest) error {
+func (d *cassandraPersistence) ExtendLease(request *p.InternalExtendLeaseRequest) error {
 	query := d.session.Query(templateUpdateTaskQueueQuery,
 		request.RangeID+1,
 		request.TaskQueueInfo.Data,

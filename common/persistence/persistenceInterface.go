@@ -65,7 +65,7 @@ type (
 		GetName() string
 		CreateTaskQueue(request *InternalCreateTaskQueueRequest) error
 		GetTaskQueue(request *InternalGetTaskQueueRequest) (*InternalGetTaskQueueResponse, error)
-		ExtendLease(request *InternalLeaseTaskQueueRequest) error
+		ExtendLease(request *InternalExtendLeaseRequest) error
 		UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
 		ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error)
 		DeleteTaskQueue(request *DeleteTaskQueueRequest) error
@@ -265,7 +265,7 @@ type (
 		TaskQueueInfo *commonpb.DataBlob
 	}
 
-	InternalLeaseTaskQueueRequest struct {
+	InternalExtendLeaseRequest struct {
 		NamespaceID   string
 		TaskQueue     string
 		TaskType      enumspb.TaskQueueType

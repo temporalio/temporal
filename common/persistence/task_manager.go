@@ -88,7 +88,7 @@ func (m *taskManagerImpl) LeaseTaskQueue(request *LeaseTaskQueueRequest) (*Lease
 		if err != nil {
 			return nil, err
 		}
-		err = m.taskStore.ExtendLease(&InternalLeaseTaskQueueRequest{
+		err = m.taskStore.ExtendLease(&InternalExtendLeaseRequest{
 			NamespaceID:   request.NamespaceID,
 			TaskQueue:     request.TaskQueue,
 			TaskType:      request.TaskType,

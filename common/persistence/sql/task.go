@@ -130,7 +130,7 @@ func (m *sqlTaskManager) GetTaskQueue(request *persistence.InternalGetTaskQueueR
 }
 
 func (m *sqlTaskManager) ExtendLease(
-	request *persistence.InternalLeaseTaskQueueRequest,
+	request *persistence.InternalExtendLeaseRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
