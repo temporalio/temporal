@@ -2106,7 +2106,7 @@ func (d *cassandraPersistence) ExtendLease(request *p.InternalExtendLeaseRequest
 	if !applied {
 		previousRangeID := previous["range_id"]
 		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("LeaseTaskQueue: taskQueue:%v, taskQueueType:%v, haveRangeID:%v, gotRangeID:%v",
+			Msg: fmt.Sprintf("ExtendLease: taskQueue:%v, taskQueueType:%v, haveRangeID:%v, gotRangeID:%v",
 				request.TaskQueue, request.TaskType, request.RangeID, previousRangeID),
 		}
 	}
