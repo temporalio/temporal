@@ -284,10 +284,6 @@ func (c *historyCache) getCurrentExecutionWithRetry(
 	request *persistence.GetCurrentExecutionRequest,
 ) (*persistence.GetCurrentExecutionResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.HistoryCacheGetCurrentExecutionScope, metrics.CacheRequests)
-	sw := c.metricsClient.StartTimer(metrics.HistoryCacheGetCurrentExecutionScope, metrics.CacheLatency)
-	defer sw.Stop()
-
 	var response *persistence.GetCurrentExecutionResponse
 	op := func() error {
 		var err error
@@ -298,7 +294,6 @@ func (c *historyCache) getCurrentExecutionWithRetry(
 
 	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.HistoryCacheGetCurrentExecutionScope, metrics.CacheFailures)
 		return nil, err
 	}
 

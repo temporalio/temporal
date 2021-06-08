@@ -363,8 +363,8 @@ install-schema-postgresql: temporal-sql-tool
 
 install-schema-es:
 	@printf $(COLOR) "Install Elasticsearch schema..."
-	curl -X PUT "http://127.0.0.1:9200/_template/temporal-visibility-template" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/v7/visibility/index_template.json --write-out "\n"
-	curl -X PUT "http://127.0.0.1:9200/temporal-visibility-dev" --write-out "\n"
+	curl -X PUT "http://127.0.0.1:9200/_template/temporal-visibility-v1-template" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/index_template_v7.json --write-out "\n"
+	curl -X PUT "http://127.0.0.1:9200/temporal-visibility-v1-dev" --write-out "\n"
 
 install-schema-cdc: temporal-cassandra-tool
 	@printf $(COLOR)  "Set up temporal_active key space..."

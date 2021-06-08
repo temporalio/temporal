@@ -159,8 +159,8 @@ func (c *clientV6) RunBulkProcessor(ctx context.Context, p *BulkProcessorParamet
 	return newBulkProcessorV6(esBulkProcessor), convertV6ErrorToV7(err)
 }
 
-func (c *clientV6) PutMapping(ctx context.Context, index string, root string, mapping map[string]string) (bool, error) {
-	body := buildMappingBody(root, mapping)
+func (c *clientV6) PutMapping(ctx context.Context, index string, mapping map[string]string) (bool, error) {
+	body := buildMappingBody(mapping)
 	resp, err := c.esClient.PutMapping().Index(index).Type(docTypeV6).BodyJson(body).Do(ctx)
 	if err != nil {
 		return false, convertV6ErrorToV7(err)

@@ -99,7 +99,10 @@ func initPrometheusListener(config *PrometheusConfig, logger log.Logger, exporte
 	handler := http.NewServeMux()
 	handler.HandleFunc(handlerPath, exporter.ServeHTTP)
 
-	server := &http.Server{Addr: ":8080", Handler: handler}
+	if config.ListenAddress == "" {
+		logger.Fatal("Listen address must be specified.", tag.Address(config.ListenAddress))
+	}
+	server := &http.Server{Addr: config.ListenAddress, Handler: handler}
 
 	go func() {
 		err := server.ListenAndServe()

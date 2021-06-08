@@ -154,7 +154,7 @@ func (a *activities) AddESMappingFieldActivity(ctx context.Context, params Workf
 	}
 
 	a.logger.Info("Creating Elasticsearch mapping.", tag.ESIndex(params.IndexName), tag.ESMapping(mapping))
-	_, err := a.esClient.PutMapping(ctx, params.IndexName, searchattribute.Attr, mapping)
+	_, err := a.esClient.PutMapping(ctx, params.IndexName, mapping)
 	if err != nil {
 		a.metricsClient.IncCounter(metrics.AddSearchAttributesWorkflowScope, metrics.AddSearchAttributesFailuresCount)
 		if esclient.IsRetryableError(err) {
