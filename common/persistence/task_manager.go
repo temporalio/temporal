@@ -178,7 +178,7 @@ func (m *taskManagerImpl) ListTaskQueue(request *ListTaskQueueRequest) (*ListTas
 	if err != nil {
 		return nil, err
 	}
-	taskQueues := make([]*PersistedTaskQueueInfo, 0, len(internalResp.Items))
+	taskQueues := make([]*PersistedTaskQueueInfo, len(internalResp.Items))
 	for i, item := range internalResp.Items {
 		tqi, err := m.serializer.TaskQueueInfoFromBlob(item.TaskQueue)
 		if err != nil {
@@ -208,7 +208,7 @@ func (m *taskManagerImpl) CreateTasks(request *CreateTasksRequest) (*CreateTasks
 		return nil, err
 	}
 
-	tasks := make([]*InternalCreateTask, 0, len(request.Tasks))
+	tasks := make([]*InternalCreateTask, len(request.Tasks))
 	for i, task := range request.Tasks {
 		taskBlob, err := m.serializer.TaskInfoToBlob(task, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
@@ -236,7 +236,7 @@ func (m *taskManagerImpl) GetTasks(request *GetTasksRequest) (*GetTasksResponse,
 	if err != nil {
 		return nil, err
 	}
-	tasks := make([]*persistencespb.AllocatedTaskInfo, 0, len(internalResp.Tasks))
+	tasks := make([]*persistencespb.AllocatedTaskInfo, len(internalResp.Tasks))
 	for i, taskBlob := range internalResp.Tasks {
 		task, err := m.serializer.TaskInfoFromBlob(taskBlob)
 		if err != nil {
