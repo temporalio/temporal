@@ -31,7 +31,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
@@ -66,11 +65,11 @@ type (
 		CreateTaskQueue(request *InternalCreateTaskQueueRequest) error
 		GetTaskQueue(request *InternalGetTaskQueueRequest) (*InternalGetTaskQueueResponse, error)
 		ExtendLease(request *InternalExtendLeaseRequest) error
-		UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
-		ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error)
+		UpdateTaskQueue(request *InternalUpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
+		ListTaskQueue(request *ListTaskQueueRequest) (*InternalListTaskQueueResponse, error)
 		DeleteTaskQueue(request *DeleteTaskQueueRequest) error
-		CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error)
-		GetTasks(request *GetTasksRequest) (*GetTasksResponse, error)
+		CreateTasks(request *InternalCreateTasksRequest) (*CreateTasksResponse, error)
+		GetTasks(request *GetTasksRequest) (*InternalGetTasksResponse, error)
 		CompleteTask(request *CompleteTaskRequest) error
 		CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error)
 	}
@@ -271,6 +270,44 @@ type (
 		TaskType      enumspb.TaskQueueType
 		RangeID       int64
 		TaskQueueInfo *commonpb.DataBlob
+	}
+
+	InternalUpdateTaskQueueRequest struct {
+		NamespaceID   string
+		TaskQueue     string
+		TaskType      enumspb.TaskQueueType
+		TaskQueueKind enumspb.TaskQueueKind
+		RangeID       int64
+		ExpiryTime    *time.Time
+		TaskQueueInfo *commonpb.DataBlob
+	}
+
+	InternalCreateTasksRequest struct {
+		NamespaceID   string
+		TaskQueue     string
+		TaskType      enumspb.TaskQueueType
+		RangeID       int64
+		TaskQueueInfo *commonpb.DataBlob
+		Tasks         []*InternalCreateTask
+	}
+
+	InternalCreateTask struct {
+		TaskId     int64
+		ExpiryTime *time.Time
+		Task       *commonpb.DataBlob
+	}
+
+	InternalGetTasksResponse struct {
+		Tasks []*commonpb.DataBlob
+	}
+
+	InternalListTaskQueueResponse struct {
+		Items         []*InternalListTaskQueueItem
+		NextPageToken []byte
+	}
+	InternalListTaskQueueItem struct {
+		TaskQueue *commonpb.DataBlob //serialized PersistedTaskQueueInfo
+		RangeID   int64
 	}
 
 	// DataBlob represents a blob for any binary data.
