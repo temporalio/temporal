@@ -1,12 +1,13 @@
 {
   "order": 0,
   "index_patterns": [
-    "test-visibility*"
+    "temporal-visibility-v1*"
   ],
   "settings": {
     "index": {
       "number_of_shards": "5",
-      "number_of_replicas": "0"
+      "number_of_replicas": "0",
+      "search.idle.after": "365d"
     }
   },
   "mappings": {
@@ -34,34 +35,13 @@
         "type": "long"
       },
       "ExecutionStatus": {
-        "type": "integer"
+        "type": "long"
       },
-      "HistoryLength": {
-        "type": "integer"
-      },
-      "Encoding": {
+      "TaskQueue": {
         "type": "keyword"
       },
       "TemporalChangeVersion": {
         "type": "keyword"
-      },
-      "CustomStringField": {
-        "type": "text"
-      },
-      "CustomKeywordField": {
-        "type": "keyword"
-      },
-      "CustomIntField": {
-        "type": "long"
-      },
-      "CustomDoubleField": {
-        "type": "double"
-      },
-      "CustomBoolField": {
-        "type": "boolean"
-      },
-      "CustomDatetimeField": {
-        "type": "date"
       },
       "CustomNamespace": {
         "type": "keyword"

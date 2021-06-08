@@ -179,17 +179,10 @@ func (qv *VisibilityQueryValidator) validateComparisonExpr(expr sqlparser.Expr, 
 	if err != nil {
 		return err
 	}
-	if searchAttributes.IsDefined(colNameStr) {
-		if !searchattribute.NoAttrPrefix(colNameStr) { // add search attribute prefix
-			comparisonExpr.Left = &sqlparser.ColName{
-				Metadata:  colName.Metadata,
-				Name:      sqlparser.NewColIdent(searchattribute.Attr + "." + colNameStr),
-				Qualifier: colName.Qualifier,
-			}
-		}
-		return nil
+	if !searchAttributes.IsDefined(colNameStr) {
+		return fmt.Errorf("invalid search attribute: %s", colNameStr)
 	}
-	return errors.New("invalid search attribute")
+	return nil
 }
 
 func (qv *VisibilityQueryValidator) validateRangeExpr(expr sqlparser.Expr, indexName string) error {
@@ -203,40 +196,25 @@ func (qv *VisibilityQueryValidator) validateRangeExpr(expr sqlparser.Expr, index
 	if err != nil {
 		return err
 	}
-	if searchAttributes.IsDefined(colNameStr) {
-		if !searchattribute.NoAttrPrefix(colNameStr) { // add search attribute prefix
-			rangeCond.Left = &sqlparser.ColName{
-				Metadata:  colName.Metadata,
-				Name:      sqlparser.NewColIdent(searchattribute.Attr + "." + colNameStr),
-				Qualifier: colName.Qualifier,
-			}
-		}
-		return nil
+	if !searchAttributes.IsDefined(colNameStr) {
+		return fmt.Errorf("invalid search attribute: %s", colNameStr)
 	}
-	return errors.New("invalid search attribute")
+	return nil
 }
 
 func (qv *VisibilityQueryValidator) validateOrderByExpr(orderBy sqlparser.OrderBy, indexName string) error {
+	searchAttributes, err := qv.searchAttributesProvider.GetSearchAttributes(indexName, false)
 	for _, orderByExpr := range orderBy {
 		colName, ok := orderByExpr.Expr.(*sqlparser.ColName)
 		if !ok {
 			return errors.New("invalid order by expression")
 		}
 		colNameStr := colName.Name.String()
-		searchAttributes, err := qv.searchAttributesProvider.GetSearchAttributes(indexName, false)
 		if err != nil {
 			return err
 		}
-		if searchAttributes.IsDefined(colNameStr) {
-			if !searchattribute.NoAttrPrefix(colNameStr) { // add search attribute prefix
-				orderByExpr.Expr = &sqlparser.ColName{
-					Metadata:  colName.Metadata,
-					Name:      sqlparser.NewColIdent(searchattribute.Attr + "." + colNameStr),
-					Qualifier: colName.Qualifier,
-				}
-			}
-		} else {
-			return errors.New("invalid order by attribute")
+		if !searchAttributes.IsDefined(colNameStr) {
+			return fmt.Errorf("invalid order by attribute: %s", colNameStr)
 		}
 	}
 	return nil

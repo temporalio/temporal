@@ -26,14 +26,11 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/olivere/elastic/v7"
-	"go.temporal.io/server/common/searchattribute"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 )
@@ -153,8 +150,8 @@ func (c *clientV7) RunBulkProcessor(ctx context.Context, p *BulkProcessorParamet
 	return newBulkProcessorV7(esBulkProcessor), err
 }
 
-func (c *clientV7) PutMapping(ctx context.Context, index string, root string, mapping map[string]string) (bool, error) {
-	body := buildMappingBody(root, mapping)
+func (c *clientV7) PutMapping(ctx context.Context, index string, mapping map[string]string) (bool, error) {
+	body := buildMappingBody(mapping)
 	resp, err := c.esClient.PutMapping().Index(index).BodyJson(body).Do(ctx)
 	if err != nil {
 		return false, err
@@ -252,7 +249,7 @@ func getLoggerOptions(logLevel string, logger log.Logger) []elastic.ClientOption
 	}
 }
 
-func buildMappingBody(root string, mapping map[string]string) map[string]interface{} {
+func buildMappingBody(mapping map[string]string) map[string]interface{} {
 	properties := make(map[string]interface{}, len(mapping))
 	for fieldName, fieldType := range mapping {
 		properties[fieldName] = map[string]interface{}{
@@ -260,15 +257,8 @@ func buildMappingBody(root string, mapping map[string]string) map[string]interfa
 		}
 	}
 
-	body := make(map[string]interface{})
-	if len(root) != 0 {
-		body["properties"] = map[string]interface{}{
-			root: map[string]interface{}{
-				"properties": properties,
-			},
-		}
-	} else {
-		body["properties"] = properties
+	body := map[string]interface{}{
+		"properties": properties,
 	}
 	return body
 }
@@ -301,36 +291,6 @@ func convertMappingBody(esMapping map[string]interface{}, indexName string) map[
 	}
 
 	for fieldName, fieldProp := range propMap {
-		if fieldName == searchattribute.Attr {
-			attrFieldMap, ok := fieldProp.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			attrFieldProp, ok := attrFieldMap["properties"]
-			if !ok {
-				continue
-			}
-			attrBodyMap, ok := attrFieldProp.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			for fieldName, fieldProp := range attrBodyMap {
-				fieldPropMap, ok := fieldProp.(map[string]interface{})
-				if !ok {
-					continue
-				}
-				tYpe, ok := fieldPropMap["type"]
-				if !ok {
-					continue
-				}
-				typeStr, ok := tYpe.(string)
-				if !ok {
-					continue
-				}
-				result[fmt.Sprintf("%s.%s", searchattribute.Attr, fieldName)] = typeStr
-			}
-		}
-
 		fieldPropMap, ok := fieldProp.(map[string]interface{})
 		if !ok {
 			continue
