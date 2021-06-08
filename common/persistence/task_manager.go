@@ -26,6 +26,7 @@ package persistence
 
 import (
 	"fmt"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -34,7 +35,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-const initialRangeID = 1 // Id of the first range of a new task queue
+const (
+	initialRangeID     = 1 // Id of the first range of a new task queue
+	stickyTaskQueueTTL = 24 * time.Hour
+)
 
 type taskManagerImpl struct {
 	taskStore  TaskStore
@@ -145,13 +149,51 @@ func (m *taskManagerImpl) LeaseTaskQueue(request *LeaseTaskQueueRequest) (*Lease
 	}
 }
 
-// TODO: below part will be refactored in separate PR.
 func (m *taskManagerImpl) UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error) {
-	return m.taskStore.UpdateTaskQueue(request)
+	taskQueueInfo := request.TaskQueueInfo
+	taskQueueInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
+	if taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
+		taskQueueInfo.ExpiryTime = timestamp.TimePtr(time.Now().UTC().Add(stickyTaskQueueTTL))
+	}
+	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo, enumspb.ENCODING_TYPE_PROTO3)
+	if err != nil {
+		return nil, err
+	}
+
+	internalRequest := &InternalUpdateTaskQueueRequest{
+		NamespaceID:   request.TaskQueueInfo.GetNamespaceId(),
+		TaskQueue:     request.TaskQueueInfo.GetName(),
+		TaskType:      request.TaskQueueInfo.GetTaskType(),
+		TaskQueueKind: request.TaskQueueInfo.GetKind(),
+		RangeID:       request.RangeID,
+		ExpiryTime:    taskQueueInfo.ExpiryTime,
+		TaskQueueInfo: taskQueueInfoBlob,
+	}
+
+	return m.taskStore.UpdateTaskQueue(internalRequest)
 }
 
 func (m *taskManagerImpl) ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error) {
-	return m.taskStore.ListTaskQueue(request)
+	internalResp, err := m.taskStore.ListTaskQueue(request)
+	if err != nil {
+		return nil, err
+	}
+	taskQueues := make([]*PersistedTaskQueueInfo, len(internalResp.Items))
+	for i, item := range internalResp.Items {
+		tqi, err := m.serializer.TaskQueueInfoFromBlob(item.TaskQueue)
+		if err != nil {
+			return nil, err
+		}
+		taskQueues[i] = &PersistedTaskQueueInfo{
+			Data:    tqi,
+			RangeID: item.RangeID,
+		}
+
+	}
+	return &ListTaskQueueResponse{
+		Items:         taskQueues,
+		NextPageToken: internalResp.NextPageToken,
+	}, nil
 }
 
 func (m *taskManagerImpl) DeleteTaskQueue(request *DeleteTaskQueueRequest) error {
@@ -159,11 +201,52 @@ func (m *taskManagerImpl) DeleteTaskQueue(request *DeleteTaskQueueRequest) error
 }
 
 func (m *taskManagerImpl) CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error) {
-	return m.taskStore.CreateTasks(request)
+	taskQueueInfo := request.TaskQueueInfo.Data
+	taskQueueInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
+	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo, enumspb.ENCODING_TYPE_PROTO3)
+	if err != nil {
+		return nil, err
+	}
+
+	tasks := make([]*InternalCreateTask, len(request.Tasks))
+	for i, task := range request.Tasks {
+		taskBlob, err := m.serializer.TaskInfoToBlob(task, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", err))
+		}
+		tasks[i] = &InternalCreateTask{
+			TaskId:     task.GetTaskId(),
+			ExpiryTime: task.Data.ExpiryTime,
+			Task:       taskBlob,
+		}
+	}
+	internalRequest := &InternalCreateTasksRequest{
+		NamespaceID:   request.TaskQueueInfo.Data.GetNamespaceId(),
+		TaskQueue:     request.TaskQueueInfo.Data.GetName(),
+		TaskType:      request.TaskQueueInfo.Data.GetTaskType(),
+		RangeID:       request.TaskQueueInfo.RangeID,
+		TaskQueueInfo: taskQueueInfoBlob,
+		Tasks:         tasks,
+	}
+	return m.taskStore.CreateTasks(internalRequest)
 }
 
 func (m *taskManagerImpl) GetTasks(request *GetTasksRequest) (*GetTasksResponse, error) {
-	return m.taskStore.GetTasks(request)
+	internalResp, err := m.taskStore.GetTasks(request)
+	if err != nil {
+		return nil, err
+	}
+	tasks := make([]*persistencespb.AllocatedTaskInfo, len(internalResp.Tasks))
+	for i, taskBlob := range internalResp.Tasks {
+		task, err := m.serializer.TaskInfoFromBlob(taskBlob)
+		if err != nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTasks failed to deserialize task: %s", err.Error()))
+		}
+		tasks[i] = task
+	}
+	return &GetTasksResponse{
+		Tasks: tasks,
+	}, nil
 }
 
 func (m *taskManagerImpl) CompleteTask(request *CompleteTaskRequest) error {

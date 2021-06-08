@@ -30,19 +30,15 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
-	"time"
 
 	"github.com/dgryski/go-farm"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -183,27 +179,17 @@ func (m *sqlTaskManager) ExtendLease(
 }
 
 func (m *sqlTaskManager) UpdateTaskQueue(
-	request *persistence.UpdateTaskQueueRequest,
+	request *persistence.InternalUpdateTaskQueueRequest,
 ) (*persistence.UpdateTaskQueueResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	nidBytes, err := primitives.ParseUUID(request.TaskQueueInfo.GetNamespaceId())
+	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
 		return nil, serviceerror.NewInternal(err.Error())
 	}
 
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueueInfo.Name, request.TaskQueueInfo.TaskType)
-	tq := request.TaskQueueInfo
-	tq.LastUpdateTime = timestamp.TimeNowPtrUtc()
-
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
 	var resp *persistence.UpdateTaskQueueResponse
-	if request.TaskQueueInfo.Kind == enumspb.TASK_QUEUE_KIND_STICKY {
-		tq.ExpiryTime = stickyTaskQueueTTL()
-	}
-	blob, err := serialization.TaskQueueInfoToBlob(tq)
-	if err != nil {
-		return nil, err
-	}
 	err = m.txExecute(ctx, "UpdateTaskQueue", func(tx sqlplugin.Tx) error {
 		if err := lockTaskQueue(ctx,
 			tx,
@@ -217,8 +203,8 @@ func (m *sqlTaskManager) UpdateTaskQueue(
 			RangeHash:    tqHash,
 			TaskQueueID:  tqId,
 			RangeID:      request.RangeID,
-			Data:         blob.Data,
-			DataEncoding: blob.EncodingType.String(),
+			Data:         request.TaskQueueInfo.Data,
+			DataEncoding: request.TaskQueueInfo.EncodingType.String(),
 		})
 		if err != nil {
 			return err
@@ -236,7 +222,7 @@ func (m *sqlTaskManager) UpdateTaskQueue(
 	return resp, err
 }
 
-func (m *sqlTaskManager) ListTaskQueue(request *persistence.ListTaskQueueRequest) (*persistence.ListTaskQueueResponse, error) {
+func (m *sqlTaskManager) ListTaskQueue(request *persistence.ListTaskQueueRequest) (*persistence.InternalListTaskQueueResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	pageToken := taskQueuePageToken{MinTaskQueueId: minTaskQueueId}
@@ -291,23 +277,19 @@ func (m *sqlTaskManager) ListTaskQueue(request *persistence.ListTaskQueueRequest
 	}
 
 	maxRangeHash := uint32(0)
-	resp := &persistence.ListTaskQueueResponse{
-		Items: make([]*persistence.PersistedTaskQueueInfo, len(rows)),
+	resp := &persistence.InternalListTaskQueueResponse{
+		Items: make([]*persistence.InternalListTaskQueueItem, len(rows)),
 	}
 
-	for i := range rows {
-		info, err := serialization.TaskQueueInfoFromBlob(rows[i].Data, rows[i].DataEncoding)
-		if err != nil {
-			return nil, err
-		}
-		resp.Items[i] = &persistence.PersistedTaskQueueInfo{
-			Data:    info,
-			RangeID: rows[i].RangeID,
+	for i, row := range rows {
+		resp.Items[i] = &persistence.InternalListTaskQueueItem{
+			RangeID:   row.RangeID,
+			TaskQueue: persistence.NewDataBlob(row.Data, row.DataEncoding),
 		}
 
 		// Only want to look at up to PageSize number of records to prevent losing data.
-		if rows[i].RangeHash > maxRangeHash {
-			maxRangeHash = rows[i].RangeHash
+		if row.RangeHash > maxRangeHash {
+			maxRangeHash = row.RangeHash
 		}
 
 		// Enforces PageSize
@@ -397,51 +379,39 @@ func (m *sqlTaskManager) DeleteTaskQueue(
 	}
 	return nil
 }
-
 func (m *sqlTaskManager) CreateTasks(
-	request *persistence.CreateTasksRequest,
+	request *persistence.InternalCreateTasksRequest,
 ) (*persistence.CreateTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
+
+	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
+	if err != nil {
+		return nil, serviceerror.NewInternal(err.Error())
+	}
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
+
 	tasksRows := make([]sqlplugin.TasksRow, len(request.Tasks))
 	for i, v := range request.Tasks {
-		nidBytes, err := primitives.ParseUUID(v.Data.GetNamespaceId())
-		if err != nil {
-			return nil, serviceerror.NewInternal(err.Error())
-		}
-
-		blob, err := serialization.TaskInfoToBlob(v)
-
-		if err != nil {
-			return nil, err
-		}
-
-		tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueueInfo.Data.Name, request.TaskQueueInfo.Data.TaskType)
 		tasksRows[i] = sqlplugin.TasksRow{
 			RangeHash:    tqHash,
 			TaskQueueID:  tqId,
-			TaskID:       v.GetTaskId(),
-			Data:         blob.Data,
-			DataEncoding: blob.EncodingType.String(),
+			TaskID:       v.TaskId,
+			Data:         v.Task.Data,
+			DataEncoding: v.Task.EncodingType.String(),
 		}
 	}
 	var resp *persistence.CreateTasksResponse
-	err := m.txExecute(ctx, "CreateTasks", func(tx sqlplugin.Tx) error {
-		nidBytes, err := primitives.ParseUUID(request.TaskQueueInfo.Data.GetNamespaceId())
-		if err != nil {
-			return serviceerror.NewInternal(err.Error())
-		}
-
+	err = m.txExecute(ctx, "CreateTasks", func(tx sqlplugin.Tx) error {
 		if _, err1 := tx.InsertIntoTasks(ctx, tasksRows); err1 != nil {
 			return err1
 		}
-		tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueueInfo.Data.Name, request.TaskQueueInfo.Data.TaskType)
 		// Lock task queue before committing.
 		if err := lockTaskQueue(ctx,
 			tx,
 			tqHash,
 			tqId,
-			request.TaskQueueInfo.RangeID,
+			request.RangeID,
 		); err != nil {
 			return err
 		}
@@ -453,7 +423,7 @@ func (m *sqlTaskManager) CreateTasks(
 
 func (m *sqlTaskManager) GetTasks(
 	request *persistence.GetTasksRequest,
-) (*persistence.GetTasksResponse, error) {
+) (*persistence.InternalGetTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
@@ -473,16 +443,12 @@ func (m *sqlTaskManager) GetTasks(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTasks operation failed. Failed to get rows. Error: %v", err))
 	}
 
-	var tasks = make([]*persistencespb.AllocatedTaskInfo, len(rows))
+	var tasks = make([]*commonpb.DataBlob, len(rows))
 	for i, v := range rows {
-		info, err := serialization.TaskInfoFromBlob(v.Data, v.DataEncoding)
-		if err != nil {
-			return nil, err
-		}
-		tasks[i] = info
+		tasks[i] = persistence.NewDataBlob(v.Data, v.DataEncoding)
 	}
 
-	return &persistence.GetTasksResponse{Tasks: tasks}, nil
+	return &persistence.InternalGetTasksResponse{Tasks: tasks}, nil
 }
 
 func (m *sqlTaskManager) CompleteTask(
@@ -590,8 +556,4 @@ func lockTaskQueue(
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock task queue. Error: %v", err))
 	}
-}
-
-func stickyTaskQueueTTL() *time.Time {
-	return timestamp.TimePtr(time.Now().UTC().Add(24 * time.Hour))
 }
