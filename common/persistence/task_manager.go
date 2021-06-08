@@ -178,16 +178,16 @@ func (m *taskManagerImpl) ListTaskQueue(request *ListTaskQueueRequest) (*ListTas
 	if err != nil {
 		return nil, err
 	}
-	var taskQueues []*PersistedTaskQueueInfo
-	for _, item := range internalResp.Items {
+	taskQueues := make([]*PersistedTaskQueueInfo, 0, len(internalResp.Items))
+	for i, item := range internalResp.Items {
 		tqi, err := m.serializer.TaskQueueInfoFromBlob(item.TaskQueue)
 		if err != nil {
 			return nil, err
 		}
-		taskQueues = append(taskQueues, &PersistedTaskQueueInfo{
+		taskQueues[i] = &PersistedTaskQueueInfo{
 			Data:    tqi,
 			RangeID: item.RangeID,
-		})
+		}
 
 	}
 	return &ListTaskQueueResponse{
@@ -208,17 +208,17 @@ func (m *taskManagerImpl) CreateTasks(request *CreateTasksRequest) (*CreateTasks
 		return nil, err
 	}
 
-	var tasks []*InternalCreateTask
-	for _, task := range request.Tasks {
+	tasks := make([]*InternalCreateTask, 0, len(request.Tasks))
+	for i, task := range request.Tasks {
 		taskBlob, err := m.serializer.TaskInfoToBlob(task, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", err))
 		}
-		tasks = append(tasks, &InternalCreateTask{
+		tasks[i] = &InternalCreateTask{
 			TaskId:     task.GetTaskId(),
 			ExpiryTime: task.Data.ExpiryTime,
 			Task:       taskBlob,
-		})
+		}
 	}
 	internalRequest := &InternalCreateTasksRequest{
 		NamespaceID:   request.TaskQueueInfo.Data.GetNamespaceId(),
@@ -236,13 +236,13 @@ func (m *taskManagerImpl) GetTasks(request *GetTasksRequest) (*GetTasksResponse,
 	if err != nil {
 		return nil, err
 	}
-	var tasks []*persistencespb.AllocatedTaskInfo
-	for _, taskBlob := range internalResp.Tasks {
+	tasks := make([]*persistencespb.AllocatedTaskInfo, 0, len(internalResp.Tasks))
+	for i, taskBlob := range internalResp.Tasks {
 		task, err := m.serializer.TaskInfoFromBlob(taskBlob)
 		if err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTasks failed to deserialize task: %s", err.Error()))
 		}
-		tasks = append(tasks, task)
+		tasks[i] = task
 	}
 	return &GetTasksResponse{
 		Tasks: tasks,
