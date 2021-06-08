@@ -79,6 +79,16 @@ func (c *ConditionVariableImpl) Wait(
 	channel := c.channel
 	c.chanLock.Unlock()
 
+	// user provided lock must be released after getting the above channel
+	// so channel to be waited on < release of user lock < acquire of user lock < signal / broadcast
+	// ```
+	// That is, if another thread is able to acquire the mutex after the about-to-block
+	// thread has released it, then a subsequent call to pthread_cond_signal() or
+	// pthread_cond_broadcast() in that thread behaves as if it were issued after the
+	// about-to-block thread has blocked.
+	// ref: https://pubs.opengroup.org/onlinepubs/007908799/xsh/pthread_cond_wait.html
+	// ```
+
 	c.lock.Unlock()
 	defer c.lock.Lock()
 
