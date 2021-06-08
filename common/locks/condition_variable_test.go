@@ -27,7 +27,6 @@ package locks
 import (
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -66,7 +65,9 @@ func (s *conditionVariableSuite) TearDownTest() {
 }
 
 func (s *conditionVariableSuite) TestSignal() {
-	waitTime := time.Second * 4
+	signalWaitGroup := sync.WaitGroup{}
+	signalWaitGroup.Add(1)
+
 	waitGroup := sync.WaitGroup{}
 	waitGroup.Add(1)
 
@@ -74,20 +75,23 @@ func (s *conditionVariableSuite) TestSignal() {
 		s.lock.Lock()
 		defer s.lock.Unlock()
 
-		now := time.Now()
+		signalWaitGroup.Done()
 		s.cv.Wait(nil)
-		s.True(time.Now().Sub(now) >= waitTime)
 		waitGroup.Done()
 	}
 	go waitFn()
 
-	time.Sleep(waitTime)
+	signalWaitGroup.Wait()
+	s.lock.Lock()
+	s.lock.Unlock()
 	s.cv.Signal()
 	waitGroup.Wait()
 }
 
 func (s *conditionVariableSuite) TestInterrupt() {
-	waitTime := time.Second * 4
+	interruptWaitGroup := sync.WaitGroup{}
+	interruptWaitGroup.Add(1)
+
 	waitGroup := sync.WaitGroup{}
 	waitGroup.Add(1)
 	interruptChan := make(chan struct{})
@@ -96,21 +100,24 @@ func (s *conditionVariableSuite) TestInterrupt() {
 		s.lock.Lock()
 		defer s.lock.Unlock()
 
-		now := time.Now()
+		interruptWaitGroup.Done()
 		s.cv.Wait(interruptChan)
-		s.True(time.Now().Sub(now) >= waitTime)
 		waitGroup.Done()
 	}
 	go waitFn()
 
-	time.Sleep(waitTime)
+	interruptWaitGroup.Wait()
+	s.lock.Lock()
+	s.lock.Unlock()
 	interruptChan <- struct{}{}
 	waitGroup.Wait()
 }
 
 func (s *conditionVariableSuite) TestBroadcast() {
-	waitTime := time.Second * 4
-	waitThreads := 16
+	waitThreads := 256
+
+	broadcastWaitGroup := sync.WaitGroup{}
+	broadcastWaitGroup.Add(waitThreads)
 
 	waitGroup := sync.WaitGroup{}
 	waitGroup.Add(waitThreads)
@@ -119,16 +126,17 @@ func (s *conditionVariableSuite) TestBroadcast() {
 		s.lock.Lock()
 		defer s.lock.Unlock()
 
-		now := time.Now()
+		broadcastWaitGroup.Done()
 		s.cv.Wait(nil)
-		s.True(time.Now().Sub(now) >= waitTime)
 		waitGroup.Done()
 	}
 	for i := 0; i < waitThreads; i++ {
 		go waitFn()
 	}
 
-	time.Sleep(waitTime)
+	broadcastWaitGroup.Wait()
+	s.lock.Lock()
+	s.lock.Unlock()
 	s.cv.Broadcast()
 	waitGroup.Wait()
 }

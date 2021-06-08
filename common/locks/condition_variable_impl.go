@@ -50,6 +50,7 @@ func NewConditionVariable(
 	}
 }
 
+// Signal wakes one goroutine waiting on this condition variable, if there is any.
 func (c *ConditionVariableImpl) Signal() {
 	c.chanLock.Lock()
 	defer c.chanLock.Unlock()
@@ -61,6 +62,7 @@ func (c *ConditionVariableImpl) Signal() {
 	}
 }
 
+// Broadcast wakes all goroutines waiting on this condition variable.
 func (c *ConditionVariableImpl) Broadcast() {
 	newChannel := make(chan struct{})
 
@@ -71,6 +73,9 @@ func (c *ConditionVariableImpl) Broadcast() {
 	c.channel = newChannel
 }
 
+// Wait atomically unlocks user provided lock and suspends execution of the calling goroutine.
+// After later resuming execution, Wait locks c.L before returning.
+// Wait can be awoken by Broadcast, Signal or user provided interrupt channel.
 func (c *ConditionVariableImpl) Wait(
 	interrupt <-chan struct{},
 ) {
