@@ -998,8 +998,6 @@ const (
 	HistoryCacheGetOrCreateScope
 	// HistoryCacheGetOrCreateCurrentScope is the scope used by history cache
 	HistoryCacheGetOrCreateCurrentScope
-	// HistoryCacheGetCurrentExecutionScope is the scope used by history cache for getting current execution
-	HistoryCacheGetCurrentExecutionScope
 	// EventsCacheGetEventScope is the scope used by events cache
 	EventsCacheGetEventScope
 	// EventsCachePutEventScope is the scope used by events cache
@@ -1548,7 +1546,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryCacheGetAndCreateScope:             {operation: "HistoryCacheGetAndCreate", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
 		HistoryCacheGetOrCreateScope:              {operation: "HistoryCacheGetOrCreate", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
 		HistoryCacheGetOrCreateCurrentScope:       {operation: "HistoryCacheGetOrCreateCurrent", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
-		HistoryCacheGetCurrentExecutionScope:      {operation: "HistoryCacheGetCurrentExecution", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
 		EventsCacheGetEventScope:                  {operation: "EventsCacheGetEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
 		EventsCachePutEventScope:                  {operation: "EventsCachePutEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
 		EventsCacheDeleteEventScope:               {operation: "EventsCacheDeleteEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
