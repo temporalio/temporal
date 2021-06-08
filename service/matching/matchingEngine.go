@@ -371,7 +371,7 @@ pollLoop:
 			})
 			if err != nil {
 				// will notify query client that the query task failed
-				e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err}) // nolint:errcheck
+				_ = e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err})
 				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 
@@ -548,7 +548,7 @@ func (e *matchingEngineImpl) RespondQueryTaskCompleted(
 func (e *matchingEngineImpl) deliverQueryResult(taskID string, queryResult *queryResult) error {
 	queryResultCh, ok := e.lockableQueryTaskMap.get(taskID)
 	if !ok {
-		return serviceerror.NewInternal("query task not found, or already expired")
+		return serviceerror.NewNotFound("query task not found, or already expired")
 	}
 	queryResultCh <- queryResult
 	return nil
