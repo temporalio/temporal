@@ -18,7 +18,7 @@ FROM alpine:3.12 AS base-server
 RUN apk add --update --no-cache \
     ca-certificates \
     openssl \
-    bash \
+#    bash \
     curl \
     vim
 
