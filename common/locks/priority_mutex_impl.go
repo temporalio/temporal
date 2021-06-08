@@ -67,6 +67,7 @@ func NewPriorityMutex() *PriorityMutexImpl {
 	}
 }
 
+// LockHigh try to lock with high priority, use LockHigh / UnlockHigh pair to lock / unlock
 func (c *PriorityMutexImpl) LockHigh(
 	ctx context.Context,
 ) error {
@@ -88,6 +89,7 @@ func (c *PriorityMutexImpl) LockHigh(
 	return nil
 }
 
+// LockLow try to lock with low priority, use LockLow / UnlockLow pair to lock / unlock
 func (c *PriorityMutexImpl) LockLow(
 	ctx context.Context,
 ) error {
@@ -109,6 +111,7 @@ func (c *PriorityMutexImpl) LockLow(
 	return nil
 }
 
+// UnlockHigh unlock with high priority, use LockHigh / UnlockHigh pair to lock / unlock
 func (c *PriorityMutexImpl) UnlockHigh() {
 	c.locker.Lock()
 	defer c.locker.Unlock()
@@ -121,6 +124,7 @@ func (c *PriorityMutexImpl) UnlockHigh() {
 	c.notify()
 }
 
+// UnlockLow unlock with low priority, use LockLow / UnlockLow pair to lock / unlock
 func (c *PriorityMutexImpl) UnlockLow() {
 	c.locker.Lock()
 	defer c.locker.Unlock()

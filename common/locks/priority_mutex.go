@@ -30,9 +30,13 @@ import (
 
 type (
 	PriorityMutex interface {
+		// LockHigh try to lock with high priority, use LockHigh / UnlockHigh pair to lock / unlock
 		LockHigh(context.Context) error
+		// LockLow try to lock with low priority, use LockLow / UnlockLow pair to lock / unlock
 		LockLow(context.Context) error
+		// UnlockHigh unlock with high priority, use LockHigh / UnlockHigh pair to lock / unlock
 		UnlockHigh()
+		// UnlockLow unlock with low priority, use LockLow / UnlockLow pair to lock / unlock
 		UnlockLow()
 	}
 )
