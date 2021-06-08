@@ -71,8 +71,8 @@ var (
 	testNamespace    = "test-namespace"
 	testNamespaceID  = "bfd5c907-f899-4baf-a7b2-2ab85e623ebd"
 	testPageSize     = 5
-	testEarliestTime = int64(1547596872371000000)
-	testLatestTime   = int64(2547596872371000000)
+	testEarliestTime = time.Unix(0, 1547596872371000000).UTC()
+	testLatestTime   = time.Unix(0, 2547596872371000000).UTC()
 	testWorkflowType = "test-wf-type"
 	testWorkflowID   = "test-wid"
 	testRunID        = "1601da05-4db9-4eeb-89e4-da99481bdfc9"
@@ -350,8 +350,8 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	runningQuery := elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 	tieBreakerSorter := elastic.NewFieldSort(searchattribute.RunID).Desc()
 
-	earliestTime := convert.Int64ToString(request.EarliestStartTime - oneMilliSecondInNano)
-	latestTime := convert.Int64ToString(request.LatestStartTime + oneMilliSecondInNano)
+	earliestTime := convert.Int64ToString(request.EarliestStartTime.UnixNano() - oneMilliSecondInNano)
+	latestTime := convert.Int64ToString(request.LatestStartTime.UnixNano() + oneMilliSecondInNano)
 
 	// test for open
 	rangeQuery := elastic.NewRangeQuery(searchattribute.StartTime).Gte(earliestTime).Lte(latestTime)
@@ -368,8 +368,8 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	s.NoError(err)
 
 	// test request latestTime overflow
-	request.LatestStartTime = math.MaxInt64
-	rangeQuery1 := elastic.NewRangeQuery(searchattribute.StartTime).Gte(earliestTime).Lte(convert.Int64ToString(request.LatestStartTime))
+	request.LatestStartTime = time.Unix(0, math.MaxInt64).UTC()
+	rangeQuery1 := elastic.NewRangeQuery(searchattribute.StartTime).Gte(earliestTime).Lte(convert.Int64ToString(request.LatestStartTime.UnixNano()))
 	boolQuery1 := elastic.NewBoolQuery().Must(runningQuery).Must(matchNamespaceQuery).Filter(rangeQuery1)
 	param1 := &client.SearchParameters{
 		Index:    testIndex,

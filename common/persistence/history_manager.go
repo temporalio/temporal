@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/primitives/timestamp"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -44,7 +45,7 @@ import (
 type (
 	// historyManagerImpl implements HistoryManager based on HistoryStore and PayloadSerializer
 	historyV2ManagerImpl struct {
-		historySerializer     PayloadSerializer
+		historySerializer     serialization.Serializer
 		persistence           HistoryStore
 		logger                log.Logger
 		pagingTokenSerializer *jsonHistoryTokenSerializer
@@ -70,7 +71,7 @@ func NewHistoryV2ManagerImpl(
 ) HistoryManager {
 
 	return &historyV2ManagerImpl{
-		historySerializer:     NewPayloadSerializer(),
+		historySerializer:     serialization.NewSerializer(),
 		persistence:           persistence,
 		logger:                logger,
 		pagingTokenSerializer: newJSONHistoryTokenSerializer(),
@@ -93,32 +94,74 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(
 		}
 	}
 
-	forkBranch, err := serialization.HistoryBranchFromBlob(request.ForkBranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
+	forkBranch, err := m.historySerializer.HistoryBranchFromBlob(&commonpb.DataBlob{Data: request.ForkBranchToken, EncodingType: enumspb.ENCODING_TYPE_PROTO3})
+	if err != nil {
+		return nil, err
+	}
+
+	newAncestors := make([]*persistencespb.HistoryBranchRange, 0, len(forkBranch.Ancestors)+1)
+
+	beginNodeID := GetBeginNodeID(forkBranch)
+	if beginNodeID >= request.ForkNodeID {
+		// this is the case that new branch's ancestors doesn't include the forking branch
+		for _, br := range forkBranch.Ancestors {
+			if br.GetEndNodeId() >= request.ForkNodeID {
+				newAncestors = append(newAncestors, &persistencespb.HistoryBranchRange{
+					BranchId:    br.GetBranchId(),
+					BeginNodeId: br.GetBeginNodeId(),
+					EndNodeId:   request.ForkNodeID,
+				})
+				break
+			} else {
+				newAncestors = append(newAncestors, br)
+			}
+		}
+	} else {
+		// this is the case the new branch will inherit all ancestors from forking branch
+		newAncestors = forkBranch.Ancestors
+		newAncestors = append(newAncestors, &persistencespb.HistoryBranchRange{
+			BranchId:    forkBranch.GetBranchId(),
+			BeginNodeId: beginNodeID,
+			EndNodeId:   request.ForkNodeID,
+		})
+	}
+	newBranchInfo := &persistencespb.HistoryBranch{
+		TreeId:    forkBranch.TreeId,
+		BranchId:  uuid.New(),
+		Ancestors: newAncestors,
+	}
+	treeInfo := &persistencespb.HistoryTreeInfo{
+		BranchInfo: newBranchInfo,
+		ForkTime:   timestamp.TimeNowPtrUtc(),
+		Info:       request.Info,
+	}
+
+	treeInfoBlob, err := m.historySerializer.HistoryTreeInfoToBlob(treeInfo, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return nil, err
 	}
 
 	req := &InternalForkHistoryBranchRequest{
 		ForkBranchInfo: forkBranch,
+		TreeInfo:       treeInfoBlob,
 		ForkNodeID:     request.ForkNodeID,
-		NewBranchID:    uuid.New(),
+		NewBranchID:    newBranchInfo.BranchId,
 		Info:           request.Info,
 		ShardID:        request.ShardID,
 	}
 
-	resp, err := m.persistence.ForkHistoryBranch(req)
+	err = m.persistence.ForkHistoryBranch(req)
 	if err != nil {
 		return nil, err
 	}
 
-	datablob, err := serialization.HistoryBranchToBlob(resp.NewBranchInfo)
+	branchInfoBlob, err := m.historySerializer.HistoryBranchToBlob(newBranchInfo, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return nil, err
 	}
-	token := datablob.Data
 
 	return &ForkHistoryBranchResponse{
-		NewBranchToken: token,
+		NewBranchToken: branchInfoBlob.Data,
 	}, nil
 }
 
@@ -132,11 +175,67 @@ func (m *historyV2ManagerImpl) DeleteHistoryBranch(
 		return err
 	}
 
-	req := &InternalDeleteHistoryBranchRequest{
-		BranchInfo: branch,
-		ShardID:    request.ShardID,
+	// We need to delete the target branch and its ancestors if they are not referenced by any other branches.
+	// However, it is possible that part of the target branch (or its ancestors) is used as ancestors by other branch.
+	// We need to avoid deleting those referenced parts. This is similar to reference count in garbage collection.
+	brsToDelete := branch.Ancestors
+	brsToDelete = append(brsToDelete, &persistencespb.HistoryBranchRange{
+		BranchId:    branch.GetBranchId(),
+		BeginNodeId: GetBeginNodeID(branch),
+	})
+
+	// Get the entire history tree, so we know if any part of the target branch is referenced by other branches.
+	historyTreeResp, err := m.GetHistoryTree(&GetHistoryTreeRequest{
+		TreeID:      branch.TreeId,
+		ShardID:     &request.ShardID,
+		BranchToken: request.BranchToken,
+	})
+	if err != nil {
+		return err
 	}
 
+	// usedBranches record branches referenced by others
+	usedBranches := map[string]int64{}
+	for _, br := range historyTreeResp.Branches {
+		if br.BranchId == branch.BranchId {
+			// skip the target branch
+			continue
+		}
+		for _, ancestor := range br.Ancestors {
+			if curr, ok := usedBranches[ancestor.GetBranchId()]; !ok || curr < ancestor.GetEndNodeId() {
+				usedBranches[ancestor.GetBranchId()] = ancestor.GetEndNodeId()
+			}
+		}
+	}
+
+	var deleteRanges []InternalDeleteHistoryBranchRange
+	// for each branch range to delete, we iterate from bottom up, and stop when the range is also used by others
+findDeleteRanges:
+	for i := len(brsToDelete) - 1; i >= 0; i-- {
+		br := brsToDelete[i]
+		if maxEndNode, ok := usedBranches[br.GetBranchId()]; ok {
+			// branch is used by others, we can only delete from the maxEndNode
+			deleteRanges = append(deleteRanges, InternalDeleteHistoryBranchRange{
+				BranchId:    br.BranchId,
+				BeginNodeId: maxEndNode,
+			})
+			// all ancestors are also used, no need to go up further,
+			break findDeleteRanges
+		} else {
+			// No other branch is using this range, we can delete all of it
+			deleteRanges = append(deleteRanges, InternalDeleteHistoryBranchRange{
+				BranchId:    br.BranchId,
+				BeginNodeId: br.BeginNodeId,
+			})
+		}
+	}
+
+	req := &InternalDeleteHistoryBranchRequest{
+		ShardID:      request.ShardID,
+		TreeId:       branch.TreeId,
+		BranchId:     branch.BranchId,
+		BranchRanges: deleteRanges,
+	}
 	return m.persistence.DeleteHistoryBranch(req)
 }
 
@@ -247,7 +346,19 @@ func (m *historyV2ManagerImpl) GetHistoryTree(
 		}
 		request.TreeID = branch.GetTreeId()
 	}
-	return m.persistence.GetHistoryTree(request)
+	resp, err := m.persistence.GetHistoryTree(request)
+	if err != nil {
+		return nil, err
+	}
+	branches := make([]*persistencespb.HistoryBranch, 0, len(resp.TreeInfos))
+	for _, blob := range resp.TreeInfos {
+		br, err := m.historySerializer.HistoryTreeInfoFromBlob(NewDataBlob(blob.Data, blob.EncodingType.String()))
+		if err != nil {
+			return nil, err
+		}
+		branches = append(branches, br.BranchInfo)
+	}
+	return &GetHistoryTreeResponse{Branches: branches}, nil
 }
 
 // AppendHistoryNodes add a node to history node table
@@ -255,7 +366,7 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(
 	request *AppendHistoryNodesRequest,
 ) (*AppendHistoryNodesResponse, error) {
 
-	branch, err := serialization.HistoryBranchFromBlob(request.BranchToken, enumspb.ENCODING_TYPE_PROTO3.String())
+	branch, err := m.historySerializer.HistoryBranchFromBlob(&commonpb.DataBlob{Data: request.BranchToken, EncodingType: enumspb.ENCODING_TYPE_PROTO3})
 	if err != nil {
 		return nil, err
 	}
@@ -264,6 +375,8 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(
 			Msg: fmt.Sprintf("events to be appended cannot be empty"),
 		}
 	}
+	sortAncestors(branch.Ancestors)
+
 	version := request.Events[0].Version
 	nodeID := request.Events[0].EventId
 	lastID := nodeID - 1
@@ -311,6 +424,25 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(
 			TransactionID:     request.TransactionID,
 		},
 		ShardID: request.ShardID,
+	}
+
+	if req.IsNewBranch {
+		// TreeInfo is only needed for new branch
+		treeInfoBlob, err := m.historySerializer.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
+			BranchInfo: branch,
+			ForkTime:   timestamp.TimeNowPtrUtc(),
+			Info:       request.Info,
+		}, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+		req.TreeInfo = treeInfoBlob
+	}
+
+	if nodeID < GetBeginNodeID(branch) {
+		return nil, &InvalidPersistenceRequestError{
+			Msg: fmt.Sprintf("cannot append to ancestors' nodes"),
+		}
 	}
 
 	err = m.persistence.AppendHistoryNodes(req)
@@ -371,8 +503,31 @@ func (m *historyV2ManagerImpl) ReadRawHistoryBranch(
 func (m *historyV2ManagerImpl) GetAllHistoryTreeBranches(
 	request *GetAllHistoryTreeBranchesRequest,
 ) (*GetAllHistoryTreeBranchesResponse, error) {
+	resp, err := m.persistence.GetAllHistoryTreeBranches(request)
+	if err != nil {
+		return nil, err
+	}
+	branches := make([]HistoryBranchDetail, 0, len(resp.Branches))
+	for _, branch := range resp.Branches {
+		blob := NewDataBlob(branch.Data, branch.Encoding)
+		treeInfo, err := m.historySerializer.HistoryTreeInfoFromBlob(blob)
+		if err != nil {
+			return nil, err
+		}
 
-	return m.persistence.GetAllHistoryTreeBranches(request)
+		branchDetail := HistoryBranchDetail{
+			TreeID:   branch.TreeID,
+			BranchID: branch.BranchID,
+			ForkTime: treeInfo.ForkTime,
+			Info:     treeInfo.Info,
+		}
+		branches = append(branches, branchDetail)
+	}
+
+	return &GetAllHistoryTreeBranchesResponse{
+		NextPageToken: resp.NextPageToken,
+		Branches:      branches,
+	}, nil
 }
 
 func (m *historyV2ManagerImpl) readRawHistoryBranch(

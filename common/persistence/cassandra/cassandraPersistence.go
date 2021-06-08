@@ -107,7 +107,6 @@ const (
 
 const (
 	taskQueueTaskID = -12345
-	initialRangeID  = 1 // Id of the first range of a new task queue
 )
 
 const (
@@ -710,7 +709,7 @@ const (
 
 var (
 	defaultDateTime            = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
-	defaultVisibilityTimestamp = p.UnixNanoToDBTimestamp(defaultDateTime.UnixNano())
+	defaultVisibilityTimestamp = p.UnixMilliseconds(defaultDateTime)
 )
 
 type (
@@ -780,26 +779,22 @@ func (d *cassandraPersistence) GetShardID() int32 {
 	return d.shardID
 }
 
-func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error {
-	shardInfo := request.ShardInfo
-	shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
-	data, err := serialization.ShardInfoToBlob(shardInfo)
+func (d *cassandraPersistence) GetClusterName() string {
+	return d.currentClusterName
+}
 
-	if err != nil {
-		return gocql.ConvertError("CreateShard", err)
-	}
-
+func (d *cassandraPersistence) CreateShard(request *p.InternalCreateShardRequest) error {
 	query := d.session.Query(templateCreateShardQuery,
-		shardInfo.GetShardId(),
+		request.ShardID,
 		rowTypeShard,
 		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
 		rowTypeShardRunID,
 		defaultVisibilityTimestamp,
 		rowTypeShardTaskID,
-		data.Data,
-		data.EncodingType.String(),
-		shardInfo.GetRangeId())
+		request.ShardInfo.Data,
+		request.ShardInfo.EncodingType.String(),
+		request.RangeID)
 
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
@@ -808,20 +803,14 @@ func (d *cassandraPersistence) CreateShard(request *p.CreateShardRequest) error 
 	}
 
 	if !applied {
-		data := previous["shard"].([]byte)
-		encoding := previous["shard_encoding"].(string)
-		shard, _ := serialization.ShardInfoFromBlob(data, encoding, d.currentClusterName)
-
 		return &p.ShardAlreadyExistError{
-			Msg: fmt.Sprintf("Shard already exists in executions table.  ShardId: %v, RangeId: %v",
-				shard.GetShardId(), shard.GetRangeId()),
+			Msg: fmt.Sprintf("Shard already exists in executions table.  ShardId: %v.", request.ShardID),
 		}
 	}
-
 	return nil
 }
 
-func (d *cassandraPersistence) GetShard(request *p.GetShardRequest) (*p.GetShardResponse, error) {
+func (d *cassandraPersistence) GetShard(request *p.InternalGetShardRequest) (*p.InternalGetShardResponse, error) {
 	shardID := request.ShardID
 	query := d.session.Query(templateGetShardQuery,
 		shardID,
@@ -838,29 +827,15 @@ func (d *cassandraPersistence) GetShard(request *p.GetShardRequest) (*p.GetShard
 		return nil, gocql.ConvertError("GetShard", err)
 	}
 
-	info, err := serialization.ShardInfoFromBlob(data, encoding, d.currentClusterName)
-
-	if err != nil {
-		return nil, gocql.ConvertError("GetShard", err)
-	}
-
-	return &p.GetShardResponse{ShardInfo: info}, nil
+	return &p.InternalGetShardResponse{ShardInfo: p.NewDataBlob(data, encoding)}, nil
 }
 
-func (d *cassandraPersistence) UpdateShard(request *p.UpdateShardRequest) error {
-	shardInfo := request.ShardInfo
-	shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
-	data, err := serialization.ShardInfoToBlob(shardInfo)
-
-	if err != nil {
-		return gocql.ConvertError("UpdateShard", err)
-	}
-
+func (d *cassandraPersistence) UpdateShard(request *p.InternalUpdateShardRequest) error {
 	query := d.session.Query(templateUpdateShardQuery,
-		data.Data,
-		data.EncodingType.String(),
-		shardInfo.GetRangeId(),
-		shardInfo.GetShardId(), // Where
+		request.ShardInfo.Data,
+		request.ShardInfo.EncodingType.String(),
+		request.RangeID,
+		request.ShardID,
 		rowTypeShard,
 		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
@@ -2031,7 +2006,7 @@ func (d *cassandraPersistence) RangeCompleteReplicationTask(
 }
 
 func (d *cassandraPersistence) CompleteTimerTask(request *p.CompleteTimerTaskRequest) error {
-	ts := p.UnixNanoToDBTimestamp(request.VisibilityTimestamp.UnixNano())
+	ts := p.UnixMilliseconds(request.VisibilityTimestamp)
 	query := d.session.Query(templateCompleteTimerTaskQuery,
 		d.shardID,
 		rowTypeTimerTask,
@@ -2046,8 +2021,8 @@ func (d *cassandraPersistence) CompleteTimerTask(request *p.CompleteTimerTaskReq
 }
 
 func (d *cassandraPersistence) RangeCompleteTimerTask(request *p.RangeCompleteTimerTaskRequest) error {
-	start := p.UnixNanoToDBTimestamp(request.InclusiveBeginTimestamp.UnixNano())
-	end := p.UnixNanoToDBTimestamp(request.ExclusiveEndTimestamp.UnixNano())
+	start := p.UnixMilliseconds(request.InclusiveBeginTimestamp)
+	end := p.UnixMilliseconds(request.ExclusiveEndTimestamp)
 	query := d.session.Query(templateRangeCompleteTimerTaskQuery,
 		d.shardID,
 		rowTypeTimerTask,
@@ -2062,12 +2037,36 @@ func (d *cassandraPersistence) RangeCompleteTimerTask(request *p.RangeCompleteTi
 	return gocql.ConvertError("RangeCompleteTimerTask", err)
 }
 
-// From TaskManager interface
-func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) (*p.LeaseTaskQueueResponse, error) {
-	if len(request.TaskQueue) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue requires non empty task queue"))
+func (d *cassandraPersistence) CreateTaskQueue(request *p.InternalCreateTaskQueueRequest) error {
+	query := d.session.Query(templateInsertTaskQueueQuery,
+		request.NamespaceID,
+		request.TaskQueue,
+		request.TaskType,
+		rowTypeTaskQueue,
+		taskQueueTaskID,
+		request.RangeID,
+		request.TaskQueueInfo.Data,
+		request.TaskQueueInfo.EncodingType.String(),
+	)
+
+	previous := make(map[string]interface{})
+	applied, err := query.MapScanCAS(previous)
+	if err != nil {
+		return gocql.ConvertError("LeaseTaskQueue", err)
 	}
-	now := timestamp.TimeNowPtrUtc()
+
+	if !applied {
+		previousRangeID := previous["range_id"]
+		return &p.ConditionFailedError{
+			Msg: fmt.Sprintf("CreateTaskQueue: TaskQueue:%v, TaskQueueType:%v, PreviousRangeID:%v",
+				request.TaskQueue, request.TaskType, previousRangeID),
+		}
+	}
+
+	return nil
+}
+
+func (d *cassandraPersistence) GetTaskQueue(request *p.InternalGetTaskQueueRequest) (*p.InternalGetTaskQueueResponse, error) {
 	query := d.session.Query(templateGetTaskQueue,
 		request.NamespaceID,
 		request.TaskQueue,
@@ -2075,99 +2074,47 @@ func (d *cassandraPersistence) LeaseTaskQueue(request *p.LeaseTaskQueueRequest) 
 		rowTypeTaskQueue,
 		taskQueueTaskID,
 	)
+
 	var rangeID int64
 	var tlBytes []byte
 	var tlEncoding string
-	err := query.Scan(&rangeID, &tlBytes, &tlEncoding)
-	var tl *p.PersistedTaskQueueInfo
-	if err != nil {
-		if gocql.IsNotFoundError(err) { // First time task queue is used
-			tl = &p.PersistedTaskQueueInfo{
-				Data: &persistencespb.TaskQueueInfo{
-					NamespaceId:    request.NamespaceID,
-					Name:           request.TaskQueue,
-					TaskType:       request.TaskType,
-					Kind:           request.TaskQueueKind,
-					AckLevel:       0,
-					ExpiryTime:     nil,
-					LastUpdateTime: now,
-				},
-				RangeID: initialRangeID,
-			}
-			datablob, err := serialization.TaskQueueInfoToBlob(tl.Data)
-
-			if err != nil {
-				return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed during serialization. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
-			}
-
-			query = d.session.Query(templateInsertTaskQueueQuery,
-				request.NamespaceID,
-				request.TaskQueue,
-				request.TaskType,
-				rowTypeTaskQueue,
-				taskQueueTaskID,
-				initialRangeID,
-				datablob.Data,
-				datablob.EncodingType.String(),
-			)
-		} else if gocql.IsThrottlingError(err) {
-			return nil, serviceerror.NewResourceExhausted(fmt.Sprintf("LeaseTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
-		} else {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
-		}
-	} else {
-		// if request.RangeID is > 0, we are trying to renew an already existing
-		// lease on the task queue. If request.RangeID=0, we are trying to steal
-		// the taskqueue from its current owner
-		if request.RangeID > 0 && request.RangeID != rangeID {
-			return nil, &p.ConditionFailedError{
-				Msg: fmt.Sprintf("leaseTaskQueue:renew failed: taskQueue:%v, taskQueueType:%v, haveRangeID:%v, gotRangeID:%v",
-					request.TaskQueue, request.TaskType, request.RangeID, rangeID),
-			}
-		}
-
-		tli, err := serialization.TaskQueueInfoFromBlob(tlBytes, tlEncoding)
-		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed during serialization. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
-		}
-
-		tli.LastUpdateTime = now
-		tl = &p.PersistedTaskQueueInfo{
-			Data:    tli,
-			RangeID: rangeID + 1,
-		}
-
-		datablob, err := serialization.TaskQueueInfoToBlob(tl.Data)
-		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed during serialization. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
-		}
-
-		query = d.session.Query(templateUpdateTaskQueueQuery,
-			rangeID+1,
-			datablob.Data,
-			datablob.EncodingType.String(),
-			request.NamespaceID,
-			&request.TaskQueue,
-			request.TaskType,
-			rowTypeTaskQueue,
-			taskQueueTaskID,
-			rangeID,
-		)
+	if err := query.Scan(&rangeID, &tlBytes, &tlEncoding); err != nil {
+		return nil, gocql.ConvertError("GetTaskQueue", err)
 	}
+
+	return &p.InternalGetTaskQueueResponse{
+		RangeID:       rangeID,
+		TaskQueueInfo: p.NewDataBlob(tlBytes, tlEncoding),
+	}, nil
+}
+
+func (d *cassandraPersistence) ExtendLease(request *p.InternalExtendLeaseRequest) error {
+	query := d.session.Query(templateUpdateTaskQueueQuery,
+		request.RangeID+1,
+		request.TaskQueueInfo.Data,
+		request.TaskQueueInfo.EncodingType.String(),
+		request.NamespaceID,
+		&request.TaskQueue,
+		request.TaskType,
+		rowTypeTaskQueue,
+		taskQueueTaskID,
+		request.RangeID,
+	)
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
-		return nil, gocql.ConvertError("LeaseTaskQueue", err)
+		return gocql.ConvertError("LeaseTaskQueue", err)
 	}
+
 	if !applied {
 		previousRangeID := previous["range_id"]
-		return nil, &p.ConditionFailedError{
-			Msg: fmt.Sprintf("leaseTaskQueue: taskQueue:%v, taskQueueType:%v, haveRangeID:%v, gotRangeID:%v",
-				request.TaskQueue, request.TaskType, rangeID, previousRangeID),
+		return &p.ConditionFailedError{
+			Msg: fmt.Sprintf("LeaseTaskQueue: taskQueue:%v, taskQueueType:%v, haveRangeID:%v, gotRangeID:%v",
+				request.TaskQueue, request.TaskType, request.RangeID, previousRangeID),
 		}
 	}
 
-	return &p.LeaseTaskQueueResponse{TaskQueueInfo: tl}, nil
+	return nil
 }
 
 // From TaskManager interface
@@ -2478,8 +2425,8 @@ func (d *cassandraPersistence) GetTimerTask(request *p.GetTimerTaskRequest) (*p.
 func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksRequest) (*p.GetTimerIndexTasksResponse,
 	error) {
 	// Reading timer tasks need to be quorum level consistent, otherwise we could lose tasks
-	minTimestamp := p.UnixNanoToDBTimestamp(request.MinTimestamp.UnixNano())
-	maxTimestamp := p.UnixNanoToDBTimestamp(request.MaxTimestamp.UnixNano())
+	minTimestamp := p.UnixMilliseconds(request.MinTimestamp)
+	maxTimestamp := p.UnixMilliseconds(request.MaxTimestamp)
 	query := d.session.Query(templateGetTimerTasksQuery,
 		d.shardID,
 		rowTypeTimerTask,

@@ -13,8 +13,7 @@ require (
 	github.com/cactus/go-statsd-client/statsd v0.0.0-20200423205355-cb0885a1018c
 	github.com/cch123/elasticsql v1.0.1
 	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
-	github.com/davecgh/go-spew v1.1.1
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible
+	github.com/dgrijalva/jwt-go/v4 v4.0.0-preview1
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13
 	github.com/emirpasic/gods v0.0.0-20190624094223-e689965507ab
 	github.com/fatih/color v1.10.0

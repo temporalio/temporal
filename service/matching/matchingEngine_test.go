@@ -33,7 +33,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/emirpasic/gods/maps/treemap"
 	"github.com/gogo/protobuf/types"
 	"github.com/golang/mock/gomock"
@@ -1974,9 +1973,7 @@ func (m *testTaskManager) String() string {
 		result += fmt.Sprintf("RangeID=%v\n", tl.rangeID)
 		result += "Tasks=\n"
 		for _, t := range tl.tasks.Values() {
-			result += spew.Sdump(t)
-			result += "\n"
-
+			result += fmt.Sprintf("%v\n", t)
 		}
 		tl.Unlock()
 	}

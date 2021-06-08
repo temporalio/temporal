@@ -161,10 +161,11 @@ func NewFactory(
 // NewTaskManager returns a new task manager
 func (f *factoryImpl) NewTaskManager() (p.TaskManager, error) {
 	ds := f.datastores[storeTypeTask]
-	result, err := ds.factory.NewTaskStore()
+	taskStore, err := ds.factory.NewTaskStore()
 	if err != nil {
 		return nil, err
 	}
+	result := p.NewTaskManager(taskStore)
 	if ds.ratelimit != nil {
 		result = p.NewTaskPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}
@@ -177,7 +178,8 @@ func (f *factoryImpl) NewTaskManager() (p.TaskManager, error) {
 // NewShardManager returns a new shard manager
 func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
 	ds := f.datastores[storeTypeShard]
-	result, err := ds.factory.NewShardStore()
+	shardStore, err := ds.factory.NewShardStore()
+	result := p.NewShardManager(shardStore)
 	if err != nil {
 		return nil, err
 	}

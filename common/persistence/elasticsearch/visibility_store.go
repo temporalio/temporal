@@ -147,7 +147,7 @@ func (s *visibilityStore) RecordWorkflowExecutionClosed(request *persistence.Int
 	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
 	doc := s.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
 
-	doc[searchattribute.CloseTime] = request.CloseTimestamp
+	doc[searchattribute.CloseTime] = request.CloseTimestamp.UnixNano()
 	doc[searchattribute.HistoryLength] = request.HistoryLength
 
 	return s.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
@@ -223,8 +223,8 @@ func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityR
 		searchattribute.WorkflowID:        request.WorkflowID,
 		searchattribute.RunID:             request.RunID,
 		searchattribute.WorkflowType:      request.WorkflowTypeName,
-		searchattribute.StartTime:         request.StartTimestamp,
-		searchattribute.ExecutionTime:     request.ExecutionTimestamp,
+		searchattribute.StartTime:         request.StartTimestamp.UnixNano(),
+		searchattribute.ExecutionTime:     request.ExecutionTimestamp.UnixNano(),
 		searchattribute.ExecutionStatus:   request.Status,
 		searchattribute.TaskQueue:         request.TaskQueue,
 	}
@@ -264,8 +264,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutions(
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
-		startTime := rec.StartTime.UnixNano()
-		return request.EarliestStartTime <= startTime && startTime <= request.LatestStartTime
+		return !rec.StartTime.Before(request.EarliestStartTime) && !rec.StartTime.After(request.LatestStartTime)
 	}
 
 	return s.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
@@ -286,8 +285,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutions(
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
-		closeTime := rec.CloseTime.UnixNano()
-		return request.EarliestStartTime <= closeTime && closeTime <= request.LatestStartTime
+		return !rec.CloseTime.Before(request.EarliestStartTime) && !rec.CloseTime.After(request.LatestStartTime)
 	}
 
 	return s.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
@@ -309,8 +307,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByType(
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
-		startTime := rec.StartTime.UnixNano()
-		return request.EarliestStartTime <= startTime && startTime <= request.LatestStartTime
+		return !rec.StartTime.Before(request.EarliestStartTime) && !rec.StartTime.After(request.LatestStartTime)
 	}
 
 	return s.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
@@ -332,8 +329,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByType(
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
-		closeTime := rec.CloseTime.UnixNano()
-		return request.EarliestStartTime <= closeTime && closeTime <= request.LatestStartTime
+		return !rec.CloseTime.Before(request.EarliestStartTime) && !rec.CloseTime.After(request.LatestStartTime)
 	}
 
 	return s.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
@@ -355,8 +351,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
-		startTime := rec.StartTime.UnixNano()
-		return request.EarliestStartTime <= startTime && startTime <= request.LatestStartTime
+		return !rec.StartTime.Before(request.EarliestStartTime) && !rec.StartTime.After(request.LatestStartTime)
 	}
 
 	return s.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
@@ -378,8 +373,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
-		closeTime := rec.CloseTime.UnixNano()
-		return request.EarliestStartTime <= closeTime && closeTime <= request.LatestStartTime
+		return !rec.CloseTime.Before(request.EarliestStartTime) && !rec.CloseTime.After(request.LatestStartTime)
 	}
 
 	return s.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
@@ -400,8 +394,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
-		closeTime := rec.CloseTime.UnixNano()
-		return request.EarliestStartTime <= closeTime && closeTime <= request.LatestStartTime
+		return !rec.CloseTime.Before(request.EarliestStartTime) && !rec.CloseTime.After(request.LatestStartTime)
 	}
 
 	return s.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, isRecordValid)
@@ -797,17 +790,20 @@ func (s *visibilityStore) getSearchResult(request *persistence.ListWorkflowExecu
 	} else {
 		rangeQuery = elastic.NewRangeQuery(searchattribute.CloseTime)
 	}
+
+	latestStartTime := request.LatestStartTime.UnixNano()
+	earliestStartTime := request.EarliestStartTime.UnixNano()
 	// ElasticSearch v6 is unable to precisely compare time, have to manually add resolution 1ms to time range.
 	// Also has to use string instead of int64 to avoid data conversion issue,
 	// 9223372036854775807 to 9223372036854776000 (long overflow)
-	if request.LatestStartTime > math.MaxInt64-oneMilliSecondInNano { // prevent latestTime overflow
-		request.LatestStartTime = math.MaxInt64 - oneMilliSecondInNano
+	if latestStartTime > math.MaxInt64-oneMilliSecondInNano { // prevent latestTime overflow
+		latestStartTime = math.MaxInt64 - oneMilliSecondInNano
 	}
-	if request.EarliestStartTime < math.MinInt64+oneMilliSecondInNano { // prevent earliestTime overflow
-		request.EarliestStartTime = math.MinInt64 + oneMilliSecondInNano
+	if earliestStartTime < math.MinInt64+oneMilliSecondInNano { // prevent earliestTime overflow
+		earliestStartTime = math.MinInt64 + oneMilliSecondInNano
 	}
-	earliestTimeStr := convert.Int64ToString(request.EarliestStartTime - oneMilliSecondInNano)
-	latestTimeStr := convert.Int64ToString(request.LatestStartTime + oneMilliSecondInNano)
+	earliestTimeStr := convert.Int64ToString(earliestStartTime - oneMilliSecondInNano)
+	latestTimeStr := convert.Int64ToString(latestStartTime + oneMilliSecondInNano)
 	rangeQuery = rangeQuery.
 		Gte(earliestTimeStr).
 		Lte(latestTimeStr)

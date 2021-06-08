@@ -362,7 +362,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 	treeID := uuid.NewRandom().String()
 	wg := sync.WaitGroup{}
-	concurrency := 20
+	concurrency := 1
 	m := sync.Map{}
 
 	// test create new branch along with appending new nodes

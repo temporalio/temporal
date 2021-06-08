@@ -89,7 +89,7 @@ const (
 	templateDeleteWorkflowExecution = "DELETE FROM executions_visibility WHERE namespace_id = ? AND run_id = ?"
 )
 
-var errCloseParams = errors.New("missing one of {closeTime, historyLength} params")
+var errCloseParams = errors.New("missing one of {CloseTime, HistoryLength} params")
 
 // InsertIntoVisibility inserts a row into visibility table. If an row already exist,
 // its left as such and no update will be made
@@ -98,6 +98,7 @@ func (mdb *db) InsertIntoVisibility(
 	row *sqlplugin.VisibilityRow,
 ) (sql.Result, error) {
 	row.StartTime = mdb.converter.ToMySQLDateTime(row.StartTime)
+	row.ExecutionTime = mdb.converter.ToMySQLDateTime(row.ExecutionTime)
 	return mdb.conn.ExecContext(ctx,
 		templateCreateWorkflowExecutionStarted,
 		row.NamespaceID,
@@ -120,6 +121,7 @@ func (mdb *db) ReplaceIntoVisibility(
 	switch {
 	case row.CloseTime != nil && row.HistoryLength != nil:
 		row.StartTime = mdb.converter.ToMySQLDateTime(row.StartTime)
+		row.ExecutionTime = mdb.converter.ToMySQLDateTime(row.ExecutionTime)
 		closeTime := mdb.converter.ToMySQLDateTime(*row.CloseTime)
 		return mdb.conn.ExecContext(ctx,
 			templateCreateWorkflowExecutionClosed,
