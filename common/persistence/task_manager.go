@@ -173,7 +173,26 @@ func (m *taskManagerImpl) UpdateTaskQueue(request *UpdateTaskQueueRequest) (*Upd
 }
 
 func (m *taskManagerImpl) ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error) {
-	return m.taskStore.ListTaskQueue(request)
+	internalResp, err := m.taskStore.ListTaskQueue(request)
+	if err != nil {
+		return nil, err
+	}
+	var taskQueues []*PersistedTaskQueueInfo
+	for _, item := range internalResp.Items {
+		tqi, err := m.serializer.TaskQueueInfoFromBlob(item.TaskQueue)
+		if err != nil {
+			return nil, err
+		}
+		taskQueues = append(taskQueues, &PersistedTaskQueueInfo{
+			Data: tqi,
+			RangeID: item.RangeID,
+		})
+
+	}
+	return &ListTaskQueueResponse {
+		Items: taskQueues,
+		NextPageToken: internalResp.NextPageToken,
+	}, nil
 }
 
 func (m *taskManagerImpl) DeleteTaskQueue(request *DeleteTaskQueueRequest) error {

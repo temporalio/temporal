@@ -67,7 +67,7 @@ type (
 		GetTaskQueue(request *InternalGetTaskQueueRequest) (*InternalGetTaskQueueResponse, error)
 		ExtendLease(request *InternalExtendLeaseRequest) error
 		UpdateTaskQueue(request *InternalUpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
-		ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error)
+		ListTaskQueue(request *ListTaskQueueRequest) (*InternalListTaskQueueResponse, error)
 		DeleteTaskQueue(request *DeleteTaskQueueRequest) error
 		CreateTasks(request *InternalCreateTasksRequest) (*CreateTasksResponse, error)
 		GetTasks(request *GetTasksRequest) (*InternalGetTasksResponse, error)
@@ -300,6 +300,15 @@ type (
 
 	InternalGetTasksResponse struct {
 		Tasks []*commonpb.DataBlob
+	}
+
+	InternalListTaskQueueResponse struct {
+		Items         []*InternalListTaskQueueItem
+		NextPageToken []byte
+	}
+	InternalListTaskQueueItem struct {
+		TaskQueue *commonpb.DataBlob //serialized PersistedTaskQueueInfo
+		RangeID int64
 	}
 
 	// DataBlob represents a blob for any binary data.
