@@ -454,11 +454,11 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	// Configure Elasticsearch: add advanced visibility store config with index name.
 	handler.ESConfig = &config.Elasticsearch{
 		Indices: map[string]string{
-			"visibility": "temporal-visibility-dev",
+			"visibility": "random-index-name",
 		},
 	}
 
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("temporal-visibility-dev", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 	testCases2 := []test{
 		{
 			Name: "reserved key (ES configured)",
@@ -517,7 +517,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 
 	s.mockResource.SDKClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "random-run-id").Return(
 		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
-	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "temporal-visibility-dev").Return(map[string]string{"col": "type"}, nil)
+	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
 
 	resp, err = handler.AddSearchAttributes(ctx, &adminservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enumspb.IndexedValueType{

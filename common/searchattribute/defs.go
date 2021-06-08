@@ -46,9 +46,6 @@ const (
 	Memo              = "Memo"
 	VisibilityTaskKey = "VisibilityTaskKey"
 
-	// Attr is prefix for search attributes.
-	Attr = "Attr"
-
 	// System search attributes.
 	TemporalChangeVersion = "TemporalChangeVersion"
 	BinaryChecksums       = "BinaryChecksums"
@@ -94,31 +91,10 @@ var (
 	}
 
 	namespaceIDType = enumspb.INDEXED_VALUE_TYPE_KEYWORD
-
-	// noAttrPrefixAttributes are internal system search attributes which don't require Attr prefix.
-	// TODO: remove with Attr prefix removal
-	noAttrPrefixAttributes = map[string]struct{}{
-		NamespaceID:     {},
-		WorkflowID:      {},
-		RunID:           {},
-		WorkflowType:    {},
-		StartTime:       {},
-		ExecutionTime:   {},
-		CloseTime:       {},
-		ExecutionStatus: {},
-		TaskQueue:       {},
-	}
 )
 
 // IsReservedField return true if field name is system reserved.
 func IsReservedField(fieldName string) bool {
 	_, ok := reservedFields[fieldName]
-	return ok
-}
-
-// NoAttrPrefix return true if search attribute is system and doesn't require Attr prefix.
-// TODO: remove with Attr prefix removal
-func NoAttrPrefix(saName string) bool {
-	_, ok := noAttrPrefixAttributes[saName]
 	return ok
 }

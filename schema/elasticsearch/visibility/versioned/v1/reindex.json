@@ -1,0 +1,17 @@
+{
+  "conflicts": "proceed",
+  "source": {
+    "index": "${ES_VIS_INDEX_V0}"
+  },
+  "dest": {
+    "index": "${ES_VIS_INDEX_V1}",
+    "version_type": "external"
+  },
+  "script": {
+    "lang": "painless",
+    "source": "${REINDEX_SCRIPT}",
+    "params": {
+      "reindexCustomFields": "${REINDEX_CUSTOM_FIELDS}"
+    }
+  }
+}
