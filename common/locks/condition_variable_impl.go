@@ -25,61 +25,67 @@
 package locks
 
 import (
-	"context"
-	"testing"
-	"time"
-
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
+	"sync"
 )
 
 type (
-	LockSuite struct {
-		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
-		suite.Suite
+	ConditionVariableImpl struct {
+		lock Locker
+
+		chanLock sync.Mutex
+		channel  chan struct{}
 	}
 )
 
-func TestLockSuite(t *testing.T) {
-	suite.Run(t, new(LockSuite))
+var _ ConditionVariable = (*ConditionVariableImpl)(nil)
+
+func NewConditionVariable(
+	lock Locker,
+) *ConditionVariableImpl {
+	return &ConditionVariableImpl{
+		lock: lock,
+
+		chanLock: sync.Mutex{},
+		channel:  make(chan struct{}, 1),
+	}
 }
 
-func (s *LockSuite) SetupTest() {
-	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
+func (c *ConditionVariableImpl) Signal() {
+	c.chanLock.Lock()
+	defer c.chanLock.Unlock()
+
+	select {
+	case c.channel <- struct{}{}:
+	default:
+		//noop
+	}
 }
 
-func (s *LockSuite) TestBasicLocking() {
-	lock := NewMutex()
-	err1 := lock.Lock(context.Background())
-	s.Nil(err1)
-	lock.Unlock()
+func (c *ConditionVariableImpl) Broadcast() {
+	newChannel := make(chan struct{})
+
+	c.chanLock.Lock()
+	defer c.chanLock.Unlock()
+
+	close(c.channel)
+	c.channel = newChannel
 }
 
-func (s *LockSuite) TestExpiredContext() {
-	lock := NewMutex()
-	err1 := lock.Lock(context.Background())
-	s.Nil(err1)
+func (c *ConditionVariableImpl) Wait(
+	interrupt <-chan struct{},
+) {
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	cancel()
-	err2 := lock.Lock(ctx)
-	s.NotNil(err2)
-	s.Equal(err2, ctx.Err())
+	c.chanLock.Lock()
+	channel := c.channel
+	c.chanLock.Unlock()
 
-	lock.Unlock()
+	c.lock.Unlock()
+	defer c.lock.Lock()
 
-	err3 := lock.Lock(context.Background())
-	s.Nil(err3)
-	lock.Unlock()
-}
-
-func BenchmarkLock(b *testing.B) {
-	b.ReportAllocs()
-
-	l := NewMutex()
-	ctx := context.Background()
-	for n := 0; n < b.N; n++ {
-		l.Lock(ctx) //nolint:errcheck
-		l.Unlock()  //nolint:staticcheck
+	select {
+	case <-channel:
+		// received signal
+	case <-interrupt:
+		// interrupted
 	}
 }

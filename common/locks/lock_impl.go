@@ -26,60 +26,54 @@ package locks
 
 import (
 	"context"
-	"testing"
-	"time"
-
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
+	"sync"
+	"sync/atomic"
 )
 
 type (
-	LockSuite struct {
-		*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
-		suite.Suite
+	mutexImpl struct {
+		sync.Mutex
 	}
 )
 
-func TestLockSuite(t *testing.T) {
-	suite.Run(t, new(LockSuite))
+const (
+	acquiring = iota
+	acquired
+	bailed
+)
+
+// NewMutex creates a new RWMutex
+func NewMutex() Mutex {
+	return &mutexImpl{}
 }
 
-func (s *LockSuite) SetupTest() {
-	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
+func (m *mutexImpl) Lock(ctx context.Context) error {
+	return m.lockInternal(ctx)
 }
 
-func (s *LockSuite) TestBasicLocking() {
-	lock := NewMutex()
-	err1 := lock.Lock(context.Background())
-	s.Nil(err1)
-	lock.Unlock()
-}
+func (m *mutexImpl) lockInternal(ctx context.Context) error {
+	var state int32 = acquiring
 
-func (s *LockSuite) TestExpiredContext() {
-	lock := NewMutex()
-	err1 := lock.Lock(context.Background())
-	s.Nil(err1)
+	acquiredCh := make(chan struct{})
+	go func() {
+		m.Mutex.Lock()
+		if !atomic.CompareAndSwapInt32(&state, acquiring, acquired) {
+			// already bailed due to context closing
+			m.Unlock()
+		}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	cancel()
-	err2 := lock.Lock(ctx)
-	s.NotNil(err2)
-	s.Equal(err2, ctx.Err())
+		close(acquiredCh)
+	}()
 
-	lock.Unlock()
-
-	err3 := lock.Lock(context.Background())
-	s.Nil(err3)
-	lock.Unlock()
-}
-
-func BenchmarkLock(b *testing.B) {
-	b.ReportAllocs()
-
-	l := NewMutex()
-	ctx := context.Background()
-	for n := 0; n < b.N; n++ {
-		l.Lock(ctx) //nolint:errcheck
-		l.Unlock()  //nolint:staticcheck
+	select {
+	case <-acquiredCh:
+		return nil
+	case <-ctx.Done():
+		{
+			if !atomic.CompareAndSwapInt32(&state, acquiring, bailed) {
+				return nil
+			}
+			return ctx.Err()
+		}
 	}
 }
