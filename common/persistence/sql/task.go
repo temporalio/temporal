@@ -283,7 +283,7 @@ func (m *sqlTaskManager) ListTaskQueue(request *persistence.ListTaskQueueRequest
 
 	for i, row := range rows {
 		resp.Items[i] = &persistence.InternalListTaskQueueItem{
-			RangeID: row.RangeID,
+			RangeID:   row.RangeID,
 			TaskQueue: persistence.NewDataBlob(row.Data, row.DataEncoding),
 		}
 

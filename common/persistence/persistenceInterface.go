@@ -31,7 +31,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
@@ -287,15 +286,15 @@ type (
 		NamespaceID   string
 		TaskQueue     string
 		TaskType      enumspb.TaskQueueType
-		RangeID int64
+		RangeID       int64
 		TaskQueueInfo *commonpb.DataBlob
 		Tasks         []*InternalCreateTask
 	}
 
 	InternalCreateTask struct {
-		TaskId int64
+		TaskId     int64
 		ExpiryTime *time.Time
-		Task *commonpb.DataBlob
+		Task       *commonpb.DataBlob
 	}
 
 	InternalGetTasksResponse struct {
@@ -308,7 +307,7 @@ type (
 	}
 	InternalListTaskQueueItem struct {
 		TaskQueue *commonpb.DataBlob //serialized PersistedTaskQueueInfo
-		RangeID int64
+		RangeID   int64
 	}
 
 	// DataBlob represents a blob for any binary data.

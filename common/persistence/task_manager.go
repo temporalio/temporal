@@ -26,16 +26,17 @@ package persistence
 
 import (
 	"fmt"
+	"time"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"time"
 )
 
 const (
-	initialRangeID = 1 // Id of the first range of a new task queue
+	initialRangeID     = 1 // Id of the first range of a new task queue
 	stickyTaskQueueTTL = 24 * time.Hour
 )
 
@@ -160,12 +161,12 @@ func (m *taskManagerImpl) UpdateTaskQueue(request *UpdateTaskQueueRequest) (*Upd
 	}
 
 	internalRequest := &InternalUpdateTaskQueueRequest{
-		NamespaceID: request.TaskQueueInfo.GetNamespaceId(),
-		TaskQueue: request.TaskQueueInfo.GetName(),
-		TaskType: request.TaskQueueInfo.GetTaskType(),
-		TaskQueueKind:request.TaskQueueInfo.GetKind(),
-		RangeID: request.RangeID,
-		ExpiryTime: taskQueueInfo.ExpiryTime,
+		NamespaceID:   request.TaskQueueInfo.GetNamespaceId(),
+		TaskQueue:     request.TaskQueueInfo.GetName(),
+		TaskType:      request.TaskQueueInfo.GetTaskType(),
+		TaskQueueKind: request.TaskQueueInfo.GetKind(),
+		RangeID:       request.RangeID,
+		ExpiryTime:    taskQueueInfo.ExpiryTime,
 		TaskQueueInfo: taskQueueInfoBlob,
 	}
 
@@ -184,13 +185,13 @@ func (m *taskManagerImpl) ListTaskQueue(request *ListTaskQueueRequest) (*ListTas
 			return nil, err
 		}
 		taskQueues = append(taskQueues, &PersistedTaskQueueInfo{
-			Data: tqi,
+			Data:    tqi,
 			RangeID: item.RangeID,
 		})
 
 	}
-	return &ListTaskQueueResponse {
-		Items: taskQueues,
+	return &ListTaskQueueResponse{
+		Items:         taskQueues,
 		NextPageToken: internalResp.NextPageToken,
 	}, nil
 }
@@ -214,18 +215,18 @@ func (m *taskManagerImpl) CreateTasks(request *CreateTasksRequest) (*CreateTasks
 			return nil, serviceerror.NewInternal(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", err))
 		}
 		tasks = append(tasks, &InternalCreateTask{
-			TaskId: task.GetTaskId(),
+			TaskId:     task.GetTaskId(),
 			ExpiryTime: task.Data.ExpiryTime,
-			Task: taskBlob,
+			Task:       taskBlob,
 		})
 	}
 	internalRequest := &InternalCreateTasksRequest{
-		NamespaceID: request.TaskQueueInfo.Data.GetNamespaceId(),
-		TaskQueue: request.TaskQueueInfo.Data.GetName(),
-		TaskType: request.TaskQueueInfo.Data.GetTaskType(),
-		RangeID: request.TaskQueueInfo.RangeID,
-		TaskQueueInfo:  taskQueueInfoBlob,
-		Tasks: tasks,
+		NamespaceID:   request.TaskQueueInfo.Data.GetNamespaceId(),
+		TaskQueue:     request.TaskQueueInfo.Data.GetName(),
+		TaskType:      request.TaskQueueInfo.Data.GetTaskType(),
+		RangeID:       request.TaskQueueInfo.RangeID,
+		TaskQueueInfo: taskQueueInfoBlob,
+		Tasks:         tasks,
 	}
 	return m.taskStore.CreateTasks(internalRequest)
 }
