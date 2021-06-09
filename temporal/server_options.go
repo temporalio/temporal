@@ -49,6 +49,7 @@ type (
 		blockingStart bool
 
 		logger                     log.Logger
+		namespaceLogger            log.Logger
 		authorizer                 authorization.Authorizer
 		tlsConfigProvider          encryption.TLSConfigProvider
 		claimMapper                authorization.ClaimMapper

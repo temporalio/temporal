@@ -75,6 +75,7 @@ type (
 		serviceStoppedChs map[string]chan struct{}
 		stoppedCh         chan interface{}
 		logger            log.Logger
+		namespaceLogger   log.Logger
 		serverReporter    metrics.Reporter
 		sdkReporter       metrics.Reporter
 	}
@@ -113,6 +114,7 @@ func (s *Server) Start() error {
 	if s.logger == nil {
 		s.logger = log.NewZapLogger(log.BuildZapLogger(s.so.config.Log))
 	}
+	s.namespaceLogger = s.so.namespaceLogger
 
 	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))
 	s.logger.Debug(s.so.config.String())
@@ -268,6 +270,7 @@ func (s *Server) newBootstrapParams(
 	params := &resource.BootstrapParams{
 		Name:                  svcName,
 		Logger:                s.logger,
+		NamespaceLogger:       s.namespaceLogger,
 		PersistenceConfig:     s.so.config.Persistence,
 		DynamicConfigClient:   s.so.dynamicConfigClient,
 		ClusterMetadataConfig: s.so.config.ClusterMetadata,

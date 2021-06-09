@@ -73,6 +73,12 @@ func WithLogger(logger log.Logger) ServerOption {
 	})
 }
 
+func WithNamespaceLogger(namespaceLogger log.Logger) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.namespaceLogger = namespaceLogger
+	})
+}
+
 // Sets low level authorizer to allow/deny all API calls
 func WithAuthorizer(authorizer authorization.Authorizer) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {

@@ -289,6 +289,11 @@ func NewService(
 		configs.ExecutionAPICountLimitOverride,
 	)
 
+	namespaceLogger := params.NamespaceLogger
+	namespaceLogInterceptor := interceptor.NewNamespaceLogInterceptor(
+		serviceResource.GetNamespaceCache(),
+		namespaceLogger)
+
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
 		PermitWithoutStream: serviceConfig.KeepAlivePermitWithoutStream(),
