@@ -26,13 +26,13 @@
         "type": "keyword"
       },
       "StartTime": {
-        "type": "long"
+        "type": "date"
       },
       "ExecutionTime": {
-        "type": "long"
+        "type": "date"
       },
       "CloseTime": {
-        "type": "long"
+        "type": "date"
       },
       "ExecutionStatus": {
         "type": "long"
