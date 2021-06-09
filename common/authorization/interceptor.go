@@ -164,7 +164,7 @@ type interceptor struct {
 	logger        log.Logger
 }
 
-// GetAuthorizationInterceptor creates an authorization interceptor and return a func that points to its Interceptor method
+// NewAuthorizationInterceptor creates an authorization interceptor and return a func that points to its Interceptor method
 func NewAuthorizationInterceptor(
 	claimMapper ClaimMapper,
 	authorizer Authorizer,
