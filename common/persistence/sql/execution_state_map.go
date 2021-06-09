@@ -375,13 +375,6 @@ func getRequestCancelInfoMap(
 	ret := make(map[int64]*commonpb.DataBlob)
 	for _, row := range rows {
 		ret[row.InitiatedID] = persistence.NewDataBlob(row.Data, row.DataEncoding)
-		// TODO: yiminc check this
-		//	&persistencespb.RequestCancelInfo{
-		//	Version:               rowInfo.GetVersion(),
-		//	InitiatedId:           row.InitiatedID,
-		//	InitiatedEventBatchId: rowInfo.GetInitiatedEventBatchId(),
-		//	CancelRequestId:       rowInfo.GetCancelRequestId(),
-		//}
 	}
 
 	return ret, nil

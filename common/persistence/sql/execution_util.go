@@ -31,10 +31,8 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
-
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -1278,16 +1276,6 @@ func (m *sqlExecutionStore) createExecution(
 	dbRecordVersion int64,
 	shardID int32,
 ) error {
-
-	//// validate workflow state & close status
-	//if err := p.ValidateCreateWorkflowStateStatus(
-	//	executionState.State,
-	//	executionState.Status); err != nil {
-	//	return err
-	//}
-	//
-	//// TODO we should set the start time and last update time on business logic layer
-	////executionInfo.LastUpdateTime = executionInfo.StartTime
 
 	row, err := buildExecutionRow(
 		namespaceID,

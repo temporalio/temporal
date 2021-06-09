@@ -438,25 +438,6 @@ func updateExecution(
 		return err
 	}
 
-	// TODO: set this from call site
-	// TODO we should set the last update time on business logic layer
-	// executionInfo.LastUpdateTime = timestamp.UnixOrZeroTimePtr(p.DBTimestampToUnixNano(cqlNowTimestampMillis))
-
-	//executionDatablob, err := serialization.WorkflowExecutionInfoToBlob(executionInfo)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//executionStateDatablob, err := serialization.WorkflowExecutionStateToBlob(executionState)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//checksumDatablob, err := serialization.ChecksumToBlob(checksum)
-	//if err != nil {
-	//	return err
-	//}
-
 	if dbRecordVersion == 0 {
 		batch.Query(templateUpdateWorkflowExecutionQueryDeprecated,
 			executionInfoBlob.Data,
