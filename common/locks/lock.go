@@ -24,23 +24,12 @@
 
 package locks
 
-import (
-	"context"
-)
-
 type (
 	// Locker is the interface for lock
 	Locker interface {
 		// Lock locks
 		Lock()
 		// Unlock unlocks
-		Unlock()
-	}
-
-	// Mutex accepts a context in its Lock method.
-	// It blocks the caller until either the lock is acquired or the context done.
-	Mutex interface {
-		Lock(context.Context) error
 		Unlock()
 	}
 )

@@ -45,6 +45,10 @@ import (
 	"go.temporal.io/server/service/history/shard"
 )
 
+const (
+	taskTimeout = time.Second * 10
+)
+
 type (
 	taskProcessorOptions struct {
 		queueSize   int

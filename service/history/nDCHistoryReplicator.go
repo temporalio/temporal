@@ -223,6 +223,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 		ctx,
 		task.getNamespaceID(),
 		*task.getExecution(),
+		callerTypeAPI,
 	)
 	if err != nil {
 		// for get workflow execution context, with valid run id
