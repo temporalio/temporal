@@ -311,7 +311,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		RunId:      token.GetRunId(),
 	}
 
-	weContext, release, err := handler.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, workflowExecution)
+	weContext, release, err := handler.historyCache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		workflowExecution,
+		callerTypeAPI,
+	)
 	if err != nil {
 		return nil, err
 	}

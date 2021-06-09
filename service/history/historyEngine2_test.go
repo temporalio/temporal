@@ -635,7 +635,12 @@ func (s *engine2Suite) TestRecordWorkflowTaskSuccess() {
 
 	// load mutable state such that it already exists in memory when respond workflow task is called
 	// this enables us to set query registry on it
-	ctx, release, err := s.historyEngine.historyCache.getOrCreateWorkflowExecutionForBackground(testNamespaceID, workflowExecution)
+	ctx, release, err := s.historyEngine.historyCache.getOrCreateWorkflowExecution(
+		context.Background(),
+		testNamespaceID,
+		workflowExecution,
+		callerTypeAPI,
+	)
 	s.NoError(err)
 	loadedMS, err := ctx.loadWorkflowExecution()
 	s.NoError(err)
@@ -1492,7 +1497,12 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 }
 
 func (s *engine2Suite) getBuilder(namespaceID string, we commonpb.WorkflowExecution) mutableState {
-	weContext, release, err := s.historyEngine.historyCache.getOrCreateWorkflowExecutionForBackground(namespaceID, we)
+	weContext, release, err := s.historyEngine.historyCache.getOrCreateWorkflowExecution(
+		context.Background(),
+		namespaceID,
+		we,
+		callerTypeAPI,
+	)
 	if err != nil {
 		return nil
 	}

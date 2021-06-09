@@ -537,6 +537,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
+			callerTypeAPI,
 		)
 		if err != nil {
 			return 0, nil, err

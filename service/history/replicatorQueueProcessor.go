@@ -531,7 +531,12 @@ func (p *replicatorQueueProcessorImpl) processReplication(
 		RunId:      runID,
 	}
 
-	context, release, err := p.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, execution)
+	context, release, err := p.historyCache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeAPI,
+	)
 	if err != nil {
 		return nil, err
 	}

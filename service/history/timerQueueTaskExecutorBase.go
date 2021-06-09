@@ -78,7 +78,15 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 
-	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(t.getNamespaceIDAndWorkflowExecution(task))
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
+	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeTask,
+	)
 	if err != nil {
 		return err
 	}
