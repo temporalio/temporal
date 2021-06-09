@@ -58,7 +58,7 @@ type (
 
 		controller *gomock.Controller
 
-		minRetentionDays        int
+		minRetention            time.Duration
 		maxBadBinaryCount       int
 		metadataMgr             persistence.MetadataManager
 		mockProducer            *persistence.MockNamespaceReplicationQueue
@@ -87,7 +87,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) TearDownSuite() {
 func (s *namespaceHandlerGlobalNamespaceDisabledSuite) SetupTest() {
 	logger := log.NewNoopLogger()
 	dcCollection := dc.NewCollection(dc.NewNoopClient(), logger)
-	s.minRetentionDays = 1
+	s.minRetention = 1 * 24 * time.Hour
 	s.maxBadBinaryCount = 10
 	s.metadataMgr = s.TestBase.MetadataManager
 	s.controller = gomock.NewController(s.T())
@@ -103,7 +103,7 @@ func (s *namespaceHandlerGlobalNamespaceDisabledSuite) SetupTest() {
 	)
 	s.mockArchiverProvider = provider.NewMockArchiverProvider(s.controller)
 	s.handler = NewHandler(
-		s.minRetentionDays,
+		s.minRetention,
 		dc.GetIntPropertyFilteredByNamespace(s.maxBadBinaryCount),
 		logger,
 		s.metadataMgr,

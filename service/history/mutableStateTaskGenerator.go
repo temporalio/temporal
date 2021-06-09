@@ -110,7 +110,7 @@ type (
 	}
 )
 
-const defaultWorkflowRetentionInDays int32 = 1
+const defaultWorkflowRetention time.Duration = 1 * 24 * time.Hour
 
 var _ mutableStateTaskGenerator = (*mutableStateTaskGeneratorImpl)(nil)
 
@@ -170,21 +170,20 @@ func (r *mutableStateTaskGeneratorImpl) generateWorkflowCloseTasks(
 		Version:             currentVersion,
 	})
 
-	retentionInDays := defaultWorkflowRetentionInDays
+	retention := defaultWorkflowRetention
 	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(executionInfo.NamespaceId)
 	switch err.(type) {
 	case nil:
-		retentionInDays = namespaceEntry.GetRetentionDays(executionInfo.WorkflowId)
+		retention = namespaceEntry.GetRetention(executionInfo.WorkflowId)
 	case *serviceerror.NotFound:
 		// namespace is not accessible, use default value above
 	default:
 		return err
 	}
 
-	retentionDuration := timestamp.DurationValue(timestamp.DurationFromDays(retentionInDays))
 	r.mutableState.AddTimerTasks(&persistence.DeleteHistoryEventTask{
 		// TaskID is set by shard
-		VisibilityTimestamp: now.Add(retentionDuration),
+		VisibilityTimestamp: now.Add(retention),
 		Version:             currentVersion,
 	})
 

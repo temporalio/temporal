@@ -1461,7 +1461,7 @@ func (e *mutableStateBuilder) ReplicateWorkflowExecutionStartedEvent(
 		event.GetPrevAutoResetPoints(),
 		event.GetContinuedExecutionRunId(),
 		timestamp.TimeValue(startEvent.GetEventTime()),
-		e.namespaceEntry.GetRetentionDays(e.executionInfo.WorkflowId),
+		e.namespaceEntry.GetRetention(e.executionInfo.WorkflowId),
 	)
 
 	if event.Memo != nil {
@@ -3025,14 +3025,14 @@ func rolloverAutoResetPointsWithExpiringTime(
 	resetPoints *workflowpb.ResetPoints,
 	prevRunID string,
 	now time.Time,
-	namespaceRetentionDays int32,
+	namespaceRetention time.Duration,
 ) *workflowpb.ResetPoints {
 
 	if resetPoints == nil || resetPoints.Points == nil {
 		return resetPoints
 	}
 	newPoints := make([]*workflowpb.ResetPointInfo, 0, len(resetPoints.Points))
-	expireTime := now.Add(time.Duration(namespaceRetentionDays) * time.Hour * 24)
+	expireTime := now.Add(namespaceRetention)
 	for _, rp := range resetPoints.Points {
 		if rp.GetRunId() == prevRunID {
 			rp.ExpireTime = &expireTime

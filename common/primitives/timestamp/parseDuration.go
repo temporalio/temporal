@@ -1,8 +1,6 @@
 // The MIT License
 //
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2021 Temporal Technologies Inc.  All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,15 +20,40 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package namespace
+package timestamp
 
-import "time"
+import (
+	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+)
 
-const (
-	// MinRetention is the minimal retention for any namespace (can be
-	// overridden by dynamic config)
-	MinRetention = 1 * 24 * time.Hour
+// ParseDuration is like time.ParseDuration, but supports unit "d" for days
+// (always interpreted as exactly 24 hours).
+func ParseDuration(s string) (time.Duration, error) {
+	s = reDays.ReplaceAllStringFunc(s, func(v string) string {
+		fv, err := strconv.ParseFloat(strings.TrimSuffix(v, "d"), 64)
+		if err != nil {
+			return v // will cause time.ParseDuration to return an error
+		}
+		return fmt.Sprintf("%fh", 24*fv)
+	})
+	return time.ParseDuration(s)
+}
 
-	// MaxBadBinaries is the maximal number of bad client binaries stored in a namespace
-	MaxBadBinaries = 10
+// ParseDurationDefaultDays is like time.ParseDuration, but supports unit "d"
+// for days (always interpreted as exactly 24 hours), and also supports
+// unit-less numbers, which are interpreted as days.
+func ParseDurationDefaultDays(s string) (time.Duration, error) {
+	if reUnitless.MatchString(s) {
+		s += "d"
+	}
+	return ParseDuration(s)
+}
+
+var (
+	reUnitless = regexp.MustCompile("^(\\d+(\\.\\d*)?|(\\.\\d+))$")
+	reDays     = regexp.MustCompile("(\\d+(\\.\\d*)?|(\\.\\d+))d")
 )

@@ -44,8 +44,8 @@ type (
 		controller          *gomock.Controller
 		mockClusterMetadata *cluster.MockMetadata
 
-		minRetentionDays int
-		validator        *AttrValidatorImpl
+		minRetention time.Duration
+		validator    *AttrValidatorImpl
 	}
 )
 
@@ -64,8 +64,8 @@ func (s *attrValidatorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 
-	s.minRetentionDays = 1
-	s.validator = newAttrValidator(s.mockClusterMetadata, int32(s.minRetentionDays))
+	s.minRetention = 1 * 24 * time.Hour
+	s.validator = newAttrValidator(s.mockClusterMetadata, s.minRetention)
 }
 
 func (s *attrValidatorSuite) TearDownTest() {

@@ -776,26 +776,27 @@ var SampleRetentionKey = "sample_retention_days"
 // SampleRateKey is key to specify sample rate
 var SampleRateKey = "sample_retention_rate"
 
-// GetRetentionDays returns retention in days for given workflow
-func (entry *NamespaceCacheEntry) GetRetentionDays(
+// GetRetention returns retention in days for given workflow
+func (entry *NamespaceCacheEntry) GetRetention(
 	workflowID string,
-) int32 {
-
-	if entry.IsSampledForLongerRetention(workflowID) {
-		if sampledRetentionValue, ok := entry.info.Data[SampleRetentionKey]; ok {
-			sampledRetentionDays, err := strconv.Atoi(sampledRetentionValue)
-			if err != nil || sampledRetentionDays < timestamp.DaysFromDuration(entry.config.Retention) {
-				return timestamp.DaysInt32FromDuration(entry.config.Retention)
-			}
-			return int32(sampledRetentionDays)
-		}
-	}
+) time.Duration {
 
 	if entry.config.Retention == nil {
 		return 0
 	}
 
-	return timestamp.DaysInt32FromDuration(entry.config.Retention)
+	if entry.IsSampledForLongerRetention(workflowID) {
+		if sampledRetentionValue, ok := entry.info.Data[SampleRetentionKey]; ok {
+			sampledRetentionDays, err := strconv.Atoi(sampledRetentionValue)
+			sampledRetention := *timestamp.DurationFromDays(int32(sampledRetentionDays))
+			if err != nil || sampledRetention < *entry.config.Retention {
+				return *entry.config.Retention
+			}
+			return sampledRetention
+		}
+	}
+
+	return *entry.config.Retention
 }
 
 // IsSampledForLongerRetentionEnabled return whether sample for longer retention is enabled or not
