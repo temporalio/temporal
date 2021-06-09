@@ -315,6 +315,7 @@ func NewService(
 		grpc.KeepaliveParams(kp),
 		grpc.KeepaliveEnforcementPolicy(kep),
 		grpc.ChainUnaryInterceptor(
+			namespaceLogInterceptor.Intercept,
 			rpc.ServiceErrorInterceptor,
 			metricsInterceptor.Intercept,
 			rateLimiterInterceptor.Intercept,
