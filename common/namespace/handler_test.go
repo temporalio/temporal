@@ -406,15 +406,17 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod
 	s.NoError(err)
 	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
 
-	updateRequest := &workflowservice.UpdateNamespaceRequest{
-		Namespace: namespace,
-		Config: &namespacepb.NamespaceConfig{
-			WorkflowExecutionRetentionTtl: timestamp.DurationPtr(time.Duration(-1)),
-		},
+	for _, invalidDuration := range []time.Duration{0, -1 * time.Hour} {
+		updateRequest := &workflowservice.UpdateNamespaceRequest{
+			Namespace: namespace,
+			Config: &namespacepb.NamespaceConfig{
+				WorkflowExecutionRetentionTtl: timestamp.DurationPtr(invalidDuration),
+			},
+		}
+		resp, err := s.handler.UpdateNamespace(context.Background(), updateRequest)
+		s.Equal(errInvalidRetentionPeriod, err)
+		s.Nil(resp)
 	}
-	resp, err := s.handler.UpdateNamespace(context.Background(), updateRequest)
-	s.Equal(errInvalidRetentionPeriod, err)
-	s.Nil(resp)
 }
 
 func (s *namespaceHandlerCommonSuite) getRandomNamespace() string {
