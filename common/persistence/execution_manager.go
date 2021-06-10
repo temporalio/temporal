@@ -50,8 +50,8 @@ type (
 
 var _ ExecutionManager = (*executionManagerImpl)(nil)
 
-// NewExecutionManagerImpl returns new ExecutionManager
-func NewExecutionManagerImpl(
+// NewExecutionManager returns new ExecutionManager
+func NewExecutionManager(
 	persistence ExecutionStore,
 	logger log.Logger,
 ) ExecutionManager {
@@ -91,73 +91,6 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 		MutableStateStats: m.statsComputer.computeMutableStateStats(state),
 	}
 	return newResponse, nil
-}
-
-func (m *executionManagerImpl) DeserializeExecutionInfo(
-	// TODO: info should be a blob
-	info *persistencespb.WorkflowExecutionInfo,
-) (*persistencespb.WorkflowExecutionInfo, error) {
-
-	newInfo := &persistencespb.WorkflowExecutionInfo{
-		CompletionEvent:                   info.CompletionEvent,
-		NamespaceId:                       info.NamespaceId,
-		WorkflowId:                        info.WorkflowId,
-		FirstExecutionRunId:               info.FirstExecutionRunId,
-		ParentNamespaceId:                 info.ParentNamespaceId,
-		ParentWorkflowId:                  info.ParentWorkflowId,
-		ParentRunId:                       info.ParentRunId,
-		InitiatedId:                       info.InitiatedId,
-		CompletionEventBatchId:            info.CompletionEventBatchId,
-		TaskQueue:                         info.TaskQueue,
-		WorkflowTypeName:                  info.WorkflowTypeName,
-		WorkflowRunTimeout:                info.WorkflowRunTimeout,
-		WorkflowExecutionTimeout:          info.WorkflowExecutionTimeout,
-		DefaultWorkflowTaskTimeout:        info.DefaultWorkflowTaskTimeout,
-		LastFirstEventId:                  info.LastFirstEventId,
-		LastEventTaskId:                   info.LastEventTaskId,
-		LastProcessedEvent:                info.LastProcessedEvent,
-		StartTime:                         info.StartTime,
-		LastUpdateTime:                    info.LastUpdateTime,
-		SignalCount:                       info.SignalCount,
-		WorkflowTaskVersion:               info.WorkflowTaskVersion,
-		WorkflowTaskScheduleId:            info.WorkflowTaskScheduleId,
-		WorkflowTaskStartedId:             info.WorkflowTaskStartedId,
-		WorkflowTaskRequestId:             info.WorkflowTaskRequestId,
-		WorkflowTaskTimeout:               info.WorkflowTaskTimeout,
-		WorkflowTaskAttempt:               info.WorkflowTaskAttempt,
-		WorkflowTaskStartedTime:           info.WorkflowTaskStartedTime,
-		WorkflowTaskScheduledTime:         info.WorkflowTaskScheduledTime,
-		WorkflowTaskOriginalScheduledTime: info.WorkflowTaskOriginalScheduledTime,
-		CancelRequested:                   info.CancelRequested,
-		StickyTaskQueue:                   info.StickyTaskQueue,
-		StickyScheduleToStartTimeout:      info.StickyScheduleToStartTimeout,
-		Attempt:                           info.Attempt,
-		HasRetryPolicy:                    info.HasRetryPolicy,
-		RetryInitialInterval:              info.RetryInitialInterval,
-		RetryBackoffCoefficient:           info.RetryBackoffCoefficient,
-		RetryMaximumInterval:              info.RetryMaximumInterval,
-		RetryMaximumAttempts:              info.RetryMaximumAttempts,
-		RetryNonRetryableErrorTypes:       info.RetryNonRetryableErrorTypes,
-		CronSchedule:                      info.CronSchedule,
-		AutoResetPoints:                   info.AutoResetPoints,
-		SearchAttributes:                  info.SearchAttributes,
-		Memo:                              info.Memo,
-		ExecutionStats:                    info.ExecutionStats,
-		StartVersion:                      info.StartVersion,
-		HistorySize:                       info.HistorySize,
-		StateTransitionCount:              info.StateTransitionCount,
-		CancelRequestId:                   info.CancelRequestId,
-		VersionHistories:                  info.VersionHistories,
-		WorkflowRunExpirationTime:         info.WorkflowRunExpirationTime,
-		WorkflowExecutionExpirationTime:   info.WorkflowExecutionExpirationTime,
-		LastFirstEventTxnId:               info.LastFirstEventTxnId,
-	}
-
-	if newInfo.AutoResetPoints == nil {
-		newInfo.AutoResetPoints = &workflowpb.ResetPoints{}
-	}
-
-	return newInfo, nil
 }
 
 func (m *executionManagerImpl) DeserializeBufferedEvents(
