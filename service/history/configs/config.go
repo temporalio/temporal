@@ -39,7 +39,7 @@ type Config struct {
 	NumberOfShards             int32
 	DefaultVisibilityIndexName string
 
-	// TODO remove this dynamic flag in 1.12.x
+	// TODO remove this dynamic flag in 1.14.x
 	EnableDBRecordVersion dynamicconfig.BoolPropertyFn
 
 	RPS                           dynamicconfig.IntPropertyFn
@@ -270,8 +270,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		NumberOfShards:             numberOfShards,
 		DefaultVisibilityIndexName: defaultVisibilityIndex,
 
-		// TODO remove this dynamic flag in 1.12.x
-		EnableDBRecordVersion: dc.GetBoolProperty(dynamicconfig.EnableDBRecordVersion, false),
+		// TODO remove this dynamic flag in 1.14.x
+		EnableDBRecordVersion: dc.GetBoolProperty(dynamicconfig.EnableDBRecordVersion, true),
 
 		RPS:                                  dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
 		MaxIDLengthLimit:                     dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),

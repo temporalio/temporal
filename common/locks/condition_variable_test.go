@@ -148,9 +148,9 @@ func (s *conditionVariableSuite) TestBroadcast() {
 }
 
 func (s *conditionVariableSuite) TestCase_ProducerConsumer() {
-	signalRatio := 0.5
-	numProducer := 1024
-	numConsumer := 1024
+	signalRatio := 0.8
+	numProducer := 256
+	numConsumer := 256
 	totalToken := numProducer * numConsumer * 10
 	tokenPerProducer := totalToken / numProducer
 	tokenPerConsumer := totalToken / numConsumer
