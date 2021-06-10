@@ -26,6 +26,7 @@ package authorization
 
 import (
 	"context"
+	"crypto/x509"
 	"crypto/x509/pkix"
 
 	"go.temporal.io/api/serviceerror"
@@ -74,20 +75,12 @@ func (a *interceptor) Interceptor(
 			authHeaders = md["authorization"]
 			authExtraHeaders = md["authorization-extras"]
 		}
-		if p, ok := peer.FromContext(ctx); ok {
-			if tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo); ok {
-				tlsConnection = &tlsInfo
-				if len(tlsInfo.State.VerifiedChains) > 0 && len(tlsInfo.State.VerifiedChains[0]) > 0 {
-					// The assumption here is that we only expect a single verified chain of certs (first[0]).
-					// It's unclear how we should handle a situation when more than one chain is presented,
-					// which subject to use. It's okay for us to limit ourselves to one chain.
-					// We can always extend this logic later.
-					// We tale the first element in the chain ([0]) because that's the client cert
-					// (at the beginning of the chain), not intermediary CAs or the root CA (at the end of the chain).
-					tlsSubject = &tlsInfo.State.VerifiedChains[0][0].Subject
-				}
-			}
+		tlsConnection = TLSInfoFormContext(ctx)
+		clientCert := PeerCert(tlsConnection)
+		if clientCert != nil {
+			tlsSubject = &clientCert.Subject
 		}
+
 		// Add auth info to context only if there's some auth info
 		if tlsSubject != nil || len(authHeaders) > 0 {
 			var authHeader string
@@ -179,7 +172,7 @@ func NewAuthorizationInterceptor(
 	}).Interceptor
 }
 
-// getMetricsScopeWithNamespace return metrics scope with namespace tag
+// getMetricsScope return metrics scope with namespace tag
 func (a *interceptor) getMetricsScope(
 	scope int,
 	namespace string,
@@ -191,4 +184,30 @@ func (a *interceptor) getMetricsScope(
 		metricsScope = a.metricsClient.Scope(scope).Tagged(metrics.NamespaceUnknownTag())
 	}
 	return metricsScope
+}
+
+func TLSInfoFormContext(ctx context.Context) *credentials.TLSInfo {
+
+	p, ok := peer.FromContext(ctx)
+	if !ok {
+		return nil
+	}
+	if tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo); ok {
+		return &tlsInfo
+	}
+	return nil
+}
+
+func PeerCert(tlsInfo *credentials.TLSInfo) *x509.Certificate {
+
+	if tlsInfo == nil || len(tlsInfo.State.VerifiedChains) == 0 || len(tlsInfo.State.VerifiedChains[0]) == 0 {
+		return nil
+	}
+	// The assumption here is that we only expect a single verified chain of certs (first[0]).
+	// It's unclear how we should handle a situation when more than one chain is presented,
+	// which subject to use. It's okay for us to limit ourselves to one chain.
+	// We can always extend this logic later.
+	// We take the first element in the chain ([0]) because that's the client cert
+	// (at the beginning of the chain), not intermediary CAs or the root CA (at the end of the chain).
+	return tlsInfo.State.VerifiedChains[0][0]
 }
