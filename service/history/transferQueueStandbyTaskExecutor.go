@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -403,8 +404,14 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 ) (retError error) {
 
 	transferTask := taskInfo.(*persistencespb.TransferTaskInfo)
-	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getNamespaceIDAndWorkflowExecution(transferTask),
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(transferTask)
+	context, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeTask,
 	)
 	if err != nil {
 		return err

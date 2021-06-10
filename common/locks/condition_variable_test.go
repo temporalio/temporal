@@ -25,8 +25,10 @@
 package locks
 
 import (
+	"math/rand"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -49,6 +51,7 @@ func TestConditionVariableSuite(t *testing.T) {
 
 func (s *conditionVariableSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
+	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *conditionVariableSuite) TearDownSuite() {
@@ -72,12 +75,13 @@ func (s *conditionVariableSuite) TestSignal() {
 	waitGroup.Add(1)
 
 	waitFn := func() {
+		defer waitGroup.Done()
+
 		s.lock.Lock()
 		defer s.lock.Unlock()
 
 		signalWaitGroup.Done()
 		s.cv.Wait(nil)
-		waitGroup.Done()
 	}
 	go waitFn()
 
@@ -97,12 +101,13 @@ func (s *conditionVariableSuite) TestInterrupt() {
 	interruptChan := make(chan struct{})
 
 	waitFn := func() {
+		defer waitGroup.Done()
+
 		s.lock.Lock()
 		defer s.lock.Unlock()
 
 		interruptWaitGroup.Done()
 		s.cv.Wait(interruptChan)
-		waitGroup.Done()
 	}
 	go waitFn()
 
@@ -123,12 +128,13 @@ func (s *conditionVariableSuite) TestBroadcast() {
 	waitGroup.Add(waitThreads)
 
 	waitFn := func() {
+		defer waitGroup.Done()
+
 		s.lock.Lock()
 		defer s.lock.Unlock()
 
 		broadcastWaitGroup.Done()
 		s.cv.Wait(nil)
-		waitGroup.Done()
 	}
 	for i := 0; i < waitThreads; i++ {
 		go waitFn()
@@ -139,4 +145,91 @@ func (s *conditionVariableSuite) TestBroadcast() {
 	s.lock.Unlock()
 	s.cv.Broadcast()
 	waitGroup.Wait()
+}
+
+func (s *conditionVariableSuite) TestCase_ProducerConsumer() {
+	signalRatio := 0.5
+	numProducer := 1024
+	numConsumer := 1024
+	totalToken := numProducer * numConsumer * 10
+	tokenPerProducer := totalToken / numProducer
+	tokenPerConsumer := totalToken / numConsumer
+
+	lock := &sync.Mutex{}
+	tokens := 0
+	notifyProducerCV := NewConditionVariable(lock)
+	notifyConsumerCV := NewConditionVariable(lock)
+
+	waitGroup := sync.WaitGroup{}
+	waitGroup.Add(numProducer + numConsumer)
+
+	produceFn := func() {
+		defer waitGroup.Done()
+		remainingToken := tokenPerProducer
+
+		lock.Lock()
+		defer lock.Unlock()
+
+		for remainingToken > 0 {
+			for tokens > 0 {
+				randSignalBroadcast(notifyConsumerCV, signalRatio)
+				notifyProducerCV.Wait(nil)
+			}
+
+			produce := rand.Intn(remainingToken + 1)
+			tokens += produce
+			remainingToken -= produce
+		}
+		randSignalBroadcast(notifyConsumerCV, signalRatio)
+	}
+
+	consumerFn := func() {
+		defer waitGroup.Done()
+		remainingToken := 0
+
+		lock.Lock()
+		defer lock.Unlock()
+
+		for remainingToken < tokenPerConsumer {
+			for tokens == 0 {
+				randSignalBroadcast(notifyProducerCV, signalRatio)
+				notifyConsumerCV.Wait(nil)
+			}
+
+			consume := min(tokens, tokenPerConsumer-remainingToken)
+			tokens -= consume
+			remainingToken += consume
+		}
+		randSignalBroadcast(notifyProducerCV, signalRatio)
+	}
+
+	for i := 0; i < numConsumer; i++ {
+		go consumerFn()
+	}
+	for i := 0; i < numProducer; i++ {
+		go produceFn()
+	}
+
+	waitGroup.Wait()
+}
+
+func randSignalBroadcast(
+	cv ConditionVariable,
+	signalRatio float64,
+) {
+	if rand.Float64() <= signalRatio {
+		cv.Signal()
+	} else {
+		cv.Broadcast()
+	}
+}
+
+func min(left int, right int) int {
+	if left < right {
+		return left
+	} else if left > right {
+		return right
+	} else {
+		return left
+	}
 }

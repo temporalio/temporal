@@ -40,7 +40,7 @@ import (
 // ValidateCreateWorkflowModeState validate workflow creation mode & workflow state
 func ValidateCreateWorkflowModeState(
 	mode CreateWorkflowMode,
-	newWorkflowSnapshot InternalWorkflowSnapshot,
+	newWorkflowSnapshot WorkflowSnapshot,
 ) error {
 
 	workflowState := newWorkflowSnapshot.ExecutionState.State
@@ -80,8 +80,8 @@ func ValidateCreateWorkflowModeState(
 // ValidateUpdateWorkflowModeState validate workflow update mode & workflow state
 func ValidateUpdateWorkflowModeState(
 	mode UpdateWorkflowMode,
-	currentWorkflowMutation InternalWorkflowMutation,
-	newWorkflowSnapshot *InternalWorkflowSnapshot,
+	currentWorkflowMutation WorkflowMutation,
+	newWorkflowSnapshot *WorkflowSnapshot,
 ) error {
 
 	currentWorkflowState := currentWorkflowMutation.ExecutionState.State
@@ -161,9 +161,9 @@ func ValidateUpdateWorkflowModeState(
 // ValidateConflictResolveWorkflowModeState validate workflow conflict resolve mode & workflow state
 func ValidateConflictResolveWorkflowModeState(
 	mode ConflictResolveWorkflowMode,
-	resetWorkflowSnapshot InternalWorkflowSnapshot,
-	newWorkflowSnapshot *InternalWorkflowSnapshot,
-	currentWorkflowMutation *InternalWorkflowMutation,
+	resetWorkflowSnapshot WorkflowSnapshot,
+	newWorkflowSnapshot *WorkflowSnapshot,
+	currentWorkflowMutation *WorkflowMutation,
 ) error {
 
 	resetWorkflowState := resetWorkflowSnapshot.ExecutionState.State

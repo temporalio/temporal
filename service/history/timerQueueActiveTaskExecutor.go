@@ -113,8 +113,14 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 
-	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getNamespaceIDAndWorkflowExecution(task),
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
+	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -165,8 +171,14 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 
-	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getNamespaceIDAndWorkflowExecution(task),
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
+	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -267,8 +279,14 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 
-	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getNamespaceIDAndWorkflowExecution(task),
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
+	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -339,8 +357,14 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 
-	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getNamespaceIDAndWorkflowExecution(task),
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
+	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -374,8 +398,14 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 
-	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getNamespaceIDAndWorkflowExecution(task),
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
+	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -412,7 +442,6 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		return err
 	}
 
-	namespaceID := task.GetNamespaceId()
 	targetNamespaceID := namespaceID
 	if activityInfo.NamespaceId != "" {
 		targetNamespaceID = activityInfo.NamespaceId
@@ -434,9 +463,6 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		}
 	}
 
-	execution := &commonpb.WorkflowExecution{
-		WorkflowId: task.GetWorkflowId(),
-		RunId:      task.GetRunId()}
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: activityInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -446,12 +472,12 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	// NOTE: do not access anything related mutable state after this lock release
 	release(nil) // release earlier as we don't need the lock anymore
 
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
+	ctx, cancel = context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 	_, retError = t.shard.GetService().GetMatchingClient().AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId:            targetNamespaceID,
 		SourceNamespaceId:      namespaceID,
-		Execution:              execution,
+		Execution:              &execution,
 		TaskQueue:              taskQueue,
 		ScheduleId:             scheduledID,
 		ScheduleToStartTimeout: timestamp.DurationPtr(scheduleToStartTimeout),
@@ -464,8 +490,14 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 
-	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getNamespaceIDAndWorkflowExecution(task),
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
+	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeTask,
 	)
 	if err != nil {
 		return err

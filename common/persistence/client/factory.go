@@ -259,7 +259,7 @@ func (f *factoryImpl) NewExecutionManager(
 	if err != nil {
 		return nil, err
 	}
-	result := p.NewExecutionManagerImpl(store, f.logger)
+	result := p.NewExecutionManager(store, f.logger)
 	if ds.ratelimit != nil {
 		result = p.NewWorkflowExecutionPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}

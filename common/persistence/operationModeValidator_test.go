@@ -404,8 +404,8 @@ func (s *validateOperationWorkflowModeStateSuite) TestConflictResolveMode_Bypass
 
 func (s *validateOperationWorkflowModeStateSuite) newTestWorkflowSnapshot(
 	state enumsspb.WorkflowExecutionState,
-) InternalWorkflowSnapshot {
-	return InternalWorkflowSnapshot{
+) WorkflowSnapshot {
+	return WorkflowSnapshot{
 		ExecutionInfo:  &persistencespb.WorkflowExecutionInfo{},
 		ExecutionState: &persistencespb.WorkflowExecutionState{State: state},
 	}
@@ -413,8 +413,8 @@ func (s *validateOperationWorkflowModeStateSuite) newTestWorkflowSnapshot(
 
 func (s *validateOperationWorkflowModeStateSuite) newTestWorkflowMutation(
 	state enumsspb.WorkflowExecutionState,
-) InternalWorkflowMutation {
-	return InternalWorkflowMutation{
+) WorkflowMutation {
+	return WorkflowMutation{
 		ExecutionInfo:  &persistencespb.WorkflowExecutionInfo{},
 		ExecutionState: &persistencespb.WorkflowExecutionState{State: state},
 	}

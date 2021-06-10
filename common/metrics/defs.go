@@ -992,8 +992,6 @@ const (
 	ShardInfoScope
 	// WorkflowContextScope is the scope used by WorkflowContext component
 	WorkflowContextScope
-	// HistoryCacheGetAndCreateScope is the scope used by history cache
-	HistoryCacheGetAndCreateScope
 	// HistoryCacheGetOrCreateScope is the scope used by history cache
 	HistoryCacheGetOrCreateScope
 	// HistoryCacheGetOrCreateCurrentScope is the scope used by history cache
@@ -1543,7 +1541,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ReplicateHistoryEventsScope:               {operation: "ReplicateHistoryEvents"},
 		ShardInfoScope:                            {operation: "ShardInfo"},
 		WorkflowContextScope:                      {operation: "WorkflowContext"},
-		HistoryCacheGetAndCreateScope:             {operation: "HistoryCacheGetAndCreate", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
 		HistoryCacheGetOrCreateScope:              {operation: "HistoryCacheGetOrCreate", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
 		HistoryCacheGetOrCreateCurrentScope:       {operation: "HistoryCacheGetOrCreateCurrent", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
 		EventsCacheGetEventScope:                  {operation: "EventsCacheGetEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},

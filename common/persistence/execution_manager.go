@@ -29,18 +29,19 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
 	// executionManagerImpl implements ExecutionManager based on ExecutionStore, statsComputer and PayloadSerializer
 	executionManagerImpl struct {
-		serializer    PayloadSerializer
+		serializer    serialization.Serializer
 		persistence   ExecutionStore
 		statsComputer statsComputer
 		logger        log.Logger
@@ -49,14 +50,14 @@ type (
 
 var _ ExecutionManager = (*executionManagerImpl)(nil)
 
-// NewExecutionManagerImpl returns new ExecutionManager
-func NewExecutionManagerImpl(
+// NewExecutionManager returns new ExecutionManager
+func NewExecutionManager(
 	persistence ExecutionStore,
 	logger log.Logger,
 ) ExecutionManager {
 
 	return &executionManagerImpl{
-		serializer:    NewPayloadSerializer(),
+		serializer:    serialization.NewSerializer(),
 		persistence:   persistence,
 		statsComputer: statsComputer{},
 		logger:        logger,
@@ -75,104 +76,21 @@ func (m *executionManagerImpl) GetShardID() int32 {
 func (m *executionManagerImpl) GetWorkflowExecution(
 	request *GetWorkflowExecutionRequest,
 ) (*GetWorkflowExecutionResponse, error) {
-
 	response, err := m.persistence.GetWorkflowExecution(request)
 	if err != nil {
 		return nil, err
 	}
+	state, err := m.toWorkflowMutableState(response.State)
+	if err != nil {
+		return nil, err
+	}
+
 	newResponse := &GetWorkflowExecutionResponse{
-		State: &persistencespb.WorkflowMutableState{
-			ActivityInfos:       response.State.ActivityInfos,
-			TimerInfos:          response.State.TimerInfos,
-			RequestCancelInfos:  response.State.RequestCancelInfos,
-			SignalInfos:         response.State.SignalInfos,
-			SignalRequestedIds:  response.State.SignalRequestedIDs,
-			Checksum:            response.State.Checksum,
-			ChildExecutionInfos: response.State.ChildExecutionInfos,
-			ExecutionState:      response.State.ExecutionState,
-			NextEventId:         response.State.NextEventID,
-		},
-		DBRecordVersion: response.DBRecordVersion,
+		State:             state,
+		DBRecordVersion:   response.DBRecordVersion,
+		MutableStateStats: m.statsComputer.computeMutableStateStats(state),
 	}
-
-	newResponse.State.BufferedEvents, err = m.DeserializeBufferedEvents(response.State.BufferedEvents)
-	if err != nil {
-		return nil, err
-	}
-	newResponse.State.ExecutionInfo, err = m.DeserializeExecutionInfo(response.State.ExecutionInfo)
-	if err != nil {
-		return nil, err
-	}
-
-	newResponse.MutableStateStats = m.statsComputer.computeMutableStateStats(response)
-
 	return newResponse, nil
-}
-
-func (m *executionManagerImpl) DeserializeExecutionInfo(
-	// TODO: info should be a blob
-	info *persistencespb.WorkflowExecutionInfo,
-) (*persistencespb.WorkflowExecutionInfo, error) {
-	newInfo := &persistencespb.WorkflowExecutionInfo{
-		CompletionEvent:                   info.CompletionEvent,
-		NamespaceId:                       info.NamespaceId,
-		WorkflowId:                        info.WorkflowId,
-		FirstExecutionRunId:               info.FirstExecutionRunId,
-		ParentNamespaceId:                 info.ParentNamespaceId,
-		ParentWorkflowId:                  info.ParentWorkflowId,
-		ParentRunId:                       info.ParentRunId,
-		InitiatedId:                       info.InitiatedId,
-		CompletionEventBatchId:            info.CompletionEventBatchId,
-		TaskQueue:                         info.TaskQueue,
-		WorkflowTypeName:                  info.WorkflowTypeName,
-		WorkflowRunTimeout:                info.WorkflowRunTimeout,
-		WorkflowExecutionTimeout:          info.WorkflowExecutionTimeout,
-		DefaultWorkflowTaskTimeout:        info.DefaultWorkflowTaskTimeout,
-		LastFirstEventId:                  info.LastFirstEventId,
-		LastEventTaskId:                   info.LastEventTaskId,
-		LastProcessedEvent:                info.LastProcessedEvent,
-		StartTime:                         info.StartTime,
-		LastUpdateTime:                    info.LastUpdateTime,
-		SignalCount:                       info.SignalCount,
-		WorkflowTaskVersion:               info.WorkflowTaskVersion,
-		WorkflowTaskScheduleId:            info.WorkflowTaskScheduleId,
-		WorkflowTaskStartedId:             info.WorkflowTaskStartedId,
-		WorkflowTaskRequestId:             info.WorkflowTaskRequestId,
-		WorkflowTaskTimeout:               info.WorkflowTaskTimeout,
-		WorkflowTaskAttempt:               info.WorkflowTaskAttempt,
-		WorkflowTaskStartedTime:           info.WorkflowTaskStartedTime,
-		WorkflowTaskScheduledTime:         info.WorkflowTaskScheduledTime,
-		WorkflowTaskOriginalScheduledTime: info.WorkflowTaskOriginalScheduledTime,
-		CancelRequested:                   info.CancelRequested,
-		StickyTaskQueue:                   info.StickyTaskQueue,
-		StickyScheduleToStartTimeout:      info.StickyScheduleToStartTimeout,
-		Attempt:                           info.Attempt,
-		HasRetryPolicy:                    info.HasRetryPolicy,
-		RetryInitialInterval:              info.RetryInitialInterval,
-		RetryBackoffCoefficient:           info.RetryBackoffCoefficient,
-		RetryMaximumInterval:              info.RetryMaximumInterval,
-		RetryMaximumAttempts:              info.RetryMaximumAttempts,
-		RetryNonRetryableErrorTypes:       info.RetryNonRetryableErrorTypes,
-		CronSchedule:                      info.CronSchedule,
-		AutoResetPoints:                   info.AutoResetPoints,
-		SearchAttributes:                  info.SearchAttributes,
-		Memo:                              info.Memo,
-		ExecutionStats:                    info.ExecutionStats,
-		StartVersion:                      info.StartVersion,
-		HistorySize:                       info.HistorySize,
-		StateTransitionCount:              info.StateTransitionCount,
-		CancelRequestId:                   info.CancelRequestId,
-		VersionHistories:                  info.VersionHistories,
-		WorkflowRunExpirationTime:         info.WorkflowRunExpirationTime,
-		WorkflowExecutionExpirationTime:   info.WorkflowExecutionExpirationTime,
-		LastFirstEventTxnId:               info.LastFirstEventTxnId,
-	}
-
-	if newInfo.AutoResetPoints == nil {
-		newInfo.AutoResetPoints = &workflowpb.ResetPoints{}
-	}
-
-	return newInfo, nil
 }
 
 func (m *executionManagerImpl) DeserializeBufferedEvents(
@@ -200,13 +118,29 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	request *UpdateWorkflowExecutionRequest,
 ) (*UpdateWorkflowExecutionResponse, error) {
 
-	serializedWorkflowMutation, err := m.SerializeWorkflowMutation(&request.UpdateWorkflowMutation)
+	mutation := request.UpdateWorkflowMutation
+	newSnapshot := request.NewWorkflowSnapshot
+	if err := ValidateUpdateWorkflowModeState(
+		request.Mode,
+		mutation,
+		newSnapshot,
+	); err != nil {
+		return nil, err
+	}
+	if err := ValidateUpdateWorkflowStateStatus(
+		mutation.ExecutionState.State,
+		mutation.ExecutionState.Status,
+	); err != nil {
+		return nil, err
+	}
+
+	serializedWorkflowMutation, err := m.SerializeWorkflowMutation(&mutation)
 	if err != nil {
 		return nil, err
 	}
 	var serializedNewWorkflowSnapshot *InternalWorkflowSnapshot
 	if request.NewWorkflowSnapshot != nil {
-		serializedNewWorkflowSnapshot, err = m.SerializeWorkflowSnapshot(request.NewWorkflowSnapshot)
+		serializedNewWorkflowSnapshot, err = m.SerializeWorkflowSnapshot(newSnapshot)
 		if err != nil {
 			return nil, err
 		}
@@ -221,7 +155,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		NewWorkflowSnapshot:    serializedNewWorkflowSnapshot,
 	}
 
-	msuss := m.statsComputer.computeMutableStateUpdateStats(newRequest)
+	msuss := m.statsComputer.computeMutableStateUpdateStats(request)
 	err1 := m.persistence.UpdateWorkflowExecution(newRequest)
 	return &UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: msuss}, err1
 }
@@ -296,6 +230,15 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	request *ConflictResolveWorkflowExecutionRequest,
 ) error {
 
+	if err := ValidateConflictResolveWorkflowModeState(
+		request.Mode,
+		request.ResetWorkflowSnapshot,
+		request.NewWorkflowSnapshot,
+		request.CurrentWorkflowMutation,
+	); err != nil {
+		return err
+	}
+
 	serializedResetWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.ResetWorkflowSnapshot)
 	if err != nil {
 		return err
@@ -332,21 +275,32 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 func (m *executionManagerImpl) CreateWorkflowExecution(
 	request *CreateWorkflowExecutionRequest,
 ) (*CreateWorkflowExecutionResponse, error) {
+	snapshot := request.NewWorkflowSnapshot
+	if err := ValidateCreateWorkflowModeState(
+		request.Mode,
+		snapshot,
+	); err != nil {
+		return nil, err
+	}
+	if err := ValidateCreateWorkflowStateStatus(
+		snapshot.ExecutionState.State,
+		snapshot.ExecutionState.Status,
+	); err != nil {
+		return nil, err
+	}
 
-	serializedNewWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.NewWorkflowSnapshot)
+	snapshot.ExecutionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
+	serializedNewWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&snapshot)
 	if err != nil {
 		return nil, err
 	}
 
 	newRequest := &InternalCreateWorkflowExecutionRequest{
-		RangeID: request.RangeID,
-
-		Mode: request.Mode,
-
+		RangeID:                  request.RangeID,
+		Mode:                     request.Mode,
 		PreviousRunID:            request.PreviousRunID,
 		PreviousLastWriteVersion: request.PreviousLastWriteVersion,
-
-		NewWorkflowSnapshot: *serializedNewWorkflowSnapshot,
+		NewWorkflowSnapshot:      *serializedNewWorkflowSnapshot,
 	}
 
 	return m.persistence.CreateWorkflowExecution(newRequest)
@@ -356,44 +310,29 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 	input *WorkflowMutation,
 ) (*InternalWorkflowMutation, error) {
 
-	serializedExecutionInfo, err := m.SerializeExecutionInfo(input.ExecutionInfo)
-	if err != nil {
-		return nil, err
-	}
+	var err error
+	result := &InternalWorkflowMutation{
+		NamespaceID: input.ExecutionInfo.GetNamespaceId(),
+		WorkflowID:  input.ExecutionInfo.GetWorkflowId(),
+		RunID:       input.ExecutionState.GetRunId(),
 
-	var serializedNewBufferedEvents *commonpb.DataBlob
-	if len(input.NewBufferedEvents) > 0 {
-		serializedNewBufferedEvents, err = m.serializer.SerializeEvents(input.NewBufferedEvents, enumspb.ENCODING_TYPE_PROTO3)
-		if err != nil {
-			return nil, err
-		}
-	}
+		UpsertActivityInfos:       make(map[int64]*commonpb.DataBlob),
+		UpsertTimerInfos:          make(map[string]*commonpb.DataBlob),
+		UpsertChildExecutionInfos: make(map[int64]*commonpb.DataBlob),
+		UpsertRequestCancelInfos:  make(map[int64]*commonpb.DataBlob),
+		UpsertSignalInfos:         make(map[int64]*commonpb.DataBlob),
 
-	lastWriteVersion, err := getLastWriteVersion(input.ExecutionInfo.VersionHistories)
-	if err != nil {
-		return nil, err
-	}
+		ExecutionState: input.ExecutionState,
 
-	return &InternalWorkflowMutation{
-		ExecutionInfo:    serializedExecutionInfo,
-		ExecutionState:   input.ExecutionState,
-		NextEventID:      input.NextEventID,
-		LastWriteVersion: lastWriteVersion,
-
-		UpsertActivityInfos:       input.UpsertActivityInfos,
 		DeleteActivityInfos:       input.DeleteActivityInfos,
-		UpsertTimerInfos:          input.UpsertTimerInfos,
 		DeleteTimerInfos:          input.DeleteTimerInfos,
-		UpsertChildExecutionInfos: input.UpsertChildExecutionInfos,
 		DeleteChildExecutionInfos: input.DeleteChildExecutionInfos,
-		UpsertRequestCancelInfos:  input.UpsertRequestCancelInfos,
 		DeleteRequestCancelInfos:  input.DeleteRequestCancelInfos,
-		UpsertSignalInfos:         input.UpsertSignalInfos,
 		DeleteSignalInfos:         input.DeleteSignalInfos,
-		UpsertSignalRequestedIDs:  input.UpsertSignalRequestedIDs,
 		DeleteSignalRequestedIDs:  input.DeleteSignalRequestedIDs,
-		NewBufferedEvents:         serializedNewBufferedEvents,
-		ClearBufferedEvents:       input.ClearBufferedEvents,
+
+		UpsertSignalRequestedIDs: input.UpsertSignalRequestedIDs,
+		ClearBufferedEvents:      input.ClearBufferedEvents,
 
 		TransferTasks:    input.TransferTasks,
 		ReplicationTasks: input.ReplicationTasks,
@@ -402,46 +341,157 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 
 		Condition:       input.Condition,
 		DBRecordVersion: input.DBRecordVersion,
-		Checksum:        input.Checksum,
-	}, nil
+		NextEventID:     input.NextEventID,
+		StartVersion:    input.ExecutionInfo.StartVersion,
+	}
+
+	result.ExecutionInfo, err = m.serializer.WorkflowExecutionInfoToBlob(input.ExecutionInfo, enumspb.ENCODING_TYPE_PROTO3)
+	if err != nil {
+		return nil, err
+	}
+	result.ExecutionStateBlob, err = m.serializer.WorkflowExecutionStateToBlob(input.ExecutionState, enumspb.ENCODING_TYPE_PROTO3)
+	if err != nil {
+		return nil, err
+	}
+
+	for key, info := range input.UpsertActivityInfos {
+		blob, err := m.serializer.ActivityInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+		result.UpsertActivityInfos[key] = blob
+	}
+	for key, info := range input.UpsertTimerInfos {
+		blob, err := m.serializer.TimerInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+		result.UpsertTimerInfos[key] = blob
+	}
+	for key, info := range input.UpsertChildExecutionInfos {
+		blob, err := m.serializer.ChildExecutionInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+		result.UpsertChildExecutionInfos[key] = blob
+	}
+	for key, info := range input.UpsertRequestCancelInfos {
+		blob, err := m.serializer.RequestCancelInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+		result.UpsertRequestCancelInfos[key] = blob
+	}
+	for key, info := range input.UpsertSignalInfos {
+		blob, err := m.serializer.SignalInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+		result.UpsertSignalInfos[key] = blob
+	}
+
+	if len(input.NewBufferedEvents) > 0 {
+		result.NewBufferedEvents, err = m.serializer.SerializeEvents(input.NewBufferedEvents, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+	}
+	result.LastWriteVersion, err = getLastWriteVersion(input.ExecutionInfo.VersionHistories)
+	if err != nil {
+		return nil, err
+	}
+	result.Checksum, err = m.serializer.ChecksumToBlob(input.Checksum, enumspb.ENCODING_TYPE_PROTO3)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 	input *WorkflowSnapshot,
 ) (*InternalWorkflowSnapshot, error) {
 
-	serializedExecutionInfo, err := m.SerializeExecutionInfo(input.ExecutionInfo)
-	if err != nil {
-		return nil, err
-	}
+	var err error
+	result := &InternalWorkflowSnapshot{
+		NamespaceID: input.ExecutionInfo.GetNamespaceId(),
+		WorkflowID:  input.ExecutionInfo.GetWorkflowId(),
+		RunID:       input.ExecutionState.GetRunId(),
 
-	lastWriteVersion, err := getLastWriteVersion(input.ExecutionInfo.VersionHistories)
-	if err != nil {
-		return nil, err
-	}
+		ActivityInfos:       make(map[int64]*commonpb.DataBlob),
+		TimerInfos:          make(map[string]*commonpb.DataBlob),
+		ChildExecutionInfos: make(map[int64]*commonpb.DataBlob),
+		RequestCancelInfos:  make(map[int64]*commonpb.DataBlob),
+		SignalInfos:         make(map[int64]*commonpb.DataBlob),
 
-	return &InternalWorkflowSnapshot{
-		ExecutionInfo:    serializedExecutionInfo,
-		ExecutionState:   input.ExecutionState,
-		NextEventID:      input.NextEventID,
-		LastWriteVersion: lastWriteVersion,
-
-		ActivityInfos:       input.ActivityInfos,
-		TimerInfos:          input.TimerInfos,
-		ChildExecutionInfos: input.ChildExecutionInfos,
-		RequestCancelInfos:  input.RequestCancelInfos,
-		SignalInfos:         input.SignalInfos,
-		SignalRequestedIDs:  input.SignalRequestedIDs,
-
-		TransferTasks:    input.TransferTasks,
-		ReplicationTasks: input.ReplicationTasks,
-		TimerTasks:       input.TimerTasks,
-		VisibilityTasks:  input.VisibilityTasks,
+		ExecutionState:     input.ExecutionState,
+		SignalRequestedIDs: input.SignalRequestedIDs,
+		TransferTasks:      input.TransferTasks,
+		ReplicationTasks:   input.ReplicationTasks,
+		TimerTasks:         input.TimerTasks,
+		VisibilityTasks:    input.VisibilityTasks,
 
 		Condition:       input.Condition,
 		DBRecordVersion: input.DBRecordVersion,
-		Checksum:        input.Checksum,
-	}, nil
+		NextEventID:     input.NextEventID,
+
+		StartVersion: input.ExecutionInfo.StartVersion,
+	}
+
+	result.ExecutionInfo, err = m.serializer.WorkflowExecutionInfoToBlob(input.ExecutionInfo, enumspb.ENCODING_TYPE_PROTO3)
+	if err != nil {
+		return nil, err
+	}
+	result.ExecutionStateBlob, err = m.serializer.WorkflowExecutionStateToBlob(input.ExecutionState, enumspb.ENCODING_TYPE_PROTO3)
+	if err != nil {
+		return nil, err
+	}
+	result.LastWriteVersion, err = getLastWriteVersion(input.ExecutionInfo.VersionHistories)
+	if err != nil {
+		return nil, err
+	}
+
+	for key, info := range input.ActivityInfos {
+		blob, err := m.serializer.ActivityInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+		result.ActivityInfos[key] = blob
+	}
+	for key, info := range input.TimerInfos {
+		blob, err := m.serializer.TimerInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+		result.TimerInfos[key] = blob
+	}
+	for key, info := range input.ChildExecutionInfos {
+		blob, err := m.serializer.ChildExecutionInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+		result.ChildExecutionInfos[key] = blob
+	}
+	for key, info := range input.RequestCancelInfos {
+		blob, err := m.serializer.RequestCancelInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+		result.RequestCancelInfos[key] = blob
+	}
+	for key, info := range input.SignalInfos {
+		blob, err := m.serializer.SignalInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+		result.SignalInfos[key] = blob
+	}
+	result.Checksum, err = m.serializer.ChecksumToBlob(input.Checksum, enumspb.ENCODING_TYPE_PROTO3)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func (m *executionManagerImpl) DeleteWorkflowExecution(
@@ -459,7 +509,18 @@ func (m *executionManagerImpl) DeleteCurrentWorkflowExecution(
 func (m *executionManagerImpl) GetCurrentExecution(
 	request *GetCurrentExecutionRequest,
 ) (*GetCurrentExecutionResponse, error) {
-	return m.persistence.GetCurrentExecution(request)
+	internalResp, err := m.persistence.GetCurrentExecution(request)
+	if err != nil {
+		return nil, err
+	}
+
+	return &GetCurrentExecutionResponse{
+		RunID:            internalResp.RunID,
+		LastWriteVersion: internalResp.LastWriteVersion,
+		StartRequestID:   internalResp.ExecutionState.CreateRequestId,
+		State:            internalResp.ExecutionState.State,
+		Status:           internalResp.ExecutionState.Status,
+	}, nil
 }
 
 func (m *executionManagerImpl) ListConcreteExecutions(
@@ -474,27 +535,10 @@ func (m *executionManagerImpl) ListConcreteExecutions(
 		PageToken: response.NextPageToken,
 	}
 	for i, s := range response.States {
-		state := &persistencespb.WorkflowMutableState{
-			ActivityInfos:       s.ActivityInfos,
-			TimerInfos:          s.TimerInfos,
-			RequestCancelInfos:  s.RequestCancelInfos,
-			SignalInfos:         s.SignalInfos,
-			SignalRequestedIds:  s.SignalRequestedIDs,
-			Checksum:            s.Checksum,
-			ChildExecutionInfos: s.ChildExecutionInfos,
-			ExecutionState:      s.ExecutionState,
-			NextEventId:         s.NextEventID,
-		}
-
-		state.BufferedEvents, err = m.DeserializeBufferedEvents(s.BufferedEvents)
+		state, err := m.toWorkflowMutableState(s)
 		if err != nil {
 			return nil, err
 		}
-		state.ExecutionInfo, err = m.DeserializeExecutionInfo(s.ExecutionInfo)
-		if err != nil {
-			return nil, err
-		}
-
 		newResponse.States[i] = state
 	}
 	return newResponse, nil
@@ -632,6 +676,79 @@ func (m *executionManagerImpl) RangeCompleteTimerTask(
 
 func (m *executionManagerImpl) Close() {
 	m.persistence.Close()
+}
+
+func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkflowMutableState) (*persistencespb.WorkflowMutableState, error) {
+	state := &persistencespb.WorkflowMutableState{
+		ActivityInfos:       make(map[int64]*persistencespb.ActivityInfo),
+		TimerInfos:          make(map[string]*persistencespb.TimerInfo),
+		ChildExecutionInfos: make(map[int64]*persistencespb.ChildExecutionInfo),
+		RequestCancelInfos:  make(map[int64]*persistencespb.RequestCancelInfo),
+		SignalInfos:         make(map[int64]*persistencespb.SignalInfo),
+		SignalRequestedIds:  internState.SignalRequestedIDs,
+		NextEventId:         internState.NextEventID,
+		BufferedEvents:      make([]*historypb.HistoryEvent, len(internState.BufferedEvents)),
+	}
+	for key, blob := range internState.ActivityInfos {
+		info, err := m.serializer.ActivityInfoFromBlob(blob)
+		if err != nil {
+			return nil, err
+		}
+		state.ActivityInfos[key] = info
+	}
+	for key, blob := range internState.TimerInfos {
+		info, err := m.serializer.TimerInfoFromBlob(blob)
+		if err != nil {
+			return nil, err
+		}
+		state.TimerInfos[key] = info
+	}
+	for key, blob := range internState.ChildExecutionInfos {
+		info, err := m.serializer.ChildExecutionInfoFromBlob(blob)
+		if err != nil {
+			return nil, err
+		}
+		state.ChildExecutionInfos[key] = info
+	}
+	for key, blob := range internState.RequestCancelInfos {
+		info, err := m.serializer.RequestCancelInfoFromBlob(blob)
+		if err != nil {
+			return nil, err
+		}
+		state.RequestCancelInfos[key] = info
+	}
+	for key, blob := range internState.SignalInfos {
+		info, err := m.serializer.SignalInfoFromBlob(blob)
+		if err != nil {
+			return nil, err
+		}
+		state.SignalInfos[key] = info
+	}
+	var err error
+	state.ExecutionInfo, err = m.serializer.WorkflowExecutionInfoFromBlob(internState.ExecutionInfo)
+	if err != nil {
+		return nil, err
+	}
+	if state.ExecutionInfo.AutoResetPoints == nil {
+		// TODO: check if we need this?
+		state.ExecutionInfo.AutoResetPoints = &workflowpb.ResetPoints{}
+	}
+	state.ExecutionState, err = m.serializer.WorkflowExecutionStateFromBlob(internState.ExecutionState)
+	if err != nil {
+		return nil, err
+	}
+	state.BufferedEvents, err = m.DeserializeBufferedEvents(internState.BufferedEvents)
+	if err != nil {
+		return nil, err
+	}
+	if internState.Checksum != nil {
+		state.Checksum, err = m.serializer.ChecksumFromBlob(internState.Checksum)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return state, nil
 }
 
 func getLastWriteVersion(

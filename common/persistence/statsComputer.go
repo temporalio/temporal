@@ -31,33 +31,33 @@ type (
 	statsComputer struct{}
 )
 
-func (sc *statsComputer) computeMutableStateStats(req *InternalGetWorkflowExecutionResponse) *MutableStateStats {
-	executionInfoSize := computeExecutionInfoSize(req.State.ExecutionInfo)
+func (sc *statsComputer) computeMutableStateStats(state *persistencespb.WorkflowMutableState) *MutableStateStats {
+	executionInfoSize := computeExecutionInfoSize(state.ExecutionInfo)
 
 	activityInfoCount := 0
 	activityInfoSize := 0
-	for _, ai := range req.State.ActivityInfos {
+	for _, ai := range state.ActivityInfos {
 		activityInfoCount++
 		activityInfoSize += computeActivityInfoSize(ai)
 	}
 
 	timerInfoCount := 0
 	timerInfoSize := 0
-	for _, ti := range req.State.TimerInfos {
+	for _, ti := range state.TimerInfos {
 		timerInfoCount++
 		timerInfoSize += computeTimerInfoSize(ti)
 	}
 
 	childExecutionInfoCount := 0
 	childExecutionInfoSize := 0
-	for _, ci := range req.State.ChildExecutionInfos {
+	for _, ci := range state.ChildExecutionInfos {
 		childExecutionInfoCount++
 		childExecutionInfoSize += computeChildInfoSize(ci)
 	}
 
 	signalInfoCount := 0
 	signalInfoSize := 0
-	for _, si := range req.State.SignalInfos {
+	for _, si := range state.SignalInfos {
 		signalInfoCount++
 		signalInfoSize += computeSignalInfoSize(si)
 	}
@@ -65,17 +65,17 @@ func (sc *statsComputer) computeMutableStateStats(req *InternalGetWorkflowExecut
 	bufferedEventsCount := 0
 	bufferedEventsSize := 0
 
-	for _, be := range req.State.BufferedEvents {
+	for _, be := range state.BufferedEvents {
 		bufferedEventsCount++
 
 		if be == nil {
 			continue
 		}
 
-		bufferedEventsSize += len(be.Data)
+		bufferedEventsSize += be.Size()
 	}
 
-	requestCancelInfoCount := len(req.State.RequestCancelInfos)
+	requestCancelInfoCount := len(state.RequestCancelInfos)
 
 	totalSize := executionInfoSize
 	totalSize += activityInfoSize
@@ -101,7 +101,7 @@ func (sc *statsComputer) computeMutableStateStats(req *InternalGetWorkflowExecut
 	}
 }
 
-func (sc *statsComputer) computeMutableStateUpdateStats(req *InternalUpdateWorkflowExecutionRequest) *MutableStateUpdateSessionStats {
+func (sc *statsComputer) computeMutableStateUpdateStats(req *UpdateWorkflowExecutionRequest) *MutableStateUpdateSessionStats {
 	executionInfoSize := computeExecutionInfoSize(req.UpdateWorkflowMutation.ExecutionInfo)
 
 	activityInfoCount := 0
@@ -133,8 +133,8 @@ func (sc *statsComputer) computeMutableStateUpdateStats(req *InternalUpdateWorkf
 	}
 
 	bufferedEventsSize := 0
-	if req.UpdateWorkflowMutation.NewBufferedEvents != nil {
-		bufferedEventsSize = len(req.UpdateWorkflowMutation.NewBufferedEvents.Data)
+	for _, event := range req.UpdateWorkflowMutation.NewBufferedEvents {
+		bufferedEventsSize += event.Size()
 	}
 
 	requestCancelInfoCount := len(req.UpdateWorkflowMutation.UpsertRequestCancelInfos)
