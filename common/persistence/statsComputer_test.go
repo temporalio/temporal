@@ -57,9 +57,9 @@ func (s *statsComputerSuite) SetupTest() {
 	s.sc = &statsComputer{}
 }
 
-func (s *statsComputerSuite) createRequest() *InternalUpdateWorkflowExecutionRequest {
-	return &InternalUpdateWorkflowExecutionRequest{
-		UpdateWorkflowMutation: InternalWorkflowMutation{
+func (s *statsComputerSuite) createRequest() *UpdateWorkflowExecutionRequest {
+	return &UpdateWorkflowExecutionRequest{
+		UpdateWorkflowMutation: WorkflowMutation{
 			ExecutionInfo:  &persistencespb.WorkflowExecutionInfo{},
 			ExecutionState: &persistencespb.WorkflowExecutionState{},
 		},
