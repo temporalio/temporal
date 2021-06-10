@@ -62,7 +62,7 @@ require (
 	go.opentelemetry.io/otel v0.15.0
 	go.opentelemetry.io/otel/exporters/metric/prometheus v0.15.0
 	go.temporal.io/api v1.4.1-0.20210429213054-a9a257b5cf16
-	go.temporal.io/sdk v1.6.1-0.20210525221837-b434b501f9d5
+	go.temporal.io/sdk v1.7.0
 	go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193
 	go.uber.org/atomic v1.7.0
 	go.uber.org/multierr v1.6.0
