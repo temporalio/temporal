@@ -73,6 +73,7 @@ func WithLogger(logger log.Logger) ServerOption {
 	})
 }
 
+// Sets optional logger for all frontend operations
 func WithNamespaceLogger(namespaceLogger log.Logger) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.namespaceLogger = namespaceLogger
