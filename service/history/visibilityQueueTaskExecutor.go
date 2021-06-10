@@ -462,19 +462,20 @@ func getWorkflowExecutionTime(
 	msBuilder mutableState,
 	startEvent *historypb.HistoryEvent,
 ) time.Time {
-	// Use value 0 to represent workflows that don't need backoff. Since ES doesn't support
-	// comparison between two field, we need a value to differentiate them from cron workflows
-	// or later runs of a workflow that needs retry.
-	executionTimestamp := time.Unix(0, 0).UTC()
-	if startEvent == nil {
-		return executionTimestamp
+	// All workflows created >= 1.11 release should have ExecutionTime set.
+	if msBuilder.GetExecutionInfo().GetExecutionTime() != nil {
+		return timestamp.TimeValue(msBuilder.GetExecutionInfo().GetExecutionTime())
 	}
 
-	if backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff()); backoffDuration != 0 {
-		startTime := timestamp.TimeValue(startEvent.GetEventTime())
-		executionTimestamp = startTime.Add(backoffDuration)
+	// For legacy workflows compute it on the fly.
+	// Remove the rest of the func when it is ok to rely on executionInfo.ExecutionTime only (added 6/9/21).
+	if startEvent == nil {
+		return time.Time{}
 	}
-	return executionTimestamp
+
+	backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff())
+	startTime := timestamp.TimeValue(startEvent.GetEventTime())
+	return startTime.Add(backoffDuration)
 }
 
 func getWorkflowMemo(

@@ -460,9 +460,9 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 }
 
 func (e *historyEngineImpl) createMutableState(
-	clusterMetadata cluster.Metadata,
 	namespaceEntry *cache.NamespaceCacheEntry,
 	runID string,
+	firstWorkflowTaskBackoff *time.Duration,
 ) (mutableState, error) {
 
 	var newMutableState mutableState
@@ -473,6 +473,7 @@ func (e *historyEngineImpl) createMutableState(
 		e.logger,
 		namespaceEntry,
 		e.shard.GetTimeSource().Now(),
+		firstWorkflowTaskBackoff,
 	)
 
 	if err := newMutableState.SetHistoryTree(runID); err != nil {
@@ -535,7 +536,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		RunId:      uuid.New(),
 	}
 	clusterMetadata := e.shard.GetService().GetClusterMetadata()
-	mutableState, err := e.createMutableState(clusterMetadata, namespaceEntry, execution.GetRunId())
+	mutableState, err := e.createMutableState(namespaceEntry, execution.GetRunId(), startRequest.GetFirstWorkflowTaskBackoff())
 	if err != nil {
 		return nil, err
 	}
@@ -1186,6 +1187,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			},
 			Type:                 &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
 			StartTime:            executionInfo.StartTime,
+			ExecutionTime:        executionInfo.ExecutionTime,
 			HistoryLength:        mutableState.GetNextEventID() - common.FirstEventID,
 			AutoResetPoints:      executionInfo.AutoResetPoints,
 			Memo:                 &commonpb.Memo{Fields: executionInfo.Memo},
@@ -1195,15 +1197,20 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		},
 	}
 
-	// TODO: we need to consider adding execution time to mutable state
-	// For now execution time will be calculated based on start time and cron schedule/retry policy
-	// each time DescribeWorkflowExecution is called.
-	startEvent, err := mutableState.GetStartEvent()
-	if err != nil {
-		return nil, err
+	// Old WorkflowExecutionInfo doesn't have execution time.
+	// For backwards compatibility continue to compute execution time.
+	// Remove this "if" block when it is ok to rely on executionInfo.ExecutionTime only (added 6/9/21).
+	if result.GetWorkflowExecutionInfo().GetExecutionTime() == nil {
+		// TODO: we need to consider adding execution time to mutable state
+		// For now execution time will be calculated based on start time and cron schedule/retry policy
+		// each time DescribeWorkflowExecution is called.
+		startEvent, err := mutableState.GetStartEvent()
+		if err != nil {
+			return nil, err
+		}
+		backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff())
+		result.WorkflowExecutionInfo.ExecutionTime = timestamp.TimePtr(timestamp.TimeValue(result.WorkflowExecutionInfo.GetStartTime()).Add(backoffDuration))
 	}
-	backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff())
-	result.WorkflowExecutionInfo.ExecutionTime = timestamp.TimePtr(timestamp.TimeValue(result.WorkflowExecutionInfo.GetStartTime()).Add(backoffDuration))
 
 	if executionInfo.ParentRunId != "" {
 		result.WorkflowExecutionInfo.ParentExecution = &commonpb.WorkflowExecution{
@@ -2016,7 +2023,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}
 
 	clusterMetadata := e.shard.GetService().GetClusterMetadata()
-	mutableState, err := e.createMutableState(clusterMetadata, namespaceEntry, execution.GetRunId())
+	mutableState, err := e.createMutableState(namespaceEntry, execution.GetRunId(), startRequest.GetFirstWorkflowTaskBackoff())
 	if err != nil {
 		return nil, err
 	}

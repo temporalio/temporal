@@ -186,6 +186,7 @@ func newMutableStateBuilder(
 	logger log.Logger,
 	namespaceEntry *cache.NamespaceCacheEntry,
 	startTime time.Time,
+	firstWorkflowTaskBackoff *time.Duration,
 ) *mutableStateBuilder {
 	s := &mutableStateBuilder{
 		updateActivityInfos:            make(map[int64]*persistencespb.ActivityInfo),
@@ -245,6 +246,7 @@ func newMutableStateBuilder(
 		LastProcessedEvent: common.EmptyEventID,
 
 		StartTime:        timestamp.TimePtr(startTime),
+		ExecutionTime:    timestamp.TimePtr(startTime.Add(timestamp.DurationValue(firstWorkflowTaskBackoff))),
 		VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
 	}
 	s.executionState = &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -272,9 +274,10 @@ func newMutableStateBuilderFromDB(
 	dbRecordVersion int64,
 ) *mutableStateBuilder {
 
-	// startTime will be overridden by DB record
-	startTime := time.Time{}
-	mutableState := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry, startTime)
+	// startTime and firstWorkflowTaskBackoff will be overridden by DB record
+	var startTime time.Time
+	var firstWorkflowTaskBackoff *time.Duration
+	mutableState := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry, startTime, firstWorkflowTaskBackoff)
 
 	mutableState.pendingActivityInfoIDs = dbRecord.ActivityInfos
 	for _, activityInfo := range dbRecord.ActivityInfos {
@@ -668,21 +671,30 @@ func (e *mutableStateBuilder) GetRetryBackoffDuration(
 }
 
 func (e *mutableStateBuilder) GetCronBackoffDuration() (time.Duration, error) {
-	info := e.executionInfo
-	if len(info.CronSchedule) == 0 {
+	if e.executionInfo.CronSchedule == "" {
 		return backoff.NoBackoff, nil
 	}
-	// TODO: decide if we can add execution time in execution info.
-	executionTime := timestamp.TimeValue(e.executionInfo.StartTime)
-	// This only call when doing ContinueAsNew. At this point, the workflow should have a start event
-	workflowStartEvent, err := e.GetStartEvent()
-	if err != nil {
-		e.logError("unable to find workflow start event", tag.ErrorTypeInvalidHistoryAction)
-		return backoff.NoBackoff, err
+	var executionTime time.Time
+	if e.GetExecutionInfo().GetExecutionTime() != nil {
+		executionTime = timestamp.TimeValue(e.GetExecutionInfo().GetExecutionTime())
+	} else {
+		// Old ExecutionInfo doesn't have execution time.
+		// For backwards compatibility continue to compute execution time.
+		// Remove this "else" block when it is ok to rely on executionInfo.ExecutionTime only (added 6/9/21).
+
+		// TODO: decide if we can add execution time in execution info.
+		executionTime = timestamp.TimeValue(e.executionInfo.StartTime)
+		// This only call when doing ContinueAsNew. At this point, the workflow should have a start event
+		workflowStartEvent, err := e.GetStartEvent()
+		if err != nil {
+			e.logError("unable to find workflow start event", tag.ErrorTypeInvalidHistoryAction)
+			return backoff.NoBackoff, err
+		}
+		firstWorkflowTaskBackoff := timestamp.DurationValue(workflowStartEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff())
+		executionTime = executionTime.Add(firstWorkflowTaskBackoff)
 	}
-	firstWorkflowTaskBackoff := timestamp.DurationValue(workflowStartEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff())
-	executionTime = executionTime.Add(firstWorkflowTaskBackoff)
-	return backoff.GetBackoffForNextSchedule(info.CronSchedule, executionTime, e.timeSource.Now()), nil
+
+	return backoff.GetBackoffForNextSchedule(e.executionInfo.CronSchedule, executionTime, e.timeSource.Now()), nil
 }
 
 // GetSignalInfo get details about a signal request that is currently in progress.
@@ -2992,6 +3004,7 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 		e.logger,
 		e.namespaceEntry,
 		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
+		command.GetBackoffStartInterval(),
 	)
 
 	if _, err = newStateBuilder.addWorkflowExecutionStartedEventForContinueAsNew(
