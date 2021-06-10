@@ -22,48 +22,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
+package locks
 
-import (
-	"fmt"
-	"testing"
-
-	"github.com/olivere/elastic/v7"
-	"github.com/stretchr/testify/require"
+type (
+	// ConditionVariable is the interface for condition variable
+	ConditionVariable interface {
+		// Signal wakes one goroutine waiting on this condition variable, if there is any.
+		Signal()
+		// Broadcast wakes all goroutines waiting on this condition variable.
+		Broadcast()
+		// Wait atomically unlocks user provided lock and suspends execution of the calling goroutine.
+		// After later resuming execution, Wait locks c.L before returning.
+		// Wait can be awoken by Broadcast, Signal or user provided interrupt channel.
+		Wait(interrupt <-chan struct{})
+	}
 )
-
-func Test_BuildPutMappingBody(t *testing.T) {
-	tests := []struct {
-		root     string
-		expected string
-	}{
-		{
-			root:     "",
-			expected: "map[properties:map[testKey:map[type:text]]]",
-		},
-	}
-	k := "testKey"
-	v := "text"
-
-	for _, test := range tests {
-		require.Equal(t, test.expected, fmt.Sprintf("%v", buildMappingBody(map[string]string{k: v})))
-	}
-}
-func Test_ConvertV7Sorters(t *testing.T) {
-	sortersV7 := make([]elastic.Sorter, 2)
-	sortersV7[0] = elastic.NewFieldSort("test")
-	sortersV7[1] = elastic.NewFieldSort("test2")
-
-	sortersV6 := convertV7SortersToV6(sortersV7)
-	require.NotNil(t, sortersV6[0])
-	source0, err0 := sortersV6[0].Source()
-	require.NoError(t, err0)
-	require.NotNil(t, source0)
-}
-
-func TestIsResponseRetryable(t *testing.T) {
-	status := []int{408, 429, 500, 503, 507}
-	for _, code := range status {
-		require.True(t, IsRetryableStatus(code))
-	}
-}

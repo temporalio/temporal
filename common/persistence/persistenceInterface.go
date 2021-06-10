@@ -31,7 +31,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
@@ -45,8 +44,7 @@ type (
 	// ////////////////////////////////////////////////////////////////////
 	// Persistence interface is a lower layer of dataInterface.
 	// The intention is to let different persistence implementation(SQL,Cassandra/etc) share some common logic
-	// Right now the only common part is serialization/deserialization, and only ExecutionManager/HistoryManager need it.
-	// ShardManager/TaskManager/MetadataManager are the same.
+	// Right now the only common part is serialization/deserialization.
 	// ////////////////////////////////////////////////////////////////////
 
 	// ShardStore is a lower level of ShardManager
@@ -66,11 +64,11 @@ type (
 		CreateTaskQueue(request *InternalCreateTaskQueueRequest) error
 		GetTaskQueue(request *InternalGetTaskQueueRequest) (*InternalGetTaskQueueResponse, error)
 		ExtendLease(request *InternalExtendLeaseRequest) error
-		UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
-		ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error)
+		UpdateTaskQueue(request *InternalUpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
+		ListTaskQueue(request *ListTaskQueueRequest) (*InternalListTaskQueueResponse, error)
 		DeleteTaskQueue(request *DeleteTaskQueueRequest) error
-		CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error)
-		GetTasks(request *GetTasksRequest) (*GetTasksResponse, error)
+		CreateTasks(request *InternalCreateTasksRequest) (*CreateTasksResponse, error)
+		GetTasks(request *GetTasksRequest) (*InternalGetTasksResponse, error)
 		CompleteTask(request *CompleteTaskRequest) error
 		CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error)
 	}
@@ -114,7 +112,7 @@ type (
 		CreateWorkflowExecution(request *InternalCreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
 		DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error
-		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
+		GetCurrentExecution(request *GetCurrentExecutionRequest) (*InternalGetCurrentExecutionResponse, error)
 
 		// Scan related methods
 		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*InternalListConcreteExecutionsResponse, error)
@@ -273,6 +271,44 @@ type (
 		TaskQueueInfo *commonpb.DataBlob
 	}
 
+	InternalUpdateTaskQueueRequest struct {
+		NamespaceID   string
+		TaskQueue     string
+		TaskType      enumspb.TaskQueueType
+		TaskQueueKind enumspb.TaskQueueKind
+		RangeID       int64
+		ExpiryTime    *time.Time
+		TaskQueueInfo *commonpb.DataBlob
+	}
+
+	InternalCreateTasksRequest struct {
+		NamespaceID   string
+		TaskQueue     string
+		TaskType      enumspb.TaskQueueType
+		RangeID       int64
+		TaskQueueInfo *commonpb.DataBlob
+		Tasks         []*InternalCreateTask
+	}
+
+	InternalCreateTask struct {
+		TaskId     int64
+		ExpiryTime *time.Time
+		Task       *commonpb.DataBlob
+	}
+
+	InternalGetTasksResponse struct {
+		Tasks []*commonpb.DataBlob
+	}
+
+	InternalListTaskQueueResponse struct {
+		Items         []*InternalListTaskQueueItem
+		NextPageToken []byte
+	}
+	InternalListTaskQueueItem struct {
+		TaskQueue *commonpb.DataBlob //serialized PersistedTaskQueueInfo
+		RangeID   int64
+	}
+
 	// DataBlob represents a blob for any binary data.
 	// It contains raw data, and metadata(right now only encoding) in other field
 	// Note that it should be only used for Persistence layer, below dataInterface and application(historyEngine/etc)
@@ -291,19 +327,18 @@ type (
 
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
 	InternalWorkflowMutableState struct {
-		ActivityInfos       map[int64]*persistencespb.ActivityInfo
-		TimerInfos          map[string]*persistencespb.TimerInfo
-		ChildExecutionInfos map[int64]*persistencespb.ChildExecutionInfo
-		RequestCancelInfos  map[int64]*persistencespb.RequestCancelInfo
-		SignalInfos         map[int64]*persistencespb.SignalInfo
+		ActivityInfos       map[int64]*commonpb.DataBlob  // ActivityInfo
+		TimerInfos          map[string]*commonpb.DataBlob // TimerInfo
+		ChildExecutionInfos map[int64]*commonpb.DataBlob  // ChildExecutionInfo
+		RequestCancelInfos  map[int64]*commonpb.DataBlob  // RequestCancelInfo
+		SignalInfos         map[int64]*commonpb.DataBlob  // SignalInfo
 		SignalRequestedIDs  []string
-		ExecutionInfo       *persistencespb.WorkflowExecutionInfo
-		ExecutionState      *persistencespb.WorkflowExecutionState
+		ExecutionInfo       *commonpb.DataBlob // WorkflowExecutionInfo
+		ExecutionState      *commonpb.DataBlob // WorkflowExecutionState
 		NextEventID         int64
-
-		BufferedEvents  []*commonpb.DataBlob
-		Checksum        *persistencespb.Checksum
-		DBRecordVersion int64
+		BufferedEvents      []*commonpb.DataBlob
+		Checksum            *commonpb.DataBlob // persistencespb.Checksum
+		DBRecordVersion     int64
 	}
 
 	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
@@ -335,21 +370,28 @@ type (
 
 	// InternalWorkflowMutation is used as generic workflow execution state mutation for Persistence Interface
 	InternalWorkflowMutation struct {
-		ExecutionInfo    *persistencespb.WorkflowExecutionInfo
-		ExecutionState   *persistencespb.WorkflowExecutionState
-		NextEventID      int64
-		LastWriteVersion int64
-		DBRecordVersion  int64
+		// TODO: properly set this on call sites
+		NamespaceID string
+		WorkflowID  string
+		RunID       string
 
-		UpsertActivityInfos       map[int64]*persistencespb.ActivityInfo
+		ExecutionInfo      *commonpb.DataBlob
+		ExecutionState     *persistencespb.WorkflowExecutionState
+		ExecutionStateBlob *commonpb.DataBlob
+		NextEventID        int64
+		StartVersion       int64
+		LastWriteVersion   int64
+		DBRecordVersion    int64
+
+		UpsertActivityInfos       map[int64]*commonpb.DataBlob
 		DeleteActivityInfos       map[int64]struct{}
-		UpsertTimerInfos          map[string]*persistencespb.TimerInfo
+		UpsertTimerInfos          map[string]*commonpb.DataBlob
 		DeleteTimerInfos          map[string]struct{}
-		UpsertChildExecutionInfos map[int64]*persistencespb.ChildExecutionInfo
+		UpsertChildExecutionInfos map[int64]*commonpb.DataBlob
 		DeleteChildExecutionInfos map[int64]struct{}
-		UpsertRequestCancelInfos  map[int64]*persistencespb.RequestCancelInfo
+		UpsertRequestCancelInfos  map[int64]*commonpb.DataBlob
 		DeleteRequestCancelInfos  map[int64]struct{}
-		UpsertSignalInfos         map[int64]*persistencespb.SignalInfo
+		UpsertSignalInfos         map[int64]*commonpb.DataBlob
 		DeleteSignalInfos         map[int64]struct{}
 		UpsertSignalRequestedIDs  map[string]struct{}
 		DeleteSignalRequestedIDs  map[string]struct{}
@@ -363,22 +405,29 @@ type (
 
 		Condition int64
 
-		Checksum *persistencespb.Checksum
+		Checksum *commonpb.DataBlob
 	}
 
 	// InternalWorkflowSnapshot is used as generic workflow execution state snapshot for Persistence Interface
 	InternalWorkflowSnapshot struct {
-		ExecutionInfo    *persistencespb.WorkflowExecutionInfo
-		ExecutionState   *persistencespb.WorkflowExecutionState
-		LastWriteVersion int64
-		NextEventID      int64
-		DBRecordVersion  int64
+		// TODO: properly set this on call sites
+		NamespaceID string
+		WorkflowID  string
+		RunID       string
 
-		ActivityInfos       map[int64]*persistencespb.ActivityInfo
-		TimerInfos          map[string]*persistencespb.TimerInfo
-		ChildExecutionInfos map[int64]*persistencespb.ChildExecutionInfo
-		RequestCancelInfos  map[int64]*persistencespb.RequestCancelInfo
-		SignalInfos         map[int64]*persistencespb.SignalInfo
+		ExecutionInfo      *commonpb.DataBlob
+		ExecutionState     *persistencespb.WorkflowExecutionState
+		ExecutionStateBlob *commonpb.DataBlob
+		StartVersion       int64
+		LastWriteVersion   int64
+		NextEventID        int64
+		DBRecordVersion    int64
+
+		ActivityInfos       map[int64]*commonpb.DataBlob
+		TimerInfos          map[string]*commonpb.DataBlob
+		ChildExecutionInfos map[int64]*commonpb.DataBlob
+		RequestCancelInfos  map[int64]*commonpb.DataBlob
+		SignalInfos         map[int64]*commonpb.DataBlob
 		SignalRequestedIDs  map[string]struct{}
 
 		TransferTasks    []Task
@@ -388,7 +437,13 @@ type (
 
 		Condition int64
 
-		Checksum *persistencespb.Checksum
+		Checksum *commonpb.DataBlob
+	}
+
+	InternalGetCurrentExecutionResponse struct {
+		RunID            string
+		ExecutionState   *persistencespb.WorkflowExecutionState
+		LastWriteVersion int64
 	}
 
 	// InternalHistoryNode represent a history node metadata

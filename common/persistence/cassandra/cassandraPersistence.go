@@ -32,7 +32,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
@@ -84,8 +83,6 @@ const (
 	rowTypeExecutionTaskID = int64(-10)
 	rowTypeShardTaskID     = int64(-11)
 	emptyInitiatedID       = int64(-7)
-
-	stickyTaskQueueTTL = int32(24 * time.Hour / time.Second) // if sticky task_queue stopped being updated, remove it in one day
 )
 
 const (
@@ -865,7 +862,6 @@ func (d *cassandraPersistence) UpdateShard(request *p.InternalUpdateShardRequest
 
 	return nil
 }
-
 func (d *cassandraPersistence) CreateWorkflowExecution(
 	request *p.InternalCreateWorkflowExecutionRequest,
 ) (*p.CreateWorkflowExecutionResponse, error) {
@@ -874,21 +870,13 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 
 	newWorkflow := request.NewWorkflowSnapshot
 	lastWriteVersion := newWorkflow.LastWriteVersion
-	namespaceID := newWorkflow.ExecutionInfo.NamespaceId
-	workflowID := newWorkflow.ExecutionInfo.WorkflowId
-	runID := newWorkflow.ExecutionState.RunId
-
-	if err := p.ValidateCreateWorkflowModeState(
-		request.Mode,
-		newWorkflow,
-	); err != nil {
-		return nil, err
-	}
+	namespaceID := newWorkflow.NamespaceID
+	workflowID := newWorkflow.WorkflowID
+	runID := newWorkflow.RunID
 
 	switch request.Mode {
 	case p.CreateWorkflowModeZombie:
 		// noop
-
 	default:
 		if err := createOrUpdateCurrentExecution(batch,
 			request.Mode,
@@ -897,11 +885,10 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 			workflowID,
 			runID,
 			newWorkflow.ExecutionState.State,
-			newWorkflow.ExecutionState.Status,
-			newWorkflow.ExecutionState.CreateRequestId,
 			lastWriteVersion,
 			request.PreviousRunID,
 			request.PreviousLastWriteVersion,
+			newWorkflow.ExecutionStateBlob,
 		); err != nil {
 			return nil, err
 		}
@@ -969,7 +956,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 						return nil, newPersistedTypeMismatchError("execution_state_encoding", "", stateEncoding, previous)
 					}
 
-					// todo: Move serialization to manager
+					// TODO: fix blob
 					protoState, err := serialization.WorkflowExecutionStateFromBlob(state, stateEncoding)
 					if err != nil {
 						return nil, err
@@ -978,7 +965,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 					lastWriteVersion := previous["workflow_last_write_version"].(int64)
 
 					msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
-						newWorkflow.ExecutionInfo.WorkflowId, protoState.RunId, request.RangeID, strings.Join(columns, ","))
+						newWorkflow.WorkflowID, protoState.RunId, request.RangeID, strings.Join(columns, ","))
 					if request.Mode == p.CreateWorkflowModeBrandNew {
 						// todo: Look at moving these errors upstream to manager
 						return nil, &p.WorkflowExecutionAlreadyStartedError{
@@ -996,24 +983,29 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 				if prevRunID := gocql.UUIDToString(previous["current_run_id"]); prevRunID != request.PreviousRunID {
 					// currentRunID on previous run has been changed, return to caller to handle
 					msg := fmt.Sprintf("Workflow execution creation condition failed by mismatch runID. WorkflowId: %v, Expected Current RunId: %v, Actual Current RunId: %v",
-						newWorkflow.ExecutionInfo.WorkflowId, request.PreviousRunID, prevRunID)
+						newWorkflow.WorkflowID, request.PreviousRunID, prevRunID)
 					return nil, &p.CurrentWorkflowConditionFailedError{Msg: msg}
 				}
 
 				msg := fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, CurrentRunId: %v, columns: (%v)",
-					newWorkflow.ExecutionInfo.WorkflowId, newWorkflow.ExecutionState.RunId, strings.Join(columns, ","))
+					newWorkflow.WorkflowID, newWorkflow.ExecutionState.RunId, strings.Join(columns, ","))
 				return nil, &p.CurrentWorkflowConditionFailedError{Msg: msg}
 			} else if rowType == rowTypeExecution && runID == newWorkflow.ExecutionState.RunId {
 				msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeId: %v",
-					newWorkflow.ExecutionInfo.WorkflowId, newWorkflow.ExecutionState.RunId, request.RangeID)
+					newWorkflow.WorkflowID, newWorkflow.ExecutionState.RunId, request.RangeID)
 
 				mutableState, err := mutableStateFromRow(previous)
 				if err != nil {
 					return nil, serviceerror.NewInternal(fmt.Sprintf("CreateWorkflowExecution operation error check failed. Error: %v", err))
 				}
 				lastWriteVersion := common.EmptyVersion
-				if mutableState.ExecutionInfo.VersionHistories != nil {
-					currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(mutableState.ExecutionInfo.VersionHistories)
+				// TODO: fix blob
+				executionInfo, err := serialization.WorkflowExecutionInfoFromBlob(mutableState.ExecutionInfo.Data, mutableState.ExecutionInfo.EncodingType.String())
+				if err != nil {
+					return nil, serviceerror.NewInternal(fmt.Sprintf("CreateWorkflowExecution operation error check failed. Error: %v", err))
+				}
+				if executionInfo.VersionHistories != nil {
+					currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
 					if err != nil {
 						return nil, serviceerror.NewInternal(fmt.Sprintf("CreateWorkflowExecution operation error check failed. Error: %v", err))
 					}
@@ -1081,63 +1073,43 @@ func (d *cassandraPersistence) GetWorkflowExecution(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
 	}
 
-	activityInfos := make(map[int64]*persistencespb.ActivityInfo)
+	activityInfos := make(map[int64]*commonpb.DataBlob)
 	aMap := result["activity_map"].(map[int64][]byte)
 	aMapEncoding := result["activity_map_encoding"].(string)
 	for key, value := range aMap {
-		aInfo, err := serialization.ActivityInfoFromBlob(value, aMapEncoding)
-		if err != nil {
-			return nil, err
-		}
-		activityInfos[key] = aInfo
+		activityInfos[key] = p.NewDataBlob(value, aMapEncoding)
 	}
 	state.ActivityInfos = activityInfos
 
-	timerInfos := make(map[string]*persistencespb.TimerInfo)
+	timerInfos := make(map[string]*commonpb.DataBlob)
 	tMapEncoding := result["timer_map_encoding"].(string)
 	tMap := result["timer_map"].(map[string][]byte)
 	for key, value := range tMap {
-		info, err := serialization.TimerInfoFromBlob(value, tMapEncoding)
-		if err != nil {
-			return nil, err
-		}
-		timerInfos[key] = info
+		timerInfos[key] = p.NewDataBlob(value, tMapEncoding)
 	}
 	state.TimerInfos = timerInfos
 
-	childExecutionInfos := make(map[int64]*persistencespb.ChildExecutionInfo)
+	childExecutionInfos := make(map[int64]*commonpb.DataBlob)
 	cMap := result["child_executions_map"].(map[int64][]byte)
 	cMapEncoding := result["child_executions_map_encoding"].(string)
 	for key, value := range cMap {
-		cInfo, err := serialization.ChildExecutionInfoFromBlob(value, cMapEncoding)
-		if err != nil {
-			return nil, err
-		}
-		childExecutionInfos[key] = cInfo
+		childExecutionInfos[key] = p.NewDataBlob(value, cMapEncoding)
 	}
 	state.ChildExecutionInfos = childExecutionInfos
 
-	requestCancelInfos := make(map[int64]*persistencespb.RequestCancelInfo)
+	requestCancelInfos := make(map[int64]*commonpb.DataBlob)
 	rMapEncoding := result["request_cancel_map_encoding"].(string)
 	rMap := result["request_cancel_map"].(map[int64][]byte)
 	for key, value := range rMap {
-		info, err := serialization.RequestCancelInfoFromBlob(value, rMapEncoding)
-		if err != nil {
-			return nil, err
-		}
-		requestCancelInfos[key] = info
+		requestCancelInfos[key] = p.NewDataBlob(value, rMapEncoding)
 	}
 	state.RequestCancelInfos = requestCancelInfos
 
-	signalInfos := make(map[int64]*persistencespb.SignalInfo)
+	signalInfos := make(map[int64]*commonpb.DataBlob)
 	sMapEncoding := result["signal_map_encoding"].(string)
 	sMap := result["signal_map"].(map[int64][]byte)
 	for key, value := range sMap {
-		info, err := serialization.SignalInfoFromBlob(value, sMapEncoding)
-		if err != nil {
-			return nil, err
-		}
-		signalInfos[key] = info
+		signalInfos[key] = p.NewDataBlob(value, sMapEncoding)
 	}
 	state.SignalInfos = signalInfos
 	state.SignalRequestedIDs = gocql.UUIDsToStrings(result["signal_requested"])
@@ -1150,11 +1122,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(
 	}
 	state.BufferedEvents = bufferedEventsBlobs
 
-	cs, err := serialization.ChecksumFromBlob(result["checksum"].([]byte), result["checksum_encoding"].(string))
-	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
-	}
-	state.Checksum = cs
+	state.Checksum = p.NewDataBlob(result["checksum"].([]byte), result["checksum_encoding"].(string))
 
 	dbVersion := int64(0)
 	if dbRecordVersion, ok := result["db_record_version"]; ok {
@@ -1169,7 +1137,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(
 	}, nil
 }
 
-func protoExecutionStateFromRow(result map[string]interface{}) (*persistencespb.WorkflowExecutionState, error) {
+func executionStateBlobFromRow(result map[string]interface{}) (*commonpb.DataBlob, error) {
 	state, ok := result["execution_state"].([]byte)
 	if !ok {
 		return nil, newPersistedTypeMismatchError("execution_state", "", state, result)
@@ -1180,11 +1148,7 @@ func protoExecutionStateFromRow(result map[string]interface{}) (*persistencespb.
 		return nil, newPersistedTypeMismatchError("execution_state_encoding", "", stateEncoding, result)
 	}
 
-	protoState, err := serialization.WorkflowExecutionStateFromBlob(state, stateEncoding)
-	if err != nil {
-		return nil, err
-	}
-	return protoState, nil
+	return p.NewDataBlob(state, stateEncoding), nil
 }
 
 func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdateWorkflowExecutionRequest) error {
@@ -1194,18 +1158,10 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 	updateWorkflow := request.UpdateWorkflowMutation
 	newWorkflow := request.NewWorkflowSnapshot
 
-	namespaceID := updateWorkflow.ExecutionInfo.NamespaceId
-	workflowID := updateWorkflow.ExecutionInfo.WorkflowId
-	runID := updateWorkflow.ExecutionState.RunId
+	namespaceID := updateWorkflow.NamespaceID
+	workflowID := updateWorkflow.WorkflowID
+	runID := updateWorkflow.RunID
 	shardID := d.shardID
-
-	if err := p.ValidateUpdateWorkflowModeState(
-		request.Mode,
-		updateWorkflow,
-		newWorkflow,
-	); err != nil {
-		return err
-	}
 
 	switch request.Mode {
 	case p.UpdateWorkflowModeBypassCurrent:
@@ -1219,14 +1175,13 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 	case p.UpdateWorkflowModeUpdateCurrent:
 		if newWorkflow != nil {
 			newLastWriteVersion := newWorkflow.LastWriteVersion
-			newNamespaceID := newWorkflow.ExecutionInfo.NamespaceId
-			newWorkflowID := newWorkflow.ExecutionInfo.WorkflowId
-			newRunID := newWorkflow.ExecutionState.RunId
+			newNamespaceID := newWorkflow.NamespaceID
+			newWorkflowID := newWorkflow.WorkflowID
+			newRunID := newWorkflow.RunID
 
 			if namespaceID != newNamespaceID {
 				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another namespace"))
 			}
-
 			if err := createOrUpdateCurrentExecution(batch,
 				p.CreateWorkflowModeContinueAsNew,
 				d.shardID,
@@ -1234,11 +1189,10 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 				newWorkflowID,
 				newRunID,
 				newWorkflow.ExecutionState.State,
-				newWorkflow.ExecutionState.Status,
-				newWorkflow.ExecutionState.CreateRequestId,
 				newLastWriteVersion,
 				runID,
 				0, // for continue as new, this is not used
+				newWorkflow.ExecutionStateBlob,
 			); err != nil {
 				return err
 			}
@@ -1321,17 +1275,8 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 
 	shardID := d.shardID
 
-	namespaceID := resetWorkflow.ExecutionInfo.NamespaceId
-	workflowID := resetWorkflow.ExecutionInfo.WorkflowId
-
-	if err := p.ValidateConflictResolveWorkflowModeState(
-		request.Mode,
-		resetWorkflow,
-		newWorkflow,
-		currentWorkflow,
-	); err != nil {
-		return err
-	}
+	namespaceID := resetWorkflow.NamespaceID
+	workflowID := resetWorkflow.WorkflowID
 
 	var prevRunID string
 
@@ -1590,7 +1535,7 @@ func (d *cassandraPersistence) DeleteCurrentWorkflowExecution(request *p.DeleteC
 	return gocql.ConvertError("DeleteWorkflowCurrentRow", err)
 }
 
-func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutionRequest) (*p.GetCurrentExecutionResponse,
+func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutionRequest) (*p.InternalGetCurrentExecutionResponse,
 	error) {
 	query := d.session.Query(templateGetCurrentExecutionQuery,
 		d.shardID,
@@ -1608,16 +1553,20 @@ func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutio
 
 	currentRunID := gocql.UUIDToString(result["current_run_id"])
 	lastWriteVersion := result["workflow_last_write_version"].(int64)
-	executionState, err := protoExecutionStateFromRow(result)
+	executionStateBlob, err := executionStateBlobFromRow(result)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err))
 	}
 
-	return &p.GetCurrentExecutionResponse{
+	// TODO: fix blob ExecutionState in storage should not be a blob.
+	executionState, err := serialization.WorkflowExecutionStateFromBlob(executionStateBlob.Data, executionStateBlob.EncodingType.String())
+	if err != nil {
+		return nil, err
+	}
+
+	return &p.InternalGetCurrentExecutionResponse{
 		RunID:            currentRunID,
-		StartRequestID:   executionState.CreateRequestId,
-		State:            executionState.State,
-		Status:           executionState.Status,
+		ExecutionState:   executionState,
 		LastWriteVersion: lastWriteVersion,
 	}, nil
 }
@@ -2109,7 +2058,7 @@ func (d *cassandraPersistence) ExtendLease(request *p.InternalExtendLeaseRequest
 	if !applied {
 		previousRangeID := previous["range_id"]
 		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("LeaseTaskQueue: taskQueue:%v, taskQueueType:%v, haveRangeID:%v, gotRangeID:%v",
+			Msg: fmt.Sprintf("ExtendLease: taskQueue:%v, taskQueueType:%v, haveRangeID:%v, gotRangeID:%v",
 				request.TaskQueue, request.TaskType, request.RangeID, previousRangeID),
 		}
 	}
@@ -2118,34 +2067,32 @@ func (d *cassandraPersistence) ExtendLease(request *p.InternalExtendLeaseRequest
 }
 
 // From TaskManager interface
-func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest) (*p.UpdateTaskQueueResponse, error) {
-	tli := *request.TaskQueueInfo
-	tli.LastUpdateTime = timestamp.TimeNowPtrUtc()
-	datablob, err := serialization.TaskQueueInfoToBlob(&tli)
-	if err != nil {
-		return nil, gocql.ConvertError("UpdateTaskQueue", err)
-	}
-
+func (d *cassandraPersistence) UpdateTaskQueue(request *p.InternalUpdateTaskQueueRequest) (*p.UpdateTaskQueueResponse, error) {
+	var err error
 	var applied bool
 	previous := make(map[string]interface{})
-	if tli.Kind == enumspb.TASK_QUEUE_KIND_STICKY { // if task_queue is sticky, then update with TTL
+	if request.TaskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY { // if task_queue is sticky, then update with TTL
+		if request.ExpiryTime == nil {
+			return nil, serviceerror.NewInternal("ExpiryTime cannot be nil for sticky task queue")
+		}
+		expiryTtl := convert.Int64Ceil(time.Until(timestamp.TimeValue(request.ExpiryTime)).Seconds())
 		batch := d.session.NewBatch(gocql.LoggedBatch)
 		batch.Query(templateUpdateTaskQueueQueryWithTTLPart1,
-			tli.GetNamespaceId(),
-			&tli.Name,
-			tli.TaskType,
+			request.NamespaceID,
+			request.TaskQueue,
+			request.TaskType,
 			rowTypeTaskQueue,
 			taskQueueTaskID,
-			stickyTaskQueueTTL,
+			expiryTtl,
 		)
 		batch.Query(templateUpdateTaskQueueQueryWithTTLPart2,
-			stickyTaskQueueTTL,
+			expiryTtl,
 			request.RangeID,
-			datablob.Data,
-			datablob.EncodingType.String(),
-			tli.GetNamespaceId(),
-			&tli.Name,
-			tli.TaskType,
+			request.TaskQueueInfo.Data,
+			request.TaskQueueInfo.EncodingType.String(),
+			request.NamespaceID,
+			request.TaskQueue,
+			request.TaskType,
 			rowTypeTaskQueue,
 			taskQueueTaskID,
 			request.RangeID,
@@ -2154,11 +2101,11 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 	} else {
 		query := d.session.Query(templateUpdateTaskQueueQuery,
 			request.RangeID,
-			datablob.Data,
-			datablob.EncodingType.String(),
-			tli.GetNamespaceId(),
-			&tli.Name,
-			tli.TaskType,
+			request.TaskQueueInfo.Data,
+			request.TaskQueueInfo.EncodingType.String(),
+			request.NamespaceID,
+			request.TaskQueue,
+			request.TaskType,
 			rowTypeTaskQueue,
 			taskQueueTaskID,
 			request.RangeID,
@@ -2178,14 +2125,14 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.UpdateTaskQueueRequest
 
 		return nil, &p.ConditionFailedError{
 			Msg: fmt.Sprintf("Failed to update task queue. name: %v, type: %v, rangeID: %v, columns: (%v)",
-				tli.Name, tli.TaskType, request.RangeID, strings.Join(columns, ",")),
+				request.TaskQueue, request.TaskType, request.RangeID, strings.Join(columns, ",")),
 		}
 	}
 
 	return &p.UpdateTaskQueueResponse{}, nil
 }
 
-func (d *cassandraPersistence) ListTaskQueue(_ *p.ListTaskQueueRequest) (*p.ListTaskQueueResponse, error) {
+func (d *cassandraPersistence) ListTaskQueue(_ *p.ListTaskQueueRequest) (*p.InternalListTaskQueueResponse, error) {
 	return nil, serviceerror.NewInternal(fmt.Sprintf("unsupported operation"))
 }
 
@@ -2206,18 +2153,14 @@ func (d *cassandraPersistence) DeleteTaskQueue(request *p.DeleteTaskQueueRequest
 }
 
 // From TaskManager interface
-func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.CreateTasksResponse, error) {
+func (d *cassandraPersistence) CreateTasks(request *p.InternalCreateTasksRequest) (*p.CreateTasksResponse, error) {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
-	namespaceID := request.TaskQueueInfo.Data.GetNamespaceId()
-	taskQueue := request.TaskQueueInfo.Data.Name
-	taskQueueType := request.TaskQueueInfo.Data.TaskType
+	namespaceID := request.NamespaceID
+	taskQueue := request.TaskQueue
+	taskQueueType := request.TaskType
 
 	for _, task := range request.Tasks {
-		ttl := GetTaskTTL(task.Data)
-		datablob, err := serialization.TaskInfoToBlob(task)
-		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", err))
-		}
+		ttl := GetTaskTTL(task.ExpiryTime)
 
 		if ttl <= 0 || ttl > maxCassandraTTL {
 			batch.Query(templateCreateTaskQuery,
@@ -2225,41 +2168,33 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 				taskQueue,
 				taskQueueType,
 				rowTypeTask,
-				task.GetTaskId(),
-				datablob.Data,
-				datablob.EncodingType.String())
+				task.TaskId,
+				task.Task.Data,
+				task.Task.EncodingType.String())
 		} else {
 			batch.Query(templateCreateTaskWithTTLQuery,
 				namespaceID,
 				taskQueue,
 				taskQueueType,
 				rowTypeTask,
-				task.GetTaskId(),
-				datablob.Data,
-				datablob.EncodingType.String(),
+				task.TaskId,
+				task.Task.Data,
+				task.Task.EncodingType.String(),
 				ttl)
 		}
 	}
 
-	tl := *request.TaskQueueInfo.Data
-	tl.LastUpdateTime = timestamp.TimeNowPtrUtc()
-	datablob, err := serialization.TaskQueueInfoToBlob(&tl)
-
-	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", err))
-	}
-
 	// The following query is used to ensure that range_id didn't change
 	batch.Query(templateUpdateTaskQueueQuery,
-		request.TaskQueueInfo.RangeID,
-		datablob.Data,
-		datablob.EncodingType.String(),
+		request.RangeID,
+		request.TaskQueueInfo.Data,
+		request.TaskQueueInfo.EncodingType.String(),
 		namespaceID,
 		taskQueue,
 		taskQueueType,
 		rowTypeTaskQueue,
 		taskQueueTaskID,
-		request.TaskQueueInfo.RangeID,
+		request.RangeID,
 	)
 
 	previous := make(map[string]interface{})
@@ -2271,17 +2206,17 @@ func (d *cassandraPersistence) CreateTasks(request *p.CreateTasksRequest) (*p.Cr
 		rangeID := previous["range_id"]
 		return nil, &p.ConditionFailedError{
 			Msg: fmt.Sprintf("Failed to create task. TaskQueue: %v, taskQueueType: %v, rangeID: %v, db rangeID: %v",
-				taskQueue, taskQueueType, request.TaskQueueInfo.RangeID, rangeID),
+				taskQueue, taskQueueType, request.RangeID, rangeID),
 		}
 	}
 
 	return &p.CreateTasksResponse{}, nil
 }
 
-func GetTaskTTL(task *persistencespb.TaskInfo) int64 {
+func GetTaskTTL(expireTime *time.Time) int64 {
 	var ttl int64 = 0
-	if task.ExpiryTime != nil {
-		expiryTtl := convert.Int64Ceil(time.Until(timestamp.TimeValue(task.ExpiryTime)).Seconds())
+	if expireTime != nil {
+		expiryTtl := convert.Int64Ceil(time.Until(timestamp.TimeValue(expireTime)).Seconds())
 
 		// 0 means no ttl, we dont want that.
 		// Todo: Come back and correctly ignore expired in-memory tasks before persisting
@@ -2295,12 +2230,12 @@ func GetTaskTTL(task *persistencespb.TaskInfo) int64 {
 }
 
 // From TaskManager interface
-func (d *cassandraPersistence) GetTasks(request *p.GetTasksRequest) (*p.GetTasksResponse, error) {
+func (d *cassandraPersistence) GetTasks(request *p.GetTasksRequest) (*p.InternalGetTasksResponse, error) {
 	if request.MaxReadLevel == nil {
 		return nil, serviceerror.NewInternal("getTasks: both readLevel and maxReadLevel MUST be specified for cassandra persistence")
 	}
 	if request.ReadLevel > *request.MaxReadLevel {
-		return &p.GetTasksResponse{}, nil
+		return &p.InternalGetTasksResponse{}, nil
 	}
 
 	// Reading taskqueue tasks need to be quorum level consistent, otherwise we could lose tasks
@@ -2314,7 +2249,7 @@ func (d *cassandraPersistence) GetTasks(request *p.GetTasksRequest) (*p.GetTasks
 	)
 	iter := query.PageSize(request.BatchSize).Iter()
 
-	response := &p.GetTasksResponse{}
+	response := &p.InternalGetTasksResponse{}
 	task := make(map[string]interface{})
 PopulateTasks:
 	for iter.MapScan(task) {
@@ -2344,12 +2279,7 @@ PopulateTasks:
 			return nil, newPersistedTypeMismatchError("task_encoding", byteSliceType, rawEncoding, task)
 		}
 
-		t, err := serialization.TaskInfoFromBlob(taskVal, encodingVal)
-		if err != nil {
-			return nil, gocql.ConvertError("GetTasks", err)
-		}
-
-		response.Tasks = append(response.Tasks, t)
+		response.Tasks = append(response.Tasks, p.NewDataBlob(taskVal, encodingVal))
 		if len(response.Tasks) == request.BatchSize {
 			break PopulateTasks
 		}
@@ -2555,23 +2485,18 @@ func mutableStateFromRow(result map[string]interface{}) (*p.InternalWorkflowMuta
 		return nil, newPersistedTypeMismatchError("execution_encoding", "", eiEncoding, result)
 	}
 
-	protoInfo, err := serialization.WorkflowExecutionInfoFromBlob(eiBytes, eiEncoding)
-	if err != nil {
-		return nil, err
-	}
-
 	nextEventID, ok := result["next_event_id"].(int64)
 	if !ok {
 		return nil, newPersistedTypeMismatchError("next_event_id", "", nextEventID, result)
 	}
 
-	protoState, err := protoExecutionStateFromRow(result)
+	protoState, err := executionStateBlobFromRow(result)
 	if err != nil {
 		return nil, err
 	}
 
 	mutableState := &p.InternalWorkflowMutableState{
-		ExecutionInfo:  protoInfo,
+		ExecutionInfo:  p.NewDataBlob(eiBytes, eiEncoding),
 		ExecutionState: protoState,
 		NextEventID:    nextEventID,
 	}

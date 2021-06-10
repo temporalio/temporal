@@ -128,8 +128,14 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getNamespaceIDAndWorkflowExecution(task),
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
+	context, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -167,8 +173,14 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getNamespaceIDAndWorkflowExecution(task),
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
+	context, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -230,8 +242,14 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
-	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getNamespaceIDAndWorkflowExecution(task),
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
+	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -343,8 +361,14 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getNamespaceIDAndWorkflowExecution(task),
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
+	context, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -427,8 +451,14 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
-	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getNamespaceIDAndWorkflowExecution(task),
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
+	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -521,7 +551,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	// the rest of logic is making RPC call, which takes time.
 	release(retError)
 	// remove signalRequestedID from target workflow, after Signal detail is removed from source workflow
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
+	ctx, cancel = context.WithTimeout(context.Background(), taskTimeout)
 	defer cancel()
 	_, err = t.historyClient.RemoveSignalMutableState(ctx, &historyservice.RemoveSignalMutableStateRequest{
 		NamespaceId: task.GetTargetNamespaceId(),
@@ -538,8 +568,14 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
-	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getNamespaceIDAndWorkflowExecution(task),
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
+	context, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -649,8 +685,14 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
-	currentContext, currentRelease, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getNamespaceIDAndWorkflowExecution(task),
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
+	currentContext, currentRelease, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -734,7 +776,14 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      resetPoint.GetRunId(),
 		}
-		baseContext, baseRelease, err = t.cache.getOrCreateWorkflowExecutionForBackground(task.GetNamespaceId(), *baseExecution)
+		ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+		defer cancel()
+		baseContext, baseRelease, err = t.cache.getOrCreateWorkflowExecution(
+			ctx,
+			task.GetNamespaceId(),
+			*baseExecution,
+			callerTypeTask,
+		)
 		if err != nil {
 			return err
 		}

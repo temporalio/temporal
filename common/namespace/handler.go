@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -439,7 +438,7 @@ func (d *HandlerImpl) UpdateNamespace(
 	}
 	if updateRequest.Config != nil {
 		updatedConfig := updateRequest.Config
-		if timestamp.DurationValue(updatedConfig.GetWorkflowExecutionRetentionTtl()) != 0 {
+		if updatedConfig.GetWorkflowExecutionRetentionTtl() != nil {
 			configurationChanged = true
 			config.Retention = updatedConfig.GetWorkflowExecutionRetentionTtl()
 		}

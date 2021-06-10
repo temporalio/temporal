@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -125,12 +127,16 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 	isStartExecution bool,
 ) (retError error) {
 
-	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
 		task.GetNamespaceId(),
 		commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      task.GetRunId(),
 		},
+		callerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -299,12 +305,16 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	task *persistencespb.VisibilityTaskInfo,
 ) (retError error) {
 
-	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
 		task.GetNamespaceId(),
 		commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      task.GetRunId(),
 		},
+		callerTypeTask,
 	)
 	if err != nil {
 		return err

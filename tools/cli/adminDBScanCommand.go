@@ -302,6 +302,7 @@ func scanShard(
 		}
 		return report
 	}
+	execMan := persistence.NewExecutionManager(execStore, log.NewNoopLogger())
 
 	var token []byte
 	isFirstIteration := true
@@ -312,7 +313,7 @@ func scanShard(
 			PageToken: token,
 		}
 		preconditionForDBCall(&report.TotalDBRequests, limiter)
-		resp, err := execStore.ListConcreteExecutions(req)
+		resp, err := execMan.ListConcreteExecutions(req)
 		if err != nil {
 			report.Failure = &ShardScanReportFailure{
 				Note:    "failed to call ListConcreteExecutions",
@@ -320,7 +321,7 @@ func scanShard(
 			}
 			return report
 		}
-		token = resp.NextPageToken
+		token = resp.PageToken
 		for _, s := range resp.States {
 			if report.Scanned == nil {
 				report.Scanned = &ShardScanReportExecutionsScanned{}
@@ -329,7 +330,7 @@ func scanShard(
 			historyVerificationResult, history, historyBranch := fetchAndVerifyHistoryExists(
 				s.ExecutionInfo,
 				s.ExecutionState,
-				s.NextEventID,
+				s.NextEventId,
 				corruptedExecutionWriter,
 				checkFailureWriter,
 				shardID,
@@ -363,7 +364,7 @@ func scanShard(
 			firstHistoryEventVerificationResult := verifyFirstHistoryEvent(
 				s.ExecutionInfo,
 				s.ExecutionState,
-				s.NextEventID,
+				s.NextEventId,
 				byteBranch,
 				corruptedExecutionWriter,
 				checkFailureWriter,
@@ -386,12 +387,12 @@ func scanShard(
 			currentExecutionVerificationResult := verifyCurrentExecution(
 				s.ExecutionInfo,
 				s.ExecutionState,
-				s.NextEventID,
+				s.NextEventId,
 				corruptedExecutionWriter,
 				checkFailureWriter,
 				shardID,
 				byteBranch,
-				execStore,
+				execMan,
 				limiter,
 				&report.TotalDBRequests,
 			)
@@ -409,7 +410,7 @@ func scanShard(
 
 			activityIdsVerificationResult := verifyActivityIds(
 				shardID,
-				s.NextEventID,
+				s.NextEventId,
 				s.ActivityInfos,
 				s.ExecutionInfo,
 				s.ExecutionState,
@@ -643,7 +644,7 @@ func verifyCurrentExecution(
 	checkFailureWriter BufferedWriter,
 	shardID int32,
 	byteBranch *historyBranchByteKey,
-	execStore persistence.ExecutionStore,
+	execMan persistence.ExecutionManager,
 	limiter quotas.RateLimiter,
 	totalDBRequests *int64,
 ) VerificationResult {
@@ -655,9 +656,9 @@ func verifyCurrentExecution(
 		WorkflowID:  executionInfo.WorkflowId,
 	}
 	preconditionForDBCall(totalDBRequests, limiter)
-	currentExecution, err := execStore.GetCurrentExecution(getCurrentExecutionRequest)
+	currentExecution, err := execMan.GetCurrentExecution(getCurrentExecutionRequest)
 
-	ecf, stillOpen := concreteExecutionStillOpen(executionInfo, executionState, shardID, execStore, limiter, totalDBRequests)
+	ecf, stillOpen := concreteExecutionStillOpen(executionInfo, executionState, shardID, execMan, limiter, totalDBRequests)
 	if ecf != nil {
 		checkFailureWriter.Add(ecf)
 		return VerificationResultCheckFailure
@@ -756,7 +757,7 @@ func concreteExecutionStillOpen(
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
 	shardID int32,
-	execStore persistence.ExecutionStore,
+	execMan persistence.ExecutionManager,
 	limiter quotas.RateLimiter,
 	totalDBRequests *int64,
 ) (*ExecutionCheckFailure, bool) {
@@ -768,7 +769,7 @@ func concreteExecutionStillOpen(
 		},
 	}
 	preconditionForDBCall(totalDBRequests, limiter)
-	ce, err := execStore.GetWorkflowExecution(getConcreteExecution)
+	ce, err := execMan.GetWorkflowExecution(getConcreteExecution)
 	if err != nil {
 		return &ExecutionCheckFailure{
 			ShardID:     shardID,

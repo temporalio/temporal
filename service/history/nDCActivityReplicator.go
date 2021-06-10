@@ -98,7 +98,12 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		RunId:      request.RunId,
 	}
 
-	context, release, err := r.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, execution)
+	context, release, err := r.historyCache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeAPI,
+	)
 	if err != nil {
 		// for get workflow execution context, with valid run id
 		// err will not be of type EntityNotExistsError

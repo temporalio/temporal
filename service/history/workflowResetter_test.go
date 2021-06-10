@@ -573,8 +573,8 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 	}, nil)
 
 	resetContext := NewMockworkflowExecutionContext(s.controller)
-	resetContext.EXPECT().lock(gomock.Any()).Return(nil)
-	resetContext.EXPECT().unlock()
+	resetContext.EXPECT().lock(gomock.Any(), callerTypeAPI).Return(nil)
+	resetContext.EXPECT().unlock(callerTypeAPI)
 	resetMutableState := NewMockmutableState(s.controller)
 	resetContext.EXPECT().loadWorkflowExecution().Return(resetMutableState, nil)
 	resetMutableState.EXPECT().GetNextEventID().Return(newNextEventID).AnyTimes()
