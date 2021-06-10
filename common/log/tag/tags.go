@@ -455,6 +455,11 @@ func ServerName(serverName string) ZapTag {
 	return NewStringTag("server-name", serverName)
 }
 
+// CertThumbprint returns tag for CertThumbprint
+func CertThumbprint(thumbprint string) ZapTag {
+	return NewStringTag("cert-thumbprint", thumbprint)
+}
+
 // history engine shard
 
 // ShardID returns tag for ShardID

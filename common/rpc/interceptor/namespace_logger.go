@@ -26,6 +26,8 @@ package interceptor
 
 import (
 	"context"
+	"crypto/md5"
+	"fmt"
 
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/log"
@@ -64,14 +66,20 @@ func (nli *NamespaceLogInterceptor) Intercept(
 		namespace := GetNamespace(nli.namespaceCache, req)
 		tlsInfo := authorization.TLSInfoFormContext(ctx)
 		var serverName string
+		var certThumbprint string
 		if tlsInfo != nil {
 			serverName = tlsInfo.State.ServerName
+			cert := authorization.PeerCert(tlsInfo)
+			if cert != nil {
+				certThumbprint = fmt.Sprintf("%x", md5.Sum(cert.Raw))
+			}
 		}
 		nli.logger.Info(
 			"frontend method invoked",
 			tag.WorkflowNamespace(namespace),
 			tag.Operation(methodName),
-			tag.ServerName(serverName))
+			tag.ServerName(serverName),
+			tag.CertThumbprint(certThumbprint))
 	}
 	return handler(ctx, req)
 }
