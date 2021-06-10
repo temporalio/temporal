@@ -170,7 +170,7 @@ func (s *Service) Start() {
 		return
 	}
 
-	// TODO remove this dynamic flag in 1.12.x
+	// TODO remove this dynamic flag in 1.14.x
 	migration.SetDBVersionFlag(s.config.EnableDBRecordVersion())
 
 	logger := s.GetLogger()
