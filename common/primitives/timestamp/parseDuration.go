@@ -30,6 +30,11 @@ import (
 	"time"
 )
 
+var (
+	reUnitless = regexp.MustCompile("^(\\d+(\\.\\d*)?|(\\.\\d+))$")
+	reDays     = regexp.MustCompile("(\\d+(\\.\\d*)?|(\\.\\d+))d")
+)
+
 // ParseDuration is like time.ParseDuration, but supports unit "d" for days
 // (always interpreted as exactly 24 hours).
 func ParseDuration(s string) (time.Duration, error) {
@@ -52,8 +57,3 @@ func ParseDurationDefaultDays(s string) (time.Duration, error) {
 	}
 	return ParseDuration(s)
 }
-
-var (
-	reUnitless = regexp.MustCompile("^(\\d+(\\.\\d*)?|(\\.\\d+))$")
-	reDays     = regexp.MustCompile("(\\d+(\\.\\d*)?|(\\.\\d+))d")
-)

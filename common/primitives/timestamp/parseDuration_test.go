@@ -50,6 +50,8 @@ func (s *ParseDurationSuite) TestParseDuration() {
 		{"5.25d15m", 5*24*time.Hour + 6*time.Hour + 15*time.Minute},
 		{".5d", 12 * time.Hour},
 		{"-10d12.25h", -(10*24*time.Hour + 12*time.Hour + 15*time.Minute)},
+		{"3m2h1d", 3*time.Minute + 2*time.Hour + 1*24*time.Hour},
+		{"8m7h6d5d4h3m", 8*time.Minute + 7*time.Hour + 6*24*time.Hour + 5*24*time.Hour + 4*time.Hour + 3*time.Minute},
 		{"7", -1}, // error
 		{"", -1},  // error
 	} {
