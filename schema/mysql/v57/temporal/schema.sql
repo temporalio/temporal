@@ -244,6 +244,7 @@ CREATE TABLE queue_metadata (
   queue_type     INT NOT NULL,
   data           MEDIUMBLOB NOT NULL,
   data_encoding  VARCHAR(16) NOT NULL,
+  version        BIGINT NOT NULL,
   PRIMARY KEY(queue_type)
 );
 

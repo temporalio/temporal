@@ -197,18 +197,19 @@ type (
 	// Queue is a store to enqueue and get messages
 	Queue interface {
 		Closeable
+		Init(blob *commonpb.DataBlob) error
 		EnqueueMessage(blob commonpb.DataBlob) error
 		ReadMessages(lastMessageID int64, maxCount int) ([]*QueueMessage, error)
 		DeleteMessagesBefore(messageID int64) error
-		UpdateAckLevel(messageID int64, clusterName string) error
-		GetAckLevels() (map[string]int64, error)
+		UpdateAckLevel(metadata *InternalQueueMetadata) error
+		GetAckLevels() (*InternalQueueMetadata, error)
 
 		EnqueueMessageToDLQ(blob commonpb.DataBlob) (int64, error)
 		ReadMessagesFromDLQ(firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error)
 		DeleteMessageFromDLQ(messageID int64) error
 		RangeDeleteMessagesFromDLQ(firstMessageID int64, lastMessageID int64) error
-		UpdateDLQAckLevel(messageID int64, clusterName string) error
-		GetDLQAckLevels() (map[string]int64, error)
+		UpdateDLQAckLevel(metadata *InternalQueueMetadata) error
+		GetDLQAckLevels() (*InternalQueueMetadata, error)
 	}
 
 	// QueueMessage is the message that stores in the queue
@@ -217,6 +218,11 @@ type (
 		ID        int64     `json:"message_id"`
 		Data      []byte    `json:"message_payload"`
 		Encoding  string    `json:"message_encoding"`
+	}
+
+	InternalQueueMetadata struct {
+		Blob    *commonpb.DataBlob
+		Version int64
 	}
 
 	// InternalCreateShardRequest is used by ShardStore to create new shard
@@ -736,8 +742,9 @@ func NewDataBlob(data []byte, encodingTypeStr string) *commonpb.DataBlob {
 	}
 
 	encodingType, ok := enumspb.EncodingType_value[encodingTypeStr]
-	if !ok || enumspb.EncodingType(encodingType) != enumspb.ENCODING_TYPE_PROTO3 {
-		panic(fmt.Sprintf("Invalid incoding: \"%v\"", encodingTypeStr))
+	if !ok || (enumspb.EncodingType(encodingType) != enumspb.ENCODING_TYPE_PROTO3 &&
+		enumspb.EncodingType(encodingType) != enumspb.ENCODING_TYPE_JSON) {
+		panic(fmt.Sprintf("Invalid encoding: \"%v\"", encodingTypeStr))
 	}
 
 	return &commonpb.DataBlob{
