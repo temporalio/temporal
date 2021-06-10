@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -401,8 +402,14 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 	postActionFn standbyPostActionFn,
 ) (retError error) {
 
-	context, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
-		t.getNamespaceIDAndWorkflowExecution(timerTask),
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(timerTask)
+	context, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeTask,
 	)
 	if err != nil {
 		return err

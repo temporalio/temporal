@@ -443,6 +443,7 @@ func (r *nDCTransactionMgrImpl) loadNDCWorkflow(
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
+		callerTypeAPI,
 	)
 	if err != nil {
 		return nil, err

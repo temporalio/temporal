@@ -63,7 +63,7 @@ var Keys = map[Key]string{
 	AdminMatchingNamespaceToPartitionDispatchRate:          "admin.matchingNamespaceToPartitionDispatchRate",
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate: "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
 
-	// TODO remove this dynamic flag in 1.12.x
+	// TODO remove this dynamic flag in 1.14.x
 	EnableDBRecordVersion: "system.enableDBRecordVersion",
 
 	// system settings
@@ -345,7 +345,7 @@ const (
 	// AdminMatchingNamespaceTaskqueueToPartitionDispatchRate is the max qps of a task queue partition for a given namespace & task queue
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate
 
-	// TODO remove this dynamic flag in 1.12.x
+	// TODO remove this dynamic flag in 1.14.x
 
 	// EnableDBRecordVersion is key for enable db version
 	EnableDBRecordVersion
