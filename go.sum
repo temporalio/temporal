@@ -215,6 +215,7 @@ github.com/googleapis/gax-go/v2 v2.0.5 h1:sjZBwGj9Jlw33ImPtvFviGYvseOtDM7hkSKB7+
 github.com/googleapis/gax-go/v2 v2.0.5/go.mod h1:DWXyrwAJ9X0FpwwEdw+IPEYBICEFu5mhpdKc/us6bOk=
 github.com/gorilla/websocket v1.4.2 h1:+/TMaTYc4QFitKJxsQ7Yye35DkWvkdLcvGKqM+x0Ufc=
 github.com/gorilla/websocket v1.4.2/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
+github.com/grpc-ecosystem/go-grpc-middleware v1.3.0 h1:+9834+KizmvFV7pXQGSXQTsaWhq2GjuNUt0aUU0YBYw=
 github.com/grpc-ecosystem/go-grpc-middleware v1.3.0/go.mod h1:z0ButlSOZa5vEBq9m2m2hlwIgKw+rp3sdCBRoJY+30Y=
 github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed h1:5upAirOpQc1Q53c0bnx2ufif5kANL7bfZWcc6VJWJd8=
 github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed/go.mod h1:tMWxXQ9wFIaZeTI9F+hmhFiGpFmhOHzyShyFUhRm0H4=
@@ -418,8 +419,6 @@ go.opentelemetry.io/otel/sdk v0.15.0/go.mod h1:Qudkwgq81OcA9GYVlbyZ62wkLieeS1eWx
 go.temporal.io/api v1.4.1-0.20210420220407-6f00f7f98373/go.mod h1:Xtk6uRDheAVQr4fgcfo5ZDEkIGMLGJrNkswxZNpqpG0=
 go.temporal.io/api v1.4.1-0.20210429213054-a9a257b5cf16 h1:/HQBt8BOnOdqCETIKHdt8Ydl+S2XctbogHoikFKUoMM=
 go.temporal.io/api v1.4.1-0.20210429213054-a9a257b5cf16/go.mod h1:TqTvtQnmH8u0DgcIFXNBYpLaToB8sSwKmEbUqw7HapI=
-go.temporal.io/sdk v1.6.1-0.20210525221837-b434b501f9d5 h1:P3UksDOBeZ3EwFWl18rzvqkfzafT3M+P/P1FNS22jeM=
-go.temporal.io/sdk v1.6.1-0.20210525221837-b434b501f9d5/go.mod h1:4JZgBtLJUhyjm0bdP0nr/zzxOdd/WYRsmPgWuYf3Om4=
 go.temporal.io/sdk v1.7.0 h1:uVJPkUHYu1k23Hn7F2mYso1p3wHnPbVwWobSPVYmW0I=
 go.temporal.io/sdk v1.7.0/go.mod h1:SGEzYshamm994VrqsONO/ON4RcPkdqsGHsRhtiOjcd8=
 go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193 h1:jhIqHkAE74DnEXipymFTzmTxyboMYmv6iVkkCFC1pas=
