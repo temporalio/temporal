@@ -27,6 +27,7 @@ package interceptor
 import (
 	"context"
 
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"google.golang.org/grpc"
@@ -61,7 +62,16 @@ func (nli *NamespaceLogInterceptor) Intercept(
 	if nli.logger != nil {
 		_, methodName := splitMethodName(info.FullMethod)
 		namespace := GetNamespace(nli.namespaceCache, req)
-		nli.logger.Info("frontend method invoked", tag.WorkflowNamespace(namespace), tag.Operation(methodName))
+		tlsInfo := authorization.TLSInfoFormContext(ctx)
+		var serverName string
+		if tlsInfo != nil {
+			serverName = tlsInfo.State.ServerName
+		}
+		nli.logger.Info(
+			"frontend method invoked",
+			tag.WorkflowNamespace(namespace),
+			tag.Operation(methodName),
+			tag.ServerName(serverName))
 	}
 	return handler(ctx, req)
 }
