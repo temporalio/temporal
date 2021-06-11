@@ -948,7 +948,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
 			var err error
-			record.StartTime, err = time.Parse(time.RFC3339, startTime)
+			record.StartTime, err = time.Parse(time.RFC3339Nano, startTime)
 			if err != nil {
 				logDateParseError(fieldName, startTime, err, hit.Id)
 			}
@@ -958,7 +958,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
 			var err error
-			record.ExecutionTime, err = time.Parse(time.RFC3339, executionTime)
+			record.ExecutionTime, err = time.Parse(time.RFC3339Nano, executionTime)
 			if err != nil {
 				logDateParseError(fieldName, executionTime, err, hit.Id)
 			}
@@ -968,7 +968,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
 			var err error
-			record.CloseTime, err = time.Parse(time.RFC3339, closeTime)
+			record.CloseTime, err = time.Parse(time.RFC3339Nano, closeTime)
 			if err != nil {
 				logDateParseError(fieldName, closeTime, err, hit.Id)
 			}
@@ -1081,11 +1081,9 @@ func timeProcessFunc(obj *fastjson.Object, key string, value *fastjson.Value) er
 		// Temporal historically uses nanos for timestamps which need to be converted to milliseconds.
 		// After ES6 deprecation this func can be removed but "date" columns need to be reindexed to "data_nanos"
 		// https://www.elastic.co/guide/en/elasticsearch/reference/current/date_nanos.html
-
 		if nanos, err := strconv.ParseInt(timeStr, 10, 64); err == nil {
 			milliseconds := nanos / int64(time.Millisecond)
 			obj.Set(key, fastjson.MustParse(strconv.FormatInt(milliseconds, 10)))
-			return nil
 		}
 
 		return nil

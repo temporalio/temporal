@@ -195,12 +195,17 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_ExecutionTime() {
 	expectedCronMaxExecutionTime := now.Add(1 * time.Minute).Add(1 * time.Second) // 1 second for time skew
 
 	// WorkflowId filter is to filter workflows from other tests.
-	nonCronQuery := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < %v`, id, cronID, expectedNonCronMaxExecutionTime.UnixNano())
+	nonCronQueryNanos := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < %d`, id, cronID, expectedNonCronMaxExecutionTime.UnixNano())
+	s.testHelperForReadOnce(weNonCron.GetRunId(), nonCronQueryNanos, false)
+
+	cronQueryNanos := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < %d AND ExecutionTime > %d`, id, cronID, expectedCronMaxExecutionTime.UnixNano(), expectedNonCronMaxExecutionTime.UnixNano())
+	s.testHelperForReadOnce(weCron.GetRunId(), cronQueryNanos, false)
+
+	nonCronQuery := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < "%s"`, id, cronID, expectedNonCronMaxExecutionTime.Format(time.RFC3339Nano))
 	s.testHelperForReadOnce(weNonCron.GetRunId(), nonCronQuery, false)
 
-	cronQuery := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < %v AND ExecutionTime > %v`, id, cronID, expectedCronMaxExecutionTime.UnixNano(), expectedNonCronMaxExecutionTime.UnixNano())
+	cronQuery := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < "%s" AND ExecutionTime > "%s"`, id, cronID, expectedCronMaxExecutionTime.Format(time.RFC3339), expectedNonCronMaxExecutionTime.Format(time.RFC3339))
 	s.testHelperForReadOnce(weCron.GetRunId(), cronQuery, false)
-	println(nonCronQuery, cronQuery)
 }
 
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
@@ -366,7 +371,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.GreaterOrEqual(openExecution.GetExecutionTime().UnixNano(), openExecution.GetStartTime().UnixNano())
+	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
 	searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[key]
 	var searchVal int
 	payload.Decode(searchValBytes, &searchVal)
@@ -527,8 +532,8 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 		e1 := openExecutions[i-1]
 		e2 := openExecutions[i]
 		if e2.GetCloseTime() != nil {
-			s.NotEqual(0, e1.GetCloseTime().UnixNano())
-			s.GreaterOrEqual(e2.GetCloseTime().UnixNano(), e1.GetCloseTime().UnixNano())
+			s.NotEqual(time.Time{}, *e1.GetCloseTime())
+			s.GreaterOrEqual(e2.GetCloseTime(), e1.GetCloseTime())
 		}
 	}
 
@@ -723,7 +728,7 @@ func (s *elasticsearchIntegrationSuite) testHelperForReadOnce(expectedRunID stri
 	}
 	s.NotNil(openExecution)
 	s.Equal(expectedRunID, openExecution.GetExecution().GetRunId())
-	s.GreaterOrEqual(openExecution.GetExecutionTime().UnixNano(), openExecution.GetStartTime().UnixNano())
+	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
 	if openExecution.SearchAttributes != nil && len(openExecution.SearchAttributes.GetIndexedFields()) > 0 {
 		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey]
 		var searchVal string

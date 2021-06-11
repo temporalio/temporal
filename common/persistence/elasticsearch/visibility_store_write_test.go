@@ -76,8 +76,8 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 			s.Equal(request.WorkflowID, body[searchattribute.WorkflowID])
 			s.Equal(request.RunID, body[searchattribute.RunID])
 			s.Equal(request.WorkflowTypeName, body[searchattribute.WorkflowType])
-			s.EqualValues(request.StartTimestamp.UnixNano(), body[searchattribute.StartTime])
-			s.EqualValues(request.ExecutionTimestamp.UnixNano(), body[searchattribute.ExecutionTime])
+			s.EqualValues(request.StartTimestamp, body[searchattribute.StartTime])
+			s.EqualValues(request.ExecutionTimestamp, body[searchattribute.ExecutionTime])
 			s.Equal(request.TaskQueue, body[searchattribute.TaskQueue])
 			s.EqualValues(request.Status, body[searchattribute.ExecutionStatus])
 
@@ -140,8 +140,8 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 			WorkflowID:         "wid",
 			RunID:              "rid",
 			WorkflowTypeName:   "wfType",
-			StartTimestamp:     time.Unix(0, 123).UTC(),
-			ExecutionTimestamp: time.Unix(0, 321).UTC(),
+			StartTimestamp:     time.Date(2020, 8, 2, 1, 2, 3, 4, time.UTC),
+			ExecutionTimestamp: time.Date(2020, 8, 2, 2, 2, 3, 4, time.UTC),
 			TaskID:             int64(111),
 			ShardID:            2208,
 			Memo:               persistence.NewDataBlob([]byte("test bytes"), enumspb.ENCODING_TYPE_PROTO3.String()),
@@ -172,11 +172,11 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 			s.Equal(request.WorkflowID, body[searchattribute.WorkflowID])
 			s.Equal(request.RunID, body[searchattribute.RunID])
 			s.Equal(request.WorkflowTypeName, body[searchattribute.WorkflowType])
-			s.EqualValues(request.StartTimestamp.UnixNano(), body[searchattribute.StartTime])
-			s.EqualValues(request.ExecutionTimestamp.UnixNano(), body[searchattribute.ExecutionTime])
+			s.EqualValues(request.StartTimestamp, body[searchattribute.StartTime])
+			s.EqualValues(request.ExecutionTimestamp, body[searchattribute.ExecutionTime])
 			s.Equal(request.Memo.Data, body[searchattribute.Memo])
 			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[searchattribute.Encoding])
-			s.EqualValues(request.CloseTimestamp.UnixNano(), body[searchattribute.CloseTime])
+			s.EqualValues(request.CloseTimestamp, body[searchattribute.CloseTime])
 			s.EqualValues(request.Status, body[searchattribute.ExecutionStatus])
 			s.EqualValues(request.HistoryLength, body[searchattribute.HistoryLength])
 
