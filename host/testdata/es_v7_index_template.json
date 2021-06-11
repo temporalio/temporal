@@ -25,13 +25,16 @@
         "type": "keyword"
       },
       "StartTime": {
-        "type": "date"
+        "type": "date",
+        "format": "strict_date_optional_time||epoch_millis"
       },
       "ExecutionTime": {
-        "type": "date"
+        "type": "date",
+        "format": "strict_date_optional_time||epoch_millis"
       },
       "CloseTime": {
-        "type": "date"
+        "type": "date",
+        "format": "strict_date_optional_time||epoch_millis"
       },
       "ExecutionStatus": {
         "type": "integer"

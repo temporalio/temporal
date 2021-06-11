@@ -474,6 +474,11 @@ const (
 )
 
 var (
+	timeKeys = map[string]bool{
+		"StartTime":     true,
+		"CloseTime":     true,
+		"ExecutionTime": true,
+	}
 	rangeKeys = map[string]bool{
 		"from":  true,
 		"to":    true,
@@ -575,6 +580,9 @@ func getCustomizedDSLFromSQL(sql string, namespaceID string) (*fastjson.Value, e
 		addQueryForExecutionTime(dsl)
 	}
 	addNamespaceToQuery(dsl, namespaceID)
+	if err := processAllValuesForKey(dsl, timeKeyFilter, timeProcessFunc); err != nil {
+		return nil, err
+	}
 	return dsl, nil
 }
 
@@ -1022,4 +1030,64 @@ func checkPageSize(request *persistence.ListWorkflowExecutionsRequestV2) {
 	if request.PageSize == 0 {
 		request.PageSize = 1000
 	}
+}
+
+func processAllValuesForKey(dsl *fastjson.Value, keyFilter func(k string) bool,
+	processFunc func(obj *fastjson.Object, key string, v *fastjson.Value) error,
+) error {
+	switch dsl.Type() {
+	case fastjson.TypeArray:
+		for _, val := range dsl.GetArray() {
+			if err := processAllValuesForKey(val, keyFilter, processFunc); err != nil {
+				return err
+			}
+		}
+	case fastjson.TypeObject:
+		objectVal := dsl.GetObject()
+		keys := []string{}
+		objectVal.Visit(func(key []byte, val *fastjson.Value) {
+			keys = append(keys, string(key))
+		})
+
+		for _, key := range keys {
+			var err error
+			val := objectVal.Get(key)
+			if keyFilter(key) {
+				err = processFunc(objectVal, key, val)
+			} else {
+				err = processAllValuesForKey(val, keyFilter, processFunc)
+			}
+			if err != nil {
+				return err
+			}
+		}
+	default:
+		// do nothing, since there's no key
+	}
+	return nil
+}
+
+func timeKeyFilter(key string) bool {
+	return timeKeys[key]
+}
+
+func timeProcessFunc(obj *fastjson.Object, key string, value *fastjson.Value) error {
+	return processAllValuesForKey(value, func(key string) bool {
+		return rangeKeys[key]
+	}, func(obj *fastjson.Object, key string, v *fastjson.Value) error {
+		timeStr := string(v.GetStringBytes())
+
+		// ES6 use milliseconds for times and doesn't support "date_nanos" type (available in ES7 only).
+		// Temporal historically uses nanos for timestamps which need to be converted to milliseconds.
+		// After ES6 deprecation this func can be removed but "date" columns need to be reindexed to "data_nanos"
+		// https://www.elastic.co/guide/en/elasticsearch/reference/current/date_nanos.html
+
+		if nanos, err := strconv.ParseInt(timeStr, 10, 64); err == nil {
+			milliseconds := nanos / int64(time.Millisecond)
+			obj.Set(key, fastjson.MustParse(strconv.FormatInt(milliseconds, 10)))
+			return nil
+		}
+
+		return nil
+	})
 }
