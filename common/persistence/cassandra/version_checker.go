@@ -26,6 +26,7 @@ package cassandra
 
 import (
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/resolver"
@@ -81,7 +82,7 @@ func checkCompatibleVersion(
 	expectedVersion string,
 ) error {
 
-	session, err := gocql.NewSession(cfg, r)
+	session, err := gocql.NewSession(cfg, r, log.NewNoopLogger())
 	if err != nil {
 		return err
 	}

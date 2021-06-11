@@ -26,6 +26,7 @@ package gocql
 
 import (
 	"context"
+
 	"sync"
 	"sync/atomic"
 	"time"
@@ -34,6 +35,8 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -49,6 +52,7 @@ type (
 		config       config.Cassandra
 		resolver     resolver.ServiceResolver
 		atomic.Value // *gocql.Session
+		logger       log.Logger
 
 		sync.Mutex
 		sessionInitTime time.Time
@@ -58,6 +62,7 @@ type (
 func NewSession(
 	config config.Cassandra,
 	resolver resolver.ServiceResolver,
+	logger log.Logger,
 ) (*session, error) {
 
 	gocqlSession, err := initSession(config, resolver)
@@ -69,6 +74,7 @@ func NewSession(
 		status:   common.DaemonStatusStarted,
 		config:   config,
 		resolver: resolver,
+		logger:   logger,
 
 		sessionInitTime: time.Now().UTC(),
 	}
@@ -76,28 +82,30 @@ func NewSession(
 	return session, nil
 }
 
-func (s *session) refresh() error {
+func (s *session) refresh() {
 	if atomic.LoadInt32(&s.status) != common.DaemonStatusStarted {
-		return nil
+		return
 	}
 
 	s.Lock()
 	defer s.Unlock()
 
 	if time.Now().UTC().Sub(s.sessionInitTime) < sessionRefreshMinInternal {
-		return nil
+		s.logger.Warn("too soon to refresh cql session")
+		return
 	}
 
 	newSession, err := initSession(s.config, s.resolver)
 	if err != nil {
-		return err
+		s.logger.Error("unable to refresh cql session", tag.Error(err))
+		return
 	}
 
 	s.sessionInitTime = time.Now().UTC()
 	oldSession := s.Value.Load().(*gocql.Session)
 	s.Value.Store(newSession)
 	oldSession.Close()
-	return nil
+	s.logger.Warn("successfully refresshed cql session")
 }
 
 func initSession(
@@ -180,7 +188,7 @@ func (s *session) handleError(
 ) {
 	switch err {
 	case gocql.ErrNoConnections:
-		_ = s.refresh()
+		s.refresh()
 	default:
 		// noop
 	}

@@ -60,7 +60,7 @@ func NewFactory(
 	clusterName string,
 	logger log.Logger,
 ) *Factory {
-	session, err := gocql.NewSession(cfg, r)
+	session, err := gocql.NewSession(cfg, r, logger)
 	if err != nil {
 		logger.Fatal("unable to initialize cassandra session", tag.Error(err))
 	}
