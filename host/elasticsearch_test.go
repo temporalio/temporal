@@ -88,7 +88,7 @@ func (s *elasticsearchIntegrationSuite) SetupSuite() {
 
 func (s *elasticsearchIntegrationSuite) TearDownSuite() {
 	s.tearDownSuite()
-	//DeleteIndex(s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
+	DeleteIndex(s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
 }
 
 func (s *elasticsearchIntegrationSuite) SetupTest() {
