@@ -606,6 +606,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 	tl := "testTaskQueue"
 	failoverVersion := int64(300)
 
+	startTime := timestamp.TimePtr(time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC))
 	info := &persistencespb.WorkflowExecutionInfo{
 		NamespaceId:                namespaceID,
 		WorkflowId:                 we.GetWorkflowId(),
@@ -615,6 +616,8 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 		DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(100),
 		LastProcessedEvent:         int64(99),
 		LastUpdateTime:             timestamp.TimeNowPtrUtc(),
+		StartTime:                  startTime,
+		ExecutionTime:              startTime,
 		WorkflowTaskVersion:        failoverVersion,
 		WorkflowTaskScheduleId:     101,
 		WorkflowTaskStartedId:      102,
