@@ -311,7 +311,7 @@ func connectToCassandra(c *cli.Context) gocql.Session {
 		}
 	}
 
-	session, err := gocql.NewSession(cassandraConfig, resolver.NewNoopResolver())
+	session, err := gocql.NewSession(cassandraConfig, resolver.NewNoopResolver(), log.NewNoopLogger())
 	if err != nil {
 		ErrorAndExit("connect to Cassandra failed", err)
 	}

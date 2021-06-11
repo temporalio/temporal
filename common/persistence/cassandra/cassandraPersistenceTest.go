@@ -151,6 +151,7 @@ func (s *TestCluster) CreateSession(
 			},
 		},
 		resolver.NewNoopResolver(),
+		log.NewNoopLogger(),
 	)
 	if err != nil {
 		s.logger.Fatal("CreateSession", tag.Error(err))
