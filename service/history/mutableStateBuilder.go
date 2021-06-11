@@ -186,7 +186,6 @@ func newMutableStateBuilder(
 	logger log.Logger,
 	namespaceEntry *cache.NamespaceCacheEntry,
 	startTime time.Time,
-	firstWorkflowTaskBackoff *time.Duration,
 ) *mutableStateBuilder {
 	s := &mutableStateBuilder{
 		updateActivityInfos:            make(map[int64]*persistencespb.ActivityInfo),
@@ -246,7 +245,6 @@ func newMutableStateBuilder(
 		LastProcessedEvent: common.EmptyEventID,
 
 		StartTime:        timestamp.TimePtr(startTime),
-		ExecutionTime:    timestamp.TimePtr(startTime.Add(timestamp.DurationValue(firstWorkflowTaskBackoff))),
 		VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
 	}
 	s.executionState = &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -272,12 +270,11 @@ func newMutableStateBuilderFromDB(
 	namespaceEntry *cache.NamespaceCacheEntry,
 	dbRecord *persistencespb.WorkflowMutableState,
 	dbRecordVersion int64,
-) *mutableStateBuilder {
+) (*mutableStateBuilder, error) {
 
 	// startTime and firstWorkflowTaskBackoff will be overridden by DB record
 	var startTime time.Time
-	var firstWorkflowTaskBackoff *time.Duration
-	mutableState := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry, startTime, firstWorkflowTaskBackoff)
+	mutableState := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry, startTime)
 
 	mutableState.pendingActivityInfoIDs = dbRecord.ActivityInfos
 	for _, activityInfo := range dbRecord.ActivityInfos {
@@ -297,6 +294,17 @@ func newMutableStateBuilderFromDB(
 	mutableState.pendingSignalInfoIDs = dbRecord.SignalInfos
 	mutableState.pendingSignalRequestedIDs = convert.StringSliceToSet(dbRecord.SignalRequestedIds)
 	mutableState.executionInfo = dbRecord.ExecutionInfo
+
+	// Workflows created before 1.11 doesn't have ExecutionTime and it must be computed for backwards compatibility.
+	// Remove this "if" block when it is ok to rely on executionInfo.ExecutionTime only (added 6/9/21).
+	if mutableState.executionInfo.ExecutionTime == nil {
+		startEvent, err := mutableState.GetStartEvent()
+		if err != nil {
+			return nil, err
+		}
+		backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff())
+		mutableState.executionInfo.ExecutionTime = timestamp.TimePtr(timestamp.TimeValue(mutableState.executionInfo.GetStartTime()).Add(backoffDuration))
+	}
 	mutableState.executionState = dbRecord.ExecutionState
 
 	mutableState.hBuilder = mutablestate.NewMutableHistoryBuilder(
@@ -330,7 +338,7 @@ func newMutableStateBuilderFromDB(
 		}
 	}
 
-	return mutableState
+	return mutableState, nil
 }
 
 func (e *mutableStateBuilder) CloneToProto() *persistencespb.WorkflowMutableState {
@@ -674,26 +682,7 @@ func (e *mutableStateBuilder) GetCronBackoffDuration() (time.Duration, error) {
 	if e.executionInfo.CronSchedule == "" {
 		return backoff.NoBackoff, nil
 	}
-	var executionTime time.Time
-	if e.GetExecutionInfo().GetExecutionTime() != nil {
-		executionTime = timestamp.TimeValue(e.GetExecutionInfo().GetExecutionTime())
-	} else {
-		// Old ExecutionInfo doesn't have execution time.
-		// For backwards compatibility continue to compute execution time.
-		// Remove this "else" block when it is ok to rely on executionInfo.ExecutionTime only (added 6/9/21).
-
-		// TODO: decide if we can add execution time in execution info.
-		executionTime = timestamp.TimeValue(e.executionInfo.StartTime)
-		// This only call when doing ContinueAsNew. At this point, the workflow should have a start event
-		workflowStartEvent, err := e.GetStartEvent()
-		if err != nil {
-			e.logError("unable to find workflow start event", tag.ErrorTypeInvalidHistoryAction)
-			return backoff.NoBackoff, err
-		}
-		firstWorkflowTaskBackoff := timestamp.DurationValue(workflowStartEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff())
-		executionTime = executionTime.Add(firstWorkflowTaskBackoff)
-	}
-
+	executionTime := timestamp.TimeValue(e.GetExecutionInfo().GetExecutionTime())
 	return backoff.GetBackoffForNextSchedule(e.executionInfo.CronSchedule, executionTime, e.timeSource.Now()), nil
 }
 
@@ -1353,6 +1342,8 @@ func (e *mutableStateBuilder) AddWorkflowExecutionStartedEvent(
 			tag.ErrorTypeInvalidHistoryAction)
 		return nil, e.createInternalServerError(opTag)
 	}
+
+	e.executionInfo.ExecutionTime = timestamp.TimePtr(e.executionInfo.StartTime.Add(timestamp.DurationValue(startRequest.GetFirstWorkflowTaskBackoff())))
 
 	event := e.hBuilder.AddWorkflowExecutionStartedEvent(
 		*e.executionInfo.StartTime,
@@ -3004,7 +2995,6 @@ func (e *mutableStateBuilder) AddContinueAsNewEvent(
 		e.logger,
 		e.namespaceEntry,
 		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
-		command.GetBackoffStartInterval(),
 	)
 
 	if _, err = newStateBuilder.addWorkflowExecutionStartedEventForContinueAsNew(

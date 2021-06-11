@@ -244,7 +244,9 @@ func (s *mutableStateSuite) TestChecksum() {
 
 			// create mutable state and verify checksum is generated on close
 			loadErrors = loadErrorsFunc()
-			s.msBuilder = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, testLocalNamespaceEntry, dbState, 123)
+			var err error
+			s.msBuilder, err = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, testLocalNamespaceEntry, dbState, 123)
+			s.NoError(err)
 			s.Equal(loadErrors, loadErrorsFunc()) // no errors expected
 			s.EqualValues(dbState.Checksum, s.msBuilder.checksum)
 			s.msBuilder.namespaceEntry = s.newNamespaceCacheEntry()
@@ -257,7 +259,8 @@ func (s *mutableStateSuite) TestChecksum() {
 
 			// verify checksum is verified on Load
 			dbState.Checksum = csum
-			s.msBuilder = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, testLocalNamespaceEntry, dbState, 123)
+			s.msBuilder, err = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, testLocalNamespaceEntry, dbState, 123)
+			s.NoError(err)
 			s.Equal(loadErrors, loadErrorsFunc())
 
 			// generate checksum again and verify its the same
@@ -268,7 +271,8 @@ func (s *mutableStateSuite) TestChecksum() {
 
 			// modify checksum and verify Load fails
 			dbState.Checksum.Value[0]++
-			s.msBuilder = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, testLocalNamespaceEntry, dbState, 123)
+			s.msBuilder, err = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, testLocalNamespaceEntry, dbState, 123)
+			s.NoError(err)
 			s.Equal(loadErrors+1, loadErrorsFunc())
 			s.EqualValues(dbState.Checksum, s.msBuilder.checksum)
 
@@ -277,7 +281,8 @@ func (s *mutableStateSuite) TestChecksum() {
 			s.mockConfig.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
 				return float64((s.msBuilder.executionInfo.LastUpdateTime.UnixNano() / int64(time.Second)) + 1)
 			}
-			s.msBuilder = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, testLocalNamespaceEntry, dbState, 123)
+			s.msBuilder, err = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, testLocalNamespaceEntry, dbState, 123)
+			s.NoError(err)
 			s.Equal(loadErrors, loadErrorsFunc())
 			s.Nil(s.msBuilder.checksum)
 

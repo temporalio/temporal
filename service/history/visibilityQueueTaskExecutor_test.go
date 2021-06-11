@@ -292,25 +292,9 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
-	workflowType := "some random workflow type"
 	taskQueueName := "some random task queue"
 
 	mutableState := newMutableStateBuilderWithVersionHistoriesForTest(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
-
-	event, err := mutableState.AddWorkflowExecutionStartedEvent(
-		execution,
-		&historyservice.StartWorkflowExecutionRequest{
-			Attempt:     1,
-			NamespaceId: s.namespaceID,
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
-				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
-			},
-		},
-	)
-	s.Nil(err)
 
 	taskID := int64(59)
 	di := addWorkflowTaskScheduledEvent(mutableState)
@@ -326,9 +310,9 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockVisibilityMgr.EXPECT().UpsertWorkflowExecution(s.createUpsertWorkflowSearchAttributesRequest(s.namespace, event, visibilityTask, mutableState, taskQueueName)).Return(nil)
+	s.mockVisibilityMgr.EXPECT().UpsertWorkflowExecution(s.createUpsertWorkflowSearchAttributesRequest(s.namespace, visibilityTask, mutableState, taskQueueName)).Return(nil)
 
-	err = s.visibilityQueueTaskExecutor.execute(visibilityTask, true)
+	err := s.visibilityQueueTaskExecutor.execute(visibilityTask, true)
 	s.Nil(err)
 }
 
@@ -366,7 +350,6 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedR
 
 func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowSearchAttributesRequest(
 	namespace string,
-	startEvent *historypb.HistoryEvent,
 	task *persistencespb.VisibilityTaskInfo,
 	mutableState mutableState,
 	taskQueueName string,
@@ -384,8 +367,8 @@ func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowSearchAttributesR
 			NamespaceID:        task.GetNamespaceId(),
 			Execution:          *execution,
 			WorkflowTypeName:   executionInfo.WorkflowTypeName,
-			StartTimestamp:     timestamp.TimeValue(startEvent.GetEventTime()),
-			ExecutionTimestamp: getWorkflowExecutionTime(mutableState, startEvent),
+			StartTimestamp:     timestamp.TimeValue(executionInfo.GetStartTime()),
+			ExecutionTimestamp: timestamp.TimeValue(executionInfo.GetExecutionTime()),
 			TaskID:             task.GetTaskId(),
 			Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			TaskQueue:          taskQueueName,

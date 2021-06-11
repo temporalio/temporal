@@ -270,9 +270,9 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 		convertedExecution.HistoryLength = execution.HistoryLength
 	}
 
-	// Workflows created before 1.11 have ExecutionTime set to Unix zero time (1/1/1970) for non-cron/non-retry case.
-	// Compute it on the fly using StartTime (if there was a backoff it must be set).
-	// Remove this if block when it is ok to rely on execution.ExecutionTime only (added 6/9/21).
+	// Workflows created before 1.11 have ExecutionTime set to Unix epoch zero time (1/1/1970) for non-cron/non-retry case.
+	// Use StartTime as ExecutionTime for this case (if there was a backoff it must be set).
+	// Remove this "if" block when ExecutionTime field has actual correct value (added 6/9/21).
 	if !convertedExecution.ExecutionTime.After(time.Unix(0, 0)) {
 		convertedExecution.ExecutionTime = convertedExecution.StartTime
 	}

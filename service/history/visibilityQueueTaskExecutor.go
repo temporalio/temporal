@@ -32,8 +32,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -168,12 +166,8 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 	executionState := mutableState.GetExecutionState()
 	wfTypeName := executionInfo.WorkflowTypeName
 
-	startEvent, err := mutableState.GetStartEvent()
-	if err != nil {
-		return err
-	}
-	startTimestamp := timestamp.TimeValue(startEvent.GetEventTime())
-	executionTimestamp := getWorkflowExecutionTime(mutableState, startEvent)
+	workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
+	workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
 	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
 	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 	executionStatus := executionState.GetStatus()
@@ -190,8 +184,8 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 			task.GetWorkflowId(),
 			task.GetRunId(),
 			wfTypeName,
-			startTimestamp,
-			executionTimestamp,
+			workflowStartTime,
+			workflowExecutionTime,
 			task.GetTaskId(),
 			executionStatus,
 			taskQueue,
@@ -204,8 +198,8 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 		task.GetWorkflowId(),
 		task.GetRunId(),
 		wfTypeName,
-		startTimestamp,
-		executionTimestamp,
+		workflowStartTime,
+		workflowExecutionTime,
 		task.GetTaskId(),
 		executionStatus,
 		taskQueue,
@@ -351,12 +345,8 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	workflowStatus := executionState.Status
 	workflowHistoryLength := mutableState.GetNextEventID() - 1
 
-	startEvent, err := mutableState.GetStartEvent()
-	if err != nil {
-		return err
-	}
-	workflowStartTime := timestamp.TimeValue(startEvent.GetEventTime())
-	workflowExecutionTime := getWorkflowExecutionTime(mutableState, startEvent)
+	workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
+	workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
 	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
 	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 	taskQueue := executionInfo.TaskQueue
@@ -455,27 +445,6 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		return t.shard.GetService().GetVisibilityManager().DeleteWorkflowExecution(request) // delete from db
 	}
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-}
-
-// Argument startEvent is to save additional call of msBuilder.GetStartEvent
-func getWorkflowExecutionTime(
-	msBuilder mutableState,
-	startEvent *historypb.HistoryEvent,
-) time.Time {
-	// All workflows created >= 1.11 release should have ExecutionTime set.
-	if msBuilder.GetExecutionInfo().GetExecutionTime() != nil {
-		return timestamp.TimeValue(msBuilder.GetExecutionInfo().GetExecutionTime())
-	}
-
-	// For legacy workflows compute it on the fly.
-	// Remove the rest of the func when it is ok to rely on executionInfo.ExecutionTime only (added 6/9/21).
-	if startEvent == nil {
-		return time.Time{}
-	}
-
-	backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff())
-	startTime := timestamp.TimeValue(startEvent.GetEventTime())
-	return startTime.Add(backoffDuration)
 }
 
 func getWorkflowMemo(
