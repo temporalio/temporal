@@ -88,7 +88,7 @@ func (s *elasticsearchIntegrationSuite) SetupSuite() {
 
 func (s *elasticsearchIntegrationSuite) TearDownSuite() {
 	s.tearDownSuite()
-	DeleteIndex(s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
+	//DeleteIndex(s.Suite, s.esClient, s.testClusterConfig.ESConfig.GetVisibilityIndex())
 }
 
 func (s *elasticsearchIntegrationSuite) SetupTest() {
@@ -170,23 +170,30 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_ExecutionTime() {
 	id := "es-integration-list-workflow-execution-time-test"
 	wt := "es-integration-list-workflow-execution-time-test-type"
 	tl := "es-integration-list-workflow-execution-time-test-taskqueue"
+
+	now := time.Now().UTC()
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	// Start workflow with ExecutionTime equal to StartTime
+	weNonCron, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 
 	cronID := id + "-cron"
 	request.CronSchedule = "@every 1m"
 	request.WorkflowId = cronID
 
+	// Start workflow with ExecutionTime equal to StartTime + 1 minute (cron delay)
 	weCron, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 
-	query := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") and ExecutionTime < %v`, id, cronID, time.Now().UTC().UnixNano()+int64(time.Minute))
-	s.testHelperForReadOnce(weCron.GetRunId(), query, false)
+	expectedNonCronMaxExecutionTime := now.Add(1 * time.Second)                   // 1 second for time skew
+	expectedCronMaxExecutionTime := now.Add(1 * time.Minute).Add(1 * time.Second) // 1 second for time skew
 
-	query = fmt.Sprintf(`WorkflowId = "%s"`, id)
-	s.testHelperForReadOnce(we.GetRunId(), query, false)
+	nonCronQuery := fmt.Sprintf(`ExecutionTime < %v`, expectedNonCronMaxExecutionTime.UnixNano())
+	s.testHelperForReadOnce(weNonCron.GetRunId(), nonCronQuery, false)
+
+	cronQuery := fmt.Sprintf(`ExecutionTime < %v AND ExecutionTime > %v`, expectedCronMaxExecutionTime.UnixNano(), expectedNonCronMaxExecutionTime.UnixNano())
+	s.testHelperForReadOnce(weCron.GetRunId(), cronQuery, false)
 }
 
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
@@ -676,7 +683,7 @@ func (s *elasticsearchIntegrationSuite) testListWorkflowHelper(numOfWorkflows, p
 	s.Nil(nextPageToken)
 }
 
-func (s *elasticsearchIntegrationSuite) testHelperForReadOnce(runID, query string, isScan bool) {
+func (s *elasticsearchIntegrationSuite) testHelperForReadOnce(expectedRunID string, query string, isScan bool) {
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
@@ -708,7 +715,7 @@ func (s *elasticsearchIntegrationSuite) testHelperForReadOnce(runID, query strin
 		time.Sleep(waitTimeInMs * time.Millisecond)
 	}
 	s.NotNil(openExecution)
-	s.Equal(runID, openExecution.GetExecution().GetRunId())
+	s.Equal(expectedRunID, openExecution.GetExecution().GetRunId())
 	s.GreaterOrEqual(openExecution.GetExecutionTime().UnixNano(), openExecution.GetStartTime().UnixNano())
 	if openExecution.SearchAttributes != nil && len(openExecution.SearchAttributes.GetIndexedFields()) > 0 {
 		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey]
