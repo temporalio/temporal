@@ -186,14 +186,21 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_ExecutionTime() {
 	weCron, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 
+	//       <<1s    <<1s                  1m
+	// ----+-----+------------+----------------------------+--------------
+	//    now  nonCronStart  cronStart                  cronExecutionTime
+	//         =nonCronExecutionTime
+
 	expectedNonCronMaxExecutionTime := now.Add(1 * time.Second)                   // 1 second for time skew
 	expectedCronMaxExecutionTime := now.Add(1 * time.Minute).Add(1 * time.Second) // 1 second for time skew
 
-	nonCronQuery := fmt.Sprintf(`ExecutionTime < %v`, expectedNonCronMaxExecutionTime.UnixNano())
+	// WorkflowId filter is to filter workflows from other tests.
+	nonCronQuery := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < %v`, id, cronID, expectedNonCronMaxExecutionTime.UnixNano())
 	s.testHelperForReadOnce(weNonCron.GetRunId(), nonCronQuery, false)
 
-	cronQuery := fmt.Sprintf(`ExecutionTime < %v AND ExecutionTime > %v`, expectedCronMaxExecutionTime.UnixNano(), expectedNonCronMaxExecutionTime.UnixNano())
+	cronQuery := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < %v AND ExecutionTime > %v`, id, cronID, expectedCronMaxExecutionTime.UnixNano(), expectedNonCronMaxExecutionTime.UnixNano())
 	s.testHelperForReadOnce(weCron.GetRunId(), cronQuery, false)
+	println(nonCronQuery, cronQuery)
 }
 
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
