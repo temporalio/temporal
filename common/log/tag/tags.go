@@ -450,6 +450,16 @@ func Bool(b bool) ZapTag {
 	return NewBoolTag("bool", b)
 }
 
+// ServerName returns tag for ServerName
+func ServerName(serverName string) ZapTag {
+	return NewStringTag("server-name", serverName)
+}
+
+// CertThumbprint returns tag for CertThumbprint
+func CertThumbprint(thumbprint string) ZapTag {
+	return NewStringTag("cert-thumbprint", thumbprint)
+}
+
 // history engine shard
 
 // ShardID returns tag for ShardID
