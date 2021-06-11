@@ -272,8 +272,8 @@ func newMutableStateBuilderFromDB(
 	dbRecordVersion int64,
 ) (*mutableStateBuilder, error) {
 
-	// startTime and firstWorkflowTaskBackoff will be overridden by DB record
-	var startTime time.Time
+	// startTime will be overridden by DB record
+	startTime := time.Time{}
 	mutableState := newMutableStateBuilder(shard, eventsCache, logger, namespaceEntry, startTime)
 
 	mutableState.pendingActivityInfoIDs = dbRecord.ActivityInfos
