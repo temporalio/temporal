@@ -105,7 +105,7 @@ func (s *session) refresh() {
 	oldSession := s.Value.Load().(*gocql.Session)
 	s.Value.Store(newSession)
 	oldSession.Close()
-	s.logger.Warn("successfully refresshed cql session")
+	s.logger.Warn("successfully refreshed cql session")
 }
 
 func initSession(
@@ -127,6 +127,7 @@ func (s *session) Query(
 	if q == nil {
 		return nil
 	}
+
 	return &query{
 		session:    s,
 		gocqlQuery: q,
