@@ -358,9 +358,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	tieBreakerSorter := elastic.NewFieldSort(searchattribute.RunID).Desc()
 
 	// test for open
-	rangeQuery := elastic.NewRangeQuery(searchattribute.StartTime).
-		Gte(request.EarliestStartTime.Truncate(1 * time.Millisecond)).
-		Lte(request.LatestStartTime.Truncate(1 * time.Millisecond).Add(1 * time.Millisecond))
+	rangeQuery := elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
 	boolQuery := elastic.NewBoolQuery().Must(runningQuery).Must(matchNamespaceQuery).Filter(rangeQuery)
 	params := &client.SearchParameters{
 		Index:    testIndex,
@@ -375,9 +373,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 
 	// test request latestTime overflow
 	request.LatestStartTime = time.Unix(0, math.MaxInt64).UTC()
-	rangeQuery1 := elastic.NewRangeQuery(searchattribute.StartTime).
-		Gte(request.EarliestStartTime.Truncate(1 * time.Millisecond)).
-		Lte(request.LatestStartTime.Truncate(1 * time.Millisecond).Add(1 * time.Millisecond))
+	rangeQuery1 := elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
 	boolQuery1 := elastic.NewBoolQuery().Must(runningQuery).Must(matchNamespaceQuery).Filter(rangeQuery1)
 	param1 := &client.SearchParameters{
 		Index:    testIndex,
@@ -389,12 +385,10 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	s.mockESClient.EXPECT().Search(gomock.Any(), param1).Return(nil, nil)
 	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Must(elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
 	s.NoError(err)
-	request.LatestStartTime = testLatestTime // revert
+	request = createTestRequest() // revert
 
 	// test for closed
-	rangeQuery = elastic.NewRangeQuery(searchattribute.CloseTime).
-		Gte(request.EarliestStartTime.Truncate(1 * time.Millisecond)).
-		Lte(request.LatestStartTime.Truncate(1 * time.Millisecond).Add(1 * time.Millisecond))
+	rangeQuery = elastic.NewRangeQuery(searchattribute.CloseTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
 	boolQuery = elastic.NewBoolQuery().MustNot(runningQuery).Must(matchNamespaceQuery).Filter(rangeQuery)
 	params.Query = boolQuery
 	params.Sorter = []elastic.Sorter{elastic.NewFieldSort(searchattribute.CloseTime).Desc(), tieBreakerSorter}
@@ -413,7 +407,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	// test for search after
 	runID := "runID"
 	token = &visibilityPageToken{
-		SortValue:  request.LatestStartTime.Truncate(1 * time.Millisecond).Add(1 * time.Millisecond),
+		SortValue:  request.LatestStartTime,
 		TieBreaker: runID,
 	}
 	params.From = 0

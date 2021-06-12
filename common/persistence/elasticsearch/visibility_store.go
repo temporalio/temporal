@@ -735,12 +735,9 @@ func (s *visibilityStore) getSearchResult(request *persistence.ListWorkflowExecu
 		rangeQuery = elastic.NewRangeQuery(searchattribute.CloseTime)
 	}
 
-	// ElasticSearch v6 is unable to precisely compare time, have to manually add resolution 1ms to time range.
-	latestStartTime := request.LatestStartTime.Truncate(time.Millisecond).Add(time.Millisecond)
-	earliestStartTime := request.EarliestStartTime.Truncate(time.Millisecond)
 	rangeQuery = rangeQuery.
-		Gte(earliestStartTime).
-		Lte(latestStartTime)
+		Gte(request.EarliestStartTime).
+		Lte(request.LatestStartTime)
 
 	query := elastic.NewBoolQuery()
 	if boolQuery != nil {
@@ -809,13 +806,14 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(searchHits *elastic.
 
 	response := &persistence.InternalListWorkflowExecutionsResponse{}
 
-	response.Executions = make([]*persistence.VisibilityWorkflowExecutionInfo, len(searchHits.Hits))
-	for i := 0; i < len(searchHits.Hits); i++ {
-		workflowExecutionInfo := s.parseESDoc(searchHits.Hits[i], typeMap)
+	response.Executions = make([]*persistence.VisibilityWorkflowExecutionInfo, 0, len(searchHits.Hits))
+	for _, hit := range searchHits.Hits {
+		workflowExecutionInfo := s.parseESDoc(hit, typeMap)
 		if isRecordValid == nil || isRecordValid(workflowExecutionInfo) {
-			// for old APIs like ListOpenWorkflowExecutions, we added 1 ms to range query to overcome ES limitation
-			// (see getSearchResult function), but manually dropped records beyond request range here.
-			response.Executions[i] = workflowExecutionInfo
+			// Elasticsearch truncates dates using milliseconds and might return extra rows.
+			// For example: 2021-06-12T00:21:43.159739259Z fits 2021-06-12T00:21:43.158Z...2021-06-12T00:21:43.159Z range lte/gte query.
+			// Therefore these records needs to be filtered out on the client side to support nanos precision.
+			response.Executions = append(response.Executions, workflowExecutionInfo)
 		}
 	}
 
