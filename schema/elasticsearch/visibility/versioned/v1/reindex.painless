@@ -3,12 +3,16 @@ if (ctx._source.Attr != null) {
         if (params['reindexCustomFields'] == 'true' || !attr.getKey().startsWith('Custom')){
             ctx._source[attr.getKey()] = attr.getValue();
         }
-        if (attr.getKey() == 'ExecutionTime' && attr.getValue() == 0){
-            ctx._source['ExecutionTime'] = ctx._source['StartTime'];
-        }
-        if (attr.getKey() == 'StartTime' || attr.getKey() == 'ExecutionTime' || attr.getKey() == 'CloseTime'){
-            ctx._source[attr.getKey()] = attr.getValue() / 1000000;
-        }
     }
 }
 ctx._source.remove('Attr');
+
+ctx._source.StartTime = ctx._source.StartTime \/ 1000000;
+if (ctx._source.CloseTime != null) {
+    ctx._source.CloseTime = ctx._source.CloseTime \/ 1000000;
+}
+if (ctx._source.ExecutionTime == 0){
+    ctx._source.ExecutionTime = ctx._source.StartTime;
+} else {
+    ctx._source.ExecutionTime = ctx._source.ExecutionTime \/ 1000000;
+}
