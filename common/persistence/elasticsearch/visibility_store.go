@@ -461,6 +461,7 @@ func (s *visibilityStore) CountWorkflowExecutions(request *persistence.CountWork
 	return response, nil
 }
 
+// TODO (alex): move this to separate file
 const (
 	jsonMissingCloseTime     = `{"missing":{"field":"CloseTime"}}`
 	jsonRangeOnExecutionTime = `{"range":{"ExecutionTime":`
@@ -1077,7 +1078,7 @@ func timeProcessFunc(obj *fastjson.Object, key string, value *fastjson.Value) er
 
 		// ES6 use milliseconds for times and doesn't support "date_nanos" type (available in ES7 only).
 		// Temporal historically uses nanos for timestamps which need to be converted to milliseconds.
-		// After ES6 deprecation this func can be removed but "date" columns need to be reindexed to "data_nanos"
+		// After ES6 deprecation this func can be removed but "date" columns need to be reindexed to "date_nanos":
 		// https://www.elastic.co/guide/en/elasticsearch/reference/current/date_nanos.html
 		if nanos, err := strconv.ParseInt(timeStr, 10, 64); err == nil {
 			milliseconds := nanos / int64(time.Millisecond)
