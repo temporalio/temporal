@@ -814,6 +814,9 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(searchHits *elastic.
 			// Elasticsearch truncates dates using milliseconds and might return extra rows.
 			// For example: 2021-06-12T00:21:43.159739259Z fits 2021-06-12T00:21:43.158Z...2021-06-12T00:21:43.159Z range lte/gte query.
 			// Therefore these records needs to be filtered out on the client side to support nanos precision.
+
+			// After ES6 deprecation this func can be removed but "date" columns need to be reindexed to "date_nanos":
+			// https://www.elastic.co/guide/en/elasticsearch/reference/current/date_nanos.html
 			response.Executions = append(response.Executions, workflowExecutionInfo)
 		}
 	}
