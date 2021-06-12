@@ -16,7 +16,7 @@ persistence:
           scheme: "http"
           host: "127.0.0.1:9200"
         indices:
-          visibility: temporal-visibility_v1-dev
+          visibility: temporal_visibility_v1_dev
 global:
   membership:
     maxJoinDuration: 30s

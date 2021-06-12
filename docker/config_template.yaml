@@ -142,7 +142,7 @@ persistence:
                 username: "{{ default .Env.ES_USER "" }}"
                 password: "{{ default .Env.ES_PWD "" }}"
                 indices:
-                    visibility: "{{ default .Env.ES_VIS_INDEX "temporal-visibility_v1-dev" }}"
+                    visibility: "{{ default .Env.ES_VIS_INDEX "temporal_visibility_v1_dev" }}"
         {{- end }}
 
 global:
