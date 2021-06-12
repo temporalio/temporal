@@ -14,14 +14,14 @@ REINDEX_CUSTOM_FIELDS="${REINDEX_CUSTOM_FIELDS:-true}"
 AUTO_CONFIRM="${AUTO_CONFIRM:-}"
 
 DIR_NAME="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
-# Convert multiline script to single line and remove repeated spaces.
-REINDEX_SCRIPT=$(tr -d "\n" < "${DIR_NAME}/reindex.painless" | tr -s " ")
+# Convert multiline script to single line, remove repeated spaces, and replace / with \/.
+REINDEX_SCRIPT=$(tr -d "\n" < "${DIR_NAME}/reindex.painless" | tr -s " " | sed "s/\//\\\\\//g")
 # Substitute envs in reindex.json (envsubst is not available in alpine by default).
 REINDEX_JSON=$(sed \
-    -e "s/\${REINDEX_SCRIPT}/${REINDEX_SCRIPT}/" \
-    -e "s/\${ES_VIS_INDEX_V0}/${ES_VIS_INDEX_V0}/" \
-    -e "s/\${ES_VIS_INDEX_V1}/${ES_VIS_INDEX_V1}/" \
-    -e "s/\${REINDEX_CUSTOM_FIELDS}/${REINDEX_CUSTOM_FIELDS}/" \
+    -e "s/\${REINDEX_SCRIPT}/${REINDEX_SCRIPT}/g" \
+    -e "s/\${ES_VIS_INDEX_V0}/${ES_VIS_INDEX_V0}/g" \
+    -e "s/\${ES_VIS_INDEX_V1}/${ES_VIS_INDEX_V1}/g" \
+    -e "s/\${REINDEX_CUSTOM_FIELDS}/${REINDEX_CUSTOM_FIELDS}/g" \
     "${DIR_NAME}/reindex.json")
 
 echo "${REINDEX_JSON}" | jq

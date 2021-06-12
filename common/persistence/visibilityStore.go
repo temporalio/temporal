@@ -273,6 +273,7 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 	// Workflows created before 1.11 have ExecutionTime set to Unix epoch zero time (1/1/1970) for non-cron/non-retry case.
 	// Use StartTime as ExecutionTime for this case (if there was a backoff it must be set).
 	// Remove this "if" block when ExecutionTime field has actual correct value (added 6/9/21).
+	// Affects only non-advanced visibility.
 	if !convertedExecution.ExecutionTime.After(time.Unix(0, 0)) {
 		convertedExecution.ExecutionTime = convertedExecution.StartTime
 	}

@@ -8,9 +8,9 @@ if (ctx._source.Attr != null) {
 ctx._source.remove('Attr');
 
 int nanos = 1000000000;
-ctx._source.StartTime = Instant.ofEpochSecond(ctx._source.StartTime \/ nanos, ctx._source.StartTime % nanos);
-ctx._source.ExecutionTime = ctx._source.ExecutionTime == 0 ? ctx._source.ExecutionTime = ctx._source.StartTime : Instant.ofEpochSecond(ctx._source.ExecutionTime \/ nanos, ctx._source.ExecutionTime % nanos);
+ctx._source.StartTime = Instant.ofEpochSecond(ctx._source.StartTime / nanos, ctx._source.StartTime % nanos);
+ctx._source.ExecutionTime = ctx._source.ExecutionTime == 0 ? ctx._source.ExecutionTime = ctx._source.StartTime : Instant.ofEpochSecond(ctx._source.ExecutionTime / nanos, ctx._source.ExecutionTime % nanos);
 if (ctx._source.CloseTime != null){
-    ctx._source.CloseTime = Instant.ofEpochSecond(ctx._source.CloseTime \/ nanos, ctx._source.CloseTime % nanos);
+    ctx._source.CloseTime = Instant.ofEpochSecond(ctx._source.CloseTime / nanos, ctx._source.CloseTime % nanos);
 }
 
