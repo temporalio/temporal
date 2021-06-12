@@ -26,7 +26,8 @@
           "type": "keyword"
         },
         "StartTime": {
-          "type": "date"
+          "type": "date",
+          "format": "strict_date_optional_time||epoch_millis"
         },
         "ExecutionTime": {
           "type": "date",
@@ -37,8 +38,7 @@
           "format": "strict_date_optional_time||epoch_millis"
         },
         "ExecutionStatus": {
-          "type": "long",
-          "format": "strict_date_optional_time||epoch_millis"
+          "type": "long"
         },
         "TaskQueue": {
           "type": "keyword"
