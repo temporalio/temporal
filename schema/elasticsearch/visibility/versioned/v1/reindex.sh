@@ -9,7 +9,7 @@ ES_PORT="${ES_PORT:-9200}"
 ES_USER="${ES_USER:-}"
 ES_PWD="${ES_PWD:-}"
 ES_VIS_INDEX_V0="${ES_VIS_INDEX_V0:-temporal-visibility-dev}"
-ES_VIS_INDEX_V1="${ES_VIS_INDEX_V1:-temporal-visibility-v1-dev}"
+ES_VIS_INDEX_V1="${ES_VIS_INDEX_V1:-temporal-visibility_v1-dev}"
 REINDEX_CUSTOM_FIELDS="${REINDEX_CUSTOM_FIELDS:-true}"
 AUTO_CONFIRM="${AUTO_CONFIRM:-}"
 
