@@ -4,7 +4,7 @@ ARG BASE_SERVER_IMAGE=temporalio/base-server:1.1.0
 ARG BASE_ADMIN_TOOLS_IMAGE=temporalio/base-admin-tools:1.1.0
 ARG GOPROXY
 
-##### temporal-builder target #####
+##### Temporal builder #####
 FROM ${BASE_BUILDER_IMAGE} AS temporal-builder
 
 WORKDIR /temporal
@@ -15,7 +15,7 @@ RUN go mod download
 COPY . .
 RUN make bins
 
-##### temporal-server target #####
+##### Temporal server #####
 FROM ${BASE_SERVER_IMAGE} AS temporal-server
 WORKDIR /etc/temporal
 ENV TEMPORAL_HOME /etc/temporal
