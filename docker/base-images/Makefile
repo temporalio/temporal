@@ -24,10 +24,10 @@ buildx-docker-container:
 	docker buildx create --driver docker-container --use
 
 base-admin-tools-x:
-	docker buildx build -f base-server.Dockerfile -t temporalio/base-admin-tools:$(DOCKER_IMAGE_TAG) --platform linux/amd64,linux/arm64 --output type=registry .
+	docker buildx build -f base-admin-tools.Dockerfile -t temporalio/base-admin-tools:$(DOCKER_IMAGE_TAG) --platform linux/amd64,linux/arm64 --output type=registry .
 
 base-builder-x:
-	docker buildx build -f base-server.Dockerfile -t temporalio/base-builder:$(DOCKER_IMAGE_TAG) --platform linux/amd64,linux/arm64 --output type=registry .
+	docker buildx build -f base-builder.Dockerfile -t temporalio/base-builder:$(DOCKER_IMAGE_TAG) --platform linux/amd64,linux/arm64 --output type=registry .
 
 base-server-x:
 	docker buildx build -f base-server.Dockerfile -t temporalio/base-server:$(DOCKER_IMAGE_TAG) --platform linux/amd64,linux/arm64 --output type=registry .
