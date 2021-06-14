@@ -1622,6 +1622,7 @@ const (
 	ServiceErrNamespaceAlreadyExistsCounter
 	ServiceErrCancellationAlreadyRequestedCounter
 	ServiceErrQueryFailedCounter
+	ServiceErrContextCancelledCounter
 	ServiceErrContextTimeoutCounter
 	ServiceErrRetryTaskCounter
 	ServiceErrBadBinaryCounter
@@ -2050,6 +2051,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceErrNamespaceAlreadyExistsCounter:             {metricName: "service_errors_namespace_already_exists", metricType: Counter},
 		ServiceErrCancellationAlreadyRequestedCounter:       {metricName: "service_errors_cancellation_already_requested", metricType: Counter},
 		ServiceErrQueryFailedCounter:                        {metricName: "service_errors_query_failed", metricType: Counter},
+		ServiceErrContextCancelledCounter:                   {metricName: "service_errors_context_cancelled", metricType: Counter},
 		ServiceErrContextTimeoutCounter:                     {metricName: "service_errors_context_timeout", metricType: Counter},
 		ServiceErrRetryTaskCounter:                          {metricName: "service_errors_retry_task", metricType: Counter},
 		ServiceErrBadBinaryCounter:                          {metricName: "service_errors_bad_binary", metricType: Counter},

@@ -410,7 +410,7 @@ pollLoop:
 	}
 }
 
-// pollForActivityTaskOperation takes one task from the task manager, update workflow execution history, mark task as
+// PollActivityTaskQueue takes one task from the task manager, update workflow execution history, mark task as
 // completed and return it to user. If a task from task manager is already started, return an empty response, without
 // error. Timeouts handled by the timer queue.
 func (e *matchingEngineImpl) PollActivityTaskQueue(
