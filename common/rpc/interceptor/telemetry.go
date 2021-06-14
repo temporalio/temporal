@@ -145,8 +145,12 @@ func (ti *TelemetryInterceptor) handleError(
 	err error,
 ) {
 
-	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
+	if common.IsContextDeadlineExceededErr(err) {
 		scope.IncCounter(metrics.ServiceErrContextTimeoutCounter)
+		return
+	}
+	if common.IsContextCanceledErr(err) {
+		scope.IncCounter(metrics.ServiceErrContextCancelledCounter)
 		return
 	}
 
