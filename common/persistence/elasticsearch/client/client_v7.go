@@ -256,9 +256,13 @@ func getLoggerOptions(logLevel string, logger log.Logger) []elastic.ClientOption
 func buildMappingBody(mapping map[string]string) map[string]interface{} {
 	properties := make(map[string]interface{}, len(mapping))
 	for fieldName, fieldType := range mapping {
-		properties[fieldName] = map[string]interface{}{
+		typeMap := map[string]interface{}{
 			"type": fieldType,
 		}
+		if fieldType == "scaled_float" {
+			typeMap["scaling_factor"] = 10000
+		}
+		properties[fieldName] = typeMap
 	}
 
 	body := map[string]interface{}{

@@ -103,7 +103,7 @@ func MapESType(t enumspb.IndexedValueType, dateFieldType string) string {
 	case enumspb.INDEXED_VALUE_TYPE_INT:
 		return "long"
 	case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
-		return "double"
+		return "scaled_float"
 	case enumspb.INDEXED_VALUE_TYPE_BOOL:
 		return "boolean"
 	case enumspb.INDEXED_VALUE_TYPE_DATETIME:
