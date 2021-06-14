@@ -124,11 +124,6 @@ type (
 	}
 )
 
-const (
-	// maxSyncMatchWaitTime is the max amount of time that we are willing to wait for a sync match to happen
-	maxSyncMatchWaitTime = 200 * time.Millisecond
-)
-
 var _ taskQueueManager = (*taskQueueManagerImpl)(nil)
 
 var errRemoteSyncMatchFailed = serviceerror.NewCanceled("remote sync match failed")
@@ -495,7 +490,7 @@ func (c *taskQueueManagerImpl) executeWithRetry(
 }
 
 func (c *taskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {
-	childCtx, cancel := c.newChildContext(ctx, maxSyncMatchWaitTime, time.Second)
+	childCtx, cancel := c.newChildContext(ctx, c.config.SyncMatchWaitDuration(), time.Second)
 
 	// Mocking out TaskId for syncmatch as it hasn't been allocated yet
 	fakeTaskIdWrapper := &persistencespb.AllocatedTaskInfo{
