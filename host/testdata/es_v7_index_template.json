@@ -25,13 +25,13 @@
         "type": "keyword"
       },
       "StartTime": {
-        "type": "long"
+        "type": "date_nanos"
       },
       "ExecutionTime": {
-        "type": "long"
+        "type": "date_nanos"
       },
       "CloseTime": {
-        "type": "long"
+        "type": "date_nanos"
       },
       "ExecutionStatus": {
         "type": "integer"

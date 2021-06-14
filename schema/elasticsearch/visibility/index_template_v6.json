@@ -1,7 +1,7 @@
 {
   "order": 0,
   "index_patterns": [
-    "temporal-visibility-v1*"
+    "temporal_visibility_v1*"
   ],
   "settings": {
     "index": {
@@ -26,13 +26,13 @@
           "type": "keyword"
         },
         "StartTime": {
-          "type": "long"
+          "type": "date"
         },
         "ExecutionTime": {
-          "type": "long"
+          "type": "date"
         },
         "CloseTime": {
-          "type": "long"
+          "type": "date"
         },
         "ExecutionStatus": {
           "type": "long"

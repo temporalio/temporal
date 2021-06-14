@@ -164,44 +164,57 @@ func Test_ApplyTypeMap_Skip(t *testing.T) {
 	})
 }
 
-func Test_GetESType(t *testing.T) {
+func Test_MapESType(t *testing.T) {
 	assert := assert.New(t)
 
 	tests := []struct {
-		input    enumspb.IndexedValueType
-		expected string
+		input         enumspb.IndexedValueType
+		dateFieldType string
+		expected      string
 	}{
 		{
-			input:    enumspb.INDEXED_VALUE_TYPE_STRING,
-			expected: "text",
+			input:         enumspb.INDEXED_VALUE_TYPE_STRING,
+			dateFieldType: "",
+			expected:      "text",
 		},
 		{
-			input:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			expected: "keyword",
+			input:         enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			dateFieldType: "",
+			expected:      "keyword",
 		},
 		{
-			input:    enumspb.INDEXED_VALUE_TYPE_INT,
-			expected: "long",
+			input:         enumspb.INDEXED_VALUE_TYPE_INT,
+			dateFieldType: "",
+			expected:      "long",
 		},
 		{
-			input:    enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-			expected: "double",
+			input:         enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			dateFieldType: "",
+			expected:      "double",
 		},
 		{
-			input:    enumspb.INDEXED_VALUE_TYPE_BOOL,
-			expected: "boolean",
+			input:         enumspb.INDEXED_VALUE_TYPE_BOOL,
+			dateFieldType: "",
+			expected:      "boolean",
 		},
 		{
-			input:    enumspb.INDEXED_VALUE_TYPE_DATETIME,
-			expected: "date",
+			input:         enumspb.INDEXED_VALUE_TYPE_DATETIME,
+			dateFieldType: "date",
+			expected:      "date",
 		},
 		{
-			input:    enumspb.IndexedValueType(-1),
-			expected: "",
+			input:         enumspb.INDEXED_VALUE_TYPE_DATETIME,
+			dateFieldType: "date_nanos",
+			expected:      "date_nanos",
+		},
+		{
+			input:         enumspb.IndexedValueType(-1),
+			dateFieldType: "",
+			expected:      "",
 		},
 	}
 
 	for _, test := range tests {
-		assert.Equal(test.expected, MapESType(test.input))
+		assert.Equal(test.expected, MapESType(test.input, test.dateFieldType))
 	}
 }

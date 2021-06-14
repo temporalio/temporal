@@ -78,9 +78,9 @@ var (
 		WorkflowID:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		RunID:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		WorkflowType:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		StartTime:       enumspb.INDEXED_VALUE_TYPE_INT,
-		ExecutionTime:   enumspb.INDEXED_VALUE_TYPE_INT,
-		CloseTime:       enumspb.INDEXED_VALUE_TYPE_INT,
+		StartTime:       enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		ExecutionTime:   enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		CloseTime:       enumspb.INDEXED_VALUE_TYPE_DATETIME,
 		ExecutionStatus: enumspb.INDEXED_VALUE_TYPE_INT,
 		TaskQueue:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 

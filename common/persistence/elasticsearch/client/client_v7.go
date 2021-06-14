@@ -175,6 +175,10 @@ func (c *clientV7) GetMapping(ctx context.Context, index string) (map[string]str
 	return convertMappingBody(resp, index), err
 }
 
+func (c *clientV7) GetDateFieldType() string {
+	return "date_nanos"
+}
+
 func (c *clientV7) CreateIndex(ctx context.Context, index string) (bool, error) {
 	resp, err := c.esClient.CreateIndex(index).Do(ctx)
 	if err != nil {
@@ -281,6 +285,17 @@ func convertMappingBody(esMapping map[string]interface{}, indexName string) map[
 	if !ok {
 		return result
 	}
+
+	// One more nested field on ES6.
+	// TODO (alex): Remove with ES6 removal.
+	if doc, ok := mappingsMap[docTypeV6]; ok {
+		docMap, ok := doc.(map[string]interface{})
+		if !ok {
+			return result
+		}
+		mappingsMap = docMap
+	}
+
 	properties, ok := mappingsMap["properties"]
 	if !ok {
 		return result
