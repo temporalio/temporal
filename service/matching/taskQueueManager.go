@@ -181,7 +181,7 @@ func newTaskQueueManager(
 	return tlMgr, nil
 }
 
-// Starts reading pump for the given task queue.
+// Start reading pump for the given task queue.
 // The pump fills up taskBuffer from persistence.
 func (c *taskQueueManagerImpl) Start() error {
 	defer c.startWG.Done()
