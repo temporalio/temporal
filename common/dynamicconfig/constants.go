@@ -137,7 +137,7 @@ var Keys = map[Key]string{
 	MatchingMinTaskThrottlingBurstSize:      "matching.minTaskThrottlingBurstSize",
 	MatchingGetTasksBatchSize:               "matching.getTasksBatchSize",
 	MatchingLongPollExpirationInterval:      "matching.longPollExpirationInterval",
-	MatchingEnableSyncMatch:                 "matching.enableSyncMatch",
+	MatchingSyncMatchWaitDuration:           "matching.syncMatchWaitDuration",
 	MatchingUpdateAckInterval:               "matching.updateAckInterval",
 	MatchingIdleTaskqueueCheckInterval:      "matching.idleTaskqueueCheckInterval",
 	MaxTaskqueueIdleTime:                    "matching.maxTaskqueueIdleTime",
@@ -498,8 +498,8 @@ const (
 	MatchingGetTasksBatchSize
 	// MatchingLongPollExpirationInterval is the long poll expiration interval in the matching service
 	MatchingLongPollExpirationInterval
-	// MatchingEnableSyncMatch is to enable sync match
-	MatchingEnableSyncMatch
+	// MatchingSyncMatchWaitDuration is to wait time for sync match
+	MatchingSyncMatchWaitDuration
 	// MatchingUpdateAckInterval is the interval for update ack
 	MatchingUpdateAckInterval
 	// MatchingIdleTaskqueueCheckInterval is the IdleTaskqueueCheckInterval
