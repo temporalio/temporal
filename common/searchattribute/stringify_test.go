@@ -348,8 +348,8 @@ func (s *StringifySuite) Test_isJsonArray() {
 }
 
 func (s *StringifySuite) Test_parseJsonArray() {
-	t1, _ := time.Parse(time.RFC3339, "2019-06-07T16:16:34-08:00")
-	t2, _ := time.Parse(time.RFC3339, "2019-06-07T17:16:34-08:00")
+	t1, _ := time.Parse(time.RFC3339Nano, "2019-06-07T16:16:34-08:00")
+	t2, _ := time.Parse(time.RFC3339Nano, "2019-06-07T17:16:34-08:00")
 	testCases := []struct {
 		name             string
 		indexedValueType enumspb.IndexedValueType

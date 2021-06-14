@@ -53,6 +53,7 @@ type (
 		PutMapping(ctx context.Context, index string, mapping map[string]string) (bool, error)
 		WaitForYellowStatus(ctx context.Context, index string) (string, error)
 		GetMapping(ctx context.Context, index string) (map[string]string, error)
+		GetDateFieldType() string // TODO (alex): Remove with ES6 support removal.
 	}
 
 	CLIClient interface {

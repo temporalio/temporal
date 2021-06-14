@@ -175,6 +175,10 @@ func (c *clientV7) GetMapping(ctx context.Context, index string) (map[string]str
 	return convertMappingBody(resp, index), err
 }
 
+func (c *clientV7) GetDateFieldType() string {
+	return "date_nanos"
+}
+
 func (c *clientV7) CreateIndex(ctx context.Context, index string) (bool, error) {
 	resp, err := c.esClient.CreateIndex(index).Do(ctx)
 	if err != nil {

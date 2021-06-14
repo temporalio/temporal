@@ -810,13 +810,11 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(searchHits *elastic.
 	response.Executions = make([]*persistence.VisibilityWorkflowExecutionInfo, 0, len(searchHits.Hits))
 	for _, hit := range searchHits.Hits {
 		workflowExecutionInfo := s.parseESDoc(hit, typeMap)
+		// ES6 uses "date" data type not "date_nanos". It truncates dates using milliseconds and might return extra rows.
+		// For example: 2021-06-12T00:21:43.159739259Z fits 2021-06-12T00:21:43.158Z...2021-06-12T00:21:43.159Z range lte/gte query.
+		// Therefore these records needs to be filtered out on the client side to support nanos precision.
+		// After ES6 deprecation isRecordValid can be removed.
 		if isRecordValid == nil || isRecordValid(workflowExecutionInfo) {
-			// Elasticsearch truncates dates using milliseconds and might return extra rows.
-			// For example: 2021-06-12T00:21:43.159739259Z fits 2021-06-12T00:21:43.158Z...2021-06-12T00:21:43.159Z range lte/gte query.
-			// Therefore these records needs to be filtered out on the client side to support nanos precision.
-
-			// After ES6 deprecation this func can be removed but "date" columns need to be reindexed to "date_nanos":
-			// https://www.elastic.co/guide/en/elasticsearch/reference/current/date_nanos.html
 			response.Executions = append(response.Executions, workflowExecutionInfo)
 		}
 	}
@@ -1079,13 +1077,9 @@ func timeProcessFunc(obj *fastjson.Object, key string, value *fastjson.Value) er
 	}, func(obj *fastjson.Object, key string, v *fastjson.Value) error {
 		timeStr := string(v.GetStringBytes())
 
-		// ES6 use milliseconds for times and doesn't support "date_nanos" type (available in ES7 only).
-		// Temporal historically uses nanos for timestamps which need to be converted to milliseconds.
-		// After ES6 deprecation this func can be removed but "date" columns need to be reindexed to "date_nanos":
-		// https://www.elastic.co/guide/en/elasticsearch/reference/current/date_nanos.html
+		// To support dates passed as "nanoseconds since epoch".
 		if nanos, err := strconv.ParseInt(timeStr, 10, 64); err == nil {
-			milliseconds := nanos / int64(time.Millisecond)
-			obj.Set(key, fastjson.MustParse(strconv.FormatInt(milliseconds, 10)))
+			obj.Set(key, fastjson.MustParse(time.Unix(0, nanos).UTC().Format(time.RFC3339Nano)))
 		}
 
 		return nil

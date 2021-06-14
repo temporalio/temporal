@@ -204,7 +204,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_ExecutionTime() {
 	nonCronQuery := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < "%s"`, id, cronID, expectedNonCronMaxExecutionTime.Format(time.RFC3339Nano))
 	s.testHelperForReadOnce(weNonCron.GetRunId(), nonCronQuery, false)
 
-	cronQuery := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < "%s" AND ExecutionTime > "%s"`, id, cronID, expectedCronMaxExecutionTime.Format(time.RFC3339), expectedNonCronMaxExecutionTime.Format(time.RFC3339))
+	cronQuery := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < "%s" AND ExecutionTime > "%s"`, id, cronID, expectedCronMaxExecutionTime.Format(time.RFC3339Nano), expectedNonCronMaxExecutionTime.Format(time.RFC3339Nano))
 	s.testHelperForReadOnce(weCron.GetRunId(), cronQuery, false)
 }
 
@@ -572,8 +572,8 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 			case "CustomKeywordField":
 				s.True(prevVal.(string) >= currVal.(string))
 			case "CustomDatetimeField":
-				v1, _ = time.Parse(time.RFC3339, prevVal.(string))
-				v2, _ = time.Parse(time.RFC3339, currVal.(string))
+				v1, _ = time.Parse(time.RFC3339Nano, prevVal.(string))
+				v2, _ = time.Parse(time.RFC3339Nano, currVal.(string))
 				s.True(v1.(time.Time).After(v2.(time.Time)))
 			}
 			prevVal = currVal
