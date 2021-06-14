@@ -463,10 +463,9 @@ func (s *visibilityStore) CountWorkflowExecutions(request *persistence.CountWork
 
 // TODO (alex): move this to separate file
 const (
-	jsonMissingCloseTime     = `{"missing":{"field":"CloseTime"}}`
-	jsonRangeOnExecutionTime = `{"range":{"ExecutionTime":`
-	jsonSortForOpen          = `[{"StartTime":"desc"},{"RunId":"desc"}]`
-	jsonSortWithTieBreaker   = `{"RunId":"desc"}`
+	jsonMissingCloseTime   = `{"missing":{"field":"CloseTime"}}`
+	jsonSortForOpen        = `[{"StartTime":"desc"},{"RunId":"desc"}]`
+	jsonSortWithTieBreaker = `{"RunId":"desc"}`
 
 	dslFieldSort        = "sort"
 	dslFieldSearchAfter = "search_after"
@@ -577,9 +576,6 @@ func getCustomizedDSLFromSQL(sql string, namespaceID string) (*fastjson.Value, e
 	if strings.Contains(dslStr, jsonMissingCloseTime) { // isOpen
 		dsl = replaceQueryForOpen(dsl)
 	}
-	if strings.Contains(dslStr, jsonRangeOnExecutionTime) {
-		addQueryForExecutionTime(dsl)
-	}
 	addNamespaceToQuery(dsl, namespaceID)
 	if err := processAllValuesForKey(dsl, timeKeyFilter, timeProcessFunc); err != nil {
 		return nil, err
@@ -595,11 +591,6 @@ func replaceQueryForOpen(dsl *fastjson.Value) *fastjson.Value {
 	newDslStr := re.ReplaceAllString(dsl.String(), `{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}`)
 	dsl = fastjson.MustParse(newDslStr)
 	return dsl
-}
-
-func addQueryForExecutionTime(dsl *fastjson.Value) {
-	executionTimeQueryString := `{"range" : {"ExecutionTime" : {"gt" : "0"}}}`
-	addMustQuery(dsl, executionTimeQueryString)
 }
 
 func addNamespaceToQuery(dsl *fastjson.Value, namespaceID string) {
@@ -1079,9 +1070,8 @@ func timeProcessFunc(obj *fastjson.Object, key string, value *fastjson.Value) er
 
 		// To support dates passed as "nanoseconds since epoch".
 		if nanos, err := strconv.ParseInt(timeStr, 10, 64); err == nil {
-			obj.Set(key, fastjson.MustParse(time.Unix(0, nanos).UTC().Format(time.RFC3339Nano)))
+			obj.Set(key, fastjson.MustParse(fmt.Sprintf(`"%s"`, time.Unix(0, nanos).UTC().Format(time.RFC3339Nano))))
 		}
-
 		return nil
 	})
 }
