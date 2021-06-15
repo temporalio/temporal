@@ -94,7 +94,7 @@ func ApplyTypeMap(searchAttributes *commonpb.SearchAttributes, typeMap NameTypeM
 	}
 }
 
-func MapESType(t enumspb.IndexedValueType) string {
+func MapESType(t enumspb.IndexedValueType, dateFieldType string) string {
 	switch t {
 	case enumspb.INDEXED_VALUE_TYPE_STRING:
 		return "text"
@@ -107,7 +107,7 @@ func MapESType(t enumspb.IndexedValueType) string {
 	case enumspb.INDEXED_VALUE_TYPE_BOOL:
 		return "boolean"
 	case enumspb.INDEXED_VALUE_TYPE_DATETIME:
-		return "date"
+		return dateFieldType
 	default:
 		return ""
 	}

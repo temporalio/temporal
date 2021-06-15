@@ -74,7 +74,7 @@ func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap *NameTypeMap
 		case bool:
 			result[saName] = strconv.FormatBool(saTypedValue)
 		case time.Time:
-			result[saName] = saTypedValue.Format(time.RFC3339)
+			result[saName] = saTypedValue.Format(time.RFC3339Nano)
 		default:
 			switch reflect.TypeOf(saValue).Kind() {
 			case reflect.Slice, reflect.Array:
@@ -163,7 +163,7 @@ func parseValueTyped(valStr string, t enumspb.IndexedValueType) (interface{}, er
 	case enumspb.INDEXED_VALUE_TYPE_BOOL:
 		val, err = strconv.ParseBool(valStr)
 	case enumspb.INDEXED_VALUE_TYPE_DATETIME:
-		val, err = time.Parse(time.RFC3339, valStr)
+		val, err = time.Parse(time.RFC3339Nano, valStr)
 	case enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED:
 		val = parseValueUnspecified(valStr)
 	default:
@@ -180,7 +180,7 @@ func parseValueUnspecified(valStr string) interface{} {
 	if val, err = strconv.ParseInt(valStr, 10, 64); err == nil {
 	} else if val, err = strconv.ParseBool(valStr); err == nil {
 	} else if val, err = strconv.ParseFloat(valStr, 64); err == nil {
-	} else if val, err = time.Parse(time.RFC3339, valStr); err == nil {
+	} else if val, err = time.Parse(time.RFC3339Nano, valStr); err == nil {
 	} else if isJsonArray(valStr) {
 		arr, err := parseJsonArray(valStr, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
 		if err != nil {

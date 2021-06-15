@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 )
@@ -49,6 +50,7 @@ type (
 		blockingStart bool
 
 		logger                     log.Logger
+		namespaceLogger            log.Logger
 		authorizer                 authorization.Authorizer
 		tlsConfigProvider          encryption.TLSConfigProvider
 		claimMapper                authorization.ClaimMapper
@@ -56,6 +58,7 @@ type (
 		persistenceServiceResolver resolver.ServiceResolver
 		elasticseachHttpClient     *http.Client
 		dynamicConfigClient        dynamicconfig.Client
+		customDataStoreFactory     client.AbstractDataStoreFactory
 	}
 )
 

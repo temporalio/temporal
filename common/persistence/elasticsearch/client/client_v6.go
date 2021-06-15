@@ -184,6 +184,10 @@ func (c *clientV6) GetMapping(ctx context.Context, index string) (map[string]str
 	return convertMappingBody(resp, index), nil
 }
 
+func (c *clientV6) GetDateFieldType() string {
+	return "date"
+}
+
 func (c *clientV6) CreateIndex(ctx context.Context, index string) (bool, error) {
 	resp, err := c.esClient.CreateIndex(index).Do(ctx)
 	if err != nil {

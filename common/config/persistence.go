@@ -59,19 +59,8 @@ func (c *Persistence) Validate() error {
 		if !ok {
 			return fmt.Errorf("persistence config: missing config for datastore %q", st)
 		}
-		if ds.SQL == nil && ds.Cassandra == nil {
-			return fmt.Errorf("persistence config: datastore %q: must provide config for one of cassandra or sql stores", st)
-		}
-		if ds.SQL != nil && ds.Cassandra != nil {
-			return fmt.Errorf("persistence config: datastore %q: only one of SQL or cassandra can be specified", st)
-		}
-		if ds.SQL != nil && ds.SQL.TaskScanPartitions == 0 {
-			ds.SQL.TaskScanPartitions = 1
-		}
-		if ds.Cassandra != nil {
-			if err := ds.Cassandra.validate(); err != nil {
-				return err
-			}
+		if err := ds.Validate(); err != nil {
+			return fmt.Errorf("persistence config: datastore %q: %s", st, err.Error())
 		}
 	}
 
@@ -109,6 +98,33 @@ func (c *Persistence) validateAdvancedVisibility() error {
 		return err
 	}
 
+	return nil
+}
+
+// Validate validates the data store config
+func (ds *DataStore) Validate() error {
+	storeConfigCount := 0
+	if ds.SQL != nil {
+		storeConfigCount++
+	}
+	if ds.Cassandra != nil {
+		storeConfigCount++
+	}
+	if ds.CustomDataStoreConfig != nil {
+		storeConfigCount++
+	}
+	if storeConfigCount != 1 {
+		return errors.New("must provide config for one and only one for DataStore of cassandra or sql or custom stores")
+	}
+
+	if ds.SQL != nil && ds.SQL.TaskScanPartitions == 0 {
+		ds.SQL.TaskScanPartitions = 1
+	}
+	if ds.Cassandra != nil {
+		if err := ds.Cassandra.validate(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

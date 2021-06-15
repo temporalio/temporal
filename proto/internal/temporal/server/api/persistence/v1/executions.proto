@@ -123,6 +123,7 @@ message WorkflowExecutionInfo {
     // Transaction Id of the first event in the last batch of events.
     int64 last_first_event_txn_id = 58;
     int64 state_transition_count = 59;
+    google.protobuf.Timestamp execution_time = 60 [(gogoproto.stdtime) = true];
 }
 
 message ExecutionStats {

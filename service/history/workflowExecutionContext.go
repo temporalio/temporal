@@ -272,7 +272,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 			return nil, err
 		}
 
-		c.mutableState = newMutableStateBuilderFromDB(
+		c.mutableState, err = newMutableStateBuilderFromDB(
 			c.shard,
 			c.shard.GetEventsCache(),
 			c.logger,
@@ -280,6 +280,9 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 			response.State,
 			response.DBRecordVersion,
 		)
+		if err != nil {
+			return nil, err
+		}
 
 		c.stats = response.State.ExecutionInfo.ExecutionStats
 		if c.stats == nil {
@@ -352,7 +355,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 			return nil, err
 		}
 
-		c.mutableState = newMutableStateBuilderFromDB(
+		c.mutableState, err = newMutableStateBuilderFromDB(
 			c.shard,
 			c.shard.GetEventsCache(),
 			c.logger,
@@ -360,6 +363,9 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 			response.State,
 			response.DBRecordVersion,
 		)
+		if err != nil {
+			return nil, err
+		}
 
 		c.stats = response.State.ExecutionInfo.ExecutionStats
 		if c.stats == nil {

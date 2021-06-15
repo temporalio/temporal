@@ -63,7 +63,7 @@ var Keys = map[Key]string{
 	AdminMatchingNamespaceToPartitionDispatchRate:          "admin.matchingNamespaceToPartitionDispatchRate",
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate: "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
 
-	// TODO remove this dynamic flag in 1.12.x
+	// TODO remove this dynamic flag in 1.14.x
 	EnableDBRecordVersion: "system.enableDBRecordVersion",
 
 	// system settings
@@ -137,7 +137,7 @@ var Keys = map[Key]string{
 	MatchingMinTaskThrottlingBurstSize:      "matching.minTaskThrottlingBurstSize",
 	MatchingGetTasksBatchSize:               "matching.getTasksBatchSize",
 	MatchingLongPollExpirationInterval:      "matching.longPollExpirationInterval",
-	MatchingEnableSyncMatch:                 "matching.enableSyncMatch",
+	MatchingSyncMatchWaitDuration:           "matching.syncMatchWaitDuration",
 	MatchingUpdateAckInterval:               "matching.updateAckInterval",
 	MatchingIdleTaskqueueCheckInterval:      "matching.idleTaskqueueCheckInterval",
 	MaxTaskqueueIdleTime:                    "matching.maxTaskqueueIdleTime",
@@ -345,7 +345,7 @@ const (
 	// AdminMatchingNamespaceTaskqueueToPartitionDispatchRate is the max qps of a task queue partition for a given namespace & task queue
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate
 
-	// TODO remove this dynamic flag in 1.12.x
+	// TODO remove this dynamic flag in 1.14.x
 
 	// EnableDBRecordVersion is key for enable db version
 	EnableDBRecordVersion
@@ -498,8 +498,8 @@ const (
 	MatchingGetTasksBatchSize
 	// MatchingLongPollExpirationInterval is the long poll expiration interval in the matching service
 	MatchingLongPollExpirationInterval
-	// MatchingEnableSyncMatch is to enable sync match
-	MatchingEnableSyncMatch
+	// MatchingSyncMatchWaitDuration is to wait time for sync match
+	MatchingSyncMatchWaitDuration
 	// MatchingUpdateAckInterval is the interval for update ack
 	MatchingUpdateAckInterval
 	// MatchingIdleTaskqueueCheckInterval is the IdleTaskqueueCheckInterval

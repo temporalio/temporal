@@ -75,6 +75,7 @@ type (
 		serviceStoppedChs map[string]chan struct{}
 		stoppedCh         chan interface{}
 		logger            log.Logger
+		namespaceLogger   log.Logger
 		serverReporter    metrics.Reporter
 		sdkReporter       metrics.Reporter
 	}
@@ -113,6 +114,7 @@ func (s *Server) Start() error {
 	if s.logger == nil {
 		s.logger = log.NewZapLogger(log.BuildZapLogger(s.so.config.Log))
 	}
+	s.namespaceLogger = s.so.namespaceLogger
 
 	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))
 	s.logger.Debug(s.so.config.String())
@@ -146,15 +148,25 @@ func (s *Server) Start() error {
 		return fmt.Errorf("ringpop config validation error: %w", err)
 	}
 
-	err = updateClusterMetadataConfig(s.so.config, s.so.persistenceServiceResolver, s.logger)
+	err = updateClusterMetadataConfig(s.so.config, s.so.persistenceServiceResolver, s.logger, s.so.customDataStoreFactory)
 	if err != nil {
 		return fmt.Errorf("unable to initialize cluster metadata: %w", err)
 	}
 
 	// TODO: remove this call after 1.10 release
-	copyCustomSearchAttributesFromDynamicConfigToClusterMetadata(s.so.config, s.so.persistenceServiceResolver, s.logger, dc)
+	copyCustomSearchAttributesFromDynamicConfigToClusterMetadata(
+		s.so.config,
+		s.so.persistenceServiceResolver,
+		s.logger,
+		dc,
+		s.so.customDataStoreFactory)
 
-	err = initSystemNamespaces(&s.so.config.Persistence, s.so.config.ClusterMetadata.CurrentClusterName, s.so.persistenceServiceResolver, s.logger)
+	err = initSystemNamespaces(
+		&s.so.config.Persistence,
+		s.so.config.ClusterMetadata.CurrentClusterName,
+		s.so.persistenceServiceResolver,
+		s.logger,
+		s.so.customDataStoreFactory)
 	if err != nil {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
@@ -232,7 +244,7 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// Stops the server.
+// Stop stops the server.
 func (s *Server) Stop() {
 	var wg sync.WaitGroup
 	wg.Add(len(s.services))
@@ -266,14 +278,16 @@ func (s *Server) newBootstrapParams(
 ) (*resource.BootstrapParams, error) {
 
 	params := &resource.BootstrapParams{
-		Name:                  svcName,
-		Logger:                s.logger,
-		PersistenceConfig:     s.so.config.Persistence,
-		DynamicConfigClient:   s.so.dynamicConfigClient,
-		ClusterMetadataConfig: s.so.config.ClusterMetadata,
-		DCRedirectionPolicy:   s.so.config.DCRedirectionPolicy,
-		ESConfig:              esConfig,
-		ESClient:              esClient,
+		Name:                     svcName,
+		Logger:                   s.logger,
+		NamespaceLogger:          s.namespaceLogger,
+		PersistenceConfig:        s.so.config.Persistence,
+		DynamicConfigClient:      s.so.dynamicConfigClient,
+		ClusterMetadataConfig:    s.so.config.ClusterMetadata,
+		DCRedirectionPolicy:      s.so.config.DCRedirectionPolicy,
+		AbstractDatastoreFactory: s.so.customDataStoreFactory,
+		ESConfig:                 esConfig,
+		ESClient:                 esClient,
 	}
 
 	svcCfg := s.so.config.Services[svcName]
@@ -422,6 +436,7 @@ func copyCustomSearchAttributesFromDynamicConfigToClusterMetadata(
 	persistenceServiceResolver resolver.ServiceResolver,
 	logger log.Logger,
 	dc *dynamicconfig.Collection,
+	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
 ) {
 
 	var visibilityIndex string
@@ -453,7 +468,7 @@ func copyCustomSearchAttributesFromDynamicConfigToClusterMetadata(
 		&cfg.Persistence,
 		persistenceServiceResolver,
 		nil,
-		nil,
+		customDataStoreFactory,
 		cfg.ClusterMetadata.CurrentClusterName,
 		nil,
 		logger,
@@ -491,14 +506,19 @@ func copyCustomSearchAttributesFromDynamicConfigToClusterMetadata(
 // updateClusterMetadataConfig performs a config check against the configured persistence store for cluster metadata.
 // If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
 // This is to keep this check hidden from downstream calls.
-func updateClusterMetadataConfig(cfg *config.Config, persistenceServiceResolver resolver.ServiceResolver, logger log.Logger) error {
+func updateClusterMetadataConfig(
+	cfg *config.Config,
+	persistenceServiceResolver resolver.ServiceResolver,
+	logger log.Logger,
+	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
+) error {
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
 
 	factory := persistenceClient.NewFactory(
 		&cfg.Persistence,
 		persistenceServiceResolver,
 		nil,
-		nil,
+		customDataStoreFactory,
 		cfg.ClusterMetadata.CurrentClusterName,
 		nil,
 		logger,
@@ -551,12 +571,18 @@ func updateClusterMetadataConfig(cfg *config.Config, persistenceServiceResolver 
 	return nil
 }
 
-func initSystemNamespaces(cfg *config.Persistence, currentClusterName string, persistenceServiceResolver resolver.ServiceResolver, logger log.Logger) error {
+func initSystemNamespaces(
+	cfg *config.Persistence,
+	currentClusterName string,
+	persistenceServiceResolver resolver.ServiceResolver,
+	logger log.Logger,
+	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
+) error {
 	factory := persistenceClient.NewFactory(
 		cfg,
 		persistenceServiceResolver,
 		nil,
-		nil,
+		customDataStoreFactory,
 		currentClusterName,
 		nil,
 		logger,

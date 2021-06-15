@@ -146,7 +146,7 @@ func (a *activities) AddESMappingFieldActivity(ctx context.Context, params Workf
 
 	mapping := make(map[string]string, len(params.CustomAttributesToAdd))
 	for saName, saType := range params.CustomAttributesToAdd {
-		esType := searchattribute.MapESType(saType)
+		esType := searchattribute.MapESType(saType, a.esClient.GetDateFieldType())
 		if esType == "" {
 			return temporal.NewNonRetryableApplicationError(fmt.Sprintf("Unknown search attribute type: %v", saType), "", nil)
 		}

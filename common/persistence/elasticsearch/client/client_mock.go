@@ -74,6 +74,20 @@ func (mr *MockClientMockRecorder) Count(ctx, index, query interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockClient)(nil).Count), ctx, index, query)
 }
 
+// GetDateFieldType mocks base method.
+func (m *MockClient) GetDateFieldType() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDateFieldType")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetDateFieldType indicates an expected call of GetDateFieldType.
+func (mr *MockClientMockRecorder) GetDateFieldType() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDateFieldType", reflect.TypeOf((*MockClient)(nil).GetDateFieldType))
+}
+
 // GetMapping mocks base method.
 func (m *MockClient) GetMapping(ctx context.Context, index string) (map[string]string, error) {
 	m.ctrl.T.Helper()
@@ -261,6 +275,20 @@ func (m *MockCLIClient) Count(ctx context.Context, index, query string) (int64, 
 func (mr *MockCLIClientMockRecorder) Count(ctx, index, query interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockCLIClient)(nil).Count), ctx, index, query)
+}
+
+// GetDateFieldType mocks base method.
+func (m *MockCLIClient) GetDateFieldType() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDateFieldType")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetDateFieldType indicates an expected call of GetDateFieldType.
+func (mr *MockCLIClientMockRecorder) GetDateFieldType() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDateFieldType", reflect.TypeOf((*MockCLIClient)(nil).GetDateFieldType))
 }
 
 // GetMapping mocks base method.

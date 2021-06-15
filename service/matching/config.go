@@ -37,7 +37,7 @@ type (
 	Config struct {
 		PersistenceMaxQPS       dynamicconfig.IntPropertyFn
 		PersistenceGlobalMaxQPS dynamicconfig.IntPropertyFn
-		EnableSyncMatch         dynamicconfig.BoolPropertyFnWithTaskQueueInfoFilters
+		SyncMatchWaitDuration   dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 		RPS                     dynamicconfig.IntPropertyFn
 		ShutdownDrainDuration   dynamicconfig.DurationPropertyFn
 
@@ -78,7 +78,7 @@ type (
 
 	taskQueueConfig struct {
 		forwarderConfig
-		EnableSyncMatch func() bool
+		SyncMatchWaitDuration func() time.Duration
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval func() time.Duration
 		RangeSize                  int64
@@ -106,7 +106,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 	return &Config{
 		PersistenceMaxQPS:               dc.GetIntProperty(dynamicconfig.MatchingPersistenceMaxQPS, 3000),
 		PersistenceGlobalMaxQPS:         dc.GetIntProperty(dynamicconfig.MatchingPersistenceGlobalMaxQPS, 0),
-		EnableSyncMatch:                 dc.GetBoolPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingEnableSyncMatch, true),
+		SyncMatchWaitDuration:           dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingSyncMatchWaitDuration, 200*time.Millisecond),
 		RPS:                             dc.GetIntProperty(dynamicconfig.MatchingRPS, 1200),
 		RangeSize:                       100000,
 		GetTasksBatchSize:               dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingGetTasksBatchSize, 1000),
@@ -166,8 +166,8 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespaceCache cache.Na
 		MinTaskThrottlingBurstSize: func() int {
 			return config.MinTaskThrottlingBurstSize(namespace, taskQueueName, taskType)
 		},
-		EnableSyncMatch: func() bool {
-			return config.EnableSyncMatch(namespace, taskQueueName, taskType)
+		SyncMatchWaitDuration: func() time.Duration {
+			return config.SyncMatchWaitDuration(namespace, taskQueueName, taskType)
 		},
 		LongPollExpirationInterval: func() time.Duration {
 			return config.LongPollExpirationInterval(namespace, taskQueueName, taskType)

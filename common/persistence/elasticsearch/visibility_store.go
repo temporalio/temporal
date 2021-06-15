@@ -45,7 +45,6 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -83,10 +82,6 @@ type (
 )
 
 var _ persistence.VisibilityStore = (*visibilityStore)(nil)
-
-var (
-	oneMilliSecondInNano = int64(1000)
-)
 
 // NewVisibilityStore create a visibility store connecting to ElasticSearch
 func NewVisibilityStore(
@@ -132,7 +127,7 @@ func (s *visibilityStore) RecordWorkflowExecutionClosed(request *persistence.Int
 	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
 	doc := s.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
 
-	doc[searchattribute.CloseTime] = request.CloseTimestamp.UnixNano()
+	doc[searchattribute.CloseTime] = request.CloseTimestamp
 	doc[searchattribute.HistoryLength] = request.HistoryLength
 
 	return s.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
@@ -466,18 +461,16 @@ func (s *visibilityStore) CountWorkflowExecutions(request *persistence.CountWork
 	return response, nil
 }
 
+// TODO (alex): move this to separate file
 const (
-	jsonMissingCloseTime     = `{"missing":{"field":"CloseTime"}}`
-	jsonRangeOnExecutionTime = `{"range":{"ExecutionTime":`
-	jsonSortForOpen          = `[{"StartTime":"desc"},{"RunId":"desc"}]`
-	jsonSortWithTieBreaker   = `{"RunId":"desc"}`
+	jsonMissingCloseTime   = `{"missing":{"field":"CloseTime"}}`
+	jsonSortForOpen        = `[{"StartTime":"desc"},{"RunId":"desc"}]`
+	jsonSortWithTieBreaker = `{"RunId":"desc"}`
 
 	dslFieldSort        = "sort"
 	dslFieldSearchAfter = "search_after"
 	dslFieldFrom        = "from"
 	dslFieldSize        = "size"
-
-	defaultDateTimeFormat = time.RFC3339 // used for converting UnixNano to string like 2018-02-15T16:16:36-08:00
 )
 
 var (
@@ -583,9 +576,6 @@ func getCustomizedDSLFromSQL(sql string, namespaceID string) (*fastjson.Value, e
 	if strings.Contains(dslStr, jsonMissingCloseTime) { // isOpen
 		dsl = replaceQueryForOpen(dsl)
 	}
-	if strings.Contains(dslStr, jsonRangeOnExecutionTime) {
-		addQueryForExecutionTime(dsl)
-	}
 	addNamespaceToQuery(dsl, namespaceID)
 	if err := processAllValuesForKey(dsl, timeKeyFilter, timeProcessFunc); err != nil {
 		return nil, err
@@ -601,11 +591,6 @@ func replaceQueryForOpen(dsl *fastjson.Value) *fastjson.Value {
 	newDslStr := re.ReplaceAllString(dsl.String(), `{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}`)
 	dsl = fastjson.MustParse(newDslStr)
 	return dsl
-}
-
-func addQueryForExecutionTime(dsl *fastjson.Value) {
-	executionTimeQueryString := `{"range" : {"ExecutionTime" : {"gt" : "0"}}}`
-	addMustQuery(dsl, executionTimeQueryString)
 }
 
 func addNamespaceToQuery(dsl *fastjson.Value, namespaceID string) {
@@ -742,22 +727,9 @@ func (s *visibilityStore) getSearchResult(request *persistence.ListWorkflowExecu
 		rangeQuery = elastic.NewRangeQuery(searchattribute.CloseTime)
 	}
 
-	latestStartTime := request.LatestStartTime.UnixNano()
-	earliestStartTime := request.EarliestStartTime.UnixNano()
-	// ElasticSearch v6 is unable to precisely compare time, have to manually add resolution 1ms to time range.
-	// Also has to use string instead of int64 to avoid data conversion issue,
-	// 9223372036854775807 to 9223372036854776000 (long overflow)
-	if latestStartTime > math.MaxInt64-oneMilliSecondInNano { // prevent latestTime overflow
-		latestStartTime = math.MaxInt64 - oneMilliSecondInNano
-	}
-	if earliestStartTime < math.MinInt64+oneMilliSecondInNano { // prevent earliestTime overflow
-		earliestStartTime = math.MinInt64 + oneMilliSecondInNano
-	}
-	earliestTimeStr := convert.Int64ToString(earliestStartTime - oneMilliSecondInNano)
-	latestTimeStr := convert.Int64ToString(latestStartTime + oneMilliSecondInNano)
 	rangeQuery = rangeQuery.
-		Gte(earliestTimeStr).
-		Lte(latestTimeStr)
+		Gte(request.EarliestStartTime).
+		Lte(request.LatestStartTime)
 
 	query := elastic.NewBoolQuery()
 	if boolQuery != nil {
@@ -826,13 +798,15 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(searchHits *elastic.
 
 	response := &persistence.InternalListWorkflowExecutionsResponse{}
 
-	response.Executions = make([]*persistence.VisibilityWorkflowExecutionInfo, len(searchHits.Hits))
-	for i := 0; i < len(searchHits.Hits); i++ {
-		workflowExecutionInfo := s.parseESDoc(searchHits.Hits[i], typeMap)
+	response.Executions = make([]*persistence.VisibilityWorkflowExecutionInfo, 0, len(searchHits.Hits))
+	for _, hit := range searchHits.Hits {
+		workflowExecutionInfo := s.parseESDoc(hit, typeMap)
+		// ES6 uses "date" data type not "date_nanos". It truncates dates using milliseconds and might return extra rows.
+		// For example: 2021-06-12T00:21:43.159739259Z fits 2021-06-12T00:21:43.158Z...2021-06-12T00:21:43.159Z range lte/gte query.
+		// Therefore these records needs to be filtered out on the client side to support nanos precision.
+		// After ES6 deprecation isRecordValid can be removed.
 		if isRecordValid == nil || isRecordValid(workflowExecutionInfo) {
-			// for old APIs like ListOpenWorkflowExecutions, we added 1 ms to range query to overcome ES limitation
-			// (see getSearchResult function), but manually dropped records beyond request range here.
-			response.Executions[i] = workflowExecutionInfo
+			response.Executions = append(response.Executions, workflowExecutionInfo)
 		}
 	}
 
@@ -889,8 +863,8 @@ func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityR
 		searchattribute.WorkflowID:        request.WorkflowID,
 		searchattribute.RunID:             request.RunID,
 		searchattribute.WorkflowType:      request.WorkflowTypeName,
-		searchattribute.StartTime:         request.StartTimestamp.UnixNano(),
-		searchattribute.ExecutionTime:     request.ExecutionTimestamp.UnixNano(),
+		searchattribute.StartTime:         request.StartTimestamp,
+		searchattribute.ExecutionTime:     request.ExecutionTimestamp,
 		searchattribute.ExecutionStatus:   request.Status,
 		searchattribute.TaskQueue:         request.TaskQueue,
 	}
@@ -926,6 +900,10 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 		s.logger.Error("Unable to parse JSON number while parsing Elasticsearch document.", tag.Name(fieldName), tag.ValueType(fieldValue), tag.Error(err), tag.ESDocID(docID))
 		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
+	logDateParseError := func(fieldName string, fieldValue string, err error, docID string) {
+		s.logger.Error("Unable to parse JSON date while parsing Elasticsearch document.", tag.Name(fieldName), tag.ValueType(fieldValue), tag.Error(err), tag.ESDocID(docID))
+		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
+	}
 
 	var sourceMap map[string]interface{}
 	d := json.NewDecoder(bytes.NewReader(hit.Source))
@@ -956,35 +934,35 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
 		case searchattribute.StartTime:
-			var startTime json.Number
-			if startTime, isValidType = fieldValue.(json.Number); !isValidType {
+			var startTime string
+			if startTime, isValidType = fieldValue.(string); !isValidType {
 				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
-			startTimeInt64, err := startTime.Int64()
+			var err error
+			record.StartTime, err = time.Parse(time.RFC3339Nano, startTime)
 			if err != nil {
-				logNumberParseError(fieldName, startTime, err, hit.Id)
+				logDateParseError(fieldName, startTime, err, hit.Id)
 			}
-			record.StartTime = time.Unix(0, startTimeInt64).UTC()
 		case searchattribute.ExecutionTime:
-			var executionTime json.Number
-			if executionTime, isValidType = fieldValue.(json.Number); !isValidType {
+			var executionTime string
+			if executionTime, isValidType = fieldValue.(string); !isValidType {
 				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
-			executionTimeInt64, err := executionTime.Int64()
+			var err error
+			record.ExecutionTime, err = time.Parse(time.RFC3339Nano, executionTime)
 			if err != nil {
-				logNumberParseError(fieldName, executionTime, err, hit.Id)
+				logDateParseError(fieldName, executionTime, err, hit.Id)
 			}
-			record.ExecutionTime = time.Unix(0, executionTimeInt64).UTC()
 		case searchattribute.CloseTime:
-			var closeTime json.Number
-			if closeTime, isValidType = fieldValue.(json.Number); !isValidType {
+			var closeTime string
+			if closeTime, isValidType = fieldValue.(string); !isValidType {
 				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
-			closeTimeInt64, err := closeTime.Int64()
+			var err error
+			record.CloseTime, err = time.Parse(time.RFC3339Nano, closeTime)
 			if err != nil {
-				logNumberParseError(fieldName, closeTime, err, hit.Id)
+				logDateParseError(fieldName, closeTime, err, hit.Id)
 			}
-			record.CloseTime = time.Unix(0, closeTimeInt64).UTC()
 		case searchattribute.Memo:
 			if memo, isValidType = fieldValue.([]byte); !isValidType {
 				logUnexpectedType(fieldName, fieldValue, hit.Id)
@@ -1090,18 +1068,10 @@ func timeProcessFunc(obj *fastjson.Object, key string, value *fastjson.Value) er
 	}, func(obj *fastjson.Object, key string, v *fastjson.Value) error {
 		timeStr := string(v.GetStringBytes())
 
-		// first check if already in int64 format
-		if _, err := strconv.ParseInt(timeStr, 10, 64); err == nil {
-			return nil
+		// To support dates passed as "nanoseconds since epoch".
+		if nanos, err := strconv.ParseInt(timeStr, 10, 64); err == nil {
+			obj.Set(key, fastjson.MustParse(fmt.Sprintf(`"%s"`, time.Unix(0, nanos).UTC().Format(time.RFC3339Nano))))
 		}
-
-		// try to parse time
-		parsedTime, err := time.Parse(defaultDateTimeFormat, timeStr)
-		if err != nil {
-			return err
-		}
-
-		obj.Set(key, fastjson.MustParse(fmt.Sprintf(`"%v"`, parsedTime.UnixNano())))
 		return nil
 	})
 }
