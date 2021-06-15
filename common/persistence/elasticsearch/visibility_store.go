@@ -27,6 +27,7 @@ package elasticsearch
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -911,6 +912,10 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 		s.logger.Error("Unable to parse JSON date while parsing Elasticsearch document.", tag.Name(fieldName), tag.ValueType(fieldValue), tag.Error(err), tag.ESDocID(docID))
 		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
+	logMemoDecodeError := func(err error, docID string) {
+		s.logger.Error("Unable to base64 decode Memo field while parsing Elasticsearch document.", tag.Error(err), tag.ESDocID(docID))
+		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
+	}
 
 	var sourceMap map[string]interface{}
 	d := json.NewDecoder(bytes.NewReader(hit.Source))
@@ -971,8 +976,13 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 				logDateParseError(fieldName, closeTime, err, hit.Id)
 			}
 		case searchattribute.Memo:
-			if memo, isValidType = fieldValue.([]byte); !isValidType {
+			var memoStr string
+			if memoStr, isValidType = fieldValue.(string); !isValidType {
 				logUnexpectedType(fieldName, fieldValue, hit.Id)
+			}
+			var err error
+			if memo, err = base64.StdEncoding.DecodeString(memoStr); err != nil {
+				logMemoDecodeError(err, hit.Id)
 			}
 		case searchattribute.Encoding:
 			if memoEncoding, isValidType = fieldValue.(string); !isValidType {
