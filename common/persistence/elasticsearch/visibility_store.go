@@ -727,7 +727,7 @@ func (s *visibilityStore) getSearchResult(request *persistence.ListWorkflowExecu
 	matchNamespaceQuery := elastic.NewMatchQuery(searchattribute.NamespaceID, request.NamespaceID)
 	query = query.Must(matchNamespaceQuery)
 
-	if !request.EarliestStartTime.IsZero() && !request.LatestStartTime.IsZero() {
+	if !request.EarliestStartTime.IsZero() || !request.LatestStartTime.IsZero() {
 		var rangeQuery *elastic.RangeQuery
 		if overStartTime {
 			rangeQuery = elastic.NewRangeQuery(searchattribute.StartTime)
