@@ -227,6 +227,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
 	s.testHelperForReadOnce(we.GetRunId(), query, false)
 
+	searchAttributes := s.createSearchAttributes()
 	// test upsert
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
@@ -234,7 +235,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 		upsertCommand := &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{
-				SearchAttributes: getUpsertSearchAttributes(),
+				SearchAttributes: searchAttributes,
 			}}}
 
 		return []*commandpb.Command{upsertCommand}, nil
@@ -282,9 +283,8 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 	}
 	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
 	s.NoError(err)
-	expectedSearchAttributes := getUpsertSearchAttributes()
-	s.Equal(len(expectedSearchAttributes.GetIndexedFields()), len(descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()))
-	for attrName, expectedPayload := range expectedSearchAttributes.GetIndexedFields() {
+	s.Equal(len(searchAttributes.GetIndexedFields()), len(descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()))
+	for attrName, expectedPayload := range searchAttributes.GetIndexedFields() {
 		respAttr, ok := descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()[attrName]
 		s.True(ok)
 		s.Equal(expectedPayload.GetData(), respAttr.GetData())
@@ -920,7 +920,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		// handle second upsert, which update existing field and add new field
 		if commandCount == 1 {
 			commandCount++
-			upsertCommand.GetUpsertWorkflowSearchAttributesCommandAttributes().SearchAttributes = getUpsertSearchAttributes()
+			upsertCommand.GetUpsertWorkflowSearchAttributesCommandAttributes().SearchAttributes = s.createSearchAttributes()
 			return []*commandpb.Command{upsertCommand}, nil
 		}
 
@@ -1026,7 +1026,7 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 		if len(resp.GetExecutions()) == 1 {
 			execution := resp.GetExecutions()[0]
 			retrievedSearchAttr := execution.SearchAttributes
-			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 3 {
+			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 4 {
 				fields := retrievedSearchAttr.GetIndexedFields()
 				searchValBytes := fields[s.testSearchAttributeKey]
 				var searchVal string
@@ -1039,6 +1039,12 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 				err = payload.Decode(searchValBytes2, &searchVal2)
 				s.NoError(err)
 				s.Equal(123, searchVal2)
+
+				doublePayload := fields["CustomDoubleField"]
+				var doubleVal float64
+				err = payload.Decode(doublePayload, &doubleVal)
+				s.NoError(err)
+				s.Equal(22.0878, doubleVal)
 
 				binaryChecksumsBytes := fields[searchattribute.BinaryChecksums]
 				var binaryChecksums []string
@@ -1055,19 +1061,15 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 	s.True(verified)
 }
 
-func getUpsertSearchAttributes() *commonpb.SearchAttributes {
-	stringAttrPayload, _ := payload.Encode("another string")
-	intAttrPayload, _ := payload.Encode(123)
-	binaryChecksumsPayload, _ := payload.Encode([]string{"binary-v1", "binary-v2"})
-
-	upsertSearchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payload{
-			"CustomStringField":             stringAttrPayload,
-			"CustomIntField":                intAttrPayload,
-			searchattribute.BinaryChecksums: binaryChecksumsPayload,
-		},
-	}
-	return upsertSearchAttr
+func (s *elasticsearchIntegrationSuite) createSearchAttributes() *commonpb.SearchAttributes {
+	searchAttributes, err := searchattribute.Encode(map[string]interface{}{
+		"CustomStringField":             "another string",
+		"CustomIntField":                123,
+		"CustomDoubleField":             22.0878,
+		searchattribute.BinaryChecksums: []string{"binary-v1", "binary-v2"},
+	}, nil)
+	s.NoError(err)
+	return searchAttributes
 }
 
 func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey() {
