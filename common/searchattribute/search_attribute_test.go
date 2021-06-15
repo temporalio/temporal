@@ -190,7 +190,7 @@ func Test_MapESType(t *testing.T) {
 		{
 			input:         enumspb.INDEXED_VALUE_TYPE_DOUBLE,
 			dateFieldType: "",
-			expected:      "double",
+			expected:      "scaled_float",
 		},
 		{
 			input:         enumspb.INDEXED_VALUE_TYPE_BOOL,
