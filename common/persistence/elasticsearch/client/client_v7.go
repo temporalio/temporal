@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/olivere/elastic/v7"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 )
@@ -150,7 +151,7 @@ func (c *clientV7) RunBulkProcessor(ctx context.Context, p *BulkProcessorParamet
 	return newBulkProcessorV7(esBulkProcessor), err
 }
 
-func (c *clientV7) PutMapping(ctx context.Context, index string, mapping map[string]string) (bool, error) {
+func (c *clientV7) PutMapping(ctx context.Context, index string, mapping map[string]enumspb.IndexedValueType) (bool, error) {
 	body := buildMappingBody(mapping)
 	resp, err := c.esClient.PutMapping().Index(index).BodyJson(body).Do(ctx)
 	if err != nil {
@@ -253,16 +254,30 @@ func getLoggerOptions(logLevel string, logger log.Logger) []elastic.ClientOption
 	}
 }
 
-func buildMappingBody(mapping map[string]string) map[string]interface{} {
+func buildMappingBody(mapping map[string]enumspb.IndexedValueType) map[string]interface{} {
 	properties := make(map[string]interface{}, len(mapping))
 	for fieldName, fieldType := range mapping {
-		typeMap := map[string]interface{}{
-			"type": fieldType,
+		var typeMap map[string]interface{}
+		switch fieldType {
+		case enumspb.INDEXED_VALUE_TYPE_STRING:
+			typeMap = map[string]interface{}{"type": "text"}
+		case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
+			typeMap = map[string]interface{}{"type": "keyword"}
+		case enumspb.INDEXED_VALUE_TYPE_INT:
+			typeMap = map[string]interface{}{"type": "long"}
+		case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
+			typeMap = map[string]interface{}{
+				"type":           "scaled_float",
+				"scaling_factor": 10000,
+			}
+		case enumspb.INDEXED_VALUE_TYPE_BOOL:
+			typeMap = map[string]interface{}{"type": "boolean"}
+		case enumspb.INDEXED_VALUE_TYPE_DATETIME:
+			typeMap = map[string]interface{}{"type": "date_nanos"}
 		}
-		if fieldType == "scaled_float" {
-			typeMap["scaling_factor"] = 10000
+		if typeMap != nil {
+			properties[fieldName] = typeMap
 		}
-		properties[fieldName] = typeMap
 	}
 
 	body := map[string]interface{}{
