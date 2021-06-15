@@ -82,7 +82,7 @@ type (
 		// the channel which will be used to proxy the fired timer
 		fireChan chan struct{}
 
-		// lock for timer and next wake up time
+		// Lock for timer and next wake up time
 		sync.Mutex
 		// view of current time
 		currentTime time.Time

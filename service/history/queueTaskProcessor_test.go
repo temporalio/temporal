@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/task"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
 )
 
 type (
@@ -80,7 +81,7 @@ func (s *queueTaskProcessorSuite) SetupTest() {
 				ShardId: 10,
 				RangeId: 1,
 			}},
-		NewDynamicConfigForTest(),
+		tests.NewDynamicConfig(),
 	)
 	s.mockPriorityAssigner = NewMocktaskPriorityAssigner(s.controller)
 
@@ -175,7 +176,7 @@ func (s *queueTaskProcessorSuite) TestStop() {
 					ShardId: 10,
 					RangeId: 1,
 				}},
-			NewDynamicConfigForTest(),
+			tests.NewDynamicConfig(),
 		)
 		mockScheduler := task.NewMockScheduler(s.controller)
 		mockScheduler.EXPECT().Stop()

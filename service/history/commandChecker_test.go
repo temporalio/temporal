@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/tests"
 )
 
 type (
@@ -142,7 +143,7 @@ func (s *commandAttrValidatorSuite) TestValidateSignalExternalWorkflowExecutionA
 	attributes.Execution.RunId = "run-id"
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "Invalid RunId set on command.")
-	attributes.Execution.RunId = testRunID
+	attributes.Execution.RunId = tests.RunID
 
 	attributes.SignalName = "my signal name"
 	err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
@@ -154,7 +155,7 @@ func (s *commandAttrValidatorSuite) TestValidateSignalExternalWorkflowExecutionA
 }
 
 func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes() {
-	namespace := "testNamespace"
+	namespace := "tests.Namespace"
 	var attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes
 
 	err := s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")

@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 const (
@@ -62,8 +63,8 @@ type (
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryManager
 
-		context      workflowExecutionContext
-		mutableState mutableState
+		context      workflow.Context
+		mutableState workflow.MutableState
 		logger       log.Logger
 	}
 )
@@ -72,8 +73,8 @@ var _ nDCBranchMgr = (*nDCBranchMgrImpl)(nil)
 
 func newNDCBranchMgr(
 	shard shard.Context,
-	context workflowExecutionContext,
-	mutableState mutableState,
+	context workflow.Context,
+	mutableState workflow.MutableState,
 	logger log.Logger,
 ) *nDCBranchMgrImpl {
 
@@ -177,13 +178,13 @@ func (r *nDCBranchMgrImpl) flushBufferedEvents(
 		r.clusterMetadata,
 		r.context,
 		r.mutableState,
-		noopReleaseFn,
+		workflow.NoopReleaseFn,
 	)
 	if err := targetWorkflow.flushBufferedEvents(); err != nil {
 		return nil, 0, err
 	}
 	// the workflow must be updated as active, to send out replication tasks
-	if err := targetWorkflow.context.updateWorkflowExecutionAsActive(
+	if err := targetWorkflow.context.UpdateWorkflowExecutionAsActive(
 		r.shard.GetTimeSource().Now(),
 	); err != nil {
 		return nil, 0, err

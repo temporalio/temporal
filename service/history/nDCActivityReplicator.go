@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 const (
@@ -63,7 +64,7 @@ type (
 	}
 
 	nDCActivityReplicatorImpl struct {
-		historyCache    *historyCache
+		historyCache    *workflow.Cache
 		clusterMetadata cluster.Metadata
 		logger          log.Logger
 	}
@@ -71,7 +72,7 @@ type (
 
 func newNDCActivityReplicator(
 	shard shard.Context,
-	historyCache *historyCache,
+	historyCache *workflow.Cache,
 	logger log.Logger,
 ) *nDCActivityReplicatorImpl {
 
@@ -98,11 +99,11 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		RunId:      request.RunId,
 	}
 
-	context, release, err := r.historyCache.getOrCreateWorkflowExecution(
+	context, release, err := r.historyCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		execution,
-		callerTypeAPI,
+		workflow.CallerTypeAPI,
 	)
 	if err != nil {
 		// for get workflow execution context, with valid run id
@@ -111,7 +112,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := context.loadWorkflowExecution()
+	mutableState, err := context.LoadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
@@ -175,10 +176,10 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 
 	// passive logic need to explicitly call create timer
 	now := eventTime
-	if _, err := newTimerSequence(
+	if _, err := workflow.NewTimerSequence(
 		clock.NewEventTimeSource().Update(now),
 		mutableState,
-	).createNextActivityTimer(); err != nil {
+	).CreateNextActivityTimer(); err != nil {
 		return err
 	}
 
@@ -187,12 +188,12 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		updateMode = persistence.UpdateWorkflowModeBypassCurrent
 	}
 
-	return context.updateWorkflowExecutionWithNew(
+	return context.UpdateWorkflowExecutionWithNew(
 		now,
 		updateMode,
 		nil, // no new workflow
 		nil, // no new workflow
-		transactionPolicyPassive,
+		workflow.TransactionPolicyPassive,
 		nil,
 	)
 }
@@ -259,7 +260,7 @@ func (r *nDCActivityReplicatorImpl) testVersionHistory(
 	workflowID string,
 	runID string,
 	scheduleID int64,
-	mutableState mutableState,
+	mutableState workflow.MutableState,
 	incomingVersionHistory *historyspb.VersionHistory,
 ) (bool, error) {
 

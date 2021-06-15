@@ -44,7 +44,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/history"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/matching"
 )
 
@@ -345,7 +345,7 @@ GetHistoryLoop:
 				_, err := poller.PollAndProcessWorkflowTaskWithoutRetry(true, false)
 				s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 				// Excluding ErrWorkflowCompleted because workflow might timeout while we are processing wtHandler.
-				if err != nil && err != matching.ErrNoTasks && err.Error() != history.ErrWorkflowCompleted.Error() {
+				if err != nil && err != matching.ErrNoTasks && err.Error() != consts.ErrWorkflowCompleted.Error() {
 					s.NoError(err)
 				}
 			}

@@ -34,6 +34,7 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
+	workflow "go.temporal.io/server/service/history/workflow"
 )
 
 // MocknDCWorkflowResetter is a mock of nDCWorkflowResetter interface.
@@ -60,10 +61,10 @@ func (m *MocknDCWorkflowResetter) EXPECT() *MocknDCWorkflowResetterMockRecorder 
 }
 
 // resetWorkflow mocks base method.
-func (m *MocknDCWorkflowResetter) resetWorkflow(ctx context.Context, now time.Time, baseLastEventID, baseLastEventVersion, incomingFirstEventID, incomingFirstEventVersion int64) (mutableState, error) {
+func (m *MocknDCWorkflowResetter) resetWorkflow(ctx context.Context, now time.Time, baseLastEventID, baseLastEventVersion, incomingFirstEventID, incomingFirstEventVersion int64) (workflow.MutableState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "resetWorkflow", ctx, now, baseLastEventID, baseLastEventVersion, incomingFirstEventID, incomingFirstEventVersion)
-	ret0, _ := ret[0].(mutableState)
+	ret0, _ := ret[0].(workflow.MutableState)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

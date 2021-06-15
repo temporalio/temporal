@@ -25,31 +25,22 @@
 package history
 
 import (
-	commandpb "go.temporal.io/api/command/v1"
-	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
-	namespacepb "go.temporal.io/api/namespace/v1"
-	"go.temporal.io/api/serviceerror"
-	workflowpb "go.temporal.io/api/workflow/v1"
-
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type workflowContext interface {
-	getContext() workflowExecutionContext
-	getMutableState() mutableState
-	reloadMutableState() (mutableState, error)
-	getReleaseFn() releaseWorkflowExecutionFunc
+	getContext() workflow.Context
+	getMutableState() workflow.MutableState
+	reloadMutableState() (workflow.MutableState, error)
+	getReleaseFn() workflow.ReleaseCacheFunc
 	getWorkflowID() string
 	getRunID() string
 }
 
 type workflowContextImpl struct {
-	context      workflowExecutionContext
-	mutableState mutableState
-	releaseFn    releaseWorkflowExecutionFunc
+	context      workflow.Context
+	mutableState workflow.MutableState
+	releaseFn    workflow.ReleaseCacheFunc
 }
 
 type updateWorkflowAction struct {
@@ -66,18 +57,18 @@ var (
 	}
 )
 
-type updateWorkflowActionFunc func(workflowExecutionContext, mutableState) (*updateWorkflowAction, error)
+type updateWorkflowActionFunc func(workflow.Context, workflow.MutableState) (*updateWorkflowAction, error)
 
-func (w *workflowContextImpl) getContext() workflowExecutionContext {
+func (w *workflowContextImpl) getContext() workflow.Context {
 	return w.context
 }
 
-func (w *workflowContextImpl) getMutableState() mutableState {
+func (w *workflowContextImpl) getMutableState() workflow.MutableState {
 	return w.mutableState
 }
 
-func (w *workflowContextImpl) reloadMutableState() (mutableState, error) {
-	mutableState, err := w.getContext().loadWorkflowExecution()
+func (w *workflowContextImpl) reloadMutableState() (workflow.MutableState, error) {
+	mutableState, err := w.getContext().LoadWorkflowExecution()
 	if err != nil {
 		return nil, err
 	}
@@ -85,22 +76,22 @@ func (w *workflowContextImpl) reloadMutableState() (mutableState, error) {
 	return mutableState, nil
 }
 
-func (w *workflowContextImpl) getReleaseFn() releaseWorkflowExecutionFunc {
+func (w *workflowContextImpl) getReleaseFn() workflow.ReleaseCacheFunc {
 	return w.releaseFn
 }
 
 func (w *workflowContextImpl) getWorkflowID() string {
-	return w.getContext().getExecution().GetWorkflowId()
+	return w.getContext().GetExecution().GetWorkflowId()
 }
 
 func (w *workflowContextImpl) getRunID() string {
-	return w.getContext().getExecution().GetRunId()
+	return w.getContext().GetExecution().GetRunId()
 }
 
 func newWorkflowContext(
-	context workflowExecutionContext,
-	releaseFn releaseWorkflowExecutionFunc,
-	mutableState mutableState,
+	context workflow.Context,
+	releaseFn workflow.ReleaseCacheFunc,
+	mutableState workflow.MutableState,
 ) *workflowContextImpl {
 
 	return &workflowContextImpl{
@@ -108,146 +99,4 @@ func newWorkflowContext(
 		releaseFn:    releaseFn,
 		mutableState: mutableState,
 	}
-}
-
-func failWorkflowTask(
-	mutableState mutableState,
-	workflowTask *workflowTaskInfo,
-	workflowTaskFailureCause enumspb.WorkflowTaskFailedCause,
-) error {
-
-	if _, err := mutableState.AddWorkflowTaskFailedEvent(
-		workflowTask.ScheduleID,
-		workflowTask.StartedID,
-		workflowTaskFailureCause,
-		nil,
-		identityHistoryService,
-		"",
-		"",
-		"",
-		0,
-	); err != nil {
-		return err
-	}
-
-	mutableState.FlushBufferedEvents()
-	return nil
-}
-
-func scheduleWorkflowTask(
-	mutableState mutableState,
-) error {
-
-	if mutableState.HasPendingWorkflowTask() {
-		return nil
-	}
-
-	_, err := mutableState.AddWorkflowTaskScheduledEvent(false)
-	if err != nil {
-		return serviceerror.NewInternal("Failed to add workflow task scheduled event.")
-	}
-	return nil
-}
-
-func retryWorkflow(
-	mutableState mutableState,
-	eventBatchFirstEventID int64,
-	parentNamespace string,
-	continueAsNewAttributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
-) (mutableState, error) {
-
-	if workflowTask, ok := mutableState.GetInFlightWorkflowTask(); ok {
-		if err := failWorkflowTask(
-			mutableState,
-			workflowTask,
-			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
-		); err != nil {
-			return nil, err
-		}
-	}
-
-	_, newMutableState, err := mutableState.AddContinueAsNewEvent(
-		eventBatchFirstEventID,
-		common.EmptyEventID,
-		parentNamespace,
-		continueAsNewAttributes,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return newMutableState, nil
-}
-
-func timeoutWorkflow(
-	mutableState mutableState,
-	eventBatchFirstEventID int64,
-	retryState enumspb.RetryState,
-) error {
-
-	if workflowTask, ok := mutableState.GetInFlightWorkflowTask(); ok {
-		if err := failWorkflowTask(
-			mutableState,
-			workflowTask,
-			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
-		); err != nil {
-			return err
-		}
-	}
-
-	_, err := mutableState.AddTimeoutWorkflowEvent(
-		eventBatchFirstEventID,
-		retryState,
-	)
-	return err
-}
-
-func terminateWorkflow(
-	mutableState mutableState,
-	eventBatchFirstEventID int64,
-	terminateReason string,
-	terminateDetails *commonpb.Payloads,
-	terminateIdentity string,
-) error {
-
-	if workflowTask, ok := mutableState.GetInFlightWorkflowTask(); ok {
-		if err := failWorkflowTask(
-			mutableState,
-			workflowTask,
-			enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
-		); err != nil {
-			return err
-		}
-	}
-
-	_, err := mutableState.AddWorkflowExecutionTerminatedEvent(
-		eventBatchFirstEventID,
-		terminateReason,
-		terminateDetails,
-		terminateIdentity,
-	)
-	return err
-}
-
-// FindAutoResetPoint returns the auto reset point
-func FindAutoResetPoint(
-	timeSource clock.TimeSource,
-	badBinaries *namespacepb.BadBinaries,
-	autoResetPoints *workflowpb.ResetPoints,
-) (string, *workflowpb.ResetPointInfo) {
-	if badBinaries == nil || badBinaries.Binaries == nil || autoResetPoints == nil || autoResetPoints.Points == nil {
-		return "", nil
-	}
-	now := timeSource.Now()
-	for _, p := range autoResetPoints.Points {
-		bin, ok := badBinaries.Binaries[p.GetBinaryChecksum()]
-		if ok && p.GetResettable() {
-			expireTime := timestamp.TimeValue(p.GetExpireTime())
-			if !expireTime.IsZero() && now.After(expireTime) {
-				// reset point has expired and we may already deleted the history
-				continue
-			}
-			return bin.GetReason(), p
-		}
-	}
-	return "", nil
 }

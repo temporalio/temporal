@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 var (
@@ -59,24 +60,25 @@ const (
 
 type (
 	stateBuilderProvider func(
-		mutableState mutableState,
-		logger log.Logger) stateBuilder
+		mutableState workflow.MutableState,
+		logger log.Logger,
+	) workflow.MutableStateRebuilder
 
 	mutableStateProvider func(
 		namespaceEntry *cache.NamespaceCacheEntry,
 		startTime time.Time,
 		logger log.Logger,
-	) mutableState
+	) workflow.MutableState
 
 	nDCBranchMgrProvider func(
-		context workflowExecutionContext,
-		mutableState mutableState,
+		context workflow.Context,
+		mutableState workflow.MutableState,
 		logger log.Logger,
 	) nDCBranchMgr
 
 	nDCConflictResolverProvider func(
-		context workflowExecutionContext,
-		mutableState mutableState,
+		context workflow.Context,
+		mutableState workflow.MutableState,
 		logger log.Logger,
 	) nDCConflictResolver
 
@@ -84,7 +86,7 @@ type (
 		namespaceID string,
 		workflowID string,
 		baseRunID string,
-		newContext workflowExecutionContext,
+		newContext workflow.Context,
 		newRunID string,
 		logger log.Logger,
 	) nDCWorkflowResetter
@@ -103,7 +105,7 @@ type (
 		historySerializer persistence.PayloadSerializer
 		metricsClient     metrics.Client
 		namespaceCache    cache.NamespaceCache
-		historyCache      *historyCache
+		historyCache      *workflow.Cache
 		eventsReapplier   nDCEventsReapplier
 		transactionMgr    nDCTransactionMgr
 		logger            log.Logger
@@ -120,7 +122,7 @@ var errPanic = serviceerror.NewInternal("encounter panic")
 
 func newNDCHistoryReplicator(
 	shard shard.Context,
-	historyCache *historyCache,
+	historyCache *workflow.Cache,
 	eventsReapplier nDCEventsReapplier,
 	logger log.Logger,
 ) *nDCHistoryReplicatorImpl {
@@ -139,15 +141,15 @@ func newNDCHistoryReplicator(
 		logger:            log.With(logger, tag.ComponentHistoryReplicator),
 
 		newBranchMgr: func(
-			context workflowExecutionContext,
-			mutableState mutableState,
+			context workflow.Context,
+			mutableState workflow.MutableState,
 			logger log.Logger,
 		) nDCBranchMgr {
 			return newNDCBranchMgr(shard, context, mutableState, logger)
 		},
 		newConflictResolver: func(
-			context workflowExecutionContext,
-			mutableState mutableState,
+			context workflow.Context,
+			mutableState workflow.MutableState,
 			logger log.Logger,
 		) nDCConflictResolver {
 			return newNDCConflictResolver(shard, context, mutableState, logger)
@@ -156,23 +158,23 @@ func newNDCHistoryReplicator(
 			namespaceID string,
 			workflowID string,
 			baseRunID string,
-			newContext workflowExecutionContext,
+			newContext workflow.Context,
 			newRunID string,
 			logger log.Logger,
 		) nDCWorkflowResetter {
 			return newNDCWorkflowResetter(shard, transactionMgr, namespaceID, workflowID, baseRunID, newContext, newRunID, logger)
 		},
 		newStateBuilder: func(
-			state mutableState,
+			state workflow.MutableState,
 			logger log.Logger,
-		) stateBuilder {
+		) workflow.MutableStateRebuilder {
 
-			return newStateBuilder(
+			return workflow.NewMutableStateRebuilder(
 				shard,
 				logger,
 				state,
-				func(mutableState mutableState) mutableStateTaskGenerator {
-					return newMutableStateTaskGenerator(shard.GetNamespaceCache(), logger, mutableState)
+				func(mutableState workflow.MutableState) workflow.TaskGenerator {
+					return workflow.NewTaskGenerator(shard.GetNamespaceCache(), logger, mutableState)
 				},
 			)
 		},
@@ -180,8 +182,8 @@ func newNDCHistoryReplicator(
 			namespaceEntry *cache.NamespaceCacheEntry,
 			startTime time.Time,
 			logger log.Logger,
-		) mutableState {
-			return newMutableStateBuilder(
+		) workflow.MutableState {
+			return workflow.NewMutableState(
 				shard,
 				shard.GetEventsCache(),
 				logger,
@@ -219,11 +221,11 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 	task nDCReplicationTask,
 ) (retError error) {
 
-	context, releaseFn, err := r.historyCache.getOrCreateWorkflowExecution(
+	context, releaseFn, err := r.historyCache.GetOrCreateWorkflowExecution(
 		ctx,
 		task.getNamespaceID(),
 		*task.getExecution(),
-		callerTypeAPI,
+		workflow.CallerTypeAPI,
 	)
 	if err != nil {
 		// for get workflow execution context, with valid run id
@@ -246,9 +248,9 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 	default:
 		// apply events, other than simple start workflow execution
 		// the continue as new + start workflow execution combination will also be processed here
-		var mutableState mutableState
+		var mutableState workflow.MutableState
 		var err error
-		namespaceEntry, err := r.namespaceCache.GetNamespaceByID(context.getNamespaceID())
+		namespaceEntry, err := r.namespaceCache.GetNamespaceByID(context.GetNamespaceID())
 		if err != nil {
 			return err
 		}
@@ -256,9 +258,9 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 		if r.shard.GetConfig().ReplicationEventsFromCurrentCluster(namespaceEntry.GetInfo().Name) {
 			// this branch is used when replicating events (generated from current cluster)from remote cluster to current cluster.
 			// this could happen when the events are lost in current cluster and plan to recover them from remote cluster.
-			mutableState, err = context.loadWorkflowExecutionForReplication(task.getVersion())
+			mutableState, err = context.LoadWorkflowExecutionForReplication(task.getVersion())
 		} else {
-			mutableState, err = context.loadWorkflowExecution()
+			mutableState, err = context.LoadWorkflowExecution()
 		}
 		switch err.(type) {
 		case nil:
@@ -303,8 +305,8 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 
 func (r *nDCHistoryReplicatorImpl) applyStartEvents(
 	ctx context.Context,
-	context workflowExecutionContext,
-	releaseFn releaseWorkflowExecutionFunc,
+	context workflow.Context,
+	releaseFn workflow.ReleaseCacheFunc,
 	task nDCReplicationTask,
 ) (retError error) {
 
@@ -317,7 +319,7 @@ func (r *nDCHistoryReplicatorImpl) applyStartEvents(
 	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())
 
 	// use state builder for workflow mutable state mutation
-	_, err = stateBuilder.applyEvents(
+	_, err = stateBuilder.ApplyEvents(
 		task.getNamespaceID(),
 		requestID,
 		*task.getExecution(),
@@ -357,8 +359,8 @@ func (r *nDCHistoryReplicatorImpl) applyStartEvents(
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareBranch(
 	ctx context.Context,
-	context workflowExecutionContext,
-	mutableState mutableState,
+	context workflow.Context,
+	mutableState workflow.MutableState,
 	task nDCReplicationTask,
 ) (bool, int32, error) {
 
@@ -388,11 +390,11 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareBranch(
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareMutableState(
 	ctx context.Context,
-	context workflowExecutionContext,
-	mutableState mutableState,
+	context workflow.Context,
+	mutableState workflow.MutableState,
 	branchIndex int32,
 	task nDCReplicationTask,
-) (mutableState, bool, error) {
+) (workflow.MutableState, bool, error) {
 
 	incomingVersion := task.getVersion()
 	conflictResolver := r.newConflictResolver(context, mutableState, task.getLogger())
@@ -412,16 +414,16 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsPrepareMutableState(
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 	ctx context.Context,
-	context workflowExecutionContext,
-	mutableState mutableState,
+	context workflow.Context,
+	mutableState workflow.MutableState,
 	isRebuilt bool,
-	releaseFn releaseWorkflowExecutionFunc,
+	releaseFn workflow.ReleaseCacheFunc,
 	task nDCReplicationTask,
 ) error {
 
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
 	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())
-	newMutableState, err := stateBuilder.applyEvents(
+	newMutableState, err := stateBuilder.ApplyEvents(
 		task.getNamespaceID(),
 		requestID,
 		*task.getExecution(),
@@ -449,7 +451,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 	if newMutableState != nil {
 		newExecutionInfo := newMutableState.GetExecutionInfo()
 		newExecutionState := newMutableState.GetExecutionState()
-		newContext := newWorkflowExecutionContext(
+		newContext := workflow.NewContext(
 			newExecutionInfo.NamespaceId,
 			commonpb.WorkflowExecution{
 				WorkflowId: newExecutionInfo.WorkflowId,
@@ -466,7 +468,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 			r.clusterMetadata,
 			newContext,
 			newMutableState,
-			noopReleaseFn,
+			workflow.NoopReleaseFn,
 		)
 	}
 
@@ -490,10 +492,10 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranch(
 	ctx context.Context,
-	context workflowExecutionContext,
-	mutableState mutableState,
+	context workflow.Context,
+	mutableState workflow.MutableState,
 	branchIndex int32,
-	releaseFn releaseWorkflowExecutionFunc,
+	releaseFn workflow.ReleaseCacheFunc,
 	task nDCReplicationTask,
 ) error {
 
@@ -518,10 +520,10 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranch(
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithoutContinueAsNew(
 	ctx context.Context,
-	context workflowExecutionContext,
-	mutableState mutableState,
+	context workflow.Context,
+	mutableState workflow.MutableState,
 	branchIndex int32,
-	releaseFn releaseWorkflowExecutionFunc,
+	releaseFn workflow.ReleaseCacheFunc,
 	task nDCReplicationTask,
 ) error {
 
@@ -575,22 +577,22 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithContinueAsNew(
 	ctx context.Context,
-	context workflowExecutionContext,
-	releaseFn releaseWorkflowExecutionFunc,
+	context workflow.Context,
+	releaseFn workflow.ReleaseCacheFunc,
 	task nDCReplicationTask,
 ) error {
 
 	// workflow backfill to non current branch with continue as new
-	// first, release target workflow lock & create the new workflow as zombie
+	// first, release target workflow Lock & create the new workflow as zombie
 	// NOTE: need to release target workflow due to target workflow
 	//  can potentially be the current workflow causing deadlock
 
-	// 1. clear all in memory changes & release target workflow lock
+	// 1. Clear all in memory changes & release target workflow Lock
 	// 2. apply new workflow first
 	// 3. apply target workflow
 
 	// step 1
-	context.clear()
+	context.Clear()
 	releaseFn(nil)
 
 	// step 2
@@ -620,9 +622,9 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithCon
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 	ctx context.Context,
-	newContext workflowExecutionContext,
+	newContext workflow.Context,
 	task nDCReplicationTask,
-) (mutableState, error) {
+) (workflow.MutableState, error) {
 
 	// for non reset workflow execution replication task, just do re-replication
 	if !task.isWorkflowReset() {
@@ -675,14 +677,14 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 
 func (r *nDCHistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 	ctx context.Context,
-	context workflowExecutionContext,
-	mutableState mutableState,
+	context workflow.Context,
+	mutableState workflow.MutableState,
 	task nDCReplicationTask,
 ) error {
 
 	requestID := uuid.New() // requestID used for start workflow execution request.  This is not on the history event.
 	stateBuilder := r.newStateBuilder(mutableState, task.getLogger())
-	_, err := stateBuilder.applyEvents(
+	_, err := stateBuilder.ApplyEvents(
 		task.getNamespaceID(),
 		requestID,
 		*task.getExecution(),
@@ -703,7 +705,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 		r.clusterMetadata,
 		context,
 		mutableState,
-		noopReleaseFn,
+		workflow.NoopReleaseFn,
 	)
 
 	err = r.transactionMgr.createWorkflow(

@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
 )
 
 type (
@@ -94,7 +95,7 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.currentCluster = cluster.TestCurrentClusterName
 
-	s.config = NewDynamicConfigForTest()
+	s.config = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
@@ -304,7 +305,7 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask() {
 				NamespaceId:         namespaceID,
 				WorkflowId:          workflowID,
 				RunId:               runID,
-				VersionHistoryItems: []*historyspb.VersionHistoryItem{{233, 2333}},
+				VersionHistoryItems: []*historyspb.VersionHistoryItem{{EventId: 233, Version: 2333}},
 				Events:              nil,
 				NewRunEvents:        nil,
 			},
@@ -316,7 +317,7 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask() {
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		VersionHistoryItems: []*historyspb.VersionHistoryItem{{233, 2333}},
+		VersionHistoryItems: []*historyspb.VersionHistoryItem{{EventId: 233, Version: 2333}},
 		Events:              nil,
 		NewRunEvents:        nil,
 	}
@@ -337,7 +338,7 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask_Resend
 				NamespaceId:         namespaceID,
 				WorkflowId:          workflowID,
 				RunId:               runID,
-				VersionHistoryItems: []*historyspb.VersionHistoryItem{{233, 2333}},
+				VersionHistoryItems: []*historyspb.VersionHistoryItem{{EventId: 233, Version: 2333}},
 				Events:              nil,
 				NewRunEvents:        nil,
 			},
@@ -349,7 +350,7 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask_Resend
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		VersionHistoryItems: []*historyspb.VersionHistoryItem{{233, 2333}},
+		VersionHistoryItems: []*historyspb.VersionHistoryItem{{EventId: 233, Version: 2333}},
 		Events:              nil,
 		NewRunEvents:        nil,
 	}

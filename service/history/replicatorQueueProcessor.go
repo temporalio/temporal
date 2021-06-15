@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -55,7 +56,7 @@ type (
 		currentClusterName string
 		shard              shard.Context
 		config             *configs.Config
-		historyCache       *historyCache
+		historyCache       *workflow.Cache
 		executionMgr       persistence.ExecutionManager
 		historyMgr         persistence.HistoryManager
 		metricsClient      metrics.Client
@@ -76,7 +77,7 @@ var (
 
 func newReplicatorQueueProcessor(
 	shard shard.Context,
-	historyCache *historyCache,
+	historyCache *workflow.Cache,
 	executionMgr persistence.ExecutionManager,
 	historyMgr persistence.HistoryManager,
 	logger log.Logger,
@@ -328,7 +329,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 		namespaceID,
 		workflowID,
 		runID,
-		func(mutableState mutableState) (*replicationspb.ReplicationTask, error) {
+		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
 			activityInfo, ok := mutableState.GetActivityInfo(taskInfo.GetScheduledId())
 			if !ok {
 				return nil, nil
@@ -393,7 +394,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 		namespaceID,
 		workflowID,
 		runID,
-		func(mutableState mutableState) (*replicationspb.ReplicationTask, error) {
+		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
 			versionHistoryItems, branchToken, err := p.getVersionHistoryItems(
 				mutableState,
 				taskInfo.GetFirstEventId(),
@@ -489,7 +490,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 }
 
 func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
-	mutableState mutableState,
+	mutableState workflow.MutableState,
 	eventID int64,
 	version int64,
 ) ([]*historyspb.VersionHistoryItem, []byte, error) {
@@ -523,7 +524,7 @@ func (p *replicatorQueueProcessorImpl) processReplication(
 	namespaceID string,
 	workflowID string,
 	runID string,
-	action func(mutableState) (*replicationspb.ReplicationTask, error),
+	action func(workflow.MutableState) (*replicationspb.ReplicationTask, error),
 ) (retReplicationTask *replicationspb.ReplicationTask, retError error) {
 
 	execution := commonpb.WorkflowExecution{
@@ -531,18 +532,18 @@ func (p *replicatorQueueProcessorImpl) processReplication(
 		RunId:      runID,
 	}
 
-	context, release, err := p.historyCache.getOrCreateWorkflowExecution(
+	context, release, err := p.historyCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		execution,
-		callerTypeAPI,
+		workflow.CallerTypeAPI,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { release(retError) }()
 
-	msBuilder, err := context.loadWorkflowExecution()
+	msBuilder, err := context.LoadWorkflowExecution()
 	switch err.(type) {
 	case nil:
 		if !processTaskIfClosed && !msBuilder.IsWorkflowExecutionRunning() {

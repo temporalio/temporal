@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -59,9 +60,9 @@ type (
 		hasBufferedEvents               bool
 		workflowTaskFailedCause         *workflowTaskFailedCause
 		activityNotStartedCancelled     bool
-		continueAsNewBuilder            mutableState
+		continueAsNewBuilder            workflow.MutableState
 		stopProcessing                  bool // should stop processing any more commands
-		mutableState                    mutableState
+		mutableState                    workflow.MutableState
 		initiatedChildExecutionsInBatch map[string]struct{} // Set of initiated child executions in the workflow task
 
 		// validation
@@ -83,7 +84,7 @@ type (
 func newWorkflowTaskHandler(
 	identity string,
 	workflowTaskCompletedID int64,
-	mutableState mutableState,
+	mutableState workflow.MutableState,
 	attrValidator *commandAttrValidator,
 	sizeLimitChecker *workflowSizeChecker,
 	logger log.Logger,

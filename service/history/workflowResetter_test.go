@@ -38,6 +38,9 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -98,20 +101,20 @@ func (s *workflowResetterSuite) SetupTest() {
 				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
-		NewDynamicConfigForTest(),
+		tests.NewDynamicConfig(),
 	)
 	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
 
 	s.workflowResetter = newWorkflowResetter(
 		s.mockShard,
-		newHistoryCache(s.mockShard),
+		workflow.NewCache(s.mockShard),
 		s.logger,
 	)
 	s.workflowResetter.newStateRebuilder = func() nDCStateRebuilder {
 		return s.mockStateRebuilder
 	}
 
-	s.namespaceID = testNamespaceID
+	s.namespaceID = tests.NamespaceID
 	s.workflowID = "some random workflow ID"
 	s.baseRunID = uuid.New()
 	s.currentRunID = uuid.New()
@@ -125,23 +128,23 @@ func (s *workflowResetterSuite) TearDownTest() {
 func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	currentWorkflow := NewMocknDCWorkflow(s.controller)
 	currentReleaseCalled := false
-	currentContext := NewMockworkflowExecutionContext(s.controller)
-	currentMutableState := NewMockmutableState(s.controller)
-	var currentReleaseFn releaseWorkflowExecutionFunc = func(error) { currentReleaseCalled = true }
+	currentContext := workflow.NewMockContext(s.controller)
+	currentMutableState := workflow.NewMockMutableState(s.controller)
+	var currentReleaseFn workflow.ReleaseCacheFunc = func(error) { currentReleaseCalled = true }
 	currentWorkflow.EXPECT().getContext().Return(currentContext).AnyTimes()
 	currentWorkflow.EXPECT().getMutableState().Return(currentMutableState).AnyTimes()
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	resetWorkflow := NewMocknDCWorkflow(s.controller)
 	resetReleaseCalled := false
-	resetContext := NewMockworkflowExecutionContext(s.controller)
-	resetMutableState := NewMockmutableState(s.controller)
-	var targetReleaseFn releaseWorkflowExecutionFunc = func(error) { resetReleaseCalled = true }
+	resetContext := workflow.NewMockContext(s.controller)
+	resetMutableState := workflow.NewMockMutableState(s.controller)
+	var targetReleaseFn workflow.ReleaseCacheFunc = func(error) { resetReleaseCalled = true }
 	resetWorkflow.EXPECT().getContext().Return(resetContext).AnyTimes()
 	resetWorkflow.EXPECT().getMutableState().Return(resetMutableState).AnyTimes()
 	resetWorkflow.EXPECT().getReleaseFn().Return(targetReleaseFn).AnyTimes()
 
-	currentContext.EXPECT().updateWorkflowExecutionWithNewAsActive(
+	currentContext.EXPECT().UpdateWorkflowExecutionWithNewAsActive(
 		gomock.Any(),
 		resetContext,
 		resetMutableState,
@@ -159,9 +162,9 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 
 	currentWorkflow := NewMocknDCWorkflow(s.controller)
 	currentReleaseCalled := false
-	currentContext := NewMockworkflowExecutionContext(s.controller)
-	currentMutableState := NewMockmutableState(s.controller)
-	var currentReleaseFn releaseWorkflowExecutionFunc = func(error) { currentReleaseCalled = true }
+	currentContext := workflow.NewMockContext(s.controller)
+	currentMutableState := workflow.NewMockMutableState(s.controller)
+	var currentReleaseFn workflow.ReleaseCacheFunc = func(error) { currentReleaseCalled = true }
 	currentWorkflow.EXPECT().getContext().Return(currentContext).AnyTimes()
 	currentWorkflow.EXPECT().getMutableState().Return(currentMutableState).AnyTimes()
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
@@ -173,9 +176,9 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 
 	resetWorkflow := NewMocknDCWorkflow(s.controller)
 	resetReleaseCalled := false
-	resetContext := NewMockworkflowExecutionContext(s.controller)
-	resetMutableState := NewMockmutableState(s.controller)
-	var targetReleaseFn releaseWorkflowExecutionFunc = func(error) { resetReleaseCalled = true }
+	resetContext := workflow.NewMockContext(s.controller)
+	resetMutableState := workflow.NewMockMutableState(s.controller)
+	var targetReleaseFn workflow.ReleaseCacheFunc = func(error) { resetReleaseCalled = true }
 	resetWorkflow.EXPECT().getContext().Return(resetContext).AnyTimes()
 	resetWorkflow.EXPECT().getMutableState().Return(resetMutableState).AnyTimes()
 	resetWorkflow.EXPECT().getReleaseFn().Return(targetReleaseFn).AnyTimes()
@@ -193,10 +196,10 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	resetEventsSize := int64(4321)
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
 		gomock.Any(),
-		transactionPolicyActive,
+		workflow.TransactionPolicyActive,
 	).Return(resetSnapshot, resetEventsSeq, nil)
-	resetContext.EXPECT().persistNonFirstWorkflowEvents(resetEventsSeq[0]).Return(resetEventsSize, nil)
-	resetContext.EXPECT().createWorkflowExecution(
+	resetContext.EXPECT().PersistNonFirstWorkflowEvents(resetEventsSeq[0]).Return(resetEventsSize, nil)
+	resetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
 		persistence.CreateWorkflowModeContinueAsNew,
 		s.currentRunID,
@@ -223,7 +226,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 	resetBranchToken := []byte("some random reset branch token")
 	resetRequestID := uuid.New()
 	resetHistorySize := int64(4411)
-	resetMutableState := NewMockmutableState(s.controller)
+	resetMutableState := workflow.NewMockMutableState(s.controller)
 
 	shardID := s.mockShard.GetShardID()
 	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
@@ -265,7 +268,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		resetRequestID,
 	)
 	s.NoError(err)
-	s.Equal(resetHistorySize, resetWorkflow.getContext().getHistorySize())
+	s.Equal(resetHistorySize, resetWorkflow.getContext().GetHistorySize())
 	s.Equal(resetMutableState, resetWorkflow.getMutableState())
 }
 
@@ -276,7 +279,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_NoWorkflowTask() {
 	resetRunID := uuid.New()
 	resetReason := "some random reset reason"
 
-	mutableState := NewMockmutableState(s.controller)
+	mutableState := workflow.NewMockMutableState(s.controller)
 	mutableState.EXPECT().GetPendingWorkflowTask().Return(nil, false).AnyTimes()
 
 	err := s.workflowResetter.failWorkflowTask(
@@ -297,8 +300,8 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 	resetRunID := uuid.New()
 	resetReason := "some random reset reason"
 
-	mutableState := NewMockmutableState(s.controller)
-	workflowTaskSchedule := &workflowTaskInfo{
+	mutableState := workflow.NewMockMutableState(s.controller)
+	workflowTaskSchedule := &workflow.WorkflowTaskInfo{
 		ScheduleID: baseRebuildLastEventID - 12,
 		StartedID:  common.EmptyEventID,
 		RequestID:  uuid.New(),
@@ -307,7 +310,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
 	}
-	workflowTaskStart := &workflowTaskInfo{
+	workflowTaskStart := &workflow.WorkflowTaskInfo{
 		ScheduleID: workflowTaskSchedule.ScheduleID,
 		StartedID:  workflowTaskSchedule.ScheduleID + 1,
 		RequestID:  workflowTaskSchedule.RequestID,
@@ -318,14 +321,14 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 		workflowTaskSchedule.ScheduleID,
 		workflowTaskSchedule.RequestID,
 		workflowTaskSchedule.TaskQueue,
-		identityHistoryService,
+		consts.IdentityHistoryService,
 	).Return(&historypb.HistoryEvent{}, workflowTaskStart, nil)
 	mutableState.EXPECT().AddWorkflowTaskFailedEvent(
 		workflowTaskStart.ScheduleID,
 		workflowTaskStart.StartedID,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		failure.NewResetWorkflowFailure(resetReason, nil),
-		identityHistoryService,
+		consts.IdentityHistoryService,
 		"",
 		baseRunID,
 		resetRunID,
@@ -350,8 +353,8 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskStarted() {
 	resetRunID := uuid.New()
 	resetReason := "some random reset reason"
 
-	mutableState := NewMockmutableState(s.controller)
-	workflowTask := &workflowTaskInfo{
+	mutableState := workflow.NewMockMutableState(s.controller)
+	workflowTask := &workflow.WorkflowTaskInfo{
 		ScheduleID: baseRebuildLastEventID - 12,
 		StartedID:  baseRebuildLastEventID - 10,
 		RequestID:  uuid.New(),
@@ -366,7 +369,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskStarted() {
 		workflowTask.StartedID,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		failure.NewResetWorkflowFailure(resetReason, nil),
-		identityHistoryService,
+		consts.IdentityHistoryService,
 		"",
 		baseRunID,
 		resetRunID,
@@ -388,7 +391,7 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 	now := time.Now().UTC()
 	terminateReason := "some random termination reason"
 
-	mutableState := NewMockmutableState(s.controller)
+	mutableState := workflow.NewMockMutableState(s.controller)
 
 	activity1 := &persistencespb.ActivityInfo{
 		Version:              12,
@@ -450,7 +453,7 @@ func (s *workflowResetterSuite) TestGenerateBranchToken() {
 }
 
 func (s *workflowResetterSuite) TestTerminateWorkflow() {
-	workflowTask := &workflowTaskInfo{
+	workflowTask := &workflow.WorkflowTaskInfo{
 		Version:    123,
 		ScheduleID: 1234,
 		StartedID:  5678,
@@ -458,7 +461,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 	nextEventID := int64(666)
 	terminateReason := "some random terminate reason"
 
-	mutableState := NewMockmutableState(s.controller)
+	mutableState := workflow.NewMockMutableState(s.controller)
 
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
 	mutableState.EXPECT().GetInFlightWorkflowTask().Return(workflowTask, true)
@@ -467,7 +470,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		workflowTask.StartedID,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FORCE_CLOSE_COMMAND,
 		nil,
-		identityHistoryService,
+		consts.IdentityHistoryService,
 		"",
 		"",
 		"",
@@ -478,7 +481,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		nextEventID,
 		terminateReason,
 		nil,
-		identityHistoryService,
+		consts.IdentityHistoryService,
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	err := s.workflowResetter.terminateWorkflow(mutableState, terminateReason)
@@ -572,17 +575,17 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 		NextPageToken: nil,
 	}, nil)
 
-	resetContext := NewMockworkflowExecutionContext(s.controller)
-	resetContext.EXPECT().lock(gomock.Any(), callerTypeAPI).Return(nil)
-	resetContext.EXPECT().unlock(callerTypeAPI)
-	resetMutableState := NewMockmutableState(s.controller)
-	resetContext.EXPECT().loadWorkflowExecution().Return(resetMutableState, nil)
+	resetContext := workflow.NewMockContext(s.controller)
+	resetContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
+	resetContext.EXPECT().Unlock(workflow.CallerTypeAPI)
+	resetMutableState := workflow.NewMockMutableState(s.controller)
+	resetContext.EXPECT().LoadWorkflowExecution().Return(resetMutableState, nil)
 	resetMutableState.EXPECT().GetNextEventID().Return(newNextEventID).AnyTimes()
 	resetMutableState.EXPECT().GetCurrentBranchToken().Return(newBranchToken, nil).AnyTimes()
 	resetContextCacheKey := definition.NewWorkflowIdentifier(s.namespaceID, s.workflowID, newRunID)
 	_, _ = s.workflowResetter.historyCache.PutIfNotExist(resetContextCacheKey, resetContext)
 
-	mutableState := NewMockmutableState(s.controller)
+	mutableState := workflow.NewMockMutableState(s.controller)
 
 	err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
 		ctx,
@@ -644,7 +647,7 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 		NextPageToken: nil,
 	}, nil)
 
-	mutableState := NewMockmutableState(s.controller)
+	mutableState := workflow.NewMockMutableState(s.controller)
 
 	nextRunID, err := s.workflowResetter.reapplyWorkflowEvents(
 		mutableState,
@@ -683,7 +686,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 	}
 	events := []*historypb.HistoryEvent{event1, event2, event3}
 
-	mutableState := NewMockmutableState(s.controller)
+	mutableState := workflow.NewMockMutableState(s.controller)
 
 	for _, event := range events {
 		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
@@ -730,8 +733,8 @@ func (s *workflowResetterSuite) TestPagination() {
 		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
 	}
-	history1 := []*historypb.History{{[]*historypb.HistoryEvent{event1, event2, event3}}}
-	history2 := []*historypb.History{{[]*historypb.HistoryEvent{event4, event5}}}
+	history1 := []*historypb.History{{Events: []*historypb.HistoryEvent{event1, event2, event3}}}
+	history2 := []*historypb.History{{Events: []*historypb.HistoryEvent{event4, event5}}}
 	history := append(history1, history2...)
 	pageToken := []byte("some random token")
 

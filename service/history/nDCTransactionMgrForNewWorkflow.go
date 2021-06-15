@@ -35,6 +35,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -157,7 +158,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.getMutableState().CloseTransactionAsSnapshot(
 		now,
-		transactionPolicyPassive,
+		workflow.TransactionPolicyPassive,
 	)
 	if err != nil {
 		return err
@@ -183,7 +184,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 		if err != nil {
 			return err
 		}
-		return targetWorkflow.getContext().createWorkflowExecution(
+		return targetWorkflow.getContext().CreateWorkflowExecution(
 			now,
 			createMode,
 			prevRunID,
@@ -198,7 +199,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 	createMode := persistence.CreateWorkflowModeBrandNew
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
-	return targetWorkflow.getContext().createWorkflowExecution(
+	return targetWorkflow.getContext().CreateWorkflowExecution(
 		now,
 		createMode,
 		prevRunID,
@@ -222,11 +223,11 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	if err != nil {
 		return err
 	}
-	if targetWorkflowPolicy != transactionPolicyPassive {
+	if targetWorkflowPolicy != workflow.TransactionPolicyPassive {
 		return serviceerror.NewInternal("nDCTransactionMgrForNewWorkflow createAsZombie encounter target workflow policy not being passive")
 	}
 
-	// release lock on current workflow, since current cluster maybe the active cluster
+	// release Lock on current workflow, since current cluster maybe the active cluster
 	// and events maybe reapplied to current workflow
 	currentWorkflow.getReleaseFn()(nil)
 	currentWorkflow = nil
@@ -250,7 +251,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		return err
 	}
 
-	if err := targetWorkflow.getContext().reapplyEvents(
+	if err := targetWorkflow.getContext().ReapplyEvents(
 		targetWorkflowEventsSeq,
 	); err != nil {
 		return err
@@ -259,7 +260,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	createMode := persistence.CreateWorkflowModeZombie
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
-	err = targetWorkflow.getContext().createWorkflowExecution(
+	err = targetWorkflow.getContext().CreateWorkflowExecution(
 		now,
 		createMode,
 		prevRunID,
@@ -296,13 +297,13 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 		return err
 	}
 
-	return currentWorkflow.getContext().updateWorkflowExecutionWithNew(
+	return currentWorkflow.getContext().UpdateWorkflowExecutionWithNew(
 		now,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		targetWorkflow.getContext(),
 		targetWorkflow.getMutableState(),
 		currentWorkflowPolicy,
-		transactionPolicyPassive.ptr(),
+		workflow.TransactionPolicyPassive.Ptr(),
 	)
 }
 
@@ -374,7 +375,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) persistNewNDCWorkflowEvents(
 
 	firstEventID := targetNewWorkflowEvents.Events[0].EventId
 	if firstEventID == common.FirstEventID {
-		return targetNewWorkflow.getContext().persistFirstWorkflowEvents(targetNewWorkflowEvents)
+		return targetNewWorkflow.getContext().PersistFirstWorkflowEvents(targetNewWorkflowEvents)
 	}
-	return targetNewWorkflow.getContext().persistNonFirstWorkflowEvents(targetNewWorkflowEvents)
+	return targetNewWorkflow.getContext().PersistNonFirstWorkflowEvents(targetNewWorkflowEvents)
 }

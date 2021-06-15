@@ -38,7 +38,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/tests"
 )
 
 type (
@@ -79,7 +79,8 @@ func (s *contextSuite) SetupTest() {
 				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
-		configs.NewDynamicConfigForTest())
+		tests.NewDynamicConfig(),
+	)
 	s.shardContext = shardContext
 
 	s.mockResource = shardContext.Resource

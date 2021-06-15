@@ -43,7 +43,9 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -122,20 +124,20 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 	timerTask *persistencespb.TimerTaskInfo,
 ) error {
 
-	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
+	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		timerSequence := t.getTimerSequence(mutableState)
 
 	Loop:
-		for _, timerSequenceID := range timerSequence.loadAndSortUserTimers() {
-			_, ok := mutableState.GetUserTimerInfoByEventID(timerSequenceID.eventID)
+		for _, timerSequenceID := range timerSequence.LoadAndSortUserTimers() {
+			_, ok := mutableState.GetUserTimerInfoByEventID(timerSequenceID.EventID)
 			if !ok {
-				errString := fmt.Sprintf("failed to find in user timer event ID: %v", timerSequenceID.eventID)
+				errString := fmt.Sprintf("failed to find in user timer event ID: %v", timerSequenceID.EventID)
 				t.logger.Error(errString)
 				return nil, serviceerror.NewInternal(errString)
 			}
 
-			if isExpired := timerSequence.isExpired(
+			if isExpired := timerSequence.IsExpired(
 				timestamp.TimeValue(timerTask.VisibilityTime),
 				timerSequenceID,
 			); isExpired {
@@ -179,21 +181,21 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 	// the overall solution is to attempt to generate a new activity timer task whenever the
 	// task passed in is safe to be throw away.
 
-	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
+	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		timerSequence := t.getTimerSequence(mutableState)
 		updateMutableState := false
 
 	Loop:
-		for _, timerSequenceID := range timerSequence.loadAndSortActivityTimers() {
-			_, ok := mutableState.GetActivityInfo(timerSequenceID.eventID)
+		for _, timerSequenceID := range timerSequence.LoadAndSortActivityTimers() {
+			_, ok := mutableState.GetActivityInfo(timerSequenceID.EventID)
 			if !ok {
-				errString := fmt.Sprintf("failed to find in memory activity timer: %v", timerSequenceID.eventID)
+				errString := fmt.Sprintf("failed to find in memory activity timer: %v", timerSequenceID.EventID)
 				t.logger.Error(errString)
 				return nil, serviceerror.NewInternal(errString)
 			}
 
-			if isExpired := timerSequence.isExpired(
+			if isExpired := timerSequence.IsExpired(
 				timestamp.TimeValue(timerTask.VisibilityTime),
 				timerSequenceID,
 			); isExpired {
@@ -208,7 +210,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// see comments at the beginning of this function.
 		// NOTE: this is the only place in the standby logic where mutable state can be updated
 
-		// need to clear the activity heartbeat timer task marks
+		// need to Clear the activity heartbeat timer task marks
 		lastWriteVersion, err := mutableState.GetLastWriteVersion()
 		if err != nil {
 			return nil, err
@@ -222,7 +224,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		activityInfo, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(timerTask.GetEventId())
 		goTS := timestamp.TimeValue(timerTask.VisibilityTime)
 		if isHeartBeatTask && ok && (heartbeatTimeoutVis.Before(goTS) || heartbeatTimeoutVis.Equal(goTS)) {
-			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ timerTaskStatusCreatedHeartbeat
+			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ workflow.TimerTaskStatusCreatedHeartbeat
 			if err := mutableState.UpdateActivity(activityInfo); err != nil {
 				return nil, err
 			}
@@ -230,7 +232,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		}
 
 		// passive logic need to explicitly call create timer
-		modified, err := timerSequence.createNextActivityTimer()
+		modified, err := timerSequence.CreateNextActivityTimer()
 		if err != nil {
 			return nil, err
 		}
@@ -248,7 +250,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			return nil, err
 		}
 
-		err = context.updateWorkflowExecutionAsPassive(now)
+		err = context.UpdateWorkflowExecutionAsPassive(now)
 		return nil, err
 	}
 
@@ -277,7 +279,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 		return nil
 	}
 
-	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
+	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		workflowTask, isPending := mutableState.GetWorkflowTaskInfo(timerTask.GetEventId())
 		if !isPending {
@@ -310,7 +312,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 	timerTask *persistencespb.TimerTaskInfo,
 ) error {
 
-	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
+	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		if mutableState.HasProcessedOrPendingWorkflowTask() {
 			// if there is one workflow task already been processed
@@ -349,7 +351,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 	timerTask *persistencespb.TimerTaskInfo,
 ) error {
 
-	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
+	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		// we do not need to notify new timer to base, since if there is no new event being replicated
 		// checking again if the timer can be completed is meaningless
@@ -387,13 +389,13 @@ func (t *timerQueueStandbyTaskExecutor) getStandbyClusterTime() time.Time {
 }
 
 func (t *timerQueueStandbyTaskExecutor) getTimerSequence(
-	mutableState mutableState,
-) timerSequence {
+	mutableState workflow.MutableState,
+) workflow.TimerSequence {
 
 	timeSource := clock.NewEventTimeSource()
 	now := t.getStandbyClusterTime()
 	timeSource.Update(now)
-	return newTimerSequence(timeSource, mutableState)
+	return workflow.NewTimerSequence(timeSource, mutableState)
 }
 
 func (t *timerQueueStandbyTaskExecutor) processTimer(
@@ -405,17 +407,17 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(timerTask)
-	context, release, err := t.cache.getOrCreateWorkflowExecution(
+	context, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		execution,
-		callerTypeTask,
+		workflow.CallerTypeTask,
 	)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		if retError == ErrTaskRetry {
+		if retError == consts.ErrTaskRetry {
 			release(nil)
 		} else {
 			release(retError)
@@ -440,7 +442,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		return err
 	}
 
-	// NOTE: do not access anything related mutable state after this lock release
+	// NOTE: do not access anything related mutable state after this Lock release
 	release(nil)
 	return postActionFn(timerTask, historyResendInfo, t.logger)
 }
@@ -502,7 +504,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	}
 
 	// return error so task processing logic will retry
-	return ErrTaskRetry
+	return consts.ErrTaskRetry
 }
 
 func (t *timerQueueStandbyTaskExecutor) getCurrentTime() time.Time {

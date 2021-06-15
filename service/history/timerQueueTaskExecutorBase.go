@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 
 	"go.temporal.io/server/service/worker/archiver"
 )
@@ -48,7 +49,7 @@ type (
 	timerQueueTaskExecutorBase struct {
 		shard                    shard.Context
 		historyService           *historyEngineImpl
-		cache                    *historyCache
+		cache                    *workflow.Cache
 		logger                   log.Logger
 		metricsClient            metrics.Client
 		config                   *configs.Config
@@ -81,11 +82,11 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		execution,
-		callerTypeTask,
+		workflow.CallerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -129,8 +130,8 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 
 func (t *timerQueueTaskExecutorBase) deleteWorkflow(
 	task *persistencespb.TimerTaskInfo,
-	workflowContext workflowExecutionContext,
-	msBuilder mutableState,
+	workflowContext workflow.Context,
+	msBuilder workflow.MutableState,
 ) error {
 
 	if err := t.deleteWorkflowVisibility(task); err != nil {
@@ -149,16 +150,16 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflow(
 		return err
 	}
 
-	// calling clear here to force accesses of mutable state to read database
+	// calling Clear here to force accesses of mutable state to read database
 	// if this is not called then callers will get mutable state even though its been removed from database
-	workflowContext.clear()
+	workflowContext.Clear()
 	return nil
 }
 
 func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 	task *persistencespb.TimerTaskInfo,
-	workflowContext workflowExecutionContext,
-	msBuilder mutableState,
+	workflowContext workflow.Context,
+	msBuilder workflow.MutableState,
 	namespaceCacheEntry *cache.NamespaceCacheEntry,
 ) error {
 	branchToken, err := msBuilder.GetCurrentBranchToken()
@@ -186,7 +187,7 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 		CallerService:        common.HistoryServiceName,
 		AttemptArchiveInline: false, // archive in workflow by default
 	}
-	executionStats, err := workflowContext.loadExecutionStats()
+	executionStats, err := workflowContext.LoadExecutionStats()
 	if err == nil && executionStats.HistorySize < int64(t.config.TimerProcessorHistoryArchivalSizeLimit()) {
 		req.AttemptArchiveInline = true
 	}
@@ -227,9 +228,9 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 			return err
 		}
 	}
-	// calling clear here to force accesses of mutable state to read database
+	// calling Clear here to force accesses of mutable state to read database
 	// if this is not called then callers will get mutable state even though its been removed from database
-	workflowContext.clear()
+	workflowContext.Clear()
 	return nil
 }
 
@@ -244,7 +245,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowExecution(
 			RunID:       task.GetRunId(),
 		})
 	}
-	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	return backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
 func (t *timerQueueTaskExecutorBase) deleteCurrentWorkflowExecution(
@@ -258,12 +259,12 @@ func (t *timerQueueTaskExecutorBase) deleteCurrentWorkflowExecution(
 			RunID:       task.GetRunId(),
 		})
 	}
-	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	return backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
 func (t *timerQueueTaskExecutorBase) deleteWorkflowHistory(
 	task *persistencespb.TimerTaskInfo,
-	msBuilder mutableState,
+	msBuilder workflow.MutableState,
 ) error {
 
 	op := func() error {
@@ -277,7 +278,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowHistory(
 		})
 
 	}
-	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	return backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
 func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
