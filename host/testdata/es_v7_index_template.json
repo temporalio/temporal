@@ -34,7 +34,7 @@
         "type": "date_nanos"
       },
       "ExecutionStatus": {
-        "type": "integer"
+        "type": "keyword"
       },
       "HistoryLength": {
         "type": "long"

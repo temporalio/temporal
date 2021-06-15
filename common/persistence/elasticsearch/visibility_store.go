@@ -204,7 +204,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutions(
 		return nil, err
 	}
 
-	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
+	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 	searchResult, err := s.getSearchResult(request, token, query, true)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutions failed. Error: %v", err))
@@ -225,7 +225,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutions(
 		return nil, err
 	}
 
-	executionStatusQuery := elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
+	executionStatusQuery := elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 	searchResult, err := s.getSearchResult(request, token, executionStatusQuery, false)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutions failed. Error: %v", err))
@@ -247,7 +247,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByType(
 	}
 
 	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(searchattribute.WorkflowType, request.WorkflowTypeName)).
-		Must(elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
+		Must(elastic.NewMatchQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, true)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByType failed. Error: %v", err))
@@ -269,7 +269,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByType(
 	}
 
 	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(searchattribute.WorkflowType, request.WorkflowTypeName)).
-		MustNot(elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
+		MustNot(elastic.NewMatchQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByType failed. Error: %v", err))
@@ -291,7 +291,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 	}
 
 	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(searchattribute.WorkflowID, request.WorkflowID)).
-		Must(elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
+		Must(elastic.NewMatchQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, true)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByWorkflowID failed. Error: %v", err))
@@ -313,7 +313,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 	}
 
 	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(searchattribute.WorkflowID, request.WorkflowID)).
-		MustNot(elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)))
+		MustNot(elastic.NewMatchQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByWorkflowID failed. Error: %v", err))
@@ -334,7 +334,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 		return nil, err
 	}
 
-	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(searchattribute.ExecutionStatus, int32(request.Status)))
+	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(searchattribute.ExecutionStatus, request.Status.String()))
 	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByStatus failed. Error: %v", err))
@@ -351,7 +351,7 @@ func (s *visibilityStore) GetClosedWorkflowExecution(
 	request *persistence.GetClosedWorkflowExecutionRequest) (*persistence.InternalGetClosedWorkflowExecutionResponse, error) {
 
 	matchNamespaceQuery := elastic.NewMatchQuery(searchattribute.NamespaceID, request.NamespaceID)
-	executionStatusQuery := elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	executionStatusQuery := elastic.NewMatchQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String())
 	matchWorkflowIDQuery := elastic.NewMatchQuery(searchattribute.WorkflowID, request.Execution.GetWorkflowId())
 	boolQuery := elastic.NewBoolQuery().Must(matchNamespaceQuery).MustNot(executionStatusQuery).Must(matchWorkflowIDQuery)
 	rid := request.Execution.GetRunId()
@@ -475,17 +475,21 @@ const (
 )
 
 var (
-	timeKeys = map[string]bool{
-		"StartTime":     true,
-		"CloseTime":     true,
-		"ExecutionTime": true,
+	timeKeys = map[string]struct{}{
+		searchattribute.StartTime:     {},
+		searchattribute.CloseTime:     {},
+		searchattribute.ExecutionTime: {},
 	}
-	rangeKeys = map[string]bool{
-		"from":  true,
-		"to":    true,
-		"gt":    true,
-		"lt":    true,
-		"query": true,
+	rangeKeys = map[string]struct{}{
+		"from":  {},
+		"to":    {},
+		"gt":    {},
+		"lt":    {},
+		"query": {},
+	}
+
+	exactMatchKeys = map[string]struct{}{
+		"query": {},
 	}
 )
 
@@ -579,6 +583,9 @@ func getCustomizedDSLFromSQL(sql string, namespaceID string) (*fastjson.Value, e
 	}
 	addNamespaceToQuery(dsl, namespaceID)
 	if err := processAllValuesForKey(dsl, timeKeyFilter, timeProcessFunc); err != nil {
+		return nil, err
+	}
+	if err := processAllValuesForKey(dsl, statusKeyFilter, statusProcessFunc); err != nil {
 		return nil, err
 	}
 	return dsl, nil
@@ -873,7 +880,7 @@ func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityR
 		searchattribute.WorkflowType:      request.WorkflowTypeName,
 		searchattribute.StartTime:         request.StartTimestamp,
 		searchattribute.ExecutionTime:     request.ExecutionTimestamp,
-		searchattribute.ExecutionStatus:   request.Status,
+		searchattribute.ExecutionStatus:   request.Status.String(),
 		searchattribute.TaskQueue:         request.TaskQueue,
 	}
 
@@ -993,15 +1000,11 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
 		case searchattribute.ExecutionStatus:
-			var executionStatus json.Number
-			if executionStatus, isValidType = fieldValue.(json.Number); !isValidType {
+			var executionStatusStr string
+			if executionStatusStr, isValidType = fieldValue.(string); !isValidType {
 				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
-			executionStatusInt64, err := executionStatus.Int64()
-			if err != nil {
-				logNumberParseError(fieldName, executionStatus, err, hit.Id)
-			}
-			record.Status = enumspb.WorkflowExecutionStatus(executionStatusInt64)
+			record.Status = enumspb.WorkflowExecutionStatus(enumspb.WorkflowExecutionStatus_value[executionStatusStr])
 		case searchattribute.HistoryLength:
 			var historyLength json.Number
 			if historyLength, isValidType = fieldValue.(json.Number); !isValidType {
@@ -1040,7 +1043,9 @@ func checkPageSize(request *persistence.ListWorkflowExecutionsRequestV2) {
 	}
 }
 
-func processAllValuesForKey(dsl *fastjson.Value, keyFilter func(k string) bool,
+func processAllValuesForKey(
+	dsl *fastjson.Value,
+	keyFilter func(k string) bool,
 	processFunc func(obj *fastjson.Object, key string, v *fastjson.Value) error,
 ) error {
 	switch dsl.Type() {
@@ -1052,7 +1057,7 @@ func processAllValuesForKey(dsl *fastjson.Value, keyFilter func(k string) bool,
 		}
 	case fastjson.TypeObject:
 		objectVal := dsl.GetObject()
-		keys := []string{}
+		var keys []string
 		objectVal.Visit(func(key []byte, val *fastjson.Value) {
 			keys = append(keys, string(key))
 		})
@@ -1076,19 +1081,48 @@ func processAllValuesForKey(dsl *fastjson.Value, keyFilter func(k string) bool,
 }
 
 func timeKeyFilter(key string) bool {
-	return timeKeys[key]
+	_, ok := timeKeys[key]
+	return ok
 }
 
-func timeProcessFunc(obj *fastjson.Object, key string, value *fastjson.Value) error {
-	return processAllValuesForKey(value, func(key string) bool {
-		return rangeKeys[key]
-	}, func(obj *fastjson.Object, key string, v *fastjson.Value) error {
-		timeStr := string(v.GetStringBytes())
+func timeProcessFunc(_ *fastjson.Object, _ string, value *fastjson.Value) error {
+	return processAllValuesForKey(
+		value,
+		func(key string) bool {
+			_, ok := rangeKeys[key]
+			return ok
+		},
+		func(obj *fastjson.Object, key string, v *fastjson.Value) error {
+			timeStr := string(v.GetStringBytes())
 
-		// To support dates passed as "nanoseconds since epoch".
-		if nanos, err := strconv.ParseInt(timeStr, 10, 64); err == nil {
-			obj.Set(key, fastjson.MustParse(fmt.Sprintf(`"%s"`, time.Unix(0, nanos).UTC().Format(time.RFC3339Nano))))
-		}
-		return nil
-	})
+			// To support dates passed as int64 "nanoseconds since epoch".
+			if nanos, err := strconv.ParseInt(timeStr, 10, 64); err == nil {
+				obj.Set(key, fastjson.MustParse(fmt.Sprintf(`"%s"`, time.Unix(0, nanos).UTC().Format(time.RFC3339Nano))))
+			}
+			return nil
+		})
+}
+
+func statusKeyFilter(key string) bool {
+	return key == searchattribute.ExecutionStatus
+}
+
+func statusProcessFunc(_ *fastjson.Object, _ string, value *fastjson.Value) error {
+	return processAllValuesForKey(
+		value,
+		func(key string) bool {
+			_, ok := exactMatchKeys[key]
+			return ok
+		},
+		func(obj *fastjson.Object, key string, v *fastjson.Value) error {
+			statusStr := string(v.GetStringBytes())
+
+			// To support statuses passed as integers for backward compatibility.
+			// Might be removed one day (added 6/15/21).
+			if statusInt, err := strconv.ParseInt(statusStr, 10, 32); err == nil {
+				statusStr = enumspb.WorkflowExecutionStatus_name[int32(statusInt)]
+				obj.Set(key, fastjson.MustParse(fmt.Sprintf(`"%s"`, statusStr)))
+			}
+			return nil
+		})
 }
