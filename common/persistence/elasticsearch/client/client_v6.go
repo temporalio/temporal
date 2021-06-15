@@ -33,6 +33,7 @@ import (
 
 	elastic6 "github.com/olivere/elastic"
 	"github.com/olivere/elastic/v7"
+	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -159,8 +160,8 @@ func (c *clientV6) RunBulkProcessor(ctx context.Context, p *BulkProcessorParamet
 	return newBulkProcessorV6(esBulkProcessor), convertV6ErrorToV7(err)
 }
 
-func (c *clientV6) PutMapping(ctx context.Context, index string, mapping map[string]string) (bool, error) {
-	body := buildMappingBody(mapping)
+func (c *clientV6) PutMapping(ctx context.Context, index string, mapping map[string]enumspb.IndexedValueType) (bool, error) {
+	body := buildMappingBodyV6(mapping)
 	resp, err := c.esClient.PutMapping().Index(index).Type(docTypeV6).BodyJson(body).Do(ctx)
 	if err != nil {
 		return false, convertV6ErrorToV7(err)
@@ -595,4 +596,36 @@ func getLoggerOptionsV6(logLevel string, logger log.Logger) []elastic6.ClientOpt
 	default:
 		return nil
 	}
+}
+
+func buildMappingBodyV6(mapping map[string]enumspb.IndexedValueType) map[string]interface{} {
+	properties := make(map[string]interface{}, len(mapping))
+	for fieldName, fieldType := range mapping {
+		var typeMap map[string]interface{}
+		switch fieldType {
+		case enumspb.INDEXED_VALUE_TYPE_STRING:
+			typeMap = map[string]interface{}{"type": "text"}
+		case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
+			typeMap = map[string]interface{}{"type": "keyword"}
+		case enumspb.INDEXED_VALUE_TYPE_INT:
+			typeMap = map[string]interface{}{"type": "long"}
+		case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
+			typeMap = map[string]interface{}{
+				"type":           "scaled_float",
+				"scaling_factor": 10000,
+			}
+		case enumspb.INDEXED_VALUE_TYPE_BOOL:
+			typeMap = map[string]interface{}{"type": "boolean"}
+		case enumspb.INDEXED_VALUE_TYPE_DATETIME:
+			typeMap = map[string]interface{}{"type": "date"}
+		}
+		if typeMap != nil {
+			properties[fieldName] = typeMap
+		}
+	}
+
+	body := map[string]interface{}{
+		"properties": properties,
+	}
+	return body
 }
