@@ -315,7 +315,7 @@ func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueu
 		result = p.NewQueuePersistenceMetricsClient(result, f.metricsClient, f.logger)
 	}
 
-	return p.NewNamespaceReplicationQueue(result, f.clusterName, f.metricsClient, f.logger), nil
+	return p.NewNamespaceReplicationQueue(result, f.clusterName, f.metricsClient, f.logger)
 }
 
 // Close closes this factory

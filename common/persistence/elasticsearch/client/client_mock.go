@@ -34,6 +34,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v7 "github.com/olivere/elastic/v7"
+	v1 "go.temporal.io/api/enums/v1"
 )
 
 // MockClient is a mock of Client interface.
@@ -74,20 +75,6 @@ func (mr *MockClientMockRecorder) Count(ctx, index, query interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockClient)(nil).Count), ctx, index, query)
 }
 
-// GetDateFieldType mocks base method.
-func (m *MockClient) GetDateFieldType() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDateFieldType")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// GetDateFieldType indicates an expected call of GetDateFieldType.
-func (mr *MockClientMockRecorder) GetDateFieldType() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDateFieldType", reflect.TypeOf((*MockClient)(nil).GetDateFieldType))
-}
-
 // GetMapping mocks base method.
 func (m *MockClient) GetMapping(ctx context.Context, index string) (map[string]string, error) {
 	m.ctrl.T.Helper()
@@ -104,7 +91,7 @@ func (mr *MockClientMockRecorder) GetMapping(ctx, index interface{}) *gomock.Cal
 }
 
 // PutMapping mocks base method.
-func (m *MockClient) PutMapping(ctx context.Context, index string, mapping map[string]string) (bool, error) {
+func (m *MockClient) PutMapping(ctx context.Context, index string, mapping map[string]v1.IndexedValueType) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PutMapping", ctx, index, mapping)
 	ret0, _ := ret[0].(bool)
@@ -277,20 +264,6 @@ func (mr *MockCLIClientMockRecorder) Count(ctx, index, query interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockCLIClient)(nil).Count), ctx, index, query)
 }
 
-// GetDateFieldType mocks base method.
-func (m *MockCLIClient) GetDateFieldType() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDateFieldType")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// GetDateFieldType indicates an expected call of GetDateFieldType.
-func (mr *MockCLIClientMockRecorder) GetDateFieldType() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDateFieldType", reflect.TypeOf((*MockCLIClient)(nil).GetDateFieldType))
-}
-
 // GetMapping mocks base method.
 func (m *MockCLIClient) GetMapping(ctx context.Context, index string) (map[string]string, error) {
 	m.ctrl.T.Helper()
@@ -307,7 +280,7 @@ func (mr *MockCLIClientMockRecorder) GetMapping(ctx, index interface{}) *gomock.
 }
 
 // PutMapping mocks base method.
-func (m *MockCLIClient) PutMapping(ctx context.Context, index string, mapping map[string]string) (bool, error) {
+func (m *MockCLIClient) PutMapping(ctx context.Context, index string, mapping map[string]v1.IndexedValueType) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PutMapping", ctx, index, mapping)
 	ret0, _ := ret[0].(bool)

@@ -1306,6 +1306,10 @@ func (p *historyV2PersistenceClient) updateErrorMetric(scope int, err error) {
 	}
 }
 
+func (p *queuePersistenceClient) Init(blob *commonpb.DataBlob) error {
+	return p.persistence.Init(blob)
+}
+
 func (p *queuePersistenceClient) EnqueueMessage(blob commonpb.DataBlob) error {
 	p.metricClient.IncCounter(metrics.PersistenceEnqueueMessageScope, metrics.PersistenceRequests)
 
@@ -1334,11 +1338,11 @@ func (p *queuePersistenceClient) ReadMessages(lastMessageID int64, maxCount int)
 	return result, err
 }
 
-func (p *queuePersistenceClient) UpdateAckLevel(messageID int64, clusterName string) error {
+func (p *queuePersistenceClient) UpdateAckLevel(metadata *InternalQueueMetadata) error {
 	p.metricClient.IncCounter(metrics.PersistenceUpdateAckLevelScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateAckLevelScope, metrics.PersistenceLatency)
-	err := p.persistence.UpdateAckLevel(messageID, clusterName)
+	err := p.persistence.UpdateAckLevel(metadata)
 	sw.Stop()
 
 	if err != nil {
@@ -1348,7 +1352,7 @@ func (p *queuePersistenceClient) UpdateAckLevel(messageID int64, clusterName str
 	return err
 }
 
-func (p *queuePersistenceClient) GetAckLevels() (map[string]int64, error) {
+func (p *queuePersistenceClient) GetAckLevels() (*InternalQueueMetadata, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetAckLevelScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceGetAckLevelScope, metrics.PersistenceLatency)
@@ -1432,11 +1436,11 @@ func (p *queuePersistenceClient) RangeDeleteMessagesFromDLQ(firstMessageID int64
 	return err
 }
 
-func (p *queuePersistenceClient) UpdateDLQAckLevel(messageID int64, clusterName string) error {
+func (p *queuePersistenceClient) UpdateDLQAckLevel(metadata *InternalQueueMetadata) error {
 	p.metricClient.IncCounter(metrics.PersistenceUpdateDLQAckLevelScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateDLQAckLevelScope, metrics.PersistenceLatency)
-	err := p.persistence.UpdateDLQAckLevel(messageID, clusterName)
+	err := p.persistence.UpdateDLQAckLevel(metadata)
 	sw.Stop()
 
 	if err != nil {
@@ -1446,7 +1450,7 @@ func (p *queuePersistenceClient) UpdateDLQAckLevel(messageID int64, clusterName 
 	return err
 }
 
-func (p *queuePersistenceClient) GetDLQAckLevels() (map[string]int64, error) {
+func (p *queuePersistenceClient) GetDLQAckLevels() (*InternalQueueMetadata, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetDLQAckLevelScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceGetDLQAckLevelScope, metrics.PersistenceLatency)

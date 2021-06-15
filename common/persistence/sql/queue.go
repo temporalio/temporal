@@ -31,11 +31,8 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
@@ -60,17 +57,19 @@ func newQueue(
 		queueType: queueType,
 		logger:    logger,
 	}
-
-	ctx, cancel := newVisibilityContext()
-	defer cancel()
-	if err := queue.initializeQueueMetadata(ctx); err != nil {
-		return nil, err
-	}
-	if err := queue.initializeDLQMetadata(ctx); err != nil {
-		return nil, err
-	}
-
 	return queue, nil
+}
+
+func (q *sqlQueue) Init(blob *commonpb.DataBlob) error {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	if err := q.initializeQueueMetadata(ctx, blob); err != nil {
+		return err
+	}
+	if err := q.initializeDLQMetadata(ctx, blob); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (q *sqlQueue) EnqueueMessage(
@@ -145,48 +144,15 @@ func (q *sqlQueue) DeleteMessagesBefore(
 	return nil
 }
 
-func (q *sqlQueue) UpdateAckLevel(
-	messageID int64,
-	clusterName string,
-) error {
+func (q *sqlQueue) UpdateAckLevel(metadata *persistence.InternalQueueMetadata) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	err := q.txExecute(ctx, "UpdateAckLevel", func(tx sqlplugin.Tx) error {
-		row, err := tx.LockQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
-			QueueType: q.queueType,
-		})
-		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err))
-		}
-
-		queueMetadata, err := serialization.QueueMetadataFromBlob(row.Data, row.DataEncoding)
-		if err != nil {
-			return err
-		}
-		if queueMetadata.ClusterAckLevels == nil {
-			queueMetadata.ClusterAckLevels = make(map[string]int64)
-		}
-
-		// Ignore possibly delayed message
-		if ack, ok := queueMetadata.ClusterAckLevels[clusterName]; ok && ack > messageID {
-			return nil
-		}
-
-		// TODO remove this block in 1.12.x
-		delete(queueMetadata.ClusterAckLevels, "")
-		// TODO remove this block in 1.12.x
-
-		queueMetadata.ClusterAckLevels[clusterName] = messageID
-
-		blob, err := serialization.QueueMetadataToBlob(queueMetadata)
-		if err != nil {
-			return err
-		}
-
 		result, err := tx.UpdateQueueMetadata(ctx, &sqlplugin.QueueMetadataRow{
 			QueueType:    q.queueType,
-			Data:         blob.Data,
-			DataEncoding: blob.EncodingType.String(),
+			Data:         metadata.Blob.Data,
+			DataEncoding: metadata.Blob.EncodingType.String(),
+			Version:      metadata.Version,
 		})
 		if err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err))
@@ -196,7 +162,7 @@ func (q *sqlQueue) UpdateAckLevel(
 			return fmt.Errorf("rowsAffected returned error for queue metadata %v: %v", q.queueType, err)
 		}
 		if rowsAffected != 1 {
-			return fmt.Errorf("rowsAffected returned %v queue metadata instead of one", rowsAffected)
+			return &persistence.ConditionFailedError{Msg: "UpdateAckLevel operation encounter concurrent write."}
 		}
 		return nil
 	})
@@ -207,7 +173,7 @@ func (q *sqlQueue) UpdateAckLevel(
 	return nil
 }
 
-func (q *sqlQueue) GetAckLevels() (map[string]int64, error) {
+func (q *sqlQueue) GetAckLevels() (*persistence.InternalQueueMetadata, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	row, err := q.db.SelectFromQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
@@ -217,16 +183,10 @@ func (q *sqlQueue) GetAckLevels() (map[string]int64, error) {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetAckLevels operation failed. Error %v", err))
 	}
 
-	queueMetadata, err := serialization.QueueMetadataFromBlob(row.Data, row.DataEncoding)
-	if err != nil {
-		return nil, err
-	}
-
-	clusterAckLevels := queueMetadata.ClusterAckLevels
-	if clusterAckLevels == nil {
-		clusterAckLevels = make(map[string]int64)
-	}
-	return clusterAckLevels, nil
+	return &persistence.InternalQueueMetadata{
+		Blob:    persistence.NewDataBlob(row.Data, row.DataEncoding),
+		Version: row.Version,
+	}, nil
 }
 
 func (q *sqlQueue) EnqueueMessageToDLQ(
@@ -335,48 +295,15 @@ func (q *sqlQueue) RangeDeleteMessagesFromDLQ(
 	return nil
 }
 
-func (q *sqlQueue) UpdateDLQAckLevel(
-	messageID int64,
-	clusterName string,
-) error {
+func (q *sqlQueue) UpdateDLQAckLevel(metadata *persistence.InternalQueueMetadata) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	err := q.txExecute(ctx, "UpdateDLQAckLevel", func(tx sqlplugin.Tx) error {
-		row, err := tx.LockQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
-			QueueType: q.getDLQTypeFromQueueType(),
-		})
-		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err))
-		}
-
-		queueMetadata, err := serialization.QueueMetadataFromBlob(row.Data, row.DataEncoding)
-		if err != nil {
-			return err
-		}
-		if queueMetadata.ClusterAckLevels == nil {
-			queueMetadata.ClusterAckLevels = make(map[string]int64)
-		}
-
-		// Ignore possibly delayed message
-		if ack, ok := queueMetadata.ClusterAckLevels[clusterName]; ok && ack > messageID {
-			return nil
-		}
-
-		// TODO remove this block in 1.12.x
-		delete(queueMetadata.ClusterAckLevels, "")
-		// TODO remove this block in 1.12.x
-
-		queueMetadata.ClusterAckLevels[clusterName] = messageID
-
-		blob, err := serialization.QueueMetadataToBlob(queueMetadata)
-		if err != nil {
-			return err
-		}
 
 		result, err := tx.UpdateQueueMetadata(ctx, &sqlplugin.QueueMetadataRow{
 			QueueType:    q.getDLQTypeFromQueueType(),
-			Data:         blob.Data,
-			DataEncoding: blob.EncodingType.String(),
+			Data:         metadata.Blob.Data,
+			DataEncoding: metadata.Blob.EncodingType.String(),
 		})
 		if err != nil {
 			return serviceerror.NewInternal(fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err))
@@ -397,7 +324,7 @@ func (q *sqlQueue) UpdateDLQAckLevel(
 	return nil
 }
 
-func (q *sqlQueue) GetDLQAckLevels() (map[string]int64, error) {
+func (q *sqlQueue) GetDLQAckLevels() (*persistence.InternalQueueMetadata, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	row, err := q.db.SelectFromQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
@@ -407,16 +334,10 @@ func (q *sqlQueue) GetDLQAckLevels() (map[string]int64, error) {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetDLQAckLevels operation failed. Error %v", err))
 	}
 
-	queueMetadata, err := serialization.QueueMetadataFromBlob(row.Data, row.DataEncoding)
-	if err != nil {
-		return nil, err
-	}
-
-	clusterAckLevels := queueMetadata.ClusterAckLevels
-	if clusterAckLevels == nil {
-		clusterAckLevels = make(map[string]int64)
-	}
-	return clusterAckLevels, nil
+	return &persistence.InternalQueueMetadata{
+		Blob:    persistence.NewDataBlob(row.Data, row.DataEncoding),
+		Version: row.Version,
+	}, nil
 }
 
 func (q *sqlQueue) getDLQTypeFromQueueType() persistence.QueueType {
@@ -425,6 +346,7 @@ func (q *sqlQueue) getDLQTypeFromQueueType() persistence.QueueType {
 
 func (q *sqlQueue) initializeQueueMetadata(
 	ctx context.Context,
+	blob *commonpb.DataBlob,
 ) error {
 	_, err := q.db.SelectFromQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
 		QueueType: q.queueType,
@@ -433,11 +355,6 @@ func (q *sqlQueue) initializeQueueMetadata(
 	case nil:
 		return nil
 	case sql.ErrNoRows:
-		queueMetadata := &persistencespb.QueueMetadata{}
-		blob, err := serialization.QueueMetadataToBlob(queueMetadata)
-		if err != nil {
-			return err
-		}
 		result, err := q.db.InsertIntoQueueMetadata(ctx, &sqlplugin.QueueMetadataRow{
 			QueueType:    q.queueType,
 			Data:         blob.Data,
@@ -461,6 +378,7 @@ func (q *sqlQueue) initializeQueueMetadata(
 
 func (q *sqlQueue) initializeDLQMetadata(
 	ctx context.Context,
+	blob *commonpb.DataBlob,
 ) error {
 	_, err := q.db.SelectFromQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
 		QueueType: q.getDLQTypeFromQueueType(),
@@ -469,11 +387,6 @@ func (q *sqlQueue) initializeDLQMetadata(
 	case nil:
 		return nil
 	case sql.ErrNoRows:
-		queueMetadata := &persistencespb.QueueMetadata{}
-		blob, err := serialization.QueueMetadataToBlob(queueMetadata)
-		if err != nil {
-			return err
-		}
 		result, err := q.db.InsertIntoQueueMetadata(ctx, &sqlplugin.QueueMetadataRow{
 			QueueType:    q.getDLQTypeFromQueueType(),
 			Data:         blob.Data,

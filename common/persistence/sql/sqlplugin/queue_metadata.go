@@ -37,6 +37,7 @@ type (
 		QueueType    persistence.QueueType
 		Data         []byte
 		DataEncoding string
+		Version      int64
 	}
 
 	QueueMetadataFilter struct {
