@@ -165,7 +165,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 	var err error
 	var remoteSyncMatch bool
 	var req *matchingservice.AddWorkflowTaskRequest
-	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).Do(
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest) {
 			req = arg1
 			task.forwardedFrom = req.GetForwardedSource()
@@ -195,7 +195,7 @@ func (t *MatcherTestSuite) TestSyncMatchFailure() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	var req *matchingservice.AddWorkflowTaskRequest
-	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).Do(
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest) {
 			req = arg1
 		},
@@ -400,8 +400,8 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	var err error
 	var remoteSyncMatch bool
 	var req *matchingservice.AddWorkflowTaskRequest
-	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottle)
-	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).Do(
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottle)
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest) {
 			req = arg1
 			task := newInternalTask(task.event.AllocatedTaskInfo, nil, enumsspb.TASK_SOURCE_DB_BACKLOG, req.GetForwardedSource(), true)

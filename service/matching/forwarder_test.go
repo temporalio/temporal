@@ -87,7 +87,7 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask() {
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 
 	var request *matchingservice.AddWorkflowTaskRequest
-	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).Do(
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest) {
 			request = arg1
 		},
@@ -114,7 +114,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
 	var request *matchingservice.AddActivityTaskRequest
-	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any()).Do(
+	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.AddActivityTaskRequest) {
 			request = arg1
 		},
