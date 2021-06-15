@@ -160,7 +160,7 @@ func (m *metadataManagerImpl) InitializeSystemNamespaces(currentClusterName stri
 				Owner:       "temporal-core@temporal.io",
 			},
 			Config: &persistencespb.NamespaceConfig{
-				Retention:               timestamp.DurationPtr(common.SystemNamespaceRetentionDays),
+				Retention:               timestamp.DurationPtr(common.SystemNamespaceRetention),
 				HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
 				VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 			},
