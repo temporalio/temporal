@@ -61,7 +61,7 @@
         "type": "boolean"
       },
       "CustomDatetimeField": {
-        "type": "date"
+        "type": "date_nanos"
       },
       "CustomNamespace": {
         "type": "keyword"
