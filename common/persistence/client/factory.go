@@ -87,7 +87,7 @@ type (
 	// AbstractDataStoreFactory creates a DataStoreFactory, can be used to implement custom datastore support outside
 	// of the Temporal core.
 	AbstractDataStoreFactory interface {
-		NewFactory(cfg config.CustomDatastoreConfig, clusterName string, logger log.Logger) DataStoreFactory
+		NewFactory(cfg config.CustomDatastoreConfig, r resolver.ServiceResolver, clusterName string, logger log.Logger) DataStoreFactory
 	}
 
 	// Datastore represents a datastore
@@ -354,7 +354,7 @@ func (f *factoryImpl) init(
 	case defaultCfg.SQL != nil:
 		defaultDataStore.factory = sql.NewFactory(*defaultCfg.SQL, r, clusterName, f.logger)
 	case defaultCfg.CustomDataStoreConfig != nil:
-		defaultDataStore.factory = f.abstractDataStoreFactory.NewFactory(*defaultCfg.CustomDataStoreConfig, clusterName, f.logger)
+		defaultDataStore.factory = f.abstractDataStoreFactory.NewFactory(*defaultCfg.CustomDataStoreConfig, r, clusterName, f.logger)
 	default:
 		f.logger.Fatal("invalid config: one of cassandra or sql params must be specified for default data store")
 	}
