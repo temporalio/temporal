@@ -720,24 +720,31 @@ func (s *visibilityStore) getNextPageToken(token []byte) (*visibilityPageToken, 
 func (s *visibilityStore) getSearchResult(request *persistence.ListWorkflowExecutionsRequest, token *visibilityPageToken,
 	boolQuery *elastic.BoolQuery, overStartTime bool) (*elastic.SearchResult, error) {
 
-	matchNamespaceQuery := elastic.NewMatchQuery(searchattribute.NamespaceID, request.NamespaceID)
-	var rangeQuery *elastic.RangeQuery
-	if overStartTime {
-		rangeQuery = elastic.NewRangeQuery(searchattribute.StartTime)
-	} else {
-		rangeQuery = elastic.NewRangeQuery(searchattribute.CloseTime)
-	}
-
-	rangeQuery = rangeQuery.
-		Gte(request.EarliestStartTime).
-		Lte(request.LatestStartTime)
-
 	query := elastic.NewBoolQuery()
 	if boolQuery != nil {
 		*query = *boolQuery
 	}
 
-	query = query.Must(matchNamespaceQuery).Filter(rangeQuery)
+	matchNamespaceQuery := elastic.NewMatchQuery(searchattribute.NamespaceID, request.NamespaceID)
+	query = query.Must(matchNamespaceQuery)
+
+	if !request.EarliestStartTime.IsZero() || !request.LatestStartTime.IsZero() {
+		var rangeQuery *elastic.RangeQuery
+		if overStartTime {
+			rangeQuery = elastic.NewRangeQuery(searchattribute.StartTime)
+		} else {
+			rangeQuery = elastic.NewRangeQuery(searchattribute.CloseTime)
+		}
+
+		if !request.EarliestStartTime.IsZero() {
+			rangeQuery = rangeQuery.Gte(request.EarliestStartTime)
+		}
+
+		if !request.LatestStartTime.IsZero() {
+			rangeQuery = rangeQuery.Lte(request.LatestStartTime)
+		}
+		query = query.Filter(rangeQuery)
+	}
 
 	ctx := context.Background()
 	params := &client.SearchParameters{
