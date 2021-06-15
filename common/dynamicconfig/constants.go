@@ -45,6 +45,7 @@ var Keys = map[Key]string{
 
 	// tests keys
 	testGetPropertyKey:                                "testGetPropertyKey",
+	testCaseInsensitivePropertyKey:                    "testCaseInsensitivePropertyKey",
 	testGetIntPropertyKey:                             "testGetIntPropertyKey",
 	testGetFloat64PropertyKey:                         "testGetFloat64PropertyKey",
 	testGetDurationPropertyKey:                        "testGetDurationPropertyKey",
@@ -327,6 +328,7 @@ const (
 
 	// key for tests
 	testGetPropertyKey
+	testCaseInsensitivePropertyKey
 	testGetIntPropertyKey
 	testGetFloat64PropertyKey
 	testGetDurationPropertyKey
