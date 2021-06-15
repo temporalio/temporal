@@ -257,7 +257,7 @@ func (q *cassandraQueue) UpdateAckLevel(metadata *persistence.InternalQueueMetad
 func (q *cassandraQueue) GetAckLevels() (*persistence.InternalQueueMetadata, error) {
 	queueMetadata, err := q.getQueueMetadata(q.queueType)
 	if err != nil {
-		return nil, err
+		return nil, gocql.ConvertError("GetAckLevels", err)
 	}
 
 	return queueMetadata, nil
@@ -271,7 +271,7 @@ func (q *cassandraQueue) GetDLQAckLevels() (*persistence.InternalQueueMetadata, 
 	// Use negative queue type as the dlq type
 	queueMetadata, err := q.getQueueMetadata(q.getDLQTypeFromQueueType())
 	if err != nil {
-		return nil, err
+		return nil, gocql.ConvertError("GetDLQAckLevels", err)
 	}
 
 	return queueMetadata, nil
@@ -308,7 +308,7 @@ func (q *cassandraQueue) getQueueMetadata(
 	message := make(map[string]interface{})
 	err := query.MapScan(message)
 	if err != nil {
-		return nil, gocql.ConvertError("getQueueMetadata", err)
+		return nil, err
 	}
 
 	return convertQueueMetadata(message)
