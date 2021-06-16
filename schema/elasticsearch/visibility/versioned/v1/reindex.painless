@@ -29,6 +29,9 @@ if (ctx._source.ExecutionTime != null){
 }
 if (ctx._source.CloseTime != null){
     ctx._source.CloseTime = Instant.ofEpochSecond(ctx._source.CloseTime / nanos, ctx._source.CloseTime % nanos);
+    if (ctx._source.ExecutionTime != null){
+        ctx._source.ExecutionDuration = Duration.between(ctx._source.ExecutionTime, ctx._source.CloseTime).toNanos();
+    }
 }
 
 if (ctx._source.ExecutionStatus == 1)
