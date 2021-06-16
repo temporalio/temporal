@@ -41,9 +41,9 @@ const (
 
 	templateGetLastMessageIDQuery = `SELECT message_id FROM queue WHERE message_id >= (SELECT message_id FROM queue WHERE queue_type=? ORDER BY message_id DESC LIMIT 1) FOR UPDATE`
 
-	templateCreateQueueMetadataQuery = `INSERT INTO queue_metadata (queue_type, data, data_encoding) VALUES(:queue_type, :data, :data_encoding)`
-	templateUpdateQueueMetadataQuery = `UPDATE queue_metadata SET data = :data, data_encoding = :data_encoding WHERE queue_type = :queue_type`
-	templateGetQueueMetadataQuery    = `SELECT data, data_encoding from queue_metadata WHERE queue_type = ?`
+	templateCreateQueueMetadataQuery = `INSERT INTO queue_metadata (queue_type, data, data_encoding, version) VALUES(:queue_type, :data, :data_encoding, :version)`
+	templateUpdateQueueMetadataQuery = `UPDATE queue_metadata SET data = :data, data_encoding = :data_encoding, version= :version+1 WHERE queue_type = :queue_type and version = :version`
+	templateGetQueueMetadataQuery    = `SELECT data, data_encoding, version from queue_metadata WHERE queue_type = ?`
 	templateLockQueueMetadataQuery   = templateGetQueueMetadataQuery + " FOR UPDATE"
 )
 

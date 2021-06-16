@@ -30,6 +30,7 @@ import (
 	"context"
 
 	"github.com/olivere/elastic/v7"
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 const (
@@ -50,7 +51,7 @@ type (
 		RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error)
 
 		// TODO (alex): move this to some admin client (and join with IntegrationTestsClient)
-		PutMapping(ctx context.Context, index string, mapping map[string]string) (bool, error)
+		PutMapping(ctx context.Context, index string, mapping map[string]enumspb.IndexedValueType) (bool, error)
 		WaitForYellowStatus(ctx context.Context, index string) (string, error)
 		GetMapping(ctx context.Context, index string) (map[string]string, error)
 	}

@@ -94,25 +94,6 @@ func ApplyTypeMap(searchAttributes *commonpb.SearchAttributes, typeMap NameTypeM
 	}
 }
 
-func MapESType(t enumspb.IndexedValueType) string {
-	switch t {
-	case enumspb.INDEXED_VALUE_TYPE_STRING:
-		return "text"
-	case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
-		return "keyword"
-	case enumspb.INDEXED_VALUE_TYPE_INT:
-		return "long"
-	case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
-		return "double"
-	case enumspb.INDEXED_VALUE_TYPE_BOOL:
-		return "boolean"
-	case enumspb.INDEXED_VALUE_TYPE_DATETIME:
-		return "date"
-	default:
-		return ""
-	}
-}
-
 // convertDynamicConfigType takes dynamicConfigType as interface{} and convert to IndexedValueType.
 // This func is needed because different implementation of dynamic config client may have different type of dynamicConfigType
 // and to support backward compatibility.

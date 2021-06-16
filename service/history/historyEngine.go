@@ -460,7 +460,6 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 }
 
 func (e *historyEngineImpl) createMutableState(
-	clusterMetadata cluster.Metadata,
 	namespaceEntry *cache.NamespaceCacheEntry,
 	runID string,
 ) (mutableState, error) {
@@ -535,7 +534,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		RunId:      uuid.New(),
 	}
 	clusterMetadata := e.shard.GetService().GetClusterMetadata()
-	mutableState, err := e.createMutableState(clusterMetadata, namespaceEntry, execution.GetRunId())
+	mutableState, err := e.createMutableState(namespaceEntry, execution.GetRunId())
 	if err != nil {
 		return nil, err
 	}
@@ -1186,6 +1185,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			},
 			Type:                 &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
 			StartTime:            executionInfo.StartTime,
+			ExecutionTime:        executionInfo.ExecutionTime,
 			HistoryLength:        mutableState.GetNextEventID() - common.FirstEventID,
 			AutoResetPoints:      executionInfo.AutoResetPoints,
 			Memo:                 &commonpb.Memo{Fields: executionInfo.Memo},
@@ -1194,16 +1194,6 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			StateTransitionCount: executionInfo.StateTransitionCount,
 		},
 	}
-
-	// TODO: we need to consider adding execution time to mutable state
-	// For now execution time will be calculated based on start time and cron schedule/retry policy
-	// each time DescribeWorkflowExecution is called.
-	startEvent, err := mutableState.GetStartEvent()
-	if err != nil {
-		return nil, err
-	}
-	backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff())
-	result.WorkflowExecutionInfo.ExecutionTime = timestamp.TimePtr(timestamp.TimeValue(result.WorkflowExecutionInfo.GetStartTime()).Add(backoffDuration))
 
 	if executionInfo.ParentRunId != "" {
 		result.WorkflowExecutionInfo.ParentExecution = &commonpb.WorkflowExecution{
@@ -2016,7 +2006,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}
 
 	clusterMetadata := e.shard.GetService().GetClusterMetadata()
-	mutableState, err := e.createMutableState(clusterMetadata, namespaceEntry, execution.GetRunId())
+	mutableState, err := e.createMutableState(namespaceEntry, execution.GetRunId())
 	if err != nil {
 		return nil, err
 	}

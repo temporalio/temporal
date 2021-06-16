@@ -26,22 +26,19 @@
           "type": "keyword"
         },
         "StartTime": {
-          "type": "long"
+          "type": "date"
         },
         "ExecutionTime": {
-          "type": "long"
+          "type": "date"
         },
         "CloseTime": {
-          "type": "long"
+          "type": "date"
         },
         "ExecutionStatus": {
-          "type": "integer"
+          "type": "keyword"
         },
         "HistoryLength": {
-          "type": "integer"
-        },
-        "Encoding": {
-          "type": "keyword"
+          "type": "long"
         },
         "TemporalChangeVersion": {
           "type": "keyword"
@@ -56,7 +53,8 @@
           "type": "long"
         },
         "CustomDoubleField": {
-          "type": "double"
+          "type": "scaled_float",
+          "scaling_factor": 10000
         },
         "CustomBoolField": {
           "type": "boolean"
@@ -64,10 +62,10 @@
         "CustomDatetimeField": {
           "type": "date"
         },
-        "CustomNamespace": {
+        "BatcherNamespace": {
           "type": "keyword"
         },
-        "Operator": {
+        "BatcherUser": {
           "type": "keyword"
         },
         "BinaryChecksums": {

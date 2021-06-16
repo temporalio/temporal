@@ -1,7 +1,7 @@
 {
   "order": 0,
   "index_patterns": [
-    "temporal-visibility-v1*"
+    "temporal_visibility_v1*"
   ],
   "settings": {
     "index": {
@@ -26,16 +26,16 @@
           "type": "keyword"
         },
         "StartTime": {
-          "type": "long"
+          "type": "date"
         },
         "ExecutionTime": {
-          "type": "long"
+          "type": "date"
         },
         "CloseTime": {
-          "type": "long"
+          "type": "date"
         },
         "ExecutionStatus": {
-          "type": "long"
+          "type": "keyword"
         },
         "TaskQueue": {
           "type": "keyword"
@@ -43,14 +43,17 @@
         "TemporalChangeVersion": {
           "type": "keyword"
         },
-        "CustomNamespace": {
+        "BatcherNamespace": {
           "type": "keyword"
         },
-        "Operator": {
+        "BatcherUser": {
           "type": "keyword"
         },
         "BinaryChecksums": {
           "type": "keyword"
+        },
+        "HistoryLength": {
+          "type": "long"
         }
       }
     }

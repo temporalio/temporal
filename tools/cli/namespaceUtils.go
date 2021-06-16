@@ -62,8 +62,8 @@ var (
 			Usage: "Owner email",
 		},
 		cli.StringFlag{
-			Name:  FlagRetentionDaysWithAlias,
-			Usage: "Workflow execution retention in days",
+			Name:  FlagRetentionWithAlias,
+			Usage: "Workflow execution retention",
 		},
 		cli.StringFlag{
 			Name:  FlagActiveClusterNameWithAlias,
@@ -112,8 +112,8 @@ var (
 			Usage: "Owner email",
 		},
 		cli.StringFlag{
-			Name:  FlagRetentionDaysWithAlias,
-			Usage: "Workflow execution retention in days",
+			Name:  FlagRetentionWithAlias,
+			Usage: "Workflow execution retention",
 		},
 		cli.StringFlag{
 			Name:  FlagActiveClusterNameWithAlias,
@@ -259,7 +259,7 @@ func initializeNamespaceHandler(
 	archiverProvider provider.ArchiverProvider,
 ) namespace.Handler {
 	return namespace.NewHandler(
-		namespace.MinRetentionDays,
+		namespace.MinRetention,
 		dynamicconfig.GetIntPropertyFilteredByNamespace(namespace.MaxBadBinaries),
 		logger,
 		metadataMgr,

@@ -253,13 +253,13 @@ func newServerTLSConfig(
 	tlsConfig.GetConfigForClient = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
 
 		remoteAddress := c.Conn.RemoteAddr().String()
-		logger.Debug("attempted incoming TLS connection", tag.Address(remoteAddress), tag.HostID(c.ServerName))
+		logger.Debug("attempted incoming TLS connection", tag.Address(remoteAddress), tag.ServerName(c.ServerName))
 
 		if perHostCertProviderMap != nil && perHostCertProviderMap.NumberOfHosts() > 0 {
 			perHostCertProvider, hostClientAuthRequired, err := perHostCertProviderMap.GetCertProvider(c.ServerName)
 			if err != nil {
 				logger.Error("error while looking up per-host provider for attempted incoming TLS connection",
-					tag.HostID(c.ServerName), tag.Address(remoteAddress), tag.Error(err))
+					tag.ServerName(c.ServerName), tag.Address(remoteAddress), tag.Error(err))
 				return nil, err
 			}
 
@@ -267,7 +267,7 @@ func newServerTLSConfig(
 				return getServerTLSConfigFromCertProvider(perHostCertProvider, hostClientAuthRequired, remoteAddress, c.ServerName, logger)
 			}
 			logger.Warn("cannot find a per-host provider for attempted incoming TLS connection. returning default TLS configuration",
-				tag.HostID(c.ServerName), tag.Address(remoteAddress))
+				tag.ServerName(c.ServerName), tag.Address(remoteAddress))
 			return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, remoteAddress, c.ServerName, logger)
 		}
 		return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, remoteAddress, c.ServerName, logger)
@@ -310,7 +310,7 @@ func getServerTLSConfigFromCertProvider(
 		clientCaPool = ca
 	}
 	if remoteAddress != "" { // remoteAddress=="" when we return initial tls.Config object when configuring server
-		logger.Debug("returning TLS config for connection", tag.Address(remoteAddress), tag.HostID(serverName))
+		logger.Debug("returning TLS config for connection", tag.Address(remoteAddress), tag.ServerName(serverName))
 	}
 	return auth.NewTLSConfigWithCertsAndCAs(
 		clientAuthType,

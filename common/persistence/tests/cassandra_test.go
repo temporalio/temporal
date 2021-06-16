@@ -97,7 +97,7 @@ func SetupCassandraDatabase(cfg *config.Cassandra) {
 	// NOTE need to connect with empty name to create new database
 	adminCfg.Keyspace = "system"
 
-	session, err := gocql.NewSession(adminCfg, resolver.NewNoopResolver())
+	session, err := gocql.NewSession(adminCfg, resolver.NewNoopResolver(), log.NewNoopLogger())
 	if err != nil {
 		panic(fmt.Sprintf("unable to create Cassandra session: %v", err))
 	}
@@ -115,7 +115,7 @@ func SetupCassandraDatabase(cfg *config.Cassandra) {
 }
 
 func SetupCassandraSchema(cfg *config.Cassandra) {
-	session, err := gocql.NewSession(*cfg, resolver.NewNoopResolver())
+	session, err := gocql.NewSession(*cfg, resolver.NewNoopResolver(), log.NewNoopLogger())
 	if err != nil {
 		panic(fmt.Sprintf("unable to create Cassandra session: %v", err))
 	}
@@ -159,7 +159,7 @@ func TearDownCassandraKeyspace(cfg *config.Cassandra) {
 	// NOTE need to connect with empty name to create new database
 	adminCfg.Keyspace = "system"
 
-	session, err := gocql.NewSession(adminCfg, resolver.NewNoopResolver())
+	session, err := gocql.NewSession(adminCfg, resolver.NewNoopResolver(), log.NewNoopLogger())
 	if err != nil {
 		panic(fmt.Sprintf("unable to create Cassandra session: %v", err))
 	}

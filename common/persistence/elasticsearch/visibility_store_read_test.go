@@ -44,7 +44,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -78,25 +77,28 @@ var (
 	testRunID        = "1601da05-4db9-4eeb-89e4-da99481bdfc9"
 	testStatus       = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 
-	testRequest = &persistence.ListWorkflowExecutionsRequest{
+	testSearchResult = &elastic.SearchResult{
+		Hits: &elastic.SearchHits{},
+	}
+	errTestESSearch = errors.New("ES error")
+
+	filterOpen              = fmt.Sprintf("map[match:map[ExecutionStatus:map[query:%s]]]", enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String())
+	filterClose             = fmt.Sprintf("map[match:map[ExecutionStatus:map[query:%s]]]", enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String())
+	filterByType            = fmt.Sprintf("map[match:map[WorkflowType:map[query:%s]]]", testWorkflowType)
+	filterByWID             = fmt.Sprintf("map[match:map[WorkflowId:map[query:%s]]]", testWorkflowID)
+	filterByRunID           = fmt.Sprintf("map[match:map[RunId:map[query:%s]]]", testRunID)
+	filterByExecutionStatus = fmt.Sprintf("map[match:map[ExecutionStatus:map[query:%s]]]", testStatus.String())
+)
+
+func createTestRequest() *persistence.ListWorkflowExecutionsRequest {
+	return &persistence.ListWorkflowExecutionsRequest{
 		NamespaceID:       testNamespaceID,
 		Namespace:         testNamespace,
 		PageSize:          testPageSize,
 		EarliestStartTime: testEarliestTime,
 		LatestStartTime:   testLatestTime,
 	}
-	testSearchResult = &elastic.SearchResult{
-		Hits: &elastic.SearchHits{},
-	}
-	errTestESSearch = errors.New("ES error")
-
-	filterOpen              = fmt.Sprintf("map[match:map[ExecutionStatus:map[query:%d]]]", enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
-	filterClose             = fmt.Sprintf("map[match:map[ExecutionStatus:map[query:%d]]]", enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
-	filterByType            = fmt.Sprintf("map[match:map[WorkflowType:map[query:%s]]]", testWorkflowType)
-	filterByWID             = fmt.Sprintf("map[match:map[WorkflowId:map[query:%s]]]", testWorkflowID)
-	filterByRunID           = fmt.Sprintf("map[match:map[RunId:map[query:%s]]]", testRunID)
-	filterByExecutionStatus = fmt.Sprintf("map[match:map[ExecutionStatus:map[query:%d]]]", testStatus)
-)
+}
 
 func TestESVisibilitySuite(t *testing.T) {
 	suite.Run(t, new(ESVisibilitySuite))
@@ -111,8 +113,8 @@ func (s *ESVisibilitySuite) SetupTest() {
 		ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 	}
 
-	s.mockMetricsClient = metrics.NewMockClient(s.controller)
 	s.controller = gomock.NewController(s.T())
+	s.mockMetricsClient = metrics.NewMockClient(s.controller)
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
 	s.visibilityStore = NewVisibilityStore(s.mockESClient, testIndex, searchattribute.NewTestProvider(), s.mockProcessor, cfg, log.NewNoopLogger(), s.mockMetricsClient)
@@ -129,11 +131,11 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutions() {
 			s.True(strings.Contains(fmt.Sprintf("%v", source), filterOpen))
 			return testSearchResult, nil
 		})
-	_, err := s.visibilityStore.ListOpenWorkflowExecutions(testRequest)
+	_, err := s.visibilityStore.ListOpenWorkflowExecutions(createTestRequest())
 	s.NoError(err)
 
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ListOpenWorkflowExecutions(testRequest)
+	_, err = s.visibilityStore.ListOpenWorkflowExecutions(createTestRequest())
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
@@ -147,11 +149,11 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutions() {
 			s.True(strings.Contains(fmt.Sprintf("%v", source), filterClose))
 			return testSearchResult, nil
 		})
-	_, err := s.visibilityStore.ListClosedWorkflowExecutions(testRequest)
+	_, err := s.visibilityStore.ListClosedWorkflowExecutions(createTestRequest())
 	s.NoError(err)
 
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ListClosedWorkflowExecutions(testRequest)
+	_, err = s.visibilityStore.ListClosedWorkflowExecutions(createTestRequest())
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
@@ -167,6 +169,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByType() {
 			return testSearchResult, nil
 		})
 
+	testRequest := createTestRequest()
 	request := &persistence.ListWorkflowExecutionsByTypeRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
 		WorkflowTypeName:              testWorkflowType,
@@ -191,6 +194,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByType() {
 			return testSearchResult, nil
 		})
 
+	testRequest := createTestRequest()
 	request := &persistence.ListWorkflowExecutionsByTypeRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
 		WorkflowTypeName:              testWorkflowType,
@@ -215,6 +219,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 			return testSearchResult, nil
 		})
 
+	testRequest := createTestRequest()
 	request := &persistence.ListWorkflowExecutionsByWorkflowIDRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
 		WorkflowID:                    testWorkflowID,
@@ -239,6 +244,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByWorkflowID() {
 			return testSearchResult, nil
 		})
 
+	testRequest := createTestRequest()
 	request := &persistence.ListWorkflowExecutionsByWorkflowIDRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
 		WorkflowID:                    testWorkflowID,
@@ -262,6 +268,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
 			return testSearchResult, nil
 		})
 
+	testRequest := createTestRequest()
 	request := &persistence.ListClosedWorkflowExecutionsByStatusRequest{
 		ListWorkflowExecutionsRequest: *testRequest,
 		Status:                        testStatus,
@@ -342,7 +349,7 @@ func (s *ESVisibilitySuite) TestGetNextPageToken() {
 }
 
 func (s *ESVisibilitySuite) TestGetSearchResult() {
-	request := testRequest
+	request := createTestRequest()
 	from := 1
 	token := &visibilityPageToken{From: from}
 
@@ -350,11 +357,8 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	runningQuery := elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 	tieBreakerSorter := elastic.NewFieldSort(searchattribute.RunID).Desc()
 
-	earliestTime := convert.Int64ToString(request.EarliestStartTime.UnixNano() - oneMilliSecondInNano)
-	latestTime := convert.Int64ToString(request.LatestStartTime.UnixNano() + oneMilliSecondInNano)
-
 	// test for open
-	rangeQuery := elastic.NewRangeQuery(searchattribute.StartTime).Gte(earliestTime).Lte(latestTime)
+	rangeQuery := elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
 	boolQuery := elastic.NewBoolQuery().Must(runningQuery).Must(matchNamespaceQuery).Filter(rangeQuery)
 	params := &client.SearchParameters{
 		Index:    testIndex,
@@ -369,7 +373,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 
 	// test request latestTime overflow
 	request.LatestStartTime = time.Unix(0, math.MaxInt64).UTC()
-	rangeQuery1 := elastic.NewRangeQuery(searchattribute.StartTime).Gte(earliestTime).Lte(convert.Int64ToString(request.LatestStartTime.UnixNano()))
+	rangeQuery1 := elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
 	boolQuery1 := elastic.NewBoolQuery().Must(runningQuery).Must(matchNamespaceQuery).Filter(rangeQuery1)
 	param1 := &client.SearchParameters{
 		Index:    testIndex,
@@ -381,10 +385,10 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	s.mockESClient.EXPECT().Search(gomock.Any(), param1).Return(nil, nil)
 	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Must(elastic.NewMatchQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
 	s.NoError(err)
-	request.LatestStartTime = testLatestTime // revert
+	request = createTestRequest() // revert
 
 	// test for closed
-	rangeQuery = elastic.NewRangeQuery(searchattribute.CloseTime).Gte(earliestTime).Lte(latestTime)
+	rangeQuery = elastic.NewRangeQuery(searchattribute.CloseTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
 	boolQuery = elastic.NewBoolQuery().MustNot(runningQuery).Must(matchNamespaceQuery).Filter(rangeQuery)
 	params.Query = boolQuery
 	params.Sorter = []elastic.Sorter{elastic.NewFieldSort(searchattribute.CloseTime).Desc(), tieBreakerSorter}
@@ -403,7 +407,7 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	// test for search after
 	runID := "runID"
 	token = &visibilityPageToken{
-		SortValue:  latestTime,
+		SortValue:  request.LatestStartTime,
 		TieBreaker: runID,
 	}
 	params.From = 0
@@ -426,13 +430,13 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.Equal(0, len(resp.Executions))
 
 	// test for one hits
-	data := []byte(`{"ExecutionStatus": 1,
-          "CloseTime": 1547596872817380000,
+	data := []byte(`{"ExecutionStatus": "Running",
+          "CloseTime": "2021-06-11T16:04:07.980-07:00",
           "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
           "VisibilityTaskKey": "7-619",
           "RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
-          "StartTime": 1547596872371000000,
+          "StartTime": "2021-06-11T15:04:07.980-07:00",
           "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
           "WorkflowType": "basic.stressWorkflowExecute"}`)
 	source := json.RawMessage(data)
@@ -539,12 +543,12 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 
 func (s *ESVisibilitySuite) TestParseESDoc() {
 	searchHit := &elastic.SearchHit{
-		Source: []byte(`{"ExecutionStatus": 1,
+		Source: []byte(`{"ExecutionStatus": "Running",
           "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
           "VisibilityTaskKey": "7-619",
           "RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
-          "StartTime": 1547596872371000000,
+          "StartTime": "2021-06-11T15:04:07.980-07:00",
           "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
           "WorkflowType": "TestWorkflowExecute"}`),
 	}
@@ -555,17 +559,19 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", info.RunID)
 	s.Equal("TestWorkflowExecute", info.TypeName)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.Status)
-	s.Equal(int64(1547596872371000000), info.StartTime.UnixNano())
+	expectedStartTime, err := time.Parse(time.RFC3339Nano, "2021-06-11T15:04:07.980-07:00")
+	s.NoError(err)
+	s.Equal(expectedStartTime, info.StartTime)
 
 	// test for close
 	searchHit = &elastic.SearchHit{
-		Source: []byte(`{"ExecutionStatus": 2,
-          "CloseTime": 1547596872817380000,
+		Source: []byte(`{"ExecutionStatus": "Completed",
+          "CloseTime": "2021-06-11T16:04:07Z",
           "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
           "VisibilityTaskKey": "7-619",
           "RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
-          "StartTime": 1547596872371000000,
+          "StartTime": "2021-06-11T15:04:07.980-07:00",
           "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
           "WorkflowType": "TestWorkflowExecute"}`),
 	}
@@ -574,8 +580,12 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", info.RunID)
 	s.Equal("TestWorkflowExecute", info.TypeName)
-	s.Equal(int64(1547596872371000000), info.StartTime.UnixNano())
-	s.Equal(int64(1547596872817380000), info.CloseTime.UnixNano())
+	expectedStartTime, err = time.Parse(time.RFC3339Nano, "2021-06-11T15:04:07.980-07:00")
+	s.NoError(err)
+	expectedCloseTime, err := time.Parse(time.RFC3339Nano, "2021-06-11T16:04:07Z")
+	s.NoError(err)
+	s.Equal(expectedStartTime, info.StartTime)
+	s.Equal(expectedCloseTime, info.CloseTime)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.Status)
 	s.Equal(int64(29), info.HistoryLength)
 
@@ -648,22 +658,22 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	request.Query = `StartTime = "2018-06-07T15:04:05-08:00"`
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"StartTime":{"query":"1528412645000000000"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunId":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"StartTime":{"query":"2018-06-07T15:04:05-08:00"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunId":"desc"}]}`, dsl)
 
 	request.Query = `WorkflowId = 'wid' and StartTime > "2018-06-07T15:04:05+00:00"`
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowId":{"query":"wid"}}},{"range":{"StartTime":{"gt":"1528383845000000000"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunId":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowId":{"query":"wid"}}},{"range":{"StartTime":{"gt":"2018-06-07T15:04:05+00:00"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunId":"desc"}]}`, dsl)
 
-	request.Query = `ExecutionTime < 1000`
+	request.Query = `ExecutionTime < 1000000`
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"lt":"1000"}}}]}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunId":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"lt":"1970-01-01T00:00:00.001Z"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunId":"desc"}]}`, dsl)
 
-	request.Query = `ExecutionTime < 1000 or ExecutionTime > 2000`
+	request.Query = `ExecutionTime < 1000000 or ExecutionTime > 2000000`
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"should":[{"range":{"ExecutionTime":{"lt":"1000"}}},{"range":{"ExecutionTime":{"gt":"2000"}}}]}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunId":"desc"}]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"should":[{"range":{"ExecutionTime":{"lt":"1970-01-01T00:00:00.001Z"}}},{"range":{"ExecutionTime":{"gt":"1970-01-01T00:00:00.002Z"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunId":"desc"}]}`, dsl)
 
 	request.Query = `order by ExecutionTime desc`
 	dsl, err = v.getESQueryDSL(request, token)
@@ -685,7 +695,8 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 
 	request.Query = `ExecutionTime < "unable to parse"`
 	_, err = v.getESQueryDSL(request, token)
-	s.Error(err)
+	// Wrong dates goes directly to Elasticsearch and it return an error.
+	s.NoError(err)
 
 	token = s.getTokenHelper(1)
 	request.Query = `WorkflowId = 'wid'`
@@ -718,12 +729,12 @@ func (s *ESVisibilitySuite) TestGetESQueryDSLForScan() {
 	request.Query = `CloseTime = missing and (ExecutionTime >= "2019-08-27T15:04:05+00:00" or StartTime <= "2018-06-07T15:04:05+00:00")`
 	dsl, err = getESQueryDSLForScan(request)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}},{"bool":{"should":[{"range":{"ExecutionTime":{"from":"1566918245000000000"}}},{"range":{"StartTime":{"to":"1528383845000000000"}}}]}}]}}]}}]}},"from":0,"size":10}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}},{"bool":{"should":[{"range":{"ExecutionTime":{"from":"2019-08-27T15:04:05+00:00"}}},{"range":{"StartTime":{"to":"2018-06-07T15:04:05+00:00"}}}]}}]}}]}},"from":0,"size":10}`, dsl)
 
-	request.Query = `ExecutionTime < 1000 and ExecutionTime > 500`
+	request.Query = `ExecutionTime < 1000000 and ExecutionTime > 5000000`
 	dsl, err = getESQueryDSLForScan(request)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"lt":"1000"}}},{"range":{"ExecutionTime":{"gt":"500"}}}]}}]}}]}},"from":0,"size":10}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"lt":"1970-01-01T00:00:00.001Z"}}},{"range":{"ExecutionTime":{"gt":"1970-01-01T00:00:00.005Z"}}}]}}]}},"from":0,"size":10}`, dsl)
 }
 
 func (s *ESVisibilitySuite) TestGetESQueryDSLForCount() {
@@ -744,12 +755,12 @@ func (s *ESVisibilitySuite) TestGetESQueryDSLForCount() {
 	request.Query = `CloseTime < "2018-06-07T15:04:05+07:00" and StartTime > "2018-05-04T16:00:00+07:00" and ExecutionTime >= "2018-05-05T16:00:00+07:00"`
 	dsl, err = getESQueryDSLForCount(request)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"range":{"CloseTime":{"lt":"1528358645000000000"}}},{"range":{"StartTime":{"gt":"1525424400000000000"}}},{"range":{"ExecutionTime":{"from":"1525510800000000000"}}}]}}]}}]}}}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"CloseTime":{"lt":"2018-06-07T15:04:05+07:00"}}},{"range":{"StartTime":{"gt":"2018-05-04T16:00:00+07:00"}}},{"range":{"ExecutionTime":{"from":"2018-05-05T16:00:00+07:00"}}}]}}]}}}`, dsl)
 
-	request.Query = `ExecutionTime < 1000`
+	request.Query = `ExecutionTime < 1000000`
 	dsl, err = getESQueryDSLForCount(request)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"gt":"0"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"lt":"1000"}}}]}}]}}]}}}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"range":{"ExecutionTime":{"lt":"1970-01-01T00:00:00.001Z"}}}]}}]}}}`, dsl)
 }
 
 func (s *ESVisibilitySuite) TestAddNamespaceToQuery() {
@@ -766,7 +777,7 @@ func (s *ESVisibilitySuite) TestAddNamespaceToQuery() {
 func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 	s.mockESClient.EXPECT().SearchWithDSL(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, index, input string) (*elastic.SearchResult, error) {
-			s.True(strings.Contains(input, `{"match_phrase":{"ExecutionStatus":{"query":"5"}}}`))
+			s.True(strings.Contains(input, `{"match_phrase":{"ExecutionStatus":{"query":"Terminated"}}}`))
 			return testSearchResult, nil
 		})
 
@@ -774,7 +785,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
 		PageSize:    10,
-		Query:       `ExecutionStatus = 5`,
+		Query:       `ExecutionStatus = "Terminated"`,
 	}
 	_, err := s.visibilityStore.ListWorkflowExecutions(request)
 	s.NoError(err)
@@ -798,7 +809,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 	// test first page
 	s.mockESClient.EXPECT().ScrollFirstPage(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
 		func(ctx context.Context, index, input string) (*elastic.SearchResult, client.ScrollService, error) {
-			s.True(strings.Contains(input, `{"match_phrase":{"ExecutionStatus":{"query":"5"}}}`))
+			s.True(strings.Contains(input, `{"match_phrase":{"ExecutionStatus":{"query":"Terminated"}}}`))
 			return testSearchResult, nil, nil
 		})
 
@@ -806,7 +817,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
 		PageSize:    10,
-		Query:       `ExecutionStatus = 5`,
+		Query:       `ExecutionStatus = "Terminated"`,
 	}
 	_, err := s.visibilityStore.ScanWorkflowExecutions(request)
 	s.NoError(err)
@@ -849,14 +860,14 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 	s.mockESClient.EXPECT().Count(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
 		func(ctx context.Context, index, input string) (int64, error) {
-			s.True(strings.Contains(input, `{"match_phrase":{"ExecutionStatus":{"query":"5"}}}`))
+			s.True(strings.Contains(input, `{"match_phrase":{"ExecutionStatus":{"query":"Terminated"}}}`))
 			return int64(1), nil
 		})
 
 	request := &persistence.CountWorkflowExecutionsRequest{
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
-		Query:       `ExecutionStatus = 5`,
+		Query:       `ExecutionStatus = "Terminated"`,
 	}
 	resp, err := s.visibilityStore.CountWorkflowExecutions(request)
 	s.NoError(err)
@@ -894,15 +905,48 @@ func (s *ESVisibilitySuite) TestTimeProcessFunc() {
 		value     string
 		returnErr bool
 	}{
-		{value: `"1528358645000000000"`, returnErr: false},
-		{value: `"1528358645000000000"`},
-		{value: "", returnErr: true},
+		{value: `"2018-06-07T08:04:05Z"`, returnErr: false},
+		{value: `"2018-06-07T15:04:05+07:00"`, returnErr: false},
+		{value: `"some invalid time string"`, returnErr: false},
 		{value: `"should not be modified"`, returnErr: false},
 	}
 
 	for i, testCase := range cases {
 		value := fastjson.MustParse(fmt.Sprintf(`{"%s": "%s"}`, testCase.key, testCase.value))
 		err := timeProcessFunc(nil, "", value)
+		if expected[i].returnErr {
+			s.Error(err)
+			continue
+		}
+		s.Equal(expected[i].value, value.Get(testCase.key).String())
+	}
+}
+
+func (s *ESVisibilitySuite) TestStatusProcessFunc() {
+	cases := []struct {
+		key   string
+		value string
+	}{
+		{key: "query", value: "Completed"},
+		{key: "query", value: "1"},
+		{key: "query", value: "100"},
+		{key: "query", value: "BadStatus"},
+		{key: "unrelatedKey", value: "should not be modified"},
+	}
+	expected := []struct {
+		value     string
+		returnErr bool
+	}{
+		{value: `"Completed"`, returnErr: false},
+		{value: `"Running"`, returnErr: false},
+		{value: `""`, returnErr: false},
+		{value: `"BadStatus"`, returnErr: false},
+		{value: `"should not be modified"`, returnErr: false},
+	}
+
+	for i, testCase := range cases {
+		value := fastjson.MustParse(fmt.Sprintf(`{"%s": "%s"}`, testCase.key, testCase.value))
+		err := statusProcessFunc(nil, "", value)
 		if expected[i].returnErr {
 			s.Error(err)
 			continue

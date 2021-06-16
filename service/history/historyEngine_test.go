@@ -5308,6 +5308,7 @@ func newMutableStateBuilderWithEventV2(
 ) *mutableStateBuilder {
 
 	msBuilder := newMutableStateBuilder(shard, eventsCache, logger, testLocalNamespaceEntry, time.Now().UTC())
+	msBuilder.executionInfo.ExecutionTime = msBuilder.executionInfo.StartTime
 	_ = msBuilder.SetHistoryTree(runID)
 
 	return msBuilder
@@ -5322,6 +5323,7 @@ func newMutableStateBuilderWithVersionHistoriesForTest(
 ) *mutableStateBuilder {
 
 	msBuilder := newMutableStateBuilder(shard, eventsCache, logger, testLocalNamespaceEntry, time.Now().UTC())
+	msBuilder.executionInfo.ExecutionTime = msBuilder.executionInfo.StartTime
 	_ = msBuilder.UpdateCurrentVersion(version, false)
 	_ = msBuilder.SetHistoryTree(runID)
 
@@ -5380,59 +5382,16 @@ func copyWorkflowExecutionState(sourceState *persistencespb.WorkflowExecutionSta
 	}
 }
 func copyWorkflowExecutionInfo(sourceInfo *persistencespb.WorkflowExecutionInfo) *persistencespb.WorkflowExecutionInfo {
-	return &persistencespb.WorkflowExecutionInfo{
-		NamespaceId:                       sourceInfo.NamespaceId,
-		WorkflowId:                        sourceInfo.WorkflowId,
-		FirstExecutionRunId:               sourceInfo.FirstExecutionRunId,
-		ParentNamespaceId:                 sourceInfo.ParentNamespaceId,
-		ParentWorkflowId:                  sourceInfo.ParentWorkflowId,
-		ParentRunId:                       sourceInfo.ParentRunId,
-		InitiatedId:                       sourceInfo.InitiatedId,
-		CompletionEventBatchId:            sourceInfo.CompletionEventBatchId,
-		CompletionEvent:                   sourceInfo.CompletionEvent,
-		TaskQueue:                         sourceInfo.TaskQueue,
-		StickyTaskQueue:                   sourceInfo.StickyTaskQueue,
-		StickyScheduleToStartTimeout:      sourceInfo.StickyScheduleToStartTimeout,
-		WorkflowTypeName:                  sourceInfo.WorkflowTypeName,
-		WorkflowRunTimeout:                sourceInfo.WorkflowRunTimeout,
-		DefaultWorkflowTaskTimeout:        sourceInfo.DefaultWorkflowTaskTimeout,
-		LastFirstEventId:                  sourceInfo.LastFirstEventId,
-		LastFirstEventTxnId:               sourceInfo.LastFirstEventTxnId,
-		LastEventTaskId:                   sourceInfo.LastEventTaskId,
-		LastProcessedEvent:                sourceInfo.LastProcessedEvent,
-		StartTime:                         sourceInfo.StartTime,
-		LastUpdateTime:                    sourceInfo.LastUpdateTime,
-		SignalCount:                       sourceInfo.SignalCount,
-		WorkflowTaskVersion:               sourceInfo.WorkflowTaskVersion,
-		WorkflowTaskScheduleId:            sourceInfo.WorkflowTaskScheduleId,
-		WorkflowTaskStartedId:             sourceInfo.WorkflowTaskStartedId,
-		WorkflowTaskRequestId:             sourceInfo.WorkflowTaskRequestId,
-		WorkflowTaskTimeout:               sourceInfo.WorkflowTaskTimeout,
-		WorkflowTaskAttempt:               sourceInfo.WorkflowTaskAttempt,
-		WorkflowTaskStartedTime:           sourceInfo.WorkflowTaskStartedTime,
-		WorkflowTaskOriginalScheduledTime: sourceInfo.WorkflowTaskOriginalScheduledTime,
-		WorkflowTaskScheduledTime:         sourceInfo.WorkflowTaskScheduledTime,
-		CancelRequested:                   sourceInfo.CancelRequested,
-		CronSchedule:                      sourceInfo.CronSchedule,
-		AutoResetPoints:                   sourceInfo.AutoResetPoints,
-		Memo:                              sourceInfo.Memo,
-		SearchAttributes:                  sourceInfo.SearchAttributes,
-		Attempt:                           sourceInfo.Attempt,
-		HasRetryPolicy:                    sourceInfo.HasRetryPolicy,
-		RetryInitialInterval:              sourceInfo.RetryInitialInterval,
-		RetryBackoffCoefficient:           sourceInfo.RetryBackoffCoefficient,
-		RetryMaximumInterval:              sourceInfo.RetryMaximumInterval,
-		RetryMaximumAttempts:              sourceInfo.RetryMaximumAttempts,
-		RetryNonRetryableErrorTypes:       sourceInfo.RetryNonRetryableErrorTypes,
-		VersionHistories:                  sourceInfo.VersionHistories,
-		ExecutionStats:                    sourceInfo.ExecutionStats,
-		StartVersion:                      sourceInfo.StartVersion,
-		CancelRequestId:                   sourceInfo.CancelRequestId,
-		WorkflowExecutionTimeout:          sourceInfo.WorkflowExecutionTimeout,
-		WorkflowRunExpirationTime:         sourceInfo.WorkflowRunExpirationTime,
-		WorkflowExecutionExpirationTime:   sourceInfo.WorkflowExecutionExpirationTime,
-		HistorySize:                       sourceInfo.HistorySize,
+	data, err := sourceInfo.Marshal()
+	if err != nil {
+		panic(err)
 	}
+	wei := &persistencespb.WorkflowExecutionInfo{}
+	err = wei.Unmarshal(data)
+	if err != nil {
+		panic(err)
+	}
+	return wei
 }
 
 func copyHistoryEvent(source *historypb.HistoryEvent) *historypb.HistoryEvent {

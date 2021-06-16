@@ -1,3 +1,18 @@
+##### dockerize builder: built from source to support arm & x86 #####
+FROM golang:1.16-alpine AS dockerize-builder
+
+RUN apk add --update --no-cache \
+    git
+
+RUN mkdir -p /xsrc && \
+    git clone https://github.com/jwilder/dockerize.git && \
+    cd dockerize && \
+    go mod init github.com/jwilder/dockerize && \
+    go mod tidy && \
+    go build -o /usr/local/bin/dockerize . && \
+    rm -rf /xsrc
+
+##### base-server target #####
 FROM alpine:3.12 AS base-server
 
 RUN apk add --update --no-cache \
@@ -7,13 +22,7 @@ RUN apk add --update --no-cache \
     curl \
     vim
 
-ENV DOCKERIZE_VERSION v0.6.1
-RUN wget https://github.com/jwilder/dockerize/releases/download/${DOCKERIZE_VERSION}/dockerize-alpine-linux-amd64-${DOCKERIZE_VERSION}.tar.gz \
-    && tar -C /usr/local/bin -xzvf dockerize-alpine-linux-amd64-${DOCKERIZE_VERSION}.tar.gz \
-    && rm dockerize-alpine-linux-amd64-${DOCKERIZE_VERSION}.tar.gz \
-    && echo "**** fix for host id mapping error ****" \
-    && chown root:root /usr/local/bin/dockerize
-
+COPY --from=dockerize-builder /usr/local/bin/dockerize /usr/local/bin/dockerize
 # set up nsswitch.conf for Go's "netgo" implementation
 # https://github.com/gliderlabs/docker-alpine/issues/367#issuecomment-424546457
 RUN test ! -e /etc/nsswitch.conf && echo 'hosts: files dns' > /etc/nsswitch.conf

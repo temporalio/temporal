@@ -40,25 +40,25 @@ import (
 type (
 	// AttrValidatorImpl is namespace attr validator
 	AttrValidatorImpl struct {
-		clusterMetadata  cluster.Metadata
-		minRetentionDays int32
+		clusterMetadata cluster.Metadata
+		minRetention    time.Duration
 	}
 )
 
 // newAttrValidator create a new namespace attr validator
 func newAttrValidator(
 	clusterMetadata cluster.Metadata,
-	minRetentionDays int32,
+	minRetention time.Duration,
 ) *AttrValidatorImpl {
 
 	return &AttrValidatorImpl{
-		clusterMetadata:  clusterMetadata,
-		minRetentionDays: minRetentionDays,
+		clusterMetadata: clusterMetadata,
+		minRetention:    minRetention,
 	}
 }
 
 func (d *AttrValidatorImpl) validateNamespaceConfig(config *persistencespb.NamespaceConfig) error {
-	if timestamp.DurationValue(config.Retention) < time.Hour*24*time.Duration(d.minRetentionDays) {
+	if timestamp.DurationValue(config.Retention) < d.minRetention {
 		return errInvalidRetentionPeriod
 	} else if timestamp.DurationValue(config.Retention) > common.MaxWorkflowRetentionPeriod {
 		return errInvalidRetentionPeriod

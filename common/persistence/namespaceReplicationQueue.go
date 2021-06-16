@@ -32,6 +32,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/api/persistence/v1"
+
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
@@ -54,7 +58,21 @@ func NewNamespaceReplicationQueue(
 	clusterName string,
 	metricsClient metrics.Client,
 	logger log.Logger,
-) NamespaceReplicationQueue {
+) (NamespaceReplicationQueue, error) {
+	serializer := serialization.NewSerializer()
+
+	blob, err := serializer.QueueMetadataToBlob(
+		&persistence.QueueMetadata{
+			ClusterAckLevels: make(map[string]int64),
+		}, enumspb.ENCODING_TYPE_PROTO3)
+	if err != nil {
+		return nil, err
+	}
+	err = queue.Init(blob)
+	if err != nil {
+		return nil, err
+	}
+
 	return &namespaceReplicationQueueImpl{
 		queue:               queue,
 		clusterName:         clusterName,
@@ -63,7 +81,8 @@ func NewNamespaceReplicationQueue(
 		ackNotificationChan: make(chan bool),
 		done:                make(chan bool),
 		status:              common.DaemonStatusInitialized,
-	}
+		serializer:          serializer,
+	}, nil
 }
 
 type (
@@ -76,6 +95,7 @@ type (
 		ackNotificationChan chan bool
 		done                chan bool
 		status              int32
+		serializer          serialization.Serializer
 	}
 
 	// NamespaceReplicationQueue is used to publish and list namespace replication tasks
@@ -175,8 +195,69 @@ func (q *namespaceReplicationQueueImpl) UpdateAckLevel(
 	lastProcessedMessageID int64,
 	clusterName string,
 ) error {
+	return q.updateAckLevelWithRetry(lastProcessedMessageID, clusterName, false)
+}
 
-	err := q.queue.UpdateAckLevel(lastProcessedMessageID, clusterName)
+func (q *namespaceReplicationQueueImpl) updateAckLevelWithRetry(
+	lastProcessedMessageID int64,
+	clusterName string,
+	isDLQ bool,
+) error {
+conditionFailedRetry:
+	for {
+		err := q.updateAckLevel(lastProcessedMessageID, clusterName, isDLQ)
+		switch err.(type) {
+		case *ConditionFailedError:
+			continue conditionFailedRetry
+		}
+
+		return err
+	}
+}
+
+func (q *namespaceReplicationQueueImpl) updateAckLevel(
+	lastProcessedMessageID int64,
+	clusterName string,
+	isDLQ bool,
+) error {
+	var err error
+	var internalMetadata *InternalQueueMetadata
+	if isDLQ {
+		internalMetadata, err = q.queue.GetDLQAckLevels()
+	} else {
+		internalMetadata, err = q.queue.GetAckLevels()
+	}
+
+	if err != nil {
+		return err
+	}
+
+	ackLevels, err := q.ackLevelsFromBlob(internalMetadata.Blob)
+
+	// Ignore possibly delayed message
+	if ack, ok := ackLevels[clusterName]; ok && ack > lastProcessedMessageID {
+		return nil
+	}
+
+	// TODO remove this block in 1.12.x
+	delete(ackLevels, "")
+	// TODO remove this block in 1.12.x
+
+	// update ack level
+	ackLevels[clusterName] = lastProcessedMessageID
+	blob, err := q.serializer.QueueMetadataToBlob(&persistence.QueueMetadata{
+		ClusterAckLevels: ackLevels,
+	}, enumspb.ENCODING_TYPE_PROTO3)
+	if err != nil {
+		return err
+	}
+
+	internalMetadata.Blob = blob
+	if isDLQ {
+		err = q.queue.UpdateDLQAckLevel(internalMetadata)
+	} else {
+		err = q.queue.UpdateAckLevel(internalMetadata)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to update ack level: %v", err)
 	}
@@ -190,7 +271,27 @@ func (q *namespaceReplicationQueueImpl) UpdateAckLevel(
 }
 
 func (q *namespaceReplicationQueueImpl) GetAckLevels() (map[string]int64, error) {
-	return q.queue.GetAckLevels()
+	metadata, err := q.queue.GetAckLevels()
+	if err != nil {
+		return nil, err
+	}
+	return q.ackLevelsFromBlob(metadata.Blob)
+}
+
+func (q *namespaceReplicationQueueImpl) ackLevelsFromBlob(blob *commonpb.DataBlob) (map[string]int64, error) {
+	if blob == nil {
+		return make(map[string]int64), nil
+	}
+
+	metadata, err := q.serializer.QueueMetadataFromBlob(blob)
+	if err != nil {
+		return nil, err
+	}
+	ackLevels := metadata.ClusterAckLevels
+	if ackLevels == nil {
+		ackLevels = make(map[string]int64)
+	}
+	return ackLevels, nil
 }
 
 func (q *namespaceReplicationQueueImpl) GetMessagesFromDLQ(
@@ -223,25 +324,15 @@ func (q *namespaceReplicationQueueImpl) GetMessagesFromDLQ(
 func (q *namespaceReplicationQueueImpl) UpdateDLQAckLevel(
 	lastProcessedMessageID int64,
 ) error {
-
-	if err := q.queue.UpdateDLQAckLevel(
-		lastProcessedMessageID,
-		localNamespaceReplicationCluster,
-	); err != nil {
-		return err
-	}
-
-	q.metricsClient.Scope(
-		metrics.PersistenceNamespaceReplicationQueueScope,
-	).UpdateGauge(
-		metrics.NamespaceReplicationDLQAckLevelGauge,
-		float64(lastProcessedMessageID),
-	)
-	return nil
+	return q.updateAckLevelWithRetry(lastProcessedMessageID, localNamespaceReplicationCluster, true)
 }
 
 func (q *namespaceReplicationQueueImpl) GetDLQAckLevel() (int64, error) {
-	dlqMetadata, err := q.queue.GetDLQAckLevels()
+	metadata, err := q.queue.GetDLQAckLevels()
+	if err != nil {
+		return EmptyQueueMessageID, err
+	}
+	dlqMetadata, err := q.ackLevelsFromBlob(metadata.Blob)
 	if err != nil {
 		return EmptyQueueMessageID, err
 	}
