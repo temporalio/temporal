@@ -34,6 +34,9 @@
       "CloseTime": {
         "type": "date_nanos"
       },
+      "ExecutionDuration": {
+        "type": "long"
+      },
       "ExecutionStatus": {
         "type": "keyword"
       },

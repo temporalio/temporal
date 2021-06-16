@@ -40,6 +40,7 @@ const (
 	ExecutionStatus       = "ExecutionStatus"
 	TaskQueue             = "TaskQueue"
 	HistoryLength         = "HistoryLength"
+	ExecutionDuration     = "ExecutionDuration"
 	TemporalChangeVersion = "TemporalChangeVersion"
 	BinaryChecksums       = "BinaryChecksums"
 	BatcherNamespace      = "BatcherNamespace"
@@ -54,16 +55,17 @@ const (
 var (
 	// reservedFields are internal field names that can't be used as search attribute names.
 	reservedFields = map[string]struct{}{
-		NamespaceID:     {},
-		WorkflowID:      {},
-		RunID:           {},
-		WorkflowType:    {},
-		StartTime:       {},
-		ExecutionTime:   {},
-		CloseTime:       {},
-		ExecutionStatus: {},
-		TaskQueue:       {},
-		HistoryLength:   {},
+		NamespaceID:       {},
+		WorkflowID:        {},
+		RunID:             {},
+		WorkflowType:      {},
+		StartTime:         {},
+		ExecutionTime:     {},
+		CloseTime:         {},
+		ExecutionStatus:   {},
+		TaskQueue:         {},
+		HistoryLength:     {},
+		ExecutionDuration: {},
 
 		MemoEncoding:      {},
 		Memo:              {},
@@ -82,6 +84,7 @@ var (
 		ExecutionStatus:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TaskQueue:             enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		HistoryLength:         enumspb.INDEXED_VALUE_TYPE_INT,
+		ExecutionDuration:     enumspb.INDEXED_VALUE_TYPE_INT,
 		TemporalChangeVersion: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		BinaryChecksums:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		BatcherNamespace:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
