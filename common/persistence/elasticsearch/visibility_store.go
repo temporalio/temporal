@@ -463,6 +463,7 @@ func (s *visibilityStore) CountWorkflowExecutions(request *persistence.CountWork
 }
 
 // TODO (alex): move this to separate file
+// TODO (alex): consider replacing this code with Elasticsearch SQL from X-Pack: https://www.elastic.co/what-is/open-x-pack.
 const (
 	jsonMissingCloseTime   = `{"missing":{"field":"CloseTime"}}`
 	jsonSortForOpen        = `[{"StartTime":"desc"},{"RunId":"desc"}]`
@@ -568,6 +569,10 @@ func getSQLFromCountRequest(request *persistence.CountWorkflowExecutionsRequest)
 	return sql
 }
 
+// getCustomizedDSLFromSQL converts SQL-ish query to Elasticsearch JSON query.
+// This is primarily done by `elasticsql` package.
+// Queries like `ExecutionStatus="Running"` are converted to: `{"query":{"bool":{"must":[{"match_phrase":{"ExecutionStatus":{"query":"Running"}}}]}},"from":0,"size":20}`.
+// Then `fastjson` parse this JSON and substitute some values.
 func getCustomizedDSLFromSQL(sql string, namespaceID string) (*fastjson.Value, error) {
 	dslStr, _, err := elasticsql.Convert(sql)
 	if err != nil {
@@ -1103,10 +1108,14 @@ func timeProcessFunc(_ *fastjson.Object, _ string, value *fastjson.Value) error 
 		})
 }
 
+// statusKeyFilter catch `ExecutionStatus` key and sends its value `{"query":"Running"}` to the statusProcessFunc.
 func statusKeyFilter(key string) bool {
 	return key == searchattribute.ExecutionStatus
 }
 
+// statusProcessFunc treats passed value as regular JSON and calls processAllValuesForKey for it.
+// keyFilterFunc func catches `query` key and call `processFunc` with value "Running".
+// In case of string it is just ignored but if it is a `int`, it gets converted to string and set back to `obj`.
 func statusProcessFunc(_ *fastjson.Object, _ string, value *fastjson.Value) error {
 	return processAllValuesForKey(
 		value,
