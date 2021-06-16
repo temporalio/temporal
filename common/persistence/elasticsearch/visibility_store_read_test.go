@@ -82,12 +82,12 @@ var (
 	}
 	errTestESSearch = errors.New("ES error")
 
-	filterOpen              = fmt.Sprintf("map[match:map[ExecutionStatus:map[query:%d]]]", enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
-	filterClose             = fmt.Sprintf("map[match:map[ExecutionStatus:map[query:%d]]]", enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
+	filterOpen              = fmt.Sprintf("map[match:map[ExecutionStatus:map[query:%s]]]", enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String())
+	filterClose             = fmt.Sprintf("map[match:map[ExecutionStatus:map[query:%s]]]", enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String())
 	filterByType            = fmt.Sprintf("map[match:map[WorkflowType:map[query:%s]]]", testWorkflowType)
 	filterByWID             = fmt.Sprintf("map[match:map[WorkflowId:map[query:%s]]]", testWorkflowID)
 	filterByRunID           = fmt.Sprintf("map[match:map[RunId:map[query:%s]]]", testRunID)
-	filterByExecutionStatus = fmt.Sprintf("map[match:map[ExecutionStatus:map[query:%d]]]", testStatus)
+	filterByExecutionStatus = fmt.Sprintf("map[match:map[ExecutionStatus:map[query:%s]]]", testStatus.String())
 )
 
 func createTestRequest() *persistence.ListWorkflowExecutionsRequest {
@@ -430,7 +430,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.Equal(0, len(resp.Executions))
 
 	// test for one hits
-	data := []byte(`{"ExecutionStatus": 1,
+	data := []byte(`{"ExecutionStatus": "Running",
           "CloseTime": "2021-06-11T16:04:07.980-07:00",
           "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
@@ -543,7 +543,7 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 
 func (s *ESVisibilitySuite) TestParseESDoc() {
 	searchHit := &elastic.SearchHit{
-		Source: []byte(`{"ExecutionStatus": 1,
+		Source: []byte(`{"ExecutionStatus": "Running",
           "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
           "VisibilityTaskKey": "7-619",
@@ -565,7 +565,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 
 	// test for close
 	searchHit = &elastic.SearchHit{
-		Source: []byte(`{"ExecutionStatus": 2,
+		Source: []byte(`{"ExecutionStatus": "Completed",
           "CloseTime": "2021-06-11T16:04:07Z",
           "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
@@ -777,7 +777,7 @@ func (s *ESVisibilitySuite) TestAddNamespaceToQuery() {
 func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 	s.mockESClient.EXPECT().SearchWithDSL(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, index, input string) (*elastic.SearchResult, error) {
-			s.True(strings.Contains(input, `{"match_phrase":{"ExecutionStatus":{"query":"5"}}}`))
+			s.True(strings.Contains(input, `{"match_phrase":{"ExecutionStatus":{"query":"Terminated"}}}`))
 			return testSearchResult, nil
 		})
 
@@ -785,7 +785,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
 		PageSize:    10,
-		Query:       `ExecutionStatus = 5`,
+		Query:       `ExecutionStatus = "Terminated"`,
 	}
 	_, err := s.visibilityStore.ListWorkflowExecutions(request)
 	s.NoError(err)
@@ -809,7 +809,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 	// test first page
 	s.mockESClient.EXPECT().ScrollFirstPage(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
 		func(ctx context.Context, index, input string) (*elastic.SearchResult, client.ScrollService, error) {
-			s.True(strings.Contains(input, `{"match_phrase":{"ExecutionStatus":{"query":"5"}}}`))
+			s.True(strings.Contains(input, `{"match_phrase":{"ExecutionStatus":{"query":"Terminated"}}}`))
 			return testSearchResult, nil, nil
 		})
 
@@ -817,7 +817,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
 		PageSize:    10,
-		Query:       `ExecutionStatus = 5`,
+		Query:       `ExecutionStatus = "Terminated"`,
 	}
 	_, err := s.visibilityStore.ScanWorkflowExecutions(request)
 	s.NoError(err)
@@ -860,14 +860,14 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutions() {
 func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 	s.mockESClient.EXPECT().Count(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
 		func(ctx context.Context, index, input string) (int64, error) {
-			s.True(strings.Contains(input, `{"match_phrase":{"ExecutionStatus":{"query":"5"}}}`))
+			s.True(strings.Contains(input, `{"match_phrase":{"ExecutionStatus":{"query":"Terminated"}}}`))
 			return int64(1), nil
 		})
 
 	request := &persistence.CountWorkflowExecutionsRequest{
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
-		Query:       `ExecutionStatus = 5`,
+		Query:       `ExecutionStatus = "Terminated"`,
 	}
 	resp, err := s.visibilityStore.CountWorkflowExecutions(request)
 	s.NoError(err)
@@ -914,6 +914,39 @@ func (s *ESVisibilitySuite) TestTimeProcessFunc() {
 	for i, testCase := range cases {
 		value := fastjson.MustParse(fmt.Sprintf(`{"%s": "%s"}`, testCase.key, testCase.value))
 		err := timeProcessFunc(nil, "", value)
+		if expected[i].returnErr {
+			s.Error(err)
+			continue
+		}
+		s.Equal(expected[i].value, value.Get(testCase.key).String())
+	}
+}
+
+func (s *ESVisibilitySuite) TestStatusProcessFunc() {
+	cases := []struct {
+		key   string
+		value string
+	}{
+		{key: "query", value: "Completed"},
+		{key: "query", value: "1"},
+		{key: "query", value: "100"},
+		{key: "query", value: "BadStatus"},
+		{key: "unrelatedKey", value: "should not be modified"},
+	}
+	expected := []struct {
+		value     string
+		returnErr bool
+	}{
+		{value: `"Completed"`, returnErr: false},
+		{value: `"Running"`, returnErr: false},
+		{value: `""`, returnErr: false},
+		{value: `"BadStatus"`, returnErr: false},
+		{value: `"should not be modified"`, returnErr: false},
+	}
+
+	for i, testCase := range cases {
+		value := fastjson.MustParse(fmt.Sprintf(`{"%s": "%s"}`, testCase.key, testCase.value))
+		err := statusProcessFunc(nil, "", value)
 		if expected[i].returnErr {
 			s.Error(err)
 			continue

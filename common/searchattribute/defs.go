@@ -79,7 +79,7 @@ var (
 		StartTime:             enumspb.INDEXED_VALUE_TYPE_DATETIME,
 		ExecutionTime:         enumspb.INDEXED_VALUE_TYPE_DATETIME,
 		CloseTime:             enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		ExecutionStatus:       enumspb.INDEXED_VALUE_TYPE_INT,
+		ExecutionStatus:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		TaskQueue:             enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		HistoryLength:         enumspb.INDEXED_VALUE_TYPE_INT,
 		TemporalChangeVersion: enumspb.INDEXED_VALUE_TYPE_KEYWORD,

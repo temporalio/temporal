@@ -31,3 +31,19 @@ if (ctx._source.CloseTime != null){
     ctx._source.CloseTime = Instant.ofEpochSecond(ctx._source.CloseTime / nanos, ctx._source.CloseTime % nanos);
 }
 
+if (ctx._source.ExecutionStatus == 1)
+    ctx._source.ExecutionStatus = 'Running';
+else if (ctx._source.ExecutionStatus == 2)
+    ctx._source.ExecutionStatus = 'Completed';
+else if (ctx._source.ExecutionStatus == 3)
+    ctx._source.ExecutionStatus = 'Failed';
+else if (ctx._source.ExecutionStatus == 4)
+    ctx._source.ExecutionStatus = 'Canceled';
+else if (ctx._source.ExecutionStatus == 5)
+    ctx._source.ExecutionStatus = 'Terminated';
+else if (ctx._source.ExecutionStatus == 6)
+    ctx._source.ExecutionStatus = 'ContinuedAsNew';
+else if (ctx._source.ExecutionStatus == 7)
+    ctx._source.ExecutionStatus = 'TimedOut';
+else
+    ctx._source.ExecutionStatus = 'Unspecified';
