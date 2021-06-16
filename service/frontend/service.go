@@ -76,7 +76,7 @@ type Config struct {
 	GlobalNamespaceRPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit             dynamicconfig.IntPropertyFn
 	EnableClientVersionCheck     dynamicconfig.BoolPropertyFn
-	MinRetentionDays             dynamicconfig.IntPropertyFn
+	MinRetention                 dynamicconfig.DurationPropertyFn
 	DisallowQuery                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ShutdownDrainDuration        dynamicconfig.DurationPropertyFn
 
@@ -163,7 +163,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 		SearchAttributesNumberOfKeysLimit:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
 		SearchAttributesSizeOfValueLimit:       dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
 		SearchAttributesTotalSizeLimit:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
-		MinRetentionDays:                       dc.GetIntProperty(dynamicconfig.MinRetentionDays, namespace.MinRetentionDays),
+		MinRetention:                           dc.GetDurationProperty(dynamicconfig.MinRetention, namespace.MinRetention),
 		VisibilityArchivalQueryMaxPageSize:     dc.GetIntProperty(dynamicconfig.VisibilityArchivalQueryMaxPageSize, 10000),
 		DisallowQuery:                          dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.DisallowQuery, false),
 		SendRawWorkflowHistory:                 dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.SendRawWorkflowHistory, false),

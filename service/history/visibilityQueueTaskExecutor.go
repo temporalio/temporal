@@ -395,8 +395,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 
 	recordWorkflowClose := true
 
-	// retention in namespace config is in days, convert to time.Duration.
-	retention := timestamp.DurationFromDays(namespaceEntry.GetRetentionDays(workflowID))
+	retention := namespaceEntry.GetRetention(workflowID)
 	// if sampled for longer retention is enabled, only record those sampled events
 	if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
 		!namespaceEntry.IsSampledForLongerRetention(workflowID) {
@@ -424,7 +423,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 			},
 			CloseTimestamp: endTime,
 			HistoryLength:  historyLength,
-			Retention:      retention,
+			Retention:      &retention,
 		})
 	}
 

@@ -537,30 +537,30 @@ func Test_GetRetentionDays(t *testing.T) {
 	d.info.Data[SampleRateKey] = "0"
 
 	wid := uuid.New()
-	rd := d.GetRetentionDays(wid)
-	require.Equal(t, int32(7), rd)
+	rd := d.GetRetention(wid)
+	require.Equal(t, 7*24*time.Hour, rd)
 
 	d.info.Data[SampleRateKey] = "1"
-	rd = d.GetRetentionDays(wid)
-	require.Equal(t, int32(30), rd)
+	rd = d.GetRetention(wid)
+	require.Equal(t, 30*24*time.Hour, rd)
 
 	d.info.Data[SampleRetentionKey] = "invalid-value"
-	rd = d.GetRetentionDays(wid)
-	require.Equal(t, int32(7), rd) // fallback to normal retention
+	rd = d.GetRetention(wid)
+	require.Equal(t, 7*24*time.Hour, rd) // fallback to normal retention
 
 	d.info.Data[SampleRetentionKey] = "30"
 	d.info.Data[SampleRateKey] = "invalid-value"
-	rd = d.GetRetentionDays(wid)
-	require.Equal(t, int32(7), rd) // fallback to normal retention
+	rd = d.GetRetention(wid)
+	require.Equal(t, 7*24*time.Hour, rd) // fallback to normal retention
 
 	wid = "3aef42a8-db0a-4a3b-b8b7-9829d74b4ebf"
 	d.info.Data[SampleRetentionKey] = "30"
 	d.info.Data[SampleRateKey] = "0.8"
-	rd = d.GetRetentionDays(wid)
-	require.Equal(t, int32(7), rd) // fallback to normal retention
+	rd = d.GetRetention(wid)
+	require.Equal(t, 7*24*time.Hour, rd) // fallback to normal retention
 	d.info.Data[SampleRateKey] = "0.9"
-	rd = d.GetRetentionDays(wid)
-	require.Equal(t, int32(30), rd)
+	rd = d.GetRetention(wid)
+	require.Equal(t, 30*24*time.Hour, rd)
 }
 
 func Test_IsSampledForLongerRetentionEnabled(t *testing.T) {

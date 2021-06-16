@@ -120,7 +120,7 @@ func NewWorkflowHandler(
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		versionChecker:  headers.NewDefaultVersionChecker(),
 		namespaceHandler: namespace.NewHandler(
-			config.MinRetentionDays(),
+			config.MinRetention(),
 			config.MaxBadBinaries,
 			resource.GetLogger(),
 			resource.GetMetadataManager(),
