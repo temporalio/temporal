@@ -608,18 +608,17 @@ type (
 
 	// VisibilityWorkflowExecutionInfo is visibility info for internal response
 	VisibilityWorkflowExecutionInfo struct {
-		WorkflowID        string
-		RunID             string
-		TypeName          string
-		StartTime         time.Time
-		ExecutionTime     time.Time
-		ExecutionDuration time.Duration
-		CloseTime         time.Time
-		Status            enumspb.WorkflowExecutionStatus
-		HistoryLength     int64
-		Memo              *commonpb.DataBlob
-		TaskQueue         string
-		SearchAttributes  map[string]interface{}
+		WorkflowID       string
+		RunID            string
+		TypeName         string
+		StartTime        time.Time
+		ExecutionTime    time.Time
+		CloseTime        time.Time
+		Status           enumspb.WorkflowExecutionStatus
+		HistoryLength    int64
+		Memo             *commonpb.DataBlob
+		TaskQueue        string
+		SearchAttributes map[string]interface{}
 	}
 
 	// InternalListWorkflowExecutionsResponse is response from ListWorkflowExecutions

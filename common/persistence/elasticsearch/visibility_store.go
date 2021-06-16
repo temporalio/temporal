@@ -1029,15 +1029,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 			}
 			record.HistoryLength = historyLengthInt64
 		case searchattribute.ExecutionDuration:
-			var executionDuration json.Number
-			if executionDuration, isValidType = fieldValue.(json.Number); !isValidType {
-				logUnexpectedType(fieldName, fieldValue, hit.Id)
-			}
-			executionDurationInt64, err := executionDuration.Int64()
-			if err != nil {
-				logNumberParseError(fieldName, executionDuration, err, hit.Id)
-			}
-			record.ExecutionDuration = time.Duration(executionDurationInt64)
+			// Ignore ExecutionDuration because it always can be computed.
 		default:
 			// All custom search attributes are handled here.
 			// Add only defined search attributes and ignore all unknown fields.
