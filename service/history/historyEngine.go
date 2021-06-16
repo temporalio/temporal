@@ -336,21 +336,21 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 
 	// NOTE: READ BEFORE MODIFICATION
 	//
-	// Tasks, e.g. transfer tasks and timer tasks, are created when holding the shard Lock
-	// meaning tasks -> release of shard Lock
+	// Tasks, e.g. transfer tasks and timer tasks, are created when holding the shard lock
+	// meaning tasks -> release of shard lock
 	//
 	// Namespace change notification follows the following steps, order matters
-	// 1. Lock all task processing.
-	// 2. namespace changes visible to everyone (Note: Lock of task processing prevents task processing logic seeing the namespace changes).
+	// 1. lock all task processing.
+	// 2. namespace changes visible to everyone (Note: lock of task processing prevents task processing logic seeing the namespace changes).
 	// 3. failover min and max task levels are calculated, then update to shard.
-	// 4. failover start & task processing Unlock & shard namespace version notification update. (order does not matter for this discussion)
+	// 4. failover start & task processing unlock & shard namespace version notification update. (order does not matter for this discussion)
 	//
 	// The above guarantees that task created during the failover will be processed.
 	// If the task is created after namespace change:
 	// 		then active processor will handle it. (simple case)
 	// If the task is created before namespace change:
-	//		task -> release of shard Lock
-	//		failover min / max task levels calculated & updated to shard (using shard Lock) -> failover start
+	//		task -> release of shard lock
+	//		failover min / max task levels calculated & updated to shard (using shard lock) -> failover start
 	// above 2 guarantees that failover start is after persistence of the task.
 
 	failoverPredicate := func(shardNotificationVersion int64, nextNamespace *cache.NamespaceCacheEntry, action func()) {
