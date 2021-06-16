@@ -82,7 +82,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 			s.EqualValues(request.Status, body[searchattribute.ExecutionStatus])
 
 			s.Equal(request.Memo.Data, body[searchattribute.Memo])
-			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[searchattribute.Encoding])
+			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[searchattribute.MemoEncoding])
 
 			customStringField := body["CustomStringField"].(string)
 			// %q because request has JSON encoded string.
@@ -119,7 +119,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 
 			_, ok := body[searchattribute.Memo]
 			s.False(ok)
-			_, ok = body[searchattribute.Encoding]
+			_, ok = body[searchattribute.MemoEncoding]
 			s.False(ok)
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
@@ -175,7 +175,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 			s.EqualValues(request.StartTimestamp, body[searchattribute.StartTime])
 			s.EqualValues(request.ExecutionTimestamp, body[searchattribute.ExecutionTime])
 			s.Equal(request.Memo.Data, body[searchattribute.Memo])
-			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[searchattribute.Encoding])
+			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[searchattribute.MemoEncoding])
 			s.EqualValues(request.CloseTimestamp, body[searchattribute.CloseTime])
 			s.EqualValues(request.Status, body[searchattribute.ExecutionStatus])
 			s.EqualValues(request.HistoryLength, body[searchattribute.HistoryLength])
@@ -211,7 +211,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 
 			_, ok := body[searchattribute.Memo]
 			s.False(ok)
-			_, ok = body[searchattribute.Encoding]
+			_, ok = body[searchattribute.MemoEncoding]
 			s.False(ok)
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)

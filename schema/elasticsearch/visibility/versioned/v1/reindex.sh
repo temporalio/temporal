@@ -10,7 +10,7 @@ ES_USER="${ES_USER:-}"
 ES_PWD="${ES_PWD:-}"
 ES_VIS_INDEX_V0="${ES_VIS_INDEX_V0:-temporal-visibility-dev}"
 ES_VIS_INDEX_V1="${ES_VIS_INDEX_V1:-temporal_visibility_v1_dev}"
-REINDEX_CUSTOM_FIELDS="${REINDEX_CUSTOM_FIELDS:-true}"
+CUSTOM_SEARCH_ATTRIBUTES="${CUSTOM_SEARCH_ATTRIBUTES:-[\"CustomKeywordField\",\"CustomStringField\",\"CustomIntField\",\"CustomDatetimeField\",\"CustomDoubleField\",\"CustomBoolField\"]}"
 AUTO_CONFIRM="${AUTO_CONFIRM:-}"
 
 DIR_NAME="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
@@ -21,7 +21,7 @@ REINDEX_JSON=$(sed \
     -e "s/\${REINDEX_SCRIPT}/${REINDEX_SCRIPT}/g" \
     -e "s/\${ES_VIS_INDEX_V0}/${ES_VIS_INDEX_V0}/g" \
     -e "s/\${ES_VIS_INDEX_V1}/${ES_VIS_INDEX_V1}/g" \
-    -e "s/\${REINDEX_CUSTOM_FIELDS}/${REINDEX_CUSTOM_FIELDS}/g" \
+    -e "s/\${CUSTOM_SEARCH_ATTRIBUTES}/${CUSTOM_SEARCH_ATTRIBUTES}/g" \
     "${DIR_NAME}/reindex.json")
 
 echo "${REINDEX_JSON}" | jq
