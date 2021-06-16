@@ -879,7 +879,7 @@ func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityR
 
 	if len(request.Memo.GetData()) > 0 {
 		doc[searchattribute.Memo] = request.Memo.GetData()
-		doc[searchattribute.Encoding] = request.Memo.GetEncodingType().String()
+		doc[searchattribute.MemoEncoding] = request.Memo.GetEncodingType().String()
 	}
 
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
@@ -984,7 +984,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 			if memo, err = base64.StdEncoding.DecodeString(memoStr); err != nil {
 				logMemoDecodeError(err, hit.Id)
 			}
-		case searchattribute.Encoding:
+		case searchattribute.MemoEncoding:
 			if memoEncoding, isValidType = fieldValue.(string); !isValidType {
 				logUnexpectedType(fieldName, fieldValue, hit.Id)
 			}
@@ -1027,7 +1027,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 	if memoEncoding != "" {
 		record.Memo = persistence.NewDataBlob(memo, memoEncoding)
 	} else if memo != nil {
-		s.logger.Error("Encoding field is missing in Elasticsearch document.", tag.ESDocID(hit.Id))
+		s.logger.Error("Field is missing in Elasticsearch document.", tag.Name(searchattribute.MemoEncoding), tag.ESDocID(hit.Id))
 		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
 

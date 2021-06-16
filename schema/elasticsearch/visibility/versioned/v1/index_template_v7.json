@@ -43,14 +43,17 @@
       "TemporalChangeVersion": {
         "type": "keyword"
       },
-      "CustomNamespace": {
+      "BatcherNamespace": {
         "type": "keyword"
       },
-      "Operator": {
+      "BatcherUser": {
         "type": "keyword"
       },
       "BinaryChecksums": {
         "type": "keyword"
+      },
+      "HistoryLength": {
+        "type": "long"
       }
     }
   },
