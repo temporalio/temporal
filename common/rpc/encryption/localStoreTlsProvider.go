@@ -149,7 +149,7 @@ func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 			return newClientTLSConfig(s.workerCertProvider, client.ServerName,
 				s.settings.Frontend.Server.RequireClientAuth, true, !client.DisableHostVerification)
 		},
-		s.settings.Internode.IsEnabled(),
+		s.settings.Frontend.IsEnabled(),
 	)
 }
 
