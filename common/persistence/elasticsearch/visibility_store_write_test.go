@@ -79,7 +79,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 			s.EqualValues(request.StartTimestamp, body[searchattribute.StartTime])
 			s.EqualValues(request.ExecutionTimestamp, body[searchattribute.ExecutionTime])
 			s.Equal(request.TaskQueue, body[searchattribute.TaskQueue])
-			s.EqualValues(request.Status, body[searchattribute.ExecutionStatus])
+			s.EqualValues(request.Status.String(), body[searchattribute.ExecutionStatus])
 
 			s.Equal(request.Memo.Data, body[searchattribute.Memo])
 			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[searchattribute.MemoEncoding])
@@ -177,7 +177,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 			s.Equal(request.Memo.Data, body[searchattribute.Memo])
 			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[searchattribute.MemoEncoding])
 			s.EqualValues(request.CloseTimestamp, body[searchattribute.CloseTime])
-			s.EqualValues(request.Status, body[searchattribute.ExecutionStatus])
+			s.EqualValues(request.Status.String(), body[searchattribute.ExecutionStatus])
 			s.EqualValues(request.HistoryLength, body[searchattribute.HistoryLength])
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
