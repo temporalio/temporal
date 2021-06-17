@@ -77,6 +77,12 @@ func (s *fileBasedClientSuite) TestGetValue_NonExistKey() {
 	s.Equal(defaultValue, v)
 }
 
+func (s *fileBasedClientSuite) TestGetValue_CaseInsensitie() {
+	v, err := s.client.GetValue(testCaseInsensitivePropertyKey, false)
+	s.Nil(err)
+	s.Equal(true, v)
+}
+
 func (s *fileBasedClientSuite) TestGetValueWithFilters() {
 	filters := map[Filter]interface{}{
 		Namespace: "global-samples-namespace",
