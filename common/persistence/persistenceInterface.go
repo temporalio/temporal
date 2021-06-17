@@ -637,19 +637,18 @@ type (
 
 	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted
 	InternalVisibilityRequestBase struct {
-		NamespaceID          string
-		WorkflowID           string
-		RunID                string
-		WorkflowTypeName     string
-		StartTimestamp       time.Time
-		Status               enumspb.WorkflowExecutionStatus
-		ExecutionTimestamp   time.Time
-		StateTransitionCount int64
-		TaskID               int64
-		ShardID              int32
-		Memo                 *commonpb.DataBlob
-		TaskQueue            string
-		SearchAttributes     *commonpb.SearchAttributes
+		NamespaceID      string
+		WorkflowID       string
+		RunID            string
+		WorkflowTypeName string
+		StartTime        time.Time
+		Status           enumspb.WorkflowExecutionStatus
+		ExecutionTime    time.Time
+		StateTransitionCount int64TaskID           int64
+		ShardID          int32
+		Memo             *commonpb.DataBlob
+		TaskQueue        string
+		SearchAttributes *commonpb.SearchAttributes
 	}
 
 	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted
@@ -660,9 +659,9 @@ type (
 	// InternalRecordWorkflowExecutionClosedRequest is request to RecordWorkflowExecutionClosed
 	InternalRecordWorkflowExecutionClosedRequest struct {
 		*InternalVisibilityRequestBase
-		CloseTimestamp time.Time
-		HistoryLength  int64
-		Retention      *time.Duration
+		CloseTime     time.Time
+		HistoryLength int64
+		Retention     *time.Duration
 	}
 
 	// InternalUpsertWorkflowExecutionRequest is request to UpsertWorkflowExecution
