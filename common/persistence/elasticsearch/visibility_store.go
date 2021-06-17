@@ -82,6 +82,10 @@ type (
 	}
 )
 
+var (
+	ErrInvalidDuration = errors.New("invalid duration format")
+)
+
 var _ persistence.VisibilityStore = (*visibilityStore)(nil)
 
 // NewVisibilityStore create a visibility store connecting to ElasticSearch
@@ -129,6 +133,7 @@ func (s *visibilityStore) RecordWorkflowExecutionClosed(request *persistence.Int
 	doc := s.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
 
 	doc[searchattribute.CloseTime] = request.CloseTimestamp
+	doc[searchattribute.ExecutionDuration] = request.CloseTimestamp.Sub(request.ExecutionTimestamp).Nanoseconds()
 	doc[searchattribute.HistoryLength] = request.HistoryLength
 
 	return s.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
@@ -593,6 +598,9 @@ func getCustomizedDSLFromSQL(sql string, namespaceID string) (*fastjson.Value, e
 	if err := processAllValuesForKey(dsl, statusKeyFilter, statusProcessFunc); err != nil {
 		return nil, err
 	}
+	if err := processAllValuesForKey(dsl, durationKeyFilter, durationProcessFunc); err != nil {
+		return nil, err
+	}
 	return dsl, nil
 }
 
@@ -1020,6 +1028,8 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 				logNumberParseError(fieldName, historyLength, err, hit.Id)
 			}
 			record.HistoryLength = historyLengthInt64
+		case searchattribute.ExecutionDuration:
+			// Ignore ExecutionDuration because it always can be computed.
 		default:
 			// All custom search attributes are handled here.
 			// Add only defined search attributes and ignore all unknown fields.
@@ -1134,4 +1144,56 @@ func statusProcessFunc(_ *fastjson.Object, _ string, value *fastjson.Value) erro
 			}
 			return nil
 		})
+}
+func durationKeyFilter(key string) bool {
+	return key == searchattribute.ExecutionDuration
+}
+
+func durationProcessFunc(_ *fastjson.Object, _ string, value *fastjson.Value) error {
+	return processAllValuesForKey(
+		value,
+		func(key string) bool {
+			_, ok := rangeKeys[key]
+			return ok
+		},
+		func(obj *fastjson.Object, key string, v *fastjson.Value) error {
+			durationStr := string(v.GetStringBytes())
+
+			// To support durations passed as golang durations such as "300ms", "-1.5h" or "2h45m".
+			// Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
+			if duration, err := time.ParseDuration(durationStr); err == nil {
+				obj.Set(key, fastjson.MustParse(strconv.FormatInt(duration.Nanoseconds(), 10)))
+				return nil
+			}
+
+			// To support "hh:mm:ss" durations.
+			durationNanos, err := parseHHMMSSDuration(durationStr)
+			if errors.Is(err, ErrInvalidDuration) {
+				return err
+			}
+			if err == nil {
+				obj.Set(key, fastjson.MustParse(strconv.FormatInt(durationNanos, 10)))
+			}
+
+			return nil
+		})
+}
+
+func parseHHMMSSDuration(d string) (int64, error) {
+	var hours, minutes, seconds, nanos int64
+	_, err := fmt.Sscanf(d, "%d:%d:%d", &hours, &minutes, &seconds)
+	if err != nil {
+		return 0, err
+	}
+	if hours < 0 {
+		return 0, fmt.Errorf("%w: hours must be positive number", ErrInvalidDuration)
+	}
+	if minutes < 0 || minutes > 59 {
+		return 0, fmt.Errorf("%w: minutes must be from 0 to 59", ErrInvalidDuration)
+	}
+	if seconds < 0 || seconds > 59 {
+		return 0, fmt.Errorf("%w: seconds must be from 0 to 59", ErrInvalidDuration)
+	}
+
+	return hours*int64(time.Hour) + minutes*int64(time.Minute) + seconds*int64(time.Second) + nanos, nil
 }

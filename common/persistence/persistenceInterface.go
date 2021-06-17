@@ -313,7 +313,7 @@ type (
 		NextPageToken []byte
 	}
 	InternalListTaskQueueItem struct {
-		TaskQueue *commonpb.DataBlob //serialized PersistedTaskQueueInfo
+		TaskQueue *commonpb.DataBlob // serialized PersistedTaskQueueInfo
 		RangeID   int64
 	}
 
