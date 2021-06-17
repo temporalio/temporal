@@ -35,7 +35,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/api/common/v1"
-
 	v10 "go.temporal.io/server/api/persistence/v1"
 	persistence "go.temporal.io/server/common/persistence"
 )
@@ -63,13 +62,13 @@ func (m *MockContext) EXPECT() *MockContextMockRecorder {
 	return m.recorder
 }
 
-// clear mocks base method.
+// Clear mocks base method.
 func (m *MockContext) Clear() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Clear")
 }
 
-// clear indicates an expected call of Clear.
+// Clear indicates an expected call of Clear.
 func (mr *MockContextMockRecorder) Clear() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Clear", reflect.TypeOf((*MockContext)(nil).Clear))
@@ -204,7 +203,7 @@ func (mr *MockContextMockRecorder) LoadWorkflowExecutionForReplication(incomingV
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadWorkflowExecutionForReplication", reflect.TypeOf((*MockContext)(nil).LoadWorkflowExecutionForReplication), incomingVersion)
 }
 
-// lock mocks base method.
+// Lock mocks base method.
 func (m *MockContext) Lock(ctx context.Context, caller CallerType) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Lock", ctx, caller)
@@ -212,7 +211,7 @@ func (m *MockContext) Lock(ctx context.Context, caller CallerType) error {
 	return ret0
 }
 
-// lock indicates an expected call of Lock.
+// Lock indicates an expected call of Lock.
 func (mr *MockContextMockRecorder) Lock(ctx, caller interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lock", reflect.TypeOf((*MockContext)(nil).Lock), ctx, caller)
