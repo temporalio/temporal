@@ -293,7 +293,7 @@ func toTimeStr(s interface{}) string {
 		return s.(string)
 	}
 	t := time.Unix(0, intTime).UTC()
-	return t.Format(time.RFC3339)
+	return t.Format(time.RFC3339Nano)
 }
 
 // GenerateReport generate report for an aggregation query to ES

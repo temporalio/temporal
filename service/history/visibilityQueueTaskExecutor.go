@@ -25,13 +25,13 @@
 package history
 
 import (
+	"context"
 	"errors"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -125,12 +125,16 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 	isStartExecution bool,
 ) (retError error) {
 
-	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
 		task.GetNamespaceId(),
 		commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      task.GetRunId(),
 		},
+		callerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -162,12 +166,8 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 	executionState := mutableState.GetExecutionState()
 	wfTypeName := executionInfo.WorkflowTypeName
 
-	startEvent, err := mutableState.GetStartEvent()
-	if err != nil {
-		return err
-	}
-	startTimestamp := timestamp.TimeValue(startEvent.GetEventTime())
-	executionTimestamp := getWorkflowExecutionTime(mutableState, startEvent)
+	workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
+	workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
 	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
 	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 	executionStatus := executionState.GetStatus()
@@ -184,8 +184,8 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 			task.GetWorkflowId(),
 			task.GetRunId(),
 			wfTypeName,
-			startTimestamp,
-			executionTimestamp,
+			workflowStartTime,
+			workflowExecutionTime,
 			task.GetTaskId(),
 			executionStatus,
 			taskQueue,
@@ -198,8 +198,8 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 		task.GetWorkflowId(),
 		task.GetRunId(),
 		wfTypeName,
-		startTimestamp,
-		executionTimestamp,
+		workflowStartTime,
+		workflowExecutionTime,
 		task.GetTaskId(),
 		executionStatus,
 		taskQueue,
@@ -299,12 +299,16 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	task *persistencespb.VisibilityTaskInfo,
 ) (retError error) {
 
-	weContext, release, err := t.cache.getOrCreateWorkflowExecutionForBackground(
+	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	defer cancel()
+	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+		ctx,
 		task.GetNamespaceId(),
 		commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      task.GetRunId(),
 		},
+		callerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -341,12 +345,8 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	workflowStatus := executionState.Status
 	workflowHistoryLength := mutableState.GetNextEventID() - 1
 
-	startEvent, err := mutableState.GetStartEvent()
-	if err != nil {
-		return err
-	}
-	workflowStartTime := timestamp.TimeValue(startEvent.GetEventTime())
-	workflowExecutionTime := getWorkflowExecutionTime(mutableState, startEvent)
+	workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
+	workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
 	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
 	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 	taskQueue := executionInfo.TaskQueue
@@ -395,8 +395,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 
 	recordWorkflowClose := true
 
-	// retention in namespace config is in days, convert to time.Duration.
-	retention := timestamp.DurationFromDays(namespaceEntry.GetRetentionDays(workflowID))
+	retention := namespaceEntry.GetRetention(workflowID)
 	// if sampled for longer retention is enabled, only record those sampled events
 	if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
 		!namespaceEntry.IsSampledForLongerRetention(workflowID) {
@@ -424,7 +423,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 			},
 			CloseTimestamp: endTime,
 			HistoryLength:  historyLength,
-			Retention:      retention,
+			Retention:      &retention,
 		})
 	}
 
@@ -445,26 +444,6 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		return t.shard.GetService().GetVisibilityManager().DeleteWorkflowExecution(request) // delete from db
 	}
 	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-}
-
-// Argument startEvent is to save additional call of msBuilder.GetStartEvent
-func getWorkflowExecutionTime(
-	msBuilder mutableState,
-	startEvent *historypb.HistoryEvent,
-) time.Time {
-	// Use value 0 to represent workflows that don't need backoff. Since ES doesn't support
-	// comparison between two field, we need a value to differentiate them from cron workflows
-	// or later runs of a workflow that needs retry.
-	executionTimestamp := time.Unix(0, 0).UTC()
-	if startEvent == nil {
-		return executionTimestamp
-	}
-
-	if backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff()); backoffDuration != 0 {
-		startTime := timestamp.TimeValue(startEvent.GetEventTime())
-		executionTimestamp = startTime.Add(backoffDuration)
-	}
-	return executionTimestamp
 }
 
 func getWorkflowMemo(

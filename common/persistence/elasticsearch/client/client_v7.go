@@ -26,14 +26,12 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/olivere/elastic/v7"
-	"go.temporal.io/server/common/searchattribute"
-
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 )
@@ -153,8 +151,8 @@ func (c *clientV7) RunBulkProcessor(ctx context.Context, p *BulkProcessorParamet
 	return newBulkProcessorV7(esBulkProcessor), err
 }
 
-func (c *clientV7) PutMapping(ctx context.Context, index string, root string, mapping map[string]string) (bool, error) {
-	body := buildMappingBody(root, mapping)
+func (c *clientV7) PutMapping(ctx context.Context, index string, mapping map[string]enumspb.IndexedValueType) (bool, error) {
+	body := buildMappingBody(mapping)
 	resp, err := c.esClient.PutMapping().Index(index).BodyJson(body).Do(ctx)
 	if err != nil {
 		return false, err
@@ -176,6 +174,10 @@ func (c *clientV7) GetMapping(ctx context.Context, index string) (map[string]str
 		return nil, err
 	}
 	return convertMappingBody(resp, index), err
+}
+
+func (c *clientV7) GetDateFieldType() string {
+	return "date_nanos"
 }
 
 func (c *clientV7) CreateIndex(ctx context.Context, index string) (bool, error) {
@@ -252,23 +254,34 @@ func getLoggerOptions(logLevel string, logger log.Logger) []elastic.ClientOption
 	}
 }
 
-func buildMappingBody(root string, mapping map[string]string) map[string]interface{} {
+func buildMappingBody(mapping map[string]enumspb.IndexedValueType) map[string]interface{} {
 	properties := make(map[string]interface{}, len(mapping))
 	for fieldName, fieldType := range mapping {
-		properties[fieldName] = map[string]interface{}{
-			"type": fieldType,
+		var typeMap map[string]interface{}
+		switch fieldType {
+		case enumspb.INDEXED_VALUE_TYPE_STRING:
+			typeMap = map[string]interface{}{"type": "text"}
+		case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
+			typeMap = map[string]interface{}{"type": "keyword"}
+		case enumspb.INDEXED_VALUE_TYPE_INT:
+			typeMap = map[string]interface{}{"type": "long"}
+		case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
+			typeMap = map[string]interface{}{
+				"type":           "scaled_float",
+				"scaling_factor": 10000,
+			}
+		case enumspb.INDEXED_VALUE_TYPE_BOOL:
+			typeMap = map[string]interface{}{"type": "boolean"}
+		case enumspb.INDEXED_VALUE_TYPE_DATETIME:
+			typeMap = map[string]interface{}{"type": "date_nanos"}
+		}
+		if typeMap != nil {
+			properties[fieldName] = typeMap
 		}
 	}
 
-	body := make(map[string]interface{})
-	if len(root) != 0 {
-		body["properties"] = map[string]interface{}{
-			root: map[string]interface{}{
-				"properties": properties,
-			},
-		}
-	} else {
-		body["properties"] = properties
+	body := map[string]interface{}{
+		"properties": properties,
 	}
 	return body
 }
@@ -291,6 +304,17 @@ func convertMappingBody(esMapping map[string]interface{}, indexName string) map[
 	if !ok {
 		return result
 	}
+
+	// One more nested field on ES6.
+	// TODO (alex): Remove with ES6 removal.
+	if doc, ok := mappingsMap[docTypeV6]; ok {
+		docMap, ok := doc.(map[string]interface{})
+		if !ok {
+			return result
+		}
+		mappingsMap = docMap
+	}
+
 	properties, ok := mappingsMap["properties"]
 	if !ok {
 		return result
@@ -301,36 +325,6 @@ func convertMappingBody(esMapping map[string]interface{}, indexName string) map[
 	}
 
 	for fieldName, fieldProp := range propMap {
-		if fieldName == searchattribute.Attr {
-			attrFieldMap, ok := fieldProp.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			attrFieldProp, ok := attrFieldMap["properties"]
-			if !ok {
-				continue
-			}
-			attrBodyMap, ok := attrFieldProp.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			for fieldName, fieldProp := range attrBodyMap {
-				fieldPropMap, ok := fieldProp.(map[string]interface{})
-				if !ok {
-					continue
-				}
-				tYpe, ok := fieldPropMap["type"]
-				if !ok {
-					continue
-				}
-				typeStr, ok := tYpe.(string)
-				if !ok {
-					continue
-				}
-				result[fmt.Sprintf("%s.%s", searchattribute.Attr, fieldName)] = typeStr
-			}
-		}
-
 		fieldPropMap, ok := fieldProp.(map[string]interface{})
 		if !ok {
 			continue

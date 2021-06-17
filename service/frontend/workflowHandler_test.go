@@ -1562,7 +1562,6 @@ func registerNamespaceRequest(
 		},
 		ActiveClusterName:       cluster.TestCurrentClusterName,
 		Data:                    make(map[string]string),
-		SecurityToken:           "token",
 		HistoryArchivalState:    historyArchivalState,
 		HistoryArchivalUri:      historyArchivalURI,
 		VisibilityArchivalState: visibilityArchivalState,

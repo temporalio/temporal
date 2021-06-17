@@ -684,6 +684,9 @@ const (
 	// BlobstoreClientDirectoryExistsScope tracks DirectoryExists calls to blobstore
 	BlobstoreClientDirectoryExistsScope
 
+	// ElasticSearchVisibility is scope used by all metric emitted by esProcessor
+	ElasticSearchVisibility
+
 	NumCommonScopes
 )
 
@@ -992,14 +995,10 @@ const (
 	ShardInfoScope
 	// WorkflowContextScope is the scope used by WorkflowContext component
 	WorkflowContextScope
-	// HistoryCacheGetAndCreateScope is the scope used by history cache
-	HistoryCacheGetAndCreateScope
 	// HistoryCacheGetOrCreateScope is the scope used by history cache
 	HistoryCacheGetOrCreateScope
 	// HistoryCacheGetOrCreateCurrentScope is the scope used by history cache
 	HistoryCacheGetOrCreateCurrentScope
-	// HistoryCacheGetCurrentExecutionScope is the scope used by history cache for getting current execution
-	HistoryCacheGetCurrentExecutionScope
 	// EventsCacheGetEventScope is the scope used by events cache
 	EventsCacheGetEventScope
 	// EventsCachePutEventScope is the scope used by events cache
@@ -1032,9 +1031,6 @@ const (
 	ReplicationTaskCleanupScope
 	// ReplicationDLQStatsScope is scope used by all metrics emitted related to replication DLQ
 	ReplicationDLQStatsScope
-
-	// ElasticSearchVisibility is scope used by all metric emitted by esProcessor
-	ElasticSearchVisibility
 
 	NumHistoryScopes
 )
@@ -1388,6 +1384,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		BlobstoreClientExistsScope:          {operation: "BlobstoreClientExists", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
 		BlobstoreClientDeleteScope:          {operation: "BlobstoreClientDelete", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
 		BlobstoreClientDirectoryExistsScope: {operation: "BlobstoreClientDirectoryExists", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
+
+		ElasticSearchVisibility: {operation: "ElasticSearchVisibility"},
 	},
 	// Frontend Scope Names
 	Frontend: {
@@ -1545,10 +1543,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ReplicateHistoryEventsScope:               {operation: "ReplicateHistoryEvents"},
 		ShardInfoScope:                            {operation: "ShardInfo"},
 		WorkflowContextScope:                      {operation: "WorkflowContext"},
-		HistoryCacheGetAndCreateScope:             {operation: "HistoryCacheGetAndCreate", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
 		HistoryCacheGetOrCreateScope:              {operation: "HistoryCacheGetOrCreate", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
 		HistoryCacheGetOrCreateCurrentScope:       {operation: "HistoryCacheGetOrCreateCurrent", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
-		HistoryCacheGetCurrentExecutionScope:      {operation: "HistoryCacheGetCurrentExecution", tags: map[string]string{CacheTypeTagName: MutableStateCacheTypeTagValue}},
 		EventsCacheGetEventScope:                  {operation: "EventsCacheGetEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
 		EventsCachePutEventScope:                  {operation: "EventsCachePutEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
 		EventsCacheDeleteEventScope:               {operation: "EventsCacheDeleteEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
@@ -1562,7 +1558,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ReplicationTaskFetcherScope:               {operation: "ReplicationTaskFetcher"},
 		ReplicationTaskCleanupScope:               {operation: "ReplicationTaskCleanup"},
 		ReplicationDLQStatsScope:                  {operation: "ReplicationDLQStats"},
-		ElasticSearchVisibility:                   {operation: "ElasticSearchVisibility"},
 		SyncShardTaskScope:                        {operation: "SyncShardTask"},
 		SyncActivityTaskScope:                     {operation: "SyncActivityTask"},
 		HistoryMetadataReplicationTaskScope:       {operation: "HistoryMetadataReplicationTask"},
@@ -1622,6 +1617,7 @@ const (
 	ServiceErrNamespaceAlreadyExistsCounter
 	ServiceErrCancellationAlreadyRequestedCounter
 	ServiceErrQueryFailedCounter
+	ServiceErrContextCancelledCounter
 	ServiceErrContextTimeoutCounter
 	ServiceErrRetryTaskCounter
 	ServiceErrBadBinaryCounter
@@ -1752,6 +1748,9 @@ const (
 
 	AddSearchAttributesWorkflowSuccessCount
 	AddSearchAttributesWorkflowFailuresCount
+
+	ESInvalidSearchAttribute
+
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
 
@@ -1931,7 +1930,6 @@ const (
 	ESBulkProcessorFailures
 	ESBulkProcessorCorruptedData
 	ESBulkProcessorRequestLatency
-	ESInvalidSearchAttribute
 
 	NumHistoryMetrics
 )
@@ -2050,6 +2048,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceErrNamespaceAlreadyExistsCounter:             {metricName: "service_errors_namespace_already_exists", metricType: Counter},
 		ServiceErrCancellationAlreadyRequestedCounter:       {metricName: "service_errors_cancellation_already_requested", metricType: Counter},
 		ServiceErrQueryFailedCounter:                        {metricName: "service_errors_query_failed", metricType: Counter},
+		ServiceErrContextCancelledCounter:                   {metricName: "service_errors_context_cancelled", metricType: Counter},
 		ServiceErrContextTimeoutCounter:                     {metricName: "service_errors_context_timeout", metricType: Counter},
 		ServiceErrRetryTaskCounter:                          {metricName: "service_errors_retry_task", metricType: Counter},
 		ServiceErrBadBinaryCounter:                          {metricName: "service_errors_bad_binary", metricType: Counter},
@@ -2201,6 +2200,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceErrAuthorizeFailedPerTaskQueueCounter: {
 			metricName: "service_errors_authorize_failed_per_tl", metricRollupName: "service_errors_authorize_failed", metricType: Counter,
 		},
+		ESInvalidSearchAttribute: {metricName: "es_invalid_search_attribute"},
 	},
 	History: {
 		TaskRequests:                                      {metricName: "task_requests", metricType: Counter},
@@ -2374,7 +2374,6 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ESBulkProcessorFailures:       {metricName: "es_bulk_processor_errors"},
 		ESBulkProcessorCorruptedData:  {metricName: "es_bulk_processor_corrupted_data"},
 		ESBulkProcessorRequestLatency: {metricName: "es_bulk_processor_request_latency", metricType: Timer},
-		ESInvalidSearchAttribute:      {metricName: "es_invalid_search_attribute"},
 	},
 	Matching: {
 		PollSuccessPerTaskQueueCounter:            {metricName: "poll_success_per_tl", metricRollupName: "poll_success"},

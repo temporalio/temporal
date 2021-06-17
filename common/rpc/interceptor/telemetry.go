@@ -95,16 +95,8 @@ func (ti *TelemetryInterceptor) Intercept(
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 	_, methodName := splitMethodName(info.FullMethod)
-	// if the method name is not defined, will default to
-	// unknown scope, which carries value 0
-	scope, _ := ti.scopes[methodName]
-	scope = ti.overrideScope(scope, req)
-	var metricsScope metrics.Scope
-	if namespace := GetNamespace(ti.namespaceCache, req); namespace != "" {
-		metricsScope = ti.metricsClient.Scope(scope).Tagged(metrics.NamespaceTag(namespace))
-	} else {
-		metricsScope = ti.metricsClient.Scope(scope).Tagged(metrics.NamespaceUnknownTag())
-	}
+	metricsScope, logTags := ti.metricsScopeLogTags(req, methodName)
+
 	ctx = context.WithValue(ctx, metricsCtxKey, metricsScope)
 	metricsScope.IncCounter(metrics.ServiceRequests)
 
@@ -120,21 +112,45 @@ func (ti *TelemetryInterceptor) Intercept(
 	}
 
 	if err != nil {
-		ti.handleError(metricsScope, methodName, err)
+		ti.handleError(metricsScope, logTags, err)
 		return nil, err
 	}
 
 	return resp, nil
 }
 
+func (ti *TelemetryInterceptor) metricsScopeLogTags(
+	req interface{},
+	methodName string,
+) (metrics.Scope, []tag.Tag) {
+
+	// if the method name is not defined, will default to
+	// unknown scope, which carries value 0
+	scopeDef, _ := ti.scopes[methodName]
+	scopeDef = ti.overrideScope(scopeDef, req)
+
+	namespace := GetNamespace(ti.namespaceCache, req)
+	if namespace == "" {
+		return ti.metricsClient.Scope(scopeDef).Tagged(metrics.NamespaceUnknownTag()), []tag.Tag{tag.Operation(methodName)}
+	}
+	return ti.metricsClient.Scope(scopeDef).Tagged(metrics.NamespaceTag(namespace)), []tag.Tag{
+		tag.Operation(methodName),
+		tag.WorkflowNamespace(namespace),
+	}
+}
+
 func (ti *TelemetryInterceptor) handleError(
 	scope metrics.Scope,
-	methodName string,
+	logTags []tag.Tag,
 	err error,
 ) {
 
-	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
+	if common.IsContextDeadlineExceededErr(err) {
 		scope.IncCounter(metrics.ServiceErrContextTimeoutCounter)
+		return
+	}
+	if common.IsContextCanceledErr(err) {
+		scope.IncCounter(metrics.ServiceErrContextCancelledCounter)
 		return
 	}
 
@@ -163,13 +179,13 @@ func (ti *TelemetryInterceptor) handleError(
 		scope.IncCounter(metrics.ServiceErrClientVersionNotSupportedCounter)
 	case *serviceerror.DataLoss:
 		scope.IncCounter(metrics.ServiceFailures)
-		ti.logger.Error("internal service error, data loss", tag.Operation(methodName), tag.Error(err))
+		ti.logger.Error("internal service error, data loss", append(logTags, tag.Error(err))...)
 	case *serviceerror.Internal:
 		scope.IncCounter(metrics.ServiceFailures)
-		ti.logger.Error("internal service error", tag.Operation(methodName), tag.Error(err))
+		ti.logger.Error("internal service error", append(logTags, tag.Error(err))...)
 	default:
 		scope.IncCounter(metrics.ServiceFailures)
-		ti.logger.Error("uncategorized error", tag.Operation(methodName), tag.Error(err))
+		ti.logger.Error("uncategorized error", append(logTags, tag.Error(err))...)
 	}
 }
 

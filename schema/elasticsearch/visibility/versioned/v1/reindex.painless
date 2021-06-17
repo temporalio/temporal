@@ -1,0 +1,52 @@
+if (ctx._source.Attr != null) {
+    for (customSearchAttribute in params['customSearchAttributes']) {
+        def customSearchAttributeValue = ctx._source.Attr[customSearchAttribute];
+        if (customSearchAttributeValue != null){
+            ctx._source[customSearchAttribute] = customSearchAttributeValue;
+        }
+    }
+    if (ctx._source.Attr['CustomNamespace'] != null){
+        ctx._source['BatcherNamespace'] = ctx._source.Attr['CustomNamespace'];
+    }
+    if (ctx._source.Attr['Operator'] != null){
+        ctx._source['BatcherUser'] = ctx._source.Attr['Operator'];
+    }
+    if (ctx._source.Attr['TemporalChangeVersion'] != null){
+        ctx._source['TemporalChangeVersion'] = ctx._source.Attr['TemporalChangeVersion'];
+    }
+    if (ctx._source.Attr['BinaryChecksums'] != null){
+        ctx._source['BinaryChecksums'] = ctx._source.Attr['BinaryChecksums'];
+    }
+}
+ctx._source.remove('Attr');
+
+int nanos = 1000000000;
+if (ctx._source.StartTime != null){
+    ctx._source.StartTime = Instant.ofEpochSecond(ctx._source.StartTime / nanos, ctx._source.StartTime % nanos);
+}
+if (ctx._source.ExecutionTime != null){
+    ctx._source.ExecutionTime = ctx._source.ExecutionTime == 0 ? ctx._source.ExecutionTime = ctx._source.StartTime : Instant.ofEpochSecond(ctx._source.ExecutionTime / nanos, ctx._source.ExecutionTime % nanos);
+}
+if (ctx._source.CloseTime != null){
+    ctx._source.CloseTime = Instant.ofEpochSecond(ctx._source.CloseTime / nanos, ctx._source.CloseTime % nanos);
+    if (ctx._source.ExecutionTime != null){
+        ctx._source.ExecutionDuration = Duration.between(ctx._source.ExecutionTime, ctx._source.CloseTime).toNanos();
+    }
+}
+
+if (ctx._source.ExecutionStatus == 1)
+    ctx._source.ExecutionStatus = 'Running';
+else if (ctx._source.ExecutionStatus == 2)
+    ctx._source.ExecutionStatus = 'Completed';
+else if (ctx._source.ExecutionStatus == 3)
+    ctx._source.ExecutionStatus = 'Failed';
+else if (ctx._source.ExecutionStatus == 4)
+    ctx._source.ExecutionStatus = 'Canceled';
+else if (ctx._source.ExecutionStatus == 5)
+    ctx._source.ExecutionStatus = 'Terminated';
+else if (ctx._source.ExecutionStatus == 6)
+    ctx._source.ExecutionStatus = 'ContinuedAsNew';
+else if (ctx._source.ExecutionStatus == 7)
+    ctx._source.ExecutionStatus = 'TimedOut';
+else
+    ctx._source.ExecutionStatus = 'Unspecified';

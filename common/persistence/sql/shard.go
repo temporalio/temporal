@@ -38,7 +38,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
-type sqlShardManager struct {
+type sqlShardStore struct {
 	sqlStore
 	currentClusterName string
 }
@@ -48,8 +48,8 @@ func newShardPersistence(
 	db sqlplugin.DB,
 	currentClusterName string,
 	log log.Logger,
-) (persistence.ShardManager, error) {
-	return &sqlShardManager{
+) (persistence.ShardStore, error) {
+	return &sqlShardStore{
 		sqlStore: sqlStore{
 			db:     db,
 			logger: log,
@@ -58,22 +58,28 @@ func newShardPersistence(
 	}, nil
 }
 
-func (m *sqlShardManager) CreateShard(
-	request *persistence.CreateShardRequest,
+func (m *sqlShardStore) GetClusterName() string {
+	return m.currentClusterName
+}
+
+func (m *sqlShardStore) CreateShard(
+	request *persistence.InternalCreateShardRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	if _, err := m.GetShard(&persistence.GetShardRequest{
-		ShardID: request.ShardInfo.GetShardId(),
+	if _, err := m.GetShard(&persistence.InternalGetShardRequest{
+		ShardID: request.ShardID,
 	}); err == nil {
 		return &persistence.ShardAlreadyExistError{
-			Msg: fmt.Sprintf("CreateShard operaiton failed. Shard with ID %v already exists.", request.ShardInfo.GetShardId()),
+			Msg: fmt.Sprintf("CreateShard operaiton failed. Shard with ID %v already exists.", request.ShardID),
 		}
 	}
 
-	row, err := shardInfoToShardsRow(*request.ShardInfo)
-	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("CreateShard operation failed. Error: %v", err))
+	row := &sqlplugin.ShardsRow{
+		ShardID:      request.ShardID,
+		RangeID:      request.RangeID,
+		Data:         request.ShardInfo.Data,
+		DataEncoding: request.ShardInfo.EncodingType.String(),
 	}
 
 	if _, err := m.db.InsertIntoShards(ctx, row); err != nil {
@@ -83,9 +89,9 @@ func (m *sqlShardManager) CreateShard(
 	return nil
 }
 
-func (m *sqlShardManager) GetShard(
-	request *persistence.GetShardRequest,
-) (*persistence.GetShardResponse, error) {
+func (m *sqlShardStore) GetShard(
+	request *persistence.InternalGetShardRequest,
+) (*persistence.InternalGetShardResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	row, err := m.db.SelectFromShards(ctx, sqlplugin.ShardsFilter{
@@ -93,11 +99,9 @@ func (m *sqlShardManager) GetShard(
 	})
 	switch err {
 	case nil:
-		shardInfo, err := serialization.ShardInfoFromBlob(row.Data, row.DataEncoding, m.currentClusterName)
-		if err != nil {
-			return nil, err
-		}
-		return &persistence.GetShardResponse{ShardInfo: shardInfo}, nil
+		return &persistence.InternalGetShardResponse{
+			ShardInfo: persistence.NewDataBlob(row.Data, row.DataEncoding),
+		}, nil
 	case sql.ErrNoRows:
 		return nil, serviceerror.NewNotFound(fmt.Sprintf("GetShard operation failed. Shard with ID %v not found. Error: %v", request.ShardID, err))
 	default:
@@ -105,30 +109,31 @@ func (m *sqlShardManager) GetShard(
 	}
 }
 
-func (m *sqlShardManager) UpdateShard(
-	request *persistence.UpdateShardRequest,
+func (m *sqlShardStore) UpdateShard(
+	request *persistence.InternalUpdateShardRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	row, err := shardInfoToShardsRow(*request.ShardInfo)
-	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("UpdateShard operation failed. Error: %v", err))
-	}
 	return m.txExecute(ctx, "UpdateShard", func(tx sqlplugin.Tx) error {
 		if err := lockShard(ctx,
 			tx,
-			request.ShardInfo.GetShardId(),
+			request.ShardID,
 			request.PreviousRangeID,
 		); err != nil {
 			return err
 		}
-		result, err := tx.UpdateShards(ctx, row)
+		result, err := tx.UpdateShards(ctx, &sqlplugin.ShardsRow{
+			ShardID:      request.ShardID,
+			RangeID:      request.RangeID,
+			Data:         request.ShardInfo.Data,
+			DataEncoding: request.ShardInfo.EncodingType.String(),
+		})
 		if err != nil {
 			return err
 		}
 		rowsAffected, err := result.RowsAffected()
 		if err != nil {
-			return fmt.Errorf("rowsAffected returned error for shardID %v: %v", request.ShardInfo.GetShardId(), err)
+			return fmt.Errorf("rowsAffected returned error for shardID %v: %v", request.ShardID, err)
 		}
 		if rowsAffected != 1 {
 			return fmt.Errorf("rowsAffected returned %v shards instead of one", rowsAffected)

@@ -59,7 +59,7 @@ type (
 
 		controller *gomock.Controller
 
-		minRetentionDays        int
+		minRetention            time.Duration
 		maxBadBinaryCount       int
 		metadataMgr             persistence.MetadataManager
 		mockProducer            *persistence.MockNamespaceReplicationQueue
@@ -90,7 +90,7 @@ func (s *namespaceHandlerCommonSuite) TearDownSuite() {
 func (s *namespaceHandlerCommonSuite) SetupTest() {
 	logger := log.NewNoopLogger()
 	dcCollection := dc.NewCollection(dc.NewNoopClient(), logger)
-	s.minRetentionDays = 1
+	s.minRetention = 1 * 24 * time.Hour
 	s.maxBadBinaryCount = 10
 	s.metadataMgr = s.TestBase.MetadataManager
 	s.controller = gomock.NewController(s.T())
@@ -106,7 +106,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 	)
 	s.mockArchiverProvider = provider.NewMockArchiverProvider(s.controller)
 	s.handler = NewHandler(
-		s.minRetentionDays,
+		s.minRetention,
 		dc.GetIntPropertyFilteredByNamespace(s.maxBadBinaryCount),
 		logger,
 		s.metadataMgr,
@@ -406,15 +406,17 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod
 	s.NoError(err)
 	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
 
-	updateRequest := &workflowservice.UpdateNamespaceRequest{
-		Namespace: namespace,
-		Config: &namespacepb.NamespaceConfig{
-			WorkflowExecutionRetentionTtl: timestamp.DurationPtr(time.Duration(-1)),
-		},
+	for _, invalidDuration := range []time.Duration{0, -1 * time.Hour} {
+		updateRequest := &workflowservice.UpdateNamespaceRequest{
+			Namespace: namespace,
+			Config: &namespacepb.NamespaceConfig{
+				WorkflowExecutionRetentionTtl: timestamp.DurationPtr(invalidDuration),
+			},
+		}
+		resp, err := s.handler.UpdateNamespace(context.Background(), updateRequest)
+		s.Equal(errInvalidRetentionPeriod, err)
+		s.Nil(resp)
 	}
-	resp, err := s.handler.UpdateNamespace(context.Background(), updateRequest)
-	s.Equal(errInvalidRetentionPeriod, err)
-	s.Nil(resp)
 }
 
 func (s *namespaceHandlerCommonSuite) getRandomNamespace() string {

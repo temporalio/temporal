@@ -57,7 +57,14 @@ const (
 	defaultRemoteCallTimeout = 30 * time.Second
 )
 
+const (
+	callerTypeAPI  callerType = 0
+	callerTypeTask callerType = 1
+)
+
 type (
+	callerType int
+
 	workflowExecutionContext interface {
 		getNamespace() string
 		getNamespaceID() string
@@ -68,8 +75,8 @@ type (
 		loadExecutionStats() (*persistencespb.ExecutionStats, error)
 		clear()
 
-		lock(ctx context.Context) error
-		unlock()
+		lock(ctx context.Context, caller callerType) error
+		unlock(caller callerType)
 
 		getHistorySize() int64
 		setHistorySize(size int64)
@@ -143,7 +150,7 @@ type (
 		timeSource        clock.TimeSource
 		config            *configs.Config
 
-		mutex           locks.Mutex
+		mutex           locks.PriorityMutex
 		mutableState    mutableState
 		stats           *persistencespb.ExecutionStats
 		updateCondition int64
@@ -173,19 +180,38 @@ func newWorkflowExecutionContext(
 		metricsClient:     shard.GetMetricsClient(),
 		timeSource:        shard.GetTimeSource(),
 		config:            shard.GetConfig(),
-		mutex:             locks.NewMutex(),
+		mutex:             locks.NewPriorityMutex(),
 		stats: &persistencespb.ExecutionStats{
 			HistorySize: 0,
 		},
 	}
 }
 
-func (c *workflowExecutionContextImpl) lock(ctx context.Context) error {
-	return c.mutex.Lock(ctx)
+func (c *workflowExecutionContextImpl) lock(
+	ctx context.Context,
+	caller callerType,
+) error {
+	switch caller {
+	case callerTypeAPI:
+		return c.mutex.LockHigh(ctx)
+	case callerTypeTask:
+		return c.mutex.LockLow(ctx)
+	default:
+		panic(fmt.Sprintf("unknown caller type: %v", caller))
+	}
 }
 
-func (c *workflowExecutionContextImpl) unlock() {
-	c.mutex.Unlock()
+func (c *workflowExecutionContextImpl) unlock(
+	caller callerType,
+) {
+	switch caller {
+	case callerTypeAPI:
+		c.mutex.UnlockHigh()
+	case callerTypeTask:
+		c.mutex.UnlockLow()
+	default:
+		panic(fmt.Sprintf("unknown caller type: %v", caller))
+	}
 }
 
 func (c *workflowExecutionContextImpl) clear() {
@@ -246,7 +272,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 			return nil, err
 		}
 
-		c.mutableState = newMutableStateBuilderFromDB(
+		c.mutableState, err = newMutableStateBuilderFromDB(
 			c.shard,
 			c.shard.GetEventsCache(),
 			c.logger,
@@ -254,6 +280,9 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecutionForReplication(
 			response.State,
 			response.DBRecordVersion,
 		)
+		if err != nil {
+			return nil, err
+		}
 
 		c.stats = response.State.ExecutionInfo.ExecutionStats
 		if c.stats == nil {
@@ -326,7 +355,7 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 			return nil, err
 		}
 
-		c.mutableState = newMutableStateBuilderFromDB(
+		c.mutableState, err = newMutableStateBuilderFromDB(
 			c.shard,
 			c.shard.GetEventsCache(),
 			c.logger,
@@ -334,6 +363,9 @@ func (c *workflowExecutionContextImpl) loadWorkflowExecution() (mutableState, er
 			response.State,
 			response.DBRecordVersion,
 		)
+		if err != nil {
+			return nil, err
+		}
 
 		c.stats = response.State.ExecutionInfo.ExecutionStats
 		if c.stats == nil {

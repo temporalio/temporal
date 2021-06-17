@@ -144,17 +144,8 @@ func (a *activities) AddESMappingFieldActivity(ctx context.Context, params Workf
 		return nil
 	}
 
-	mapping := make(map[string]string, len(params.CustomAttributesToAdd))
-	for saName, saType := range params.CustomAttributesToAdd {
-		esType := searchattribute.MapESType(saType)
-		if esType == "" {
-			return temporal.NewNonRetryableApplicationError(fmt.Sprintf("Unknown search attribute type: %v", saType), "", nil)
-		}
-		mapping[saName] = esType
-	}
-
-	a.logger.Info("Creating Elasticsearch mapping.", tag.ESIndex(params.IndexName), tag.ESMapping(mapping))
-	_, err := a.esClient.PutMapping(ctx, params.IndexName, searchattribute.Attr, mapping)
+	a.logger.Info("Creating Elasticsearch mapping.", tag.ESIndex(params.IndexName), tag.ESMapping(params.CustomAttributesToAdd))
+	_, err := a.esClient.PutMapping(ctx, params.IndexName, params.CustomAttributesToAdd)
 	if err != nil {
 		a.metricsClient.IncCounter(metrics.AddSearchAttributesWorkflowScope, metrics.AddSearchAttributesFailuresCount)
 		if esclient.IsRetryableError(err) {
@@ -164,7 +155,7 @@ func (a *activities) AddESMappingFieldActivity(ctx context.Context, params Workf
 		a.logger.Error("Unable to update Elasticsearch mapping (non-retryable error).", tag.ESIndex(params.IndexName), tag.Error(err))
 		return temporal.NewNonRetryableApplicationError(fmt.Sprintf("%v: %v", ErrUnableToUpdateESMapping, err), "", nil)
 	}
-	a.logger.Info("Elasticsearch mapping created.", tag.ESIndex(params.IndexName), tag.ESMapping(mapping))
+	a.logger.Info("Elasticsearch mapping created.", tag.ESIndex(params.IndexName), tag.ESMapping(params.CustomAttributesToAdd))
 
 	return nil
 }

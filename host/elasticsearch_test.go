@@ -170,23 +170,42 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_ExecutionTime() {
 	id := "es-integration-list-workflow-execution-time-test"
 	wt := "es-integration-list-workflow-execution-time-test-type"
 	tl := "es-integration-list-workflow-execution-time-test-taskqueue"
+
+	now := time.Now().UTC()
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	// Start workflow with ExecutionTime equal to StartTime
+	weNonCron, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 
 	cronID := id + "-cron"
 	request.CronSchedule = "@every 1m"
 	request.WorkflowId = cronID
 
+	// Start workflow with ExecutionTime equal to StartTime + 1 minute (cron delay)
 	weCron, err := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err)
 
-	query := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") and ExecutionTime < %v`, id, cronID, time.Now().UTC().UnixNano()+int64(time.Minute))
-	s.testHelperForReadOnce(weCron.GetRunId(), query, false)
+	//       <<1s    <<1s                  1m
+	// ----+-----+------------+----------------------------+--------------
+	//    now  nonCronStart  cronStart                  cronExecutionTime
+	//         =nonCronExecutionTime
 
-	query = fmt.Sprintf(`WorkflowId = "%s"`, id)
-	s.testHelperForReadOnce(we.GetRunId(), query, false)
+	expectedNonCronMaxExecutionTime := now.Add(1 * time.Second)                   // 1 second for time skew
+	expectedCronMaxExecutionTime := now.Add(1 * time.Minute).Add(1 * time.Second) // 1 second for time skew
+
+	// WorkflowId filter is to filter workflows from other tests.
+	nonCronQueryNanos := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < %d`, id, cronID, expectedNonCronMaxExecutionTime.UnixNano())
+	s.testHelperForReadOnce(weNonCron.GetRunId(), nonCronQueryNanos, false)
+
+	cronQueryNanos := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < %d AND ExecutionTime > %d`, id, cronID, expectedCronMaxExecutionTime.UnixNano(), expectedNonCronMaxExecutionTime.UnixNano())
+	s.testHelperForReadOnce(weCron.GetRunId(), cronQueryNanos, false)
+
+	nonCronQuery := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < "%s"`, id, cronID, expectedNonCronMaxExecutionTime.Format(time.RFC3339Nano))
+	s.testHelperForReadOnce(weNonCron.GetRunId(), nonCronQuery, false)
+
+	cronQuery := fmt.Sprintf(`(WorkflowId = "%s" or WorkflowId = "%s") AND ExecutionTime < "%s" AND ExecutionTime > "%s"`, id, cronID, expectedCronMaxExecutionTime.Format(time.RFC3339Nano), expectedNonCronMaxExecutionTime.Format(time.RFC3339Nano))
+	s.testHelperForReadOnce(weCron.GetRunId(), cronQuery, false)
 }
 
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
@@ -208,6 +227,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, s.testSearchAttributeKey, s.testSearchAttributeVal)
 	s.testHelperForReadOnce(we.GetRunId(), query, false)
 
+	searchAttributes := s.createSearchAttributes()
 	// test upsert
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
@@ -215,7 +235,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 		upsertCommand := &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES,
 			Attributes: &commandpb.Command_UpsertWorkflowSearchAttributesCommandAttributes{UpsertWorkflowSearchAttributesCommandAttributes: &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{
-				SearchAttributes: getUpsertSearchAttributes(),
+				SearchAttributes: searchAttributes,
 			}}}
 
 		return []*commandpb.Command{upsertCommand}, nil
@@ -263,9 +283,8 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 	}
 	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), descRequest)
 	s.NoError(err)
-	expectedSearchAttributes := getUpsertSearchAttributes()
-	s.Equal(len(expectedSearchAttributes.GetIndexedFields()), len(descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()))
-	for attrName, expectedPayload := range expectedSearchAttributes.GetIndexedFields() {
+	s.Equal(len(searchAttributes.GetIndexedFields()), len(descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()))
+	for attrName, expectedPayload := range searchAttributes.GetIndexedFields() {
 		respAttr, ok := descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()[attrName]
 		s.True(ok)
 		s.Equal(expectedPayload.GetData(), respAttr.GetData())
@@ -352,7 +371,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
 	}
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
-	s.GreaterOrEqual(openExecution.GetExecutionTime().UnixNano(), openExecution.GetStartTime().UnixNano())
+	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
 	searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[key]
 	var searchVal int
 	payload.Decode(searchValBytes, &searchVal)
@@ -513,8 +532,8 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 		e1 := openExecutions[i-1]
 		e2 := openExecutions[i]
 		if e2.GetCloseTime() != nil {
-			s.NotEqual(0, e1.GetCloseTime().UnixNano())
-			s.GreaterOrEqual(e2.GetCloseTime().UnixNano(), e1.GetCloseTime().UnixNano())
+			s.NotEqual(time.Time{}, *e1.GetCloseTime())
+			s.GreaterOrEqual(e2.GetCloseTime(), e1.GetCloseTime())
 		}
 	}
 
@@ -553,8 +572,8 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
 			case "CustomKeywordField":
 				s.True(prevVal.(string) >= currVal.(string))
 			case "CustomDatetimeField":
-				v1, _ = time.Parse(time.RFC3339, prevVal.(string))
-				v2, _ = time.Parse(time.RFC3339, currVal.(string))
+				v1, _ = time.Parse(time.RFC3339Nano, prevVal.(string))
+				v2, _ = time.Parse(time.RFC3339Nano, currVal.(string))
 				s.True(v1.(time.Time).After(v2.(time.Time)))
 			}
 			prevVal = currVal
@@ -676,7 +695,7 @@ func (s *elasticsearchIntegrationSuite) testListWorkflowHelper(numOfWorkflows, p
 	s.Nil(nextPageToken)
 }
 
-func (s *elasticsearchIntegrationSuite) testHelperForReadOnce(runID, query string, isScan bool) {
+func (s *elasticsearchIntegrationSuite) testHelperForReadOnce(expectedRunID string, query string, isScan bool) {
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
@@ -708,8 +727,8 @@ func (s *elasticsearchIntegrationSuite) testHelperForReadOnce(runID, query strin
 		time.Sleep(waitTimeInMs * time.Millisecond)
 	}
 	s.NotNil(openExecution)
-	s.Equal(runID, openExecution.GetExecution().GetRunId())
-	s.GreaterOrEqual(openExecution.GetExecutionTime().UnixNano(), openExecution.GetStartTime().UnixNano())
+	s.Equal(expectedRunID, openExecution.GetExecution().GetRunId())
+	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
 	if openExecution.SearchAttributes != nil && len(openExecution.SearchAttributes.GetIndexedFields()) > 0 {
 		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[s.testSearchAttributeKey]
 		var searchVal string
@@ -901,7 +920,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 		// handle second upsert, which update existing field and add new field
 		if commandCount == 1 {
 			commandCount++
-			upsertCommand.GetUpsertWorkflowSearchAttributesCommandAttributes().SearchAttributes = getUpsertSearchAttributes()
+			upsertCommand.GetUpsertWorkflowSearchAttributesCommandAttributes().SearchAttributes = s.createSearchAttributes()
 			return []*commandpb.Command{upsertCommand}, nil
 		}
 
@@ -1007,7 +1026,7 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 		if len(resp.GetExecutions()) == 1 {
 			execution := resp.GetExecutions()[0]
 			retrievedSearchAttr := execution.SearchAttributes
-			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 3 {
+			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 4 {
 				fields := retrievedSearchAttr.GetIndexedFields()
 				searchValBytes := fields[s.testSearchAttributeKey]
 				var searchVal string
@@ -1020,6 +1039,12 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 				err = payload.Decode(searchValBytes2, &searchVal2)
 				s.NoError(err)
 				s.Equal(123, searchVal2)
+
+				doublePayload := fields["CustomDoubleField"]
+				var doubleVal float64
+				err = payload.Decode(doublePayload, &doubleVal)
+				s.NoError(err)
+				s.Equal(22.0878, doubleVal)
 
 				binaryChecksumsBytes := fields[searchattribute.BinaryChecksums]
 				var binaryChecksums []string
@@ -1036,19 +1061,15 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 	s.True(verified)
 }
 
-func getUpsertSearchAttributes() *commonpb.SearchAttributes {
-	stringAttrPayload, _ := payload.Encode("another string")
-	intAttrPayload, _ := payload.Encode(123)
-	binaryChecksumsPayload, _ := payload.Encode([]string{"binary-v1", "binary-v2"})
-
-	upsertSearchAttr := &commonpb.SearchAttributes{
-		IndexedFields: map[string]*commonpb.Payload{
-			"CustomStringField":             stringAttrPayload,
-			"CustomIntField":                intAttrPayload,
-			searchattribute.BinaryChecksums: binaryChecksumsPayload,
-		},
-	}
-	return upsertSearchAttr
+func (s *elasticsearchIntegrationSuite) createSearchAttributes() *commonpb.SearchAttributes {
+	searchAttributes, err := searchattribute.Encode(map[string]interface{}{
+		"CustomStringField":             "another string",
+		"CustomIntField":                123,
+		"CustomDoubleField":             22.0878,
+		searchattribute.BinaryChecksums: []string{"binary-v1", "binary-v2"},
+	}, nil)
+	s.NoError(err)
+	return searchAttributes
 }
 
 func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey() {

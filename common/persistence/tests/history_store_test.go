@@ -454,6 +454,73 @@ func (s *historyEventsSuite) TestAppendForkSelectTrim_LastBranch() {
 	s.Equal(events, s.listAllHistoryEvents(shardID, newBranchToken))
 }
 
+func (s *historyEventsSuite) TestForkDeleteBranch() {
+	shardID := rand.Int31()
+	treeID := uuid.New()
+	branchID := uuid.New()
+	br1Token, err := p.NewHistoryBranchTokenByBranchID(treeID, branchID)
+	s.NoError(err)
+
+	eventsPacket0 := s.newHistoryEvents(
+		[]int64{1, 2, 3},
+		rand.Int63(),
+		0,
+	)
+	s.appendHistoryEvents(shardID, br1Token, eventsPacket0)
+
+	s.appendHistoryEvents(shardID, br1Token, s.newHistoryEvents(
+		[]int64{4, 5},
+		eventsPacket0.transactionID+1,
+		eventsPacket0.transactionID,
+	))
+
+	br2Token := s.forkHistoryBranch(shardID, br1Token, 4)
+	eventsPacket1 := s.newHistoryEvents(
+		[]int64{4, 5},
+		eventsPacket0.transactionID+2,
+		eventsPacket0.transactionID,
+	)
+	s.appendHistoryEvents(shardID, br2Token, eventsPacket1)
+
+	// delete branch1, should only delete branch1:[4,5], keep branch1:[1,2,3] as it is used as ancestor by branch2
+	err = s.store.DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
+		ShardID:     shardID,
+		BranchToken: br1Token,
+	})
+	s.NoError(err)
+	// verify branch1:[1,2,3] still remains
+	s.Equal(eventsPacket0.events, s.listAllHistoryEvents(shardID, br1Token))
+	// verify branch2 is not affected
+	s.Equal(append(eventsPacket0.events, eventsPacket1.events...), s.listAllHistoryEvents(shardID, br2Token))
+
+	// delete branch2, should delete branch2:[4,5], and also should delete ancestor branch1:[1,2,3] as it is no longer
+	// used by anyone
+	err = s.store.DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
+		ShardID:     shardID,
+		BranchToken: br2Token,
+	})
+	s.NoError(err)
+
+	// at this point, both branch1 and branch2 are deleted.
+	_, err = s.store.ReadHistoryBranch(&p.ReadHistoryBranchRequest{
+		ShardID:     shardID,
+		BranchToken: br1Token,
+		MinEventID:  common.FirstEventID,
+		MaxEventID:  common.LastEventID,
+		PageSize:    1,
+	})
+	s.Error(err, "Workflow execution history not found.")
+
+	_, err = s.store.ReadHistoryBranch(&p.ReadHistoryBranchRequest{
+		ShardID:     shardID,
+		BranchToken: br2Token,
+		MinEventID:  common.FirstEventID,
+		MaxEventID:  common.LastEventID,
+		PageSize:    1,
+	})
+	s.Error(err, "Workflow execution history not found.")
+}
+
 func (s *historyEventsSuite) appendHistoryEvents(
 	shardID int32,
 	branchToken []byte,

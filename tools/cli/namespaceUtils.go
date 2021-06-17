@@ -62,8 +62,8 @@ var (
 			Usage: "Owner email",
 		},
 		cli.StringFlag{
-			Name:  FlagRetentionDaysWithAlias,
-			Usage: "Workflow execution retention in days",
+			Name:  FlagRetentionWithAlias,
+			Usage: "Workflow execution retention",
 		},
 		cli.StringFlag{
 			Name:  FlagActiveClusterNameWithAlias,
@@ -83,10 +83,6 @@ var (
 		cli.StringFlag{
 			Name:  FlagNamespaceDataWithAlias,
 			Usage: "Namespace data of key value pairs, in format of k1:v1,k2:v2,k3:v3",
-		},
-		cli.StringFlag{
-			Name:  FlagSecurityTokenWithAlias,
-			Usage: "Optional token for security check",
 		},
 		cli.StringFlag{
 			Name:  FlagHistoryArchivalStateWithAlias,
@@ -116,8 +112,8 @@ var (
 			Usage: "Owner email",
 		},
 		cli.StringFlag{
-			Name:  FlagRetentionDaysWithAlias,
-			Usage: "Workflow execution retention in days",
+			Name:  FlagRetentionWithAlias,
+			Usage: "Workflow execution retention",
 		},
 		cli.StringFlag{
 			Name:  FlagActiveClusterNameWithAlias,
@@ -133,10 +129,6 @@ var (
 		cli.StringFlag{
 			Name:  FlagNamespaceDataWithAlias,
 			Usage: "Namespace data of key value pairs, in format of k1:v1,k2:v2,k3:v3 ",
-		},
-		cli.StringFlag{
-			Name:  FlagSecurityTokenWithAlias,
-			Usage: "Optional token for security check",
 		},
 		cli.StringFlag{
 			Name:  FlagHistoryArchivalStateWithAlias,
@@ -267,7 +259,7 @@ func initializeNamespaceHandler(
 	archiverProvider provider.ArchiverProvider,
 ) namespace.Handler {
 	return namespace.NewHandler(
-		namespace.MinRetentionDays,
+		namespace.MinRetention,
 		dynamicconfig.GetIntPropertyFilteredByNamespace(namespace.MaxBadBinaries),
 		logger,
 		metadataMgr,

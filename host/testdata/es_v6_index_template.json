@@ -26,36 +26,53 @@
           "type": "keyword"
         },
         "StartTime": {
-          "type": "long"
+          "type": "date"
         },
         "ExecutionTime": {
-          "type": "long"
+          "type": "date"
         },
         "CloseTime": {
+          "type": "date"
+        },
+        "ExecutionDuration": {
           "type": "long"
         },
         "ExecutionStatus": {
-          "type": "integer"
-        },
-        "HistoryLength": {
-          "type": "integer"
-        },
-        "Encoding": {
           "type": "keyword"
         },
-        "Attr": {
-          "properties": {
-            "TemporalChangeVersion":  { "type": "keyword" },
-            "CustomStringField":  { "type": "text" },
-            "CustomKeywordField": { "type": "keyword"},
-            "CustomIntField": { "type": "long"},
-            "CustomDoubleField": { "type": "double"},
-            "CustomBoolField": { "type": "boolean"},
-            "CustomDatetimeField": { "type": "date"},
-            "CustomNamespace": { "type": "keyword"},
-            "Operator": { "type": "keyword"},
-            "BinaryChecksums": { "type": "keyword"}
-          }
+        "HistoryLength": {
+          "type": "long"
+        },
+        "TemporalChangeVersion": {
+          "type": "keyword"
+        },
+        "CustomStringField": {
+          "type": "text"
+        },
+        "CustomKeywordField": {
+          "type": "keyword"
+        },
+        "CustomIntField": {
+          "type": "long"
+        },
+        "CustomDoubleField": {
+          "type": "scaled_float",
+          "scaling_factor": 10000
+        },
+        "CustomBoolField": {
+          "type": "boolean"
+        },
+        "CustomDatetimeField": {
+          "type": "date"
+        },
+        "BatcherNamespace": {
+          "type": "keyword"
+        },
+        "BatcherUser": {
+          "type": "keyword"
+        },
+        "BinaryChecksums": {
+          "type": "keyword"
         }
       }
     }

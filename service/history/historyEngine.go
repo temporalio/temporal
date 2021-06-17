@@ -460,7 +460,6 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 }
 
 func (e *historyEngineImpl) createMutableState(
-	clusterMetadata cluster.Metadata,
 	namespaceEntry *cache.NamespaceCacheEntry,
 	runID string,
 ) (mutableState, error) {
@@ -535,7 +534,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		RunId:      uuid.New(),
 	}
 	clusterMetadata := e.shard.GetService().GetClusterMetadata()
-	mutableState, err := e.createMutableState(clusterMetadata, namespaceEntry, execution.GetRunId())
+	mutableState, err := e.createMutableState(namespaceEntry, execution.GetRunId())
 	if err != nil {
 		return nil, err
 	}
@@ -771,7 +770,7 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 func (e *historyEngineImpl) QueryWorkflow(
 	ctx context.Context,
 	request *historyservice.QueryWorkflowRequest,
-) (retResp *historyservice.QueryWorkflowResponse, retErr error) {
+) (_ *historyservice.QueryWorkflowResponse, retErr error) {
 
 	scope := e.metricsClient.Scope(metrics.HistoryQueryWorkflowScope)
 
@@ -800,7 +799,12 @@ func (e *historyEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 
-	context, release, err := e.historyCache.getOrCreateWorkflowExecution(ctx, request.GetNamespaceId(), *request.GetRequest().GetExecution())
+	context, release, err := e.historyCache.getOrCreateWorkflowExecution(
+		ctx,
+		request.GetNamespaceId(),
+		*request.GetRequest().GetExecution(),
+		callerTypeAPI,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1001,17 +1005,22 @@ func (e *historyEngineImpl) getMutableState(
 	ctx context.Context,
 	namespaceID string,
 	execution commonpb.WorkflowExecution,
-) (retResp *historyservice.GetMutableStateResponse, retError error) {
+) (_ *historyservice.GetMutableStateResponse, retError error) {
 
-	context, release, retError := e.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, execution)
-	if retError != nil {
-		return
+	context, release, err := e.historyCache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeAPI,
+	)
+	if err != nil {
+		return nil, err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, retError := context.loadWorkflowExecution()
-	if retError != nil {
-		return
+	mutableState, err := context.loadWorkflowExecution()
+	if err != nil {
+		return nil, err
 	}
 
 	currentBranchToken, err := mutableState.GetCurrentBranchToken()
@@ -1023,7 +1032,7 @@ func (e *historyEngineImpl) getMutableState(
 	execution.RunId = context.getExecution().RunId
 	workflowState, workflowStatus := mutableState.GetWorkflowStateStatus()
 	lastFirstEventID, lastFirstEventTxnID := mutableState.GetLastFirstEventIDTxnID()
-	retResp = &historyservice.GetMutableStateResponse{
+	return &historyservice.GetMutableStateResponse{
 		Execution:              &execution,
 		WorkflowType:           &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
 		LastFirstEventId:       lastFirstEventID,
@@ -1043,12 +1052,10 @@ func (e *historyEngineImpl) getMutableState(
 		WorkflowState:                         workflowState,
 		WorkflowStatus:                        workflowStatus,
 		IsStickyTaskQueueEnabled:              mutableState.IsStickyTaskQueueEnabled(),
-	}
-	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
-	if versionHistories != nil {
-		retResp.VersionHistories = versionhistory.CopyVersionHistories(versionHistories)
-	}
-	return
+		VersionHistories: versionhistory.CopyVersionHistories(
+			mutableState.GetExecutionInfo().GetVersionHistories(),
+		),
+	}, nil
 }
 
 func (e *historyEngineImpl) DescribeMutableState(
@@ -1066,8 +1073,11 @@ func (e *historyEngineImpl) DescribeMutableState(
 		RunId:      request.Execution.RunId,
 	}
 
-	cacheCtx, dbCtx, release, cacheHit, err := e.historyCache.getAndCreateWorkflowExecution(
-		ctx, namespaceID, execution,
+	context, release, err := e.historyCache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeAPI,
 	)
 	if err != nil {
 		return nil, err
@@ -1076,17 +1086,18 @@ func (e *historyEngineImpl) DescribeMutableState(
 
 	response = &historyservice.DescribeMutableStateResponse{}
 
-	if cacheHit && cacheCtx.(*workflowExecutionContextImpl).mutableState != nil {
-		msb := cacheCtx.(*workflowExecutionContextImpl).mutableState
+	if context.(*workflowExecutionContextImpl).mutableState != nil {
+		msb := context.(*workflowExecutionContextImpl).mutableState
 		response.CacheMutableState = msb.CloneToProto()
 	}
 
-	msb, err := dbCtx.loadWorkflowExecution()
+	context.clear()
+	mutableState, err := context.loadWorkflowExecution()
 	if err != nil {
 		return nil, err
 	}
 
-	response.DatabaseMutableState = msb.CloneToProto()
+	response.DatabaseMutableState = mutableState.CloneToProto()
 	return response, nil
 }
 
@@ -1131,7 +1142,7 @@ func (e *historyEngineImpl) ResetStickyTaskQueue(
 func (e *historyEngineImpl) DescribeWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DescribeWorkflowExecutionRequest,
-) (retResp *historyservice.DescribeWorkflowExecutionResponse, retError error) {
+) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
 
 	namespaceID, err := validateNamespaceUUID(request.GetNamespaceId())
 	if err != nil {
@@ -1140,9 +1151,14 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 
 	execution := *request.Request.Execution
 
-	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, execution)
-	if err0 != nil {
-		return nil, err0
+	context, release, err := e.historyCache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeAPI,
+	)
+	if err != nil {
+		return nil, err
 	}
 	defer func() { release(retError) }()
 
@@ -1169,6 +1185,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			},
 			Type:                 &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
 			StartTime:            executionInfo.StartTime,
+			ExecutionTime:        executionInfo.ExecutionTime,
 			HistoryLength:        mutableState.GetNextEventID() - common.FirstEventID,
 			AutoResetPoints:      executionInfo.AutoResetPoints,
 			Memo:                 &commonpb.Memo{Fields: executionInfo.Memo},
@@ -1177,16 +1194,6 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			StateTransitionCount: executionInfo.StateTransitionCount,
 		},
 	}
-
-	// TODO: we need to consider adding execution time to mutable state
-	// For now execution time will be calculated based on start time and cron schedule/retry policy
-	// each time DescribeWorkflowExecution is called.
-	startEvent, err := mutableState.GetStartEvent()
-	if err != nil {
-		return nil, err
-	}
-	backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff())
-	result.WorkflowExecutionInfo.ExecutionTime = timestamp.TimePtr(timestamp.TimeValue(result.WorkflowExecutionInfo.GetStartTime()).Add(backoffDuration))
 
 	if executionInfo.ParentRunId != "" {
 		result.WorkflowExecutionInfo.ParentExecution = &commonpb.WorkflowExecution{
@@ -1886,7 +1893,7 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	ctx context.Context,
 	signalWithStartRequest *historyservice.SignalWithStartWorkflowExecutionRequest,
-) (retResp *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
+) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 
 	namespaceEntry, err := e.getActiveNamespaceEntry(signalWithStartRequest.GetNamespaceId())
 	if err != nil {
@@ -1902,7 +1909,12 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	var prevMutableState mutableState
 	attempt := 1
 
-	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, execution)
+	context, release, err0 := e.historyCache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeAPI,
+	)
 
 	if err0 == nil {
 		defer func() { release(retError) }()
@@ -1994,7 +2006,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}
 
 	clusterMetadata := e.shard.GetService().GetClusterMetadata()
-	mutableState, err := e.createMutableState(clusterMetadata, namespaceEntry, execution.GetRunId())
+	mutableState, err := e.createMutableState(namespaceEntry, execution.GetRunId())
 	if err != nil {
 		return nil, err
 	}
@@ -2304,6 +2316,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 			WorkflowId: workflowID,
 			RunId:      baseRunID,
 		},
+		callerTypeAPI,
 	)
 	if err != nil {
 		return nil, err
@@ -2346,6 +2359,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 				WorkflowId: workflowID,
 				RunId:      currentRunID,
 			},
+			callerTypeAPI,
 		)
 		if err != nil {
 			return nil, err
@@ -3118,7 +3132,12 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 	}
 	namespaceID := namespaceEntry.GetInfo().Id
 
-	context, release, err := e.historyCache.getOrCreateWorkflowExecution(ctx, namespaceID, execution)
+	context, release, err := e.historyCache.getOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		callerTypeAPI,
+	)
 	if err != nil {
 		return err
 	}
@@ -3168,6 +3187,7 @@ func (e *historyEngineImpl) loadWorkflowOnce(
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
+		callerTypeAPI,
 	)
 	if err != nil {
 		return nil, err

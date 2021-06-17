@@ -30,7 +30,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
@@ -79,13 +78,16 @@ func (d *namespaceCLIImpl) RegisterNamespace(c *cli.Context) {
 
 	description := c.String(FlagDescription)
 	ownerEmail := c.String(FlagOwnerEmail)
-	retentionDays := defaultNamespaceRetentionDays
+	retention := defaultNamespaceRetention
 
-	if c.IsSet(FlagRetentionDays) {
-		retentionDays = c.Int(FlagRetentionDays)
-	}
-	securityToken := c.String(FlagSecurityToken)
 	var err error
+
+	if c.IsSet(FlagRetention) {
+		retention, err = timestamp.ParseDurationDefaultDays(c.String(FlagRetention))
+		if err != nil {
+			ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagRetention), err)
+		}
+	}
 
 	var isGlobalNamespace bool
 	if c.IsSet(FlagIsGlobalNamespace) {
@@ -133,10 +135,9 @@ func (d *namespaceCLIImpl) RegisterNamespace(c *cli.Context) {
 		Description:                      description,
 		OwnerEmail:                       ownerEmail,
 		Data:                             namespaceData,
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(time.Duration(retentionDays) * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: &retention,
 		Clusters:                         clusters,
 		ActiveClusterName:                activeClusterName,
-		SecurityToken:                    securityToken,
 		HistoryArchivalState:             archivalState(c, FlagHistoryArchivalState),
 		HistoryArchivalUri:               c.String(FlagHistoryArchivalURI),
 		VisibilityArchivalState:          archivalState(c, FlagVisibilityArchivalState),
@@ -191,7 +192,7 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 
 		description := resp.NamespaceInfo.GetDescription()
 		ownerEmail := resp.NamespaceInfo.GetOwnerEmail()
-		retention := resp.Config.GetWorkflowExecutionRetentionTtl()
+		retention := timestamp.DurationValue(resp.Config.GetWorkflowExecutionRetentionTtl())
 		var clusters []*replicationpb.ClusterReplicationConfig
 
 		if c.IsSet(FlagDescription) {
@@ -208,8 +209,11 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 				ErrorAndExit("Namespace data format is invalid.", err)
 			}
 		}
-		if c.IsSet(FlagRetentionDays) {
-			retention = timestamp.DurationPtr(time.Duration(c.Int(FlagRetentionDays)) * time.Hour * 24)
+		if c.IsSet(FlagRetention) {
+			retention, err = timestamp.ParseDurationDefaultDays(c.String(FlagRetention))
+			if err != nil {
+				ErrorAndExit(fmt.Sprintf("Option %s format is invalid.", FlagRetention), err)
+			}
 		}
 		if c.IsSet(FlagClusters) {
 			clusterStr := c.String(FlagClusters)
@@ -252,7 +256,7 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 			Data:        namespaceData,
 		}
 		updateConfig := &namespacepb.NamespaceConfig{
-			WorkflowExecutionRetentionTtl: retention,
+			WorkflowExecutionRetentionTtl: &retention,
 			HistoryArchivalState:          archivalState(c, FlagHistoryArchivalState),
 			HistoryArchivalUri:            c.String(FlagHistoryArchivalURI),
 			VisibilityArchivalState:       archivalState(c, FlagVisibilityArchivalState),
@@ -271,8 +275,6 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 		}
 	}
 
-	securityToken := c.String(FlagSecurityToken)
-	updateRequest.SecurityToken = securityToken
 	err := d.updateNamespace(ctx, updateRequest)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
@@ -317,7 +319,7 @@ func (d *namespaceCLIImpl) DescribeNamespace(c *cli.Context) {
 }
 
 func printNamespace(resp *workflowservice.DescribeNamespaceResponse) {
-	var formatStr = "Name: %v\nId: %v\nDescription: %v\nOwnerEmail: %v\nNamespaceData: %#v\nState: %v\nRetentionInDays: %v\n" +
+	var formatStr = "Name: %v\nId: %v\nDescription: %v\nOwnerEmail: %v\nNamespaceData: %#v\nState: %v\nRetention: %v\n" +
 		"ActiveClusterName: %v\nClusters: %v\nHistoryArchivalState: %v\n"
 	descValues := []interface{}{
 		resp.NamespaceInfo.GetName(),

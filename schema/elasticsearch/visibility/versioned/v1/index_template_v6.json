@@ -1,0 +1,65 @@
+{
+  "order": 0,
+  "index_patterns": [
+    "temporal_visibility_v1*"
+  ],
+  "settings": {
+    "index": {
+      "number_of_shards": "5",
+      "number_of_replicas": "0"
+    }
+  },
+  "mappings": {
+    "_doc": {
+      "dynamic": "false",
+      "properties": {
+        "NamespaceId": {
+          "type": "keyword"
+        },
+        "WorkflowId": {
+          "type": "keyword"
+        },
+        "RunId": {
+          "type": "keyword"
+        },
+        "WorkflowType": {
+          "type": "keyword"
+        },
+        "StartTime": {
+          "type": "date"
+        },
+        "ExecutionTime": {
+          "type": "date"
+        },
+        "CloseTime": {
+          "type": "date"
+        },
+        "ExecutionDuration": {
+          "type": "long"
+        },
+        "ExecutionStatus": {
+          "type": "keyword"
+        },
+        "TaskQueue": {
+          "type": "keyword"
+        },
+        "TemporalChangeVersion": {
+          "type": "keyword"
+        },
+        "BatcherNamespace": {
+          "type": "keyword"
+        },
+        "BatcherUser": {
+          "type": "keyword"
+        },
+        "BinaryChecksums": {
+          "type": "keyword"
+        },
+        "HistoryLength": {
+          "type": "long"
+        }
+      }
+    }
+  },
+  "aliases": {}
+}

@@ -43,7 +43,7 @@ ES_PORT="${ES_PORT:-9200}"
 ES_USER="${ES_USER:-}"
 ES_PWD="${ES_PWD:-}"
 ES_VERSION="${ES_VERSION:-v6}"
-ES_VIS_INDEX="${ES_VIS_INDEX:-temporal-visibility-dev}"
+ES_VIS_INDEX="${ES_VIS_INDEX:-temporal_visibility_v1_dev}"
 ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS="${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS:-0}"
 
 # Server setup
@@ -177,11 +177,16 @@ setup_postgres_schema() {
     { export SQL_PASSWORD=${POSTGRES_PWD}; } 2> /dev/null
 
     SCHEMA_DIR=${TEMPORAL_HOME}/schema/postgresql/v96/temporal/versioned
-    temporal-sql-tool --plugin postgres --ep "${POSTGRES_SEEDS}" -u "${POSTGRES_USER}" -p "${DB_PORT}" create --db "${DBNAME}"
+    # Create database only if its name is different from the user name. Otherwise PostgreSQL container itself will create database.
+    if [ "${DBNAME}" != "${POSTGRES_USER}" ]; then
+        temporal-sql-tool --plugin postgres --ep "${POSTGRES_SEEDS}" -u "${POSTGRES_USER}" -p "${DB_PORT}" create --db "${DBNAME}"
+    fi
     temporal-sql-tool --plugin postgres --ep "${POSTGRES_SEEDS}" -u "${POSTGRES_USER}" -p "${DB_PORT}" --db "${DBNAME}" setup-schema -v 0.0
     temporal-sql-tool --plugin postgres --ep "${POSTGRES_SEEDS}" -u "${POSTGRES_USER}" -p "${DB_PORT}" --db "${DBNAME}" update-schema -d "${SCHEMA_DIR}"
     VISIBILITY_SCHEMA_DIR=${TEMPORAL_HOME}/schema/postgresql/v96/visibility/versioned
-    temporal-sql-tool --plugin postgres --ep "${POSTGRES_SEEDS}" -u "${POSTGRES_USER}" -p "${DB_PORT}" create --db "${VISIBILITY_DBNAME}"
+    if [ "${VISIBILITY_DBNAME}" != "${POSTGRES_USER}" ]; then
+        temporal-sql-tool --plugin postgres --ep "${POSTGRES_SEEDS}" -u "${POSTGRES_USER}" -p "${DB_PORT}" create --db "${VISIBILITY_DBNAME}"
+    fi
     temporal-sql-tool --plugin postgres --ep "${POSTGRES_SEEDS}" -u "${POSTGRES_USER}" -p "${DB_PORT}" --db "${VISIBILITY_DBNAME}" setup-schema -v 0.0
     temporal-sql-tool --plugin postgres --ep "${POSTGRES_SEEDS}" -u "${POSTGRES_USER}" -p "${DB_PORT}" --db "${VISIBILITY_DBNAME}" update-schema -d "${VISIBILITY_SCHEMA_DIR}"
 }
@@ -232,9 +237,9 @@ wait_for_es() {
 }
 
 setup_es_template() {
-    SCHEMA_FILE=${TEMPORAL_HOME}/schema/elasticsearch/${ES_VERSION}/visibility/index_template.json
+    SCHEMA_FILE=${TEMPORAL_HOME}/schema/elasticsearch/visibility/index_template_${ES_VERSION}.json
     ES_SERVER=$(echo "${ES_SEEDS}" | awk -F ',' '{print $1}')
-    TEMPLATE_URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/_template/temporal-visibility-template"
+    TEMPLATE_URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/_template/temporal_visibility_v1_template"
     INDEX_URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/${ES_VIS_INDEX}"
     curl --user "${ES_USER}":"${ES_PWD}" -X PUT "${TEMPLATE_URL}" -H 'Content-Type: application/json' --data-binary "@${SCHEMA_FILE}" --write-out "\n"
     curl --user "${ES_USER}":"${ES_PWD}" -X PUT "${INDEX_URL}" --write-out "\n"

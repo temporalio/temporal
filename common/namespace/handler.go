@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -93,7 +92,7 @@ var _ Handler = (*HandlerImpl)(nil)
 
 // NewHandler create a new namespace handler
 func NewHandler(
-	minRetentionDays int,
+	minRetention time.Duration,
 	maxBadBinaryCount dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 	metadataMgr persistence.MetadataManager,
@@ -108,7 +107,7 @@ func NewHandler(
 		metadataMgr:            metadataMgr,
 		clusterMetadata:        clusterMetadata,
 		namespaceReplicator:    namespaceReplicator,
-		namespaceAttrValidator: newAttrValidator(clusterMetadata, int32(minRetentionDays)),
+		namespaceAttrValidator: newAttrValidator(clusterMetadata, minRetention),
 		archivalMetadata:       archivalMetadata,
 		archiverProvider:       archiverProvider,
 	}
@@ -439,7 +438,7 @@ func (d *HandlerImpl) UpdateNamespace(
 	}
 	if updateRequest.Config != nil {
 		updatedConfig := updateRequest.Config
-		if timestamp.DurationValue(updatedConfig.GetWorkflowExecutionRetentionTtl()) != 0 {
+		if updatedConfig.GetWorkflowExecutionRetentionTtl() != nil {
 			configurationChanged = true
 			config.Retention = updatedConfig.GetWorkflowExecutionRetentionTtl()
 		}

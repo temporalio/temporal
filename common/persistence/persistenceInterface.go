@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package mock -source $GOFILE -destination mock/store_mock.go -aux_files go.temporal.io/server/common/persistence=dataInterfaces.go
+
 package persistence
 
 import (
@@ -31,7 +33,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
@@ -45,14 +46,34 @@ type (
 	// ////////////////////////////////////////////////////////////////////
 	// Persistence interface is a lower layer of dataInterface.
 	// The intention is to let different persistence implementation(SQL,Cassandra/etc) share some common logic
-	// Right now the only common part is serialization/deserialization, and only ExecutionManager/HistoryManager need it.
-	// ShardManager/TaskManager/MetadataManager are the same.
+	// Right now the only common part is serialization/deserialization.
 	// ////////////////////////////////////////////////////////////////////
 
 	// ShardStore is a lower level of ShardManager
-	ShardStore = ShardManager
+	ShardStore interface {
+		Closeable
+		GetName() string
+		GetClusterName() string
+		CreateShard(request *InternalCreateShardRequest) error
+		GetShard(request *InternalGetShardRequest) (*InternalGetShardResponse, error)
+		UpdateShard(request *InternalUpdateShardRequest) error
+	}
+
 	// TaskStore is a lower level of TaskManager
-	TaskStore = TaskManager
+	TaskStore interface {
+		Closeable
+		GetName() string
+		CreateTaskQueue(request *InternalCreateTaskQueueRequest) error
+		GetTaskQueue(request *InternalGetTaskQueueRequest) (*InternalGetTaskQueueResponse, error)
+		ExtendLease(request *InternalExtendLeaseRequest) error
+		UpdateTaskQueue(request *InternalUpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
+		ListTaskQueue(request *ListTaskQueueRequest) (*InternalListTaskQueueResponse, error)
+		DeleteTaskQueue(request *DeleteTaskQueueRequest) error
+		CreateTasks(request *InternalCreateTasksRequest) (*CreateTasksResponse, error)
+		GetTasks(request *GetTasksRequest) (*InternalGetTasksResponse, error)
+		CompleteTask(request *CompleteTaskRequest) error
+		CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error)
+	}
 	// MetadataStore is a lower level of MetadataManager
 	MetadataStore interface {
 		Closeable
@@ -93,7 +114,7 @@ type (
 		CreateWorkflowExecution(request *InternalCreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
 		DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error
-		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
+		GetCurrentExecution(request *GetCurrentExecutionRequest) (*InternalGetCurrentExecutionResponse, error)
 
 		// Scan related methods
 		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*InternalListConcreteExecutionsResponse, error)
@@ -178,18 +199,19 @@ type (
 	// Queue is a store to enqueue and get messages
 	Queue interface {
 		Closeable
+		Init(blob *commonpb.DataBlob) error
 		EnqueueMessage(blob commonpb.DataBlob) error
 		ReadMessages(lastMessageID int64, maxCount int) ([]*QueueMessage, error)
 		DeleteMessagesBefore(messageID int64) error
-		UpdateAckLevel(messageID int64, clusterName string) error
-		GetAckLevels() (map[string]int64, error)
+		UpdateAckLevel(metadata *InternalQueueMetadata) error
+		GetAckLevels() (*InternalQueueMetadata, error)
 
 		EnqueueMessageToDLQ(blob commonpb.DataBlob) (int64, error)
 		ReadMessagesFromDLQ(firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error)
 		DeleteMessageFromDLQ(messageID int64) error
 		RangeDeleteMessagesFromDLQ(firstMessageID int64, lastMessageID int64) error
-		UpdateDLQAckLevel(messageID int64, clusterName string) error
-		GetDLQAckLevels() (map[string]int64, error)
+		UpdateDLQAckLevel(metadata *InternalQueueMetadata) error
+		GetDLQAckLevels() (*InternalQueueMetadata, error)
 	}
 
 	// QueueMessage is the message that stores in the queue
@@ -198,6 +220,101 @@ type (
 		ID        int64     `json:"message_id"`
 		Data      []byte    `json:"message_payload"`
 		Encoding  string    `json:"message_encoding"`
+	}
+
+	InternalQueueMetadata struct {
+		Blob    *commonpb.DataBlob
+		Version int64
+	}
+
+	// InternalCreateShardRequest is used by ShardStore to create new shard
+	InternalCreateShardRequest struct {
+		ShardID   int32
+		RangeID   int64
+		ShardInfo *commonpb.DataBlob
+	}
+
+	// InternalGetShardRequest is used by ShardStore to retrieve a shard
+	InternalGetShardRequest struct {
+		ShardID int32
+	}
+
+	// InternalGetShardResponse is the response to GetShard
+	InternalGetShardResponse struct {
+		ShardInfo *commonpb.DataBlob
+	}
+
+	// InternalUpdateShardRequest is used by ShardStore to update a shard
+	InternalUpdateShardRequest struct {
+		ShardID         int32
+		RangeID         int64
+		ShardInfo       *commonpb.DataBlob
+		PreviousRangeID int64
+	}
+
+	InternalCreateTaskQueueRequest struct {
+		NamespaceID   string
+		TaskQueue     string
+		TaskType      enumspb.TaskQueueType
+		RangeID       int64
+		TaskQueueInfo *commonpb.DataBlob
+	}
+
+	InternalGetTaskQueueRequest struct {
+		NamespaceID string
+		TaskQueue   string
+		TaskType    enumspb.TaskQueueType
+	}
+
+	InternalGetTaskQueueResponse struct {
+		RangeID       int64
+		TaskQueueInfo *commonpb.DataBlob
+	}
+
+	InternalExtendLeaseRequest struct {
+		NamespaceID   string
+		TaskQueue     string
+		TaskType      enumspb.TaskQueueType
+		RangeID       int64
+		TaskQueueInfo *commonpb.DataBlob
+	}
+
+	InternalUpdateTaskQueueRequest struct {
+		NamespaceID   string
+		TaskQueue     string
+		TaskType      enumspb.TaskQueueType
+		TaskQueueKind enumspb.TaskQueueKind
+		RangeID       int64
+		ExpiryTime    *time.Time
+		TaskQueueInfo *commonpb.DataBlob
+	}
+
+	InternalCreateTasksRequest struct {
+		NamespaceID   string
+		TaskQueue     string
+		TaskType      enumspb.TaskQueueType
+		RangeID       int64
+		TaskQueueInfo *commonpb.DataBlob
+		Tasks         []*InternalCreateTask
+	}
+
+	InternalCreateTask struct {
+		TaskId     int64
+		ExpiryTime *time.Time
+		Task       *commonpb.DataBlob
+	}
+
+	InternalGetTasksResponse struct {
+		Tasks []*commonpb.DataBlob
+	}
+
+	InternalListTaskQueueResponse struct {
+		Items         []*InternalListTaskQueueItem
+		NextPageToken []byte
+	}
+	InternalListTaskQueueItem struct {
+		TaskQueue *commonpb.DataBlob // serialized PersistedTaskQueueInfo
+		RangeID   int64
 	}
 
 	// DataBlob represents a blob for any binary data.
@@ -218,19 +335,18 @@ type (
 
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
 	InternalWorkflowMutableState struct {
-		ActivityInfos       map[int64]*persistencespb.ActivityInfo
-		TimerInfos          map[string]*persistencespb.TimerInfo
-		ChildExecutionInfos map[int64]*persistencespb.ChildExecutionInfo
-		RequestCancelInfos  map[int64]*persistencespb.RequestCancelInfo
-		SignalInfos         map[int64]*persistencespb.SignalInfo
+		ActivityInfos       map[int64]*commonpb.DataBlob  // ActivityInfo
+		TimerInfos          map[string]*commonpb.DataBlob // TimerInfo
+		ChildExecutionInfos map[int64]*commonpb.DataBlob  // ChildExecutionInfo
+		RequestCancelInfos  map[int64]*commonpb.DataBlob  // RequestCancelInfo
+		SignalInfos         map[int64]*commonpb.DataBlob  // SignalInfo
 		SignalRequestedIDs  []string
-		ExecutionInfo       *persistencespb.WorkflowExecutionInfo
-		ExecutionState      *persistencespb.WorkflowExecutionState
+		ExecutionInfo       *commonpb.DataBlob // WorkflowExecutionInfo
+		ExecutionState      *commonpb.DataBlob // WorkflowExecutionState
 		NextEventID         int64
-
-		BufferedEvents  []*commonpb.DataBlob
-		Checksum        *persistencespb.Checksum
-		DBRecordVersion int64
+		BufferedEvents      []*commonpb.DataBlob
+		Checksum            *commonpb.DataBlob // persistencespb.Checksum
+		DBRecordVersion     int64
 	}
 
 	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
@@ -262,21 +378,28 @@ type (
 
 	// InternalWorkflowMutation is used as generic workflow execution state mutation for Persistence Interface
 	InternalWorkflowMutation struct {
-		ExecutionInfo    *persistencespb.WorkflowExecutionInfo
-		ExecutionState   *persistencespb.WorkflowExecutionState
-		NextEventID      int64
-		LastWriteVersion int64
-		DBRecordVersion  int64
+		// TODO: properly set this on call sites
+		NamespaceID string
+		WorkflowID  string
+		RunID       string
 
-		UpsertActivityInfos       map[int64]*persistencespb.ActivityInfo
+		ExecutionInfo      *commonpb.DataBlob
+		ExecutionState     *persistencespb.WorkflowExecutionState
+		ExecutionStateBlob *commonpb.DataBlob
+		NextEventID        int64
+		StartVersion       int64
+		LastWriteVersion   int64
+		DBRecordVersion    int64
+
+		UpsertActivityInfos       map[int64]*commonpb.DataBlob
 		DeleteActivityInfos       map[int64]struct{}
-		UpsertTimerInfos          map[string]*persistencespb.TimerInfo
+		UpsertTimerInfos          map[string]*commonpb.DataBlob
 		DeleteTimerInfos          map[string]struct{}
-		UpsertChildExecutionInfos map[int64]*persistencespb.ChildExecutionInfo
+		UpsertChildExecutionInfos map[int64]*commonpb.DataBlob
 		DeleteChildExecutionInfos map[int64]struct{}
-		UpsertRequestCancelInfos  map[int64]*persistencespb.RequestCancelInfo
+		UpsertRequestCancelInfos  map[int64]*commonpb.DataBlob
 		DeleteRequestCancelInfos  map[int64]struct{}
-		UpsertSignalInfos         map[int64]*persistencespb.SignalInfo
+		UpsertSignalInfos         map[int64]*commonpb.DataBlob
 		DeleteSignalInfos         map[int64]struct{}
 		UpsertSignalRequestedIDs  map[string]struct{}
 		DeleteSignalRequestedIDs  map[string]struct{}
@@ -290,22 +413,29 @@ type (
 
 		Condition int64
 
-		Checksum *persistencespb.Checksum
+		Checksum *commonpb.DataBlob
 	}
 
 	// InternalWorkflowSnapshot is used as generic workflow execution state snapshot for Persistence Interface
 	InternalWorkflowSnapshot struct {
-		ExecutionInfo    *persistencespb.WorkflowExecutionInfo
-		ExecutionState   *persistencespb.WorkflowExecutionState
-		LastWriteVersion int64
-		NextEventID      int64
-		DBRecordVersion  int64
+		// TODO: properly set this on call sites
+		NamespaceID string
+		WorkflowID  string
+		RunID       string
 
-		ActivityInfos       map[int64]*persistencespb.ActivityInfo
-		TimerInfos          map[string]*persistencespb.TimerInfo
-		ChildExecutionInfos map[int64]*persistencespb.ChildExecutionInfo
-		RequestCancelInfos  map[int64]*persistencespb.RequestCancelInfo
-		SignalInfos         map[int64]*persistencespb.SignalInfo
+		ExecutionInfo      *commonpb.DataBlob
+		ExecutionState     *persistencespb.WorkflowExecutionState
+		ExecutionStateBlob *commonpb.DataBlob
+		StartVersion       int64
+		LastWriteVersion   int64
+		NextEventID        int64
+		DBRecordVersion    int64
+
+		ActivityInfos       map[int64]*commonpb.DataBlob
+		TimerInfos          map[string]*commonpb.DataBlob
+		ChildExecutionInfos map[int64]*commonpb.DataBlob
+		RequestCancelInfos  map[int64]*commonpb.DataBlob
+		SignalInfos         map[int64]*commonpb.DataBlob
 		SignalRequestedIDs  map[string]struct{}
 
 		TransferTasks    []Task
@@ -315,7 +445,13 @@ type (
 
 		Condition int64
 
-		Checksum *persistencespb.Checksum
+		Checksum *commonpb.DataBlob
+	}
+
+	InternalGetCurrentExecutionResponse struct {
+		RunID            string
+		ExecutionState   *persistencespb.WorkflowExecutionState
+		LastWriteVersion int64
 	}
 
 	// InternalHistoryNode represent a history node metadata
@@ -394,12 +530,18 @@ type (
 
 	// InternalDeleteHistoryBranchRequest is used to remove a history branch
 	InternalDeleteHistoryBranchRequest struct {
-		// branch to be deleted
-		BranchInfo *persistencespb.HistoryBranch
 		// Used in sharded data stores to identify which shard to use
-		ShardID int32
-		// Max EndNodeID of each  branch. This is used to determine the range of nodes that
-		BranchesMaxEndNodeID map[string]int64
+		ShardID  int32
+		TreeId   string // TreeId, BranchId is used to delete target history branch itself.
+		BranchId string
+		// branch ranges is used to delete range of history nodes from target branch and it ancestors.
+		BranchRanges []InternalDeleteHistoryBranchRange
+	}
+
+	// InternalDeleteHistoryBranchRange is used to delete a range of history nodes of a branch
+	InternalDeleteHistoryBranchRange struct {
+		BranchId    string
+		BeginNodeId int64 // delete nodes with ID >= BeginNodeId
 	}
 
 	// InternalReadHistoryBranchRequest is used to read a history branch
@@ -602,8 +744,9 @@ func NewDataBlob(data []byte, encodingTypeStr string) *commonpb.DataBlob {
 	}
 
 	encodingType, ok := enumspb.EncodingType_value[encodingTypeStr]
-	if !ok || enumspb.EncodingType(encodingType) != enumspb.ENCODING_TYPE_PROTO3 {
-		panic(fmt.Sprintf("Invalid incoding: \"%v\"", encodingTypeStr))
+	if !ok || (enumspb.EncodingType(encodingType) != enumspb.ENCODING_TYPE_PROTO3 &&
+		enumspb.EncodingType(encodingType) != enumspb.ENCODING_TYPE_JSON) {
+		panic(fmt.Sprintf("Invalid encoding: \"%v\"", encodingTypeStr))
 	}
 
 	return &commonpb.DataBlob{

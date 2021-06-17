@@ -264,12 +264,14 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 		ScheduledId: scheduleID,
 	}
 
-	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
+	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecution(
+		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
+		callerTypeTask,
 	)
 	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
 	release(nil)
@@ -312,12 +314,14 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 		ScheduledId: scheduleID,
 	}
 
-	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
+	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecution(
+		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
+		callerTypeTask,
 	)
 
 	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
@@ -362,12 +366,14 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		ScheduledId: scheduleID,
 	}
 
-	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
+	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecution(
+		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
+		callerTypeTask,
 	)
 
 	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
@@ -469,12 +475,14 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		ScheduledId: scheduleID,
 	}
 
-	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecutionForBackground(
+	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecution(
+		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
+		callerTypeTask,
 	)
 
 	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState

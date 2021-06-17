@@ -371,7 +371,7 @@ pollLoop:
 			})
 			if err != nil {
 				// will notify query client that the query task failed
-				e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err}) // nolint:errcheck
+				_ = e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err})
 				return emptyPollWorkflowTaskQueueResponse, nil
 			}
 
@@ -410,7 +410,7 @@ pollLoop:
 	}
 }
 
-// pollForActivityTaskOperation takes one task from the task manager, update workflow execution history, mark task as
+// PollActivityTaskQueue takes one task from the task manager, update workflow execution history, mark task as
 // completed and return it to user. If a task from task manager is already started, return an empty response, without
 // error. Timeouts handled by the timer queue.
 func (e *matchingEngineImpl) PollActivityTaskQueue(
@@ -548,7 +548,7 @@ func (e *matchingEngineImpl) RespondQueryTaskCompleted(
 func (e *matchingEngineImpl) deliverQueryResult(taskID string, queryResult *queryResult) error {
 	queryResultCh, ok := e.lockableQueryTaskMap.get(taskID)
 	if !ok {
-		return serviceerror.NewInternal("query task not found, or already expired")
+		return serviceerror.NewNotFound("query task not found, or already expired")
 	}
 	queryResultCh <- queryResult
 	return nil

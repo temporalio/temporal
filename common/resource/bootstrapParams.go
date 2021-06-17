@@ -51,6 +51,7 @@ type (
 		InstanceID      string
 		Logger          log.Logger
 		ThrottledLogger log.Logger
+		NamespaceLogger log.Logger
 
 		MetricsScope                 tally.Scope
 		MembershipFactoryInitializer MembershipFactoryInitializerFunc

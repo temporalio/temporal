@@ -30,47 +30,44 @@ import (
 
 const (
 	// Indexed fields on ES.
-	NamespaceID     = "NamespaceId"
-	WorkflowID      = "WorkflowId"
-	RunID           = "RunId"
-	WorkflowType    = "WorkflowType"
-	StartTime       = "StartTime"
-	ExecutionTime   = "ExecutionTime"
-	CloseTime       = "CloseTime"
-	ExecutionStatus = "ExecutionStatus"
-	TaskQueue       = "TaskQueue"
-
-	// Valid non-indexed fields on ES.
-	HistoryLength     = "HistoryLength"
-	Encoding          = "Encoding"
-	Memo              = "Memo"
-	VisibilityTaskKey = "VisibilityTaskKey"
-
-	// Attr is prefix for search attributes.
-	Attr = "Attr"
-
-	// System search attributes.
+	NamespaceID           = "NamespaceId"
+	WorkflowID            = "WorkflowId"
+	RunID                 = "RunId"
+	WorkflowType          = "WorkflowType"
+	StartTime             = "StartTime"
+	ExecutionTime         = "ExecutionTime"
+	CloseTime             = "CloseTime"
+	ExecutionStatus       = "ExecutionStatus"
+	TaskQueue             = "TaskQueue"
+	HistoryLength         = "HistoryLength"
+	ExecutionDuration     = "ExecutionDuration"
 	TemporalChangeVersion = "TemporalChangeVersion"
 	BinaryChecksums       = "BinaryChecksums"
-	CustomNamespace       = "CustomNamespace"
-	Operator              = "Operator"
+	BatcherNamespace      = "BatcherNamespace"
+	BarcherUser           = "BarcherUser"
+
+	// Reserved non-indexed fields on ES.
+	MemoEncoding      = "MemoEncoding"
+	Memo              = "Memo"
+	VisibilityTaskKey = "VisibilityTaskKey"
 )
 
 var (
 	// reservedFields are internal field names that can't be used as search attribute names.
 	reservedFields = map[string]struct{}{
-		NamespaceID:     {},
-		WorkflowID:      {},
-		RunID:           {},
-		WorkflowType:    {},
-		StartTime:       {},
-		ExecutionTime:   {},
-		CloseTime:       {},
-		ExecutionStatus: {},
-		TaskQueue:       {},
-
+		NamespaceID:       {},
+		WorkflowID:        {},
+		RunID:             {},
+		WorkflowType:      {},
+		StartTime:         {},
+		ExecutionTime:     {},
+		CloseTime:         {},
+		ExecutionStatus:   {},
+		TaskQueue:         {},
 		HistoryLength:     {},
-		Encoding:          {},
+		ExecutionDuration: {},
+
+		MemoEncoding:      {},
 		Memo:              {},
 		VisibilityTaskKey: {},
 	}
@@ -78,47 +75,27 @@ var (
 	// system are default internal system search attributes which are shown to the users.
 	// Note: NamespaceID is not included because it is not exposed.
 	system = map[string]enumspb.IndexedValueType{
-		WorkflowID:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		RunID:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		WorkflowType:    enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		StartTime:       enumspb.INDEXED_VALUE_TYPE_INT,
-		ExecutionTime:   enumspb.INDEXED_VALUE_TYPE_INT,
-		CloseTime:       enumspb.INDEXED_VALUE_TYPE_INT,
-		ExecutionStatus: enumspb.INDEXED_VALUE_TYPE_INT,
-		TaskQueue:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-
+		WorkflowID:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		RunID:                 enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		WorkflowType:          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		StartTime:             enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		ExecutionTime:         enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		CloseTime:             enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		ExecutionStatus:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TaskQueue:             enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		HistoryLength:         enumspb.INDEXED_VALUE_TYPE_INT,
+		ExecutionDuration:     enumspb.INDEXED_VALUE_TYPE_INT,
 		TemporalChangeVersion: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		BinaryChecksums:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		CustomNamespace:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		Operator:              enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BatcherNamespace:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BarcherUser:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
 	namespaceIDType = enumspb.INDEXED_VALUE_TYPE_KEYWORD
-
-	// noAttrPrefixAttributes are internal system search attributes which don't require Attr prefix.
-	// TODO: remove with Attr prefix removal
-	noAttrPrefixAttributes = map[string]struct{}{
-		NamespaceID:     {},
-		WorkflowID:      {},
-		RunID:           {},
-		WorkflowType:    {},
-		StartTime:       {},
-		ExecutionTime:   {},
-		CloseTime:       {},
-		ExecutionStatus: {},
-		TaskQueue:       {},
-	}
 )
 
 // IsReservedField return true if field name is system reserved.
 func IsReservedField(fieldName string) bool {
 	_, ok := reservedFields[fieldName]
-	return ok
-}
-
-// NoAttrPrefix return true if search attribute is system and doesn't require Attr prefix.
-// TODO: remove with Attr prefix removal
-func NoAttrPrefix(saName string) bool {
-	_, ok := noAttrPrefixAttributes[saName]
 	return ok
 }

@@ -34,7 +34,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -42,6 +41,7 @@ import (
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence"
@@ -236,9 +236,10 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		fmt.Println("deleting history events for ...")
 		prettyPrintJSONObject(branchInfo)
 		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, log.NewNoopLogger())
-		err = histV2.DeleteHistoryBranch(&persistence.InternalDeleteHistoryBranchRequest{
-			BranchInfo: branchInfo,
-			ShardID:    shardIDInt32,
+		histMgr := persistence.NewHistoryV2ManagerImpl(histV2, log.NewNoopLogger(), dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit))
+		err = histMgr.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+			BranchToken: branchToken,
+			ShardID:     shardIDInt32,
 		})
 		if err != nil {
 			if skipError {
@@ -311,7 +312,7 @@ func connectToCassandra(c *cli.Context) gocql.Session {
 		}
 	}
 
-	session, err := gocql.NewSession(cassandraConfig, resolver.NewNoopResolver())
+	session, err := gocql.NewSession(cassandraConfig, resolver.NewNoopResolver(), log.NewNoopLogger())
 	if err != nil {
 		ErrorAndExit("connect to Cassandra failed", err)
 	}

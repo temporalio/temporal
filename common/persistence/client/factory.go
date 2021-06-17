@@ -87,7 +87,7 @@ type (
 	// AbstractDataStoreFactory creates a DataStoreFactory, can be used to implement custom datastore support outside
 	// of the Temporal core.
 	AbstractDataStoreFactory interface {
-		NewFactory(cfg config.CustomDatastoreConfig, clusterName string, logger log.Logger) DataStoreFactory
+		NewFactory(cfg config.CustomDatastoreConfig, r resolver.ServiceResolver, clusterName string, logger log.Logger) DataStoreFactory
 	}
 
 	// Datastore represents a datastore
@@ -161,10 +161,11 @@ func NewFactory(
 // NewTaskManager returns a new task manager
 func (f *factoryImpl) NewTaskManager() (p.TaskManager, error) {
 	ds := f.datastores[storeTypeTask]
-	result, err := ds.factory.NewTaskStore()
+	taskStore, err := ds.factory.NewTaskStore()
 	if err != nil {
 		return nil, err
 	}
+	result := p.NewTaskManager(taskStore)
 	if ds.ratelimit != nil {
 		result = p.NewTaskPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}
@@ -177,7 +178,8 @@ func (f *factoryImpl) NewTaskManager() (p.TaskManager, error) {
 // NewShardManager returns a new shard manager
 func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
 	ds := f.datastores[storeTypeShard]
-	result, err := ds.factory.NewShardStore()
+	shardStore, err := ds.factory.NewShardStore()
+	result := p.NewShardManager(shardStore)
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +259,7 @@ func (f *factoryImpl) NewExecutionManager(
 	if err != nil {
 		return nil, err
 	}
-	result := p.NewExecutionManagerImpl(store, f.logger)
+	result := p.NewExecutionManager(store, f.logger)
 	if ds.ratelimit != nil {
 		result = p.NewWorkflowExecutionPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}
@@ -313,7 +315,7 @@ func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueu
 		result = p.NewQueuePersistenceMetricsClient(result, f.metricsClient, f.logger)
 	}
 
-	return p.NewNamespaceReplicationQueue(result, f.clusterName, f.metricsClient, f.logger), nil
+	return p.NewNamespaceReplicationQueue(result, f.clusterName, f.metricsClient, f.logger)
 }
 
 // Close closes this factory
@@ -352,7 +354,7 @@ func (f *factoryImpl) init(
 	case defaultCfg.SQL != nil:
 		defaultDataStore.factory = sql.NewFactory(*defaultCfg.SQL, r, clusterName, f.logger)
 	case defaultCfg.CustomDataStoreConfig != nil:
-		defaultDataStore.factory = f.abstractDataStoreFactory.NewFactory(*defaultCfg.CustomDataStoreConfig, clusterName, f.logger)
+		defaultDataStore.factory = f.abstractDataStoreFactory.NewFactory(*defaultCfg.CustomDataStoreConfig, r, clusterName, f.logger)
 	default:
 		f.logger.Fatal("invalid config: one of cassandra or sql params must be specified for default data store")
 	}

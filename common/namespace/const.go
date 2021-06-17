@@ -24,9 +24,12 @@
 
 package namespace
 
+import "time"
+
 const (
-	// MinRetentionDays is the minimal retention days for any namespace
-	MinRetentionDays = 1
+	// MinRetention is the minimal retention for any namespace (can be
+	// overridden by dynamic config)
+	MinRetention = 1 * 24 * time.Hour
 
 	// MaxBadBinaries is the maximal number of bad client binaries stored in a namespace
 	MaxBadBinaries = 10

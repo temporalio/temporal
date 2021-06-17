@@ -33,11 +33,8 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
 )
@@ -354,46 +351,14 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	branch := request.BranchInfo
-	treeID := branch.TreeId
-	branchIDBytes, err := primitives.ParseUUID(branch.GetBranchId())
+
+	branchIDBytes, err := primitives.ParseUUID(request.BranchId)
 	if err != nil {
 		return err
 	}
-	treeIDBytes, err := primitives.ParseUUID(branch.GetTreeId())
+	treeIDBytes, err := primitives.ParseUUID(request.TreeId)
 	if err != nil {
 		return err
-	}
-
-	brsToDelete := branch.Ancestors
-	beginNodeID := p.GetBeginNodeID(branch)
-	brsToDelete = append(brsToDelete, &persistencespb.HistoryBranchRange{
-		BranchId:    branch.BranchId,
-		BeginNodeId: beginNodeID,
-	})
-
-	rsp, err := m.GetHistoryTree(&p.GetHistoryTreeRequest{
-		TreeID:  treeID,
-		ShardID: convert.Int32Ptr(request.ShardID),
-	})
-	if err != nil {
-		return err
-	}
-
-	// validBRsMaxEndNode is to for each branch range that is being used, we want to know what is the max nodeID referred by other valid branch
-	validBRsMaxEndNode := map[string]int64{}
-	for _, blob := range rsp.TreeInfos {
-		treeInfo, err := serialization.HistoryTreeInfoFromBlob(blob.Data, blob.EncodingType.String())
-		if err != nil {
-			return err
-		}
-
-		for _, br := range treeInfo.BranchInfo.Ancestors {
-			curr, ok := validBRsMaxEndNode[br.GetBranchId()]
-			if !ok || curr < br.GetEndNodeId() {
-				validBRsMaxEndNode[br.GetBranchId()] = br.GetEndNodeId()
-			}
-		}
 	}
 
 	return m.txExecute(ctx, "DeleteHistoryBranch", func(tx sqlplugin.Tx) error {
@@ -406,31 +371,22 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 			return err
 		}
 
-		done := false
-		// for each branch range to delete, we iterate from bottom to up, and delete up to the point according to validBRsEndNode
-		for i := len(brsToDelete) - 1; i >= 0; i-- {
-			br := brsToDelete[i]
-			maxReferredEndNodeID, ok := validBRsMaxEndNode[br.GetBranchId()]
-			deleteFilter := sqlplugin.HistoryNodeDeleteFilter{
-				ShardID:  request.ShardID,
-				TreeID:   treeIDBytes,
-				BranchID: branchIDBytes,
-			}
-
-			if ok {
-				// we can only delete from the maxEndNode and stop here
-				deleteFilter.MinNodeID = maxReferredEndNodeID
-				done = true
-			} else {
-				// No any branch is using this range, we can delete all of it
-				deleteFilter.MinNodeID = br.BeginNodeId
-			}
-			_, err := tx.RangeDeleteFromHistoryNode(ctx, deleteFilter)
+		// delete each branch range
+		for _, br := range request.BranchRanges {
+			branchIDBytes, err := primitives.ParseUUID(br.BranchId)
 			if err != nil {
 				return err
 			}
-			if done {
-				break
+
+			deleteFilter := sqlplugin.HistoryNodeDeleteFilter{
+				ShardID:   request.ShardID,
+				TreeID:    treeIDBytes,
+				BranchID:  branchIDBytes,
+				MinNodeID: br.BeginNodeId,
+			}
+			_, err = tx.RangeDeleteFromHistoryNode(ctx, deleteFilter)
+			if err != nil {
+				return err
 			}
 		}
 		return nil

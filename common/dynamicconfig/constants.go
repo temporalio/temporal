@@ -63,7 +63,7 @@ var Keys = map[Key]string{
 	AdminMatchingNamespaceToPartitionDispatchRate:          "admin.matchingNamespaceToPartitionDispatchRate",
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate: "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
 
-	// TODO remove this dynamic flag in 1.12.x
+	// TODO remove this dynamic flag in 1.14.x
 	EnableDBRecordVersion: "system.enableDBRecordVersion",
 
 	// system settings
@@ -76,7 +76,7 @@ var Keys = map[Key]string{
 	EnableReadFromVisibilityArchival:       "system.enableReadFromVisibilityArchival",
 	EnableNamespaceNotActiveAutoForwarding: "system.enableNamespaceNotActiveAutoForwarding",
 	TransactionSizeLimit:                   "system.transactionSizeLimit",
-	MinRetentionDays:                       "system.minRetentionDays",
+	MinRetention:                           "system.minRetention",
 	DisallowQuery:                          "system.disallowQuery",
 	EnableBatcher:                          "worker.enableBatcher",
 	EnableParentClosePolicyWorker:          "system.enableParentClosePolicyWorker",
@@ -137,7 +137,7 @@ var Keys = map[Key]string{
 	MatchingMinTaskThrottlingBurstSize:      "matching.minTaskThrottlingBurstSize",
 	MatchingGetTasksBatchSize:               "matching.getTasksBatchSize",
 	MatchingLongPollExpirationInterval:      "matching.longPollExpirationInterval",
-	MatchingEnableSyncMatch:                 "matching.enableSyncMatch",
+	MatchingSyncMatchWaitDuration:           "matching.syncMatchWaitDuration",
 	MatchingUpdateAckInterval:               "matching.updateAckInterval",
 	MatchingIdleTaskqueueCheckInterval:      "matching.idleTaskqueueCheckInterval",
 	MaxTaskqueueIdleTime:                    "matching.maxTaskqueueIdleTime",
@@ -345,7 +345,7 @@ const (
 	// AdminMatchingNamespaceTaskqueueToPartitionDispatchRate is the max qps of a task queue partition for a given namespace & task queue
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate
 
-	// TODO remove this dynamic flag in 1.12.x
+	// TODO remove this dynamic flag in 1.14.x
 
 	// EnableDBRecordVersion is key for enable db version
 	EnableDBRecordVersion
@@ -373,8 +373,8 @@ const (
 	EnableNamespaceNotActiveAutoForwarding
 	// TransactionSizeLimit is the largest allowed transaction size to persistence
 	TransactionSizeLimit
-	// MinRetentionDays is the minimal allowed retention days for namespace
-	MinRetentionDays
+	// MinRetention is the minimal allowed retention period for namespaces
+	MinRetention
 	// DisallowQuery is the key to disallow query for a namespace
 	DisallowQuery
 	// EnablePriorityTaskProcessor is the key for enabling priority task processor
@@ -498,8 +498,8 @@ const (
 	MatchingGetTasksBatchSize
 	// MatchingLongPollExpirationInterval is the long poll expiration interval in the matching service
 	MatchingLongPollExpirationInterval
-	// MatchingEnableSyncMatch is to enable sync match
-	MatchingEnableSyncMatch
+	// MatchingSyncMatchWaitDuration is to wait time for sync match
+	MatchingSyncMatchWaitDuration
 	// MatchingUpdateAckInterval is the interval for update ack
 	MatchingUpdateAckInterval
 	// MatchingIdleTaskqueueCheckInterval is the IdleTaskqueueCheckInterval
