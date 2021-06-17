@@ -928,7 +928,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 
 	var sourceMap map[string]interface{}
 	d := json.NewDecoder(bytes.NewReader(hit.Source))
-	// Very important line.
+	// Very important line. See finishParseJSONValue bellow.
 	d.UseNumber()
 	if err := d.Decode(&sourceMap); err != nil {
 		s.logger.Error("Unable to JSON unmarshal Elasticsearch SearchHit.Source.", tag.Error(err), tag.ESDocID(hit.Id))
@@ -1015,7 +1015,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 }
 
 // finishParseJSONValue finishes JSON parsing after json.Decode.
-// json.Decode return:
+// json.Decode returns:
 //     bool, for JSON booleans
 //     json.Number, for JSON numbers (because of d.UseNumber())
 //     string, for JSON strings
