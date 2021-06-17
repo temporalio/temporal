@@ -44,6 +44,7 @@ type AuthInfo struct {
 	TLSSubject    *pkix.Name
 	TLSConnection *credentials.TLSInfo
 	ExtraData     string
+	Audience      string
 }
 
 // @@@SNIPEND
