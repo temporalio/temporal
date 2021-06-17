@@ -941,8 +941,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 	record := &persistence.VisibilityWorkflowExecutionInfo{}
 	for fieldName, fieldValue := range sourceMap {
 		switch fieldName {
-		case searchattribute.NamespaceID:
-		case searchattribute.ExecutionDuration:
+		case searchattribute.NamespaceID, searchattribute.ExecutionDuration:
 			// Ignore these fields.
 			continue
 		case searchattribute.Memo:
