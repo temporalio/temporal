@@ -72,6 +72,9 @@
       },
       "BinaryChecksums": {
         "type": "keyword"
+      },
+      "StateTransitionCount": {
+        "type": "long"
       }
     }
   },

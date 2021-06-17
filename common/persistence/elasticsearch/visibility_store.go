@@ -887,15 +887,16 @@ func (s *visibilityStore) serializePageToken(token *visibilityPageToken) ([]byte
 
 func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityRequestBase, visibilityTaskKey string) map[string]interface{} {
 	doc := map[string]interface{}{
-		searchattribute.VisibilityTaskKey: visibilityTaskKey,
-		searchattribute.NamespaceID:       request.NamespaceID,
-		searchattribute.WorkflowID:        request.WorkflowID,
-		searchattribute.RunID:             request.RunID,
-		searchattribute.WorkflowType:      request.WorkflowTypeName,
-		searchattribute.StartTime:         request.StartTimestamp,
-		searchattribute.ExecutionTime:     request.ExecutionTimestamp,
-		searchattribute.ExecutionStatus:   request.Status.String(),
-		searchattribute.TaskQueue:         request.TaskQueue,
+		searchattribute.VisibilityTaskKey:    visibilityTaskKey,
+		searchattribute.NamespaceID:          request.NamespaceID,
+		searchattribute.WorkflowID:           request.WorkflowID,
+		searchattribute.RunID:                request.RunID,
+		searchattribute.WorkflowType:         request.WorkflowTypeName,
+		searchattribute.StartTime:            request.StartTimestamp,
+		searchattribute.ExecutionTime:        request.ExecutionTimestamp,
+		searchattribute.ExecutionStatus:      request.Status.String(),
+		searchattribute.TaskQueue:            request.TaskQueue,
+		searchattribute.StateTransitionCount: request.StateTransitionCount,
 	}
 
 	if len(request.Memo.GetData()) > 0 {
@@ -995,6 +996,8 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 			record.Status = enumspb.WorkflowExecutionStatus(enumspb.WorkflowExecutionStatus_value[fieldValueParsed.(string)])
 		case searchattribute.HistoryLength:
 			record.HistoryLength = fieldValueParsed.(int64)
+		case searchattribute.StateTransitionCount:
+			record.StateTransitionCount = fieldValueParsed.(int64)
 		default:
 			// All custom search attributes are handled here.
 			if record.SearchAttributes == nil {

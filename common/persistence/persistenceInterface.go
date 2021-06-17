@@ -608,17 +608,18 @@ type (
 
 	// VisibilityWorkflowExecutionInfo is visibility info for internal response
 	VisibilityWorkflowExecutionInfo struct {
-		WorkflowID       string
-		RunID            string
-		TypeName         string
-		StartTime        time.Time
-		ExecutionTime    time.Time
-		CloseTime        time.Time
-		Status           enumspb.WorkflowExecutionStatus
-		HistoryLength    int64
-		Memo             *commonpb.DataBlob
-		TaskQueue        string
-		SearchAttributes map[string]interface{}
+		WorkflowID           string
+		RunID                string
+		TypeName             string
+		StartTime            time.Time
+		ExecutionTime        time.Time
+		CloseTime            time.Time
+		Status               enumspb.WorkflowExecutionStatus
+		HistoryLength        int64
+		StateTransitionCount int64
+		Memo                 *commonpb.DataBlob
+		TaskQueue            string
+		SearchAttributes     map[string]interface{}
 	}
 
 	// InternalListWorkflowExecutionsResponse is response from ListWorkflowExecutions
@@ -636,18 +637,19 @@ type (
 
 	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted
 	InternalVisibilityRequestBase struct {
-		NamespaceID        string
-		WorkflowID         string
-		RunID              string
-		WorkflowTypeName   string
-		StartTimestamp     time.Time
-		Status             enumspb.WorkflowExecutionStatus
-		ExecutionTimestamp time.Time
-		TaskID             int64
-		ShardID            int32
-		Memo               *commonpb.DataBlob
-		TaskQueue          string
-		SearchAttributes   *commonpb.SearchAttributes
+		NamespaceID          string
+		WorkflowID           string
+		RunID                string
+		WorkflowTypeName     string
+		StartTimestamp       time.Time
+		Status               enumspb.WorkflowExecutionStatus
+		ExecutionTimestamp   time.Time
+		StateTransitionCount int64
+		TaskID               int64
+		ShardID              int32
+		Memo                 *commonpb.DataBlob
+		TaskQueue            string
+		SearchAttributes     *commonpb.SearchAttributes
 	}
 
 	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted

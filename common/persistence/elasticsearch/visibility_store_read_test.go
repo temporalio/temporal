@@ -434,6 +434,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
           "CloseTime": "2021-06-11T16:04:07.980-07:00",
           "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
+          "StateTransitionCount": 22,
           "VisibilityTaskKey": "7-619",
           "RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
           "StartTime": "2021-06-11T15:04:07.980-07:00",
@@ -546,6 +547,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 		Source: []byte(`{"ExecutionStatus": "Running",
           "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
+          "StateTransitionCount": 10,
           "VisibilityTaskKey": "7-619",
           "RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
           "StartTime": "2021-06-11T15:04:07.980-07:00",
@@ -558,6 +560,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", info.RunID)
 	s.Equal("TestWorkflowExecute", info.TypeName)
+	s.Equal(int64(10), info.StateTransitionCount)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.Status)
 	expectedStartTime, err := time.Parse(time.RFC3339Nano, "2021-06-11T15:04:07.980-07:00")
 	s.NoError(err)
@@ -570,6 +573,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
           "CloseTime": "2021-06-11T16:04:07Z",
           "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
+          "StateTransitionCount": 20,
           "VisibilityTaskKey": "7-619",
           "RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
           "StartTime": "2021-06-11T15:04:07.980-07:00",
@@ -581,6 +585,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", info.RunID)
 	s.Equal("TestWorkflowExecute", info.TypeName)
+	s.Equal(int64(20), info.StateTransitionCount)
 	expectedStartTime, err = time.Parse(time.RFC3339Nano, "2021-06-11T15:04:07.980-07:00")
 	s.NoError(err)
 	expectedCloseTime, err := time.Parse(time.RFC3339Nano, "2021-06-11T16:04:07Z")

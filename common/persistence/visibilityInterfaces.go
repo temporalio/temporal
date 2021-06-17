@@ -43,18 +43,19 @@ import (
 
 type (
 	VisibilityRequestBase struct {
-		NamespaceID        string
-		Namespace          string // not persisted, used as config filter key
-		Execution          commonpb.WorkflowExecution
-		WorkflowTypeName   string
-		StartTimestamp     time.Time
-		Status             enumspb.WorkflowExecutionStatus
-		ExecutionTimestamp time.Time
-		TaskID             int64 // not persisted, used as condition update version for ES
-		ShardID            int32 // not persisted
-		Memo               *commonpb.Memo
-		TaskQueue          string
-		SearchAttributes   *commonpb.SearchAttributes
+		NamespaceID          string
+		Namespace            string // not persisted, used as config filter key
+		Execution            commonpb.WorkflowExecution
+		WorkflowTypeName     string
+		StartTimestamp       time.Time
+		Status               enumspb.WorkflowExecutionStatus
+		ExecutionTimestamp   time.Time
+		StateTransitionCount int64
+		TaskID               int64 // not persisted, used as condition update version for ES
+		ShardID              int32 // not persisted
+		Memo                 *commonpb.Memo
+		TaskQueue            string
+		SearchAttributes     *commonpb.SearchAttributes
 	}
 
 	// RecordWorkflowExecutionStartedRequest is used to add a record of a newly started execution
