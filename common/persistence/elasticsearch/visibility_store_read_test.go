@@ -562,6 +562,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 	expectedStartTime, err := time.Parse(time.RFC3339Nano, "2021-06-11T15:04:07.980-07:00")
 	s.NoError(err)
 	s.Equal(expectedStartTime, info.StartTime)
+	s.Nil(info.SearchAttributes)
 
 	// test for close
 	searchHit = &elastic.SearchHit{
@@ -588,6 +589,7 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 	s.Equal(expectedCloseTime, info.CloseTime)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.Status)
 	s.Equal(int64(29), info.HistoryLength)
+	s.Nil(info.SearchAttributes)
 
 	// test for error case
 	searchHit = &elastic.SearchHit{
@@ -595,6 +597,42 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 	}
 	info = s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap)
 	s.Nil(info)
+}
+
+func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
+	searchHit := &elastic.SearchHit{
+		Source: []byte(`{"TemporalChangeVersion": ["ver1", "ver2"],
+          "CustomKeywordField": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
+          "CustomStringField": "text text",
+          "CustomDatetimeField": ["2014-08-28T03:15:00.000-07:00", "2016-04-21T05:00:00.000-07:00"],
+          "CustomDoubleField": [1234.1234,5678.5678],
+          "CustomIntField": [111,222],
+          "CustomBoolField": true,
+          "UnknownField": "random"}`),
+	}
+	// test for open
+	info := s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap)
+	s.NotNil(info)
+	s.Equal([]interface{}{"ver1", "ver2"}, info.SearchAttributes["TemporalChangeVersion"])
+
+	s.Equal("bfd5c907-f899-4baf-a7b2-2ab85e623ebd", info.SearchAttributes["CustomKeywordField"])
+
+	s.Equal("text text", info.SearchAttributes["CustomStringField"])
+
+	date1, err := time.Parse(time.RFC3339Nano, "2014-08-28T03:15:00.000-07:00")
+	s.NoError(err)
+	date2, err := time.Parse(time.RFC3339Nano, "2016-04-21T05:00:00.000-07:00")
+	s.NoError(err)
+	s.Equal([]interface{}{date1, date2}, info.SearchAttributes["CustomDatetimeField"])
+
+	s.Equal([]interface{}{1234.1234, 5678.5678}, info.SearchAttributes["CustomDoubleField"])
+
+	s.Equal(true, info.SearchAttributes["CustomBoolField"])
+
+	s.Equal([]interface{}{int64(111), int64(222)}, info.SearchAttributes["CustomIntField"])
+
+	_, ok := info.SearchAttributes["UnknownField"]
+	s.False(ok)
 }
 
 func (s *ESVisibilitySuite) TestShouldSearchAfter() {
