@@ -352,16 +352,16 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedR
 
 	return &persistence.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &p.VisibilityRequestBase{
-			Namespace:          namespace,
-			NamespaceID:        task.GetNamespaceId(),
-			Execution:          *execution,
-			WorkflowTypeName:   executionInfo.WorkflowTypeName,
-			StartTimestamp:     timestamp.TimeValue(startEvent.GetEventTime()),
-			ExecutionTimestamp: executionTimestamp,
-			TaskID:             task.GetTaskId(),
-			Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			ShardID:            s.mockShard.GetShardID(),
-			TaskQueue:          taskQueueName,
+			Namespace:        namespace,
+			NamespaceID:      task.GetNamespaceId(),
+			Execution:        *execution,
+			WorkflowTypeName: executionInfo.WorkflowTypeName,
+			StartTime:        timestamp.TimeValue(startEvent.GetEventTime()),
+			ExecutionTime:    executionTimestamp,
+			TaskID:           task.GetTaskId(),
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			ShardID:          s.mockShard.GetShardID(),
+			TaskQueue:        taskQueueName,
 		},
 	}
 }
@@ -381,16 +381,16 @@ func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowSearchAttributesR
 
 	return &persistence.UpsertWorkflowExecutionRequest{
 		VisibilityRequestBase: &p.VisibilityRequestBase{
-			Namespace:          namespace,
-			NamespaceID:        task.GetNamespaceId(),
-			Execution:          *execution,
-			WorkflowTypeName:   executionInfo.WorkflowTypeName,
-			StartTimestamp:     timestamp.TimeValue(executionInfo.GetStartTime()),
-			ExecutionTimestamp: timestamp.TimeValue(executionInfo.GetExecutionTime()),
-			TaskID:             task.GetTaskId(),
-			Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			TaskQueue:          taskQueueName,
-			ShardID:            s.mockShard.GetShardID(),
+			Namespace:        namespace,
+			NamespaceID:      task.GetNamespaceId(),
+			Execution:        *execution,
+			WorkflowTypeName: executionInfo.WorkflowTypeName,
+			StartTime:        timestamp.TimeValue(executionInfo.GetStartTime()),
+			ExecutionTime:    timestamp.TimeValue(executionInfo.GetExecutionTime()),
+			TaskID:           task.GetTaskId(),
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			TaskQueue:        taskQueueName,
+			ShardID:          s.mockShard.GetShardID(),
 		},
 	}
 }

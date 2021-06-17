@@ -641,9 +641,9 @@ type (
 		WorkflowID           string
 		RunID                string
 		WorkflowTypeName     string
-		StartTimestamp       time.Time
+		StartTime            time.Time
 		Status               enumspb.WorkflowExecutionStatus
-		ExecutionTimestamp   time.Time
+		ExecutionTime        time.Time
 		StateTransitionCount int64
 		TaskID               int64
 		ShardID              int32
@@ -660,9 +660,9 @@ type (
 	// InternalRecordWorkflowExecutionClosedRequest is request to RecordWorkflowExecutionClosed
 	InternalRecordWorkflowExecutionClosedRequest struct {
 		*InternalVisibilityRequestBase
-		CloseTimestamp time.Time
-		HistoryLength  int64
-		Retention      *time.Duration
+		CloseTime     time.Time
+		HistoryLength int64
+		Retention     *time.Duration
 	}
 
 	// InternalUpsertWorkflowExecutionRequest is request to UpsertWorkflowExecution

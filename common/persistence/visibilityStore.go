@@ -80,7 +80,7 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionStarted(request *RecordWo
 func (v *visibilityManagerImpl) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
 	req := &InternalRecordWorkflowExecutionClosedRequest{
 		InternalVisibilityRequestBase: v.newInternalVisibilityRequestBase(request.VisibilityRequestBase),
-		CloseTimestamp:                request.CloseTimestamp,
+		CloseTime:                     request.CloseTime,
 		HistoryLength:                 request.HistoryLength,
 		Retention:                     request.Retention,
 	}
@@ -100,15 +100,14 @@ func (v *visibilityManagerImpl) newInternalVisibilityRequestBase(request *Visibi
 		WorkflowID:           request.Execution.GetWorkflowId(),
 		RunID:                request.Execution.GetRunId(),
 		WorkflowTypeName:     request.WorkflowTypeName,
-		StartTimestamp:       request.StartTimestamp,
+		StartTime:            request.StartTime,
 		Status:               request.Status,
-		ExecutionTimestamp:   request.ExecutionTimestamp,
-		StateTransitionCount: request.StateTransitionCount,
-		TaskID:               request.TaskID,
-		ShardID:              request.ShardID,
-		TaskQueue:            request.TaskQueue,
-		Memo:                 v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
-		SearchAttributes:     request.SearchAttributes,
+		ExecutionTime:        request.ExecutionTime,
+		StateTransitionCount: request.StateTransitionCount, TaskID: request.TaskID,
+		ShardID:          request.ShardID,
+		TaskQueue:        request.TaskQueue,
+		Memo:             v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
+		SearchAttributes: request.SearchAttributes,
 	}
 }
 

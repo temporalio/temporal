@@ -81,7 +81,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibility() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
 	}
 	err0 := s.VisibilityMgr.RecordWorkflowExecutionStarted(startReq)
@@ -102,10 +102,10 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibility() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
-		CloseTimestamp: time.Now(),
-		HistoryLength:  5,
+		CloseTime:     time.Now(),
+		HistoryLength: 5,
 	}
 	err2 := s.VisibilityMgr.RecordWorkflowExecutionClosed(closeReq)
 	s.Nil(err2)
@@ -145,7 +145,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
 	})
 	s.NoError(err0)
@@ -165,9 +165,9 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
-		CloseTimestamp: startTime.Add(-10 * time.Millisecond),
+		CloseTime: startTime.Add(-10 * time.Millisecond),
 	})
 	s.NoError(err2)
 
@@ -204,7 +204,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityShortWorkflow() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
 	})
 	s.NoError(err0)
@@ -214,9 +214,9 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityShortWorkflow() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
-		CloseTimestamp: startTime.Add(10 * time.Millisecond),
+		CloseTime: startTime.Add(10 * time.Millisecond),
 	})
 	s.NoError(err2)
 
@@ -257,7 +257,7 @@ func (s *VisibilityPersistenceSuite) TestVisibilityRetention() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
 	})
 	s.NoError(err0)
@@ -268,10 +268,10 @@ func (s *VisibilityPersistenceSuite) TestVisibilityRetention() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
-		CloseTimestamp: startTime.Add(1 * time.Minute),
-		Retention:      &retention,
+		CloseTime: startTime.Add(1 * time.Minute),
+		Retention: &retention,
 	})
 	s.NoError(err2)
 
@@ -321,7 +321,7 @@ func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution1,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime1,
+			StartTime:        startTime1,
 		},
 	}
 
@@ -339,7 +339,7 @@ func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution2,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime2,
+			StartTime:        startTime2,
 		},
 	}
 	err1 := s.VisibilityMgr.RecordWorkflowExecutionStarted(startReq2)
@@ -398,7 +398,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution1,
 			WorkflowTypeName: "visibility-workflow-1",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
 	})
 	s.Nil(err0)
@@ -412,7 +412,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution2,
 			WorkflowTypeName: "visibility-workflow-2",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
 	})
 	s.Nil(err1)
@@ -437,9 +437,9 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution1,
 			WorkflowTypeName: "visibility-workflow-1",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
-		CloseTimestamp: time.Now(),
+		CloseTime: time.Now(),
 	})
 	s.Nil(err3)
 
@@ -448,10 +448,10 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution2,
 			WorkflowTypeName: "visibility-workflow-2",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
-		CloseTimestamp: time.Now(),
-		HistoryLength:  3,
+		CloseTime:     time.Now(),
+		HistoryLength: 3,
 	}
 	err4 := s.VisibilityMgr.RecordWorkflowExecutionClosed(closeReq)
 	s.Nil(err4)
@@ -486,7 +486,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution1,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
 	})
 	s.Nil(err0)
@@ -500,7 +500,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution2,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
 	})
 	s.Nil(err1)
@@ -525,9 +525,9 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution1,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
-		CloseTimestamp: time.Now(),
+		CloseTime: time.Now(),
 	})
 	s.Nil(err3)
 
@@ -536,10 +536,10 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution2,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
-		CloseTimestamp: time.Now(),
-		HistoryLength:  3,
+		CloseTime:     time.Now(),
+		HistoryLength: 3,
 	}
 	err4 := s.VisibilityMgr.RecordWorkflowExecutionClosed(closeReq)
 	s.Nil(err4)
@@ -574,7 +574,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution1,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
 	})
 	s.Nil(err0)
@@ -588,7 +588,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution2,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
 	})
 	s.Nil(err1)
@@ -599,10 +599,10 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution1,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		},
-		CloseTimestamp: time.Now(),
+		CloseTime: time.Now(),
 	})
 	s.Nil(err2)
 
@@ -611,11 +611,11 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution2,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		},
-		CloseTimestamp: time.Now(),
-		HistoryLength:  3,
+		CloseTime:     time.Now(),
+		HistoryLength: 3,
 	}
 	err3 := s.VisibilityMgr.RecordWorkflowExecutionClosed(closeReq)
 	s.Nil(err3)
@@ -650,7 +650,7 @@ func (s *VisibilityPersistenceSuite) TestGetClosedExecution() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 		},
 	})
 	s.Nil(err0)
@@ -669,11 +669,11 @@ func (s *VisibilityPersistenceSuite) TestGetClosedExecution() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		},
-		CloseTimestamp: time.Now(),
-		HistoryLength:  3,
+		CloseTime:     time.Now(),
+		HistoryLength: 3,
 	}
 	err2 := s.VisibilityMgr.RecordWorkflowExecutionClosed(closeReq)
 	s.Nil(err2)
@@ -708,11 +708,11 @@ func (s *VisibilityPersistenceSuite) TestClosedWithoutStarted() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   time.Now().UTC().Add(time.Second * -5),
+			StartTime:        time.Now().UTC().Add(time.Second * -5),
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		},
-		CloseTimestamp: time.Now(),
-		HistoryLength:  3,
+		CloseTime:     time.Now(),
+		HistoryLength: 3,
 	}
 	err1 := s.VisibilityMgr.RecordWorkflowExecutionClosed(closeReq)
 	s.Nil(err1)
@@ -740,11 +740,11 @@ func (s *VisibilityPersistenceSuite) TestMultipleUpserts() {
 			NamespaceID:      testNamespaceUUID,
 			Execution:        workflowExecution,
 			WorkflowTypeName: "visibility-workflow",
-			StartTimestamp:   startTime,
+			StartTime:        startTime,
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		},
-		CloseTimestamp: time.Now(),
-		HistoryLength:  3,
+		CloseTime:     time.Now(),
+		HistoryLength: 3,
 	}
 
 	count := 3
@@ -754,7 +754,7 @@ func (s *VisibilityPersistenceSuite) TestMultipleUpserts() {
 				NamespaceID:      testNamespaceUUID,
 				Execution:        workflowExecution,
 				WorkflowTypeName: "visibility-workflow",
-				StartTimestamp:   startTime,
+				StartTime:        startTime,
 			},
 		})
 		s.Nil(err0)
@@ -791,7 +791,7 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 				NamespaceID:      testNamespaceUUID,
 				Execution:        workflowExecution,
 				WorkflowTypeName: "visibility-workflow",
-				StartTimestamp:   startTime,
+				StartTime:        startTime,
 			},
 		})
 		s.Nil(err0)
@@ -800,11 +800,11 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 				NamespaceID:      testNamespaceUUID,
 				Execution:        workflowExecution,
 				WorkflowTypeName: "visibility-workflow",
-				StartTimestamp:   startTime,
+				StartTime:        startTime,
 				Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			},
-			CloseTimestamp: time.Now(),
-			HistoryLength:  3,
+			CloseTime:     time.Now(),
+			HistoryLength: 3,
 		}
 		err1 := s.VisibilityMgr.RecordWorkflowExecutionClosed(closeReq)
 		s.Nil(err1)
@@ -847,14 +847,14 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 		{
 			request: &p.UpsertWorkflowExecutionRequest{
 				VisibilityRequestBase: &p.VisibilityRequestBase{
-					NamespaceID:        "",
-					Namespace:          "",
-					Execution:          commonpb.WorkflowExecution{},
-					WorkflowTypeName:   "",
-					StartTimestamp:     time.Time{},
-					ExecutionTimestamp: time.Time{},
-					TaskID:             0,
-					Memo:               nil,
+					NamespaceID:      "",
+					Namespace:        "",
+					Execution:        commonpb.WorkflowExecution{},
+					WorkflowTypeName: "",
+					StartTime:        time.Time{},
+					ExecutionTime:    time.Time{},
+					TaskID:           0,
+					Memo:             nil,
 					SearchAttributes: &commonpb.SearchAttributes{
 						IndexedFields: map[string]*commonpb.Payload{
 							searchattribute.TemporalChangeVersion: payload.EncodeBytes([]byte("dummy")),
@@ -868,16 +868,16 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 		{
 			request: &p.UpsertWorkflowExecutionRequest{
 				VisibilityRequestBase: &p.VisibilityRequestBase{
-					NamespaceID:        "",
-					Namespace:          "",
-					Execution:          commonpb.WorkflowExecution{},
-					WorkflowTypeName:   "",
-					StartTimestamp:     time.Time{},
-					ExecutionTimestamp: time.Time{},
-					TaskID:             0,
-					Memo:               nil,
-					SearchAttributes:   nil,
-					Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					NamespaceID:      "",
+					Namespace:        "",
+					Execution:        commonpb.WorkflowExecution{},
+					WorkflowTypeName: "",
+					StartTime:        time.Time{},
+					ExecutionTime:    time.Time{},
+					TaskID:           0,
+					Memo:             nil,
+					SearchAttributes: nil,
+					Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 				},
 			},
 			// To avoid blocking the task queue processors on non-ElasticSearch visibility stores
@@ -897,8 +897,8 @@ func (s *VisibilityPersistenceSuite) assertClosedExecutionEquals(
 	s.Equal(req.Execution.RunId, resp.Execution.RunId)
 	s.Equal(req.Execution.WorkflowId, resp.Execution.WorkflowId)
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
-	s.Equal(p.UnixMilliseconds(req.StartTimestamp), p.UnixMilliseconds(timestamp.TimeValue(resp.GetStartTime())))
-	s.Equal(p.UnixMilliseconds(req.CloseTimestamp), p.UnixMilliseconds(timestamp.TimeValue(resp.GetCloseTime())))
+	s.Equal(p.UnixMilliseconds(req.StartTime), p.UnixMilliseconds(timestamp.TimeValue(resp.GetStartTime())))
+	s.Equal(p.UnixMilliseconds(req.CloseTime), p.UnixMilliseconds(timestamp.TimeValue(resp.GetCloseTime())))
 	s.Equal(req.Status, resp.GetStatus())
 	s.Equal(req.HistoryLength, resp.HistoryLength)
 }
@@ -908,7 +908,7 @@ func (s *VisibilityPersistenceSuite) assertOpenExecutionEquals(
 	s.Equal(req.Execution.GetRunId(), resp.Execution.GetRunId())
 	s.Equal(req.Execution.WorkflowId, resp.Execution.WorkflowId)
 	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
-	s.Equal(p.UnixMilliseconds(req.StartTimestamp), p.UnixMilliseconds(timestamp.TimeValue(resp.GetStartTime())))
+	s.Equal(p.UnixMilliseconds(req.StartTime), p.UnixMilliseconds(timestamp.TimeValue(resp.GetStartTime())))
 	s.Nil(resp.CloseTime)
 	s.Equal(resp.Status, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 	s.Zero(resp.HistoryLength)
