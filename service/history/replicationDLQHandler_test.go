@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
 )
 
 type (
@@ -96,7 +97,7 @@ func (s *replicationDLQHandlerSuite) SetupTest() {
 				ReplicationAckLevel:    0,
 				ReplicationDlqAckLevel: map[string]int64{cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID},
 			}},
-		NewDynamicConfigForTest(),
+		tests.NewDynamicConfig(),
 	)
 	s.mockResource = s.mockShard.Resource
 	s.mockClientBean = s.mockResource.ClientBean
@@ -104,7 +105,7 @@ func (s *replicationDLQHandlerSuite) SetupTest() {
 	s.clusterMetadata = s.mockResource.ClusterMetadata
 	s.executionManager = s.mockResource.ExecutionMgr
 	s.shardManager = s.mockResource.ShardMgr
-	s.config = NewDynamicConfigForTest()
+	s.config = tests.NewDynamicConfig()
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.taskExecutors = make(map[string]replicationTaskExecutor)
 	s.taskExecutor = NewMockreplicationTaskExecutor(s.controller)

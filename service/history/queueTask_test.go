@@ -43,7 +43,9 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/task"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
 )
 
 type (
@@ -79,7 +81,7 @@ func (s *queueTaskSuite) SetupTest() {
 				ShardId: 10,
 				RangeId: 1,
 			}},
-		NewDynamicConfigForTest(),
+		tests.NewDynamicConfig(),
 	)
 	s.mockQueueTaskExecutor = NewMockqueueTaskExecutor(s.controller)
 	s.mockQueueTaskInfo = NewMockqueueTaskInfo(s.controller)
@@ -140,8 +142,8 @@ func (s *queueTaskSuite) TestHandleErr_ErrTaskRetry() {
 		return true, nil
 	})
 
-	err := ErrTaskRetry
-	s.Equal(ErrTaskRetry, queueTaskBase.HandleErr(err))
+	err := consts.ErrTaskRetry
+	s.Equal(consts.ErrTaskRetry, queueTaskBase.HandleErr(err))
 }
 
 func (s *queueTaskSuite) TestHandleErr_ErrTaskDiscarded() {
@@ -149,7 +151,7 @@ func (s *queueTaskSuite) TestHandleErr_ErrTaskDiscarded() {
 		return true, nil
 	})
 
-	err := ErrTaskDiscarded
+	err := consts.ErrTaskDiscarded
 	s.NoError(queueTaskBase.HandleErr(err))
 }
 

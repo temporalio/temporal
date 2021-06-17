@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -93,7 +94,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent() {
 	}
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
 
-	msBuilderCurrent := NewMockmutableState(s.controller)
+	msBuilderCurrent := workflow.NewMockMutableState(s.controller)
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
 	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
@@ -126,7 +127,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 		}},
 	}
 
-	msBuilderCurrent := NewMockmutableState(s.controller)
+	msBuilderCurrent := workflow.NewMockMutableState(s.controller)
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(true)
 	events := []*historypb.HistoryEvent{
@@ -163,7 +164,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 	}
 	attr1 := event1.GetWorkflowExecutionSignaledEventAttributes()
 
-	msBuilderCurrent := NewMockmutableState(s.controller)
+	msBuilderCurrent := workflow.NewMockMutableState(s.controller)
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
 	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()
@@ -203,7 +204,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 	}
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
 
-	msBuilderCurrent := NewMockmutableState(s.controller)
+	msBuilderCurrent := workflow.NewMockMutableState(s.controller)
 	msBuilderCurrent.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	msBuilderCurrent.EXPECT().GetLastWriteVersion().Return(int64(1), nil).AnyTimes()
 	msBuilderCurrent.EXPECT().GetExecutionInfo().Return(execution).AnyTimes()

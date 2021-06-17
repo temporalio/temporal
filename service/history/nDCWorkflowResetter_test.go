@@ -44,6 +44,8 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -53,8 +55,8 @@ type (
 
 		controller              *gomock.Controller
 		mockShard               *shard.ContextTest
-		mockBaseMutableState    *MockmutableState
-		mockRebuiltMutableState *MockmutableState
+		mockBaseMutableState    *workflow.MockMutableState
+		mockRebuiltMutableState *workflow.MockMutableState
 		mockTransactionMgr      *MocknDCTransactionMgr
 		mockStateBuilder        *MocknDCStateRebuilder
 
@@ -65,7 +67,7 @@ type (
 		namespace   string
 		workflowID  string
 		baseRunID   string
-		newContext  workflowExecutionContext
+		newContext  workflow.Context
 		newRunID    string
 
 		nDCWorkflowResetter *nDCWorkflowResetterImpl
@@ -81,8 +83,8 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockBaseMutableState = NewMockmutableState(s.controller)
-	s.mockRebuiltMutableState = NewMockmutableState(s.controller)
+	s.mockBaseMutableState = workflow.NewMockMutableState(s.controller)
+	s.mockRebuiltMutableState = workflow.NewMockMutableState(s.controller)
 	s.mockTransactionMgr = NewMocknDCTransactionMgr(s.controller)
 	s.mockStateBuilder = NewMocknDCStateRebuilder(s.controller)
 
@@ -94,7 +96,7 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
-		NewDynamicConfigForTest(),
+		tests.NewDynamicConfig(),
 	)
 
 	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
@@ -105,7 +107,7 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 	s.namespace = "some random namespace name"
 	s.workflowID = "some random workflow ID"
 	s.baseRunID = uuid.New()
-	s.newContext = newWorkflowExecutionContext(
+	s.newContext = workflow.NewContext(
 		s.namespaceID,
 		commonpb.WorkflowExecution{
 			WorkflowId: s.workflowID,
@@ -203,7 +205,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	)
 	s.NoError(err)
 	s.Equal(s.mockRebuiltMutableState, rebuiltMutableState)
-	s.Equal(s.newContext.getHistorySize(), rebuiltHistorySize)
+	s.Equal(s.newContext.GetHistorySize(), rebuiltHistorySize)
 	s.True(mockBaseWorkflowReleaseFnCalled)
 }
 

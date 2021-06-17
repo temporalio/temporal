@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -60,7 +61,7 @@ type (
 			targetWorkflowIdentifier definition.WorkflowIdentifier,
 			targetBranchToken []byte,
 			requestID string,
-		) (mutableState, int64, error)
+		) (workflow.MutableState, int64, error)
 	}
 
 	nDCStateRebuilderImpl struct {
@@ -69,7 +70,7 @@ type (
 		eventsCache     events.Cache
 		clusterMetadata cluster.Metadata
 		historyV2Mgr    persistence.HistoryManager
-		taskRefresher   mutableStateTaskRefresher
+		taskRefresher   workflow.TaskRefresher
 
 		rebuiltHistorySize int64
 		logger             log.Logger
@@ -89,7 +90,7 @@ func newNDCStateRebuilder(
 		eventsCache:     shard.GetEventsCache(),
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
 		historyV2Mgr:    shard.GetHistoryManager(),
-		taskRefresher: newMutableStateTaskRefresher(
+		taskRefresher: workflow.NewTaskRefresher(
 			shard.GetConfig(),
 			shard.GetNamespaceCache(),
 			shard.GetEventsCache(),
@@ -110,7 +111,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	targetWorkflowIdentifier definition.WorkflowIdentifier,
 	targetBranchToken []byte,
 	requestID string,
-) (mutableState, int64, error) {
+) (workflow.MutableState, int64, error) {
 
 	iter := collection.NewPagingIterator(r.getPaginationFn(
 		common.FirstEventID,
@@ -174,13 +175,13 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	}
 
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
-	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(now, transactionPolicyPassive)
+	_, _, err = rebuiltMutableState.CloseTransactionAsSnapshot(now, workflow.TransactionPolicyPassive)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	// refresh tasks to be generated
-	if err := r.taskRefresher.refreshTasks(now, rebuiltMutableState); err != nil {
+	if err := r.taskRefresher.RefreshTasks(now, rebuiltMutableState); err != nil {
 		return nil, 0, err
 	}
 
@@ -190,20 +191,20 @@ func (r *nDCStateRebuilderImpl) rebuild(
 func (r *nDCStateRebuilderImpl) initializeBuilders(
 	namespaceEntry *cache.NamespaceCacheEntry,
 	now time.Time,
-) (mutableState, stateBuilder) {
-	resetMutableStateBuilder := newMutableStateBuilder(
+) (workflow.MutableState, workflow.MutableStateRebuilder) {
+	resetMutableStateBuilder := workflow.NewMutableState(
 		r.shard,
 		r.shard.GetEventsCache(),
 		r.logger,
 		namespaceEntry,
 		now,
 	)
-	stateBuilder := newStateBuilder(
+	stateBuilder := workflow.NewMutableStateRebuilder(
 		r.shard,
 		r.logger,
 		resetMutableStateBuilder,
-		func(mutableState mutableState) mutableStateTaskGenerator {
-			return newMutableStateTaskGenerator(r.shard.GetNamespaceCache(), r.logger, mutableState)
+		func(mutableState workflow.MutableState) workflow.TaskGenerator {
+			return workflow.NewTaskGenerator(r.shard.GetNamespaceCache(), r.logger, mutableState)
 		},
 	)
 	return resetMutableStateBuilder, stateBuilder
@@ -211,12 +212,12 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 
 func (r *nDCStateRebuilderImpl) applyEvents(
 	workflowIdentifier definition.WorkflowIdentifier,
-	stateBuilder stateBuilder,
+	stateBuilder workflow.MutableStateRebuilder,
 	events []*historypb.HistoryEvent,
 	requestID string,
 ) error {
 
-	_, err := stateBuilder.applyEvents(
+	_, err := stateBuilder.ApplyEvents(
 		workflowIdentifier.NamespaceID,
 		requestID,
 		commonpb.WorkflowExecution{

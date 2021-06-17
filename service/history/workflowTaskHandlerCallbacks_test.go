@@ -38,6 +38,8 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -48,8 +50,8 @@ type (
 		controller *gomock.Controller
 
 		workflowTaskHandlerCallback *workflowTaskHandlerCallbacksImpl
-		queryRegistry               queryRegistry
-		mockMutableState            *MockmutableState
+		queryRegistry               workflow.QueryRegistry
+		mockMutableState            *workflow.MockMutableState
 	}
 )
 
@@ -63,17 +65,17 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 
 	s.workflowTaskHandlerCallback = &workflowTaskHandlerCallbacksImpl{
 		metricsClient: metrics.NewClient(tally.NoopScope, metrics.History),
-		config:        NewDynamicConfigForTest(),
+		config:        tests.NewDynamicConfig(),
 		logger:        log.NewNoopLogger(),
 	}
 	s.queryRegistry = s.constructQueryRegistry(10)
-	s.mockMutableState = NewMockmutableState(s.controller)
+	s.mockMutableState = workflow.NewMockMutableState(s.controller)
 	s.mockMutableState.EXPECT().GetQueryRegistry().Return(s.queryRegistry)
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		WorkflowId: testWorkflowID,
+		WorkflowId: tests.WorkflowID,
 	}).AnyTimes()
 	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
-		RunId: testRunID,
+		RunId: tests.RunID,
 	}).AnyTimes()
 }
 
@@ -83,34 +85,34 @@ func (s *WorkflowTaskHandlerCallbackSuite) TearDownTest() {
 
 func (s *WorkflowTaskHandlerCallbackSuite) TestHandleBufferedQueries_HeartbeatWorkflowTask() {
 	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
-	queryResults := s.constructQueryResults(s.queryRegistry.getBufferedIDs()[0:5], 10)
-	s.workflowTaskHandlerCallback.handleBufferedQueries(s.mockMutableState, queryResults, false, testGlobalNamespaceEntry, true)
+	queryResults := s.constructQueryResults(s.queryRegistry.GetBufferedIDs()[0:5], 10)
+	s.workflowTaskHandlerCallback.handleBufferedQueries(s.mockMutableState, queryResults, false, tests.GlobalNamespaceEntry, true)
 	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
 }
 
 func (s *WorkflowTaskHandlerCallbackSuite) TestHandleBufferedQueries_NewWorkflowTask() {
 	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
-	queryResults := s.constructQueryResults(s.queryRegistry.getBufferedIDs()[0:5], 10)
-	s.workflowTaskHandlerCallback.handleBufferedQueries(s.mockMutableState, queryResults, true, testGlobalNamespaceEntry, false)
+	queryResults := s.constructQueryResults(s.queryRegistry.GetBufferedIDs()[0:5], 10)
+	s.workflowTaskHandlerCallback.handleBufferedQueries(s.mockMutableState, queryResults, true, tests.GlobalNamespaceEntry, false)
 	s.assertQueryCounts(s.queryRegistry, 5, 5, 0, 0)
 }
 
 func (s *WorkflowTaskHandlerCallbackSuite) TestHandleBufferedQueries_NoNewWorkflowTask() {
 	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
-	queryResults := s.constructQueryResults(s.queryRegistry.getBufferedIDs()[0:5], 10)
-	s.workflowTaskHandlerCallback.handleBufferedQueries(s.mockMutableState, queryResults, false, testGlobalNamespaceEntry, false)
+	queryResults := s.constructQueryResults(s.queryRegistry.GetBufferedIDs()[0:5], 10)
+	s.workflowTaskHandlerCallback.handleBufferedQueries(s.mockMutableState, queryResults, false, tests.GlobalNamespaceEntry, false)
 	s.assertQueryCounts(s.queryRegistry, 0, 5, 5, 0)
 }
 
 func (s *WorkflowTaskHandlerCallbackSuite) TestHandleBufferedQueries_QueryTooLarge() {
 	s.assertQueryCounts(s.queryRegistry, 10, 0, 0, 0)
-	bufferedIDs := s.queryRegistry.getBufferedIDs()
+	bufferedIDs := s.queryRegistry.GetBufferedIDs()
 	queryResults := s.constructQueryResults(bufferedIDs[0:5], 10)
 	largeQueryResults := s.constructQueryResults(bufferedIDs[5:10], 10*1024*1024)
 	for k, v := range largeQueryResults {
 		queryResults[k] = v
 	}
-	s.workflowTaskHandlerCallback.handleBufferedQueries(s.mockMutableState, queryResults, false, testGlobalNamespaceEntry, false)
+	s.workflowTaskHandlerCallback.handleBufferedQueries(s.mockMutableState, queryResults, false, tests.GlobalNamespaceEntry, false)
 	s.assertQueryCounts(s.queryRegistry, 0, 5, 0, 5)
 }
 
@@ -125,17 +127,17 @@ func (s *WorkflowTaskHandlerCallbackSuite) constructQueryResults(ids []string, r
 	return results
 }
 
-func (s *WorkflowTaskHandlerCallbackSuite) constructQueryRegistry(numQueries int) queryRegistry {
-	queryRegistry := newQueryRegistry()
+func (s *WorkflowTaskHandlerCallbackSuite) constructQueryRegistry(numQueries int) workflow.QueryRegistry {
+	queryRegistry := workflow.NewQueryRegistry()
 	for i := 0; i < numQueries; i++ {
-		queryRegistry.bufferQuery(&querypb.WorkflowQuery{})
+		queryRegistry.BufferQuery(&querypb.WorkflowQuery{})
 	}
 	return queryRegistry
 }
 
-func (s *WorkflowTaskHandlerCallbackSuite) assertQueryCounts(queryRegistry queryRegistry, buffered, completed, unblocked, failed int) {
-	s.Len(queryRegistry.getBufferedIDs(), buffered)
-	s.Len(queryRegistry.getCompletedIDs(), completed)
-	s.Len(queryRegistry.getUnblockedIDs(), unblocked)
-	s.Len(queryRegistry.getFailedIDs(), failed)
+func (s *WorkflowTaskHandlerCallbackSuite) assertQueryCounts(queryRegistry workflow.QueryRegistry, buffered, completed, unblocked, failed int) {
+	s.Len(queryRegistry.GetBufferedIDs(), buffered)
+	s.Len(queryRegistry.GetCompletedIDs(), completed)
+	s.Len(queryRegistry.GetUnblockedIDs(), unblocked)
+	s.Len(queryRegistry.GetFailedIDs(), failed)
 }

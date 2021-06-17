@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -72,7 +73,7 @@ type (
 		historyCountLimitError int
 
 		completedID               int64
-		mutableState              mutableState
+		mutableState              workflow.MutableState
 		searchAttributesValidator *searchattribute.Validator
 		executionStats            *persistencespb.ExecutionStats
 		metricsScope              metrics.Scope
@@ -108,7 +109,7 @@ func newWorkflowSizeChecker(
 	historyCountLimitWarn int,
 	historyCountLimitError int,
 	completedID int64,
-	mutableState mutableState,
+	mutableState workflow.MutableState,
 	searchAttributesValidator *searchattribute.Validator,
 	executionStats *persistencespb.ExecutionStats,
 	metricsScope metrics.Scope,
