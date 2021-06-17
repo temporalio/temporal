@@ -15,7 +15,7 @@ AUTO_CONFIRM="${AUTO_CONFIRM:-}"
 
 DIR_NAME="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 # Convert multiline script to single line, remove repeated spaces, and replace / with \/.
-REINDEX_SCRIPT=$(tr -d "\n" < "${DIR_NAME}/reindex.painless" | tr -s " " | sed "s/\//\\\\\//g")
+REINDEX_SCRIPT=$(tr -d "\n" < "${DIR_NAME}/reindex.painless" | tr -s " " | sed "s/\//\\\\\//g" | sed "s/&/\\\&/g")
 # Substitute envs in reindex.json (envsubst is not available in alpine by default).
 REINDEX_JSON=$(sed \
     -e "s/\${REINDEX_SCRIPT}/${REINDEX_SCRIPT}/g" \

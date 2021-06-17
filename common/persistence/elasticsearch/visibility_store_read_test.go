@@ -955,6 +955,41 @@ func (s *ESVisibilitySuite) TestStatusProcessFunc() {
 	}
 }
 
+func (s *ESVisibilitySuite) TestDurationProcessFunc() {
+	cases := []struct {
+		key   string
+		value string
+	}{
+		{key: "query", value: "1"},
+		{key: "query", value: "5h3m"},
+		{key: "query", value: "00:00:01"},
+		{key: "query", value: "00:00:61"},
+		{key: "query", value: "bad value"},
+		{key: "unrelatedKey", value: "should not be modified"},
+	}
+	expected := []struct {
+		value     string
+		returnErr bool
+	}{
+		{value: `"1"`, returnErr: false},
+		{value: `18180000000000`, returnErr: false},
+		{value: `1000000000`, returnErr: false},
+		{value: `"0"`, returnErr: true},
+		{value: `"bad value"`, returnErr: false},
+		{value: `"should not be modified"`, returnErr: false},
+	}
+
+	for i, testCase := range cases {
+		value := fastjson.MustParse(fmt.Sprintf(`{"%s": "%s"}`, testCase.key, testCase.value))
+		err := durationProcessFunc(nil, "", value)
+		if expected[i].returnErr {
+			s.Error(err)
+			continue
+		}
+		s.Equal(expected[i].value, value.Get(testCase.key).String())
+	}
+}
+
 func (s *ESVisibilitySuite) TestProcessAllValuesForKey() {
 	testJSONStr := `{
 		"arrayKey": [
