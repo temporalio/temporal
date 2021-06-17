@@ -96,18 +96,19 @@ func (v *visibilityManagerImpl) UpsertWorkflowExecution(request *UpsertWorkflowE
 
 func (v *visibilityManagerImpl) newInternalVisibilityRequestBase(request *VisibilityRequestBase) *InternalVisibilityRequestBase {
 	return &InternalVisibilityRequestBase{
-		NamespaceID:        request.NamespaceID,
-		WorkflowID:         request.Execution.GetWorkflowId(),
-		RunID:              request.Execution.GetRunId(),
-		WorkflowTypeName:   request.WorkflowTypeName,
-		StartTimestamp:     request.StartTimestamp,
-		Status:             request.Status,
-		ExecutionTimestamp: request.ExecutionTimestamp,
-		TaskID:             request.TaskID,
-		ShardID:            request.ShardID,
-		TaskQueue:          request.TaskQueue,
-		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
-		SearchAttributes:   request.SearchAttributes,
+		NamespaceID:          request.NamespaceID,
+		WorkflowID:           request.Execution.GetWorkflowId(),
+		RunID:                request.Execution.GetRunId(),
+		WorkflowTypeName:     request.WorkflowTypeName,
+		StartTimestamp:       request.StartTimestamp,
+		Status:               request.Status,
+		ExecutionTimestamp:   request.ExecutionTimestamp,
+		StateTransitionCount: request.StateTransitionCount,
+		TaskID:               request.TaskID,
+		ShardID:              request.ShardID,
+		TaskQueue:            request.TaskQueue,
+		Memo:                 v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
+		SearchAttributes:     request.SearchAttributes,
 	}
 }
 
@@ -256,12 +257,13 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 		Type: &commonpb.WorkflowType{
 			Name: execution.TypeName,
 		},
-		StartTime:        &execution.StartTime,
-		ExecutionTime:    &execution.ExecutionTime,
-		Memo:             memo,
-		SearchAttributes: searchAttributes,
-		TaskQueue:        execution.TaskQueue,
-		Status:           execution.Status,
+		StartTime:            &execution.StartTime,
+		ExecutionTime:        &execution.ExecutionTime,
+		Memo:                 memo,
+		SearchAttributes:     searchAttributes,
+		TaskQueue:            execution.TaskQueue,
+		Status:               execution.Status,
+		StateTransitionCount: execution.StateTransitionCount,
 	}
 
 	// for close records

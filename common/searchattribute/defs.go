@@ -41,6 +41,7 @@ const (
 	TaskQueue             = "TaskQueue"
 	HistoryLength         = "HistoryLength"
 	ExecutionDuration     = "ExecutionDuration"
+	StateTransitionCount  = "StateTransitionCount"
 	TemporalChangeVersion = "TemporalChangeVersion"
 	BinaryChecksums       = "BinaryChecksums"
 	BatcherNamespace      = "BatcherNamespace"
@@ -85,6 +86,7 @@ var (
 		TaskQueue:             enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		HistoryLength:         enumspb.INDEXED_VALUE_TYPE_INT,
 		ExecutionDuration:     enumspb.INDEXED_VALUE_TYPE_INT,
+		StateTransitionCount:  enumspb.INDEXED_VALUE_TYPE_INT,
 		TemporalChangeVersion: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		BinaryChecksums:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		BatcherNamespace:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,

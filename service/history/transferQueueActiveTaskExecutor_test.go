@@ -1881,14 +1881,15 @@ func (s *transferQueueActiveTaskExecutorSuite) createRecordWorkflowExecutionStar
 
 	return &persistence.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &p.VisibilityRequestBase{
-			Namespace:          namespace,
-			NamespaceID:        task.GetNamespaceId(),
-			Execution:          *execution,
-			WorkflowTypeName:   executionInfo.WorkflowTypeName,
-			StartTimestamp:     timestamp.TimeValue(startEvent.GetEventTime()),
-			ExecutionTimestamp: executionTimestamp,
-			TaskID:             task.GetTaskId(),
-			TaskQueue:          task.TaskQueue,
+			Namespace:            namespace,
+			NamespaceID:          task.GetNamespaceId(),
+			Execution:            *execution,
+			WorkflowTypeName:     executionInfo.WorkflowTypeName,
+			StartTimestamp:       timestamp.TimeValue(startEvent.GetEventTime()),
+			ExecutionTimestamp:   executionTimestamp,
+			StateTransitionCount: executionInfo.StateTransitionCount,
+			TaskID:               task.GetTaskId(),
+			TaskQueue:            task.TaskQueue,
 		},
 	}
 }
