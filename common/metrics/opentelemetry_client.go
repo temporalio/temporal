@@ -34,7 +34,7 @@ import (
 type (
 	opentelemetryClient struct {
 		//parentReporter is the parent scope for the metrics
-		rootScope   Scope
+		rootScope   *opentelemetryScope
 		childScopes map[int]Scope
 		metricDefs  map[int]metricDefinition
 		serviceIdx  ServiceIdx
@@ -114,4 +114,8 @@ func (m *opentelemetryClient) UpdateGauge(scopeIdx int, gaugeIdx int, value floa
 // information to the metrics emitted
 func (m *opentelemetryClient) Scope(scopeIdx int, tags ...Tag) Scope {
 	return m.childScopes[scopeIdx].Tagged(tags...)
+}
+
+func (m *opentelemetryClient) UserScope() UserScope {
+	return m.rootScope.userScope()
 }

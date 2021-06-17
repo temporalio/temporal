@@ -64,6 +64,9 @@ type (
 		// Scope return an internal scope that can be used to add additional
 		// information to metrics
 		Scope(scope int, tags ...Tag) Scope
+		// UserScope return a new metrics scope that can be used to add additional
+		// information to the metrics emitted by user code
+		UserScope() UserScope
 	}
 
 	// Scope is an interface for metric.
@@ -85,6 +88,27 @@ type (
 		// Tagged return an internal scope that can be used to add additional
 		// information to metrics
 		Tagged(tags ...Tag) Scope
+	}
+
+	// UserScope is an interface for reporting metrics by user code
+	UserScope interface {
+		// IncCounter increments a counter metric
+		IncCounter(counter string)
+		// AddCounter adds delta to the counter metric
+		AddCounter(counter string, delta int64)
+		// StartTimer starts a timer for the given metric name.
+		// Time will be recorded when stopwatch is stopped.
+		StartTimer(timer string) Stopwatch
+		// RecordTimer records a timer for the given metric name
+		RecordTimer(timer string, d time.Duration)
+		// RecordDistribution records a distribution (wrapper on top of timer) for the given
+		// metric name
+		RecordDistribution(id string, d int)
+		// UpdateGauge reports Gauge type absolute value metric
+		UpdateGauge(gauge string, value float64)
+		// Tagged returns a new scope with added and/or overriden tags values that can be used
+		// to provide additional information to metrics
+		Tagged(tags map[string]string) UserScope
 	}
 
 	// Reporter is an interface for base constructor for metrics client.

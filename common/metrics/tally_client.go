@@ -122,3 +122,9 @@ func (m *TallyClient) Scope(scopeIdx int, tags ...Tag) Scope {
 	scope := m.childScopes[scopeIdx]
 	return newTallyScope(scope, scope, m.metricDefs, false).Tagged(tags...)
 }
+
+// UserScope return a new metrics scope that can be used to add additional
+// information to the metrics emitted by user code
+func (m *TallyClient) UserScope() UserScope {
+	return newTallyUserScope(m.parentScope)
+}
