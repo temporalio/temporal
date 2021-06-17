@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -60,7 +61,7 @@ type (
 		scope                int
 		shard                shard.Context
 		historyService       *historyEngineImpl
-		cache                *historyCache
+		cache                *workflow.Cache
 		executionManager     persistence.ExecutionManager
 		status               int32
 		shutdownWG           sync.WaitGroup

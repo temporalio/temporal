@@ -34,6 +34,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v7 "github.com/olivere/elastic/v7"
+	v1 "go.temporal.io/api/enums/v1"
 )
 
 // MockClient is a mock of Client interface.
@@ -90,7 +91,7 @@ func (mr *MockClientMockRecorder) GetMapping(ctx, index interface{}) *gomock.Cal
 }
 
 // PutMapping mocks base method.
-func (m *MockClient) PutMapping(ctx context.Context, index string, mapping map[string]string) (bool, error) {
+func (m *MockClient) PutMapping(ctx context.Context, index string, mapping map[string]v1.IndexedValueType) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PutMapping", ctx, index, mapping)
 	ret0, _ := ret[0].(bool)
@@ -279,7 +280,7 @@ func (mr *MockCLIClientMockRecorder) GetMapping(ctx, index interface{}) *gomock.
 }
 
 // PutMapping mocks base method.
-func (m *MockCLIClient) PutMapping(ctx context.Context, index string, mapping map[string]string) (bool, error) {
+func (m *MockCLIClient) PutMapping(ctx context.Context, index string, mapping map[string]v1.IndexedValueType) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PutMapping", ctx, index, mapping)
 	ret0, _ := ret[0].(bool)

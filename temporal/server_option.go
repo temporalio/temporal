@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 )
@@ -130,5 +131,13 @@ func WithElasticsearchHttpClient(c *http.Client) ServerOption {
 func WithDynamicConfigClient(c dynamicconfig.Client) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.dynamicConfigClient = c
+	})
+}
+
+// WithCustomDataStoreFactory sets a custom AbstractDataStoreFactory
+// NOTE: this option is experimental.
+func WithCustomDataStoreFactory(customFactory client.AbstractDataStoreFactory) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.customDataStoreFactory = customFactory
 	})
 }

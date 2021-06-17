@@ -130,7 +130,7 @@ func (q *query) handleError(
 ) {
 	switch err {
 	case gocql.ErrNoConnections:
-		_ = q.session.refresh()
+		q.session.refresh()
 	default:
 		// noop
 	}

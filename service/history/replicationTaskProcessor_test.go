@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -101,7 +102,7 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
-	s.config = NewDynamicConfigForTest()
+	s.config = tests.NewDynamicConfig()
 	s.requestChan = make(chan *replicationTaskRequest, 10)
 
 	s.mockShard = shard.NewTestContext(

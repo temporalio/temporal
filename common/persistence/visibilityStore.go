@@ -25,6 +25,8 @@
 package persistence
 
 import (
+	"time"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -78,7 +80,7 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionStarted(request *RecordWo
 func (v *visibilityManagerImpl) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
 	req := &InternalRecordWorkflowExecutionClosedRequest{
 		InternalVisibilityRequestBase: v.newInternalVisibilityRequestBase(request.VisibilityRequestBase),
-		CloseTimestamp:                request.CloseTimestamp,
+		CloseTime:                     request.CloseTime,
 		HistoryLength:                 request.HistoryLength,
 		Retention:                     request.Retention,
 	}
@@ -94,18 +96,18 @@ func (v *visibilityManagerImpl) UpsertWorkflowExecution(request *UpsertWorkflowE
 
 func (v *visibilityManagerImpl) newInternalVisibilityRequestBase(request *VisibilityRequestBase) *InternalVisibilityRequestBase {
 	return &InternalVisibilityRequestBase{
-		NamespaceID:        request.NamespaceID,
-		WorkflowID:         request.Execution.GetWorkflowId(),
-		RunID:              request.Execution.GetRunId(),
-		WorkflowTypeName:   request.WorkflowTypeName,
-		StartTimestamp:     request.StartTimestamp,
-		Status:             request.Status,
-		ExecutionTimestamp: request.ExecutionTimestamp,
-		TaskID:             request.TaskID,
-		ShardID:            request.ShardID,
-		TaskQueue:          request.TaskQueue,
-		Memo:               v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
-		SearchAttributes:   request.SearchAttributes,
+		NamespaceID:          request.NamespaceID,
+		WorkflowID:           request.Execution.GetWorkflowId(),
+		RunID:                request.Execution.GetRunId(),
+		WorkflowTypeName:     request.WorkflowTypeName,
+		StartTime:            request.StartTime,
+		Status:               request.Status,
+		ExecutionTime:        request.ExecutionTime,
+		StateTransitionCount: request.StateTransitionCount, TaskID: request.TaskID,
+		ShardID:          request.ShardID,
+		TaskQueue:        request.TaskQueue,
+		Memo:             v.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
+		SearchAttributes: request.SearchAttributes,
 	}
 }
 
@@ -231,11 +233,6 @@ func (v *visibilityManagerImpl) convertInternalListResponse(internalResp *Intern
 }
 
 func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution *VisibilityWorkflowExecutionInfo, saTypeMap searchattribute.NameTypeMap) *workflowpb.WorkflowExecutionInfo {
-	// special handling of ExecutionTime for cron or retry
-	if execution.ExecutionTime.UnixNano() == 0 {
-		execution.ExecutionTime = execution.StartTime
-	}
-
 	memo, err := v.serializer.DeserializeVisibilityMemo(execution.Memo)
 	if err != nil {
 		v.logger.Error("failed to deserialize memo",
@@ -259,18 +256,27 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 		Type: &commonpb.WorkflowType{
 			Name: execution.TypeName,
 		},
-		StartTime:        &execution.StartTime,
-		ExecutionTime:    &execution.ExecutionTime,
-		Memo:             memo,
-		SearchAttributes: searchAttributes,
-		TaskQueue:        execution.TaskQueue,
-		Status:           execution.Status,
+		StartTime:            &execution.StartTime,
+		ExecutionTime:        &execution.ExecutionTime,
+		Memo:                 memo,
+		SearchAttributes:     searchAttributes,
+		TaskQueue:            execution.TaskQueue,
+		Status:               execution.Status,
+		StateTransitionCount: execution.StateTransitionCount,
 	}
 
 	// for close records
 	if execution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		convertedExecution.CloseTime = &execution.CloseTime
 		convertedExecution.HistoryLength = execution.HistoryLength
+	}
+
+	// Workflows created before 1.11 have ExecutionTime set to Unix epoch zero time (1/1/1970) for non-cron/non-retry case.
+	// Use StartTime as ExecutionTime for this case (if there was a backoff it must be set).
+	// Remove this "if" block when ExecutionTime field has actual correct value (added 6/9/21).
+	// Affects only non-advanced visibility.
+	if !convertedExecution.ExecutionTime.After(time.Unix(0, 0)) {
+		convertedExecution.ExecutionTime = convertedExecution.StartTime
 	}
 
 	return convertedExecution

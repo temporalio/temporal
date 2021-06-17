@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 const (
@@ -77,13 +78,13 @@ func verifyTaskVersion(
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTransferTask(
-	context workflowExecutionContext,
+	context workflow.Context,
 	transferTask *persistencespb.TransferTaskInfo,
 	metricsClient metrics.Client,
 	logger log.Logger,
-) (mutableState, error) {
+) (workflow.MutableState, error) {
 
-	msBuilder, err := context.loadWorkflowExecution()
+	msBuilder, err := context.LoadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
@@ -102,9 +103,9 @@ func loadMutableStateForTransferTask(
 
 	if transferTask.GetScheduleId() >= msBuilder.GetNextEventID() && !isWorkflowTaskRetry {
 		metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.StaleMutableStateCounter)
-		context.clear()
+		context.Clear()
 
-		msBuilder, err = context.loadWorkflowExecution()
+		msBuilder, err = context.LoadWorkflowExecution()
 		if err != nil {
 			return nil, err
 		}
@@ -122,13 +123,13 @@ func loadMutableStateForTransferTask(
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTimerTask(
-	context workflowExecutionContext,
+	context workflow.Context,
 	timerTask *persistencespb.TimerTaskInfo,
 	metricsClient metrics.Client,
 	logger log.Logger,
-) (mutableState, error) {
+) (workflow.MutableState, error) {
 
-	msBuilder, err := context.loadWorkflowExecution()
+	msBuilder, err := context.LoadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
@@ -147,9 +148,9 @@ func loadMutableStateForTimerTask(
 
 	if timerTask.GetEventId() >= msBuilder.GetNextEventID() && !isWorkflowTaskRetry {
 		metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)
-		context.clear()
+		context.Clear()
 
-		msBuilder, err = context.loadWorkflowExecution()
+		msBuilder, err = context.LoadWorkflowExecution()
 		if err != nil {
 			return nil, err
 		}

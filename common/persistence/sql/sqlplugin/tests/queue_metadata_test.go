@@ -167,8 +167,9 @@ func (s *queueMetadataSuite) TestInsertUpdateSelect() {
 	}
 	row, err := s.store.SelectFromQueueMetadata(newExecutionContext(), filter)
 	s.NoError(err)
-	row.QueueType = queueType
-	s.Equal(&queueMetadata, row)
+	s.Equal(queueMetadata.DataEncoding, row.DataEncoding)
+	s.Equal(queueMetadata.Data, row.Data)
+	s.Equal(queueMetadata.Version+1, row.Version) // version increase by one after update
 }
 
 func (s *queueMetadataSuite) TestSelectReadLock() {

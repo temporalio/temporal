@@ -25,7 +25,6 @@
 package shard
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -46,11 +45,6 @@ import (
 
 const (
 	shardControllerMembershipUpdateListenerName = "ShardController"
-)
-
-var (
-	// ErrMaxAttemptsExceeded is exported temporarily for integration test
-	ErrMaxAttemptsExceeded = errors.New("maximum attempts exceeded to update history")
 )
 
 type (

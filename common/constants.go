@@ -82,8 +82,8 @@ const (
 	SystemLocalNamespace = "temporal-system"
 	// SystemNamespaceID is namespace id for all temporal system workflows
 	SystemNamespaceID = "32049b68-7872-4094-8e63-d0dd59896a83"
-	// SystemNamespaceRetentionDays is retention config for all temporal system workflows
-	SystemNamespaceRetentionDays = time.Hour * 24 * 7
+	// SystemNamespaceRetention is retention config for all temporal system workflows
+	SystemNamespaceRetention = time.Hour * 24 * 7
 )
 
 const (

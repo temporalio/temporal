@@ -78,6 +78,7 @@ const (
 var _ Handler = (*WorkflowHandler)(nil)
 
 var (
+	minTime = time.Unix(0, 0).UTC()
 	maxTime = time.Date(2100, 1, 1, 1, 0, 0, 0, time.UTC)
 )
 
@@ -119,7 +120,7 @@ func NewWorkflowHandler(
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		versionChecker:  headers.NewDefaultVersionChecker(),
 		namespaceHandler: namespace.NewHandler(
-			config.MinRetentionDays(),
+			config.MinRetention(),
 			config.MaxBadBinaries,
 			resource.GetLogger(),
 			resource.GetMetadataManager(),
@@ -2187,6 +2188,10 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		request.StartTimeFilter = &filterpb.StartTimeFilter{}
 	}
 
+	if timestamp.TimeValue(request.GetStartTimeFilter().GetEarliestTime()).IsZero() {
+		request.GetStartTimeFilter().EarliestTime = &minTime
+	}
+
 	if timestamp.TimeValue(request.GetStartTimeFilter().GetLatestTime()).IsZero() {
 		request.GetStartTimeFilter().LatestTime = &maxTime
 	}
@@ -2278,6 +2283,10 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 
 	if request.StartTimeFilter == nil {
 		request.StartTimeFilter = &filterpb.StartTimeFilter{}
+	}
+
+	if timestamp.TimeValue(request.GetStartTimeFilter().GetEarliestTime()).IsZero() {
+		request.GetStartTimeFilter().EarliestTime = &minTime
 	}
 
 	if timestamp.TimeValue(request.GetStartTimeFilter().GetLatestTime()).IsZero() {
@@ -3434,7 +3443,7 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error,
 				tag.WorkflowTaskQueueName(taskQueue.GetName()), tag.Error(err))
 		}
 
-		// Clear error as we don't want to report context cancellation error to count against our SLA
+		// clear error as we don't want to report context cancellation error to count against our SLA
 		return nil
 	}
 

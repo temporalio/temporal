@@ -42,7 +42,9 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -121,7 +123,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 ) error {
 
 	processTaskIfClosed := false
-	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
+	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		activityInfo, ok := mutableState.GetActivityInfo(transferTask.GetScheduleId())
 		if !ok {
@@ -160,7 +162,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 ) error {
 
 	processTaskIfClosed := false
-	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
+	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		wtInfo, ok := mutableState.GetWorkflowTaskInfo(transferTask.GetScheduleId())
 		if !ok {
@@ -223,7 +225,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 ) error {
 
 	processTaskIfClosed := true
-	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
+	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		if mutableState.IsWorkflowExecutionRunning() {
 			// this can happen if workflow is reset.
@@ -242,12 +244,8 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		workflowCloseTime := wfCloseTime
 		workflowStatus := executionState.Status
 		workflowHistoryLength := mutableState.GetNextEventID() - 1
-		startEvent, err := mutableState.GetStartEvent()
-		if err != nil {
-			return nil, err
-		}
-		workflowStartTime := timestamp.TimeValue(startEvent.GetEventTime())
-		workflowExecutionTimestamp := getWorkflowExecutionTime(mutableState, startEvent)
+		workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
+		workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
 		visibilityMemo := getWorkflowMemo(executionInfo.Memo)
 		searchAttr := getSearchAttributes(executionInfo.SearchAttributes)
 
@@ -268,7 +266,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			transferTask.GetRunId(),
 			workflowTypeName,
 			workflowStartTime,
-			workflowExecutionTimestamp,
+			workflowExecutionTime,
 			workflowCloseTime,
 			workflowStatus,
 			workflowHistoryLength,
@@ -292,7 +290,7 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 ) error {
 
 	processTaskIfClosed := false
-	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
+	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		requestCancelInfo, ok := mutableState.GetRequestCancelInfo(transferTask.GetScheduleId())
 		if !ok {
@@ -327,7 +325,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 ) error {
 
 	processTaskIfClosed := false
-	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
+	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		signalInfo, ok := mutableState.GetSignalInfo(transferTask.GetScheduleId())
 		if !ok {
@@ -362,7 +360,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 ) error {
 
 	processTaskIfClosed := false
-	actionFn := func(context workflowExecutionContext, mutableState mutableState) (interface{}, error) {
+	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		childWorkflowInfo, ok := mutableState.GetChildExecutionInfo(transferTask.GetScheduleId())
 		if !ok {
@@ -407,17 +405,17 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(transferTask)
-	context, release, err := t.cache.getOrCreateWorkflowExecution(
+	context, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		execution,
-		callerTypeTask,
+		workflow.CallerTypeTask,
 	)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		if retError == ErrTaskRetry {
+		if retError == consts.ErrTaskRetry {
 			release(nil)
 		} else {
 			release(retError)
@@ -539,7 +537,7 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	}
 
 	// return error so task processing logic will retry
-	return ErrTaskRetry
+	return consts.ErrTaskRetry
 }
 
 func (t *transferQueueStandbyTaskExecutor) getCurrentTime() time.Time {

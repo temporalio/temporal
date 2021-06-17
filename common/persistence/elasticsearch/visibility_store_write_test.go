@@ -42,17 +42,17 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 	// test non-empty request fields match
 	request := &persistence.InternalRecordWorkflowExecutionStartedRequest{
 		InternalVisibilityRequestBase: &persistence.InternalVisibilityRequestBase{
-			NamespaceID:        "namespaceID",
-			WorkflowID:         "wid",
-			RunID:              "rid",
-			WorkflowTypeName:   "wfType",
-			StartTimestamp:     time.Unix(0, 123).UTC(),
-			ExecutionTimestamp: time.Unix(0, 321).UTC(),
-			TaskID:             int64(111),
-			ShardID:            2208,
-			Memo:               persistence.NewDataBlob([]byte("test bytes"), enumspb.ENCODING_TYPE_PROTO3.String()),
-			Status:             enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			TaskQueue:          "task-queue-name",
+			NamespaceID:      "namespaceID",
+			WorkflowID:       "wid",
+			RunID:            "rid",
+			WorkflowTypeName: "wfType",
+			StartTime:        time.Unix(0, 123).UTC(),
+			ExecutionTime:    time.Unix(0, 321).UTC(),
+			TaskID:           int64(111),
+			ShardID:          2208,
+			Memo:             persistence.NewDataBlob([]byte("test bytes"), enumspb.ENCODING_TYPE_PROTO3.String()),
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			TaskQueue:        "task-queue-name",
 			SearchAttributes: &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
 					"CustomStringField": payload.EncodeString("alex"),
@@ -76,13 +76,13 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 			s.Equal(request.WorkflowID, body[searchattribute.WorkflowID])
 			s.Equal(request.RunID, body[searchattribute.RunID])
 			s.Equal(request.WorkflowTypeName, body[searchattribute.WorkflowType])
-			s.EqualValues(request.StartTimestamp.UnixNano(), body[searchattribute.StartTime])
-			s.EqualValues(request.ExecutionTimestamp.UnixNano(), body[searchattribute.ExecutionTime])
+			s.EqualValues(request.StartTime, body[searchattribute.StartTime])
+			s.EqualValues(request.ExecutionTime, body[searchattribute.ExecutionTime])
 			s.Equal(request.TaskQueue, body[searchattribute.TaskQueue])
-			s.EqualValues(request.Status, body[searchattribute.ExecutionStatus])
+			s.EqualValues(request.Status.String(), body[searchattribute.ExecutionStatus])
 
 			s.Equal(request.Memo.Data, body[searchattribute.Memo])
-			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[searchattribute.Encoding])
+			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[searchattribute.MemoEncoding])
 
 			customStringField := body["CustomStringField"].(string)
 			// %q because request has JSON encoded string.
@@ -119,7 +119,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 
 			_, ok := body[searchattribute.Memo]
 			s.False(ok)
-			_, ok = body[searchattribute.Encoding]
+			_, ok = body[searchattribute.MemoEncoding]
 			s.False(ok)
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
@@ -136,25 +136,25 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	// test non-empty request fields match
 	request := &persistence.InternalRecordWorkflowExecutionClosedRequest{
 		InternalVisibilityRequestBase: &persistence.InternalVisibilityRequestBase{
-			NamespaceID:        "namespaceID",
-			WorkflowID:         "wid",
-			RunID:              "rid",
-			WorkflowTypeName:   "wfType",
-			StartTimestamp:     time.Unix(0, 123).UTC(),
-			ExecutionTimestamp: time.Unix(0, 321).UTC(),
-			TaskID:             int64(111),
-			ShardID:            2208,
-			Memo:               persistence.NewDataBlob([]byte("test bytes"), enumspb.ENCODING_TYPE_PROTO3.String()),
-			Status:             enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
-			TaskQueue:          "task-queue-name",
+			NamespaceID:      "namespaceID",
+			WorkflowID:       "wid",
+			RunID:            "rid",
+			WorkflowTypeName: "wfType",
+			StartTime:        time.Date(2020, 8, 2, 1, 2, 3, 4, time.UTC),
+			ExecutionTime:    time.Date(2020, 8, 2, 2, 2, 3, 4, time.UTC),
+			TaskID:           int64(111),
+			ShardID:          2208,
+			Memo:             persistence.NewDataBlob([]byte("test bytes"), enumspb.ENCODING_TYPE_PROTO3.String()),
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			TaskQueue:        "task-queue-name",
 			SearchAttributes: &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
 					"CustomStringField": payload.EncodeString("alex"),
 				},
 			},
 		},
-		CloseTimestamp: time.Unix(0, 1978).UTC(),
-		HistoryLength:  int64(20),
+		CloseTime:     time.Unix(0, 1978).UTC(),
+		HistoryLength: int64(20),
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -172,12 +172,12 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 			s.Equal(request.WorkflowID, body[searchattribute.WorkflowID])
 			s.Equal(request.RunID, body[searchattribute.RunID])
 			s.Equal(request.WorkflowTypeName, body[searchattribute.WorkflowType])
-			s.EqualValues(request.StartTimestamp.UnixNano(), body[searchattribute.StartTime])
-			s.EqualValues(request.ExecutionTimestamp.UnixNano(), body[searchattribute.ExecutionTime])
+			s.EqualValues(request.StartTime, body[searchattribute.StartTime])
+			s.EqualValues(request.ExecutionTime, body[searchattribute.ExecutionTime])
 			s.Equal(request.Memo.Data, body[searchattribute.Memo])
-			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[searchattribute.Encoding])
-			s.EqualValues(request.CloseTimestamp.UnixNano(), body[searchattribute.CloseTime])
-			s.EqualValues(request.Status, body[searchattribute.ExecutionStatus])
+			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[searchattribute.MemoEncoding])
+			s.EqualValues(request.CloseTime, body[searchattribute.CloseTime])
+			s.EqualValues(request.Status.String(), body[searchattribute.ExecutionStatus])
 			s.EqualValues(request.HistoryLength, body[searchattribute.HistoryLength])
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
@@ -211,7 +211,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 
 			_, ok := body[searchattribute.Memo]
 			s.False(ok)
-			_, ok = body[searchattribute.Encoding]
+			_, ok = body[searchattribute.MemoEncoding]
 			s.False(ok)
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)

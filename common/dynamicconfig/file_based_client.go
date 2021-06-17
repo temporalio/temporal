@@ -37,6 +37,7 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 var _ Client = (*fileBasedClient)(nil)
@@ -183,7 +184,7 @@ func (fc *fileBasedClient) GetDurationValue(
 		return defaultValue, errors.New("value type is not string")
 	}
 
-	durationVal, err := time.ParseDuration(durationString)
+	durationVal, err := timestamp.ParseDurationDefaultDays(durationString)
 	if err != nil {
 		return defaultValue, fmt.Errorf("failed to parse duration: %v", err)
 	}

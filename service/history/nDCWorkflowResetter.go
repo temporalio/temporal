@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 const (
@@ -54,7 +55,7 @@ type (
 			baseLastEventVersion int64,
 			incomingFirstEventID int64,
 			incomingFirstEventVersion int64,
-		) (mutableState, error)
+		) (workflow.MutableState, error)
 	}
 
 	nDCWorkflowResetterImpl struct {
@@ -66,7 +67,7 @@ type (
 		namespaceID string
 		workflowID  string
 		baseRunID   string
-		newContext  workflowExecutionContext
+		newContext  workflow.Context
 		newRunID    string
 
 		logger log.Logger
@@ -81,7 +82,7 @@ func newNDCWorkflowResetter(
 	namespaceID string,
 	workflowID string,
 	baseRunID string,
-	newContext workflowExecutionContext,
+	newContext workflow.Context,
 	newRunID string,
 	logger log.Logger,
 ) *nDCWorkflowResetterImpl {
@@ -108,7 +109,7 @@ func (r *nDCWorkflowResetterImpl) resetWorkflow(
 	baseLastEventVersion int64,
 	incomingFirstEventID int64,
 	incomingFirstEventVersion int64,
-) (mutableState, error) {
+) (workflow.MutableState, error) {
 
 	baseBranchToken, err := r.getBaseBranchToken(
 		ctx,
@@ -148,8 +149,8 @@ func (r *nDCWorkflowResetterImpl) resetWorkflow(
 		return nil, err
 	}
 
-	r.newContext.clear()
-	r.newContext.setHistorySize(rebuiltHistorySize)
+	r.newContext.Clear()
+	r.newContext.SetHistorySize(rebuiltHistorySize)
 	return rebuildMutableState, nil
 }
 

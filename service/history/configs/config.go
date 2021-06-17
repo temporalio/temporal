@@ -457,7 +457,7 @@ func (config *Config) GetShardID(namespaceID, workflowID string) int32 {
 	return common.WorkflowIDToHistoryShard(namespaceID, workflowID, config.NumberOfShards)
 }
 
-func NewDynamicConfigForTest() *Config {
+func NewDynamicConfig() *Config {
 	dc := dynamicconfig.NewNoopCollection()
 	config := NewConfig(dc, 1, false, "")
 	// reduce the duration of long poll to increase test speed

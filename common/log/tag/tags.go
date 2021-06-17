@@ -623,7 +623,7 @@ func ESIndex(index string) ZapTag {
 	return NewStringTag("es-index", index)
 }
 
-func ESMapping(mapping map[string]string) ZapTag {
+func ESMapping(mapping map[string]enumspb.IndexedValueType) ZapTag {
 	return NewAnyTag("es-mapping", mapping)
 }
 

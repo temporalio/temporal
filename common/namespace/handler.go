@@ -92,7 +92,7 @@ var _ Handler = (*HandlerImpl)(nil)
 
 // NewHandler create a new namespace handler
 func NewHandler(
-	minRetentionDays int,
+	minRetention time.Duration,
 	maxBadBinaryCount dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 	metadataMgr persistence.MetadataManager,
@@ -107,7 +107,7 @@ func NewHandler(
 		metadataMgr:            metadataMgr,
 		clusterMetadata:        clusterMetadata,
 		namespaceReplicator:    namespaceReplicator,
-		namespaceAttrValidator: newAttrValidator(clusterMetadata, int32(minRetentionDays)),
+		namespaceAttrValidator: newAttrValidator(clusterMetadata, minRetention),
 		archivalMetadata:       archivalMetadata,
 		archiverProvider:       archiverProvider,
 	}
