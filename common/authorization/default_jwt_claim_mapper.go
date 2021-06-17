@@ -131,7 +131,7 @@ func parseJWT(tokenString string, keyProvider TokenKeyProvider) (jwt.MapClaims, 
 func parseJWTWithAudience(tokenString string, keyProvider TokenKeyProvider, audience string) (jwt.MapClaims, error) {
 
 	var parser *jwt.Parser
-	if audience == "" {
+	if strings.TrimSpace(audience) == "" {
 		parser = jwt.NewParser(jwt.WithoutAudienceValidation())
 	} else {
 		parser = jwt.NewParser(jwt.WithAudience(audience))
