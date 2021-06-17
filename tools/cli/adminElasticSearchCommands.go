@@ -131,7 +131,7 @@ func AdminCatIndices(c *cli.Context) {
 
 // AdminIndex used to bulk insert message to ES.
 // Sample JSON line:
-// {"NamespaceID": "namespace-id", "Namespace": "namespace-name", "Execution": {"workflow_id": "workflow-id1", "run_id": "run-id" }, "WorkflowTypeName": "workflow-type", "StartTimestamp": 1234, "Status": 1, "ExecutionTimestamp": 5678, "TaskID": 2208, "ShardID": 1978, "Memo": {"fields": {"memo-1": {"metadata": {"encoding": "anNvbi9wbGFpbg==" }, "data": "MQ==" } } }, "TaskQueue": "task-queue", "CloseTimestamp": 9012, "HistoryLength": 2203, "SearchAttributes": {"indexed_fields": {"CustomKeywordField": {"metadata": {"encoding": "anNvbi9wbGFpbg==" }, "data": "ImtleXdvcmQiCg==" } } } }
+// {"NamespaceID": "namespace-id", "Namespace": "namespace-name", "Execution": {"workflow_id": "workflow-id1", "run_id": "run-id" }, "WorkflowTypeName": "workflow-type", "StartTime": 1234, "Status": 1, "ExecutionTime": 5678, "TaskID": 2208, "ShardID": 1978, "Memo": {"fields": {"memo-1": {"metadata": {"encoding": "anNvbi9wbGFpbg==" }, "data": "MQ==" } } }, "TaskQueue": "task-queue", "CloseTime": 9012, "HistoryLength": 2203, "SearchAttributes": {"indexed_fields": {"CustomKeywordField": {"metadata": {"encoding": "anNvbi9wbGFpbg==" }, "data": "ImtleXdvcmQiCg==" } } } }
 func AdminIndex(c *cli.Context) {
 	esClient := newESClient(c)
 	indexName := getRequiredOption(c, FlagIndex)

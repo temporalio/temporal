@@ -174,6 +174,7 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 	executionStatus := executionState.GetStatus()
 	taskQueue := executionInfo.TaskQueue
+	stateTransitionCount := executionInfo.GetStateTransitionCount()
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state builder and
@@ -188,6 +189,7 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 			wfTypeName,
 			workflowStartTime,
 			workflowExecutionTime,
+			stateTransitionCount,
 			task.GetTaskId(),
 			executionStatus,
 			taskQueue,
@@ -202,6 +204,7 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 		wfTypeName,
 		workflowStartTime,
 		workflowExecutionTime,
+		stateTransitionCount,
 		task.GetTaskId(),
 		executionStatus,
 		taskQueue,
@@ -216,6 +219,7 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 	workflowTypeName string,
 	startTime time.Time,
 	executionTime time.Time,
+	stateTransitionCount int64,
 	taskID int64,
 	status enumspb.WorkflowExecutionStatus,
 	taskQueue string,
@@ -241,15 +245,15 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
-			WorkflowTypeName:   workflowTypeName,
-			StartTimestamp:     startTime,
-			ExecutionTimestamp: executionTime,
-			TaskID:             taskID,
-			Status:             status,
-			ShardID:            t.shard.GetShardID(),
-			Memo:               visibilityMemo,
-			TaskQueue:          taskQueue,
-			SearchAttributes:   searchAttributes,
+			WorkflowTypeName:     workflowTypeName,
+			StartTime:            startTime,
+			ExecutionTime:        executionTime,
+			StateTransitionCount: stateTransitionCount, TaskID: taskID,
+			Status:           status,
+			ShardID:          t.shard.GetShardID(),
+			Memo:             visibilityMemo,
+			TaskQueue:        taskQueue,
+			SearchAttributes: searchAttributes,
 		},
 	}
 	return t.visibilityMgr.RecordWorkflowExecutionStarted(request)
@@ -262,6 +266,7 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 	workflowTypeName string,
 	startTime time.Time,
 	executionTime time.Time,
+	stateTransitionCount int64,
 	taskID int64,
 	status enumspb.WorkflowExecutionStatus,
 	taskQueue string,
@@ -282,15 +287,15 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},
-			WorkflowTypeName:   workflowTypeName,
-			StartTimestamp:     startTime,
-			ExecutionTimestamp: executionTime,
-			TaskID:             taskID,
-			ShardID:            t.shard.GetShardID(),
-			Status:             status,
-			Memo:               visibilityMemo,
-			TaskQueue:          taskQueue,
-			SearchAttributes:   searchAttributes,
+			WorkflowTypeName:     workflowTypeName,
+			StartTime:            startTime,
+			ExecutionTime:        executionTime,
+			StateTransitionCount: stateTransitionCount, TaskID: taskID,
+			ShardID:          t.shard.GetShardID(),
+			Status:           status,
+			Memo:             visibilityMemo,
+			TaskQueue:        taskQueue,
+			SearchAttributes: searchAttributes,
 		},
 	}
 
@@ -352,6 +357,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
 	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 	taskQueue := executionInfo.TaskQueue
+	stateTransitionCount := executionInfo.GetStateTransitionCount()
 
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state builder and
@@ -366,6 +372,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		workflowExecutionTime,
 		workflowCloseTime,
 		workflowStatus,
+		stateTransitionCount,
 		workflowHistoryLength,
 		task.GetTaskId(),
 		visibilityMemo,
@@ -383,6 +390,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 	executionTime time.Time,
 	endTime time.Time,
 	status enumspb.WorkflowExecutionStatus,
+	stateTransitionCount int64,
 	historyLength int64,
 	taskID int64,
 	visibilityMemo *commonpb.Memo,
@@ -413,19 +421,19 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 					WorkflowId: workflowID,
 					RunId:      runID,
 				},
-				WorkflowTypeName:   workflowTypeName,
-				StartTimestamp:     startTime,
-				ExecutionTimestamp: executionTime,
-				Status:             status,
-				TaskID:             taskID,
-				ShardID:            t.shard.GetShardID(),
-				Memo:               visibilityMemo,
-				TaskQueue:          taskQueue,
-				SearchAttributes:   searchAttributes,
+				WorkflowTypeName:     workflowTypeName,
+				StartTime:            startTime,
+				ExecutionTime:        executionTime,
+				StateTransitionCount: stateTransitionCount, Status: status,
+				TaskID:           taskID,
+				ShardID:          t.shard.GetShardID(),
+				Memo:             visibilityMemo,
+				TaskQueue:        taskQueue,
+				SearchAttributes: searchAttributes,
 			},
-			CloseTimestamp: endTime,
-			HistoryLength:  historyLength,
-			Retention:      &retention,
+			CloseTime:     endTime,
+			HistoryLength: historyLength,
+			Retention:     &retention,
 		})
 	}
 

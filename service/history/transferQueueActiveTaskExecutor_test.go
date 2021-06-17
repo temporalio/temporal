@@ -1881,14 +1881,15 @@ func (s *transferQueueActiveTaskExecutorSuite) createRecordWorkflowExecutionStar
 
 	return &persistence.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &p.VisibilityRequestBase{
-			Namespace:          namespace,
-			NamespaceID:        task.GetNamespaceId(),
-			Execution:          *execution,
-			WorkflowTypeName:   executionInfo.WorkflowTypeName,
-			StartTimestamp:     timestamp.TimeValue(startEvent.GetEventTime()),
-			ExecutionTimestamp: executionTimestamp,
-			TaskID:             task.GetTaskId(),
-			TaskQueue:          task.TaskQueue,
+			Namespace:            namespace,
+			NamespaceID:          task.GetNamespaceId(),
+			Execution:            *execution,
+			WorkflowTypeName:     executionInfo.WorkflowTypeName,
+			StartTime:            timestamp.TimeValue(startEvent.GetEventTime()),
+			ExecutionTime:        executionTimestamp,
+			StateTransitionCount: executionInfo.StateTransitionCount,
+			TaskID:               task.GetTaskId(),
+			TaskQueue:            task.TaskQueue,
 		},
 	}
 }
@@ -2017,7 +2018,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createUpsertWorkflowSearchAttribu
 			NamespaceID:      task.GetNamespaceId(),
 			Execution:        *execution,
 			WorkflowTypeName: executionInfo.WorkflowTypeName,
-			StartTimestamp:   timestamp.TimeValue(startEvent.GetEventTime()),
+			StartTime:        timestamp.TimeValue(startEvent.GetEventTime()),
 			TaskID:           task.GetTaskId(),
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			TaskQueue:        task.TaskQueue,

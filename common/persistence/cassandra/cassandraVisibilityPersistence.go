@@ -159,8 +159,8 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 		namespacePartition,
 		request.WorkflowID,
 		request.RunID,
-		p.UnixMilliseconds(request.StartTimestamp),
-		p.UnixMilliseconds(request.ExecutionTimestamp),
+		p.UnixMilliseconds(request.StartTime),
+		p.UnixMilliseconds(request.ExecutionTime),
 		request.WorkflowTypeName,
 		request.Memo.Data,
 		request.Memo.EncodingType.String(),
@@ -169,7 +169,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 	// It is important to specify timestamp for all `open_executions` queries because
 	// we are using milliseconds instead of default microseconds. If custom timestamp collides with
 	// default timestamp, default one will always win because they are 1000 times bigger.
-	query = query.WithTimestamp(p.UnixMilliseconds(request.StartTimestamp))
+	query = query.WithTimestamp(p.UnixMilliseconds(request.StartTime))
 	err := query.Exec()
 	return gocql.ConvertError("RecordWorkflowExecutionStarted", err)
 }
@@ -181,7 +181,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(request *
 	batch.Query(templateDeleteWorkflowExecutionStarted,
 		request.NamespaceID,
 		namespacePartition,
-		p.UnixMilliseconds(request.StartTimestamp),
+		p.UnixMilliseconds(request.StartTime),
 		request.RunID,
 	)
 
@@ -201,9 +201,9 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(request *
 			namespacePartition,
 			request.WorkflowID,
 			request.RunID,
-			p.UnixMilliseconds(request.StartTimestamp),
-			p.UnixMilliseconds(request.ExecutionTimestamp),
-			p.UnixMilliseconds(request.CloseTimestamp),
+			p.UnixMilliseconds(request.StartTime),
+			p.UnixMilliseconds(request.ExecutionTime),
+			p.UnixMilliseconds(request.CloseTime),
 			request.WorkflowTypeName,
 			request.Status,
 			request.HistoryLength,
@@ -217,9 +217,9 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(request *
 			namespacePartition,
 			request.WorkflowID,
 			request.RunID,
-			p.UnixMilliseconds(request.StartTimestamp),
-			p.UnixMilliseconds(request.ExecutionTimestamp),
-			p.UnixMilliseconds(request.CloseTimestamp),
+			p.UnixMilliseconds(request.StartTime),
+			p.UnixMilliseconds(request.ExecutionTime),
+			p.UnixMilliseconds(request.CloseTime),
 			request.WorkflowTypeName,
 			request.Status,
 			request.HistoryLength,
@@ -230,18 +230,18 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(request *
 		)
 	}
 
-	// RecordWorkflowExecutionStarted is using StartTimestamp as the timestamp for every query in `open_executions` table.
+	// RecordWorkflowExecutionStarted is using StartTime as the timestamp for every query in `open_executions` table.
 	// Due to the fact that cross DC using mutable state creation time as workflow start time and visibility using event time
-	// instead of last update time (https://github.com/uber/cadence/pull/1501) CloseTimestamp can be before StartTimestamp (or very close it).
-	// In this case, use (StartTimestamp + minWorkflowDuration) for delete operation to guarantee that it is greater than StartTimestamp
+	// instead of last update time (https://github.com/uber/cadence/pull/1501) CloseTime can be before StartTime (or very close it).
+	// In this case, use (StartTime + minWorkflowDuration) for delete operation to guarantee that it is greater than StartTime
 	// and won't be ignored.
 
 	const minWorkflowDuration = time.Second
 	var batchTimestamp time.Time
-	if request.CloseTimestamp.Sub(request.StartTimestamp) < minWorkflowDuration {
-		batchTimestamp = request.StartTimestamp.Add(minWorkflowDuration)
+	if request.CloseTime.Sub(request.StartTime) < minWorkflowDuration {
+		batchTimestamp = request.StartTime.Add(minWorkflowDuration)
 	} else {
-		batchTimestamp = request.CloseTimestamp
+		batchTimestamp = request.CloseTime
 	}
 
 	batch = batch.WithTimestamp(p.UnixMilliseconds(batchTimestamp))

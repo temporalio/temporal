@@ -57,6 +57,9 @@
       },
       "HistoryLength": {
         "type": "long"
+      },
+      "StateTransitionCount": {
+        "type": "long"
       }
     }
   },
