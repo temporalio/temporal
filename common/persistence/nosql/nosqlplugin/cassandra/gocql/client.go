@@ -132,6 +132,12 @@ func NewCassandraCluster(
 				return nil, errors.New("failed to load decoded CA Cert as PEM")
 			}
 		}
+
+		cluster.ReconnectionPolicy = &gocql.ExponentialReconnectionPolicy{
+			MaxRetries:      30,
+			InitialInterval: time.Second,
+			MaxInterval:     time.Minute,
+		}
 	}
 
 	if cfg.MaxConns > 0 {
