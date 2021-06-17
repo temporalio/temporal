@@ -93,13 +93,12 @@ func (m *opentelemetryClient) StartTimer(scopeIdx int, timerIdx int) Stopwatch {
 	return m.childScopes[scopeIdx].StartTimer(timerIdx)
 }
 
-// RecordTimer record and emit a timer for the given
-// metric name
+// RecordTimer records and emits a timer for the given metric name
 func (m *opentelemetryClient) RecordTimer(scopeIdx int, timerIdx int, d time.Duration) {
 	m.childScopes[scopeIdx].RecordTimer(timerIdx, d)
 }
 
-// RecordDistribution record and emit a distribution (wrapper on top of timer) for the given
+// RecordDistribution records and emits a distribution (wrapper on top of timer) for the given
 // metric name
 func (m *opentelemetryClient) RecordDistribution(scopeIdx int, timerIdx int, d int) {
 	m.childScopes[scopeIdx].RecordDistribution(timerIdx, d)
@@ -110,12 +109,14 @@ func (m *opentelemetryClient) UpdateGauge(scopeIdx int, gaugeIdx int, value floa
 	m.childScopes[scopeIdx].UpdateGauge(gaugeIdx, value)
 }
 
-// Scope return a new internal metrics scope that can be used to add additional
+// Scope returns a new internal metrics scope that can be used to add additional
 // information to the metrics emitted
 func (m *opentelemetryClient) Scope(scopeIdx int, tags ...Tag) Scope {
 	return m.childScopes[scopeIdx].Tagged(tags...)
 }
 
+// UserScope returns a new metrics scope that can be used to add additional
+// information to the metrics emitted by user code
 func (m *opentelemetryClient) UserScope() UserScope {
 	return m.rootScope.userScope()
 }

@@ -56,15 +56,15 @@ type (
 		// RecordTimer starts a timer for the given
 		// metric name
 		RecordTimer(scope int, timer int, d time.Duration)
-		// RecordDistribution record and emit a distribution (wrapper on top of timer) for the given
+		// RecordDistribution records and emits a distribution (wrapper on top of timer) for the given
 		// metric name
 		RecordDistribution(scope int, timer int, d int)
 		// UpdateGauge reports Gauge type absolute value metric
 		UpdateGauge(scope int, gauge int, value float64)
-		// Scope return an internal scope that can be used to add additional
+		// Scope returns an internal scope that can be used to add additional
 		// information to metrics
 		Scope(scope int, tags ...Tag) Scope
-		// UserScope return a new metrics scope that can be used to add additional
+		// UserScope returns a new metrics scope that can be used to add additional
 		// information to the metrics emitted by user code
 		UserScope() UserScope
 	}
@@ -85,7 +85,7 @@ type (
 		RecordDistribution(id int, d int)
 		// UpdateGauge reports Gauge type absolute value metric
 		UpdateGauge(gauge int, value float64)
-		// Tagged return an internal scope that can be used to add additional
+		// Tagged returns an internal scope that can be used to add additional
 		// information to metrics
 		Tagged(tags ...Tag) Scope
 	}
