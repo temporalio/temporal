@@ -103,7 +103,7 @@ func WithClaimMapper(claimMapper func(cfg *config.Config) authorization.ClaimMap
 }
 
 // Configures JWT audience getter for authorization
-func WithAudienceGetter(audienceGetter func(cfg *config.Config) authorization.AudienceGetter) ServerOption {
+func WithAudienceGetter(audienceGetter func(cfg *config.Config) authorization.JWTAudienceMapper) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.audienceGetter = audienceGetter(s.config)
 	})

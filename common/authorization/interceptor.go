@@ -46,8 +46,8 @@ type (
 )
 
 type (
-	// AudienceGetter returns JWT audience for a given request
-	AudienceGetter interface {
+	// JWTAudienceMapper returns JWT audience for a given request
+	JWTAudienceMapper interface {
 		Audience(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo) string
 	}
 )
@@ -167,7 +167,7 @@ type interceptor struct {
 	claimMapper    ClaimMapper
 	metricsClient  metrics.Client
 	logger         log.Logger
-	audienceGetter AudienceGetter
+	audienceGetter JWTAudienceMapper
 }
 
 // NewAuthorizationInterceptor creates an authorization interceptor and return a func that points to its Interceptor method
@@ -176,7 +176,7 @@ func NewAuthorizationInterceptor(
 	authorizer Authorizer,
 	metrics metrics.Client,
 	logger log.Logger,
-	audienceGetter AudienceGetter,
+	audienceGetter JWTAudienceMapper,
 ) grpc.UnaryServerInterceptor {
 	return (&interceptor{
 		claimMapper:    claimMapper,

@@ -54,7 +54,7 @@ type (
 		authorizer                 authorization.Authorizer
 		tlsConfigProvider          encryption.TLSConfigProvider
 		claimMapper                authorization.ClaimMapper
-		audienceGetter             authorization.AudienceGetter
+		audienceGetter             authorization.JWTAudienceMapper
 		metricsReporter            interface{}
 		persistenceServiceResolver resolver.ServiceResolver
 		elasticseachHttpClient     *http.Client
