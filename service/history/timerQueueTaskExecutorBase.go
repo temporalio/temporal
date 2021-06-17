@@ -150,7 +150,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflow(
 		return err
 	}
 
-	// calling Clear here to force accesses of mutable state to read database
+	// calling clear here to force accesses of mutable state to read database
 	// if this is not called then callers will get mutable state even though its been removed from database
 	workflowContext.Clear()
 	return nil
@@ -228,7 +228,7 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 			return err
 		}
 	}
-	// calling Clear here to force accesses of mutable state to read database
+	// calling clear here to force accesses of mutable state to read database
 	// if this is not called then callers will get mutable state even though its been removed from database
 	workflowContext.Clear()
 	return nil

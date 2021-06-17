@@ -58,10 +58,10 @@ func getBackoffInterval(
 
 	// currentAttemptCounterValue starts from 1.
 	// maxAttempts is the total attempts, including initial (non-retry) Attempt.
-	// At this point we are about to make next Attempt and all calculations in this func are for this next Attempt.
+	// At this point we are about to make next attempt and all calculations in this func are for this next Attempt.
 	// For example, if maxAttempts is set to 2 and we are making 1st retry, currentAttemptCounterValue will be 1
-	// (we made 1 non-retry Attempt already) and condition (currentAttemptCounterValue+1 > maxAttempts) will be false.
-	// With 2nd retry, currentAttemptCounterValue will be 2 (1 non-retry + 1 retry Attempt already made) and
+	// (we made 1 non-retry attempt already) and condition (currentAttemptCounterValue+1 > maxAttempts) will be false.
+	// With 2nd retry, currentAttemptCounterValue will be 2 (1 non-retry + 1 retry attempt already made) and
 	// condition (currentAttemptCounterValue+1 > maxAttempts) will be true (means stop retrying, we tried 2 times already).
 	if maxAttempts > 0 && currentAttemptCounterValue+1 > maxAttempts {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED

@@ -130,7 +130,7 @@ func (p *queueTaskProcessorImpl) StopShardProcessor(
 	delete(p.schedulers, shard)
 	p.Unlock()
 
-	// don't hold the Lock while stopping the scheduler
+	// don't hold the lock while stopping the scheduler
 	scheduler.Stop()
 }
 
@@ -212,7 +212,7 @@ func (p *queueTaskProcessorImpl) getOrCreateTaskScheduler(
 	p.schedulers[shard] = scheduler
 	p.Unlock()
 
-	// don't hold the Lock while starting the scheduler
+	// don't hold the lock while starting the scheduler
 	scheduler.Start()
 	return scheduler, nil
 }

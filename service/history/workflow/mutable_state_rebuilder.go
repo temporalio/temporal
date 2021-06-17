@@ -109,7 +109,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 	taskGenerator := b.taskGeneratorProvider(b.mutableState)
 
-	// need to Clear the stickiness since workflow turned to passive
+	// need to clear the stickiness since workflow turned to passive
 	b.mutableState.ClearStickyness()
 
 	for _, event := range history {

@@ -301,7 +301,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 		}
 	}
 
-	// release Lock on current workflow, since current cluster maybe the active cluster
+	// release lock on current workflow, since current cluster maybe the active cluster
 	//  and events maybe reapplied to current workflow
 	currentWorkflow.getReleaseFn()(nil)
 	currentWorkflow = nil
@@ -442,7 +442,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 		}
 	}
 
-	// release Lock on current workflow, since current cluster maybe the active cluster
+	// release lock on current workflow, since current cluster maybe the active cluster
 	//  and events maybe reapplied to current workflow
 	currentWorkflow.getReleaseFn()(nil)
 	currentWorkflow = nil

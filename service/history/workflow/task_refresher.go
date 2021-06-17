@@ -284,7 +284,7 @@ func (r *TaskRefresherImpl) refreshTasksForActivity(
 
 Loop:
 	for _, activityInfo := range pendingActivityInfos {
-		// Clear all activity timer task mask for later activity timer task re-generation
+		// clear all activity timer task mask for later activity timer task re-generation
 		activityInfo.TimerTaskStatus = TimerTaskStatusNone
 
 		// need to update activity timer task mask for which task is generated
@@ -337,7 +337,7 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 	pendingTimerInfos := mutableState.GetPendingTimerInfos()
 
 	for _, timerInfo := range pendingTimerInfos {
-		// Clear all timer task mask for later timer task re-generation
+		// clear all timer task mask for later timer task re-generation
 		timerInfo.TaskStatus = TimerTaskStatusNone
 
 		// need to update user timer task mask for which task is generated

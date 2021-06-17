@@ -227,7 +227,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		return serviceerror.NewInternal("nDCTransactionMgrForNewWorkflow createAsZombie encounter target workflow policy not being passive")
 	}
 
-	// release Lock on current workflow, since current cluster maybe the active cluster
+	// release lock on current workflow, since current cluster maybe the active cluster
 	// and events maybe reapplied to current workflow
 	currentWorkflow.getReleaseFn()(nil)
 	currentWorkflow = nil

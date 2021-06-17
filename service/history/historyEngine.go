@@ -866,7 +866,7 @@ func (e *historyEngineImpl) queryDirectlyThroughMatching(
 		}
 
 		// using a clean new context in case customer provide a context which has
-		// a really short deadline, causing we Clear the stickiness
+		// a really short deadline, causing we clear the stickiness
 		stickyContext, cancel := context.WithTimeout(context.Background(), timestamp.DurationValue(msResp.GetStickyTaskQueueScheduleToStartTimeout()))
 		stickyStopWatch := scope.StartTimer(metrics.DirectQueryDispatchStickyLatency)
 		matchingResp, err := e.rawMatchingClient.QueryWorkflow(stickyContext, stickyMatchingRequest)
@@ -2477,7 +2477,7 @@ func (e *historyEngineImpl) failWorkflowTask(
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 ) (workflow.MutableState, error) {
 
-	// Clear any updates we have accumulated so far
+	// clear any updates we have accumulated so far
 	context.Clear()
 
 	// Reload workflow execution so we can apply the workflow task failure event

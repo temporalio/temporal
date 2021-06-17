@@ -199,7 +199,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	updateMutableState := false
 	scheduleWorkflowTask := false
 
-	// need to Clear activity heartbeat timer task mask for new activity timer task creation
+	// need to clear activity heartbeat timer task mask for new activity timer task creation
 	// NOTE: LastHeartbeatTimeoutVisibilityInSeconds is for deduping heartbeat timer creation as it's possible
 	// one heartbeat task was persisted multiple times with different taskIDs due to the retry logic
 	// for updating workflow execution. In that case, only one new heartbeat timeout task should be
@@ -470,8 +470,8 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	}
 	scheduleToStartTimeout := timestamp.DurationValue(activityInfo.ScheduleToStartTimeout)
 
-	// NOTE: do not access anything related mutable state after this Lock release
-	release(nil) // release earlier as we don't need the Lock anymore
+	// NOTE: do not access anything related mutable state after this lock release
+	release(nil) // release earlier as we don't need the lock anymore
 
 	ctx, cancel = context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()

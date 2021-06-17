@@ -210,7 +210,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// see comments at the beginning of this function.
 		// NOTE: this is the only place in the standby logic where mutable state can be updated
 
-		// need to Clear the activity heartbeat timer task marks
+		// need to clear the activity heartbeat timer task marks
 		lastWriteVersion, err := mutableState.GetLastWriteVersion()
 		if err != nil {
 			return nil, err
@@ -442,7 +442,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		return err
 	}
 
-	// NOTE: do not access anything related mutable state after this Lock release
+	// NOTE: do not access anything related mutable state after this lock release
 	release(nil)
 	return postActionFn(timerTask, historyResendInfo, t.logger)
 }

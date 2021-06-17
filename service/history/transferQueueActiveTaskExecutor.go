@@ -164,8 +164,8 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 
 	timeout := timestamp.DurationValue(ai.ScheduleToStartTimeout)
 
-	// NOTE: do not access anything related mutable state after this Lock release
-	// release the context Lock since we no longer need mutable state builder and
+	// NOTE: do not access anything related mutable state after this lock release
+	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	return t.pushActivity(task, &timeout)
@@ -233,8 +233,8 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		taskScheduleToStartTimeoutSeconds = int64(workflowRunTimeout.Round(time.Second).Seconds())
 	}
 
-	// NOTE: do not access anything related mutable state after this Lock release
-	// release the context Lock since we no longer need mutable state builder and
+	// NOTE: do not access anything related mutable state after this lock release
+	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	return t.pushWorkflowTask(task, taskQueue, timestamp.DurationFromSeconds(taskScheduleToStartTimeoutSeconds))
@@ -302,8 +302,8 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	namespace := mutableState.GetNamespaceEntry().GetInfo().Name
 	children := copyChildWorkflowInfos(mutableState.GetPendingChildExecutionInfos())
 
-	// NOTE: do not access anything related mutable state after this Lock release
-	// release the context Lock since we no longer need mutable state builder and
+	// NOTE: do not access anything related mutable state after this lock release
+	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	err = t.recordWorkflowClosed(
@@ -545,7 +545,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 
 	signalRequestID := signalInfo.GetRequestId()
 
-	// release the weContext Lock since we no longer need mutable state builder and
+	// release the weContext lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(retError)
 	// remove signalRequestedID from target workflow, after Signal detail is removed from source workflow
@@ -633,8 +633,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			WorkflowId: childInfo.StartedWorkflowId,
 			RunId:      childInfo.StartedRunId,
 		}
-		// NOTE: do not access anything related mutable state after this Lock release
-		// release the context Lock since we no longer need mutable state builder and
+		// NOTE: do not access anything related mutable state after this lock release
+		// release the context lock since we no longer need mutable state builder and
 		// the rest of logic is making RPC call, which takes time.
 		release(nil)
 		return t.createFirstWorkflowTask(task.GetTargetNamespaceId(), childExecution)
@@ -669,8 +669,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		return err
 	}
 
-	// NOTE: do not access anything related mutable state after this Lock release
-	// release the context Lock since we no longer need mutable state builder and
+	// NOTE: do not access anything related mutable state after this lock release
+	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	return t.createFirstWorkflowTask(task.GetTargetNamespaceId(), &commonpb.WorkflowExecution{

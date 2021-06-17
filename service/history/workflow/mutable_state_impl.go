@@ -2831,7 +2831,7 @@ func (e *MutableStateImpl) AddTimerCanceledEvent(
 	ti, ok := e.GetUserTimerInfo(timerID)
 	if !ok {
 		// if timer is not running then check if it has fired in the mutable state.
-		// If so Clear the timer from the mutable state. We need to check both the
+		// If so clear the timer from the mutable state. We need to check both the
 		// bufferedEvents and the history builder
 		timerFiredEvent := e.hBuilder.GetAndRemoveTimerFireEvent(timerID)
 		if timerFiredEvent == nil {

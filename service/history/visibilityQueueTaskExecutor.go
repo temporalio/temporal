@@ -175,8 +175,8 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 	executionStatus := executionState.GetStatus()
 	taskQueue := executionInfo.TaskQueue
 
-	// NOTE: do not access anything related mutable state after this Lock release
-	// release the context Lock since we no longer need mutable state builder and
+	// NOTE: do not access anything related mutable state after this lock release
+	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
@@ -353,8 +353,8 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
 	taskQueue := executionInfo.TaskQueue
 
-	// NOTE: do not access anything related mutable state after this Lock release
-	// release the context Lock since we no longer need mutable state builder and
+	// NOTE: do not access anything related mutable state after this lock release
+	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	return t.recordCloseExecution(

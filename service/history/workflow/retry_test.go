@@ -287,7 +287,7 @@ func Test_NextRetry(t *testing.T) {
 	a.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
 	ai.Attempt++
 
-	// no retry as max Attempt reached
+	// no retry as max attempt reached
 	a.EqualValues(ai.RetryMaximumAttempts, ai.Attempt)
 	interval, retryState = getBackoffInterval(
 		now,

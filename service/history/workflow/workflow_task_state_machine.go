@@ -100,7 +100,7 @@ func (m *workflowTaskStateMachine) ReplicateTransientWorkflowTaskScheduled() (*W
 	// this is OK
 	// 1. if a failover happen just after this transient workflow task,
 	// AddWorkflowTaskStartedEvent will handle the correction of schedule ID
-	// and set the Attempt to 1
+	// and set the attempt to 1
 	// 2. if no failover happen during the life time of this transient workflow task
 	// then ReplicateWorkflowTaskScheduledEvent will overwrite everything
 	// including the workflow task schedule ID
@@ -136,13 +136,13 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskStartedEvent(
 		if !ok {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("unable to find workflow task: %v", scheduleID))
 		}
-		// setting workflow task Attempt to 1 for workflow task replication
+		// setting workflow task attempt to 1 for workflow task replication
 		// this mainly handles transient workflow task completion
 		// for transient workflow task, active side will write 2 batch in a "transaction"
 		// 1. workflow task scheduled & workflow task started
 		// 2. workflow task completed & other events
 		// since we need to treat each individual event batch as one transaction
-		// certain "magic" needs to be done, i.e. setting Attempt to 1 so
+		// certain "magic" needs to be done, i.e. setting attempt to 1 so
 		// if first batch is replicated, but not the second one, workflow task can be correctly timed out
 		workflowTask.Attempt = 1
 	}
@@ -181,7 +181,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskTimedOutEvent(
 	timeoutType enumspb.TimeoutType,
 ) error {
 	incrementAttempt := true
-	// Do not increment workflow task Attempt in the case of sticky timeout to prevent creating next workflow task as transient
+	// Do not increment workflow task attempt in the case of sticky timeout to prevent creating next workflow task as transient
 	if timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
 		incrementAttempt = false
 	}
@@ -202,7 +202,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
 		return nil, m.ms.createInternalServerError(opTag)
 	}
 
-	// Clear stickiness whenever workflow task fails
+	// clear stickiness whenever workflow task fails
 	m.ms.ClearStickyness()
 
 	event := m.ms.hBuilder.AddWorkflowTaskTimedOutEvent(
@@ -237,7 +237,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
 	} else {
 		// It can be because stickyness has expired due to StickyTTL config
-		// In that case we need to Clear stickyness so that the LastUpdatedTimestamp is not corrupted.
+		// In that case we need to clear stickyness so that the LastUpdatedTimestamp is not corrupted.
 		// In other cases, clearing stickyness shouldn't hurt anything.
 		// TODO: https://github.com/temporalio/temporal/issues/2357:
 		//  if we can use a new field(LastWorkflowTaskUpdateTimestamp), then we could get rid of it.
@@ -262,7 +262,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 
 		if m.ms.GetCurrentVersion() != lastWriteVersion {
 			// during transient workflow task cannot allow version changes
-			// mark the Attempt to be 1 to NOT use transient workflow task
+			// mark the attempt to be 1 to NOT use transient workflow task
 			m.ms.executionInfo.WorkflowTaskAttempt = 1
 		}
 	}
@@ -519,7 +519,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 		return nil, err
 	}
 
-	// always Clear workflow task Attempt for reset
+	// always clear workflow task attempt for reset
 	if cause == enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW ||
 		cause == enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND {
 		m.ms.executionInfo.WorkflowTaskAttempt = 1
@@ -561,7 +561,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 func (m *workflowTaskStateMachine) FailWorkflowTask(
 	incrementAttempt bool,
 ) {
-	// Clear stickiness whenever workflow task fails
+	// clear stickiness whenever workflow task fails
 	m.ms.ClearStickyness()
 
 	failWorkflowTaskInfo := &WorkflowTaskInfo{

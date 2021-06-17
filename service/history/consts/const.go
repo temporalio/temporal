@@ -75,10 +75,10 @@ var (
 
 	// FailedWorkflowStatuses is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API
-	FailedWorkflowStatuses = map[enumspb.WorkflowExecutionStatus]bool{
-		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED:     true,
-		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED:   true,
-		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED: true,
-		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:  true,
+	FailedWorkflowStatuses = map[enumspb.WorkflowExecutionStatus]struct{}{
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED:     {},
+		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED:   {},
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED: {},
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:  {},
 	}
 )

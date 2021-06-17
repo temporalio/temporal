@@ -437,7 +437,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		return err
 	}
 
-	// NOTE: do not access anything related mutable state after this Lock release
+	// NOTE: do not access anything related mutable state after this lock release
 	release(nil)
 	return postActionFn(taskInfo, historyResendInfo, t.logger)
 }

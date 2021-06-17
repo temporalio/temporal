@@ -583,11 +583,11 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithCon
 ) error {
 
 	// workflow backfill to non current branch with continue as new
-	// first, release target workflow Lock & create the new workflow as zombie
+	// first, release target workflow lock & create the new workflow as zombie
 	// NOTE: need to release target workflow due to target workflow
 	//  can potentially be the current workflow causing deadlock
 
-	// 1. Clear all in memory changes & release target workflow Lock
+	// 1. clear all in memory changes & release target workflow Lock
 	// 2. apply new workflow first
 	// 3. apply target workflow
 
