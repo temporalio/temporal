@@ -32,6 +32,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -44,6 +45,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 )
 
@@ -51,7 +53,7 @@ type (
 	visibilityQueueTaskExecutor struct {
 		shard                   shard.Context
 		historyService          *historyEngineImpl
-		cache                   *historyCache
+		cache                   *workflow.Cache
 		logger                  log.Logger
 		metricsClient           metrics.Client
 		matchingClient          matchingservice.MatchingServiceClient
@@ -127,21 +129,21 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 
 	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
 	defer cancel()
-	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
 		task.GetNamespaceId(),
 		commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      task.GetRunId(),
 		},
-		callerTypeTask,
+		workflow.CallerTypeTask,
 	)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := weContext.loadWorkflowExecution()
+	mutableState, err := weContext.LoadWorkflowExecution()
 	if err != nil {
 		return err
 	}
@@ -301,21 +303,21 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 
 	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
 	defer cancel()
-	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
 		task.GetNamespaceId(),
 		commonpb.WorkflowExecution{
 			WorkflowId: task.GetWorkflowId(),
 			RunId:      task.GetRunId(),
 		},
-		callerTypeTask,
+		workflow.CallerTypeTask,
 	)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := weContext.loadWorkflowExecution()
+	mutableState, err := weContext.LoadWorkflowExecution()
 	if err != nil {
 		return err
 	}
@@ -443,7 +445,7 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		// TODO: expose GetVisibilityManager method on shardContext interface
 		return t.shard.GetService().GetVisibilityManager().DeleteWorkflowExecution(request) // delete from db
 	}
-	return backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	return backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
 func getWorkflowMemo(

@@ -33,6 +33,7 @@ import (
 
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/tests"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 
@@ -95,7 +96,7 @@ func (s *controllerSuite) SetupTest() {
 	s.hostInfo = s.mockResource.GetHostInfo()
 
 	s.logger = s.mockResource.Logger
-	s.config = configs.NewDynamicConfigForTest()
+	s.config = tests.NewDynamicConfig()
 
 	s.shardController = NewController(s.mockResource, s.mockEngineFactory, s.config)
 }

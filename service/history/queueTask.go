@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/task"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -304,12 +305,12 @@ func (t *queueTaskBase) HandleErr(
 	}
 
 	// this is a transient error
-	if err == ErrTaskRetry {
+	if err == consts.ErrTaskRetry {
 		t.scope.IncCounter(metrics.TaskStandbyRetryCounter)
 		return err
 	}
 
-	if err == ErrTaskDiscarded {
+	if err == consts.ErrTaskDiscarded {
 		t.scope.IncCounter(metrics.TaskDiscarded)
 		err = nil
 	}

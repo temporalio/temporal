@@ -50,6 +50,8 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -60,7 +62,7 @@ type (
 		controller          *gomock.Controller
 		mockShard           *shard.ContextTest
 		mockNamespaceCache  *cache.MockNamespaceCache
-		mockMutableState    *MockmutableState
+		mockMutableState    *workflow.MockMutableState
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockExecutionMgr *persistence.MockExecutionManager
@@ -89,7 +91,7 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockMutableState = NewMockmutableState(s.controller)
+	s.mockMutableState = workflow.NewMockMutableState(s.controller)
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -99,7 +101,7 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
-		NewDynamicConfigForTest(),
+		tests.NewDynamicConfig(),
 	)
 
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
@@ -110,7 +112,7 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
-	historyCache := newHistoryCache(s.mockShard)
+	historyCache := workflow.NewCache(s.mockShard)
 
 	s.replicatorQueueProcessor = newReplicatorQueueProcessor(
 		s.mockShard, historyCache, s.mockExecutionMgr, s.mockHistoryMgr, s.logger,
@@ -207,7 +209,7 @@ func (s *replicatorQueueProcessorSuite) TestTaskIDRange_Initialized_UseHighestTr
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	ctx := context.Background()
 	namespace := "some random namespace name"
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -249,7 +251,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	ctx := context.Background()
 	namespace := "some random namespace name"
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -264,16 +266,16 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 		ScheduledId: scheduleID,
 	}
 
-	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecution(
+	context, release, _ := s.replicatorQueueProcessor.historyCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		callerTypeTask,
+		workflow.CallerTypeTask,
 	)
-	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
+	context.(*workflow.ContextImpl).MutableState = s.mockMutableState
 	release(nil)
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
@@ -299,7 +301,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	ctx := context.Background()
 	namespace := "some random namespace name"
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -314,17 +316,17 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 		ScheduledId: scheduleID,
 	}
 
-	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecution(
+	context, release, _ := s.replicatorQueueProcessor.historyCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		callerTypeTask,
+		workflow.CallerTypeTask,
 	)
 
-	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
+	context.(*workflow.ContextImpl).MutableState = s.mockMutableState
 	release(nil)
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
@@ -351,7 +353,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	ctx := context.Background()
 	namespace := "some random namespace name"
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -366,17 +368,17 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		ScheduledId: scheduleID,
 	}
 
-	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecution(
+	context, release, _ := s.replicatorQueueProcessor.historyCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		callerTypeTask,
+		workflow.CallerTypeTask,
 	)
 
-	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
+	context.(*workflow.ContextImpl).MutableState = s.mockMutableState
 	release(nil)
 
 	activityVersion := int64(333)
@@ -460,7 +462,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	ctx := context.Background()
 	namespace := "some random namespace name"
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
@@ -475,17 +477,17 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		ScheduledId: scheduleID,
 	}
 
-	context, release, _ := s.replicatorQueueProcessor.historyCache.getOrCreateWorkflowExecution(
+	context, release, _ := s.replicatorQueueProcessor.historyCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		callerTypeTask,
+		workflow.CallerTypeTask,
 	)
 
-	context.(*workflowExecutionContextImpl).mutableState = s.mockMutableState
+	context.(*workflow.ContextImpl).MutableState = s.mockMutableState
 	release(nil)
 
 	activityVersion := int64(333)
