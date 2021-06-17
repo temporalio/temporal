@@ -37,17 +37,19 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
 	nDCWorkflow interface {
-		getContext() workflowExecutionContext
-		getMutableState() mutableState
-		getReleaseFn() releaseWorkflowExecutionFunc
+		getContext() workflow.Context
+		getMutableState() workflow.MutableState
+		getReleaseFn() workflow.ReleaseCacheFunc
 		getVectorClock() (int64, int64, error)
 		happensAfter(that nDCWorkflow) (bool, error)
 		revive() error
-		suppressBy(incomingWorkflow nDCWorkflow) (transactionPolicy, error)
+		suppressBy(incomingWorkflow nDCWorkflow) (workflow.TransactionPolicy, error)
 		flushBufferedEvents() error
 	}
 
@@ -56,9 +58,9 @@ type (
 		clusterMetadata cluster.Metadata
 
 		ctx          context.Context
-		context      workflowExecutionContext
-		mutableState mutableState
-		releaseFn    releaseWorkflowExecutionFunc
+		context      workflow.Context
+		mutableState workflow.MutableState
+		releaseFn    workflow.ReleaseCacheFunc
 	}
 )
 
@@ -66,9 +68,9 @@ func newNDCWorkflow(
 	ctx context.Context,
 	namespaceCache cache.NamespaceCache,
 	clusterMetadata cluster.Metadata,
-	context workflowExecutionContext,
-	mutableState mutableState,
-	releaseFn releaseWorkflowExecutionFunc,
+	context workflow.Context,
+	mutableState workflow.MutableState,
+	releaseFn workflow.ReleaseCacheFunc,
 ) *nDCWorkflowImpl {
 
 	return &nDCWorkflowImpl{
@@ -82,15 +84,15 @@ func newNDCWorkflow(
 	}
 }
 
-func (r *nDCWorkflowImpl) getContext() workflowExecutionContext {
+func (r *nDCWorkflowImpl) getContext() workflow.Context {
 	return r.context
 }
 
-func (r *nDCWorkflowImpl) getMutableState() mutableState {
+func (r *nDCWorkflowImpl) getMutableState() workflow.MutableState {
 	return r.mutableState
 }
 
-func (r *nDCWorkflowImpl) getReleaseFn() releaseWorkflowExecutionFunc {
+func (r *nDCWorkflowImpl) getReleaseFn() workflow.ReleaseCacheFunc {
 	return r.releaseFn
 }
 
@@ -149,7 +151,7 @@ func (r *nDCWorkflowImpl) revive() error {
 
 func (r *nDCWorkflowImpl) suppressBy(
 	incomingWorkflow nDCWorkflow,
-) (transactionPolicy, error) {
+) (workflow.TransactionPolicy, error) {
 
 	// NOTE: READ BEFORE MODIFICATION
 	//
@@ -160,33 +162,34 @@ func (r *nDCWorkflowImpl) suppressBy(
 
 	lastWriteVersion, lastEventTaskID, err := r.getVectorClock()
 	if err != nil {
-		return transactionPolicyActive, err
+		return workflow.TransactionPolicyActive, err
 	}
 	incomingLastWriteVersion, incomingLastEventTaskID, err := incomingWorkflow.getVectorClock()
 	if err != nil {
-		return transactionPolicyActive, err
+		return workflow.TransactionPolicyActive, err
 	}
 
 	if workflowHappensAfter(
 		lastWriteVersion,
 		lastEventTaskID,
 		incomingLastWriteVersion,
-		incomingLastEventTaskID) {
-		return transactionPolicyActive, serviceerror.NewInternal("nDCWorkflow cannot suppress workflow by older workflow")
+		incomingLastEventTaskID,
+	) {
+		return workflow.TransactionPolicyActive, serviceerror.NewInternal("nDCWorkflow cannot suppress workflow by older workflow")
 	}
 
 	// if workflow is in zombie or finished state, keep as is
 	if !r.mutableState.IsWorkflowExecutionRunning() {
-		return transactionPolicyPassive, nil
+		return workflow.TransactionPolicyPassive, nil
 	}
 
 	lastWriteCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 
 	if currentCluster == lastWriteCluster {
-		return transactionPolicyActive, r.terminateWorkflow(lastWriteVersion, incomingLastWriteVersion)
+		return workflow.TransactionPolicyActive, r.terminateWorkflow(lastWriteVersion, incomingLastWriteVersion)
 	}
-	return transactionPolicyPassive, r.zombiefyWorkflow()
+	return workflow.TransactionPolicyPassive, r.zombiefyWorkflow()
 }
 
 func (r *nDCWorkflowImpl) flushBufferedEvents() error {
@@ -233,7 +236,7 @@ func (r *nDCWorkflowImpl) failWorkflowTask(
 		workflowTask.StartedID,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
-		identityHistoryService,
+		consts.IdentityHistoryService,
 		"",
 		"",
 		"",

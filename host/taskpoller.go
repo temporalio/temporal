@@ -45,7 +45,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/service/history"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/matching"
 )
 
@@ -156,7 +156,7 @@ Loop:
 			return false, nil, err1
 		}
 
-		if err1 == history.ErrDuplicate {
+		if err1 == consts.ErrDuplicate {
 			p.Logger.Info("Duplicate Workflow task: Polling again")
 			continue Loop
 		}
@@ -360,7 +360,7 @@ retry:
 			Identity:  p.Identity,
 		})
 
-		if err == history.ErrDuplicate {
+		if err == consts.ErrDuplicate {
 			p.Logger.Info("Duplicate Activity task: Polling again")
 			continue retry
 		}
@@ -422,7 +422,7 @@ retry:
 			Identity:  p.Identity,
 		})
 
-		if err1 == history.ErrDuplicate {
+		if err1 == consts.ErrDuplicate {
 			p.Logger.Info("Duplicate Activity task: Polling again")
 			continue retry
 		}

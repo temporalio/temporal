@@ -31,7 +31,9 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/workflow"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -40,6 +42,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -51,8 +54,8 @@ type (
 		controller                   *gomock.Controller
 		mockShard                    *shard.ContextTest
 		mockEngine                   *shard.MockEngine
-		mockWorkflowExecutionContext *MockworkflowExecutionContext
-		mockMutableState             *MockmutableState
+		mockWorkflowExecutionContext *workflow.MockContext
+		mockMutableState             *workflow.MockMutableState
 
 		mockExecutionManager         *persistence.MockExecutionManager
 		mockVisibilityManager        *persistence.MockVisibilityManager
@@ -83,10 +86,10 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockWorkflowExecutionContext = NewMockworkflowExecutionContext(s.controller)
-	s.mockMutableState = NewMockmutableState(s.controller)
+	s.mockWorkflowExecutionContext = workflow.NewMockContext(s.controller)
+	s.mockMutableState = workflow.NewMockMutableState(s.controller)
 
-	config := NewDynamicConfigForTest()
+	config := tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
@@ -140,9 +143,9 @@ func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 		VisibilityTime:  timestamp.TimeNowPtrUtc(),
 	}
 
-	s.mockWorkflowExecutionContext.EXPECT().clear()
+	s.mockWorkflowExecutionContext.EXPECT().Clear()
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testGlobalNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockExecutionManager.EXPECT().AddTasks(gomock.Any()).Return(nil)
 	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any())
@@ -160,15 +163,15 @@ func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchivalFailed() {
-	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistencespb.ExecutionStats{
+	s.mockWorkflowExecutionContext.EXPECT().LoadExecutionStats().Return(&persistencespb.ExecutionStats{
 		HistorySize: 1024,
 	}, nil)
-	s.mockWorkflowExecutionContext.EXPECT().clear()
+	s.mockWorkflowExecutionContext.EXPECT().Clear()
 	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil)
 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1234), nil)
 	s.mockMutableState.EXPECT().GetNextEventID().Return(int64(101))
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testGlobalNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockExecutionManager.EXPECT().AddTasks(gomock.Any()).Return(nil)
 	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any())
@@ -193,7 +196,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchiva
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_SendSignalErr() {
-	s.mockWorkflowExecutionContext.EXPECT().loadExecutionStats().Return(&persistencespb.ExecutionStats{
+	s.mockWorkflowExecutionContext.EXPECT().LoadExecutionStats().Return(&persistencespb.ExecutionStats{
 		HistorySize: 1024 * 1024 * 1024,
 	}, nil)
 

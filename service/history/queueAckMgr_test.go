@@ -31,6 +31,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -93,7 +94,7 @@ func (s *queueAckMgrSuite) TearDownSuite() {
 func (s *queueAckMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	config := NewDynamicConfigForTest()
+	config := tests.NewDynamicConfig()
 	config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
 	s.controller = gomock.NewController(s.T())
@@ -280,7 +281,7 @@ func (s *queueFailoverAckMgrSuite) TearDownSuite() {
 func (s *queueFailoverAckMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	config := NewDynamicConfigForTest()
+	config := tests.NewDynamicConfig()
 	config.ShardUpdateMinInterval = dynamicconfig.GetDurationPropertyFn(0 * time.Second)
 
 	s.controller = gomock.NewController(s.T())
