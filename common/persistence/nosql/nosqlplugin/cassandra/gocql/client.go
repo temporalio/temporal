@@ -153,7 +153,7 @@ func NewCassandraCluster(
 	cluster.ReconnectionPolicy = &gocql.ExponentialReconnectionPolicy{
 		MaxRetries:      30,
 		InitialInterval: time.Second,
-		MaxInterval:     time.Minute,
+		MaxInterval:     10 * time.Second,
 	}
 
 	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
