@@ -98,8 +98,7 @@ func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, enableKeepA
 			keepalive.ClientParameters{
 				Time: 10 * time.Second,
 			},
-		),
-		)
+		))
 	}
 
 	return grpc.Dial(
