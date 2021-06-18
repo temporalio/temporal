@@ -82,9 +82,6 @@ var (
 	errForwarderSlowDown    = errors.New("limit exceeded")
 )
 
-// noopForwarderTokenC refers to a token channel that blocks forever
-var noopForwarderTokenC <-chan *ForwarderReqToken = make(chan *ForwarderReqToken)
-
 // newForwarder returns an instance of Forwarder object which
 // can be used to forward api request calls from a task queue
 // child partition to a task queue parent partition. The returned

@@ -212,7 +212,7 @@ func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*mat
 			if err == errForwarderSlowDown {
 				// if we are rate limited, try only local match for the
 				// remainder of the context timeout left
-				fwdrTokenC = noopForwarderTokenC
+				fwdrTokenC = nil
 				continue
 			}
 			return nil, err
@@ -283,27 +283,13 @@ forLoop:
 // On success, the returned task could be a query task or a regular task
 // Returns ErrNoTasks when context deadline is exceeded
 func (tm *TaskMatcher) Poll(ctx context.Context) (*internalTask, error) {
-	// try local match first without blocking until context timeout
-	if task, err := tm.pollNonBlocking(tm.taskC, tm.queryTaskC); err == nil {
-		return task, nil
-	}
-	// there is no local poller available to pickup this task. Now block waiting
-	// either for a local poller or a forwarding token to be available. When a
-	// forwarding token becomes available, send this poll to a parent partition
-	return tm.pollOrForward(ctx, tm.taskC, tm.queryTaskC)
+	return tm.poll(ctx, false)
 }
 
 // PollForQuery blocks until a *query* task is found or context deadline is exceeded
 // Returns ErrNoTasks when context deadline is exceeded
 func (tm *TaskMatcher) PollForQuery(ctx context.Context) (*internalTask, error) {
-	// try local match first without blocking until context timeout
-	if task, err := tm.pollNonBlocking(nil, tm.queryTaskC); err == nil {
-		return task, nil
-	}
-	// there is no local poller available to pickup this task. Now block waiting
-	// either for a local poller or a forwarding token to be available. When a
-	// forwarding token becomes available, send this poll to a parent partition
-	return tm.pollOrForward(ctx, nil, tm.queryTaskC)
+	return tm.poll(ctx, true)
 }
 
 // UpdateRatelimit updates the task dispatch rate
@@ -334,87 +320,82 @@ func (tm *TaskMatcher) Rate() float64 {
 	return tm.rateLimiter.Rate()
 }
 
-func (tm *TaskMatcher) pollOrForward(
-	ctx context.Context,
-	taskC <-chan *internalTask,
-	queryTaskC <-chan *internalTask,
-) (*internalTask, error) {
+func (tm *TaskMatcher) poll(ctx context.Context, queryOnly bool) (*internalTask, error) {
+	taskC, queryTaskC := tm.taskC, tm.queryTaskC
+	if queryOnly {
+		taskC = nil
+	}
+
+	// We want to effectively do a prioritized select, but Go select is random
+	// if multiple cases are ready, so split into multiple selects.
+	// The priority order is:
+	// 1. ctx.Done
+	// 2. taskC
+	// 3. queryTaskC
+	// 4. forwarding
+	// To correctly handle priorities and allow any case to succeed, all select
+	// statements except for the last one must be non-blocking, and the last one
+	// must include all the previous cases.
+
+	// 1. ctx.Done
+	select {
+	case <-ctx.Done():
+		tm.scope().IncCounter(metrics.PollTimeoutPerTaskQueueCounter)
+		return nil, ErrNoTasks
+	default:
+	}
+
+	// 2. taskC
 	select {
 	case task := <-taskC:
-		if task.responseC != nil {
-			tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
-		}
+		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
+		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
+		return task, nil
+	default:
+	}
+
+	// 3. queryTaskC
+	select {
+	case task := <-queryTaskC:
+		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
+		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
+		return task, nil
+	default:
+	}
+
+	// 4. forwarding (and all other clauses repeated again)
+	select {
+	case <-ctx.Done():
+		tm.scope().IncCounter(metrics.PollTimeoutPerTaskQueueCounter)
+		return nil, ErrNoTasks
+	case task := <-taskC:
+		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
 		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
 		return task, nil
 	case task := <-queryTaskC:
 		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
 		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
 		return task, nil
-	case <-ctx.Done():
-		tm.scope().IncCounter(metrics.PollTimeoutPerTaskQueueCounter)
-		return nil, ErrNoTasks
 	case token := <-tm.fwdrPollReqTokenC():
 		if task, err := tm.fwdr.ForwardPoll(ctx); err == nil {
 			token.release()
 			return task, nil
 		}
 		token.release()
-		return tm.poll(ctx, taskC, queryTaskC)
-	}
-}
-
-func (tm *TaskMatcher) poll(
-	ctx context.Context,
-	taskC <-chan *internalTask,
-	queryTaskC <-chan *internalTask,
-) (*internalTask, error) {
-	select {
-	case task := <-taskC:
-		if task.responseC != nil {
-			tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
-		}
-		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
-		return task, nil
-	case task := <-queryTaskC:
-		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
-		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
-		return task, nil
-	case <-ctx.Done():
-		tm.scope().IncCounter(metrics.PollTimeoutPerTaskQueueCounter)
-		return nil, ErrNoTasks
-	}
-}
-
-func (tm *TaskMatcher) pollNonBlocking(
-	taskC <-chan *internalTask,
-	queryTaskC <-chan *internalTask,
-) (*internalTask, error) {
-	select {
-	case task := <-taskC:
-		if task.responseC != nil {
-			tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
-		}
-		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
-		return task, nil
-	case task := <-queryTaskC:
-		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
-		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
-		return task, nil
-	default:
-		return nil, ErrNoTasks
+		return tm.poll(ctx, queryOnly)
 	}
 }
 
 func (tm *TaskMatcher) fwdrPollReqTokenC() <-chan *ForwarderReqToken {
 	if tm.fwdr == nil {
-		return noopForwarderTokenC
+		return nil
 	}
 	return tm.fwdr.PollReqTokenC()
 }
 
 func (tm *TaskMatcher) fwdrAddReqTokenC() <-chan *ForwarderReqToken {
 	if tm.fwdr == nil {
-		return noopForwarderTokenC
+		return nil
 	}
 	return tm.fwdr.AddReqTokenC()
 }
