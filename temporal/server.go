@@ -367,6 +367,7 @@ func (s *Server) newBootstrapParams(
 	} else {
 		params.ClaimMapper = authorization.NewNoopClaimMapper()
 	}
+	params.AudienceGetter = s.so.audienceGetter
 
 	params.PersistenceServiceResolver = s.so.persistenceServiceResolver
 

@@ -72,6 +72,7 @@ type (
 		Authorizer                   authorization.Authorizer
 		ClaimMapper                  authorization.ClaimMapper
 		PersistenceServiceResolver   resolver.ServiceResolver
+		AudienceGetter               authorization.JWTAudienceMapper
 	}
 
 	// MembershipMonitorFactory provides a bootstrapped membership monitor

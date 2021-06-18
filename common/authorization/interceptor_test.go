@@ -93,7 +93,8 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 		s.mockClaimMapper,
 		s.mockAuthorizer,
 		s.mockMetricsClient,
-		log.NewNoopLogger())
+		log.NewNoopLogger(),
+		nil)
 	s.handler = func(ctx context.Context, req interface{}) (interface{}, error) { return true, nil }
 }
 

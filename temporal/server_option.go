@@ -94,6 +94,13 @@ func WithClaimMapper(claimMapper func(cfg *config.Config) authorization.ClaimMap
 	})
 }
 
+// Configures JWT audience getter for authorization
+func WithAudienceGetter(audienceGetter func(cfg *config.Config) authorization.JWTAudienceMapper) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.audienceGetter = audienceGetter(s.config)
+	})
+}
+
 // Set custom metric reporter
 // for (deprecated) Tally it should be tally.BaseStatsReporter
 // for Prometheus with framework metrics.FrameworkCustom it should be metrics.Reporter
