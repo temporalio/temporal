@@ -97,6 +97,7 @@ func NewService(
 	if err != nil {
 		logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
+
 	grpcServerOptions = append(
 		grpcServerOptions,
 		grpc.ChainUnaryInterceptor(
