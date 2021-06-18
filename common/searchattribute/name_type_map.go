@@ -94,3 +94,14 @@ func (m NameTypeMap) GetType(name string) (enumspb.IndexedValueType, error) {
 	}
 	return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, fmt.Errorf("%w: %s", ErrInvalidName, name)
 }
+
+func (m NameTypeMap) canBeSet(name string) bool {
+	if _, cbs := canBeSet[name]; cbs {
+		return true
+	}
+	if len(m.customSearchAttributes) == 0 {
+		return false
+	}
+	_, isCustom := m.customSearchAttributes[name]
+	return isCustom
+}

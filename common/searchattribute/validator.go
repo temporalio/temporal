@@ -96,14 +96,15 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 	}
 
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
-		if IsReservedField(saName) {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is Temporal reserved field name", saName))
-		}
-
 		saType, err := typeMap.GetType(saName)
 		if err != nil {
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is not a valid search attribute name", saName))
 		}
+
+		if !typeMap.canBeSet(saName) {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s attribute can't be set in SearchAttributes: reserved field name", saName))
+		}
+
 		_, err = DecodeValue(saPayload, saType)
 		if err != nil {
 			var invalidValue interface{}

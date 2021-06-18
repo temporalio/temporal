@@ -30,18 +30,19 @@ import (
 
 const (
 	// Indexed fields on ES.
-	NamespaceID           = "NamespaceId"
-	WorkflowID            = "WorkflowId"
-	RunID                 = "RunId"
-	WorkflowType          = "WorkflowType"
-	StartTime             = "StartTime"
-	ExecutionTime         = "ExecutionTime"
-	CloseTime             = "CloseTime"
-	ExecutionStatus       = "ExecutionStatus"
-	TaskQueue             = "TaskQueue"
-	HistoryLength         = "HistoryLength"
-	ExecutionDuration     = "ExecutionDuration"
-	StateTransitionCount  = "StateTransitionCount"
+	NamespaceID          = "NamespaceId"
+	WorkflowID           = "WorkflowId"
+	RunID                = "RunId"
+	WorkflowType         = "WorkflowType"
+	StartTime            = "StartTime"
+	ExecutionTime        = "ExecutionTime"
+	CloseTime            = "CloseTime"
+	ExecutionStatus      = "ExecutionStatus"
+	TaskQueue            = "TaskQueue"
+	HistoryLength        = "HistoryLength"
+	ExecutionDuration    = "ExecutionDuration"
+	StateTransitionCount = "StateTransitionCount"
+
 	TemporalChangeVersion = "TemporalChangeVersion"
 	BinaryChecksums       = "BinaryChecksums"
 	BatcherNamespace      = "BatcherNamespace"
@@ -55,38 +56,54 @@ const (
 
 var (
 	// reservedFields are internal field names that can't be used as search attribute names.
+	// All from const section above.
 	reservedFields = map[string]struct{}{
-		NamespaceID:       {},
-		WorkflowID:        {},
-		RunID:             {},
-		WorkflowType:      {},
-		StartTime:         {},
-		ExecutionTime:     {},
-		CloseTime:         {},
-		ExecutionStatus:   {},
-		TaskQueue:         {},
-		HistoryLength:     {},
-		ExecutionDuration: {},
+		NamespaceID:          {},
+		WorkflowID:           {},
+		RunID:                {},
+		WorkflowType:         {},
+		StartTime:            {},
+		ExecutionTime:        {},
+		CloseTime:            {},
+		ExecutionStatus:      {},
+		TaskQueue:            {},
+		HistoryLength:        {},
+		ExecutionDuration:    {},
+		StateTransitionCount: {},
+
+		TemporalChangeVersion: {},
+		BinaryChecksums:       {},
+		BatcherNamespace:      {},
+		BarcherUser:           {},
 
 		MemoEncoding:      {},
 		Memo:              {},
 		VisibilityTaskKey: {},
 	}
 
+	// canBeSet are internal search attributes which are passed using SearchAttributes object together with custom search attributes.
+	canBeSet = map[string]struct{}{
+		TemporalChangeVersion: {},
+		BinaryChecksums:       {},
+		BatcherNamespace:      {},
+		BarcherUser:           {},
+	}
+
 	// system are default internal system search attributes which are shown to the users.
 	// Note: NamespaceID is not included because it is not exposed.
 	system = map[string]enumspb.IndexedValueType{
-		WorkflowID:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		RunID:                 enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		WorkflowType:          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		StartTime:             enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		ExecutionTime:         enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		CloseTime:             enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		ExecutionStatus:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TaskQueue:             enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		HistoryLength:         enumspb.INDEXED_VALUE_TYPE_INT,
-		ExecutionDuration:     enumspb.INDEXED_VALUE_TYPE_INT,
-		StateTransitionCount:  enumspb.INDEXED_VALUE_TYPE_INT,
+		WorkflowID:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		RunID:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		WorkflowType:         enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		StartTime:            enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		ExecutionTime:        enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		CloseTime:            enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		ExecutionStatus:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TaskQueue:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		HistoryLength:        enumspb.INDEXED_VALUE_TYPE_INT,
+		ExecutionDuration:    enumspb.INDEXED_VALUE_TYPE_INT,
+		StateTransitionCount: enumspb.INDEXED_VALUE_TYPE_INT,
+
 		TemporalChangeVersion: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		BinaryChecksums:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		BatcherNamespace:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,

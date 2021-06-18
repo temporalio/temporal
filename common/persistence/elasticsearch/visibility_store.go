@@ -136,6 +136,7 @@ func (s *visibilityStore) RecordWorkflowExecutionClosed(request *persistence.Int
 	doc[searchattribute.CloseTime] = request.CloseTime
 	doc[searchattribute.ExecutionDuration] = request.CloseTime.Sub(request.ExecutionTime).Nanoseconds()
 	doc[searchattribute.HistoryLength] = request.HistoryLength
+	doc[searchattribute.StateTransitionCount] = request.StateTransitionCount
 
 	return s.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
 }
@@ -887,16 +888,15 @@ func (s *visibilityStore) serializePageToken(token *visibilityPageToken) ([]byte
 
 func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityRequestBase, visibilityTaskKey string) map[string]interface{} {
 	doc := map[string]interface{}{
-		searchattribute.VisibilityTaskKey:    visibilityTaskKey,
-		searchattribute.NamespaceID:          request.NamespaceID,
-		searchattribute.WorkflowID:           request.WorkflowID,
-		searchattribute.RunID:                request.RunID,
-		searchattribute.WorkflowType:         request.WorkflowTypeName,
-		searchattribute.StartTime:            request.StartTime,
-		searchattribute.ExecutionTime:        request.ExecutionTime,
-		searchattribute.ExecutionStatus:      request.Status.String(),
-		searchattribute.TaskQueue:            request.TaskQueue,
-		searchattribute.StateTransitionCount: request.StateTransitionCount,
+		searchattribute.VisibilityTaskKey: visibilityTaskKey,
+		searchattribute.NamespaceID:       request.NamespaceID,
+		searchattribute.WorkflowID:        request.WorkflowID,
+		searchattribute.RunID:             request.RunID,
+		searchattribute.WorkflowType:      request.WorkflowTypeName,
+		searchattribute.StartTime:         request.StartTime,
+		searchattribute.ExecutionTime:     request.ExecutionTime,
+		searchattribute.ExecutionStatus:   request.Status.String(),
+		searchattribute.TaskQueue:         request.TaskQueue,
 	}
 
 	if len(request.Memo.GetData()) > 0 {
