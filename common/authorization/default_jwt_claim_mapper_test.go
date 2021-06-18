@@ -130,6 +130,7 @@ func (s *defaultClaimMapperSuite) TestTokenWithAdminPermissions() {
 		nil,
 		nil,
 		"",
+		"",
 	}
 	claims, err := s.claimMapper.GetClaims(authInfo)
 	s.NoError(err)
@@ -148,6 +149,7 @@ func (s *defaultClaimMapperSuite) TestTokenWithReaderWriterWorkerPermissions() {
 		nil,
 		nil,
 		"",
+		"test-audience",
 	}
 	claims, err := s.claimMapper.GetClaims(authInfo)
 	s.NoError(err)
@@ -166,6 +168,48 @@ func (s *defaultClaimMapperSuite) TestGetClaimMapperFromConfigDefault() {
 
 func (s *defaultClaimMapperSuite) TestGetClaimMapperFromConfigUnknown() {
 	s.testGetClaimMapperFromConfig("foo", false, nil)
+}
+
+func (s *defaultClaimMapperSuite) TestWrongAudience() {
+	tokenString, err := s.tokenGenerator.generateToken(testSubject, permissionsAdmin, errorTestOptionNoError)
+	s.NoError(err)
+	authInfo := &AuthInfo{
+		AddBearer(tokenString),
+		nil,
+		nil,
+		"",
+		"foo",
+	}
+	_, err = s.claimMapper.GetClaims(authInfo)
+	s.Error(err)
+}
+
+func (s *defaultClaimMapperSuite) TestCorrectAudience() {
+	tokenString, err := s.tokenGenerator.generateToken(testSubject, permissionsAdmin, errorTestOptionNoError)
+	s.NoError(err)
+	authInfo := &AuthInfo{
+		AddBearer(tokenString),
+		nil,
+		nil,
+		"",
+		"test-audience",
+	}
+	_, err = s.claimMapper.GetClaims(authInfo)
+	s.NoError(err)
+}
+
+func (s *defaultClaimMapperSuite) TestIgnoreAudience() {
+	tokenString, err := s.tokenGenerator.generateToken(testSubject, permissionsAdmin, errorTestOptionNoError)
+	s.NoError(err)
+	authInfo := &AuthInfo{
+		AddBearer(tokenString),
+		nil,
+		nil,
+		"",
+		"",
+	}
+	_, err = s.claimMapper.GetClaims(authInfo)
+	s.NoError(err)
 }
 
 func (s *defaultClaimMapperSuite) testGetClaimMapperFromConfig(name string, valid bool, cmType reflect.Type) {
@@ -222,6 +266,7 @@ func (tg *tokenGenerator) generateToken(subject string, permissions []string, op
 		jwt.StandardClaims{
 			ExpiresAt: jwt.At(time.Now().Add(time.Hour)),
 			Issuer:    "test",
+			Audience:  []string{"test-audience"},
 		},
 	}
 	if options&errorTestOptionNoSubject == 0 {

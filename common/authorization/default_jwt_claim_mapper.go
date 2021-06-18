@@ -78,7 +78,7 @@ func (a *defaultJWTClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 	if !strings.EqualFold(parts[0], authorizationBearer) {
 		return nil, serviceerror.NewPermissionDenied("unexpected name in authorization token", "")
 	}
-	jwtClaims, err := parseJWT(parts[1], a.keyProvider)
+	jwtClaims, err := parseJWTWithAudience(parts[1], a.keyProvider, authInfo.Audience)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +125,18 @@ func (a *defaultJWTClaimMapper) extractPermissions(permissions []interface{}, cl
 }
 
 func parseJWT(tokenString string, keyProvider TokenKeyProvider) (jwt.MapClaims, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+	return parseJWTWithAudience(tokenString, keyProvider, "")
+}
+
+func parseJWTWithAudience(tokenString string, keyProvider TokenKeyProvider, audience string) (jwt.MapClaims, error) {
+
+	var parser *jwt.Parser
+	if strings.TrimSpace(audience) == "" {
+		parser = jwt.NewParser(jwt.WithoutAudienceValidation())
+	} else {
+		parser = jwt.NewParser(jwt.WithAudience(audience))
+	}
+	token, err := parser.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 
 		kid, ok := token.Header["kid"].(string)
 		if !ok {

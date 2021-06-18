@@ -327,6 +327,7 @@ func NewService(
 				params.Authorizer,
 				serviceResource.GetMetricsClient(),
 				params.Logger,
+				params.AudienceGetter,
 			),
 		),
 	)
