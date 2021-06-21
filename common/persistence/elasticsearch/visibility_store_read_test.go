@@ -741,11 +741,11 @@ func (s *ESVisibilitySuite) TestGetESQueryDSL() {
 	// Wrong dates goes directly to Elasticsearch and it return an error.
 	s.NoError(err)
 
-	token = s.getTokenHelper(1)
+	token = s.getTokenHelper("2021-08-22T01:02:03Z")
 	request.Query = `WorkflowId = 'wid'`
 	dsl, err = v.getESQueryDSL(request, token)
 	s.Nil(err)
-	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowId":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunId":"desc"}],"search_after":[1,"t"]}`, dsl)
+	s.Equal(`{"query":{"bool":{"must":[{"match_phrase":{"NamespaceId":{"query":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}},{"bool":{"must":[{"match_phrase":{"WorkflowId":{"query":"wid"}}}]}}]}},"from":0,"size":10,"sort":[{"StartTime":"desc"},{"RunId":"desc"}],"search_after":["2021-08-22T01:02:03Z","t"]}`, dsl)
 
 	// invalid union injection
 	request.Query = `WorkflowId = 'wid' union select * from dummy`

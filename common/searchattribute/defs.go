@@ -29,7 +29,6 @@ import (
 )
 
 const (
-	// Indexed fields on ES.
 	NamespaceID          = "NamespaceId"
 	WorkflowID           = "WorkflowId"
 	RunID                = "RunId"
@@ -46,51 +45,15 @@ const (
 	TemporalChangeVersion = "TemporalChangeVersion"
 	BinaryChecksums       = "BinaryChecksums"
 	BatcherNamespace      = "BatcherNamespace"
-	BarcherUser           = "BarcherUser"
+	BatcherUser           = "BatcherUser"
 
-	// Reserved non-indexed fields on ES.
 	MemoEncoding      = "MemoEncoding"
 	Memo              = "Memo"
 	VisibilityTaskKey = "VisibilityTaskKey"
 )
 
 var (
-	// reservedFields are internal field names that can't be used as search attribute names.
-	// All from const section above.
-	reservedFields = map[string]struct{}{
-		NamespaceID:          {},
-		WorkflowID:           {},
-		RunID:                {},
-		WorkflowType:         {},
-		StartTime:            {},
-		ExecutionTime:        {},
-		CloseTime:            {},
-		ExecutionStatus:      {},
-		TaskQueue:            {},
-		HistoryLength:        {},
-		ExecutionDuration:    {},
-		StateTransitionCount: {},
-
-		TemporalChangeVersion: {},
-		BinaryChecksums:       {},
-		BatcherNamespace:      {},
-		BarcherUser:           {},
-
-		MemoEncoding:      {},
-		Memo:              {},
-		VisibilityTaskKey: {},
-	}
-
-	// canBeSet are internal search attributes which are passed using SearchAttributes object together with custom search attributes.
-	canBeSet = map[string]struct{}{
-		TemporalChangeVersion: {},
-		BinaryChecksums:       {},
-		BatcherNamespace:      {},
-		BarcherUser:           {},
-	}
-
-	// system are default internal system search attributes which are shown to the users.
-	// Note: NamespaceID is not included because it is not exposed.
+	// system are internal search attributes which are passed and stored as separate fields.
 	system = map[string]enumspb.IndexedValueType{
 		WorkflowID:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		RunID:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -103,18 +66,35 @@ var (
 		HistoryLength:        enumspb.INDEXED_VALUE_TYPE_INT,
 		ExecutionDuration:    enumspb.INDEXED_VALUE_TYPE_INT,
 		StateTransitionCount: enumspb.INDEXED_VALUE_TYPE_INT,
+	}
 
+	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
+	predefined = map[string]enumspb.IndexedValueType{
 		TemporalChangeVersion: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		BinaryChecksums:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		BatcherNamespace:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		BarcherUser:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BatcherUser:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
-	namespaceIDType = enumspb.INDEXED_VALUE_TYPE_KEYWORD
+	// reserved are internal field names that can't be used as search attribute names.
+	reserved = map[string]struct{}{
+		NamespaceID:       {},
+		MemoEncoding:      {},
+		Memo:              {},
+		VisibilityTaskKey: {},
+	}
 )
 
-// IsReservedField return true if field name is system reserved.
-func IsReservedField(fieldName string) bool {
-	_, ok := reservedFields[fieldName]
-	return ok
+// IsReserved return true if field name is system reserved and can't be used as custom search attribute name.
+func IsReserved(fieldName string) bool {
+	if _, ok := system[fieldName]; ok {
+		return true
+	}
+	if _, ok := predefined[fieldName]; ok {
+		return true
+	}
+	if _, ok := reserved[fieldName]; ok {
+		return true
+	}
+	return false
 }
