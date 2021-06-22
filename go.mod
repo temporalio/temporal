@@ -18,12 +18,11 @@ require (
 	github.com/emirpasic/gods v0.0.0-20190624094223-e689965507ab
 	github.com/fatih/color v1.10.0
 	github.com/go-sql-driver/mysql v1.5.0
-	github.com/gocql/gocql v0.0.0-20210425135552-909f2a77f46e
+	github.com/gocql/gocql v0.0.0-20210621133426-d83b80dfb480
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/mock v1.5.0
-	github.com/golang/snappy v0.0.3 // indirect
 	github.com/google/uuid v1.2.0
 	github.com/gorilla/websocket v1.4.2
 	github.com/hashicorp/go-hclog v0.16.0
@@ -43,6 +42,7 @@ require (
 	github.com/olivere/elastic v6.2.35+incompatible
 	github.com/olivere/elastic/v7 v7.0.24
 	github.com/pborman/uuid v1.2.1
+	github.com/pierrec/lz4/v4 v4.1.8 // indirect
 	github.com/prometheus/procfs v0.6.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
