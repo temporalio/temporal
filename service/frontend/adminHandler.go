@@ -273,20 +273,7 @@ func (adh *AdminHandler) RemoveSearchAttributes(ctx context.Context, request *ad
 		return nil, adh.error(serviceerror.NewInternal(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err)), scope)
 	}
 
-	// Get current state and return it.
-	resp, err := adh.getSearchAttributes(ctx, indexName, "")
-	if err != nil {
-		// Don't return error in case of getSearchAttributes error. Just log it.
-		adh.GetLogger().Error("Unable to get search attributes back while adding them.", tag.Error(err))
-		metricsGetSearchAttributesScope := adh.GetMetricsClient().Scope(metrics.AdminGetSearchAttributesScope)
-		metricsGetSearchAttributesScope.IncCounter(metrics.ServiceFailures)
-	}
-
-	return &adminservice.RemoveSearchAttributesResponse{
-		CustomAttributes: resp.GetCustomAttributes(),
-		SystemAttributes: resp.GetSystemAttributes(),
-		Mapping:          resp.GetMapping(),
-	}, nil
+	return &adminservice.RemoveSearchAttributesResponse{}, nil
 }
 
 func (adh *AdminHandler) GetSearchAttributes(ctx context.Context, request *adminservice.GetSearchAttributesRequest) (_ *adminservice.GetSearchAttributesResponse, retError error) {

@@ -45,6 +45,7 @@ type (
 		GetCustomAttributes() map[string]enumspb.IndexedValueType
 		GetSystemAttributes() map[string]enumspb.IndexedValueType
 		GetMapping() map[string]string
+		GetAddWorkflowExecutionInfo() *workflowpb.WorkflowExecutionInfo
 	}
 )
 
@@ -108,10 +109,20 @@ func AdminRemoveSearchAttributes(c *cli.Context) {
 		IndexName:        c.String(FlagIndex),
 	}
 
-	resp, err := adminClient.RemoveSearchAttributes(ctx, request)
+	_, err := adminClient.RemoveSearchAttributes(ctx, request)
 	if err != nil {
-		ErrorAndExit("Unable to add search attributes.", err)
+		ErrorAndExit("Unable to remove search attributes.", err)
 	}
+
+	getRequest := &adminservice.GetSearchAttributesRequest{
+		IndexName: request.IndexName,
+	}
+
+	resp, err := adminClient.GetSearchAttributes(ctx, getRequest)
+	if err != nil {
+		ErrorAndExit("Search attributes have been removed successfully but there was an error while reading them back.", err)
+	}
+
 	printSearchAttributesResponse(resp, request.GetIndexName())
 	color.HiGreen("Search attributes have been removed successfully.")
 }
@@ -156,17 +167,13 @@ func printSearchAttributesResponse(resp searchAttributesResponse, indexName stri
 	table.AppendBulk(rows)
 	table.Render()
 
-	if respWithAWEI, hasAddWorkflowExecutionInfo := resp.(interface {
-		GetAddWorkflowExecutionInfo() *workflowpb.WorkflowExecutionInfo
-	}); hasAddWorkflowExecutionInfo {
-		color.Cyan("Workflow info:\n")
-		prettyPrintJSONObject(&clispb.WorkflowExecutionInfo{
-			Execution: respWithAWEI.GetAddWorkflowExecutionInfo().GetExecution(),
-			StartTime: respWithAWEI.GetAddWorkflowExecutionInfo().GetStartTime(),
-			CloseTime: respWithAWEI.GetAddWorkflowExecutionInfo().GetCloseTime(),
-			Status:    respWithAWEI.GetAddWorkflowExecutionInfo().GetStatus(),
-		})
-	}
+	color.Cyan("Workflow info:\n")
+	prettyPrintJSONObject(&clispb.WorkflowExecutionInfo{
+		Execution: resp.GetAddWorkflowExecutionInfo().GetExecution(),
+		StartTime: resp.GetAddWorkflowExecutionInfo().GetStartTime(),
+		CloseTime: resp.GetAddWorkflowExecutionInfo().GetCloseTime(),
+		Status:    resp.GetAddWorkflowExecutionInfo().GetStatus(),
+	})
 }
 
 func printSearchAttributes(searchAttributes map[string]enumspb.IndexedValueType, header string) {

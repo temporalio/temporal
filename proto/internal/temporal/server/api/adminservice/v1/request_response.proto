@@ -166,9 +166,6 @@ message RemoveSearchAttributesRequest {
 }
 
 message RemoveSearchAttributesResponse {
-    map<string, temporal.api.enums.v1.IndexedValueType> custom_attributes = 1;
-    map<string, temporal.api.enums.v1.IndexedValueType> system_attributes = 2;
-    map<string, string> mapping = 3;
 }
 
 message GetSearchAttributesRequest {
