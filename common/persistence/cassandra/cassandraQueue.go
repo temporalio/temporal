@@ -31,7 +31,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
@@ -60,16 +59,6 @@ type (
 		logger    log.Logger
 		cassandraStore
 	}
-
-	// Note that this struct is defined in the cassandra package not the persistence interface
-	// because we only have ack levels in metadata (version is a cassandra only concept because
-	// of the CAS operation). Consider moving this to persistence interface if we end up having
-	// more shared fields.
-	queueMetadata struct {
-		clusterAckLevels map[string]int64
-		// version is used for CAS operation.
-		version int64
-	}
 )
 
 func newQueue(
@@ -87,14 +76,19 @@ func newQueue(
 		logger:         logger,
 		queueType:      queueType,
 	}
-	if err := queue.initializeQueueMetadata(); err != nil {
-		return nil, err
-	}
-	if err := queue.initializeDLQMetadata(); err != nil {
-		return nil, err
-	}
 
 	return queue, nil
+}
+
+func (q *cassandraQueue) Init(blob *commonpb.DataBlob) error {
+	if err := q.initializeQueueMetadata(blob); err != nil {
+		return err
+	}
+	if err := q.initializeDLQMetadata(blob); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (q *cassandraQueue) EnqueueMessage(
@@ -256,55 +250,41 @@ func (q *cassandraQueue) RangeDeleteMessagesFromDLQ(
 	return nil
 }
 
-func (q *cassandraQueue) UpdateAckLevel(
-	messageID int64,
-	clusterName string,
-) error {
-
-	return q.updateAckLevel(messageID, clusterName, q.queueType)
+func (q *cassandraQueue) UpdateAckLevel(metadata *persistence.InternalQueueMetadata) error {
+	return q.updateAckLevel(metadata, q.queueType)
 }
 
-func (q *cassandraQueue) GetAckLevels() (map[string]int64, error) {
+func (q *cassandraQueue) GetAckLevels() (*persistence.InternalQueueMetadata, error) {
 	queueMetadata, err := q.getQueueMetadata(q.queueType)
 	if err != nil {
-		return nil, err
+		return nil, gocql.ConvertError("GetAckLevels", err)
 	}
 
-	return queueMetadata.clusterAckLevels, nil
+	return queueMetadata, nil
 }
 
-func (q *cassandraQueue) UpdateDLQAckLevel(
-	messageID int64,
-	clusterName string,
-) error {
-
-	return q.updateAckLevel(messageID, clusterName, q.getDLQTypeFromQueueType())
+func (q *cassandraQueue) UpdateDLQAckLevel(metadata *persistence.InternalQueueMetadata) error {
+	return q.updateAckLevel(metadata, q.getDLQTypeFromQueueType())
 }
 
-func (q *cassandraQueue) GetDLQAckLevels() (map[string]int64, error) {
-
+func (q *cassandraQueue) GetDLQAckLevels() (*persistence.InternalQueueMetadata, error) {
 	// Use negative queue type as the dlq type
 	queueMetadata, err := q.getQueueMetadata(q.getDLQTypeFromQueueType())
 	if err != nil {
-		return nil, err
+		return nil, gocql.ConvertError("GetDLQAckLevels", err)
 	}
 
-	return queueMetadata.clusterAckLevels, nil
+	return queueMetadata, nil
 }
 
 func (q *cassandraQueue) insertInitialQueueMetadataRecord(
 	queueType persistence.QueueType,
+	blob *commonpb.DataBlob,
 ) error {
 
 	version := 0
+	// TODO: remove once cluster_ack_level is removed from DB
 	clusterAckLevels := map[string]int64{}
-	blob, err := serialization.QueueMetadataToBlob(&persistencespb.QueueMetadata{
-		ClusterAckLevels: clusterAckLevels,
-	})
-	if err != nil {
-		return err
-	}
-
 	query := q.session.Query(templateInsertQueueMetadataQuery,
 		queueType,
 		clusterAckLevels,
@@ -312,7 +292,7 @@ func (q *cassandraQueue) insertInitialQueueMetadataRecord(
 		blob.EncodingType.String(),
 		version,
 	)
-	_, err = query.MapScanCAS(make(map[string]interface{}))
+	_, err := query.MapScanCAS(make(map[string]interface{}))
 	if err != nil {
 		return fmt.Errorf("failed to insert initial queue metadata record: %v, Type: %v", err, queueType)
 	}
@@ -322,7 +302,7 @@ func (q *cassandraQueue) insertInitialQueueMetadataRecord(
 
 func (q *cassandraQueue) getQueueMetadata(
 	queueType persistence.QueueType,
-) (*queueMetadata, error) {
+) (*persistence.InternalQueueMetadata, error) {
 
 	query := q.session.Query(templateGetQueueMetadataQuery, queueType)
 	message := make(map[string]interface{})
@@ -334,65 +314,30 @@ func (q *cassandraQueue) getQueueMetadata(
 	return convertQueueMetadata(message)
 }
 
-func (q *cassandraQueue) updateQueueMetadata(
-	metadata *queueMetadata,
+func (q *cassandraQueue) updateAckLevel(
+	metadata *persistence.InternalQueueMetadata,
 	queueType persistence.QueueType,
 ) error {
 
-	blob, err := serialization.QueueMetadataToBlob(&persistencespb.QueueMetadata{
-		ClusterAckLevels: metadata.clusterAckLevels,
-	})
-	if err != nil {
-		return err
-	}
+	// TODO: remove this once cluster_ack_level is removed from DB
+	metadataStruct, err := serialization.QueueMetadataFromBlob(metadata.Blob.Data, metadata.Blob.EncodingType.String())
 
 	query := q.session.Query(templateUpdateQueueMetadataQuery,
-		metadata.clusterAckLevels,
-		blob.Data,
-		blob.EncodingType.String(),
-		metadata.version,
+		metadataStruct.ClusterAckLevels,
+		metadata.Blob.Data,
+		metadata.Blob.EncodingType.String(),
+		metadata.Version+1, // always increase version number on update
 		queueType,
-		metadata.version-1,
+		metadata.Version, // condition update
 	)
 	applied, err := query.MapScanCAS(make(map[string]interface{}))
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("UpdateAckLevel operation failed. Error %v", err))
+		gocql.ConvertError("updateAckLevel", err)
 	}
 	if !applied {
-		return serviceerror.NewInternal(fmt.Sprintf("UpdateAckLevel operation encounter concurrent write."))
+		return &persistence.ConditionFailedError{Msg: "UpdateAckLevel operation encounter concurrent write."}
 	}
 
-	return nil
-}
-
-func (q *cassandraQueue) updateAckLevel(
-	messageID int64,
-	clusterName string,
-	queueType persistence.QueueType,
-) error {
-
-	queueMetadata, err := q.getQueueMetadata(queueType)
-	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("updateAckLevel operation failed. Error %v", err))
-	}
-
-	// Ignore possibly delayed message
-	if ack, ok := queueMetadata.clusterAckLevels[clusterName]; ok && ack > messageID {
-		return nil
-	}
-
-	// TODO remove this block in 1.12.x
-	delete(queueMetadata.clusterAckLevels, "")
-	// TODO remove this block in 1.12.x
-
-	queueMetadata.clusterAckLevels[clusterName] = messageID
-	queueMetadata.version++
-
-	// Use negative queue type as the dlq type
-	err = q.updateQueueMetadata(queueMetadata, queueType)
-	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("UpdateDLQAckLevel operation failed. Error %v", err))
-	}
 	return nil
 }
 
@@ -406,18 +351,18 @@ func (q *cassandraQueue) getDLQTypeFromQueueType() persistence.QueueType {
 	return -q.queueType
 }
 
-func (q *cassandraQueue) initializeQueueMetadata() error {
+func (q *cassandraQueue) initializeQueueMetadata(blob *commonpb.DataBlob) error {
 	_, err := q.getQueueMetadata(q.queueType)
 	if gocql.IsNotFoundError(err) {
-		return q.insertInitialQueueMetadataRecord(q.queueType)
+		return q.insertInitialQueueMetadataRecord(q.queueType, blob)
 	}
 	return err
 }
 
-func (q *cassandraQueue) initializeDLQMetadata() error {
+func (q *cassandraQueue) initializeDLQMetadata(blob *commonpb.DataBlob) error {
 	_, err := q.getQueueMetadata(q.getDLQTypeFromQueueType())
 	if gocql.IsNotFoundError(err) {
-		return q.insertInitialQueueMetadataRecord(q.getDLQTypeFromQueueType())
+		return q.insertInitialQueueMetadataRecord(q.getDLQTypeFromQueueType(), blob)
 	}
 	return err
 }
@@ -441,30 +386,25 @@ func convertQueueMessage(
 
 func convertQueueMetadata(
 	message map[string]interface{},
-) (*queueMetadata, error) {
+) (*persistence.InternalQueueMetadata, error) {
 
-	metadata := &queueMetadata{
-		version: message["version"].(int64),
+	metadata := &persistence.InternalQueueMetadata{
+		Version: message["version"].(int64),
 	}
-
 	_, ok := message["cluster_ack_level"]
 	if ok {
 		clusterAckLevel := message["cluster_ack_level"].(map[string]int64)
-		metadata.clusterAckLevels = clusterAckLevel
+		// TODO: remove this once we remove cluster_ack_level from DB.
+		blob, err := serialization.QueueMetadataToBlob(&persistencespb.QueueMetadata{ClusterAckLevels: clusterAckLevel})
+		if err != nil {
+			return nil, err
+		}
+		metadata.Blob = &blob
 	} else {
 		data := message["data"].([]byte)
 		encoding := message["data_encoding"].(string)
 
-		clusterAckLevels, err := serialization.QueueMetadataFromBlob(data, encoding)
-		if err != nil {
-			return nil, err
-		}
-
-		metadata.clusterAckLevels = clusterAckLevels.ClusterAckLevels
-	}
-
-	if metadata.clusterAckLevels == nil {
-		metadata.clusterAckLevels = make(map[string]int64)
+		metadata.Blob = persistence.NewDataBlob(data, encoding)
 	}
 
 	return metadata, nil

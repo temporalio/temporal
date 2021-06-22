@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -55,7 +56,7 @@ type (
 	transferQueueTaskExecutorBase struct {
 		shard                    shard.Context
 		historyService           *historyEngineImpl
-		cache                    *historyCache
+		cache                    *workflow.Cache
 		logger                   log.Logger
 		metricsClient            metrics.Client
 		matchingClient           matchingservice.MatchingServiceClient

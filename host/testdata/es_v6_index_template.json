@@ -34,14 +34,14 @@
         "CloseTime": {
           "type": "date"
         },
+        "ExecutionDuration": {
+          "type": "long"
+        },
         "ExecutionStatus": {
-          "type": "integer"
+          "type": "keyword"
         },
         "HistoryLength": {
-          "type": "integer"
-        },
-        "Encoding": {
-          "type": "keyword"
+          "type": "long"
         },
         "TemporalChangeVersion": {
           "type": "keyword"
@@ -65,14 +65,17 @@
         "CustomDatetimeField": {
           "type": "date"
         },
-        "CustomNamespace": {
+        "BatcherNamespace": {
           "type": "keyword"
         },
-        "Operator": {
+        "BatcherUser": {
           "type": "keyword"
         },
         "BinaryChecksums": {
           "type": "keyword"
+        },
+        "StateTransitionCount": {
+          "type": "long"
         }
       }
     }

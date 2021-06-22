@@ -104,7 +104,7 @@ func ListBatchJobs(c *cli.Context) {
 	resp, err := client.ListWorkflow(tcCtx, &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: common.SystemLocalNamespace,
 		PageSize:  int32(pageSize),
-		Query:     fmt.Sprintf("CustomNamespace = '%v'", namespace),
+		Query:     fmt.Sprintf("%s = '%s'", searchattribute.BatcherNamespace, namespace),
 	})
 	if err != nil {
 		ErrorAndExit("Failed to list batch jobs", err)
@@ -118,7 +118,7 @@ func ListBatchJobs(c *cli.Context) {
 			ErrorAndExit("Failed to deserialize reason memo field", err)
 		}
 
-		err = payload.Decode(wf.SearchAttributes.IndexedFields["Operator"], &operator)
+		err = payload.Decode(wf.SearchAttributes.IndexedFields[searchattribute.BatcherUser], &operator)
 		if err != nil {
 			ErrorAndExit("Failed to deserialize operator search attribute", err)
 		}
@@ -195,8 +195,8 @@ func StartBatchJob(c *cli.Context) {
 			"Reason": reason,
 		},
 		SearchAttributes: map[string]interface{}{
-			searchattribute.CustomNamespace: namespace,
-			searchattribute.Operator:        operator,
+			searchattribute.BatcherNamespace: namespace,
+			searchattribute.BatcherUser:      operator,
 		},
 	}
 

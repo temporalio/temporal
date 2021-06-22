@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -116,11 +117,11 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		execution,
-		callerTypeTask,
+		workflow.CallerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -140,15 +141,15 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	timerFired := false
 
 Loop:
-	for _, timerSequenceID := range timerSequence.loadAndSortUserTimers() {
-		timerInfo, ok := mutableState.GetUserTimerInfoByEventID(timerSequenceID.eventID)
+	for _, timerSequenceID := range timerSequence.LoadAndSortUserTimers() {
+		timerInfo, ok := mutableState.GetUserTimerInfoByEventID(timerSequenceID.EventID)
 		if !ok {
-			errString := fmt.Sprintf("failed to find in user timer event ID: %v", timerSequenceID.eventID)
+			errString := fmt.Sprintf("failed to find in user timer event ID: %v", timerSequenceID.EventID)
 			t.logger.Error(errString)
 			return serviceerror.NewInternal(errString)
 		}
 
-		if expired := timerSequence.isExpired(referenceTime, timerSequenceID); !expired {
+		if expired := timerSequence.IsExpired(referenceTime, timerSequenceID); !expired {
 			// timer sequence IDs are sorted, once there is one timer
 			// sequence ID not expired, all after that wil not expired
 			break Loop
@@ -174,11 +175,11 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		execution,
-		callerTypeTask,
+		workflow.CallerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -207,7 +208,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	activityInfo, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(task.GetEventId())
 	goVisibilityTS := timestamp.TimeValue(task.VisibilityTime)
 	if isHeartBeatTask && ok && (heartbeatTimeoutVis.Before(goVisibilityTS) || heartbeatTimeoutVis.Equal(goVisibilityTS)) {
-		activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ timerTaskStatusCreatedHeartbeat
+		activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ workflow.TimerTaskStatusCreatedHeartbeat
 		if err := mutableState.UpdateActivity(activityInfo); err != nil {
 			return err
 		}
@@ -215,9 +216,9 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	}
 
 Loop:
-	for _, timerSequenceID := range timerSequence.loadAndSortActivityTimers() {
-		activityInfo, ok := mutableState.GetActivityInfo(timerSequenceID.eventID)
-		if !ok || timerSequenceID.attempt < activityInfo.Attempt {
+	for _, timerSequenceID := range timerSequence.LoadAndSortActivityTimers() {
+		activityInfo, ok := mutableState.GetActivityInfo(timerSequenceID.EventID)
+		if !ok || timerSequenceID.Attempt < activityInfo.Attempt {
 			// handle 2 cases:
 			// 1. !ok
 			//  this case can happen since each activity can have 4 timers
@@ -227,13 +228,13 @@ Loop:
 			continue Loop
 		}
 
-		if expired := timerSequence.isExpired(referenceTime, timerSequenceID); !expired {
+		if expired := timerSequence.IsExpired(referenceTime, timerSequenceID); !expired {
 			// timer sequence IDs are sorted, once there is one timer
 			// sequence ID not expired, all after that wil not expired
 			break Loop
 		}
 
-		timeoutFailure := failure.NewTimeoutFailure("activity timeout", timerSequenceID.timerType)
+		timeoutFailure := failure.NewTimeoutFailure("activity timeout", timerSequenceID.TimerType)
 		var retryState enumspb.RetryState
 		if retryState, err = mutableState.RetryActivity(
 			activityInfo,
@@ -255,7 +256,7 @@ Loop:
 		t.emitTimeoutMetricScopeWithNamespaceTag(
 			mutableState.GetExecutionInfo().NamespaceId,
 			metrics.TimerActiveTaskActivityTimeoutScope,
-			timerSequenceID.timerType,
+			timerSequenceID.TimerType,
 		)
 		if _, err := mutableState.AddActivityTaskTimedOutEvent(
 			activityInfo.ScheduleId,
@@ -282,11 +283,11 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		execution,
-		callerTypeTask,
+		workflow.CallerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -360,11 +361,11 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		execution,
-		callerTypeTask,
+		workflow.CallerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -401,11 +402,11 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		execution,
-		callerTypeTask,
+		workflow.CallerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -493,11 +494,11 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	weContext, release, err := t.cache.getOrCreateWorkflowExecution(
+	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		execution,
-		callerTypeTask,
+		workflow.CallerTypeTask,
 	)
 	if err != nil {
 		return err
@@ -545,7 +546,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 
 	// No more retries, or workflow is expired.
 	if backoffInterval == backoff.NoBackoff {
-		if err := timeoutWorkflow(mutableState, eventBatchFirstEventID, retryState); err != nil {
+		if err := workflow.TimeoutWorkflow(mutableState, eventBatchFirstEventID, retryState); err != nil {
 			return err
 		}
 
@@ -577,7 +578,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		Memo:                 startAttributes.Memo,
 		SearchAttributes:     startAttributes.SearchAttributes,
 	}
-	newMutableState, err := retryWorkflow(
+	newMutableState, err := workflow.RetryWorkflow(
 		mutableState,
 		eventBatchFirstEventID,
 		startAttributes.GetParentWorkflowNamespace(),
@@ -589,9 +590,9 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 
 	newExecutionInfo := newMutableState.GetExecutionInfo()
 	newExecutionState := newMutableState.GetExecutionState()
-	return weContext.updateWorkflowExecutionWithNewAsActive(
+	return weContext.UpdateWorkflowExecutionWithNewAsActive(
 		t.shard.GetTimeSource().Now(),
-		newWorkflowExecutionContext(
+		workflow.NewContext(
 			newExecutionInfo.NamespaceId,
 			commonpb.WorkflowExecution{
 				WorkflowId: newExecutionInfo.WorkflowId,
@@ -606,30 +607,30 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 }
 
 func (t *timerQueueActiveTaskExecutor) getTimerSequence(
-	mutableState mutableState,
-) timerSequence {
+	mutableState workflow.MutableState,
+) workflow.TimerSequence {
 
 	timeSource := t.shard.GetTimeSource()
-	return newTimerSequence(timeSource, mutableState)
+	return workflow.NewTimerSequence(timeSource, mutableState)
 }
 
 func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
-	context workflowExecutionContext,
-	mutableState mutableState,
+	context workflow.Context,
+	mutableState workflow.MutableState,
 	scheduleNewWorkflowTask bool,
 ) error {
 
 	var err error
 	if scheduleNewWorkflowTask {
 		// Schedule a new workflow task.
-		err = scheduleWorkflowTask(mutableState)
+		err = workflow.ScheduleWorkflowTask(mutableState)
 		if err != nil {
 			return err
 		}
 	}
 
 	now := t.shard.GetTimeSource().Now()
-	err = context.updateWorkflowExecutionAsActive(now)
+	err = context.UpdateWorkflowExecutionAsActive(now)
 	if err != nil {
 		if shard.IsShardOwnershipLostError(err) {
 			// Shard is stolen.  Stop timer processing to reduce duplicates

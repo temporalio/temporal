@@ -54,7 +54,7 @@ func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap *NameTypeMap
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
 		saType := enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
 		if typeMap != nil {
-			saType, _ = typeMap.GetType(saName)
+			saType, _ = typeMap.getType(saName, customCategory|predefinedCategory)
 		}
 		saValue, err := DecodeValue(saPayload, saType)
 		if err != nil {
@@ -111,7 +111,7 @@ func Parse(searchAttributesStr map[string]string, typeMap *NameTypeMap) (*common
 	for saName, saValStr := range searchAttributesStr {
 		saType := enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
 		if typeMap != nil {
-			saType, _ = typeMap.GetType(saName)
+			saType, _ = typeMap.getType(saName, customCategory|predefinedCategory)
 		}
 		saValPayload, err := parseValueOrArray(saValStr, saType)
 		if err != nil {

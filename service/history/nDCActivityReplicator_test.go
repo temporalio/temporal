@@ -54,6 +54,8 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -67,12 +69,12 @@ type (
 		mockTimerProcessor  *MocktimerQueueProcessor
 		mockNamespaceCache  *cache.MockNamespaceCache
 		mockClusterMetadata *cluster.MockMetadata
-		mockMutableState    *MockmutableState
+		mockMutableState    *workflow.MockMutableState
 
 		mockExecutionMgr *persistence.MockExecutionManager
 
 		logger       log.Logger
-		historyCache *historyCache
+		historyCache *workflow.Cache
 
 		nDCActivityReplicator *nDCActivityReplicatorImpl
 	}
@@ -95,7 +97,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockMutableState = NewMockmutableState(s.controller)
+	s.mockMutableState = workflow.NewMockMutableState(s.controller)
 	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
 	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
@@ -109,7 +111,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
-		NewDynamicConfigForTest(),
+		tests.NewDynamicConfig(),
 	)
 
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
@@ -121,7 +123,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	s.historyCache = newHistoryCache(s.mockShard)
+	s.historyCache = workflow.NewCache(s.mockShard)
 	engine := &historyEngineImpl{
 		currentClusterName: s.mockClusterMetadata.GetCurrentClusterName(),
 		shard:              s.mockShard,
@@ -318,8 +320,8 @@ func (s *activityReplicatorSuite) TestActivity_SameVersion_SameAttempt_IncomingH
 }
 
 func (s *activityReplicatorSuite) TestVersionHistory_LocalIsSuperSet() {
-	namespaceID := testNamespaceID
-	workflowID := testWorkflowID
+	namespaceID := tests.NamespaceID
+	workflowID := tests.WorkflowID
 	runID := uuid.New()
 	scheduleID := int64(99)
 	version := int64(100)
@@ -366,8 +368,8 @@ func (s *activityReplicatorSuite) TestVersionHistory_LocalIsSuperSet() {
 }
 
 func (s *activityReplicatorSuite) TestVersionHistory_IncomingIsSuperSet_NoResend() {
-	namespaceID := testNamespaceID
-	workflowID := testWorkflowID
+	namespaceID := tests.NamespaceID
+	workflowID := tests.WorkflowID
 	runID := uuid.New()
 	scheduleID := int64(99)
 	version := int64(100)
@@ -414,8 +416,8 @@ func (s *activityReplicatorSuite) TestVersionHistory_IncomingIsSuperSet_NoResend
 }
 
 func (s *activityReplicatorSuite) TestVersionHistory_IncomingIsSuperSet_Resend() {
-	namespaceID := testNamespaceID
-	workflowID := testWorkflowID
+	namespaceID := tests.NamespaceID
+	workflowID := tests.WorkflowID
 	runID := uuid.New()
 	scheduleID := int64(99)
 	version := int64(100)
@@ -471,8 +473,8 @@ func (s *activityReplicatorSuite) TestVersionHistory_IncomingIsSuperSet_Resend()
 }
 
 func (s *activityReplicatorSuite) TestVersionHistory_Diverge_LocalLarger() {
-	namespaceID := testNamespaceID
-	workflowID := testWorkflowID
+	namespaceID := tests.NamespaceID
+	workflowID := tests.WorkflowID
 	runID := uuid.New()
 	scheduleID := int64(99)
 	version := int64(100)
@@ -527,8 +529,8 @@ func (s *activityReplicatorSuite) TestVersionHistory_Diverge_LocalLarger() {
 }
 
 func (s *activityReplicatorSuite) TestVersionHistory_Diverge_IncomingLarger() {
-	namespaceID := testNamespaceID
-	workflowID := testWorkflowID
+	namespaceID := tests.NamespaceID
+	workflowID := tests.WorkflowID
 	runID := uuid.New()
 	scheduleID := int64(99)
 	version := int64(100)
@@ -593,7 +595,7 @@ func (s *activityReplicatorSuite) TestVersionHistory_Diverge_IncomingLarger() {
 
 func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
 	namespace := "some random namespace name"
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	version := int64(100)
@@ -631,9 +633,9 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
-	namespace := testNamespace
-	namespaceID := testNamespaceID
-	workflowID := testWorkflowID
+	namespace := tests.Namespace
+	namespaceID := tests.NamespaceID
+	workflowID := tests.WorkflowID
 	runID := uuid.New()
 	scheduleID := int64(99)
 	version := int64(100)
@@ -662,10 +664,10 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 	}
 
 	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
-	weContext := NewMockworkflowExecutionContext(s.controller)
-	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil)
-	weContext.EXPECT().lock(gomock.Any(), callerTypeAPI).Return(nil)
-	weContext.EXPECT().unlock(callerTypeAPI)
+	weContext := workflow.NewMockContext(s.controller)
+	weContext.EXPECT().LoadWorkflowExecution().Return(s.mockMutableState, nil)
+	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
+	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 
@@ -706,9 +708,9 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_ActivityNotFound() {
-	namespace := testNamespace
-	namespaceID := testNamespaceID
-	workflowID := testWorkflowID
+	namespace := tests.Namespace
+	namespaceID := tests.NamespaceID
+	workflowID := tests.WorkflowID
 	runID := uuid.New()
 	scheduleID := int64(99)
 	version := int64(100)
@@ -737,10 +739,10 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityNotFound() {
 	}
 
 	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
-	weContext := NewMockworkflowExecutionContext(s.controller)
-	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil)
-	weContext.EXPECT().lock(gomock.Any(), callerTypeAPI).Return(nil)
-	weContext.EXPECT().unlock(callerTypeAPI)
+	weContext := workflow.NewMockContext(s.controller)
+	weContext.EXPECT().LoadWorkflowExecution().Return(s.mockMutableState, nil)
+	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
+	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 
@@ -782,9 +784,9 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityNotFound() {
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
-	namespace := testNamespace
-	namespaceID := testNamespaceID
-	workflowID := testWorkflowID
+	namespace := tests.Namespace
+	namespaceID := tests.NamespaceID
+	workflowID := tests.WorkflowID
 	runID := uuid.New()
 	scheduleID := int64(99)
 	version := int64(100)
@@ -813,10 +815,10 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 	}
 
 	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
-	weContext := NewMockworkflowExecutionContext(s.controller)
-	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil)
-	weContext.EXPECT().lock(gomock.Any(), callerTypeAPI).Return(nil)
-	weContext.EXPECT().unlock(callerTypeAPI)
+	weContext := workflow.NewMockContext(s.controller)
+	weContext.EXPECT().LoadWorkflowExecution().Return(s.mockMutableState, nil)
+	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
+	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 
@@ -843,13 +845,13 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
-	weContext.EXPECT().updateWorkflowExecutionWithNew(
+	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),
 		persistence.UpdateWorkflowModeBypassCurrent,
-		workflowExecutionContext(nil),
-		mutableState(nil),
-		transactionPolicyPassive,
-		(*transactionPolicy)(nil),
+		workflow.Context(nil),
+		workflow.MutableState(nil),
+		workflow.TransactionPolicyPassive,
+		(*workflow.TransactionPolicy)(nil),
 	).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
@@ -873,9 +875,9 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
-	namespace := testNamespace
-	namespaceID := testNamespaceID
-	workflowID := testWorkflowID
+	namespace := tests.Namespace
+	namespaceID := tests.NamespaceID
+	workflowID := tests.WorkflowID
 	runID := uuid.New()
 	scheduleID := int64(99)
 	version := int64(100)
@@ -904,10 +906,10 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 	}
 
 	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
-	weContext := NewMockworkflowExecutionContext(s.controller)
-	weContext.EXPECT().loadWorkflowExecution().Return(s.mockMutableState, nil)
-	weContext.EXPECT().lock(gomock.Any(), callerTypeAPI).Return(nil)
-	weContext.EXPECT().unlock(callerTypeAPI)
+	weContext := workflow.NewMockContext(s.controller)
+	weContext.EXPECT().LoadWorkflowExecution().Return(s.mockMutableState, nil)
+	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
+	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 
@@ -934,13 +936,13 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
-	weContext.EXPECT().updateWorkflowExecutionWithNew(
+	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),
 		persistence.UpdateWorkflowModeUpdateCurrent,
-		workflowExecutionContext(nil),
-		mutableState(nil),
-		transactionPolicyPassive,
-		(*transactionPolicy)(nil),
+		workflow.Context(nil),
+		workflow.MutableState(nil),
+		workflow.TransactionPolicyPassive,
+		(*workflow.TransactionPolicy)(nil),
 	).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(

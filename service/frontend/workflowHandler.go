@@ -120,7 +120,7 @@ func NewWorkflowHandler(
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		versionChecker:  headers.NewDefaultVersionChecker(),
 		namespaceHandler: namespace.NewHandler(
-			config.MinRetentionDays(),
+			config.MinRetention(),
 			config.MaxBadBinaries,
 			resource.GetLogger(),
 			resource.GetMetadataManager(),
@@ -3454,7 +3454,7 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error,
 				tag.WorkflowTaskQueueName(taskQueue.GetName()), tag.Error(err))
 		}
 
-		// Clear error as we don't want to report context cancellation error to count against our SLA
+		// clear error as we don't want to report context cancellation error to count against our SLA
 		return nil
 	}
 

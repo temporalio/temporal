@@ -45,6 +45,13 @@ type (
 	contextKeyAuthHeader   struct{}
 )
 
+type (
+	// JWTAudienceMapper returns JWT audience for a given request
+	JWTAudienceMapper interface {
+		Audience(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo) string
+	}
+)
+
 const (
 	RequestUnauthorized = "Request unauthorized."
 )
@@ -85,17 +92,22 @@ func (a *interceptor) Interceptor(
 		if tlsSubject != nil || len(authHeaders) > 0 {
 			var authHeader string
 			var authExtraHeader string
+			var audience string
 			if len(authHeaders) > 0 {
 				authHeader = authHeaders[0]
 			}
 			if len(authExtraHeaders) > 0 {
 				authExtraHeader = authExtraHeaders[0]
 			}
+			if a.audienceGetter != nil {
+				audience = a.audienceGetter.Audience(ctx, req, info)
+			}
 			authInfo := AuthInfo{
 				AuthToken:     authHeader,
 				TLSSubject:    tlsSubject,
 				TLSConnection: tlsConnection,
 				ExtraData:     authExtraHeader,
+				Audience:      audience,
 			}
 			mappedClaims, err := a.claimMapper.GetClaims(&authInfo)
 			if err != nil {
@@ -151,10 +163,11 @@ func (a *interceptor) logAuthError(err error) {
 }
 
 type interceptor struct {
-	authorizer    Authorizer
-	claimMapper   ClaimMapper
-	metricsClient metrics.Client
-	logger        log.Logger
+	authorizer     Authorizer
+	claimMapper    ClaimMapper
+	metricsClient  metrics.Client
+	logger         log.Logger
+	audienceGetter JWTAudienceMapper
 }
 
 // NewAuthorizationInterceptor creates an authorization interceptor and return a func that points to its Interceptor method
@@ -163,12 +176,14 @@ func NewAuthorizationInterceptor(
 	authorizer Authorizer,
 	metrics metrics.Client,
 	logger log.Logger,
+	audienceGetter JWTAudienceMapper,
 ) grpc.UnaryServerInterceptor {
 	return (&interceptor{
-		claimMapper:   claimMapper,
-		authorizer:    authorizer,
-		metricsClient: metrics,
-		logger:        logger,
+		claimMapper:    claimMapper,
+		authorizer:     authorizer,
+		metricsClient:  metrics,
+		logger:         logger,
+		audienceGetter: audienceGetter,
 	}).Interceptor
 }
 

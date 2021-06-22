@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 // NOTE: terminology
@@ -153,7 +154,7 @@ type (
 	nDCTransactionMgrImpl struct {
 		shard            shard.Context
 		namespaceCache   cache.NamespaceCache
-		historyCache     *historyCache
+		historyCache     *workflow.Cache
 		clusterMetadata  cluster.Metadata
 		historyV2Mgr     persistence.HistoryManager
 		serializer       persistence.PayloadSerializer
@@ -171,7 +172,7 @@ var _ nDCTransactionMgr = (*nDCTransactionMgrImpl)(nil)
 
 func newNDCTransactionMgr(
 	shard shard.Context,
-	historyCache *historyCache,
+	historyCache *workflow.Cache,
 	eventsReapplier nDCEventsReapplier,
 	logger log.Logger,
 ) *nDCTransactionMgrImpl {
@@ -246,7 +247,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 		}
 	}()
 
-	if _, err := targetWorkflow.getContext().persistNonFirstWorkflowEvents(
+	if _, err := targetWorkflow.getContext().PersistNonFirstWorkflowEvents(
 		targetWorkflowEvents,
 	); err != nil {
 		return err
@@ -261,7 +262,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 		return err
 	}
 
-	return targetWorkflow.getContext().updateWorkflowExecutionWithNew(
+	return targetWorkflow.getContext().UpdateWorkflowExecutionWithNew(
 		now,
 		updateMode,
 		nil,
@@ -275,11 +276,11 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 	ctx context.Context,
 	targetWorkflow nDCWorkflow,
 	targetWorkflowEvents *persistence.WorkflowEvents,
-) (persistence.UpdateWorkflowMode, transactionPolicy, error) {
+) (persistence.UpdateWorkflowMode, workflow.TransactionPolicy, error) {
 
 	isCurrentWorkflow, err := r.isWorkflowCurrent(ctx, targetWorkflow)
 	if err != nil {
-		return 0, transactionPolicyActive, err
+		return 0, workflow.TransactionPolicyActive, err
 	}
 	isWorkflowRunning := targetWorkflow.getMutableState().IsWorkflowExecutionRunning()
 	targetWorkflowActiveCluster := r.clusterMetadata.ClusterNameForFailoverVersion(
@@ -305,9 +306,9 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 				targetWorkflowEvents.Events,
 				targetWorkflow.getMutableState().GetExecutionState().GetRunId(),
 			); err != nil {
-				return 0, transactionPolicyActive, err
+				return 0, workflow.TransactionPolicyActive, err
 			}
-			return persistence.UpdateWorkflowModeUpdateCurrent, transactionPolicyActive, nil
+			return persistence.UpdateWorkflowModeUpdateCurrent, workflow.TransactionPolicyActive, nil
 		}
 
 		// case 1.b
@@ -328,17 +329,17 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 				tag.WorkflowID(workflowID),
 			)
 			r.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
-			return persistence.UpdateWorkflowModeBypassCurrent, transactionPolicyPassive, nil
+			return persistence.UpdateWorkflowModeBypassCurrent, workflow.TransactionPolicyPassive, nil
 		}
 
 		baseVersionHistories := baseMutableState.GetExecutionInfo().GetVersionHistories()
 		baseCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(baseVersionHistories)
 		if err != nil {
-			return 0, transactionPolicyActive, err
+			return 0, workflow.TransactionPolicyActive, err
 		}
 		baseRebuildLastEventVersion, err := versionhistory.GetVersionHistoryEventVersion(baseCurrentVersionHistory, baseRebuildLastEventID)
 		if err != nil {
-			return 0, transactionPolicyActive, err
+			return 0, workflow.TransactionPolicyActive, err
 		}
 		baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 		baseNextEventID := baseMutableState.GetNextEventID()
@@ -359,25 +360,25 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 			targetWorkflowEvents.Events,
 			enumspb.RESET_REAPPLY_TYPE_SIGNAL,
 		); err != nil {
-			return 0, transactionPolicyActive, err
+			return 0, workflow.TransactionPolicyActive, err
 		}
 		// after the reset of target workflow (current workflow) with additional events to be reapplied
 		// target workflow is no longer the current workflow
-		return persistence.UpdateWorkflowModeBypassCurrent, transactionPolicyPassive, nil
+		return persistence.UpdateWorkflowModeBypassCurrent, workflow.TransactionPolicyPassive, nil
 	}
 
 	// case 2
 	//  find the current & active workflow to reapply
-	if err := targetWorkflow.getContext().reapplyEvents(
+	if err := targetWorkflow.getContext().ReapplyEvents(
 		[]*persistence.WorkflowEvents{targetWorkflowEvents},
 	); err != nil {
-		return 0, transactionPolicyActive, err
+		return 0, workflow.TransactionPolicyActive, err
 	}
 
 	if isCurrentWorkflow {
-		return persistence.UpdateWorkflowModeUpdateCurrent, transactionPolicyPassive, nil
+		return persistence.UpdateWorkflowModeUpdateCurrent, workflow.TransactionPolicyPassive, nil
 	}
-	return persistence.UpdateWorkflowModeBypassCurrent, transactionPolicyPassive, nil
+	return persistence.UpdateWorkflowModeBypassCurrent, workflow.TransactionPolicyPassive, nil
 }
 
 func (r *nDCTransactionMgrImpl) checkWorkflowExists(
@@ -438,20 +439,20 @@ func (r *nDCTransactionMgrImpl) loadNDCWorkflow(
 ) (nDCWorkflow, error) {
 
 	// we need to check the current workflow execution
-	weContext, release, err := r.historyCache.getOrCreateWorkflowExecution(
+	weContext, release, err := r.historyCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
-		callerTypeAPI,
+		workflow.CallerTypeAPI,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	msBuilder, err := weContext.loadWorkflowExecution()
+	msBuilder, err := weContext.LoadWorkflowExecution()
 	if err != nil {
 		// no matter what error happen, we need to retry
 		release(err)

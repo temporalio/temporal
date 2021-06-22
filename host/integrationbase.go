@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
@@ -78,7 +79,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 	if clusterConfig.FrontendAddress != "" {
 		s.Logger.Info("Running integration test against specified frontend", tag.Address(TestFlags.FrontendAddr))
 
-		connection, err := rpc.Dial(TestFlags.FrontendAddr, nil, s.Logger)
+		connection, err := rpc.Dial(TestFlags.FrontendAddr, nil, s.Logger, false)
 		if err != nil {
 			s.Require().NoError(err)
 		}
@@ -97,13 +98,13 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 	s.testRawHistoryNamespaceName = "TestRawHistoryNamespace"
 	s.namespace = s.randomizeStr("integration-test-namespace")
 	s.Require().NoError(
-		s.registerNamespace(s.namespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
+		s.registerNamespace(s.namespace, namespace.MinRetention, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
 	s.Require().NoError(
-		s.registerNamespace(s.testRawHistoryNamespaceName, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
+		s.registerNamespace(s.testRawHistoryNamespaceName, namespace.MinRetention, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
 
 	s.foreignNamespace = s.randomizeStr("integration-foreign-test-namespace")
 	s.Require().NoError(
-		s.registerNamespace(s.foreignNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
+		s.registerNamespace(s.foreignNamespace, namespace.MinRetention, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
 
 	s.Require().NoError(s.registerArchivalNamespace())
 
@@ -154,7 +155,7 @@ func (s *IntegrationBase) tearDownSuite() {
 
 func (s *IntegrationBase) registerNamespace(
 	namespace string,
-	retentionDays int,
+	retention time.Duration,
 	historyArchivalState enumspb.ArchivalState,
 	historyArchivalURI string,
 	visibilityArchivalState enumspb.ArchivalState,
@@ -165,7 +166,7 @@ func (s *IntegrationBase) registerNamespace(
 	_, err := s.engine.RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		Description:                      namespace,
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(time.Duration(retentionDays) * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: &retention,
 		HistoryArchivalState:             historyArchivalState,
 		HistoryArchivalUri:               historyArchivalURI,
 		VisibilityArchivalState:          visibilityArchivalState,

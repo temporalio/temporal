@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/consts"
 )
 
 type (
@@ -320,7 +321,7 @@ func validateReplicateEventsRequest(
 		return nil, nil, err
 	}
 	if len(events) == 0 {
-		return nil, nil, ErrEmptyHistoryRawEventBatch
+		return nil, nil, consts.ErrEmptyHistoryRawEventBatch
 	}
 
 	version, err := validateEvents(events)

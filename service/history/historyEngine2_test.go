@@ -49,8 +49,11 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow"
 
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
@@ -92,7 +95,7 @@ func TestEngine2Suite(t *testing.T) {
 }
 
 func (s *engine2Suite) SetupSuite() {
-	s.config = configs.NewDynamicConfigForTest()
+
 }
 
 func (s *engine2Suite) TearDownSuite() {
@@ -108,6 +111,7 @@ func (s *engine2Suite) SetupTest() {
 	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
 
+	s.config = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
@@ -125,7 +129,7 @@ func (s *engine2Suite) SetupTest() {
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockEventsCache = s.mockShard.MockEventsCache
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
-		&persistencespb.NamespaceInfo{Id: testNamespaceID}, &persistencespb.NamespaceConfig{}, "", nil,
+		&persistencespb.NamespaceInfo{Id: tests.NamespaceID}, &persistencespb.NamespaceConfig{}, "", nil,
 	), nil).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
@@ -135,7 +139,7 @@ func (s *engine2Suite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	historyCache := newHistoryCache(s.mockShard)
+	historyCache := workflow.NewCache(s.mockShard)
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.mockShard,
@@ -164,16 +168,16 @@ func (s *engine2Suite) TearDownTest() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyExpired() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 	tl := "testTaskQueue"
 	stickyTl := "stickyTaskQueue"
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
+	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache,
 		log.NewTestLogger(), we.GetRunId())
 	executionInfo := msBuilder.GetExecutionInfo()
 	executionInfo.StickyTaskQueue = stickyTl
@@ -181,7 +185,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyExpired() {
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 
-	ms := createMutableState(msBuilder)
+	ms := workflow.TestCloneToProto(msBuilder)
 
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
@@ -233,16 +237,16 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyExpired() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 	tl := "testTaskQueue"
 	stickyTl := "stickyTaskQueue"
 	identity := "testIdentity"
 
-	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
+	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache,
 		log.NewTestLogger(), we.GetRunId())
 	executionInfo := msBuilder.GetExecutionInfo()
 	executionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
@@ -251,7 +255,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 
-	ms := createMutableState(msBuilder)
+	ms := workflow.TestCloneToProto(msBuilder)
 
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
@@ -305,10 +309,10 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedIfNoExecution() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 
 	identity := "testIdentity"
@@ -335,10 +339,10 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfNoExecution() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedIfGetExecutionFailed() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 
 	identity := "testIdentity"
@@ -365,17 +369,17 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfGetExecutionFailed() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyStarted() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 
 	identity := "testIdentity"
 	tl := "testTaskQueue"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, true)
-	ms := createMutableState(msBuilder)
+	ms := workflow.TestCloneToProto(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
 
@@ -399,10 +403,10 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyStarted() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyCompleted() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 
 	identity := "testIdentity"
@@ -411,7 +415,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyCompleted() {
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, true)
 	addWorkflowTaskCompletedEvent(msBuilder, int64(2), int64(3), identity)
 
-	ms := createMutableState(msBuilder)
+	ms := workflow.TestCloneToProto(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
@@ -436,10 +440,10 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyCompleted() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 
 	identity := "testIdentity"
@@ -447,14 +451,14 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
 
-	ms := createMutableState(msBuilder)
+	ms := workflow.TestCloneToProto(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
 	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(nil, &persistence.ConditionFailedError{})
 
-	ms2 := createMutableState(msBuilder)
+	ms2 := workflow.TestCloneToProto(msBuilder)
 	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse2, nil)
@@ -484,10 +488,10 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskRetrySameRequest() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 
 	tl := "testTaskQueue"
@@ -495,7 +499,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskRetrySameRequest() {
 	requestID := "testRecordWorkflowTaskRetrySameRequestID"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
-	ms := createMutableState(msBuilder)
+	ms := workflow.TestCloneToProto(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
@@ -503,7 +507,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskRetrySameRequest() {
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(nil, &persistence.ConditionFailedError{})
 
 	startedEventID := addWorkflowTaskStartedEventWithRequestID(msBuilder, int64(2), requestID, tl, identity)
-	ms2 := createMutableState(msBuilder)
+	ms2 := workflow.TestCloneToProto(msBuilder)
 	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse2, nil)
 
@@ -529,10 +533,10 @@ func (s *engine2Suite) TestRecordWorkflowTaskRetrySameRequest() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskRetryDifferentRequest() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 
 	tl := "testTaskQueue"
@@ -540,7 +544,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskRetryDifferentRequest() {
 	requestID := "testRecordWorkflowTaskRetrySameRequestID"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
-	ms := createMutableState(msBuilder)
+	ms := workflow.TestCloneToProto(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
 	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil)
@@ -548,7 +552,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskRetryDifferentRequest() {
 
 	// Add event.
 	addWorkflowTaskStartedEventWithRequestID(msBuilder, int64(2), "some_other_req", tl, identity)
-	ms2 := createMutableState(msBuilder)
+	ms2 := workflow.TestCloneToProto(msBuilder)
 	gwmsResponse2 := &persistence.GetWorkflowExecutionResponse{State: ms2}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse2, nil)
 
@@ -573,10 +577,10 @@ func (s *engine2Suite) TestRecordWorkflowTaskRetryDifferentRequest() {
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedMaxAttemptsExceeded() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 
 	tl := "testTaskQueue"
@@ -584,7 +588,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedMaxAttemptsExceeded() {
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
 	for i := 0; i < conditionalRetryCount; i++ {
-		ms := createMutableState(msBuilder)
+		ms := workflow.TestCloneToProto(msBuilder)
 		gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 		s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
@@ -611,21 +615,21 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedMaxAttemptsExceeded() {
 
 	s.NotNil(err)
 	s.Nil(response)
-	s.Equal(ErrMaxAttemptsExceeded, err)
+	s.Equal(consts.ErrMaxAttemptsExceeded, err)
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskSuccess() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 
 	tl := "testTaskQueue"
 	identity := "testIdentity"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
-	ms := createMutableState(msBuilder)
+	ms := workflow.TestCloneToProto(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
 	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil)
@@ -635,20 +639,20 @@ func (s *engine2Suite) TestRecordWorkflowTaskSuccess() {
 
 	// load mutable state such that it already exists in memory when respond workflow task is called
 	// this enables us to set query registry on it
-	ctx, release, err := s.historyEngine.historyCache.getOrCreateWorkflowExecution(
+	ctx, release, err := s.historyEngine.historyCache.GetOrCreateWorkflowExecution(
 		context.Background(),
-		testNamespaceID,
+		tests.NamespaceID,
 		workflowExecution,
-		callerTypeAPI,
+		workflow.CallerTypeAPI,
 	)
 	s.NoError(err)
-	loadedMS, err := ctx.loadWorkflowExecution()
+	loadedMS, err := ctx.LoadWorkflowExecution()
 	s.NoError(err)
-	qr := newQueryRegistry()
-	id1, _ := qr.bufferQuery(&querypb.WorkflowQuery{})
-	id2, _ := qr.bufferQuery(&querypb.WorkflowQuery{})
-	id3, _ := qr.bufferQuery(&querypb.WorkflowQuery{})
-	loadedMS.(*mutableStateBuilder).queryRegistry = qr
+	qr := workflow.NewQueryRegistry()
+	id1, _ := qr.BufferQuery(&querypb.WorkflowQuery{})
+	id2, _ := qr.BufferQuery(&querypb.WorkflowQuery{})
+	id3, _ := qr.BufferQuery(&querypb.WorkflowQuery{})
+	loadedMS.(*workflow.MutableStateImpl).QueryRegistry = qr
 	release(nil)
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &historyservice.RecordWorkflowTaskStartedRequest{
@@ -679,10 +683,10 @@ func (s *engine2Suite) TestRecordWorkflowTaskSuccess() {
 }
 
 func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 
 	identity := "testIdentity"
@@ -712,10 +716,10 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 }
 
 func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 
 	identity := "testIdentity"
@@ -729,7 +733,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(msBuilder, int64(2), int64(3), identity)
 	scheduledEvent, _ := addActivityTaskScheduledEvent(msBuilder, workflowTaskCompletedEvent.EventId, activityID, activityType, tl, activityInput, 100*time.Second, 10*time.Second, 1*time.Second, 5*time.Second)
 
-	ms1 := createMutableState(msBuilder)
+	ms1 := workflow.TestCloneToProto(msBuilder)
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse1, nil)
@@ -761,17 +765,17 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 }
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecution_Running() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 
 	identity := "testIdentity"
 	tl := "testTaskQueue"
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
-	ms1 := createMutableState(msBuilder)
+	ms1 := workflow.TestCloneToProto(msBuilder)
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse1, nil)
@@ -797,10 +801,10 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_Running() {
 }
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecution_Finished() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 
 	identity := "testIdentity"
@@ -808,7 +812,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_Finished() {
 
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
 	msBuilder.GetExecutionState().State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
-	ms1 := createMutableState(msBuilder)
+	ms1 := workflow.TestCloneToProto(msBuilder)
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse1, nil)
@@ -827,10 +831,10 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_Finished() {
 }
 
 func (s *engine2Suite) TestRequestCancelWorkflowExecution_NotFound() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(nil, &serviceerror.NotFound{})
@@ -850,8 +854,8 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_NotFound() {
 }
 
 func (s *engine2Suite) createExecutionStartedState(we commonpb.WorkflowExecution, tl, identity string,
-	startWorkflowTask bool) mutableState {
-	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
+	startWorkflowTask bool) workflow.MutableState {
+	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache,
 		s.logger, we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
@@ -864,10 +868,10 @@ func (s *engine2Suite) createExecutionStartedState(we commonpb.WorkflowExecution
 }
 
 func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 	tl := "testTaskQueue"
 	taskToken := &tokenspb.Task{
@@ -881,7 +885,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	markerDetails := payloads.EncodeString("marker details")
 	markerName := "marker name"
 
-	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
+	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache,
 		log.NewTestLogger(), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
@@ -897,7 +901,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 		}},
 	}}
 
-	ms := createMutableState(msBuilder)
+	ms := workflow.TestCloneToProto(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
@@ -923,7 +927,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowID := "workflowID"
 	workflowType := "workflowType"
 	taskQueue := "testTaskQueue"
@@ -953,7 +957,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowID := "workflowID"
 	runID := "runID"
 	workflowType := "workflowType"
@@ -991,7 +995,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowID := "workflowID"
 	runID := "runID"
 	workflowType := "workflowType"
@@ -1030,7 +1034,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowID := "workflowID"
 	runID := "runID"
 	workflowType := "workflowType"
@@ -1100,7 +1104,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowID := "workflowID"
 	workflowType := "workflowType"
 	taskQueue := "testTaskQueue"
@@ -1185,9 +1189,9 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
 	s.EqualError(err, "Missing namespace UUID.")
 
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowID := "wId"
-	runID := testRunID
+	runID := tests.RunID
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
@@ -1202,9 +1206,9 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 		},
 	}
 
-	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
+	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache,
 		log.NewTestLogger(), runID)
-	ms := createMutableState(msBuilder)
+	ms := workflow.TestCloneToProto(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
 
@@ -1225,7 +1229,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
 	s.EqualError(err, "Missing namespace UUID.")
 
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowID := "wId"
 	workflowType := "workflowType"
 	taskQueue := "testTaskQueue"
@@ -1266,7 +1270,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_CreateTimeout() {
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
 	s.EqualError(err, "Missing namespace UUID.")
 
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowID := "wId"
 	workflowType := "workflowType"
 	taskQueue := "testTaskQueue"
@@ -1305,7 +1309,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_CreateTimeout() {
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning() {
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 	tl := "testTaskQueue"
 
@@ -1313,9 +1317,9 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
 	s.EqualError(err, "Missing namespace UUID.")
 
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowID := "wId"
-	runID := testRunID
+	runID := tests.RunID
 	workflowType := "workflowType"
 	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
@@ -1346,10 +1350,10 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 		},
 	}
 
-	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
+	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache,
 		log.NewTestLogger(), runID)
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	ms := createMutableState(msBuilder)
+	ms := workflow.TestCloneToProto(msBuilder)
 	ms.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
@@ -1366,9 +1370,9 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 }
 
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateRequests() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowID := "wId"
-	runID := testRunID
+	runID := tests.RunID
 	workflowType := "workflowType"
 	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
@@ -1377,7 +1381,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 	requestID := "testRequestID"
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 	tl := "testTaskQueue"
 	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
@@ -1404,10 +1408,10 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 		},
 	}
 
-	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
+	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache,
 		log.NewTestLogger(), runID)
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	ms := createMutableState(msBuilder)
+	ms := workflow.TestCloneToProto(msBuilder)
 	ms.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
@@ -1432,9 +1436,9 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 }
 
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlreadyStarted() {
-	namespaceID := testNamespaceID
+	namespaceID := tests.NamespaceID
 	workflowID := "wId"
-	runID := testRunID
+	runID := tests.RunID
 	workflowType := "workflowType"
 	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
@@ -1443,7 +1447,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	requestID := "testRequestID"
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
-		RunId:      testRunID,
+		RunId:      tests.RunID,
 	}
 	tl := "testTaskQueue"
 	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
@@ -1470,10 +1474,10 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 		},
 	}
 
-	msBuilder := newMutableStateBuilderWithEventV2(s.historyEngine.shard, s.mockEventsCache,
+	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache,
 		log.NewTestLogger(), runID)
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	ms := createMutableState(msBuilder)
+	ms := workflow.TestCloneToProto(msBuilder)
 	ms.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
@@ -1496,19 +1500,19 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	s.NotNil(err)
 }
 
-func (s *engine2Suite) getBuilder(namespaceID string, we commonpb.WorkflowExecution) mutableState {
-	weContext, release, err := s.historyEngine.historyCache.getOrCreateWorkflowExecution(
+func (s *engine2Suite) getBuilder(namespaceID string, we commonpb.WorkflowExecution) workflow.MutableState {
+	weContext, release, err := s.historyEngine.historyCache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		namespaceID,
 		we,
-		callerTypeAPI,
+		workflow.CallerTypeAPI,
 	)
 	if err != nil {
 		return nil
 	}
 	defer release(nil)
 
-	return weContext.(*workflowExecutionContextImpl).mutableState
+	return weContext.(*workflow.ContextImpl).MutableState
 }
 
 type createWorkflowExecutionRequestMatcher struct {

@@ -11,7 +11,7 @@
     "lang": "painless",
     "source": "${REINDEX_SCRIPT}",
     "params": {
-      "reindexCustomFields": "${REINDEX_CUSTOM_FIELDS}"
+      "customSearchAttributes": ${CUSTOM_SEARCH_ATTRIBUTES}
     }
   }
 }

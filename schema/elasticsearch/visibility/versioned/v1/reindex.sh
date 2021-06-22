@@ -10,21 +10,44 @@ ES_USER="${ES_USER:-}"
 ES_PWD="${ES_PWD:-}"
 ES_VIS_INDEX_V0="${ES_VIS_INDEX_V0:-temporal-visibility-dev}"
 ES_VIS_INDEX_V1="${ES_VIS_INDEX_V1:-temporal_visibility_v1_dev}"
-REINDEX_CUSTOM_FIELDS="${REINDEX_CUSTOM_FIELDS:-true}"
+CUSTOM_SEARCH_ATTRIBUTES="${CUSTOM_SEARCH_ATTRIBUTES:-[\"CustomKeywordField\",\"CustomStringField\",\"CustomIntField\",\"CustomDatetimeField\",\"CustomDoubleField\",\"CustomBoolField\"]}"
 AUTO_CONFIRM="${AUTO_CONFIRM:-}"
 
+ES_ENDPOINT="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}"
 DIR_NAME="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+
+echo "=== Step 1. Add custom search attributes to the new index. ==="
+# _doc and ?include_type_name=true for compatibility with ES6.
+CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V0}/_doc/_mapping?include_type_name=true" | jq -c '.. | .Attr? | select(.!=null) | .properties | with_entries(select(.key == ($customSA[]))) | {properties:.}' --argjson customSA "${CUSTOM_SEARCH_ATTRIBUTES}")
+jq -n "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}"
+if [ -z "${AUTO_CONFIRM}" ]; then
+    read -p "Add custom search attributes above to the index ${ES_VIS_INDEX_V1}? (N/y)" -n 1 -r
+    echo
+else
+    REPLY="y"
+fi
+if [ "${REPLY}" = "y" ]; then
+    curl --silent --user "${ES_USER}":"${ES_PWD}" -X PUT "${ES_ENDPOINT}/${ES_VIS_INDEX_V1}/_doc/_mapping?include_type_name=true" -H "Content-Type: application/json" --data-binary "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}" --write-out "\n" | jq
+    # Wait for mapping changes to go through.
+    until curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_cluster/health/${ES_VIS_INDEX_V1}" | jq  --exit-status '.status=="green" | .'; do
+        echo "Waiting for Elasticsearch index ${ES_VIS_INDEX_V1} become green."
+        sleep 1
+    done
+fi
+
+
+echo "=== Step 2. Reindex old index to the new index. ==="
 # Convert multiline script to single line, remove repeated spaces, and replace / with \/.
-REINDEX_SCRIPT=$(tr -d "\n" < "${DIR_NAME}/reindex.painless" | tr -s " " | sed "s/\//\\\\\//g")
+REINDEX_SCRIPT=$(tr -d "\n" < "${DIR_NAME}/reindex.painless" | tr -s " " | sed "s/\//\\\\\//g" | sed "s/&/\\\&/g")
 # Substitute envs in reindex.json (envsubst is not available in alpine by default).
 REINDEX_JSON=$(sed \
     -e "s/\${REINDEX_SCRIPT}/${REINDEX_SCRIPT}/g" \
     -e "s/\${ES_VIS_INDEX_V0}/${ES_VIS_INDEX_V0}/g" \
     -e "s/\${ES_VIS_INDEX_V1}/${ES_VIS_INDEX_V1}/g" \
-    -e "s/\${REINDEX_CUSTOM_FIELDS}/${REINDEX_CUSTOM_FIELDS}/g" \
+    -e "s/\${CUSTOM_SEARCH_ATTRIBUTES}/${CUSTOM_SEARCH_ATTRIBUTES}/g" \
     "${DIR_NAME}/reindex.json")
 
-echo "${REINDEX_JSON}" | jq
+jq -n "${REINDEX_JSON}"
 if [ -z "${AUTO_CONFIRM}" ]; then
     read -p "Apply reindex script above? (N/y)" -n 1 -r
     echo
@@ -33,8 +56,7 @@ else
 fi
 
 if [ "${REPLY}" = "y" ]; then
-    ES_URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/_reindex"
-    curl --user "${ES_USER}":"${ES_PWD}" -X POST "${ES_URL}" -H "Content-Type: application/json" --data-binary "${REINDEX_JSON}" --write-out "\n" | jq
+    curl --silent --user "${ES_USER}":"${ES_PWD}" -X POST "${ES_ENDPOINT}/_reindex" -H "Content-Type: application/json" --data-binary "${REINDEX_JSON}" --write-out "\n" | jq
 fi
 
 

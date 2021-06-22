@@ -36,13 +36,14 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
 	nDCEventsReapplier interface {
 		reapplyEvents(
 			ctx context.Context,
-			msBuilder mutableState,
+			msBuilder workflow.MutableState,
 			historyEvents []*historypb.HistoryEvent,
 			runID string,
 		) ([]*historypb.HistoryEvent, error)
@@ -67,7 +68,7 @@ func newNDCEventsReapplier(
 
 func (r *nDCEventsReapplierImpl) reapplyEvents(
 	_ context.Context,
-	msBuilder mutableState,
+	msBuilder workflow.MutableState,
 	historyEvents []*historypb.HistoryEvent,
 	runID string,
 ) ([]*historypb.HistoryEvent, error) {

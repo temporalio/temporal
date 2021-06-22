@@ -33,14 +33,14 @@
       "CloseTime": {
         "type": "date_nanos"
       },
+      "ExecutionDuration": {
+        "type": "long"
+      },
       "ExecutionStatus": {
-        "type": "integer"
+        "type": "keyword"
       },
       "HistoryLength": {
-        "type": "integer"
-      },
-      "Encoding": {
-        "type": "keyword"
+        "type": "long"
       },
       "TemporalChangeVersion": {
         "type": "keyword"
@@ -64,14 +64,17 @@
       "CustomDatetimeField": {
         "type": "date_nanos"
       },
-      "CustomNamespace": {
+      "BatcherNamespace": {
         "type": "keyword"
       },
-      "Operator": {
+      "BatcherUser": {
         "type": "keyword"
       },
       "BinaryChecksums": {
         "type": "keyword"
+      },
+      "StateTransitionCount": {
+        "type": "long"
       }
     }
   },

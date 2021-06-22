@@ -34,8 +34,11 @@
       "CloseTime": {
         "type": "date_nanos"
       },
-      "ExecutionStatus": {
+      "ExecutionDuration": {
         "type": "long"
+      },
+      "ExecutionStatus": {
+        "type": "keyword"
       },
       "TaskQueue": {
         "type": "keyword"
@@ -43,14 +46,20 @@
       "TemporalChangeVersion": {
         "type": "keyword"
       },
-      "CustomNamespace": {
+      "BatcherNamespace": {
         "type": "keyword"
       },
-      "Operator": {
+      "BatcherUser": {
         "type": "keyword"
       },
       "BinaryChecksums": {
         "type": "keyword"
+      },
+      "HistoryLength": {
+        "type": "long"
+      },
+      "StateTransitionCount": {
+        "type": "long"
       }
     }
   },

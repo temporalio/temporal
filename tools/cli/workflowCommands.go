@@ -64,7 +64,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/service/history"
+	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/tools/cli/dataconverter"
 	"go.temporal.io/server/tools/cli/stringify"
 )
@@ -1791,7 +1791,7 @@ func getBadWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid, bin
 		return "", 0, printErrorAndReturn("DescribeWorkflowExecution failed", err)
 	}
 
-	_, p := history.FindAutoResetPoint(clock.NewRealTimeSource(), &namespacepb.BadBinaries{
+	_, p := workflow.FindAutoResetPoint(clock.NewRealTimeSource(), &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			binChecksum: {},
 		},

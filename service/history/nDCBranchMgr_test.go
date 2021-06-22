@@ -42,7 +42,10 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -52,8 +55,8 @@ type (
 
 		controller          *gomock.Controller
 		mockShard           *shard.ContextTest
-		mockContext         *MockworkflowExecutionContext
-		mockMutableState    *MockmutableState
+		mockContext         *workflow.MockContext
+		mockMutableState    *workflow.MockMutableState
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockHistoryMgr *persistence.MockHistoryManager
@@ -78,8 +81,8 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockContext = NewMockworkflowExecutionContext(s.controller)
-	s.mockMutableState = NewMockmutableState(s.controller)
+	s.mockContext = workflow.NewMockContext(s.controller)
+	s.mockMutableState = workflow.NewMockMutableState(s.controller)
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -89,7 +92,7 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
-		NewDynamicConfigForTest(),
+		tests.NewDynamicConfig(),
 	)
 
 	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
@@ -192,7 +195,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 	s.mockMutableState.EXPECT().HasBufferedEvents().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(lastWriteVersion, true).Return(nil)
-	workflowTask := &workflowTaskInfo{
+	workflowTask := &workflow.WorkflowTaskInfo{
 		ScheduleID: 1234,
 		StartedID:  2345,
 	}
@@ -205,7 +208,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 		workflowTask.StartedID,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_FAILOVER_CLOSE_COMMAND,
 		nil,
-		identityHistoryService,
+		consts.IdentityHistoryService,
 		"",
 		"",
 		"",
@@ -216,7 +219,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(lastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	s.mockContext.EXPECT().updateWorkflowExecutionAsActive(gomock.Any()).Return(nil)
+	s.mockContext.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any()).Return(nil)
 
 	ctx := context.Background()
 

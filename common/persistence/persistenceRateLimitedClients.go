@@ -865,15 +865,15 @@ func (p *queueRateLimitedPersistenceClient) ReadMessages(lastMessageID int64, ma
 	return p.persistence.ReadMessages(lastMessageID, maxCount)
 }
 
-func (p *queueRateLimitedPersistenceClient) UpdateAckLevel(messageID int64, clusterName string) error {
+func (p *queueRateLimitedPersistenceClient) UpdateAckLevel(metadata *InternalQueueMetadata) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	return p.persistence.UpdateAckLevel(messageID, clusterName)
+	return p.persistence.UpdateAckLevel(metadata)
 }
 
-func (p *queueRateLimitedPersistenceClient) GetAckLevels() (map[string]int64, error) {
+func (p *queueRateLimitedPersistenceClient) GetAckLevels() (*InternalQueueMetadata, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -912,15 +912,15 @@ func (p *queueRateLimitedPersistenceClient) RangeDeleteMessagesFromDLQ(firstMess
 
 	return p.persistence.RangeDeleteMessagesFromDLQ(firstMessageID, lastMessageID)
 }
-func (p *queueRateLimitedPersistenceClient) UpdateDLQAckLevel(messageID int64, clusterName string) error {
+func (p *queueRateLimitedPersistenceClient) UpdateDLQAckLevel(metadata *InternalQueueMetadata) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	return p.persistence.UpdateDLQAckLevel(messageID, clusterName)
+	return p.persistence.UpdateDLQAckLevel(metadata)
 }
 
-func (p *queueRateLimitedPersistenceClient) GetDLQAckLevels() (map[string]int64, error) {
+func (p *queueRateLimitedPersistenceClient) GetDLQAckLevels() (*InternalQueueMetadata, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -938,6 +938,10 @@ func (p *queueRateLimitedPersistenceClient) DeleteMessageFromDLQ(messageID int64
 
 func (p *queueRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
+}
+
+func (p *queueRateLimitedPersistenceClient) Init(blob *commonpb.DataBlob) error {
+	return p.persistence.Init(blob)
 }
 
 func (c *clusterMetadataRateLimitedPersistenceClient) Close() {

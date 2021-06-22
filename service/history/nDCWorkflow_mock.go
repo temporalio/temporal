@@ -32,6 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	workflow "go.temporal.io/server/service/history/workflow"
 )
 
 // MocknDCWorkflow is a mock of nDCWorkflow interface.
@@ -72,10 +73,10 @@ func (mr *MocknDCWorkflowMockRecorder) flushBufferedEvents() *gomock.Call {
 }
 
 // getContext mocks base method.
-func (m *MocknDCWorkflow) getContext() workflowExecutionContext {
+func (m *MocknDCWorkflow) getContext() workflow.Context {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getContext")
-	ret0, _ := ret[0].(workflowExecutionContext)
+	ret0, _ := ret[0].(workflow.Context)
 	return ret0
 }
 
@@ -86,10 +87,10 @@ func (mr *MocknDCWorkflowMockRecorder) getContext() *gomock.Call {
 }
 
 // getMutableState mocks base method.
-func (m *MocknDCWorkflow) getMutableState() mutableState {
+func (m *MocknDCWorkflow) getMutableState() workflow.MutableState {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getMutableState")
-	ret0, _ := ret[0].(mutableState)
+	ret0, _ := ret[0].(workflow.MutableState)
 	return ret0
 }
 
@@ -100,10 +101,10 @@ func (mr *MocknDCWorkflowMockRecorder) getMutableState() *gomock.Call {
 }
 
 // getReleaseFn mocks base method.
-func (m *MocknDCWorkflow) getReleaseFn() releaseWorkflowExecutionFunc {
+func (m *MocknDCWorkflow) getReleaseFn() workflow.ReleaseCacheFunc {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getReleaseFn")
-	ret0, _ := ret[0].(releaseWorkflowExecutionFunc)
+	ret0, _ := ret[0].(workflow.ReleaseCacheFunc)
 	return ret0
 }
 
@@ -159,10 +160,10 @@ func (mr *MocknDCWorkflowMockRecorder) revive() *gomock.Call {
 }
 
 // suppressBy mocks base method.
-func (m *MocknDCWorkflow) suppressBy(incomingWorkflow nDCWorkflow) (transactionPolicy, error) {
+func (m *MocknDCWorkflow) suppressBy(incomingWorkflow nDCWorkflow) (workflow.TransactionPolicy, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "suppressBy", incomingWorkflow)
-	ret0, _ := ret[0].(transactionPolicy)
+	ret0, _ := ret[0].(workflow.TransactionPolicy)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

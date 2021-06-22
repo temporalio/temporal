@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -101,7 +102,7 @@ func newQueueProcessorBase(
 	queueTaskProcessor queueTaskProcessor,
 	queueAckMgr queueAckMgr,
 	redispatchQueue collection.Queue,
-	historyCache *historyCache,
+	historyCache *workflow.Cache,
 	queueTaskInitializer queueTaskInitializer,
 	logger log.Logger,
 	metricsScope metrics.Scope,
