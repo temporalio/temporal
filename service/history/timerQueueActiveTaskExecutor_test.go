@@ -1155,6 +1155,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 			ScheduleId:             activityInfo.ScheduleId,
 			ScheduleToStartTimeout: activityInfo.ScheduleToStartTimeout,
 		},
+		gomock.Any(),
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil)
 
 	err = s.timerQueueActiveTaskExecutor.execute(timerTask, true)

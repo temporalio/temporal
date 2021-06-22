@@ -1265,6 +1265,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		),
 		reason,
 		nil,
+		enumspb.RESET_REAPPLY_TYPE_SIGNAL,
 	)
 
 	switch err.(type) {

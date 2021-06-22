@@ -32,6 +32,7 @@ import (
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
@@ -357,6 +358,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 			targetWorkflow,
 			eventsReapplicationResetWorkflowReason,
 			targetWorkflowEvents.Events,
+			enumspb.RESET_REAPPLY_TYPE_SIGNAL,
 		); err != nil {
 			return 0, workflow.TransactionPolicyActive, err
 		}
