@@ -33,8 +33,17 @@ import (
 
 type (
 	NameTypeMap struct {
+		// customSearchAttributes are defined by cluster admin per cluster level and passed and stored in SearchAttributes object.
 		customSearchAttributes map[string]enumspb.IndexedValueType
 	}
+
+	category int32
+)
+
+const (
+	systemCategory category = 1 << iota
+	predefinedCategory
+	customCategory
 )
 
 func BuildIndexNameTypeMap(indexSearchAttributes map[string]*persistencespb.IndexSearchAttributes) map[string]NameTypeMap {
@@ -48,7 +57,14 @@ func BuildIndexNameTypeMap(indexSearchAttributes map[string]*persistencespb.Inde
 }
 
 func (m NameTypeMap) System() map[string]enumspb.IndexedValueType {
-	return system
+	allSystem := make(map[string]enumspb.IndexedValueType, len(system)+len(predefined))
+	for saName, saType := range system {
+		allSystem[saName] = saType
+	}
+	for saName, saType := range predefined {
+		allSystem[saName] = saType
+	}
+	return allSystem
 }
 
 func (m NameTypeMap) Custom() map[string]enumspb.IndexedValueType {
@@ -56,8 +72,11 @@ func (m NameTypeMap) Custom() map[string]enumspb.IndexedValueType {
 }
 
 func (m NameTypeMap) All() map[string]enumspb.IndexedValueType {
-	allSearchAttributes := make(map[string]enumspb.IndexedValueType, len(system)+len(m.customSearchAttributes))
+	allSearchAttributes := make(map[string]enumspb.IndexedValueType, len(system)+len(m.customSearchAttributes)+len(reserved))
 	for saName, saType := range system {
+		allSearchAttributes[saName] = saType
+	}
+	for saName, saType := range predefined {
 		allSearchAttributes[saName] = saType
 	}
 	for saName, saType := range m.customSearchAttributes {
@@ -66,31 +85,34 @@ func (m NameTypeMap) All() map[string]enumspb.IndexedValueType {
 	return allSearchAttributes
 }
 
-func (m NameTypeMap) IsDefined(name string) bool {
-	if _, isSystem := system[name]; isSystem {
-		return true
-	}
-	if len(m.customSearchAttributes) == 0 {
-		return false
-	}
-	_, isCustom := m.customSearchAttributes[name]
-	return isCustom
+// GetType returns type of search attribute from type map.
+func (m NameTypeMap) GetType(name string) (enumspb.IndexedValueType, error) {
+	return m.getType(name, systemCategory|predefinedCategory|customCategory)
 }
 
 // GetType returns type of search attribute from type map.
-func (m NameTypeMap) GetType(name string) (enumspb.IndexedValueType, error) {
-	if name == NamespaceID {
-		return namespaceIDType, nil
-	}
-	// Check custom search attributes first, because it is most common use case.
-	if len(m.customSearchAttributes) != 0 {
-		tYpe, isCustom := m.customSearchAttributes[name]
-		if isCustom {
-			return tYpe, nil
+func (m NameTypeMap) getType(name string, cat category) (enumspb.IndexedValueType, error) {
+	if cat|customCategory == cat && len(m.customSearchAttributes) != 0 {
+		if t, isCustom := m.customSearchAttributes[name]; isCustom {
+			return t, nil
 		}
 	}
-	if tYpe, isSystem := system[name]; isSystem {
-		return tYpe, nil
+	if cat|predefinedCategory == cat {
+		if t, isPredefined := predefined[name]; isPredefined {
+			return t, nil
+		}
+	}
+	if cat|systemCategory == cat {
+		if t, isSystem := system[name]; isSystem {
+			return t, nil
+		}
 	}
 	return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, fmt.Errorf("%w: %s", ErrInvalidName, name)
+}
+
+func (m NameTypeMap) IsDefined(name string) bool {
+	if _, err := m.GetType(name); err == nil {
+		return true
+	}
+	return false
 }

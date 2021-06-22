@@ -26,12 +26,15 @@ if [ -z "${AUTO_CONFIRM}" ]; then
 else
     REPLY="y"
 fi
-curl --silent --user "${ES_USER}":"${ES_PWD}" -X PUT "${ES_ENDPOINT}/${ES_VIS_INDEX_V1}/_doc/_mapping?include_type_name=true" -H "Content-Type: application/json" --data-binary "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}" --write-out "\n" | jq
+if [ "${REPLY}" = "y" ]; then
+    curl --silent --user "${ES_USER}":"${ES_PWD}" -X PUT "${ES_ENDPOINT}/${ES_VIS_INDEX_V1}/_doc/_mapping?include_type_name=true" -H "Content-Type: application/json" --data-binary "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}" --write-out "\n" | jq
+    # Wait for mapping changes to go through.
+    until curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_cluster/health/${ES_VIS_INDEX_V1}" | jq  --exit-status '.status=="green" | .'; do
+        echo "Waiting for Elasticsearch index ${ES_VIS_INDEX_V1} become green."
+        sleep 1
+    done
+fi
 
-until curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_cluster/health/${ES_VIS_INDEX_V1}" | jq  --exit-status '.status=="green" | .'; do
-    echo "Waiting for Elasticsearch index ${ES_VIS_INDEX_V1} become green."
-    sleep 1
-done
 
 echo "=== Step 2. Reindex old index to the new index. ==="
 # Convert multiline script to single line, remove repeated spaces, and replace / with \/.
