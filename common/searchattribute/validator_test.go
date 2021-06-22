@@ -114,7 +114,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	attr.IndexedFields = fields
 	err = saValidator.Validate(attr, namespace, "")
 	s.Error(err)
-	s.Equal("StartTime attribute can't be set in SearchAttributes: reserved field name", err.Error())
+	s.Equal("StartTime attribute can't be set in SearchAttributes", err.Error())
 }
 
 func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
