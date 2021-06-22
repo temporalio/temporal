@@ -360,6 +360,26 @@ func (mr *MockAdminServiceClientMockRecorder) RefreshWorkflowTasks(ctx, in inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshWorkflowTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).RefreshWorkflowTasks), varargs...)
 }
 
+// RemoveSearchAttributes mocks base method.
+func (m *MockAdminServiceClient) RemoveSearchAttributes(ctx context.Context, in *adminservice.RemoveSearchAttributesRequest, opts ...grpc.CallOption) (*adminservice.RemoveSearchAttributesResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RemoveSearchAttributes", varargs...)
+	ret0, _ := ret[0].(*adminservice.RemoveSearchAttributesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RemoveSearchAttributes indicates an expected call of RemoveSearchAttributes.
+func (mr *MockAdminServiceClientMockRecorder) RemoveSearchAttributes(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveSearchAttributes", reflect.TypeOf((*MockAdminServiceClient)(nil).RemoveSearchAttributes), varargs...)
+}
+
 // RemoveTask mocks base method.
 func (m *MockAdminServiceClient) RemoveTask(ctx context.Context, in *adminservice.RemoveTaskRequest, opts ...grpc.CallOption) (*adminservice.RemoveTaskResponse, error) {
 	m.ctrl.T.Helper()
@@ -646,6 +666,21 @@ func (m *MockAdminServiceServer) RefreshWorkflowTasks(arg0 context.Context, arg1
 func (mr *MockAdminServiceServerMockRecorder) RefreshWorkflowTasks(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshWorkflowTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).RefreshWorkflowTasks), arg0, arg1)
+}
+
+// RemoveSearchAttributes mocks base method.
+func (m *MockAdminServiceServer) RemoveSearchAttributes(arg0 context.Context, arg1 *adminservice.RemoveSearchAttributesRequest) (*adminservice.RemoveSearchAttributesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveSearchAttributes", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.RemoveSearchAttributesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RemoveSearchAttributes indicates an expected call of RemoveSearchAttributes.
+func (mr *MockAdminServiceServerMockRecorder) RemoveSearchAttributes(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveSearchAttributes", reflect.TypeOf((*MockAdminServiceServer)(nil).RemoveSearchAttributes), arg0, arg1)
 }
 
 // RemoveTask mocks base method.

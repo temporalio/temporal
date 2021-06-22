@@ -611,6 +611,25 @@ func newAdminClusterCommands() []cli.Command {
 			},
 		},
 		{
+			Name:    "remove-search-attributes",
+			Aliases: []string{"rsa"},
+			Usage:   "Remove custom search attributes metadata only (Elasticsearch schema is not modified)",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:   FlagIndex,
+					Usage:  "ES index name (optional)",
+					Hidden: true, // don't show it for now
+				},
+				cli.StringSliceFlag{
+					Name:  FlagNameWithAlias,
+					Usage: "Search attribute name",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminRemoveSearchAttributes(c)
+			},
+		},
+		{
 			Name:    "get-search-attributes",
 			Aliases: []string{"gsa"},
 			Usage:   "Show exiting search attributes",

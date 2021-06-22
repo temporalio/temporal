@@ -82,6 +82,7 @@ type (
 		metricsScope    tally.Scope
 		clusterMetadata cluster.Metadata
 		saProvider      searchattribute.Provider
+		saManager       searchattribute.Manager
 
 		// other common resources
 
@@ -240,6 +241,8 @@ func New(
 
 	saProvider := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
 
+	saManager := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
+
 	visibilityMgr, err := visibilityManagerInitializer(
 		persistenceBean,
 		saProvider,
@@ -312,6 +315,7 @@ func New(
 		metricsScope:    params.MetricsScope,
 		clusterMetadata: clusterMetadata,
 		saProvider:      saProvider,
+		saManager:       saManager,
 
 		// other common resources
 
@@ -625,4 +629,8 @@ func (h *Impl) GetGRPCListener() net.Listener {
 
 func (h *Impl) GetSearchAttributesProvider() searchattribute.Provider {
 	return h.saProvider
+}
+
+func (h *Impl) GetSearchAttributesManager() searchattribute.Manager {
+	return h.saManager
 }

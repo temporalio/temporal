@@ -160,6 +160,17 @@ message AddSearchAttributesResponse {
     temporal.api.workflow.v1.WorkflowExecutionInfo add_workflow_execution_info = 4;
 }
 
+message RemoveSearchAttributesRequest {
+    repeated string search_attributes = 1;
+    string index_name = 2;
+}
+
+message RemoveSearchAttributesResponse {
+    map<string, temporal.api.enums.v1.IndexedValueType> custom_attributes = 1;
+    map<string, temporal.api.enums.v1.IndexedValueType> system_attributes = 2;
+    map<string, string> mapping = 3;
+}
+
 message GetSearchAttributesRequest {
     string index_name = 1;
 }
