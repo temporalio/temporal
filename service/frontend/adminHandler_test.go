@@ -391,7 +391,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	s.NoError(err)
 }
 
-func (s *adminHandlerSuite) Test_AddSearchAttribute() {
+func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 	handler := s.handler
 	ctx := context.Background()
 
@@ -528,7 +528,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute() {
 	s.NotNil(resp)
 }
 
-func (s *adminHandlerSuite) Test_RemoveSearchAttribute() {
+func (s *adminHandlerSuite) Test_RemoveSearchAttributes() {
 	handler := s.handler
 	ctx := context.Background()
 
@@ -625,9 +625,6 @@ func (s *adminHandlerSuite) Test_RemoveSearchAttribute() {
 	}
 
 	// Success case.
-	s.mockResource.SDKClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
-		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
-	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesManager.EXPECT().SaveSearchAttributes("random-index-name", gomock.Any()).Return(nil)
 
 	resp, err := handler.RemoveSearchAttributes(ctx, &adminservice.RemoveSearchAttributesRequest{
