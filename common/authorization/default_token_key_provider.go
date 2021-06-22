@@ -97,7 +97,7 @@ func (a *defaultTokenKeyProvider) RsaKey(alg string, kid string) (*rsa.PublicKey
 }
 
 func (a *defaultTokenKeyProvider) EcdsaKey(alg string, kid string) (*ecdsa.PublicKey, error) {
-	if !strings.EqualFold(alg, "ec256") {
+	if !strings.EqualFold(alg, "es256") {
 		return nil, fmt.Errorf("unexpected signing algorithm: %s", alg)
 	}
 
