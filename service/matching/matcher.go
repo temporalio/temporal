@@ -147,7 +147,7 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 		// no poller waiting for tasks, try forwarding this task to the
 		// root partition if possible
 		select {
-		case token := <-tm.fwdrAddReqTokenC():
+		case token := <-tm.fwdr.AddReqTokenC():
 			if err := tm.fwdr.ForwardTask(ctx, task); err == nil {
 				// task was remotely sync matched on the parent partition
 				token.release()
@@ -196,7 +196,7 @@ func (tm *TaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*mat
 	default:
 	}
 
-	fwdrTokenC := tm.fwdrAddReqTokenC()
+	fwdrTokenC := tm.fwdr.AddReqTokenC()
 
 	for {
 		select {
@@ -245,7 +245,7 @@ forLoop:
 		select {
 		case tm.taskC <- task:
 			return nil
-		case token := <-tm.fwdrAddReqTokenC():
+		case token := <-tm.fwdr.AddReqTokenC():
 			childCtx, cancel := context.WithDeadline(ctx, time.Now().UTC().Add(time.Second*2))
 			err := tm.fwdr.ForwardTask(childCtx, task)
 			token.release()
@@ -376,7 +376,7 @@ func (tm *TaskMatcher) poll(ctx context.Context, queryOnly bool) (*internalTask,
 		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
 		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
 		return task, nil
-	case token := <-tm.fwdrPollReqTokenC():
+	case token := <-tm.fwdr.PollReqTokenC():
 		if task, err := tm.fwdr.ForwardPoll(ctx); err == nil {
 			token.release()
 			return task, nil
@@ -384,20 +384,6 @@ func (tm *TaskMatcher) poll(ctx context.Context, queryOnly bool) (*internalTask,
 		token.release()
 		return tm.poll(ctx, queryOnly)
 	}
-}
-
-func (tm *TaskMatcher) fwdrPollReqTokenC() <-chan *ForwarderReqToken {
-	if tm.fwdr == nil {
-		return nil
-	}
-	return tm.fwdr.PollReqTokenC()
-}
-
-func (tm *TaskMatcher) fwdrAddReqTokenC() <-chan *ForwarderReqToken {
-	if tm.fwdr == nil {
-		return nil
-	}
-	return tm.fwdr.AddReqTokenC()
 }
 
 func (tm *TaskMatcher) isForwardingAllowed() bool {
