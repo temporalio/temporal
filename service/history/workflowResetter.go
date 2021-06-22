@@ -242,7 +242,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	}
 
 	switch resetReapplyType {
-	case enumspb.RESET_REAPPLY_TYPE_ALL:
+	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
 		if err := r.reapplyContinueAsNewWorkflowEvents(
 			ctx,
 			resetMutableState,

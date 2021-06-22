@@ -2331,7 +2331,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	switch request.GetResetReapplyType() {
 	case enumspb.RESET_REAPPLY_TYPE_UNSPECIFIED:
 		return nil, serviceerror.NewInvalidArgument("reset type not set")
-	case enumspb.RESET_REAPPLY_TYPE_ALL:
+	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
 		// noop
 	case enumspb.RESET_REAPPLY_TYPE_NONE:
 		// noop
@@ -3024,7 +3024,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 					),
 					eventsReapplicationResetWorkflowReason,
 					toReapplyEvents,
-					enumspb.RESET_REAPPLY_TYPE_ALL,
+					enumspb.RESET_REAPPLY_TYPE_SIGNAL,
 				); err != nil {
 					return nil, err
 				}

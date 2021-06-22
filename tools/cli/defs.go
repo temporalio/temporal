@@ -88,9 +88,9 @@ var resetTypesMap = map[string]interface{}{
 }
 
 var resetReapplyTypesMap = map[string]interface{}{
-	"":     enumspb.RESET_REAPPLY_TYPE_ALL, // default value
-	"All":  enumspb.RESET_REAPPLY_TYPE_ALL,
-	"None": enumspb.RESET_REAPPLY_TYPE_NONE,
+	"":       enumspb.RESET_REAPPLY_TYPE_SIGNAL, // default value
+	"Signal": enumspb.RESET_REAPPLY_TYPE_SIGNAL,
+	"None":   enumspb.RESET_REAPPLY_TYPE_NONE,
 }
 
 type jsonType int

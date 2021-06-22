@@ -2109,8 +2109,8 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 
 	switch request.GetResetReapplyType() {
 	case enumspb.RESET_REAPPLY_TYPE_UNSPECIFIED:
-		request.ResetReapplyType = enumspb.RESET_REAPPLY_TYPE_ALL
-	case enumspb.RESET_REAPPLY_TYPE_ALL:
+		request.ResetReapplyType = enumspb.RESET_REAPPLY_TYPE_SIGNAL
+	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
 		// noop
 	case enumspb.RESET_REAPPLY_TYPE_NONE:
 		// noop

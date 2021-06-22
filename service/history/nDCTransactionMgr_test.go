@@ -235,7 +235,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 		workflow,
 		eventsReapplicationResetWorkflowReason,
 		workflowEvents.Events,
-		enumspb.RESET_REAPPLY_TYPE_ALL,
+		enumspb.RESET_REAPPLY_TYPE_SIGNAL,
 	).Return(nil)
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{

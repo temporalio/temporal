@@ -206,7 +206,7 @@ func (s *integrationSuite) TestResetWorkflow_ReapplyAll() {
 	workflowTypeName := "integration-reset-workflow-test-reapply-all-type"
 	taskQueueName := "integration-reset-workflow-test-reapply-all-taskqueue"
 
-	s.testResetWorkflowReapply(workflowID, workflowTypeName, taskQueueName, 4, 3, enumspb.RESET_REAPPLY_TYPE_ALL)
+	s.testResetWorkflowReapply(workflowID, workflowTypeName, taskQueueName, 4, 3, enumspb.RESET_REAPPLY_TYPE_SIGNAL)
 }
 
 func (s *integrationSuite) TestResetWorkflow_ReapplyNone() {
@@ -339,7 +339,7 @@ func (s *integrationSuite) testResetWorkflowReapply(
 	}
 
 	switch reapplyType {
-	case enumspb.RESET_REAPPLY_TYPE_ALL:
+	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
 		s.Equal(totalSignals, signalCount)
 	case enumspb.RESET_REAPPLY_TYPE_NONE:
 		s.Equal(0, signalCount)
