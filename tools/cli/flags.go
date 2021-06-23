@@ -237,6 +237,7 @@ const (
 	FlagType                                  = "type"
 	FlagTypeWithAlias                         = FlagType + ", t"
 	FlagVersion                               = "version"
+	FlagIdempotent                            = "idempotent"
 
 	FlagProtoType  = "type"
 	FlagHexData    = "hex_data"

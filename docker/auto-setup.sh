@@ -259,18 +259,14 @@ register_default_namespace() {
 }
 
 add_custom_search_attributes() {
-    if ! tctl cluster get-search-attributes | grep CustomKeywordField; then
-        echo "Adding Custom*Field search attributes."
-        tctl --auto_confirm admin cluster add-search-attributes \
-            --name CustomKeywordField --type Keyword \
-            --name CustomStringField --type String \
-            --name CustomIntField --type Int \
-            --name CustomDatetimeField --type Datetime \
-            --name CustomDoubleField --type Double \
-            --name CustomBoolField --type Bool
-    else
-        echo "CustomKeywordField search attribute already exist. Skip search attributes creation."
-    fi
+      echo "Adding Custom*Field search attributes."
+      tctl --auto_confirm admin cluster add-search-attributes --idempotent \
+          --name CustomKeywordField --type Keyword \
+          --name CustomStringField --type String \
+          --name CustomIntField --type Int \
+          --name CustomDatetimeField --type Datetime \
+          --name CustomDoubleField --type Double \
+          --name CustomBoolField --type Bool
 }
 
 setup_server(){

@@ -597,6 +597,10 @@ func newAdminClusterCommands() []cli.Command {
 					Usage:  "ES index name (optional)",
 					Hidden: true, // don't show it for now
 				},
+				cli.BoolFlag{
+					Name:  FlagIdempotent,
+					Usage: "Add only missing attributes",
+				},
 				cli.StringSliceFlag{
 					Name:  FlagNameWithAlias,
 					Usage: "Search attribute name",
