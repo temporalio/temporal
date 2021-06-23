@@ -41,7 +41,7 @@ const (
 	ServerVersion = "1.10.4"
 	CLIVersion    = "1.10.4"
 
-	// SupportedServerVersions is used by CLI and inter role communication.
+	// SupportedServerVersions is used by CLI and inter role communication
 	SupportedServerVersions = ">=1.0.0 <2.0.0"
 )
 
