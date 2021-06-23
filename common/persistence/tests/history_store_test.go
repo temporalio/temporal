@@ -113,6 +113,7 @@ func (s *historyEventsSuite) TestAppendSelect_First() {
 	)
 	s.appendHistoryEvents(shardID, branchToken, eventsPacket)
 
+	s.Equal(eventsPacket.events, s.listHistoryEvents(shardID, branchToken, common.FirstEventID, 4))
 	s.Equal(eventsPacket.events, s.listAllHistoryEvents(shardID, branchToken))
 }
 
@@ -140,6 +141,8 @@ func (s *historyEventsSuite) TestAppendSelect_NonShadowing() {
 	s.appendHistoryEvents(shardID, branchToken, eventsPacket1)
 	events = append(events, eventsPacket1.events...)
 
+	s.Equal(eventsPacket0.events, s.listHistoryEvents(shardID, branchToken, common.FirstEventID, 4))
+	s.Equal(eventsPacket1.events, s.listHistoryEvents(shardID, branchToken, 4, 6))
 	s.Equal(events, s.listAllHistoryEvents(shardID, branchToken))
 }
 
@@ -179,6 +182,8 @@ func (s *historyEventsSuite) TestAppendSelect_Shadowing() {
 	s.appendHistoryEvents(shardID, branchToken, eventsPacket11)
 	events1 = append(events1, eventsPacket11.events...)
 
+	s.Equal(eventsPacket0.events, s.listHistoryEvents(shardID, branchToken, common.FirstEventID, 4))
+	s.Equal(eventsPacket11.events, s.listHistoryEvents(shardID, branchToken, 4, 6))
 	s.Equal(events1, s.listAllHistoryEvents(shardID, branchToken))
 }
 
@@ -217,6 +222,10 @@ func (s *historyEventsSuite) TestAppendForkSelect_NoShadowing() {
 	s.appendHistoryEvents(shardID, newBranchToken, eventsPacket11)
 	events1 = append(events1, eventsPacket11.events...)
 
+	s.Equal(eventsPacket0.events, s.listHistoryEvents(shardID, branchToken, common.FirstEventID, 4))
+	s.Equal(eventsPacket0.events, s.listHistoryEvents(shardID, newBranchToken, common.FirstEventID, 4))
+	s.Equal(eventsPacket10.events, s.listHistoryEvents(shardID, branchToken, 4, 6))
+	s.Equal(eventsPacket11.events, s.listHistoryEvents(shardID, newBranchToken, 4, 6))
 	s.Equal(events0, s.listAllHistoryEvents(shardID, branchToken))
 	s.Equal(events1, s.listAllHistoryEvents(shardID, newBranchToken))
 }
@@ -271,6 +280,12 @@ func (s *historyEventsSuite) TestAppendForkSelect_Shadowing_NonLastBranch() {
 	s.appendHistoryEvents(shardID, newBranchToken, eventsPacket21)
 	events1 = append(events1, eventsPacket21.events...)
 
+	s.Equal(eventsPacket0.events, s.listHistoryEvents(shardID, branchToken, common.FirstEventID, 4))
+	s.Equal(eventsPacket0.events, s.listHistoryEvents(shardID, newBranchToken, common.FirstEventID, 4))
+	s.Equal(eventsPacket1.events, s.listHistoryEvents(shardID, branchToken, 4, 6))
+	s.Equal(eventsPacket1.events, s.listHistoryEvents(shardID, newBranchToken, 4, 6))
+	s.Equal(eventsPacket20.events, s.listHistoryEvents(shardID, branchToken, 6, 7))
+	s.Equal(eventsPacket21.events, s.listHistoryEvents(shardID, newBranchToken, 6, 7))
 	s.Equal(events0, s.listAllHistoryEvents(shardID, branchToken))
 	s.Equal(events1, s.listAllHistoryEvents(shardID, newBranchToken))
 }
@@ -308,6 +323,8 @@ func (s *historyEventsSuite) TestAppendForkSelect_Shadowing_LastBranch() {
 	s.appendHistoryEvents(shardID, newBranchToken, eventsPacket20)
 	events0 = append(events0, eventsPacket20.events...)
 
+	s.Equal(eventsPacket0.events, s.listHistoryEvents(shardID, newBranchToken, common.FirstEventID, 4))
+	s.Equal(eventsPacket20.events, s.listHistoryEvents(shardID, newBranchToken, 4, 6))
 	s.Equal(events0, s.listAllHistoryEvents(shardID, newBranchToken))
 
 	eventsPacket21 := s.newHistoryEvents(
@@ -318,6 +335,8 @@ func (s *historyEventsSuite) TestAppendForkSelect_Shadowing_LastBranch() {
 	s.appendHistoryEvents(shardID, newBranchToken, eventsPacket21)
 	events1 = append(events1, eventsPacket21.events...)
 
+	s.Equal(eventsPacket0.events, s.listHistoryEvents(shardID, newBranchToken, common.FirstEventID, 4))
+	s.Equal(eventsPacket21.events, s.listHistoryEvents(shardID, newBranchToken, 4, 6))
 	s.Equal(events1, s.listAllHistoryEvents(shardID, newBranchToken))
 }
 
@@ -503,6 +522,30 @@ func (s *historyEventsSuite) trimHistoryBranch(
 		TransactionID: transactionID,
 	})
 	s.NoError(err)
+}
+
+func (s *historyEventsSuite) listHistoryEvents(
+	shardID int32,
+	branchToken []byte,
+	startEventID int64,
+	endEventID int64,
+) []*historypb.HistoryEvent {
+	var token []byte
+	var events []*historypb.HistoryEvent
+	for doContinue := true; doContinue; doContinue = len(token) > 0 {
+		resp, err := s.store.ReadHistoryBranch(&p.ReadHistoryBranchRequest{
+			ShardID:       shardID,
+			BranchToken:   branchToken,
+			MinEventID:    startEventID,
+			MaxEventID:    endEventID,
+			PageSize:      1, // use 1 here for better testing exp
+			NextPageToken: token,
+		})
+		s.NoError(err)
+		token = resp.NextPageToken
+		events = append(events, resp.HistoryEvents...)
+	}
+	return events
 }
 
 func (s *historyEventsSuite) listAllHistoryEvents(
