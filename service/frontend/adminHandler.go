@@ -210,21 +210,7 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 	}
 	scope.IncCounter(metrics.AddSearchAttributesWorkflowSuccessCount)
 
-	// Get current state and return it.
-	resp, err := adh.getSearchAttributes(ctx, indexName, run.GetRunID())
-	if err != nil {
-		// Don't return error in case of getSearchAttributes error. Just log it.
-		adh.GetLogger().Error("Unable to get search attributes back while adding them.", tag.Error(err))
-		metricsGetSearchAttributesScope := adh.GetMetricsClient().Scope(metrics.AdminGetSearchAttributesScope)
-		metricsGetSearchAttributesScope.IncCounter(metrics.ServiceFailures)
-	}
-
-	return &adminservice.AddSearchAttributesResponse{
-		CustomAttributes:         resp.GetCustomAttributes(),
-		SystemAttributes:         resp.GetSystemAttributes(),
-		Mapping:                  resp.GetMapping(),
-		AddWorkflowExecutionInfo: resp.GetAddWorkflowExecutionInfo(),
-	}, nil
+	return &adminservice.AddSearchAttributesResponse{}, nil
 }
 
 // RemoveSearchAttributes add search attribute to the cluster.
@@ -281,6 +267,10 @@ func (adh *AdminHandler) GetSearchAttributes(ctx context.Context, request *admin
 
 	scope, sw := adh.startRequestProfile(metrics.AdminGetSearchAttributesScope)
 	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
 
 	indexName := request.GetIndexName()
 	if indexName == "" {
