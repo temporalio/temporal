@@ -218,7 +218,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyExpired() {
 	expectedResponse.ScheduledEventId = di.ScheduleID
 	expectedResponse.ScheduledTime = di.ScheduledTime
 	expectedResponse.StartedEventId = di.ScheduleID + 1
-	expectedResponse.StickyExecutionEnabled = false
+	expectedResponse.StickyExecutionEnabled = true
 	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
 	expectedResponse.Attempt = di.Attempt
 	expectedResponse.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{
