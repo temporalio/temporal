@@ -26,6 +26,7 @@ package authorization
 
 import (
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"fmt"
@@ -49,6 +50,13 @@ const (
 	errorTestOptionNoSubject
 	errorTestOptionNoAlgorithm
 	errorTestOptionNoError = errorTestOptions(0)
+)
+
+type keyAlgorithm int8
+
+const (
+	RSA keyAlgorithm = iota
+	ECDSA
 )
 
 const (
@@ -90,16 +98,23 @@ func (s *defaultClaimMapperSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *defaultClaimMapperSuite) TestTokenGenerator() {
-	tokenString, err := s.tokenGenerator.generateToken(
+func (s *defaultClaimMapperSuite) TestTokenGeneratorRSA() {
+	s.testTokenGenerator(RSA)
+}
+func (s *defaultClaimMapperSuite) TestTokenGeneratorECDSA() {
+	s.testTokenGenerator(ECDSA)
+}
+func (s *defaultClaimMapperSuite) testTokenGenerator(alg keyAlgorithm) {
+	tokenString, err := s.tokenGenerator.generateToken(alg,
 		testSubject, permissionsAdmin, errorTestOptionNoError)
 	s.NoError(err)
 	claims, err := parseJWT(tokenString, s.tokenGenerator)
 	s.NoError(err)
 	s.Equal(testSubject, claims["sub"])
 }
+
 func (s *defaultClaimMapperSuite) TestTokenWithNoSubject() {
-	tokenString, err := s.tokenGenerator.generateToken(
+	tokenString, err := s.tokenGenerator.generateRSAToken(
 		testSubject, permissionsAdmin, errorTestOptionNoSubject)
 	s.NoError(err)
 	claims, err := parseJWT(tokenString, s.tokenGenerator)
@@ -108,21 +123,28 @@ func (s *defaultClaimMapperSuite) TestTokenWithNoSubject() {
 	s.Nil(subject)
 }
 func (s *defaultClaimMapperSuite) TestTokenWithNoKID() {
-	tokenString, err := s.tokenGenerator.generateToken(
+	tokenString, err := s.tokenGenerator.generateRSAToken(
 		testSubject, permissionsAdmin, errorTestOptionNoKID)
 	s.NoError(err)
 	_, err = parseJWT(tokenString, s.tokenGenerator)
 	s.Error(err, "malformed token - no \"kid\" header")
 }
 func (s *defaultClaimMapperSuite) TestTokenWithNoAlgorithm() {
-	tokenString, err := s.tokenGenerator.generateToken(
+	tokenString, err := s.tokenGenerator.generateRSAToken(
 		testSubject, permissionsAdmin, errorTestOptionNoAlgorithm)
 	s.NoError(err)
 	_, err = parseJWT(tokenString, s.tokenGenerator)
 	s.Error(err, "signing method (alg) is unspecified.")
 }
-func (s *defaultClaimMapperSuite) TestTokenWithAdminPermissions() {
-	tokenString, err := s.tokenGenerator.generateToken(
+
+func (s *defaultClaimMapperSuite) TestTokenWithAdminPermissionsRSA() {
+	s.testTokenWithAdminPermissions(RSA)
+}
+func (s *defaultClaimMapperSuite) TestTokenWithAdminPermissionsECDSA() {
+	s.testTokenWithAdminPermissions(ECDSA)
+}
+func (s *defaultClaimMapperSuite) testTokenWithAdminPermissions(alg keyAlgorithm) {
+	tokenString, err := s.tokenGenerator.generateToken(alg,
 		testSubject, permissionsAdmin, errorTestOptionNoError)
 	s.NoError(err)
 	authInfo := &AuthInfo{
@@ -140,9 +162,16 @@ func (s *defaultClaimMapperSuite) TestTokenWithAdminPermissions() {
 	defaultRole := claims.Namespaces[defaultNamespace]
 	s.Equal(RoleReader, defaultRole)
 }
-func (s *defaultClaimMapperSuite) TestTokenWithReaderWriterWorkerPermissions() {
+
+func (s *defaultClaimMapperSuite) TestTokenWithReaderWriterWorkerPermissionsRSA() {
+	s.testTokenWithReaderWriterWorkerPermissions(RSA)
+}
+func (s *defaultClaimMapperSuite) TestTokenWithReaderWriterWorkerPermissionsECDSA() {
+	s.testTokenWithReaderWriterWorkerPermissions(ECDSA)
+}
+func (s *defaultClaimMapperSuite) testTokenWithReaderWriterWorkerPermissions(alg keyAlgorithm) {
 	tokenString, err := s.tokenGenerator.generateToken(
-		testSubject, permissionsReaderWriterWorker, errorTestOptionNoError)
+		alg, testSubject, permissionsReaderWriterWorker, errorTestOptionNoError)
 	s.NoError(err)
 	authInfo := &AuthInfo{
 		AddBearer(tokenString),
@@ -171,7 +200,7 @@ func (s *defaultClaimMapperSuite) TestGetClaimMapperFromConfigUnknown() {
 }
 
 func (s *defaultClaimMapperSuite) TestWrongAudience() {
-	tokenString, err := s.tokenGenerator.generateToken(testSubject, permissionsAdmin, errorTestOptionNoError)
+	tokenString, err := s.tokenGenerator.generateRSAToken(testSubject, permissionsAdmin, errorTestOptionNoError)
 	s.NoError(err)
 	authInfo := &AuthInfo{
 		AddBearer(tokenString),
@@ -185,7 +214,7 @@ func (s *defaultClaimMapperSuite) TestWrongAudience() {
 }
 
 func (s *defaultClaimMapperSuite) TestCorrectAudience() {
-	tokenString, err := s.tokenGenerator.generateToken(testSubject, permissionsAdmin, errorTestOptionNoError)
+	tokenString, err := s.tokenGenerator.generateRSAToken(testSubject, permissionsAdmin, errorTestOptionNoError)
 	s.NoError(err)
 	authInfo := &AuthInfo{
 		AddBearer(tokenString),
@@ -199,7 +228,7 @@ func (s *defaultClaimMapperSuite) TestCorrectAudience() {
 }
 
 func (s *defaultClaimMapperSuite) TestIgnoreAudience() {
-	tokenString, err := s.tokenGenerator.generateToken(testSubject, permissionsAdmin, errorTestOptionNoError)
+	tokenString, err := s.tokenGenerator.generateRSAToken(testSubject, permissionsAdmin, errorTestOptionNoError)
 	s.NoError(err)
 	authInfo := &AuthInfo{
 		AddBearer(tokenString),
@@ -234,19 +263,30 @@ func AddBearer(token string) string {
 
 type (
 	tokenGenerator struct {
-		privateKey *rsa.PrivateKey
-		publicKey  *rsa.PublicKey
+		rsaPrivateKey   *rsa.PrivateKey
+		rsaPublicKey    *rsa.PublicKey
+		ecdsaPrivateKey *ecdsa.PrivateKey
+		ecdsaPublicKey  *ecdsa.PublicKey
 	}
 )
 
 func newTokenGenerator() *tokenGenerator {
 
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil
+	}
+	ecdsaKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return nil
 	}
 
-	return &tokenGenerator{privateKey: key, publicKey: &key.PublicKey}
+	return &tokenGenerator{
+		rsaPrivateKey:   rsaKey,
+		rsaPublicKey:    &rsaKey.PublicKey,
+		ecdsaPrivateKey: ecdsaKey,
+		ecdsaPublicKey:  &ecdsaKey.PublicKey,
+	}
 }
 
 type (
@@ -260,7 +300,15 @@ func (CustomClaims) Valid(*jwt.ValidationHelper) error {
 	return nil
 }
 
-func (tg *tokenGenerator) generateToken(subject string, permissions []string, options errorTestOptions) (string, error) {
+func (tg *tokenGenerator) generateRSAToken(subject string, permissions []string, options errorTestOptions) (string, error) {
+	return tg.generateToken(RSA, subject, permissions, options)
+}
+
+func (tg *tokenGenerator) generateECDSAToken(subject string, permissions []string, options errorTestOptions) (string, error) {
+	return tg.generateToken(ECDSA, subject, permissions, options)
+}
+
+func (tg *tokenGenerator) generateToken(alg keyAlgorithm, subject string, permissions []string, options errorTestOptions) (string, error) {
 	claims := CustomClaims{
 		permissions,
 		jwt.StandardClaims{
@@ -273,25 +321,40 @@ func (tg *tokenGenerator) generateToken(subject string, permissions []string, op
 		claims.Subject = subject
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	var token *jwt.Token
+	switch alg {
+	case RSA:
+		token = jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	case ECDSA:
+		token = jwt.NewWithClaims(jwt.SigningMethodES256, claims)
+	default:
+		return "", fmt.Errorf("unsupported algorithm")
+	}
+
 	if options&errorTestOptionNoKID == 0 {
 		token.Header["kid"] = "test-key"
 	}
 	if options&errorTestOptionNoAlgorithm > 0 {
 		delete(token.Header, "alg")
 	}
-	signedToken, err := token.SignedString(tg.privateKey)
-	return signedToken, err
+
+	switch alg {
+	case RSA:
+		return token.SignedString(tg.rsaPrivateKey)
+	case ECDSA:
+		return token.SignedString(tg.ecdsaPrivateKey)
+	}
+	return "", fmt.Errorf("unexpected condition")
 }
 
 func (tg *tokenGenerator) EcdsaKey(alg string, kid string) (*ecdsa.PublicKey, error) {
-	return nil, fmt.Errorf("unsupported key type ECDSA for: %s", alg)
+	return tg.ecdsaPublicKey, nil
 }
 func (tg *tokenGenerator) HmacKey(alg string, kid string) ([]byte, error) {
 	return nil, fmt.Errorf("unsupported key type HMAC for: %s", alg)
 }
 func (tg *tokenGenerator) RsaKey(alg string, kid string) (*rsa.PublicKey, error) {
-	return tg.publicKey, nil
+	return tg.rsaPublicKey, nil
 }
 func (tg *tokenGenerator) Close() {
 }

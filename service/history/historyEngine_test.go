@@ -4904,8 +4904,10 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any()).Return(gceResponse, nil)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
 	s.mockEventsReapplier.EXPECT().reapplyEvents(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
-	s.mockWorkflowResetter.EXPECT().resetWorkflow(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
-		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+	s.mockWorkflowResetter.EXPECT().resetWorkflow(
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 	).Return(nil)
 	err = s.mockHistoryEngine.ReapplyEvents(
 		context.Background(),

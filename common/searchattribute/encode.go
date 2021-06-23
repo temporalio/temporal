@@ -51,7 +51,7 @@ func Encode(searchAttributes map[string]interface{}, typeMap *NameTypeMap) (*com
 		indexedFields[saName] = valPayload
 		saType := enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
 		if typeMap != nil {
-			saType, err = typeMap.GetType(saName)
+			saType, err = typeMap.getType(saName, customCategory|predefinedCategory)
 			if err != nil {
 				lastErr = err
 				continue
@@ -77,7 +77,7 @@ func Decode(searchAttributes *commonpb.SearchAttributes, typeMap *NameTypeMap) (
 		saType := enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
 		if typeMap != nil {
 			var err error
-			saType, err = typeMap.GetType(saName)
+			saType, err = typeMap.getType(saName, customCategory|predefinedCategory)
 			if err != nil {
 				lastErr = err
 			}

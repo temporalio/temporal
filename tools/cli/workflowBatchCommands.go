@@ -118,7 +118,7 @@ func ListBatchJobs(c *cli.Context) {
 			ErrorAndExit("Failed to deserialize reason memo field", err)
 		}
 
-		err = payload.Decode(wf.SearchAttributes.IndexedFields[searchattribute.BarcherUser], &operator)
+		err = payload.Decode(wf.SearchAttributes.IndexedFields[searchattribute.BatcherUser], &operator)
 		if err != nil {
 			ErrorAndExit("Failed to deserialize operator search attribute", err)
 		}
@@ -196,7 +196,7 @@ func StartBatchJob(c *cli.Context) {
 		},
 		SearchAttributes: map[string]interface{}{
 			searchattribute.BatcherNamespace: namespace,
-			searchattribute.BarcherUser:      operator,
+			searchattribute.BatcherUser:      operator,
 		},
 	}
 

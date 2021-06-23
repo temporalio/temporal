@@ -18,12 +18,11 @@ require (
 	github.com/emirpasic/gods v0.0.0-20190624094223-e689965507ab
 	github.com/fatih/color v1.10.0
 	github.com/go-sql-driver/mysql v1.5.0
-	github.com/gocql/gocql v0.0.0-20210425135552-909f2a77f46e
+	github.com/gocql/gocql v0.0.0-20210621133426-d83b80dfb480
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.0
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/mock v1.5.0
-	github.com/golang/snappy v0.0.3 // indirect
 	github.com/google/uuid v1.2.0
 	github.com/gorilla/websocket v1.4.2
 	github.com/hashicorp/go-hclog v0.16.0
@@ -43,6 +42,7 @@ require (
 	github.com/olivere/elastic v6.2.35+incompatible
 	github.com/olivere/elastic/v7 v7.0.24
 	github.com/pborman/uuid v1.2.1
+	github.com/pierrec/lz4/v4 v4.1.8 // indirect
 	github.com/prometheus/procfs v0.6.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
@@ -60,7 +60,7 @@ require (
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.opentelemetry.io/otel v0.15.0
 	go.opentelemetry.io/otel/exporters/metric/prometheus v0.15.0
-	go.temporal.io/api v1.4.1-0.20210429213054-a9a257b5cf16
+	go.temporal.io/api v1.4.1-0.20210622200201-edd2d5680749
 	go.temporal.io/sdk v1.7.0
 	go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193
 	go.uber.org/atomic v1.7.0
@@ -69,9 +69,8 @@ require (
 	golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b // indirect
 	golang.org/x/oauth2 v0.0.0-20210413134643-5e61552d6c78
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
-	golang.org/x/tools v0.1.1 // indirect
 	google.golang.org/api v0.45.0
-	google.golang.org/grpc v1.37.0
+	google.golang.org/grpc v1.38.0
 	google.golang.org/grpc/examples v0.0.0-20210426212906-52a707c0dafe
 	gopkg.in/check.v1 v1.0.0-20200902074654-038fdea0a05b // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1

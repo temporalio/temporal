@@ -79,8 +79,8 @@ func Test_GetType(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_KEYWORD, ivt)
 	ivt, err = typeMap.GetType("NamespaceId")
-	assert.NoError(err)
-	assert.Equal(enumspb.INDEXED_VALUE_TYPE_KEYWORD, ivt)
+	assert.Error(err)
+	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
 
 	ivt, err = NameTypeMap{}.GetType("key1")
 	assert.Error(err)

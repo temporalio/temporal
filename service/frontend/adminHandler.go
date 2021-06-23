@@ -172,7 +172,7 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 	}
 
 	for saName, saType := range request.GetSearchAttributes() {
-		if searchattribute.IsReservedField(saName) {
+		if searchattribute.IsReserved(saName) {
 			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeIsReservedMessage, saName)), scope)
 		}
 		if currentSearchAttributes.IsDefined(saName) {

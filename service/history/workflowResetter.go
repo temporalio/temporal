@@ -68,6 +68,7 @@ type (
 			currentWorkflow nDCWorkflow,
 			resetReason string,
 			additionalReapplyEvents []*historypb.HistoryEvent,
+			resetReapplyType enumspb.ResetReapplyType,
 		) error
 	}
 
@@ -118,6 +119,7 @@ func (r *workflowResetterImpl) resetWorkflow(
 	currentWorkflow nDCWorkflow,
 	resetReason string,
 	additionalReapplyEvents []*historypb.HistoryEvent,
+	resetReapplyType enumspb.ResetReapplyType,
 ) (retError error) {
 
 	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(namespaceID)
@@ -153,6 +155,7 @@ func (r *workflowResetterImpl) resetWorkflow(
 		resetWorkflowVersion,
 		resetReason,
 		additionalReapplyEvents,
+		resetReapplyType,
 	)
 	if err != nil {
 		return err
@@ -180,6 +183,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	resetWorkflowVersion int64,
 	resetReason string,
 	additionalReapplyEvents []*historypb.HistoryEvent,
+	resetReapplyType enumspb.ResetReapplyType,
 ) (nDCWorkflow, error) {
 
 	resetWorkflow, err := r.replayResetWorkflow(
@@ -239,17 +243,24 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		return nil, err
 	}
 
-	if err := r.reapplyContinueAsNewWorkflowEvents(
-		ctx,
-		resetMutableState,
-		namespaceID,
-		workflowID,
-		baseRunID,
-		baseBranchToken,
-		baseRebuildLastEventID+1,
-		baseNextEventID,
-	); err != nil {
-		return nil, err
+	switch resetReapplyType {
+	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
+		if err := r.reapplyContinueAsNewWorkflowEvents(
+			ctx,
+			resetMutableState,
+			namespaceID,
+			workflowID,
+			baseRunID,
+			baseBranchToken,
+			baseRebuildLastEventID+1,
+			baseNextEventID,
+		); err != nil {
+			return nil, err
+		}
+	case enumspb.RESET_REAPPLY_TYPE_NONE:
+		// noop
+	default:
+		panic(fmt.Sprintf("unknown reset type: %v", resetReapplyType))
 	}
 
 	if err := r.reapplyEvents(resetMutableState, additionalReapplyEvents); err != nil {
