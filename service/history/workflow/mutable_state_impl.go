@@ -4094,7 +4094,8 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskTTL() {
 	}
 
 	ttl := e.config.StickyTTL(e.GetNamespaceEntry().GetInfo().Name)
-	if e.timeSource.Now().After(timestamp.TimeValue(e.executionInfo.LastUpdateTime).Add(ttl)) {
+	expired := e.timeSource.Now().After(timestamp.TimeValue(e.executionInfo.LastUpdateTime).Add(ttl))
+	if expired && !e.HasPendingWorkflowTask() {
 		e.ClearStickyness()
 	}
 }
