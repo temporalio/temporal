@@ -187,7 +187,7 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		DefaultWorkflowTaskTimeout:        info.DefaultWorkflowTaskTimeout,
 		LastFirstEventId:                  info.LastFirstEventId,
 		LastEventTaskId:                   info.LastEventTaskId,
-		LastWorkflowTaskCompleteId:        info.LastWorkflowTaskCompleteId,
+		LastWorkflowTaskStartId:           info.LastWorkflowTaskStartId,
 		StartTime:                         info.StartTime,
 		LastUpdateTime:                    info.LastUpdateTime,
 		SignalCount:                       info.SignalCount,

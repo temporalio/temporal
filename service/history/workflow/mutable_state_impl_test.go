@@ -614,7 +614,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 		WorkflowTypeName:           "wType",
 		WorkflowRunTimeout:         timestamp.DurationFromSeconds(200),
 		DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(100),
-		LastWorkflowTaskCompleteId: int64(99),
+		LastWorkflowTaskStartId:    int64(99),
 		LastUpdateTime:             timestamp.TimeNowPtrUtc(),
 		StartTime:                  startTime,
 		ExecutionTime:              startTime,
