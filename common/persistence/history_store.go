@@ -411,7 +411,9 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	currentBranch := branchAncestors[token.CurrentRangeIndex]
 	// minNodeID remains the same, since caller can read from the middle
 	// maxNodeID need to be shortened since this branch can contain additional history nodes
-	maxNodeID = currentBranch.GetEndNodeId()
+	if currentBranch.GetEndNodeId() < maxNodeID {
+		maxNodeID = currentBranch.GetEndNodeId()
+	}
 	branchID := currentBranch.GetBranchId()
 	resp, err := m.persistence.ReadHistoryBranch(&InternalReadHistoryBranchRequest{
 		ShardID:       shardID,
