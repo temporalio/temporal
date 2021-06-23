@@ -894,18 +894,6 @@ func (mr *MockMutableStateMockRecorder) DeleteWorkflowTask() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).DeleteWorkflowTask))
 }
 
-// FailWorkflowTask mocks base method.
-func (m *MockMutableState) FailWorkflowTask(arg0 bool) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "FailWorkflowTask", arg0)
-}
-
-// FailWorkflowTask indicates an expected call of FailWorkflowTask.
-func (mr *MockMutableStateMockRecorder) FailWorkflowTask(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).FailWorkflowTask), arg0)
-}
-
 // FlushBufferedEvents mocks base method.
 func (m *MockMutableState) FlushBufferedEvents() {
 	m.ctrl.T.Helper()

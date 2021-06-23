@@ -132,7 +132,6 @@ type (
 		CreateTransientWorkflowTaskEvents(di *WorkflowTaskInfo, identity string) (*historypb.HistoryEvent, *historypb.HistoryEvent)
 		DeleteWorkflowTask()
 		DeleteSignalRequested(requestID string)
-		FailWorkflowTask(bool)
 		FlushBufferedEvents()
 		GetActivityByActivityID(string) (*persistencespb.ActivityInfo, bool)
 		GetActivityInfo(int64) (*persistencespb.ActivityInfo, bool)
