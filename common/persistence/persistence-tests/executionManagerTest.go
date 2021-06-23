@@ -135,7 +135,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 				WorkflowRunTimeout:         workflowTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastFirstEventId:           common.FirstEventID,
-				LastProcessedEvent:         lastProcessedEventID,
+				LastWorkflowTaskCompleteId: lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
@@ -209,7 +209,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 				WorkflowRunTimeout:         workflowTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastFirstEventId:           common.FirstEventID,
-				LastProcessedEvent:         lastProcessedEventID,
+				LastWorkflowTaskCompleteId: lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
@@ -331,7 +331,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 				WorkflowTypeName:           workflowType,
 				WorkflowRunTimeout:         workflowTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
-				LastProcessedEvent:         lastProcessedEventID,
+				LastWorkflowTaskCompleteId: lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
@@ -420,7 +420,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 				WorkflowRunTimeout:         workflowTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastFirstEventId:           common.FirstEventID,
-				LastProcessedEvent:         lastProcessedEventID,
+				LastWorkflowTaskCompleteId: lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
@@ -602,7 +602,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 				WorkflowTypeName:           workflowType,
 				WorkflowRunTimeout:         workflowTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
-				LastProcessedEvent:         lastProcessedEventID,
+				LastWorkflowTaskCompleteId: lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
@@ -737,7 +737,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 				WorkflowRunTimeout:         workflowTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastFirstEventId:           common.FirstEventID,
-				LastProcessedEvent:         lastProcessedEventID,
+				LastWorkflowTaskCompleteId: lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
@@ -792,7 +792,7 @@ func (s *ExecutionManagerSuite) TestUpsertWorkflowActivity() {
 				WorkflowRunTimeout:         workflowTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastFirstEventId:           common.FirstEventID,
-				LastProcessedEvent:         lastProcessedEventID,
+				LastWorkflowTaskCompleteId: lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
@@ -898,7 +898,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 	closeState := copyWorkflowExecutionState(state0.ExecutionState)
 	closeState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	closeState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-	closeInfo.LastProcessedEvent = int64(2)
+	closeInfo.LastWorkflowTaskCompleteId = int64(2)
 
 	err2 := s.UpdateWorkflowExecution(closeInfo, closeState, int64(5), nil, nil, nextEventID,
 		nil, nil, nil, nil, nil)
@@ -920,7 +920,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 				WorkflowRunTimeout:         workflowTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastFirstEventId:           common.FirstEventID,
-				LastProcessedEvent:         lastProcessedEventID,
+				LastWorkflowTaskCompleteId: lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
 			},
@@ -978,7 +978,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionConcurrentCreate() {
 			continueAsNewState := copyWorkflowExecutionState(state0.ExecutionState)
 			continueAsNewState.State = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 			continueAsNewNextEventID := int64(5)
-			continueAsNewInfo.LastProcessedEvent = int64(2)
+			continueAsNewInfo.LastWorkflowTaskCompleteId = int64(2)
 
 			err2 := s.ContinueAsNewExecution(continueAsNewInfo, continueAsNewState, continueAsNewNextEventID, state0.NextEventId, newExecution, int64(3), int64(2), nil)
 			if err2 != nil {
@@ -1030,7 +1030,7 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 				WorkflowRunTimeout:         timestamp.DurationFromSeconds(20),
 				DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(13),
 				LastFirstEventId:           common.FirstEventID,
-				LastProcessedEvent:         0,
+				LastWorkflowTaskCompleteId: 0,
 				WorkflowTaskScheduleId:     int64(2),
 				WorkflowTaskStartedId:      common.EmptyEventID,
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
@@ -1106,7 +1106,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				WorkflowRunTimeout:              timestamp.DurationFromSeconds(int64(rand.Int31())),
 				DefaultWorkflowTaskTimeout:      timestamp.DurationFromSeconds(int64(rand.Int31())),
 				LastFirstEventId:                common.FirstEventID,
-				LastProcessedEvent:              int64(rand.Int31()),
+				LastWorkflowTaskCompleteId:      int64(rand.Int31()),
 				SignalCount:                     rand.Int63(),
 				WorkflowTaskVersion:             int64(rand.Int31()),
 				WorkflowTaskScheduleId:          int64(rand.Int31()),
@@ -1170,7 +1170,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, state.ExecutionState.State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, state.ExecutionState.Status)
 	s.Equal(createReq.NewWorkflowSnapshot.NextEventID, state.NextEventId)
-	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.LastProcessedEvent, info.LastProcessedEvent)
+	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.LastWorkflowTaskCompleteId, info.LastWorkflowTaskCompleteId)
 	s.True(s.validateTimeRange(timestamp.TimeValue(info.LastUpdateTime), time.Hour))
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTaskVersion, info.WorkflowTaskVersion)
 	s.Equal(createReq.NewWorkflowSnapshot.ExecutionInfo.WorkflowTaskScheduleId, info.WorkflowTaskScheduleId)
@@ -1225,7 +1225,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, state0.ExecutionState.Status)
 	s.Equal(int64(1), info0.LastFirstEventId)
 	s.Equal(int64(3), state0.NextEventId)
-	s.Equal(int64(0), info0.LastProcessedEvent)
+	s.Equal(int64(0), info0.LastWorkflowTaskCompleteId)
 	s.True(s.validateTimeRange(*info0.LastUpdateTime, time.Hour))
 	s.Equal(int64(0), info0.WorkflowTaskVersion)
 	s.Equal(int64(2), info0.WorkflowTaskScheduleId)
@@ -1248,7 +1248,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
 	updatedInfo.LastFirstEventId = int64(3)
-	updatedInfo.LastProcessedEvent = int64(2)
+	updatedInfo.LastWorkflowTaskCompleteId = int64(2)
 	updatedInfo.WorkflowTaskVersion = int64(666)
 	updatedInfo.WorkflowTaskAttempt = 123
 	updatedInfo.WorkflowTaskStartedTime = timestamp.UnixOrZeroTimePtr(321)
@@ -1291,7 +1291,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, state1.ExecutionState.Status)
 	s.Equal(int64(3), info1.LastFirstEventId)
 	s.Equal(int64(5), state1.NextEventId)
-	s.Equal(int64(2), info1.LastProcessedEvent)
+	s.Equal(int64(2), info1.LastWorkflowTaskCompleteId)
 	s.True(s.validateTimeRange(*info1.LastUpdateTime, time.Hour))
 	s.Equal(int64(666), info1.WorkflowTaskVersion)
 	s.Equal(int64(2), info1.WorkflowTaskScheduleId)
@@ -1343,7 +1343,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, state2.ExecutionState.State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, state2.ExecutionState.Status)
 	s.Equal(int64(5), state2.NextEventId)
-	s.Equal(int64(2), info2.LastProcessedEvent)
+	s.Equal(int64(2), info2.LastWorkflowTaskCompleteId)
 	s.True(s.validateTimeRange(*info2.LastUpdateTime, time.Hour))
 	s.Equal(int64(666), info2.WorkflowTaskVersion)
 	s.Equal(int64(2), info2.WorkflowTaskScheduleId)
@@ -1390,7 +1390,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, state3.ExecutionState.State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, state3.ExecutionState.Status)
 	s.Equal(int64(5), state3.NextEventId)
-	s.Equal(int64(2), info3.LastProcessedEvent)
+	s.Equal(int64(2), info3.LastWorkflowTaskCompleteId)
 	s.True(s.validateTimeRange(*info3.LastUpdateTime, time.Hour))
 	s.Equal(int64(666), info3.WorkflowTaskVersion)
 	s.Equal(int64(2), info3.WorkflowTaskScheduleId)
@@ -1439,7 +1439,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, state4.ExecutionState.State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, state4.ExecutionState.Status)
 	s.Equal(int64(5), state4.NextEventId)
-	s.Equal(int64(2), info4.LastProcessedEvent)
+	s.Equal(int64(2), info4.LastWorkflowTaskCompleteId)
 	s.True(s.validateTimeRange(*info4.LastUpdateTime, time.Hour))
 	s.Equal(int64(666), info4.WorkflowTaskVersion)
 	s.Equal(int64(2), info4.WorkflowTaskScheduleId)
@@ -1492,7 +1492,7 @@ func (s *ExecutionManagerSuite) TestDeleteWorkflow() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, state0.ExecutionState.State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, state0.ExecutionState.Status)
 	s.Equal(int64(3), state0.NextEventId)
-	s.Equal(int64(0), info0.LastProcessedEvent)
+	s.Equal(int64(0), info0.LastWorkflowTaskCompleteId)
 	s.True(s.validateTimeRange(*info0.LastUpdateTime, time.Hour))
 	s.Equal(int64(2), info0.WorkflowTaskScheduleId)
 	s.Equal(common.EmptyEventID, info0.WorkflowTaskStartedId)
@@ -1536,7 +1536,7 @@ func (s *ExecutionManagerSuite) TestDeleteCurrentWorkflow() {
 
 	updatedInfo1 := copyWorkflowExecutionInfo(info0.ExecutionInfo)
 	updatedState1 := copyWorkflowExecutionState(info0.ExecutionState)
-	updatedInfo1.LastProcessedEvent = int64(2)
+	updatedInfo1.LastWorkflowTaskCompleteId = int64(2)
 	err3 := s.UpdateWorkflowExecutionAndFinish(updatedInfo1, updatedState1, int64(6), int64(3))
 	s.NoError(err3)
 
@@ -1592,7 +1592,7 @@ func (s *ExecutionManagerSuite) TestUpdateDeleteWorkflow() {
 
 	updatedInfo1 := copyWorkflowExecutionInfo(info0.ExecutionInfo)
 	updatedState1 := copyWorkflowExecutionState(info0.ExecutionState)
-	updatedInfo1.LastProcessedEvent = int64(2)
+	updatedInfo1.LastWorkflowTaskCompleteId = int64(2)
 	err3 := s.UpdateWorkflowExecutionAndFinish(updatedInfo1, updatedState1, int64(6), int64(3))
 	s.NoError(err3)
 
@@ -1711,7 +1711,7 @@ func (s *ExecutionManagerSuite) TestGetCurrentWorkflow() {
 
 	updatedInfo1 := copyWorkflowExecutionInfo(info0.ExecutionInfo)
 	updatedState1 := copyWorkflowExecutionState(info0.ExecutionState)
-	updatedInfo1.LastProcessedEvent = int64(2)
+	updatedInfo1.LastWorkflowTaskCompleteId = int64(2)
 	err3 := s.UpdateWorkflowExecutionAndFinish(updatedInfo1, updatedState1, int64(6), int64(3))
 	s.NoError(err3)
 
@@ -1759,7 +1759,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 	info0 := state0.ExecutionInfo
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState0 := copyWorkflowExecutionState(state0.ExecutionState)
-	updatedInfo.LastProcessedEvent = int64(2)
+	updatedInfo.LastWorkflowTaskCompleteId = int64(2)
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedState0, int64(5), nil, []int64{int64(4)}, int64(3), nil, nil, nil, nil, nil)
 	s.NoError(err2)
 
@@ -1780,7 +1780,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 	info1 := state1.ExecutionInfo
 	updatedInfo1 := copyWorkflowExecutionInfo(info1)
 	updatedState1 := copyWorkflowExecutionState(state1.ExecutionState)
-	updatedInfo1.LastProcessedEvent = int64(2)
+	updatedInfo1.LastWorkflowTaskCompleteId = int64(2)
 	err5 := s.UpdateWorkflowExecutionAndFinish(updatedInfo1, updatedState1, int64(6), int64(5))
 	s.NoError(err5)
 
@@ -2105,7 +2105,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
-	updatedInfo.LastProcessedEvent = int64(2)
+	updatedInfo.LastWorkflowTaskCompleteId = int64(2)
 	scheduleID := int64(123)
 	targetNamespaceID := "8bfb47be-5b57-4d66-9109-5fb35e20b1d0"
 	targetWorkflowID := "some random target namespace ID"
@@ -2200,7 +2200,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
-	updatedInfo.LastProcessedEvent = int64(2)
+	updatedInfo.LastWorkflowTaskCompleteId = int64(2)
 	scheduleID := int64(123)
 	targetNamespaceID := "8bfb47be-5b57-4d66-9109-5fb35e20b1d0"
 	targetWorkflowID := "some random target namespace ID"
@@ -2275,7 +2275,7 @@ func (s *ExecutionManagerSuite) TestTimerTasksComplete() {
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
-	updatedInfo.LastProcessedEvent = int64(2)
+	updatedInfo.LastWorkflowTaskCompleteId = int64(2)
 	tasks := []p.Task{
 		&p.WorkflowTimeoutTask{now.Add(2 * time.Second), 2, 12},
 		&p.DeleteHistoryEventTask{now.Add(2 * time.Second), 3, 13},
@@ -2329,7 +2329,7 @@ func (s *ExecutionManagerSuite) TestTimerTasksRangeComplete() {
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
-	updatedInfo.LastProcessedEvent = int64(2)
+	updatedInfo.LastWorkflowTaskCompleteId = int64(2)
 	tasks := []p.Task{
 		&p.WorkflowTaskTimeoutTask{time.Now().UTC(), 1, 2, 3, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 11},
 		&p.WorkflowTimeoutTask{time.Now().UTC(), 2, 12},
@@ -2397,7 +2397,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
-	updatedInfo.LastProcessedEvent = int64(2)
+	updatedInfo.LastWorkflowTaskCompleteId = int64(2)
 	currentTime := time.Now().UTC()
 
 	activityInfos := []*persistencespb.ActivityInfo{{
@@ -2506,7 +2506,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateTimers() {
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
-	updatedInfo.LastProcessedEvent = int64(2)
+	updatedInfo.LastWorkflowTaskCompleteId = int64(2)
 	currentTime := timestamp.TimePtr(time.Date(2078, 8, 22, 12, 59, 59, 999999, time.UTC))
 	timerID := "id_1"
 	timerInfos := []*persistencespb.TimerInfo{{
@@ -2567,7 +2567,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateChildExecutions() {
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
-	updatedInfo.LastProcessedEvent = int64(2)
+	updatedInfo.LastWorkflowTaskCompleteId = int64(2)
 	createRequestID := uuid.New()
 	childExecutionInfos := []*persistencespb.ChildExecutionInfo{{
 		Version:           1234,
@@ -2624,7 +2624,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateRequestCancel() {
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
-	updatedInfo.LastProcessedEvent = int64(2)
+	updatedInfo.LastWorkflowTaskCompleteId = int64(2)
 	requestCancelInfo := &persistencespb.RequestCancelInfo{
 		Version:               456,
 		InitiatedId:           2,
@@ -2672,7 +2672,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalInfo() {
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
-	updatedInfo.LastProcessedEvent = int64(2)
+	updatedInfo.LastWorkflowTaskCompleteId = int64(2)
 	signalInfo := &persistencespb.SignalInfo{
 		Version:               123,
 		InitiatedId:           2,
@@ -2723,7 +2723,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalRequested() {
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
-	updatedInfo.LastProcessedEvent = int64(2)
+	updatedInfo.LastWorkflowTaskCompleteId = int64(2)
 	signalRequestedID := uuid.New()
 	signalsRequested := []string{signalRequestedID}
 	err2 := s.UpsertSignalsRequestedState(updatedInfo, updatedState, int64(5), int64(3), signalsRequested)
@@ -2764,7 +2764,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateInfo() {
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
 	updatedNextEventID := int64(5)
-	updatedInfo.LastProcessedEvent = int64(2)
+	updatedInfo.LastWorkflowTaskCompleteId = int64(2)
 
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedState, updatedNextEventID, []int64{int64(4)}, nil, int64(3), nil, nil, nil, nil, nil)
 	s.NoError(err2)
@@ -2796,7 +2796,7 @@ func (s *ExecutionManagerSuite) TestContinueAsNew() {
 	continueAsNewState.State = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
 	continueAsNewState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	continueAsNewNextEventID := int64(5)
-	continueAsNewInfo.LastProcessedEvent = int64(2)
+	continueAsNewInfo.LastWorkflowTaskCompleteId = int64(2)
 
 	newWorkflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "continue-as-new-workflow-test",
@@ -2825,7 +2825,7 @@ func (s *ExecutionManagerSuite) TestContinueAsNew() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, prevExecutionState.ExecutionState.State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, prevExecutionState.ExecutionState.Status)
 	s.Equal(int64(5), prevExecutionState.NextEventId)
-	s.Equal(int64(2), prevExecutionInfo.LastProcessedEvent)
+	s.Equal(int64(2), prevExecutionInfo.LastWorkflowTaskCompleteId)
 	s.True(reflect.DeepEqual(prevExecutionInfo.AutoResetPoints, &workflowpb.ResetPoints{}))
 
 	newExecutionState, err4 := s.GetWorkflowMutableState(namespaceID, newWorkflowExecution)
@@ -2834,7 +2834,7 @@ func (s *ExecutionManagerSuite) TestContinueAsNew() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, newExecutionState.ExecutionState.State)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, newExecutionState.ExecutionState.Status)
 	s.Equal(int64(3), newExecutionState.NextEventId)
-	s.Equal(common.EmptyEventID, newExecutionInfo.LastProcessedEvent)
+	s.Equal(common.EmptyEventID, newExecutionInfo.LastWorkflowTaskCompleteId)
 	s.Equal(int64(2), newExecutionInfo.WorkflowTaskScheduleId)
 	s.Equal(testResetPoints.String(), newExecutionInfo.AutoResetPoints.String())
 
@@ -3179,7 +3179,7 @@ func copyWorkflowExecutionInfo(sourceInfo *persistencespb.WorkflowExecutionInfo)
 		WorkflowRunTimeout:         sourceInfo.WorkflowRunTimeout,
 		DefaultWorkflowTaskTimeout: sourceInfo.DefaultWorkflowTaskTimeout,
 		LastFirstEventId:           sourceInfo.LastFirstEventId,
-		LastProcessedEvent:         sourceInfo.LastProcessedEvent,
+		LastWorkflowTaskCompleteId: sourceInfo.LastWorkflowTaskCompleteId,
 		WorkflowTaskVersion:        sourceInfo.WorkflowTaskVersion,
 		WorkflowTaskScheduleId:     sourceInfo.WorkflowTaskScheduleId,
 		WorkflowTaskStartedId:      sourceInfo.WorkflowTaskStartedId,

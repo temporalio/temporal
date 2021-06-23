@@ -212,8 +212,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyExpired() {
 	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
 	expectedResponse.WorkflowType = msBuilder.GetWorkflowType()
 	executionInfo = msBuilder.GetExecutionInfo()
-	if executionInfo.LastProcessedEvent != common.EmptyEventID {
-		expectedResponse.PreviousStartedEventId = executionInfo.LastProcessedEvent
+	if executionInfo.LastWorkflowTaskCompleteId != common.EmptyEventID {
+		expectedResponse.PreviousStartedEventId = executionInfo.LastWorkflowTaskCompleteId
 	}
 	expectedResponse.ScheduledEventId = di.ScheduleID
 	expectedResponse.ScheduledTime = di.ScheduledTime
@@ -282,8 +282,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
 	expectedResponse.WorkflowType = msBuilder.GetWorkflowType()
 	executionInfo = msBuilder.GetExecutionInfo()
-	if executionInfo.LastProcessedEvent != common.EmptyEventID {
-		expectedResponse.PreviousStartedEventId = executionInfo.LastProcessedEvent
+	if executionInfo.LastWorkflowTaskCompleteId != common.EmptyEventID {
+		expectedResponse.PreviousStartedEventId = executionInfo.LastWorkflowTaskCompleteId
 	}
 	expectedResponse.ScheduledEventId = di.ScheduleID
 	expectedResponse.ScheduledTime = di.ScheduledTime
@@ -921,7 +921,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	s.Nil(err)
 	executionBuilder := s.getBuilder(namespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskCompleteId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 }

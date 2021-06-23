@@ -29,6 +29,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -186,7 +187,7 @@ func (m *executionManagerImpl) SerializeExecutionInfo(
 		DefaultWorkflowTaskTimeout:        info.DefaultWorkflowTaskTimeout,
 		LastFirstEventId:                  info.LastFirstEventId,
 		LastEventTaskId:                   info.LastEventTaskId,
-		LastProcessedEvent:                info.LastProcessedEvent,
+		LastWorkflowTaskCompleteId:        info.LastWorkflowTaskCompleteId,
 		StartTime:                         info.StartTime,
 		LastUpdateTime:                    info.LastUpdateTime,
 		SignalCount:                       info.SignalCount,

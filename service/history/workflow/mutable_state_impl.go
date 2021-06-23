@@ -242,7 +242,7 @@ func NewMutableState(
 		WorkflowTaskTimeout:    timestamp.DurationFromSeconds(0),
 		WorkflowTaskAttempt:    1,
 
-		LastProcessedEvent: common.EmptyEventID,
+		LastWorkflowTaskCompleteId: common.EmptyEventID,
 
 		StartTime:        timestamp.TimePtr(startTime),
 		VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
@@ -1158,7 +1158,7 @@ func (e *MutableStateImpl) GetNextEventID() int64 {
 
 // GetPreviousStartedEventID returns last started workflow task event ID
 func (e *MutableStateImpl) GetPreviousStartedEventID() int64 {
-	return e.executionInfo.LastProcessedEvent
+	return e.executionInfo.LastWorkflowTaskCompleteId
 }
 
 func (e *MutableStateImpl) IsWorkflowExecutionRunning() bool {
@@ -1422,7 +1422,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	); err != nil {
 		return err
 	}
-	e.executionInfo.LastProcessedEvent = common.EmptyEventID
+	e.executionInfo.LastWorkflowTaskCompleteId = common.EmptyEventID
 	e.executionInfo.LastFirstEventId = startEvent.GetEventId()
 
 	e.executionInfo.WorkflowTaskVersion = common.EmptyVersion
