@@ -26,13 +26,57 @@ package metrics
 
 import (
 	"time"
-
-	"github.com/uber-go/tally"
 )
 
 type (
-	NoopMetricsClient struct{}
+	NoopMetricsClient    struct{}
+	NoopMetricsScope     struct{}
+	NoopMetricsUserScope struct{}
 )
+
+func NewNoopMetricsUserScope() *NoopMetricsUserScope {
+	return &NoopMetricsUserScope{}
+}
+
+func (n NoopMetricsUserScope) IncCounter(counter string) {}
+
+func (n NoopMetricsUserScope) AddCounter(counter string, delta int64) {}
+
+func (n NoopMetricsUserScope) StartTimer(timer string) Stopwatch {
+	return NopStopwatch()
+}
+
+func (n NoopMetricsUserScope) RecordTimer(timer string, d time.Duration) {}
+
+func (n NoopMetricsUserScope) RecordDistribution(id string, d int) {}
+
+func (n NoopMetricsUserScope) UpdateGauge(gauge string, value float64) {}
+
+func (n NoopMetricsUserScope) Tagged(tags map[string]string) UserScope {
+	return n
+}
+
+func NewNoopMetricsScope() *NoopMetricsScope {
+	return &NoopMetricsScope{}
+}
+
+func (n NoopMetricsScope) IncCounter(counter int) {}
+
+func (n NoopMetricsScope) AddCounter(counter int, delta int64) {}
+
+func (n NoopMetricsScope) StartTimer(timer int) Stopwatch {
+	return NopStopwatch()
+}
+
+func (n NoopMetricsScope) RecordTimer(timer int, d time.Duration) {}
+
+func (n NoopMetricsScope) RecordDistribution(id int, d int) {}
+
+func (n NoopMetricsScope) UpdateGauge(gauge int, value float64) {}
+
+func (n NoopMetricsScope) Tagged(tags ...Tag) Scope {
+	return n
+}
 
 func NewNoopMetricsClient() *NoopMetricsClient {
 	return &NoopMetricsClient{}
@@ -53,8 +97,9 @@ func (m NoopMetricsClient) RecordDistribution(scope int, timer int, d int) {}
 func (m NoopMetricsClient) UpdateGauge(scope int, gauge int, value float64) {}
 
 func (m NoopMetricsClient) Scope(scope int, tags ...Tag) Scope {
-	return &tallyScope{
-		scope:     tally.NoopScope,
-		rootScope: tally.NoopScope,
-	}
+	return NewNoopMetricsScope()
+}
+
+func (m NoopMetricsClient) UserScope() UserScope {
+	return NewNoopMetricsUserScope()
 }

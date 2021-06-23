@@ -123,6 +123,7 @@ func (m *tallyScope) RecordDistribution(id int, d int) {
 	}
 }
 
+// Deprecated: not used
 func (m *tallyScope) RecordHistogramDuration(id int, value time.Duration) {
 	def := m.defs[id]
 	m.scope.Histogram(def.metricName.String(), m.getBuckets(id)).RecordDuration(value)
@@ -131,6 +132,7 @@ func (m *tallyScope) RecordHistogramDuration(id int, value time.Duration) {
 	}
 }
 
+// Deprecated: not used
 func (m *tallyScope) RecordHistogramValue(id int, value float64) {
 	def := m.defs[id]
 	m.scope.Histogram(def.metricName.String(), m.getBuckets(id)).RecordValue(value)
