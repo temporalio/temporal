@@ -61,6 +61,7 @@ type (
 		GetArchivalMetadata() archiver.ArchivalMetadata
 		GetClusterMetadata() cluster.Metadata
 		GetSearchAttributesProvider() searchattribute.Provider
+		GetSearchAttributesManager() searchattribute.Manager
 
 		// other common resources
 

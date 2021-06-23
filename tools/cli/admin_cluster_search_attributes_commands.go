@@ -90,6 +90,43 @@ func AdminAddSearchAttributes(c *cli.Context) {
 	color.HiGreen("Search attributes have been added successfully.")
 }
 
+// AdminRemoveSearchAttributes to add search attributes
+func AdminRemoveSearchAttributes(c *cli.Context) {
+	names := getRequiredStringSliceOption(c, FlagName)
+
+	// ask user for confirmation
+	promptMsg := fmt.Sprintf(
+		"You are about to remove search attributes %s. Continue? Y/N",
+		color.YellowString(fmt.Sprintf("%v", names)),
+	)
+	prompt(promptMsg, c.GlobalBool(FlagAutoConfirm))
+
+	adminClient := cFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+	request := &adminservice.RemoveSearchAttributesRequest{
+		SearchAttributes: names,
+		IndexName:        c.String(FlagIndex),
+	}
+
+	_, err := adminClient.RemoveSearchAttributes(ctx, request)
+	if err != nil {
+		ErrorAndExit("Unable to remove search attributes.", err)
+	}
+
+	getRequest := &adminservice.GetSearchAttributesRequest{
+		IndexName: request.IndexName,
+	}
+
+	resp, err := adminClient.GetSearchAttributes(ctx, getRequest)
+	if err != nil {
+		ErrorAndExit("Search attributes have been removed successfully but there was an error while reading them back.", err)
+	}
+
+	printSearchAttributesResponse(resp, request.GetIndexName())
+	color.HiGreen("Search attributes have been removed successfully.")
+}
+
 // AdminGetSearchAttributes to print search attributes
 func AdminGetSearchAttributes(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)

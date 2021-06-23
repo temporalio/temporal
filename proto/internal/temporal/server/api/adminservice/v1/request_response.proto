@@ -160,6 +160,14 @@ message AddSearchAttributesResponse {
     temporal.api.workflow.v1.WorkflowExecutionInfo add_workflow_execution_info = 4;
 }
 
+message RemoveSearchAttributesRequest {
+    repeated string search_attributes = 1;
+    string index_name = 2;
+}
+
+message RemoveSearchAttributesResponse {
+}
+
 message GetSearchAttributesRequest {
     string index_name = 1;
 }

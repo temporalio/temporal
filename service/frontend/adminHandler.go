@@ -227,6 +227,55 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 	}, nil
 }
 
+// RemoveSearchAttributes add search attribute to the cluster.
+func (adh *AdminHandler) RemoveSearchAttributes(ctx context.Context, request *adminservice.RemoveSearchAttributesRequest) (_ *adminservice.RemoveSearchAttributesResponse, retError error) {
+	defer log.CapturePanic(adh.GetLogger(), &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminRemoveSearchAttributesScope)
+	defer sw.Stop()
+
+	// validate request
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	if len(request.GetSearchAttributes()) == 0 {
+		return nil, adh.error(errSearchAttributesNotSet, scope)
+	}
+
+	indexName := request.GetIndexName()
+	if indexName == "" {
+		indexName = adh.ESConfig.GetVisibilityIndex()
+	}
+
+	currentSearchAttributes, err := adh.Resource.GetSearchAttributesProvider().GetSearchAttributes(indexName, true)
+	if err != nil {
+		return nil, adh.error(serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err)), scope)
+	}
+
+	newCustomSearchAttributes := map[string]enumspb.IndexedValueType{}
+	for saName, saType := range currentSearchAttributes.Custom() {
+		newCustomSearchAttributes[saName] = saType
+	}
+
+	for _, saName := range request.GetSearchAttributes() {
+		if !currentSearchAttributes.IsDefined(saName) {
+			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeDoesntExistMessage, saName)), scope)
+		}
+		if _, ok := newCustomSearchAttributes[saName]; !ok {
+			return nil, adh.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToRemoveNonCustomSearchAttributesMessage, saName)), scope)
+		}
+		delete(newCustomSearchAttributes, saName)
+	}
+
+	err = adh.Resource.GetSearchAttributesManager().SaveSearchAttributes(indexName, newCustomSearchAttributes)
+	if err != nil {
+		return nil, adh.error(serviceerror.NewInternal(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err)), scope)
+	}
+
+	return &adminservice.RemoveSearchAttributesResponse{}, nil
+}
+
 func (adh *AdminHandler) GetSearchAttributes(ctx context.Context, request *adminservice.GetSearchAttributesRequest) (_ *adminservice.GetSearchAttributesResponse, retError error) {
 	defer log.CapturePanic(adh.GetLogger(), &retError)
 

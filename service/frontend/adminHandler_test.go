@@ -391,7 +391,7 @@ func (s *adminHandlerSuite) Test_SetRequestDefaultValueAndGetTargetVersionHistor
 	s.NoError(err)
 }
 
-func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
+func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 	handler := s.handler
 	ctx := context.Background()
 
@@ -522,6 +522,114 @@ func (s *adminHandlerSuite) Test_AddSearchAttribute_Validate() {
 	resp, err = handler.AddSearchAttributes(ctx, &adminservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enumspb.IndexedValueType{
 			"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+}
+
+func (s *adminHandlerSuite) Test_RemoveSearchAttributes() {
+	handler := s.handler
+	ctx := context.Background()
+
+	type test struct {
+		Name     string
+		Request  *adminservice.RemoveSearchAttributesRequest
+		Expected error
+	}
+	// request validation tests
+	testCases1 := []test{
+		{
+			Name:     "nil request",
+			Request:  nil,
+			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
+		},
+		{
+			Name:     "empty request",
+			Request:  &adminservice.RemoveSearchAttributesRequest{},
+			Expected: &serviceerror.InvalidArgument{Message: "SearchAttributes are not set on request."},
+		},
+	}
+	for _, testCase := range testCases1 {
+		s.T().Run(testCase.Name, func(t *testing.T) {
+			resp, err := handler.RemoveSearchAttributes(ctx, testCase.Request)
+			s.Equal(testCase.Expected, err)
+			s.Nil(resp)
+		})
+	}
+
+	// Elasticsearch is not configured
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	testCases3 := []test{
+		{
+			Name: "reserved search attribute (empty index)",
+			Request: &adminservice.RemoveSearchAttributesRequest{
+				SearchAttributes: []string{
+					"WorkflowId",
+				},
+			},
+			Expected: &serviceerror.InvalidArgument{Message: "Unable to remove non-custom search attributes: WorkflowId."},
+		},
+		{
+			Name: "search attribute doesn't exist (empty index)",
+			Request: &adminservice.RemoveSearchAttributesRequest{
+				SearchAttributes: []string{
+					"ProductId",
+				},
+			},
+			Expected: &serviceerror.InvalidArgument{Message: "Search attribute ProductId doesn't exist."},
+		},
+	}
+	for _, testCase := range testCases3 {
+		s.T().Run(testCase.Name, func(t *testing.T) {
+			resp, err := handler.RemoveSearchAttributes(ctx, testCase.Request)
+			s.Equal(testCase.Expected, err)
+			s.Nil(resp)
+		})
+	}
+
+	// Configure Elasticsearch: add advanced visibility store config with index name.
+	handler.ESConfig = &config.Elasticsearch{
+		Indices: map[string]string{
+			"visibility": "random-index-name",
+		},
+	}
+
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	testCases2 := []test{
+		{
+			Name: "reserved search attribute (ES configured)",
+			Request: &adminservice.RemoveSearchAttributesRequest{
+				SearchAttributes: []string{
+					"WorkflowId",
+				},
+			},
+			Expected: &serviceerror.InvalidArgument{Message: "Unable to remove non-custom search attributes: WorkflowId."},
+		},
+		{
+			Name: "search attribute doesn't exist (ES configured)",
+			Request: &adminservice.RemoveSearchAttributesRequest{
+				SearchAttributes: []string{
+					"ProductId",
+				},
+			},
+			Expected: &serviceerror.InvalidArgument{Message: "Search attribute ProductId doesn't exist."},
+		},
+	}
+	for _, testCase := range testCases2 {
+		s.T().Run(testCase.Name, func(t *testing.T) {
+			resp, err := handler.RemoveSearchAttributes(ctx, testCase.Request)
+			s.Equal(testCase.Expected, err)
+			s.Nil(resp)
+		})
+	}
+
+	// Success case.
+	s.mockResource.SearchAttributesManager.EXPECT().SaveSearchAttributes("random-index-name", gomock.Any()).Return(nil)
+
+	resp, err := handler.RemoveSearchAttributes(ctx, &adminservice.RemoveSearchAttributesRequest{
+		SearchAttributes: []string{
+			"CustomKeywordField",
 		},
 	})
 	s.NoError(err)
