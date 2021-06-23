@@ -38,8 +38,8 @@ const (
 	ClientNameJavaSDK = "temporal-java"
 	ClientNameCLI     = "temporal-cli"
 
-	ServerVersion = "1.9.2"
-	CLIVersion    = "1.9.2"
+	ServerVersion = "1.9.3"
+	CLIVersion    = "1.9.3"
 
 	// SupportedServerVersions is used by CLI and inter role communication.
 	SupportedServerVersions = ">=1.0.0 <2.0.0"
