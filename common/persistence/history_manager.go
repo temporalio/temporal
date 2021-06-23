@@ -32,6 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/primitives/timestamp"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -94,7 +95,10 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(
 		}
 	}
 
-	forkBranch, err := m.historySerializer.HistoryBranchFromBlob(&commonpb.DataBlob{Data: request.ForkBranchToken, EncodingType: enumspb.ENCODING_TYPE_PROTO3})
+	forkBranch, err := m.historySerializer.HistoryBranchFromBlob(&commonpb.DataBlob{
+		Data:         request.ForkBranchToken,
+		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -566,7 +570,9 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	currentBranch := branchAncestors[token.CurrentRangeIndex]
 	// minNodeID remains the same, since caller can read from the middle
 	// maxNodeID need to be shortened since this branch can contain additional history nodes
-	maxNodeID = currentBranch.GetEndNodeId()
+	if currentBranch.GetEndNodeId() < maxNodeID {
+		maxNodeID = currentBranch.GetEndNodeId()
+	}
 	branchID := currentBranch.GetBranchId()
 	resp, err := m.persistence.ReadHistoryBranch(&InternalReadHistoryBranchRequest{
 		ShardID:       shardID,
