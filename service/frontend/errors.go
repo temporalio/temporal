@@ -77,12 +77,15 @@ var (
 
 	errPageSizeTooBigMessage = "PageSize is larger than allowed %d."
 
-	errSearchAttributeIsReservedMessage    = "Search attribute %s is reserved by system."
-	errSearchAttributeAlreadyExistsMessage = "Search attribute %s already exists."
-	errUnknownSearchAttributeTypeMessage   = "Unknown search attribute type: %v."
-	errUnableToGetSearchAttributesMessage  = "Unable to get search attributes: %v."
-	errUnableToStartWorkflowMessage        = "Unable to start %s workflow: %v."
-	errWorkflowReturnedErrorMessage        = "Workflow %s returned an error: %v."
+	errSearchAttributeIsReservedMessage               = "Search attribute %s is reserved by system."
+	errSearchAttributeAlreadyExistsMessage            = "Search attribute %s already exists."
+	errSearchAttributeDoesntExistMessage              = "Search attribute %s doesn't exist."
+	errUnknownSearchAttributeTypeMessage              = "Unknown search attribute type: %v."
+	errUnableToGetSearchAttributesMessage             = "Unable to get search attributes: %v."
+	errUnableToRemoveNonCustomSearchAttributesMessage = "Unable to remove non-custom search attributes: %v."
+	errUnableToSaveSearchAttributesMessage            = "Unable to save search attributes: %v."
+	errUnableToStartWorkflowMessage                   = "Unable to start %s workflow: %v."
+	errWorkflowReturnedErrorMessage                   = "Workflow %s returned an error: %v."
 
 	errNoPermission = serviceerror.NewPermissionDenied("No permission to do this operation.", "")
 )

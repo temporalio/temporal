@@ -34,19 +34,8 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
 	enumspb "go.temporal.io/api/enums/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	clispb "go.temporal.io/server/api/cli/v1"
-)
-
-type (
-	// Both AddSearchAttributesResponse and GetSearchAttributesResponse satisfy this interface.
-	searchAttributesResponse interface {
-		GetCustomAttributes() map[string]enumspb.IndexedValueType
-		GetSystemAttributes() map[string]enumspb.IndexedValueType
-		GetMapping() map[string]string
-		GetAddWorkflowExecutionInfo() *workflowpb.WorkflowExecutionInfo
-	}
 )
 
 // AdminAddSearchAttributes to add search attributes
@@ -82,12 +71,58 @@ func AdminAddSearchAttributes(c *cli.Context) {
 		IndexName:        c.String(FlagIndex),
 	}
 
-	resp, err := adminClient.AddSearchAttributes(ctx, request)
+	_, err := adminClient.AddSearchAttributes(ctx, request)
 	if err != nil {
 		ErrorAndExit("Unable to add search attributes.", err)
 	}
+	getRequest := &adminservice.GetSearchAttributesRequest{
+		IndexName: request.IndexName,
+	}
+
+	resp, err := adminClient.GetSearchAttributes(ctx, getRequest)
+	if err != nil {
+		ErrorAndExit("Search attributes have been added successfully but there was an error while reading them back.", err)
+	}
+
 	printSearchAttributesResponse(resp, request.GetIndexName())
 	color.HiGreen("Search attributes have been added successfully.")
+}
+
+// AdminRemoveSearchAttributes to add search attributes
+func AdminRemoveSearchAttributes(c *cli.Context) {
+	names := getRequiredStringSliceOption(c, FlagName)
+
+	// ask user for confirmation
+	promptMsg := fmt.Sprintf(
+		"You are about to remove search attributes %s. Continue? Y/N",
+		color.YellowString(fmt.Sprintf("%v", names)),
+	)
+	prompt(promptMsg, c.GlobalBool(FlagAutoConfirm))
+
+	adminClient := cFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+	request := &adminservice.RemoveSearchAttributesRequest{
+		SearchAttributes: names,
+		IndexName:        c.String(FlagIndex),
+	}
+
+	_, err := adminClient.RemoveSearchAttributes(ctx, request)
+	if err != nil {
+		ErrorAndExit("Unable to remove search attributes.", err)
+	}
+
+	getRequest := &adminservice.GetSearchAttributesRequest{
+		IndexName: request.IndexName,
+	}
+
+	resp, err := adminClient.GetSearchAttributes(ctx, getRequest)
+	if err != nil {
+		ErrorAndExit("Search attributes have been removed successfully but there was an error while reading them back.", err)
+	}
+
+	printSearchAttributesResponse(resp, request.GetIndexName())
+	color.HiGreen("Search attributes have been removed successfully.")
 }
 
 // AdminGetSearchAttributes to print search attributes
@@ -106,7 +141,7 @@ func AdminGetSearchAttributes(c *cli.Context) {
 	printSearchAttributesResponse(resp, request.GetIndexName())
 }
 
-func printSearchAttributesResponse(resp searchAttributesResponse, indexName string) {
+func printSearchAttributesResponse(resp *adminservice.GetSearchAttributesResponse, indexName string) {
 	if indexName != "" {
 		indexName = fmt.Sprintf(" (%s)", indexName)
 	}
