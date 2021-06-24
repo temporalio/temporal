@@ -34,50 +34,9 @@ import (
 	"go.temporal.io/server/common/backoff"
 )
 
-func getBackoffInterval(
-	now time.Time,
-	currentAttempt int32,
-	maxAttempts int32,
-	initInterval *time.Duration,
-	maxInterval *time.Duration,
-	expiration *time.Time,
-	backoffCoefficient float64,
-	failure *failurepb.Failure,
-	nonRetryableTypes []string,
-) (time.Duration, enumspb.RetryState) {
-
-	var initIntervalDuration *time.Duration
-	if initInterval != nil && *initInterval > 0 {
-		initIntervalDuration = initInterval
-	}
-
-	var maxIntervalDuration *time.Duration
-	if maxInterval != nil && *maxInterval > 0 {
-		maxIntervalDuration = maxInterval
-	}
-
-	var expirationTime *time.Time
-	if expiration != nil && !(*expiration).IsZero() {
-		expirationTime = expiration
-	}
-
-	return getBackoffIntervalWrapper(
-		now,
-		currentAttempt,
-		maxAttempts,
-		initIntervalDuration,
-		maxIntervalDuration,
-		expirationTime,
-		backoffCoefficient,
-		failure,
-		nonRetryableTypes,
-	)
-}
-
 // TODO treat 0 as 0, not infinite
-// TODO use getBackoffIntervalWrapper for retry calculation, deprecate the 0 -> nil conversion
 
-func getBackoffIntervalWrapper(
+func getBackoffInterval(
 	now time.Time,
 	currentAttempt int32,
 	maxAttempts int32,
