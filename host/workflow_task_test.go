@@ -144,7 +144,7 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 	s.NoError(err5)
 	s.Nil(resp5.WorkflowTask)
 
-	s.assertLastHistoryEvent(we, 41, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED)
+	s.assertLastHistoryEvent(we, 47, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED)
 }
 
 func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithLocalActivitiesResult() {
