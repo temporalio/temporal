@@ -48,19 +48,23 @@ var (
 	claimsSystemReaderNamespaceUndefined = Claims{
 		System: RoleReader,
 		Namespaces: map[string]Role{
-			"Bar": RoleUndefined,
+			"bar": RoleUndefined,
 		},
 	}
 	claimsSystemUndefinedNamespaceReader = Claims{
 		System: RoleUndefined,
 		Namespaces: map[string]Role{
-			"Bar": RoleReader,
+			"bar": RoleReader,
 		},
 	}
 
 	targetFooBar = CallTarget{
 		APIName:   "Foo",
-		Namespace: "Bar",
+		Namespace: "bar",
+	}
+	targetFooBAR = CallTarget{
+		APIName:   "Foo",
+		Namespace: "BAR",
 	}
 )
 
@@ -110,9 +114,14 @@ func (s *defaultAuthorizerSuite) TestSystemReaderBarUndefinedAuthZ() {
 	s.Equal(DecisionDeny, result.Decision)
 }
 func (s *defaultAuthorizerSuite) TestSystemUndefinedNamespaceReaderAuthZ() {
-	result, err := s.authorizer.Authorize(nil, &claimsSystemReaderNamespaceUndefined, &targetFooBar)
+	result, err := s.authorizer.Authorize(nil, &claimsSystemUndefinedNamespaceReader, &targetFooBar)
 	s.NoError(err)
-	s.Equal(DecisionDeny, result.Decision)
+	s.Equal(DecisionAllow, result.Decision)
+}
+func (s *defaultAuthorizerSuite) TestSystemUndefinedNamespaceCaseMismatch() {
+	result, err := s.authorizer.Authorize(nil, &claimsSystemUndefinedNamespaceReader, &targetFooBAR)
+	s.NoError(err)
+	s.Equal(DecisionAllow, result.Decision)
 }
 func (s *defaultAuthorizerSuite) TestGetAuthorizerFromConfigNoop() {
 	s.testGetAuthorizerFromConfig("", true, reflect.TypeOf(&noopAuthorizer{}))
