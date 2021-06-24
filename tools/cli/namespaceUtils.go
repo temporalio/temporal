@@ -259,7 +259,7 @@ func initializeNamespaceHandler(
 	archiverProvider provider.ArchiverProvider,
 ) namespace.Handler {
 	return namespace.NewHandler(
-		namespace.MinRetention,
+		namespace.MinRetentionDefault,
 		dynamicconfig.GetIntPropertyFilteredByNamespace(namespace.MaxBadBinaries),
 		logger,
 		metadataMgr,

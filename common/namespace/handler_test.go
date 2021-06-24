@@ -90,7 +90,7 @@ func (s *namespaceHandlerCommonSuite) TearDownSuite() {
 func (s *namespaceHandlerCommonSuite) SetupTest() {
 	logger := log.NewNoopLogger()
 	dcCollection := dc.NewCollection(dc.NewNoopClient(), logger)
-	s.minRetention = 1 * 24 * time.Hour
+	s.minRetention = 12 * time.Hour
 	s.maxBadBinaryCount = 10
 	s.metadataMgr = s.TestBase.MetadataManager
 	s.controller = gomock.NewController(s.T())
@@ -383,6 +383,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 }
 
 func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidRetentionPeriod() {
+	// zero is always invalid
 	registerRequest := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        "random namespace name",
 		Description:                      "random namespace name",
@@ -392,6 +393,28 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidRetentionPeri
 	resp, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
 	s.Equal(errInvalidRetentionPeriod, err)
 	s.Nil(resp)
+
+	// handler minimum is 12 hours, so 6 hours is not allowed
+	registerRequest = &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        "random namespace name",
+		Description:                      "random namespace name",
+		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(6 * time.Hour),
+		IsGlobalNamespace:                false,
+	}
+	resp, err = s.handler.RegisterNamespace(context.Background(), registerRequest)
+	s.Equal(errInvalidRetentionPeriod, err)
+	s.Nil(resp)
+
+	// Global namespace can't have < 24 hours even if minRetention is set to 12 hours
+	registerRequest = &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        "random namespace name",
+		Description:                      "random namespace name",
+		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(20 * time.Hour),
+		IsGlobalNamespace:                true,
+	}
+	resp, err = s.handler.RegisterNamespace(context.Background(), registerRequest)
+	s.Equal(errInvalidRetentionPeriod, err)
+	s.Nil(resp)
 }
 
 func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod() {
@@ -399,14 +422,14 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod
 	registerRequest := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		Description:                      namespace,
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(10 * time.Hour * 24),
+		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(10 * 24 * time.Hour),
 		IsGlobalNamespace:                false,
 	}
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
 	s.NoError(err)
 	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
 
-	for _, invalidDuration := range []time.Duration{0, -1 * time.Hour} {
+	for _, invalidDuration := range []time.Duration{0, -1 * time.Hour, 1 * time.Millisecond, 6 * time.Hour} {
 		updateRequest := &workflowservice.UpdateNamespaceRequest{
 			Namespace: namespace,
 			Config: &namespacepb.NamespaceConfig{

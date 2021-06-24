@@ -48,7 +48,20 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
+
+// validateRetentionDuration ensures that retention duration can't be set below a sane minimum.
+func validateRetentionDuration(retention time.Duration, isGlobalNamespace bool) error {
+	min := MinRetentionLocal
+	if isGlobalNamespace {
+		min = MinRetentionGlobal
+	}
+	if retention < min {
+		return errInvalidRetentionPeriod
+	}
+	return nil
+}
 
 type (
 	// Handler is the namespace operation handler
@@ -130,6 +143,12 @@ func (d *HandlerImpl) RegisterNamespace(
 		if !d.clusterMetadata.IsMasterCluster() && registerRequest.GetIsGlobalNamespace() {
 			return nil, errNotMasterCluster
 		}
+	}
+
+	if err := validateRetentionDuration(
+		timestamp.DurationValue(registerRequest.WorkflowExecutionRetentionPeriod),
+		registerRequest.IsGlobalNamespace); err != nil {
+		return nil, err
 	}
 
 	// first check if the name is already registered as the local namespace
@@ -440,7 +459,11 @@ func (d *HandlerImpl) UpdateNamespace(
 		updatedConfig := updateRequest.Config
 		if updatedConfig.GetWorkflowExecutionRetentionTtl() != nil {
 			configurationChanged = true
+
 			config.Retention = updatedConfig.GetWorkflowExecutionRetentionTtl()
+			if err := validateRetentionDuration(timestamp.DurationValue(config.Retention), isGlobalNamespace); err != nil {
+				return nil, err
+			}
 		}
 		if historyArchivalConfigChanged {
 			configurationChanged = true
