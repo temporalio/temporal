@@ -36,6 +36,7 @@ type (
 		serviceIdx        ServiceIdx
 		reporter          *OpentelemetryReporter
 		labels            []label.KeyValue
+		tags              map[string]string
 		rootScope         *opentelemetryScope
 		defs              map[int]metricDefinition
 		isNamespaceTagged bool
@@ -53,21 +54,12 @@ func newOpentelemetryScope(
 	result := &opentelemetryScope{
 		serviceIdx:        serviceIdx,
 		reporter:          reporter,
+		tags:              tags,
 		rootScope:         rootScope,
 		defs:              defs,
 		isNamespaceTagged: isNamespace,
 	}
-	result.labels = result.tagMapToLabelArray(tags)
-	return result
-}
-
-func (m *opentelemetryScope) tagMapToLabelArray(tags map[string]string) []label.KeyValue {
-	result := make([]label.KeyValue, len(tags))
-	idx := 0
-	for k, v := range tags {
-		result[idx] = label.String(k, v)
-		idx++
-	}
+	result.labels = tagMapToLabelArray(tags)
 	return result
 }
 
@@ -174,6 +166,7 @@ func (m *opentelemetryScope) RecordDistribution(id int, d int) {
 	}
 }
 
+// Deprecated: not used
 func (m *opentelemetryScope) RecordHistogramDuration(id int, value time.Duration) {
 	def := m.defs[id]
 	ctx := context.Background()
@@ -186,6 +179,7 @@ func (m *opentelemetryScope) RecordHistogramDuration(id int, value time.Duration
 	}
 }
 
+// Deprecated: not used
 func (m *opentelemetryScope) RecordHistogramValue(id int, value float64) {
 	def := m.defs[id]
 	ctx := context.Background()
@@ -201,8 +195,8 @@ func (m *opentelemetryScope) RecordHistogramValue(id int, value float64) {
 func (m *opentelemetryScope) taggedString(tags map[string]string) *opentelemetryScope {
 	namespaceTagged := m.isNamespaceTagged
 	tagMap := make(map[string]string, len(tags)+len(m.labels))
-	for _, lbl := range m.labels {
-		tagMap[string(lbl.Key)] = lbl.Value.AsString()
+	for k, v := range m.tags {
+		tagMap[k] = v
 	}
 
 	for k, v := range tags {
@@ -225,4 +219,8 @@ func (m *opentelemetryScope) Tagged(tags ...Tag) Scope {
 
 func (m *opentelemetryScope) namespaceTagged(key string, value string) bool {
 	return key == namespace && value != namespaceAllValue
+}
+
+func (m *opentelemetryScope) userScope() UserScope {
+	return newOpentelemetryUserScope(m.reporter, m.tags)
 }

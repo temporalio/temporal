@@ -65,8 +65,12 @@ service AdminService {
     rpc ReapplyEvents (ReapplyEventsRequest) returns (ReapplyEventsResponse) {
     }
 
-    // AddSearchAttribute add custom search attributes and returns comprehensive information about them.
+    // AddSearchAttributes add custom search attributes and returns comprehensive information about them.
     rpc AddSearchAttributes (AddSearchAttributesRequest) returns (AddSearchAttributesResponse) {
+    }
+
+    // RemoveSearchAttributes removes custom search attributes and returns comprehensive information about them.
+    rpc RemoveSearchAttributes (RemoveSearchAttributesRequest) returns (RemoveSearchAttributesResponse) {
     }
 
     // GetSearchAttributes returns comprehensive information about search attributes.

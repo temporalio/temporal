@@ -480,6 +480,8 @@ const (
 	FrontendClientListTaskQueuePartitionsScope
 	// AdminClientAddSearchAttributesScope tracks RPC calls to admin service
 	AdminClientAddSearchAttributesScope
+	// AdminClientRemoveSearchAttributesScope tracks RPC calls to admin service
+	AdminClientRemoveSearchAttributesScope
 	// AdminClientGetSearchAttributesScope tracks RPC calls to admin service
 	AdminClientGetSearchAttributesScope
 	// AdminClientCloseShardScope tracks RPC calls to admin service
@@ -696,6 +698,8 @@ const (
 	AdminDescribeHistoryHostScope = iota + NumCommonScopes
 	// AdminAddSearchAttributesScope is the metric scope for admin.AdminAddSearchAttributesScope
 	AdminAddSearchAttributesScope
+	// AdminRemoveSearchAttributesScope is the metric scope for admin.AdminRemoveSearchAttributesScope
+	AdminRemoveSearchAttributesScope
 	// AdminGetSearchAttributesScope is the metric scope for admin.AdminGetSearchAttributesScope
 	AdminGetSearchAttributesScope
 	// AdminDescribeWorkflowExecutionScope is the metric scope for admin.AdminDescribeWorkflowExecutionScope
@@ -1294,6 +1298,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientGetClusterInfoScope:                     {operation: "FrontendClientGetClusterInfoScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListTaskQueuePartitionsScope:            {operation: "FrontendClientListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		AdminClientAddSearchAttributesScope:                   {operation: "AdminClientAddSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientRemoveSearchAttributesScope:                {operation: "AdminClientRemoveSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetSearchAttributesScope:                   {operation: "AdminClientGetSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeHistoryHostScope:                   {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeWorkflowMutableStateScope:          {operation: "AdminClientDescribeWorkflowMutableState", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1397,6 +1402,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminMergeDLQMessagesScope:                 {operation: "AdminMergeDLQMessages"},
 		AdminDescribeHistoryHostScope:              {operation: "DescribeHistoryHost"},
 		AdminAddSearchAttributesScope:              {operation: "AdminAddSearchAttributes"},
+		AdminRemoveSearchAttributesScope:           {operation: "AdminRemoveSearchAttributes"},
 		AdminGetSearchAttributesScope:              {operation: "AdminGetSearchAttributes"},
 		AdminDescribeWorkflowExecutionScope:        {operation: "DescribeWorkflowExecution"},
 		AdminGetWorkflowExecutionRawHistoryScope:   {operation: "GetWorkflowExecutionRawHistory"},

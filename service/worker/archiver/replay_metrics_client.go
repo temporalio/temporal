@@ -106,6 +106,10 @@ func (r *replayMetricsClient) Scope(scope int, tags ...metrics.Tag) metrics.Scop
 	return NewReplayMetricsScope(r.client.Scope(scope, tags...), r.ctx)
 }
 
+func (r *replayMetricsClient) UserScope() metrics.UserScope {
+	panic("Not supported")
+}
+
 // NewReplayMetricsScope creates a metrics scope which is aware of temporal's replay mode
 func NewReplayMetricsScope(scope metrics.Scope, ctx workflow.Context) metrics.Scope {
 	return &replayMetricsScope{

@@ -27,6 +27,8 @@ package persistence
 import (
 	"time"
 
+	"go.temporal.io/server/common/persistence/serialization"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -38,7 +40,7 @@ import (
 
 type (
 	visibilityManagerImpl struct {
-		serializer                 PayloadSerializer
+		serializer                 serialization.Serializer
 		persistence                VisibilityStore
 		searchAttributesProvider   searchattribute.Provider
 		defaultVisibilityIndexName string
@@ -54,7 +56,7 @@ var _ VisibilityManager = (*visibilityManagerImpl)(nil)
 // NewVisibilityManagerImpl returns new VisibilityManager
 func NewVisibilityManagerImpl(persistence VisibilityStore, searchAttributesProvider searchattribute.Provider, defaultVisibilityIndexName string, logger log.Logger) VisibilityManager {
 	return &visibilityManagerImpl{
-		serializer:                 NewPayloadSerializer(),
+		serializer:                 serialization.NewSerializer(),
 		persistence:                persistence,
 		searchAttributesProvider:   searchAttributesProvider,
 		defaultVisibilityIndexName: defaultVisibilityIndexName,
