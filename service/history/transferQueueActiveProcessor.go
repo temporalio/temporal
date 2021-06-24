@@ -38,8 +38,6 @@ import (
 	"go.temporal.io/server/service/history/shard"
 )
 
-const identityHistoryService = "history-service"
-
 type (
 	transferQueueActiveProcessorImpl struct {
 		*transferQueueProcessorBase

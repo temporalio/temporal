@@ -64,7 +64,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/service/history"
+	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/tools/cli/dataconverter"
 	"go.temporal.io/server/tools/cli/stringify"
 )
@@ -1369,8 +1369,12 @@ func ResetWorkflow(c *cli.Context) {
 	if !ok && eventID <= 0 {
 		ErrorAndExit(fmt.Sprintf("must specify either valid event_id or reset_type (one of %s)", strings.Join(mapKeysToArray(resetTypesMap), ", ")), nil)
 	}
-	if ok && len(extraForResetType) > 0 {
-		getRequiredOption(c, extraForResetType)
+	if ok && len(extraForResetType.(string)) > 0 {
+		getRequiredOption(c, extraForResetType.(string))
+	}
+	resetReapplyType := c.String(FlagResetReapplyType)
+	if _, ok := resetReapplyTypesMap[resetReapplyType]; !ok {
+		ErrorAndExit(fmt.Sprintf("must specify valid reset reapply type: %v", strings.Join(mapKeysToArray(resetReapplyTypesMap), ", ")), nil)
 	}
 
 	ctx, cancel := newContext(c)
@@ -1396,6 +1400,7 @@ func ResetWorkflow(c *cli.Context) {
 		Reason:                    fmt.Sprintf("%v:%v", getCurrentUserFromEnv(), reason),
 		WorkflowTaskFinishEventId: workflowTaskFinishID,
 		RequestId:                 uuid.New(),
+		ResetReapplyType:          resetReapplyTypesMap[resetReapplyType].(enumspb.ResetReapplyType),
 	})
 	if err != nil {
 		ErrorAndExit("reset failed", err)
@@ -1456,8 +1461,8 @@ func ResetInBatch(c *cli.Context) {
 	extraForResetType, ok := resetTypesMap[resetType]
 	if !ok {
 		ErrorAndExit("Not supported reset type", nil)
-	} else if len(extraForResetType) > 0 {
-		getRequiredOption(c, extraForResetType)
+	} else if len(extraForResetType.(string)) > 0 {
+		getRequiredOption(c, extraForResetType.(string))
 	}
 
 	batchResetParams := batchResetParamsType{
@@ -1786,7 +1791,7 @@ func getBadWorkflowTaskCompletedID(ctx context.Context, namespace, wid, rid, bin
 		return "", 0, printErrorAndReturn("DescribeWorkflowExecution failed", err)
 	}
 
-	_, p := history.FindAutoResetPoint(clock.NewRealTimeSource(), &namespacepb.BadBinaries{
+	_, p := workflow.FindAutoResetPoint(clock.NewRealTimeSource(), &namespacepb.BadBinaries{
 		Binaries: map[string]*namespacepb.BadBinaryInfo{
 			binChecksum: {},
 		},

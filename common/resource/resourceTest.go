@@ -62,6 +62,7 @@ type (
 		MetricsScope             tally.Scope
 		ClusterMetadata          *cluster.MockMetadata
 		SearchAttributesProvider *searchattribute.MockProvider
+		SearchAttributesManager  *searchattribute.MockManager
 
 		// other common resources
 
@@ -173,6 +174,7 @@ func NewTest(
 		MetricsScope:             scope,
 		ClusterMetadata:          cluster.NewMockMetadata(controller),
 		SearchAttributesProvider: searchattribute.NewMockProvider(controller),
+		SearchAttributesManager:  searchattribute.NewMockManager(controller),
 
 		// other common resources
 
@@ -439,4 +441,8 @@ func (s *Test) GetGRPCListener() net.Listener {
 
 func (h *Test) GetSearchAttributesProvider() searchattribute.Provider {
 	return h.SearchAttributesProvider
+}
+
+func (h *Test) GetSearchAttributesManager() searchattribute.Manager {
+	return h.SearchAttributesManager
 }

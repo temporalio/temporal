@@ -24,16 +24,17 @@ update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc fix-
 .PHONY: proto
 
 ##### Variables ######
-ifndef GOOS
-GOOS := $(shell go env GOOS)
-endif
+GOOS ?= $(shell go env GOOS)
+GOARCH ?= $(shell go env GOARCH)
+GOPATH ?= $(shell go env GOPATH)
 
-ifndef GOARCH
-GOARCH := $(shell go env GOARCH)
-endif
-
-ifndef GOPATH
-GOPATH := $(shell go env GOPATH)
+# Name resolution requires cgo to be enabled on macOS and Windows: https://golang.org/pkg/net/#hdr-Name_Resolution.
+ifndef CGO_ENABLED
+	ifeq ($(GOOS),linux)
+	CGO_ENABLED := 0
+	else
+	CGO_ENABLED := 1
+	endif
 endif
 
 GOBIN := $(if $(shell go env GOBIN),$(shell go env GOBIN),$(GOPATH)/bin)
@@ -54,13 +55,13 @@ INTEG_TEST_ROOT        := ./host
 INTEG_TEST_XDC_ROOT    := ./host/xdc
 INTEG_TEST_NDC_ROOT    := ./host/ndc
 
-ifndef PERSISTENCE_TYPE
-override PERSISTENCE_TYPE := nosql
-endif
+PERSISTENCE_TYPE ?= nosql
+PERSISTENCE_DRIVER ?= cassandra
 
-ifndef PERSISTENCE_DRIVER
-override PERSISTENCE_DRIVER := cassandra
-endif
+# optional args to make it possible to create multiple keyspaces:
+# make install-schema TEMPORAL_DB=temporal2 VISIBILITY_DB=temporal_visibility2
+TEMPORAL_DB ?= temporal
+VISIBILITY_DB ?= temporal_visibility
 
 ifdef TEST_TAG
 override TEST_TAG := -tags $(TEST_TAG)
@@ -184,23 +185,23 @@ clean-bins:
 
 temporal-server:
 	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=0 go build -ldflags "$(shell ./develop/scripts/go-build-ldflags.sh $(MODULE_ROOT)/ldflags)" -o temporal-server cmd/server/main.go
+	CGO_ENABLED=$(CGO_ENABLED) go build -ldflags "$(shell ./develop/scripts/go-build-ldflags.sh $(MODULE_ROOT)/ldflags)" -o temporal-server cmd/server/main.go
 
 tctl:
 	@printf $(COLOR) "Build tctl with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=0 go build -o tctl cmd/tools/cli/main.go
+	CGO_ENABLED=$(CGO_ENABLED) go build -o tctl cmd/tools/cli/main.go
 
 plugins:
 	@printf $(COLOR) "Build tctl-authorization-plugin with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=0 go build -o tctl-authorization-plugin cmd/tools/cli/plugins/authorization/main.go
+	CGO_ENABLED=$(CGO_ENABLED) go build -o tctl-authorization-plugin cmd/tools/cli/plugins/authorization/main.go
 
 temporal-cassandra-tool:
 	@printf $(COLOR) "Build temporal-cassandra-tool with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=0 go build -o temporal-cassandra-tool cmd/tools/cassandra/main.go
+	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-cassandra-tool cmd/tools/cassandra/main.go
 
 temporal-sql-tool:
 	@printf $(COLOR) "Build temporal-sql-tool with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=0 go build -o temporal-sql-tool cmd/tools/sql/main.go
+	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-sql-tool cmd/tools/sql/main.go
 
 ##### Checks #####
 copyright-check:
@@ -330,36 +331,36 @@ ci-coverage-report: $(SUMMARY_COVER_PROFILE) coverage-report
 ##### Schema #####
 install-schema: temporal-cassandra-tool
 	@printf $(COLOR) "Install Cassandra schema..."
-	./temporal-cassandra-tool drop -k temporal -f
-	./temporal-cassandra-tool create -k temporal --rf 1
-	./temporal-cassandra-tool -k temporal setup-schema -v 0.0
-	./temporal-cassandra-tool -k temporal update-schema -d ./schema/cassandra/temporal/versioned
-	./temporal-cassandra-tool drop -k temporal_visibility -f
-	./temporal-cassandra-tool create -k temporal_visibility --rf 1
-	./temporal-cassandra-tool -k temporal_visibility setup-schema -v 0.0
-	./temporal-cassandra-tool -k temporal_visibility update-schema -d ./schema/cassandra/visibility/versioned
+	./temporal-cassandra-tool drop -k $(TEMPORAL_DB) -f
+	./temporal-cassandra-tool create -k $(TEMPORAL_DB) --rf 1
+	./temporal-cassandra-tool -k $(TEMPORAL_DB) setup-schema -v 0.0
+	./temporal-cassandra-tool -k $(TEMPORAL_DB) update-schema -d ./schema/cassandra/temporal/versioned
+	./temporal-cassandra-tool drop -k $(VISIBILITY_DB) -f
+	./temporal-cassandra-tool create -k $(VISIBILITY_DB) --rf 1
+	./temporal-cassandra-tool -k $(VISIBILITY_DB) setup-schema -v 0.0
+	./temporal-cassandra-tool -k $(VISIBILITY_DB) update-schema -d ./schema/cassandra/visibility/versioned
 
 install-schema-mysql: temporal-sql-tool
 	@printf $(COLOR) "Install MySQL schema..."
-	./temporal-sql-tool -u temporal --pw temporal drop --db temporal -f
-	./temporal-sql-tool -u temporal --pw temporal create --db temporal
-	./temporal-sql-tool -u temporal --pw temporal --db temporal setup-schema -v 0.0
-	./temporal-sql-tool -u temporal --pw temporal --db temporal update-schema -d ./schema/mysql/v57/temporal/versioned
-	./temporal-sql-tool -u temporal --pw temporal drop --db temporal_visibility -f
-	./temporal-sql-tool -u temporal --pw temporal create --db temporal_visibility
-	./temporal-sql-tool -u temporal --pw temporal --db temporal_visibility setup-schema -v 0.0
-	./temporal-sql-tool -u temporal --pw temporal --db temporal_visibility update-schema -d ./schema/mysql/v57/visibility/versioned
+	./temporal-sql-tool -u temporal --pw temporal drop --db $(TEMPORAL_DB) -f
+	./temporal-sql-tool -u temporal --pw temporal create --db $(TEMPORAL_DB)
+	./temporal-sql-tool -u temporal --pw temporal --db $(TEMPORAL_DB) setup-schema -v 0.0
+	./temporal-sql-tool -u temporal --pw temporal --db $(TEMPORAL_DB) update-schema -d ./schema/mysql/v57/temporal/versioned
+	./temporal-sql-tool -u temporal --pw temporal drop --db $(VISIBILITY_DB) -f
+	./temporal-sql-tool -u temporal --pw temporal create --db $(VISIBILITY_DB)
+	./temporal-sql-tool -u temporal --pw temporal --db $(VISIBILITY_DB) setup-schema -v 0.0
+	./temporal-sql-tool -u temporal --pw temporal --db $(VISIBILITY_DB) update-schema -d ./schema/mysql/v57/visibility/versioned
 
 install-schema-postgresql: temporal-sql-tool
 	@printf $(COLOR) "Install Postgres schema..."
-	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres drop --db temporal -f
-	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres create --db temporal
-	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db temporal setup -v 0.0
-	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db temporal update-schema -d ./schema/postgresql/v96/temporal/versioned
-	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres drop --db temporal_visibility -f
-	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres create --db temporal_visibility
-	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db temporal_visibility setup-schema -v 0.0
-	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db temporal_visibility update-schema -d ./schema/postgresql/v96/visibility/versioned
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres drop --db $(TEMPORAL_DB) -f
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres create --db $(TEMPORAL_DB)
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(TEMPORAL_DB) setup -v 0.0
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(TEMPORAL_DB) update-schema -d ./schema/postgresql/v96/temporal/versioned
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres drop --db $(VISIBILITY_DB) -f
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres create --db $(VISIBILITY_DB)
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(VISIBILITY_DB) setup-schema -v 0.0
+	./temporal-sql-tool -u temporal -pw temporal -p 5432 --pl postgres --db $(VISIBILITY_DB) update-schema -d ./schema/postgresql/v96/visibility/versioned
 
 install-schema-es:
 	@printf $(COLOR) "Install Elasticsearch schema..."

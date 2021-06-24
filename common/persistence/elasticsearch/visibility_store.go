@@ -84,6 +84,11 @@ type (
 
 var _ persistence.VisibilityStore = (*visibilityStore)(nil)
 
+var (
+	ErrInvalidDuration         = errors.New("invalid duration format")
+	errUnexpectedJSONFieldType = errors.New("unexpected JSON field type")
+)
+
 // NewVisibilityStore create a visibility store connecting to ElasticSearch
 func NewVisibilityStore(
 	esClient client.Client,
@@ -128,8 +133,10 @@ func (s *visibilityStore) RecordWorkflowExecutionClosed(request *persistence.Int
 	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
 	doc := s.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
 
-	doc[searchattribute.CloseTime] = request.CloseTimestamp
+	doc[searchattribute.CloseTime] = request.CloseTime
+	doc[searchattribute.ExecutionDuration] = request.CloseTime.Sub(request.ExecutionTime).Nanoseconds()
 	doc[searchattribute.HistoryLength] = request.HistoryLength
+	doc[searchattribute.StateTransitionCount] = request.StateTransitionCount
 
 	return s.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
 }
@@ -593,6 +600,9 @@ func getCustomizedDSLFromSQL(sql string, namespaceID string) (*fastjson.Value, e
 	if err := processAllValuesForKey(dsl, statusKeyFilter, statusProcessFunc); err != nil {
 		return nil, err
 	}
+	if err := processAllValuesForKey(dsl, durationKeyFilter, durationProcessFunc); err != nil {
+		return nil, err
+	}
 	return dsl, nil
 }
 
@@ -883,8 +893,8 @@ func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityR
 		searchattribute.WorkflowID:        request.WorkflowID,
 		searchattribute.RunID:             request.RunID,
 		searchattribute.WorkflowType:      request.WorkflowTypeName,
-		searchattribute.StartTime:         request.StartTimestamp,
-		searchattribute.ExecutionTime:     request.ExecutionTimestamp,
+		searchattribute.StartTime:         request.StartTime,
+		searchattribute.ExecutionTime:     request.ExecutionTime,
 		searchattribute.ExecutionStatus:   request.Status.String(),
 		searchattribute.TaskQueue:         request.TaskQueue,
 	}
@@ -912,25 +922,14 @@ func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityR
 }
 
 func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchattribute.NameTypeMap) *persistence.VisibilityWorkflowExecutionInfo {
-	logUnexpectedType := func(fieldName string, fieldValue interface{}, docID string) {
-		s.logger.Error("Unexpected field type while parsing Elasticsearch document.", tag.Name(fieldName), tag.ValueType(fieldValue), tag.ESDocID(docID))
-		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
-	}
-	logNumberParseError := func(fieldName string, fieldValue json.Number, err error, docID string) {
-		s.logger.Error("Unable to parse JSON number while parsing Elasticsearch document.", tag.Name(fieldName), tag.ValueType(fieldValue), tag.Error(err), tag.ESDocID(docID))
-		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
-	}
-	logDateParseError := func(fieldName string, fieldValue string, err error, docID string) {
-		s.logger.Error("Unable to parse JSON date while parsing Elasticsearch document.", tag.Name(fieldName), tag.ValueType(fieldValue), tag.Error(err), tag.ESDocID(docID))
-		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
-	}
-	logMemoDecodeError := func(err error, docID string) {
-		s.logger.Error("Unable to base64 decode Memo field while parsing Elasticsearch document.", tag.Error(err), tag.ESDocID(docID))
+	logParseError := func(fieldName string, fieldValue interface{}, err error, docID string) {
+		s.logger.Error("Unable to parse Elasticsearch document field.", tag.Name(fieldName), tag.Value(fieldValue), tag.Error(err), tag.ESDocID(docID))
 		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
 
 	var sourceMap map[string]interface{}
 	d := json.NewDecoder(bytes.NewReader(hit.Source))
+	// Very important line. See finishParseJSONValue bellow.
 	d.UseNumber()
 	if err := d.Decode(&sourceMap); err != nil {
 		s.logger.Error("Unable to JSON unmarshal Elasticsearch SearchHit.Source.", tag.Error(err), tag.ESDocID(hit.Id))
@@ -943,92 +942,70 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 	record := &persistence.VisibilityWorkflowExecutionInfo{}
 	for fieldName, fieldValue := range sourceMap {
 		switch fieldName {
-		case searchattribute.NamespaceID:
-			// Ignore NamespaceID
-		case searchattribute.WorkflowID:
-			if record.WorkflowID, isValidType = fieldValue.(string); !isValidType {
-				logUnexpectedType(fieldName, fieldValue, hit.Id)
-			}
-		case searchattribute.RunID:
-			if record.RunID, isValidType = fieldValue.(string); !isValidType {
-				logUnexpectedType(fieldName, fieldValue, hit.Id)
-			}
-		case searchattribute.WorkflowType:
-			if record.TypeName, isValidType = fieldValue.(string); !isValidType {
-				logUnexpectedType(fieldName, fieldValue, hit.Id)
-			}
-		case searchattribute.StartTime:
-			var startTime string
-			if startTime, isValidType = fieldValue.(string); !isValidType {
-				logUnexpectedType(fieldName, fieldValue, hit.Id)
-			}
-			var err error
-			record.StartTime, err = time.Parse(time.RFC3339Nano, startTime)
-			if err != nil {
-				logDateParseError(fieldName, startTime, err, hit.Id)
-			}
-		case searchattribute.ExecutionTime:
-			var executionTime string
-			if executionTime, isValidType = fieldValue.(string); !isValidType {
-				logUnexpectedType(fieldName, fieldValue, hit.Id)
-			}
-			var err error
-			record.ExecutionTime, err = time.Parse(time.RFC3339Nano, executionTime)
-			if err != nil {
-				logDateParseError(fieldName, executionTime, err, hit.Id)
-			}
-		case searchattribute.CloseTime:
-			var closeTime string
-			if closeTime, isValidType = fieldValue.(string); !isValidType {
-				logUnexpectedType(fieldName, fieldValue, hit.Id)
-			}
-			var err error
-			record.CloseTime, err = time.Parse(time.RFC3339Nano, closeTime)
-			if err != nil {
-				logDateParseError(fieldName, closeTime, err, hit.Id)
-			}
+		case searchattribute.NamespaceID,
+			searchattribute.ExecutionDuration,
+			searchattribute.VisibilityTaskKey:
+			// Ignore these fields.
+			continue
 		case searchattribute.Memo:
 			var memoStr string
 			if memoStr, isValidType = fieldValue.(string); !isValidType {
-				logUnexpectedType(fieldName, fieldValue, hit.Id)
+				logParseError(fieldName, fieldValue, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, fieldValue), hit.Id)
 			}
 			var err error
 			if memo, err = base64.StdEncoding.DecodeString(memoStr); err != nil {
-				logMemoDecodeError(err, hit.Id)
+				logParseError(fieldName, memoStr[:10], err, hit.Id)
 			}
+			continue
 		case searchattribute.MemoEncoding:
 			if memoEncoding, isValidType = fieldValue.(string); !isValidType {
-				logUnexpectedType(fieldName, fieldValue, hit.Id)
+				logParseError(fieldName, fieldValue, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, fieldValue), hit.Id)
 			}
+			continue
+		}
+
+		fieldType, err := saTypeMap.GetType(fieldName)
+		if err != nil {
+			// Silently ignore ErrInvalidName because it indicates unknown field in Elasticsearch document.
+			if !errors.Is(err, searchattribute.ErrInvalidName) {
+				s.logger.Error("Unable to get type for Elasticsearch document field.", tag.Name(fieldName), tag.Error(err), tag.ESDocID(hit.Id))
+			}
+			continue
+		}
+
+		fieldValueParsed, err := finishParseJSONValue(fieldValue, fieldType)
+		if err != nil {
+			logParseError(fieldName, fieldValue, err, hit.Id)
+			continue
+		}
+
+		switch fieldName {
+		case searchattribute.WorkflowID:
+			record.WorkflowID = fieldValueParsed.(string)
+		case searchattribute.RunID:
+			record.RunID = fieldValueParsed.(string)
+		case searchattribute.WorkflowType:
+			record.TypeName = fieldValue.(string)
+		case searchattribute.StartTime:
+			record.StartTime = fieldValueParsed.(time.Time)
+		case searchattribute.ExecutionTime:
+			record.ExecutionTime = fieldValueParsed.(time.Time)
+		case searchattribute.CloseTime:
+			record.CloseTime = fieldValueParsed.(time.Time)
 		case searchattribute.TaskQueue:
-			if record.TaskQueue, isValidType = fieldValue.(string); !isValidType {
-				logUnexpectedType(fieldName, fieldValue, hit.Id)
-			}
+			record.TaskQueue = fieldValueParsed.(string)
 		case searchattribute.ExecutionStatus:
-			var executionStatusStr string
-			if executionStatusStr, isValidType = fieldValue.(string); !isValidType {
-				logUnexpectedType(fieldName, fieldValue, hit.Id)
-			}
-			record.Status = enumspb.WorkflowExecutionStatus(enumspb.WorkflowExecutionStatus_value[executionStatusStr])
+			record.Status = enumspb.WorkflowExecutionStatus(enumspb.WorkflowExecutionStatus_value[fieldValueParsed.(string)])
 		case searchattribute.HistoryLength:
-			var historyLength json.Number
-			if historyLength, isValidType = fieldValue.(json.Number); !isValidType {
-				logUnexpectedType(fieldName, fieldValue, hit.Id)
-			}
-			historyLengthInt64, err := historyLength.Int64()
-			if err != nil {
-				logNumberParseError(fieldName, historyLength, err, hit.Id)
-			}
-			record.HistoryLength = historyLengthInt64
+			record.HistoryLength = fieldValueParsed.(int64)
+		case searchattribute.StateTransitionCount:
+			record.StateTransitionCount = fieldValueParsed.(int64)
 		default:
 			// All custom search attributes are handled here.
-			// Add only defined search attributes and ignore all unknown fields.
-			if saTypeMap.IsDefined(fieldName) {
-				if record.SearchAttributes == nil {
-					record.SearchAttributes = map[string]interface{}{}
-				}
-				record.SearchAttributes[fieldName] = fieldValue
+			if record.SearchAttributes == nil {
+				record.SearchAttributes = map[string]interface{}{}
 			}
+			record.SearchAttributes[fieldName] = fieldValueParsed
 		}
 	}
 
@@ -1040,6 +1017,55 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 	}
 
 	return record
+}
+
+// finishParseJSONValue finishes JSON parsing after json.Decode.
+// json.Decode returns:
+//     bool, for JSON booleans
+//     json.Number, for JSON numbers (because of d.UseNumber())
+//     string, for JSON strings
+//     []interface{}, for JSON arrays
+//     map[string]interface{}, for JSON objects (should never be a case)
+//     nil for JSON null
+func finishParseJSONValue(val interface{}, t enumspb.IndexedValueType) (interface{}, error) {
+	// Custom search attributes support array of particular type.
+	if arrayValue, isArray := val.([]interface{}); isArray {
+		retArray := make([]interface{}, len(arrayValue))
+		var lastErr error
+		for i := 0; i < len(retArray); i++ {
+			retArray[i], lastErr = finishParseJSONValue(arrayValue[i], t)
+		}
+		return retArray, lastErr
+	}
+
+	switch t {
+	case enumspb.INDEXED_VALUE_TYPE_STRING, enumspb.INDEXED_VALUE_TYPE_KEYWORD, enumspb.INDEXED_VALUE_TYPE_DATETIME:
+		stringVal, isString := val.(string)
+		if !isString {
+			return nil, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, val)
+		}
+		if t == enumspb.INDEXED_VALUE_TYPE_DATETIME {
+			return time.Parse(time.RFC3339Nano, stringVal)
+		}
+		return stringVal, nil
+	case enumspb.INDEXED_VALUE_TYPE_INT, enumspb.INDEXED_VALUE_TYPE_DOUBLE:
+		numberVal, isNumber := val.(json.Number)
+		if !isNumber {
+			return nil, fmt.Errorf("%w: expected json.Number got %T", errUnexpectedJSONFieldType, val)
+		}
+		if t == enumspb.INDEXED_VALUE_TYPE_INT {
+			return numberVal.Int64()
+		}
+		return numberVal.Float64()
+	case enumspb.INDEXED_VALUE_TYPE_BOOL:
+		boolVal, isBool := val.(bool)
+		if !isBool {
+			return nil, fmt.Errorf("%w: expected bool got %T", errUnexpectedJSONFieldType, val)
+		}
+		return boolVal, nil
+	}
+
+	panic(fmt.Sprintf("Unknown field type: %v", t))
 }
 
 func checkPageSize(request *persistence.ListWorkflowExecutionsRequestV2) {
@@ -1134,4 +1160,56 @@ func statusProcessFunc(_ *fastjson.Object, _ string, value *fastjson.Value) erro
 			}
 			return nil
 		})
+}
+func durationKeyFilter(key string) bool {
+	return key == searchattribute.ExecutionDuration
+}
+
+func durationProcessFunc(_ *fastjson.Object, _ string, value *fastjson.Value) error {
+	return processAllValuesForKey(
+		value,
+		func(key string) bool {
+			_, ok := rangeKeys[key]
+			return ok
+		},
+		func(obj *fastjson.Object, key string, v *fastjson.Value) error {
+			durationStr := string(v.GetStringBytes())
+
+			// To support durations passed as golang durations such as "300ms", "-1.5h" or "2h45m".
+			// Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
+			if duration, err := time.ParseDuration(durationStr); err == nil {
+				obj.Set(key, fastjson.MustParse(strconv.FormatInt(duration.Nanoseconds(), 10)))
+				return nil
+			}
+
+			// To support "hh:mm:ss" durations.
+			durationNanos, err := parseHHMMSSDuration(durationStr)
+			if errors.Is(err, ErrInvalidDuration) {
+				return err
+			}
+			if err == nil {
+				obj.Set(key, fastjson.MustParse(strconv.FormatInt(durationNanos, 10)))
+			}
+
+			return nil
+		})
+}
+
+func parseHHMMSSDuration(d string) (int64, error) {
+	var hours, minutes, seconds, nanos int64
+	_, err := fmt.Sscanf(d, "%d:%d:%d", &hours, &minutes, &seconds)
+	if err != nil {
+		return 0, err
+	}
+	if hours < 0 {
+		return 0, fmt.Errorf("%w: hours must be positive number", ErrInvalidDuration)
+	}
+	if minutes < 0 || minutes > 59 {
+		return 0, fmt.Errorf("%w: minutes must be from 0 to 59", ErrInvalidDuration)
+	}
+	if seconds < 0 || seconds > 59 {
+		return 0, fmt.Errorf("%w: seconds must be from 0 to 59", ErrInvalidDuration)
+	}
+
+	return hours*int64(time.Hour) + minutes*int64(time.Minute) + seconds*int64(time.Second) + nanos, nil
 }

@@ -34,6 +34,9 @@
         "CloseTime": {
           "type": "date"
         },
+        "ExecutionDuration": {
+          "type": "long"
+        },
         "ExecutionStatus": {
           "type": "keyword"
         },
@@ -70,6 +73,9 @@
         },
         "BinaryChecksums": {
           "type": "keyword"
+        },
+        "StateTransitionCount": {
+          "type": "long"
         }
       }
     }

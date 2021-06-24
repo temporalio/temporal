@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -218,27 +219,30 @@ func (fc *fileBasedClient) update() error {
 }
 
 func (fc *fileBasedClient) storeValues(newValues map[string][]*constrainedValue) error {
+	formattedNewValues := make(map[string][]*constrainedValue, len(newValues))
+
 	// yaml will unmarshal map into map[interface{}]interface{} instead of map[string]interface{}
 	// manually convert key type to string for all values here
 	// We don't need to convert constraints as their type can't be map. If user does use a map as filter
 	// value, it won't match anyway.
-	for _, s := range newValues {
-		for _, cv := range s {
+	for key, valuesSlice := range newValues {
+		for _, cv := range valuesSlice {
 			var err error
 			cv.Value, err = convertKeyTypeToString(cv.Value)
 			if err != nil {
 				return err
 			}
 		}
+		formattedNewValues[strings.ToLower(key)] = valuesSlice
 	}
 
-	fc.values.Store(newValues)
+	fc.values.Store(formattedNewValues)
 	fc.logger.Info("Updated dynamic config")
 	return nil
 }
 
 func (fc *fileBasedClient) getValueWithFilters(key Key, filters map[Filter]interface{}, defaultValue interface{}) (interface{}, error) {
-	keyName := Keys[key]
+	keyName := strings.ToLower(Keys[key])
 	values := fc.values.Load().(map[string][]*constrainedValue)
 	found := false
 	for _, constrainedValue := range values[keyName] {

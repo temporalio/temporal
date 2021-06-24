@@ -204,7 +204,7 @@ func (d *RPCFactory) CreateFrontendGRPCConnection(hostName string) *grpc.ClientC
 		}
 	}
 
-	return d.dial(hostName, tlsClientConfig)
+	return d.dial(hostName, tlsClientConfig, false)
 }
 
 // CreateInternodeGRPCConnection creates connection for gRPC calls
@@ -218,11 +218,11 @@ func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.Client
 		}
 	}
 
-	return d.dial(hostName, tlsClientConfig)
+	return d.dial(hostName, tlsClientConfig, true)
 }
 
-func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config) *grpc.ClientConn {
-	connection, err := Dial(hostName, tlsClientConfig, d.logger)
+func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, enableKeepAlive bool) *grpc.ClientConn {
+	connection, err := Dial(hostName, tlsClientConfig, d.logger, enableKeepAlive)
 	if err != nil {
 		d.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
 	}

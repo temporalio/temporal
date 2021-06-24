@@ -2107,6 +2107,17 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
+	switch request.GetResetReapplyType() {
+	case enumspb.RESET_REAPPLY_TYPE_UNSPECIFIED:
+		request.ResetReapplyType = enumspb.RESET_REAPPLY_TYPE_SIGNAL
+	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
+		// noop
+	case enumspb.RESET_REAPPLY_TYPE_NONE:
+		// noop
+	default:
+		return nil, serviceerror.NewInternal("unknown reset type")
+	}
+
 	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, err
@@ -3443,7 +3454,7 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error,
 				tag.WorkflowTaskQueueName(taskQueue.GetName()), tag.Error(err))
 		}
 
-		// Clear error as we don't want to report context cancellation error to count against our SLA
+		// clear error as we don't want to report context cancellation error to count against our SLA
 		return nil
 	}
 

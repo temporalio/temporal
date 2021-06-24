@@ -29,70 +29,72 @@ import (
 )
 
 const (
-	// Indexed fields on ES.
-	NamespaceID           = "NamespaceId"
-	WorkflowID            = "WorkflowId"
-	RunID                 = "RunId"
-	WorkflowType          = "WorkflowType"
-	StartTime             = "StartTime"
-	ExecutionTime         = "ExecutionTime"
-	CloseTime             = "CloseTime"
-	ExecutionStatus       = "ExecutionStatus"
-	TaskQueue             = "TaskQueue"
-	HistoryLength         = "HistoryLength"
+	NamespaceID          = "NamespaceId"
+	WorkflowID           = "WorkflowId"
+	RunID                = "RunId"
+	WorkflowType         = "WorkflowType"
+	StartTime            = "StartTime"
+	ExecutionTime        = "ExecutionTime"
+	CloseTime            = "CloseTime"
+	ExecutionStatus      = "ExecutionStatus"
+	TaskQueue            = "TaskQueue"
+	HistoryLength        = "HistoryLength"
+	ExecutionDuration    = "ExecutionDuration"
+	StateTransitionCount = "StateTransitionCount"
+
 	TemporalChangeVersion = "TemporalChangeVersion"
 	BinaryChecksums       = "BinaryChecksums"
 	BatcherNamespace      = "BatcherNamespace"
-	BarcherUser           = "BarcherUser"
+	BatcherUser           = "BatcherUser"
 
-	// Reserved non-indexed fields on ES.
 	MemoEncoding      = "MemoEncoding"
 	Memo              = "Memo"
 	VisibilityTaskKey = "VisibilityTaskKey"
 )
 
 var (
-	// reservedFields are internal field names that can't be used as search attribute names.
-	reservedFields = map[string]struct{}{
-		NamespaceID:     {},
-		WorkflowID:      {},
-		RunID:           {},
-		WorkflowType:    {},
-		StartTime:       {},
-		ExecutionTime:   {},
-		CloseTime:       {},
-		ExecutionStatus: {},
-		TaskQueue:       {},
-		HistoryLength:   {},
+	// system are internal search attributes which are passed and stored as separate fields.
+	system = map[string]enumspb.IndexedValueType{
+		WorkflowID:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		RunID:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		WorkflowType:         enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		StartTime:            enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		ExecutionTime:        enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		CloseTime:            enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		ExecutionStatus:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		TaskQueue:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		HistoryLength:        enumspb.INDEXED_VALUE_TYPE_INT,
+		ExecutionDuration:    enumspb.INDEXED_VALUE_TYPE_INT,
+		StateTransitionCount: enumspb.INDEXED_VALUE_TYPE_INT,
+	}
 
+	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
+	predefined = map[string]enumspb.IndexedValueType{
+		TemporalChangeVersion: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BinaryChecksums:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BatcherNamespace:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		BatcherUser:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	}
+
+	// reserved are internal field names that can't be used as search attribute names.
+	reserved = map[string]struct{}{
+		NamespaceID:       {},
 		MemoEncoding:      {},
 		Memo:              {},
 		VisibilityTaskKey: {},
 	}
-
-	// system are default internal system search attributes which are shown to the users.
-	// Note: NamespaceID is not included because it is not exposed.
-	system = map[string]enumspb.IndexedValueType{
-		WorkflowID:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		RunID:                 enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		WorkflowType:          enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		StartTime:             enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		ExecutionTime:         enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		CloseTime:             enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		ExecutionStatus:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		TaskQueue:             enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		HistoryLength:         enumspb.INDEXED_VALUE_TYPE_INT,
-		TemporalChangeVersion: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		BinaryChecksums:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		BatcherNamespace:      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		BarcherUser:           enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-	}
-
-	namespaceIDType = enumspb.INDEXED_VALUE_TYPE_KEYWORD
 )
 
-// IsReservedField return true if field name is system reserved.
-func IsReservedField(fieldName string) bool {
-	_, ok := reservedFields[fieldName]
-	return ok
+// IsReserved return true if field name is system reserved and can't be used as custom search attribute name.
+func IsReserved(fieldName string) bool {
+	if _, ok := system[fieldName]; ok {
+		return true
+	}
+	if _, ok := predefined[fieldName]; ok {
+		return true
+	}
+	if _, ok := reserved[fieldName]; ok {
+		return true
+	}
+	return false
 }

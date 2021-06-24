@@ -52,6 +52,8 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -62,7 +64,7 @@ type (
 		controller          *gomock.Controller
 		mockShard           *shard.ContextTest
 		mockEventsCache     *events.MockCache
-		mockTaskRefresher   *MockmutableStateTaskRefresher
+		mockTaskRefresher   *workflow.MockTaskRefresher
 		mockNamespaceCache  *cache.MockNamespaceCache
 		mockClusterMetadata *cluster.MockMetadata
 
@@ -87,7 +89,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockTaskRefresher = NewMockmutableStateTaskRefresher(s.controller)
+	s.mockTaskRefresher = workflow.NewMockTaskRefresher(s.controller)
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -97,7 +99,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
-		NewDynamicConfigForTest(),
+		tests.NewDynamicConfig(),
 	)
 
 	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
@@ -123,7 +125,7 @@ func (s *nDCStateRebuilderSuite) TearDownTest() {
 }
 
 func (s *nDCStateRebuilderSuite) TestInitializeBuilders() {
-	mutableState, stateBuilder := s.nDCStateRebuilder.initializeBuilders(testGlobalNamespaceEntry, s.now)
+	mutableState, stateBuilder := s.nDCStateRebuilder.initializeBuilders(tests.GlobalNamespaceEntry, s.now)
 	s.NotNil(mutableState)
 	s.NotNil(stateBuilder)
 	s.NotNil(mutableState.GetExecutionInfo().GetVersionHistories())
@@ -147,8 +149,8 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 
 	workflowIdentifier := definition.NewWorkflowIdentifier(s.namespaceID, s.workflowID, s.runID)
 
-	mockStateBuilder := NewMockstateBuilder(s.controller)
-	mockStateBuilder.EXPECT().applyEvents(
+	mockStateBuilder := workflow.NewMockMutableStateRebuilder(s.controller)
+	mockStateBuilder.EXPECT().ApplyEvents(
 		s.namespaceID,
 		requestID,
 		commonpb.WorkflowExecution{
@@ -193,8 +195,8 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 		EventType:  enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
 	}
-	history1 := []*historypb.History{{[]*historypb.HistoryEvent{event1, event2, event3}}}
-	history2 := []*historypb.History{{[]*historypb.HistoryEvent{event4, event5}}}
+	history1 := []*historypb.History{{Events: []*historypb.HistoryEvent{event1, event2, event3}}}
+	history2 := []*historypb.History{{Events: []*historypb.HistoryEvent{event4, event5}}}
 	history := append(history1, history2...)
 	pageToken := []byte("some random token")
 
@@ -275,8 +277,8 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 			Identity:   "some random identity",
 		}},
 	}}
-	history1 := []*historypb.History{{events1}}
-	history2 := []*historypb.History{{events2}}
+	history1 := []*historypb.History{{Events: events1}}
+	history2 := []*historypb.History{{Events: events2}}
 	pageToken := []byte("some random pagination token")
 
 	historySize1 := 12345
@@ -320,7 +322,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		1234,
 		s.mockClusterMetadata,
 	), nil).AnyTimes()
-	s.mockTaskRefresher.EXPECT().refreshTasks(s.now, gomock.Any()).Return(nil)
+	s.mockTaskRefresher.EXPECT().RefreshTasks(s.now, gomock.Any()).Return(nil)
 
 	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.rebuild(
 		context.Background(),

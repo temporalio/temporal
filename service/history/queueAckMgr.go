@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -107,7 +108,7 @@ func (a *queueAckMgrImpl) readQueueTasks() ([]queueTaskInfo, bool, error) {
 		return err
 	}
 
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	err := backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		return nil, false, err
 	}

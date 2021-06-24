@@ -32,6 +32,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -45,6 +46,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 )
 
@@ -479,7 +481,7 @@ Create_Loop:
 		return response, err
 	}
 
-	return nil, ErrMaxAttemptsExceeded
+	return nil, consts.ErrMaxAttemptsExceeded
 }
 
 func (s *ContextImpl) UpdateWorkflowExecution(
@@ -568,7 +570,7 @@ Update_Loop:
 		return resp, err
 	}
 
-	return nil, ErrMaxAttemptsExceeded
+	return nil, consts.ErrMaxAttemptsExceeded
 }
 
 func (s *ContextImpl) ConflictResolveWorkflowExecution(
@@ -670,7 +672,7 @@ Reset_Loop:
 		return err
 	}
 
-	return ErrMaxAttemptsExceeded
+	return consts.ErrMaxAttemptsExceeded
 }
 
 func (s *ContextImpl) AddTasks(

@@ -263,8 +263,13 @@ func (s *Server) Stop() {
 	}
 	wg.Wait()
 
-	s.sdkReporter.Stop(s.logger)
-	s.serverReporter.Stop(s.logger)
+	if s.sdkReporter != nil {
+		s.sdkReporter.Stop(s.logger)
+	}
+
+	if s.serverReporter != nil {
+		s.serverReporter.Stop(s.logger)
+	}
 }
 
 // Populates parameters for a service
@@ -381,6 +386,7 @@ func (s *Server) newBootstrapParams(
 	} else {
 		params.ClaimMapper = authorization.NewNoopClaimMapper()
 	}
+	params.AudienceGetter = s.so.audienceGetter
 
 	params.PersistenceServiceResolver = s.so.persistenceServiceResolver
 

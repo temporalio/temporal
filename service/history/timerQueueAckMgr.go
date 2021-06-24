@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 
 	"go.temporal.io/server/common/log"
@@ -426,7 +427,7 @@ func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestam
 		return true
 	})
 	if err != nil {
-		return nil, nil, ErrMaxAttemptsExceeded
+		return nil, nil, consts.ErrMaxAttemptsExceeded
 	}
 	return response.Timers, response.NextPageToken, nil
 }

@@ -94,7 +94,7 @@ func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionStarted() {
 			Namespace:        testNamespace,
 			Execution:        testWorkflowExecution,
 			WorkflowTypeName: testWorkflowTypeName,
-			StartTimestamp:   time.Now().UTC(),
+			StartTime:        time.Now().UTC(),
 		},
 	}
 	s.persistence.EXPECT().RecordWorkflowExecutionStarted(request).Return(nil)

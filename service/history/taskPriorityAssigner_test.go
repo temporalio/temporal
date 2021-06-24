@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/tests"
 )
 
 type (
@@ -68,7 +69,7 @@ func (s *taskPriorityAssignerSuite) SetupTest() {
 
 	s.testTaskProcessRPS = 10
 	dc := dynamicconfig.NewNoopCollection()
-	config := NewDynamicConfigForTest()
+	config := tests.NewDynamicConfig()
 	config.TaskProcessRPS = dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskProcessRPS, s.testTaskProcessRPS)
 
 	s.priorityAssigner = newTaskPriorityAssigner(
@@ -85,55 +86,55 @@ func (s *taskPriorityAssignerSuite) TearDownTest() {
 }
 
 func (s *taskPriorityAssignerSuite) TestGetNamespaceInfo_Success_Active() {
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testGlobalNamespaceEntry, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil)
 
-	namespace, isActive, err := s.priorityAssigner.getNamespaceInfo(testNamespaceID)
+	namespace, isActive, err := s.priorityAssigner.getNamespaceInfo(tests.NamespaceID)
 	s.NoError(err)
-	s.Equal(testNamespace, namespace)
+	s.Equal(tests.Namespace, namespace)
 	s.True(isActive)
 }
 
 func (s *taskPriorityAssignerSuite) TestGetNamespaceInfo_Success_Passive() {
-	testGlobalNamespaceEntry.GetReplicationConfig().ActiveClusterName = cluster.TestAlternativeClusterName
+	tests.GlobalNamespaceEntry.GetReplicationConfig().ActiveClusterName = cluster.TestAlternativeClusterName
 	defer func() {
-		testGlobalNamespaceEntry.GetReplicationConfig().ActiveClusterName = cluster.TestCurrentClusterName
+		tests.GlobalNamespaceEntry.GetReplicationConfig().ActiveClusterName = cluster.TestCurrentClusterName
 	}()
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testGlobalNamespaceEntry, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil)
 
-	namespace, isActive, err := s.priorityAssigner.getNamespaceInfo(testNamespaceID)
+	namespace, isActive, err := s.priorityAssigner.getNamespaceInfo(tests.NamespaceID)
 	s.NoError(err)
-	s.Equal(testNamespace, namespace)
+	s.Equal(tests.Namespace, namespace)
 	s.False(isActive)
 }
 
 func (s *taskPriorityAssignerSuite) TestGetNamespaceInfo_Success_Local() {
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testLocalNamespaceEntry, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.LocalNamespaceEntry, nil)
 
-	namespace, isActive, err := s.priorityAssigner.getNamespaceInfo(testNamespaceID)
+	namespace, isActive, err := s.priorityAssigner.getNamespaceInfo(tests.NamespaceID)
 	s.NoError(err)
-	s.Equal(testNamespace, namespace)
+	s.Equal(tests.Namespace, namespace)
 	s.True(isActive)
 }
 
 func (s *taskPriorityAssignerSuite) TestGetNamespaceInfo_Fail_NamespaceNotExist() {
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(
 		nil,
 		serviceerror.NewNotFound("namespace not exist"),
 	)
 
-	namespace, isActive, err := s.priorityAssigner.getNamespaceInfo(testNamespaceID)
+	namespace, isActive, err := s.priorityAssigner.getNamespaceInfo(tests.NamespaceID)
 	s.NoError(err)
 	s.Empty(namespace)
 	s.True(isActive)
 }
 
 func (s *taskPriorityAssignerSuite) TestGetNamespaceInfo_Fail_UnknownError() {
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(
 		nil,
 		errors.New("some random error"),
 	)
 
-	namespace, isActive, err := s.priorityAssigner.getNamespaceInfo(testNamespaceID)
+	namespace, isActive, err := s.priorityAssigner.getNamespaceInfo(tests.NamespaceID)
 	s.Error(err)
 	s.Empty(namespace)
 	s.False(isActive)
@@ -149,15 +150,15 @@ func (s *taskPriorityAssignerSuite) TestAssign_ReplicationTask() {
 }
 
 func (s *taskPriorityAssignerSuite) TestAssign_StandbyTask() {
-	testGlobalNamespaceEntry.GetReplicationConfig().ActiveClusterName = cluster.TestAlternativeClusterName
+	tests.GlobalNamespaceEntry.GetReplicationConfig().ActiveClusterName = cluster.TestAlternativeClusterName
 	defer func() {
-		testGlobalNamespaceEntry.GetReplicationConfig().ActiveClusterName = cluster.TestCurrentClusterName
+		tests.GlobalNamespaceEntry.GetReplicationConfig().ActiveClusterName = cluster.TestCurrentClusterName
 	}()
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testGlobalNamespaceEntry, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil)
 
 	mockTask := NewMockqueueTask(s.controller)
 	mockTask.EXPECT().GetQueueType().Return(transferQueueType)
-	mockTask.EXPECT().GetNamespaceId().Return(testNamespaceID)
+	mockTask.EXPECT().GetNamespaceId().Return(tests.NamespaceID)
 	mockTask.EXPECT().SetPriority(configs.GetTaskPriority(configs.TaskLowPriorityClass, configs.TaskDefaultPrioritySubclass))
 
 	err := s.priorityAssigner.Assign(mockTask)
@@ -165,11 +166,11 @@ func (s *taskPriorityAssignerSuite) TestAssign_StandbyTask() {
 }
 
 func (s *taskPriorityAssignerSuite) TestAssign_TransferTask() {
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testGlobalNamespaceEntry, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil)
 
 	mockTask := NewMockqueueTask(s.controller)
 	mockTask.EXPECT().GetQueueType().Return(transferQueueType).AnyTimes()
-	mockTask.EXPECT().GetNamespaceId().Return(testNamespaceID)
+	mockTask.EXPECT().GetNamespaceId().Return(tests.NamespaceID)
 	mockTask.EXPECT().SetPriority(configs.GetTaskPriority(configs.TaskHighPriorityClass, configs.TaskDefaultPrioritySubclass))
 
 	err := s.priorityAssigner.Assign(mockTask)
@@ -177,11 +178,11 @@ func (s *taskPriorityAssignerSuite) TestAssign_TransferTask() {
 }
 
 func (s *taskPriorityAssignerSuite) TestAssign_TimerTask() {
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testGlobalNamespaceEntry, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil)
 
 	mockTask := NewMockqueueTask(s.controller)
 	mockTask.EXPECT().GetQueueType().Return(timerQueueType).AnyTimes()
-	mockTask.EXPECT().GetNamespaceId().Return(testNamespaceID)
+	mockTask.EXPECT().GetNamespaceId().Return(tests.NamespaceID)
 	mockTask.EXPECT().SetPriority(configs.GetTaskPriority(configs.TaskHighPriorityClass, configs.TaskDefaultPrioritySubclass))
 
 	err := s.priorityAssigner.Assign(mockTask)
@@ -189,12 +190,12 @@ func (s *taskPriorityAssignerSuite) TestAssign_TimerTask() {
 }
 
 func (s *taskPriorityAssignerSuite) TestAssign_ThrottledTask() {
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(testNamespaceID).Return(testGlobalNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 
 	for i := 0; i != s.testTaskProcessRPS*2; i++ {
 		mockTask := NewMockqueueTask(s.controller)
 		mockTask.EXPECT().GetQueueType().Return(timerQueueType).AnyTimes()
-		mockTask.EXPECT().GetNamespaceId().Return(testNamespaceID)
+		mockTask.EXPECT().GetNamespaceId().Return(tests.NamespaceID)
 		if i < s.testTaskProcessRPS {
 			mockTask.EXPECT().SetPriority(configs.GetTaskPriority(configs.TaskHighPriorityClass, configs.TaskDefaultPrioritySubclass))
 		} else {

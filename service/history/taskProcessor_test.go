@@ -41,8 +41,9 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
 )
 
 type (
@@ -89,7 +90,7 @@ func (s *taskProcessorSuite) SetupTest() {
 				RangeId:          1,
 				TransferAckLevel: 0,
 			}},
-		configs.NewDynamicConfigForTest(),
+		tests.NewDynamicConfig(),
 	)
 
 	s.mockProcessor = NewMocktimerProcessor(s.controller)
@@ -141,7 +142,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceErrRetry_ProcessNoEr
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
 	s.mockProcessor.EXPECT().process(task).Return(s.scopeIdx, nil)
 	s.mockProcessor.EXPECT().complete(task)
-	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(testNamespace, nil)
+	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
 		task,
@@ -158,7 +159,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceFalse_ProcessNoErr()
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
 	s.mockProcessor.EXPECT().process(task).Return(s.scopeIdx, nil)
 	s.mockProcessor.EXPECT().complete(task)
-	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(testNamespace, nil)
+	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
 		task,
@@ -174,7 +175,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessNoErr() 
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
 	s.mockProcessor.EXPECT().process(task).Return(s.scopeIdx, nil)
 	s.mockProcessor.EXPECT().complete(task)
-	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(testNamespace, nil)
+	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
 		task,
@@ -192,7 +193,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessErrNoErr
 	s.mockProcessor.EXPECT().process(task).Return(s.scopeIdx, err)
 	s.mockProcessor.EXPECT().process(task).Return(s.scopeIdx, nil)
 	s.mockProcessor.EXPECT().complete(task)
-	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(testNamespace, nil).Times(2)
+	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).Times(2)
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
 		task,
@@ -207,7 +208,7 @@ func (s *taskProcessorSuite) TestHandleTaskError_EntityNotExists() {
 }
 
 func (s *taskProcessorSuite) TestHandleTaskError_ErrTaskRetry() {
-	err := ErrTaskRetry
+	err := consts.ErrTaskRetry
 	delay := time.Second
 
 	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
@@ -219,11 +220,11 @@ func (s *taskProcessorSuite) TestHandleTaskError_ErrTaskRetry() {
 	err = s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err)
 	duration := time.Since(taskInfo.startTime)
 	s.True(duration >= delay)
-	s.Equal(ErrTaskRetry, err)
+	s.Equal(consts.ErrTaskRetry, err)
 }
 
 func (s *taskProcessorSuite) TestHandleTaskError_ErrTaskDiscarded() {
-	err := ErrTaskDiscarded
+	err := consts.ErrTaskDiscarded
 
 	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
 	s.Nil(s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
@@ -233,7 +234,7 @@ func (s *taskProcessorSuite) TestHandleTaskError_NamespaceNotActiveError() {
 	err := serviceerror.NewNamespaceNotActive("", "", "")
 
 	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
-	taskInfo.startTime = time.Now().UTC().Add(-cache.NamespaceCacheRefreshInterval * time.Duration(2))
+	taskInfo.startTime = time.Now().UTC().Add(-cache.NamespaceCacheRefreshInterval * time.Duration(3))
 	s.Nil(s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 
 	taskInfo.startTime = time.Now().UTC()

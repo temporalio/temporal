@@ -2,6 +2,9 @@ frontend.validSearchAttributes:
 - value:
     NamespaceId: 1
   constraints: {}
+TestCaseInsensitivePropertykEy:
+  - value: true
+    constraints: {}
 testGetBoolPropertyKey:
 - value: false
   constraints: {}

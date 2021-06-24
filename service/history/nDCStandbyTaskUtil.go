@@ -38,19 +38,21 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
-	standbyActionFn     func(workflowExecutionContext, mutableState) (interface{}, error)
+	standbyActionFn     func(workflow.Context, workflow.MutableState) (interface{}, error)
 	standbyPostActionFn func(queueTaskInfo, interface{}, log.Logger) error
 
 	standbyCurrentTimeFn func() time.Time
 )
 
 func standbyTaskPostActionNoOp(
-	taskInfo queueTaskInfo,
+	_ queueTaskInfo,
 	postActionInfo interface{},
-	logger log.Logger,
+	_ log.Logger,
 ) error {
 
 	if postActionInfo == nil {
@@ -58,7 +60,7 @@ func standbyTaskPostActionNoOp(
 	}
 
 	// return error so task processing logic will retry
-	return ErrTaskRetry
+	return consts.ErrTaskRetry
 }
 
 func standbyTransferTaskPostActionTaskDiscarded(
@@ -81,7 +83,7 @@ func standbyTransferTaskPostActionTaskDiscarded(
 		tag.FailoverVersion(transferTask.GetVersion()),
 		tag.TimestampPtr(transferTask.VisibilityTime),
 		tag.WorkflowEventID(transferTask.GetScheduleId()))
-	return ErrTaskDiscarded
+	return consts.ErrTaskDiscarded
 }
 
 func standbyTimerTaskPostActionTaskDiscarded(
@@ -105,7 +107,7 @@ func standbyTimerTaskPostActionTaskDiscarded(
 		tag.FailoverVersion(timerTask.GetVersion()),
 		tag.TimestampPtr(timerTask.VisibilityTime),
 		tag.WorkflowEventID(timerTask.GetEventId()))
-	return ErrTaskDiscarded
+	return consts.ErrTaskDiscarded
 }
 
 type (
@@ -157,7 +159,7 @@ func newPushWorkflowTaskToMatchingInfo(
 }
 
 func getHistoryResendInfo(
-	mutableState mutableState,
+	mutableState workflow.MutableState,
 ) (*historyResendInfo, error) {
 
 	currentBranch, err := versionhistory.GetCurrentVersionHistory(mutableState.GetExecutionInfo().GetVersionHistories())

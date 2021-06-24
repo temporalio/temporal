@@ -34,6 +34,9 @@
         "CloseTime": {
           "type": "date"
         },
+        "ExecutionDuration": {
+          "type": "long"
+        },
         "ExecutionStatus": {
           "type": "keyword"
         },
@@ -53,6 +56,9 @@
           "type": "keyword"
         },
         "HistoryLength": {
+          "type": "long"
+        },
+        "StateTransitionCount": {
           "type": "long"
         }
       }

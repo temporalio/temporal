@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/tests"
 )
 
 type (
@@ -86,7 +87,7 @@ func (s *replicationTaskFetcherSuite) SetupTest() {
 	s.mockResource = resource.NewTest(s.controller, metrics.History)
 	s.frontendClient = s.mockResource.RemoteAdminClient
 	s.logger = log.NewNoopLogger()
-	s.config = NewDynamicConfigForTest()
+	s.config = tests.NewDynamicConfig()
 	s.config.ReplicationTaskFetcherParallelism = dynamicconfig.GetIntPropertyFn(1)
 
 	s.replicationTaskFetcher = newReplicationTaskFetcher(

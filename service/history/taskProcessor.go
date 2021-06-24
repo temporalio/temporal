@@ -42,7 +42,9 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 const (
@@ -71,7 +73,7 @@ type (
 
 	taskProcessor struct {
 		shard         shard.Context
-		cache         *historyCache
+		cache         *workflow.Cache
 		shutdownCh    chan struct{}
 		tasksCh       chan *taskInfo
 		config        *configs.Config
@@ -106,7 +108,7 @@ func newTaskInfo(
 func newTaskProcessor(
 	options taskProcessorOptions,
 	shard shard.Context,
-	historyCache *historyCache,
+	historyCache *workflow.Cache,
 	logger log.Logger,
 ) *taskProcessor {
 
@@ -286,7 +288,7 @@ func (t *taskProcessor) handleTaskError(
 
 	if transferTask, ok := task.task.(*persistencespb.TransferTaskInfo); ok &&
 		transferTask.TaskType == enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION &&
-		err == ErrMissingWorkflowStartEvent &&
+		err == workflow.ErrMissingWorkflowStartEvent &&
 		t.config.EnableDropStuckTaskByNamespaceID(task.task.GetNamespaceId()) { // use namespaceID here to avoid accessing namespaceCache
 		scope.IncCounter(metrics.TransferTaskMissingEventCounter)
 		task.logger.Error("Drop close execution transfer task due to corrupted workflow history", tag.Error(err), tag.LifeCycleProcessingFailed)
@@ -294,7 +296,7 @@ func (t *taskProcessor) handleTaskError(
 	}
 
 	// this is a transient error
-	if err == ErrTaskRetry {
+	if err == consts.ErrTaskRetry {
 		scope.IncCounter(metrics.TaskStandbyRetryCounter)
 		select {
 		case <-notificationChan:
@@ -303,7 +305,7 @@ func (t *taskProcessor) handleTaskError(
 		return err
 	}
 
-	if err == ErrTaskDiscarded {
+	if err == consts.ErrTaskDiscarded {
 		scope.IncCounter(metrics.TaskDiscarded)
 		err = nil
 	}

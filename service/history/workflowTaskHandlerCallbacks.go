@@ -48,7 +48,9 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -71,7 +73,7 @@ type (
 		timeSource           clock.TimeSource
 		historyEngine        *historyEngineImpl
 		namespaceCache       cache.NamespaceCache
-		historyCache         *historyCache
+		historyCache         *workflow.Cache
 		txProcessor          transferQueueProcessor
 		timerProcessor       timerQueueProcessor
 		tokenSerializer      common.TaskTokenSerializer
@@ -125,9 +127,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 		ctx,
 		namespaceID,
 		execution,
-		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
+		func(context workflow.Context, mutableState workflow.MutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return nil, ErrWorkflowCompleted
+				return nil, consts.ErrWorkflowCompleted
 			}
 
 			if mutableState.HasProcessedOrPendingWorkflowTask() {
@@ -174,9 +176,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 		ctx,
 		namespaceID,
 		execution,
-		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
+		func(context workflow.Context, mutableState workflow.MutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return nil, ErrWorkflowCompleted
+				return nil, consts.ErrWorkflowCompleted
 			}
 
 			workflowTask, isRunning := mutableState.GetWorkflowTaskInfo(scheduleID)
@@ -187,7 +189,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				handler.metricsClient.IncCounter(metrics.HistoryRecordWorkflowTaskStartedScope, metrics.StaleMutableStateCounter)
 				// Reload workflow execution history
 				// ErrStaleState will trigger updateWorkflowExecution function to reload the mutable state
-				return nil, ErrStaleState
+				return nil, consts.ErrStaleState
 			}
 
 			// Check execution state to make sure task is in the list of outstanding tasks and it is not yet started.  If
@@ -254,7 +256,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 	request := req.FailedRequest
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
-		return ErrDeserializingToken
+		return consts.ErrDeserializingToken
 	}
 
 	workflowExecution := commonpb.WorkflowExecution{
@@ -266,9 +268,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 		ctx,
 		namespaceID,
 		workflowExecution,
-		func(context workflowExecutionContext, mutableState mutableState) (*updateWorkflowAction, error) {
+		func(context workflow.Context, mutableState workflow.MutableState) (*updateWorkflowAction, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return nil, ErrWorkflowCompleted
+				return nil, consts.ErrWorkflowCompleted
 			}
 
 			scheduleID := token.GetScheduleId()
@@ -303,7 +305,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	request := req.CompleteRequest
 	token, err0 := handler.tokenSerializer.Deserialize(request.TaskToken)
 	if err0 != nil {
-		return nil, ErrDeserializingToken
+		return nil, consts.ErrDeserializingToken
 	}
 
 	workflowExecution := commonpb.WorkflowExecution{
@@ -311,11 +313,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		RunId:      token.GetRunId(),
 	}
 
-	weContext, release, err := handler.historyCache.getOrCreateWorkflowExecution(
+	weContext, release, err := handler.historyCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		workflowExecution,
-		callerTypeAPI,
+		workflow.CallerTypeAPI,
 	)
 	if err != nil {
 		return nil, err
@@ -324,14 +326,14 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 Update_History_Loop:
 	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
-		msBuilder, err := weContext.loadWorkflowExecution()
+		msBuilder, err := weContext.LoadWorkflowExecution()
 		if err != nil {
 			return nil, err
 		}
 		if !msBuilder.IsWorkflowExecutionRunning() {
-			return nil, ErrWorkflowCompleted
+			return nil, consts.ErrWorkflowCompleted
 		}
-		executionStats, err := weContext.loadExecutionStats()
+		executionStats, err := weContext.LoadExecutionStats()
 		if err != nil {
 			return nil, err
 		}
@@ -346,7 +348,7 @@ Update_History_Loop:
 		if !isRunning && scheduleID >= msBuilder.GetNextEventID() {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.StaleMutableStateCounter)
 			// Reload workflow execution history
-			weContext.clear()
+			weContext.Clear()
 			continue Update_History_Loop
 		}
 
@@ -393,7 +395,7 @@ Update_History_Loop:
 		var (
 			wtFailedCause               *workflowTaskFailedCause
 			activityNotStartedCancelled bool
-			continueAsNewBuilder        mutableState
+			continueAsNewBuilder        workflow.MutableState
 
 			hasUnhandledEvents bool
 		)
@@ -478,7 +480,7 @@ Update_History_Loop:
 		createNewWorkflowTask := msBuilder.IsWorkflowExecutionRunning() && (hasUnhandledEvents || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled)
 		var newWorkflowTaskScheduledID int64
 		if createNewWorkflowTask {
-			var newWorkflowTask *workflowTaskInfo
+			var newWorkflowTask *workflow.WorkflowTaskInfo
 			var err error
 			if workflowTaskHeartbeating && !workflowTaskHeartbeatTimeout {
 				newWorkflowTask, err = msBuilder.AddWorkflowTaskScheduledEventAsHeartbeat(
@@ -517,9 +519,9 @@ Update_History_Loop:
 		if continueAsNewBuilder != nil {
 			continueAsNewExecutionInfo := continueAsNewBuilder.GetExecutionInfo()
 			continueAsNewExecutionState := continueAsNewBuilder.GetExecutionState()
-			updateErr = weContext.updateWorkflowExecutionWithNewAsActive(
+			updateErr = weContext.UpdateWorkflowExecutionWithNewAsActive(
 				handler.shard.GetTimeSource().Now(),
-				newWorkflowExecutionContext(
+				workflow.NewContext(
 					continueAsNewExecutionInfo.NamespaceId,
 					commonpb.WorkflowExecution{
 						WorkflowId: continueAsNewExecutionInfo.WorkflowId,
@@ -532,11 +534,11 @@ Update_History_Loop:
 				continueAsNewBuilder,
 			)
 		} else {
-			updateErr = weContext.updateWorkflowExecutionAsActive(handler.shard.GetTimeSource().Now())
+			updateErr = weContext.UpdateWorkflowExecutionAsActive(handler.shard.GetTimeSource().Now())
 		}
 
 		if updateErr != nil {
-			if updateErr == ErrConflict {
+			if updateErr == consts.ErrConflict {
 				handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.ConcurrencyUpdateFailureCounter)
 				continue Update_History_Loop
 			}
@@ -546,22 +548,22 @@ Update_History_Loop:
 			case *persistence.TransactionSizeLimitError:
 				// must reload mutable state because the first call to updateWorkflowExecutionWithContext or continueAsNewWorkflowExecution
 				// clears mutable state if error is returned
-				msBuilder, err = weContext.loadWorkflowExecution()
+				msBuilder, err = weContext.LoadWorkflowExecution()
 				if err != nil {
 					return nil, err
 				}
 
 				eventBatchFirstEventID := msBuilder.GetNextEventID()
-				if err := terminateWorkflow(
+				if err := workflow.TerminateWorkflow(
 					msBuilder,
 					eventBatchFirstEventID,
 					common.FailureReasonTransactionSizeExceedsLimit,
 					payloads.EncodeString(updateErr.Error()),
-					identityHistoryService,
+					consts.IdentityHistoryService,
 				); err != nil {
 					return nil, err
 				}
-				if err := weContext.updateWorkflowExecutionAsActive(
+				if err := weContext.UpdateWorkflowExecutionAsActive(
 					handler.shard.GetTimeSource().Now(),
 				); err != nil {
 					return nil, err
@@ -596,13 +598,13 @@ Update_History_Loop:
 		return resp, nil
 	}
 
-	return nil, ErrMaxAttemptsExceeded
+	return nil, consts.ErrMaxAttemptsExceeded
 }
 
 func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStartedResponse(
 	namespaceID string,
-	msBuilder mutableState,
-	workflowTask *workflowTaskInfo,
+	msBuilder workflow.MutableState,
+	workflowTask *workflow.WorkflowTaskInfo,
 	identity string,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 
@@ -642,10 +644,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	response.BranchToken = currentBranchToken
 
 	qr := msBuilder.GetQueryRegistry()
-	buffered := qr.getBufferedIDs()
+	buffered := qr.GetBufferedIDs()
 	queries := make(map[string]*querypb.WorkflowQuery)
 	for _, id := range buffered {
-		input, err := qr.getQueryInput(id)
+		input, err := qr.GetQueryInput(id)
 		if err != nil {
 			continue
 		}
@@ -655,9 +657,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	return response, nil
 }
 
-func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder mutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *cache.NamespaceCacheEntry, workflowTaskHeartbeating bool) {
+func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder workflow.MutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *cache.NamespaceCacheEntry, workflowTaskHeartbeating bool) {
 	queryRegistry := msBuilder.GetQueryRegistry()
-	if !queryRegistry.hasBufferedQuery() {
+	if !queryRegistry.HasBufferedQuery() {
 		return
 	}
 
@@ -699,11 +701,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 				tag.WorkflowRunID(runID),
 				tag.QueryID(id),
 				tag.Error(err))
-			failedTerminationState := &queryTerminationState{
-				queryTerminationType: queryTerminationTypeFailed,
-				failure:              err,
+			failedTerminationState := &workflow.QueryTerminationState{
+				QueryTerminationType: workflow.QueryTerminationTypeFailed,
+				Failure:              err,
 			}
-			if err := queryRegistry.setTerminationState(id, failedTerminationState); err != nil {
+			if err := queryRegistry.SetTerminationState(id, failedTerminationState); err != nil {
 				handler.logger.Error(
 					"failed to set query termination state to failed",
 					tag.WorkflowNamespace(namespace),
@@ -714,11 +716,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 				scope.IncCounter(metrics.QueryRegistryInvalidStateCount)
 			}
 		} else {
-			completedTerminationState := &queryTerminationState{
-				queryTerminationType: queryTerminationTypeCompleted,
-				queryResult:          result,
+			completedTerminationState := &workflow.QueryTerminationState{
+				QueryTerminationType: workflow.QueryTerminationTypeCompleted,
+				QueryResult:          result,
 			}
-			if err := queryRegistry.setTerminationState(id, completedTerminationState); err != nil {
+			if err := queryRegistry.SetTerminationState(id, completedTerminationState); err != nil {
 				handler.logger.Error(
 					"failed to set query termination state to completed",
 					tag.WorkflowNamespace(namespace),
@@ -734,12 +736,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 	// If no workflow task was created then it means no buffered events came in during this workflow task's handling.
 	// This means all unanswered buffered queries can be dispatched directly through matching at this point.
 	if !createNewWorkflowTask {
-		buffered := queryRegistry.getBufferedIDs()
+		buffered := queryRegistry.GetBufferedIDs()
 		for _, id := range buffered {
-			unblockTerminationState := &queryTerminationState{
-				queryTerminationType: queryTerminationTypeUnblocked,
+			unblockTerminationState := &workflow.QueryTerminationState{
+				QueryTerminationType: workflow.QueryTerminationTypeUnblocked,
 			}
-			if err := queryRegistry.setTerminationState(id, unblockTerminationState); err != nil {
+			if err := queryRegistry.SetTerminationState(id, unblockTerminationState); err != nil {
 				handler.logger.Error(
 					"failed to set query termination state to unblocked",
 					tag.WorkflowNamespace(namespace),

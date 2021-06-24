@@ -378,7 +378,7 @@ func prettyPrintJSONObject(o interface{}) {
 	fmt.Println()
 }
 
-func mapKeysToArray(m map[string]string) []string {
+func mapKeysToArray(m map[string]interface{}) []string {
 	var out []string
 	for k := range m {
 		out = append(out, k)
