@@ -27,6 +27,8 @@ package resource
 import (
 	"net"
 
+	"go.temporal.io/server/common/persistence/serialization"
+
 	"github.com/golang/mock/gomock"
 	"github.com/uber-go/tally"
 	"go.temporal.io/api/workflowservice/v1"
@@ -68,7 +70,7 @@ type (
 
 		NamespaceCache    *cache.MockNamespaceCache
 		TimeSource        clock.TimeSource
-		PayloadSerializer persistence.PayloadSerializer
+		PayloadSerializer serialization.Serializer
 		MetricsClient     metrics.Client
 		ArchivalMetadata  *archiver.MockArchivalMetadata
 		ArchiverProvider  *provider.MockArchiverProvider
@@ -180,7 +182,7 @@ func NewTest(
 
 		NamespaceCache:    cache.NewMockNamespaceCache(controller),
 		TimeSource:        clock.NewRealTimeSource(),
-		PayloadSerializer: persistence.NewPayloadSerializer(),
+		PayloadSerializer: serialization.NewSerializer(),
 		MetricsClient:     metrics.NewClient(scope, serviceMetricsIndex),
 		ArchivalMetadata:  archiver.NewMockArchivalMetadata(controller),
 		ArchiverProvider:  provider.NewMockArchiverProvider(controller),
@@ -272,7 +274,7 @@ func (s *Test) GetTimeSource() clock.TimeSource {
 }
 
 // GetPayloadSerializer for testing
-func (s *Test) GetPayloadSerializer() persistence.PayloadSerializer {
+func (s *Test) GetPayloadSerializer() serialization.Serializer {
 	return s.PayloadSerializer
 }
 

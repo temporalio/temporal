@@ -236,12 +236,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 		taskQueue.Name = m.ms.executionInfo.StickyTaskQueue
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_STICKY
 	} else {
-		// It can be because stickyness has expired due to StickyTTL config
-		// In that case we need to clear stickyness so that the LastUpdatedTimestamp is not corrupted.
-		// In other cases, clearing stickyness shouldn't hurt anything.
-		// TODO: https://github.com/temporalio/temporal/issues/2357:
-		//  if we can use a new field(LastWorkflowTaskUpdateTimestamp), then we could get rid of it.
-		m.ms.ClearStickyness()
 		taskQueue.Name = m.ms.executionInfo.TaskQueue
 		taskQueue.Kind = enumspb.TASK_QUEUE_KIND_NORMAL
 	}
@@ -562,6 +556,7 @@ func (m *workflowTaskStateMachine) FailWorkflowTask(
 	incrementAttempt bool,
 ) {
 	// clear stickiness whenever workflow task fails
+	incrementAttempt = incrementAttempt && !m.ms.IsStickyTaskQueueEnabled()
 	m.ms.ClearStickyness()
 
 	failWorkflowTaskInfo := &WorkflowTaskInfo{
@@ -741,6 +736,6 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	event *historypb.HistoryEvent,
 	maxResetPoints int,
 ) error {
-	m.ms.executionInfo.LastProcessedEvent = event.GetWorkflowTaskCompletedEventAttributes().GetStartedEventId()
+	m.ms.executionInfo.LastWorkflowTaskStartId = event.GetWorkflowTaskCompletedEventAttributes().GetStartedEventId()
 	return m.ms.addBinaryCheckSumIfNotExists(event, maxResetPoints)
 }

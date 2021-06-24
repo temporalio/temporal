@@ -30,6 +30,8 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/server/common/persistence/serialization"
+
 	commonpb "go.temporal.io/api/common/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -40,7 +42,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
 )
 
@@ -72,7 +73,7 @@ type (
 		namespaceCache       cache.NamespaceCache
 		adminClient          adminservice.AdminServiceClient
 		historyReplicationFn nDCHistoryReplicationFn
-		serializer           persistence.PayloadSerializer
+		serializer           serialization.Serializer
 		rereplicationTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter
 		logger               log.Logger
 	}
@@ -92,7 +93,7 @@ func NewNDCHistoryResender(
 	namespaceCache cache.NamespaceCache,
 	adminClient adminservice.AdminServiceClient,
 	historyReplicationFn nDCHistoryReplicationFn,
-	serializer persistence.PayloadSerializer,
+	serializer serialization.Serializer,
 	rereplicationTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter,
 	logger log.Logger,
 ) *NDCHistoryResenderImpl {

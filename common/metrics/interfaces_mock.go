@@ -199,6 +199,20 @@ func (mr *MockClientMockRecorder) UpdateGauge(scope, gauge, value interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateGauge", reflect.TypeOf((*MockClient)(nil).UpdateGauge), scope, gauge, value)
 }
 
+// UserScope mocks base method.
+func (m *MockClient) UserScope() UserScope {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UserScope")
+	ret0, _ := ret[0].(UserScope)
+	return ret0
+}
+
+// UserScope indicates an expected call of UserScope.
+func (mr *MockClientMockRecorder) UserScope() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UserScope", reflect.TypeOf((*MockClient)(nil).UserScope))
+}
+
 // MockScope is a mock of Scope interface.
 type MockScope struct {
 	ctrl     *gomock.Controller
@@ -312,6 +326,117 @@ func (m *MockScope) UpdateGauge(gauge int, value float64) {
 func (mr *MockScopeMockRecorder) UpdateGauge(gauge, value interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateGauge", reflect.TypeOf((*MockScope)(nil).UpdateGauge), gauge, value)
+}
+
+// MockUserScope is a mock of UserScope interface.
+type MockUserScope struct {
+	ctrl     *gomock.Controller
+	recorder *MockUserScopeMockRecorder
+}
+
+// MockUserScopeMockRecorder is the mock recorder for MockUserScope.
+type MockUserScopeMockRecorder struct {
+	mock *MockUserScope
+}
+
+// NewMockUserScope creates a new mock instance.
+func NewMockUserScope(ctrl *gomock.Controller) *MockUserScope {
+	mock := &MockUserScope{ctrl: ctrl}
+	mock.recorder = &MockUserScopeMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockUserScope) EXPECT() *MockUserScopeMockRecorder {
+	return m.recorder
+}
+
+// AddCounter mocks base method.
+func (m *MockUserScope) AddCounter(counter string, delta int64) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AddCounter", counter, delta)
+}
+
+// AddCounter indicates an expected call of AddCounter.
+func (mr *MockUserScopeMockRecorder) AddCounter(counter, delta interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddCounter", reflect.TypeOf((*MockUserScope)(nil).AddCounter), counter, delta)
+}
+
+// IncCounter mocks base method.
+func (m *MockUserScope) IncCounter(counter string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "IncCounter", counter)
+}
+
+// IncCounter indicates an expected call of IncCounter.
+func (mr *MockUserScopeMockRecorder) IncCounter(counter interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncCounter", reflect.TypeOf((*MockUserScope)(nil).IncCounter), counter)
+}
+
+// RecordDistribution mocks base method.
+func (m *MockUserScope) RecordDistribution(id string, d int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RecordDistribution", id, d)
+}
+
+// RecordDistribution indicates an expected call of RecordDistribution.
+func (mr *MockUserScopeMockRecorder) RecordDistribution(id, d interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordDistribution", reflect.TypeOf((*MockUserScope)(nil).RecordDistribution), id, d)
+}
+
+// RecordTimer mocks base method.
+func (m *MockUserScope) RecordTimer(timer string, d time.Duration) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RecordTimer", timer, d)
+}
+
+// RecordTimer indicates an expected call of RecordTimer.
+func (mr *MockUserScopeMockRecorder) RecordTimer(timer, d interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordTimer", reflect.TypeOf((*MockUserScope)(nil).RecordTimer), timer, d)
+}
+
+// StartTimer mocks base method.
+func (m *MockUserScope) StartTimer(timer string) Stopwatch {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartTimer", timer)
+	ret0, _ := ret[0].(Stopwatch)
+	return ret0
+}
+
+// StartTimer indicates an expected call of StartTimer.
+func (mr *MockUserScopeMockRecorder) StartTimer(timer interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTimer", reflect.TypeOf((*MockUserScope)(nil).StartTimer), timer)
+}
+
+// Tagged mocks base method.
+func (m *MockUserScope) Tagged(tags map[string]string) UserScope {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Tagged", tags)
+	ret0, _ := ret[0].(UserScope)
+	return ret0
+}
+
+// Tagged indicates an expected call of Tagged.
+func (mr *MockUserScopeMockRecorder) Tagged(tags interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tagged", reflect.TypeOf((*MockUserScope)(nil).Tagged), tags)
+}
+
+// UpdateGauge mocks base method.
+func (m *MockUserScope) UpdateGauge(gauge string, value float64) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UpdateGauge", gauge, value)
+}
+
+// UpdateGauge indicates an expected call of UpdateGauge.
+func (mr *MockUserScopeMockRecorder) UpdateGauge(gauge, value interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateGauge", reflect.TypeOf((*MockUserScope)(nil).UpdateGauge), gauge, value)
 }
 
 // MockReporter is a mock of Reporter interface.

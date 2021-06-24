@@ -38,9 +38,9 @@ import (
 
 type (
 
-	// metadataManagerImpl implements MetadataManager based on MetadataStore and PayloadSerializer
+	// metadataManagerImpl implements MetadataManager based on MetadataStore and Serializer
 	metadataManagerImpl struct {
-		serializer  PayloadSerializer
+		serializer  serialization.Serializer
 		persistence MetadataStore
 		logger      log.Logger
 		clusterName string
@@ -52,7 +52,7 @@ var _ MetadataManager = (*metadataManagerImpl)(nil)
 //NewMetadataManagerImpl returns new MetadataManager
 func NewMetadataManagerImpl(persistence MetadataStore, logger log.Logger, clusterName string) MetadataManager {
 	return &metadataManagerImpl{
-		serializer:  NewPayloadSerializer(),
+		serializer:  serialization.NewSerializer(),
 		persistence: persistence,
 		logger:      logger,
 		clusterName: clusterName,
@@ -64,7 +64,7 @@ func (m *metadataManagerImpl) GetName() string {
 }
 
 func (m *metadataManagerImpl) CreateNamespace(request *CreateNamespaceRequest) (*CreateNamespaceResponse, error) {
-	datablob, err := serialization.NamespaceDetailToBlob(request.Namespace)
+	datablob, err := m.serializer.NamespaceDetailToBlob(request.Namespace, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (m *metadataManagerImpl) CreateNamespace(request *CreateNamespaceRequest) (
 		ID:        request.Namespace.Info.Id,
 		Name:      request.Namespace.Info.Name,
 		IsGlobal:  request.IsGlobalNamespace,
-		Namespace: &datablob,
+		Namespace: datablob,
 	})
 }
 
@@ -86,7 +86,7 @@ func (m *metadataManagerImpl) GetNamespace(request *GetNamespaceRequest) (*GetNa
 }
 
 func (m *metadataManagerImpl) UpdateNamespace(request *UpdateNamespaceRequest) error {
-	datablob, err := serialization.NamespaceDetailToBlob(request.Namespace)
+	datablob, err := m.serializer.NamespaceDetailToBlob(request.Namespace, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func (m *metadataManagerImpl) UpdateNamespace(request *UpdateNamespaceRequest) e
 	return m.persistence.UpdateNamespace(&InternalUpdateNamespaceRequest{
 		Id:                  request.Namespace.Info.Id,
 		Name:                request.Namespace.Info.Name,
-		Namespace:           &datablob,
+		Namespace:           datablob,
 		NotificationVersion: request.NotificationVersion,
 	})
 }
@@ -108,7 +108,7 @@ func (m *metadataManagerImpl) DeleteNamespaceByName(request *DeleteNamespaceByNa
 }
 
 func (m *metadataManagerImpl) ConvertInternalGetResponse(d *InternalGetNamespaceResponse) (*GetNamespaceResponse, error) {
-	ns, err := serialization.NamespaceDetailFromBlob(FromDataBlob(d.Namespace))
+	ns, err := m.serializer.NamespaceDetailFromBlob(d.Namespace)
 	if err != nil {
 		return nil, err
 	}

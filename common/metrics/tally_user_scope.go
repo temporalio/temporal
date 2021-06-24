@@ -1,6 +1,8 @@
 // The MIT License
 //
-// Copyright (c) 2021 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,43 +22,49 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package metrics
 
 import (
-	"os"
+	"time"
 
-	"github.com/hashicorp/go-plugin"
-	cliplugin "go.temporal.io/server/tools/cli/plugin"
+	"github.com/uber-go/tally"
 )
 
-type provider struct {
-	token string
+type tallyUserScope struct {
+	scope tally.Scope
 }
 
-func (p provider) GetHeaders(currentHeaders map[string][]string) (map[string]string, error) {
-	return map[string]string{
-		"Authorization": p.token,
-	}, nil
+func newTallyUserScope(scope tally.Scope) UserScope {
+	return &tallyUserScope{scope: scope}
 }
 
-func main() {
-	var p provider
+func (t tallyUserScope) IncCounter(counter string) {
+	t.AddCounter(counter, 1)
+	panic("implement me")
+}
 
-	if len(os.Args) > 1 {
-		p.token = os.Args[1]
-	}
-	if p.token == "" {
-		p.token = os.Getenv("TEMPORAL_CLI_AUTHORIZATION_TOKEN")
-	}
+func (t tallyUserScope) AddCounter(counter string, delta int64) {
+	t.scope.Counter(counter).Inc(delta)
+}
 
-	var pluginMap = map[string]plugin.Plugin{
-		cliplugin.HeadersProviderPluginType: &cliplugin.HeadersProviderPlugin{
-			Impl: &p,
-		},
-	}
+func (t tallyUserScope) StartTimer(timer string) Stopwatch {
+	tm := t.scope.Timer(timer)
+	return NewStopwatch(tm)
+}
 
-	plugin.Serve(&plugin.ServeConfig{
-		HandshakeConfig: cliplugin.PluginHandshakeConfig,
-		Plugins:         pluginMap,
-	})
+func (t tallyUserScope) RecordTimer(timer string, d time.Duration) {
+	t.scope.Timer(timer).Record(d)
+}
+
+func (t tallyUserScope) RecordDistribution(id string, d int) {
+	dist := time.Duration(d * distributionToTimerRatio)
+	t.scope.Timer(id).Record(dist)
+}
+
+func (t tallyUserScope) UpdateGauge(gauge string, value float64) {
+	t.scope.Gauge(gauge).Update(value)
+}
+
+func (t tallyUserScope) Tagged(tags map[string]string) UserScope {
+	return newTallyUserScope(t.scope.Tagged(tags))
 }

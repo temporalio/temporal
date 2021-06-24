@@ -79,7 +79,7 @@ message WorkflowExecutionInfo {
     reserved 16;
     int64 last_event_task_id = 17;
     int64 last_first_event_id = 18;
-    int64 last_processed_event = 19;
+    int64 last_workflow_task_start_id = 19;
     google.protobuf.Timestamp start_time = 20 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp last_update_time = 21 [(gogoproto.stdtime) = true];
     int64 workflow_task_version = 22;

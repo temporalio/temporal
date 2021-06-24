@@ -26,6 +26,7 @@ package authorization
 
 import (
 	"context"
+	"strings"
 )
 
 type (
@@ -57,7 +58,7 @@ func (a *defaultAuthorizer) Authorize(_ context.Context, claims *Claims, target 
 	if claims.System == RoleAdmin || claims.System == RoleWriter {
 		return Result{Decision: DecisionAllow}, nil
 	}
-	roles, found := claims.Namespaces[target.Namespace]
+	roles, found := claims.Namespaces[strings.ToLower(target.Namespace)]
 	if !found || roles == RoleUndefined {
 		return Result{Decision: DecisionDeny}, nil
 	}

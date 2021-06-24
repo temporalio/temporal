@@ -518,16 +518,16 @@ func (s *localStoreRPCSuite) TestServerTLS() {
 	runHelloWorldTest(s.Suite, localhostIPv4, s.internodeServerTLSRPCFactory, s.internodeServerTLSRPCFactory, true)
 }
 
-func (s *localStoreRPCSuite) TestServerTLSInternodeToFrontend() {
-	runHelloWorldTest(s.Suite, localhostIPv4, s.frontendServerTLSRPCFactory, s.internodeServerTLSRPCFactory, true)
+func (s *localStoreRPCSuite) TestServerTLSFrontendToFrontend() {
+	runHelloWorldTest(s.Suite, localhostIPv4, s.frontendServerTLSRPCFactory, s.frontendServerTLSRPCFactory, true)
 }
 
 func (s *localStoreRPCSuite) TestMutualTLS() {
 	runHelloWorldTest(s.Suite, localhostIPv4, s.internodeMutualTLSRPCFactory, s.internodeMutualTLSRPCFactory, true)
 }
 
-func (s *localStoreRPCSuite) TestMutualTLSInternodeToFrontend() {
-	runHelloWorldTest(s.Suite, localhostIPv4, s.frontendMutualTLSRPCFactory, s.internodeMutualTLSRPCFactory, true)
+func (s *localStoreRPCSuite) TestMutualTLSFrontendToFrontend() {
+	runHelloWorldTest(s.Suite, localhostIPv4, s.frontendMutualTLSRPCFactory, s.frontendMutualTLSRPCFactory, true)
 }
 
 func (s *localStoreRPCSuite) TestMutualTLSButClientInsecure() {
@@ -544,10 +544,6 @@ func (s *localStoreRPCSuite) TestMutualTLSButClientNoCert() {
 
 func (s *localStoreRPCSuite) TestServerTLSButClientAddsCert() {
 	runHelloWorldTest(s.Suite, localhostIPv4, s.internodeServerTLSRPCFactory, s.internodeMutualTLSRPCFactory, true)
-}
-
-func (s *localStoreRPCSuite) TestServerTLSInternodeToFrontendAlt() {
-	runHelloWorldTest(s.Suite, localhost, s.frontendMutualTLSRPCFactory, s.internodeAltMutualTLSRPCFactory, true)
 }
 
 func (s *localStoreRPCSuite) TestMutualTLSSystemWorker() {

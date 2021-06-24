@@ -29,6 +29,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -39,7 +40,7 @@ import (
 )
 
 type (
-	// executionManagerImpl implements ExecutionManager based on ExecutionStore, statsComputer and PayloadSerializer
+	// executionManagerImpl implements ExecutionManager based on ExecutionStore, statsComputer and Serializer
 	executionManagerImpl struct {
 		serializer    serialization.Serializer
 		persistence   ExecutionStore
@@ -158,72 +159,6 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	msuss := m.statsComputer.computeMutableStateUpdateStats(request)
 	err1 := m.persistence.UpdateWorkflowExecution(newRequest)
 	return &UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: msuss}, err1
-}
-
-func (m *executionManagerImpl) SerializeExecutionInfo(
-	info *persistencespb.WorkflowExecutionInfo,
-	// TODO: return blob here
-) (*persistencespb.WorkflowExecutionInfo, error) {
-
-	if info == nil {
-		return &persistencespb.WorkflowExecutionInfo{}, nil
-	}
-
-	return &persistencespb.WorkflowExecutionInfo{
-		NamespaceId:                       info.NamespaceId,
-		WorkflowId:                        info.WorkflowId,
-		FirstExecutionRunId:               info.FirstExecutionRunId,
-		ParentNamespaceId:                 info.ParentNamespaceId,
-		ParentWorkflowId:                  info.ParentWorkflowId,
-		ParentRunId:                       info.ParentRunId,
-		InitiatedId:                       info.InitiatedId,
-		CompletionEventBatchId:            info.CompletionEventBatchId,
-		CompletionEvent:                   info.CompletionEvent,
-		TaskQueue:                         info.TaskQueue,
-		WorkflowTypeName:                  info.WorkflowTypeName,
-		WorkflowRunTimeout:                info.WorkflowRunTimeout,
-		WorkflowExecutionTimeout:          info.WorkflowExecutionTimeout,
-		DefaultWorkflowTaskTimeout:        info.DefaultWorkflowTaskTimeout,
-		LastFirstEventId:                  info.LastFirstEventId,
-		LastEventTaskId:                   info.LastEventTaskId,
-		LastProcessedEvent:                info.LastProcessedEvent,
-		StartTime:                         info.StartTime,
-		LastUpdateTime:                    info.LastUpdateTime,
-		SignalCount:                       info.SignalCount,
-		WorkflowTaskVersion:               info.WorkflowTaskVersion,
-		WorkflowTaskScheduleId:            info.WorkflowTaskScheduleId,
-		WorkflowTaskStartedId:             info.WorkflowTaskStartedId,
-		WorkflowTaskRequestId:             info.WorkflowTaskRequestId,
-		WorkflowTaskTimeout:               info.WorkflowTaskTimeout,
-		WorkflowTaskAttempt:               info.WorkflowTaskAttempt,
-		WorkflowTaskStartedTime:           info.WorkflowTaskStartedTime,
-		WorkflowTaskScheduledTime:         info.WorkflowTaskScheduledTime,
-		WorkflowTaskOriginalScheduledTime: info.WorkflowTaskOriginalScheduledTime,
-		CancelRequested:                   info.CancelRequested,
-		StickyTaskQueue:                   info.StickyTaskQueue,
-		StickyScheduleToStartTimeout:      info.StickyScheduleToStartTimeout,
-		AutoResetPoints:                   info.AutoResetPoints,
-		Attempt:                           info.Attempt,
-		HasRetryPolicy:                    info.HasRetryPolicy,
-		RetryInitialInterval:              info.RetryInitialInterval,
-		RetryBackoffCoefficient:           info.RetryBackoffCoefficient,
-		RetryMaximumInterval:              info.RetryMaximumInterval,
-		RetryMaximumAttempts:              info.RetryMaximumAttempts,
-		RetryNonRetryableErrorTypes:       info.RetryNonRetryableErrorTypes,
-		CronSchedule:                      info.CronSchedule,
-		Memo:                              info.Memo,
-		SearchAttributes:                  info.SearchAttributes,
-		WorkflowRunExpirationTime:         info.WorkflowRunExpirationTime,
-		WorkflowExecutionExpirationTime:   info.WorkflowExecutionExpirationTime,
-		LastFirstEventTxnId:               info.LastFirstEventTxnId,
-
-		ExecutionStats:       info.ExecutionStats,
-		VersionHistories:     info.VersionHistories,
-		CancelRequestId:      info.CancelRequestId,
-		HistorySize:          info.HistorySize,
-		StateTransitionCount: info.StateTransitionCount,
-		StartVersion:         info.StartVersion,
-	}, nil
 }
 
 func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
