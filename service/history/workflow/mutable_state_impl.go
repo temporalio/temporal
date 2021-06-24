@@ -3515,8 +3515,6 @@ func (e *MutableStateImpl) RetryActivity(
 		return retryState, nil
 	}
 
-	fmt.Printf("#####\n%v\n#####\n", backoffInterval)
-
 	// a retry is needed, update activity info for next retry
 	ai.Version = e.GetCurrentVersion()
 	ai.Attempt++
