@@ -65,7 +65,7 @@ func newMutableStateChecksumPayload(ms MutableState) *checksumspb.MutableStateCh
 		State:                   executionState.State,
 		LastFirstEventId:        executionInfo.LastFirstEventId,
 		NextEventId:             ms.GetNextEventID(),
-		LastProcessedEventId:    executionInfo.LastProcessedEvent,
+		LastProcessedEventId:    executionInfo.LastWorkflowTaskStartId,
 		SignalCount:             executionInfo.SignalCount,
 		WorkflowTaskAttempt:     executionInfo.WorkflowTaskAttempt,
 		WorkflowTaskScheduledId: executionInfo.WorkflowTaskScheduleId,

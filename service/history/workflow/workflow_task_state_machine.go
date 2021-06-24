@@ -736,6 +736,6 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	event *historypb.HistoryEvent,
 	maxResetPoints int,
 ) error {
-	m.ms.executionInfo.LastProcessedEvent = event.GetWorkflowTaskCompletedEventAttributes().GetStartedEventId()
+	m.ms.executionInfo.LastWorkflowTaskStartId = event.GetWorkflowTaskCompletedEventAttributes().GetStartedEventId()
 	return m.ms.addBinaryCheckSumIfNotExists(event, maxResetPoints)
 }
