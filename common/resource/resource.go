@@ -27,6 +27,8 @@ package resource
 import (
 	"net"
 
+	"go.temporal.io/server/common/persistence/serialization"
+
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/searchattribute"
@@ -67,7 +69,7 @@ type (
 
 		GetNamespaceCache() cache.NamespaceCache
 		GetTimeSource() clock.TimeSource
-		GetPayloadSerializer() persistence.PayloadSerializer
+		GetPayloadSerializer() serialization.Serializer
 		GetMetricsClient() metrics.Client
 		GetArchiverProvider() provider.ArchiverProvider
 

@@ -82,7 +82,7 @@ func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope tally.Scope, logg
 
 	internodeProvider := certProviderFactory(&tlsConfig.Internode, nil, nil, tlsConfig.RefreshInterval, logger)
 	var workerProvider CertProvider
-	if tlsConfig.SystemWorker.CertFile != "" || tlsConfig.SystemWorker.CertData != "" { // explicit system worker config
+	if isSystemWorker(tlsConfig) { // explicit system worker config
 		workerProvider = certProviderFactory(nil, &tlsConfig.SystemWorker, nil, tlsConfig.RefreshInterval, logger)
 	} else { // legacy implicit system worker config case
 		internodeWorkerProvider := certProviderFactory(&tlsConfig.Internode, nil, &tlsConfig.Frontend.Client, tlsConfig.RefreshInterval, logger)
@@ -142,14 +142,19 @@ func (s *localStoreTlsProvider) GetInternodeClientConfig() (*tls.Config, error) 
 
 func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 
-	client := &s.settings.Frontend.Client
+	var client *config.ClientTLS
+	if isSystemWorker(s.settings) {
+		client = &s.settings.SystemWorker.Client
+	} else {
+		client = &s.settings.Frontend.Client
+	}
 	return s.getOrCreateConfig(
 		&s.cachedFrontendClientConfig,
 		func() (*tls.Config, error) {
 			return newClientTLSConfig(s.workerCertProvider, client.ServerName,
 				s.settings.Frontend.Server.RequireClientAuth, true, !client.DisableHostVerification)
 		},
-		s.settings.Internode.IsEnabled(),
+		s.settings.Frontend.IsEnabled(),
 	)
 }
 
@@ -426,4 +431,8 @@ func mergeMaps(to CertExpirationMap, from CertExpirationMap) {
 	for k, v := range from {
 		to[k] = v
 	}
+}
+
+func isSystemWorker(tls *config.RootTLS) bool {
+	return tls.SystemWorker.CertData != "" || tls.SystemWorker.CertFile != ""
 }

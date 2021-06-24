@@ -29,6 +29,8 @@ import (
 	"encoding/binary"
 	"time"
 
+	"go.temporal.io/server/common/persistence/serialization"
+
 	"github.com/pborman/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -40,7 +42,6 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -484,7 +485,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		return responseInner.RawHistory, responseInner.NextPageToken
 	}
 
-	serializer := persistence.NewPayloadSerializer()
+	serializer := serialization.NewSerializer()
 	convertBlob := func(blobs []*commonpb.DataBlob) []*historypb.HistoryEvent {
 		events := []*historypb.HistoryEvent{}
 		for _, blob := range blobs {

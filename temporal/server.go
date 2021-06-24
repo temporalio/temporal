@@ -217,7 +217,7 @@ func (s *Server) Start() error {
 		case primitives.WorkerService:
 			svc, err = worker.NewService(params)
 		default:
-			return fmt.Errorf("uknown service %q", svcName)
+			return fmt.Errorf("unknown service %q", svcName)
 		}
 		if err != nil {
 			return fmt.Errorf("unable to start service %q: %w", svcName, err)

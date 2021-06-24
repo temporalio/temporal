@@ -30,6 +30,8 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/server/common/persistence/serialization"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -157,7 +159,7 @@ type (
 		historyCache     *workflow.Cache
 		clusterMetadata  cluster.Metadata
 		historyV2Mgr     persistence.HistoryManager
-		serializer       persistence.PayloadSerializer
+		serializer       serialization.Serializer
 		metricsClient    metrics.Client
 		workflowResetter workflowResetter
 		eventsReapplier  nDCEventsReapplier

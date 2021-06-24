@@ -43,7 +43,7 @@ import (
 )
 
 type (
-	// historyManagerImpl implements HistoryManager based on HistoryStore and PayloadSerializer
+	// historyManagerImpl implements HistoryManager based on HistoryStore and Serializer
 	historyV2ManagerImpl struct {
 		historySerializer     serialization.Serializer
 		persistence           HistoryStore

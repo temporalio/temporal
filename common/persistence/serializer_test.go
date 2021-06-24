@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -75,7 +76,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 	startWG.Add(1)
 	doneWG.Add(concurrency)
 
-	serializer := NewPayloadSerializer()
+	serializer := serialization.NewSerializer()
 
 	eventType := enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED
 	event0 := &historypb.HistoryEvent{
@@ -137,7 +138,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			_, err = serializer.SerializeEvent(event0, enumspb.ENCODING_TYPE_UNSPECIFIED)
 			s.NotNil(err)
-			_, ok := err.(*UnknownEncodingTypeError)
+			_, ok := err.(*serialization.UnknownEncodingTypeError)
 			s.True(ok)
 
 			dProto, err := serializer.SerializeEvent(event0, enumspb.ENCODING_TYPE_PROTO3)
@@ -152,7 +153,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			_, err = serializer.SerializeEvents(history0.Events, enumspb.ENCODING_TYPE_UNSPECIFIED)
 			s.NotNil(err)
-			_, ok = err.(*UnknownEncodingTypeError)
+			_, ok = err.(*serialization.UnknownEncodingTypeError)
 			s.True(ok)
 
 			dsProto, err := serializer.SerializeEvents(history0.Events, enumspb.ENCODING_TYPE_PROTO3)
@@ -161,7 +162,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			_, err = serializer.SerializeVisibilityMemo(memo0, enumspb.ENCODING_TYPE_UNSPECIFIED)
 			s.NotNil(err)
-			_, ok = err.(*UnknownEncodingTypeError)
+			_, ok = err.(*serialization.UnknownEncodingTypeError)
 			s.True(ok)
 
 			// serialize visibility memo
@@ -213,7 +214,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			_, err = serializer.SerializeResetPoints(resetPoints0, enumspb.ENCODING_TYPE_UNSPECIFIED)
 			s.NotNil(err)
-			_, ok = err.(*UnknownEncodingTypeError)
+			_, ok = err.(*serialization.UnknownEncodingTypeError)
 			s.True(ok)
 
 			resetPointsProto, err := serializer.SerializeResetPoints(resetPoints0, enumspb.ENCODING_TYPE_PROTO3)
@@ -242,7 +243,7 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 			_, err = serializer.SerializeBadBinaries(badBinaries0, enumspb.ENCODING_TYPE_UNSPECIFIED)
 			s.NotNil(err)
-			_, ok = err.(*UnknownEncodingTypeError)
+			_, ok = err.(*serialization.UnknownEncodingTypeError)
 			s.True(ok)
 
 			badBinariesProto, err := serializer.SerializeBadBinaries(badBinaries0, enumspb.ENCODING_TYPE_PROTO3)

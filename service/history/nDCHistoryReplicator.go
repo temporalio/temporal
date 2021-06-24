@@ -28,6 +28,8 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/server/common/persistence/serialization"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -102,7 +104,7 @@ type (
 		shard             shard.Context
 		clusterMetadata   cluster.Metadata
 		historyV2Mgr      persistence.HistoryManager
-		historySerializer persistence.PayloadSerializer
+		historySerializer serialization.Serializer
 		metricsClient     metrics.Client
 		namespaceCache    cache.NamespaceCache
 		historyCache      *workflow.Cache
@@ -132,7 +134,7 @@ func newNDCHistoryReplicator(
 		shard:             shard,
 		clusterMetadata:   shard.GetService().GetClusterMetadata(),
 		historyV2Mgr:      shard.GetHistoryManager(),
-		historySerializer: persistence.NewPayloadSerializer(),
+		historySerializer: serialization.NewSerializer(),
 		metricsClient:     shard.GetMetricsClient(),
 		namespaceCache:    shard.GetNamespaceCache(),
 		historyCache:      historyCache,
