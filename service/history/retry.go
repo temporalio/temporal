@@ -35,61 +35,68 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
+// TODO treat 0 as 0, not infinite
+
 func getBackoffInterval(
 	now time.Time,
-	expirationTime time.Time,
-	currentAttemptCounterValue int32,
+	currentAttempt int32,
 	maxAttempts int32,
 	initInterval *time.Duration,
 	maxInterval *time.Duration,
+	expirationTime *time.Time,
 	backoffCoefficient float64,
 	failure *failurepb.Failure,
 	nonRetryableTypes []string,
 ) (time.Duration, enumspb.RetryState) {
 
-	// Sanity check to make sure currentAttemptCounterValue started with 1.
-	if currentAttemptCounterValue < 1 {
-		currentAttemptCounterValue = 1
+	// TODO remove below checks, most are already set with correct values
+	if currentAttempt < 1 {
+		currentAttempt = 1
 	}
+
+	if initInterval == nil {
+		initInterval = timestamp.DurationPtr(time.Duration(0))
+	}
+
+	if maxInterval != nil && *maxInterval == 0 {
+		maxInterval = nil
+	}
+
+	if expirationTime != nil && expirationTime.IsZero() {
+		expirationTime = nil
+	}
+	// TODO remove above checks, most are already set with correct values
 
 	if !isRetryable(failure, nonRetryableTypes) {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}
 
-	// currentAttemptCounterValue starts from 1.
+	// currentAttempt starts from 1.
 	// maxAttempts is the total attempts, including initial (non-retry) attempt.
 	// At this point we are about to make next attempt and all calculations in this func are for this next attempt.
-	// For example, if maxAttempts is set to 2 and we are making 1st retry, currentAttemptCounterValue will be 1
-	// (we made 1 non-retry attempt already) and condition (currentAttemptCounterValue+1 > maxAttempts) will be false.
-	// With 2nd retry, currentAttemptCounterValue will be 2 (1 non-retry + 1 retry attempt already made) and
-	// condition (currentAttemptCounterValue+1 > maxAttempts) will be true (means stop retrying, we tried 2 times already).
-	if maxAttempts > 0 && currentAttemptCounterValue+1 > maxAttempts {
+	// For example, if maxAttempts is set to 2 and we are making 1st retry, currentAttempt will be 1
+	// (we made 1 non-retry attempt already) and condition (currentAttempt+1 > maxAttempts) will be false.
+	// With 2nd retry, currentAttempt will be 2 (1 non-retry + 1 retry attempt already made) and
+	// condition (currentAttempt >= maxAttempts) will be true (means stop retrying, we tried 2 times already).
+	if maxAttempts > 0 && currentAttempt >= maxAttempts {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED
 	}
 
-	maxIntervalSeconds := int64(timestamp.DurationValue(maxInterval).Round(time.Second).Seconds())
-	nextIntervalSeconds := int64(timestamp.DurationValue(initInterval).Seconds() * math.Pow(backoffCoefficient, float64(currentAttemptCounterValue-1)))
-	if nextIntervalSeconds <= 0 {
-		// math.Pow() could overflow
-		if maxIntervalSeconds > 0 {
-			nextIntervalSeconds = maxIntervalSeconds
-		} else {
-			return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
-		}
+	interval := time.Duration(int64(float64(initInterval.Nanoseconds()) * math.Pow(backoffCoefficient, float64(currentAttempt-1))))
+	if maxInterval != nil && (interval <= 0 || interval > *maxInterval) {
+		interval = *maxInterval
+	} else if maxInterval == nil && interval <= 0 {
+		return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
+	} else {
+		// maxInterval != nil && (0 < interval && interval <= *maxInterval)
+		// or
+		// maxInterval == nil && interval > 0
 	}
 
-	if maxIntervalSeconds > 0 && nextIntervalSeconds > maxIntervalSeconds {
-		// cap next interval to MaxInterval
-		nextIntervalSeconds = maxIntervalSeconds
-	}
-
-	backoffInterval := time.Duration(nextIntervalSeconds) * time.Second
-	nextScheduleTime := now.Add(backoffInterval)
-	if !expirationTime.IsZero() && nextScheduleTime.After(expirationTime) {
+	if expirationTime != nil && now.Add(interval).After(*expirationTime) {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
 	}
-
-	return backoffInterval, enumspb.RETRY_STATE_IN_PROGRESS
+	return interval, enumspb.RETRY_STATE_IN_PROGRESS
 }
 
 func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
