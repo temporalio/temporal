@@ -31,6 +31,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/persistence/serialization"
+
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
@@ -88,7 +90,7 @@ type (
 
 		namespaceCache    cache.NamespaceCache
 		timeSource        clock.TimeSource
-		payloadSerializer persistence.PayloadSerializer
+		payloadSerializer serialization.Serializer
 		metricsClient     metrics.Client
 		archivalMetadata  archiver.ArchivalMetadata
 		archiverProvider  provider.ArchiverProvider
@@ -321,7 +323,7 @@ func New(
 
 		namespaceCache:    namespaceCache,
 		timeSource:        clock.NewRealTimeSource(),
-		payloadSerializer: persistence.NewPayloadSerializer(),
+		payloadSerializer: serialization.NewSerializer(),
 		metricsClient:     params.MetricsClient,
 		archivalMetadata:  params.ArchivalMetadata,
 		archiverProvider:  params.ArchiverProvider,
@@ -456,7 +458,7 @@ func (h *Impl) GetTimeSource() clock.TimeSource {
 }
 
 // GetPayloadSerializer return binary payload serializer
-func (h *Impl) GetPayloadSerializer() persistence.PayloadSerializer {
+func (h *Impl) GetPayloadSerializer() serialization.Serializer {
 	return h.payloadSerializer
 }
 
