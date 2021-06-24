@@ -64,7 +64,7 @@ func AdminShowWorkflow(c *cli.Context) {
 	outputFileName := c.String(FlagOutputFilename)
 
 	session := connectToCassandra(c)
-	serializer := persistence.NewPayloadSerializer()
+	serializer := serialization.NewSerializer()
 	var history []*commonpb.DataBlob
 	if len(tid) != 0 {
 		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, log.NewNoopLogger())

@@ -29,9 +29,9 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
 const (
@@ -47,9 +47,9 @@ var (
 )
 
 type (
-	// clusterMetadataManagerImpl implements MetadataManager based on MetadataStore and PayloadSerializer
+	// clusterMetadataManagerImpl implements MetadataManager based on MetadataStore and Serializer
 	clusterMetadataManagerImpl struct {
-		serializer  PayloadSerializer
+		serializer  serialization.Serializer
 		persistence ClusterMetadataStore
 		logger      log.Logger
 	}
@@ -60,7 +60,7 @@ var _ ClusterMetadataManager = (*clusterMetadataManagerImpl)(nil)
 //NewClusterMetadataManagerImpl returns new ClusterMetadataManager
 func NewClusterMetadataManagerImpl(persistence ClusterMetadataStore, logger log.Logger) ClusterMetadataManager {
 	return &clusterMetadataManagerImpl{
-		serializer:  NewPayloadSerializer(),
+		serializer:  serialization.NewSerializer(),
 		persistence: persistence,
 		logger:      logger,
 	}

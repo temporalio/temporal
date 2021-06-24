@@ -232,7 +232,7 @@ func AdminDBScan(c *cli.Context) {
 		scanWorkerCount = numShards
 	}
 
-	payloadSerializer := persistence.NewPayloadSerializer()
+	payloadSerializer := serialization.NewSerializer()
 	rateLimiter := getRateLimiter(startingRPS, targetRPS)
 	session := connectToCassandra(c)
 	defer session.Close()
@@ -278,7 +278,7 @@ func scanShard(
 	scanOutputDirectories *ScanOutputDirectories,
 	limiter quotas.RateLimiter,
 	executionsPageSize int,
-	payloadSerializer persistence.PayloadSerializer,
+	payloadSerializer serialization.Serializer,
 	historyStore persistence.HistoryStore,
 ) *ShardScanReport {
 	outputFiles, closeFn := createShardScanOutputFiles(shardID, scanOutputDirectories)
@@ -540,7 +540,7 @@ func verifyFirstHistoryEvent(
 	corruptedExecutionWriter BufferedWriter,
 	checkFailureWriter BufferedWriter,
 	shardID int32,
-	payloadSerializer persistence.PayloadSerializer,
+	payloadSerializer serialization.Serializer,
 	history *persistence.InternalReadHistoryBranchResponse,
 ) VerificationResult {
 	firstBatch, err := payloadSerializer.DeserializeEvents(history.Nodes[0].Events)
