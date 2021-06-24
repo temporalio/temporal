@@ -136,11 +136,11 @@ func (q *namespaceReplicationQueueImpl) Publish(message interface{}) error {
 		return errors.New("wrong message type")
 	}
 
-	blob, err := serialization.ReplicationTaskToBlob(task)
+	blob, err := q.serializer.ReplicationTaskToBlob(task, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return fmt.Errorf("failed to encode message: %v", err)
 	}
-	return q.queue.EnqueueMessage(blob)
+	return q.queue.EnqueueMessage(*blob)
 }
 
 func (q *namespaceReplicationQueueImpl) PublishToDLQ(message interface{}) error {
@@ -149,11 +149,11 @@ func (q *namespaceReplicationQueueImpl) PublishToDLQ(message interface{}) error 
 		return errors.New("wrong message type")
 	}
 
-	blob, err := serialization.ReplicationTaskToBlob(task)
+	blob, err := q.serializer.ReplicationTaskToBlob(task, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return fmt.Errorf("failed to encode message: %v", err)
 	}
-	messageID, err := q.queue.EnqueueMessageToDLQ(blob)
+	messageID, err := q.queue.EnqueueMessageToDLQ(*blob)
 	if err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ func (q *namespaceReplicationQueueImpl) GetReplicationMessages(
 
 	replicationTasks := make([]*replicationspb.ReplicationTask, 0, len(messages))
 	for _, message := range messages {
-		replicationTask, err := serialization.ReplicationTaskFromBlob(message.Data, message.Encoding)
+		replicationTask, err := q.serializer.ReplicationTaskFromBlob(NewDataBlob(message.Data, message.Encoding))
 		if err != nil {
 			return nil, lastMessageID, fmt.Errorf("failed to decode task: %v", err)
 		}
@@ -308,7 +308,7 @@ func (q *namespaceReplicationQueueImpl) GetMessagesFromDLQ(
 
 	var replicationTasks []*replicationspb.ReplicationTask
 	for _, message := range messages {
-		replicationTask, err := serialization.ReplicationTaskFromBlob(message.Data, message.Encoding)
+		replicationTask, err := q.serializer.ReplicationTaskFromBlob(NewDataBlob(message.Data, message.Encoding))
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to decode dlq task: %v", err)
 		}

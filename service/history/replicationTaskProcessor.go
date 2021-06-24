@@ -32,6 +32,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/persistence/serialization"
+
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -71,7 +73,7 @@ type (
 		status                  int32
 		shard                   shard.Context
 		historyEngine           shard.Engine
-		historySerializer       persistence.PayloadSerializer
+		historySerializer       serialization.Serializer
 		config                  *configs.Config
 		metricsClient           metrics.Client
 		logger                  log.Logger
@@ -133,7 +135,7 @@ func NewReplicationTaskProcessor(
 		status:                  common.DaemonStatusInitialized,
 		shard:                   shard,
 		historyEngine:           historyEngine,
-		historySerializer:       persistence.NewPayloadSerializer(),
+		historySerializer:       serialization.NewSerializer(),
 		config:                  config,
 		metricsClient:           metricsClient,
 		logger:                  shard.GetLogger(),
