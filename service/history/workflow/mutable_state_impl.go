@@ -242,7 +242,7 @@ func NewMutableState(
 		WorkflowTaskTimeout:    timestamp.DurationFromSeconds(0),
 		WorkflowTaskAttempt:    1,
 
-		LastProcessedEvent: common.EmptyEventID,
+		LastWorkflowTaskStartId: common.EmptyEventID,
 
 		StartTime:        timestamp.TimePtr(startTime),
 		VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
@@ -539,14 +539,7 @@ func (e *MutableStateImpl) GetNamespaceEntry() *cache.NamespaceCacheEntry {
 }
 
 func (e *MutableStateImpl) IsStickyTaskQueueEnabled() bool {
-	if e.executionInfo.StickyTaskQueue == "" {
-		return false
-	}
-	ttl := e.config.StickyTTL(e.GetNamespaceEntry().GetInfo().Name)
-	if e.timeSource.Now().After(timestamp.TimeValue(e.executionInfo.LastUpdateTime).Add(ttl)) {
-		return false
-	}
-	return true
+	return e.executionInfo.StickyTaskQueue != ""
 }
 
 func (e *MutableStateImpl) GetWorkflowType() *commonpb.WorkflowType {
@@ -1134,12 +1127,6 @@ func (e *MutableStateImpl) DeleteWorkflowTask() {
 	e.workflowTaskManager.DeleteWorkflowTask()
 }
 
-func (e *MutableStateImpl) FailWorkflowTask(
-	incrementAttempt bool,
-) {
-	e.workflowTaskManager.FailWorkflowTask(incrementAttempt)
-}
-
 func (e *MutableStateImpl) ClearStickyness() {
 	e.executionInfo.StickyTaskQueue = ""
 	e.executionInfo.StickyScheduleToStartTimeout = timestamp.DurationFromSeconds(0)
@@ -1158,7 +1145,7 @@ func (e *MutableStateImpl) GetNextEventID() int64 {
 
 // GetPreviousStartedEventID returns last started workflow task event ID
 func (e *MutableStateImpl) GetPreviousStartedEventID() int64 {
-	return e.executionInfo.LastProcessedEvent
+	return e.executionInfo.LastWorkflowTaskStartId
 }
 
 func (e *MutableStateImpl) IsWorkflowExecutionRunning() bool {
@@ -1422,7 +1409,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	); err != nil {
 		return err
 	}
-	e.executionInfo.LastProcessedEvent = common.EmptyEventID
+	e.executionInfo.LastWorkflowTaskStartId = common.EmptyEventID
 	e.executionInfo.LastFirstEventId = startEvent.GetEventId()
 
 	e.executionInfo.WorkflowTaskVersion = common.EmptyVersion
@@ -3607,6 +3594,8 @@ func (e *MutableStateImpl) StartTransaction(
 		return false, err
 	}
 
+	e.startTransactionHandleWorkflowTaskTTL()
+
 	return flushBeforeReady, nil
 }
 
@@ -4096,6 +4085,18 @@ func (e *MutableStateImpl) validateNoEventsAfterWorkflowFinish(
 			tag.WorkflowRunID(e.executionState.RunId),
 		)
 		return consts.ErrEventsAterWorkflowFinish
+	}
+}
+
+func (e *MutableStateImpl) startTransactionHandleWorkflowTaskTTL() {
+	if e.executionInfo.StickyTaskQueue == "" {
+		return
+	}
+
+	ttl := e.config.StickyTTL(e.GetNamespaceEntry().GetInfo().Name)
+	expired := e.timeSource.Now().After(timestamp.TimeValue(e.executionInfo.LastUpdateTime).Add(ttl))
+	if expired && !e.HasPendingWorkflowTask() {
+		e.ClearStickyness()
 	}
 }
 

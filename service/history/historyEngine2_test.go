@@ -167,75 +167,6 @@ func (s *engine2Suite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyExpired() {
-	namespaceID := tests.NamespaceID
-	we := commonpb.WorkflowExecution{
-		WorkflowId: "wId",
-		RunId:      tests.RunID,
-	}
-	tl := "testTaskQueue"
-	stickyTl := "stickyTaskQueue"
-	identity := "testIdentity"
-
-	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache,
-		log.NewTestLogger(), we.GetRunId())
-	executionInfo := msBuilder.GetExecutionInfo()
-	executionInfo.StickyTaskQueue = stickyTl
-
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
-	di := addWorkflowTaskScheduledEvent(msBuilder)
-
-	ms := workflow.TestCloneToProto(msBuilder)
-
-	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
-
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
-	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil)
-	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(&persistence.UpdateWorkflowExecutionResponse{
-		MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{},
-	}, nil)
-
-	request := historyservice.RecordWorkflowTaskStartedRequest{
-		NamespaceId:       namespaceID,
-		WorkflowExecution: &we,
-		ScheduleId:        2,
-		TaskId:            100,
-		RequestId:         "reqId",
-		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: stickyTl,
-			},
-			Identity: identity,
-		},
-	}
-
-	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
-	expectedResponse.WorkflowType = msBuilder.GetWorkflowType()
-	executionInfo = msBuilder.GetExecutionInfo()
-	if executionInfo.LastProcessedEvent != common.EmptyEventID {
-		expectedResponse.PreviousStartedEventId = executionInfo.LastProcessedEvent
-	}
-	expectedResponse.ScheduledEventId = di.ScheduleID
-	expectedResponse.ScheduledTime = di.ScheduledTime
-	expectedResponse.StartedEventId = di.ScheduleID + 1
-	expectedResponse.StickyExecutionEnabled = false
-	expectedResponse.NextEventId = msBuilder.GetNextEventID() + 1
-	expectedResponse.Attempt = di.Attempt
-	expectedResponse.WorkflowExecutionTaskQueue = &taskqueuepb.TaskQueue{
-		Name: executionInfo.TaskQueue,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-	expectedResponse.BranchToken, _ = msBuilder.GetCurrentBranchToken()
-
-	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &request)
-	s.Nil(err)
-	s.NotNil(response)
-	s.True(response.StartedTime.After(*expectedResponse.ScheduledTime))
-	expectedResponse.StartedTime = response.StartedTime
-	expectedResponse.Queries = make(map[string]*querypb.WorkflowQuery)
-	s.Equal(&expectedResponse, response)
-}
-
 func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	namespaceID := tests.NamespaceID
 	we := commonpb.WorkflowExecution{
@@ -282,8 +213,8 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
 	expectedResponse.WorkflowType = msBuilder.GetWorkflowType()
 	executionInfo = msBuilder.GetExecutionInfo()
-	if executionInfo.LastProcessedEvent != common.EmptyEventID {
-		expectedResponse.PreviousStartedEventId = executionInfo.LastProcessedEvent
+	if executionInfo.LastWorkflowTaskStartId != common.EmptyEventID {
+		expectedResponse.PreviousStartedEventId = executionInfo.LastWorkflowTaskStartId
 	}
 	expectedResponse.ScheduledEventId = di.ScheduleID
 	expectedResponse.ScheduledTime = di.ScheduledTime
@@ -921,7 +852,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	s.Nil(err)
 	executionBuilder := s.getBuilder(namespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 }
