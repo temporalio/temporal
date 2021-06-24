@@ -32,6 +32,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 // TODO treat 0 as 0, not infinite
@@ -47,6 +48,24 @@ func getBackoffInterval(
 	failure *failurepb.Failure,
 	nonRetryableTypes []string,
 ) (time.Duration, enumspb.RetryState) {
+
+	// TODO remove below checks, most are already set with correct values
+	if currentAttempt < 1 {
+		currentAttempt = 1
+	}
+
+	if initInterval == nil {
+		initInterval = timestamp.DurationPtr(time.Duration(0))
+	}
+
+	if maxInterval != nil && *maxInterval == 0 {
+		maxInterval = nil
+	}
+
+	if expirationTime != nil && expirationTime.IsZero() {
+		expirationTime = nil
+	}
+	// TODO remove above checks, most are already set with correct values
 
 	if !isRetryable(failure, nonRetryableTypes) {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
