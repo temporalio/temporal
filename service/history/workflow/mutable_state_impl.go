@@ -675,11 +675,11 @@ func (e *MutableStateImpl) GetRetryBackoffDuration(
 
 	return getBackoffInterval(
 		e.timeSource.Now(),
-		timestamp.TimeValue(info.WorkflowExecutionExpirationTime),
 		info.Attempt,
 		info.RetryMaximumAttempts,
 		info.RetryInitialInterval,
 		info.RetryMaximumInterval,
+		info.WorkflowExecutionExpirationTime,
 		info.RetryBackoffCoefficient,
 		failure,
 		info.RetryNonRetryableErrorTypes,
@@ -3489,11 +3489,11 @@ func (e *MutableStateImpl) RetryActivity(
 
 	backoffInterval, retryState := getBackoffInterval(
 		now,
-		timestamp.TimeValue(ai.RetryExpirationTime),
 		ai.Attempt,
 		ai.RetryMaximumAttempts,
 		ai.RetryInitialInterval,
 		ai.RetryMaximumInterval,
+		ai.RetryExpirationTime,
 		ai.RetryBackoffCoefficient,
 		failure,
 		ai.RetryNonRetryableErrorTypes,
