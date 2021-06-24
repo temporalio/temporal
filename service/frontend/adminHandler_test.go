@@ -515,10 +515,6 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 	mockRun.On("Get", mock.Anything, nil).Return(nil)
 	mockRun.On("GetRunID").Return("random-run-id")
 
-	s.mockResource.SDKClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "random-run-id").Return(
-		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
-	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
-
 	resp, err = handler.AddSearchAttributes(ctx, &adminservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enumspb.IndexedValueType{
 			"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -526,6 +522,57 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
+}
+
+func (s *adminHandlerSuite) Test_GetSearchAttributes() {
+	handler := s.handler
+	ctx := context.Background()
+
+	resp, err := handler.GetSearchAttributes(ctx, nil)
+	s.Error(err)
+	s.Equal(&serviceerror.InvalidArgument{Message: "Request is nil."}, err)
+	s.Nil(resp)
+
+	// Elasticsearch is not configured
+	s.mockResource.SDKClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
+		&workflowservice.DescribeWorkflowExecutionResponse{}, nil).Once()
+	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "").Return(map[string]string{"col": "type"}, nil)
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+
+	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{})
+	s.NoError(err)
+	s.NotNil(resp)
+
+	// Configure Elasticsearch: add advanced visibility store config with index name.
+	handler.ESConfig = &config.Elasticsearch{
+		Indices: map[string]string{
+			"visibility": "random-index-name",
+		},
+	}
+
+	s.mockResource.SDKClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
+		&workflowservice.DescribeWorkflowExecutionResponse{}, nil).Once()
+	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{})
+	s.NoError(err)
+	s.NotNil(resp)
+
+	s.mockResource.SDKClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
+		&workflowservice.DescribeWorkflowExecutionResponse{}, nil).Once()
+	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "another-index-name").Return(map[string]string{"col": "type"}, nil)
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("another-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{IndexName: "another-index-name"})
+	s.NoError(err)
+	s.NotNil(resp)
+
+	s.mockResource.SDKClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
+		nil, errors.New("random error")).Once()
+	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{})
+	s.Error(err)
+	s.Nil(resp)
 }
 
 func (s *adminHandlerSuite) Test_RemoveSearchAttributes() {
