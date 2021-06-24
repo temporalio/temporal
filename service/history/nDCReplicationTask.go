@@ -27,6 +27,8 @@ package history
 import (
 	"time"
 
+	"go.temporal.io/server/common/persistence/serialization"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -38,7 +40,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/consts"
 )
@@ -99,7 +100,7 @@ var (
 
 func newNDCReplicationTask(
 	clusterMetadata cluster.Metadata,
-	historySerializer persistence.PayloadSerializer,
+	historySerializer serialization.Serializer,
 	taskStartTime time.Time,
 	logger log.Logger,
 	request *historyservice.ReplicateEventsV2Request,
@@ -300,7 +301,7 @@ func (t *nDCReplicationTaskImpl) splitTask(
 }
 
 func validateReplicateEventsRequest(
-	historySerializer persistence.PayloadSerializer,
+	historySerializer serialization.Serializer,
 	request *historyservice.ReplicateEventsV2Request,
 ) ([]*historypb.HistoryEvent, []*historypb.HistoryEvent, error) {
 
@@ -373,7 +374,7 @@ func validateEvents(events []*historypb.HistoryEvent) (int64, error) {
 }
 
 func deserializeBlob(
-	historySerializer persistence.PayloadSerializer,
+	historySerializer serialization.Serializer,
 	blob *commonpb.DataBlob,
 ) ([]*historypb.HistoryEvent, error) {
 

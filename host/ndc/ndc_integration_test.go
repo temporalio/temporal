@@ -34,6 +34,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/common/persistence/serialization"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -64,7 +66,6 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/persistence"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/host"
@@ -78,7 +79,7 @@ type (
 		suite.Suite
 		active     *host.TestCluster
 		generator  test.Generator
-		serializer persistence.PayloadSerializer
+		serializer serialization.Serializer
 		logger     log.Logger
 
 		namespace                   string
@@ -108,7 +109,7 @@ func TestNDCIntegrationTestSuite(t *testing.T) {
 
 func (s *nDCIntegrationTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
-	s.serializer = persistence.NewPayloadSerializer()
+	s.serializer = serialization.NewSerializer()
 
 	fileName := "../testdata/ndc_integration_test_clusters.yaml"
 	if host.TestFlags.TestClusterConfigFile != "" {

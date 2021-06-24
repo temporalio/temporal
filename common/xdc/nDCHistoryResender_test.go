@@ -29,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/common/persistence/serialization"
+
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -47,7 +49,6 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
@@ -66,7 +67,7 @@ type (
 		namespaceID string
 		namespace   string
 
-		serializer persistence.PayloadSerializer
+		serializer serialization.Serializer
 		logger     log.Logger
 
 		rereplicator *NDCHistoryResenderImpl
@@ -114,7 +115,7 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(namespaceEntry, nil).AnyTimes()
-	s.serializer = persistence.NewPayloadSerializer()
+	s.serializer = serialization.NewSerializer()
 
 	s.rereplicator = NewNDCHistoryResender(
 		s.mockNamespaceCache,
@@ -123,7 +124,7 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 			_, err := s.mockHistoryClient.ReplicateEventsV2(ctx, request)
 			return err
 		},
-		persistence.NewPayloadSerializer(),
+		serialization.NewSerializer(),
 		nil,
 		s.logger,
 	)

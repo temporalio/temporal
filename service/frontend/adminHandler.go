@@ -30,6 +30,8 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"go.temporal.io/server/common/persistence/serialization"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -78,7 +80,7 @@ type (
 		ESClient              esclient.Client
 		config                *Config
 		namespaceDLQHandler   namespace.DLQMessageHandler
-		eventSerializer       persistence.PayloadSerializer
+		eventSerializer       serialization.Serializer
 	}
 )
 
@@ -110,7 +112,7 @@ func NewAdminHandler(
 			resource.GetNamespaceReplicationQueue(),
 			resource.GetLogger(),
 		),
-		eventSerializer: persistence.NewPayloadSerializer(),
+		eventSerializer: serialization.NewSerializer(),
 		ESConfig:        params.ESConfig,
 		ESClient:        params.ESClient,
 	}
