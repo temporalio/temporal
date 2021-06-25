@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -60,6 +59,18 @@ type (
 		NewAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) (adminservice.AdminServiceClient, error)
 	}
 
+	// FactoryProvider can be used to provide a customized client Factory implementation.
+	FactoryProvider interface {
+		NewFactory(
+			rpcFactory common.RPCFactory,
+			monitor membership.Monitor,
+			metricsClient metrics.Client,
+			dc *dynamicconfig.Collection,
+			numberOfHistoryShards int32,
+			logger log.Logger,
+		) Factory
+	}
+
 	// NamespaceIDToNameFunc maps a namespaceID to namespace name. Returns error when mapping is not possible.
 	NamespaceIDToNameFunc func(string) (string, error)
 
@@ -71,10 +82,18 @@ type (
 		numberOfHistoryShards int32
 		logger                log.Logger
 	}
+
+	factoryProviderImpl struct {
+	}
 )
 
-// NewRPCClientFactory creates an instance of client factory that knows how to dispatch RPC calls.
-func NewRPCClientFactory(
+// NewFactoryProvider creates a default implementation of FactoryProvider.
+func NewFactoryProvider() FactoryProvider {
+	return &factoryProviderImpl{}
+}
+
+// NewFactory creates an instance of client factory that knows how to dispatch RPC calls.
+func (p *factoryProviderImpl) NewFactory(
 	rpcFactory common.RPCFactory,
 	monitor membership.Monitor,
 	metricsClient metrics.Client,
