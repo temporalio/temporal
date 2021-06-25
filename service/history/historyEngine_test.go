@@ -64,6 +64,8 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -1089,8 +1091,17 @@ func (s *engineSuite) TestValidateSignalRequest() {
 		WorkflowTaskTimeout:      timestamp.DurationPtr(10 * time.Second),
 		Identity:                 "identity",
 	}
-	err := s.mockHistoryEngine.validateStartWorkflowExecutionRequest(startRequest, 999, tests.LocalNamespaceEntry.GetInfo().GetName())
+	err := s.mockHistoryEngine.validateStartWorkflowExecutionRequest(
+		startRequest, tests.LocalNamespaceEntry.GetInfo().GetName(), metrics.HistoryStartWorkflowExecutionScope)
 	s.Error(err, "startRequest doesn't have request id, it should error out")
+
+	startRequest.RequestId = "request-id"
+	startRequest.Memo = &commonpb.Memo{Fields: map[string]*commonpb.Payload{
+		"data": payload.EncodeBytes(make([]byte, 4*1024*1024)),
+	}}
+	err = s.mockHistoryEngine.validateStartWorkflowExecutionRequest(
+		startRequest, tests.LocalNamespaceEntry.GetInfo().GetName(), metrics.HistoryStartWorkflowExecutionScope)
+	s.Error(err, "memo should be too big")
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedMaxAttemptsExceeded() {

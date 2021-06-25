@@ -663,6 +663,16 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return err
 	}
 
+	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfMemoSizeExceedsLimit(
+		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION.String()),
+		attr.GetMemo().Size(),
+		"ContinueAsNewWorkflowExecutionCommandAttributes. Memo exceeds size limit.",
+	)
+	if err != nil || failWorkflow {
+		handler.stopProcessing = true
+		return err
+	}
+
 	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfSearchAttributesSizeExceedsLimit(
 		attr.GetSearchAttributes(),
 		namespace,
@@ -758,6 +768,16 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION.String()),
 		attr.GetInput().Size(),
 		"StartChildWorkflowExecutionCommandAttributes.Input exceeds size limit.",
+	)
+	if err != nil || failWorkflow {
+		handler.stopProcessing = true
+		return err
+	}
+
+	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfMemoSizeExceedsLimit(
+		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION.String()),
+		attr.GetMemo().Size(),
+		"StartChildWorkflowExecutionCommandAttributes.Memo exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true

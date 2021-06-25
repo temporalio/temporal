@@ -457,11 +457,12 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
+	namespace := namespaceEntry.GetInfo().Name
 	namespaceID := namespaceEntry.GetInfo().Id
 
 	request := startRequest.StartRequest
-	e.overrideStartWorkflowExecutionRequest(namespaceEntry, request, metrics.HistoryStartWorkflowExecutionScope)
-	err = e.validateStartWorkflowExecutionRequest(request, e.config.MaxIDLengthLimit(), namespaceEntry.GetInfo().GetName())
+	e.overrideStartWorkflowExecutionRequest(namespace, request, metrics.HistoryStartWorkflowExecutionScope)
+	err = e.validateStartWorkflowExecutionRequest(request, namespace, metrics.HistoryStartWorkflowExecutionScope)
 	if err != nil {
 		return nil, err
 	}
@@ -1849,6 +1850,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, err
 	}
 	namespaceID := namespaceEntry.GetInfo().Id
+	namespace := namespaceEntry.GetInfo().Name
 
 	sRequest := signalWithStartRequest.SignalWithStartRequest
 	execution := commonpb.WorkflowExecution{
@@ -1884,7 +1886,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			}
 
 			executionInfo := mutableState.GetExecutionInfo()
-			maxAllowedSignals := e.config.MaximumSignalsPerExecution(namespaceEntry.GetInfo().Name)
+			maxAllowedSignals := e.config.MaximumSignalsPerExecution(namespace)
 			if maxAllowedSignals > 0 && int(executionInfo.SignalCount) >= maxAllowedSignals {
 				e.logger.Info("Execution limit reached for maximum signals", tag.WorkflowSignalCount(executionInfo.SignalCount),
 					tag.WorkflowID(execution.GetWorkflowId()),
@@ -1931,9 +1933,24 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	// Start workflow and signal
 	startRequest := e.getStartRequest(namespaceID, sRequest)
 	request := startRequest.StartRequest
-	e.overrideStartWorkflowExecutionRequest(namespaceEntry, request, metrics.HistorySignalWorkflowExecutionScope)
-	err = e.validateStartWorkflowExecutionRequest(request, e.config.MaxIDLengthLimit(), namespaceEntry.GetInfo().GetName())
+	// QUESTION: should this be metrics.HistorySignalWithStartWorkflowExecutionScope?
+	e.overrideStartWorkflowExecutionRequest(namespace, request, metrics.HistorySignalWorkflowExecutionScope)
+	err = e.validateStartWorkflowExecutionRequest(request, namespace, metrics.HistorySignalWithStartWorkflowExecutionScope)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := common.CheckEventBlobSizeLimit(
+		sRequest.GetSignalInput().Size(),
+		e.config.BlobSizeLimitWarn(namespace),
+		e.config.BlobSizeLimitError(namespace),
+		namespaceID,
+		sRequest.GetWorkflowId(),
+		"",
+		e.metricsClient.Scope(metrics.HistorySignalWithStartWorkflowExecutionScope),
+		e.throttledLogger,
+		tag.BlobSizeViolationOperation("SignalWithStartWorkflowExecution"),
+	); err != nil {
 		return nil, err
 	}
 
@@ -1967,7 +1984,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		}
 		if prevLastWriteVersion > mutableState.GetCurrentVersion() {
 			return nil, serviceerror.NewNamespaceNotActive(
-				namespaceEntry.GetInfo().Name,
+				namespace,
 				clusterMetadata.GetCurrentClusterName(),
 				clusterMetadata.ClusterNameForFailoverVersion(prevLastWriteVersion),
 			)
@@ -2561,9 +2578,15 @@ func (e *historyEngineImpl) NotifyNewVisibilityTasks(
 
 func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
 	request *workflowservice.StartWorkflowExecutionRequest,
-	maxIDLengthLimit int,
 	namespace string,
+	scope int,
 ) error {
+
+	maxIDLengthLimit := e.config.MaxIDLengthLimit()
+	blobSizeLimitError := e.config.BlobSizeLimitError(namespace)
+	blobSizeLimitWarn := e.config.BlobSizeLimitWarn(namespace)
+	memoSizeLimitError := e.config.MemoSizeLimitError(namespace)
+	memoSizeLimitWarn := e.config.MemoSizeLimitWarn(namespace)
 
 	if len(request.GetRequestId()) == 0 {
 		return serviceerror.NewInvalidArgument("Missing request ID.")
@@ -2607,16 +2630,44 @@ func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
 		return err
 	}
 
+	if err := common.CheckEventBlobSizeLimit(
+		request.GetInput().Size(),
+		blobSizeLimitWarn,
+		blobSizeLimitError,
+		namespace,
+		request.GetWorkflowId(),
+		"",
+		// QUESTION: is this right? should it have any more tags?
+		e.metricsClient.Scope(scope),
+		e.throttledLogger,
+		// QUESTION: should this string change when this is called from SignalWithStartWorkflowExecution?
+		tag.BlobSizeViolationOperation("StartWorkflowExecution"),
+	); err != nil {
+		return err
+	}
+
+	if err := common.CheckEventBlobSizeLimit(
+		request.GetMemo().Size(),
+		memoSizeLimitWarn,
+		memoSizeLimitError,
+		namespace,
+		request.GetWorkflowId(),
+		"",
+		e.metricsClient.Scope(scope),
+		e.throttledLogger,
+		tag.BlobSizeViolationOperation("StartWorkflowExecution"),
+	); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
-	namespaceEntry *cache.NamespaceCacheEntry,
+	namespace string,
 	request *workflowservice.StartWorkflowExecutionRequest,
 	metricsScope int,
 ) {
-	namespace := namespaceEntry.GetInfo().Name
-
 	// workflow execution timeout is left as is
 	//  if workflow execution timeout == 0 -> infinity
 
@@ -2633,6 +2684,8 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 	}
 
 	workflowTaskStartToCloseTimeout := common.OverrideWorkflowTaskTimeout(
+		// QUESTION: can `request.GetNamespace()` ever be different from `namespace` here?
+		// maybe we can avoid passing in `namespace` and just use this?
 		request.GetNamespace(),
 		timestamp.DurationValue(request.GetWorkflowTaskTimeout()),
 		timestamp.DurationValue(request.GetWorkflowRunTimeout()),
