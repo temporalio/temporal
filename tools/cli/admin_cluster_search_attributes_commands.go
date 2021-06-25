@@ -51,19 +51,14 @@ func AdminAddSearchAttributes(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	var existingSearchAttributes map[string]enumspb.IndexedValueType
-	if c.Bool(FlagIdempotent) {
-		getRequest := &adminservice.GetSearchAttributesRequest{
-			IndexName: c.String(FlagIndex),
-		}
-		resp, err := adminClient.GetSearchAttributes(ctx, getRequest)
-		if err != nil {
-			ErrorAndExit("Unable to get existing search attributes.", err)
-		}
-		existingSearchAttributes = resp.CustomAttributes
-	} else {
-		existingSearchAttributes = map[string]enumspb.IndexedValueType{}
+	getRequest := &adminservice.GetSearchAttributesRequest{
+		IndexName: c.String(FlagIndex),
 	}
+	resp, err := adminClient.GetSearchAttributes(ctx, getRequest)
+	if err != nil {
+		ErrorAndExit("Unable to get existing search attributes.", err)
+	}
+	existingSearchAttributes := resp.CustomAttributes
 
 	searchAttributes := make(map[string]enumspb.IndexedValueType, len(typeStrs))
 	for i := 0; i < len(typeStrs); i++ {
@@ -71,8 +66,13 @@ func AdminAddSearchAttributes(c *cli.Context) {
 		if err != nil {
 			ErrorAndExit(fmt.Sprintf("Unable to parse search attribute type: %s", typeStrs[i]), err)
 		}
-		if _, exists := existingSearchAttributes[names[i]]; !exists {
+		existingSearchAttributeType, searchAttributeExists := existingSearchAttributes[names[i]]
+		if !searchAttributeExists {
 			searchAttributes[names[i]] = enumspb.IndexedValueType(typeInt)
+			continue
+		}
+		if existingSearchAttributeType != enumspb.IndexedValueType(typeInt) {
+			ErrorAndExit(fmt.Sprintf("Search attribute %s already exists and has different type %s.", names[i], existingSearchAttributeType), nil)
 		}
 	}
 
@@ -93,15 +93,12 @@ func AdminAddSearchAttributes(c *cli.Context) {
 		IndexName:        c.String(FlagIndex),
 	}
 
-	_, err := adminClient.AddSearchAttributes(ctx, request)
+	_, err = adminClient.AddSearchAttributes(ctx, request)
 	if err != nil {
 		ErrorAndExit("Unable to add search attributes.", err)
 	}
-	getRequest := &adminservice.GetSearchAttributesRequest{
-		IndexName: c.String(FlagIndex),
-	}
 
-	resp, err := adminClient.GetSearchAttributes(ctx, getRequest)
+	resp, err = adminClient.GetSearchAttributes(ctx, getRequest)
 	if err != nil {
 		ErrorAndExit("Search attributes have been added successfully but there was an error while reading them back.", err)
 	}

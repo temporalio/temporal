@@ -260,7 +260,7 @@ register_default_namespace() {
 
 add_custom_search_attributes() {
       echo "Adding Custom*Field search attributes."
-      tctl --auto_confirm admin cluster add-search-attributes --idempotent \
+      tctl --auto_confirm admin cluster add-search-attributes \
           --name CustomKeywordField --type Keyword \
           --name CustomStringField --type String \
           --name CustomIntField --type Int \
