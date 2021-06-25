@@ -26,6 +26,7 @@ package config
 
 import (
 	"bytes"
+	"fmt"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -490,13 +491,20 @@ type (
 )
 
 // Validate validates this config
-func (c *Config) Validate() error {
+func (c *Config) Validate(requiredServices []string) error {
+
 	if err := c.Persistence.Validate(); err != nil {
 		return err
 	}
 
 	if err := c.Archival.Validate(&c.NamespaceDefaults.Archival); err != nil {
 		return err
+	}
+
+	for _, name := range requiredServices {
+		if _, ok := c.Services[name]; !ok {
+			return fmt.Errorf("%q service is missing in config", name)
+		}
 	}
 
 	return nil

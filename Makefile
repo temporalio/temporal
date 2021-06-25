@@ -3,7 +3,7 @@
 install: update-tools bins
 
 # Rebuild binaries (used by Dockerfile).
-bins: clean-bins temporal-server tctl plugins temporal-cassandra-tool temporal-sql-tool
+bins: wire-gen clean-bins temporal-server tctl plugins temporal-cassandra-tool temporal-sql-tool
 
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
 all: update-tools clean proto bins check test
@@ -182,6 +182,10 @@ clean-bins:
 	@rm -f temporal-server
 	@rm -f temporal-cassandra-tool
 	@rm -f temporal-sql-tool
+
+temporal-server-test:
+	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
+	CGO_ENABLED=$(CGO_ENABLED) go build -ldflags "$(shell ./develop/scripts/go-build-ldflags.sh $(MODULE_ROOT)/ldflags)" -o temporal-server cmd/server/main.go
 
 temporal-server:
 	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
@@ -467,3 +471,6 @@ ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."
 	@printf $(COLOR) "========================================================================"
 	@git diff --name-status --exit-code || (printf $(COLOR) "========================================================================"; printf $(RED) "Above files are not regenerated properly. Regenerate them and try again."; exit 1)
+
+wire-gen:
+	wire ./temporal

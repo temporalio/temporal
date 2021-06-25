@@ -106,17 +106,13 @@ func (so *serverOptions) loadConfig() error {
 }
 
 func (so *serverOptions) validateConfig() error {
-	if err := so.config.Validate(); err != nil {
+	if err := so.config.Validate(so.serviceNames); err != nil {
 		return err
 	}
 
-	for _, name := range so.serviceNames {
-		if _, ok := so.config.Services[name]; !ok {
-			return fmt.Errorf("%q service is missing in config", name)
-		}
-	}
 	return nil
 }
+
 func isValidService(service string) bool {
 	for _, s := range Services {
 		if s == service {

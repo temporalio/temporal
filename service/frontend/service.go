@@ -201,7 +201,6 @@ type Service struct {
 func NewService(
 	params *resource.BootstrapParams,
 ) (*Service, error) {
-
 	isAdvancedVisExistInConfig := len(params.PersistenceConfig.AdvancedVisibilityStore) != 0
 	serviceConfig := NewConfig(
 		dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger),
