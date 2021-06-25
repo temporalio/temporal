@@ -26,7 +26,6 @@ package namespace
 
 import (
 	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
@@ -34,7 +33,6 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -44,8 +42,7 @@ type (
 		controller          *gomock.Controller
 		mockClusterMetadata *cluster.MockMetadata
 
-		minRetention time.Duration
-		validator    *AttrValidatorImpl
+		validator *AttrValidatorImpl
 	}
 )
 
@@ -64,38 +61,11 @@ func (s *attrValidatorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 
-	s.minRetention = 1 * 24 * time.Hour
-	s.validator = newAttrValidator(s.mockClusterMetadata, s.minRetention)
+	s.validator = newAttrValidator(s.mockClusterMetadata)
 }
 
 func (s *attrValidatorSuite) TearDownTest() {
 	s.controller.Finish()
-}
-
-func (s *attrValidatorSuite) TestValidateConfigRetentionPeriod() {
-	testCases := []struct {
-		retentionPeriod *time.Duration
-		expectedErr     error
-	}{
-		{
-			retentionPeriod: timestamp.DurationFromDays(10),
-			expectedErr:     nil,
-		},
-		{
-			retentionPeriod: timestamp.DurationFromDays(0),
-			expectedErr:     errInvalidRetentionPeriod,
-		},
-		{
-			retentionPeriod: timestamp.DurationFromDays(-3),
-			expectedErr:     errInvalidRetentionPeriod,
-		},
-	}
-	for _, tc := range testCases {
-		actualErr := s.validator.validateNamespaceConfig(
-			&persistencespb.NamespaceConfig{Retention: tc.retentionPeriod},
-		)
-		s.Equal(tc.expectedErr, actualErr)
-	}
 }
 
 func (s *attrValidatorSuite) TestClusterName() {

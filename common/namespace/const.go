@@ -27,10 +27,6 @@ package namespace
 import "time"
 
 const (
-	// MinRetentionDefault is the minimum retention duration for any namespace (can be
-	// overridden by dynamic config)
-	MinRetentionDefault = 1 * 24 * time.Hour
-
 	// MinRetentionGlobal is a hard limit for the minimun retention duration for global
 	// namespaces (to allow time for replication).
 	MinRetentionGlobal = 1 * 24 * time.Hour

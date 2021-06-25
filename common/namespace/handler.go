@@ -54,10 +54,11 @@ import (
 // validateRetentionDuration ensures that retention duration can't be set below a sane minimum.
 func validateRetentionDuration(retention time.Duration, isGlobalNamespace bool) error {
 	min := MinRetentionLocal
+	max := common.MaxWorkflowRetentionPeriod
 	if isGlobalNamespace {
 		min = MinRetentionGlobal
 	}
-	if retention < min {
+	if retention < min || retention > max {
 		return errInvalidRetentionPeriod
 	}
 	return nil
@@ -105,7 +106,6 @@ var _ Handler = (*HandlerImpl)(nil)
 
 // NewHandler create a new namespace handler
 func NewHandler(
-	minRetention time.Duration,
 	maxBadBinaryCount dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 	metadataMgr persistence.MetadataManager,
@@ -120,7 +120,7 @@ func NewHandler(
 		metadataMgr:            metadataMgr,
 		clusterMetadata:        clusterMetadata,
 		namespaceReplicator:    namespaceReplicator,
-		namespaceAttrValidator: newAttrValidator(clusterMetadata, minRetention),
+		namespaceAttrValidator: newAttrValidator(clusterMetadata),
 		archivalMetadata:       archivalMetadata,
 		archiverProvider:       archiverProvider,
 	}
