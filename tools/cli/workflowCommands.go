@@ -204,7 +204,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 		reusePolicy = enumspb.WorkflowIdReusePolicy(reusePolicyInt)
 	}
 
-	input := processJSONInput(c)
+	inputs := unmarshalInputsFromCLI(c)
 	wo := client.StartWorkflowOptions{
 		ID:                       wid,
 		TaskQueue:                taskQueue,
@@ -216,13 +216,13 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 		wo.CronSchedule = c.String(FlagCronSchedule)
 	}
 
-	wo.Memo = processMemo(c)
-	wo.SearchAttributes = processSearchAttr(c)
+	wo.Memo = unmarshalMemoFromCLI(c)
+	wo.SearchAttributes = unmarshalSearchAttrFromCLI(c)
 
 	startFn := func() {
 		tcCtx, cancel := newContext(c)
 		defer cancel()
-		resp, err := sdkClient.ExecuteWorkflow(tcCtx, wo, workflowType, input)
+		resp, err := sdkClient.ExecuteWorkflow(tcCtx, wo, workflowType, inputs...)
 
 		if err != nil {
 			ErrorAndExit("Failed to create workflow.", err)
@@ -234,7 +234,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	runFn := func() {
 		tcCtx, cancel := newContextForLongPoll(c)
 		defer cancel()
-		resp, err := sdkClient.ExecuteWorkflow(tcCtx, wo, workflowType, input)
+		resp, err := sdkClient.ExecuteWorkflow(tcCtx, wo, workflowType, inputs...)
 
 		if err != nil {
 			ErrorAndExit("Failed to run workflow.", err)
@@ -249,7 +249,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 			{"Type", workflowType},
 			{"Namespace", namespace},
 			{"Task Queue", taskQueue},
-			{"Args", truncate(payloads.ToString(input))}, // in case of large input
+			{"Args", truncate(formatInputsForDisplay(inputs))}, // in case of large input
 		}
 		table.SetBorder(false)
 		table.SetColumnSeparator(":")
@@ -266,7 +266,36 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	}
 }
 
-func processSearchAttr(c *cli.Context) map[string]interface{} {
+func unmarshalInputsFromCLI(c *cli.Context) []interface{} {
+	jsonsRaw := readJSONInputs(c, jsonTypeInput)
+
+	var result []interface{}
+	for _, jsonRaw := range jsonsRaw {
+		if jsonRaw == nil {
+			result = append(result, nil)
+		} else {
+			var j interface{}
+			if err := json.Unmarshal(jsonRaw, &j); err != nil {
+				ErrorAndExit("Input is not valid JSON.", err)
+			}
+			result = append(result, j)
+		}
+
+	}
+
+	return result
+}
+
+func formatInputsForDisplay(inputs []interface{}) string {
+	var result []string
+	for _, input := range inputs {
+		s, _ := json.Marshal(input)
+		result = append(result, string(s))
+	}
+	return fmt.Sprintf("[%s]", strings.Join(result, ","))
+}
+
+func unmarshalSearchAttrFromCLI(c *cli.Context) map[string]interface{} {
 	sanitize := func(val string) []string {
 		trimmedVal := strings.TrimSpace(val)
 		if len(trimmedVal) == 0 {
@@ -310,7 +339,7 @@ func processSearchAttr(c *cli.Context) map[string]interface{} {
 	return fields
 }
 
-func processMemo(c *cli.Context) map[string]interface{} {
+func unmarshalMemoFromCLI(c *cli.Context) map[string]interface{} {
 	rawMemoKey := c.String(FlagMemoKey)
 	var memoKeys []string
 	if strings.TrimSpace(rawMemoKey) != "" {
