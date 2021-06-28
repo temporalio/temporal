@@ -277,8 +277,7 @@ func (s *cliAppSuite) TestShowHistory_PrintDateTime() {
 }
 
 func (s *cliAppSuite) TestStartWorkflow() {
-	resp := &workflowservice.StartWorkflowExecutionResponse{RunId: uuid.New()}
-	s.frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil).Times(2)
+	s.sdkClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(workflowRun(), nil)
 	// start with wid
 	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "start", "-tq", "testTaskQueue", "-wt", "testWorkflowType", "-et", "60", "-w", "wid", "-wrp", "AllowDuplicateFailedOnly"})
 	s.Nil(err)
@@ -288,16 +287,14 @@ func (s *cliAppSuite) TestStartWorkflow() {
 }
 
 func (s *cliAppSuite) TestStartWorkflow_Failed() {
-	resp := &workflowservice.StartWorkflowExecutionResponse{RunId: uuid.New()}
-	s.frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewInvalidArgument("faked error"))
+	s.sdkClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(workflowRun(), serviceerror.NewInvalidArgument("faked error"))
 	// start with wid
 	errorCode := s.RunErrorExitCode([]string{"", "--ns", cliTestNamespace, "workflow", "start", "-tq", "testTaskQueue", "-wt", "testWorkflowType", "-et", "60", "-w", "wid"})
 	s.Equal(1, errorCode)
 }
 
 func (s *cliAppSuite) TestRunWorkflow() {
-	resp := &workflowservice.StartWorkflowExecutionResponse{RunId: uuid.New()}
-	s.frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, nil).Times(2)
+	s.sdkClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(workflowRun(), nil)
 	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", mock.Anything, mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 
 	// start with wid
@@ -305,6 +302,7 @@ func (s *cliAppSuite) TestRunWorkflow() {
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 
+	s.sdkClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(workflowRun(), nil)
 	s.sdkClient.On("GetWorkflowHistory", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
 	// start without wid
 	err = s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "run", "-tq", "testTaskQueue", "-wt", "testWorkflowType", "-et", "60", "wrp", "2"})
@@ -313,9 +311,9 @@ func (s *cliAppSuite) TestRunWorkflow() {
 }
 
 func (s *cliAppSuite) TestRunWorkflow_Failed() {
-	resp := &workflowservice.StartWorkflowExecutionResponse{RunId: uuid.New()}
-	s.frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(resp, serviceerror.NewInvalidArgument("faked error"))
-	s.sdkClient.On("GetWorkflowHistory", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
+	s.sdkClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(workflowRun(), serviceerror.NewInvalidArgument("fake error"))
+	s.sdkClient.On("GetWorkflowHistory", mock.Anything, "wid", mock.Anything, mock.Anything, mock.Anything).Return(historyEventIterator()).Once()
+
 	// start with wid
 	errorCode := s.RunErrorExitCode([]string{"", "--ns", cliTestNamespace, "workflow", "run", "-tq", "testTaskQueue", "-wt", "testWorkflowType", "-et", "60", "-w", "wid"})
 	s.Equal(1, errorCode)

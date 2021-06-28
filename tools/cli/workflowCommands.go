@@ -28,6 +28,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -51,9 +52,9 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/client"
 	sdkclient "go.temporal.io/sdk/client"
 
 	clispb "go.temporal.io/server/api/cli/v1"
@@ -183,7 +184,7 @@ func RunWorkflow(c *cli.Context) {
 }
 
 func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
-	serviceClient := cFactory.FrontendClient(c)
+	sdkClient := getSDKClient(c)
 
 	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	taskQueue := getRequiredOption(c, FlagTaskQueue)
@@ -204,50 +205,36 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	}
 
 	input := processJSONInput(c)
-	startRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:  uuid.New(),
-		Namespace:  namespace,
-		WorkflowId: wid,
-		WorkflowType: &commonpb.WorkflowType{
-			Name: workflowType,
-		},
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		Input:                    input,
-		WorkflowExecutionTimeout: timestamp.DurationPtr(time.Duration(et) * time.Second),
-		WorkflowTaskTimeout:      timestamp.DurationPtr(time.Duration(dt) * time.Second),
-		Identity:                 getCliIdentity(),
-		WorkflowIdReusePolicy:    reusePolicy,
+	wo := client.StartWorkflowOptions{
+		ID:                       wid,
+		TaskQueue:                taskQueue,
+		WorkflowExecutionTimeout: time.Duration(et) * time.Second,
+		WorkflowTaskTimeout:      time.Duration(dt) * time.Second,
+		WorkflowIDReusePolicy:    reusePolicy,
 	}
 	if c.IsSet(FlagCronSchedule) {
-		startRequest.CronSchedule = c.String(FlagCronSchedule)
+		wo.CronSchedule = c.String(FlagCronSchedule)
 	}
 
-	memoFields := processMemo(c)
-	if len(memoFields) != 0 {
-		startRequest.Memo = &commonpb.Memo{Fields: memoFields}
-	}
-
-	startRequest.SearchAttributes = processSearchAttr(c)
+	wo.Memo = processMemo(c)
+	wo.SearchAttributes = processSearchAttr(c)
 
 	startFn := func() {
 		tcCtx, cancel := newContext(c)
 		defer cancel()
-		resp, err := serviceClient.StartWorkflowExecution(tcCtx, startRequest)
+		resp, err := sdkClient.ExecuteWorkflow(tcCtx, wo, workflowType, input)
 
 		if err != nil {
 			ErrorAndExit("Failed to create workflow.", err)
 		} else {
-			fmt.Printf("Started Workflow Id: %s, run Id: %s\n", wid, resp.GetRunId())
+			fmt.Printf("Started Workflow Id: %s, run Id: %s\n", wid, resp.GetRunID())
 		}
 	}
 
 	runFn := func() {
 		tcCtx, cancel := newContextForLongPoll(c)
 		defer cancel()
-		resp, err := serviceClient.StartWorkflowExecution(tcCtx, startRequest)
+		resp, err := sdkClient.ExecuteWorkflow(tcCtx, wo, workflowType, input)
 
 		if err != nil {
 			ErrorAndExit("Failed to run workflow.", err)
@@ -258,7 +245,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 		table := tablewriter.NewWriter(os.Stdout)
 		executionData := [][]string{
 			{"Workflow Id", wid},
-			{"Run Id", resp.GetRunId()},
+			{"Run Id", resp.GetRunID()},
 			{"Type", workflowType},
 			{"Namespace", namespace},
 			{"Task Queue", taskQueue},
@@ -269,7 +256,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 		table.AppendBulk(executionData) // Add Bulk Data
 		table.Render()
 
-		printWorkflowProgress(c, wid, resp.GetRunId())
+		printWorkflowProgress(c, wid, resp.GetRunID())
 	}
 
 	if shouldPrintProgress {
@@ -279,7 +266,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	}
 }
 
-func processSearchAttr(c *cli.Context) *commonpb.SearchAttributes {
+func processSearchAttr(c *cli.Context) map[string]interface{} {
 	sanitize := func(val string) []string {
 		trimmedVal := strings.TrimSpace(val)
 		if len(trimmedVal) == 0 {
@@ -297,29 +284,33 @@ func processSearchAttr(c *cli.Context) *commonpb.SearchAttributes {
 	if len(searchAttrKeys) == 0 {
 		return nil
 	}
-	searchAttrVals := sanitize(c.String(FlagSearchAttributesVal))
-	if len(searchAttrVals) == 0 {
+	rawSearchAttrVals := sanitize(c.String(FlagSearchAttributesVal))
+	if len(rawSearchAttrVals) == 0 {
 		return nil
 	}
 
-	if len(searchAttrKeys) != len(searchAttrVals) {
-		ErrorAndExit(fmt.Sprintf("Uneven number of search attributes keys (%d): %v and values(%d): %v.", len(searchAttrKeys), searchAttrKeys, len(searchAttrVals), searchAttrVals), nil)
+	if len(searchAttrKeys) != len(rawSearchAttrVals) {
+		ErrorAndExit(fmt.Sprintf("Uneven number of search attributes keys (%d): %v and values(%d): %v.", len(searchAttrKeys), searchAttrKeys, len(rawSearchAttrVals), rawSearchAttrVals), nil)
 	}
 
-	searchAttributesStr := make(map[string]string, len(searchAttrKeys))
-	for i, searchAttrVal := range searchAttrVals {
-		searchAttributesStr[searchAttrKeys[i]] = searchAttrVal
+	var searchAttrValues []interface{}
+
+	for _, v := range rawSearchAttrVals {
+		var j interface{}
+		if err := json.Unmarshal([]byte(v), &j); err != nil {
+			ErrorAndExit("Search attribute JSON parse error.", err)
+		}
+		searchAttrValues = append(searchAttrValues, j)
 	}
 
-	searchAttributes, err := searchattribute.Parse(searchAttributesStr, nil)
-	if err != nil {
-		ErrorAndExit("Unable to parse search attributes.", err)
+	fields := make(map[string]interface{}, len(searchAttrKeys))
+	for i, key := range searchAttrKeys {
+		fields[key] = searchAttrValues[i]
 	}
-
-	return searchAttributes
+	return fields
 }
 
-func processMemo(c *cli.Context) map[string]*commonpb.Payload {
+func processMemo(c *cli.Context) map[string]interface{} {
 	rawMemoKey := c.String(FlagMemoKey)
 	var memoKeys []string
 	if strings.TrimSpace(rawMemoKey) != "" {
@@ -336,23 +327,23 @@ func processMemo(c *cli.Context) map[string]*commonpb.Payload {
 		ErrorAndExit("Input is not valid JSON, or JSONs concatenated with spaces/newlines.", err)
 	}
 
-	var memoValues []string
+	var memoValues []interface{}
 
 	var sc fastjson.Scanner
 	sc.Init(rawMemoValue)
 	for sc.Next() {
-		memoValues = append(memoValues, sc.Value().String())
+		memoValues = append(memoValues, sc.Value())
 	}
 	if err := sc.Error(); err != nil {
-		ErrorAndExit("Parse json error.", err)
+		ErrorAndExit("Memo JSON parse error.", err)
 	}
 	if len(memoKeys) != len(memoValues) {
 		ErrorAndExit("Number of memo keys and values are not equal.", nil)
 	}
 
-	fields := map[string]*commonpb.Payload{}
+	fields := make(map[string]interface{}, len(memoKeys))
 	for i, key := range memoKeys {
-		fields[key] = payload.EncodeString(memoValues[i])
+		fields[key] = memoValues[i]
 	}
 	return fields
 }
@@ -363,7 +354,7 @@ func getPrintableMemo(memo *commonpb.Memo) string {
 		var memo string
 		err := payload.Decode(v, &memo)
 		if err != nil {
-			ErrorAndExit("Memo has incoorect formtat.", err)
+			ErrorAndExit("Memo has incorrect format.", err)
 		}
 
 		_, _ = fmt.Fprintf(buf, "%s=%s\n", k, memo)

@@ -628,7 +628,7 @@ func processJSONInput(c *cli.Context) *commonpb.Payloads {
 		} else {
 			var j interface{}
 			if err := json.Unmarshal(jsonRaw, &j); err != nil {
-				ErrorAndExit("Input is not a valid JSON.", err)
+				ErrorAndExit("Input is not valid JSON.", err)
 			}
 			jsons = append(jsons, j)
 		}
