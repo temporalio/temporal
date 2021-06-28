@@ -113,59 +113,13 @@ func buildCLI() *cli.App {
 
 
 func run(c *cli.Context) error {
-	//env := c.String("env")
-	//zone := c.String("zone")
-	//configDir := path.Join(c.String("root"), c.String("config"))
-	//services := c.StringSlice("service")
-	//
-	// For backward compatibility to support old flag format (i.e. `--services=frontend,history,matching`).
-	//if c.IsSet("services") {
-	//	log.Println("WARNING: --services flag is deprecated. Specify multiply --service flags instead.")
-	//	services = strings.Split(c.String("services"), ",")
-	//}
-
-	//cfg, err := config.LoadConfig(env, configDir, zone)
-	//if err != nil {
-	//	return cli.Exit(fmt.Sprintf("Unable to load configuration: %v.", err), 1)
-	//}
-	//
-	//logger := tlog.NewZapLogger(tlog.BuildZapLogger(cfg.Log))
-	//
-	//dynamicConfigClient, err := dynamicconfig.NewFileBasedClient(&cfg.DynamicConfigClient, logger, temporal.InterruptCh())
-	//if err != nil {
-	//	logger.Info("Unable to create file based dynamic config client, use no-op config client instead.", tag.Error(err))
-	//	dynamicConfigClient = dynamicconfig.NewNoopClient()
-	//}
-	//
-	//authorizer, err := authorization.GetAuthorizerFromConfig(
-	//	&cfg.Global.Authorization,
-	//)
-	//
-	//claimMapper, err := authorization.GetClaimMapperFromConfig(&cfg.Global.Authorization, logger)
-	//if err != nil {
-	//	return cli.Exit(fmt.Sprintf("Unable to instantiate claim mapper: %v.", err), 1)
-	//}
-
-	//userProviderSet := InitializeDefaultUserProviderSet(c)
 	s, err := temporal.InitializeServer(c)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("Unable to initialize server. Error: %v", err), 1)
 	}
 
-	//s := temporal.NewServer(
-	//	temporal.ForServices(services),
-	//	temporal.WithConfig(cfg),
-	//	temporal.WithDynamicConfigClient(dynamicConfigClient),
-	//	temporal.WithLogger(logger),
-	//	temporal.InterruptOn(temporal.InterruptCh()),
-	//	temporal.WithAuthorizer(authorizer),
-	//	temporal.WithClaimMapper(func(cfg *config.Config) authorization.ClaimMapper {
-	//		return claimMapper
-	//	}),
-	//)
-
-
 	err = s.Start()
+
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("Unable to start server. Error: %v", err), 1)
 	}
