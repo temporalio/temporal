@@ -55,7 +55,7 @@ var serverSet = wire.NewSet(
 	ESClientProvider,
 	ESConfigProvider,
 	AdvancedVisibilityWritingModeProvider,
-	wire.Struct(new(ServicesProviderDeps), "*"),
+	wire.Struct(new(ServicesProviderDeps), "*"), // we can use this to inject dependencies into sub-modules
 )
 
 func InitializeServer(c *cli.Context) (*Server, error) {
