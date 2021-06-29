@@ -291,6 +291,7 @@ func (s *Server) newBootstrapParams(
 		ClusterMetadataConfig:    s.so.config.ClusterMetadata,
 		DCRedirectionPolicy:      s.so.config.DCRedirectionPolicy,
 		AbstractDatastoreFactory: s.so.customDataStoreFactory,
+		ClientFactoryProvider:    s.so.clientFactoryProvider,
 		ESConfig:                 esConfig,
 		ESClient:                 esClient,
 	}

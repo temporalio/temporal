@@ -27,11 +27,12 @@ package temporal
 import (
 	"net/http"
 
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/persistence/client"
+	persistenceclient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 )
@@ -142,9 +143,17 @@ func WithDynamicConfigClient(c dynamicconfig.Client) ServerOption {
 }
 
 // WithCustomDataStoreFactory sets a custom AbstractDataStoreFactory
-// NOTE: this option is experimental.
-func WithCustomDataStoreFactory(customFactory client.AbstractDataStoreFactory) ServerOption {
+// NOTE: this option is experimental and may be changed or removed in future release.
+func WithCustomDataStoreFactory(customFactory persistenceclient.AbstractDataStoreFactory) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.customDataStoreFactory = customFactory
+	})
+}
+
+// WithClientFactoryProvider sets a custom ClientFactoryProvider
+// NOTE: this option is experimental and may be changed or removed in future release.
+func WithClientFactoryProvider(clientFactoryProvider client.FactoryProvider) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.clientFactoryProvider = clientFactoryProvider
 	})
 }
