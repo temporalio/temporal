@@ -47,13 +47,38 @@ func AdminAddSearchAttributes(c *cli.Context) {
 		ErrorAndExit("Number of names and types options should be the same.", nil)
 	}
 
+	adminClient := cFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	getRequest := &adminservice.GetSearchAttributesRequest{
+		IndexName: c.String(FlagIndex),
+	}
+	resp, err := adminClient.GetSearchAttributes(ctx, getRequest)
+	if err != nil {
+		ErrorAndExit("Unable to get existing search attributes.", err)
+	}
+	existingSearchAttributes := resp.CustomAttributes
+
 	searchAttributes := make(map[string]enumspb.IndexedValueType, len(typeStrs))
 	for i := 0; i < len(typeStrs); i++ {
 		typeInt, err := stringToEnum(typeStrs[i], enumspb.IndexedValueType_value)
 		if err != nil {
 			ErrorAndExit(fmt.Sprintf("Unable to parse search attribute type: %s", typeStrs[i]), err)
 		}
-		searchAttributes[names[i]] = enumspb.IndexedValueType(typeInt)
+		existingSearchAttributeType, searchAttributeExists := existingSearchAttributes[names[i]]
+		if !searchAttributeExists {
+			searchAttributes[names[i]] = enumspb.IndexedValueType(typeInt)
+			continue
+		}
+		if existingSearchAttributeType != enumspb.IndexedValueType(typeInt) {
+			ErrorAndExit(fmt.Sprintf("Search attribute %s already exists and has different type %s.", names[i], existingSearchAttributeType), nil)
+		}
+	}
+
+	if len(searchAttributes) == 0 {
+		color.HiYellow("No search attributes to add.")
+		return
 	}
 
 	// ask user for confirmation
@@ -63,28 +88,22 @@ func AdminAddSearchAttributes(c *cli.Context) {
 	)
 	prompt(promptMsg, c.GlobalBool(FlagAutoConfirm))
 
-	adminClient := cFactory.AdminClient(c)
-	ctx, cancel := newContext(c)
-	defer cancel()
 	request := &adminservice.AddSearchAttributesRequest{
 		SearchAttributes: searchAttributes,
 		IndexName:        c.String(FlagIndex),
 	}
 
-	_, err := adminClient.AddSearchAttributes(ctx, request)
+	_, err = adminClient.AddSearchAttributes(ctx, request)
 	if err != nil {
 		ErrorAndExit("Unable to add search attributes.", err)
 	}
-	getRequest := &adminservice.GetSearchAttributesRequest{
-		IndexName: request.IndexName,
-	}
 
-	resp, err := adminClient.GetSearchAttributes(ctx, getRequest)
+	resp, err = adminClient.GetSearchAttributes(ctx, getRequest)
 	if err != nil {
 		ErrorAndExit("Search attributes have been added successfully but there was an error while reading them back.", err)
 	}
 
-	printSearchAttributesResponse(resp, request.GetIndexName())
+	printSearchAttributesResponse(resp, c.String(FlagIndex))
 	color.HiGreen("Search attributes have been added successfully.")
 }
 
@@ -113,7 +132,7 @@ func AdminRemoveSearchAttributes(c *cli.Context) {
 	}
 
 	getRequest := &adminservice.GetSearchAttributesRequest{
-		IndexName: request.IndexName,
+		IndexName: c.String(FlagIndex),
 	}
 
 	resp, err := adminClient.GetSearchAttributes(ctx, getRequest)
@@ -121,7 +140,7 @@ func AdminRemoveSearchAttributes(c *cli.Context) {
 		ErrorAndExit("Search attributes have been removed successfully but there was an error while reading them back.", err)
 	}
 
-	printSearchAttributesResponse(resp, request.GetIndexName())
+	printSearchAttributesResponse(resp, c.String(FlagIndex))
 	color.HiGreen("Search attributes have been removed successfully.")
 }
 
@@ -138,7 +157,7 @@ func AdminGetSearchAttributes(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Unable to get search attributes.", err)
 	}
-	printSearchAttributesResponse(resp, request.GetIndexName())
+	printSearchAttributesResponse(resp, c.String(FlagIndex))
 }
 
 func printSearchAttributesResponse(resp *adminservice.GetSearchAttributesResponse, indexName string) {
