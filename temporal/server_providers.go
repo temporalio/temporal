@@ -213,41 +213,45 @@ func makeBootstrapParams(
 	return params, nil
 }
 
+type ServicesProviderDeps struct {
+	cfg *config.Config
+	services ServiceNamesList
+	logger log.Logger
+	namespaceLogger NamespaceLogger
+	authorizer authorization.Authorizer
+	claimMapper authorization.ClaimMapper
+	dynamicConfigClient dynamicconfig.Client
+	dynamicConfigCollection *dynamicconfig.Collection
+	customDatastoreFactory persistenceClient.AbstractDataStoreFactory
+	metricReporters *MetricsReporters
+	tlsConfigProvider encryption.TLSConfigProvider
+	audienceGetter authorization.JWTAudienceMapper
+	persistenceServiceResolver resolver.ServiceResolver
+	esConfig *config.Elasticsearch
+	esClient esclient.Client
+}
+
 func ServicesProvider(
-	cfg *config.Config,
-	services ServiceNamesList,
-	logger log.Logger,
-	namespaceLogger NamespaceLogger,
-	authorizer authorization.Authorizer,
-	claimMapper authorization.ClaimMapper,
-	dynamicConfigClient dynamicconfig.Client,
-	dynamicConfigCollection *dynamicconfig.Collection,
-	customDatastoreFactory persistenceClient.AbstractDataStoreFactory,
-	metricReporters *MetricsReporters,
-	tlsConfigProvider encryption.TLSConfigProvider,
-	audienceGetter authorization.JWTAudienceMapper,
-	persistenceServiceResolver resolver.ServiceResolver,
-	esConfig *config.Elasticsearch,
-	esClient esclient.Client,
+	deps *ServicesProviderDeps,
 ) (map[string]common.Daemon, error) {
 	result := make(map[string]common.Daemon)
-	for _, svcName := range services {
+	for _, svcName := range deps.services {
 		params, err := makeBootstrapParams(
-			cfg,
+			deps.cfg,
 			svcName,
-			logger,
-			namespaceLogger,
-			authorizer,
-			claimMapper,
-			dynamicConfigClient,
-			dynamicConfigCollection,
-			customDatastoreFactory,
-			metricReporters,
-			tlsConfigProvider,
-			audienceGetter,
-			persistenceServiceResolver,
-			esConfig,
-			esClient,
+			deps.logger,
+			deps.namespaceLogger,
+			deps.authorizer,
+			deps.claimMapper,
+			deps.dynamicConfigClient,
+			deps.dynamicConfigCollection,
+			deps.customDatastoreFactory,
+			deps.metricReporters,
+			deps.tlsConfigProvider,
+			deps.audienceGetter,
+			deps.persistenceServiceResolver,
+			deps.esConfig,
+			deps.esClient,
 		)
 
 		if err != nil{

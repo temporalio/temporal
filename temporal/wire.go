@@ -55,6 +55,7 @@ var serverSet = wire.NewSet(
 	ESClientProvider,
 	ESConfigProvider,
 	AdvancedVisibilityWritingModeProvider,
+	wire.Struct(new(ServicesProviderDeps), "*"),
 )
 
 func InitializeServer(c *cli.Context) (*Server, error) {

@@ -29,7 +29,6 @@ import (
 	"os"
 
 	"github.com/urfave/cli/v2"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/headers"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"      // needed to load mysql plugin

@@ -58,7 +58,24 @@ func InitializeServer(c *cli.Context) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	v, err := ServicesProvider(config, serviceNamesList, logger, logger, authorizer, claimMapper, client, collection, abstractDataStoreFactory, metricsReporters, tlsConfigProvider, jwtAudienceMapper, serviceResolver, elasticsearch, clientClient)
+	servicesProviderDeps := &ServicesProviderDeps{
+		cfg:                        config,
+		services:                   serviceNamesList,
+		logger:                     logger,
+		namespaceLogger:            logger,
+		authorizer:                 authorizer,
+		claimMapper:                claimMapper,
+		dynamicConfigClient:        client,
+		dynamicConfigCollection:    collection,
+		customDatastoreFactory:     abstractDataStoreFactory,
+		metricReporters:            metricsReporters,
+		tlsConfigProvider:          tlsConfigProvider,
+		audienceGetter:             jwtAudienceMapper,
+		persistenceServiceResolver: serviceResolver,
+		esConfig:                   elasticsearch,
+		esClient:                   clientClient,
+	}
+	v, err := ServicesProvider(servicesProviderDeps)
 	if err != nil {
 		return nil, err
 	}
@@ -104,4 +121,13 @@ var UserSet = wire.NewSet(
 	DefaultPersistenseServiceResolverProvider,
 	DefaultElasticSearchHttpClientProvider,
 	DefaultInterruptChProvider,
+)
+
+var serverSet = wire.NewSet(
+	ServicesProvider,
+	ServerProvider,
+	AdvancedVisibilityStoreProvider,
+	ESClientProvider,
+	ESConfigProvider,
+	AdvancedVisibilityWritingModeProvider, wire.Struct(new(ServicesProviderDeps), "*"),
 )
