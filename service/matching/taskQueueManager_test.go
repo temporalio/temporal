@@ -122,7 +122,7 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 		},
 	}
 
-	require.True(t, tlm.taskReader.addTasksToBuffer(tasks, time.Now().UTC(), time.NewTimer(time.Minute)))
+	require.True(t, tlm.taskReader.addTasksToBuffer(tasks))
 	require.Equal(t, int64(0), tlm.taskAckManager.getAckLevel())
 	require.Equal(t, int64(12), tlm.taskAckManager.getReadLevel())
 
@@ -142,7 +142,7 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 			},
 			TaskId: 14,
 		},
-	}, time.Now().UTC(), time.NewTimer(time.Minute)))
+	}))
 	require.Equal(t, int64(0), tlm.taskAckManager.getAckLevel())
 	require.Equal(t, int64(14), tlm.taskAckManager.getReadLevel())
 }
@@ -248,13 +248,13 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	defer controller.Finish()
 
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	cfg.IdleTaskqueueCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
+	cfg.IdleTaskqueueCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
 
 	// Idle
 	tlm := createTestTaskQueueManagerWithConfig(controller, cfg)
 	tlm.Start()
 	tlMgrStartWithoutNotifyEvent(tlm)
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 
 	// Active poll-er
@@ -263,7 +263,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity("test-poll"), nil)
 	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
 	tlMgrStartWithoutNotifyEvent(tlm)
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 	tlm.Stop()
 	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
@@ -274,7 +274,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	require.Equal(t, 0, len(tlm.GetAllPollerInfo()))
 	tlMgrStartWithoutNotifyEvent(tlm)
 	tlm.taskReader.Signal()
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 	tlm.Stop()
 	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))

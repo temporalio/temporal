@@ -145,26 +145,18 @@ func (tr *taskReader) getTasksPump() {
 	updateAckTimer := time.NewTimer(tr.tlMgr.config.UpdateAckInterval())
 	defer updateAckTimer.Stop()
 
-	checkIdleTaskQueueTimer := time.NewTimer(tr.tlMgr.config.IdleTaskqueueCheckInterval())
-	defer checkIdleTaskQueueTimer.Stop()
-
-	lastTimeWriteTask := time.Now()
-
-getTasksPumpLoop:
+Loop:
 	for {
 		select {
 		case <-tr.shutdownChan:
 			return
 
 		case <-tr.notifyC:
-
-			lastTimeWriteTask = time.Now().UTC()
-
 			tasks, readLevel, isReadBatchDone, err := tr.getTaskBatch()
 			if err != nil {
 				tr.Signal() // re-enqueue the event
 				// TODO: Should we ever stop retrying on db errors?
-				continue getTasksPumpLoop
+				continue Loop
 			}
 
 			if len(tasks) == 0 {
@@ -172,10 +164,10 @@ getTasksPumpLoop:
 				if !isReadBatchDone {
 					tr.Signal()
 				}
-				continue getTasksPumpLoop
+				continue Loop
 			}
 
-			if !tr.addTasksToBuffer(tasks, lastTimeWriteTask, checkIdleTaskQueueTimer) {
+			if !tr.addTasksToBuffer(tasks) {
 				return
 			}
 			// There maybe more tasks. We yield now, but signal pump to check again later.
@@ -196,13 +188,6 @@ getTasksPumpLoop:
 			}
 			tr.Signal() // periodically signal pump to check persistence for tasks
 			updateAckTimer = time.NewTimer(tr.tlMgr.config.UpdateAckInterval())
-
-		case <-checkIdleTaskQueueTimer.C:
-			if tr.isIdle(lastTimeWriteTask) {
-				tr.handleIdleTimeout()
-				return
-			}
-			checkIdleTaskQueueTimer = time.NewTimer(tr.tlMgr.config.IdleTaskqueueCheckInterval())
 		}
 	}
 }
@@ -244,17 +229,9 @@ func (tr *taskReader) getTaskBatch() ([]*persistencespb.AllocatedTaskInfo, int64
 	return tasks, readLevel, readLevel == maxReadLevel, nil // caller will update readLevel when no task grabbed
 }
 
-func (tr *taskReader) isIdle(lastWriteTime time.Time) bool {
-	return !tr.isTaskAddedRecently(lastWriteTime) && len(tr.tlMgr.GetAllPollerInfo()) == 0
-}
-
-func (tr *taskReader) handleIdleTimeout() {
-	_ = tr.persistAckLevel()
-	tr.tlMgr.taskGC.RunNow(tr.tlMgr.taskAckManager.getAckLevel())
-	tr.tlMgr.Stop()
-}
-
-func (tr *taskReader) addTasksToBuffer(tasks []*persistencespb.AllocatedTaskInfo, lastWriteTime time.Time, idleTimer *time.Timer) bool {
+func (tr *taskReader) addTasksToBuffer(
+	tasks []*persistencespb.AllocatedTaskInfo,
+) bool {
 	for _, t := range tasks {
 		if taskqueue.IsTaskExpired(t) {
 			tr.scope().IncCounter(metrics.ExpiredTasksPerTaskQueueCounter)
@@ -263,7 +240,7 @@ func (tr *taskReader) addTasksToBuffer(tasks []*persistencespb.AllocatedTaskInfo
 			tr.tlMgr.taskAckManager.setReadLevel(t.GetTaskId())
 			continue
 		}
-		if !tr.addSingleTaskToBuffer(t, lastWriteTime, idleTimer) {
+		if !tr.addSingleTaskToBuffer(t) {
 			return false // we are shutting down the task queue
 		}
 	}
@@ -272,22 +249,13 @@ func (tr *taskReader) addTasksToBuffer(tasks []*persistencespb.AllocatedTaskInfo
 
 func (tr *taskReader) addSingleTaskToBuffer(
 	task *persistencespb.AllocatedTaskInfo,
-	lastWriteTime time.Time,
-	idleTimer *time.Timer,
 ) bool {
 	tr.tlMgr.taskAckManager.addTask(task.GetTaskId())
-	for {
-		select {
-		case tr.taskBuffer <- task:
-			return true
-		case <-idleTimer.C:
-			if tr.isIdle(lastWriteTime) {
-				tr.handleIdleTimeout()
-				return false
-			}
-		case <-tr.shutdownChan:
-			return false
-		}
+	select {
+	case tr.taskBuffer <- task:
+		return true
+	case <-tr.shutdownChan:
+		return false
 	}
 }
 
