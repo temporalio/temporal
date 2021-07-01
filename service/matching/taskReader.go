@@ -26,10 +26,12 @@ package matching
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -43,6 +45,7 @@ const (
 
 type (
 	taskReader struct {
+		status     int32
 		taskBuffer chan *persistencespb.AllocatedTaskInfo // tasks loaded from persistence
 		notifyC    chan struct{}                          // Used as signal to notify pump of new tasks
 		tlMgr      *taskQueueManagerImpl
@@ -51,37 +54,53 @@ type (
 		// in order to cancel it on shutdown, we need a new goroutine for each call that would wait on
 		// the shutdown channel. To optimize on efficiency, we instead create one and tag it on the struct
 		// so the cancel can be called directly on shutdown.
-		cancelCtx  context.Context
-		cancelFunc context.CancelFunc
-		// separate shutdownC needed for dispatchTasks go routine to allow
-		// getTasksPump to be stopped without stopping dispatchTasks in unit tests
-		dispatcherShutdownC chan struct{}
+		cancelCtx    context.Context
+		cancelFunc   context.CancelFunc
+		shutdownChan chan struct{}
 	}
 )
 
 func newTaskReader(tlMgr *taskQueueManagerImpl) *taskReader {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &taskReader{
-		tlMgr:               tlMgr,
-		cancelCtx:           ctx,
-		cancelFunc:          cancel,
-		notifyC:             make(chan struct{}, 1),
-		dispatcherShutdownC: make(chan struct{}),
+		status:     common.DaemonStatusInitialized,
+		tlMgr:      tlMgr,
+		cancelCtx:  ctx,
+		cancelFunc: cancel,
+		notifyC:    make(chan struct{}, 1),
 		// we always dequeue the head of the buffer and try to dispatch it to a poller
 		// so allocate one less than desired target buffer size
-		taskBuffer: make(chan *persistencespb.AllocatedTaskInfo, tlMgr.config.GetTasksBatchSize()-1),
+		taskBuffer:   make(chan *persistencespb.AllocatedTaskInfo, tlMgr.config.GetTasksBatchSize()-1),
+		shutdownChan: make(chan struct{}),
 	}
 }
 
 func (tr *taskReader) Start() {
+	if !atomic.CompareAndSwapInt32(
+		&tr.status,
+		common.DaemonStatusInitialized,
+		common.DaemonStatusStarted,
+	) {
+		return
+	}
+
 	tr.Signal()
 	go tr.dispatchBufferedTasks()
 	go tr.getTasksPump()
 }
 
 func (tr *taskReader) Stop() {
+	if !atomic.CompareAndSwapInt32(
+		&tr.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
+		return
+	}
+
+	close(tr.shutdownChan)
+
 	tr.cancelFunc()
-	close(tr.dispatcherShutdownC)
 }
 
 func (tr *taskReader) Signal() {
@@ -115,79 +134,77 @@ dispatchLoop:
 				tr.logger().Error("taskReader: unexpected error dispatching task", tag.Error(err))
 				time.Sleep(taskReaderOfferThrottleWait)
 			}
-		case <-tr.dispatcherShutdownC:
-			break dispatchLoop
+
+		case <-tr.shutdownChan:
+			return
 		}
 	}
 }
 
 func (tr *taskReader) getTasksPump() {
-	tr.tlMgr.startWG.Wait()
-	defer close(tr.taskBuffer)
-
 	updateAckTimer := time.NewTimer(tr.tlMgr.config.UpdateAckInterval())
+	defer updateAckTimer.Stop()
+
 	checkIdleTaskQueueTimer := time.NewTimer(tr.tlMgr.config.IdleTaskqueueCheckInterval())
-	lastTimeWriteTask := time.Time{}
+	defer checkIdleTaskQueueTimer.Stop()
+
+	lastTimeWriteTask := time.Now()
+
 getTasksPumpLoop:
 	for {
 		select {
-		case <-tr.tlMgr.shutdownCh:
-			break getTasksPumpLoop
+		case <-tr.shutdownChan:
+			return
+
 		case <-tr.notifyC:
-			{
-				lastTimeWriteTask = time.Now().UTC()
 
-				tasks, readLevel, isReadBatchDone, err := tr.getTaskBatch()
-				if err != nil {
-					tr.Signal() // re-enqueue the event
-					// TODO: Should we ever stop retrying on db errors?
-					continue getTasksPumpLoop
-				}
+			lastTimeWriteTask = time.Now().UTC()
 
-				if len(tasks) == 0 {
-					tr.tlMgr.taskAckManager.setReadLevel(readLevel)
-					if !isReadBatchDone {
-						tr.Signal()
-					}
-					continue getTasksPumpLoop
-				}
-
-				if !tr.addTasksToBuffer(tasks, lastTimeWriteTask, checkIdleTaskQueueTimer) {
-					break getTasksPumpLoop
-				}
-				// There maybe more tasks. We yield now, but signal pump to check again later.
-				tr.Signal()
+			tasks, readLevel, isReadBatchDone, err := tr.getTaskBatch()
+			if err != nil {
+				tr.Signal() // re-enqueue the event
+				// TODO: Should we ever stop retrying on db errors?
+				continue getTasksPumpLoop
 			}
+
+			if len(tasks) == 0 {
+				tr.tlMgr.taskAckManager.setReadLevel(readLevel)
+				if !isReadBatchDone {
+					tr.Signal()
+				}
+				continue getTasksPumpLoop
+			}
+
+			if !tr.addTasksToBuffer(tasks, lastTimeWriteTask, checkIdleTaskQueueTimer) {
+				return
+			}
+			// There maybe more tasks. We yield now, but signal pump to check again later.
+			tr.Signal()
+
 		case <-updateAckTimer.C:
-			{
-				err := tr.persistAckLevel()
-				if err != nil {
-					if _, ok := err.(*persistence.ConditionFailedError); ok {
-						// This indicates the task queue may have moved to another host.
-						tr.tlMgr.Stop()
-					} else {
-						tr.logger().Error("Persistent store operation failure",
-							tag.StoreOperationUpdateTaskQueue,
-							tag.Error(err))
-					}
-					// keep going as saving ack is not critical
+			err := tr.persistAckLevel()
+			if err != nil {
+				if _, ok := err.(*persistence.ConditionFailedError); ok {
+					// This indicates the task queue may have moved to another host.
+					tr.tlMgr.Stop()
+				} else {
+					tr.logger().Error("Persistent store operation failure",
+						tag.StoreOperationUpdateTaskQueue,
+						tag.Error(err))
 				}
-				tr.Signal() // periodically signal pump to check persistence for tasks
-				updateAckTimer = time.NewTimer(tr.tlMgr.config.UpdateAckInterval())
+				// keep going as saving ack is not critical
 			}
+			tr.Signal() // periodically signal pump to check persistence for tasks
+			updateAckTimer = time.NewTimer(tr.tlMgr.config.UpdateAckInterval())
+
 		case <-checkIdleTaskQueueTimer.C:
-			{
-				if tr.isIdle(lastTimeWriteTask) {
-					tr.handleIdleTimeout()
-					break getTasksPumpLoop
-				}
-				checkIdleTaskQueueTimer = time.NewTimer(tr.tlMgr.config.IdleTaskqueueCheckInterval())
+			if tr.isIdle(lastTimeWriteTask) {
+				tr.handleIdleTimeout()
+				return
 			}
+			checkIdleTaskQueueTimer = time.NewTimer(tr.tlMgr.config.IdleTaskqueueCheckInterval())
 		}
 	}
-
-	updateAckTimer.Stop()
-	checkIdleTaskQueueTimer.Stop()
 }
 
 func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64) ([]*persistencespb.AllocatedTaskInfo, error) {
@@ -254,7 +271,10 @@ func (tr *taskReader) addTasksToBuffer(tasks []*persistencespb.AllocatedTaskInfo
 }
 
 func (tr *taskReader) addSingleTaskToBuffer(
-	task *persistencespb.AllocatedTaskInfo, lastWriteTime time.Time, idleTimer *time.Timer) bool {
+	task *persistencespb.AllocatedTaskInfo,
+	lastWriteTime time.Time,
+	idleTimer *time.Timer,
+) bool {
 	tr.tlMgr.taskAckManager.addTask(task.GetTaskId())
 	for {
 		select {
@@ -265,7 +285,7 @@ func (tr *taskReader) addSingleTaskToBuffer(
 				tr.handleIdleTimeout()
 				return false
 			}
-		case <-tr.tlMgr.shutdownCh:
+		case <-tr.shutdownChan:
 			return false
 		}
 	}

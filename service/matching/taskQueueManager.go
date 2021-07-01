@@ -68,7 +68,7 @@ type (
 	}
 
 	taskQueueManager interface {
-		Start() error
+		Start()
 		Stop()
 		// AddTask adds a task to the task queue. This method will first attempt a synchronous
 		// match with a poller. When that fails, task will be written to database and later
@@ -93,6 +93,7 @@ type (
 
 	// Single task queue in memory state
 	taskQueueManagerImpl struct {
+		status           int32
 		taskQueueID      *taskQueueID
 		taskQueueKind    enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
 		config           *taskQueueConfig
@@ -118,9 +119,7 @@ type (
 		outstandingPollsLock sync.Mutex
 		outstandingPollsMap  map[string]context.CancelFunc
 
-		shutdownCh chan struct{}  // Delivers stop to the pump that populates taskBuffer
-		startWG    sync.WaitGroup // ensures that background processes do not start until setup is ready
-		stopped    int32
+		shutdownCh chan struct{} // Delivers stop to the pump that populates taskBuffer
 	}
 )
 
@@ -143,6 +142,7 @@ func newTaskQueueManager(
 	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue.name, taskQueue.taskType, taskQueueKind, e.logger)
 
 	tlMgr := &taskQueueManagerImpl{
+		status:              common.DaemonStatusInitialized,
 		namespaceCache:      e.namespaceCache,
 		metricsClient:       e.metricsClient,
 		engine:              e,
@@ -170,41 +170,47 @@ func newTaskQueueManager(
 		))
 	}
 
-	tlMgr.taskWriter = newTaskWriter(tlMgr)
+	state, err := tlMgr.renewLeaseWithRetry()
+	if err != nil {
+		return nil, err
+	}
+
+	tlMgr.taskAckManager.setAckLevel(state.ackLevel)
+	tlMgr.taskWriter = newTaskWriter(tlMgr, tlMgr.rangeIDToTaskIDBlock(state.rangeID))
 	tlMgr.taskReader = newTaskReader(tlMgr)
 	var fwdr *Forwarder
 	if tlMgr.isFowardingAllowed(taskQueue, taskQueueKind) {
 		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, taskQueue, taskQueueKind, e.matchingClient)
 	}
 	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.metricScope)
-	tlMgr.startWG.Add(1)
 	return tlMgr, nil
 }
 
 // Start reading pump for the given task queue.
 // The pump fills up taskBuffer from persistence.
-func (c *taskQueueManagerImpl) Start() error {
-	defer c.startWG.Done()
-
-	// Make sure to grab the range first before starting task writer, as it needs the range to initialize maxReadLevel
-	state, err := c.renewLeaseWithRetry()
-	if err != nil {
-		c.Stop()
-		return err
-	}
-
-	c.taskAckManager.setAckLevel(state.ackLevel)
-	c.taskWriter.Start(c.rangeIDToTaskIDBlock(state.rangeID))
-	c.taskReader.Start()
-
-	return nil
-}
-
-// Stops pump that fills up taskBuffer from persistence.
-func (c *taskQueueManagerImpl) Stop() {
-	if !atomic.CompareAndSwapInt32(&c.stopped, 0, 1) {
+func (c *taskQueueManagerImpl) Start() {
+	if !atomic.CompareAndSwapInt32(
+		&c.status,
+		common.DaemonStatusInitialized,
+		common.DaemonStatusStarted,
+	) {
 		return
 	}
+
+	c.taskWriter.Start()
+	c.taskReader.Start()
+}
+
+// Stop pump that fills up taskBuffer from persistence.
+func (c *taskQueueManagerImpl) Stop() {
+	if !atomic.CompareAndSwapInt32(
+		&c.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
+		return
+	}
+
 	close(c.shutdownCh)
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
@@ -216,7 +222,6 @@ func (c *taskQueueManagerImpl) Stop() {
 // match with a poller. When there are no pollers or if ratelimit is exceeded, task will
 // be written to database and later asynchronously matched with a poller
 func (c *taskQueueManagerImpl) AddTask(ctx context.Context, params addTaskParams) (bool, error) {
-	c.startWG.Wait()
 	var syncMatch bool
 	_, err := c.executeWithRetry(func() (interface{}, error) {
 		td := params.taskInfo
@@ -265,7 +270,6 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 	taskID string,
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
-	c.startWG.Wait()
 	task := newInternalQueryTask(taskID, request)
 	return c.matcher.OfferQuery(ctx, task)
 }
