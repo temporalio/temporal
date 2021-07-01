@@ -25,6 +25,7 @@
 package matching
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -41,7 +42,7 @@ type (
 
 		timeSource   *clock.EventTimeSource
 		ttl          time.Duration
-		shutdownFlag bool
+		shutdownFlag int32
 	}
 )
 
@@ -62,7 +63,7 @@ func (s *livenessSuite) SetupTest() {
 	s.ttl = 2 * time.Second
 	s.timeSource = clock.NewEventTimeSource()
 	s.timeSource.Update(time.Now())
-	s.shutdownFlag = false
+	s.shutdownFlag = 0
 }
 
 func (s *livenessSuite) TearDownTest() {
@@ -70,21 +71,21 @@ func (s *livenessSuite) TearDownTest() {
 }
 
 func (s *livenessSuite) TestIsAlive_No() {
-	liveness := newLiveness(s.timeSource, s.ttl, func() { s.shutdownFlag = true })
+	liveness := newLiveness(s.timeSource, s.ttl, func() { atomic.CompareAndSwapInt32(&s.shutdownFlag, 0, 1) })
 	s.timeSource.Update(time.Now().Add(s.ttl * 2))
 	alive := liveness.isAlive()
 	s.False(alive)
 }
 
 func (s *livenessSuite) TestIsAlive_Yes() {
-	liveness := newLiveness(s.timeSource, s.ttl, func() { s.shutdownFlag = true })
+	liveness := newLiveness(s.timeSource, s.ttl, func() { atomic.CompareAndSwapInt32(&s.shutdownFlag, 0, 1) })
 	s.timeSource.Update(time.Now().Add(s.ttl / 2))
 	alive := liveness.isAlive()
 	s.True(alive)
 }
 
 func (s *livenessSuite) TestMarkAlive_Noop() {
-	liveness := newLiveness(s.timeSource, s.ttl, func() { s.shutdownFlag = true })
+	liveness := newLiveness(s.timeSource, s.ttl, func() { atomic.CompareAndSwapInt32(&s.shutdownFlag, 0, 1) })
 	lastEventTime := liveness.lastEventTime
 	newEventTime := s.timeSource.Now().Add(-1)
 	liveness.markAlive(newEventTime)
@@ -92,14 +93,14 @@ func (s *livenessSuite) TestMarkAlive_Noop() {
 }
 
 func (s *livenessSuite) TestMarkAlive_Updated() {
-	liveness := newLiveness(s.timeSource, s.ttl, func() { s.shutdownFlag = true })
+	liveness := newLiveness(s.timeSource, s.ttl, func() { atomic.CompareAndSwapInt32(&s.shutdownFlag, 0, 1) })
 	newEventTime := s.timeSource.Now().Add(1)
 	liveness.markAlive(newEventTime)
 	s.Equal(newEventTime, liveness.lastEventTime)
 }
 
 func (s *livenessSuite) TestEventLoop_Noop() {
-	liveness := newLiveness(s.timeSource, s.ttl, func() { s.shutdownFlag = true })
+	liveness := newLiveness(s.timeSource, s.ttl, func() { atomic.CompareAndSwapInt32(&s.shutdownFlag, 0, 1) })
 	liveness.Start()
 
 	now := time.Now().Add(s.ttl * 4)
@@ -111,15 +112,15 @@ func (s *livenessSuite) TestEventLoop_Noop() {
 	case <-liveness.shutdownChan:
 		s.Fail("should not shutdown")
 	case <-timer.C:
-		s.False(s.shutdownFlag)
+		s.Equal(int32(0), atomic.LoadInt32(&s.shutdownFlag))
 	}
 }
 
 func (s *livenessSuite) TestEventLoop_Shutdown() {
-	liveness := newLiveness(s.timeSource, s.ttl, func() { s.shutdownFlag = true })
+	liveness := newLiveness(s.timeSource, s.ttl, func() { atomic.CompareAndSwapInt32(&s.shutdownFlag, 0, 1) })
 	liveness.Start()
 
 	s.timeSource.Update(time.Now().Add(s.ttl * 4))
 	<-liveness.shutdownChan
-	s.True(s.shutdownFlag)
+	s.Equal(int32(1), atomic.LoadInt32(&s.shutdownFlag))
 }
