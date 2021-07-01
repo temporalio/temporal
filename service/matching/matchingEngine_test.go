@@ -1584,14 +1584,13 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 	s.matchingEngine.config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFilteredByTaskQueueInfo(2)
 	// set idle timer check to a really small value to assert that we don't accidentally drop tasks while blocking
 	// on enqueuing a task to task buffer
-	s.matchingEngine.config.IdleTaskqueueCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(time.Microsecond)
+	s.matchingEngine.config.IdleTaskqueueCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(time.Millisecond)
 
 	testCases := []struct {
-		batchSize          int
 		maxTimeBtwnDeletes time.Duration
 	}{
-		{2, time.Minute},       // test taskGC deleting due to size threshold
-		{100, time.Nanosecond}, // test taskGC deleting due to time condition
+		{time.Minute},     // test taskGC deleting due to size threshold
+		{time.Nanosecond}, // test taskGC deleting due to time condition
 	}
 
 	for _, tc := range testCases {
@@ -1622,7 +1621,6 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 		s.True(s.awaitCondition(func() bool { return len(tlMgr.taskReader.taskBuffer) >= (taskCount/2 - 1) }, time.Second))
 
 		maxTimeBetweenTaskDeletes = tc.maxTimeBtwnDeletes
-		s.matchingEngine.config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFilteredByTaskQueueInfo(tc.batchSize)
 
 		s.setupRecordActivityTaskStartedMock(tl)
 
