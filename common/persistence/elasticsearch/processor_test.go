@@ -28,6 +28,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -163,6 +164,35 @@ func (s *processorSuite) TestAdd() {
 
 func (s *processorSuite) TestAdd_ConcurrentAdd() {
 	request := &client.BulkableRequest{}
+	docsCount := 1000
+	parallelFactor := 10
+	ackChs := make([]<-chan bool, docsCount)
+
+	wg := sync.WaitGroup{}
+	wg.Add(parallelFactor)
+	s.mockBulkProcessor.EXPECT().Add(request).Times(docsCount)
+	for i := 0; i < parallelFactor; i++ {
+		go func(i int) {
+			for j := 0; j < docsCount/parallelFactor; j++ {
+				ackChs[i*docsCount/parallelFactor+j] = s.esProcessor.Add(request, fmt.Sprintf("test-key-%d-%d", i, j))
+			}
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+	s.Equal(docsCount, s.esProcessor.mapToAckChan.Len())
+
+	for i := 0; i < docsCount; i++ {
+		select {
+		case <-ackChs[i]:
+			s.Fail("all request must be in the bulk")
+		default:
+		}
+	}
+}
+
+func (s *processorSuite) TestAdd_ConcurrentAdd_Duplicates() {
+	request := &client.BulkableRequest{}
 	key := "test-key"
 	duplicates := 100
 	ackChs := make([]<-chan bool, duplicates)
@@ -189,6 +219,7 @@ func (s *processorSuite) TestAdd_ConcurrentAdd() {
 	}
 
 	s.Equal(1, pendingRequestsCount, "only one request should not be nacked")
+	s.Equal(1, s.esProcessor.mapToAckChan.Len(), "only one request should be in the bulk")
 }
 
 func (s *processorSuite) TestBulkAfterAction_Ack() {
@@ -436,4 +467,72 @@ func (s *processorSuite) TestErrorReasonFromResponse() {
 	s.Equal("", extractErrorReason(resp))
 	resp.Error = &elastic.ErrorDetails{Reason: reason}
 	s.Equal(reason, extractErrorReason(resp))
+}
+
+func (s *processorSuite) Test_End2End() {
+	docsCount := 1000
+	parallelFactor := 10
+	version := int64(2208) //random
+
+	request := &client.BulkableRequest{}
+	bulkIndexRequests := make([]elastic.BulkableRequest, docsCount)
+	bulkIndexResponse := &elastic.BulkResponse{
+		Took:   3,
+		Errors: false,
+		Items:  make([]map[string]*elastic.BulkResponseItem, docsCount),
+	}
+	ackChs := make([]<-chan bool, docsCount)
+
+	// Add documents in parallel.
+	wg := sync.WaitGroup{}
+	wg.Add(parallelFactor)
+	s.mockBulkProcessor.EXPECT().Add(request).Times(docsCount)
+	for i := 0; i < parallelFactor; i++ {
+		go func(i int) {
+			for j := 0; j < docsCount/parallelFactor; j++ {
+				docIndex := i*docsCount/parallelFactor + j
+				testKey := fmt.Sprintf("test-key-%d-%d", i, j)
+				docId := fmt.Sprintf("docId-%d", docIndex)
+				ackChs[docIndex] = s.esProcessor.Add(request, testKey)
+				bulkIndexRequests[docIndex] = elastic.NewBulkIndexRequest().
+					Index(testIndex).
+					Id(docId).
+					Version(version).
+					Doc(map[string]interface{}{searchattribute.VisibilityTaskKey: testKey})
+
+				mSuccess := map[string]*elastic.BulkResponseItem{
+					"index": {
+						Index:   testIndex,
+						Id:      docId,
+						Version: version,
+						Status:  200,
+					},
+				}
+				bulkIndexResponse.Items[docIndex] = mSuccess
+			}
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+	s.Equal(docsCount, s.esProcessor.mapToAckChan.Len())
+
+	// Emulate bulk commit.
+
+	s.mockMetricClient.EXPECT().AddCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequests, int64(docsCount))
+	s.mockMetricClient.EXPECT().RecordDistribution(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorBulkSize, docsCount)
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitLatency, gomock.Any()).Times(docsCount)
+	s.esProcessor.bulkBeforeAction(0, bulkIndexRequests)
+
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any()).Times(docsCount)
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorCommitLatency, gomock.Any()).Times(docsCount)
+	s.esProcessor.bulkAfterAction(0, bulkIndexRequests, bulkIndexResponse, nil)
+
+	for i := 0; i < docsCount; i++ {
+		select {
+		case ack := <-ackChs[i]:
+			s.True(ack)
+		default:
+			s.Fail("all requests must be acked")
+		}
+	}
 }
