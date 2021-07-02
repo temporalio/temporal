@@ -59,15 +59,17 @@ func (m *MockProcessor) EXPECT() *MockProcessorMockRecorder {
 }
 
 // Add mocks base method.
-func (m *MockProcessor) Add(request *client.BulkableRequest, visibilityTaskKey string, ackCh chan<- bool) {
+func (m *MockProcessor) Add(request *client.BulkableRequest, visibilityTaskKey string) <-chan bool {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Add", request, visibilityTaskKey, ackCh)
+	ret := m.ctrl.Call(m, "Add", request, visibilityTaskKey)
+	ret0, _ := ret[0].(<-chan bool)
+	return ret0
 }
 
 // Add indicates an expected call of Add.
-func (mr *MockProcessorMockRecorder) Add(request, visibilityTaskKey, ackCh interface{}) *gomock.Call {
+func (mr *MockProcessorMockRecorder) Add(request, visibilityTaskKey interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockProcessor)(nil).Add), request, visibilityTaskKey, ackCh)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockProcessor)(nil).Add), request, visibilityTaskKey)
 }
 
 // Start mocks base method.
