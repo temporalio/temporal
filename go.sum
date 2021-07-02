@@ -86,6 +86,7 @@ github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDk
 github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
 github.com/cncf/udpa/go v0.0.0-20200629203442-efcf912fb354/go.mod h1:WmhPx2Nbnhtbo57+VJT5O0JRkEi1Wbu0z5j0R8u5Hbk=
 github.com/cncf/udpa/go v0.0.0-20201120205902-5459f2c99403/go.mod h1:WmhPx2Nbnhtbo57+VJT5O0JRkEi1Wbu0z5j0R8u5Hbk=
+github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd h1:qMd81Ts1T2OTKmB4acZcyKaMtRnY5Y44NuXGX2GFJ1w=
 github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd/go.mod h1:sE/e/2PUdi/liOCUjSTXgM1o87ZssimdTWN964YiIeI=
 github.com/cpuguy83/go-md2man/v2 v2.0.0-20190314233015-f79a8a8ca69d/go.mod h1:maD7wRr/U5Z6m/iR4s+kqSMx2CaBsrgA7czyZG/E6dU=
 github.com/cpuguy83/go-md2man/v2 v2.0.0 h1:EoUDS0afbrsXAZ9YQ9jdu/mZ2sXgT1/2yyNng4PGlyM=
@@ -421,8 +422,6 @@ go.opentelemetry.io/otel/sdk v0.15.0/go.mod h1:Qudkwgq81OcA9GYVlbyZ62wkLieeS1eWx
 go.temporal.io/api v1.4.1-0.20210420220407-6f00f7f98373/go.mod h1:Xtk6uRDheAVQr4fgcfo5ZDEkIGMLGJrNkswxZNpqpG0=
 go.temporal.io/api v1.4.1-0.20210622200201-edd2d5680749 h1:7My9owVaKG+pUN3AHcp+q6xPDEEZFRGupy4J49ZylQA=
 go.temporal.io/api v1.4.1-0.20210622200201-edd2d5680749/go.mod h1:ph8kEAwEBNg2+A/gOWPn98tw8ckHED98iX024sVjcKY=
-go.temporal.io/sdk v1.7.0 h1:uVJPkUHYu1k23Hn7F2mYso1p3wHnPbVwWobSPVYmW0I=
-go.temporal.io/sdk v1.7.0/go.mod h1:SGEzYshamm994VrqsONO/ON4RcPkdqsGHsRhtiOjcd8=
 go.temporal.io/sdk v1.8.0 h1:XvI3juXtDS8rlTJ/vjs7duwts9GxZhC8DabOd5wq3Ps=
 go.temporal.io/sdk v1.8.0/go.mod h1:SGEzYshamm994VrqsONO/ON4RcPkdqsGHsRhtiOjcd8=
 go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193 h1:jhIqHkAE74DnEXipymFTzmTxyboMYmv6iVkkCFC1pas=
