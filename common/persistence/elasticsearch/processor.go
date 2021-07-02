@@ -167,6 +167,7 @@ func (p *processorImpl) hashFn(key interface{}) uint32 {
 // Add request to the bulk and return ack channel which will receive ack signal when request is processed.
 func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey string) <-chan bool {
 	ackCh := newAckChan()
+	retCh := ackCh.ackChInternal
 	_, isDup, _ := p.mapToAckChan.PutOrDo(visibilityTaskKey, ackCh, func(key interface{}, value interface{}) error {
 		ackChExisting, ok := value.(*ackChan)
 		if !ok {
@@ -188,7 +189,7 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 	if !isDup {
 		p.bulkProcessor.Add(request)
 	}
-	return ackCh.ackChInternal
+	return retCh
 }
 
 // bulkBeforeAction is triggered before bulk processor commit
