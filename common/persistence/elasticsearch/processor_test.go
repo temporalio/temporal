@@ -144,7 +144,7 @@ func (s *processorSuite) TestAdd() {
 	}
 
 	// handle duplicate
-	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
 	ackCh2 := s.esProcessor.Add(request, visibilityTaskKey)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
 	select {
@@ -166,7 +166,7 @@ func (s *processorSuite) TestAdd_ConcurrentAdd() {
 	key := "test-key"
 	duplicates := 100
 	ackChs := make([]<-chan bool, duplicates)
-	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any()).Times(duplicates - 1)
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any()).Times(duplicates - 1)
 
 	wg := sync.WaitGroup{}
 	wg.Add(duplicates)
@@ -215,7 +215,7 @@ func (s *processorSuite) TestBulkAfterAction_Ack() {
 		Items:  []map[string]*elastic.BulkResponseItem{mSuccess},
 	}
 
-	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
 	mapVal := newAckChan()
 	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
 	s.esProcessor.bulkAfterAction(0, requests, response, nil)
@@ -261,10 +261,10 @@ func (s *processorSuite) TestBulkAfterAction_Nack() {
 		Items:  []map[string]*elastic.BulkResponseItem{mFailed},
 	}
 
-	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
 	mapVal := newAckChan()
 	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
-	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorFailures)
+	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorFailures)
 	s.esProcessor.bulkAfterAction(0, requests, response, nil)
 	select {
 	case ack := <-mapVal.ackChInternal:
@@ -301,7 +301,7 @@ func (s *processorSuite) TestBulkAfterAction_Error() {
 		Items:  []map[string]*elastic.BulkResponseItem{mFailed},
 	}
 
-	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorFailures)
+	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorFailures)
 	s.esProcessor.bulkAfterAction(0, requests, response, errors.New("some error"))
 }
 
@@ -315,9 +315,9 @@ func (s *processorSuite) TestBulkBeforeAction() {
 		Doc(map[string]interface{}{searchattribute.VisibilityTaskKey: testKey})
 	requests := []elastic.BulkableRequest{request}
 
-	s.mockMetricClient.EXPECT().AddCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorRequests, int64(1))
-	s.mockMetricClient.EXPECT().RecordDistribution(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorBulkSize, 1)
-	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorWaitLatency, gomock.Any())
+	s.mockMetricClient.EXPECT().AddCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequests, int64(1))
+	s.mockMetricClient.EXPECT().RecordDistribution(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorBulkSize, 1)
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitLatency, gomock.Any())
 
 	mapVal := newAckChan()
 	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
@@ -333,7 +333,7 @@ func (s *processorSuite) TestAckChan() {
 	s.esProcessor.sendToAckChan(key, true)
 
 	request := &client.BulkableRequest{}
-	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
 	s.mockBulkProcessor.EXPECT().Add(request)
 	ackCh := s.esProcessor.Add(request, key)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
@@ -355,7 +355,7 @@ func (s *processorSuite) TestNackChan() {
 
 	request := &client.BulkableRequest{}
 	s.mockBulkProcessor.EXPECT().Add(request)
-	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
 	ackCh := s.esProcessor.Add(request, key)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
 
@@ -376,7 +376,7 @@ func (s *processorSuite) TestHashFn() {
 
 func (s *processorSuite) TestExtractVisibilityTaskKey() {
 	request := elastic.NewBulkIndexRequest()
-	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorCorruptedData)
+	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorCorruptedData)
 
 	visibilityTaskKey := s.esProcessor.extractVisibilityTaskKey(request)
 	s.Equal("", visibilityTaskKey)
@@ -406,7 +406,7 @@ func (s *processorSuite) TestExtractVisibilityTaskKey_Delete() {
 	_, ok := body["delete"]
 	s.True(ok)
 
-	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorCorruptedData)
+	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorCorruptedData)
 	key := s.esProcessor.extractVisibilityTaskKey(request)
 	s.Equal("", key)
 

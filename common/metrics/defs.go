@@ -658,6 +658,12 @@ const (
 	// ElasticsearchDeleteWorkflowExecutionsScope tracks DeleteWorkflowExecution calls made by service to persistence layer
 	ElasticsearchDeleteWorkflowExecutionsScope
 
+	// ElasticsearchBulkProcessor is scope used by all metric emitted by Elasticsearch bulk processor
+	ElasticsearchBulkProcessor
+
+	// ElasticsearchVisibility is scope used by all Elasticsearch visibility metrics
+	ElasticsearchVisibility
+
 	// SequentialTaskProcessingScope is used by sequential task processing logic
 	SequentialTaskProcessingScope
 	// ParallelTaskProcessingScope is used by parallel task processing logic
@@ -685,9 +691,6 @@ const (
 	BlobstoreClientDeleteScope
 	// BlobstoreClientDirectoryExistsScope tracks DirectoryExists calls to blobstore
 	BlobstoreClientDirectoryExistsScope
-
-	// ElasticsearchVisibility is scope used by all metric emitted by esProcessor
-	ElasticsearchVisibility
 
 	NumCommonScopes
 )
@@ -1376,9 +1379,12 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ElasticsearchScanWorkflowExecutionsScope:                   {operation: "ScanWorkflowExecutions"},
 		ElasticsearchCountWorkflowExecutionsScope:                  {operation: "CountWorkflowExecutions"},
 		ElasticsearchDeleteWorkflowExecutionsScope:                 {operation: "DeleteWorkflowExecution"},
-		SequentialTaskProcessingScope:                              {operation: "SequentialTaskProcessing"},
-		ParallelTaskProcessingScope:                                {operation: "ParallelTaskProcessing"},
-		TaskSchedulerScope:                                         {operation: "TaskScheduler"},
+		ElasticsearchBulkProcessor:                                 {operation: "ElasticsearchBulkProcessor"},
+		ElasticsearchVisibility:                                    {operation: "ElasticsearchVisibility"},
+
+		SequentialTaskProcessingScope: {operation: "SequentialTaskProcessing"},
+		ParallelTaskProcessingScope:   {operation: "ParallelTaskProcessing"},
+		TaskSchedulerScope:            {operation: "TaskScheduler"},
 
 		HistoryArchiverScope:    {operation: "HistoryArchiver"},
 		VisibilityArchiverScope: {operation: "VisibilityArchiver"},
@@ -1389,8 +1395,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		BlobstoreClientExistsScope:          {operation: "BlobstoreClientExists", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
 		BlobstoreClientDeleteScope:          {operation: "BlobstoreClientDelete", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
 		BlobstoreClientDirectoryExistsScope: {operation: "BlobstoreClientDirectoryExists", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
-
-		ElasticsearchVisibility: {operation: "ElasticsearchVisibility"},
 	},
 	// Frontend Scope Names
 	Frontend: {

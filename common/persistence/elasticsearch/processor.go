@@ -193,8 +193,8 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 
 // bulkBeforeAction is triggered before bulk processor commit
 func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableRequest) {
-	p.metricsClient.AddCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorRequests, int64(len(requests)))
-	p.metricsClient.RecordDistribution(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorBulkSize, len(requests))
+	p.metricsClient.AddCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequests, int64(len(requests)))
+	p.metricsClient.RecordDistribution(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorBulkSize, len(requests))
 
 	for _, request := range requests {
 		visibilityTaskKey := p.extractVisibilityTaskKey(request)
@@ -222,7 +222,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 		p.logger.Error("Unable to commit bulk ES request.", tag.Error(err), tag.Bool(isRetryable))
 		for _, request := range requests {
 			p.logger.Error("ES request failed.", tag.ESRequest(request.String()))
-			p.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorFailures)
+			p.metricsClient.IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorFailures)
 
 			if !isRetryable {
 				visibilityTaskKey := p.extractVisibilityTaskKey(request)
@@ -250,7 +250,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 				tag.Key(visibilityTaskKey),
 				tag.ESDocID(docID),
 				tag.ESRequest(request.String()))
-			p.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorCorruptedData)
+			p.metricsClient.IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorCorruptedData)
 			p.sendToAckChan(visibilityTaskKey, false)
 			continue
 		}
@@ -265,7 +265,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 				tag.Key(visibilityTaskKey),
 				tag.ESDocID(docID),
 				tag.ESRequest(request.String()))
-			p.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorFailures)
+			p.metricsClient.IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorFailures)
 			p.sendToAckChan(visibilityTaskKey, false)
 		default: // bulk processor will retry
 			p.logger.Warn("ES request retried.",
@@ -274,7 +274,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 				tag.Key(visibilityTaskKey),
 				tag.ESDocID(docID),
 				tag.ESRequest(request.String()))
-			p.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorRetries)
+			p.metricsClient.IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRetries)
 		}
 	}
 }
@@ -312,7 +312,7 @@ func (p *processorImpl) extractVisibilityTaskKey(request elastic.BulkableRequest
 	req, err := request.Source()
 	if err != nil {
 		p.logger.Error("Unable to get ES request source.", tag.Error(err), tag.ESRequest(request.String()))
-		p.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorCorruptedData)
+		p.metricsClient.IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorCorruptedData)
 		return ""
 	}
 
@@ -320,14 +320,14 @@ func (p *processorImpl) extractVisibilityTaskKey(request elastic.BulkableRequest
 		var body map[string]interface{}
 		if err = json.Unmarshal([]byte(req[1]), &body); err != nil {
 			p.logger.Error("Unable to unmarshal ES request body.", tag.Error(err))
-			p.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorCorruptedData)
+			p.metricsClient.IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorCorruptedData)
 			return ""
 		}
 
 		k, ok := body[searchattribute.VisibilityTaskKey]
 		if !ok {
 			p.logger.Error("Unable to extract VisibilityTaskKey from ES request.", tag.ESRequest(request.String()))
-			p.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorCorruptedData)
+			p.metricsClient.IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorCorruptedData)
 			return ""
 		}
 		return k.(string)
@@ -340,14 +340,14 @@ func (p *processorImpl) extractDocID(request elastic.BulkableRequest) string {
 	req, err := request.Source()
 	if err != nil {
 		p.logger.Error("Unable to get ES request source.", tag.Error(err), tag.ESRequest(request.String()))
-		p.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorCorruptedData)
+		p.metricsClient.IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorCorruptedData)
 		return ""
 	}
 
 	var body map[string]map[string]interface{}
 	if err = json.Unmarshal([]byte(req[0]), &body); err != nil {
 		p.logger.Error("Unable to unmarshal ES request body.", tag.Error(err), tag.ESRequest(request.String()))
-		p.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorCorruptedData)
+		p.metricsClient.IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorCorruptedData)
 		return ""
 	}
 
@@ -360,7 +360,7 @@ func (p *processorImpl) extractDocID(request elastic.BulkableRequest) string {
 	}
 
 	p.logger.Error("Unable to extract _id from ES request.", tag.ESRequest(request.String()))
-	p.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorCorruptedData)
+	p.metricsClient.IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorCorruptedData)
 	return ""
 }
 
@@ -388,15 +388,15 @@ func newAckChan() *ackChan {
 }
 
 func (a *ackChan) Start(metricsClient metrics.Client) {
-	metricsClient.RecordTimer(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorWaitLatency, time.Now().UTC().Sub(a.addedAt))
+	metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitLatency, time.Now().UTC().Sub(a.addedAt))
 	a.startedAt = time.Now().UTC()
 }
 
 func (a *ackChan) Done(ack bool, metricsClient metrics.Client) {
 	a.ackChInternal <- ack
 
-	metricsClient.RecordTimer(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorRequestLatency, time.Now().UTC().Sub(a.addedAt))
+	metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, time.Now().UTC().Sub(a.addedAt))
 	if !a.startedAt.IsZero() {
-		metricsClient.RecordTimer(metrics.ElasticsearchVisibility, metrics.ElasticsearchBulkProcessorCommitLatency, time.Now().UTC().Sub(a.startedAt))
+		metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorCommitLatency, time.Now().UTC().Sub(a.startedAt))
 	}
 }
