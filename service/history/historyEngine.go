@@ -62,6 +62,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
@@ -461,8 +462,8 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	namespaceID := namespaceEntry.GetInfo().Id
 
 	request := startRequest.StartRequest
-	e.overrideStartWorkflowExecutionRequest(namespace, request, metrics.HistoryStartWorkflowExecutionScope)
-	err = e.validateStartWorkflowExecutionRequest(request, namespace, metrics.HistoryStartWorkflowExecutionScope)
+	e.overrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope)
+	err = e.validateStartWorkflowExecutionRequest(ctx, request, namespace, "StartWorkflowExecution")
 	if err != nil {
 		return nil, err
 	}
@@ -1933,9 +1934,8 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	// Start workflow and signal
 	startRequest := e.getStartRequest(namespaceID, sRequest)
 	request := startRequest.StartRequest
-	// QUESTION: should this be metrics.HistorySignalWithStartWorkflowExecutionScope?
-	e.overrideStartWorkflowExecutionRequest(namespace, request, metrics.HistorySignalWorkflowExecutionScope)
-	err = e.validateStartWorkflowExecutionRequest(request, namespace, metrics.HistorySignalWithStartWorkflowExecutionScope)
+	e.overrideStartWorkflowExecutionRequest(request, metrics.HistorySignalWithStartWorkflowExecutionScope)
+	err = e.validateStartWorkflowExecutionRequest(ctx, request, namespace, "SignalWithStartWorkflowExecution")
 	if err != nil {
 		return nil, err
 	}
@@ -1947,7 +1947,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		namespaceID,
 		sRequest.GetWorkflowId(),
 		"",
-		e.metricsClient.Scope(metrics.HistorySignalWithStartWorkflowExecutionScope),
+		e.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		e.throttledLogger,
 		tag.BlobSizeViolationOperation("SignalWithStartWorkflowExecution"),
 	); err != nil {
@@ -2577,9 +2577,10 @@ func (e *historyEngineImpl) NotifyNewVisibilityTasks(
 }
 
 func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
+	ctx context.Context,
 	request *workflowservice.StartWorkflowExecutionRequest,
 	namespace string,
-	scope int,
+	operation string,
 ) error {
 
 	maxIDLengthLimit := e.config.MaxIDLengthLimit()
@@ -2637,11 +2638,9 @@ func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
 		namespace,
 		request.GetWorkflowId(),
 		"",
-		// QUESTION: is this right? should it have any more tags?
-		e.metricsClient.Scope(scope),
+		e.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		e.throttledLogger,
-		// QUESTION: should this string change when this is called from SignalWithStartWorkflowExecution?
-		tag.BlobSizeViolationOperation("StartWorkflowExecution"),
+		tag.BlobSizeViolationOperation(operation),
 	); err != nil {
 		return err
 	}
@@ -2653,9 +2652,9 @@ func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
 		namespace,
 		request.GetWorkflowId(),
 		"",
-		e.metricsClient.Scope(scope),
+		e.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		e.throttledLogger,
-		tag.BlobSizeViolationOperation("StartWorkflowExecution"),
+		tag.BlobSizeViolationOperation(operation),
 	); err != nil {
 		return err
 	}
@@ -2664,12 +2663,13 @@ func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
 }
 
 func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
-	namespace string,
 	request *workflowservice.StartWorkflowExecutionRequest,
 	metricsScope int,
 ) {
 	// workflow execution timeout is left as is
 	//  if workflow execution timeout == 0 -> infinity
+
+	namespace := request.GetNamespace()
 
 	workflowRunTimeout := common.OverrideWorkflowRunTimeout(
 		timestamp.DurationValue(request.GetWorkflowRunTimeout()),
@@ -2684,9 +2684,7 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 	}
 
 	workflowTaskStartToCloseTimeout := common.OverrideWorkflowTaskTimeout(
-		// QUESTION: can `request.GetNamespace()` ever be different from `namespace` here?
-		// maybe we can avoid passing in `namespace` and just use this?
-		request.GetNamespace(),
+		namespace,
 		timestamp.DurationValue(request.GetWorkflowTaskTimeout()),
 		timestamp.DurationValue(request.GetWorkflowRunTimeout()),
 		e.config.DefaultWorkflowTaskTimeout,
@@ -3238,4 +3236,8 @@ func (e *historyEngineImpl) loadWorkflow(
 	}
 
 	return nil, serviceerror.NewInternal("unable to locate current workflow execution")
+}
+
+func (e *historyEngineImpl) metricsScope(ctx context.Context) metrics.Scope {
+	return interceptor.MetricsScope(ctx, e.logger)
 }

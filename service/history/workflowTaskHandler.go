@@ -767,7 +767,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION.String()),
 		attr.GetInput().Size(),
-		"StartChildWorkflowExecutionCommandAttributes.Input exceeds size limit.",
+		"StartChildWorkflowExecutionCommandAttributes. Input exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true
@@ -777,7 +777,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfMemoSizeExceedsLimit(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION.String()),
 		attr.GetMemo().Size(),
-		"StartChildWorkflowExecutionCommandAttributes.Memo exceeds size limit.",
+		"StartChildWorkflowExecutionCommandAttributes. Memo exceeds size limit.",
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true

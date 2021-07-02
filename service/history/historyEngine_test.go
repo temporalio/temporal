@@ -64,7 +64,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -1092,7 +1091,7 @@ func (s *engineSuite) TestValidateSignalRequest() {
 		Identity:                 "identity",
 	}
 	err := s.mockHistoryEngine.validateStartWorkflowExecutionRequest(
-		startRequest, tests.LocalNamespaceEntry.GetInfo().GetName(), metrics.HistoryStartWorkflowExecutionScope)
+		context.Background(), startRequest, tests.LocalNamespaceEntry.GetInfo().GetName(), "SignalWithStartWorkflowExecution")
 	s.Error(err, "startRequest doesn't have request id, it should error out")
 
 	startRequest.RequestId = "request-id"
@@ -1100,7 +1099,7 @@ func (s *engineSuite) TestValidateSignalRequest() {
 		"data": payload.EncodeBytes(make([]byte, 4*1024*1024)),
 	}}
 	err = s.mockHistoryEngine.validateStartWorkflowExecutionRequest(
-		startRequest, tests.LocalNamespaceEntry.GetInfo().GetName(), metrics.HistoryStartWorkflowExecutionScope)
+		context.Background(), startRequest, tests.LocalNamespaceEntry.GetInfo().GetName(), "SignalWithStartWorkflowExecution")
 	s.Error(err, "memo should be too big")
 }
 
