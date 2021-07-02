@@ -27,9 +27,14 @@ package namespace
 import "time"
 
 const (
-	// MinRetention is the minimal retention for any namespace (can be
-	// overridden by dynamic config)
-	MinRetention = 1 * 24 * time.Hour
+	// MinRetentionGlobal is a hard limit for the minimun retention duration for global
+	// namespaces (to allow time for replication).
+	MinRetentionGlobal = 1 * 24 * time.Hour
+
+	// MinRetentionLocal is a hard limit for the minimun retention duration for local
+	// namespaces. Allow short values but disallow zero to avoid confusion with
+	// interpreting zero as infinite.
+	MinRetentionLocal = 1 * time.Second
 
 	// MaxBadBinaries is the maximal number of bad client binaries stored in a namespace
 	MaxBadBinaries = 10

@@ -26,43 +26,32 @@ package namespace
 
 import (
 	"fmt"
-	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
 	// AttrValidatorImpl is namespace attr validator
 	AttrValidatorImpl struct {
 		clusterMetadata cluster.Metadata
-		minRetention    time.Duration
 	}
 )
 
 // newAttrValidator create a new namespace attr validator
 func newAttrValidator(
 	clusterMetadata cluster.Metadata,
-	minRetention time.Duration,
 ) *AttrValidatorImpl {
 
 	return &AttrValidatorImpl{
 		clusterMetadata: clusterMetadata,
-		minRetention:    minRetention,
 	}
 }
 
 func (d *AttrValidatorImpl) validateNamespaceConfig(config *persistencespb.NamespaceConfig) error {
-	if timestamp.DurationValue(config.Retention) < d.minRetention {
-		return errInvalidRetentionPeriod
-	} else if timestamp.DurationValue(config.Retention) > common.MaxWorkflowRetentionPeriod {
-		return errInvalidRetentionPeriod
-	}
 	if config.HistoryArchivalState == enumspb.ARCHIVAL_STATE_ENABLED && len(config.HistoryArchivalUri) == 0 {
 		return errInvalidArchivalConfig
 	}
