@@ -125,8 +125,13 @@ func buildDSN(cfg *config.SQL, r resolver.ServiceResolver) string {
 	mysqlConfig.Addr = r.Resolve(cfg.ConnectAddr)[0]
 	mysqlConfig.DBName = cfg.DatabaseName
 	mysqlConfig.Net = cfg.ConnectProtocol
-
 	mysqlConfig.Params = buildDSNAttrs(cfg)
+
+	// https://github.com/go-sql-driver/mysql/blob/v1.5.0/dsn.go#L104-L106
+	// https://github.com/go-sql-driver/mysql/blob/v1.5.0/dsn.go#L182-L189
+	if mysqlConfig.Net == "" {
+		mysqlConfig.Net = "tcp"
+	}
 
 	// https://github.com/go-sql-driver/mysql#rejectreadonly
 	// https://github.com/temporalio/temporal/issues/1703
