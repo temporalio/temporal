@@ -149,5 +149,6 @@ func buildExpectedURLParams(attrs map[string]string, isolationKey string, isolat
 	for k, v := range dsnAttrOverrides {
 		result[k] = []string{v}
 	}
+	result["rejectReadOnly"] = []string{"true"}
 	return result
 }
