@@ -177,7 +177,7 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 		p.logger.Warn("Adding duplicate ES request for visibility task key.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc))
 
 		// Nack existing visibility task.
-		ackChExisting.Done(false, p.metricsClient)
+		ackChExisting.done(false, p.metricsClient)
 
 		// Replace existing dictionary item with new item.
 		// Note: request won't be added to bulk processor.
@@ -207,7 +207,7 @@ func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableReq
 			if !ok {
 				p.logger.Fatal(fmt.Sprintf("mapToAckChan has item of a wrong type %T (%T expected).", value, &ackChan{}), tag.Value(key))
 			}
-			ackCh.Start(p.metricsClient)
+			ackCh.start(p.metricsClient)
 			return nil
 		})
 	}
@@ -304,7 +304,7 @@ func (p *processorImpl) sendToAckChan(visibilityTaskKey string, ack bool) {
 			p.logger.Fatal(fmt.Sprintf("mapToAckChan has item of a wrong type %T (%T expected).", value, &ackChan{}), tag.ESKey(visibilityTaskKey))
 		}
 
-		ackCh.Done(ack, p.metricsClient)
+		ackCh.done(ack, p.metricsClient)
 		return true
 	})
 }
@@ -388,12 +388,12 @@ func newAckChan() *ackChan {
 	}
 }
 
-func (a *ackChan) Start(metricsClient metrics.Client) {
+func (a *ackChan) start(metricsClient metrics.Client) {
 	metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitLatency, time.Now().UTC().Sub(a.addedAt))
 	a.startedAt = time.Now().UTC()
 }
 
-func (a *ackChan) Done(ack bool, metricsClient metrics.Client) {
+func (a *ackChan) done(ack bool, metricsClient metrics.Client) {
 	a.ackChInternal <- ack
 
 	metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, time.Now().UTC().Sub(a.addedAt))
