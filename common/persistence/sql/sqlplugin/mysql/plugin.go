@@ -25,11 +25,9 @@
 package mysql
 
 import (
-	"bytes"
-	"fmt"
-	"net/url"
 	"strings"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
 
@@ -42,7 +40,6 @@ import (
 const (
 	// PluginName is the name of the plugin
 	PluginName                   = "mysql"
-	dsnFmt                       = "%v:%v@%v(%v)/%v"
 	isolationLevelAttrName       = "transaction_isolation"
 	isolationLevelAttrNameLegacy = "tx_isolation"
 	defaultIsolationLevel        = "'READ-COMMITTED'"
@@ -121,16 +118,24 @@ func (p *plugin) createDBConnection(cfg *config.SQL, r resolver.ServiceResolver)
 }
 
 func buildDSN(cfg *config.SQL, r resolver.ServiceResolver) string {
-	attrs := buildDSNAttrs(cfg)
-	resolvedAddr := r.Resolve(cfg.ConnectAddr)[0]
-	dsn := fmt.Sprintf(dsnFmt, cfg.User, cfg.Password, cfg.ConnectProtocol, resolvedAddr, cfg.DatabaseName)
-	if attrs != "" {
-		dsn = dsn + "?" + attrs
-	}
-	return dsn
+	mysqlConfig := mysql.NewConfig()
+
+	mysqlConfig.User = cfg.User
+	mysqlConfig.Passwd = cfg.Password
+	mysqlConfig.Addr = r.Resolve(cfg.ConnectAddr)[0]
+	mysqlConfig.DBName = cfg.DatabaseName
+	mysqlConfig.Net = cfg.ConnectProtocol
+
+	mysqlConfig.Params = buildDSNAttrs(cfg)
+
+	// https://github.com/go-sql-driver/mysql#rejectreadonly
+	// https://github.com/temporalio/temporal/issues/1703
+	mysqlConfig.RejectReadOnly = true
+
+	return mysqlConfig.FormatDSN()
 }
 
-func buildDSNAttrs(cfg *config.SQL) string {
+func buildDSNAttrs(cfg *config.SQL) map[string]string {
 	attrs := make(map[string]string, len(dsnAttrOverrides)+len(cfg.ConnectAttributes)+1)
 	for k, v := range cfg.ConnectAttributes {
 		k1, v1 := sanitizeAttr(k, v)
@@ -148,18 +153,7 @@ func buildDSNAttrs(cfg *config.SQL) string {
 		attrs[k] = v
 	}
 
-	first := true
-	var buf bytes.Buffer
-	for k, v := range attrs {
-		if !first {
-			buf.WriteString("&")
-		}
-		first = false
-		buf.WriteString(k)
-		buf.WriteString("=")
-		buf.WriteString(v)
-	}
-	return url.PathEscape(buf.String())
+	return attrs
 }
 
 func hasAttr(attrs map[string]string, key string) bool {
