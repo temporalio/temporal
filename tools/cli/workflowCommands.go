@@ -322,20 +322,16 @@ func unmarshalSearchAttrFromCLI(c *cli.Context) map[string]interface{} {
 		ErrorAndExit(fmt.Sprintf("Uneven number of search attributes keys (%d): %v and values(%d): %v.", len(searchAttrKeys), searchAttrKeys, len(rawSearchAttrVals), rawSearchAttrVals), nil)
 	}
 
-	var searchAttrValues []interface{}
+	fields := make(map[string]interface{}, len(searchAttrKeys))
 
-	for _, v := range rawSearchAttrVals {
+	for i, v := range rawSearchAttrVals {
 		var j interface{}
 		if err := json.Unmarshal([]byte(v), &j); err != nil {
 			ErrorAndExit("Search attribute JSON parse error.", err)
 		}
-		searchAttrValues = append(searchAttrValues, j)
+		fields[searchAttrKeys[i]] = j
 	}
 
-	fields := make(map[string]interface{}, len(searchAttrKeys))
-	for i, key := range searchAttrKeys {
-		fields[key] = searchAttrValues[i]
-	}
 	return fields
 }
 
