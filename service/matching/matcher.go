@@ -250,6 +250,7 @@ forLoop:
 			err := tm.fwdr.ForwardTask(childCtx, task)
 			token.release()
 			if err != nil {
+				tm.scope().IncCounter(metrics.ForwardTaskErrorsPerTaskQueue)
 				// forwarder returns error only when the call is rate limited. To
 				// avoid a busy loop on such rate limiting events, we only attempt to make
 				// the next forwarded call after this childCtx expires. Till then, we block

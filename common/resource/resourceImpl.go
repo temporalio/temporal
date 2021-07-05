@@ -206,8 +206,12 @@ func New(
 	}
 
 	dynamicCollection := dynamicconfig.NewCollection(params.DynamicConfigClient, logger)
+	factoryProvider := params.ClientFactoryProvider
+	if factoryProvider == nil {
+		factoryProvider = client.NewFactoryProvider()
+	}
 	clientBean, err := client.NewClientBean(
-		client.NewRPCClientFactory(
+		factoryProvider.NewFactory(
 			params.RPCFactory,
 			membershipMonitor,
 			params.MetricsClient,

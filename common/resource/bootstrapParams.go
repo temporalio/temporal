@@ -27,13 +27,12 @@ package resource
 import (
 	"github.com/uber-go/tally"
 	sdkclient "go.temporal.io/sdk/client"
-
-	"go.temporal.io/server/common/config"
-
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
@@ -56,6 +55,7 @@ type (
 		MetricsScope                 tally.Scope
 		MembershipFactoryInitializer MembershipFactoryInitializerFunc
 		RPCFactory                   common.RPCFactory
+		ClientFactoryProvider        client.FactoryProvider
 		AbstractDatastoreFactory     persistenceClient.AbstractDataStoreFactory
 		PersistenceConfig            config.Persistence
 		ClusterMetadataConfig        *config.ClusterMetadata
