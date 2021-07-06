@@ -1196,47 +1196,6 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	s.NotNil(resp.GetRunId())
 }
 
-func (s *engine2Suite) TestSignalWithStartWorkflowExecution_CreateTimeout() {
-	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{}
-	_, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
-	s.EqualError(err, "Missing namespace UUID.")
-
-	namespaceID := tests.NamespaceID
-	workflowID := "wId"
-	workflowType := "workflowType"
-	taskQueue := "testTaskQueue"
-	identity := "testIdentity"
-	signalName := "my signal name"
-	input := payloads.EncodeString("test input")
-	requestID := uuid.New()
-
-	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceId: namespaceID,
-		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:                namespaceID,
-			WorkflowId:               workflowID,
-			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
-			WorkflowExecutionTimeout: timestamp.DurationPtr(1 * time.Second),
-			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
-			Identity:                 identity,
-			SignalName:               signalName,
-			Input:                    input,
-			RequestId:                requestID,
-		},
-	}
-
-	notExistErr := serviceerror.NewNotFound("Workflow not exist")
-
-	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any()).Return(nil, notExistErr)
-	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil)
-	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any()).Return(nil, &persistence.TimeoutError{})
-
-	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)
-	s.True(persistence.IsTimeoutError(err))
-	s.NotNil(resp.GetRunId())
-}
-
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning() {
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
