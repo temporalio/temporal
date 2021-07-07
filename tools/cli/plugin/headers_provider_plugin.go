@@ -28,45 +28,27 @@ import (
 	"net/rpc"
 
 	"github.com/hashicorp/go-plugin"
-	"google.golang.org/grpc/metadata"
 )
 
 type (
-	HeadersProviderSDK interface {
-		GetHeaders(context.Context) (map[string]string, error)
-	}
-
 	HeadersProvider interface {
-		GetHeaders(map[string][]string) (map[string]string, error)
-	}
-
-	HeadersProviderRPCServer struct {
-		Impl HeadersProvider
+		GetHeaders(context.Context) (map[string]string, error)
 	}
 
 	HeadersProviderPlugin struct {
 		Impl HeadersProvider
 	}
 
+	HeadersProviderRPCServer struct {
+		Impl HeadersProvider
+	}
+
 	HeadersProviderRPC struct {
 		client *rpc.Client
 	}
-
-	HeadersProviderPluginWrapper struct {
-		provider HeadersProvider
-	}
 )
 
-func (w HeadersProviderPluginWrapper) GetHeaders(ctx context.Context) (map[string]string, error) {
-	var currentHeaders map[string][]string
-	if headers, ok := metadata.FromOutgoingContext(ctx); ok {
-		currentHeaders = headers
-	}
-
-	return w.provider.GetHeaders(currentHeaders)
-}
-
-func NewHeadersProviderPlugin(name string) (HeadersProviderSDK, error) {
+func NewHeadersProviderPlugin(name string) (HeadersProvider, error) {
 	client, err := newPluginClient(HeadersProviderPluginType, name)
 	if err != nil {
 		return nil, fmt.Errorf("unable to register plugin: %w", err)
@@ -77,25 +59,36 @@ func NewHeadersProviderPlugin(name string) (HeadersProviderSDK, error) {
 		return nil, fmt.Errorf("constructed plugin client type %T doesn't implement HeadersProvider interface", client)
 	}
 
-	return HeadersProviderPluginWrapper{
-		provider: headersProvider,
-	}, nil
+	return headersProvider, nil
 }
 
-func (g *HeadersProviderRPC) GetHeaders(currentHeaders map[string][]string) (map[string]string, error) {
+func (g *HeadersProviderRPC) GetHeaders(ctx context.Context) (map[string]string, error) {
 	var result map[string]string
 
-	err := g.client.Call("Plugin.GetHeaders", currentHeaders, &result)
+	sCtx, err := NewPluginSafeContext(ctx)
 	if err != nil {
+		fmt.Printf("error: %v", err)
+		return nil, err
+	}
+
+	err = g.client.Call("Plugin.GetHeaders", sCtx, &result)
+	if err != nil {
+		fmt.Printf("error: %v", err)
 		return nil, err
 	}
 
 	return result, nil
 }
 
-func (s *HeadersProviderRPCServer) GetHeaders(currentHeaders map[string][]string, resp *map[string]string) error {
+func (s *HeadersProviderRPCServer) GetHeaders(sCtx PluginSafeContext, resp *map[string]string) error {
 	var err error
-	*resp, err = s.Impl.GetHeaders(currentHeaders)
+
+	ctx, err := sCtx.GetContext()
+	if err != nil {
+		return err
+	}
+
+	*resp, err = s.Impl.GetHeaders(ctx)
 	return err
 }
 
