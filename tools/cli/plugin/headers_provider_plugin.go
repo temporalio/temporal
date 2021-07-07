@@ -67,13 +67,11 @@ func (g *HeadersProviderRPC) GetHeaders(ctx context.Context) (map[string]string,
 
 	sCtx, err := NewPluginSafeContext(ctx)
 	if err != nil {
-		fmt.Printf("error: %v", err)
 		return nil, err
 	}
 
 	err = g.client.Call("Plugin.GetHeaders", sCtx, &result)
 	if err != nil {
-		fmt.Printf("error: %v", err)
 		return nil, err
 	}
 
