@@ -25,6 +25,7 @@
 package cassandra
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"reflect"
@@ -44,71 +45,89 @@ var (
 	errorDefaultPriority = math.MaxInt64
 )
 
+type (
+	executionCASCondition struct {
+		runID       string
+		dbVersion   int64
+		nextEventID int64 // TODO deprecate this variable once DB version comparison is the default
+	}
+)
+
 func convertErrors(
+	record map[string]interface{},
 	iter gocql.Iter,
 	requestShardID int32,
 	requestRangeID int64,
 	requestCurrentRunID string,
-	requestRunID string,
-	requestDBVersion int64,
-	requestNextEventID int64, // TODO deprecate this variable once DB version comparison is the default
+	requestExecutionCASConditions []executionCASCondition,
 ) error {
-	errs := extractErrors(
-		iter,
+
+	records := []map[string]interface{}{record}
+	errors := extractErrors(
+		record,
 		requestShardID,
 		requestRangeID,
 		requestCurrentRunID,
-		requestRunID,
-		requestDBVersion,
-		requestNextEventID,
+		requestExecutionCASConditions,
 	)
-	errs = sortErrors(errs)
 
-	if len(errs) == 0 {
-		return nil
+	record = make(map[string]interface{})
+	for iter.MapScan(record) {
+		records = append(records, record)
+		errors = append(errors, extractErrors(
+			record,
+			requestShardID,
+			requestRangeID,
+			requestCurrentRunID,
+			requestExecutionCASConditions,
+		)...)
+
+		record = make(map[string]interface{})
 	}
-	return errs[0]
+
+	errors = sortErrors(errors)
+	if len(errors) == 0 {
+		return &p.ConditionFailedError{
+			Msg: fmt.Sprintf("Encounter unknown error: %v", printRecords(records)),
+		}
+	}
+	return errors[0]
 }
 
 func extractErrors(
-	iter gocql.Iter,
+	record map[string]interface{},
 	requestShardID int32,
 	requestRangeID int64,
 	requestCurrentRunID string,
-	requestRunID string,
-	requestDBVersion int64,
-	requestNextEventID int64, // TODO deprecate this variable once DB version comparison is the default
+	requestExecutionCASConditions []executionCASCondition,
 ) []error {
 
 	var errors []error
 
-	record := make(map[string]interface{})
-	for iter.MapScan(record) {
-		if err := extractShardOwnershipLostError(
-			record,
-			requestShardID,
-			requestRangeID,
-		); err != nil {
-			errors = append(errors, err)
-		}
+	if err := extractShardOwnershipLostError(
+		record,
+		requestShardID,
+		requestRangeID,
+	); err != nil {
+		errors = append(errors, err)
+	}
 
-		if err := extractCurrentWorkflowConflictError(
-			record,
-			requestCurrentRunID,
-		); err != nil {
-			errors = append(errors, err)
-		}
+	if err := extractCurrentWorkflowConflictError(
+		record,
+		requestCurrentRunID,
+	); err != nil {
+		errors = append(errors, err)
+	}
 
+	for _, condition := range requestExecutionCASConditions {
 		if err := extractWorkflowVersionConflictError(
 			record,
-			requestRunID,
-			requestDBVersion,
-			requestNextEventID,
+			condition.runID,
+			condition.dbVersion,
+			condition.nextEventID,
 		); err != nil {
 			errors = append(errors, err)
 		}
-
-		record = make(map[string]interface{})
 	}
 
 	return errors
@@ -228,4 +247,11 @@ func extractWorkflowVersionConflictError(
 		}
 	}
 	return nil
+}
+
+func printRecords(
+	records []map[string]interface{},
+) string {
+	binary, _ := json.MarshalIndent(records, "", "  ")
+	return string(binary)
 }
