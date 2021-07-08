@@ -473,4 +473,4 @@ ensure-no-changes:
 	@git diff --name-status --exit-code || (printf $(COLOR) "========================================================================"; printf $(RED) "Above files are not regenerated properly. Regenerate them and try again."; exit 1)
 
 wire-gen:
-	wire ./temporal
+	wire ./temporal ./service/matching

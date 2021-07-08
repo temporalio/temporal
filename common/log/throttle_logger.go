@@ -31,71 +31,71 @@ import (
 
 const extraSkipForThrottleLogger = 3
 
-type throttledLogger struct {
+type ThrottledLogger struct {
 	limiter quotas.RateLimiter
 	logger  Logger
 }
 
-var _ Logger = (*throttledLogger)(nil)
+var _ Logger = (*ThrottledLogger)(nil)
 
 // NewThrottledLogger returns an implementation of logger that throttles the
 // log messages being emitted. The underlying implementation uses a token bucket
 // rate limiter and stops emitting logs once the bucket runs out of tokens
 //
 // Fatal/Panic logs are always emitted without any throttling
-func NewThrottledLogger(logger Logger, rps quotas.RateFn) *throttledLogger {
+func NewThrottledLogger(logger Logger, rps quotas.RateFn) *ThrottledLogger {
 	if sl, ok := logger.(SkipLogger); ok {
 		logger = sl.Skip(extraSkipForThrottleLogger)
 	}
 
 	limiter := quotas.NewDefaultOutgoingDynamicRateLimiter(rps)
-	tl := &throttledLogger{
+	tl := &ThrottledLogger{
 		limiter: limiter,
 		logger:  logger,
 	}
 	return tl
 }
 
-func (tl *throttledLogger) Debug(msg string, tags ...tag.Tag) {
+func (tl *ThrottledLogger) Debug(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
 		tl.logger.Debug(msg, tags...)
 	})
 }
 
-func (tl *throttledLogger) Info(msg string, tags ...tag.Tag) {
+func (tl *ThrottledLogger) Info(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
 		tl.logger.Info(msg, tags...)
 	})
 }
 
-func (tl *throttledLogger) Warn(msg string, tags ...tag.Tag) {
+func (tl *ThrottledLogger) Warn(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
 		tl.logger.Warn(msg, tags...)
 	})
 }
 
-func (tl *throttledLogger) Error(msg string, tags ...tag.Tag) {
+func (tl *ThrottledLogger) Error(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
 		tl.logger.Error(msg, tags...)
 	})
 }
 
-func (tl *throttledLogger) Fatal(msg string, tags ...tag.Tag) {
+func (tl *ThrottledLogger) Fatal(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
 		tl.logger.Fatal(msg, tags...)
 	})
 }
 
 // Return a logger with the specified key-value pairs set, to be included in a subsequent normal logging call
-func (tl *throttledLogger) With(tags ...tag.Tag) Logger {
-	result := &throttledLogger{
+func (tl *ThrottledLogger) With(tags ...tag.Tag) Logger {
+	result := &ThrottledLogger{
 		limiter: tl.limiter,
 		logger:  With(tl.logger, tags...),
 	}
 	return result
 }
 
-func (tl *throttledLogger) rateLimit(f func()) {
+func (tl *ThrottledLogger) rateLimit(f func()) {
 	if ok := tl.limiter.Allow(); ok {
 		f()
 	}
