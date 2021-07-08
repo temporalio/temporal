@@ -73,6 +73,7 @@ func ServiceConfigProvider(logger log.Logger, dcClient dynamicconfig.Client) (*C
 
 
 // todomigryz: this belongs in handler file service/matching/handler.go
+// todomigryz: this should not use resource :(
 func HandlerProvider(
 	resource resource.Resource,
 	config *Config,
@@ -89,7 +90,7 @@ func HandlerProvider(
 			resource.GetMatchingRawClient(), // Use non retry client inside matching
 			config,
 			resource.GetLogger(),
-			resource.GetMetricsClient(),
+			metricsClient, // resource.GetMetricsClient(),
 			resource.GetNamespaceCache(),
 			resource.GetMatchingServiceResolver(),
 		),
