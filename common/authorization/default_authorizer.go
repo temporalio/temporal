@@ -84,7 +84,6 @@ func (a *defaultAuthorizer) Authorize(_ context.Context, claims *Claims, target 
 }
 
 func ApiName(api string) string {
-
 	index := strings.LastIndex(api, "/")
 	if index > -1 {
 		return api[index+1:]

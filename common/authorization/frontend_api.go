@@ -25,34 +25,32 @@
 package authorization
 
 var readOnlyNamespaceAPI = map[string]struct{}{
-	"DescribeNamespace":              struct{},
-	"GetWorkflowExecutionHistory":    nil,
-	"ListOpenWorkflowExecutions":     nil,
-	"ListClosedWorkflowExecutions":   nil,
-	"ListWorkflowExecutions":         nil,
-	"ListArchivedWorkflowExecutions": nil,
-	"ScanWorkflowExecutions":         nil,
-	"CountWorkflowExecutions":        nil,
-	"QueryWorkflow":                  nil,
-	"DescribeWorkflowExecution":      nil,
-	"DescribeTaskQueue":              nil,
-	"ListTaskQueuePartitions":        nil,
+	"DescribeNamespace":              {},
+	"GetWorkflowExecutionHistory":    {},
+	"ListOpenWorkflowExecutions":     {},
+	"ListClosedWorkflowExecutions":   {},
+	"ListWorkflowExecutions":         {},
+	"ListArchivedWorkflowExecutions": {},
+	"ScanWorkflowExecutions":         {},
+	"CountWorkflowExecutions":        {},
+	"QueryWorkflow":                  {},
+	"DescribeWorkflowExecution":      {},
+	"DescribeTaskQueue":              {},
+	"ListTaskQueuePartitions":        {},
 }
 
-var readOnlyGlobalAPI = map[string]interface{}{
-	"ListNamespaces":      nil,
-	"GetSearchAttributes": nil,
-	"GetClusterInfo":      nil,
+var readOnlyGlobalAPI = map[string]struct{}{
+	"ListNamespaces":      {},
+	"GetSearchAttributes": {},
+	"GetClusterInfo":      {},
 }
 
 func IsReadOnlyNamespaceAPI(api string) bool {
-
 	_, found := readOnlyNamespaceAPI[api]
 	return found
 }
 
 func IsReadOnlyGlobalAPI(api string) bool {
-
 	_, found := readOnlyGlobalAPI[api]
 	return found
 }
