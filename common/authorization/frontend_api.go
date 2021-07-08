@@ -24,8 +24,8 @@
 
 package authorization
 
-var readOnlyNamespaceAPI = map[string]interface{}{
-	"DescribeNamespace":              nil,
+var readOnlyNamespaceAPI = map[string]struct{}{
+	"DescribeNamespace":              struct{},
 	"GetWorkflowExecutionHistory":    nil,
 	"ListOpenWorkflowExecutions":     nil,
 	"ListClosedWorkflowExecutions":   nil,
