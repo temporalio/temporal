@@ -88,7 +88,11 @@ func convertErrors(
 	errors = sortErrors(errors)
 	if len(errors) == 0 {
 		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("Encounter unknown error: %v", printRecords(records)),
+			Msg: fmt.Sprintf("Encounter unknown error: shard ID: %v, range ID: %v, error: %v",
+				requestShardID,
+				requestRangeID,
+				printRecords(records),
+			),
 		}
 	}
 	return errors[0]
