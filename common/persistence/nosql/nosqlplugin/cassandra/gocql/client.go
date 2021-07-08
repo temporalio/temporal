@@ -149,13 +149,6 @@ func NewCassandraCluster(
 	cluster.ProtoVersion = 4
 	cluster.Consistency = cfg.Consistency.GetConsistency()
 	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
-
-	cluster.ReconnectionPolicy = &gocql.ExponentialReconnectionPolicy{
-		MaxRetries:      30,
-		InitialInterval: time.Second,
-		MaxInterval:     10 * time.Second,
-	}
-
 	cluster.PoolConfig.HostSelectionPolicy = gocql.TokenAwareHostPolicy(gocql.RoundRobinHostPolicy())
 	return cluster, nil
 }
