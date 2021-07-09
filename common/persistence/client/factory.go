@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
@@ -165,12 +166,15 @@ func (f *factoryImpl) NewTaskManager() (p.TaskManager, error) {
 	if err != nil {
 		return nil, err
 	}
+	taggedLogger := log.With(f.logger,
+		tag.NewStringTag("PersistenceStore", taskStore.GetName()),
+	)
 	result := p.NewTaskManager(taskStore)
 	if ds.ratelimit != nil {
-		result = p.NewTaskPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
+		result = p.NewTaskPersistenceRateLimitedClient(result, ds.ratelimit, taggedLogger)
 	}
 	if f.metricsClient != nil {
-		result = p.NewTaskPersistenceMetricsClient(result, f.metricsClient, f.logger)
+		result = p.NewTaskPersistenceMetricsClient(result, f.metricsClient, taggedLogger)
 	}
 	return result, nil
 }
@@ -179,15 +183,18 @@ func (f *factoryImpl) NewTaskManager() (p.TaskManager, error) {
 func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
 	ds := f.datastores[storeTypeShard]
 	shardStore, err := ds.factory.NewShardStore()
+	taggedLogger := log.With(f.logger,
+		tag.NewStringTag("PersistenceStore", shardStore.GetName()),
+	)
 	result := p.NewShardManager(shardStore)
 	if err != nil {
 		return nil, err
 	}
 	if ds.ratelimit != nil {
-		result = p.NewShardPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
+		result = p.NewShardPersistenceRateLimitedClient(result, ds.ratelimit, taggedLogger)
 	}
 	if f.metricsClient != nil {
-		result = p.NewShardPersistenceMetricsClient(result, f.metricsClient, f.logger)
+		result = p.NewShardPersistenceMetricsClient(result, f.metricsClient, taggedLogger)
 	}
 	return result, nil
 }
@@ -199,12 +206,15 @@ func (f *factoryImpl) NewHistoryManager() (p.HistoryManager, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := p.NewHistoryV2ManagerImpl(store, f.logger, f.config.TransactionSizeLimit)
+	taggedLogger := log.With(f.logger,
+		tag.NewStringTag("PersistenceStore", store.GetName()),
+	)
+	result := p.NewHistoryV2ManagerImpl(store, taggedLogger, f.config.TransactionSizeLimit)
 	if ds.ratelimit != nil {
-		result = p.NewHistoryV2PersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
+		result = p.NewHistoryV2PersistenceRateLimitedClient(result, ds.ratelimit, taggedLogger)
 	}
 	if f.metricsClient != nil {
-		result = p.NewHistoryV2PersistenceMetricsClient(result, f.metricsClient, f.logger)
+		result = p.NewHistoryV2PersistenceMetricsClient(result, f.metricsClient, taggedLogger)
 	}
 	return result, nil
 }
@@ -218,13 +228,15 @@ func (f *factoryImpl) NewMetadataManager() (p.MetadataManager, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	result := p.NewMetadataManagerImpl(store, f.logger, f.clusterName)
+	taggedLogger := log.With(f.logger,
+		tag.NewStringTag("PersistenceStore", store.GetName()),
+	)
+	result := p.NewMetadataManagerImpl(store, taggedLogger, f.clusterName)
 	if ds.ratelimit != nil {
-		result = p.NewMetadataPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
+		result = p.NewMetadataPersistenceRateLimitedClient(result, ds.ratelimit, taggedLogger)
 	}
 	if f.metricsClient != nil {
-		result = p.NewMetadataPersistenceMetricsClient(result, f.metricsClient, f.logger)
+		result = p.NewMetadataPersistenceMetricsClient(result, f.metricsClient, taggedLogger)
 	}
 	return result, nil
 }
@@ -238,13 +250,15 @@ func (f *factoryImpl) NewClusterMetadataManager() (p.ClusterMetadataManager, err
 	if err != nil {
 		return nil, err
 	}
-
-	result := p.NewClusterMetadataManagerImpl(store, f.logger)
+	taggedLogger := log.With(f.logger,
+		tag.NewStringTag("PersistenceStore", store.GetName()),
+	)
+	result := p.NewClusterMetadataManagerImpl(store, taggedLogger)
 	if ds.ratelimit != nil {
-		result = p.NewClusterMetadataPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
+		result = p.NewClusterMetadataPersistenceRateLimitedClient(result, ds.ratelimit, taggedLogger)
 	}
 	if f.metricsClient != nil {
-		result = p.NewClusterMetadataPersistenceMetricsClient(result, f.metricsClient, f.logger)
+		result = p.NewClusterMetadataPersistenceMetricsClient(result, f.metricsClient, taggedLogger)
 	}
 	return result, nil
 }
@@ -259,12 +273,15 @@ func (f *factoryImpl) NewExecutionManager(
 	if err != nil {
 		return nil, err
 	}
-	result := p.NewExecutionManager(store, f.logger)
+	taggedLogger := log.With(f.logger,
+		tag.NewStringTag("PersistenceStore", store.GetName()),
+	)
+	result := p.NewExecutionManager(store, taggedLogger)
 	if ds.ratelimit != nil {
-		result = p.NewWorkflowExecutionPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
+		result = p.NewWorkflowExecutionPersistenceRateLimitedClient(result, ds.ratelimit, taggedLogger)
 	}
 	if f.metricsClient != nil {
-		result = p.NewWorkflowExecutionPersistenceMetricsClient(result, f.metricsClient, f.logger)
+		result = p.NewWorkflowExecutionPersistenceMetricsClient(result, f.metricsClient, taggedLogger)
 	}
 	return result, nil
 }
@@ -285,18 +302,21 @@ func (f *factoryImpl) NewVisibilityManager() (p.VisibilityManager, error) {
 	if err != nil {
 		return nil, err
 	}
+	taggedLogger := log.With(f.logger,
+		tag.NewStringTag("PersistenceStore", store.GetName()),
+	)
 
 	// This visibility manager is used by DB visibility only and doesn't care about search attributes.
-	result := p.NewVisibilityManagerImpl(store, searchattribute.NewSystemProvider(), "", f.logger)
+	result := p.NewVisibilityManagerImpl(store, searchattribute.NewSystemProvider(), "", taggedLogger)
 	if ds.ratelimit != nil {
-		result = p.NewVisibilityPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
+		result = p.NewVisibilityPersistenceRateLimitedClient(result, ds.ratelimit, taggedLogger)
 	}
 
 	if visConfig.EnableSampling() {
-		result = p.NewVisibilitySamplingClient(result, visConfig, f.metricsClient, f.logger)
+		result = p.NewVisibilitySamplingClient(result, visConfig, f.metricsClient, taggedLogger)
 	}
 	if f.metricsClient != nil {
-		result = p.NewVisibilityPersistenceMetricsClient(result, f.metricsClient, f.logger)
+		result = p.NewVisibilityPersistenceMetricsClient(result, f.metricsClient, taggedLogger)
 	}
 
 	return result, nil
