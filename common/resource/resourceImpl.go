@@ -373,6 +373,8 @@ func New(
 	return impl, nil
 }
 
+
+// todomigryz: this should be moved to matching service
 // Start start all resources
 func (h *Impl) Start() {
 
@@ -402,6 +404,8 @@ func (h *Impl) Start() {
 	rand.Seed(time.Now().UnixNano())
 }
 
+
+// todomigryz: this should be moved to matching service
 // Stop stops all resources
 func (h *Impl) Stop() {
 
@@ -647,8 +651,10 @@ func NewMatchingResource(
 	serviceName string,
 	visibilityManagerInitializer VisibilityManagerInitializer,
 	persistenceBean persistenceClient.Bean,
+	namespaceCache cache.NamespaceCache,
+	clusterMetadata  cluster.Metadata,
+	metricsClient metrics.Client,
 ) (impl *Impl, retError error) {
-
 	numShards := params.PersistenceConfig.NumHistoryShards
 	hostName, err := os.Hostname()
 	if err != nil {
@@ -658,15 +664,6 @@ func NewMatchingResource(
 	grpcListener := params.RPCFactory.GetGRPCListener()
 
 	ringpopChannel := params.RPCFactory.GetRingpopChannel()
-
-
-	clusterMetadata := cluster.NewMetadata(
-		params.ClusterMetadataConfig.EnableGlobalNamespace,
-		params.ClusterMetadataConfig.FailoverVersionIncrement,
-		params.ClusterMetadataConfig.MasterClusterName,
-		params.ClusterMetadataConfig.CurrentClusterName,
-		params.ClusterMetadataConfig.ClusterInformation,
-	)
 
 	membershipFactory, err := params.MembershipFactoryInitializer(persistenceBean, taggedLogger)
 	if err != nil {
@@ -683,7 +680,7 @@ func NewMatchingResource(
 		client.NewRPCClientFactory(
 			params.RPCFactory,
 			membershipMonitor,
-			params.MetricsClient,
+			metricsClient, // replaced params.MetricsClient,
 			dynamicCollection,
 			numShards,
 			taggedLogger,
@@ -727,14 +724,6 @@ func NewMatchingResource(
 		return nil, err
 	}
 
-	// todomigryz: inject NamespaceCache
-	namespaceCache := cache.NewNamespaceCache(
-		persistenceBean.GetMetadataManager(),
-		clusterMetadata,
-		params.MetricsClient,
-		taggedLogger,
-	)
-
 	frontendRawClient := clientBean.GetFrontendClient()
 	frontendClient := frontend.NewRetryableClient(
 		frontendRawClient,
@@ -762,13 +751,13 @@ func NewMatchingResource(
 	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
 		HistoryV2Manager: persistenceBean.GetHistoryManager(),
 		Logger:           taggedLogger,
-		MetricsClient:    params.MetricsClient,
+		MetricsClient:    metricsClient, // replaced params.MetricsClient,
 		ClusterMetadata:  clusterMetadata,
 		NamespaceCache:   namespaceCache,
 	}
 	visibilityArchiverBootstrapContainer := &archiver.VisibilityBootstrapContainer{
 		Logger:          taggedLogger,
-		MetricsClient:   params.MetricsClient,
+		MetricsClient:   metricsClient, // replaced params.MetricsClient,
 		ClusterMetadata: clusterMetadata,
 		NamespaceCache:  namespaceCache,
 	}
@@ -798,7 +787,7 @@ func NewMatchingResource(
 		namespaceCache:    namespaceCache,
 		timeSource:        clock.NewRealTimeSource(),
 		payloadSerializer: persistence.NewPayloadSerializer(),
-		metricsClient:     params.MetricsClient,
+		metricsClient:     metricsClient, // todomigryz: remove. replaced params.MetricsClient, should not be used any more
 		archivalMetadata:  params.ArchivalMetadata,
 		archiverProvider:  params.ArchiverProvider,
 

@@ -116,6 +116,7 @@ func NewClientWorker(container *BootstrapContainer) ClientWorker {
 	return clientWorker
 }
 
+// todo: might cause closing of closed stream if worker.Start() fails.
 // Start the ClientWorker
 func (w *clientWorker) Start() error {
 	if err := w.worker.Start(); err != nil {

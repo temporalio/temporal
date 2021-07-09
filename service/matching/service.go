@@ -33,6 +33,8 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/resolver"
@@ -111,10 +113,11 @@ AudienceGetter               authorization.JWTAudienceMapper
 //  When debuging, compare all three for relevant initial implementation.
 // NewService builds a new matching service
 func NewService(
-	logger          log.Logger, // comes from BootstrapParams.Logger
+	logger log.Logger, // comes from BootstrapParams.Logger
 	serviceConfig *Config,
 	params *resource.BootstrapParams,
 ) (*Service, error) {
+	metricsClient := params.MetricsClient
 	throttledLoggerMaxRPS := serviceConfig.ThrottledLogRPS
 	taggedLogger := log.With(logger, tag.Service(serviceName))
 	throttledLogger := log.NewThrottledLogger(
@@ -143,14 +146,31 @@ func NewService(
 		},
 		params.AbstractDatastoreFactory,
 		params.ClusterMetadataConfig.CurrentClusterName,
-		params.MetricsClient,
+		metricsClient,
 		taggedLogger,
 	))
 	if err != nil {
 		return nil, err
 	}
 
+	clusterMetadata := cluster.NewMetadata(
+		params.ClusterMetadataConfig.EnableGlobalNamespace,
+		params.ClusterMetadataConfig.FailoverVersionIncrement,
+		params.ClusterMetadataConfig.MasterClusterName,
+		params.ClusterMetadataConfig.CurrentClusterName,
+		params.ClusterMetadataConfig.ClusterInformation,
+	)
 
+	// todomigryz: inject NamespaceCache
+	namespaceCache := cache.NewNamespaceCache(
+		persistenceBean.GetMetadataManager(),
+		clusterMetadata,
+		metricsClient,
+		taggedLogger,
+	)
+
+	///////////////////////
+	// Removing resource //
 	serviceResource, err := resource.NewMatchingResource(
 		params,
 		taggedLogger,
@@ -164,17 +184,23 @@ func NewService(
 			return persistenceBean.GetVisibilityManager(), nil
 		},
 		persistenceBean,
+		namespaceCache,
+		clusterMetadata,
+		metricsClient,
 	)
 	if err != nil {
 		return nil, err
 	}
+	// Removing resource end //
+	///////////////////////////
+
 
 	// todomigryz: inject telemetry interceptor
 	// todomigryz: Inject namespace cache, remove it from resource
 	// todomigryz: Inject metricsClient, remove it from resource
 	metricsInterceptor := interceptor.NewTelemetryInterceptor(
-		serviceResource.GetNamespaceCache(),
-		serviceResource.GetMetricsClient(),
+		namespaceCache,
+		metricsClient,
 		metrics.MatchingAPIMetricsScopes(),
 		logger,
 	)
