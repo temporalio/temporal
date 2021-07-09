@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/resource"
 )
 
 type (
@@ -65,7 +64,6 @@ var (
 
 // NewHandler creates a gRPC handler for the matchingservice
 func NewHandler(
-	resource resource.Resource,
 	config *Config,
 	logger log.Logger,
 	throttledLogger log.ThrottledLogger,

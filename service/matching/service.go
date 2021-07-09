@@ -25,13 +25,19 @@
 package matching
 
 import (
+	"math/rand"
+	"net"
 	"sync/atomic"
 	"time"
 
+	"github.com/uber-go/tally"
+	"github.com/uber/tchannel-go"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/membership"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -52,22 +58,27 @@ import (
 
 // Service represents the matching service
 type Service struct {
-	////////////////////////////////////////////////////
-	// todomigryz: added from Resource
-	resource.Resource
 	// logger          log.Logger
 	taggedLogger    log.Logger // todomigryz: rename to logger, unless untagged is required.
 	throttledLogger log.Logger // todomigryz: this should not be required. Transient dependency?
 
 	// todomigryz: added from Resource Done
-	////////////////////////////////////////////////////
-
+	// //////////////////////////////////////////////////
 
 	status  int32
 	handler *Handler
 	config  *Config
 
 	server *grpc.Server
+
+	metricsScope           tally.Scope
+	runtimeMetricsReporter *metrics.RuntimeMetricsReporter
+	membershipMonitor      membership.Monitor
+	namespaceCache         cache.NamespaceCache
+	visibilityMgr          persistence.VisibilityManager
+	persistenceBean        *persistenceClient.BeanImpl
+	ringpopChannel         *tchannel.Channel
+	grpcListener           net.Listener
 }
 
 // todomigryz: check if I can decouple BootstrapParams.
@@ -167,6 +178,7 @@ func NewService(
 	)
 
 	grpcServer := grpc.NewServer(grpcServerOptions...)
+	grpcListener := params.RPCFactory.GetGRPCListener()
 
 	dynamicCollection := dynamicconfig.NewCollection(params.DynamicConfigClient, taggedLogger)
 
@@ -206,6 +218,9 @@ func NewService(
 		return nil, err
 	}
 
+	// todomigryz: @Alex how does this work?
+	ringpopChannel := params.RPCFactory.GetRingpopChannel()
+
 	historyRawClient := clientBean.GetHistoryClient()
 	historyClient := history.NewRetryableClient(
 		historyRawClient,
@@ -213,39 +228,63 @@ func NewService(
 		common.IsWhitelistServiceTransientError,
 	)
 
-
-	/////////////////////////////////////
-	// todomigryz:  Removing resource //
-	// todomigryz: do we really need the rest of Resource???
-	serviceResource, err := resource.NewMatchingResource(
-		params,
+	runtimeMetricsReporter := metrics.NewRuntimeMetricsReporter(
+		params.MetricsScope,
+		time.Minute,
 		taggedLogger,
-		throttledLogger,
-		common.MatchingServiceName,
-		func(
-			persistenceBean persistenceClient.Bean,
-			searchAttributesProvider searchattribute.Provider,
-			logger log.Logger,
-		) (persistence.VisibilityManager, error) {
-			return persistenceBean.GetVisibilityManager(), nil
-		},
+		params.InstanceID,
+	)
+
+
+	visibilityManagerInitializer := func(
+		persistenceBean persistenceClient.Bean,
+		searchAttributesProvider searchattribute.Provider,
+		logger log.Logger,
+	) (persistence.VisibilityManager, error) {
+		return persistenceBean.GetVisibilityManager(), nil
+	}
+
+	saProvider := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
+
+	visibilityMgr, err := visibilityManagerInitializer(
 		persistenceBean,
-		namespaceCache,
-		clusterMetadata,
-		metricsClient,
-		membershipMonitor,
-		clientBean,
-		numShards,
-		matchingRawClient,
-		matchingServiceResolver,
-		historyClient,
-		historyRawClient,
-		)
+		saProvider,
+		taggedLogger,
+	)
 	if err != nil {
 		return nil, err
 	}
-	// Removing resource end //
-	///////////////////////////
+
+	// /////////////////////////////////////
+	// // todomigryz:  Removing resource //
+	// // todomigryz: do we really need the rest of Resource???
+	// serviceResource, err := resource.NewMatchingResource(
+	// 	params,
+	// 	taggedLogger,
+	// 	throttledLogger,
+	// 	common.MatchingServiceName,
+	// 	persistenceBean,
+	// 	namespaceCache,
+	// 	clusterMetadata,
+	// 	metricsClient,
+	// 	membershipMonitor,
+	// 	clientBean,
+	// 	numShards,
+	// 	matchingRawClient,
+	// 	matchingServiceResolver,
+	// 	historyClient,
+	// 	historyRawClient,
+	// 	runtimeMetricsReporter,
+	// 	visibilityMgr,
+	// 	saProvider,
+	// 	ringpopChannel,
+	// 	grpcListener,
+	// 	)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// // Removing resource end //
+	// ///////////////////////////
 
 
 	engine := NewEngine(
@@ -260,7 +299,6 @@ func NewService(
 	)
 
 	handler := NewHandler(
-		serviceResource,
 		serviceConfig,
 		taggedLogger,
 		throttledLogger,
@@ -269,8 +307,8 @@ func NewService(
 		namespaceCache,
 	)
 
+
 	return &Service{
-		Resource:     serviceResource,
 		status:       common.DaemonStatusInitialized,
 		config:       serviceConfig,
 		server:       grpcServer,
@@ -279,6 +317,15 @@ func NewService(
 		// logger:       logger,
 		taggedLogger: taggedLogger,
 		throttledLogger: throttledLogger,
+
+		metricsScope: params.MetricsScope,
+		runtimeMetricsReporter: runtimeMetricsReporter,
+		membershipMonitor: membershipMonitor,
+		namespaceCache: namespaceCache,
+		visibilityMgr: visibilityMgr,
+		persistenceBean: persistenceBean,
+		ringpopChannel: ringpopChannel,
+		grpcListener: grpcListener,
 	}, nil
 }
 
@@ -295,31 +342,25 @@ func (s *Service) Start() {
 	//////////////////////////////////////
 	// todomigryz: inline Resource.Start()
 	// must start base service first
-	s.Resource.Start()
-	// if !atomic.CompareAndSwapInt32(
-	// 	&h.status,
-	// 	common.DaemonStatusInitialized,
-	// 	common.DaemonStatusStarted,
-	// ) {
-	// 	return
-	// }
-	//
-	// h.metricsScope.Counter(metrics.RestartCount).Inc(1)
-	// h.runtimeMetricsReporter.Start()
-	//
-	// h.membershipMonitor.Start()
-	// h.namespaceCache.Start()
-	//
-	// hostInfo, err := h.membershipMonitor.WhoAmI()
-	// if err != nil {
-	// 	h.logger.Fatal("fail to get host info from membership monitor", tag.Error(err))
-	// }
+	// s.Resource.Start()
+	s.metricsScope.Counter(metrics.RestartCount).Inc(1)
+	s.runtimeMetricsReporter.Start()
+
+	s.membershipMonitor.Start()
+	s.namespaceCache.Start()
+
+	// todomigryz: remove if hostInfo not used
+	hostInfo, err := s.membershipMonitor.WhoAmI()
+	if err != nil {
+		s.taggedLogger.Fatal("fail to get host info from membership monitor", tag.Error(err))
+	}
 	// h.hostInfo = hostInfo
-	//
-	// // The service is now started up
-	// h.logger.Info("Service resources started", tag.Address(hostInfo.GetAddress()))
-	// // seed the random generator once for this service
-	// rand.Seed(time.Now().UnixNano())
+
+	// The service is now started up
+	s.taggedLogger.Info("Service resources started", tag.Address(hostInfo.GetAddress()))
+
+	// seed the random generator once for this service
+	rand.Seed(time.Now().UnixNano())
 	// todomigryz: inline Resource.Start() done
 	//////////////////////////////////////
 
@@ -328,7 +369,7 @@ func (s *Service) Start() {
 	matchingservice.RegisterMatchingServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.handler)
 
-	listener := s.GetGRPCListener()
+	listener := s.grpcListener
 	logger.Info("Starting to serve on matching listener")
 	if err := s.server.Serve(listener); err != nil {
 		logger.Fatal("Failed to serve on matching listener", tag.Error(err))
@@ -347,7 +388,7 @@ func (s *Service) Stop() {
 
 	// remove self from membership ring and wait for traffic to drain
 	s.taggedLogger.Info("ShutdownHandler: Evicting self from membership ring")
-	s.GetMembershipMonitor().EvictSelf()
+	s.membershipMonitor.EvictSelf()
 	s.taggedLogger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	time.Sleep(s.config.ShutdownDrainDuration())
 
@@ -358,24 +399,17 @@ func (s *Service) Stop() {
 
 	/////////////////////////////////////////////////
 	// s.Resource.Stop() // todomigryz: inlined below
-	//
-	// todomigryz: ATTENTION this is another status coming from Resource
-	// if !atomic.CompareAndSwapInt32(
-	// 	&h.status,
-	// 	common.DaemonStatusStarted,
-	// 	common.DaemonStatusStopped,
-	// ) {
-	// 	return
-	// }
-	//
-	// h.namespaceCache.Stop()
-	// h.membershipMonitor.Stop()
-	// h.ringpopChannel.Close()
-	// h.runtimeMetricsReporter.Stop()
-	// h.persistenceBean.Close()
-	// if h.visibilityMgr != nil {
-	// 	h.visibilityMgr.Close()
-	// }
+
+	s.namespaceCache.Stop()
+	s.membershipMonitor.Stop()
+	s.ringpopChannel.Close() // todomigryz: we do not start this in Start()
+	s.runtimeMetricsReporter.Stop()
+	s.persistenceBean.Close() // todomigryz: we do not start this in Start()
+
+	// todomigryz: @Alex why do we need visibilityMgr in matching
+	if s.visibilityMgr != nil {
+		s.visibilityMgr.Close()
+	}
 	// todomigryz: done inlining Resource.Stop
 	/////////////////////////////////////////////////
 

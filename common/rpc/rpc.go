@@ -157,6 +157,7 @@ func (d *RPCFactory) GetRingpopChannel() *tchannel.Channel {
 			d.logger.Fatal("Failed to create ringpop TChannel", tag.Error(err))
 		}
 
+		// todo: this should be moved to a separate method and called explicitly at Init or Start
 		err = d.ringpopChannel.ListenAndServe(ringpopHostAddress)
 		if err != nil {
 			d.logger.Fatal("Failed to start ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))

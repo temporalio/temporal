@@ -652,7 +652,6 @@ func NewMatchingResource(
 	taggedLogger TaggedLogger,
 	throttledLogger log.ThrottledLogger,
 	serviceName string,
-	visibilityManagerInitializer VisibilityManagerInitializer,
 	persistenceBean persistenceClient.Bean,
 	namespaceCache cache.NamespaceCache,
 	clusterMetadata cluster.Metadata,
@@ -664,17 +663,19 @@ func NewMatchingResource(
 	matchingServiceResolver membership.ServiceResolver,
 	historyClient historyservice.HistoryServiceClient,
 	historyRawClient historyservice.HistoryServiceClient,
+	runtimeMetricsReporter *metrics.RuntimeMetricsReporter,
+	visibilityMgr persistence.VisibilityManager,
+	saProvider *persistence.SearchAttributesManager,
+	ringpopChannel *tchannel.Channel,
+	grpcListener net.Listener,
 ) (impl *Impl, retError error) {
 	hostName, err := os.Hostname()
 	if err != nil {
 		return nil, err
 	}
 
-	grpcListener := params.RPCFactory.GetGRPCListener()
 
-	ringpopChannel := params.RPCFactory.GetRingpopChannel()
-
-
+	// todomigryz: seems we are not using most of these resolver? I don't see direct calls/dependencies.
 	frontendServiceResolver, err := membershipMonitor.GetResolver(common.FrontendServiceName)
 	if err != nil {
 		return nil, err
@@ -690,18 +691,8 @@ func NewMatchingResource(
 		return nil, err
 	}
 
-	saProvider := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
 
 	saManager := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
-
-	visibilityMgr, err := visibilityManagerInitializer(
-		persistenceBean,
-		saProvider,
-		taggedLogger,
-	)
-	if err != nil {
-		return nil, err
-	}
 
 	frontendRawClient := clientBean.GetFrontendClient()
 	frontendClient := frontend.NewRetryableClient(
@@ -718,6 +709,7 @@ func NewMatchingResource(
 	)
 
 
+	// todomigryz: Is this needed for matching? Together with visibility.
 	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
 		HistoryV2Manager: persistenceBean.GetHistoryManager(),
 		Logger:           taggedLogger,
@@ -797,12 +789,7 @@ func NewMatchingResource(
 		ringpopChannel: ringpopChannel,
 
 		// internal vars
-		runtimeMetricsReporter: metrics.NewRuntimeMetricsReporter(
-			params.MetricsScope,
-			time.Minute,
-			taggedLogger,
-			params.InstanceID,
-		),
+		runtimeMetricsReporter: runtimeMetricsReporter,
 		rpcFactory: params.RPCFactory,
 	}
 	return impl, nil
