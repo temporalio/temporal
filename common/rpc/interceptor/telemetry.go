@@ -62,7 +62,7 @@ var _ grpc.UnaryServerInterceptor = (*TelemetryInterceptor)(nil).Intercept
 func NewTelemetryInterceptor(
 	namespaceCache cache.NamespaceCache,
 	metricsClient metrics.Client,
-	scopes map[string]int,
+	scopes metrics.MatchingAPIMetricsScopes,
 	logger log.Logger,
 ) *TelemetryInterceptor {
 	return &TelemetryInterceptor{

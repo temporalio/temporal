@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/rpc/interceptor"
 )
 
 // Injectors from wire.go:
@@ -74,7 +75,9 @@ func InitializeMatchingService(logger log.Logger, params *resource.BootstrapPara
 		return nil, err
 	}
 	namespaceCache := cache.NewNamespaceCache(metadataManager, metadata, client, logger)
-	service, err := NewService(params, logger, taggedLogger, throttledLogger, matchingConfig, client, bean, metadata, namespaceCache)
+	matchingAPIMetricsScopes := metrics.NewMatchingAPIMetricsScopes()
+	telemetryInterceptor := interceptor.NewTelemetryInterceptor(namespaceCache, client, matchingAPIMetricsScopes, logger)
+	service, err := NewService(params, logger, taggedLogger, throttledLogger, matchingConfig, client, bean, metadata, namespaceCache, telemetryInterceptor)
 	if err != nil {
 		return nil, err
 	}

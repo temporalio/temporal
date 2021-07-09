@@ -33,6 +33,8 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 )
 
+type MatchingAPIMetricsScopes map[string]int
+
 func FrontendAPIMetricsNames() map[string]struct{} {
 	var service workflowservice.WorkflowServiceServer
 	t := reflect.TypeOf(&service).Elem()
@@ -74,7 +76,7 @@ func FrontendAPIMetricsScopes() map[string]int {
 	return apiNameToScope
 }
 
-func MatchingAPIMetricsScopes() map[string]int {
+func NewMatchingAPIMetricsScopes() MatchingAPIMetricsScopes {
 	apiNames := MatchingAPIMetricsNames()
 	apiNameToScope := make(map[string]int, len(apiNames))
 	for scope, name := range ScopeDefs[Matching] {

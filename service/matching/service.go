@@ -105,14 +105,8 @@ func NewService(
 	persistenceBean persistenceClient.Bean,
 	clusterMetadata cluster.Metadata,
 	namespaceCache cache.NamespaceCache,
+	metricsInterceptor *interceptor.TelemetryInterceptor,
 ) (*Service, error) {
-
-	metricsInterceptor := interceptor.NewTelemetryInterceptor(
-		namespaceCache,
-		metricsClient,
-		metrics.MatchingAPIMetricsScopes(),
-		logger,
-	)
 
 	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
 		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),

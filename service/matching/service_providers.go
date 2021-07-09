@@ -66,7 +66,7 @@ func RateLimitInterceptorProvider(rateLimiter quotas.RequestRateLimiter) (*inter
 }
 
 // todomigryz: metrics client comes from bootstrap params that I'm not using atm. Although these should be injected now.
-func MetricsInterceptorProvider(
+func TelemetryInterceptorProvider(
 	logger log.Logger,
 	metricsClient metrics.Client,
 	namespaceCache cache.NamespaceCache,
@@ -74,7 +74,7 @@ func MetricsInterceptorProvider(
 	metricsInterceptor := interceptor.NewTelemetryInterceptor(
 		namespaceCache,
 		metricsClient,
-		metrics.MatchingAPIMetricsScopes(),
+		metrics.NewMatchingAPIMetricsScopes(),
 		logger,
 	)
 	return metricsInterceptor, nil

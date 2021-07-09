@@ -27,12 +27,13 @@ package matching
 
 import (
 	"github.com/google/wire"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/rpc/interceptor"
 )
 
 // todomigryz: implement this method. Replace NewService method.
@@ -56,6 +57,8 @@ func InitializeMatchingService(
 		ClusterMetadataProvider,
 		MetadataManagerProvider,
 		cache.NewNamespaceCache,
+		metrics.NewMatchingAPIMetricsScopes,
+		interceptor.NewTelemetryInterceptor,
 		NewService,
 	)
 	return nil, nil
