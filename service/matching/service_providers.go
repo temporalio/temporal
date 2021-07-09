@@ -1,3 +1,25 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 package matching
 
 import (
@@ -22,7 +44,7 @@ import (
 )
 
 type (
-	MetricsReporter           metrics.Reporter
+	MetricsReporter metrics.Reporter
 )
 
 func TaggedLoggerProvider(logger log.Logger) (TaggedLogger, error) {
@@ -30,8 +52,7 @@ func TaggedLoggerProvider(logger log.Logger) (TaggedLogger, error) {
 	return taggedLogger, nil
 }
 
-
-func PriorityRateLimiterProvider(serviceConfig *Config)  (quotas.RequestRateLimiter, error){
+func PriorityRateLimiterProvider(serviceConfig *Config) (quotas.RequestRateLimiter, error) {
 	result := configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) })
 	return result, nil
 }
@@ -45,7 +66,11 @@ func RateLimitInterceptorProvider(rateLimiter quotas.RequestRateLimiter) (*inter
 }
 
 // todomigryz: metrics client comes from bootstrap params that I'm not using atm. Although these should be injected now.
-func MetricsInterceptorProvider(logger log.Logger, metricsClient metrics.Client, namespaceCache cache.NamespaceCache) (*interceptor.TelemetryInterceptor, error){
+func MetricsInterceptorProvider(
+	logger log.Logger,
+	metricsClient metrics.Client,
+	namespaceCache cache.NamespaceCache,
+) (*interceptor.TelemetryInterceptor, error) {
 	metricsInterceptor := interceptor.NewTelemetryInterceptor(
 		namespaceCache,
 		metricsClient,
@@ -55,10 +80,12 @@ func MetricsInterceptorProvider(logger log.Logger, metricsClient metrics.Client,
 	return metricsInterceptor, nil
 }
 
-func GrpcServerProvider(logger log.Logger,
+func GrpcServerProvider(
+	logger log.Logger,
 	metricsInterceptor *interceptor.TelemetryInterceptor,
 	rateLimiterInterceptor *interceptor.RateLimitInterceptor,
-	rpcFactory common.RPCFactory) (*grpc.Server, error) {
+	rpcFactory common.RPCFactory,
+) (*grpc.Server, error) {
 
 	grpcServerOptions, err := rpcFactory.GetInternodeGRPCServerOptions()
 	if err != nil {
@@ -100,7 +127,8 @@ func MetricsReporterProvider(
 	if err != nil {
 		return nil, fmt.Errorf(
 			"unable to initialize per-service metric client. "+
-				"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err)
+				"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err,
+		)
 	}
 	if serverReporter != sdkReporter {
 		sdkReporter.Stop(logger)

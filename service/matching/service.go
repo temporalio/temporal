@@ -103,27 +103,29 @@ func NewService(
 
 	persistenceMaxQPS := serviceConfig.PersistenceMaxQPS
 	persistenceGlobalMaxQPS := serviceConfig.PersistenceGlobalMaxQPS
-	persistenceBean, err := persistenceClient.NewBeanFromFactory(persistenceClient.NewFactory(
-		&params.PersistenceConfig,
-		params.PersistenceServiceResolver,
-		func(...dynamicconfig.FilterOption) int {
-			if persistenceGlobalMaxQPS() > 0 {
-				// TODO: We have a bootstrap issue to correctly find memberCount.  Membership relies on
-				// persistence to bootstrap membership ring, so we cannot have persistence rely on membership
-				// as it will cause circular dependency.
-				// ringSize, err := membershipMonitor.GetMemberCount(serviceName)
-				// if err == nil && ringSize > 0 {
-				// 	avgQuota := common.MaxInt(persistenceGlobalMaxQPS()/ringSize, 1)
-				// 	return common.MinInt(avgQuota, persistenceMaxQPS())
-				// }
-			}
-			return persistenceMaxQPS()
-		},
-		params.AbstractDatastoreFactory,
-		params.ClusterMetadataConfig.CurrentClusterName,
-		metricsClient,
-		taggedLogger,
-	))
+	persistenceBean, err := persistenceClient.NewBeanFromFactory(
+		persistenceClient.NewFactory(
+			&params.PersistenceConfig,
+			params.PersistenceServiceResolver,
+			func(...dynamicconfig.FilterOption) int {
+				if persistenceGlobalMaxQPS() > 0 {
+					// TODO: We have a bootstrap issue to correctly find memberCount.  Membership relies on
+					// persistence to bootstrap membership ring, so we cannot have persistence rely on membership
+					// as it will cause circular dependency.
+					// ringSize, err := membershipMonitor.GetMemberCount(serviceName)
+					// if err == nil && ringSize > 0 {
+					// 	avgQuota := common.MaxInt(persistenceGlobalMaxQPS()/ringSize, 1)
+					// 	return common.MinInt(avgQuota, persistenceMaxQPS())
+					// }
+				}
+				return persistenceMaxQPS()
+			},
+			params.AbstractDatastoreFactory,
+			params.ClusterMetadataConfig.CurrentClusterName,
+			metricsClient,
+			taggedLogger,
+		),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +231,6 @@ func NewService(
 		params.InstanceID,
 	)
 
-
 	// todomigryz: @Alex visibility should not be present in Matching
 	// visibilityManagerInitializer := func(
 	// 	persistenceBean persistenceClient.Bean,
@@ -281,15 +282,14 @@ func NewService(
 	// // Removing resource end //
 	// ///////////////////////////
 
-
 	engine := NewEngine(
 		persistenceBean.GetTaskManager(), // todomigryz: replaced serviceResource.GetTaskManager(),
-		historyClient, // todomigryz: replaced serviceResource.GetHistoryClient(),
-		matchingRawClient, // todomigryz: replaced serviceResource.GetMatchingRawClient(), // Use non retry client inside matching
+		historyClient,                    // todomigryz: replaced serviceResource.GetHistoryClient(),
+		matchingRawClient,                // todomigryz: replaced serviceResource.GetMatchingRawClient(), // Use non retry client inside matching
 		serviceConfig,
 		taggedLogger,
-		metricsClient, // todomigryz: replaced serviceResource.GetMetricsClient(),
-		namespaceCache, // todomigryz: replaced serviceResource.GetNamespaceCache(),
+		metricsClient,           // todomigryz: replaced serviceResource.GetMetricsClient(),
+		namespaceCache,          // todomigryz: replaced serviceResource.GetNamespaceCache(),
 		matchingServiceResolver, // todomigryz: replaced serviceResource.GetMatchingServiceResolver(),
 	)
 
@@ -302,24 +302,23 @@ func NewService(
 		namespaceCache,
 	)
 
-
 	return &Service{
-		status:       common.DaemonStatusInitialized,
-		config:       serviceConfig,
-		server:       grpcServer,
-		handler:      handler,
+		status:  common.DaemonStatusInitialized,
+		config:  serviceConfig,
+		server:  grpcServer,
+		handler: handler,
 
 		// logger:       logger,
 		logger:          taggedLogger,
 		throttledLogger: throttledLogger,
 
-		metricsScope: params.MetricsScope,
+		metricsScope:           params.MetricsScope,
 		runtimeMetricsReporter: runtimeMetricsReporter,
-		membershipMonitor: membershipMonitor,
-		namespaceCache: namespaceCache,
-		persistenceBean: persistenceBean,
-		ringpopChannel: ringpopChannel,
-		grpcListener: grpcListener,
+		membershipMonitor:      membershipMonitor,
+		namespaceCache:         namespaceCache,
+		persistenceBean:        persistenceBean,
+		ringpopChannel:         ringpopChannel,
+		grpcListener:           grpcListener,
 	}, nil
 }
 
@@ -332,8 +331,7 @@ func (s *Service) Start() {
 	logger := s.logger
 	logger.Info("matching starting")
 
-
-	//////////////////////////////////////
+	// ////////////////////////////////////
 	// todomigryz: inline Resource.Start()
 	// must start base service first
 	// s.Resource.Start()
@@ -356,7 +354,7 @@ func (s *Service) Start() {
 	// seed the random generator once for this service
 	rand.Seed(time.Now().UnixNano())
 	// todomigryz: inline Resource.Start() done
-	//////////////////////////////////////
+	// ////////////////////////////////////
 
 	s.handler.Start()
 
@@ -391,7 +389,7 @@ func (s *Service) Stop() {
 
 	s.handler.Stop()
 
-	/////////////////////////////////////////////////
+	// ///////////////////////////////////////////////
 	// s.Resource.Stop() // todomigryz: inlined below
 
 	s.namespaceCache.Stop()
@@ -405,7 +403,7 @@ func (s *Service) Stop() {
 		s.visibilityMgr.Close()
 	}
 	// todomigryz: done inlining Resource.Stop
-	/////////////////////////////////////////////////
+	// ///////////////////////////////////////////////
 
 	s.logger.Info("matching stopped")
 }

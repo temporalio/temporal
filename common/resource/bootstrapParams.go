@@ -47,9 +47,9 @@ type (
 	// BootstrapParams holds the set of parameters
 	// needed to bootstrap a service
 	BootstrapParams struct {
-		Name            string
-		InstanceID      string
-		Logger          log.Logger
+		Name       string
+		InstanceID string
+		Logger     log.Logger
 		// todo: this is not used.
 		//  Remove or do we need it anywhere? Initially it was used in oneBox set to BootstrapParams.Logger above.
 		// ThrottledLogger log.Logger
@@ -86,5 +86,8 @@ type (
 
 	// MembershipFactoryInitializerFunc is used for deferred initialization of the MembershipFactory
 	// to allow for the PersistenceBean to be constructed further downstream.
-	MembershipFactoryInitializerFunc func(persistenceBean persistenceClient.Bean, logger log.Logger) (MembershipMonitorFactory, error)
+	MembershipFactoryInitializerFunc func(
+		persistenceBean persistenceClient.Bean,
+		logger log.Logger,
+	) (MembershipMonitorFactory, error)
 )

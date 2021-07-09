@@ -110,7 +110,6 @@ func buildCLI() *cli.App {
 	return app
 }
 
-
 func run(c *cli.Context) error {
 	s, err := temporal.InitializeServer(c)
 	if err != nil {

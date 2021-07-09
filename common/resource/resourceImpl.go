@@ -147,8 +147,10 @@ func New(
 ) (impl *Impl, retError error) {
 
 	logger := log.With(params.Logger, tag.Service(serviceName))
-	throttledLogger := log.NewThrottledLogger(logger,
-		func() float64 { return float64(throttledLoggerMaxRPS()) })
+	throttledLogger := log.NewThrottledLogger(
+		logger,
+		func() float64 { return float64(throttledLoggerMaxRPS()) },
+	)
 
 	numShards := params.PersistenceConfig.NumHistoryShards
 	hostName, err := os.Hostname()
@@ -160,27 +162,29 @@ func New(
 
 	ringpopChannel := params.RPCFactory.GetRingpopChannel()
 
-	persistenceBean, err := persistenceClient.NewBeanFromFactory(persistenceClient.NewFactory(
-		&params.PersistenceConfig,
-		params.PersistenceServiceResolver,
-		func(...dynamicconfig.FilterOption) int {
-			if persistenceGlobalMaxQPS() > 0 {
-				// TODO: We have a bootstrap issue to correctly find memberCount.  Membership relies on
-				// persistence to bootstrap membership ring, so we cannot have persistence rely on membership
-				// as it will cause circular dependency.
-				// ringSize, err := membershipMonitor.GetMemberCount(serviceName)
-				// if err == nil && ringSize > 0 {
-				// 	avgQuota := common.MaxInt(persistenceGlobalMaxQPS()/ringSize, 1)
-				// 	return common.MinInt(avgQuota, persistenceMaxQPS())
-				// }
-			}
-			return persistenceMaxQPS()
-		},
-		params.AbstractDatastoreFactory,
-		params.ClusterMetadataConfig.CurrentClusterName,
-		params.MetricsClient,
-		logger,
-	))
+	persistenceBean, err := persistenceClient.NewBeanFromFactory(
+		persistenceClient.NewFactory(
+			&params.PersistenceConfig,
+			params.PersistenceServiceResolver,
+			func(...dynamicconfig.FilterOption) int {
+				if persistenceGlobalMaxQPS() > 0 {
+					// TODO: We have a bootstrap issue to correctly find memberCount.  Membership relies on
+					// persistence to bootstrap membership ring, so we cannot have persistence rely on membership
+					// as it will cause circular dependency.
+					// ringSize, err := membershipMonitor.GetMemberCount(serviceName)
+					// if err == nil && ringSize > 0 {
+					// 	avgQuota := common.MaxInt(persistenceGlobalMaxQPS()/ringSize, 1)
+					// 	return common.MinInt(avgQuota, persistenceMaxQPS())
+					// }
+				}
+				return persistenceMaxQPS()
+			},
+			params.AbstractDatastoreFactory,
+			params.ClusterMetadataConfig.CurrentClusterName,
+			params.MetricsClient,
+			logger,
+		),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -239,9 +243,15 @@ func New(
 		return nil, err
 	}
 
-	saProvider := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
+	saProvider := persistence.NewSearchAttributesManager(
+		clock.NewRealTimeSource(),
+		persistenceBean.GetClusterMetadataManager(),
+	)
 
-	saManager := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
+	saManager := persistence.NewSearchAttributesManager(
+		clock.NewRealTimeSource(),
+		persistenceBean.GetClusterMetadataManager(),
+	)
 
 	visibilityMgr, err := visibilityManagerInitializer(
 		persistenceBean,
@@ -373,7 +383,6 @@ func New(
 	return impl, nil
 }
 
-
 // todomigryz: this should be moved to matching service
 // Start start all resources
 func (h *Impl) Start() {
@@ -403,7 +412,6 @@ func (h *Impl) Start() {
 	// seed the random generator once for this service
 	rand.Seed(time.Now().UnixNano())
 }
-
 
 // todomigryz: this should be moved to matching service
 // Stop stops all resources
@@ -642,7 +650,6 @@ func (h *Impl) GetSearchAttributesManager() searchattribute.Manager {
 	return h.saManager
 }
 
-
 // todomigryz: might not be needed if can remove logger to providers.
 type TaggedLogger log.Logger
 
@@ -674,7 +681,6 @@ func NewMatchingResource(
 		return nil, err
 	}
 
-
 	// todomigryz: seems we are not using most of these resolver? I don't see direct calls/dependencies.
 	frontendServiceResolver, err := membershipMonitor.GetResolver(common.FrontendServiceName)
 	if err != nil {
@@ -691,8 +697,10 @@ func NewMatchingResource(
 		return nil, err
 	}
 
-
-	saManager := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
+	saManager := persistence.NewSearchAttributesManager(
+		clock.NewRealTimeSource(),
+		persistenceBean.GetClusterMetadataManager(),
+	)
 
 	frontendRawClient := clientBean.GetFrontendClient()
 	frontendClient := frontend.NewRetryableClient(
@@ -701,13 +709,11 @@ func NewMatchingResource(
 		common.IsWhitelistServiceTransientError,
 	)
 
-
 	matchingClient := matching.NewRetryableClient(
 		matchingRawClient,
 		common.CreateMatchingServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError,
 	)
-
 
 	// todomigryz: Is this needed for matching? Together with visibility.
 	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
@@ -790,8 +796,7 @@ func NewMatchingResource(
 
 		// internal vars
 		runtimeMetricsReporter: runtimeMetricsReporter,
-		rpcFactory: params.RPCFactory,
+		rpcFactory:             params.RPCFactory,
 	}
 	return impl, nil
 }
-

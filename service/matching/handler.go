@@ -69,14 +69,14 @@ func NewHandler(
 	throttledLogger log.ThrottledLogger,
 	metricsClient metrics.Client,
 	engine Engine,
-	namespaceCache  cache.NamespaceCache,
+	namespaceCache cache.NamespaceCache,
 ) *Handler {
 	handler := &Handler{
-		metricsClient: metricsClient, // replaced resource.GetMetricsClient(),
-		logger:        logger, //replaced resource.GetLogger(),
+		metricsClient:   metricsClient, // replaced resource.GetMetricsClient(),
+		logger:          logger,        // replaced resource.GetLogger(),
 		throttledLogger: throttledLogger,
-		engine: engine,
-		namespaceCache: namespaceCache,
+		engine:          engine,
+		namespaceCache:  namespaceCache,
 	}
 
 	// prevent from serving requests before matching engine is started and ready
@@ -96,7 +96,10 @@ func (h *Handler) Stop() {
 }
 
 // https://github.com/grpc/grpc/blob/master/doc/health-checking.md
-func (h *Handler) Check(_ context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
+func (h *Handler) Check(_ context.Context, request *healthpb.HealthCheckRequest) (
+	*healthpb.HealthCheckResponse,
+	error,
+) {
 	h.logger.Debug("Matching service health check endpoint (gRPC) reached.")
 
 	h.startWG.Wait()
@@ -217,7 +220,7 @@ func (h *Handler) PollWorkflowTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollWorkflowTaskQueueRequest,
 ) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
-	defer func (){
+	defer func() {
 		log.CapturePanic(h.logger, &retError)
 	}()
 	hCtx := h.newHandlerContext(
@@ -282,8 +285,10 @@ func (h *Handler) RespondQueryTaskCompleted(
 }
 
 // CancelOutstandingPoll is used to cancel outstanding pollers
-func (h *Handler) CancelOutstandingPoll(ctx context.Context,
-	request *matchingservice.CancelOutstandingPollRequest) (_ *matchingservice.CancelOutstandingPollResponse, retError error) {
+func (h *Handler) CancelOutstandingPoll(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingPollRequest,
+) (_ *matchingservice.CancelOutstandingPollResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,

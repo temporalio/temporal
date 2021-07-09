@@ -1,4 +1,24 @@
-
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
 
 package temporal
 
@@ -31,21 +51,32 @@ import (
 
 type VisibilityWritingMode string
 
-func AdvancedVisibilityWritingModeProvider(cfg *config.Config, dc *dynamicconfig.Collection ) (VisibilityWritingMode, error) {
-	advancedVisibilityWritingMode := dc.GetStringProperty(dynamicconfig.AdvancedVisibilityWritingMode, common.GetDefaultAdvancedVisibilityWritingMode(cfg.Persistence.IsAdvancedVisibilityConfigExist()))()
+func AdvancedVisibilityWritingModeProvider(cfg *config.Config, dc *dynamicconfig.Collection) (
+	VisibilityWritingMode,
+	error,
+) {
+	advancedVisibilityWritingMode := dc.GetStringProperty(
+		dynamicconfig.AdvancedVisibilityWritingMode,
+		common.GetDefaultAdvancedVisibilityWritingMode(cfg.Persistence.IsAdvancedVisibilityConfigExist()),
+	)()
 	return VisibilityWritingMode(advancedVisibilityWritingMode), nil
 }
 
 // todomigryz: verify if this needs custom type
-func AdvancedVisibilityStoreProvider(cfg *config.Config, visibilityWritingMode VisibilityWritingMode) (config.DataStore, error) {
+func AdvancedVisibilityStoreProvider(cfg *config.Config, visibilityWritingMode VisibilityWritingMode) (
+	config.DataStore,
+	error,
+) {
 	if visibilityWritingMode == common.AdvancedVisibilityWritingModeOff {
 		return config.DataStore{}, nil
 	}
 
 	advancedVisibilityStore, ok := cfg.Persistence.DataStores[cfg.Persistence.AdvancedVisibilityStore]
 	if !ok {
-		return config.DataStore{}, fmt.Errorf("unable to find advanced visibility store in config for %q key",
-			cfg.Persistence.AdvancedVisibilityStore)
+		return config.DataStore{}, fmt.Errorf(
+			"unable to find advanced visibility store in config for %q key",
+			cfg.Persistence.AdvancedVisibilityStore,
+		)
 	}
 
 	return advancedVisibilityStore, nil
@@ -62,10 +93,14 @@ func ESClientProvider(
 	persistenceServiceResolver resolver.ServiceResolver,
 	esConfig *config.Elasticsearch,
 	advancedVisibilityWritingMode VisibilityWritingMode,
-	) (esclient.Client, error) {
+) (esclient.Client, error) {
 
 	// todomigryz: this should be in start
-	err := verifyPersistenceCompatibleVersion(cfg.Persistence, persistenceServiceResolver, advancedVisibilityWritingMode != common.AdvancedVisibilityWritingModeOn)
+	err := verifyPersistenceCompatibleVersion(
+		cfg.Persistence,
+		persistenceServiceResolver,
+		advancedVisibilityWritingMode != common.AdvancedVisibilityWritingModeOn,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +186,8 @@ func makeMatchingBootstrapParams(
 		if err != nil {
 			return nil, fmt.Errorf(
 				"unable to initialize per-service metric client. "+
-					"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err)
+					"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err,
+			)
 		}
 		params.ServerMetricsReporter = serverReporter
 		params.SDKMetricsReporter = sdkReporter
@@ -177,16 +213,18 @@ func makeMatchingBootstrapParams(
 		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
 	}
 
-	params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
-		HostPort:     cfg.PublicClient.HostPort,
-		Namespace:    common.SystemLocalNamespace,
-		MetricsScope: globalTallyScope,
-		Logger:       log.NewSdkLogger(logger),
-		ConnectionOptions: sdkclient.ConnectionOptions{
-			TLS:                options,
-			DisableHealthCheck: true,
+	params.SdkClient, err = sdkclient.NewClient(
+		sdkclient.Options{
+			HostPort:     cfg.PublicClient.HostPort,
+			Namespace:    common.SystemLocalNamespace,
+			MetricsScope: globalTallyScope,
+			Logger:       log.NewSdkLogger(logger),
+			ConnectionOptions: sdkclient.ConnectionOptions{
+				TLS:                options,
+				DisableHealthCheck: true,
+			},
 		},
-	})
+	)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create public client: %w", err)
 	}
@@ -200,8 +238,14 @@ func makeMatchingBootstrapParams(
 		&cfg.NamespaceDefaults.Archival,
 	)
 
-	params.ArchiverProvider = provider.NewArchiverProvider(cfg.Archival.History.Provider, cfg.Archival.Visibility.Provider)
-	params.PersistenceConfig.TransactionSizeLimit = dynamicConfigCollection.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
+	params.ArchiverProvider = provider.NewArchiverProvider(
+		cfg.Archival.History.Provider,
+		cfg.Archival.Visibility.Provider,
+	)
+	params.PersistenceConfig.TransactionSizeLimit = dynamicConfigCollection.GetIntProperty(
+		dynamicconfig.TransactionSizeLimit,
+		common.DefaultTransactionSizeLimit,
+	)
 
 	params.Authorizer = authorizer
 	params.ClaimMapper = claimMapper
@@ -275,7 +319,8 @@ func makeBootstrapParams(
 		if err != nil {
 			return nil, fmt.Errorf(
 				"unable to initialize per-service metric client. "+
-					"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err)
+					"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err,
+			)
 		}
 		params.ServerMetricsReporter = serverReporter
 		params.SDKMetricsReporter = sdkReporter
@@ -301,16 +346,18 @@ func makeBootstrapParams(
 		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
 	}
 
-	params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
-		HostPort:     cfg.PublicClient.HostPort,
-		Namespace:    common.SystemLocalNamespace,
-		MetricsScope: globalTallyScope,
-		Logger:       log.NewSdkLogger(logger),
-		ConnectionOptions: sdkclient.ConnectionOptions{
-			TLS:                options,
-			DisableHealthCheck: true,
+	params.SdkClient, err = sdkclient.NewClient(
+		sdkclient.Options{
+			HostPort:     cfg.PublicClient.HostPort,
+			Namespace:    common.SystemLocalNamespace,
+			MetricsScope: globalTallyScope,
+			Logger:       log.NewSdkLogger(logger),
+			ConnectionOptions: sdkclient.ConnectionOptions{
+				TLS:                options,
+				DisableHealthCheck: true,
+			},
 		},
-	})
+	)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create public client: %w", err)
 	}
@@ -324,8 +371,14 @@ func makeBootstrapParams(
 		&cfg.NamespaceDefaults.Archival,
 	)
 
-	params.ArchiverProvider = provider.NewArchiverProvider(cfg.Archival.History.Provider, cfg.Archival.Visibility.Provider)
-	params.PersistenceConfig.TransactionSizeLimit = dynamicConfigCollection.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
+	params.ArchiverProvider = provider.NewArchiverProvider(
+		cfg.Archival.History.Provider,
+		cfg.Archival.Visibility.Provider,
+	)
+	params.PersistenceConfig.TransactionSizeLimit = dynamicConfigCollection.GetIntProperty(
+		dynamicconfig.TransactionSizeLimit,
+		common.DefaultTransactionSizeLimit,
+	)
 
 	params.Authorizer = authorizer
 	params.ClaimMapper = claimMapper
@@ -336,21 +389,21 @@ func makeBootstrapParams(
 }
 
 type ServicesProviderDeps struct {
-	cfg *config.Config
-	services ServiceNamesList
-	logger log.Logger
-	namespaceLogger NamespaceLogger
-	authorizer authorization.Authorizer
-	claimMapper authorization.ClaimMapper
-	dynamicConfigClient dynamicconfig.Client
-	dynamicConfigCollection *dynamicconfig.Collection
-	customDatastoreFactory persistenceClient.AbstractDataStoreFactory
-	metricReporters *MetricsReporters
-	tlsConfigProvider encryption.TLSConfigProvider
-	audienceGetter authorization.JWTAudienceMapper
+	cfg                        *config.Config
+	services                   ServiceNamesList
+	logger                     log.Logger
+	namespaceLogger            NamespaceLogger
+	authorizer                 authorization.Authorizer
+	claimMapper                authorization.ClaimMapper
+	dynamicConfigClient        dynamicconfig.Client
+	dynamicConfigCollection    *dynamicconfig.Collection
+	customDatastoreFactory     persistenceClient.AbstractDataStoreFactory
+	metricReporters            *MetricsReporters
+	tlsConfigProvider          encryption.TLSConfigProvider
+	audienceGetter             authorization.JWTAudienceMapper
 	persistenceServiceResolver resolver.ServiceResolver
-	esConfig *config.Elasticsearch
-	esClient esclient.Client
+	esConfig                   *config.Elasticsearch
+	esClient                   esclient.Client
 }
 
 func ServicesProvider(
@@ -381,7 +434,7 @@ func ServicesProvider(
 				deps.esClient,
 			)
 
-			if err != nil{
+			if err != nil {
 				return nil, err
 			}
 
@@ -391,7 +444,7 @@ func ServicesProvider(
 				deps.dynamicConfigClient,
 				params.ServerMetricsReporter,
 				deps.cfg.Services[svcName],
-				)
+			)
 			result[svcName] = svc
 			continue
 		default:
@@ -415,7 +468,7 @@ func ServicesProvider(
 			deps.esClient,
 		)
 
-		if err != nil{
+		if err != nil {
 			return nil, err
 		}
 
@@ -444,7 +497,7 @@ func ServerProvider(
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
 	dynamicConfigClient dynamicconfig.Client,
 	dc *dynamicconfig.Collection,
-	interruptCh   ServerInterruptCh,
+	interruptCh ServerInterruptCh,
 ) (*Server, error) {
 	// todomigryz: ultimately, we don't need serveropts here.
 	s, err := NewServer(
@@ -457,9 +510,6 @@ func ServerProvider(
 		dynamicConfigClient,
 		dc,
 		interruptCh,
-		)
+	)
 	return s, err
 }
-
-
-

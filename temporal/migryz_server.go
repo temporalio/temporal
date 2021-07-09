@@ -57,9 +57,9 @@ const (
 type (
 	// Server is temporal server.
 	Server struct {
-		//so                *serverOptions
+		// so                *serverOptions
 		dc                         *dynamicconfig.Collection
-		dynamicConfigClient dynamicconfig.Client
+		dynamicConfigClient        dynamicconfig.Client
 		config                     *config.Config
 		serviceNames               []string
 		services                   map[string]common.Daemon
@@ -152,14 +152,16 @@ func (s *Server) Start() error {
 		s.persistenceServiceResolver,
 		s.logger,
 		s.dc,
-		s.customDataStoreFactory)
+		s.customDataStoreFactory,
+	)
 
 	err = initSystemNamespaces(
 		&s.config.Persistence,
 		s.config.ClusterMetadata.CurrentClusterName,
 		s.persistenceServiceResolver,
 		s.logger,
-		s.customDataStoreFactory)
+		s.customDataStoreFactory,
+	)
 	if err != nil {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
@@ -215,7 +217,11 @@ func (s *Server) Stop() {
 	}
 }
 
-func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceServiceResolver resolver.ServiceResolver, checkVisibility bool) error {
+func verifyPersistenceCompatibleVersion(
+	config config.Persistence,
+	persistenceServiceResolver resolver.ServiceResolver,
+	checkVisibility bool,
+) error {
 	// cassandra schema version validation
 	if err := cassandra.VerifyCompatibleVersion(config, persistenceServiceResolver, checkVisibility); err != nil {
 		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
@@ -250,14 +256,25 @@ func copyCustomSearchAttributesFromDynamicConfigToClusterMetadata(
 
 	defaultTypeMap := map[string]interface{}{}
 
-	dcSearchAttributes, err := searchattribute.BuildTypeMap(dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, defaultTypeMap))
+	dcSearchAttributes, err := searchattribute.BuildTypeMap(
+		dc.GetMapProperty(
+			dynamicconfig.ValidSearchAttributes,
+			defaultTypeMap,
+		),
+	)
 	if err != nil {
-		logger.Error("Unable to read search attributes from dynamic config. Search attributes migration is cancelled.", tag.Error(err))
+		logger.Error(
+			"Unable to read search attributes from dynamic config. Search attributes migration is cancelled.",
+			tag.Error(err),
+		)
 		return
 	}
 	dcCustomSearchAttributes := searchattribute.FilterCustomOnly(dcSearchAttributes)
 	if len(dcCustomSearchAttributes) == 0 {
-		logger.Debug("Custom search attributes are not defined in dynamic config. Search attributes migration is cancelled.", tag.Error(err))
+		logger.Debug(
+			"Custom search attributes are not defined in dynamic config. Search attributes migration is cancelled.",
+			tag.Error(err),
+		)
 		return
 	}
 
@@ -273,7 +290,10 @@ func copyCustomSearchAttributesFromDynamicConfigToClusterMetadata(
 
 	clusterMetadataManager, err := factory.NewClusterMetadataManager()
 	if err != nil {
-		logger.Error("Unable to initialize cluster metadata manager. Search attributes migration is cancelled.", tag.Error(err))
+		logger.Error(
+			"Unable to initialize cluster metadata manager. Search attributes migration is cancelled.",
+			tag.Error(err),
+		)
 		return
 	}
 	defer clusterMetadataManager.Close()
@@ -282,22 +302,37 @@ func copyCustomSearchAttributesFromDynamicConfigToClusterMetadata(
 
 	existingSearchAttributes, err := saManager.GetSearchAttributes(visibilityIndex, true)
 	if err != nil {
-		logger.Error("Unable to read current search attributes from cluster metadata. Search attributes migration is cancelled.", tag.Error(err), tag.ESIndex(visibilityIndex))
+		logger.Error(
+			"Unable to read current search attributes from cluster metadata. Search attributes migration is cancelled.",
+			tag.Error(err),
+			tag.ESIndex(visibilityIndex),
+		)
 		return
 	}
 
 	if len(existingSearchAttributes.Custom()) != 0 {
-		logger.Debug("Search attributes already exist in cluster metadata. Search attributes migration is cancelled.", tag.Error(err))
+		logger.Debug(
+			"Search attributes already exist in cluster metadata. Search attributes migration is cancelled.",
+			tag.Error(err),
+		)
 		return
 	}
 
 	err = saManager.SaveSearchAttributes(visibilityIndex, dcCustomSearchAttributes)
 	if err != nil {
-		logger.Error("Unable to save search attributes to cluster metadata. Search attributes migration is cancelled.", tag.Error(err), tag.ESIndex(visibilityIndex))
+		logger.Error(
+			"Unable to save search attributes to cluster metadata. Search attributes migration is cancelled.",
+			tag.Error(err),
+			tag.ESIndex(visibilityIndex),
+		)
 		return
 	}
 
-	logger.Info("Search attributes are successfully saved from dynamic config to cluster metadata.", tag.Value(dcCustomSearchAttributes), tag.ESIndex(visibilityIndex))
+	logger.Info(
+		"Search attributes are successfully saved from dynamic config to cluster metadata.",
+		tag.Value(dcCustomSearchAttributes),
+		tag.ESIndex(visibilityIndex),
+	)
 }
 
 // updateClusterMetadataConfig performs a config check against the configured persistence store for cluster metadata.
@@ -333,7 +368,9 @@ func updateClusterMetadataConfig(
 				HistoryShardCount: cfg.Persistence.NumHistoryShards,
 				ClusterName:       cfg.ClusterMetadata.CurrentClusterName,
 				ClusterId:         uuid.New(),
-			}})
+			},
+		},
+	)
 	if err != nil {
 		logger.Warn("Failed to save cluster metadata.", tag.Error(err))
 	}
@@ -351,7 +388,8 @@ func updateClusterMetadataConfig(
 			mismatchLogMessage,
 			tag.Key("clusterMetadata.currentClusterName"),
 			tag.IgnoredValue(cfg.ClusterMetadata.CurrentClusterName),
-			tag.Value(resp.ClusterName))
+			tag.Value(resp.ClusterName),
+		)
 		cfg.ClusterMetadata.CurrentClusterName = resp.ClusterName
 	}
 
@@ -361,7 +399,8 @@ func updateClusterMetadataConfig(
 			mismatchLogMessage,
 			tag.Key("persistence.numHistoryShards"),
 			tag.IgnoredValue(cfg.Persistence.NumHistoryShards),
-			tag.Value(persistedShardCount))
+			tag.Value(persistedShardCount),
+		)
 		cfg.Persistence.NumHistoryShards = persistedShardCount
 	}
 

@@ -43,11 +43,11 @@ import (
 
 type (
 	ServiceNamesList []string
-	NamespaceLogger tlog.Logger
-	ESHttpClient *http.Client
+	NamespaceLogger  tlog.Logger
+	ESHttpClient     *http.Client
 	MetricsReporters struct {
 		serverReporter metrics.Reporter
-		sdkReporter metrics.Reporter
+		sdkReporter    metrics.Reporter
 	}
 	ServerInterruptCh <-chan interface{}
 )
@@ -77,11 +77,13 @@ func DefaultServiceNameListProvider(log tlog.Logger, c *cli.Context) ServiceName
 	return services
 }
 
-
 func DefaultDynamicConfigClientProvider(cfg *config.Config, logger tlog.Logger) dynamicconfig.Client {
 	dynamicConfigClient, err := dynamicconfig.NewFileBasedClient(&cfg.DynamicConfigClient, logger, InterruptCh())
 	if err != nil {
-		logger.Info("Unable to create file based dynamic config client, use no-op config client instead.", tag.Error(err))
+		logger.Info(
+			"Unable to create file based dynamic config client, use no-op config client instead.",
+			tag.Error(err),
+		)
 		dynamicConfigClient = dynamicconfig.NewNoopClient()
 	}
 	return dynamicConfigClient
@@ -107,7 +109,7 @@ func DefaultDatastoreFactory() persistenceClient.AbstractDataStoreFactory {
 	return nil
 }
 
-func DefaultMetricsReportersProvider(cfg *config.Config, logger tlog.Logger) (*MetricsReporters, error){
+func DefaultMetricsReportersProvider(cfg *config.Config, logger tlog.Logger) (*MetricsReporters, error) {
 	result := &MetricsReporters{}
 	if cfg.Global.Metrics == nil {
 		return result, nil
@@ -122,13 +124,18 @@ func DefaultMetricsReportersProvider(cfg *config.Config, logger tlog.Logger) (*M
 	return result, nil
 }
 
-func DefaultTLSConfigProvider(cfg *config.Config, logger tlog.Logger, metricReporters *MetricsReporters) (encryption.TLSConfigProvider, error) {
+func DefaultTLSConfigProvider(
+	cfg *config.Config,
+	logger tlog.Logger,
+	metricReporters *MetricsReporters,
+) (encryption.TLSConfigProvider, error) {
 	scope, err := extractTallyScopeForSDK(metricReporters.sdkReporter)
 	if err != nil {
 		return nil, err
 	}
 	tlsConfigProvider, err := encryption.NewTLSConfigProviderFromConfig(
-		cfg.Global.TLS, scope, logger, nil)
+		cfg.Global.TLS, scope, logger, nil,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("TLS provider initialization error: %w", err)
 	}
