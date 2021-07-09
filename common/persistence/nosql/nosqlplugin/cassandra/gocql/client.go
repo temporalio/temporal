@@ -149,6 +149,7 @@ func NewCassandraCluster(
 	cluster.ProtoVersion = 4
 	cluster.Consistency = cfg.Consistency.GetConsistency()
 	cluster.SerialConsistency = cfg.Consistency.GetSerialConsistency()
+	cluster.DisableInitialHostLookup = cfg.DisableInitialHostLookup
 
 	cluster.ReconnectionPolicy = &gocql.ExponentialReconnectionPolicy{
 		MaxRetries:      30,
