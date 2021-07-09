@@ -3,10 +3,13 @@ package matching
 import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
+	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
@@ -71,29 +74,42 @@ func ServiceConfigProvider(logger log.Logger, dcClient dynamicconfig.Client) (*C
 	return NewConfig(dcCollection), nil
 }
 
+// todomigryz: needs PersistenceBeanProvider
+func MetadataManagerProvider(persistenceBean persistenceClient.Bean) (persistence.MetadataManager, error) {
+	return persistenceBean.GetMetadataManager(), nil
+}
+
+// todomigryz: seems this can be replaced with constructor
+func NamespaceCacheProvider(
+	metadataMgr persistence.MetadataManager,
+	clusterMetadata cluster.Metadata,
+	metricsClient metrics.Client,
+	logger log.Logger,
+) (cache.NamespaceCache, error) {
+	namespaceCache := cache.NewNamespaceCache(
+		metadataMgr, // persistenceBean.GetMetadataManager(),
+		clusterMetadata,
+		metricsClient,
+		logger,
+	)
+	return namespaceCache, nil
+}
 
 // todomigryz: this belongs in handler file service/matching/handler.go
 // todomigryz: this should not use resource :(
 func HandlerProvider(
+	logger log.Logger,
 	resource resource.Resource,
 	config *Config,
 	metricsClient metrics.Client,
+	engine Engine,
 	) (*Handler, error) {
+
 	handler := &Handler{
-		Resource:      resource,
 		config:        config,
-		metricsClient: resource.GetMetricsClient(),
-		logger:        resource.GetLogger(),
-		engine: NewEngine(
-			resource.GetTaskManager(),
-			resource.GetHistoryClient(),
-			resource.GetMatchingRawClient(), // Use non retry client inside matching
-			config,
-			resource.GetLogger(),
-			metricsClient, // resource.GetMetricsClient(),
-			resource.GetNamespaceCache(),
-			resource.GetMatchingServiceResolver(),
-		),
+		metricsClient: metricsClient,
+		logger:        logger,
+		engine:        engine,
 	}
 
 	// prevent from serving requests before matching engine is started and ready
@@ -106,43 +122,4 @@ func ThrottledLoggerProvider(logger log.Logger, config *Config) (log.Logger, err
 	dynConfigFn := config.ThrottledLogRPS
 	throttledLogger := log.NewThrottledLogger(logger, func() float64 { return float64(dynConfigFn()) })
 	return throttledLogger, nil
-}
-
-// todomigryz: providers should move towards respective classes and potentially replace "NewClass" function.
-func MatchingServiceProvider(
-	logger log.Logger, // todomigryz: this logger should be overriden by per-service logger.
-	throttledLogger log.ThrottledLogger,
-	serviceConfig *Config,
-	grpcServer *grpc.Server,
-	handler *Handler,
-	) (*Service, error) {
-
-	//serviceResource, err := resource.New(
-	//	params,
-	//	common.MatchingServiceName,
-	//	serviceConfig.PersistenceMaxQPS,
-	//	serviceConfig.PersistenceGlobalMaxQPS,
-	//	serviceConfig.ThrottledLogRPS,
-	//	func(
-	//		persistenceBean persistenceClient.Bean,
-	//		searchAttributesProvider searchattribute.Provider,
-	//		logger log.Logger,
-	//	) (persistence.VisibilityManager, error) {
-	//		return persistenceBean.GetVisibilityManager(), nil
-	//	},
-	//)
-
-	//if err != nil {
-	//	return nil, err
-	//}
-
-	return &Service{
-		Resource: serviceResource, // todomigryz: this should be removed in favor of DI
-		status:   common.DaemonStatusInitialized,
-		config:   serviceConfig,
-		server:   grpcServer,
-		handler:  handler, // todomigryz: implement handler provider. NewHandler(serviceResource, serviceConfig),
-		logger: logger,
-		throttledLogger: throttledLogger,
-	}, nil
 }

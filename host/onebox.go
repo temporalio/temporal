@@ -372,7 +372,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	params.DCRedirectionPolicy = config.DCRedirectionPolicy{}
 	params.Name = common.FrontendServiceName
 	params.Logger = c.logger
-	params.ThrottledLogger = c.logger
+	// params.ThrottledLogger = c.logger
 	params.RPCFactory = newRPCFactoryImpl(common.FrontendServiceName, c.FrontendGRPCAddress(), c.FrontendRingpopAddress(),
 		c.logger)
 	params.MetricsScope = tally.NewTestScope(common.FrontendServiceName, make(map[string]string))
@@ -437,7 +437,7 @@ func (c *temporalImpl) startHistory(
 		params := &resource.BootstrapParams{}
 		params.Name = common.HistoryServiceName
 		params.Logger = c.logger
-		params.ThrottledLogger = c.logger
+		// params.ThrottledLogger = c.logger
 		params.RPCFactory = newRPCFactoryImpl(common.HistoryServiceName, grpcPort, membershipPorts[i], c.logger)
 		params.MetricsScope = tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
 		params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
@@ -520,7 +520,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	params := &resource.BootstrapParams{}
 	params.Name = common.MatchingServiceName
 	params.Logger = c.logger
-	params.ThrottledLogger = c.logger
+	// params.ThrottledLogger = c.logger
 	params.RPCFactory = newRPCFactoryImpl(common.MatchingServiceName, c.MatchingGRPCServiceAddress(), c.MatchingServiceRingpopAddress(), c.logger)
 	params.MetricsScope = tally.NewTestScope(common.MatchingServiceName, make(map[string]string))
 	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
@@ -563,7 +563,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	params := &resource.BootstrapParams{}
 	params.Name = common.WorkerServiceName
 	params.Logger = c.logger
-	params.ThrottledLogger = c.logger
+	// params.ThrottledLogger = c.logger
 	params.RPCFactory = newRPCFactoryImpl(common.WorkerServiceName, c.WorkerGRPCServiceAddress(), c.WorkerServiceRingpopAddress(), c.logger)
 	params.MetricsScope = tally.NewTestScope(common.WorkerServiceName, make(map[string]string))
 	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {

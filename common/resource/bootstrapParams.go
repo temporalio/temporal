@@ -50,7 +50,9 @@ type (
 		Name            string
 		InstanceID      string
 		Logger          log.Logger
-		ThrottledLogger log.Logger
+		// todo: this is not used.
+		//  Remove or do we need it anywhere? Initially it was used in oneBox set to BootstrapParams.Logger above.
+		// ThrottledLogger log.Logger
 		NamespaceLogger log.Logger
 
 		MetricsScope                 tally.Scope
