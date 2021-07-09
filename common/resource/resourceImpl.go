@@ -617,11 +617,13 @@ func (h *Impl) GetPersistenceBean() persistenceClient.Bean {
 // loggers
 
 // GetLogger return logger
+// todomigryz: taggedLogger
 func (h *Impl) GetLogger() log.Logger {
 	return h.logger
 }
 
 // GetThrottledLogger return throttled logger
+// todomigryz: throttledLogger
 func (h *Impl) GetThrottledLogger() log.Logger {
 	return h.throttledLogger
 }

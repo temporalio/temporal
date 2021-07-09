@@ -60,6 +60,10 @@ import (
 type Service struct {
 	resource.Resource
 
+	// logger          log.Logger
+	taggedLogger    log.Logger // todomigryz: rename to logger, unless untagged is required.
+	throttledLogger log.Logger
+
 	status  int32
 	handler *Handler
 	config  *Config
@@ -227,11 +231,15 @@ func NewService(
 	)
 
 	return &Service{
-		Resource: serviceResource,
-		status:   common.DaemonStatusInitialized,
-		config:   serviceConfig,
-		server:   grpc.NewServer(grpcServerOptions...),
-		handler:  NewHandler(serviceResource, serviceConfig),
+		Resource:     serviceResource,
+		status:       common.DaemonStatusInitialized,
+		config:       serviceConfig,
+		server:       grpc.NewServer(grpcServerOptions...),
+		handler:      NewHandler(serviceResource, serviceConfig),
+
+		// logger:       logger,
+		taggedLogger: taggedLogger,
+		throttledLogger: throttledLogger,
 	}, nil
 }
 
@@ -241,7 +249,7 @@ func (s *Service) Start() {
 		return
 	}
 
-	logger := s.GetLogger()
+	logger := s.taggedLogger
 	logger.Info("matching starting")
 
 	// must start base service first
@@ -260,21 +268,47 @@ func (s *Service) Start() {
 
 // Stop stops the service
 func (s *Service) Stop() {
-	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
+	if !atomic.CompareAndSwapInt32(
+		&s.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
 		return
 	}
 
 	// remove self from membership ring and wait for traffic to drain
-	s.GetLogger().Info("ShutdownHandler: Evicting self from membership ring")
+	s.taggedLogger.Info("ShutdownHandler: Evicting self from membership ring")
 	s.GetMembershipMonitor().EvictSelf()
-	s.GetLogger().Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
+	s.taggedLogger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	time.Sleep(s.config.ShutdownDrainDuration())
 
 	// TODO: Change this to GracefulStop when integration tests are refactored.
 	s.server.Stop()
 
 	s.handler.Stop()
-	s.Resource.Stop()
 
-	s.GetLogger().Info("matching stopped")
+	/////////////////////////////////////////////////
+	// s.Resource.Stop() // todomigryz: inlined below
+	//
+	// todomigryz: ATTENTION this is another status coming from Resource
+	// if !atomic.CompareAndSwapInt32(
+	// 	&h.status,
+	// 	common.DaemonStatusStarted,
+	// 	common.DaemonStatusStopped,
+	// ) {
+	// 	return
+	// }
+	//
+	// h.namespaceCache.Stop()
+	// h.membershipMonitor.Stop()
+	// h.ringpopChannel.Close()
+	// h.runtimeMetricsReporter.Stop()
+	// h.persistenceBean.Close()
+	// if h.visibilityMgr != nil {
+	// 	h.visibilityMgr.Close()
+	// }
+	// todomigryz: done inlining Resource.Stop
+	/////////////////////////////////////////////////
+
+	s.taggedLogger.Info("matching stopped")
 }
