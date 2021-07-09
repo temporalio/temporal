@@ -662,6 +662,8 @@ func NewMatchingResource(
 	numShards int32,
 	matchingRawClient matchingservice.MatchingServiceClient,
 	matchingServiceResolver membership.ServiceResolver,
+	historyClient historyservice.HistoryServiceClient,
+	historyRawClient historyservice.HistoryServiceClient,
 ) (impl *Impl, retError error) {
 	hostName, err := os.Hostname()
 	if err != nil {
@@ -715,12 +717,6 @@ func NewMatchingResource(
 		common.IsWhitelistServiceTransientError,
 	)
 
-	historyRawClient := clientBean.GetHistoryClient()
-	historyClient := history.NewRetryableClient(
-		historyRawClient,
-		common.CreateHistoryServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
-	)
 
 	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
 		HistoryV2Manager: persistenceBean.GetHistoryManager(),

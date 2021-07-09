@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"google.golang.org/grpc"
@@ -205,6 +206,14 @@ func NewService(
 		return nil, err
 	}
 
+	historyRawClient := clientBean.GetHistoryClient()
+	historyClient := history.NewRetryableClient(
+		historyRawClient,
+		common.CreateHistoryServiceRetryPolicy(),
+		common.IsWhitelistServiceTransientError,
+	)
+
+
 	/////////////////////////////////////
 	// todomigryz:  Removing resource //
 	// todomigryz: do we really need the rest of Resource???
@@ -229,6 +238,8 @@ func NewService(
 		numShards,
 		matchingRawClient,
 		matchingServiceResolver,
+		historyClient,
+		historyRawClient,
 		)
 	if err != nil {
 		return nil, err
@@ -239,7 +250,7 @@ func NewService(
 
 	engine := NewEngine(
 		persistenceBean.GetTaskManager(), // todomigryz: replaced serviceResource.GetTaskManager(),
-		serviceResource.GetHistoryClient(), // todomigryz: currently extracting this
+		historyClient, // todomigryz: replaced serviceResource.GetHistoryClient(),
 		matchingRawClient, // todomigryz: replaced serviceResource.GetMatchingRawClient(), // Use non retry client inside matching
 		serviceConfig,
 		taggedLogger,
