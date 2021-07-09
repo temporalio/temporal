@@ -32,6 +32,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
@@ -780,7 +781,9 @@ func (d *cassandraPersistence) GetClusterName() string {
 	return d.currentClusterName
 }
 
-func (d *cassandraPersistence) CreateShard(request *p.InternalCreateShardRequest) error {
+func (d *cassandraPersistence) CreateShard(
+	request *p.InternalCreateShardRequest,
+) error {
 	query := d.session.Query(templateCreateShardQuery,
 		request.ShardID,
 		rowTypeShard,
@@ -807,7 +810,9 @@ func (d *cassandraPersistence) CreateShard(request *p.InternalCreateShardRequest
 	return nil
 }
 
-func (d *cassandraPersistence) GetShard(request *p.InternalGetShardRequest) (*p.InternalGetShardResponse, error) {
+func (d *cassandraPersistence) GetShard(
+	request *p.InternalGetShardRequest,
+) (*p.InternalGetShardResponse, error) {
 	shardID := request.ShardID
 	query := d.session.Query(templateGetShardQuery,
 		shardID,
@@ -827,7 +832,9 @@ func (d *cassandraPersistence) GetShard(request *p.InternalGetShardRequest) (*p.
 	return &p.InternalGetShardResponse{ShardInfo: p.NewDataBlob(data, encoding)}, nil
 }
 
-func (d *cassandraPersistence) UpdateShard(request *p.InternalUpdateShardRequest) error {
+func (d *cassandraPersistence) UpdateShard(
+	request *p.InternalUpdateShardRequest,
+) error {
 	query := d.session.Query(templateUpdateShardQuery,
 		request.ShardInfo.Data,
 		request.ShardInfo.EncodingType.String(),
@@ -1137,21 +1144,9 @@ func (d *cassandraPersistence) GetWorkflowExecution(
 	}, nil
 }
 
-func executionStateBlobFromRow(result map[string]interface{}) (*commonpb.DataBlob, error) {
-	state, ok := result["execution_state"].([]byte)
-	if !ok {
-		return nil, newPersistedTypeMismatchError("execution_state", "", state, result)
-	}
-
-	stateEncoding, ok := result["execution_state_encoding"].(string)
-	if !ok {
-		return nil, newPersistedTypeMismatchError("execution_state_encoding", "", stateEncoding, result)
-	}
-
-	return p.NewDataBlob(state, stateEncoding), nil
-}
-
-func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdateWorkflowExecutionRequest) error {
+func (d *cassandraPersistence) UpdateWorkflowExecution(
+	request *p.InternalUpdateWorkflowExecutionRequest,
+) error {
 
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 
@@ -1251,8 +1246,8 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 		request.RangeID,
 	)
 
-	previous := make(map[string]interface{})
-	applied, iter, err := d.session.MapExecuteBatchCAS(batch, previous)
+	record := make(map[string]interface{})
+	applied, iter, err := d.session.MapExecuteBatchCAS(batch, record)
 	if err != nil {
 		return gocql.ConvertError("UpdateWorkflowExecution", err)
 	}
@@ -1261,12 +1256,25 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(request *p.InternalUpdate
 	}()
 
 	if !applied {
-		return d.getExecutionConditionalUpdateFailure(previous, iter, updateWorkflow.ExecutionState.RunId, updateWorkflow.Condition, request.RangeID, updateWorkflow.ExecutionState.RunId)
+		return convertErrors(
+			record,
+			iter,
+			d.shardID,
+			request.RangeID,
+			updateWorkflow.ExecutionState.RunId,
+			[]executionCASCondition{{
+				runID:       updateWorkflow.ExecutionState.RunId,
+				dbVersion:   updateWorkflow.DBRecordVersion,
+				nextEventID: updateWorkflow.Condition,
+			}},
+		)
 	}
 	return nil
 }
 
-func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.InternalConflictResolveWorkflowExecutionRequest) error {
+func (d *cassandraPersistence) ConflictResolveWorkflowExecution(
+	request *p.InternalConflictResolveWorkflowExecutionRequest,
+) error {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 
 	currentWorkflow := request.CurrentWorkflowMutation
@@ -1278,14 +1286,15 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 	namespaceID := resetWorkflow.NamespaceID
 	workflowID := resetWorkflow.WorkflowID
 
-	var prevRunID string
+	var currentRunID string
 
 	switch request.Mode {
 	case p.ConflictResolveWorkflowModeBypassCurrent:
 		if err := d.assertNotCurrentExecution(
 			namespaceID,
 			workflowID,
-			resetWorkflow.ExecutionState.RunId); err != nil {
+			resetWorkflow.ExecutionState.RunId,
+		); err != nil {
 			return err
 		}
 
@@ -1312,7 +1321,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 		}
 
 		if currentWorkflow != nil {
-			prevRunID = currentWorkflow.ExecutionState.RunId
+			currentRunID = currentWorkflow.ExecutionState.RunId
 
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 				runID,
@@ -1327,11 +1336,11 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 				permanentRunID,
 				defaultVisibilityTimestamp,
 				rowTypeExecutionTaskID,
-				prevRunID,
+				currentRunID,
 			)
 		} else {
 			// reset workflow is current
-			prevRunID = resetWorkflow.ExecutionState.RunId
+			currentRunID = resetWorkflow.ExecutionState.RunId
 
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
 				runID,
@@ -1346,7 +1355,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 				permanentRunID,
 				defaultVisibilityTimestamp,
 				rowTypeExecutionTaskID,
-				prevRunID,
+				currentRunID,
 			)
 		}
 
@@ -1382,8 +1391,8 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 		request.RangeID,
 	)
 
-	previous := make(map[string]interface{})
-	applied, iter, err := d.session.MapExecuteBatchCAS(batch, previous)
+	record := make(map[string]interface{})
+	applied, iter, err := d.session.MapExecuteBatchCAS(batch, record)
 	if err != nil {
 		return gocql.ConvertError("ConflictResolveWorkflowExecution", err)
 	}
@@ -1392,94 +1401,28 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(request *p.Inter
 	}()
 
 	if !applied {
-		return d.getExecutionConditionalUpdateFailure(previous, iter, resetWorkflow.ExecutionState.RunId, request.ResetWorkflowSnapshot.Condition, request.RangeID, prevRunID)
+		executionCASConditions := []executionCASCondition{{
+			runID:       resetWorkflow.RunID,
+			dbVersion:   resetWorkflow.DBRecordVersion,
+			nextEventID: resetWorkflow.Condition,
+		}}
+		if currentWorkflow != nil {
+			executionCASConditions = append(executionCASConditions, executionCASCondition{
+				runID:       currentWorkflow.RunID,
+				dbVersion:   currentWorkflow.DBRecordVersion,
+				nextEventID: currentWorkflow.Condition,
+			})
+		}
+		return convertErrors(
+			record,
+			iter,
+			d.shardID,
+			request.RangeID,
+			currentRunID,
+			executionCASConditions,
+		)
 	}
 	return nil
-}
-
-func (d *cassandraPersistence) getExecutionConditionalUpdateFailure(previous map[string]interface{}, iter gocql.Iter, requestRunID string, requestCondition int64, requestRangeID int64, requestConditionalRunID string) error {
-	// There can be three reasons why the query does not get applied: the RangeID has changed, or the next_event_id or current_run_id check failed.
-	// Check the row info returned by Cassandra to figure out which one it is.
-	rangeIDUnmatch := false
-	actualRangeID := int64(0)
-	nextEventIDUnmatch := false
-	actualNextEventID := int64(0)
-	runIDUnmatch := false
-	actualCurrRunID := ""
-	allPrevious := []map[string]interface{}{}
-
-GetFailureReasonLoop:
-	for {
-		rowType, ok := previous["type"].(int)
-		if !ok {
-			// This should never happen, as all our rows have the type field.
-			break GetFailureReasonLoop
-		}
-
-		runID := gocql.UUIDToString(previous["run_id"])
-
-		if rowType == rowTypeShard {
-			if actualRangeID, ok = previous["range_id"].(int64); ok && actualRangeID != requestRangeID {
-				// UpdateWorkflowExecution failed because rangeID was modified
-				rangeIDUnmatch = true
-			}
-		} else if rowType == rowTypeExecution && runID == requestRunID {
-			if actualNextEventID, ok = previous["next_event_id"].(int64); ok && actualNextEventID != requestCondition {
-				// UpdateWorkflowExecution failed because next event ID is unexpected
-				nextEventIDUnmatch = true
-			}
-		} else if rowType == rowTypeExecution && runID == permanentRunID {
-			// UpdateWorkflowExecution failed because current_run_id is unexpected
-			if actualCurrRunID = gocql.UUIDToString(previous["current_run_id"]); actualCurrRunID != requestConditionalRunID {
-				// UpdateWorkflowExecution failed because next event ID is unexpected
-				runIDUnmatch = true
-			}
-		}
-
-		allPrevious = append(allPrevious, previous)
-		previous = make(map[string]interface{})
-		if !iter.MapScan(previous) {
-			// Cassandra returns the actual row that caused a condition failure, so we should always return
-			// from the checks above, but just in case.
-			break GetFailureReasonLoop
-		}
-	}
-
-	if rangeIDUnmatch {
-		return &p.ShardOwnershipLostError{
-			ShardID: d.shardID,
-			Msg: fmt.Sprintf("Failed to update mutable state.  Request RangeID: %v, Actual RangeID: %v",
-				requestRangeID, actualRangeID),
-		}
-	}
-
-	if runIDUnmatch {
-		return &p.CurrentWorkflowConditionFailedError{
-			Msg: fmt.Sprintf("Failed to update mutable state.  Request Condition: %v, Actual Value: %v, Request Current RunId: %v, Actual Value: %v",
-				requestCondition, actualNextEventID, requestConditionalRunID, actualCurrRunID),
-		}
-	}
-
-	if nextEventIDUnmatch {
-		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("Failed to update mutable state.  Request Condition: %v, Actual Value: %v, Request Current RunId: %v, Actual Value: %v",
-				requestCondition, actualNextEventID, requestConditionalRunID, actualCurrRunID),
-		}
-	}
-
-	// At this point we only know that the write was not applied.
-	var columns []string
-	columnID := 0
-	for _, previous := range allPrevious {
-		for k, v := range previous {
-			columns = append(columns, fmt.Sprintf("%v: %s=%v", columnID, k, v))
-		}
-		columnID++
-	}
-	return &p.ConditionFailedError{
-		Msg: fmt.Sprintf("Failed to reset mutable state. ShardId: %v, RangeId: %v, Condition: %v, Request Current RunId: %v, columns: (%v)",
-			d.shardID, requestRangeID, requestCondition, requestConditionalRunID, strings.Join(columns, ",")),
-	}
 }
 
 func (d *cassandraPersistence) assertNotCurrentExecution(
@@ -1506,7 +1449,9 @@ func (d *cassandraPersistence) assertNotCurrentExecution(
 	return nil
 }
 
-func (d *cassandraPersistence) DeleteWorkflowExecution(request *p.DeleteWorkflowExecutionRequest) error {
+func (d *cassandraPersistence) DeleteWorkflowExecution(
+	request *p.DeleteWorkflowExecutionRequest,
+) error {
 	query := d.session.Query(templateDeleteWorkflowExecutionMutableStateQuery,
 		d.shardID,
 		rowTypeExecution,
@@ -1520,7 +1465,9 @@ func (d *cassandraPersistence) DeleteWorkflowExecution(request *p.DeleteWorkflow
 	return gocql.ConvertError("DeleteWorkflowExecution", err)
 }
 
-func (d *cassandraPersistence) DeleteCurrentWorkflowExecution(request *p.DeleteCurrentWorkflowExecutionRequest) error {
+func (d *cassandraPersistence) DeleteCurrentWorkflowExecution(
+	request *p.DeleteCurrentWorkflowExecutionRequest,
+) error {
 	query := d.session.Query(templateDeleteWorkflowExecutionCurrentRowQuery,
 		d.shardID,
 		rowTypeExecution,
@@ -1535,7 +1482,9 @@ func (d *cassandraPersistence) DeleteCurrentWorkflowExecution(request *p.DeleteC
 	return gocql.ConvertError("DeleteWorkflowCurrentRow", err)
 }
 
-func (d *cassandraPersistence) GetCurrentExecution(request *p.GetCurrentExecutionRequest) (*p.InternalGetCurrentExecutionResponse,
+func (d *cassandraPersistence) GetCurrentExecution(
+	request *p.GetCurrentExecutionRequest,
+) (*p.InternalGetCurrentExecutionResponse,
 	error) {
 	query := d.session.Query(templateGetCurrentExecutionQuery,
 		d.shardID,
@@ -1604,7 +1553,9 @@ func (d *cassandraPersistence) ListConcreteExecutions(
 	return response, nil
 }
 
-func (d *cassandraPersistence) AddTasks(request *p.AddTasksRequest) error {
+func (d *cassandraPersistence) AddTasks(
+	request *p.AddTasksRequest,
+) error {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 
 	if err := applyTasks(
@@ -1656,7 +1607,9 @@ func (d *cassandraPersistence) AddTasks(request *p.AddTasksRequest) error {
 	return nil
 }
 
-func (d *cassandraPersistence) GetTransferTask(request *p.GetTransferTaskRequest) (*p.GetTransferTaskResponse, error) {
+func (d *cassandraPersistence) GetTransferTask(
+	request *p.GetTransferTaskRequest,
+) (*p.GetTransferTaskResponse, error) {
 	shardID := d.shardID
 	taskID := request.TaskID
 	query := d.session.Query(templateGetTransferTaskQuery,
@@ -1683,7 +1636,9 @@ func (d *cassandraPersistence) GetTransferTask(request *p.GetTransferTaskRequest
 	return &p.GetTransferTaskResponse{TransferTaskInfo: info}, nil
 }
 
-func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksRequest) (*p.GetTransferTasksResponse, error) {
+func (d *cassandraPersistence) GetTransferTasks(
+	request *p.GetTransferTasksRequest,
+) (*p.GetTransferTasksResponse, error) {
 
 	// Reading transfer tasks need to be quorum level consistent, otherwise we could lose task
 	query := d.session.Query(templateGetTransferTasksQuery,
@@ -1721,7 +1676,9 @@ func (d *cassandraPersistence) GetTransferTasks(request *p.GetTransferTasksReque
 	return response, nil
 }
 
-func (d *cassandraPersistence) GetVisibilityTask(request *p.GetVisibilityTaskRequest) (*p.GetVisibilityTaskResponse, error) {
+func (d *cassandraPersistence) GetVisibilityTask(
+	request *p.GetVisibilityTaskRequest,
+) (*p.GetVisibilityTaskResponse, error) {
 	shardID := d.shardID
 	taskID := request.TaskID
 	query := d.session.Query(templateGetVisibilityTaskQuery,
@@ -1748,7 +1705,9 @@ func (d *cassandraPersistence) GetVisibilityTask(request *p.GetVisibilityTaskReq
 	return &p.GetVisibilityTaskResponse{VisibilityTaskInfo: info}, nil
 }
 
-func (d *cassandraPersistence) GetVisibilityTasks(request *p.GetVisibilityTasksRequest) (*p.GetVisibilityTasksResponse, error) {
+func (d *cassandraPersistence) GetVisibilityTasks(
+	request *p.GetVisibilityTasksRequest,
+) (*p.GetVisibilityTasksResponse, error) {
 
 	// Reading Visibility tasks need to be quorum level consistent, otherwise we could lose task
 	query := d.session.Query(templateGetVisibilityTasksQuery,
@@ -1786,7 +1745,9 @@ func (d *cassandraPersistence) GetVisibilityTasks(request *p.GetVisibilityTasksR
 	return response, nil
 }
 
-func (d *cassandraPersistence) GetReplicationTask(request *p.GetReplicationTaskRequest) (*p.GetReplicationTaskResponse, error) {
+func (d *cassandraPersistence) GetReplicationTask(
+	request *p.GetReplicationTaskRequest,
+) (*p.GetReplicationTaskResponse, error) {
 	shardID := d.shardID
 	taskID := request.TaskID
 	query := d.session.Query(templateGetReplicationTaskQuery,
@@ -1862,7 +1823,9 @@ func (d *cassandraPersistence) populateGetReplicationTasksResponse(
 	return response, nil
 }
 
-func (d *cassandraPersistence) CompleteTransferTask(request *p.CompleteTransferTaskRequest) error {
+func (d *cassandraPersistence) CompleteTransferTask(
+	request *p.CompleteTransferTaskRequest,
+) error {
 	query := d.session.Query(templateCompleteTransferTaskQuery,
 		d.shardID,
 		rowTypeTransferTask,
@@ -1876,7 +1839,9 @@ func (d *cassandraPersistence) CompleteTransferTask(request *p.CompleteTransferT
 	return gocql.ConvertError("CompleteTransferTask", err)
 }
 
-func (d *cassandraPersistence) RangeCompleteTransferTask(request *p.RangeCompleteTransferTaskRequest) error {
+func (d *cassandraPersistence) RangeCompleteTransferTask(
+	request *p.RangeCompleteTransferTaskRequest,
+) error {
 	query := d.session.Query(templateRangeCompleteTransferTaskQuery,
 		d.shardID,
 		rowTypeTransferTask,
@@ -1892,7 +1857,9 @@ func (d *cassandraPersistence) RangeCompleteTransferTask(request *p.RangeComplet
 	return gocql.ConvertError("RangeCompleteTransferTask", err)
 }
 
-func (d *cassandraPersistence) CompleteVisibilityTask(request *p.CompleteVisibilityTaskRequest) error {
+func (d *cassandraPersistence) CompleteVisibilityTask(
+	request *p.CompleteVisibilityTaskRequest,
+) error {
 	query := d.session.Query(templateCompleteVisibilityTaskQuery,
 		d.shardID,
 		rowTypeVisibilityTask,
@@ -1906,7 +1873,9 @@ func (d *cassandraPersistence) CompleteVisibilityTask(request *p.CompleteVisibil
 	return gocql.ConvertError("CompleteVisibilityTask", err)
 }
 
-func (d *cassandraPersistence) RangeCompleteVisibilityTask(request *p.RangeCompleteVisibilityTaskRequest) error {
+func (d *cassandraPersistence) RangeCompleteVisibilityTask(
+	request *p.RangeCompleteVisibilityTaskRequest,
+) error {
 	query := d.session.Query(templateRangeCompleteVisibilityTaskQuery,
 		d.shardID,
 		rowTypeVisibilityTask,
@@ -1922,7 +1891,9 @@ func (d *cassandraPersistence) RangeCompleteVisibilityTask(request *p.RangeCompl
 	return gocql.ConvertError("RangeCompleteVisibilityTask", err)
 }
 
-func (d *cassandraPersistence) CompleteReplicationTask(request *p.CompleteReplicationTaskRequest) error {
+func (d *cassandraPersistence) CompleteReplicationTask(
+	request *p.CompleteReplicationTaskRequest,
+) error {
 	query := d.session.Query(templateCompleteReplicationTaskQuery,
 		d.shardID,
 		rowTypeReplicationTask,
@@ -1954,7 +1925,9 @@ func (d *cassandraPersistence) RangeCompleteReplicationTask(
 	return gocql.ConvertError("RangeCompleteReplicationTask", err)
 }
 
-func (d *cassandraPersistence) CompleteTimerTask(request *p.CompleteTimerTaskRequest) error {
+func (d *cassandraPersistence) CompleteTimerTask(
+	request *p.CompleteTimerTaskRequest,
+) error {
 	ts := p.UnixMilliseconds(request.VisibilityTimestamp)
 	query := d.session.Query(templateCompleteTimerTaskQuery,
 		d.shardID,
@@ -1969,7 +1942,9 @@ func (d *cassandraPersistence) CompleteTimerTask(request *p.CompleteTimerTaskReq
 	return gocql.ConvertError("CompleteTimerTask", err)
 }
 
-func (d *cassandraPersistence) RangeCompleteTimerTask(request *p.RangeCompleteTimerTaskRequest) error {
+func (d *cassandraPersistence) RangeCompleteTimerTask(
+	request *p.RangeCompleteTimerTaskRequest,
+) error {
 	start := p.UnixMilliseconds(request.InclusiveBeginTimestamp)
 	end := p.UnixMilliseconds(request.ExclusiveEndTimestamp)
 	query := d.session.Query(templateRangeCompleteTimerTaskQuery,
@@ -1986,7 +1961,9 @@ func (d *cassandraPersistence) RangeCompleteTimerTask(request *p.RangeCompleteTi
 	return gocql.ConvertError("RangeCompleteTimerTask", err)
 }
 
-func (d *cassandraPersistence) CreateTaskQueue(request *p.InternalCreateTaskQueueRequest) error {
+func (d *cassandraPersistence) CreateTaskQueue(
+	request *p.InternalCreateTaskQueueRequest,
+) error {
 	query := d.session.Query(templateInsertTaskQueueQuery,
 		request.NamespaceID,
 		request.TaskQueue,
@@ -2015,7 +1992,9 @@ func (d *cassandraPersistence) CreateTaskQueue(request *p.InternalCreateTaskQueu
 	return nil
 }
 
-func (d *cassandraPersistence) GetTaskQueue(request *p.InternalGetTaskQueueRequest) (*p.InternalGetTaskQueueResponse, error) {
+func (d *cassandraPersistence) GetTaskQueue(
+	request *p.InternalGetTaskQueueRequest,
+) (*p.InternalGetTaskQueueResponse, error) {
 	query := d.session.Query(templateGetTaskQueue,
 		request.NamespaceID,
 		request.TaskQueue,
@@ -2037,7 +2016,9 @@ func (d *cassandraPersistence) GetTaskQueue(request *p.InternalGetTaskQueueReque
 	}, nil
 }
 
-func (d *cassandraPersistence) ExtendLease(request *p.InternalExtendLeaseRequest) error {
+func (d *cassandraPersistence) ExtendLease(
+	request *p.InternalExtendLeaseRequest,
+) error {
 	query := d.session.Query(templateUpdateTaskQueueQuery,
 		request.RangeID+1,
 		request.TaskQueueInfo.Data,
@@ -2066,8 +2047,10 @@ func (d *cassandraPersistence) ExtendLease(request *p.InternalExtendLeaseRequest
 	return nil
 }
 
-// From TaskManager interface
-func (d *cassandraPersistence) UpdateTaskQueue(request *p.InternalUpdateTaskQueueRequest) (*p.UpdateTaskQueueResponse, error) {
+// UpdateTaskQueue update task queue
+func (d *cassandraPersistence) UpdateTaskQueue(
+	request *p.InternalUpdateTaskQueueRequest,
+) (*p.UpdateTaskQueueResponse, error) {
 	var err error
 	var applied bool
 	previous := make(map[string]interface{})
@@ -2132,11 +2115,15 @@ func (d *cassandraPersistence) UpdateTaskQueue(request *p.InternalUpdateTaskQueu
 	return &p.UpdateTaskQueueResponse{}, nil
 }
 
-func (d *cassandraPersistence) ListTaskQueue(_ *p.ListTaskQueueRequest) (*p.InternalListTaskQueueResponse, error) {
+func (d *cassandraPersistence) ListTaskQueue(
+	_ *p.ListTaskQueueRequest,
+) (*p.InternalListTaskQueueResponse, error) {
 	return nil, serviceerror.NewInternal(fmt.Sprintf("unsupported operation"))
 }
 
-func (d *cassandraPersistence) DeleteTaskQueue(request *p.DeleteTaskQueueRequest) error {
+func (d *cassandraPersistence) DeleteTaskQueue(
+	request *p.DeleteTaskQueueRequest,
+) error {
 	query := d.session.Query(templateDeleteTaskQueueQuery,
 		request.TaskQueue.NamespaceID, request.TaskQueue.Name, request.TaskQueue.TaskType, rowTypeTaskQueue, taskQueueTaskID, request.RangeID)
 	previous := make(map[string]interface{})
@@ -2152,8 +2139,10 @@ func (d *cassandraPersistence) DeleteTaskQueue(request *p.DeleteTaskQueueRequest
 	return nil
 }
 
-// From TaskManager interface
-func (d *cassandraPersistence) CreateTasks(request *p.InternalCreateTasksRequest) (*p.CreateTasksResponse, error) {
+// CreateTasks add tasks
+func (d *cassandraPersistence) CreateTasks(
+	request *p.InternalCreateTasksRequest,
+) (*p.CreateTasksResponse, error) {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 	namespaceID := request.NamespaceID
 	taskQueue := request.TaskQueue
@@ -2229,8 +2218,10 @@ func GetTaskTTL(expireTime *time.Time) int64 {
 	return ttl
 }
 
-// From TaskManager interface
-func (d *cassandraPersistence) GetTasks(request *p.GetTasksRequest) (*p.InternalGetTasksResponse, error) {
+// GetTasks get a task
+func (d *cassandraPersistence) GetTasks(
+	request *p.GetTasksRequest,
+) (*p.InternalGetTasksResponse, error) {
 	if request.MaxReadLevel == nil {
 		return nil, serviceerror.NewInternal("getTasks: both readLevel and maxReadLevel MUST be specified for cassandra persistence")
 	}
@@ -2293,8 +2284,10 @@ PopulateTasks:
 	return response, nil
 }
 
-// From TaskManager interface
-func (d *cassandraPersistence) CompleteTask(request *p.CompleteTaskRequest) error {
+// CompleteTask delete a task
+func (d *cassandraPersistence) CompleteTask(
+	request *p.CompleteTaskRequest,
+) error {
 	tli := request.TaskQueue
 	query := d.session.Query(templateCompleteTaskQuery,
 		tli.NamespaceID,
@@ -2314,7 +2307,9 @@ func (d *cassandraPersistence) CompleteTask(request *p.CompleteTaskRequest) erro
 // CompleteTasksLessThan deletes all tasks less than or equal to the given task id. This API ignores the
 // Limit request parameter i.e. either all tasks leq the task_id will be deleted or an error will
 // be returned to the caller
-func (d *cassandraPersistence) CompleteTasksLessThan(request *p.CompleteTasksLessThanRequest) (int, error) {
+func (d *cassandraPersistence) CompleteTasksLessThan(
+	request *p.CompleteTasksLessThanRequest,
+) (int, error) {
 	query := d.session.Query(templateCompleteTasksLessThanQuery,
 		request.NamespaceID, request.TaskQueueName, request.TaskType, rowTypeTask, request.TaskID)
 	err := query.Exec()
@@ -2324,7 +2319,9 @@ func (d *cassandraPersistence) CompleteTasksLessThan(request *p.CompleteTasksLes
 	return p.UnknownNumRowsAffected, nil
 }
 
-func (d *cassandraPersistence) GetTimerTask(request *p.GetTimerTaskRequest) (*p.GetTimerTaskResponse, error) {
+func (d *cassandraPersistence) GetTimerTask(
+	request *p.GetTimerTaskRequest,
+) (*p.GetTimerTaskResponse, error) {
 	shardID := d.shardID
 	taskID := request.TaskID
 	visibilityTs := request.VisibilityTimestamp
@@ -2352,8 +2349,9 @@ func (d *cassandraPersistence) GetTimerTask(request *p.GetTimerTaskRequest) (*p.
 	return &p.GetTimerTaskResponse{TimerTaskInfo: info}, nil
 }
 
-func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksRequest) (*p.GetTimerIndexTasksResponse,
-	error) {
+func (d *cassandraPersistence) GetTimerIndexTasks(
+	request *p.GetTimerIndexTasksRequest,
+) (*p.GetTimerIndexTasksResponse, error) {
 	// Reading timer tasks need to be quorum level consistent, otherwise we could lose tasks
 	minTimestamp := p.UnixMilliseconds(request.MinTimestamp)
 	maxTimestamp := p.UnixMilliseconds(request.MaxTimestamp)
@@ -2392,7 +2390,9 @@ func (d *cassandraPersistence) GetTimerIndexTasks(request *p.GetTimerIndexTasksR
 	return response, nil
 }
 
-func (d *cassandraPersistence) PutReplicationTaskToDLQ(request *p.PutReplicationTaskToDLQRequest) error {
+func (d *cassandraPersistence) PutReplicationTaskToDLQ(
+	request *p.PutReplicationTaskToDLQRequest,
+) error {
 	task := request.TaskInfo
 	datablob, err := serialization.ReplicationTaskInfoToBlob(task)
 	if err != nil {
@@ -2474,7 +2474,9 @@ func (d *cassandraPersistence) RangeDeleteReplicationTaskFromDLQ(
 	return gocql.ConvertError("RangeDeleteReplicationTaskFromDLQ", err)
 }
 
-func mutableStateFromRow(result map[string]interface{}) (*p.InternalWorkflowMutableState, error) {
+func mutableStateFromRow(
+	result map[string]interface{},
+) (*p.InternalWorkflowMutableState, error) {
 	eiBytes, ok := result["execution"].([]byte)
 	if !ok {
 		return nil, newPersistedTypeMismatchError("execution", "", eiBytes, result)
@@ -2501,4 +2503,20 @@ func mutableStateFromRow(result map[string]interface{}) (*p.InternalWorkflowMuta
 		NextEventID:    nextEventID,
 	}
 	return mutableState, nil
+}
+
+func executionStateBlobFromRow(
+	result map[string]interface{},
+) (*commonpb.DataBlob, error) {
+	state, ok := result["execution_state"].([]byte)
+	if !ok {
+		return nil, newPersistedTypeMismatchError("execution_state", "", state, result)
+	}
+
+	stateEncoding, ok := result["execution_state_encoding"].(string)
+	if !ok {
+		return nil, newPersistedTypeMismatchError("execution_state_encoding", "", stateEncoding, result)
+	}
+
+	return p.NewDataBlob(state, stateEncoding), nil
 }
