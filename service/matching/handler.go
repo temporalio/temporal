@@ -31,6 +31,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/common/cache"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -43,13 +44,12 @@ import (
 type (
 	// Handler - gRPC handler interface for matchingservice
 	Handler struct {
-		resource.Resource
-
 		engine          Engine
 		config          *Config
-		metricsClient   metrics.Client
-		logger          log.Logger
-		throttledLogger log.ThrottledLogger
+		metricsClient   metrics.Client       // todomigryz: replaced Resource.GetMetricsClient
+		logger          log.Logger           // todomigryz: replaced Resource.GetThrottledLogger
+		throttledLogger log.ThrottledLogger  // todomigryz: replaced Resource.GetThrottledLogger
+		namespaceCache  cache.NamespaceCache // todomigryz: replaced Resource.GetNamespaceCache
 		startWG         sync.WaitGroup
 	}
 )
@@ -72,14 +72,15 @@ func NewHandler(
 	throttledLogger log.ThrottledLogger,
 	metricsClient metrics.Client,
 	engine Engine,
+	namespaceCache  cache.NamespaceCache,
 ) *Handler {
 	handler := &Handler{
-		Resource:      resource,
 		config:        config,
 		metricsClient: metricsClient, // replaced resource.GetMetricsClient(),
 		logger:        logger, //replaced resource.GetLogger(),
 		throttledLogger: throttledLogger,
 		engine: engine,
+		namespaceCache: namespaceCache,
 	}
 
 	// prevent from serving requests before matching engine is started and ready
@@ -338,7 +339,7 @@ func (h *Handler) ListTaskQueuePartitions(
 }
 
 func (h *Handler) namespaceName(id string) string {
-	entry, err := h.GetNamespaceCache().GetNamespaceByID(id)
+	entry, err := h.namespaceCache.GetNamespaceByID(id)
 	if err != nil {
 		return ""
 	}
@@ -347,7 +348,7 @@ func (h *Handler) namespaceName(id string) string {
 
 func (h *Handler) reportForwardedPerTaskQueueCounter(hCtx *handlerContext, namespaceId string) {
 	hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
-	h.GetMetricsClient().
+	h.metricsClient. // todomigryz: replaced h.GetMetricsClient().
 		Scope(metrics.MatchingAddWorkflowTaskScope).
 		Tagged(metrics.NamespaceTag(h.namespaceName(namespaceId))).
 		Tagged(metrics.ServiceRoleTag(metrics.MatchingRoleTagValue)).

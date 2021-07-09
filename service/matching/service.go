@@ -205,7 +205,15 @@ func NewService(
 		serviceResource.GetMatchingServiceResolver(),
 	)
 
-	handler := NewHandler(serviceResource, serviceConfig, taggedLogger, throttledLogger, metricsClient, engine)
+	handler := NewHandler(
+		serviceResource,
+		serviceConfig,
+		taggedLogger,
+		throttledLogger,
+		metricsClient,
+		engine,
+		namespaceCache,
+	)
 
 	return &Service{
 		Resource:     serviceResource,
