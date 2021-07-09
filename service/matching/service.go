@@ -28,6 +28,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"google.golang.org/grpc"
@@ -166,6 +167,43 @@ func NewService(
 
 	grpcServer := grpc.NewServer(grpcServerOptions...)
 
+	dynamicCollection := dynamicconfig.NewCollection(params.DynamicConfigClient, taggedLogger)
+
+	membershipFactory, err := params.MembershipFactoryInitializer(persistenceBean, taggedLogger)
+	if err != nil {
+		return nil, err
+	}
+
+	membershipMonitor, err := membershipFactory.GetMembershipMonitor()
+	if err != nil {
+		return nil, err
+	}
+
+	numShards := params.PersistenceConfig.NumHistoryShards
+	clientBean, err := client.NewClientBean(
+		client.NewRPCClientFactory(
+			params.RPCFactory,
+			membershipMonitor,
+			metricsClient, // replaced params.MetricsClient,
+			dynamicCollection,
+			numShards,
+			taggedLogger,
+		),
+		clusterMetadata,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	matchingRawClient, err := clientBean.GetMatchingClient(namespaceCache.GetNamespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	matchingServiceResolver, err := membershipMonitor.GetResolver(common.MatchingServiceName)
+	if err != nil {
+		return nil, err
+	}
 
 	/////////////////////////////////////
 	// todomigryz:  Removing resource //
@@ -186,7 +224,12 @@ func NewService(
 		namespaceCache,
 		clusterMetadata,
 		metricsClient,
-	)
+		membershipMonitor,
+		clientBean,
+		numShards,
+		matchingRawClient,
+		matchingServiceResolver,
+		)
 	if err != nil {
 		return nil, err
 	}
@@ -196,13 +239,13 @@ func NewService(
 
 	engine := NewEngine(
 		persistenceBean.GetTaskManager(), // todomigryz: replaced serviceResource.GetTaskManager(),
-		serviceResource.GetHistoryClient(),
-		serviceResource.GetMatchingRawClient(), // Use non retry client inside matching
+		serviceResource.GetHistoryClient(), // todomigryz: currently extracting this
+		matchingRawClient, // todomigryz: replaced serviceResource.GetMatchingRawClient(), // Use non retry client inside matching
 		serviceConfig,
 		taggedLogger,
 		metricsClient, // todomigryz: replaced serviceResource.GetMetricsClient(),
 		namespaceCache, // todomigryz: replaced serviceResource.GetNamespaceCache(),
-		serviceResource.GetMatchingServiceResolver(),
+		matchingServiceResolver, // todomigryz: replaced serviceResource.GetMatchingServiceResolver(),
 	)
 
 	handler := NewHandler(

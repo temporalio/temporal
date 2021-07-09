@@ -655,10 +655,14 @@ func NewMatchingResource(
 	visibilityManagerInitializer VisibilityManagerInitializer,
 	persistenceBean persistenceClient.Bean,
 	namespaceCache cache.NamespaceCache,
-	clusterMetadata  cluster.Metadata,
+	clusterMetadata cluster.Metadata,
 	metricsClient metrics.Client,
+	membershipMonitor membership.Monitor,
+	clientBean client.Bean,
+	numShards int32,
+	matchingRawClient matchingservice.MatchingServiceClient,
+	matchingServiceResolver membership.ServiceResolver,
 ) (impl *Impl, retError error) {
-	numShards := params.PersistenceConfig.NumHistoryShards
 	hostName, err := os.Hostname()
 	if err != nil {
 		return nil, err
@@ -668,38 +672,8 @@ func NewMatchingResource(
 
 	ringpopChannel := params.RPCFactory.GetRingpopChannel()
 
-	membershipFactory, err := params.MembershipFactoryInitializer(persistenceBean, taggedLogger)
-	if err != nil {
-		return nil, err
-	}
-
-	membershipMonitor, err := membershipFactory.GetMembershipMonitor()
-	if err != nil {
-		return nil, err
-	}
-
-	dynamicCollection := dynamicconfig.NewCollection(params.DynamicConfigClient, taggedLogger)
-	clientBean, err := client.NewClientBean(
-		client.NewRPCClientFactory(
-			params.RPCFactory,
-			membershipMonitor,
-			metricsClient, // replaced params.MetricsClient,
-			dynamicCollection,
-			numShards,
-			taggedLogger,
-		),
-		clusterMetadata,
-	)
-	if err != nil {
-		return nil, err
-	}
 
 	frontendServiceResolver, err := membershipMonitor.GetResolver(common.FrontendServiceName)
-	if err != nil {
-		return nil, err
-	}
-
-	matchingServiceResolver, err := membershipMonitor.GetResolver(common.MatchingServiceName)
 	if err != nil {
 		return nil, err
 	}
@@ -734,10 +708,7 @@ func NewMatchingResource(
 		common.IsWhitelistServiceTransientError,
 	)
 
-	matchingRawClient, err := clientBean.GetMatchingClient(namespaceCache.GetNamespaceName)
-	if err != nil {
-		return nil, err
-	}
+
 	matchingClient := matching.NewRetryableClient(
 		matchingRawClient,
 		common.CreateMatchingServiceRetryPolicy(),

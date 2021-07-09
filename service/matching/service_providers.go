@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/matching/configs"
@@ -93,29 +92,6 @@ func NamespaceCacheProvider(
 		logger,
 	)
 	return namespaceCache, nil
-}
-
-// todomigryz: this belongs in handler file service/matching/handler.go
-// todomigryz: this should not use resource :(
-func HandlerProvider(
-	logger log.Logger,
-	resource resource.Resource,
-	config *Config,
-	metricsClient metrics.Client,
-	engine Engine,
-	) (*Handler, error) {
-
-	handler := &Handler{
-		config:        config,
-		metricsClient: metricsClient,
-		logger:        logger,
-		engine:        engine,
-	}
-
-	// prevent from serving requests before matching engine is started and ready
-	handler.startWG.Add(1)
-
-	return handler, nil
 }
 
 func ThrottledLoggerProvider(logger log.Logger, config *Config) (log.Logger, error) {
