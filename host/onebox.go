@@ -516,7 +516,6 @@ func (c *temporalImpl) startHistory(
 }
 
 func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.WaitGroup) {
-
 	params := &resource.BootstrapParams{}
 	params.Name = common.MatchingServiceName
 	params.Logger = c.logger
@@ -539,7 +538,14 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	}
 	params.PersistenceServiceResolver = resolver.NewNoopResolver()
 
-	matchingService, err := matching.InitializeMatchingService(c.logger, params, params.DynamicConfigClient)
+	svcCfg := config.Service{}
+	matchingService, err := matching.InitializeMatchingService(
+		c.logger,
+		params,
+		params.DynamicConfigClient,
+		params.ServerMetricsReporter,
+		svcCfg,
+	)
 	if err != nil {
 		params.Logger.Fatal("unable to start matching service", tag.Error(err))
 	}
