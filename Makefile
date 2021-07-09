@@ -9,7 +9,7 @@ bins: clean-bins temporal-server tctl plugins temporal-cassandra-tool temporal-s
 all: update-tools clean proto bins check test
 
 # Used by Buildkite.
-ci-build: bins build-tests update-tools shell-check check proto mocks gomodtidy ensure-no-changes
+ci-build: bins build-tests update-tools shell-check check proto mocks wire gomodtidy ensure-no-changes
 
 # Delete all build artefacts.
 clean: clean-bins clean-test-results
