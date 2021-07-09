@@ -50,11 +50,16 @@ import (
 
 // Service represents the matching service
 type Service struct {
+	////////////////////////////////////////////////////
+	// todomigryz: added from Resource
 	resource.Resource
-
 	// logger          log.Logger
 	taggedLogger    log.Logger // todomigryz: rename to logger, unless untagged is required.
 	throttledLogger log.Logger // todomigryz: this should not be required. Transient dependency?
+
+	// todomigryz: added from Resource Done
+	////////////////////////////////////////////////////
+
 
 	status  int32
 	handler *Handler
@@ -78,19 +83,18 @@ type Service struct {
 func NewService(
 	logger log.Logger, // comes from BootstrapParams.Logger
 	serviceConfig *Config,
-	params *resource.BootstrapParams,
+	params *resource.BootstrapParams, // todomigryz: replace generic BootstrapParams with factory or constructed object
 ) (*Service, error) {
-	metricsClient := params.MetricsClient
+	metricsClient := params.MetricsClient // replaces Resource.GetMetricsClient
 	throttledLoggerMaxRPS := serviceConfig.ThrottledLogRPS
-	taggedLogger := log.With(logger, tag.Service(serviceName))
-	throttledLogger := log.NewThrottledLogger(
+	taggedLogger := log.With(logger, tag.Service(serviceName)) // replaces Resource.GetLogger
+	throttledLogger := log.NewThrottledLogger(                 // replaces Resource.GetThrottledLogger
 		taggedLogger,
 		func() float64 { return float64(throttledLoggerMaxRPS()) })
 
 	persistenceMaxQPS := serviceConfig.PersistenceMaxQPS
 	persistenceGlobalMaxQPS := serviceConfig.PersistenceGlobalMaxQPS
 
-	// todomigryz: Injsect persistenceBean
 	persistenceBean, err := persistenceClient.NewBeanFromFactory(persistenceClient.NewFactory(
 		&params.PersistenceConfig,
 		params.PersistenceServiceResolver,
@@ -132,35 +136,6 @@ func NewService(
 		taggedLogger,
 	)
 
-	///////////////////////
-	// Removing resource //
-	serviceResource, err := resource.NewMatchingResource(
-		params,
-		taggedLogger,
-		throttledLogger,
-		common.MatchingServiceName,
-		func(
-			persistenceBean persistenceClient.Bean,
-			searchAttributesProvider searchattribute.Provider,
-			logger log.Logger,
-		) (persistence.VisibilityManager, error) {
-			return persistenceBean.GetVisibilityManager(), nil
-		},
-		persistenceBean,
-		namespaceCache,
-		clusterMetadata,
-		metricsClient,
-	)
-	if err != nil {
-		return nil, err
-	}
-	// Removing resource end //
-	///////////////////////////
-
-
-	// todomigryz: inject telemetry interceptor
-	// todomigryz: Inject namespace cache, remove it from resource
-	// todomigryz: Inject metricsClient, remove it from resource
 	metricsInterceptor := interceptor.NewTelemetryInterceptor(
 		namespaceCache,
 		metricsClient,
@@ -189,12 +164,55 @@ func NewService(
 		),
 	)
 
+	grpcServer := grpc.NewServer(grpcServerOptions...)
+
+
+	/////////////////////////////////////
+	// todomigryz:  Removing resource //
+	// todomigryz: do we really need the rest of Resource???
+	serviceResource, err := resource.NewMatchingResource(
+		params,
+		taggedLogger,
+		throttledLogger,
+		common.MatchingServiceName,
+		func(
+			persistenceBean persistenceClient.Bean,
+			searchAttributesProvider searchattribute.Provider,
+			logger log.Logger,
+		) (persistence.VisibilityManager, error) {
+			return persistenceBean.GetVisibilityManager(), nil
+		},
+		persistenceBean,
+		namespaceCache,
+		clusterMetadata,
+		metricsClient,
+	)
+	if err != nil {
+		return nil, err
+	}
+	// Removing resource end //
+	///////////////////////////
+
+
+	engine := NewEngine(
+		serviceResource.GetTaskManager(),
+		serviceResource.GetHistoryClient(),
+		serviceResource.GetMatchingRawClient(), // Use non retry client inside matching
+		serviceConfig,
+		taggedLogger,
+		serviceResource.GetMetricsClient(),
+		serviceResource.GetNamespaceCache(),
+		serviceResource.GetMatchingServiceResolver(),
+	)
+
+	handler := NewHandler(serviceResource, serviceConfig, taggedLogger, metricsClient, engine)
+
 	return &Service{
 		Resource:     serviceResource,
 		status:       common.DaemonStatusInitialized,
 		config:       serviceConfig,
-		server:       grpc.NewServer(grpcServerOptions...),
-		handler:      NewHandler(serviceResource, serviceConfig),
+		server:       grpcServer,
+		handler:      handler,
 
 		// logger:       logger,
 		taggedLogger: taggedLogger,
@@ -211,8 +229,38 @@ func (s *Service) Start() {
 	logger := s.taggedLogger
 	logger.Info("matching starting")
 
+
+	//////////////////////////////////////
+	// todomigryz: inline Resource.Start()
 	// must start base service first
 	s.Resource.Start()
+	// if !atomic.CompareAndSwapInt32(
+	// 	&h.status,
+	// 	common.DaemonStatusInitialized,
+	// 	common.DaemonStatusStarted,
+	// ) {
+	// 	return
+	// }
+	//
+	// h.metricsScope.Counter(metrics.RestartCount).Inc(1)
+	// h.runtimeMetricsReporter.Start()
+	//
+	// h.membershipMonitor.Start()
+	// h.namespaceCache.Start()
+	//
+	// hostInfo, err := h.membershipMonitor.WhoAmI()
+	// if err != nil {
+	// 	h.logger.Fatal("fail to get host info from membership monitor", tag.Error(err))
+	// }
+	// h.hostInfo = hostInfo
+	//
+	// // The service is now started up
+	// h.logger.Info("Service resources started", tag.Address(hostInfo.GetAddress()))
+	// // seed the random generator once for this service
+	// rand.Seed(time.Now().UnixNano())
+	// todomigryz: inline Resource.Start() done
+	//////////////////////////////////////
+
 	s.handler.Start()
 
 	matchingservice.RegisterMatchingServiceServer(s.server, s.handler)

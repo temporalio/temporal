@@ -67,22 +67,16 @@ var (
 func NewHandler(
 	resource resource.Resource,
 	config *Config,
+	logger log.Logger,
+	metricsClient metrics.Client,
+	engine Engine,
 ) *Handler {
 	handler := &Handler{
 		Resource:      resource,
 		config:        config,
-		metricsClient: resource.GetMetricsClient(),
-		logger:        resource.GetLogger(),
-		engine: NewEngine(
-			resource.GetTaskManager(),
-			resource.GetHistoryClient(),
-			resource.GetMatchingRawClient(), // Use non retry client inside matching
-			config,
-			resource.GetLogger(),
-			resource.GetMetricsClient(),
-			resource.GetNamespaceCache(),
-			resource.GetMatchingServiceResolver(),
-		),
+		metricsClient: metricsClient, // replaced resource.GetMetricsClient(),
+		logger:        logger, //replaced resource.GetLogger(),
+		engine: engine,
 	}
 
 	// prevent from serving requests before matching engine is started and ready
