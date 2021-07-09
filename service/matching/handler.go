@@ -45,7 +45,6 @@ type (
 	// Handler - gRPC handler interface for matchingservice
 	Handler struct {
 		engine          Engine
-		config          *Config
 		metricsClient   metrics.Client       // todomigryz: replaced Resource.GetMetricsClient
 		logger          log.Logger           // todomigryz: replaced Resource.GetThrottledLogger
 		throttledLogger log.ThrottledLogger  // todomigryz: replaced Resource.GetThrottledLogger
@@ -75,7 +74,6 @@ func NewHandler(
 	namespaceCache  cache.NamespaceCache,
 ) *Handler {
 	handler := &Handler{
-		config:        config,
 		metricsClient: metricsClient, // replaced resource.GetMetricsClient(),
 		logger:        logger, //replaced resource.GetLogger(),
 		throttledLogger: throttledLogger,

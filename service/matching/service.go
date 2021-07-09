@@ -195,13 +195,13 @@ func NewService(
 
 
 	engine := NewEngine(
-		serviceResource.GetTaskManager(),
+		persistenceBean.GetTaskManager(), // todomigryz: replaced serviceResource.GetTaskManager(),
 		serviceResource.GetHistoryClient(),
 		serviceResource.GetMatchingRawClient(), // Use non retry client inside matching
 		serviceConfig,
 		taggedLogger,
-		serviceResource.GetMetricsClient(),
-		serviceResource.GetNamespaceCache(),
+		metricsClient, // todomigryz: replaced serviceResource.GetMetricsClient(),
+		namespaceCache, // todomigryz: replaced serviceResource.GetNamespaceCache(),
 		serviceResource.GetMatchingServiceResolver(),
 	)
 

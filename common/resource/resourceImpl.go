@@ -450,6 +450,7 @@ func (h *Impl) GetClusterMetadata() cluster.Metadata {
 // other common resources
 
 // GetNamespaceCache return namespace cache
+// todomigryz: namespaceCache
 func (h *Impl) GetNamespaceCache() cache.NamespaceCache {
 	return h.namespaceCache
 }
