@@ -350,8 +350,8 @@ func (h *Handler) namespaceName(id string) string {
 func (h *Handler) reportForwardedPerTaskQueueCounter(hCtx *handlerContext, namespaceId string) {
 	hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
 	h.metricsClient. // todomigryz: replaced h.GetMetricsClient().
-		Scope(metrics.MatchingAddWorkflowTaskScope).
-		Tagged(metrics.NamespaceTag(h.namespaceName(namespaceId))).
-		Tagged(metrics.ServiceRoleTag(metrics.MatchingRoleTagValue)).
-		IncCounter(metrics.MatchingClientForwardedCounter)
+				Scope(metrics.MatchingAddWorkflowTaskScope).
+				Tagged(metrics.NamespaceTag(h.namespaceName(namespaceId))).
+				Tagged(metrics.ServiceRoleTag(metrics.MatchingRoleTagValue)).
+				IncCounter(metrics.MatchingClientForwardedCounter)
 }
