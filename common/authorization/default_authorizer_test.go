@@ -66,6 +66,14 @@ var (
 		APIName:   "Foo",
 		Namespace: "BAR",
 	}
+	targetListNamespaces = CallTarget{
+		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/ListNamespaces",
+		Namespace: "BAR",
+	}
+	targetDescribeNamespace = CallTarget{
+		APIName:   "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace",
+		Namespace: "BAR",
+	}
 )
 
 type (
@@ -116,13 +124,44 @@ func (s *defaultAuthorizerSuite) TestSystemReaderBarUndefinedAuthZ() {
 func (s *defaultAuthorizerSuite) TestSystemUndefinedNamespaceReaderAuthZ() {
 	result, err := s.authorizer.Authorize(nil, &claimsSystemUndefinedNamespaceReader, &targetFooBar)
 	s.NoError(err)
-	s.Equal(DecisionAllow, result.Decision)
+	s.Equal(DecisionDeny, result.Decision)
 }
 func (s *defaultAuthorizerSuite) TestSystemUndefinedNamespaceCaseMismatch() {
 	result, err := s.authorizer.Authorize(nil, &claimsSystemUndefinedNamespaceReader, &targetFooBAR)
 	s.NoError(err)
+	s.Equal(DecisionDeny, result.Decision)
+}
+func (s *defaultAuthorizerSuite) TestSystemUndefinedNamespaceReaderListNamespaces() {
+	result, err := s.authorizer.Authorize(nil, &claimsSystemUndefinedNamespaceReader, &targetListNamespaces)
+	s.NoError(err)
+	s.Equal(DecisionDeny, result.Decision)
+}
+func (s *defaultAuthorizerSuite) TestSystemUndefinedNamespaceReaderDescribeNamespace() {
+	result, err := s.authorizer.Authorize(nil, &claimsSystemUndefinedNamespaceReader, &targetDescribeNamespace)
+	s.NoError(err)
 	s.Equal(DecisionAllow, result.Decision)
 }
+func (s *defaultAuthorizerSuite) TestSystemWriterDescribeNamespace() {
+	result, err := s.authorizer.Authorize(nil, &claimsSystemWriter, &targetDescribeNamespace)
+	s.NoError(err)
+	s.Equal(DecisionAllow, result.Decision)
+}
+func (s *defaultAuthorizerSuite) TestSystemWriterListNamespaces() {
+	result, err := s.authorizer.Authorize(nil, &claimsSystemWriter, &targetListNamespaces)
+	s.NoError(err)
+	s.Equal(DecisionAllow, result.Decision)
+}
+func (s *defaultAuthorizerSuite) TestSystemAdminDescribeNamespace() {
+	result, err := s.authorizer.Authorize(nil, &claimsSystemAdmin, &targetDescribeNamespace)
+	s.NoError(err)
+	s.Equal(DecisionAllow, result.Decision)
+}
+func (s *defaultAuthorizerSuite) TestSystemAdminListNamespaces() {
+	result, err := s.authorizer.Authorize(nil, &claimsSystemAdmin, &targetListNamespaces)
+	s.NoError(err)
+	s.Equal(DecisionAllow, result.Decision)
+}
+
 func (s *defaultAuthorizerSuite) TestGetAuthorizerFromConfigNoop() {
 	s.testGetAuthorizerFromConfig("", true, reflect.TypeOf(&noopAuthorizer{}))
 }

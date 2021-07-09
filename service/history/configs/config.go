@@ -445,10 +445,15 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		ESIndexMaxResultWindow:            dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
 		IndexerConcurrency:                dc.GetIntProperty(dynamicconfig.WorkerIndexerConcurrency, 100),
 		ESProcessorNumOfWorkers:           dc.GetIntProperty(dynamicconfig.WorkerESProcessorNumOfWorkers, 1),
-		ESProcessorBulkActions:            dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkActions, 1000),
-		ESProcessorBulkSize:               dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkSize, 2<<24), // 16MB
-		ESProcessorFlushInterval:          dc.GetDurationProperty(dynamicconfig.WorkerESProcessorFlushInterval, 1*time.Second),
-		ESProcessorAckTimeout:             dc.GetDurationProperty(dynamicconfig.WorkerESProcessorAckTimeout, 1*time.Minute),
+		// Should be not greater than NumberOfShards(512)/NumberOfHistoryNodes(4) * VisibilityTaskWorkerCount(10) divided by workflow distribution factor (2 at least).
+		// Otherwise, visibility queue processors won't be able to fill up bulk with documents and bulk will flush due to interval, not number of actions.
+		ESProcessorBulkActions: dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkActions, 200),
+		// 16MB - just a sanity check. With ES document size ~1Kb it should never be reached.
+		ESProcessorBulkSize: dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkSize, 16*1024*1024),
+		// Under high load bulk processor should flush due to number of BulkActions reached.
+		// Although, under small load it would never be the case and bulk processor will flush every this interval.
+		ESProcessorFlushInterval: dc.GetDurationProperty(dynamicconfig.WorkerESProcessorFlushInterval, 200*time.Millisecond),
+		ESProcessorAckTimeout:    dc.GetDurationProperty(dynamicconfig.WorkerESProcessorAckTimeout, 1*time.Minute),
 
 		EnableCrossNamespaceCommands: dc.GetBoolProperty(dynamicconfig.EnableCrossNamespaceCommands, true),
 	}

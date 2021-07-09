@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
@@ -55,47 +56,62 @@ type (
 
 	// taskWriter writes tasks sequentially to persistence
 	taskWriter struct {
+		status       int32
 		tlMgr        *taskQueueManagerImpl
 		config       *taskQueueConfig
 		taskQueueID  *taskQueueID
 		appendCh     chan *writeTaskRequest
 		taskIDBlock  taskIDBlock
 		maxReadLevel int64
-		stopped      int64 // set to 1 if the writer is stopped or is shutting down
 		logger       log.Logger
-		stopCh       chan struct{} // shutdown signal for all routines in this class
+		shutdownChan chan struct{}
 	}
 )
 
 // errShutdown indicates that the task queue is shutting down
 var errShutdown = &persistence.ConditionFailedError{Msg: "task queue shutting down"}
 
-func newTaskWriter(tlMgr *taskQueueManagerImpl) *taskWriter {
+func newTaskWriter(
+	tlMgr *taskQueueManagerImpl,
+	block taskIDBlock,
+) *taskWriter {
 	return &taskWriter{
-		tlMgr:       tlMgr,
-		config:      tlMgr.config,
-		taskQueueID: tlMgr.taskQueueID,
-		stopCh:      make(chan struct{}),
-		appendCh:    make(chan *writeTaskRequest, tlMgr.config.OutstandingTaskAppendsThreshold()),
-		logger:      tlMgr.logger,
+		status:       common.DaemonStatusInitialized,
+		tlMgr:        tlMgr,
+		config:       tlMgr.config,
+		taskQueueID:  tlMgr.taskQueueID,
+		appendCh:     make(chan *writeTaskRequest, tlMgr.config.OutstandingTaskAppendsThreshold()),
+		taskIDBlock:  block,
+		maxReadLevel: block.start - 1,
+		logger:       tlMgr.logger,
+
+		shutdownChan: make(chan struct{}),
 	}
 }
 
-func (w *taskWriter) Start(block taskIDBlock) {
-	w.taskIDBlock = block
-	w.maxReadLevel = block.start - 1
+func (w *taskWriter) Start() {
+	if !atomic.CompareAndSwapInt32(
+		&w.status,
+		common.DaemonStatusInitialized,
+		common.DaemonStatusStarted,
+	) {
+		return
+	}
+
 	go w.taskWriterLoop()
 }
 
 // Stop stops the taskWriter
 func (w *taskWriter) Stop() {
-	if atomic.CompareAndSwapInt64(&w.stopped, 0, 1) {
-		close(w.stopCh)
+	if !atomic.CompareAndSwapInt32(
+		&w.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
+		return
 	}
-}
 
-func (w *taskWriter) isStopped() bool {
-	return atomic.LoadInt64(&w.stopped) == 1
+	close(w.shutdownChan)
 }
 
 func (w *taskWriter) appendTask(
@@ -103,8 +119,11 @@ func (w *taskWriter) appendTask(
 	taskInfo *persistencespb.TaskInfo,
 ) (*persistence.CreateTasksResponse, error) {
 
-	if w.isStopped() {
+	select {
+	case <-w.shutdownChan:
 		return nil, errShutdown
+	default:
+		// noop
 	}
 
 	ch := make(chan *writeTaskResponse)
@@ -119,7 +138,7 @@ func (w *taskWriter) appendTask(
 		select {
 		case r := <-ch:
 			return r.persistenceResponse, r.err
-		case <-w.stopCh:
+		case <-w.shutdownChan:
 			// if we are shutting down, this request will never make
 			// it to cassandra, just bail out and fail this request
 			return nil, errShutdown
@@ -179,41 +198,37 @@ writerLoop:
 	for {
 		select {
 		case request := <-w.appendCh:
-			{
-				// read a batch of requests from the channel
-				reqs := []*writeTaskRequest{request}
-				reqs = w.getWriteBatch(reqs)
-				batchSize := len(reqs)
+			// read a batch of requests from the channel
+			reqs := []*writeTaskRequest{request}
+			reqs = w.getWriteBatch(reqs)
+			batchSize := len(reqs)
 
-				maxReadLevel := int64(0)
+			maxReadLevel := int64(0)
 
-				taskIDs, err := w.allocTaskIDs(batchSize)
-				if err != nil {
-					w.sendWriteResponse(reqs, nil, err)
-					continue writerLoop
-				}
-
-				var tasks []*persistencespb.AllocatedTaskInfo
-				for i, req := range reqs {
-					tasks = append(tasks, &persistencespb.AllocatedTaskInfo{
-						TaskId: taskIDs[i],
-						Data:   req.taskInfo,
-					})
-					maxReadLevel = taskIDs[i]
-				}
-
-				resp, err := w.appendTasks(tasks)
-				w.sendWriteResponse(reqs, resp, err)
-				// Update the maxReadLevel after the writes are completed.
-				if maxReadLevel > 0 {
-					atomic.StoreInt64(&w.maxReadLevel, maxReadLevel)
-				}
+			taskIDs, err := w.allocTaskIDs(batchSize)
+			if err != nil {
+				w.sendWriteResponse(reqs, nil, err)
+				continue writerLoop
 			}
-		case <-w.stopCh:
-			// we don't close the appendCh here
-			// because that can cause on a send on closed
-			// channel panic on the appendTask()
-			break writerLoop
+
+			var tasks []*persistencespb.AllocatedTaskInfo
+			for i, req := range reqs {
+				tasks = append(tasks, &persistencespb.AllocatedTaskInfo{
+					TaskId: taskIDs[i],
+					Data:   req.taskInfo,
+				})
+				maxReadLevel = taskIDs[i]
+			}
+
+			resp, err := w.appendTasks(tasks)
+			w.sendWriteResponse(reqs, resp, err)
+			// Update the maxReadLevel after the writes are completed.
+			if maxReadLevel > 0 {
+				atomic.StoreInt64(&w.maxReadLevel, maxReadLevel)
+			}
+
+		case <-w.shutdownChan:
+			return
 		}
 	}
 }

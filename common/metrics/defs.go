@@ -658,6 +658,12 @@ const (
 	// ElasticsearchDeleteWorkflowExecutionsScope tracks DeleteWorkflowExecution calls made by service to persistence layer
 	ElasticsearchDeleteWorkflowExecutionsScope
 
+	// ElasticsearchBulkProcessor is scope used by all metric emitted by Elasticsearch bulk processor
+	ElasticsearchBulkProcessor
+
+	// ElasticsearchVisibility is scope used by all Elasticsearch visibility metrics
+	ElasticsearchVisibility
+
 	// SequentialTaskProcessingScope is used by sequential task processing logic
 	SequentialTaskProcessingScope
 	// ParallelTaskProcessingScope is used by parallel task processing logic
@@ -685,9 +691,6 @@ const (
 	BlobstoreClientDeleteScope
 	// BlobstoreClientDirectoryExistsScope tracks DirectoryExists calls to blobstore
 	BlobstoreClientDirectoryExistsScope
-
-	// ElasticSearchVisibility is scope used by all metric emitted by esProcessor
-	ElasticSearchVisibility
 
 	NumCommonScopes
 )
@@ -1376,9 +1379,12 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ElasticsearchScanWorkflowExecutionsScope:                   {operation: "ScanWorkflowExecutions"},
 		ElasticsearchCountWorkflowExecutionsScope:                  {operation: "CountWorkflowExecutions"},
 		ElasticsearchDeleteWorkflowExecutionsScope:                 {operation: "DeleteWorkflowExecution"},
-		SequentialTaskProcessingScope:                              {operation: "SequentialTaskProcessing"},
-		ParallelTaskProcessingScope:                                {operation: "ParallelTaskProcessing"},
-		TaskSchedulerScope:                                         {operation: "TaskScheduler"},
+		ElasticsearchBulkProcessor:                                 {operation: "ElasticsearchBulkProcessor"},
+		ElasticsearchVisibility:                                    {operation: "ElasticsearchVisibility"},
+
+		SequentialTaskProcessingScope: {operation: "SequentialTaskProcessing"},
+		ParallelTaskProcessingScope:   {operation: "ParallelTaskProcessing"},
+		TaskSchedulerScope:            {operation: "TaskScheduler"},
 
 		HistoryArchiverScope:    {operation: "HistoryArchiver"},
 		VisibilityArchiverScope: {operation: "VisibilityArchiver"},
@@ -1389,8 +1395,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		BlobstoreClientExistsScope:          {operation: "BlobstoreClientExists", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
 		BlobstoreClientDeleteScope:          {operation: "BlobstoreClientDelete", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
 		BlobstoreClientDirectoryExistsScope: {operation: "BlobstoreClientDirectoryExists", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
-
-		ElasticSearchVisibility: {operation: "ElasticSearchVisibility"},
 	},
 	// Frontend Scope Names
 	Frontend: {
@@ -1755,7 +1759,7 @@ const (
 	AddSearchAttributesWorkflowSuccessCount
 	AddSearchAttributesWorkflowFailuresCount
 
-	ESInvalidSearchAttribute
+	ElasticsearchInvalidSearchAttributeCount
 
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
@@ -1931,11 +1935,14 @@ const (
 	MutableStateChecksumMismatch
 	MutableStateChecksumInvalidated
 
-	ESBulkProcessorRequests
-	ESBulkProcessorRetries
-	ESBulkProcessorFailures
-	ESBulkProcessorCorruptedData
-	ESBulkProcessorRequestLatency
+	ElasticsearchBulkProcessorRequests
+	ElasticsearchBulkProcessorRetries
+	ElasticsearchBulkProcessorFailures
+	ElasticsearchBulkProcessorCorruptedData
+	ElasticsearchBulkProcessorRequestLatency
+	ElasticsearchBulkProcessorCommitLatency
+	ElasticsearchBulkProcessorWaitLatency
+	ElasticsearchBulkProcessorBulkSize
 
 	NumHistoryMetrics
 )
@@ -1979,13 +1986,6 @@ const (
 	ReplicatorMessagesDropped
 	ReplicatorLatency
 	ReplicatorDLQFailures
-	ESProcessorRequests
-	ESProcessorRetries
-	ESProcessorFailures
-	ESProcessorCorruptedData
-	ESProcessorProcessMsgLatency
-	IndexProcessorCorruptedData
-	IndexProcessorProcessMsgLatency
 	ArchiverNonRetryableErrorCount
 	ArchiverStartedCount
 	ArchiverStoppedCount
@@ -2206,7 +2206,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceErrAuthorizeFailedPerTaskQueueCounter: {
 			metricName: "service_errors_authorize_failed_per_tl", metricRollupName: "service_errors_authorize_failed", metricType: Counter,
 		},
-		ESInvalidSearchAttribute: {metricName: "es_invalid_search_attribute"},
+		ElasticsearchInvalidSearchAttributeCount: {metricName: "elasticsearch_invalid_search_attribute_counter", metricType: Counter},
 	},
 	History: {
 		TaskRequests:                                      {metricName: "task_requests", metricType: Counter},
@@ -2375,11 +2375,14 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		MutableStateChecksumMismatch:                      {metricName: "mutable_state_checksum_mismatch", metricType: Counter},
 		MutableStateChecksumInvalidated:                   {metricName: "mutable_state_checksum_invalidated", metricType: Counter},
 
-		ESBulkProcessorRequests:       {metricName: "es_bulk_processor_requests"},
-		ESBulkProcessorRetries:        {metricName: "es_bulk_processor_retries"},
-		ESBulkProcessorFailures:       {metricName: "es_bulk_processor_errors"},
-		ESBulkProcessorCorruptedData:  {metricName: "es_bulk_processor_corrupted_data"},
-		ESBulkProcessorRequestLatency: {metricName: "es_bulk_processor_request_latency", metricType: Timer},
+		ElasticsearchBulkProcessorRequests:       {metricName: "elasticsearch_bulk_processor_requests"},
+		ElasticsearchBulkProcessorRetries:        {metricName: "elasticsearch_bulk_processor_retries"},
+		ElasticsearchBulkProcessorFailures:       {metricName: "elasticsearch_bulk_processor_errors"},
+		ElasticsearchBulkProcessorCorruptedData:  {metricName: "elasticsearch_bulk_processor_corrupted_data"},
+		ElasticsearchBulkProcessorRequestLatency: {metricName: "elasticsearch_bulk_processor_request_latency", metricType: Timer},
+		ElasticsearchBulkProcessorCommitLatency:  {metricName: "elasticsearch_bulk_processor_commit_latency", metricType: Timer},
+		ElasticsearchBulkProcessorWaitLatency:    {metricName: "elasticsearch_bulk_processor_wait_latency", metricType: Timer},
+		ElasticsearchBulkProcessorBulkSize:       {metricName: "elasticsearch_bulk_processor_bulk_size", metricType: Timer},
 	},
 	Matching: {
 		PollSuccessPerTaskQueueCounter:            {metricName: "poll_success_per_tl", metricRollupName: "poll_success"},
@@ -2415,13 +2418,6 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ReplicatorMessagesDropped:                     {metricName: "replicator_messages_dropped"},
 		ReplicatorLatency:                             {metricName: "replicator_latency"},
 		ReplicatorDLQFailures:                         {metricName: "replicator_dlq_enqueue_fails", metricType: Counter},
-		ESProcessorRequests:                           {metricName: "es_processor_requests"},
-		ESProcessorRetries:                            {metricName: "es_processor_retries"},
-		ESProcessorFailures:                           {metricName: "es_processor_errors"},
-		ESProcessorCorruptedData:                      {metricName: "es_processor_corrupted_data"},
-		ESProcessorProcessMsgLatency:                  {metricName: "es_processor_process_msg_latency", metricType: Timer},
-		IndexProcessorCorruptedData:                   {metricName: "index_processor_corrupted_data"},
-		IndexProcessorProcessMsgLatency:               {metricName: "index_processor_process_msg_latency", metricType: Timer},
 		ArchiverNonRetryableErrorCount:                {metricName: "archiver_non_retryable_error"},
 		ArchiverStartedCount:                          {metricName: "archiver_started"},
 		ArchiverStoppedCount:                          {metricName: "archiver_stopped"},

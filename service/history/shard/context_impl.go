@@ -46,7 +46,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 )
 
@@ -58,14 +57,13 @@ type (
 	ContextImpl struct {
 		resource.Resource
 
+		status           int32
 		shardItem        *historyShardsItem
 		shardID          int32
-		rangeID          int64
 		executionManager persistence.ExecutionManager
 		metricsClient    metrics.Client
 		EventsCache      events.Cache
 		closeCallback    func(int32, *historyShardsItem)
-		closed           int32
 		config           *configs.Config
 		logger           log.Logger
 		throttledLogger  log.Logger
@@ -409,6 +407,9 @@ func (s *ContextImpl) UpdateTimerMaxReadLevel(cluster string) time.Time {
 func (s *ContextImpl) CreateWorkflowExecution(
 	request *persistence.CreateWorkflowExecutionRequest,
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
+	if s.isStopped() {
+		return nil, ErrShardClosed
+	}
 
 	namespaceID := request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId
 	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId
@@ -436,57 +437,21 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	}
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
-Create_Loop:
-	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
-		currentRangeID := s.getRangeID()
-		request.RangeID = currentRangeID
-
-		response, err := s.executionManager.CreateWorkflowExecution(request)
-		if err != nil {
-			switch err.(type) {
-			case *serviceerror.WorkflowExecutionAlreadyStarted,
-				*persistence.WorkflowExecutionAlreadyStartedError,
-				*persistence.TimeoutError,
-				*serviceerror.ResourceExhausted:
-				// No special handling required for these errors
-			case *persistence.ShardOwnershipLostError:
-				{
-					// RangeID might have been renewed by the same host while this update was in flight
-					// Retry the operation if we still have the shard ownership
-					if currentRangeID != s.getRangeID() {
-						continue Create_Loop
-					} else {
-						// Shard is stolen, trigger shutdown of history engine
-						s.closeShard()
-					}
-				}
-			default:
-				{
-					// We have no idea if the write failed or will eventually make it to
-					// persistence. Increment RangeID to guarantee that subsequent reads
-					// will either see that write, or know for certain that it failed.
-					// This allows the callers to reliably check the outcome by performing
-					// a read.
-					err1 := s.renewRangeLocked(false)
-					if err1 != nil {
-						// At this point we have no choice but to unload the shard, so that it
-						// gets a new RangeID when it's reloaded.
-						s.closeShard()
-						break Create_Loop
-					}
-				}
-			}
-		}
-
-		return response, err
+	currentRangeID := s.getRangeID()
+	request.RangeID = currentRangeID
+	resp, err := s.executionManager.CreateWorkflowExecution(request)
+	if err = s.handleError(err); err != nil {
+		return nil, err
 	}
-
-	return nil, consts.ErrMaxAttemptsExceeded
+	return resp, nil
 }
 
 func (s *ContextImpl) UpdateWorkflowExecution(
 	request *persistence.UpdateWorkflowExecutionRequest,
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
+	if s.isStopped() {
+		return nil, ErrShardClosed
+	}
 
 	namespaceID := request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId
 	workflowID := request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId
@@ -527,55 +492,21 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	}
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
-Update_Loop:
-	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
-		currentRangeID := s.getRangeID()
-		request.RangeID = currentRangeID
-		resp, err := s.executionManager.UpdateWorkflowExecution(request)
-		if err != nil {
-			switch err.(type) {
-			case *persistence.ConditionFailedError,
-				*serviceerror.ResourceExhausted:
-				// No special handling required for these errors
-			case *persistence.ShardOwnershipLostError:
-				{
-					// RangeID might have been renewed by the same host while this update was in flight
-					// Retry the operation if we still have the shard ownership
-					if currentRangeID != s.getRangeID() {
-						continue Update_Loop
-					} else {
-						// Shard is stolen, trigger shutdown of history engine
-						s.closeShard()
-						break Update_Loop
-					}
-				}
-			default:
-				{
-					// We have no idea if the write failed or will eventually make it to
-					// persistence. Increment RangeID to guarantee that subsequent reads
-					// will either see that write, or know for certain that it failed.
-					// This allows the callers to reliably check the outcome by performing
-					// a read.
-					err1 := s.renewRangeLocked(false)
-					if err1 != nil {
-						// At this point we have no choice but to unload the shard, so that it
-						// gets a new RangeID when it's reloaded.
-						s.closeShard()
-						break Update_Loop
-					}
-				}
-			}
-		}
-
-		return resp, err
+	currentRangeID := s.getRangeID()
+	request.RangeID = currentRangeID
+	resp, err := s.executionManager.UpdateWorkflowExecution(request)
+	if err = s.handleError(err); err != nil {
+		return nil, err
 	}
-
-	return nil, consts.ErrMaxAttemptsExceeded
+	return resp, nil
 }
 
 func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
 ) error {
+	if s.isStopped() {
+		return ErrShardClosed
+	}
 
 	namespaceID := request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId
 	workflowID := request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId
@@ -629,55 +560,19 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	}
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
-Reset_Loop:
-	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
-		currentRangeID := s.getRangeID()
-		request.RangeID = currentRangeID
-		err := s.executionManager.ConflictResolveWorkflowExecution(request)
-		if err != nil {
-			switch err.(type) {
-			case *persistence.ConditionFailedError,
-				*serviceerror.ResourceExhausted:
-				// No special handling required for these errors
-			case *persistence.ShardOwnershipLostError:
-				{
-					// RangeID might have been renewed by the same host while this update was in flight
-					// Retry the operation if we still have the shard ownership
-					if currentRangeID != s.getRangeID() {
-						continue Reset_Loop
-					} else {
-						// Shard is stolen, trigger shutdown of history engine
-						s.closeShard()
-						break Reset_Loop
-					}
-				}
-			default:
-				{
-					// We have no idea if the write failed or will eventually make it to
-					// persistence. Increment RangeID to guarantee that subsequent reads
-					// will either see that write, or know for certain that it failed.
-					// This allows the callers to reliably check the outcome by performing
-					// a read.
-					err1 := s.renewRangeLocked(false)
-					if err1 != nil {
-						// At this point we have no choice but to unload the shard, so that it
-						// gets a new RangeID when it's reloaded.
-						s.closeShard()
-						break Reset_Loop
-					}
-				}
-			}
-		}
-
-		return err
-	}
-
-	return consts.ErrMaxAttemptsExceeded
+	currentRangeID := s.getRangeID()
+	request.RangeID = currentRangeID
+	err = s.executionManager.ConflictResolveWorkflowExecution(request)
+	return s.handleError(err)
 }
 
 func (s *ContextImpl) AddTasks(
 	request *persistence.AddTasksRequest,
 ) error {
+	if s.isStopped() {
+		return ErrShardClosed
+	}
+
 	namespaceID := request.NamespaceID
 	workflowID := request.WorkflowID
 
@@ -706,30 +601,14 @@ func (s *ContextImpl) AddTasks(
 
 	request.RangeID = s.getRangeID()
 	err = s.executionManager.AddTasks(request)
-	switch err.(type) {
-	case nil:
-		s.engine.NotifyNewTransferTasks(request.TransferTasks)
-		s.engine.NotifyNewTimerTasks(request.TimerTasks)
-		s.engine.NotifyNewVisibilityTasks(request.VisibilityTasks)
-		s.engine.NotifyNewReplicationTasks(request.ReplicationTasks)
-		return nil
-	case *persistence.TimeoutError:
-		// noop
-
-	case *serviceerror.ResourceExhausted:
-		// noop
-
-	case *persistence.ShardOwnershipLostError:
-		s.closeShard()
-
-	default:
-		if err := s.renewRangeLocked(false); err != nil {
-			// At this point we have no choice but to unload the shard, so that it
-			// gets a new RangeID when it's reloaded.
-			s.closeShard()
-		}
+	if err = s.handleError(err); err != nil {
+		return err
 	}
-	return err
+	s.engine.NotifyNewTransferTasks(request.TransferTasks)
+	s.engine.NotifyNewTimerTasks(request.TimerTasks)
+	s.engine.NotifyNewVisibilityTasks(request.VisibilityTasks)
+	s.engine.NotifyNewReplicationTasks(request.ReplicationTasks)
+	return nil
 }
 
 func (s *ContextImpl) AppendHistoryEvents(
@@ -737,6 +616,9 @@ func (s *ContextImpl) AppendHistoryEvents(
 	namespaceID string,
 	execution commonpb.WorkflowExecution,
 ) (int, error) {
+	if s.isStopped() {
+		return 0, ErrShardClosed
+	}
 
 	request.ShardID = s.shardID
 
@@ -790,12 +672,16 @@ func (s *ContextImpl) getRangeID() int64 {
 	return s.shardInfo.GetRangeId()
 }
 
-func (s *ContextImpl) isClosed() bool {
-	return atomic.LoadInt32(&s.closed) != 0
+func (s *ContextImpl) isStopped() bool {
+	return atomic.LoadInt32(&s.status) == common.DaemonStatusStopped
 }
 
 func (s *ContextImpl) closeShard() {
-	if !atomic.CompareAndSwapInt32(&s.closed, 0, 1) {
+	if !atomic.CompareAndSwapInt32(
+		&s.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
 		return
 	}
 
@@ -807,7 +693,6 @@ func (s *ContextImpl) closeShard() {
 
 	// fails any writes that may start after this point.
 	s.shardInfo.RangeId = -1
-	atomic.StoreInt64(&s.rangeID, s.shardInfo.RangeId)
 }
 
 func (s *ContextImpl) generateTransferTaskIDLocked() (int64, error) {
@@ -865,7 +750,6 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 	s.transferSequenceNumber = updatedShardInfo.GetRangeId() << s.config.RangeSizeBits
 	s.maxTransferSequenceNumber = (updatedShardInfo.GetRangeId() + 1) << s.config.RangeSizeBits
 	s.transferMaxReadLevel = s.transferSequenceNumber - 1
-	atomic.StoreInt64(&s.rangeID, updatedShardInfo.GetRangeId())
 	s.shardInfo = updatedShardInfo
 
 	return nil
@@ -879,7 +763,7 @@ func (s *ContextImpl) updateMaxReadLevelLocked(rl int64) {
 }
 
 func (s *ContextImpl) updateShardInfoLocked() error {
-	if s.isClosed() {
+	if s.isStopped() {
 		return ErrShardClosed
 	}
 
@@ -1087,6 +971,38 @@ func (s *ContextImpl) GetLastUpdatedTime() time.Time {
 	return s.lastUpdated
 }
 
+func (s *ContextImpl) handleError(err error) error {
+	switch err.(type) {
+	case nil:
+		return nil
+
+	case *serviceerror.WorkflowExecutionAlreadyStarted,
+		*persistence.WorkflowExecutionAlreadyStartedError,
+		*persistence.ConditionFailedError,
+		*serviceerror.ResourceExhausted:
+		// No special handling required for these errors
+		return err
+
+	case *persistence.ShardOwnershipLostError:
+		// Shard is stolen, trigger shutdown of history engine
+		s.closeShard()
+		return err
+
+	default:
+		// We have no idea if the write failed or will eventually make it to
+		// persistence. Increment RangeID to guarantee that subsequent reads
+		// will either see that write, or know for certain that it failed.
+		// This allows the callers to reliably check the outcome by performing
+		// a read.
+		if err := s.renewRangeLocked(false); err != nil {
+			// At this point we have no choice but to unload the shard, so that it
+			// gets a new RangeID when it's reloaded.
+			s.closeShard()
+		}
+		return err
+	}
+}
+
 func (s *ContextImpl) Lock() {
 	scope := metrics.ShardInfoScope
 	s.metricsClient.IncCounter(scope, metrics.LockRequests)
@@ -1193,7 +1109,9 @@ func acquireShard(
 	}
 
 	shardContext := &ContextImpl{
-		Resource:                       shardItem.Resource,
+		Resource: shardItem.Resource,
+		// shard context does not have background processing logic
+		status:                         common.DaemonStatusStarted,
 		shardItem:                      shardItem,
 		shardID:                        shardItem.shardID,
 		executionManager:               executionMgr,

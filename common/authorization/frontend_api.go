@@ -1,6 +1,8 @@
 // The MIT License
 //
-// Copyright (c) 2021 Temporal Technologies Inc.  All rights reserved.
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,43 +22,35 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package authorization
 
-import (
-	"os"
-
-	"github.com/hashicorp/go-plugin"
-	cliplugin "go.temporal.io/server/tools/cli/plugin"
-)
-
-type provider struct {
-	token string
+var readOnlyNamespaceAPI = map[string]struct{}{
+	"DescribeNamespace":              {},
+	"GetWorkflowExecutionHistory":    {},
+	"ListOpenWorkflowExecutions":     {},
+	"ListClosedWorkflowExecutions":   {},
+	"ListWorkflowExecutions":         {},
+	"ListArchivedWorkflowExecutions": {},
+	"ScanWorkflowExecutions":         {},
+	"CountWorkflowExecutions":        {},
+	"QueryWorkflow":                  {},
+	"DescribeWorkflowExecution":      {},
+	"DescribeTaskQueue":              {},
+	"ListTaskQueuePartitions":        {},
 }
 
-func (p provider) GetHeaders(currentHeaders map[string][]string) (map[string]string, error) {
-	return map[string]string{
-		"Authorization": p.token,
-	}, nil
+var readOnlyGlobalAPI = map[string]struct{}{
+	"ListNamespaces":      {},
+	"GetSearchAttributes": {},
+	"GetClusterInfo":      {},
 }
 
-func main() {
-	var p provider
+func IsReadOnlyNamespaceAPI(api string) bool {
+	_, found := readOnlyNamespaceAPI[api]
+	return found
+}
 
-	if len(os.Args) > 1 {
-		p.token = os.Args[1]
-	}
-	if p.token == "" {
-		p.token = os.Getenv("TEMPORAL_CLI_AUTHORIZATION_TOKEN")
-	}
-
-	var pluginMap = map[string]plugin.Plugin{
-		cliplugin.HeadersProviderPluginType: &cliplugin.HeadersProviderPlugin{
-			Impl: &p,
-		},
-	}
-
-	plugin.Serve(&plugin.ServeConfig{
-		HandshakeConfig: cliplugin.PluginHandshakeConfig,
-		Plugins:         pluginMap,
-	})
+func IsReadOnlyGlobalAPI(api string) bool {
+	_, found := readOnlyGlobalAPI[api]
+	return found
 }

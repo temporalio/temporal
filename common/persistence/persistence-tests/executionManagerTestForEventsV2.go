@@ -122,7 +122,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 				WorkflowTypeName:           "wType",
 				WorkflowRunTimeout:         timestamp.DurationFromSeconds(20),
 				DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(13),
-				LastProcessedEvent:         0,
+				LastWorkflowTaskStartId:    0,
 				WorkflowTaskScheduleId:     2,
 				WorkflowTaskStartedId:      common.EmptyEventID,
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
@@ -160,7 +160,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
-	updatedInfo.LastProcessedEvent = int64(2)
+	updatedInfo.LastWorkflowTaskStartId = int64(2)
 	currentTime := timestamp.TimePtr(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC))
 	timerID := "id_1"
 	timerInfos := []*persistencespb.TimerInfo{{
@@ -221,7 +221,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 				WorkflowTypeName:           "wType",
 				WorkflowRunTimeout:         timestamp.DurationFromSeconds(20),
 				DefaultWorkflowTaskTimeout: timestamp.DurationFromSeconds(13),
-				LastProcessedEvent:         0,
+				LastWorkflowTaskStartId:    0,
 				WorkflowTaskScheduleId:     2,
 				WorkflowTaskStartedId:      common.EmptyEventID,
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
@@ -260,7 +260,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
-	updatedInfo.LastProcessedEvent = int64(2)
+	updatedInfo.LastWorkflowTaskStartId = int64(2)
 	currentTime := timestamp.TimePtr(time.Date(1978, 8, 22, 12, 59, 59, 999999, time.UTC))
 	timerID := "id_1"
 	timerInfos := []*persistencespb.TimerInfo{{
@@ -310,7 +310,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
 	updatedState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	updatedState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-	updatedInfo.LastProcessedEvent = int64(2)
+	updatedInfo.LastWorkflowTaskStartId = int64(2)
 
 	newWorkflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "continue-as-new-workflow-test",
@@ -345,7 +345,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 				WorkflowTypeName:           updatedInfo.WorkflowTypeName,
 				WorkflowRunTimeout:         updatedInfo.WorkflowRunTimeout,
 				DefaultWorkflowTaskTimeout: updatedInfo.DefaultWorkflowTaskTimeout,
-				LastProcessedEvent:         common.EmptyEventID,
+				LastWorkflowTaskStartId:    common.EmptyEventID,
 				WorkflowTaskScheduleId:     int64(2),
 				WorkflowTaskStartedId:      common.EmptyEventID,
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
@@ -371,7 +371,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	prevExecutionInfo := prevExecutionState.ExecutionInfo
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, prevExecutionState.ExecutionState.State)
 	s.Equal(int64(5), prevExecutionState.NextEventId)
-	s.Equal(int64(2), prevExecutionInfo.LastProcessedEvent)
+	s.Equal(int64(2), prevExecutionInfo.LastWorkflowTaskStartId)
 
 	newExecutionState, err4 := s.GetWorkflowMutableState(namespaceID, newWorkflowExecution)
 	s.NoError(err4)
@@ -379,7 +379,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, newExecutionState.ExecutionState.State)
 	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, newExecutionState.ExecutionState.Status)
 	s.Equal(int64(3), newExecutionState.NextEventId)
-	s.Equal(common.EmptyEventID, newExecutionInfo.LastProcessedEvent)
+	s.Equal(common.EmptyEventID, newExecutionInfo.LastWorkflowTaskStartId)
 	s.Equal(int64(2), newExecutionInfo.WorkflowTaskScheduleId)
 
 	newRunID, err5 := s.GetCurrentWorkflowRunID(namespaceID, workflowExecution.WorkflowId)

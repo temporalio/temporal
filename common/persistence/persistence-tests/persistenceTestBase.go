@@ -40,6 +40,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -324,7 +325,7 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 				WorkflowRunTimeout:         wTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastFirstEventId:           common.FirstEventID,
-				LastProcessedEvent:         lastProcessedEventID,
+				LastWorkflowTaskStartId:    lastProcessedEventID,
 				WorkflowTaskScheduleId:     workflowTaskScheduleID,
 				WorkflowTaskStartedId:      common.EmptyEventID,
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
@@ -391,16 +392,16 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 	response, err := s.ExecutionManager.CreateWorkflowExecution(&persistence.CreateWorkflowExecutionRequest{
 		NewWorkflowSnapshot: persistence.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-				NamespaceId:            namespaceID,
-				WorkflowId:             workflowExecution.GetWorkflowId(),
-				TaskQueue:              taskQueue,
-				LastFirstEventId:       common.FirstEventID,
-				LastProcessedEvent:     lastProcessedEventID,
-				WorkflowTaskScheduleId: common.EmptyEventID,
-				WorkflowTaskStartedId:  common.EmptyEventID,
-				WorkflowTaskTimeout:    timestamp.DurationFromSeconds(1),
-				ExecutionStats:         &persistencespb.ExecutionStats{},
-				StartTime:              timestamp.TimeNowPtrUtc(),
+				NamespaceId:             namespaceID,
+				WorkflowId:              workflowExecution.GetWorkflowId(),
+				TaskQueue:               taskQueue,
+				LastFirstEventId:        common.FirstEventID,
+				LastWorkflowTaskStartId: lastProcessedEventID,
+				WorkflowTaskScheduleId:  common.EmptyEventID,
+				WorkflowTaskStartedId:   common.EmptyEventID,
+				WorkflowTaskTimeout:     timestamp.DurationFromSeconds(1),
+				ExecutionStats:          &persistencespb.ExecutionStats{},
+				StartTime:               timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -438,7 +439,7 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 				WorkflowRunTimeout:         wTimeout,
 				DefaultWorkflowTaskTimeout: workflowTaskTimeout,
 				LastFirstEventId:           common.FirstEventID,
-				LastProcessedEvent:         lastProcessedEventID,
+				LastWorkflowTaskStartId:    lastProcessedEventID,
 				WorkflowTaskScheduleId:     workflowTaskScheduleID,
 				WorkflowTaskStartedId:      common.EmptyEventID,
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
@@ -541,7 +542,7 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *persistencespb.WorkflowEx
 				WorkflowRunTimeout:         updatedInfo.WorkflowRunTimeout,
 				DefaultWorkflowTaskTimeout: updatedInfo.DefaultWorkflowTaskTimeout,
 				LastFirstEventId:           common.FirstEventID,
-				LastProcessedEvent:         common.EmptyEventID,
+				LastWorkflowTaskStartId:    common.EmptyEventID,
 				WorkflowTaskScheduleId:     workflowTaskScheduleID,
 				WorkflowTaskStartedId:      common.EmptyEventID,
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),

@@ -188,8 +188,7 @@ func (s *visibilityStore) addBulkIndexRequestAndWait(
 func (s *visibilityStore) addBulkRequestAndWait(bulkRequest *client.BulkableRequest, visibilityTaskKey string) error {
 	s.checkProcessor()
 
-	ackCh := make(chan bool, 1)
-	s.processor.Add(bulkRequest, visibilityTaskKey, ackCh)
+	ackCh := s.processor.Add(bulkRequest, visibilityTaskKey)
 	ackTimeoutTimer := time.NewTimer(s.config.ESProcessorAckTimeout())
 	defer ackTimeoutTimer.Stop()
 
@@ -912,7 +911,6 @@ func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityR
 	searchAttributes, err := searchattribute.Decode(request.SearchAttributes, &typeMap)
 	if err != nil {
 		s.logger.Error("Unable to decode search attributes.", tag.Error(err))
-		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
 	}
 	for saName, saValue := range searchAttributes {
 		doc[saName] = saValue
@@ -924,7 +922,7 @@ func (s *visibilityStore) generateESDoc(request *persistence.InternalVisibilityR
 func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchattribute.NameTypeMap) *persistence.VisibilityWorkflowExecutionInfo {
 	logParseError := func(fieldName string, fieldValue interface{}, err error, docID string) {
 		s.logger.Error("Unable to parse Elasticsearch document field.", tag.Name(fieldName), tag.Value(fieldValue), tag.Error(err), tag.ESDocID(docID))
-		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
+		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchInvalidSearchAttributeCount)
 	}
 
 	var sourceMap map[string]interface{}
@@ -1013,7 +1011,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 		record.Memo = persistence.NewDataBlob(memo, memoEncoding)
 	} else if memo != nil {
 		s.logger.Error("Field is missing in Elasticsearch document.", tag.Name(searchattribute.MemoEncoding), tag.ESDocID(hit.Id))
-		s.metricsClient.IncCounter(metrics.ElasticSearchVisibility, metrics.ESInvalidSearchAttribute)
+		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchInvalidSearchAttributeCount)
 	}
 
 	return record

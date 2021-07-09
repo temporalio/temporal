@@ -242,7 +242,7 @@ func NewMutableState(
 		WorkflowTaskTimeout:    timestamp.DurationFromSeconds(0),
 		WorkflowTaskAttempt:    1,
 
-		LastProcessedEvent: common.EmptyEventID,
+		LastWorkflowTaskStartId: common.EmptyEventID,
 
 		StartTime:        timestamp.TimePtr(startTime),
 		VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
@@ -675,11 +675,11 @@ func (e *MutableStateImpl) GetRetryBackoffDuration(
 
 	return getBackoffInterval(
 		e.timeSource.Now(),
-		timestamp.TimeValue(info.WorkflowExecutionExpirationTime),
 		info.Attempt,
 		info.RetryMaximumAttempts,
 		info.RetryInitialInterval,
 		info.RetryMaximumInterval,
+		info.WorkflowExecutionExpirationTime,
 		info.RetryBackoffCoefficient,
 		failure,
 		info.RetryNonRetryableErrorTypes,
@@ -1145,7 +1145,7 @@ func (e *MutableStateImpl) GetNextEventID() int64 {
 
 // GetPreviousStartedEventID returns last started workflow task event ID
 func (e *MutableStateImpl) GetPreviousStartedEventID() int64 {
-	return e.executionInfo.LastProcessedEvent
+	return e.executionInfo.LastWorkflowTaskStartId
 }
 
 func (e *MutableStateImpl) IsWorkflowExecutionRunning() bool {
@@ -1409,7 +1409,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	); err != nil {
 		return err
 	}
-	e.executionInfo.LastProcessedEvent = common.EmptyEventID
+	e.executionInfo.LastWorkflowTaskStartId = common.EmptyEventID
 	e.executionInfo.LastFirstEventId = startEvent.GetEventId()
 
 	e.executionInfo.WorkflowTaskVersion = common.EmptyVersion
@@ -3489,11 +3489,11 @@ func (e *MutableStateImpl) RetryActivity(
 
 	backoffInterval, retryState := getBackoffInterval(
 		now,
-		timestamp.TimeValue(ai.RetryExpirationTime),
 		ai.Attempt,
 		ai.RetryMaximumAttempts,
 		ai.RetryInitialInterval,
 		ai.RetryMaximumInterval,
+		ai.RetryExpirationTime,
 		ai.RetryBackoffCoefficient,
 		failure,
 		ai.RetryNonRetryableErrorTypes,

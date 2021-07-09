@@ -77,7 +77,6 @@ var Keys = map[Key]string{
 	EnableReadFromVisibilityArchival:       "system.enableReadFromVisibilityArchival",
 	EnableNamespaceNotActiveAutoForwarding: "system.enableNamespaceNotActiveAutoForwarding",
 	TransactionSizeLimit:                   "system.transactionSizeLimit",
-	MinRetention:                           "system.minRetention",
 	DisallowQuery:                          "system.disallowQuery",
 	EnableBatcher:                          "worker.enableBatcher",
 	EnableParentClosePolicyWorker:          "system.enableParentClosePolicyWorker",
@@ -377,8 +376,6 @@ const (
 	EnableNamespaceNotActiveAutoForwarding
 	// TransactionSizeLimit is the largest allowed transaction size to persistence
 	TransactionSizeLimit
-	// MinRetention is the minimal allowed retention period for namespaces
-	MinRetention
 	// DisallowQuery is the key to disallow query for a namespace
 	DisallowQuery
 	// EnablePriorityTaskProcessor is the key for enabling priority task processor

@@ -220,10 +220,6 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueuesEmptyResultWithShortCont
 }
 
 func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
-	s.PollWorkflowTaskQueuesResultTest()
-}
-
-func (s *matchingEngineSuite) PollWorkflowTaskQueuesResultTest() {
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
 	stickyTl := "makeStickyToast"
@@ -611,6 +607,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	scope := tally.NewTestScope("test", nil)
 	s.matchingEngine.metricsClient = metrics.NewClient(scope, metrics.Matching)
 
+	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
 	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, tlKind, s.matchingEngine.config)
 	s.NoError(err)
 
@@ -631,8 +628,8 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		RateLimiterImpl: mgrImpl.matcher.rateLimiter.(*quotas.RateLimiterImpl),
 	}
 	s.matchingEngine.updateTaskQueue(tlID, mgr)
-	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
-	s.NoError(mgr.Start())
+
+	mgr.Start()
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	activityTypeName := "activity1"
@@ -804,7 +801,10 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDisp
 }
 
 func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
-	workerCount int, taskCount int64, dispatchLimitFn func(int, int64) float64) int64 {
+	workerCount int,
+	taskCount int64,
+	dispatchLimitFn func(int, int64) float64,
+) int64 {
 	scope := tally.NewTestScope("test", nil)
 	s.matchingEngine.metricsClient = metrics.NewClient(scope, metrics.Matching)
 	runID := uuid.NewRandom().String()
@@ -820,6 +820,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	tlKind := enumspb.TASK_QUEUE_KIND_NORMAL
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
+	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
 	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, tlKind, s.matchingEngine.config)
 	s.NoError(err)
 
@@ -838,8 +839,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 		RateLimiterImpl: mgrImpl.matcher.rateLimiter.(*quotas.RateLimiterImpl),
 	}
 	s.matchingEngine.updateTaskQueue(tlID, mgr)
-	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
-	s.NoError(mgr.Start())
+	mgr.Start()
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	var wg sync.WaitGroup
@@ -1484,11 +1484,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 
 	// stop all goroutines that read / write tasks in the background
 	// remainder of this test works with the in-memory buffer
-	if !atomic.CompareAndSwapInt32(&tlMgr.stopped, 0, 1) {
-		return
-	}
-	close(tlMgr.shutdownCh)
-	tlMgr.taskWriter.Stop()
+	tlMgr.Stop()
 
 	// setReadLevel should NEVER be called without updating ackManager.outstandingTasks
 	// This is only for unit test purpose
@@ -1588,14 +1584,13 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 	s.matchingEngine.config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFilteredByTaskQueueInfo(2)
 	// set idle timer check to a really small value to assert that we don't accidentally drop tasks while blocking
 	// on enqueuing a task to task buffer
-	s.matchingEngine.config.IdleTaskqueueCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(time.Microsecond)
+	s.matchingEngine.config.IdleTaskqueueCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(time.Millisecond)
 
 	testCases := []struct {
-		batchSize          int
 		maxTimeBtwnDeletes time.Duration
 	}{
-		{2, time.Minute},       // test taskGC deleting due to size threshold
-		{100, time.Nanosecond}, // test taskGC deleting due to time condition
+		{time.Minute},     // test taskGC deleting due to size threshold
+		{time.Nanosecond}, // test taskGC deleting due to time condition
 	}
 
 	for _, tc := range testCases {
@@ -1626,7 +1621,6 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 		s.True(s.awaitCondition(func() bool { return len(tlMgr.taskReader.taskBuffer) >= (taskCount/2 - 1) }, time.Second))
 
 		maxTimeBetweenTaskDeletes = tc.maxTimeBtwnDeletes
-		s.matchingEngine.config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFilteredByTaskQueueInfo(tc.batchSize)
 
 		s.setupRecordActivityTaskStartedMock(tl)
 

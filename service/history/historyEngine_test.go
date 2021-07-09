@@ -1058,7 +1058,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedConflictOnUpdate() {
 	s.NoError(err)
 	s.NotNil(updatedWorkflowMutation)
 	s.Equal(int64(16), updatedWorkflowMutation.NextEventID)
-	s.Equal(workflowTaskStartedEvent2.EventId, updatedWorkflowMutation.ExecutionInfo.LastProcessedEvent)
+	s.Equal(workflowTaskStartedEvent2.EventId, updatedWorkflowMutation.ExecutionInfo.LastWorkflowTaskStartId)
 
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	activity3Attributes := s.getActivityScheduledEvent(executionBuilder, 13).GetActivityTaskScheduledEventAttributes()
@@ -1241,7 +1241,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowFailed() {
 
 	s.NotNil(updatedWorkflowMutation)
 	s.Equal(int64(15), updatedWorkflowMutation.NextEventID)
-	s.Equal(workflowTaskStartedEvent1.EventId, updatedWorkflowMutation.ExecutionInfo.LastProcessedEvent)
+	s.Equal(workflowTaskStartedEvent1.EventId, updatedWorkflowMutation.ExecutionInfo.LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
 	s.Equal(updatedWorkflowMutation.NextEventID-1, updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduleId)
 	s.Equal(int32(1), updatedWorkflowMutation.ExecutionInfo.Attempt)
@@ -1326,7 +1326,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowFailed() {
 
 	s.NotNil(updatedWorkflowMutation)
 	s.Equal(int64(15), updatedWorkflowMutation.NextEventID)
-	s.Equal(workflowTaskStartedEvent1.EventId, updatedWorkflowMutation.ExecutionInfo.LastProcessedEvent)
+	s.Equal(workflowTaskStartedEvent1.EventId, updatedWorkflowMutation.ExecutionInfo.LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
 	s.Equal(updatedWorkflowMutation.NextEventID-1, updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduleId)
 	s.Equal(int32(1), updatedWorkflowMutation.ExecutionInfo.Attempt)
@@ -1517,7 +1517,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 			s.NoError(err)
 			executionBuilder := s.getBuilder(tests.NamespaceID, we)
 			s.Equal(int64(6), executionBuilder.GetNextEventID())
-			s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+			s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 			s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 			s.False(executionBuilder.HasPendingWorkflowTask())
 
@@ -1531,7 +1531,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledAtt
 			s.True(strings.HasPrefix(err.Error(), "BadScheduleActivityAttributes"), err.Error())
 			s.NotNil(updatedWorkflowMutation)
 			s.Equal(int64(5), updatedWorkflowMutation.NextEventID, iVar)
-			s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastProcessedEvent, iVar)
+			s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastWorkflowTaskStartId, iVar)
 			s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State, iVar)
 			s.True(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduleId != common.EmptyEventID, iVar)
 		}
@@ -1596,7 +1596,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 
 	s.NotNil(updatedWorkflowMutation)
 	s.Equal(int64(5), updatedWorkflowMutation.NextEventID)
-	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastProcessedEvent)
+	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
 	s.True(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduleId != common.EmptyEventID)
 }
@@ -1656,7 +1656,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWor
 	s.NoError(err)
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 
@@ -1852,7 +1852,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedCompleteWorkflowSuccess() 
 	s.NoError(err)
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 }
@@ -1905,7 +1905,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedFailWorkflowSuccess() {
 	s.NoError(err)
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 }
@@ -1963,7 +1963,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowSucc
 	s.NoError(err)
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 }
 
 func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithAbandonPolicy() {
@@ -2019,7 +2019,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithAban
 	s.NoError(err)
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(1, len(executionBuilder.GetPendingChildExecutionInfos()))
 	var childID int64
 	for c := range executionBuilder.GetPendingChildExecutionInfos() {
@@ -2083,7 +2083,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedStartChildWorkflowWithTerm
 	s.NoError(err)
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(6), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(1, len(executionBuilder.GetPendingChildExecutionInfos()))
 	var childID int64
 	for c := range executionBuilder.GetPendingChildExecutionInfos() {
@@ -2562,7 +2562,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedConflictOnUpdate() {
 	s.NoError(err)
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 
 	s.True(executionBuilder.HasPendingWorkflowTask())
@@ -2669,7 +2669,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedSuccess() {
 	s.NoError(err)
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(9), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 
 	s.True(executionBuilder.HasPendingWorkflowTask())
@@ -2730,7 +2730,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedByIdSuccess() {
 	s.NoError(err)
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(9), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 
 	s.True(executionBuilder.HasPendingWorkflowTask())
@@ -3105,7 +3105,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedConflictOnUpdate() {
 	s.NoError(err)
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(12), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 
 	s.True(executionBuilder.HasPendingWorkflowTask())
@@ -3210,7 +3210,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	s.Nil(err)
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(9), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 
 	s.True(executionBuilder.HasPendingWorkflowTask())
@@ -3271,7 +3271,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 	s.Nil(err)
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(9), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 
 	s.True(executionBuilder.HasPendingWorkflowTask())
@@ -3377,7 +3377,7 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	s.Nil(err)
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(7), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 }
@@ -3522,7 +3522,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceled_Started() {
 	s.Nil(err)
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(10), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 
 	s.True(executionBuilder.HasPendingWorkflowTask())
@@ -3583,7 +3583,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledById_Started() {
 	s.Nil(err)
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(10), executionBuilder.GetNextEventID())
-	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 
 	s.True(executionBuilder.HasPendingWorkflowTask())
@@ -3749,7 +3749,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NotSchedule
 	s.Equal("BadRequestCancelActivityAttributes: invalid history builder state for action: add-activitytask-cancel-requested-event", err.Error())
 	s.NotNil(updatedWorkflowMutation)
 	s.Equal(int64(5), updatedWorkflowMutation.NextEventID)
-	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastProcessedEvent)
+	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
 	s.True(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduleId != common.EmptyEventID)
 }
@@ -3809,7 +3809,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Scheduled()
 
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(12), executionBuilder.GetNextEventID())
-	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.True(executionBuilder.HasPendingWorkflowTask())
 	di2, ok := executionBuilder.GetWorkflowTaskInfo(executionBuilder.GetNextEventID() - 1)
@@ -3874,7 +3874,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Started() {
 
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetNextEventID())
-	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 }
@@ -3942,7 +3942,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Completed()
 
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetNextEventID())
-	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 }
@@ -4003,7 +4003,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NoHeartBeat
 
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetNextEventID())
-	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 
@@ -4046,7 +4046,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NoHeartBeat
 
 	executionBuilder = s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(13), executionBuilder.GetNextEventID())
-	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.True(executionBuilder.HasPendingWorkflowTask())
 }
@@ -4107,7 +4107,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Success() {
 
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetNextEventID())
-	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 
@@ -4150,7 +4150,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_Success() {
 
 	executionBuilder = s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(13), executionBuilder.GetNextEventID())
-	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.True(executionBuilder.HasPendingWorkflowTask())
 }
@@ -4240,7 +4240,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(11), executionBuilder.GetNextEventID())
-	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 	s.Len(qr.GetCompletedIDs(), 2)
@@ -4299,7 +4299,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 
 	executionBuilder = s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(13), executionBuilder.GetNextEventID())
-	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(8), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.True(executionBuilder.HasPendingWorkflowTask())
 }
@@ -4460,7 +4460,7 @@ func (s *engineSuite) TestUserTimer_RespondWorkflowTaskCompleted() {
 
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(10), executionBuilder.GetNextEventID())
-	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 }
@@ -4525,7 +4525,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_NoStartTimer(
 
 	s.NotNil(updatedWorkflowMutation)
 	s.Equal(int64(5), updatedWorkflowMutation.NextEventID)
-	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastProcessedEvent)
+	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, updatedWorkflowMutation.ExecutionState.State)
 	s.True(updatedWorkflowMutation.ExecutionInfo.WorkflowTaskScheduleId != common.EmptyEventID)
 }
@@ -4592,7 +4592,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_TimerFired() 
 
 	executionBuilder := s.getBuilder(tests.NamespaceID, we)
 	s.Equal(int64(10), executionBuilder.GetNextEventID())
-	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastProcessedEvent)
+	s.Equal(int64(7), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
 	s.False(executionBuilder.HasPendingWorkflowTask())
 	s.False(executionBuilder.HasBufferedEvents())
@@ -4903,7 +4903,7 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 
 	ms := workflow.TestCloneToProto(msBuilder)
 	ms.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
-	ms.ExecutionInfo.LastProcessedEvent = 1
+	ms.ExecutionInfo.LastWorkflowTaskStartId = 1
 	token, err := msBuilder.GetCurrentBranchToken()
 	s.NoError(err)
 	item := versionhistory.NewVersionHistoryItem(1, 1)
