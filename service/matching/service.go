@@ -121,14 +121,41 @@ func NewService(
 		taggedLogger,
 		func() float64 { return float64(throttledLoggerMaxRPS()) })
 
+	persistenceMaxQPS := serviceConfig.PersistenceMaxQPS
+	persistenceGlobalMaxQPS := serviceConfig.PersistenceGlobalMaxQPS
+
+	// todomigryz: Injsect persistenceBean
+	persistenceBean, err := persistenceClient.NewBeanFromFactory(persistenceClient.NewFactory(
+		&params.PersistenceConfig,
+		params.PersistenceServiceResolver,
+		func(...dynamicconfig.FilterOption) int {
+			if persistenceGlobalMaxQPS() > 0 {
+				// TODO: We have a bootstrap issue to correctly find memberCount.  Membership relies on
+				// persistence to bootstrap membership ring, so we cannot have persistence rely on membership
+				// as it will cause circular dependency.
+				// ringSize, err := membershipMonitor.GetMemberCount(serviceName)
+				// if err == nil && ringSize > 0 {
+				// 	avgQuota := common.MaxInt(persistenceGlobalMaxQPS()/ringSize, 1)
+				// 	return common.MinInt(avgQuota, persistenceMaxQPS())
+				// }
+			}
+			return persistenceMaxQPS()
+		},
+		params.AbstractDatastoreFactory,
+		params.ClusterMetadataConfig.CurrentClusterName,
+		params.MetricsClient,
+		taggedLogger,
+	))
+	if err != nil {
+		return nil, err
+	}
+
+
 	serviceResource, err := resource.NewMatchingResource(
 		params,
-		logger,
 		taggedLogger,
 		throttledLogger,
 		common.MatchingServiceName,
-		serviceConfig.PersistenceMaxQPS,
-		serviceConfig.PersistenceGlobalMaxQPS,
 		func(
 			persistenceBean persistenceClient.Bean,
 			searchAttributesProvider searchattribute.Provider,
@@ -136,6 +163,7 @@ func NewService(
 		) (persistence.VisibilityManager, error) {
 			return persistenceBean.GetVisibilityManager(), nil
 		},
+		persistenceBean,
 	)
 	if err != nil {
 		return nil, err
