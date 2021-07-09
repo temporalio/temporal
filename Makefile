@@ -9,7 +9,7 @@ bins: clean-bins temporal-server tctl plugins temporal-cassandra-tool temporal-s
 all: update-tools clean proto bins check test
 
 # Used by Buildkite.
-ci-build: bins build-tests update-tools shell-check check proto mocks wire gomodtidy ensure-no-changes
+ci-build: bins build-tests update-tools shell-check check proto mocks gomodtidy ensure-no-changes
 
 # Delete all build artefacts.
 clean: clean-bins clean-test-results
@@ -77,6 +77,7 @@ ALL_SRC         := $(shell find . -name "*.go" | grep -v -e "^$(PROTO_OUT)")
 TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_DIRS))
 UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
+ALL_SRC_WITH_MOCKS := $(shell grep -rlw . -e 'go:generate mockgen' | grep -v -e "^$(PROTO_OUT)")
 
 ALL_SCRIPTS     := $(shell find . -name "*.sh")
 
@@ -440,11 +441,14 @@ external-mocks:
 	@printf $(COLOR) "Generate external libraries mocks..."
 	@mockgen -copyright_file ./LICENSE -package mocks -source $(GOPATH)/pkg/mod/github.com/aws/aws-sdk-go@$(AWS_SDK_VERSION)/service/s3/s3iface/interface.go | grep -v -e "^// Source: .*" > common/archiver/s3store/mocks/S3API.go
 
+# We call go get here to workaround go:generate injected by google/wire.
 go-generate:
 	@printf $(COLOR) "Process go:generate directives..."
-	@go generate ./...
+	for line in $(ALL_SRC_WITH_MOCKS); do \
+  		go generate -v $${line} ; \
+  	done
 
-mocks: go-generate external-mocks
+mocks: go-generate external-mocks copyright
 
 ##### Fossa #####
 fossa-install:
