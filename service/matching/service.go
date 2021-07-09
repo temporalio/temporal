@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/membership"
 	"google.golang.org/grpc"
@@ -52,34 +51,34 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/matching/configs"
 )
 
 // Service represents the matching service
-type Service struct {
-	// logger          log.Logger
-	taggedLogger    log.Logger // todomigryz: rename to logger, unless untagged is required.
-	throttledLogger log.Logger // todomigryz: this should not be required. Transient dependency?
+type (
+	Service struct {
+		logger          log.Logger // todomigryz: rename to logger, unless untagged is required.
+		throttledLogger log.Logger // todomigryz: this should not be required. Transient dependency?
 
-	// todomigryz: added from Resource Done
-	// //////////////////////////////////////////////////
+		status  int32
+		handler *Handler
+		config  *Config
 
-	status  int32
-	handler *Handler
-	config  *Config
+		server *grpc.Server
 
-	server *grpc.Server
+		metricsScope           tally.Scope
+		runtimeMetricsReporter *metrics.RuntimeMetricsReporter
+		membershipMonitor      membership.Monitor
+		namespaceCache         cache.NamespaceCache
+		visibilityMgr          persistence.VisibilityManager
+		persistenceBean        *persistenceClient.BeanImpl
+		ringpopChannel         *tchannel.Channel
+		grpcListener           net.Listener
+	}
 
-	metricsScope           tally.Scope
-	runtimeMetricsReporter *metrics.RuntimeMetricsReporter
-	membershipMonitor      membership.Monitor
-	namespaceCache         cache.NamespaceCache
-	visibilityMgr          persistence.VisibilityManager
-	persistenceBean        *persistenceClient.BeanImpl
-	ringpopChannel         *tchannel.Channel
-	grpcListener           net.Listener
-}
+	TaggedLogger log.Logger
+	// MatchingMetricsClient metrics.Client
+)
 
 // todomigryz: check if I can decouple BootstrapParams.
 // todomigryz: current steps:
@@ -94,20 +93,16 @@ type Service struct {
 //  When debuging, compare all three for relevant initial implementation.
 // NewService builds a new matching service
 func NewService(
-	logger log.Logger, // comes from BootstrapParams.Logger
-	serviceConfig *Config,
 	params *resource.BootstrapParams, // todomigryz: replace generic BootstrapParams with factory or constructed object
+	logger log.Logger,
+	taggedLogger TaggedLogger,
+	throttledLogger log.ThrottledLogger,
+	serviceConfig *Config,
+	metricsClient metrics.Client,
 ) (*Service, error) {
-	metricsClient := params.MetricsClient // replaces Resource.GetMetricsClient
-	throttledLoggerMaxRPS := serviceConfig.ThrottledLogRPS
-	taggedLogger := log.With(logger, tag.Service(serviceName)) // replaces Resource.GetLogger
-	throttledLogger := log.NewThrottledLogger(                 // replaces Resource.GetThrottledLogger
-		taggedLogger,
-		func() float64 { return float64(throttledLoggerMaxRPS()) })
 
 	persistenceMaxQPS := serviceConfig.PersistenceMaxQPS
 	persistenceGlobalMaxQPS := serviceConfig.PersistenceGlobalMaxQPS
-
 	persistenceBean, err := persistenceClient.NewBeanFromFactory(persistenceClient.NewFactory(
 		&params.PersistenceConfig,
 		params.PersistenceServiceResolver,
@@ -141,7 +136,6 @@ func NewService(
 		params.ClusterMetadataConfig.ClusterInformation,
 	)
 
-	// todomigryz: inject NamespaceCache
 	namespaceCache := cache.NewNamespaceCache(
 		persistenceBean.GetMetadataManager(),
 		clusterMetadata,
@@ -236,31 +230,32 @@ func NewService(
 	)
 
 
-	visibilityManagerInitializer := func(
-		persistenceBean persistenceClient.Bean,
-		searchAttributesProvider searchattribute.Provider,
-		logger log.Logger,
-	) (persistence.VisibilityManager, error) {
-		return persistenceBean.GetVisibilityManager(), nil
-	}
-
-	saProvider := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
-
-	visibilityMgr, err := visibilityManagerInitializer(
-		persistenceBean,
-		saProvider,
-		taggedLogger,
-	)
-	if err != nil {
-		return nil, err
-	}
+	// todomigryz: @Alex visibility should not be present in Matching
+	// visibilityManagerInitializer := func(
+	// 	persistenceBean persistenceClient.Bean,
+	// 	searchAttributesProvider searchattribute.Provider,
+	// 	logger log.Logger,
+	// ) (persistence.VisibilityManager, error) {
+	// 	return persistenceBean.GetVisibilityManager(), nil
+	// }
+	//
+	// saProvider := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
+	//
+	// visibilityMgr, err := visibilityManagerInitializer(
+	// 	persistenceBean,
+	// 	saProvider,
+	// 	taggedLogger,
+	// )
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	// /////////////////////////////////////
 	// // todomigryz:  Removing resource //
 	// // todomigryz: do we really need the rest of Resource???
 	// serviceResource, err := resource.NewMatchingResource(
 	// 	params,
-	// 	taggedLogger,
+	// 	logger,
 	// 	throttledLogger,
 	// 	common.MatchingServiceName,
 	// 	persistenceBean,
@@ -315,14 +310,13 @@ func NewService(
 		handler:      handler,
 
 		// logger:       logger,
-		taggedLogger: taggedLogger,
+		logger:          taggedLogger,
 		throttledLogger: throttledLogger,
 
 		metricsScope: params.MetricsScope,
 		runtimeMetricsReporter: runtimeMetricsReporter,
 		membershipMonitor: membershipMonitor,
 		namespaceCache: namespaceCache,
-		visibilityMgr: visibilityMgr,
 		persistenceBean: persistenceBean,
 		ringpopChannel: ringpopChannel,
 		grpcListener: grpcListener,
@@ -335,7 +329,7 @@ func (s *Service) Start() {
 		return
 	}
 
-	logger := s.taggedLogger
+	logger := s.logger
 	logger.Info("matching starting")
 
 
@@ -352,12 +346,12 @@ func (s *Service) Start() {
 	// todomigryz: remove if hostInfo not used
 	hostInfo, err := s.membershipMonitor.WhoAmI()
 	if err != nil {
-		s.taggedLogger.Fatal("fail to get host info from membership monitor", tag.Error(err))
+		s.logger.Fatal("fail to get host info from membership monitor", tag.Error(err))
 	}
 	// h.hostInfo = hostInfo
 
 	// The service is now started up
-	s.taggedLogger.Info("Service resources started", tag.Address(hostInfo.GetAddress()))
+	s.logger.Info("Service resources started", tag.Address(hostInfo.GetAddress()))
 
 	// seed the random generator once for this service
 	rand.Seed(time.Now().UnixNano())
@@ -387,9 +381,9 @@ func (s *Service) Stop() {
 	}
 
 	// remove self from membership ring and wait for traffic to drain
-	s.taggedLogger.Info("ShutdownHandler: Evicting self from membership ring")
+	s.logger.Info("ShutdownHandler: Evicting self from membership ring")
 	s.membershipMonitor.EvictSelf()
-	s.taggedLogger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
+	s.logger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	time.Sleep(s.config.ShutdownDrainDuration())
 
 	// TODO: Change this to GracefulStop when integration tests are refactored.
@@ -413,5 +407,5 @@ func (s *Service) Stop() {
 	// todomigryz: done inlining Resource.Stop
 	/////////////////////////////////////////////////
 
-	s.taggedLogger.Info("matching stopped")
+	s.logger.Info("matching stopped")
 }

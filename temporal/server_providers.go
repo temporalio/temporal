@@ -388,7 +388,10 @@ func ServicesProvider(
 			svc, err = matching.InitializeMatchingService(
 				deps.logger,
 				params,
-				deps.dynamicConfigClient)
+				deps.dynamicConfigClient,
+				params.ServerMetricsReporter,
+				deps.cfg.Services[svcName],
+				)
 			result[svcName] = svc
 			continue
 		default:

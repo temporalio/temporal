@@ -6,7 +6,9 @@ import (
 	"github.com/google/wire"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/config"
 )
 
 
@@ -15,10 +17,18 @@ import (
 func InitializeMatchingService(
 	logger log.Logger,
 	params *resource.BootstrapParams,
-	dcClient dynamicconfig.Client) (*Service, error) {
+	dcClient dynamicconfig.Client,
+	metricsReporter metrics.Reporter,
+	svcCfg config.Service,
+) (*Service, error) {
 	wire.Build(
-			ServiceConfigProvider,
-			NewService,
-		)
+		ServiceIdxProvider,
+		ServiceConfigProvider,
+		TaggedLoggerProvider,
+		ThrottledLoggerProvider,
+		MetricsReporterProvider,
+		MetricsClientProvider,
+		NewService,
+	)
 	return nil, nil
 }
