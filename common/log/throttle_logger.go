@@ -31,71 +31,72 @@ import (
 
 const extraSkipForThrottleLogger = 3
 
-type ThrottledLogger struct {
+type ThrottledLogger Logger
+type throttledLogger struct {
 	limiter quotas.RateLimiter
 	logger  Logger
 }
 
-var _ Logger = (*ThrottledLogger)(nil)
+var _ Logger = (*throttledLogger)(nil)
 
 // NewThrottledLogger returns an implementation of logger that throttles the
 // log messages being emitted. The underlying implementation uses a token bucket
 // rate limiter and stops emitting logs once the bucket runs out of tokens
 //
 // Fatal/Panic logs are always emitted without any throttling
-func NewThrottledLogger(logger Logger, rps quotas.RateFn) *ThrottledLogger {
+func NewThrottledLogger(logger Logger, rps quotas.RateFn) *throttledLogger {
 	if sl, ok := logger.(SkipLogger); ok {
 		logger = sl.Skip(extraSkipForThrottleLogger)
 	}
 
 	limiter := quotas.NewDefaultOutgoingDynamicRateLimiter(rps)
-	tl := &ThrottledLogger{
+	tl := &throttledLogger{
 		limiter: limiter,
 		logger:  logger,
 	}
 	return tl
 }
 
-func (tl *ThrottledLogger) Debug(msg string, tags ...tag.Tag) {
+func (tl *throttledLogger) Debug(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
 		tl.logger.Debug(msg, tags...)
 	})
 }
 
-func (tl *ThrottledLogger) Info(msg string, tags ...tag.Tag) {
+func (tl *throttledLogger) Info(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
 		tl.logger.Info(msg, tags...)
 	})
 }
 
-func (tl *ThrottledLogger) Warn(msg string, tags ...tag.Tag) {
+func (tl *throttledLogger) Warn(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
 		tl.logger.Warn(msg, tags...)
 	})
 }
 
-func (tl *ThrottledLogger) Error(msg string, tags ...tag.Tag) {
+func (tl *throttledLogger) Error(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
 		tl.logger.Error(msg, tags...)
 	})
 }
 
-func (tl *ThrottledLogger) Fatal(msg string, tags ...tag.Tag) {
+func (tl *throttledLogger) Fatal(msg string, tags ...tag.Tag) {
 	tl.rateLimit(func() {
 		tl.logger.Fatal(msg, tags...)
 	})
 }
 
 // Return a logger with the specified key-value pairs set, to be included in a subsequent normal logging call
-func (tl *ThrottledLogger) With(tags ...tag.Tag) Logger {
-	result := &ThrottledLogger{
+func (tl *throttledLogger) With(tags ...tag.Tag) Logger {
+	result := &throttledLogger{
 		limiter: tl.limiter,
 		logger:  With(tl.logger, tags...),
 	}
 	return result
 }
 
-func (tl *ThrottledLogger) rateLimit(f func()) {
+func (tl *throttledLogger) rateLimit(f func()) {
 	if ok := tl.limiter.Allow(); ok {
 		f()
 	}

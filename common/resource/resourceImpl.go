@@ -649,7 +649,7 @@ type TaggedLogger log.Logger
 func NewMatchingResource(
 	params *BootstrapParams,
 	taggedLogger TaggedLogger,
-	throttledLogger *log.ThrottledLogger,
+	throttledLogger log.ThrottledLogger,
 	serviceName string,
 	visibilityManagerInitializer VisibilityManagerInitializer,
 	persistenceBean persistenceClient.Bean,

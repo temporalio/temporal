@@ -45,11 +45,12 @@ type (
 	Handler struct {
 		resource.Resource
 
-		engine        Engine
-		config        *Config
-		metricsClient metrics.Client
-		logger        log.Logger
-		startWG       sync.WaitGroup
+		engine          Engine
+		config          *Config
+		metricsClient   metrics.Client
+		logger          log.Logger
+		throttledLogger log.ThrottledLogger
+		startWG         sync.WaitGroup
 	}
 )
 
@@ -68,6 +69,7 @@ func NewHandler(
 	resource resource.Resource,
 	config *Config,
 	logger log.Logger,
+	throttledLogger log.ThrottledLogger,
 	metricsClient metrics.Client,
 	engine Engine,
 ) *Handler {
@@ -76,6 +78,7 @@ func NewHandler(
 		config:        config,
 		metricsClient: metricsClient, // replaced resource.GetMetricsClient(),
 		logger:        logger, //replaced resource.GetLogger(),
+		throttledLogger: throttledLogger,
 		engine: engine,
 	}
 
@@ -97,7 +100,7 @@ func (h *Handler) Stop() {
 
 // https://github.com/grpc/grpc/blob/master/doc/health-checking.md
 func (h *Handler) Check(_ context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
-	h.GetLogger().Debug("Matching service health check endpoint (gRPC) reached.")
+	h.logger.Debug("Matching service health check endpoint (gRPC) reached.")
 
 	h.startWG.Wait()
 
@@ -137,7 +140,7 @@ func (h *Handler) AddActivityTask(
 	ctx context.Context,
 	request *matchingservice.AddActivityTaskRequest,
 ) (_ *matchingservice.AddActivityTaskResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	startT := time.Now().UTC()
 	hCtx := h.newHandlerContext(
 		ctx,
@@ -163,7 +166,7 @@ func (h *Handler) AddWorkflowTask(
 	ctx context.Context,
 	request *matchingservice.AddWorkflowTaskRequest,
 ) (_ *matchingservice.AddWorkflowTaskResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	startT := time.Now().UTC()
 	hCtx := h.newHandlerContext(
 		ctx,
@@ -188,7 +191,7 @@ func (h *Handler) PollActivityTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollActivityTaskQueueRequest,
 ) (_ *matchingservice.PollActivityTaskQueueResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
@@ -203,7 +206,7 @@ func (h *Handler) PollActivityTaskQueue(
 	if _, err := common.ValidateLongPollContextTimeoutIsSet(
 		ctx,
 		"PollActivityTaskQueue",
-		h.Resource.GetThrottledLogger(),
+		h.throttledLogger,
 	); err != nil {
 		return nil, err
 	}
@@ -218,7 +221,7 @@ func (h *Handler) PollWorkflowTaskQueue(
 	request *matchingservice.PollWorkflowTaskQueueRequest,
 ) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
 	defer func (){
-		log.CapturePanic(h.GetLogger(), &retError)
+		log.CapturePanic(h.logger, &retError)
 	}()
 	hCtx := h.newHandlerContext(
 		ctx,
@@ -234,7 +237,7 @@ func (h *Handler) PollWorkflowTaskQueue(
 	if _, err := common.ValidateLongPollContextTimeoutIsSet(
 		ctx,
 		"PollWorkflowTaskQueue",
-		h.Resource.GetThrottledLogger(),
+		h.throttledLogger,
 	); err != nil {
 		return nil, err
 	}
@@ -248,7 +251,7 @@ func (h *Handler) QueryWorkflow(
 	ctx context.Context,
 	request *matchingservice.QueryWorkflowRequest,
 ) (_ *matchingservice.QueryWorkflowResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
@@ -269,7 +272,7 @@ func (h *Handler) RespondQueryTaskCompleted(
 	ctx context.Context,
 	request *matchingservice.RespondQueryTaskCompletedRequest,
 ) (_ *matchingservice.RespondQueryTaskCompletedResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
@@ -284,7 +287,7 @@ func (h *Handler) RespondQueryTaskCompleted(
 // CancelOutstandingPoll is used to cancel outstanding pollers
 func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 	request *matchingservice.CancelOutstandingPollRequest) (_ *matchingservice.CancelOutstandingPollResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
@@ -303,7 +306,7 @@ func (h *Handler) DescribeTaskQueue(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueueRequest,
 ) (_ *matchingservice.DescribeTaskQueueResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		request.GetNamespaceId(),
@@ -320,7 +323,7 @@ func (h *Handler) ListTaskQueuePartitions(
 	ctx context.Context,
 	request *matchingservice.ListTaskQueuePartitionsRequest,
 ) (_ *matchingservice.ListTaskQueuePartitionsResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	hCtx := newHandlerContext(
 		ctx,
 		request.GetNamespace(),
