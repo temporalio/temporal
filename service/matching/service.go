@@ -57,25 +57,25 @@ import (
 // Service represents the matching service
 type (
 	Service struct {
-	logger          log.Logger // todomigryz: rename to logger, unless untagged is required.
-	throttledLogger log.Logger // todomigryz: this should not be required. Transient dependency?
+		logger          log.Logger // todomigryz: rename to logger, unless untagged is required.
+		throttledLogger log.Logger // todomigryz: this should not be required. Transient dependency?
 
-	status  int32
-	handler *Handler
-	config  *Config
+		status  int32
+		handler *Handler
+		config  *Config
 
-	server *grpc.Server
+		server *grpc.Server
 
-	metricsScope           tally.Scope
-	runtimeMetricsReporter *metrics.RuntimeMetricsReporter
-	membershipMonitor      membership.Monitor
-	namespaceCache         cache.NamespaceCache
-	visibilityMgr          persistence.VisibilityManager
-	persistenceBean        *persistenceClient.BeanImpl
-	ringpopChannel         *tchannel.Channel
-	grpcListener           net.Listener
-	clientBean             client.Bean // needed for onebox. Should remove if possible.
-}
+		metricsScope           tally.Scope
+		runtimeMetricsReporter *metrics.RuntimeMetricsReporter
+		membershipMonitor      membership.Monitor
+		namespaceCache         cache.NamespaceCache
+		visibilityMgr          persistence.VisibilityManager
+		persistenceBean        *persistenceClient.BeanImpl
+		ringpopChannel         *tchannel.Channel
+		grpcListener           net.Listener
+		clientBean             client.Bean // needed for onebox. Should remove if possible.
+	}
 
 	TaggedLogger log.Logger
 	// MatchingMetricsClient metrics.Client
@@ -320,10 +320,9 @@ func NewService(
 		persistenceBean:        persistenceBean,
 		ringpopChannel:         ringpopChannel,
 		grpcListener:           grpcListener,
-		clientBean: clientBean,
+		clientBean:             clientBean,
 	}, nil
 }
-
 
 func (s *Service) GetClientBean() client.Bean {
 	return s.clientBean
