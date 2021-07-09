@@ -444,6 +444,7 @@ func ServicesProvider(
 				deps.dynamicConfigClient,
 				params.ServerMetricsReporter,
 				deps.cfg.Services[svcName],
+				deps.cfg.ClusterMetadata,
 			)
 			result[svcName] = svc
 			continue

@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/cache"
 )
 
 // todomigryz: implement this method. Replace NewService method.
@@ -42,14 +43,19 @@ func InitializeMatchingService(
 	dcClient dynamicconfig.Client,
 	metricsReporter metrics.Reporter,
 	svcCfg config.Service,
+	clusterMetadata *config.ClusterMetadata,
 ) (*Service, error) {
 	wire.Build(
-		ServiceIdxProvider,
+		wire.Value(metrics.ServiceIdx(metrics.Matching)),
 		ServiceConfigProvider,
 		TaggedLoggerProvider,
 		ThrottledLoggerProvider,
 		MetricsReporterProvider,
 		MetricsClientProvider,
+		PersistenceBeanProvider,
+		ClusterMetadataProvider,
+		MetadataManagerProvider,
+		cache.NewNamespaceCache,
 		NewService,
 	)
 	return nil, nil

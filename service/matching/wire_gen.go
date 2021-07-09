@@ -30,6 +30,7 @@
 package matching
 
 import (
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -41,7 +42,7 @@ import (
 
 // todomigryz: implement this method. Replace NewService method.
 // todomigryz: Need to come up with proper naming convention for initialize vs factory methods.
-func InitializeMatchingService(logger log.Logger, params *resource.BootstrapParams, dcClient dynamicconfig.Client, metricsReporter metrics.Reporter, svcCfg config.Service) (*Service, error) {
+func InitializeMatchingService(logger log.Logger, params *resource.BootstrapParams, dcClient dynamicconfig.Client, metricsReporter metrics.Reporter, svcCfg config.Service, clusterMetadata *config.ClusterMetadata) (*Service, error) {
 	taggedLogger, err := TaggedLoggerProvider(logger)
 	if err != nil {
 		return nil, err
@@ -58,14 +59,28 @@ func InitializeMatchingService(logger log.Logger, params *resource.BootstrapPara
 	if err != nil {
 		return nil, err
 	}
-	serviceIdx := ServiceIdxProvider()
+	serviceIdx := _wireServiceIdxValue
 	client, err := MetricsClientProvider(taggedLogger, matchingMetricsReporter, serviceIdx)
 	if err != nil {
 		return nil, err
 	}
-	service, err := NewService(params, logger, taggedLogger, throttledLogger, matchingConfig, client)
+	bean, err := PersistenceBeanProvider(matchingConfig, params, client, taggedLogger)
+	if err != nil {
+		return nil, err
+	}
+	metadata := ClusterMetadataProvider(clusterMetadata)
+	metadataManager, err := MetadataManagerProvider(bean)
+	if err != nil {
+		return nil, err
+	}
+	namespaceCache := cache.NewNamespaceCache(metadataManager, metadata, client, logger)
+	service, err := NewService(params, logger, taggedLogger, throttledLogger, matchingConfig, client, bean, metadata, namespaceCache)
 	if err != nil {
 		return nil, err
 	}
 	return service, nil
 }
+
+var (
+	_wireServiceIdxValue = metrics.ServiceIdx(metrics.Matching)
+)

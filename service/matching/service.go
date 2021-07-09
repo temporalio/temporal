@@ -71,7 +71,9 @@ type (
 		membershipMonitor      membership.Monitor
 		namespaceCache         cache.NamespaceCache
 		visibilityMgr          persistence.VisibilityManager
-		persistenceBean        *persistenceClient.BeanImpl
+		// todomigryz: trying to replace with persistenceClient.Bean
+		// persistenceBean        *persistenceClient.BeanImpl
+		persistenceBean        persistenceClient.Bean
 		ringpopChannel         *tchannel.Channel
 		grpcListener           net.Listener
 		clientBean             client.Bean // needed for onebox. Should remove if possible.
@@ -100,51 +102,10 @@ func NewService(
 	throttledLogger log.ThrottledLogger,
 	serviceConfig *Config,
 	metricsClient metrics.Client,
+	persistenceBean persistenceClient.Bean,
+	clusterMetadata cluster.Metadata,
+	namespaceCache cache.NamespaceCache,
 ) (*Service, error) {
-
-	persistenceMaxQPS := serviceConfig.PersistenceMaxQPS
-	persistenceGlobalMaxQPS := serviceConfig.PersistenceGlobalMaxQPS
-	persistenceBean, err := persistenceClient.NewBeanFromFactory(
-		persistenceClient.NewFactory(
-			&params.PersistenceConfig,
-			params.PersistenceServiceResolver,
-			func(...dynamicconfig.FilterOption) int {
-				if persistenceGlobalMaxQPS() > 0 {
-					// TODO: We have a bootstrap issue to correctly find memberCount.  Membership relies on
-					// persistence to bootstrap membership ring, so we cannot have persistence rely on membership
-					// as it will cause circular dependency.
-					// ringSize, err := membershipMonitor.GetMemberCount(serviceName)
-					// if err == nil && ringSize > 0 {
-					// 	avgQuota := common.MaxInt(persistenceGlobalMaxQPS()/ringSize, 1)
-					// 	return common.MinInt(avgQuota, persistenceMaxQPS())
-					// }
-				}
-				return persistenceMaxQPS()
-			},
-			params.AbstractDatastoreFactory,
-			params.ClusterMetadataConfig.CurrentClusterName,
-			metricsClient,
-			taggedLogger,
-		),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	clusterMetadata := cluster.NewMetadata(
-		params.ClusterMetadataConfig.EnableGlobalNamespace,
-		params.ClusterMetadataConfig.FailoverVersionIncrement,
-		params.ClusterMetadataConfig.MasterClusterName,
-		params.ClusterMetadataConfig.CurrentClusterName,
-		params.ClusterMetadataConfig.ClusterInformation,
-	)
-
-	namespaceCache := cache.NewNamespaceCache(
-		persistenceBean.GetMetadataManager(),
-		clusterMetadata,
-		metricsClient,
-		taggedLogger,
-	)
 
 	metricsInterceptor := interceptor.NewTelemetryInterceptor(
 		namespaceCache,
@@ -175,6 +136,7 @@ func NewService(
 	)
 
 	grpcServer := grpc.NewServer(grpcServerOptions...)
+	// todomigryz: might need to close grpcListener, unless it is shared
 	grpcListener := params.RPCFactory.GetGRPCListener()
 
 	dynamicCollection := dynamicconfig.NewCollection(params.DynamicConfigClient, taggedLogger)

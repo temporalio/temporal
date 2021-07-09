@@ -3,6 +3,9 @@
 install: update-tools bins
 
 # Rebuild binaries (used by Dockerfile).
+wb: wire bins
+
+# Rebuild binaries (used by Dockerfile).
 bins: clean-bins temporal-server tctl plugins temporal-cassandra-tool temporal-sql-tool
 
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
@@ -442,14 +445,19 @@ external-mocks:
 	@mockgen -copyright_file ./LICENSE -package mocks -source $(GOPATH)/pkg/mod/github.com/aws/aws-sdk-go@$(AWS_SDK_VERSION)/service/s3/s3iface/interface.go | grep -v -e "^// Source: .*" > common/archiver/s3store/mocks/S3API.go
 
 # We call go get here to workaround go:generate injected by google/wire.
-# todomigryz: reorganize and rename this command
-go-generate:
+own-mocks:
 	@printf $(COLOR) "Process go:generate directives..."
 	for line in $(ALL_SRC_WITH_MOCKS); do \
   		go generate -v $${line} ; \
   	done
 
-mocks: go-generate external-mocks copyright
+mocks: own-mocks external-mocks copyright
+
+##### DI #####
+# todomigryz: add this to ci-build for consistency
+wire:
+	wire gen --header_file license.header ./service/matching
+	wire gen --header_file license.header ./temporal
 
 ##### Fossa #####
 fossa-install:
@@ -481,6 +489,3 @@ ensure-no-changes:
 	@printf $(COLOR) "========================================================================"
 	@git diff --name-status --exit-code || (printf $(COLOR) "========================================================================"; printf $(RED) "Above files are not regenerated properly. Regenerate them and try again."; exit 1)
 
-wire:
-	wire gen --header_file license.header ./service/matching
-	wire gen --header_file license.header ./temporal

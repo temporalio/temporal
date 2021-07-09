@@ -144,10 +144,6 @@ func MetricsClientProvider(
 	return serverReporter.NewClient(logger, serviceIdx)
 }
 
-func ServiceIdxProvider() metrics.ServiceIdx {
-	return metrics.Matching
-}
-
 func PersistenceBeanProvider(
 	serviceConfig *Config,
 	params *resource.BootstrapParams,
@@ -182,10 +178,24 @@ func PersistenceBeanProvider(
 	return persistenceBean, err
 }
 
+func ClusterMetadataProvider(config *config.ClusterMetadata) cluster.Metadata {
+	return cluster.NewMetadata(
+		config.EnableGlobalNamespace,
+		config.FailoverVersionIncrement,
+		config.MasterClusterName,
+		config.CurrentClusterName,
+		config.ClusterInformation,
+	)
+}
+
+
+
 // todomigryz: needs PersistenceBeanProvider
 func MetadataManagerProvider(persistenceBean persistenceClient.Bean) (persistence.MetadataManager, error) {
 	return persistenceBean.GetMetadataManager(), nil
 }
+
+
 
 // todomigryz: seems this can be replaced with constructor
 func NamespaceCacheProvider(
