@@ -28,16 +28,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-go/tally"
-	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/config"
-	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
-	"go.temporal.io/server/common/resolver"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -62,7 +54,7 @@ type Service struct {
 
 	// logger          log.Logger
 	taggedLogger    log.Logger // todomigryz: rename to logger, unless untagged is required.
-	throttledLogger log.Logger
+	throttledLogger log.Logger // todomigryz: this should not be required. Transient dependency?
 
 	status  int32
 	handler *Handler
@@ -70,39 +62,6 @@ type Service struct {
 
 	server *grpc.Server
 }
-
-// BootstrapParams holds the set of parameters
-// needed to bootstrap a service
-type MatchingBootstrapParams struct {
-Name            string
-InstanceID      string
-Logger          log.Logger
-ThrottledLogger log.Logger
-NamespaceLogger log.Logger
-
-MetricsScope                 tally.Scope
-MembershipFactoryInitializer resource.MembershipFactoryInitializerFunc
-RPCFactory                   common.RPCFactory
-AbstractDatastoreFactory     persistenceClient.AbstractDataStoreFactory
-PersistenceConfig            config.Persistence
-ClusterMetadataConfig        *config.ClusterMetadata
-ReplicatorConfig             config.Replicator
-ServerMetricsReporter        metrics.Reporter
-SDKMetricsReporter           metrics.Reporter
-MetricsClient                metrics.Client
-ESClient                     esclient.Client
-ESConfig                     *config.Elasticsearch
-DynamicConfigClient          dynamicconfig.Client
-DCRedirectionPolicy          config.DCRedirectionPolicy
-SdkClient                    sdkclient.Client
-ArchivalMetadata             archiver.ArchivalMetadata
-ArchiverProvider             provider.ArchiverProvider
-Authorizer                   authorization.Authorizer
-ClaimMapper                  authorization.ClaimMapper
-PersistenceServiceResolver   resolver.ServiceResolver
-AudienceGetter               authorization.JWTAudienceMapper
-}
-
 
 // todomigryz: check if I can decouple BootstrapParams.
 // todomigryz: current steps:
