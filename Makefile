@@ -2,9 +2,6 @@
 # Install all tools and builds binaries.
 install: update-tools bins
 
-# Regenerates wire files and rebuilds binaries.
-wire-bins: wire bins
-
 # Rebuild binaries (used by Dockerfile).
 bins: clean-bins temporal-server tctl plugins temporal-cassandra-tool temporal-sql-tool
 
