@@ -52,6 +52,14 @@ const (
 	TransactionPolicyPassive TransactionPolicy = 1
 )
 
+type NewWorkflowType int
+
+const (
+	NewWorkflowUnspecified NewWorkflowType = iota
+	NewWorkflowRetry
+	NewWorkflowCron
+)
+
 func (policy TransactionPolicy) Ptr() *TransactionPolicy {
 	return &policy
 }
@@ -95,6 +103,7 @@ type (
 		AddChildWorkflowExecutionTerminatedEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionTerminatedEventAttributes) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionTimedOutEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionTimedOutEventAttributes) (*historypb.HistoryEvent, error)
 		AddCompletedWorkflowEvent(int64, *commandpb.CompleteWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, error)
+		NewWorkflowForRetryOrCron(int64, *historypb.WorkflowExecutionStartedEventAttributes, *commonpb.Payloads, *failurepb.Failure, time.Duration, NewWorkflowType) (MutableState, error)
 		AddContinueAsNewEvent(int64, int64, string, *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, MutableState, error)
 		AddWorkflowTaskCompletedEvent(int64, int64, *workflowservice.RespondWorkflowTaskCompletedRequest, int) (*historypb.HistoryEvent, error)
 		AddWorkflowTaskFailedEvent(scheduleEventID int64, startedEventID int64, cause enumspb.WorkflowTaskFailedCause, failure *failurepb.Failure, identity, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*historypb.HistoryEvent, error)
@@ -160,7 +169,7 @@ type (
 		GetPendingSignalExternalInfos() map[int64]*persistencespb.SignalInfo
 		GetRequestCancelInfo(int64) (*persistencespb.RequestCancelInfo, bool)
 		GetRetryBackoffDuration(failure *failurepb.Failure) (time.Duration, enumspb.RetryState)
-		GetCronBackoffDuration() (time.Duration, error)
+		GetCronBackoffDuration() time.Duration
 		GetSignalInfo(int64) (*persistencespb.SignalInfo, bool)
 		GetStartVersion() (int64, error)
 		GetUserTimerInfoByEventID(int64) (*persistencespb.TimerInfo, bool)
@@ -215,7 +224,7 @@ type (
 		ReplicateWorkflowExecutionCancelRequestedEvent(*historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionCanceledEvent(int64, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionCompletedEvent(int64, *historypb.HistoryEvent) error
-		ReplicateWorkflowExecutionContinuedAsNewEvent(int64, string, *historypb.HistoryEvent) error
+		ReplicateWorkflowExecutionContinuedAsNewEvent(int64, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionFailedEvent(int64, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionSignaled(*historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionStartedEvent(string, commonpb.WorkflowExecution, string, *historypb.HistoryEvent) error

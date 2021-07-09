@@ -1013,12 +1013,11 @@ func (mr *MockMutableStateMockRecorder) GetCompletionEvent() *gomock.Call {
 }
 
 // GetCronBackoffDuration mocks base method.
-func (m *MockMutableState) GetCronBackoffDuration() (time.Duration, error) {
+func (m *MockMutableState) GetCronBackoffDuration() time.Duration {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetCronBackoffDuration")
 	ret0, _ := ret[0].(time.Duration)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // GetCronBackoffDuration indicates an expected call of GetCronBackoffDuration.
@@ -2013,17 +2012,17 @@ func (mr *MockMutableStateMockRecorder) ReplicateWorkflowExecutionCompletedEvent
 }
 
 // ReplicateWorkflowExecutionContinuedAsNewEvent mocks base method.
-func (m *MockMutableState) ReplicateWorkflowExecutionContinuedAsNewEvent(arg0 int64, arg1 string, arg2 *v13.HistoryEvent) error {
+func (m *MockMutableState) ReplicateWorkflowExecutionContinuedAsNewEvent(arg0 int64, arg1 *v13.HistoryEvent) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReplicateWorkflowExecutionContinuedAsNewEvent", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "ReplicateWorkflowExecutionContinuedAsNewEvent", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ReplicateWorkflowExecutionContinuedAsNewEvent indicates an expected call of ReplicateWorkflowExecutionContinuedAsNewEvent.
-func (mr *MockMutableStateMockRecorder) ReplicateWorkflowExecutionContinuedAsNewEvent(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) ReplicateWorkflowExecutionContinuedAsNewEvent(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateWorkflowExecutionContinuedAsNewEvent", reflect.TypeOf((*MockMutableState)(nil).ReplicateWorkflowExecutionContinuedAsNewEvent), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateWorkflowExecutionContinuedAsNewEvent", reflect.TypeOf((*MockMutableState)(nil).ReplicateWorkflowExecutionContinuedAsNewEvent), arg0, arg1)
 }
 
 // ReplicateWorkflowExecutionFailedEvent mocks base method.
@@ -2181,6 +2180,36 @@ func (m *MockMutableState) RetryActivity(ai *v18.ActivityInfo, failure *v12.Fail
 func (mr *MockMutableStateMockRecorder) RetryActivity(ai, failure interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryActivity", reflect.TypeOf((*MockMutableState)(nil).RetryActivity), ai, failure)
+}
+
+// RetryAfterCron mocks base method.
+func (m *MockMutableState) RetryAfterCron(arg0, arg1 int64, arg2 *v13.WorkflowExecutionStartedEventAttributes, arg3 *v10.Payloads, arg4 *v12.Failure, arg5 time.Duration) (MutableState, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RetryAfterCron", arg0, arg1, arg2, arg3, arg4, arg5)
+	ret0, _ := ret[0].(MutableState)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RetryAfterCron indicates an expected call of RetryAfterCron.
+func (mr *MockMutableStateMockRecorder) RetryAfterCron(arg0, arg1, arg2, arg3, arg4, arg5 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryAfterCron", reflect.TypeOf((*MockMutableState)(nil).RetryAfterCron), arg0, arg1, arg2, arg3, arg4, arg5)
+}
+
+// RetryAfterFailure mocks base method.
+func (m *MockMutableState) RetryAfterFailure(arg0, arg1 int64, arg2 *v13.WorkflowExecutionStartedEventAttributes, arg3 *v12.Failure, arg4 time.Duration) (MutableState, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RetryAfterFailure", arg0, arg1, arg2, arg3, arg4)
+	ret0, _ := ret[0].(MutableState)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RetryAfterFailure indicates an expected call of RetryAfterFailure.
+func (mr *MockMutableStateMockRecorder) RetryAfterFailure(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryAfterFailure", reflect.TypeOf((*MockMutableState)(nil).RetryAfterFailure), arg0, arg1, arg2, arg3, arg4)
 }
 
 // SetCurrentBranchToken mocks base method.
