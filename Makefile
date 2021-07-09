@@ -442,6 +442,7 @@ external-mocks:
 	@mockgen -copyright_file ./LICENSE -package mocks -source $(GOPATH)/pkg/mod/github.com/aws/aws-sdk-go@$(AWS_SDK_VERSION)/service/s3/s3iface/interface.go | grep -v -e "^// Source: .*" > common/archiver/s3store/mocks/S3API.go
 
 # We call go get here to workaround go:generate injected by google/wire.
+# todomigryz: reorganize and rename this command
 go-generate:
 	@printf $(COLOR) "Process go:generate directives..."
 	for line in $(ALL_SRC_WITH_MOCKS); do \
