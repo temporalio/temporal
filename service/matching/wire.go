@@ -59,6 +59,7 @@ func InitializeMatchingService(
 		cache.NewNamespaceCache,
 		metrics.NewMatchingAPIMetricsScopes,
 		interceptor.NewTelemetryInterceptor,
+		RateLimitInterceptorProvider,
 		NewService,
 	)
 	return nil, nil

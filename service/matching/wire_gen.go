@@ -77,7 +77,11 @@ func InitializeMatchingService(logger log.Logger, params *resource.BootstrapPara
 	namespaceCache := cache.NewNamespaceCache(metadataManager, metadata, client, logger)
 	matchingAPIMetricsScopes := metrics.NewMatchingAPIMetricsScopes()
 	telemetryInterceptor := interceptor.NewTelemetryInterceptor(namespaceCache, client, matchingAPIMetricsScopes, logger)
-	service, err := NewService(params, logger, taggedLogger, throttledLogger, matchingConfig, client, bean, metadata, namespaceCache, telemetryInterceptor)
+	rateLimitInterceptor, err := RateLimitInterceptorProvider(matchingConfig)
+	if err != nil {
+		return nil, err
+	}
+	service, err := NewService(params, logger, taggedLogger, throttledLogger, matchingConfig, client, bean, metadata, namespaceCache, telemetryInterceptor, rateLimitInterceptor)
 	if err != nil {
 		return nil, err
 	}

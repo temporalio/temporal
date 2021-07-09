@@ -51,7 +51,6 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/service/matching/configs"
 )
 
 // Service represents the matching service
@@ -106,12 +105,8 @@ func NewService(
 	clusterMetadata cluster.Metadata,
 	namespaceCache cache.NamespaceCache,
 	metricsInterceptor *interceptor.TelemetryInterceptor,
+	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 ) (*Service, error) {
-
-	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
-		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
-		map[string]int{},
-	)
 
 	grpcServerOptions, err := params.RPCFactory.GetInternodeGRPCServerOptions()
 	if err != nil {
@@ -125,7 +120,7 @@ func NewService(
 			metrics.NewServerMetricsContextInjectorInterceptor(),
 			metrics.NewServerMetricsTrailerPropagatorInterceptor(logger),
 			metricsInterceptor.Intercept,
-			rateLimiterInterceptor.Intercept,
+			rateLimitInterceptor.Intercept,
 		),
 	)
 

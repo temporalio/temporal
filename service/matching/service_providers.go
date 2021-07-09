@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -52,32 +51,14 @@ func TaggedLoggerProvider(logger log.Logger) (TaggedLogger, error) {
 	return taggedLogger, nil
 }
 
-func PriorityRateLimiterProvider(serviceConfig *Config) (quotas.RequestRateLimiter, error) {
-	result := configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) })
-	return result, nil
-}
+func RateLimitInterceptorProvider(serviceConfig *Config) (*interceptor.RateLimitInterceptor, error) {
+	rateLimiter := configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) })
 
-func RateLimitInterceptorProvider(rateLimiter quotas.RequestRateLimiter) (*interceptor.RateLimitInterceptor, error) {
 	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
 		rateLimiter,
 		map[string]int{},
 	)
 	return rateLimiterInterceptor, nil
-}
-
-// todomigryz: metrics client comes from bootstrap params that I'm not using atm. Although these should be injected now.
-func TelemetryInterceptorProvider(
-	logger log.Logger,
-	metricsClient metrics.Client,
-	namespaceCache cache.NamespaceCache,
-) (*interceptor.TelemetryInterceptor, error) {
-	metricsInterceptor := interceptor.NewTelemetryInterceptor(
-		namespaceCache,
-		metricsClient,
-		metrics.NewMatchingAPIMetricsScopes(),
-		logger,
-	)
-	return metricsInterceptor, nil
 }
 
 func GrpcServerProvider(
