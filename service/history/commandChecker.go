@@ -66,6 +66,9 @@ type (
 		blobSizeLimitWarn  int
 		blobSizeLimitError int
 
+		memoSizeLimitWarn  int
+		memoSizeLimitError int
+
 		historySizeLimitWarn  int
 		historySizeLimitError int
 
@@ -104,6 +107,8 @@ func newCommandAttrValidator(
 func newWorkflowSizeChecker(
 	blobSizeLimitWarn int,
 	blobSizeLimitError int,
+	memoSizeLimitWarn int,
+	memoSizeLimitError int,
 	historySizeLimitWarn int,
 	historySizeLimitError int,
 	historyCountLimitWarn int,
@@ -118,6 +123,8 @@ func newWorkflowSizeChecker(
 	return &workflowSizeChecker{
 		blobSizeLimitWarn:         blobSizeLimitWarn,
 		blobSizeLimitError:        blobSizeLimitError,
+		memoSizeLimitWarn:         memoSizeLimitWarn,
+		memoSizeLimitError:        memoSizeLimitError,
 		historySizeLimitWarn:      historySizeLimitWarn,
 		historySizeLimitError:     historySizeLimitError,
 		historyCountLimitWarn:     historyCountLimitWarn,
@@ -143,6 +150,40 @@ func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 		payloadSize,
 		c.blobSizeLimitWarn,
 		c.blobSizeLimitError,
+		executionInfo.NamespaceId,
+		executionInfo.WorkflowId,
+		executionState.RunId,
+		c.metricsScope.Tagged(commandTypeTag),
+		c.logger,
+		tag.BlobSizeViolationOperation(commandTypeTag.Value()),
+	)
+	if err == nil {
+		return false, nil
+	}
+
+	attributes := &commandpb.FailWorkflowExecutionCommandAttributes{
+		Failure: failure.NewServerFailure(message, true),
+	}
+
+	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func (c *workflowSizeChecker) failWorkflowIfMemoSizeExceedsLimit(
+	commandTypeTag metrics.Tag,
+	memoSize int,
+	message string,
+) (bool, error) {
+
+	executionInfo := c.mutableState.GetExecutionInfo()
+	executionState := c.mutableState.GetExecutionState()
+	err := common.CheckEventBlobSizeLimit(
+		memoSize,
+		c.memoSizeLimitWarn,
+		c.memoSizeLimitError,
 		executionInfo.NamespaceId,
 		executionInfo.WorkflowId,
 		executionState.RunId,
