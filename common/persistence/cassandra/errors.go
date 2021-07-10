@@ -227,9 +227,11 @@ func extractWorkflowVersionConflictError(
 		return nil
 	}
 
+	actualNextEventID, _ := record["next_event_id"].(int64)
+	actualDBVersion, _ := record["db_version"].(int64)
+
 	// TODO remove this block once DB version comparison is the default
 	if requestDBVersion == 0 {
-		actualNextEventID := record["next_event_id"].(int64)
 		if actualNextEventID != requestNextEventID {
 			return &p.ConditionFailedError{
 				Msg: fmt.Sprintf("Encounter workflow next event ID mismatch, request next event ID: %v, actual next event ID: %v",
@@ -241,7 +243,6 @@ func extractWorkflowVersionConflictError(
 		return nil
 	}
 
-	actualDBVersion := record["db_version"].(int64)
 	if actualDBVersion != requestDBVersion {
 		return &p.ConditionFailedError{
 			Msg: fmt.Sprintf("Encounter workflow db version mismatch, request db version ID: %v, actual db version ID: %v",
