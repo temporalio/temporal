@@ -831,11 +831,10 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(searchHits *elastic.
 	}
 
 	if len(searchHits.Hits) == pageSize && lastHitSort != nil { // this means the response is not the last page
-		var sortVal interface{}
-		sortVal = lastHitSort[0]
-		tieBreaker := lastHitSort[1].(string)
-
-		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{SortValue: sortVal, TieBreaker: tieBreaker})
+		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
+			SortValue:  lastHitSort[0],
+			TieBreaker: lastHitSort[1].(string),
+		})
 		if err != nil {
 			return nil, err
 		}
