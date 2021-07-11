@@ -82,9 +82,6 @@ var (
 	errForwarderSlowDown    = errors.New("limit exceeded")
 )
 
-// noopForwarderTokenC refers to a token channel that blocks forever
-var noopForwarderTokenC <-chan *ForwarderReqToken = make(chan *ForwarderReqToken)
-
 // newForwarder returns an instance of Forwarder object which
 // can be used to forward api request calls from a task queue
 // child partition to a task queue parent partition. The returned
@@ -266,6 +263,9 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 // that's necessary before making a ForwardTask or ForwardQueryTask API call.
 // After the API call is invoked, token.release() must be invoked
 func (fwdr *Forwarder) AddReqTokenC() <-chan *ForwarderReqToken {
+	if fwdr == nil {
+		return nil
+	}
 	fwdr.refreshTokenC(&fwdr.addReqToken, &fwdr.outstandingTasksLimit, int32(fwdr.cfg.ForwarderMaxOutstandingTasks()))
 	return fwdr.addReqToken.Load().(*ForwarderReqToken).ch
 }
@@ -274,6 +274,9 @@ func (fwdr *Forwarder) AddReqTokenC() <-chan *ForwarderReqToken {
 // that's necessary before making a ForwardPoll API call. After the API
 // call is invoked, token.release() must be invoked
 func (fwdr *Forwarder) PollReqTokenC() <-chan *ForwarderReqToken {
+	if fwdr == nil {
+		return nil
+	}
 	fwdr.refreshTokenC(&fwdr.pollReqToken, &fwdr.outstandingPollsLimit, int32(fwdr.cfg.ForwarderMaxOutstandingPolls()))
 	return fwdr.pollReqToken.Load().(*ForwarderReqToken).ch
 }
