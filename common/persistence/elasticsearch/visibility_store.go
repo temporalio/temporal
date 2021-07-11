@@ -213,7 +213,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutions(
 	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 	searchResult, err := s.getSearchResult(request, token, query, true)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutions failed. Error: %v", err))
+		return nil, convertClientError("ListOpenWorkflowExecutions failed", err)
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
@@ -234,7 +234,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutions(
 	executionStatusQuery := elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 	searchResult, err := s.getSearchResult(request, token, executionStatusQuery, false)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutions failed. Error: %v", err))
+		return nil, convertClientError("ListClosedWorkflowExecutions failed", err)
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
@@ -256,7 +256,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByType(
 		Must(elastic.NewMatchQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, true)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByType failed. Error: %v", err))
+		return nil, convertClientError("ListOpenWorkflowExecutionsByType failed", err)
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
@@ -278,7 +278,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByType(
 		MustNot(elastic.NewMatchQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByType failed. Error: %v", err))
+		return nil, convertClientError("ListClosedWorkflowExecutionsByType failed", err)
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
@@ -300,7 +300,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 		Must(elastic.NewMatchQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, true)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByWorkflowID failed. Error: %v", err))
+		return nil, convertClientError("ListOpenWorkflowExecutionsByWorkflowID failed", err)
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
@@ -322,7 +322,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 		MustNot(elastic.NewMatchQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByWorkflowID failed. Error: %v", err))
+		return nil, convertClientError("ListClosedWorkflowExecutionsByWorkflowID failed", err)
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
@@ -343,7 +343,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 	query := elastic.NewBoolQuery().Must(elastic.NewMatchQuery(searchattribute.ExecutionStatus, request.Status.String()))
 	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByStatus failed. Error: %v", err))
+		return nil, convertClientError("ListClosedWorkflowExecutionsByStatus failed", err)
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
@@ -373,7 +373,7 @@ func (s *visibilityStore) GetClosedWorkflowExecution(
 	}
 	searchResult, err := s.esClient.Search(ctx, params)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetClosedWorkflowExecution failed. Error: %v", err))
+		return nil, convertClientError("GetClosedWorkflowExecution failed", err)
 	}
 
 	response := &persistence.InternalGetClosedWorkflowExecutionResponse{}
@@ -409,7 +409,7 @@ func (s *visibilityStore) ListWorkflowExecutions(
 	ctx := context.Background()
 	searchResult, err := s.esClient.SearchWithDSL(ctx, s.index, queryDSL)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListWorkflowExecutions failed. Error: %v", err))
+		return nil, convertClientError("ListWorkflowExecutions failed", err)
 	}
 
 	return s.getListWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, nil)
@@ -444,7 +444,7 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 		isLastPage = true
 		_ = scrollService.Clear(context.Background())
 	} else if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %v", err))
+		return nil, convertClientError("ScanWorkflowExecutions failed", err)
 	}
 
 	return s.getScanWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, searchResult.ScrollId, isLastPage)
@@ -461,7 +461,7 @@ func (s *visibilityStore) CountWorkflowExecutions(request *persistence.CountWork
 	ctx := context.Background()
 	count, err := s.esClient.Count(ctx, s.index, queryDSL)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("CountWorkflowExecutions failed. Error: %v", err))
+		return nil, convertClientError("CountWorkflowExecutions failed", err)
 	}
 
 	response := &persistence.CountWorkflowExecutionsResponse{Count: count}
@@ -1210,4 +1210,16 @@ func parseHHMMSSDuration(d string) (int64, error) {
 	}
 
 	return hours*int64(time.Hour) + minutes*int64(time.Minute) + seconds*int64(time.Second) + nanos, nil
+}
+
+func convertClientError(message string, err error) error {
+	switch e := err.(type) {
+	case *elastic.Error:
+		switch e.Status {
+		case 400: // BadRequest
+			// Returning InvalidArgument error will prevent retry on a caller side.
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s: %v", message, err))
+		}
+	}
+	return serviceerror.NewInternal(fmt.Sprintf("%s: %v", message, err))
 }
