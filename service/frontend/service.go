@@ -223,9 +223,8 @@ func NewService(
 		if params.ESConfig != nil {
 			visibilityIndexName := params.ESConfig.GetVisibilityIndex()
 			visibilityConfigForES := &config.VisibilityConfig{
-				MaxQPS:                 serviceConfig.PersistenceMaxQPS,
-				VisibilityListMaxQPS:   serviceConfig.ESVisibilityListMaxQPS,
-				ESIndexMaxResultWindow: serviceConfig.ESIndexMaxResultWindow,
+				MaxQPS:               serviceConfig.PersistenceMaxQPS,
+				VisibilityListMaxQPS: serviceConfig.ESVisibilityListMaxQPS,
 			}
 			visibilityFromES = espersistence.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
 				searchAttributesProvider, nil, params.MetricsClient, logger)

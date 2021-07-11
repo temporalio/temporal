@@ -104,8 +104,7 @@ func NewService(
 			esProcessor.Start()
 
 			visibilityConfigForES := &config.VisibilityConfig{
-				ESIndexMaxResultWindow: serviceConfig.ESIndexMaxResultWindow,
-				ESProcessorAckTimeout:  serviceConfig.ESProcessorAckTimeout,
+				ESProcessorAckTimeout: serviceConfig.ESProcessorAckTimeout,
 			}
 			visibilityFromES = espersistence.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES, searchAttributesProvider, esProcessor, params.MetricsClient, logger)
 		}

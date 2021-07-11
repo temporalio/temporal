@@ -167,9 +167,8 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		esProcessor.Start()
 
 		visConfig := &config.VisibilityConfig{
-			VisibilityListMaxQPS:   dynamicconfig.GetIntPropertyFilteredByNamespace(2000),
-			ESIndexMaxResultWindow: dynamicconfig.GetIntPropertyFn(defaultTestValueOfESIndexMaxResultWindow),
-			ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
+			VisibilityListMaxQPS:  dynamicconfig.GetIntPropertyFilteredByNamespace(2000),
+			ESProcessorAckTimeout: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 		}
 		indexName := options.ESConfig.GetVisibilityIndex()
 		esVisibilityStore := espersistence.NewVisibilityStore(

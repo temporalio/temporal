@@ -250,8 +250,6 @@ type (
 		VisibilityClosedMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter `yaml:"-" json:"-"`
 		// VisibilityListMaxQPS max QPS for list workflow
 		VisibilityListMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter `yaml:"-" json:"-"`
-		// ESIndexMaxResultWindow ElasticSearch index setting max_result_window
-		ESIndexMaxResultWindow dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
 		// MaxQPS is overall max QPS
 		MaxQPS dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
 		// ESProcessorAckTimeout is the timeout that store will wait to get ack signal from ES processor.
