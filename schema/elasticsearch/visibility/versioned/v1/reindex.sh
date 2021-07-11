@@ -26,6 +26,8 @@ CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(curl --silent --user "${ES_USER}":"${ES_PWD}"
 if [ "${ES_VERSION}" == "v7" ]; then
     # Replace "date" type with "date_nanos" for Elasticsearch v7.
     CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(jq '(.properties[].type | select(. == "date")) = "date_nanos"' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}")
+    # Replace "double" type with "scaled_float" for Elasticsearch v7.
+    CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(jq '(.properties[] | select(.type == "double")) = {"type":"scaled_float","scaling_factor":10000}' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}")
 fi
 jq -n "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}"
 if [ -z "${AUTO_CONFIRM}" ]; then
