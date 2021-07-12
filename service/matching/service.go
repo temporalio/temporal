@@ -33,7 +33,6 @@ import (
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/membership"
 	"google.golang.org/grpc"
@@ -96,7 +95,6 @@ func NewService(
 	taggedLogger TaggedLogger,
 	throttledLogger log.ThrottledLogger,
 	serviceConfig *Config,
-	metricsClient metrics.Client,
 	persistenceBean persistenceClient.Bean,
 	namespaceCache cache.NamespaceCache,
 	grpcServer *grpc.Server,
@@ -104,104 +102,9 @@ func NewService(
 	membershipMonitor membership.Monitor,
 	clientBean client.Bean,
 	ringpopChannel *tchannel.Channel,
+	handler *Handler,
+	runtimeMetricsReporter *metrics.RuntimeMetricsReporter,
 ) (*Service, error) {
-
-
-	matchingRawClient, err := clientBean.GetMatchingClient(namespaceCache.GetNamespaceName)
-	if err != nil {
-		return nil, err
-	}
-
-	matchingServiceResolver, err := membershipMonitor.GetResolver(common.MatchingServiceName)
-	if err != nil {
-		return nil, err
-	}
-
-
-	historyRawClient := clientBean.GetHistoryClient()
-	historyClient := history.NewRetryableClient(
-		historyRawClient,
-		common.CreateHistoryServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
-	)
-
-	runtimeMetricsReporter := metrics.NewRuntimeMetricsReporter(
-		params.MetricsScope,
-		time.Minute,
-		taggedLogger,
-		params.InstanceID,
-	)
-
-	// todomigryz: @Alex visibility should not be present in Matching
-	// visibilityManagerInitializer := func(
-	// 	persistenceBean persistenceClient.Bean,
-	// 	searchAttributesProvider searchattribute.Provider,
-	// 	logger log.Logger,
-	// ) (persistence.VisibilityManager, error) {
-	// 	return persistenceBean.GetVisibilityManager(), nil
-	// }
-	//
-	// saProvider := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
-	//
-	// visibilityMgr, err := visibilityManagerInitializer(
-	// 	persistenceBean,
-	// 	saProvider,
-	// 	taggedLogger,
-	// )
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// /////////////////////////////////////
-	// // todomigryz:  Removing resource //
-	// // todomigryz: do we really need the rest of Resource???
-	// serviceResource, err := resource.NewMatchingResource(
-	// 	params,
-	// 	logger,
-	// 	throttledLogger,
-	// 	common.MatchingServiceName,
-	// 	persistenceBean,
-	// 	namespaceCache,
-	// 	clusterMetadata,
-	// 	metricsClient,
-	// 	membershipMonitor,
-	// 	clientBean,
-	// 	numShards,
-	// 	matchingRawClient,
-	// 	matchingServiceResolver,
-	// 	historyClient,
-	// 	historyRawClient,
-	// 	runtimeMetricsReporter,
-	// 	visibilityMgr,
-	// 	saProvider,
-	// 	ringpopChannel,
-	// 	grpcListener,
-	// 	)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// // Removing resource end //
-	// ///////////////////////////
-
-	engine := NewEngine(
-		persistenceBean.GetTaskManager(), // todomigryz: replaced serviceResource.GetTaskManager(),
-		historyClient,                    // todomigryz: replaced serviceResource.GetHistoryClient(),
-		matchingRawClient,                // todomigryz: replaced serviceResource.GetMatchingRawClient(), // Use non retry client inside matching
-		serviceConfig,
-		taggedLogger,
-		metricsClient,           // todomigryz: replaced serviceResource.GetMetricsClient(),
-		namespaceCache,          // todomigryz: replaced serviceResource.GetNamespaceCache(),
-		matchingServiceResolver, // todomigryz: replaced serviceResource.GetMatchingServiceResolver(),
-	)
-
-	handler := NewHandler(
-		serviceConfig,
-		taggedLogger,
-		throttledLogger,
-		metricsClient,
-		engine,
-		namespaceCache,
-	)
 
 	return &Service{
 		status:  common.DaemonStatusInitialized,
@@ -209,7 +112,6 @@ func NewService(
 		server:  grpcServer,
 		handler: handler,
 
-		// logger:       logger,
 		logger:          taggedLogger,
 		throttledLogger: throttledLogger,
 

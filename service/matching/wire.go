@@ -67,6 +67,8 @@ func InitializeMatchingService(
 		MembershipMonitorProvider,
 		ClientBeanProvider,
 		RingpopChannelProvider,
+		HandlerProvider,
+		RuntimeMetricsReporterProvider,
 		NewService,
 	)
 	return nil, nil

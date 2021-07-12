@@ -75,13 +75,13 @@ func InitializeMatchingService(logger log.Logger, params *resource.BootstrapPara
 	}
 	metadata := ClusterMetadataProvider(clusterMetadata)
 	namespaceCache := cache.NewNamespaceCache(metadataManager, metadata, client, logger)
-	rpcFactory := RPCFactoryProvider(params)
 	matchingAPIMetricsScopes := metrics.NewMatchingAPIMetricsScopes()
 	telemetryInterceptor := interceptor.NewTelemetryInterceptor(namespaceCache, client, matchingAPIMetricsScopes, logger)
 	rateLimitInterceptor, err := RateLimitInterceptorProvider(matchingConfig)
 	if err != nil {
 		return nil, err
 	}
+	rpcFactory := RPCFactoryProvider(params)
 	server, err := GrpcServerProvider(logger, telemetryInterceptor, rateLimitInterceptor, rpcFactory)
 	if err != nil {
 		return nil, err
@@ -99,7 +99,8 @@ func InitializeMatchingService(logger log.Logger, params *resource.BootstrapPara
 	if err != nil {
 		return nil, err
 	}
-	service, err := NewService(params, taggedLogger, throttledLogger, matchingConfig, client, bean, namespaceCache, rpcFactory, server, grpcListener, monitor, clientBean)
+	channel := RingpopChannelProvider(rpcFactory)
+	service, err := NewService(params, taggedLogger, throttledLogger, matchingConfig, client, bean, namespaceCache, server, grpcListener, monitor, clientBean, channel)
 	if err != nil {
 		return nil, err
 	}

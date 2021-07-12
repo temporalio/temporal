@@ -24,9 +24,11 @@ package matching
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
@@ -119,6 +121,18 @@ func MembershipMonitorProvider(membershipFactory resource.MembershipMonitorFacto
 func ServiceConfigProvider(logger log.Logger, dcClient dynamicconfig.Client) (*Config, error) {
 	dcCollection := dynamicconfig.NewCollection(dcClient, logger)
 	return NewConfig(dcCollection), nil
+}
+
+func RuntimeMetricsReporterProvider(
+	params *resource.BootstrapParams,
+	logger TaggedLogger,
+) *metrics.RuntimeMetricsReporter {
+	return metrics.NewRuntimeMetricsReporter(
+		params.MetricsScope,
+		time.Minute,
+		logger,
+		params.InstanceID,
+	)
 }
 
 func MetricsReporterProvider(
@@ -255,4 +269,56 @@ func ThrottledLoggerProvider(logger TaggedLogger, config *Config) (log.Throttled
 	dynConfigFn := config.ThrottledLogRPS
 	throttledLogger := log.NewThrottledLogger(logger, func() float64 { return float64(dynConfigFn()) })
 	return throttledLogger, nil
+}
+
+func HandlerProvider(
+	serviceConfig *Config,
+	logger TaggedLogger,
+	throttledLogger log.ThrottledLogger,
+	metricsClient metrics.Client,
+	namespaceCache cache.NamespaceCache,
+	clientBean client.Bean,
+	membershipMonitor membership.Monitor,
+	persistenceBean persistenceClient.Bean,
+) (*Handler, error) {
+
+	matchingRawClient, err := clientBean.GetMatchingClient(namespaceCache.GetNamespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	matchingServiceResolver, err := membershipMonitor.GetResolver(common.MatchingServiceName)
+	if err != nil {
+		return nil, err
+	}
+
+	historyRawClient := clientBean.GetHistoryClient()
+
+	historyClient := history.NewRetryableClient(
+		historyRawClient,
+		common.CreateHistoryServiceRetryPolicy(),
+		common.IsWhitelistServiceTransientError,
+	)
+
+	engine := NewEngine(
+		persistenceBean.GetTaskManager(),
+		historyClient,
+		matchingRawClient,
+		serviceConfig,
+		logger,
+		metricsClient,
+		namespaceCache,
+		matchingServiceResolver,
+	)
+
+	result := NewHandler(
+		serviceConfig,
+		logger,
+		throttledLogger,
+		metricsClient,
+		engine,
+		namespaceCache,
+	)
+
+	return result, nil
 }
