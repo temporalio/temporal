@@ -100,7 +100,12 @@ func InitializeMatchingService(logger log.Logger, params *resource.BootstrapPara
 		return nil, err
 	}
 	channel := RingpopChannelProvider(rpcFactory)
-	service, err := NewService(params, taggedLogger, throttledLogger, matchingConfig, client, bean, namespaceCache, server, grpcListener, monitor, clientBean, channel)
+	handler, err := HandlerProvider(matchingConfig, taggedLogger, throttledLogger, client, namespaceCache, clientBean, monitor, bean)
+	if err != nil {
+		return nil, err
+	}
+	runtimeMetricsReporter := RuntimeMetricsReporterProvider(params, taggedLogger)
+	service, err := NewService(params, taggedLogger, throttledLogger, matchingConfig, bean, namespaceCache, server, grpcListener, monitor, clientBean, channel, handler, runtimeMetricsReporter)
 	if err != nil {
 		return nil, err
 	}
