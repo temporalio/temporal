@@ -65,7 +65,7 @@ func (s *apiMetricsSuite) TestFrontendAPIMetrics() {
 
 func (s *apiMetricsSuite) TestMatchingAPIMetrics() {
 	apiNames := MatchingAPIMetricsNames()
-	apiNameToScope := MatchingAPIMetricsScopes()
+	apiNameToScope := NewMatchingAPIMetricsScopes()
 	for apiName := range apiNames {
 		if _, ok := apiNameToScope[apiName]; !ok {
 			fmt.Println(apiName)
