@@ -75,22 +75,22 @@ func InitializeMatchingService(logger log.Logger, params *resource.BootstrapPara
 		return nil, err
 	}
 	namespaceCache := cache.NewNamespaceCache(metadataManager, metadata, client, logger)
+	membershipMonitorFactory, err := MembershipFactoryProvider(params, taggedLogger, bean)
+	if err != nil {
+		return nil, err
+	}
+	rpcFactory := RPCFactoryProvider(params)
 	matchingAPIMetricsScopes := metrics.NewMatchingAPIMetricsScopes()
 	telemetryInterceptor := interceptor.NewTelemetryInterceptor(namespaceCache, client, matchingAPIMetricsScopes, logger)
 	rateLimitInterceptor, err := RateLimitInterceptorProvider(matchingConfig)
 	if err != nil {
 		return nil, err
 	}
-	membershipMonitorFactory, err := MembershipFactoryProvider(params, taggedLogger, bean)
-	if err != nil {
-		return nil, err
-	}
-	rpcFactory := RPCFactoryProvider(params)
 	server, err := GrpcServerProvider(logger, telemetryInterceptor, rateLimitInterceptor, rpcFactory)
 	if err != nil {
 		return nil, err
 	}
-	service, err := NewService(params, logger, taggedLogger, throttledLogger, matchingConfig, client, bean, metadata, namespaceCache, telemetryInterceptor, rateLimitInterceptor, membershipMonitorFactory, rpcFactory, server)
+	service, err := NewService(params, taggedLogger, throttledLogger, matchingConfig, client, bean, metadata, namespaceCache, membershipMonitorFactory, rpcFactory, server)
 	if err != nil {
 		return nil, err
 	}

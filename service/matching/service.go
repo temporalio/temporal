@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/rpc/interceptor"
 )
 
 // Service represents the matching service
@@ -71,10 +70,10 @@ type (
 		visibilityMgr          persistence.VisibilityManager
 		// todomigryz: trying to replace with persistenceClient.Bean
 		// persistenceBean        *persistenceClient.BeanImpl
-		persistenceBean        persistenceClient.Bean
-		ringpopChannel         *tchannel.Channel
-		grpcListener           net.Listener
-		clientBean             client.Bean // needed for onebox. Should remove if possible.
+		persistenceBean persistenceClient.Bean
+		ringpopChannel  *tchannel.Channel
+		grpcListener    net.Listener
+		clientBean      client.Bean // needed for onebox. Should remove if possible.
 	}
 
 	TaggedLogger log.Logger
@@ -95,7 +94,6 @@ type (
 // NewService builds a new matching service
 func NewService(
 	params *resource.BootstrapParams, // todomigryz: replace generic BootstrapParams with factory or constructed object
-	logger log.Logger,
 	taggedLogger TaggedLogger,
 	throttledLogger log.ThrottledLogger,
 	serviceConfig *Config,
@@ -103,8 +101,6 @@ func NewService(
 	persistenceBean persistenceClient.Bean,
 	clusterMetadata cluster.Metadata,
 	namespaceCache cache.NamespaceCache,
-	metricsInterceptor *interceptor.TelemetryInterceptor,
-	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	membershipFactory resource.MembershipMonitorFactory,
 	rpcFactory common.RPCFactory,
 	grpcServer *grpc.Server,
