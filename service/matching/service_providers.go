@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
@@ -103,6 +104,12 @@ func GrpcServerProvider(
 		),
 	)
 	return grpc.NewServer(grpcServerOptions...), nil
+}
+
+
+// TODO: Seems that all this factory mostly handles singleton logic. We should be able to handle it via IOC.
+func MembershipMonitorProvider(membershipFactory resource.MembershipMonitorFactory) (membership.Monitor, error) {
+	return membershipFactory.GetMembershipMonitor()
 }
 
 // todomigryz: configure autoformatting in goland.

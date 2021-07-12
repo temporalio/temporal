@@ -102,19 +102,13 @@ func NewService(
 	persistenceBean persistenceClient.Bean,
 	clusterMetadata cluster.Metadata,
 	namespaceCache cache.NamespaceCache,
-	membershipFactory resource.MembershipMonitorFactory,
 	rpcFactory common.RPCFactory,
 	grpcServer *grpc.Server,
 	grpcListener GRPCListener,
+	membershipMonitor membership.Monitor,
 ) (*Service, error) {
 
-
 	dynamicCollection := dynamicconfig.NewCollection(params.DynamicConfigClient, taggedLogger)
-
-	membershipMonitor, err := membershipFactory.GetMembershipMonitor()
-	if err != nil {
-		return nil, err
-	}
 
 	numShards := params.PersistenceConfig.NumHistoryShards
 	clientBean, err := client.NewClientBean(
