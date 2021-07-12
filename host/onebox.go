@@ -539,12 +539,14 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	params.PersistenceServiceResolver = resolver.NewNoopResolver()
 
 	svcCfg := config.Service{}
+
 	matchingService, err := matching.InitializeMatchingService(
 		c.logger,
 		params,
 		params.DynamicConfigClient,
 		params.ServerMetricsReporter,
 		svcCfg,
+		params.ClusterMetadataConfig,
 	)
 	if err != nil {
 		params.Logger.Fatal("unable to start matching service", tag.Error(err))

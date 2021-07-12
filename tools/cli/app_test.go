@@ -772,11 +772,12 @@ func historyEventIterator() sdkclient.HistoryEventIterator {
 	return iteratorMock
 }
 
-func workflowRun() sdkclient.WorkflowRun {
-	workflowRunMock := &sdkmocks.WorkflowRun{}
-
-	workflowRunMock.On("GetRunID").Return(uuid.New()).Maybe()
-	workflowRunMock.On("GetID").Return(uuid.New()).Maybe()
-
-	return workflowRunMock
-}
+// todomigryz: commented code. Why did it become unused?
+// func workflowRun() sdkclient.WorkflowRun {
+// 	workflowRunMock := &sdkmocks.WorkflowRun{}
+//
+// 	workflowRunMock.On("GetRunID").Return(uuid.New()).Maybe()
+// 	workflowRunMock.On("GetID").Return(uuid.New()).Maybe()
+//
+// 	return workflowRunMock
+// }

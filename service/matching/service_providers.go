@@ -76,10 +76,9 @@ func MembershipFactoryProvider(
 
 func RPCFactoryProvider(
 	params *resource.BootstrapParams,
-) (common.RPCFactory) {
+) common.RPCFactory {
 	return params.RPCFactory
 }
-
 
 func GrpcListenerProvider(rpcFactory common.RPCFactory) GRPCListener {
 	return rpcFactory.GetGRPCListener()
@@ -109,7 +108,6 @@ func GrpcServerProvider(
 	)
 	return grpc.NewServer(grpcServerOptions...), nil
 }
-
 
 // TODO: Seems that all this factory mostly handles singleton logic. We should be able to handle it via IOC.
 func MembershipMonitorProvider(membershipFactory resource.MembershipMonitorFactory) (membership.Monitor, error) {
@@ -240,14 +238,10 @@ func ClusterMetadataProvider(config *config.ClusterMetadata) cluster.Metadata {
 	)
 }
 
-
-
 // todomigryz: needs PersistenceBeanProvider
 func MetadataManagerProvider(persistenceBean persistenceClient.Bean) (persistence.MetadataManager, error) {
 	return persistenceBean.GetMetadataManager(), nil
 }
-
-
 
 // todomigryz: seems this can be replaced with constructor
 func NamespaceCacheProvider(
