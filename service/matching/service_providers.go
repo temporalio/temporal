@@ -61,6 +61,14 @@ func RateLimitInterceptorProvider(serviceConfig *Config) (*interceptor.RateLimit
 	return rateLimiterInterceptor, nil
 }
 
+func MembershipFactoryProvider(
+	params *resource.BootstrapParams,
+	taggedLogger TaggedLogger,
+	persistenceBean persistenceClient.Bean,
+) (resource.MembershipMonitorFactory, error) {
+	return params.MembershipFactoryInitializer(persistenceBean, taggedLogger)
+}
+
 func GrpcServerProvider(
 	logger log.Logger,
 	metricsInterceptor *interceptor.TelemetryInterceptor,

@@ -106,6 +106,7 @@ func NewService(
 	namespaceCache cache.NamespaceCache,
 	metricsInterceptor *interceptor.TelemetryInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
+	membershipFactory resource.MembershipMonitorFactory,
 ) (*Service, error) {
 
 	grpcServerOptions, err := params.RPCFactory.GetInternodeGRPCServerOptions()
@@ -129,11 +130,6 @@ func NewService(
 	grpcListener := params.RPCFactory.GetGRPCListener()
 
 	dynamicCollection := dynamicconfig.NewCollection(params.DynamicConfigClient, taggedLogger)
-
-	membershipFactory, err := params.MembershipFactoryInitializer(persistenceBean, taggedLogger)
-	if err != nil {
-		return nil, err
-	}
 
 	membershipMonitor, err := membershipFactory.GetMembershipMonitor()
 	if err != nil {

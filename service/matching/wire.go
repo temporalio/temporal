@@ -60,6 +60,7 @@ func InitializeMatchingService(
 		metrics.NewMatchingAPIMetricsScopes,
 		interceptor.NewTelemetryInterceptor,
 		RateLimitInterceptorProvider,
+		MembershipFactoryProvider,
 		NewService,
 	)
 	return nil, nil
