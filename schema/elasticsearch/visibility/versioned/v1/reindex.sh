@@ -23,25 +23,31 @@ AUTO_CONFIRM="${AUTO_CONFIRM:-}"
 ES_ENDPOINT="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}"
 DIR_NAME="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 
-if ! curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_cluster/health" | jq --exit-status '.status=="green" | .'; then
-    echo "Elasticsearch is not accessible at ${ES_ENDPOINT}."
+echo "=== Step 0. Sanity check if both Elasticsearch indices are accessible. ==="
+if ! curl --silent --fail --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V0}/_stats/docs"; then
+    echo "Elasticsearch index ${ES_VIS_INDEX_V0} is not accessible at ${ES_ENDPOINT}."
+    exit 1
+fi
+
+if ! curl --silent --fail --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V1}/_stats/docs"; then
+    echo "Elasticsearch index ${ES_VIS_INDEX_V1} is not accessible at ${ES_ENDPOINT}."
     exit 1
 fi
 
 echo "=== Step 1. Add custom search attributes to the new index. ==="
-if [ "${CUSTOM_SEARCH_ATTRIBUTES}" != "[]" ]; then
-    DOC_TYPE=""
-    if [ "${ES_VERSION}" != "v7" ]; then
-        DOC_TYPE="/_doc"
-    fi
-    CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V0}${DOC_TYPE}/_mapping" | jq --compact-output '.. | .Attr? | select(.!=null) | .properties | with_entries(select(.key == ($customSA[]))) | {properties:.}' --argjson customSA "${CUSTOM_SEARCH_ATTRIBUTES}")
-    if [ "${ES_VERSION}" == "v7" ]; then
-        # Replace "date" type with "date_nanos" only for Elasticsearch v7.
-        CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(jq '(.properties[].type | select(. == "date")) = "date_nanos"' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}")
-    fi
-    # Replace "double" type with "scaled_float".
-    CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(jq '(.properties[] | select(.type == "double")) = {"type":"scaled_float","scaling_factor":10000}' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}")
+DOC_TYPE=""
+if [ "${ES_VERSION}" != "v7" ]; then
+    DOC_TYPE="/_doc"
+fi
+CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V0}${DOC_TYPE}/_mapping" | jq --compact-output '.. | .Attr? | select(.!=null) | .properties | with_entries(select(.key == ($customSA[]))) | {properties:.}' --argjson customSA "${CUSTOM_SEARCH_ATTRIBUTES}")
+if [ "${ES_VERSION}" == "v7" ]; then
+    # Replace "date" type with "date_nanos" only for Elasticsearch v7.
+    CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(jq '(.properties[].type | select(. == "date")) = "date_nanos"' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}")
+fi
+# Replace "double" type with "scaled_float".
+CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(jq '(.properties[] | select(.type == "double")) = {"type":"scaled_float","scaling_factor":10000}' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}")
 
+if jq --exit-status '.properties[]? | length > 0' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}" ; then
     jq <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}"
     if [ -z "${AUTO_CONFIRM}" ]; then
         read -p "Add custom search attributes above to the index ${ES_VIS_INDEX_V1}? (N/y)" -n 1 -r
@@ -58,7 +64,15 @@ if [ "${CUSTOM_SEARCH_ATTRIBUTES}" != "[]" ]; then
         done
     fi
 else
-    echo "Custom search attributes are empty and won't be created."
+    if [ -z "${AUTO_CONFIRM}" ]; then
+        read -p "Custom search attributes are empty and won't be created. Continue? (N/y)" -n 1 -r
+        echo
+    else
+        REPLY="y"
+    fi
+    if [ "${REPLY}" != "y" ]; then
+        exit 1
+    fi
 fi
 
 echo "=== Step 2. Reindex old index to the new index. ==="
