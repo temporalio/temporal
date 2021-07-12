@@ -215,7 +215,7 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 	return &adminservice.AddSearchAttributesResponse{}, nil
 }
 
-// RemoveSearchAttributes add search attribute to the cluster.
+// RemoveSearchAttributes remove search attribute from the cluster.
 func (adh *AdminHandler) RemoveSearchAttributes(ctx context.Context, request *adminservice.RemoveSearchAttributesRequest) (_ *adminservice.RemoveSearchAttributesResponse, retError error) {
 	defer log.CapturePanic(adh.GetLogger(), &retError)
 
