@@ -99,11 +99,11 @@ func NewService(
 	metricsClient metrics.Client,
 	persistenceBean persistenceClient.Bean,
 	namespaceCache cache.NamespaceCache,
-	rpcFactory common.RPCFactory,
 	grpcServer *grpc.Server,
 	grpcListener GRPCListener,
 	membershipMonitor membership.Monitor,
 	clientBean client.Bean,
+	ringpopChannel *tchannel.Channel,
 ) (*Service, error) {
 
 
@@ -117,7 +117,6 @@ func NewService(
 		return nil, err
 	}
 
-	ringpopChannel := rpcFactory.GetRingpopChannel()
 
 	historyRawClient := clientBean.GetHistoryClient()
 	historyClient := history.NewRetryableClient(

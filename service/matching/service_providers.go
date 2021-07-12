@@ -25,6 +25,7 @@ package matching
 import (
 	"fmt"
 
+	"github.com/uber/tchannel-go"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
@@ -150,6 +151,10 @@ func MetricsClientProvider(
 	serviceIdx metrics.ServiceIdx,
 ) (metrics.Client, error) {
 	return serverReporter.NewClient(logger, serviceIdx)
+}
+
+func RingpopChannelProvider(rpcFactory common.RPCFactory) *tchannel.Channel {
+	return rpcFactory.GetRingpopChannel()
 }
 
 func ClientBeanProvider(
