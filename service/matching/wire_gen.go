@@ -44,7 +44,7 @@ import (
 
 // todomigryz: implement this method. Replace NewService method.
 // todomigryz: Need to come up with proper naming convention for initialize vs factory methods.
-func InitializeMatchingService(serviceName2 ServiceName, logger log.Logger, params *resource.BootstrapParams, dcClient dynamicconfig.Client, metricsReporter metrics.Reporter, svcCfg config.Service, clusterMetadata *config.ClusterMetadata, tlsConfigProvider encryption.TLSConfigProvider) (*Service, error) {
+func InitializeMatchingService(serviceName2 ServiceName, logger log.Logger, params *resource.BootstrapParams, dcClient dynamicconfig.Client, metricsReporter metrics.Reporter, svcCfg config.Service, clusterMetadata *config.ClusterMetadata, tlsConfigProvider encryption.TLSConfigProvider, services ServicesConfigMap, membership *config.Membership) (*Service, error) {
 	taggedLogger, err := TaggedLoggerProvider(logger)
 	if err != nil {
 		return nil, err
@@ -88,7 +88,8 @@ func InitializeMatchingService(serviceName2 ServiceName, logger log.Logger, para
 		return nil, err
 	}
 	grpcListener := GrpcListenerProvider(rpcFactory)
-	membershipMonitorFactory, err := MembershipFactoryProvider(params, taggedLogger, bean)
+	membershipFactoryInitializerFunc := MembershipFactoryInitializerProvider(serviceName2, services, membership, rpcFactory)
+	membershipMonitorFactory, err := MembershipFactoryProvider(membershipFactoryInitializerFunc, taggedLogger, bean)
 	if err != nil {
 		return nil, err
 	}

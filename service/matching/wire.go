@@ -48,6 +48,8 @@ func InitializeMatchingService(
 	svcCfg config.Service,
 	clusterMetadata *config.ClusterMetadata,
 	tlsConfigProvider encryption.TLSConfigProvider,
+	services ServicesConfigMap,
+	membership *config.Membership,
 ) (*Service, error) {
 	wire.Build(
 		wire.Value(metrics.ServiceIdx(metrics.Matching)),
@@ -72,6 +74,7 @@ func InitializeMatchingService(
 		RingpopChannelProvider,
 		HandlerProvider,
 		RuntimeMetricsReporterProvider,
+		MembershipFactoryInitializerProvider,
 		NewService,
 	)
 	return nil, nil

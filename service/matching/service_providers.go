@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/ringpop"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -51,6 +52,7 @@ import (
 type (
 	MetricsReporter metrics.Reporter
 	ServiceName string
+	ServicesConfigMap map[string]config.Service
 )
 
 func TaggedLoggerProvider(logger log.Logger) (TaggedLogger, error) {
@@ -68,12 +70,42 @@ func RateLimitInterceptorProvider(serviceConfig *Config) (*interceptor.RateLimit
 	return rateLimiterInterceptor, nil
 }
 
+func MembershipFactoryInitializerProvider(
+	svcName ServiceName,
+	services ServicesConfigMap,
+	membership *config.Membership,
+	rpcFactory common.RPCFactory,
+) resource.MembershipFactoryInitializerFunc {
+
+	servicePortMap := make(map[string]int)
+	for sn, sc := range services { //todomigryz: commented code cfg.Services {
+		servicePortMap[sn] = sc.RPC.GRPCPort
+	}
+
+	result := func(persistenceBean persistenceClient.Bean, logger log.Logger) (
+		resource.MembershipMonitorFactory,
+		error,
+	) {
+		return ringpop.NewRingpopFactory(
+			membership,
+			rpcFactory.GetRingpopChannel(),
+			string(svcName),
+			servicePortMap,
+			logger,
+			persistenceBean.GetClusterMetadataManager(),
+		)
+	}
+
+	return result
+}
+
+// todomigryz: seem to be possible to join with MFIProvider
 func MembershipFactoryProvider(
-	params *resource.BootstrapParams,
+	factoryInitializer resource.MembershipFactoryInitializerFunc,
 	taggedLogger TaggedLogger,
 	persistenceBean persistenceClient.Bean,
 ) (resource.MembershipMonitorFactory, error) {
-	return params.MembershipFactoryInitializer(persistenceBean, taggedLogger)
+	return factoryInitializer(persistenceBean, taggedLogger)
 }
 
 func RPCFactoryProvider(

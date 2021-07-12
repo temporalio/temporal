@@ -154,27 +154,27 @@ func makeMatchingBootstrapParams(
 	}
 
 	svcCfg := cfg.Services[svcName]
-	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, logger, tlsConfigProvider)
-	params.RPCFactory = rpcFactory
+	// rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, logger, tlsConfigProvider)
+	// params.RPCFactory = rpcFactory
 
 	// Ringpop uses a different port to register handlers, this map is needed to resolve
 	// services to correct addresses used by clients through ServiceResolver lookup API
-	servicePortMap := make(map[string]int)
-	for sn, sc := range cfg.Services {
-		servicePortMap[sn] = sc.RPC.GRPCPort
-	}
-
-	params.MembershipFactoryInitializer =
-		func(persistenceBean persistenceClient.Bean, logger log.Logger) (resource.MembershipMonitorFactory, error) {
-			return ringpop.NewRingpopFactory(
-				&cfg.Global.Membership,
-				rpcFactory.GetRingpopChannel(),
-				svcName,
-				servicePortMap,
-				logger,
-				persistenceBean.GetClusterMetadataManager(),
-			)
-		}
+	// servicePortMap := make(map[string]int)
+	// for sn, sc := range cfg.Services {
+	// 	servicePortMap[sn] = sc.RPC.GRPCPort
+	// }
+	//
+	// params.MembershipFactoryInitializer =
+	// 	func(persistenceBean persistenceClient.Bean, logger log.Logger) (resource.MembershipMonitorFactory, error) {
+	// 		return ringpop.NewRingpopFactory(
+	// 			&cfg.Global.Membership,
+	// 			rpcFactory.GetRingpopChannel(),
+	// 			svcName,
+	// 			servicePortMap,
+	// 			logger,
+	// 			persistenceBean.GetClusterMetadataManager(),
+	// 		)
+	// 	}
 
 	serverReporter := metricReporters.serverReporter
 	sdkReporter := metricReporters.sdkReporter
@@ -447,6 +447,8 @@ func ServicesProvider(
 				deps.cfg.Services[svcName],
 				deps.cfg.ClusterMetadata,
 				deps.tlsConfigProvider,
+				deps.cfg.Services,
+				&deps.cfg.Global.Membership,
 			)
 			result[svcName] = svc
 			continue
