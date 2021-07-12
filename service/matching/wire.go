@@ -63,6 +63,7 @@ func InitializeMatchingService(
 		MembershipFactoryProvider,
 		RPCFactoryProvider,
 		GrpcServerProvider,
+		GrpcListenerProvider,
 		NewService,
 	)
 	return nil, nil

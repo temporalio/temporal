@@ -78,6 +78,7 @@ type (
 
 	TaggedLogger log.Logger
 	// MatchingMetricsClient metrics.Client
+	GRPCListener net.Listener
 )
 
 // todomigryz: check if I can decouple BootstrapParams.
@@ -104,10 +105,9 @@ func NewService(
 	membershipFactory resource.MembershipMonitorFactory,
 	rpcFactory common.RPCFactory,
 	grpcServer *grpc.Server,
+	grpcListener GRPCListener,
 ) (*Service, error) {
 
-	// todomigryz: might need to close grpcListener, unless it is shared
-	grpcListener := rpcFactory.GetGRPCListener()
 
 	dynamicCollection := dynamicconfig.NewCollection(params.DynamicConfigClient, taggedLogger)
 

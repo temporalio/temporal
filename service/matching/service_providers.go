@@ -76,6 +76,9 @@ func RPCFactoryProvider(
 }
 
 
+func GrpcListenerProvider(rpcFactory common.RPCFactory) GRPCListener {
+	return rpcFactory.GetGRPCListener()
+}
 
 func GrpcServerProvider(
 	logger log.Logger,

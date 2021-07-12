@@ -90,7 +90,8 @@ func InitializeMatchingService(logger log.Logger, params *resource.BootstrapPara
 	if err != nil {
 		return nil, err
 	}
-	service, err := NewService(params, taggedLogger, throttledLogger, matchingConfig, client, bean, metadata, namespaceCache, membershipMonitorFactory, rpcFactory, server)
+	grpcListener := GrpcListenerProvider(rpcFactory)
+	service, err := NewService(params, taggedLogger, throttledLogger, matchingConfig, client, bean, metadata, namespaceCache, membershipMonitorFactory, rpcFactory, server, grpcListener)
 	if err != nil {
 		return nil, err
 	}
