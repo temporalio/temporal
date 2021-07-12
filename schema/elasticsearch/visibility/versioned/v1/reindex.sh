@@ -23,7 +23,7 @@ AUTO_CONFIRM="${AUTO_CONFIRM:-}"
 ES_ENDPOINT="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}"
 DIR_NAME="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 
-if ! curl --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}"; then
+if ! curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_cluster/health" | jq --exit-status '.status=="green" | .'; then
     echo "Elasticsearch is not accessible at ${ES_ENDPOINT}."
     exit 1
 fi
