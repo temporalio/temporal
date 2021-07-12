@@ -35,16 +35,18 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
 )
 
 // Injectors from wire.go:
 
+// todomigryz: svcName can be hardcoded here. We switch on svc name one layer above.
 // todomigryz: implement this method. Replace NewService method.
 // todomigryz: Need to come up with proper naming convention for initialize vs factory methods.
-func InitializeMatchingService(serviceName2 ServiceName, logger log.Logger, params *resource.BootstrapParams, dcClient dynamicconfig.Client, metricsReporter metrics.Reporter, svcCfg config.Service, clusterMetadata *config.ClusterMetadata, tlsConfigProvider encryption.TLSConfigProvider, services ServicesConfigMap, membership *config.Membership) (*Service, error) {
+func InitializeMatchingService(serviceName2 ServiceName, logger log.Logger, dcClient dynamicconfig.Client, metricsReporter UserMetricsReporter, sdkMetricsReporter UserSdkMetricsReporter, svcCfg config.Service, clusterMetadata *config.ClusterMetadata, tlsConfigProvider encryption.TLSConfigProvider, services ServicesConfigMap, membership *config.Membership, persistenceConfig *config.Persistence, persistenceServiceResolver resolver.ServiceResolver, datastoreFactory client.AbstractDataStoreFactory) (*Service, error) {
 	taggedLogger, err := TaggedLoggerProvider(logger)
 	if err != nil {
 		return nil, err
@@ -57,16 +59,17 @@ func InitializeMatchingService(serviceName2 ServiceName, logger log.Logger, para
 	if err != nil {
 		return nil, err
 	}
-	matchingMetricsReporter, err := MetricsReporterProvider(taggedLogger, metricsReporter, svcCfg)
+	serviceMetrics, err := MetricsReporterProvider(taggedLogger, metricsReporter, sdkMetricsReporter, svcCfg)
 	if err != nil {
 		return nil, err
 	}
+	matchingMetricsReporter := serviceMetrics.reporter
 	serviceIdx := _wireServiceIdxValue
-	client, err := MetricsClientProvider(taggedLogger, matchingMetricsReporter, serviceIdx)
+	metricsClient, err := MetricsClientProvider(taggedLogger, matchingMetricsReporter, serviceIdx)
 	if err != nil {
 		return nil, err
 	}
-	bean, err := PersistenceBeanProvider(matchingConfig, params, client, taggedLogger)
+	bean, err := PersistenceBeanProvider(matchingConfig, persistenceConfig, metricsClient, taggedLogger, clusterMetadata, persistenceServiceResolver, datastoreFactory)
 	if err != nil {
 		return nil, err
 	}
@@ -75,9 +78,9 @@ func InitializeMatchingService(serviceName2 ServiceName, logger log.Logger, para
 		return nil, err
 	}
 	metadata := ClusterMetadataProvider(clusterMetadata)
-	namespaceCache := cache.NewNamespaceCache(metadataManager, metadata, client, logger)
+	namespaceCache := cache.NewNamespaceCache(metadataManager, metadata, metricsClient, logger)
 	matchingAPIMetricsScopes := metrics.NewMatchingAPIMetricsScopes()
-	telemetryInterceptor := interceptor.NewTelemetryInterceptor(namespaceCache, client, matchingAPIMetricsScopes, logger)
+	telemetryInterceptor := interceptor.NewTelemetryInterceptor(namespaceCache, metricsClient, matchingAPIMetricsScopes, logger)
 	rateLimitInterceptor, err := RateLimitInterceptorProvider(matchingConfig)
 	if err != nil {
 		return nil, err
@@ -97,17 +100,18 @@ func InitializeMatchingService(serviceName2 ServiceName, logger log.Logger, para
 	if err != nil {
 		return nil, err
 	}
-	clientBean, err := ClientBeanProvider(params, taggedLogger, dcClient, rpcFactory, monitor, client, metadata)
+	clientBean, err := ClientBeanProvider(persistenceConfig, taggedLogger, dcClient, rpcFactory, monitor, metricsClient, metadata)
 	if err != nil {
 		return nil, err
 	}
 	channel := RingpopChannelProvider(rpcFactory)
-	handler, err := HandlerProvider(matchingConfig, taggedLogger, throttledLogger, client, namespaceCache, clientBean, monitor, bean)
+	handler, err := HandlerProvider(matchingConfig, taggedLogger, throttledLogger, metricsClient, namespaceCache, clientBean, monitor, bean)
 	if err != nil {
 		return nil, err
 	}
-	runtimeMetricsReporter := RuntimeMetricsReporterProvider(params, taggedLogger)
-	service, err := NewService(params, taggedLogger, throttledLogger, matchingConfig, bean, namespaceCache, server, grpcListener, monitor, clientBean, channel, handler, runtimeMetricsReporter)
+	scope := serviceMetrics.deprecatedTally
+	runtimeMetricsReporter := RuntimeMetricsReporterProvider(taggedLogger, scope)
+	service, err := NewService(taggedLogger, throttledLogger, matchingConfig, bean, namespaceCache, server, grpcListener, monitor, clientBean, channel, handler, runtimeMetricsReporter, scope)
 	if err != nil {
 		return nil, err
 	}

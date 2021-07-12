@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/history"
@@ -40,6 +41,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/ringpop"
 	"go.temporal.io/server/common/rpc"
@@ -50,9 +52,18 @@ import (
 )
 
 type (
-	MetricsReporter metrics.Reporter
-	ServiceName string
-	ServicesConfigMap map[string]config.Service
+	MetricsReporter        metrics.Reporter
+	UserMetricsReporter    metrics.Reporter
+	UserSdkMetricsReporter metrics.Reporter
+	SDKReporter            metrics.Reporter
+	InstanceId             string
+	ServiceName            string
+	ServicesConfigMap      map[string]config.Service
+
+	ServiceMetrics struct {
+		reporter MetricsReporter
+		deprecatedTally tally.Scope
+	}
 )
 
 func TaggedLoggerProvider(logger log.Logger) (TaggedLogger, error) {
@@ -158,40 +169,73 @@ func ServiceConfigProvider(logger log.Logger, dcClient dynamicconfig.Client) (*C
 	return NewConfig(dcCollection), nil
 }
 
+
+// todo: This should be able to work without tally.
 func RuntimeMetricsReporterProvider(
-	params *resource.BootstrapParams,
 	logger TaggedLogger,
+	tallyScope tally.Scope,
+	// instanceId InstanceId, // todo: this is not set in BootstrapParams
 ) *metrics.RuntimeMetricsReporter {
 	return metrics.NewRuntimeMetricsReporter(
-		params.MetricsScope,
+		tallyScope,
 		time.Minute,
 		logger,
-		params.InstanceID,
+		"",
 	)
+}
+
+func extractTallyScopeForSDK(sdkReporter metrics.Reporter) (tally.Scope, error) {
+	if sdkTallyReporter, ok := sdkReporter.(*metrics.TallyReporter); ok {
+		return sdkTallyReporter.GetScope(), nil
+	} else {
+		return nil, fmt.Errorf(
+			"SDK reporter is not of Tally type. Unfortunately, SDK only supports Tally for now. "+
+				"Please specify prometheusSDK in metrics config with framework type %s", metrics.FrameworkTally,
+		)
+	}
 }
 
 func MetricsReporterProvider(
 	logger TaggedLogger,
-	userReporter metrics.Reporter,
+	userReporter UserMetricsReporter,
+	userSdkReporter UserSdkMetricsReporter,
 	svcCfg config.Service,
-) (MetricsReporter, error) {
+) (ServiceMetrics, error) {
 	if userReporter != nil {
-		return userReporter, nil
+		tallyScope, err := extractTallyScopeForSDK(userSdkReporter)
+		if err != nil {
+			return ServiceMetrics{}, err
+		}
+		return ServiceMetrics{
+			reporter:        userReporter,
+			deprecatedTally: tallyScope,
+		}, nil
 	}
 
 	// todomigryz: remove support of configuring metrics reporter per-service. Sync with Samar.
 	// todo: Replace this hack with actually using sdkReporter, Client or Scope.
-	serverReporter, sdkReporter, err := svcCfg.Metrics.InitMetricReporters(logger, nil)
+	serivceReporter, sdkReporter, err := svcCfg.Metrics.InitMetricReporters(logger, nil)
 	if err != nil {
-		return nil, fmt.Errorf(
+		return ServiceMetrics{}, fmt.Errorf(
 			"unable to initialize per-service metric client. "+
 				"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err,
 		)
 	}
-	if serverReporter != sdkReporter {
-		sdkReporter.Stop(logger)
+
+	// todo: uncomment after removing dependency on tally. See @RuntimeMetricsReporterProvider
+	// if serivceReporter != sdkReporter {
+	// 	sdkReporter.Stop(logger)
+	// }
+
+	tallyScope, err := extractTallyScopeForSDK(sdkReporter)
+	if err != nil {
+		return ServiceMetrics{}, err
 	}
-	return serverReporter, nil
+
+	return ServiceMetrics{
+		reporter:        serivceReporter,
+		deprecatedTally: tallyScope,
+	}, nil
 }
 
 func MetricsClientProvider(
@@ -207,7 +251,7 @@ func RingpopChannelProvider(rpcFactory common.RPCFactory) *tchannel.Channel {
 }
 
 func ClientBeanProvider(
-	params *resource.BootstrapParams,
+	persistenceConfig *config.Persistence,
 	logger TaggedLogger,
 	dcClient dynamicconfig.Client,
 	rpcFactory common.RPCFactory,
@@ -217,14 +261,13 @@ func ClientBeanProvider(
 ) (client.Bean, error) {
 	dynamicCollection := dynamicconfig.NewCollection(dcClient, logger)
 
-	numShards := params.PersistenceConfig.NumHistoryShards
 	return client.NewClientBean(
 		client.NewRPCClientFactory(
 			rpcFactory,
 			membershipMonitor,
-			metricsClient, // replaced params.MetricsClient,
+			metricsClient,
 			dynamicCollection,
-			numShards,
+			persistenceConfig.NumHistoryShards,
 			logger,
 		),
 		clusterMetadata,
@@ -233,16 +276,19 @@ func ClientBeanProvider(
 
 func PersistenceBeanProvider(
 	serviceConfig *Config,
-	params *resource.BootstrapParams,
+	persistenceConfig *config.Persistence,
 	metricsClient metrics.Client,
 	logger TaggedLogger,
+	clusterMetadataConfig *config.ClusterMetadata,
+	persistenceServiceResolver resolver.ServiceResolver,
+	datastoreFactory     persistenceClient.AbstractDataStoreFactory,
 ) (persistenceClient.Bean, error) {
 	persistenceMaxQPS := serviceConfig.PersistenceMaxQPS
 	persistenceGlobalMaxQPS := serviceConfig.PersistenceGlobalMaxQPS
 	persistenceBean, err := persistenceClient.NewBeanFromFactory(
 		persistenceClient.NewFactory(
-			&params.PersistenceConfig,
-			params.PersistenceServiceResolver,
+			persistenceConfig,
+			persistenceServiceResolver,
 			func(...dynamicconfig.FilterOption) int {
 				if persistenceGlobalMaxQPS() > 0 {
 					// TODO: We have a bootstrap issue to correctly find memberCount.  Membership relies on
@@ -256,8 +302,8 @@ func PersistenceBeanProvider(
 				}
 				return persistenceMaxQPS()
 			},
-			params.AbstractDatastoreFactory,
-			params.ClusterMetadataConfig.CurrentClusterName,
+			datastoreFactory,
+			clusterMetadataConfig.CurrentClusterName,
 			metricsClient,
 			logger,
 		),

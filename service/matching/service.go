@@ -45,7 +45,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/resource"
 )
 
 // Service represents the matching service
@@ -91,7 +90,6 @@ type (
 //  When debuging, compare all three for relevant initial implementation.
 // NewService builds a new matching service
 func NewService(
-	params *resource.BootstrapParams, // todomigryz: replace generic BootstrapParams with factory or constructed object
 	taggedLogger TaggedLogger,
 	throttledLogger log.ThrottledLogger,
 	serviceConfig *Config,
@@ -104,6 +102,7 @@ func NewService(
 	ringpopChannel *tchannel.Channel,
 	handler *Handler,
 	runtimeMetricsReporter *metrics.RuntimeMetricsReporter,
+	deprecatedTally tally.Scope,
 ) (*Service, error) {
 
 	return &Service{
@@ -115,7 +114,7 @@ func NewService(
 		logger:          taggedLogger,
 		throttledLogger: throttledLogger,
 
-		metricsScope:           params.MetricsScope,
+		metricsScope:           deprecatedTally,
 		runtimeMetricsReporter: runtimeMetricsReporter,
 		membershipMonitor:      membershipMonitor,
 		namespaceCache:         namespaceCache,

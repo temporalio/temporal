@@ -32,24 +32,30 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
+
+	persistenceClient "go.temporal.io/server/common/persistence/client"
 )
 
+// todomigryz: svcName can be hardcoded here. We switch on svc name one layer above.
 // todomigryz: implement this method. Replace NewService method.
 // todomigryz: Need to come up with proper naming convention for initialize vs factory methods.
 func InitializeMatchingService(
 	serviceName ServiceName,
 	logger log.Logger,
-	params *resource.BootstrapParams,
 	dcClient dynamicconfig.Client,
-	metricsReporter metrics.Reporter,
+	metricsReporter UserMetricsReporter,
+	sdkMetricsReporter UserSdkMetricsReporter,
 	svcCfg config.Service,
 	clusterMetadata *config.ClusterMetadata,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	services ServicesConfigMap,
 	membership *config.Membership,
+	persistenceConfig *config.Persistence,
+	persistenceServiceResolver resolver.ServiceResolver,
+	datastoreFactory     persistenceClient.AbstractDataStoreFactory,
 ) (*Service, error) {
 	wire.Build(
 		wire.Value(metrics.ServiceIdx(metrics.Matching)),
@@ -57,6 +63,8 @@ func InitializeMatchingService(
 		TaggedLoggerProvider,
 		ThrottledLoggerProvider,
 		MetricsReporterProvider,
+		wire.FieldsOf(new(ServiceMetrics), "reporter"),
+		wire.FieldsOf(new(ServiceMetrics), "deprecatedTally"),
 		MetricsClientProvider,
 		PersistenceBeanProvider,
 		ClusterMetadataProvider,

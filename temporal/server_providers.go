@@ -123,139 +123,6 @@ func ESClientProvider(
 }
 
 // Populates parameters for a service
-func makeMatchingBootstrapParams(
-	cfg *config.Config,
-	svcName string,
-	logger log.Logger,
-	nsLogger NamespaceLogger,
-	authorizer authorization.Authorizer,
-	claimMapper authorization.ClaimMapper,
-	dynamicConfigClient dynamicconfig.Client,
-	dynamicConfigCollection *dynamicconfig.Collection,
-	customDatastoreFactory persistenceClient.AbstractDataStoreFactory,
-	metricReporters *MetricsReporters,
-	tlsConfigProvider encryption.TLSConfigProvider,
-	audienceGetter authorization.JWTAudienceMapper,
-	persistenceServiceResolver resolver.ServiceResolver,
-	esConfig *config.Elasticsearch,
-	esClient esclient.Client,
-) (*resource.BootstrapParams, error) {
-	params := &resource.BootstrapParams{
-		Name:                     svcName,
-		Logger:                   nil, // remove
-		NamespaceLogger:          nsLogger,
-		PersistenceConfig:        cfg.Persistence,
-		DynamicConfigClient:      dynamicConfigClient,
-		ClusterMetadataConfig:    cfg.ClusterMetadata,
-		DCRedirectionPolicy:      cfg.DCRedirectionPolicy,
-		AbstractDatastoreFactory: customDatastoreFactory,
-		ESConfig:                 esConfig,
-		ESClient:                 esClient,
-	}
-
-	svcCfg := cfg.Services[svcName]
-	// rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, logger, tlsConfigProvider)
-	// params.RPCFactory = rpcFactory
-
-	// Ringpop uses a different port to register handlers, this map is needed to resolve
-	// services to correct addresses used by clients through ServiceResolver lookup API
-	// servicePortMap := make(map[string]int)
-	// for sn, sc := range cfg.Services {
-	// 	servicePortMap[sn] = sc.RPC.GRPCPort
-	// }
-	//
-	// params.MembershipFactoryInitializer =
-	// 	func(persistenceBean persistenceClient.Bean, logger log.Logger) (resource.MembershipMonitorFactory, error) {
-	// 		return ringpop.NewRingpopFactory(
-	// 			&cfg.Global.Membership,
-	// 			rpcFactory.GetRingpopChannel(),
-	// 			svcName,
-	// 			servicePortMap,
-	// 			logger,
-	// 			persistenceBean.GetClusterMetadataManager(),
-	// 		)
-	// 	}
-
-	serverReporter := metricReporters.serverReporter
-	sdkReporter := metricReporters.sdkReporter
-	// todomigryz: remove support of configuring metrics reporter per-service. Sync with Samar.
-	// todo: Replace this hack with actually using sdkReporter, Client or Scope.
-	if serverReporter == nil {
-		var err error
-		serverReporter, sdkReporter, err = svcCfg.Metrics.InitMetricReporters(logger, nil)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"unable to initialize per-service metric client. "+
-					"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err,
-			)
-		}
-		params.ServerMetricsReporter = serverReporter
-		params.SDKMetricsReporter = sdkReporter
-	}
-
-	globalTallyScope, err := extractTallyScopeForSDK(sdkReporter)
-	if err != nil {
-		return nil, err
-	}
-	params.MetricsScope = globalTallyScope
-
-	serviceIdx := metrics.GetMetricsServiceIdx(svcName, logger)
-
-	metricsClient, err := serverReporter.NewClient(logger, serviceIdx)
-	if err != nil {
-		return nil, fmt.Errorf("unable to initialize metrics client: %w", err)
-	}
-
-	params.MetricsClient = metricsClient
-
-	options, err := tlsConfigProvider.GetFrontendClientConfig()
-	if err != nil {
-		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
-	}
-
-	params.SdkClient, err = sdkclient.NewClient(
-		sdkclient.Options{
-			HostPort:     cfg.PublicClient.HostPort,
-			Namespace:    common.SystemLocalNamespace,
-			MetricsScope: globalTallyScope,
-			Logger:       log.NewSdkLogger(logger),
-			ConnectionOptions: sdkclient.ConnectionOptions{
-				TLS:                options,
-				DisableHealthCheck: true,
-			},
-		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("unable to create public client: %w", err)
-	}
-
-	params.ArchivalMetadata = archiver.NewArchivalMetadata(
-		dynamicConfigCollection,
-		cfg.Archival.History.State,
-		cfg.Archival.History.EnableRead,
-		cfg.Archival.Visibility.State,
-		cfg.Archival.Visibility.EnableRead,
-		&cfg.NamespaceDefaults.Archival,
-	)
-
-	params.ArchiverProvider = provider.NewArchiverProvider(
-		cfg.Archival.History.Provider,
-		cfg.Archival.Visibility.Provider,
-	)
-	params.PersistenceConfig.TransactionSizeLimit = dynamicConfigCollection.GetIntProperty(
-		dynamicconfig.TransactionSizeLimit,
-		common.DefaultTransactionSizeLimit,
-	)
-
-	params.Authorizer = authorizer
-	params.ClaimMapper = claimMapper
-	params.AudienceGetter = audienceGetter
-	params.PersistenceServiceResolver = persistenceServiceResolver
-
-	return params, nil
-}
-
-// Populates parameters for a service
 func makeBootstrapParams(
 	cfg *config.Config,
 	svcName string,
@@ -416,39 +283,20 @@ func ServicesProvider(
 		switch svcName {
 		// todo: All services should follow this path or better be split into separate providers
 		case primitives.MatchingService:
-			params, err := makeMatchingBootstrapParams(
-				deps.cfg,
-				svcName,
-				deps.logger,
-				deps.namespaceLogger,
-				deps.authorizer,
-				deps.claimMapper,
-				deps.dynamicConfigClient,
-				deps.dynamicConfigCollection,
-				deps.customDatastoreFactory,
-				deps.metricReporters,
-				deps.tlsConfigProvider,
-				deps.audienceGetter,
-				deps.persistenceServiceResolver,
-				deps.esConfig,
-				deps.esClient,
-			)
-
-			if err != nil {
-				return nil, err
-			}
-
 			svc, err = matching.InitializeMatchingService(
 				matching.ServiceName(svcName),
 				deps.logger,
-				params,
 				deps.dynamicConfigClient,
-				params.ServerMetricsReporter,
+				deps.metricReporters.serverReporter,
+				deps.metricReporters.sdkReporter,
 				deps.cfg.Services[svcName],
 				deps.cfg.ClusterMetadata,
 				deps.tlsConfigProvider,
 				deps.cfg.Services,
 				&deps.cfg.Global.Membership,
+				&deps.cfg.Persistence,
+				deps.persistenceServiceResolver,
+				deps.customDatastoreFactory,
 			)
 			result[svcName] = svc
 			continue
