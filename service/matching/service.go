@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 )
 
@@ -108,25 +107,9 @@ func NewService(
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	membershipFactory resource.MembershipMonitorFactory,
 	rpcFactory common.RPCFactory,
+	grpcServer *grpc.Server,
 ) (*Service, error) {
 
-	grpcServerOptions, err := rpcFactory.GetInternodeGRPCServerOptions()
-	if err != nil {
-		logger.Fatal("creating gRPC server options failed", tag.Error(err))
-	}
-
-	grpcServerOptions = append(
-		grpcServerOptions,
-		grpc.ChainUnaryInterceptor(
-			rpc.ServiceErrorInterceptor,
-			metrics.NewServerMetricsContextInjectorInterceptor(),
-			metrics.NewServerMetricsTrailerPropagatorInterceptor(logger),
-			metricsInterceptor.Intercept,
-			rateLimitInterceptor.Intercept,
-		),
-	)
-
-	grpcServer := grpc.NewServer(grpcServerOptions...)
 	// todomigryz: might need to close grpcListener, unless it is shared
 	grpcListener := rpcFactory.GetGRPCListener()
 
