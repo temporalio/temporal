@@ -2,6 +2,12 @@
 
 set -eu -o pipefail
 
+# Prerequisites:
+#   - jq
+#   - curl
+#   - sed
+#   - tr
+
 # Input parameters.
 ES_SCHEME="${ES_SCHEME:-http}"
 ES_SERVER="${ES_SERVER:-127.0.0.1}"
@@ -17,32 +23,42 @@ AUTO_CONFIRM="${AUTO_CONFIRM:-}"
 ES_ENDPOINT="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}"
 DIR_NAME="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 
+if ! curl --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}"; then
+    echo "Elasticsearch is not accessible at ${ES_ENDPOINT}."
+    exit 1
+fi
+
 echo "=== Step 1. Add custom search attributes to the new index. ==="
-DOC_TYPE=""
-if [ "${ES_VERSION}" != "v7" ]; then
-    DOC_TYPE="/_doc"
-fi
-CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V0}${DOC_TYPE}/_mapping" | jq -c '.. | .Attr? | select(.!=null) | .properties | with_entries(select(.key == ($customSA[]))) | {properties:.}' --argjson customSA "${CUSTOM_SEARCH_ATTRIBUTES}")
-if [ "${ES_VERSION}" == "v7" ]; then
-    # Replace "date" type with "date_nanos" for Elasticsearch v7.
-    CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(jq '(.properties[].type | select(. == "date")) = "date_nanos"' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}")
-    # Replace "double" type with "scaled_float" for Elasticsearch v7.
-    CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(jq '(.properties[] | select(.type == "double")) = {"type":"scaled_float","scaling_factor":10000}' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}")
-fi
-jq -n "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}"
-if [ -z "${AUTO_CONFIRM}" ]; then
-    read -p "Add custom search attributes above to the index ${ES_VIS_INDEX_V1}? (N/y)" -n 1 -r
-    echo
+if [ "${CUSTOM_SEARCH_ATTRIBUTES}" != "[]" ]; then
+    DOC_TYPE=""
+    if [ "${ES_VERSION}" != "v7" ]; then
+        DOC_TYPE="/_doc"
+    fi
+    CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V0}${DOC_TYPE}/_mapping" | jq --compact-output '.. | .Attr? | select(.!=null) | .properties | with_entries(select(.key == ($customSA[]))) | {properties:.}' --argjson customSA "${CUSTOM_SEARCH_ATTRIBUTES}")
+    if [ "${ES_VERSION}" == "v7" ]; then
+        # Replace "date" type with "date_nanos" for Elasticsearch v7.
+        CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(jq '(.properties[].type | select(. == "date")) = "date_nanos"' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}")
+        # Replace "double" type with "scaled_float" for Elasticsearch v7.
+        CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(jq '(.properties[] | select(.type == "double")) = {"type":"scaled_float","scaling_factor":10000}' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}")
+    fi
+
+    jq <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}"
+    if [ -z "${AUTO_CONFIRM}" ]; then
+        read -p "Add custom search attributes above to the index ${ES_VIS_INDEX_V1}? (N/y)" -n 1 -r
+        echo
+    else
+        REPLY="y"
+    fi
+    if [ "${REPLY}" = "y" ]; then
+        curl --silent --user "${ES_USER}":"${ES_PWD}" -X PUT "${ES_ENDPOINT}/${ES_VIS_INDEX_V1}${DOC_TYPE}/_mapping" -H "Content-Type: application/json" --data-binary "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}" --write-out "\n" | jq
+        # Wait for mapping changes to go through.
+        until curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_cluster/health/${ES_VIS_INDEX_V1}" | jq --exit-status '.status=="green" | .'; do
+            echo "Waiting for Elasticsearch index ${ES_VIS_INDEX_V1} become green."
+            sleep 1
+        done
+    fi
 else
-    REPLY="y"
-fi
-if [ "${REPLY}" = "y" ]; then
-    curl --silent --user "${ES_USER}":"${ES_PWD}" -X PUT "${ES_ENDPOINT}/${ES_VIS_INDEX_V1}${DOC_TYPE}/_mapping" -H "Content-Type: application/json" --data-binary "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}" --write-out "\n" | jq
-    # Wait for mapping changes to go through.
-    until curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_cluster/health/${ES_VIS_INDEX_V1}" | jq  --exit-status '.status=="green" | .'; do
-        echo "Waiting for Elasticsearch index ${ES_VIS_INDEX_V1} become green."
-        sleep 1
-    done
+    echo "Custom search attributes are empty and won't be created."
 fi
 
 echo "=== Step 2. Reindex old index to the new index. ==="
@@ -56,7 +72,7 @@ REINDEX_JSON=$(sed \
     -e "s/\${CUSTOM_SEARCH_ATTRIBUTES}/${CUSTOM_SEARCH_ATTRIBUTES}/g" \
     "${DIR_NAME}/reindex.json")
 
-jq -n "${REINDEX_JSON}"
+jq <<< "${REINDEX_JSON}"
 if [ -z "${AUTO_CONFIRM}" ]; then
     read -p "Apply reindex script above? (N/y)" -n 1 -r
     echo
