@@ -42,6 +42,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/matching/configs"
 	"google.golang.org/grpc"
@@ -49,6 +50,7 @@ import (
 
 type (
 	MetricsReporter metrics.Reporter
+	ServiceName string
 )
 
 func TaggedLoggerProvider(logger log.Logger) (TaggedLogger, error) {
@@ -75,9 +77,12 @@ func MembershipFactoryProvider(
 }
 
 func RPCFactoryProvider(
-	params *resource.BootstrapParams,
+	svcCfg config.Service,
+	logger log.Logger,
+	tlsConfigProvider encryption.TLSConfigProvider,
+	svcName ServiceName,
 ) common.RPCFactory {
-	return params.RPCFactory
+	return rpc.NewFactory(&svcCfg.RPC, string(svcName), logger, tlsConfigProvider)
 }
 
 func GrpcListenerProvider(rpcFactory common.RPCFactory) GRPCListener {

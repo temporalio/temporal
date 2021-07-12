@@ -33,18 +33,21 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
 )
 
 // todomigryz: implement this method. Replace NewService method.
 // todomigryz: Need to come up with proper naming convention for initialize vs factory methods.
 func InitializeMatchingService(
+	serviceName ServiceName,
 	logger log.Logger,
 	params *resource.BootstrapParams,
 	dcClient dynamicconfig.Client,
 	metricsReporter metrics.Reporter,
 	svcCfg config.Service,
 	clusterMetadata *config.ClusterMetadata,
+	tlsConfigProvider encryption.TLSConfigProvider,
 ) (*Service, error) {
 	wire.Build(
 		wire.Value(metrics.ServiceIdx(metrics.Matching)),

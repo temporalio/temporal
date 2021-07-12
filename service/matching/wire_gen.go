@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
 )
 
@@ -43,7 +44,7 @@ import (
 
 // todomigryz: implement this method. Replace NewService method.
 // todomigryz: Need to come up with proper naming convention for initialize vs factory methods.
-func InitializeMatchingService(logger log.Logger, params *resource.BootstrapParams, dcClient dynamicconfig.Client, metricsReporter metrics.Reporter, svcCfg config.Service, clusterMetadata *config.ClusterMetadata) (*Service, error) {
+func InitializeMatchingService(serviceName2 ServiceName, logger log.Logger, params *resource.BootstrapParams, dcClient dynamicconfig.Client, metricsReporter metrics.Reporter, svcCfg config.Service, clusterMetadata *config.ClusterMetadata, tlsConfigProvider encryption.TLSConfigProvider) (*Service, error) {
 	taggedLogger, err := TaggedLoggerProvider(logger)
 	if err != nil {
 		return nil, err
@@ -81,7 +82,7 @@ func InitializeMatchingService(logger log.Logger, params *resource.BootstrapPara
 	if err != nil {
 		return nil, err
 	}
-	rpcFactory := RPCFactoryProvider(params)
+	rpcFactory := RPCFactoryProvider(svcCfg, logger, tlsConfigProvider, serviceName2)
 	server, err := GrpcServerProvider(logger, telemetryInterceptor, rateLimitInterceptor, rpcFactory)
 	if err != nil {
 		return nil, err

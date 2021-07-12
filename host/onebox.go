@@ -35,6 +35,7 @@ import (
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/grpc"
 
@@ -541,12 +542,14 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	svcCfg := config.Service{}
 
 	matchingService, err := matching.InitializeMatchingService(
+		common.MatchingServiceName,
 		c.logger,
 		params,
 		params.DynamicConfigClient,
 		params.ServerMetricsReporter,
 		svcCfg,
 		params.ClusterMetadataConfig,
+		nil,
 	)
 	if err != nil {
 		params.Logger.Fatal("unable to start matching service", tag.Error(err))

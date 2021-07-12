@@ -439,12 +439,14 @@ func ServicesProvider(
 			}
 
 			svc, err = matching.InitializeMatchingService(
+				matching.ServiceName(svcName),
 				deps.logger,
 				params,
 				deps.dynamicConfigClient,
 				params.ServerMetricsReporter,
 				deps.cfg.Services[svcName],
 				deps.cfg.ClusterMetadata,
+				deps.tlsConfigProvider,
 			)
 			result[svcName] = svc
 			continue
