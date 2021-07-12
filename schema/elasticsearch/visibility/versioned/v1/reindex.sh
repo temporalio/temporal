@@ -36,11 +36,11 @@ if [ "${CUSTOM_SEARCH_ATTRIBUTES}" != "[]" ]; then
     fi
     CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V0}${DOC_TYPE}/_mapping" | jq --compact-output '.. | .Attr? | select(.!=null) | .properties | with_entries(select(.key == ($customSA[]))) | {properties:.}' --argjson customSA "${CUSTOM_SEARCH_ATTRIBUTES}")
     if [ "${ES_VERSION}" == "v7" ]; then
-        # Replace "date" type with "date_nanos" for Elasticsearch v7.
+        # Replace "date" type with "date_nanos" only for Elasticsearch v7.
         CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(jq '(.properties[].type | select(. == "date")) = "date_nanos"' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}")
-        # Replace "double" type with "scaled_float" for Elasticsearch v7.
-        CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(jq '(.properties[] | select(.type == "double")) = {"type":"scaled_float","scaling_factor":10000}' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}")
     fi
+    # Replace "double" type with "scaled_float".
+    CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(jq '(.properties[] | select(.type == "double")) = {"type":"scaled_float","scaling_factor":10000}' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}")
 
     jq <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}"
     if [ -z "${AUTO_CONFIRM}" ]; then
