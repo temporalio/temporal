@@ -24,12 +24,12 @@ ES_ENDPOINT="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}"
 DIR_NAME="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
 
 echo "=== Step 0. Sanity check if both Elasticsearch indices are accessible. ==="
-if ! curl --silent --fail --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V0}/_stats/docs"; then
+if ! curl --silent --fail --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V0}/_stats/docs" --write-out "\n"; then
     echo "Elasticsearch index ${ES_VIS_INDEX_V0} is not accessible at ${ES_ENDPOINT}."
     exit 1
 fi
 
-if ! curl --silent --fail --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V1}/_stats/docs"; then
+if ! curl --silent --fail --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V1}/_stats/docs" --write-out "\n"; then
     echo "Elasticsearch index ${ES_VIS_INDEX_V1} is not accessible at ${ES_ENDPOINT}."
     exit 1
 fi
@@ -56,7 +56,7 @@ if jq --exit-status '.properties[]? | length > 0' <<< "${CUSTOM_SEARCH_ATTRIBUTE
         REPLY="y"
     fi
     if [ "${REPLY}" = "y" ]; then
-        curl --silent --user "${ES_USER}":"${ES_PWD}" -X PUT "${ES_ENDPOINT}/${ES_VIS_INDEX_V1}${DOC_TYPE}/_mapping" -H "Content-Type: application/json" --data-binary "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}" --write-out "\n" | jq
+        curl --silent --user "${ES_USER}":"${ES_PWD}" -X PUT "${ES_ENDPOINT}/${ES_VIS_INDEX_V1}${DOC_TYPE}/_mapping" -H "Content-Type: application/json" --data-binary "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}" | jq
         # Wait for mapping changes to go through.
         until curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_cluster/health/${ES_VIS_INDEX_V1}" | jq --exit-status '.status=="green" | .'; do
             echo "Waiting for Elasticsearch index ${ES_VIS_INDEX_V1} become green."
