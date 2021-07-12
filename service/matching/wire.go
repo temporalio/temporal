@@ -65,6 +65,7 @@ func InitializeMatchingService(
 		GrpcServerProvider,
 		GrpcListenerProvider,
 		MembershipMonitorProvider,
+		ClientBeanProvider,
 		NewService,
 	)
 	return nil, nil

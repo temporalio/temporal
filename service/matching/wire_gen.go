@@ -69,11 +69,11 @@ func InitializeMatchingService(logger log.Logger, params *resource.BootstrapPara
 	if err != nil {
 		return nil, err
 	}
-	metadata := ClusterMetadataProvider(clusterMetadata)
 	metadataManager, err := MetadataManagerProvider(bean)
 	if err != nil {
 		return nil, err
 	}
+	metadata := ClusterMetadataProvider(clusterMetadata)
 	namespaceCache := cache.NewNamespaceCache(metadataManager, metadata, client, logger)
 	rpcFactory := RPCFactoryProvider(params)
 	matchingAPIMetricsScopes := metrics.NewMatchingAPIMetricsScopes()
@@ -95,7 +95,11 @@ func InitializeMatchingService(logger log.Logger, params *resource.BootstrapPara
 	if err != nil {
 		return nil, err
 	}
-	service, err := NewService(params, taggedLogger, throttledLogger, matchingConfig, client, bean, metadata, namespaceCache, rpcFactory, server, grpcListener, monitor)
+	clientBean, err := ClientBeanProvider(params, taggedLogger, dcClient, rpcFactory, monitor, client, metadata)
+	if err != nil {
+		return nil, err
+	}
+	service, err := NewService(params, taggedLogger, throttledLogger, matchingConfig, client, bean, namespaceCache, rpcFactory, server, grpcListener, monitor, clientBean)
 	if err != nil {
 		return nil, err
 	}

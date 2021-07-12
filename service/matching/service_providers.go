@@ -25,6 +25,7 @@ package matching
 import (
 	"fmt"
 
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
@@ -149,6 +150,31 @@ func MetricsClientProvider(
 	serviceIdx metrics.ServiceIdx,
 ) (metrics.Client, error) {
 	return serverReporter.NewClient(logger, serviceIdx)
+}
+
+func ClientBeanProvider(
+	params *resource.BootstrapParams,
+	logger TaggedLogger,
+	dcClient dynamicconfig.Client,
+	rpcFactory common.RPCFactory,
+	membershipMonitor membership.Monitor,
+	metricsClient metrics.Client,
+	clusterMetadata cluster.Metadata,
+) (client.Bean, error) {
+	dynamicCollection := dynamicconfig.NewCollection(dcClient, logger)
+
+	numShards := params.PersistenceConfig.NumHistoryShards
+	return client.NewClientBean(
+		client.NewRPCClientFactory(
+			rpcFactory,
+			membershipMonitor,
+			metricsClient, // replaced params.MetricsClient,
+			dynamicCollection,
+			numShards,
+			logger,
+		),
+		clusterMetadata,
+	)
 }
 
 func PersistenceBeanProvider(

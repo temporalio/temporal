@@ -35,14 +35,12 @@ import (
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/cache"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/membership"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -100,31 +98,14 @@ func NewService(
 	serviceConfig *Config,
 	metricsClient metrics.Client,
 	persistenceBean persistenceClient.Bean,
-	clusterMetadata cluster.Metadata,
 	namespaceCache cache.NamespaceCache,
 	rpcFactory common.RPCFactory,
 	grpcServer *grpc.Server,
 	grpcListener GRPCListener,
 	membershipMonitor membership.Monitor,
+	clientBean client.Bean,
 ) (*Service, error) {
 
-	dynamicCollection := dynamicconfig.NewCollection(params.DynamicConfigClient, taggedLogger)
-
-	numShards := params.PersistenceConfig.NumHistoryShards
-	clientBean, err := client.NewClientBean(
-		client.NewRPCClientFactory(
-			rpcFactory,
-			membershipMonitor,
-			metricsClient, // replaced params.MetricsClient,
-			dynamicCollection,
-			numShards,
-			taggedLogger,
-		),
-		clusterMetadata,
-	)
-	if err != nil {
-		return nil, err
-	}
 
 	matchingRawClient, err := clientBean.GetMatchingClient(namespaceCache.GetNamespaceName)
 	if err != nil {
