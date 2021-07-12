@@ -61,6 +61,7 @@ func InitializeMatchingService(
 		interceptor.NewTelemetryInterceptor,
 		RateLimitInterceptorProvider,
 		MembershipFactoryProvider,
+		RPCFactoryProvider,
 		NewService,
 	)
 	return nil, nil

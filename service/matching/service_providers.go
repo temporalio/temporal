@@ -69,6 +69,14 @@ func MembershipFactoryProvider(
 	return params.MembershipFactoryInitializer(persistenceBean, taggedLogger)
 }
 
+func RPCFactoryProvider(
+	params *resource.BootstrapParams,
+) (common.RPCFactory) {
+	return params.RPCFactory
+}
+
+
+
 func GrpcServerProvider(
 	logger log.Logger,
 	metricsInterceptor *interceptor.TelemetryInterceptor,

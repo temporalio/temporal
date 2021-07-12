@@ -107,9 +107,10 @@ func NewService(
 	metricsInterceptor *interceptor.TelemetryInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	membershipFactory resource.MembershipMonitorFactory,
+	rpcFactory common.RPCFactory,
 ) (*Service, error) {
 
-	grpcServerOptions, err := params.RPCFactory.GetInternodeGRPCServerOptions()
+	grpcServerOptions, err := rpcFactory.GetInternodeGRPCServerOptions()
 	if err != nil {
 		logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
@@ -127,7 +128,7 @@ func NewService(
 
 	grpcServer := grpc.NewServer(grpcServerOptions...)
 	// todomigryz: might need to close grpcListener, unless it is shared
-	grpcListener := params.RPCFactory.GetGRPCListener()
+	grpcListener := rpcFactory.GetGRPCListener()
 
 	dynamicCollection := dynamicconfig.NewCollection(params.DynamicConfigClient, taggedLogger)
 
@@ -139,7 +140,7 @@ func NewService(
 	numShards := params.PersistenceConfig.NumHistoryShards
 	clientBean, err := client.NewClientBean(
 		client.NewRPCClientFactory(
-			params.RPCFactory,
+			rpcFactory,
 			membershipMonitor,
 			metricsClient, // replaced params.MetricsClient,
 			dynamicCollection,
@@ -162,8 +163,7 @@ func NewService(
 		return nil, err
 	}
 
-	// todomigryz: @Alex how does this work?
-	ringpopChannel := params.RPCFactory.GetRingpopChannel()
+	ringpopChannel := rpcFactory.GetRingpopChannel()
 
 	historyRawClient := clientBean.GetHistoryClient()
 	historyClient := history.NewRetryableClient(
