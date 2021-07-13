@@ -65,12 +65,9 @@ func NewHeadersProviderPlugin(name string) (HeadersProvider, error) {
 func (g *HeadersProviderRPC) GetHeaders(ctx context.Context) (map[string]string, error) {
 	var result map[string]string
 
-	sCtx, err := NewPluginSafeContext(ctx)
-	if err != nil {
-		return nil, err
-	}
+	sCtx := NewPluginSafeContext(ctx)
 
-	err = g.client.Call("Plugin.GetHeaders", sCtx, &result)
+	err := g.client.Call("Plugin.GetHeaders", sCtx, &result)
 	if err != nil {
 		return nil, err
 	}
@@ -81,10 +78,7 @@ func (g *HeadersProviderRPC) GetHeaders(ctx context.Context) (map[string]string,
 func (s *HeadersProviderRPCServer) GetHeaders(sCtx PluginSafeContext, resp *map[string]string) error {
 	var err error
 
-	ctx, err := sCtx.GetContext()
-	if err != nil {
-		return err
-	}
+	ctx := sCtx.GetContext()
 
 	*resp, err = s.Impl.GetHeaders(ctx)
 	return err

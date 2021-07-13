@@ -42,8 +42,8 @@ func init() {
 	gob.Register(metadata.MD{})
 }
 
-func NewPluginSafeContext(ctx context.Context) (PluginSafeContext, error) {
-	values := make(map[string]interface{})
+func NewPluginSafeContext(ctx context.Context) PluginSafeContext {
+	values := map[string]interface{}{}
 
 	if md, ok := metadata.FromIncomingContext(ctx); ok {
 		values[grpcIncomingMDKey] = md
@@ -52,10 +52,10 @@ func NewPluginSafeContext(ctx context.Context) (PluginSafeContext, error) {
 		values[grpcOutgoingMDKey] = md
 	}
 
-	return PluginSafeContext{Values: values}, nil
+	return PluginSafeContext{Values: values}
 }
 
-func (sCtx *PluginSafeContext) GetContext() (context.Context, error) {
+func (sCtx *PluginSafeContext) GetContext() context.Context {
 	ctx := context.Background()
 
 	if rv, ok := sCtx.Values[grpcIncomingMDKey]; ok {
@@ -69,5 +69,5 @@ func (sCtx *PluginSafeContext) GetContext() (context.Context, error) {
 		}
 	}
 
-	return ctx, nil
+	return ctx
 }
