@@ -222,6 +222,7 @@ const (
 		`, execution_state = ? ` +
 		`, execution_state_encoding = ? ` +
 		`, next_event_id = ? ` +
+		`, db_record_version = ? ` +
 		`, checksum = ? ` +
 		`, checksum_encoding = ? ` +
 		`WHERE shard_id = ? ` +
@@ -1264,7 +1265,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(
 			updateWorkflow.ExecutionState.RunId,
 			[]executionCASCondition{{
 				runID:       updateWorkflow.ExecutionState.RunId,
-				dbVersion:   updateWorkflow.DBRecordVersion,
+				dbVersion:   updateWorkflow.DBRecordVersion - 1,
 				nextEventID: updateWorkflow.Condition,
 			}},
 		)
@@ -1403,13 +1404,13 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(
 	if !applied {
 		executionCASConditions := []executionCASCondition{{
 			runID:       resetWorkflow.RunID,
-			dbVersion:   resetWorkflow.DBRecordVersion,
+			dbVersion:   resetWorkflow.DBRecordVersion - 1,
 			nextEventID: resetWorkflow.Condition,
 		}}
 		if currentWorkflow != nil {
 			executionCASConditions = append(executionCASConditions, executionCASCondition{
 				runID:       currentWorkflow.RunID,
-				dbVersion:   currentWorkflow.DBRecordVersion,
+				dbVersion:   currentWorkflow.DBRecordVersion - 1,
 				nextEventID: currentWorkflow.Condition,
 			})
 		}
