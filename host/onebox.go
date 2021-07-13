@@ -570,10 +570,10 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		svcCfg,
 		params.ClusterMetadataConfig,
 		nil,
+		params.MembershipFactoryInitializer,
 		&params.PersistenceConfig,
 		params.PersistenceServiceResolver,
-		nil,
-		params.MembershipFactoryInitializer,
+		params.AbstractDatastoreFactory,
 	)
 
 	if err != nil {

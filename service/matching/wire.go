@@ -86,7 +86,6 @@ func InitializeMatchingService(
 	return nil, nil
 }
 
-// todomigryz: svcName can be hardcoded here. We switch on svc name one layer above.
 func InitializeTestMatchingService(
 	serviceName ServiceName,
 	logger log.Logger,
@@ -96,10 +95,10 @@ func InitializeTestMatchingService(
 	svcCfg config.Service,
 	clusterMetadata *config.ClusterMetadata,
 	tlsConfigProvider encryption.TLSConfigProvider,
+	membershipFactory resource.MembershipFactoryInitializerFunc,
 	persistenceConfig *config.Persistence,
 	persistenceServiceResolver resolver.ServiceResolver,
 	datastoreFactory persistenceClient.AbstractDataStoreFactory,
-	membershipFactory resource.MembershipFactoryInitializerFunc,
 ) (*Service, error) {
 	wire.Build(
 		wire.Value(metrics.ServiceIdx(metrics.Matching)),
