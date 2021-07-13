@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/persistence/visibility"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -59,6 +58,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/validator"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -949,7 +949,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 		request.Failure = serverFailure
 	}
 
-	if request.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND {
+	if request.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_NON_DETERMINISTIC_ERROR {
 		wh.GetLogger().Info("Non-Deterministic Error",
 			tag.WorkflowNamespaceID(taskToken.GetNamespaceId()),
 			tag.WorkflowID(taskToken.GetWorkflowId()),
