@@ -53,7 +53,6 @@ type (
 	}
 )
 
-// todomigryz: try to inject this one.
 func newTransferQueueActiveProcessor(
 	shard shard.Context,
 	historyService *historyEngineImpl,

@@ -44,10 +44,10 @@ type (
 	// Handler - gRPC handler interface for matchingservice
 	Handler struct {
 		engine          Engine
-		metricsClient   metrics.Client       // todomigryz: replaced Resource.GetMetricsClient
-		logger          log.Logger           // todomigryz: replaced Resource.GetThrottledLogger
-		throttledLogger log.ThrottledLogger  // todomigryz: replaced Resource.GetThrottledLogger
-		namespaceCache  cache.NamespaceCache // todomigryz: replaced Resource.GetNamespaceCache
+		metricsClient   metrics.Client
+		logger          log.Logger
+		throttledLogger log.ThrottledLogger
+		namespaceCache  cache.NamespaceCache
 		startWG         sync.WaitGroup
 	}
 )
@@ -72,8 +72,8 @@ func NewHandler(
 	namespaceCache cache.NamespaceCache,
 ) *Handler {
 	handler := &Handler{
-		metricsClient:   metricsClient, // replaced resource.GetMetricsClient(),
-		logger:          logger,        // replaced resource.GetLogger(),
+		metricsClient:   metricsClient,
+		logger:          logger,
 		throttledLogger: throttledLogger,
 		engine:          engine,
 		namespaceCache:  namespaceCache,
@@ -349,9 +349,9 @@ func (h *Handler) namespaceName(id string) string {
 
 func (h *Handler) reportForwardedPerTaskQueueCounter(hCtx *handlerContext, namespaceId string) {
 	hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
-	h.metricsClient. // todomigryz: replaced h.GetMetricsClient().
-				Scope(metrics.MatchingAddWorkflowTaskScope).
-				Tagged(metrics.NamespaceTag(h.namespaceName(namespaceId))).
-				Tagged(metrics.ServiceRoleTag(metrics.MatchingRoleTagValue)).
-				IncCounter(metrics.MatchingClientForwardedCounter)
+	h.metricsClient.
+		Scope(metrics.MatchingAddWorkflowTaskScope).
+		Tagged(metrics.NamespaceTag(h.namespaceName(namespaceId))).
+		Tagged(metrics.ServiceRoleTag(metrics.MatchingRoleTagValue)).
+		IncCounter(metrics.MatchingClientForwardedCounter)
 }

@@ -374,10 +374,15 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	params.Name = common.FrontendServiceName
 	params.Logger = c.logger
 	// params.ThrottledLogger = c.logger
-	params.RPCFactory = newRPCFactoryImpl(common.FrontendServiceName, c.FrontendGRPCAddress(), c.FrontendRingpopAddress(),
-		c.logger)
+	params.RPCFactory = newRPCFactoryImpl(
+		common.FrontendServiceName, c.FrontendGRPCAddress(), c.FrontendRingpopAddress(),
+		c.logger,
+	)
 	params.MetricsScope = tally.NewTestScope(common.FrontendServiceName, make(map[string]string))
-	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
+	params.MembershipFactoryInitializer = func(
+		x persistenceClient.Bean,
+		y log.Logger,
+	) (resource.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
@@ -441,24 +446,32 @@ func (c *temporalImpl) startHistory(
 		// params.ThrottledLogger = c.logger
 		params.RPCFactory = newRPCFactoryImpl(common.HistoryServiceName, grpcPort, membershipPorts[i], c.logger)
 		params.MetricsScope = tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
-		params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
+		params.MembershipFactoryInitializer = func(
+			x persistenceClient.Bean,
+			y log.Logger,
+		) (resource.MembershipMonitorFactory, error) {
 			return newMembershipFactory(params.Name, hosts), nil
 		}
 		params.ClusterMetadataConfig = c.clusterMetadataConfig
-		params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+		params.MetricsClient = metrics.NewClient(
+			params.MetricsScope,
+			metrics.GetMetricsServiceIdx(params.Name, c.logger),
+		)
 		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 		c.overrideHistoryDynamicConfig(integrationClient)
 		params.DynamicConfigClient = integrationClient
 
 		var err error
-		params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
-			HostPort:     c.FrontendGRPCAddress(),
-			Namespace:    common.SystemLocalNamespace,
-			MetricsScope: params.MetricsScope,
-			ConnectionOptions: sdkclient.ConnectionOptions{
-				DisableHealthCheck: true,
+		params.SdkClient, err = sdkclient.NewClient(
+			sdkclient.Options{
+				HostPort:     c.FrontendGRPCAddress(),
+				Namespace:    common.SystemLocalNamespace,
+				MetricsScope: params.MetricsScope,
+				ConnectionOptions: sdkclient.ConnectionOptions{
+					DisableHealthCheck: true,
+				},
 			},
-		})
+		)
 		if err != nil {
 			c.logger.Fatal("Failed to create client for history", tag.Error(err))
 		}
@@ -521,9 +534,17 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	params.Name = common.MatchingServiceName
 	params.Logger = c.logger
 	// params.ThrottledLogger = c.logger
-	params.RPCFactory = newRPCFactoryImpl(common.MatchingServiceName, c.MatchingGRPCServiceAddress(), c.MatchingServiceRingpopAddress(), c.logger)
+	params.RPCFactory = newRPCFactoryImpl(
+		common.MatchingServiceName,
+		c.MatchingGRPCServiceAddress(),
+		c.MatchingServiceRingpopAddress(),
+		c.logger,
+	)
 	params.MetricsScope = tally.NewTestScope(common.MatchingServiceName, make(map[string]string))
-	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
+	params.MembershipFactoryInitializer = func(
+		x persistenceClient.Bean,
+		y log.Logger,
+	) (resource.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
@@ -541,12 +562,25 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 
 	svcCfg := config.Service{}
 
+	// func
+	// InitializeMatchingService(serviceName2
+	// ServiceName, logger
+	// log.Logger, dcClient
+	// dynamicconfig.Client, metricsReporter
+	// UserMetricsReporter, sdkMetricsReporter
+	// UserSdkMetricsReporter, svcCfg
+	// config.Service, clusterMetadata * config.ClusterMetadata, tlsConfigProvider
+	// encryption.TLSConfigProvider, services
+	// ServicesConfigMap, membership * config.Membership, persistenceConfig * config.Persistence, persistenceServiceResolver
+	// resolver.ServiceResolver, datastoreFactory
+	// client.AbstractDataStoreFactory) *Service, error)
+
 	matchingService, err := matching.InitializeMatchingService(
 		common.MatchingServiceName,
 		c.logger,
-		params,
 		params.DynamicConfigClient,
 		params.ServerMetricsReporter,
+		params.SDKMetricsReporter,
 		svcCfg,
 		params.ClusterMetadataConfig,
 		nil,
@@ -575,9 +609,17 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	params.Name = common.WorkerServiceName
 	params.Logger = c.logger
 	// params.ThrottledLogger = c.logger
-	params.RPCFactory = newRPCFactoryImpl(common.WorkerServiceName, c.WorkerGRPCServiceAddress(), c.WorkerServiceRingpopAddress(), c.logger)
+	params.RPCFactory = newRPCFactoryImpl(
+		common.WorkerServiceName,
+		c.WorkerGRPCServiceAddress(),
+		c.WorkerServiceRingpopAddress(),
+		c.logger,
+	)
 	params.MetricsScope = tally.NewTestScope(common.WorkerServiceName, make(map[string]string))
-	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
+	params.MembershipFactoryInitializer = func(
+		x persistenceClient.Bean,
+		y log.Logger,
+	) (resource.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
@@ -593,14 +635,16 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	}
 	params.PersistenceServiceResolver = resolver.NewNoopResolver()
 
-	params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
-		HostPort:     c.FrontendGRPCAddress(),
-		Namespace:    common.SystemLocalNamespace,
-		MetricsScope: params.MetricsScope,
-		ConnectionOptions: sdkclient.ConnectionOptions{
-			DisableHealthCheck: true,
+	params.SdkClient, err = sdkclient.NewClient(
+		sdkclient.Options{
+			HostPort:     c.FrontendGRPCAddress(),
+			Namespace:    common.SystemLocalNamespace,
+			MetricsScope: params.MetricsScope,
+			ConnectionOptions: sdkclient.ConnectionOptions{
+				DisableHealthCheck: true,
+			},
 		},
-	})
+	)
 	if err != nil {
 		c.logger.Fatal("Failed to create client for worker", tag.Error(err))
 	}
@@ -628,16 +672,34 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	clusterMetadata := cluster.NewTestClusterMetadata(c.clusterMetadataConfig)
 	var replicatorNamespaceCache cache.NamespaceCache
 	if c.workerConfig.EnableReplicator {
-		metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
-		replicatorNamespaceCache = cache.NewNamespaceCache(metadataManager, clusterMetadata, service.GetMetricsClient(), service.GetLogger())
+		metadataManager := persistence.NewMetadataPersistenceMetricsClient(
+			c.metadataMgr,
+			service.GetMetricsClient(),
+			c.logger,
+		)
+		replicatorNamespaceCache = cache.NewNamespaceCache(
+			metadataManager,
+			clusterMetadata,
+			service.GetMetricsClient(),
+			service.GetLogger(),
+		)
 		replicatorNamespaceCache.Start()
 		c.startWorkerReplicator(params, service, clusterMetadata)
 	}
 
 	var clientWorkerNamespaceCache cache.NamespaceCache
 	if c.workerConfig.EnableArchiver {
-		metadataProxyManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
-		clientWorkerNamespaceCache = cache.NewNamespaceCache(metadataProxyManager, clusterMetadata, service.GetMetricsClient(), service.GetLogger())
+		metadataProxyManager := persistence.NewMetadataPersistenceMetricsClient(
+			c.metadataMgr,
+			service.GetMetricsClient(),
+			c.logger,
+		)
+		clientWorkerNamespaceCache = cache.NewNamespaceCache(
+			metadataProxyManager,
+			clusterMetadata,
+			service.GetMetricsClient(),
+			service.GetLogger(),
+		)
 		clientWorkerNamespaceCache.Start()
 		c.startWorkerClientWorker(params, service, clientWorkerNamespaceCache)
 	}
@@ -653,7 +715,11 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	c.shutdownWG.Done()
 }
 
-func (c *temporalImpl) startWorkerReplicator(params *resource.BootstrapParams, service resource.Resource, clusterMetadata cluster.Metadata) {
+func (c *temporalImpl) startWorkerReplicator(
+	params *resource.BootstrapParams,
+	service resource.Resource,
+	clusterMetadata cluster.Metadata,
+) {
 	workerConfig := worker.NewConfig(params)
 	workerConfig.ReplicationCfg.ReplicatorMessageConcurrency = dynamicconfig.GetIntPropertyFn(10)
 	serviceResolver, err := service.GetMembershipMonitor().GetResolver(common.WorkerServiceName)
@@ -674,7 +740,11 @@ func (c *temporalImpl) startWorkerReplicator(params *resource.BootstrapParams, s
 	c.replicator.Start()
 }
 
-func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams, service resource.Resource, namespaceCache cache.NamespaceCache) {
+func (c *temporalImpl) startWorkerClientWorker(
+	params *resource.BootstrapParams,
+	service resource.Resource,
+	namespaceCache cache.NamespaceCache,
+) {
 	workerConfig := worker.NewConfig(params)
 	workerConfig.ArchiverConfig.ArchiverConcurrency = dynamicconfig.GetIntPropertyFn(10)
 
@@ -803,7 +873,12 @@ func (c *rpcFactoryImpl) GetGRPCListener() net.Listener {
 		var err error
 		c.listener, err = net.Listen("tcp", c.grpcHostPort)
 		if err != nil {
-			c.logger.Fatal("Failed create gRPC listener", tag.Error(err), tag.Service(c.serviceName), tag.Address(c.grpcHostPort))
+			c.logger.Fatal(
+				"Failed create gRPC listener",
+				tag.Error(err),
+				tag.Service(c.serviceName),
+				tag.Address(c.grpcHostPort),
+			)
 		}
 
 		c.logger.Info("Created gRPC listener", tag.Service(c.serviceName), tag.Address(c.grpcHostPort))

@@ -20,7 +20,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// go:generate wire gen --header_file ../../license.header .
 // +build wireinject
 
 package matching
@@ -40,8 +39,6 @@ import (
 )
 
 // todomigryz: svcName can be hardcoded here. We switch on svc name one layer above.
-// todomigryz: implement this method. Replace NewService method.
-// todomigryz: Need to come up with proper naming convention for initialize vs factory methods.
 func InitializeMatchingService(
 	serviceName ServiceName,
 	logger log.Logger,
@@ -55,7 +52,7 @@ func InitializeMatchingService(
 	membership *config.Membership,
 	persistenceConfig *config.Persistence,
 	persistenceServiceResolver resolver.ServiceResolver,
-	datastoreFactory     persistenceClient.AbstractDataStoreFactory,
+	datastoreFactory persistenceClient.AbstractDataStoreFactory,
 ) (*Service, error) {
 	wire.Build(
 		wire.Value(metrics.ServiceIdx(metrics.Matching)),

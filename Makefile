@@ -3,16 +3,13 @@
 install: update-tools bins
 
 # Rebuild binaries (used by Dockerfile).
-wb: wire bins
-
-# Rebuild binaries (used by Dockerfile).
 bins: clean-bins temporal-server tctl plugins temporal-cassandra-tool temporal-sql-tool
 
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
 all: update-tools clean proto bins check test
 
 # Used by Buildkite.
-ci-build: bins build-tests update-tools shell-check check proto mocks gomodtidy ensure-no-changes
+ci-build: bins build-tests update-tools shell-check check proto mocks wire gomodtidy ensure-no-changes
 
 # Delete all build artefacts.
 clean: clean-bins clean-test-results
@@ -81,6 +78,7 @@ TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
 INTEG_TEST_DIRS := $(filter $(INTEG_TEST_ROOT)/ $(INTEG_TEST_NDC_ROOT)/,$(TEST_DIRS))
 UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(INTEG_TEST_NDC_ROOT)%,$(TEST_DIRS))
 ALL_SRC_WITH_MOCKS := $(shell grep -rlw . -e 'go:generate mockgen' | grep -v -e "^$(PROTO_OUT)")
+ALL_SRC_WITH_WIRE := $(shell grep -rlw . -e '\/\/ \?+build wireinject' | grep -v -e "^$(PROTO_OUT)")
 
 ALL_SCRIPTS     := $(shell find . -name "*.sh")
 
@@ -456,8 +454,13 @@ mocks: own-mocks external-mocks copyright
 ##### DI #####
 # todomigryz: add this to ci-build for consistency
 wire:
-	wire gen --header_file license.header ./service/matching
-	wire gen --header_file license.header ./temporal
+	@printf $(COLOR) "Generate wire files..."
+	echo $(ALL_SRC_WITH_WIRE)
+#	for line in $(ALL_SRC_WITH_WIRE); do \
+#  		wire gen --header_file license.header $${line} ; \
+#  	done
+#	wire gen --header_file license.header ./service/matching
+#	wire gen --header_file license.header ./temporal
 
 ##### Fossa #####
 fossa-install:

@@ -383,7 +383,6 @@ func New(
 	return impl, nil
 }
 
-// todomigryz: this should be moved to matching service
 // Start start all resources
 func (h *Impl) Start() {
 
@@ -413,7 +412,6 @@ func (h *Impl) Start() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-// todomigryz: this should be moved to matching service
 // Stop stops all resources
 func (h *Impl) Stop() {
 
@@ -458,7 +456,6 @@ func (h *Impl) GetClusterMetadata() cluster.Metadata {
 // other common resources
 
 // GetNamespaceCache return namespace cache
-// todomigryz: namespaceCache
 func (h *Impl) GetNamespaceCache() cache.NamespaceCache {
 	return h.namespaceCache
 }
@@ -626,13 +623,11 @@ func (h *Impl) GetPersistenceBean() persistenceClient.Bean {
 // loggers
 
 // GetLogger return logger
-// todomigryz: taggedLogger
 func (h *Impl) GetLogger() log.Logger {
 	return h.logger
 }
 
 // GetThrottledLogger return throttled logger
-// todomigryz: throttledLogger
 func (h *Impl) GetThrottledLogger() log.Logger {
 	return h.throttledLogger
 }
@@ -648,155 +643,4 @@ func (h *Impl) GetSearchAttributesProvider() searchattribute.Provider {
 
 func (h *Impl) GetSearchAttributesManager() searchattribute.Manager {
 	return h.saManager
-}
-
-// todomigryz: might not be needed if can remove logger to providers.
-type TaggedLogger log.Logger
-
-// New create a new resource containing common dependencies
-func NewMatchingResource(
-	params *BootstrapParams,
-	taggedLogger TaggedLogger,
-	throttledLogger log.ThrottledLogger,
-	serviceName string,
-	persistenceBean persistenceClient.Bean,
-	namespaceCache cache.NamespaceCache,
-	clusterMetadata cluster.Metadata,
-	metricsClient metrics.Client,
-	membershipMonitor membership.Monitor,
-	clientBean client.Bean,
-	numShards int32,
-	matchingRawClient matchingservice.MatchingServiceClient,
-	matchingServiceResolver membership.ServiceResolver,
-	historyClient historyservice.HistoryServiceClient,
-	historyRawClient historyservice.HistoryServiceClient,
-	runtimeMetricsReporter *metrics.RuntimeMetricsReporter,
-	visibilityMgr persistence.VisibilityManager,
-	saProvider *persistence.SearchAttributesManager,
-	ringpopChannel *tchannel.Channel,
-	grpcListener net.Listener,
-) (impl *Impl, retError error) {
-	hostName, err := os.Hostname()
-	if err != nil {
-		return nil, err
-	}
-
-	// todomigryz: seems we are not using most of these resolver? I don't see direct calls/dependencies.
-	frontendServiceResolver, err := membershipMonitor.GetResolver(common.FrontendServiceName)
-	if err != nil {
-		return nil, err
-	}
-
-	historyServiceResolver, err := membershipMonitor.GetResolver(common.HistoryServiceName)
-	if err != nil {
-		return nil, err
-	}
-
-	workerServiceResolver, err := membershipMonitor.GetResolver(common.WorkerServiceName)
-	if err != nil {
-		return nil, err
-	}
-
-	saManager := persistence.NewSearchAttributesManager(
-		clock.NewRealTimeSource(),
-		persistenceBean.GetClusterMetadataManager(),
-	)
-
-	frontendRawClient := clientBean.GetFrontendClient()
-	frontendClient := frontend.NewRetryableClient(
-		frontendRawClient,
-		common.CreateFrontendServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
-	)
-
-	matchingClient := matching.NewRetryableClient(
-		matchingRawClient,
-		common.CreateMatchingServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
-	)
-
-	// todomigryz: Is this needed for matching? Together with visibility.
-	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
-		HistoryV2Manager: persistenceBean.GetHistoryManager(),
-		Logger:           taggedLogger,
-		MetricsClient:    metricsClient, // replaced params.MetricsClient,
-		ClusterMetadata:  clusterMetadata,
-		NamespaceCache:   namespaceCache,
-	}
-	visibilityArchiverBootstrapContainer := &archiver.VisibilityBootstrapContainer{
-		Logger:          taggedLogger,
-		MetricsClient:   metricsClient, // replaced params.MetricsClient,
-		ClusterMetadata: clusterMetadata,
-		NamespaceCache:  namespaceCache,
-	}
-	if err := params.ArchiverProvider.RegisterBootstrapContainer(
-		serviceName,
-		historyArchiverBootstrapContainer,
-		visibilityArchiverBootstrapContainer,
-	); err != nil {
-		return nil, err
-	}
-
-	impl = &Impl{
-		status: common.DaemonStatusInitialized,
-
-		// static infos
-
-		numShards:       numShards,
-		serviceName:     params.Name,
-		hostName:        hostName,
-		metricsScope:    params.MetricsScope,
-		clusterMetadata: clusterMetadata,
-		saProvider:      saProvider,
-		saManager:       saManager,
-
-		// other common resources
-
-		namespaceCache:    namespaceCache,
-		timeSource:        clock.NewRealTimeSource(),
-		payloadSerializer: persistence.NewPayloadSerializer(),
-		metricsClient:     metricsClient, // todomigryz: remove. replaced params.MetricsClient, should not be used any more
-		archivalMetadata:  params.ArchivalMetadata,
-		archiverProvider:  params.ArchiverProvider,
-
-		// membership infos
-
-		membershipMonitor:       membershipMonitor,
-		frontendServiceResolver: frontendServiceResolver,
-		matchingServiceResolver: matchingServiceResolver,
-		historyServiceResolver:  historyServiceResolver,
-		workerServiceResolver:   workerServiceResolver,
-
-		// internal services clients
-
-		sdkClient:         params.SdkClient,
-		frontendRawClient: frontendRawClient,
-		frontendClient:    frontendClient,
-		matchingRawClient: matchingRawClient,
-		matchingClient:    matchingClient,
-		historyRawClient:  historyRawClient,
-		historyClient:     historyClient,
-		clientBean:        clientBean,
-
-		// persistence clients
-
-		persistenceBean: persistenceBean,
-		visibilityMgr:   visibilityMgr,
-
-		// loggers
-
-		logger:          taggedLogger,
-		throttledLogger: throttledLogger,
-
-		// for registering grpc handlers
-		grpcListener: grpcListener,
-
-		// for ringpop listener
-		ringpopChannel: ringpopChannel,
-
-		// internal vars
-		runtimeMetricsReporter: runtimeMetricsReporter,
-		rpcFactory:             params.RPCFactory,
-	}
-	return impl, nil
 }

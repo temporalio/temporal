@@ -30,9 +30,6 @@ import (
 	tlog "go.temporal.io/server/common/log"
 )
 
-// todomigryz: create server provider that receives a struct with dependencies
-// todomigryz: wire init struct with dependencies using wire tools
-
 func InitializeDefaultUserProviderSet(c *cli.Context) wire.ProviderSet {
 	return wire.NewSet(
 		DefaultConfigProvider,

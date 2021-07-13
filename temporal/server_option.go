@@ -60,7 +60,6 @@ func ForServices(names []string) ServerOption {
 	})
 }
 
-// todomigryz: not handled via DI yet.
 // InterruptOn interrupts server on the signal from server. If channel is nil Start() will block forever.
 func InterruptOn(interruptCh <-chan interface{}) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
@@ -103,7 +102,6 @@ func WithClaimMapper(claimMapper func(cfg *config.Config) authorization.ClaimMap
 	})
 }
 
-// todomigryz: verify handled via DI
 // Configures JWT audience getter for authorization
 func WithAudienceGetter(audienceGetter func(cfg *config.Config) authorization.JWTAudienceMapper) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
@@ -111,7 +109,6 @@ func WithAudienceGetter(audienceGetter func(cfg *config.Config) authorization.JW
 	})
 }
 
-// todomigryz: verify handled with DI
 // Set custom metric reporter
 // for (deprecated) Tally it should be tally.BaseStatsReporter
 // for Prometheus with framework metrics.FrameworkCustom it should be metrics.Reporter

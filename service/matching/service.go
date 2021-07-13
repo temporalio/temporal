@@ -43,15 +43,13 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 )
 
 // Service represents the matching service
 type (
 	Service struct {
-		logger          log.Logger // todomigryz: rename to logger, unless untagged is required.
-		throttledLogger log.Logger // todomigryz: this should not be required. Transient dependency?
+		logger log.Logger
 
 		status  int32
 		handler *Handler
@@ -63,31 +61,16 @@ type (
 		runtimeMetricsReporter *metrics.RuntimeMetricsReporter
 		membershipMonitor      membership.Monitor
 		namespaceCache         cache.NamespaceCache
-		visibilityMgr          persistence.VisibilityManager
-		// todomigryz: trying to replace with persistenceClient.Bean
-		// persistenceBean        *persistenceClient.BeanImpl
-		persistenceBean persistenceClient.Bean
-		ringpopChannel  *tchannel.Channel
-		grpcListener    net.Listener
-		clientBean      client.Bean // needed for onebox. Should remove if possible.
+		persistenceBean        persistenceClient.Bean
+		ringpopChannel         *tchannel.Channel
+		grpcListener           net.Listener
+		clientBean             client.Bean // needed for onebox. Should remove if possible.
 	}
 
 	TaggedLogger log.Logger
-	// MatchingMetricsClient metrics.Client
 	GRPCListener net.Listener
 )
 
-// todomigryz: check if I can decouple BootstrapParams.
-// todomigryz: current steps:
-//  1. Flatten BootstrapParams into a list of arguments
-//  2. Remove unused arguments
-//  3. Extract leaf dependencies as arguments and respective providers
-//  4. Repeat 3 while possible.
-//  5. ...
-//  6. Profit
-// todomigryz: seems that we do not store BootstrapParams, so it should be possible to flatten it.
-// todomigryz: keep in mind: providers are extracted from both: BootstrapParams, NewService and resource.New.
-//  When debuging, compare all three for relevant initial implementation.
 // NewService builds a new matching service
 func NewService(
 	taggedLogger TaggedLogger,
@@ -106,14 +89,11 @@ func NewService(
 ) (*Service, error) {
 
 	return &Service{
-		status:  common.DaemonStatusInitialized,
-		config:  serviceConfig,
-		server:  grpcServer,
-		handler: handler,
-
-		logger:          taggedLogger,
-		throttledLogger: throttledLogger,
-
+		status:                 common.DaemonStatusInitialized,
+		config:                 serviceConfig,
+		server:                 grpcServer,
+		handler:                handler,
+		logger:                 taggedLogger,
 		metricsScope:           deprecatedTally,
 		runtimeMetricsReporter: runtimeMetricsReporter,
 		membershipMonitor:      membershipMonitor,
@@ -138,30 +118,22 @@ func (s *Service) Start() {
 	logger := s.logger
 	logger.Info("matching starting")
 
-	// ////////////////////////////////////
-	// todomigryz: inline Resource.Start()
-	// must start base service first
-	// s.Resource.Start()
 	s.metricsScope.Counter(metrics.RestartCount).Inc(1)
 	s.runtimeMetricsReporter.Start()
 
 	s.membershipMonitor.Start()
 	s.namespaceCache.Start()
 
-	// todomigryz: remove if hostInfo not used
 	hostInfo, err := s.membershipMonitor.WhoAmI()
 	if err != nil {
 		s.logger.Fatal("fail to get host info from membership monitor", tag.Error(err))
 	}
-	// h.hostInfo = hostInfo
 
 	// The service is now started up
 	s.logger.Info("Service resources started", tag.Address(hostInfo.GetAddress()))
 
 	// seed the random generator once for this service
 	rand.Seed(time.Now().UnixNano())
-	// todomigryz: inline Resource.Start() done
-	// ////////////////////////////////////
 
 	s.handler.Start()
 
@@ -196,21 +168,10 @@ func (s *Service) Stop() {
 
 	s.handler.Stop()
 
-	// ///////////////////////////////////////////////
-	// s.Resource.Stop() // todomigryz: inlined below
-
 	s.namespaceCache.Stop()
 	s.membershipMonitor.Stop()
-	s.ringpopChannel.Close() // todomigryz: we do not start this in Start()
+	s.ringpopChannel.Close() // todo: we do not start this in Start(), need to update initialization and ownership.
 	s.runtimeMetricsReporter.Stop()
-	s.persistenceBean.Close() // todomigryz: we do not start this in Start()
+	s.persistenceBean.Close() // todo: we do not start this in Start(), need to update initialization and ownership.
 
-	// todomigryz: @Alex why do we need visibilityMgr in matching
-	if s.visibilityMgr != nil {
-		s.visibilityMgr.Close()
-	}
-	// todomigryz: done inlining Resource.Stop
-	// ///////////////////////////////////////////////
-
-	s.logger.Info("matching stopped")
 }

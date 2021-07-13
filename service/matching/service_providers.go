@@ -61,7 +61,7 @@ type (
 	ServicesConfigMap      map[string]config.Service
 
 	ServiceMetrics struct {
-		reporter MetricsReporter
+		reporter        MetricsReporter
 		deprecatedTally tally.Scope
 	}
 )
@@ -89,7 +89,7 @@ func MembershipFactoryInitializerProvider(
 ) resource.MembershipFactoryInitializerFunc {
 
 	servicePortMap := make(map[string]int)
-	for sn, sc := range services { //todomigryz: commented code cfg.Services {
+	for sn, sc := range services {
 		servicePortMap[sn] = sc.RPC.GRPCPort
 	}
 
@@ -110,7 +110,7 @@ func MembershipFactoryInitializerProvider(
 	return result
 }
 
-// todomigryz: seem to be possible to join with MFIProvider
+// todomigryz: seem to be possible to combine with MFIProvider
 func MembershipFactoryProvider(
 	factoryInitializer resource.MembershipFactoryInitializerFunc,
 	taggedLogger TaggedLogger,
@@ -162,25 +162,22 @@ func MembershipMonitorProvider(membershipFactory resource.MembershipMonitorFacto
 	return membershipFactory.GetMembershipMonitor()
 }
 
-// todomigryz: configure autoformatting in goland.
-// todomigryz: I believe we config collection can be shared across services. Might be worth injecting it directly.
+// todo: I believe we config collection can be shared across services. Might be worth injecting it directly.
 func ServiceConfigProvider(logger log.Logger, dcClient dynamicconfig.Client) (*Config, error) {
 	dcCollection := dynamicconfig.NewCollection(dcClient, logger)
 	return NewConfig(dcCollection), nil
 }
 
-
-// todo: This should be able to work without tally.
+// todo: This should be able to work without tally, refactoring needed.
 func RuntimeMetricsReporterProvider(
 	logger TaggedLogger,
 	tallyScope tally.Scope,
-	// instanceId InstanceId, // todo: this is not set in BootstrapParams
 ) *metrics.RuntimeMetricsReporter {
 	return metrics.NewRuntimeMetricsReporter(
 		tallyScope,
 		time.Minute,
 		logger,
-		"",
+		"", // todo: this was not set in BootstrapParams initially. Should we remove it?
 	)
 }
 
@@ -212,7 +209,6 @@ func MetricsReporterProvider(
 		}, nil
 	}
 
-	// todomigryz: remove support of configuring metrics reporter per-service. Sync with Samar.
 	// todo: Replace this hack with actually using sdkReporter, Client or Scope.
 	serivceReporter, sdkReporter, err := svcCfg.Metrics.InitMetricReporters(logger, nil)
 	if err != nil {
@@ -281,7 +277,7 @@ func PersistenceBeanProvider(
 	logger TaggedLogger,
 	clusterMetadataConfig *config.ClusterMetadata,
 	persistenceServiceResolver resolver.ServiceResolver,
-	datastoreFactory     persistenceClient.AbstractDataStoreFactory,
+	datastoreFactory persistenceClient.AbstractDataStoreFactory,
 ) (persistenceClient.Bean, error) {
 	persistenceMaxQPS := serviceConfig.PersistenceMaxQPS
 	persistenceGlobalMaxQPS := serviceConfig.PersistenceGlobalMaxQPS
@@ -321,25 +317,8 @@ func ClusterMetadataProvider(config *config.ClusterMetadata) cluster.Metadata {
 	)
 }
 
-// todomigryz: needs PersistenceBeanProvider
 func MetadataManagerProvider(persistenceBean persistenceClient.Bean) (persistence.MetadataManager, error) {
 	return persistenceBean.GetMetadataManager(), nil
-}
-
-// todomigryz: seems this can be replaced with constructor
-func NamespaceCacheProvider(
-	metadataMgr persistence.MetadataManager,
-	clusterMetadata cluster.Metadata,
-	metricsClient metrics.Client,
-	logger log.Logger,
-) (cache.NamespaceCache, error) {
-	namespaceCache := cache.NewNamespaceCache(
-		metadataMgr, // persistenceBean.GetMetadataManager(),
-		clusterMetadata,
-		metricsClient,
-		logger,
-	)
-	return namespaceCache, nil
 }
 
 func ThrottledLoggerProvider(logger TaggedLogger, config *Config) (log.ThrottledLogger, error) {

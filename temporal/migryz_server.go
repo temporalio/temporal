@@ -89,7 +89,7 @@ var (
 func NewServer(
 	logger log.Logger,
 	cfg *config.Config,
-	requiredServices []string, // todomigryz: might use specific type name here, or wrap in provider
+	requiredServices []string,
 	services map[string]common.Daemon,
 	persistenceServiceResolver resolver.ServiceResolver,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
@@ -118,17 +118,16 @@ func NewServer(
 	return s, nil
 }
 
-// todomigryz: decompose this in revers order. Figure out top level items we need first.
+// todomigryz: Unify this with Server.go. We should not have two separate files.
 // Start temporal server.
 func (s *Server) Start() error {
-
-	// todomigryz: move declaration closer to the usage
-	var err error
 
 	s.stoppedCh = make(chan interface{})
 
 	s.logger.Info("Starting server for services", tag.Value(s.serviceNames))
 	s.logger.Debug(s.config.String())
+
+	var err error
 
 	// todomigryz: potentially can be moved to DI as well
 	if err = pprof.NewInitializer(&s.config.Global.PProf, s.logger).Start(); err != nil {
@@ -140,7 +139,7 @@ func (s *Server) Start() error {
 		return fmt.Errorf("ringpop config validation error: %w", err)
 	}
 
-	// todomigryz: this code updates config, this should not be happening.
+	// todo: this code updates config, this should not be happening.
 	err = updateClusterMetadataConfig(s.config, s.persistenceServiceResolver, s.logger, s.customDataStoreFactory)
 	if err != nil {
 		return fmt.Errorf("unable to initialize cluster metadata: %w", err)
@@ -166,8 +165,6 @@ func (s *Server) Start() error {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
 
-	// todomigryz: metrics might still be required somewhere in server code
-
 	for svcName, svc := range s.services {
 		s.serviceStoppedChs[svcName] = make(chan struct{})
 
@@ -178,7 +175,6 @@ func (s *Server) Start() error {
 		}(svc, s.serviceStoppedChs[svcName])
 	}
 
-	// todomigryz: this is not set yet. Add to DI
 	if s.interruptCh != nil {
 		// If s.so.interruptCh is nil this will wait forever.
 		interruptSignal := <-s.interruptCh
