@@ -235,6 +235,7 @@ func NewMutableState(
 		metricsClient:   shard.GetMetricsClient(),
 	}
 
+	// making new workflow to use db record version for CAS instead of next event ID
 	if migration.IsDBVersionEnabled() {
 		s.dbRecordVersion = 1
 	}
