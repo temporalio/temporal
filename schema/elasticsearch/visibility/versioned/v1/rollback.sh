@@ -54,5 +54,13 @@ else
 fi
 
 if [ "${REPLY}" = "y" ]; then
-    curl --silent --user "${ES_USER}":"${ES_PWD}" -X POST "${ES_ENDPOINT}/_reindex" -H "Content-Type: application/json" --data-binary "${REINDEX_JSON}" --write-out "\n" | jq
+    TASK_ID=$(curl --silent --user "${ES_USER}":"${ES_PWD}" -X POST "${ES_ENDPOINT}/_reindex?wait_for_completion=false" -H "Content-Type: application/json" --data-binary "${REINDEX_JSON}" | jq --raw-output '.task')
+    TASK_JSON=$(curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_tasks/${TASK_ID}")
+    jq '.task.status | .' <<< "${TASK_JSON}"
+
+    until jq --exit-status '.completed==true | .' <<< "${TASK_JSON}"; do
+        sleep 10
+        TASK_JSON=$(curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_tasks/${TASK_ID}")
+        jq '.task.status | .' <<< "${TASK_JSON}"
+    done
 fi
