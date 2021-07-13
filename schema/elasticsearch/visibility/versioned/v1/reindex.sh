@@ -97,5 +97,3 @@ fi
 if [ "${REPLY}" = "y" ]; then
     curl --silent --user "${ES_USER}":"${ES_PWD}" -X POST "${ES_ENDPOINT}/_reindex" -H "Content-Type: application/json" --data-binary "${REINDEX_JSON}" --write-out "\n" | jq
 fi
-
-
