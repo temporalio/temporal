@@ -234,6 +234,12 @@ func NewMutableState(
 		logger:          logger,
 		metricsClient:   shard.GetMetricsClient(),
 	}
+
+	// making new workflow to use db record version for CAS instead of next event ID
+	if migration.IsDBVersionEnabled() {
+		s.dbRecordVersion = 1
+	}
+
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
 		WorkflowTaskVersion:    common.EmptyVersion,
 		WorkflowTaskScheduleId: common.EmptyEventID,
@@ -3653,7 +3659,7 @@ func (e *MutableStateImpl) CloseTransactionAsMutation(
 	// impact the checksum calculation
 	checksum := e.generateChecksum()
 
-	if e.dbRecordVersion == 0 && !migration.IsDBVersionEnabled() {
+	if e.dbRecordVersion == 0 {
 		// noop, existing behavior
 	} else {
 		e.dbRecordVersion += 1
@@ -3742,7 +3748,7 @@ func (e *MutableStateImpl) CloseTransactionAsSnapshot(
 	// impact the checksum calculation
 	checksum := e.generateChecksum()
 
-	if e.dbRecordVersion == 0 && !migration.IsDBVersionEnabled() {
+	if e.dbRecordVersion == 0 {
 		// noop, existing behavior
 	} else {
 		e.dbRecordVersion += 1
