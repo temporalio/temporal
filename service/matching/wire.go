@@ -130,5 +130,3 @@ func InitializeTestMatchingService(
 	)
 	return nil, nil
 }
-
-
