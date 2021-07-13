@@ -562,20 +562,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 
 	svcCfg := config.Service{}
 
-	// func
-	// InitializeMatchingService(serviceName2
-	// ServiceName, logger
-	// log.Logger, dcClient
-	// dynamicconfig.Client, metricsReporter
-	// UserMetricsReporter, sdkMetricsReporter
-	// UserSdkMetricsReporter, svcCfg
-	// config.Service, clusterMetadata * config.ClusterMetadata, tlsConfigProvider
-	// encryption.TLSConfigProvider, services
-	// ServicesConfigMap, membership * config.Membership, persistenceConfig * config.Persistence, persistenceServiceResolver
-	// resolver.ServiceResolver, datastoreFactory
-	// client.AbstractDataStoreFactory) *Service, error)
-
-	matchingService, err := matching.InitializeMatchingService(
+	matchingService, err := matching.InitializeTestMatchingService(
 		common.MatchingServiceName,
 		c.logger,
 		params.DynamicConfigClient,
@@ -584,7 +571,12 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		svcCfg,
 		params.ClusterMetadataConfig,
 		nil,
+		&params.PersistenceConfig,
+		params.PersistenceServiceResolver,
+		nil,
+		params.MembershipFactoryInitializer,
 	)
+
 	if err != nil {
 		params.Logger.Fatal("unable to start matching service", tag.Error(err))
 	}

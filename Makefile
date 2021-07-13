@@ -452,15 +452,11 @@ own-mocks:
 mocks: own-mocks external-mocks copyright
 
 ##### DI #####
-# todomigryz: add this to ci-build for consistency
 wire:
 	@printf $(COLOR) "Generate wire files..."
-#	echo $(ALL_SRC_WITH_WIRE)
 	for line in $(ALL_SRC_WITH_WIRE); do \
   		wire gen --header_file license.header $$(dirname $${line}) ; \
   	done
-#	wire gen --header_file license.header ./service/matching
-#	wire gen --header_file license.header ./temporal
 
 ##### Fossa #####
 fossa-install:

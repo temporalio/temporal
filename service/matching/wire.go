@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
 
@@ -49,7 +50,7 @@ func InitializeMatchingService(
 	clusterMetadata *config.ClusterMetadata,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	services ServicesConfigMap,
-	membership *config.Membership,
+	membershipConfig *config.Membership,
 	persistenceConfig *config.Persistence,
 	persistenceServiceResolver resolver.ServiceResolver,
 	datastoreFactory persistenceClient.AbstractDataStoreFactory,
@@ -84,3 +85,50 @@ func InitializeMatchingService(
 	)
 	return nil, nil
 }
+
+// todomigryz: svcName can be hardcoded here. We switch on svc name one layer above.
+func InitializeTestMatchingService(
+	serviceName ServiceName,
+	logger log.Logger,
+	dcClient dynamicconfig.Client,
+	metricsReporter UserMetricsReporter,
+	sdkMetricsReporter UserSdkMetricsReporter,
+	svcCfg config.Service,
+	clusterMetadata *config.ClusterMetadata,
+	tlsConfigProvider encryption.TLSConfigProvider,
+	persistenceConfig *config.Persistence,
+	persistenceServiceResolver resolver.ServiceResolver,
+	datastoreFactory persistenceClient.AbstractDataStoreFactory,
+	membershipFactory resource.MembershipFactoryInitializerFunc,
+) (*Service, error) {
+	wire.Build(
+		wire.Value(metrics.ServiceIdx(metrics.Matching)),
+		ServiceConfigProvider,
+		TaggedLoggerProvider,
+		ThrottledLoggerProvider,
+		MetricsReporterProvider,
+		wire.FieldsOf(new(ServiceMetrics), "reporter"),
+		wire.FieldsOf(new(ServiceMetrics), "deprecatedTally"),
+		MetricsClientProvider,
+		PersistenceBeanProvider,
+		ClusterMetadataProvider,
+		MetadataManagerProvider,
+		cache.NewNamespaceCache,
+		metrics.NewMatchingAPIMetricsScopes,
+		interceptor.NewTelemetryInterceptor,
+		RateLimitInterceptorProvider,
+		MembershipFactoryProvider,
+		RPCFactoryProvider,
+		GrpcServerProvider,
+		GrpcListenerProvider,
+		MembershipMonitorProvider,
+		ClientBeanProvider,
+		RingpopChannelProvider,
+		HandlerProvider,
+		RuntimeMetricsReporterProvider,
+		NewService,
+	)
+	return nil, nil
+}
+
+
