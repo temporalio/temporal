@@ -74,7 +74,6 @@ type (
 // NewService builds a new matching service
 func NewService(
 	taggedLogger TaggedLogger,
-	throttledLogger log.ThrottledLogger,
 	serviceConfig *Config,
 	persistenceBean persistenceClient.Bean,
 	namespaceCache cache.NamespaceCache,

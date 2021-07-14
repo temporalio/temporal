@@ -57,10 +57,6 @@ func InitializeMatchingService(logger log.Logger, dcClient dynamicconfig.Client,
 	if err != nil {
 		return nil, err
 	}
-	throttledLogger, err := ThrottledLoggerProvider(taggedLogger, matchingConfig)
-	if err != nil {
-		return nil, err
-	}
 	serviceMetrics, err := MetricsReporterProvider(taggedLogger, metricsReporter, sdkMetricsReporter, svcCfg)
 	if err != nil {
 		return nil, err
@@ -107,13 +103,17 @@ func InitializeMatchingService(logger log.Logger, dcClient dynamicconfig.Client,
 		return nil, err
 	}
 	channel := RingpopChannelProvider(rpcFactory)
+	throttledLogger, err := ThrottledLoggerProvider(taggedLogger, matchingConfig)
+	if err != nil {
+		return nil, err
+	}
 	handler, err := HandlerProvider(matchingConfig, taggedLogger, throttledLogger, metricsClient, namespaceCache, clientBean, monitor, bean)
 	if err != nil {
 		return nil, err
 	}
 	scope := serviceMetrics.deprecatedTally
 	runtimeMetricsReporter := RuntimeMetricsReporterProvider(taggedLogger, scope)
-	service, err := NewService(taggedLogger, throttledLogger, matchingConfig, bean, namespaceCache, server, grpcListener, monitor, clientBean, channel, handler, runtimeMetricsReporter, scope)
+	service, err := NewService(taggedLogger, matchingConfig, bean, namespaceCache, server, grpcListener, monitor, clientBean, channel, handler, runtimeMetricsReporter, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -130,10 +130,6 @@ func InitializeTestMatchingService(logger log.Logger, dcClient dynamicconfig.Cli
 		return nil, err
 	}
 	matchingConfig, err := ServiceConfigProvider(logger, dcClient)
-	if err != nil {
-		return nil, err
-	}
-	throttledLogger, err := ThrottledLoggerProvider(taggedLogger, matchingConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -181,13 +177,17 @@ func InitializeTestMatchingService(logger log.Logger, dcClient dynamicconfig.Cli
 		return nil, err
 	}
 	channel := RingpopChannelProvider(rpcFactory)
+	throttledLogger, err := ThrottledLoggerProvider(taggedLogger, matchingConfig)
+	if err != nil {
+		return nil, err
+	}
 	handler, err := HandlerProvider(matchingConfig, taggedLogger, throttledLogger, metricsClient, namespaceCache, clientBean, monitor, bean)
 	if err != nil {
 		return nil, err
 	}
 	scope := serviceMetrics.deprecatedTally
 	runtimeMetricsReporter := RuntimeMetricsReporterProvider(taggedLogger, scope)
-	service, err := NewService(taggedLogger, throttledLogger, matchingConfig, bean, namespaceCache, server, grpcListener, monitor, clientBean, channel, handler, runtimeMetricsReporter, scope)
+	service, err := NewService(taggedLogger, matchingConfig, bean, namespaceCache, server, grpcListener, monitor, clientBean, channel, handler, runtimeMetricsReporter, scope)
 	if err != nil {
 		return nil, err
 	}

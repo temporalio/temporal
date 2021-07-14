@@ -277,10 +277,42 @@ type ServicesProviderDeps struct {
 }
 
 
+func sliceContainsString(src []string, value string) bool {
+	for _, str := range(src) {
+		if str == value {
+			return true
+		}
+	}
+	return false;
+}
+
+func MatchingServiceProvider(
+	deps ServicesProviderDeps,
+	) (*matching.Service, error) {
+	if !sliceContainsString(deps.Services, primitives.MatchingService) {
+		return nil, nil
+	}
+	svc, err := matching.InitializeMatchingService(
+		deps.Logger,
+		deps.DynamicConfigClient,
+		deps.MetricReporters.serverReporter,
+		deps.MetricReporters.sdkReporter,
+		deps.Cfg.Services[primitives.MatchingService],
+		deps.Cfg.ClusterMetadata,
+		deps.TlsConfigProvider,
+		deps.Cfg.Services,
+		&deps.Cfg.Global.Membership,
+		&deps.Cfg.Persistence,
+		deps.PersistenceServiceResolver,
+		deps.CustomDatastoreFactory,
+	)
+	return svc, err
+}
 
 type ServicesMap map[string]common.Daemon
 func ServicesProvider(
 	deps ServicesProviderDeps,
+	matchingService *matching.Service,
 ) (ServicesMap, error) {
 	result := make(map[string]common.Daemon)
 	for _, svcName := range deps.Services {
@@ -289,21 +321,7 @@ func ServicesProvider(
 		switch svcName {
 		// todo: All Services should follow this path or better be split into separate providers
 		case primitives.MatchingService:
-			svc, err = matching.InitializeMatchingService(
-				deps.Logger,
-				deps.DynamicConfigClient,
-				deps.MetricReporters.serverReporter,
-				deps.MetricReporters.sdkReporter,
-				deps.Cfg.Services[svcName],
-				deps.Cfg.ClusterMetadata,
-				deps.TlsConfigProvider,
-				deps.Cfg.Services,
-				&deps.Cfg.Global.Membership,
-				&deps.Cfg.Persistence,
-				deps.PersistenceServiceResolver,
-				deps.CustomDatastoreFactory,
-			)
-			result[svcName] = svc
+			result[svcName] = matchingService
 			continue
 		default:
 		}

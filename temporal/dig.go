@@ -57,41 +57,77 @@ var serverSet = wire.NewSet(
 	wire.Struct(new(ServicesProviderDeps), "*"), // we can use this to inject dependencies into sub-modules
 )
 
-
-
-func InjectServerProviders(dc *dig.Container, c *cli.Context) (error) {
-	dc.Provide(func () *cli.Context {return c})
-	dc.Provide(DefaultConfigProvider)
-	dc.Provide(DefaultConfigProvider)
-	dc.Provide(DefaultLogger)
-	dc.Provide(func (l tlog.Logger) NamespaceLogger { return l })
-	dc.Provide(DefaultDynamicConfigClientProvider)
-	dc.Provide(DefaultAuthorizerProvider)
-	dc.Provide(DefaultClaimMapper)
-	dc.Provide(DefaultServiceNameListProvider)
-	dc.Provide(DefaultDatastoreFactory)
-	dc.Provide(DefaultMetricsReportersProvider)
-	dc.Provide(DefaultTLSConfigProvider)
-	dc.Provide(DefaultDynamicConfigCollectionProvider)
-	dc.Provide(DefaultAudienceGetterProvider)
-	dc.Provide(DefaultPersistenseServiceResolverProvider)
-	dc.Provide(DefaultElasticSearchHttpClientProvider)
-	err := dc.Provide(DefaultInterruptChProvider) // todomigryz: we need to check for err on each dc.Provide
-	if err != nil {
-		println(err.Error())
-	} else {
-		println("All good")
+func InjectServerProviders(dc *dig.Container, c *cli.Context) error {
+	if err := dc.Provide(func() *cli.Context { return c }); err != nil {
+		return err
 	}
-	err = dc.Provide(ServicesProvider)
-	if err != nil {
-		println(err.Error())
-	} else {
-		println("All good")
+	if err := dc.Provide(DefaultConfigProvider); err != nil {
+		return err
 	}
-	dc.Provide(ServerProvider)
-	dc.Provide(AdvancedVisibilityStoreProvider)
-	dc.Provide(ESClientProvider)
-	dc.Provide(ESConfigProvider)
-	dc.Provide(AdvancedVisibilityWritingModeProvider)
+	if err := dc.Provide(DefaultLogger); err != nil {
+		return err
+	}
+	if err := dc.Provide(func(l tlog.Logger) NamespaceLogger { return l }); err != nil {
+		return err
+	}
+	if err := dc.Provide(DefaultDynamicConfigClientProvider); err != nil {
+		return err
+	}
+	if err := dc.Provide(DefaultAuthorizerProvider); err != nil {
+		return err
+	}
+	if err := dc.Provide(DefaultClaimMapper); err != nil {
+		return err
+	}
+	if err := dc.Provide(DefaultServiceNameListProvider); err != nil {
+		return err
+	}
+	if err := dc.Provide(DefaultDatastoreFactory); err != nil {
+		return err
+	}
+	if err := dc.Provide(DefaultMetricsReportersProvider); err != nil {
+		return err
+	}
+	if err := dc.Provide(DefaultTLSConfigProvider); err != nil {
+		return err
+	}
+	if err := dc.Provide(DefaultDynamicConfigCollectionProvider); err != nil {
+		return err
+	}
+	if err := dc.Provide(DefaultAudienceGetterProvider); err != nil {
+		return err
+	}
+	if err := dc.Provide(DefaultPersistenseServiceResolverProvider); err != nil {
+		return err
+	}
+	if err := dc.Provide(DefaultElasticSearchHttpClientProvider); err != nil {
+		return err
+	}
+
+	// todomigryz: we need to check for err on each dc.Provide
+	if err := dc.Provide(DefaultInterruptChProvider); err != nil {
+		return err
+	}
+	if err := dc.Provide(ServicesProvider); err != nil {
+		return err
+	}
+	if err := dc.Provide(ServerProvider); err != nil {
+		return err
+	}
+	if err := dc.Provide(AdvancedVisibilityStoreProvider); err != nil {
+		return err
+	}
+	if err := dc.Provide(ESClientProvider); err != nil {
+		return err
+	}
+	if err := dc.Provide(ESConfigProvider); err != nil {
+		return err
+	}
+	if err := dc.Provide(AdvancedVisibilityWritingModeProvider); err != nil {
+		return err
+	}
+	if err := dc.Provide(MatchingServiceProvider); err != nil {
+		return err
+	}
 	return nil
 }
