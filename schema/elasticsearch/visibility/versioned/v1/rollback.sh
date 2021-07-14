@@ -54,13 +54,28 @@ else
 fi
 
 if [ "${REPLY}" = "y" ]; then
-    TASK_ID=$(curl --silent --user "${ES_USER}":"${ES_PWD}" -X POST "${ES_ENDPOINT}/_reindex?wait_for_completion=false" -H "Content-Type: application/json" --data-binary "${REINDEX_JSON}" | jq --raw-output '.task')
-    TASK_JSON=$(curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_tasks/${TASK_ID}")
-    jq '.task.status | .' <<< "${TASK_JSON}"
+    REINDEX_RESPONSE=$(curl --silent --user "${ES_USER}":"${ES_PWD}" -X POST "${ES_ENDPOINT}/_reindex?wait_for_completion=false&slices=auto" -H "Content-Type: application/json" --data-binary "${REINDEX_JSON}")
+    TASK_ID=$(jq --raw-output '.task' <<< "${REINDEX_RESPONSE}")
+    if [ ${TASK_ID} = null ]; then
+        echo "${REINDEX_RESPONSE}"
+        exit 1
+    fi
 
-    until jq --exit-status '.completed==true | .' <<< "${TASK_JSON}"; do
+    echo "Started reindex task ${TASK_ID}. Check its status using:"
+    echo "    curl ${ES_ENDPOINT}/_tasks/${TASK_ID}"
+    echo "Query subtasks with:"
+    echo "    curl ${ES_ENDPOINT}/_tasks?parent_task_id=${TASK_ID}"
+    echo
+    echo "Waiting for reindex to complete (it is safe to Ctrl+C now)."
+
+    until curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_tasks/${TASK_ID}" | jq --exit-status '.completed==true | .'; do
         sleep 10
-        TASK_JSON=$(curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_tasks/${TASK_ID}")
-        jq '.task.status | .' <<< "${TASK_JSON}"
     done
+    echo "Reindex complete:"
+    curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_tasks/${TASK_ID}" | jq --raw-output '.task.status | with_entries(select([.key] | inside(["total", "updated", "created", "version_conflicts"])))'
+    echo "Source index ${ES_VIS_INDEX_V1} document count:"
+    curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V1}/_stats/docs" | jq '._all.primaries.docs.count'
+    echo "Destination index ${ES_VIS_INDEX_V0} document count:"
+    curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V0}/_stats/docs" | jq '._all.primaries.docs.count'
 fi
+
