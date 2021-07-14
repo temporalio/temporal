@@ -61,10 +61,12 @@ if [ "${REPLY}" = "y" ]; then
         exit 1
     fi
 
-    echo "Started reindex task ${TASK_ID}. Check its status using:"
+    echo "Started reindex task ${TASK_ID}. Check status with:"
     echo "    curl ${ES_ENDPOINT}/_tasks/${TASK_ID}"
     echo "Query subtasks with:"
     echo "    curl ${ES_ENDPOINT}/_tasks?parent_task_id=${TASK_ID}"
+    echo "Cancel with:"
+    echo "    curl -X POST ${ES_ENDPOINT}/_tasks/${TASK_ID}/_cancel"
     echo
     echo "Waiting for reindex to complete (it is safe to Ctrl+C now)."
 
