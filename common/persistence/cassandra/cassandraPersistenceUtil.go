@@ -445,6 +445,7 @@ func updateExecution(
 			executionStateBlob.Data,
 			executionStateBlob.EncodingType.String(),
 			nextEventID,
+			dbRecordVersion,
 			checksumBlob.Data,
 			checksumBlob.EncodingType.String(),
 			shardID,

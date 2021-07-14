@@ -172,6 +172,8 @@ type Config struct {
 	// Size limit related settings
 	BlobSizeLimitError     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BlobSizeLimitWarn      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MemoSizeLimitError     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MemoSizeLimitWarn      dynamicconfig.IntPropertyFnWithNamespaceFilter
 	HistorySizeLimitError  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	HistorySizeLimitWarn   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	HistoryCountLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -378,6 +380,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 
 		BlobSizeLimitError:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitError, 2*1024*1024),
 		BlobSizeLimitWarn:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.BlobSizeLimitWarn, 512*1024),
+		MemoSizeLimitError:     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MemoSizeLimitError, 2*1024*1024),
+		MemoSizeLimitWarn:      dc.GetIntPropertyFilteredByNamespace(dynamicconfig.MemoSizeLimitWarn, 2*1024),
 		HistorySizeLimitError:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeLimitError, 50*1024*1024),
 		HistorySizeLimitWarn:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistorySizeLimitWarn, 10*1024*1024),
 		HistoryCountLimitError: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryCountLimitError, 50*1024),
@@ -442,8 +446,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		IndexerConcurrency:                dc.GetIntProperty(dynamicconfig.WorkerIndexerConcurrency, 100),
 		ESProcessorNumOfWorkers:           dc.GetIntProperty(dynamicconfig.WorkerESProcessorNumOfWorkers, 1),
 		// Should be not greater than NumberOfShards(512)/NumberOfHistoryNodes(4) * VisibilityTaskWorkerCount(10) divided by workflow distribution factor (2 at least).
-		// Otherwise, visibility queue processors won't be able to fill up bulk with documents and bulk will flush due to interval, not number of actions.
-		ESProcessorBulkActions: dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkActions, 200),
+		// Otherwise, visibility queue processors won't be able to fill up bulk with documents (even under heavy load) and bulk will flush due to interval, not number of actions.
+		ESProcessorBulkActions: dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkActions, 500),
 		// 16MB - just a sanity check. With ES document size ~1Kb it should never be reached.
 		ESProcessorBulkSize: dc.GetIntProperty(dynamicconfig.WorkerESProcessorBulkSize, 16*1024*1024),
 		// Under high load bulk processor should flush due to number of BulkActions reached.

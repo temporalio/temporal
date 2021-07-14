@@ -41,6 +41,9 @@ func NewDefaultAuthorizer() Authorizer {
 	return &defaultAuthorizer{}
 }
 
+var resultAllow = Result{Decision: DecisionAllow}
+var resultDeny = Result{Decision: DecisionDeny}
+
 func (a *defaultAuthorizer) Authorize(_ context.Context, claims *Claims, target *CallTarget) (Result, error) {
 
 	// TODO: This is a temporary workaround to allow calls to system namespace and
@@ -49,19 +52,41 @@ func (a *defaultAuthorizer) Authorize(_ context.Context, claims *Claims, target 
 	// no namespace will need to be performed at the API level, so that data would
 	// be filtered based of caller's permissions to namespaces and system.
 	if target.Namespace == "temporal-system" || target.Namespace == "" {
-		return Result{Decision: DecisionAllow}, nil
+		return resultAllow, nil
 	}
 	if claims == nil {
-		return Result{Decision: DecisionDeny}, nil
+		return resultDeny, nil
 	}
 	// Check system level permissions
-	if claims.System == RoleAdmin || claims.System == RoleWriter {
-		return Result{Decision: DecisionAllow}, nil
-	}
-	roles, found := claims.Namespaces[strings.ToLower(target.Namespace)]
-	if !found || roles == RoleUndefined {
-		return Result{Decision: DecisionDeny}, nil
+	if claims.System >= RoleWriter {
+		return resultAllow, nil
 	}
 
-	return Result{Decision: DecisionAllow}, nil
+	api := ApiName(target.APIName)
+	readOnlyNamespaceAPI := IsReadOnlyNamespaceAPI(api)
+	readOnlyGlobalAPI := IsReadOnlyGlobalAPI(api)
+	if claims.System >= RoleReader && (readOnlyNamespaceAPI || readOnlyGlobalAPI) {
+		return resultAllow, nil
+	}
+
+	role, found := claims.Namespaces[strings.ToLower(target.Namespace)]
+	if !found || role == RoleUndefined {
+		return resultDeny, nil
+	}
+	if role >= RoleWriter {
+		return resultAllow, nil
+	}
+	if role >= RoleReader && readOnlyNamespaceAPI {
+		return resultAllow, nil
+	}
+
+	return resultDeny, nil
+}
+
+func ApiName(api string) string {
+	index := strings.LastIndex(api, "/")
+	if index > -1 {
+		return api[index+1:]
+	}
+	return api
 }

@@ -420,26 +420,6 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespace)
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespace)
-
-	actualSize := request.GetInput().Size()
-	actualSize += request.GetMemo().Size()
-
-	if err := common.CheckEventBlobSizeLimit(
-		actualSize,
-		sizeLimitWarn,
-		sizeLimitError,
-		namespaceID,
-		request.GetWorkflowId(),
-		"",
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
-		wh.GetThrottledLogger(),
-		tag.BlobSizeViolationOperation("StartWorkflowExecution"),
-	); err != nil {
-		return nil, err
-	}
-
 	wh.GetLogger().Debug("Start workflow execution request namespaceID", tag.WorkflowNamespaceID(namespaceID))
 	resp, err := wh.GetHistoryClient().StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID, request, nil, time.Now().UTC()))
 
@@ -2026,36 +2006,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 
 	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(namespace)
 	if err != nil {
-		return nil, err
-	}
-
-	sizeLimitError := wh.config.BlobSizeLimitError(namespace)
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespace)
-	if err := common.CheckEventBlobSizeLimit(
-		request.GetSignalInput().Size(),
-		sizeLimitWarn,
-		sizeLimitError,
-		namespaceID,
-		request.GetWorkflowId(),
-		"",
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
-		wh.GetThrottledLogger(),
-		tag.BlobSizeViolationOperation("SignalWithStartWorkflowExecution"),
-	); err != nil {
-		return nil, err
-	}
-	actualSize := request.GetInput().Size() + request.GetMemo().Size()
-	if err := common.CheckEventBlobSizeLimit(
-		actualSize,
-		sizeLimitWarn,
-		sizeLimitError,
-		namespaceID,
-		request.GetWorkflowId(),
-		"",
-		wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
-		wh.GetThrottledLogger(),
-		tag.BlobSizeViolationOperation("SignalWithStartWorkflowExecution"),
-	); err != nil {
 		return nil, err
 	}
 

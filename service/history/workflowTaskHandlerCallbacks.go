@@ -419,6 +419,8 @@ Update_History_Loop:
 			workflowSizeChecker := newWorkflowSizeChecker(
 				handler.config.BlobSizeLimitWarn(namespace),
 				handler.config.BlobSizeLimitError(namespace),
+				handler.config.MemoSizeLimitWarn(namespace),
+				handler.config.MemoSizeLimitError(namespace),
 				handler.config.HistorySizeLimitWarn(namespace),
 				handler.config.HistorySizeLimitError(namespace),
 				handler.config.HistoryCountLimitWarn(namespace),
