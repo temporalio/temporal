@@ -27,6 +27,7 @@ package matching
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -61,6 +62,13 @@ const (
 )
 
 type (
+	taskQueueManagerOpt func(*taskQueueManagerImpl)
+
+	idBlockAllocator interface {
+		RenewLease() (taskQueueState, error)
+		RangeID() int64
+	}
+
 	addTaskParams struct {
 		execution     *commonpb.WorkflowExecution
 		taskInfo      *persistencespb.TaskInfo
@@ -99,6 +107,7 @@ type (
 		taskQueueKind    enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
 		config           *taskQueueConfig
 		db               *taskQueueDB
+		idAlloc          idBlockAllocator
 		engine           *matchingEngineImpl
 		taskWriter       *taskWriter
 		taskReader       *taskReader // reads tasks from db and async matches it with poller
@@ -125,15 +134,24 @@ type (
 	}
 )
 
+var noTaskIDs = taskIDBlock{start: 1, end: 0}
+
 var _ taskQueueManager = (*taskQueueManagerImpl)(nil)
 
 var errRemoteSyncMatchFailed = serviceerror.NewCanceled("remote sync match failed")
+
+func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
+	return func(tqm *taskQueueManagerImpl) {
+		tqm.idAlloc = ibl
+	}
+}
 
 func newTaskQueueManager(
 	e *matchingEngineImpl,
 	taskQueue *taskQueueID,
 	taskQueueKind enumspb.TaskQueueKind,
 	config *Config,
+	opts ...taskQueueManagerOpt,
 ) (taskQueueManager, error) {
 
 	taskQueueConfig, err := newTaskQueueConfig(taskQueue, config, e.namespaceCache)
@@ -153,11 +171,15 @@ func newTaskQueueManager(
 		taskQueueKind:       taskQueueKind,
 		logger:              log.With(e.logger, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType)),
 		db:                  db,
+		idAlloc:             db,
 		taskAckManager:      newAckManager(e.logger),
 		taskGC:              newTaskGC(db, taskQueueConfig),
 		config:              taskQueueConfig,
 		pollerHistory:       newPollerHistory(),
 		outstandingPollsMap: make(map[string]context.CancelFunc),
+	}
+	for _, opt := range opts {
+		opt(tlMgr)
 	}
 
 	tlMgr.namespaceValue.Store("")
@@ -172,14 +194,17 @@ func newTaskQueueManager(
 		))
 	}
 
+	idblock := noTaskIDs
 	state, err := tlMgr.renewLeaseWithRetry()
-	if err != nil {
+	if errIndicatesForeignLessee(err) {
 		return nil, err
 	}
-
-	tlMgr.taskAckManager.setAckLevel(state.ackLevel)
+	if err == nil {
+		idblock = tlMgr.rangeIDToTaskIDBlock(state.rangeID)
+		tlMgr.taskAckManager.setAckLevel(state.ackLevel)
+	}
 	tlMgr.liveness = newLiveness(clock.NewRealTimeSource(), taskQueueConfig.IdleTaskqueueCheckInterval(), tlMgr.Stop)
-	tlMgr.taskWriter = newTaskWriter(tlMgr, tlMgr.rangeIDToTaskIDBlock(state.rangeID))
+	tlMgr.taskWriter = newTaskWriter(tlMgr, idblock)
 	tlMgr.taskReader = newTaskReader(tlMgr)
 
 	var fwdr *Forwarder
@@ -188,6 +213,11 @@ func newTaskQueueManager(
 	}
 	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.metricScope)
 	return tlMgr, nil
+}
+
+func errIndicatesForeignLessee(err error) bool {
+	var condfail *persistence.ConditionFailedError
+	return errors.As(err, &condfail)
 }
 
 // Start reading pump for the given task queue.
@@ -200,7 +230,6 @@ func (c *taskQueueManagerImpl) Start() {
 	) {
 		return
 	}
-
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
@@ -453,14 +482,16 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 func (c *taskQueueManagerImpl) renewLeaseWithRetry() (taskQueueState, error) {
 	var newState taskQueueState
 	op := func() (err error) {
-		newState, err = c.db.RenewLease()
+		newState, err = c.idAlloc.RenewLease()
 		return
 	}
 	c.metricScope().IncCounter(metrics.LeaseRequestPerTaskQueueCounter)
 	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		c.metricScope().IncCounter(metrics.LeaseFailurePerTaskQueueCounter)
-		c.engine.unloadTaskQueue(c.taskQueueID)
+		if errIndicatesForeignLessee(err) {
+			c.engine.unloadTaskQueue(c.taskQueueID)
+		}
 		return newState, err
 	}
 	return newState, nil
@@ -474,7 +505,7 @@ func (c *taskQueueManagerImpl) rangeIDToTaskIDBlock(rangeID int64) taskIDBlock {
 }
 
 func (c *taskQueueManagerImpl) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock, error) {
-	currBlock := c.rangeIDToTaskIDBlock(c.db.RangeID())
+	currBlock := c.rangeIDToTaskIDBlock(c.idAlloc.RangeID())
 	if currBlock.end != prevBlockEnd {
 		return taskIDBlock{},
 			fmt.Errorf("allocTaskIDBlock: invalid state: prevBlockEnd:%v != currTaskIDBlock:%+v", prevBlockEnd, currBlock)

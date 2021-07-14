@@ -26,6 +26,8 @@ package matching
 
 import (
 	"context"
+	"errors"
+	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -34,16 +36,20 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
+
+var rpsInf = math.Inf(1)
 
 func TestDeliverBufferTasks(t *testing.T) {
 	controller := gomock.NewController(t)
@@ -62,7 +68,7 @@ func TestDeliverBufferTasks(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		tlm := createTestTaskQueueManager(controller)
+		tlm := mustCreateTestTaskQueueManager(t, controller)
 		var wg sync.WaitGroup
 		wg.Add(1)
 		go func() {
@@ -79,7 +85,7 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	tlm := createTestTaskQueueManager(controller)
+	tlm := mustCreateTestTaskQueueManager(t, controller)
 	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{}
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -96,7 +102,7 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	tlm := createTestTaskQueueManager(controller)
+	tlm := mustCreateTestTaskQueueManager(t, controller)
 	tlm.db.rangeID = int64(1)
 	tlm.db.ackLevel = int64(0)
 	tlm.taskAckManager.setAckLevel(tlm.db.ackLevel)
@@ -147,11 +153,135 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 	require.Equal(t, int64(14), tlm.taskAckManager.getReadLevel())
 }
 
-func createTestTaskQueueManager(controller *gomock.Controller) *taskQueueManagerImpl {
-	return createTestTaskQueueManagerWithConfig(controller, defaultTestConfig())
+type testIDBlockAlloc struct {
+	rid   int64
+	alloc func() (taskQueueState, error)
 }
 
-func createTestTaskQueueManagerWithConfig(controller *gomock.Controller, cfg *Config) *taskQueueManagerImpl {
+func (a *testIDBlockAlloc) RangeID() int64 {
+	return a.rid
+}
+
+func (a *testIDBlockAlloc) RenewLease() (taskQueueState, error) {
+	s, err := a.alloc()
+	if err == nil {
+		a.rid = s.rangeID
+	}
+	return s, err
+}
+
+func makeTestBlocAlloc(f func() (taskQueueState, error)) taskQueueManagerOpt {
+	return withIDBlockAllocator(&testIDBlockAlloc{alloc: f})
+}
+
+func TestSyncMatchLeasingUnavailable(t *testing.T) {
+	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t),
+		makeTestBlocAlloc(func() (taskQueueState, error) {
+			// any error other than ConditionFailedError indicates an
+			// availability problem at a lower layer so the TQM should NOT
+			// unload itself.
+			return taskQueueState{}, errors.New(t.Name())
+		}))
+	pollctx, stoppoller := context.WithCancel(context.Background())
+	defer stoppoller()
+	go func() {
+		task, err := tqm.GetTask(pollctx, &rpsInf)
+		if errors.Is(err, ErrNoTasks) {
+			return
+		}
+		task.finish(err)
+	}()
+	// tqm.GetTask() needs some time to attach the goro started above to the
+	// internal task channel. Sorry for this but it appears unavoidable.
+	time.Sleep(10 * time.Millisecond)
+	tqm.Start()
+	defer tqm.Stop()
+
+	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
+		execution: &commonpb.WorkflowExecution{},
+		taskInfo:  &persistencespb.TaskInfo{},
+		source:    enumsspb.TASK_SOURCE_HISTORY})
+	require.NoError(t, err)
+	require.True(t, sync)
+}
+
+func TestInstantiationFailureWithForeignPartitionOwner(t *testing.T) {
+	_, err := createTestTaskQueueManager(gomock.NewController(t),
+		makeTestBlocAlloc(func() (taskQueueState, error) {
+			// ConditionFailedError indicates foreign partition owner
+			return taskQueueState{}, &persistence.ConditionFailedError{}
+		}))
+	require.Error(t, err)
+}
+
+func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
+	cfg := NewConfig(dynamicconfig.NewNoopCollection())
+	cfg.RangeSize = 1 // TaskID block size
+	var leaseErr error = nil
+	tqm := mustCreateTestTaskQueueManagerWithConfig(t, gomock.NewController(t), cfg,
+		makeTestBlocAlloc(func() (taskQueueState, error) {
+			return taskQueueState{rangeID: 1}, leaseErr
+		}))
+	tqm.Start()
+	defer tqm.Stop()
+
+	// TQM started succesfully with an ID block of size 1. Perform one send
+	// without a poller to consume the one task ID from the reserved block.
+	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
+		execution: &commonpb.WorkflowExecution{},
+		taskInfo:  &persistencespb.TaskInfo{},
+		source:    enumsspb.TASK_SOURCE_HISTORY})
+	require.False(t, sync)
+	require.NoError(t, err)
+
+	// TQM's ID block should be empty so the next AddTask will trigger an
+	// attempt to obtain more IDs. This specific error type indicates that
+	// another service instance has become the owner of the partition
+	leaseErr = &persistence.ConditionFailedError{Msg: "should kill the tqm"}
+	require.True(t, errIndicatesForeignLessee(leaseErr))
+
+	sync, err = tqm.AddTask(context.TODO(), addTaskParams{
+		execution: &commonpb.WorkflowExecution{},
+		taskInfo:  &persistencespb.TaskInfo{},
+		source:    enumsspb.TASK_SOURCE_HISTORY,
+	})
+	require.False(t, sync)
+	require.ErrorIs(t, err, errShutdown)
+}
+
+func mustCreateTestTaskQueueManager(
+	t *testing.T,
+	controller *gomock.Controller,
+	opts ...taskQueueManagerOpt,
+) *taskQueueManagerImpl {
+	t.Helper()
+	return mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTestConfig(), opts...)
+}
+
+func createTestTaskQueueManager(
+	controller *gomock.Controller,
+	opts ...taskQueueManagerOpt,
+) (*taskQueueManagerImpl, error) {
+	return createTestTaskQueueManagerWithConfig(controller, defaultTestConfig(), opts...)
+}
+
+func mustCreateTestTaskQueueManagerWithConfig(
+	t *testing.T,
+	controller *gomock.Controller,
+	cfg *Config,
+	opts ...taskQueueManagerOpt,
+) *taskQueueManagerImpl {
+	t.Helper()
+	tqm, err := createTestTaskQueueManagerWithConfig(controller, cfg, opts...)
+	require.NoError(t, err)
+	return tqm
+}
+
+func createTestTaskQueueManagerWithConfig(
+	controller *gomock.Controller,
+	cfg *Config,
+	opts ...taskQueueManagerOpt,
+) (*taskQueueManagerImpl, error) {
 	logger := log.NewTestLogger()
 	tm := newTestTaskManager(logger)
 	mockNamespaceCache := cache.NewMockNamespaceCache(controller)
@@ -163,18 +293,19 @@ func createTestTaskQueueManagerWithConfig(controller *gomock.Controller, cfg *Co
 	dID := "deadbeef-0000-4567-890a-bcdef0123456"
 	tlID := newTestTaskQueueID(dID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	tlKind := enumspb.TASK_QUEUE_KIND_NORMAL
-	tlMgr, err := newTaskQueueManager(me, tlID, tlKind, cfg)
+	tlMgr, err := newTaskQueueManager(me, tlID, tlKind, cfg, opts...)
 	if err != nil {
-		logger.Fatal("error when createTestTaskQueueManager", tag.Error(err))
+		return nil, err
 	}
-	return tlMgr.(*taskQueueManagerImpl)
+	me.taskQueues[*tlID] = tlMgr
+	return tlMgr.(*taskQueueManagerImpl), nil
 }
 
 func TestIsTaskAddedRecently(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	tlm := createTestTaskQueueManager(controller)
+	tlm := mustCreateTestTaskQueueManager(t, controller)
 	require.True(t, tlm.taskReader.isTaskAddedRecently(time.Now().UTC()))
 	require.False(t, tlm.taskReader.isTaskAddedRecently(time.Now().UTC().Add(-tlm.config.MaxTaskqueueIdleTime())))
 	require.True(t, tlm.taskReader.isTaskAddedRecently(time.Now().UTC().Add(1*time.Second)))
@@ -190,7 +321,7 @@ func TestDescribeTaskQueue(t *testing.T) {
 	PollerIdentity := "test-poll"
 
 	// Create taskQueue Manager and set taskQueue state
-	tlm := createTestTaskQueueManager(controller)
+	tlm := mustCreateTestTaskQueueManager(t, controller)
 	tlm.db.rangeID = int64(1)
 	tlm.db.ackLevel = int64(0)
 	tlm.taskAckManager.setAckLevel(tlm.db.ackLevel)
@@ -251,14 +382,14 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	cfg.IdleTaskqueueCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
 
 	// Idle
-	tlm := createTestTaskQueueManagerWithConfig(controller, cfg)
+	tlm := mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg)
 	tlm.Start()
 	tlMgrStartWithoutNotifyEvent(tlm)
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 
 	// Active poll-er
-	tlm = createTestTaskQueueManagerWithConfig(controller, cfg)
+	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg)
 	tlm.Start()
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity("test-poll"), nil)
 	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
@@ -269,7 +400,7 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
 
 	// Active adding task
-	tlm = createTestTaskQueueManagerWithConfig(controller, cfg)
+	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg)
 	tlm.Start()
 	require.Equal(t, 0, len(tlm.GetAllPollerInfo()))
 	tlMgrStartWithoutNotifyEvent(tlm)
