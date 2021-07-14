@@ -30,6 +30,8 @@
 package matching
 
 import (
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -121,7 +123,7 @@ var (
 	_wireServiceIdxValue = metrics.ServiceIdx(metrics.Matching)
 )
 
-func InitializeTestMatchingService(serviceName2 ServiceName, logger log.Logger, dcClient dynamicconfig.Client, metricsReporter UserMetricsReporter, sdkMetricsReporter UserSdkMetricsReporter, svcCfg config.Service, clusterMetadata *config.ClusterMetadata, tlsConfigProvider encryption.TLSConfigProvider, membershipFactory resource.MembershipFactoryInitializerFunc, persistenceConfig *config.Persistence, persistenceServiceResolver resolver.ServiceResolver, datastoreFactory client.AbstractDataStoreFactory) (*Service, error) {
+func InitializeTestMatchingService(serviceName2 ServiceName, logger log.Logger, dcClient dynamicconfig.Client, metricsReporter UserMetricsReporter, sdkMetricsReporter UserSdkMetricsReporter, svcCfg config.Service, clusterMetadata *config.ClusterMetadata, tlsConfigProvider encryption.TLSConfigProvider, membershipFactory resource.MembershipFactoryInitializerFunc, persistenceConfig *config.Persistence, persistenceServiceResolver resolver.ServiceResolver, datastoreFactory client.AbstractDataStoreFactory, archivalMetadata archiver.ArchivalMetadata, archiverProvider provider.ArchiverProvider) (*Service, error) {
 	taggedLogger, err := TaggedLoggerProvider(logger)
 	if err != nil {
 		return nil, err

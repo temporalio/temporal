@@ -574,6 +574,8 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		&params.PersistenceConfig,
 		params.PersistenceServiceResolver,
 		params.AbstractDatastoreFactory,
+		params.ArchivalMetadata,
+		params.ArchiverProvider,
 	)
 
 	if err != nil {

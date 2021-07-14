@@ -26,6 +26,8 @@ package matching
 
 import (
 	"github.com/google/wire"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -99,6 +101,8 @@ func InitializeTestMatchingService(
 	persistenceConfig *config.Persistence,
 	persistenceServiceResolver resolver.ServiceResolver,
 	datastoreFactory persistenceClient.AbstractDataStoreFactory,
+	archivalMetadata archiver.ArchivalMetadata,
+	archiverProvider provider.ArchiverProvider,
 ) (*Service, error) {
 	wire.Build(
 		wire.Value(metrics.ServiceIdx(metrics.Matching)),
