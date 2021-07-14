@@ -74,14 +74,14 @@ func WithLogger(logger log.Logger) ServerOption {
 	})
 }
 
-// Sets optional logger for all frontend operations
+// Sets optional Logger for all frontend operations
 func WithNamespaceLogger(namespaceLogger log.Logger) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.namespaceLogger = namespaceLogger
 	})
 }
 
-// Sets low level authorizer to allow/deny all API calls
+// Sets low level Authorizer to allow/deny all API calls
 func WithAuthorizer(authorizer authorization.Authorizer) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.authorizer = authorizer

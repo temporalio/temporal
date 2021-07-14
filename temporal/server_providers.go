@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
+	"go.uber.org/dig"
 )
 
 type VisibilityWritingMode string
@@ -158,7 +159,7 @@ func makeBootstrapParams(
 	params.RPCFactory = rpcFactory
 
 	// Ringpop uses a different port to register handlers, this map is needed to resolve
-	// services to correct addresses used by clients through ServiceResolver lookup API
+	// Services to correct addresses used by clients through ServiceResolver lookup API
 	servicePortMap := make(map[string]int)
 	for sn, sc := range cfg.Services {
 		servicePortMap[sn] = sc.RPC.GRPCPort
@@ -256,47 +257,50 @@ func makeBootstrapParams(
 }
 
 type ServicesProviderDeps struct {
-	cfg                        *config.Config
-	services                   ServiceNamesList
-	logger                     log.Logger
-	namespaceLogger            NamespaceLogger
-	authorizer                 authorization.Authorizer
-	claimMapper                authorization.ClaimMapper
-	dynamicConfigClient        dynamicconfig.Client
-	dynamicConfigCollection    *dynamicconfig.Collection
-	customDatastoreFactory     persistenceClient.AbstractDataStoreFactory
-	metricReporters            *MetricsReporters
-	tlsConfigProvider          encryption.TLSConfigProvider
-	audienceGetter             authorization.JWTAudienceMapper
-	persistenceServiceResolver resolver.ServiceResolver
-	esConfig                   *config.Elasticsearch
-	esClient                   esclient.Client
+	dig.In
+
+	Cfg                        *config.Config
+	Services                   ServiceNamesList
+	Logger                     log.Logger
+	NamespaceLogger            NamespaceLogger
+	Authorizer                 authorization.Authorizer
+	ClaimMapper                authorization.ClaimMapper
+	DynamicConfigClient        dynamicconfig.Client
+	DynamicConfigCollection    *dynamicconfig.Collection
+	CustomDatastoreFactory     persistenceClient.AbstractDataStoreFactory `optional:"true"`
+	MetricReporters            *MetricsReporters
+	TlsConfigProvider          encryption.TLSConfigProvider
+	AudienceGetter             authorization.JWTAudienceMapper
+	PersistenceServiceResolver resolver.ServiceResolver
+	EsConfig                   *config.Elasticsearch
+	EsClient                   esclient.Client
 }
 
+type ServicesMap map[string]common.Daemon
 func ServicesProvider(
-	deps *ServicesProviderDeps,
-) (map[string]common.Daemon, error) {
+	deps ServicesProviderDeps,
+) (ServicesMap, error) {
 	result := make(map[string]common.Daemon)
-	for _, svcName := range deps.services {
+	for _, svcName := range deps.Services {
 		var err error
 		var svc common.Daemon
 		switch svcName {
-		// todo: All services should follow this path or better be split into separate providers
+		// todo: All Services should follow this path or better be split into separate providers
 		case primitives.MatchingService:
 			svc, err = matching.InitializeMatchingService(
 				matching.ServiceName(svcName),
-				deps.logger,
-				deps.dynamicConfigClient,
-				deps.metricReporters.serverReporter,
-				deps.metricReporters.sdkReporter,
-				deps.cfg.Services[svcName],
-				deps.cfg.ClusterMetadata,
-				deps.tlsConfigProvider,
-				deps.cfg.Services,
-				&deps.cfg.Global.Membership,
-				&deps.cfg.Persistence,
-				deps.persistenceServiceResolver,
-				deps.customDatastoreFactory,
+				deps.Logger,
+				deps.DynamicConfigClient,
+				deps.MetricReporters.serverReporter,
+				deps.MetricReporters.sdkReporter,
+				deps.Cfg.Services[svcName],
+				deps.Cfg.ClusterMetadata,
+				deps.TlsConfigProvider,
+				deps.Cfg.Services,
+				&deps.Cfg.Global.Membership,
+				&deps.Cfg.Persistence,
+				deps.PersistenceServiceResolver,
+				deps.CustomDatastoreFactory,
 			)
 			result[svcName] = svc
 			continue
@@ -304,21 +308,21 @@ func ServicesProvider(
 		}
 
 		params, err := makeBootstrapParams(
-			deps.cfg,
+			deps.Cfg,
 			svcName,
-			deps.logger,
-			deps.namespaceLogger,
-			deps.authorizer,
-			deps.claimMapper,
-			deps.dynamicConfigClient,
-			deps.dynamicConfigCollection,
-			deps.customDatastoreFactory,
-			deps.metricReporters,
-			deps.tlsConfigProvider,
-			deps.audienceGetter,
-			deps.persistenceServiceResolver,
-			deps.esConfig,
-			deps.esClient,
+			deps.Logger,
+			deps.NamespaceLogger,
+			deps.Authorizer,
+			deps.ClaimMapper,
+			deps.DynamicConfigClient,
+			deps.DynamicConfigCollection,
+			deps.CustomDatastoreFactory,
+			deps.MetricReporters,
+			deps.TlsConfigProvider,
+			deps.AudienceGetter,
+			deps.PersistenceServiceResolver,
+			deps.EsConfig,
+			deps.EsClient,
 		)
 
 		if err != nil {
@@ -345,7 +349,7 @@ func ServerProvider(
 	logger log.Logger,
 	cfg *config.Config,
 	requiredServices ServiceNamesList, // todomigryz: might use specific type name here, or wrap in provider
-	services map[string]common.Daemon,
+	services ServicesMap,
 	persistenceServiceResolver resolver.ServiceResolver,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
 	dynamicConfigClient dynamicconfig.Client,

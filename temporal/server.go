@@ -72,17 +72,17 @@ package temporal
 //	// Server is temporal server.
 //	Server struct {
 //		so                *serverOptions
-//		services          map[string]common.Daemon
+//		Services          map[string]common.Daemon
 //		serviceStoppedChs map[string]chan struct{}
 //		stoppedCh         chan interface{}
-//		logger            log.Logger
-//		namespaceLogger   log.Logger
+//		Logger            log.Logger
+//		NamespaceLogger   log.Logger
 //		serverReporter    metrics.Reporter
 //		sdkReporter       metrics.Reporter
 //	}
 //)
 //
-//// Services is the list of all valid temporal services
+//// Services is the list of all valid temporal Services
 //var (
 //	Services = []string{
 //		primitives.FrontendService,
@@ -92,11 +92,11 @@ package temporal
 //	}
 //)
 //
-//// NewServer returns a new instance of server that serves one or many services.
+//// NewServer returns a new instance of server that serves one or many Services.
 //func NewServer(opts ...ServerOption) *Server {
 //	s := &Server{
 //		so:                newServerOptions(opts),
-//		services:          make(map[string]common.Daemon),
+//		Services:          make(map[string]common.Daemon),
 //		serviceStoppedChs: make(map[string]chan struct{}),
 //	}
 //	return s
@@ -112,28 +112,28 @@ package temporal
 //
 //	s.stoppedCh = make(chan interface{})
 //
-//	s.logger = s.so.logger
-//	if s.logger == nil {
-//		s.logger = log.NewZapLogger(log.BuildZapLogger(s.so.config.Log))
+//	s.Logger = s.so.Logger
+//	if s.Logger == nil {
+//		s.Logger = log.NewZapLogger(log.BuildZapLogger(s.so.config.Log))
 //	}
-//	s.namespaceLogger = s.so.namespaceLogger
+//	s.NamespaceLogger = s.so.NamespaceLogger
 //
-//	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))
-//	s.logger.Debug(s.so.config.String())
+//	s.Logger.Info("Starting server for Services", tag.Value(s.so.serviceNames))
+//	s.Logger.Debug(s.so.config.String())
 //
 //	if s.so.persistenceServiceResolver == nil {
 //		s.so.persistenceServiceResolver = resolver.NewNoopResolver()
 //	}
 //
 //	if s.so.dynamicConfigClient == nil {
-//		s.so.dynamicConfigClient, err = dynamicconfig.NewFileBasedClient(&s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
+//		s.so.dynamicConfigClient, err = dynamicconfig.NewFileBasedClient(&s.so.config.DynamicConfigClient, s.Logger, s.stoppedCh)
 //		if err != nil {
-//			s.logger.Info("Error creating file based dynamic config client, use no-op config client instead.", tag.Error(err))
+//			s.Logger.Info("Error creating file based dynamic config client, use no-op config client instead.", tag.Error(err))
 //			s.so.dynamicConfigClient = dynamicconfig.NewNoopClient()
 //		}
 //	}
 //
-//	dc := dynamicconfig.NewCollection(s.so.dynamicConfigClient, s.logger)
+//	dc := dynamicconfig.NewCollection(s.so.dynamicConfigClient, s.Logger)
 //
 //	advancedVisibilityWritingMode := dc.GetStringProperty(dynamicconfig.AdvancedVisibilityWritingMode, common.GetDefaultAdvancedVisibilityWritingMode(s.so.config.Persistence.IsAdvancedVisibilityConfigExist()))()
 //
@@ -142,7 +142,7 @@ package temporal
 //		return err
 //	}
 //
-//	if err = pprof.NewInitializer(&s.so.config.Global.PProf, s.logger).Start(); err != nil {
+//	if err = pprof.NewInitializer(&s.so.config.Global.PProf, s.Logger).Start(); err != nil {
 //		return fmt.Errorf("unable to start PProf: %w", err)
 //	}
 //
@@ -151,7 +151,7 @@ package temporal
 //		return fmt.Errorf("ringpop config validation error: %w", err)
 //	}
 //
-//	err = updateClusterMetadataConfig(s.so.config, s.so.persistenceServiceResolver, s.logger, s.so.customDataStoreFactory)
+//	err = updateClusterMetadataConfig(s.so.config, s.so.persistenceServiceResolver, s.Logger, s.so.customDataStoreFactory)
 //	if err != nil {
 //		return fmt.Errorf("unable to initialize cluster metadata: %w", err)
 //	}
@@ -160,7 +160,7 @@ package temporal
 //	copyCustomSearchAttributesFromDynamicConfigToClusterMetadata(
 //		s.so.config,
 //		s.so.persistenceServiceResolver,
-//		s.logger,
+//		s.Logger,
 //		dc,
 //		s.so.customDataStoreFactory)
 //
@@ -168,7 +168,7 @@ package temporal
 //		&s.so.config.Persistence,
 //		s.so.config.ClusterMetadata.CurrentClusterName,
 //		s.so.persistenceServiceResolver,
-//		s.logger,
+//		s.Logger,
 //		s.so.customDataStoreFactory)
 //	if err != nil {
 //		return fmt.Errorf("unable to initialize system namespace: %w", err)
@@ -180,7 +180,7 @@ package temporal
 //	s.serverReporter = nil
 //	s.sdkReporter = nil
 //	if s.so.config.Global.Metrics != nil {
-//		s.serverReporter, s.sdkReporter, err = s.so.config.Global.Metrics.InitMetricReporters(s.logger, s.so.metricsReporter)
+//		s.serverReporter, s.sdkReporter, err = s.so.config.Global.Metrics.InitMetricReporters(s.Logger, s.so.metricsReporter)
 //		if err != nil {
 //			return err
 //		}
@@ -192,7 +192,7 @@ package temporal
 //
 //	if s.so.tlsConfigProvider == nil {
 //		s.so.tlsConfigProvider, err = encryption.NewTLSConfigProviderFromConfig(
-//			s.so.config.Global.TLS, globalMetricsScope, s.logger, nil)
+//			s.so.config.Global.TLS, globalMetricsScope, s.Logger, nil)
 //		if err != nil {
 //			return fmt.Errorf("TLS provider initialization error: %w", err)
 //		}
@@ -210,7 +210,7 @@ package temporal
 //			return err
 //		}
 //
-//		// todomigryz: server should receive initialized services.
+//		// todomigryz: server should receive initialized Services.
 //		var svc common.Daemon
 //		switch svcName {
 //		case primitives.FrontendService:
@@ -228,7 +228,7 @@ package temporal
 //			return fmt.Errorf("unable to start service %q: %w", svcName, err)
 //		}
 //
-//		s.services[svcName] = svc
+//		s.Services[svcName] = svc
 //		s.serviceStoppedChs[svcName] = make(chan struct{})
 //
 //		go func(svc common.Daemon, svcStoppedCh chan<- struct{}) {
@@ -241,7 +241,7 @@ package temporal
 //	if s.so.blockingStart {
 //		// If s.so.interruptCh is nil this will wait forever.
 //		interruptSignal := <-s.so.interruptCh
-//		s.logger.Info("Received interrupt signal, stopping the server.", tag.Value(interruptSignal))
+//		s.Logger.Info("Received interrupt signal, stopping the server.", tag.Value(interruptSignal))
 //		s.Stop()
 //	}
 //
@@ -251,16 +251,16 @@ package temporal
 //// Stop stops the server.
 //func (s *Server) Stop() {
 //	var wg sync.WaitGroup
-//	wg.Add(len(s.services))
+//	wg.Add(len(s.Services))
 //	close(s.stoppedCh)
 //
-//	for svcName, svc := range s.services {
+//	for svcName, svc := range s.Services {
 //		go func(svc common.Daemon, svcName string, svcStoppedCh <-chan struct{}) {
 //			svc.Stop()
 //			select {
 //			case <-svcStoppedCh:
 //			case <-time.After(time.Minute):
-//				s.logger.Error("Timed out (1 minute) waiting for service to stop.", tag.Service(svcName))
+//				s.Logger.Error("Timed out (1 minute) waiting for service to stop.", tag.Service(svcName))
 //			}
 //			wg.Done()
 //		}(svc, svcName, s.serviceStoppedChs[svcName])
@@ -268,11 +268,11 @@ package temporal
 //	wg.Wait()
 //
 //	if s.sdkReporter != nil {
-//		s.sdkReporter.Stop(s.logger)
+//		s.sdkReporter.Stop(s.Logger)
 //	}
 //
 //	if s.serverReporter != nil {
-//		s.serverReporter.Stop(s.logger)
+//		s.serverReporter.Stop(s.Logger)
 //	}
 //}
 //
@@ -288,8 +288,8 @@ package temporal
 //
 //	params := &resource.BootstrapParams{
 //		Name:                     svcName,
-//		Logger:                   s.logger,
-//		NamespaceLogger:          s.namespaceLogger,
+//		Logger:                   s.Logger,
+//		NamespaceLogger:          s.NamespaceLogger,
 //		PersistenceConfig:        s.so.config.Persistence,
 //		DynamicConfigClient:      s.so.dynamicConfigClient,
 //		ClusterMetadataConfig:    s.so.config.ClusterMetadata,
@@ -300,24 +300,24 @@ package temporal
 //	}
 //
 //	svcCfg := s.so.config.Services[svcName]
-//	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, s.logger, s.so.tlsConfigProvider)
+//	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, s.Logger, s.so.tlsConfigProvider)
 //	params.RPCFactory = rpcFactory
 //
 //	// Ringpop uses a different port to register handlers, this map is needed to resolve
-//	// services to correct addresses used by clients through ServiceResolver lookup API
+//	// Services to correct addresses used by clients through ServiceResolver lookup API
 //	servicePortMap := make(map[string]int)
 //	for sn, sc := range s.so.config.Services {
 //		servicePortMap[sn] = sc.RPC.GRPCPort
 //	}
 //
 //	params.MembershipFactoryInitializer =
-//		func(persistenceBean persistenceClient.Bean, logger log.Logger) (resource.MembershipMonitorFactory, error) {
+//		func(persistenceBean persistenceClient.Bean, Logger log.Logger) (resource.MembershipMonitorFactory, error) {
 //			return ringpop.NewRingpopFactory(
 //				&s.so.config.Global.Membership,
 //				rpcFactory.GetRingpopChannel(),
 //				svcName,
 //				servicePortMap,
-//				logger,
+//				Logger,
 //				persistenceBean.GetClusterMetadataManager(),
 //			)
 //		}
@@ -325,7 +325,7 @@ package temporal
 //	// todo: Replace this hack with actually using sdkReporter, Client or Scope.
 //	if serverReporter == nil {
 //		var err error
-//		serverReporter, sdkReporter, err = svcCfg.Metrics.InitMetricReporters(s.logger, nil)
+//		serverReporter, sdkReporter, err = svcCfg.Metrics.InitMetricReporters(s.Logger, nil)
 //		if err != nil {
 //			return nil, fmt.Errorf(
 //				"unable to initialize per-service metric client. "+
@@ -341,8 +341,8 @@ package temporal
 //	}
 //	params.MetricsScope = globalTallyScope
 //
-//	serviceIdx := metrics.GetMetricsServiceIdx(svcName, s.logger)
-//	metricsClient, err := serverReporter.NewClient(s.logger, serviceIdx)
+//	serviceIdx := metrics.GetMetricsServiceIdx(svcName, s.Logger)
+//	metricsClient, err := serverReporter.NewClient(s.Logger, serviceIdx)
 //	if err != nil {
 //		return nil, fmt.Errorf("unable to initialize metrics client: %w", err)
 //	}
@@ -358,7 +358,7 @@ package temporal
 //		HostPort:     s.so.config.PublicClient.HostPort,
 //		Namespace:    common.SystemLocalNamespace,
 //		MetricsScope: globalTallyScope,
-//		Logger:       log.NewSdkLogger(s.logger),
+//		Logger:       log.NewSdkLogger(s.Logger),
 //		ConnectionOptions: sdkclient.ConnectionOptions{
 //			TLS:                options,
 //			DisableHealthCheck: true,
@@ -380,13 +380,13 @@ package temporal
 //	params.ArchiverProvider = provider.NewArchiverProvider(s.so.config.Archival.History.Provider, s.so.config.Archival.Visibility.Provider)
 //	params.PersistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
 //
-//	if s.so.authorizer != nil {
-//		params.Authorizer = s.so.authorizer
+//	if s.so.Authorizer != nil {
+//		params.Authorizer = s.so.Authorizer
 //	} else {
 //		params.Authorizer = authorization.NewNoopAuthorizer()
 //	}
-//	if s.so.claimMapper != nil {
-//		params.ClaimMapper = s.so.claimMapper
+//	if s.so.ClaimMapper != nil {
+//		params.ClaimMapper = s.so.ClaimMapper
 //	} else {
 //		params.ClaimMapper = authorization.NewNoopClaimMapper()
 //	}
@@ -420,7 +420,7 @@ package temporal
 //		}
 //	}
 //
-//	esClient, err := esclient.NewClient(advancedVisibilityStore.ElasticSearch, s.so.elasticseachHttpClient, s.logger)
+//	esClient, err := esclient.NewClient(advancedVisibilityStore.ElasticSearch, s.so.elasticseachHttpClient, s.Logger)
 //	if err != nil {
 //		return nil, nil, fmt.Errorf("unable to create Elasticsearch client: %w", err)
 //	}
@@ -442,51 +442,51 @@ package temporal
 //
 //// TODO: remove this func after 1.10 release
 //func copyCustomSearchAttributesFromDynamicConfigToClusterMetadata(
-//	cfg *config.Config,
+//	Cfg *config.Config,
 //	persistenceServiceResolver resolver.ServiceResolver,
-//	logger log.Logger,
+//	Logger log.Logger,
 //	dc *dynamicconfig.Collection,
 //	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
 //) {
 //
 //	var visibilityIndex string
-//	if cfg.Persistence.IsAdvancedVisibilityConfigExist() {
-//		advancedVisibilityDataStore, ok := cfg.Persistence.DataStores[cfg.Persistence.AdvancedVisibilityStore]
+//	if Cfg.Persistence.IsAdvancedVisibilityConfigExist() {
+//		advancedVisibilityDataStore, ok := Cfg.Persistence.DataStores[Cfg.Persistence.AdvancedVisibilityStore]
 //		if ok {
 //			visibilityIndex = advancedVisibilityDataStore.ElasticSearch.GetVisibilityIndex()
 //		}
 //	}
 //
 //	if visibilityIndex == "" {
-//		logger.Debug("Advanced visibility Elasticsearch index is not configured. Search attributes migration will use empty string as index name.")
+//		Logger.Debug("Advanced visibility Elasticsearch index is not configured. Search attributes migration will use empty string as index name.")
 //	}
 //
 //	defaultTypeMap := map[string]interface{}{}
 //
 //	dcSearchAttributes, err := searchattribute.BuildTypeMap(dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, defaultTypeMap))
 //	if err != nil {
-//		logger.Error("Unable to read search attributes from dynamic config. Search attributes migration is cancelled.", tag.Error(err))
+//		Logger.Error("Unable to read search attributes from dynamic config. Search attributes migration is cancelled.", tag.Error(err))
 //		return
 //	}
 //	dcCustomSearchAttributes := searchattribute.FilterCustomOnly(dcSearchAttributes)
 //	if len(dcCustomSearchAttributes) == 0 {
-//		logger.Debug("Custom search attributes are not defined in dynamic config. Search attributes migration is cancelled.", tag.Error(err))
+//		Logger.Debug("Custom search attributes are not defined in dynamic config. Search attributes migration is cancelled.", tag.Error(err))
 //		return
 //	}
 //
 //	factory := persistenceClient.NewFactory(
-//		&cfg.Persistence,
+//		&Cfg.Persistence,
 //		persistenceServiceResolver,
 //		nil,
 //		customDataStoreFactory,
-//		cfg.ClusterMetadata.CurrentClusterName,
+//		Cfg.ClusterMetadata.CurrentClusterName,
 //		nil,
-//		logger,
+//		Logger,
 //	)
 //
 //	clusterMetadataManager, err := factory.NewClusterMetadataManager()
 //	if err != nil {
-//		logger.Error("Unable to initialize cluster metadata manager. Search attributes migration is cancelled.", tag.Error(err))
+//		Logger.Error("Unable to initialize cluster metadata manager. Search attributes migration is cancelled.", tag.Error(err))
 //		return
 //	}
 //	defer clusterMetadataManager.Close()
@@ -495,43 +495,43 @@ package temporal
 //
 //	existingSearchAttributes, err := saManager.GetSearchAttributes(visibilityIndex, true)
 //	if err != nil {
-//		logger.Error("Unable to read current search attributes from cluster metadata. Search attributes migration is cancelled.", tag.Error(err), tag.ESIndex(visibilityIndex))
+//		Logger.Error("Unable to read current search attributes from cluster metadata. Search attributes migration is cancelled.", tag.Error(err), tag.ESIndex(visibilityIndex))
 //		return
 //	}
 //
 //	if len(existingSearchAttributes.Custom()) != 0 {
-//		logger.Debug("Search attributes already exist in cluster metadata. Search attributes migration is cancelled.", tag.Error(err))
+//		Logger.Debug("Search attributes already exist in cluster metadata. Search attributes migration is cancelled.", tag.Error(err))
 //		return
 //	}
 //
 //	err = saManager.SaveSearchAttributes(visibilityIndex, dcCustomSearchAttributes)
 //	if err != nil {
-//		logger.Error("Unable to save search attributes to cluster metadata. Search attributes migration is cancelled.", tag.Error(err), tag.ESIndex(visibilityIndex))
+//		Logger.Error("Unable to save search attributes to cluster metadata. Search attributes migration is cancelled.", tag.Error(err), tag.ESIndex(visibilityIndex))
 //		return
 //	}
 //
-//	logger.Info("Search attributes are successfully saved from dynamic config to cluster metadata.", tag.Value(dcCustomSearchAttributes), tag.ESIndex(visibilityIndex))
+//	Logger.Info("Search attributes are successfully saved from dynamic config to cluster metadata.", tag.Value(dcCustomSearchAttributes), tag.ESIndex(visibilityIndex))
 //}
 //
 //// updateClusterMetadataConfig performs a config check against the configured persistence store for cluster metadata.
 //// If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
 //// This is to keep this check hidden from downstream calls.
 //func updateClusterMetadataConfig(
-//	cfg *config.Config,
+//	Cfg *config.Config,
 //	persistenceServiceResolver resolver.ServiceResolver,
-//	logger log.Logger,
+//	Logger log.Logger,
 //	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
 //) error {
-//	logger = log.With(logger, tag.ComponentMetadataInitializer)
+//	Logger = log.With(Logger, tag.ComponentMetadataInitializer)
 //
 //	factory := persistenceClient.NewFactory(
-//		&cfg.Persistence,
+//		&Cfg.Persistence,
 //		persistenceServiceResolver,
 //		nil,
 //		customDataStoreFactory,
-//		cfg.ClusterMetadata.CurrentClusterName,
+//		Cfg.ClusterMetadata.CurrentClusterName,
 //		nil,
-//		logger,
+//		Logger,
 //	)
 //
 //	clusterMetadataManager, err := factory.NewClusterMetadataManager()
@@ -543,15 +543,15 @@ package temporal
 //	applied, err := clusterMetadataManager.SaveClusterMetadata(
 //		&persistence.SaveClusterMetadataRequest{
 //			ClusterMetadata: persistencespb.ClusterMetadata{
-//				HistoryShardCount: cfg.Persistence.NumHistoryShards,
-//				ClusterName:       cfg.ClusterMetadata.CurrentClusterName,
+//				HistoryShardCount: Cfg.Persistence.NumHistoryShards,
+//				ClusterName:       Cfg.ClusterMetadata.CurrentClusterName,
 //				ClusterId:         uuid.New(),
 //			}})
 //	if err != nil {
-//		logger.Warn("Failed to save cluster metadata.", tag.Error(err))
+//		Logger.Warn("Failed to save cluster metadata.", tag.Error(err))
 //	}
 //	if applied {
-//		logger.Info("Successfully saved cluster metadata.")
+//		Logger.Info("Successfully saved cluster metadata.")
 //		return nil
 //	}
 //
@@ -559,43 +559,43 @@ package temporal
 //	if err != nil {
 //		return fmt.Errorf("error while fetching cluster metadata: %w", err)
 //	}
-//	if cfg.ClusterMetadata.CurrentClusterName != resp.ClusterName {
-//		logger.Error(
+//	if Cfg.ClusterMetadata.CurrentClusterName != resp.ClusterName {
+//		Logger.Error(
 //			mismatchLogMessage,
 //			tag.Key("clusterMetadata.currentClusterName"),
-//			tag.IgnoredValue(cfg.ClusterMetadata.CurrentClusterName),
+//			tag.IgnoredValue(Cfg.ClusterMetadata.CurrentClusterName),
 //			tag.Value(resp.ClusterName))
-//		cfg.ClusterMetadata.CurrentClusterName = resp.ClusterName
+//		Cfg.ClusterMetadata.CurrentClusterName = resp.ClusterName
 //	}
 //
 //	var persistedShardCount = resp.HistoryShardCount
-//	if cfg.Persistence.NumHistoryShards != persistedShardCount {
-//		logger.Error(
+//	if Cfg.Persistence.NumHistoryShards != persistedShardCount {
+//		Logger.Error(
 //			mismatchLogMessage,
 //			tag.Key("persistence.numHistoryShards"),
-//			tag.IgnoredValue(cfg.Persistence.NumHistoryShards),
+//			tag.IgnoredValue(Cfg.Persistence.NumHistoryShards),
 //			tag.Value(persistedShardCount))
-//		cfg.Persistence.NumHistoryShards = persistedShardCount
+//		Cfg.Persistence.NumHistoryShards = persistedShardCount
 //	}
 //
 //	return nil
 //}
 //
 //func initSystemNamespaces(
-//	cfg *config.Persistence,
+//	Cfg *config.Persistence,
 //	currentClusterName string,
 //	persistenceServiceResolver resolver.ServiceResolver,
-//	logger log.Logger,
+//	Logger log.Logger,
 //	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
 //) error {
 //	factory := persistenceClient.NewFactory(
-//		cfg,
+//		Cfg,
 //		persistenceServiceResolver,
 //		nil,
 //		customDataStoreFactory,
 //		currentClusterName,
 //		nil,
-//		logger,
+//		Logger,
 //	)
 //
 //	metadataManager, err := factory.NewMetadataManager()

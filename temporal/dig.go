@@ -20,33 +20,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//+build wireinject
-
 package temporal
 
 import (
 	"github.com/google/wire"
 	"github.com/urfave/cli/v2"
 	tlog "go.temporal.io/server/common/log"
+	"go.uber.org/dig"
 )
-
-func InitializeDefaultUserProviderSet(c *cli.Context) wire.ProviderSet {
-	return wire.NewSet(
-		DefaultConfigProvider,
-		DefaultLogger,
-		DefaultDynamicConfigClientProvider,
-		DefaultAuthorizerProvider,
-		DefaultClaimMapper,
-		DefaultServiceNameListProvider,
-		DefaultDatastoreFactory,
-		DefaultMetricsReportersProvider,
-		DefaultTLSConfigProvider,
-		DefaultDynamicConfigCollectionProvider,
-		DefaultAudienceGetterProvider,
-		DefaultPersistenseServiceResolverProvider,
-		DefaultElasticSearchHttpClientProvider,
-	)
-}
 
 var UserSet = wire.NewSet(
 	DefaultConfigProvider,
@@ -76,10 +57,42 @@ var serverSet = wire.NewSet(
 	wire.Struct(new(ServicesProviderDeps), "*"), // we can use this to inject dependencies into sub-modules
 )
 
-func InitializeServer(c *cli.Context) (*Server, error) {
-	wire.Build(
-		UserSet,
-		serverSet,
-	)
-	return nil, nil
+func InitializeServerContainer(c *cli.Context) (*dig.Container, error) {
+	dc := dig.New()
+	dc.Provide(func () *cli.Context {return c})
+	dc.Provide(DefaultConfigProvider)
+	dc.Provide(DefaultConfigProvider)
+	dc.Provide(DefaultLogger)
+	dc.Provide(func (l tlog.Logger) NamespaceLogger { return l })
+	dc.Provide(DefaultDynamicConfigClientProvider)
+	dc.Provide(DefaultAuthorizerProvider)
+	dc.Provide(DefaultClaimMapper)
+	dc.Provide(DefaultServiceNameListProvider)
+	dc.Provide(DefaultDatastoreFactory)
+	dc.Provide(DefaultMetricsReportersProvider)
+	dc.Provide(DefaultTLSConfigProvider)
+	dc.Provide(DefaultDynamicConfigCollectionProvider)
+	dc.Provide(DefaultAudienceGetterProvider)
+	dc.Provide(DefaultPersistenseServiceResolverProvider)
+	dc.Provide(DefaultElasticSearchHttpClientProvider)
+	err := dc.Provide(DefaultInterruptChProvider)
+	if err != nil {
+		println(err.Error())
+	} else {
+		println("All good")
+	}
+	err = dc.Provide(ServicesProvider)
+	if err != nil {
+		println(err.Error())
+	} else {
+		println("All good")
+	}
+	dc.Provide(ServerProvider)
+	dc.Provide(AdvancedVisibilityStoreProvider)
+	dc.Provide(ESClientProvider)
+	dc.Provide(ESConfigProvider)
+	dc.Provide(AdvancedVisibilityWritingModeProvider)
+	// println(dc.String())
+	// dig.Visualize(dc, os.Stdout)
+	return dc, nil
 }

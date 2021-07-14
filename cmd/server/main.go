@@ -111,12 +111,12 @@ func buildCLI() *cli.App {
 }
 
 func run(c *cli.Context) error {
-	s, err := temporal.InitializeServer(c)
+	serverContainer, err := temporal.InitializeServerContainer(c)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("Unable to initialize server. Error: %v", err), 1)
 	}
 
-	err = s.Start()
+	err = serverContainer.Invoke(func(s *temporal.Server) error { return s.Start() })
 
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("Unable to start server. Error: %v", err), 1)

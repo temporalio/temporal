@@ -75,7 +75,7 @@ type (
 	}
 )
 
-// Services is the list of all valid temporal services
+// Services is the list of all valid temporal Services
 var (
 	Services = []string{
 		primitives.FrontendService,
@@ -85,7 +85,7 @@ var (
 	}
 )
 
-// NewServer returns a new instance of server that serves one or many services.
+// NewServer returns a new instance of server that serves one or many Services.
 func NewServer(
 	logger log.Logger,
 	cfg *config.Config,
@@ -124,7 +124,7 @@ func (s *Server) Start() error {
 
 	s.stoppedCh = make(chan interface{})
 
-	s.logger.Info("Starting server for services", tag.Value(s.serviceNames))
+	s.logger.Info("Starting server for Services", tag.Value(s.serviceNames))
 	s.logger.Debug(s.config.String())
 
 	var err error

@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/matching/configs"
+	"go.uber.org/dig"
 	"google.golang.org/grpc"
 )
 
@@ -268,6 +269,18 @@ func ClientBeanProvider(
 		),
 		clusterMetadata,
 	)
+}
+
+type PersistenceBeanProviderParams struct {
+	dig.In
+
+	serviceConfig *Config
+	persistenceConfig *config.Persistence
+	metricsClient metrics.Client
+	logger TaggedLogger
+	clusterMetadataConfig *config.ClusterMetadata
+	persistenceServiceResolver resolver.ServiceResolver
+	datastoreFactory persistenceClient.AbstractDataStoreFactory `optional:"true"`
 }
 
 func PersistenceBeanProvider(

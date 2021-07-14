@@ -70,9 +70,9 @@ func DefaultLogger(cfg *config.Config) tlog.Logger {
 
 func DefaultServiceNameListProvider(log tlog.Logger, c *cli.Context) ServiceNamesList {
 	services := c.StringSlice("service")
-	if c.IsSet("services") {
-		log.Warn("WARNING: --services flag is deprecated. Specify multiply --service flags instead.")
-		services = strings.Split(c.String("services"), ",")
+	if c.IsSet("Services") {
+		log.Warn("WARNING: --Services flag is deprecated. Specify multiply --service flags instead.")
+		services = strings.Split(c.String("Services"), ",")
 	}
 	return services
 }
@@ -94,9 +94,7 @@ func DefaultDynamicConfigCollectionProvider(client dynamicconfig.Client, logger 
 }
 
 func DefaultAuthorizerProvider(cfg *config.Config) (authorization.Authorizer, error) {
-	authorizer, err := authorization.GetAuthorizerFromConfig(
-		&cfg.Global.Authorization,
-	)
+	authorizer, err := authorization.GetAuthorizerFromConfig(&cfg.Global.Authorization)
 	return authorizer, err
 }
 
