@@ -34,57 +34,16 @@ if ! curl --silent --fail --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_V
     exit 1
 fi
 
-echo "=== Step 1. Add custom search attributes to the new index. ==="
-DOC_TYPE=""
-if [ "${ES_VERSION}" != "v7" ]; then
-    DOC_TYPE="/_doc"
-fi
-CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V0}${DOC_TYPE}/_mapping" | jq --compact-output '.. | .Attr? | select(.!=null) | .properties | with_entries(select(.key == ($customSA[]))) | {properties:.}' --argjson customSA "${CUSTOM_SEARCH_ATTRIBUTES}")
-if [ "${ES_VERSION}" == "v7" ]; then
-    # Replace "date" type with "date_nanos" only for Elasticsearch v7.
-    CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(jq '(.properties[].type | select(. == "date")) = "date_nanos"' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}")
-fi
-# Replace "double" type with "scaled_float".
-CUSTOM_SEARCH_ATTRIBUTES_MAPPING=$(jq '(.properties[] | select(.type == "double")) = {"type":"scaled_float","scaling_factor":10000}' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}")
-
-if jq --exit-status '.properties[]? | length > 0' <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}" ; then
-    jq <<< "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}"
-    if [ -z "${AUTO_CONFIRM}" ]; then
-        read -p "Add custom search attributes above to the index ${ES_VIS_INDEX_V1}? (N/y)" -n 1 -r
-        echo
-    else
-        REPLY="y"
-    fi
-    if [ "${REPLY}" = "y" ]; then
-        curl --silent --user "${ES_USER}":"${ES_PWD}" -X PUT "${ES_ENDPOINT}/${ES_VIS_INDEX_V1}${DOC_TYPE}/_mapping" -H "Content-Type: application/json" --data-binary "${CUSTOM_SEARCH_ATTRIBUTES_MAPPING}" | jq
-        # Wait for mapping changes to go through.
-        until curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_cluster/health/${ES_VIS_INDEX_V1}" | jq --exit-status '.status=="green" | .'; do
-            echo "Waiting for Elasticsearch index ${ES_VIS_INDEX_V1} become green."
-            sleep 1
-        done
-    fi
-else
-    if [ -z "${AUTO_CONFIRM}" ]; then
-        read -p "Custom search attributes are empty and won't be created. Continue? (N/y)" -n 1 -r
-        echo
-    else
-        REPLY="y"
-    fi
-    if [ "${REPLY}" != "y" ]; then
-        exit 1
-    fi
-fi
-
-echo "=== Step 2. Reindex old index to the new index. ==="
+echo "=== Step 2. Reindex newly created documents from the new index to the old index. ==="
 # Convert multiline script to single line, remove repeated spaces, and replace / with \/.
-REINDEX_SCRIPT=$(tr -d "\n" < "${DIR_NAME}/reindex.painless" | tr -s " " | sed "s/\//\\\\\//g" | sed "s/&/\\\&/g")
-# Substitute envs in reindex.json (envsubst is not available in alpine by default).
+REINDEX_SCRIPT=$(tr -d "\n" < "${DIR_NAME}/rollback.painless" | tr -s " " | sed "s/\//\\\\\//g" | sed "s/&/\\\&/g")
+# Substitute envs in rollback.json (envsubst is not available in alpine by default).
 REINDEX_JSON=$(sed \
     -e "s/\${REINDEX_SCRIPT}/${REINDEX_SCRIPT}/g" \
     -e "s/\${ES_VIS_INDEX_V0}/${ES_VIS_INDEX_V0}/g" \
     -e "s/\${ES_VIS_INDEX_V1}/${ES_VIS_INDEX_V1}/g" \
     -e "s/\${CUSTOM_SEARCH_ATTRIBUTES}/${CUSTOM_SEARCH_ATTRIBUTES}/g" \
-    "${DIR_NAME}/reindex.json")
+    "${DIR_NAME}/rollback.json")
 
 jq <<< "${REINDEX_JSON}"
 if [ -z "${AUTO_CONFIRM}" ]; then
@@ -116,8 +75,9 @@ if [ "${REPLY}" = "y" ]; then
     done
     echo "Reindex complete:"
     curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_tasks/${TASK_ID}" | jq --raw-output '.task.status | with_entries(select([.key] | inside(["total", "updated", "created", "version_conflicts"])))'
-    echo "Source index ${ES_VIS_INDEX_V0} document count:"
-    curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V0}/_stats/docs" | jq '._all.primaries.docs.count'
-    echo "Destination index ${ES_VIS_INDEX_V1} document count:"
+    echo "Source index ${ES_VIS_INDEX_V1} document count:"
     curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V1}/_stats/docs" | jq '._all.primaries.docs.count'
+    echo "Destination index ${ES_VIS_INDEX_V0} document count:"
+    curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V0}/_stats/docs" | jq '._all.primaries.docs.count'
 fi
+
