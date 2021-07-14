@@ -48,7 +48,7 @@ import (
 // Injectors from wire.go:
 
 // todomigryz: svcName can be hardcoded here. We switch on svc name one layer above.
-func InitializeMatchingService(serviceName2 ServiceName, logger log.Logger, dcClient dynamicconfig.Client, metricsReporter UserMetricsReporter, sdkMetricsReporter UserSdkMetricsReporter, svcCfg config.Service, clusterMetadata *config.ClusterMetadata, tlsConfigProvider encryption.TLSConfigProvider, services ServicesConfigMap, membershipConfig *config.Membership, persistenceConfig *config.Persistence, persistenceServiceResolver resolver.ServiceResolver, datastoreFactory client.AbstractDataStoreFactory) (*Service, error) {
+func InitializeMatchingService(logger log.Logger, dcClient dynamicconfig.Client, metricsReporter UserMetricsReporter, sdkMetricsReporter UserSdkMetricsReporter, svcCfg config.Service, clusterMetadata *config.ClusterMetadata, tlsConfigProvider encryption.TLSConfigProvider, services ServicesConfigMap, membershipConfig *config.Membership, persistenceConfig *config.Persistence, persistenceServiceResolver resolver.ServiceResolver, datastoreFactory client.AbstractDataStoreFactory) (*Service, error) {
 	taggedLogger, err := TaggedLoggerProvider(logger)
 	if err != nil {
 		return nil, err
@@ -87,13 +87,13 @@ func InitializeMatchingService(serviceName2 ServiceName, logger log.Logger, dcCl
 	if err != nil {
 		return nil, err
 	}
-	rpcFactory := RPCFactoryProvider(svcCfg, logger, tlsConfigProvider, serviceName2)
+	rpcFactory := RPCFactoryProvider(svcCfg, logger, tlsConfigProvider)
 	server, err := GrpcServerProvider(logger, telemetryInterceptor, rateLimitInterceptor, rpcFactory)
 	if err != nil {
 		return nil, err
 	}
 	grpcListener := GrpcListenerProvider(rpcFactory)
-	membershipFactoryInitializerFunc := MembershipFactoryInitializerProvider(serviceName2, services, membershipConfig, rpcFactory)
+	membershipFactoryInitializerFunc := MembershipFactoryInitializerProvider(services, membershipConfig, rpcFactory)
 	membershipMonitorFactory, err := MembershipFactoryProvider(membershipFactoryInitializerFunc, taggedLogger, bean)
 	if err != nil {
 		return nil, err
@@ -124,7 +124,7 @@ var (
 	_wireServiceIdxValue = metrics.ServiceIdx(metrics.Matching)
 )
 
-func InitializeTestMatchingService(serviceName2 ServiceName, logger log.Logger, dcClient dynamicconfig.Client, metricsReporter UserMetricsReporter, sdkMetricsReporter UserSdkMetricsReporter, svcCfg config.Service, clusterMetadata *config.ClusterMetadata, tlsConfigProvider encryption.TLSConfigProvider, membershipFactory resource.MembershipFactoryInitializerFunc, persistenceConfig *config.Persistence, persistenceServiceResolver resolver.ServiceResolver, datastoreFactory client.AbstractDataStoreFactory, archivalMetadata archiver.ArchivalMetadata, archiverProvider provider.ArchiverProvider, rpcFactory common.RPCFactory) (*Service, error) {
+func InitializeTestMatchingService(logger log.Logger, dcClient dynamicconfig.Client, metricsReporter UserMetricsReporter, sdkMetricsReporter UserSdkMetricsReporter, svcCfg config.Service, clusterMetadata *config.ClusterMetadata, tlsConfigProvider encryption.TLSConfigProvider, membershipFactory resource.MembershipFactoryInitializerFunc, persistenceConfig *config.Persistence, persistenceServiceResolver resolver.ServiceResolver, datastoreFactory client.AbstractDataStoreFactory, archivalMetadata archiver.ArchivalMetadata, archiverProvider provider.ArchiverProvider, rpcFactory common.RPCFactory) (*Service, error) {
 	taggedLogger, err := TaggedLoggerProvider(logger)
 	if err != nil {
 		return nil, err

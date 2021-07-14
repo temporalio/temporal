@@ -34,6 +34,7 @@ import (
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"      // needed to load mysql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
 	"go.temporal.io/server/temporal"
+	"go.uber.org/dig"
 )
 
 // main entry point for the temporal server
@@ -111,7 +112,8 @@ func buildCLI() *cli.App {
 }
 
 func run(c *cli.Context) error {
-	serverContainer, err := temporal.InitializeServerContainer(c)
+	serverContainer := dig.New()
+	err := temporal.InjectServerProviders(serverContainer, c)
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("Unable to initialize server. Error: %v", err), 1)
 	}

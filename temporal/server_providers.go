@@ -276,6 +276,8 @@ type ServicesProviderDeps struct {
 	EsClient                   esclient.Client
 }
 
+
+
 type ServicesMap map[string]common.Daemon
 func ServicesProvider(
 	deps ServicesProviderDeps,
@@ -288,7 +290,6 @@ func ServicesProvider(
 		// todo: All Services should follow this path or better be split into separate providers
 		case primitives.MatchingService:
 			svc, err = matching.InitializeMatchingService(
-				matching.ServiceName(svcName),
 				deps.Logger,
 				deps.DynamicConfigClient,
 				deps.MetricReporters.serverReporter,

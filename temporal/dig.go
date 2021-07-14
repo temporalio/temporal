@@ -57,8 +57,9 @@ var serverSet = wire.NewSet(
 	wire.Struct(new(ServicesProviderDeps), "*"), // we can use this to inject dependencies into sub-modules
 )
 
-func InitializeServerContainer(c *cli.Context) (*dig.Container, error) {
-	dc := dig.New()
+
+
+func InjectServerProviders(dc *dig.Container, c *cli.Context) (error) {
 	dc.Provide(func () *cli.Context {return c})
 	dc.Provide(DefaultConfigProvider)
 	dc.Provide(DefaultConfigProvider)
@@ -75,7 +76,7 @@ func InitializeServerContainer(c *cli.Context) (*dig.Container, error) {
 	dc.Provide(DefaultAudienceGetterProvider)
 	dc.Provide(DefaultPersistenseServiceResolverProvider)
 	dc.Provide(DefaultElasticSearchHttpClientProvider)
-	err := dc.Provide(DefaultInterruptChProvider)
+	err := dc.Provide(DefaultInterruptChProvider) // todomigryz: we need to check for err on each dc.Provide
 	if err != nil {
 		println(err.Error())
 	} else {
@@ -92,7 +93,5 @@ func InitializeServerContainer(c *cli.Context) (*dig.Container, error) {
 	dc.Provide(ESClientProvider)
 	dc.Provide(ESConfigProvider)
 	dc.Provide(AdvancedVisibilityWritingModeProvider)
-	// println(dc.String())
-	// dig.Visualize(dc, os.Stdout)
-	return dc, nil
+	return nil
 }

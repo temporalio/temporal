@@ -44,7 +44,6 @@ import (
 
 // todomigryz: svcName can be hardcoded here. We switch on svc name one layer above.
 func InitializeMatchingService(
-	serviceName ServiceName,
 	logger log.Logger,
 	dcClient dynamicconfig.Client,
 	metricsReporter UserMetricsReporter,
@@ -90,7 +89,6 @@ func InitializeMatchingService(
 }
 
 func InitializeTestMatchingService(
-	serviceName ServiceName,
 	logger log.Logger,
 	dcClient dynamicconfig.Client,
 	metricsReporter UserMetricsReporter,

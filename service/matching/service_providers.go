@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/ringpop"
@@ -58,7 +59,6 @@ type (
 	UserSdkMetricsReporter metrics.Reporter
 	SDKReporter            metrics.Reporter
 	InstanceId             string
-	ServiceName            string
 	ServicesConfigMap      map[string]config.Service
 
 	ServiceMetrics struct {
@@ -83,7 +83,6 @@ func RateLimitInterceptorProvider(serviceConfig *Config) (*interceptor.RateLimit
 }
 
 func MembershipFactoryInitializerProvider(
-	svcName ServiceName,
 	services ServicesConfigMap,
 	membership *config.Membership,
 	rpcFactory common.RPCFactory,
@@ -101,7 +100,7 @@ func MembershipFactoryInitializerProvider(
 		return ringpop.NewRingpopFactory(
 			membership,
 			rpcFactory.GetRingpopChannel(),
-			string(svcName),
+			primitives.MatchingService, // todomigryz: also declared at common.MatchingServiceName
 			servicePortMap,
 			logger,
 			persistenceBean.GetClusterMetadataManager(),
@@ -124,9 +123,8 @@ func RPCFactoryProvider(
 	svcCfg config.Service,
 	logger log.Logger,
 	tlsConfigProvider encryption.TLSConfigProvider,
-	svcName ServiceName,
 ) common.RPCFactory {
-	return rpc.NewFactory(&svcCfg.RPC, string(svcName), logger, tlsConfigProvider)
+	return rpc.NewFactory(&svcCfg.RPC, primitives.MatchingService, logger, tlsConfigProvider)
 }
 
 func GrpcListenerProvider(rpcFactory common.RPCFactory) GRPCListener {
@@ -356,7 +354,7 @@ func HandlerProvider(
 		return nil, err
 	}
 
-	matchingServiceResolver, err := membershipMonitor.GetResolver(common.MatchingServiceName)
+	matchingServiceResolver, err := membershipMonitor.GetResolver(primitives.MatchingService)
 	if err != nil {
 		return nil, err
 	}
