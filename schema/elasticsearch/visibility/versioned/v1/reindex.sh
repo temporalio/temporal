@@ -96,8 +96,8 @@ fi
 
 if [ "${REPLY}" = "y" ]; then
     REINDEX_RESPONSE=$(curl --silent --user "${ES_USER}":"${ES_PWD}" -X POST "${ES_ENDPOINT}/_reindex?wait_for_completion=false&slices=auto" -H "Content-Type: application/json" --data-binary "${REINDEX_JSON}")
-    TASK_ID=$(jq --raw-output '.task' <<< "${REINDEX_RESPONSE}")
-    if [ ${TASK_ID} = null ]; then
+    TASK_ID=$(jq --raw-output --raw-input 'fromjson? | .task' <<< "${REINDEX_RESPONSE}")
+    if [ "${TASK_ID}" = null ] || [ "${TASK_ID}" = "" ]; then
         echo "${REINDEX_RESPONSE}"
         exit 1
     fi
