@@ -576,6 +576,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		params.AbstractDatastoreFactory,
 		params.ArchivalMetadata,
 		params.ArchiverProvider,
+		params.RPCFactory,
 	)
 
 	if err != nil {

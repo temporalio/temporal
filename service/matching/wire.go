@@ -26,6 +26,7 @@ package matching
 
 import (
 	"github.com/google/wire"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cache"
@@ -103,6 +104,7 @@ func InitializeTestMatchingService(
 	datastoreFactory persistenceClient.AbstractDataStoreFactory,
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
+	rpcFactory common.RPCFactory,
 ) (*Service, error) {
 	wire.Build(
 		wire.Value(metrics.ServiceIdx(metrics.Matching)),
@@ -121,7 +123,6 @@ func InitializeTestMatchingService(
 		interceptor.NewTelemetryInterceptor,
 		RateLimitInterceptorProvider,
 		MembershipFactoryProvider,
-		RPCFactoryProvider,
 		GrpcServerProvider,
 		GrpcListenerProvider,
 		MembershipMonitorProvider,
