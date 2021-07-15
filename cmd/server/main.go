@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"      // needed to load mysql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
+	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/temporal"
 	"go.uber.org/dig"
 )
@@ -114,8 +115,14 @@ func buildCLI() *cli.App {
 func run(c *cli.Context) error {
 	serverContainer := dig.New()
 	err := temporal.InjectServerProviders(serverContainer, c)
+
 	if err != nil {
-		return cli.Exit(fmt.Sprintf("Unable to initialize server. Error: %v", err), 1)
+		return cli.Exit(fmt.Sprintf("Unable to inject server providers. Error: %v", err), 1)
+	}
+
+	err = matching.InjectMatchingServiceProviders(serverContainer)
+	if err != nil {
+		return cli.Exit(fmt.Sprintf("Unable to inject matching service providers. Error: %v", err), 1)
 	}
 
 	err = serverContainer.Invoke(func(s *temporal.Server) error { return s.Start() })

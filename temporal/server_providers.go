@@ -286,28 +286,28 @@ func sliceContainsString(src []string, value string) bool {
 	return false;
 }
 
-func MatchingServiceProvider(
-	deps ServicesProviderDeps,
-	) (*matching.Service, error) {
-	if !sliceContainsString(deps.Services, primitives.MatchingService) {
-		return nil, nil
-	}
-	svc, err := matching.InitializeMatchingService(
-		deps.Logger,
-		deps.DynamicConfigClient,
-		deps.MetricReporters.serverReporter,
-		deps.MetricReporters.sdkReporter,
-		deps.Cfg.Services[primitives.MatchingService],
-		deps.Cfg.ClusterMetadata,
-		deps.TlsConfigProvider,
-		deps.Cfg.Services,
-		&deps.Cfg.Global.Membership,
-		&deps.Cfg.Persistence,
-		deps.PersistenceServiceResolver,
-		deps.CustomDatastoreFactory,
-	)
-	return svc, err
-}
+// func MatchingServiceProvider(
+// 	deps ServicesProviderDeps,
+// 	) (*matching.Service, error) {
+// 	if !sliceContainsString(deps.Services, primitives.MatchingService) {
+// 		return nil, nil
+// 	}
+// 	svc, err := matching.InitializeMatchingService(
+// 		deps.Logger,
+// 		deps.DynamicConfigClient,
+// 		deps.MetricReporters.serverReporter,
+// 		deps.MetricReporters.sdkReporter,
+// 		deps.Cfg.Services[primitives.MatchingService],
+// 		deps.Cfg.ClusterMetadata,
+// 		deps.TlsConfigProvider,
+// 		deps.Cfg.Services,
+// 		&deps.Cfg.Global.Membership,
+// 		&deps.Cfg.Persistence,
+// 		deps.PersistenceServiceResolver,
+// 		deps.CustomDatastoreFactory,
+// 	)
+// 	return svc, err
+// }
 
 type ServicesMap map[string]common.Daemon
 func ServicesProvider(

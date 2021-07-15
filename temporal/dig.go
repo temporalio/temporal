@@ -126,8 +126,8 @@ func InjectServerProviders(dc *dig.Container, c *cli.Context) error {
 	if err := dc.Provide(AdvancedVisibilityWritingModeProvider); err != nil {
 		return err
 	}
-	if err := dc.Provide(MatchingServiceProvider); err != nil {
-		return err
-	}
+	// if err := dc.Provide(MatchingServiceProvider); err != nil {
+	// 	return err
+	// }
 	return nil
 }
