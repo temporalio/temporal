@@ -592,9 +592,14 @@ func newAdminClusterCommands() []cli.Command {
 			Aliases: []string{"asa"},
 			Usage:   "Add custom search attributes",
 			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:     FlagSkipSchemaUpdate,
+					Usage:    "Skip Elasticsearch index schema update (only register in metadata)",
+					Required: false,
+				},
 				cli.StringFlag{
 					Name:   FlagIndex,
-					Usage:  "ES index name (optional)",
+					Usage:  "Elasticsearch index name (optional)",
 					Hidden: true, // don't show it for now
 				},
 				cli.StringSliceFlag{
@@ -613,11 +618,11 @@ func newAdminClusterCommands() []cli.Command {
 		{
 			Name:    "remove-search-attributes",
 			Aliases: []string{"rsa"},
-			Usage:   "Remove custom search attributes metadata only (Elasticsearch schema is not modified)",
+			Usage:   "Remove custom search attributes metadata only (Elasticsearch index schema is not modified)",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:   FlagIndex,
-					Usage:  "ES index name (optional)",
+					Usage:  "Elasticsearch index name (optional)",
 					Hidden: true, // don't show it for now
 				},
 				cli.StringSliceFlag{
@@ -640,7 +645,7 @@ func newAdminClusterCommands() []cli.Command {
 				},
 				cli.StringFlag{
 					Name:   FlagIndex,
-					Usage:  "ES index name (optional)",
+					Usage:  "Elasticsearch index name (optional)",
 					Hidden: true, // don't show it for now
 				},
 			},

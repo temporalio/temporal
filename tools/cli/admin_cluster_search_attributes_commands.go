@@ -91,6 +91,7 @@ func AdminAddSearchAttributes(c *cli.Context) {
 	request := &adminservice.AddSearchAttributesRequest{
 		SearchAttributes: searchAttributes,
 		IndexName:        c.String(FlagIndex),
+		SkipSchemaUpdate: c.Bool(FlagSkipSchemaUpdate),
 	}
 
 	_, err = adminClient.AddSearchAttributes(ctx, request)
