@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/tools/cli/dataconverter"
 	"go.temporal.io/server/tools/cli/headersprovider"
 	"go.temporal.io/server/tools/cli/plugin"
 )
@@ -104,6 +105,7 @@ func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Cl
 			DisableHealthCheck: true,
 			TLS:                tlsConfig,
 		},
+		DataConverter:   dataconverter.GetCurrent(),
 		HeadersProvider: headersprovider.GetCurrent(),
 	})
 	if err != nil {

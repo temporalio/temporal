@@ -56,7 +56,7 @@ func newPluginClient(kind string, name string) (interface{}, error) {
 		Managed:         true,
 		Logger: hclog.New(&hclog.LoggerOptions{
 			Name:  "tctl",
-			Level: hclog.LevelFromString("INFO"),
+			Level: hclog.LevelFromString("DEBUG"),
 		}),
 	})
 

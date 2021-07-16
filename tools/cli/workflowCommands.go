@@ -280,7 +280,6 @@ func unmarshalInputsFromCLI(c *cli.Context) []interface{} {
 			}
 			result = append(result, j)
 		}
-
 	}
 
 	return result

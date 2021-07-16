@@ -22,7 +22,9 @@
 
 package dataconverter
 
-import "go.temporal.io/sdk/converter"
+import (
+	"go.temporal.io/sdk/converter"
+)
 
 var (
 	dataConverter = converter.GetDefaultDataConverter()

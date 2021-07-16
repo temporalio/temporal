@@ -25,7 +25,9 @@ package plugin
 import (
 	"fmt"
 	"net/rpc"
+	"reflect"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/go-plugin"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
@@ -49,17 +51,55 @@ func NewDataConverterPlugin(name string) (converter.DataConverter, error) {
 	return dataConverter, nil
 }
 
+type DataConverterFromPayloadRequest struct {
+	Payload *commonpb.Payload
+	Value   interface{}
+}
+
+type DataConverterFromPayloadResponse struct {
+	Value interface{}
+}
+
+type DataConverterFromPayloadsRequest struct {
+	Payloads *commonpb.Payloads
+	Values   []interface{}
+}
+
+type DataConverterFromPayloadsResponse struct {
+	Values []interface{}
+}
+
 func (g *DataConverterRPC) FromPayload(payload *commonpb.Payload, valuePtr interface{}) error {
-	err := g.client.Call("Plugin.FromPayload", payload, valuePtr)
+	req := DataConverterFromPayloadRequest{
+		Payload: payload,
+		Value:   valuePtr,
+	}
+
+	resp := DataConverterFromPayloadResponse{}
+
+	spew.Dump(valuePtr)
+
+	err := g.client.Call("Plugin.FromPayload", req, &resp)
 	if err != nil {
 		return err
 	}
+
+	val := reflect.ValueOf(valuePtr).Elem()
+	newVal := reflect.Indirect(reflect.ValueOf(resp.Value))
+
+	val.Set(newVal)
 
 	return nil
 }
 
 func (g *DataConverterRPC) FromPayloads(payloads *commonpb.Payloads, valuePtr ...interface{}) error {
-	err := g.client.Call("Plugin.FromPayloads", payloads, valuePtr)
+	req := DataConverterFromPayloadsRequest{
+		Payloads: payloads,
+		Values:   valuePtr,
+	}
+	resp := DataConverterFromPayloadsResponse{}
+
+	err := g.client.Call("Plugin.FromPayloads", req, &resp)
 	if err != nil {
 		return err
 	}
@@ -68,23 +108,23 @@ func (g *DataConverterRPC) FromPayloads(payloads *commonpb.Payloads, valuePtr ..
 }
 
 func (g *DataConverterRPC) ToPayload(value interface{}) (*commonpb.Payload, error) {
-	var payload commonpb.Payload
-	err := g.client.Call("Plugin.ToPayload", value, &payload)
+	var resp commonpb.Payload
+	err := g.client.Call("Plugin.ToPayload", value, &resp)
 	if err != nil {
 		return nil, err
 	}
 
-	return &payload, nil
+	return &resp, nil
 }
 
 func (g *DataConverterRPC) ToPayloads(values ...interface{}) (*commonpb.Payloads, error) {
-	var payloads commonpb.Payloads
-	err := g.client.Call("Plugin.ToPayloads", values, &payloads)
+	var resp commonpb.Payloads
+	err := g.client.Call("Plugin.ToPayloads", values, &resp)
 	if err != nil {
 		return nil, err
 	}
 
-	return &payloads, nil
+	return &resp, nil
 }
 
 func (g *DataConverterRPC) ToString(input *commonpb.Payload) string {
@@ -111,17 +151,18 @@ type DataConverterRPCServer struct {
 	Impl converter.DataConverter
 }
 
-func (s *DataConverterRPCServer) FromPayload(input *commonpb.Payload, resp *interface{}) error {
-	var result interface{}
-	err := s.Impl.FromPayload(input, result)
-	resp = &result
+func (s *DataConverterRPCServer) FromPayload(req DataConverterFromPayloadRequest, resp *DataConverterFromPayloadResponse) error {
+	resp.Value = req.Value
+	err := s.Impl.FromPayload(req.Payload, &resp.Value)
+
 	return err
 }
 
-func (s *DataConverterRPCServer) FromPayloads(input *commonpb.Payloads, resp *[]interface{}) error {
-	var results []interface{}
-	err := s.Impl.FromPayloads(input, results)
-	resp = &results
+func (s *DataConverterRPCServer) FromPayloads(req DataConverterFromPayloadsRequest, resp *DataConverterFromPayloadsResponse) error {
+	resp.Values = req.Values
+
+	err := s.Impl.FromPayloads(req.Payloads, resp.Values)
+
 	return err
 }
 
@@ -131,7 +172,8 @@ func (s *DataConverterRPCServer) ToPayload(value interface{}, resp *commonpb.Pay
 }
 
 func (s *DataConverterRPCServer) ToPayloads(values []interface{}, resp *commonpb.Payloads) error {
-	resp, err := s.Impl.ToPayloads(values)
+	result, err := s.Impl.ToPayloads(values...)
+	*resp = *result
 	return err
 }
 
