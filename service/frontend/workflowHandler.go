@@ -766,9 +766,9 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 
 	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
-		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
-		// cancelOutstandingPoll returns nil error only if it caller context was cancelled.
-		if err == nil {
+		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
+		if contextWasCanceled {
+			// Clear error as we don't want to report context cancellation error to count against our SLA.
 			// It doesn't matter what to return here, client has already gone. But (nil,nil) is invalid gogo return pair.
 			return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
 		}
@@ -1031,9 +1031,9 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 
 	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
-		err = wh.cancelOutstandingPoll(ctx, err, namespaceID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, request.TaskQueue, pollerID)
-		// cancelOutstandingPoll returns nil error only if it caller context was cancelled.
-		if err == nil {
+		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, request.TaskQueue, pollerID)
+		if contextWasCanceled {
+			// Clear error as we don't want to report context cancellation error to count against our SLA.
 			// It doesn't matter what to return here, client has already gone. But (nil,nil) is invalid gogo return pair.
 			return &workflowservice.PollActivityTaskQueueResponse{}, nil
 		}
@@ -3393,28 +3393,28 @@ func (wh *WorkflowHandler) isListRequestPageSizeTooLarge(pageSize int32, namespa
 		pageSize > int32(wh.config.ESIndexMaxResultWindow())
 }
 
-func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error, namespaceID string, taskQueueType enumspb.TaskQueueType,
-	taskQueue *taskqueuepb.TaskQueue, pollerID string) error {
+// cancelOutstandingPoll cancel outstanding poll if context was canceled and returns true. Otherwise returns false.
+func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, namespaceID string, taskQueueType enumspb.TaskQueueType,
+	taskQueue *taskqueuepb.TaskQueue, pollerID string) bool {
 	// First check if this err is due to context cancellation.  This means client connection to frontend is closed.
 	if ctx.Err() != context.Canceled {
-		return err
+		return false
 	}
 	// Our rpc stack does not propagates context cancellation to the other service.  Lets make an explicit
 	// call to matching to notify this poller is gone to prevent any tasks being dispatched to zombie pollers.
-	_, err = wh.GetMatchingClient().CancelOutstandingPoll(context.Background(), &matchingservice.CancelOutstandingPollRequest{
+	_, err := wh.GetMatchingClient().CancelOutstandingPoll(context.Background(), &matchingservice.CancelOutstandingPollRequest{
 		NamespaceId:   namespaceID,
 		TaskQueueType: taskQueueType,
 		TaskQueue:     taskQueue,
 		PollerId:      pollerID,
 	})
-	// We can not do much if this call fails.  Just log the error and move on
+	// We can not do much if this call fails.  Just log the error and move on.
 	if err != nil {
 		wh.GetLogger().Warn("Failed to cancel outstanding poller.",
 			tag.WorkflowTaskQueueName(taskQueue.GetName()), tag.Error(err))
 	}
 
-	// clear error as we don't want to report context cancellation error to count against our SLA
-	return nil
+	return true
 }
 
 func (wh *WorkflowHandler) checkBadBinary(namespaceEntry *cache.NamespaceCacheEntry, binaryChecksum string) error {
