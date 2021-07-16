@@ -31,15 +31,13 @@ import (
 
 	"github.com/gogo/status"
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/backoff"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/keepalive"
-
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
+	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -62,7 +60,7 @@ const (
 // The hostName syntax is defined in
 // https://github.com/grpc/grpc/blob/master/doc/naming.md.
 // e.g. to use dns resolver, a "dns:///" prefix should be applied to the target.
-func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, enableKeepAlive bool) (*grpc.ClientConn, error) {
+func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger) (*grpc.ClientConn, error) {
 	// Default to insecure
 	grpcSecureOpt := grpc.WithInsecure()
 	if tlsConfig != nil {
@@ -91,14 +89,6 @@ func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, enableKeepA
 		grpc.WithDefaultServiceConfig(DefaultServiceConfig),
 		grpc.WithDisableServiceConfig(),
 		grpc.WithConnectParams(cp),
-	}
-
-	if enableKeepAlive {
-		dialOptions = append(dialOptions, grpc.WithKeepaliveParams(
-			keepalive.ClientParameters{
-				Time: 10 * time.Second,
-			},
-		))
 	}
 
 	return grpc.Dial(
