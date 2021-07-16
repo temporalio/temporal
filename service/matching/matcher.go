@@ -330,9 +330,8 @@ func (tm *TaskMatcher) poll(ctx context.Context, queryOnly bool) (*internalTask,
 	// if multiple cases are ready, so split into multiple selects.
 	// The priority order is:
 	// 1. ctx.Done
-	// 2. taskC
-	// 3. queryTaskC
-	// 4. forwarding
+	// 2. taskC and queryTaskC
+	// 3. forwarding
 	// To correctly handle priorities and allow any case to succeed, all select
 	// statements except for the last one must be non-blocking, and the last one
 	// must include all the previous cases.
@@ -345,17 +344,14 @@ func (tm *TaskMatcher) poll(ctx context.Context, queryOnly bool) (*internalTask,
 	default:
 	}
 
-	// 2. taskC
+	// 2. taskC and queryTaskC
 	select {
 	case task := <-taskC:
-		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
+		if task.responseC != nil {
+			tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
+		}
 		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
 		return task, nil
-	default:
-	}
-
-	// 3. queryTaskC
-	select {
 	case task := <-queryTaskC:
 		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
 		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
@@ -363,13 +359,15 @@ func (tm *TaskMatcher) poll(ctx context.Context, queryOnly bool) (*internalTask,
 	default:
 	}
 
-	// 4. forwarding (and all other clauses repeated again)
+	// 3. forwarding (and all other clauses repeated again)
 	select {
 	case <-ctx.Done():
 		tm.scope().IncCounter(metrics.PollTimeoutPerTaskQueueCounter)
 		return nil, ErrNoTasks
 	case task := <-taskC:
-		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
+		if task.responseC != nil {
+			tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
+		}
 		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
 		return task, nil
 	case task := <-queryTaskC:
