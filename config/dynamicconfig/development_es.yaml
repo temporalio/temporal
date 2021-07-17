@@ -34,3 +34,6 @@ system.advancedVisibilityWritingMode:
 system.enableReadVisibilityFromES:
   - value: true
     constraints: {}
+history.visibilityTaskWorkerCount:
+  - value: 10
+    constraints: {}

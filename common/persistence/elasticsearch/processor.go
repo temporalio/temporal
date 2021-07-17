@@ -257,7 +257,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 		}
 
 		switch {
-		case isSuccessStatus(responseItem.Status):
+		case isSuccess(responseItem):
 			p.sendToAckChan(visibilityTaskKey, true)
 		case !client.IsRetryableStatus(responseItem.Status):
 			p.logger.Error("ES request failed.",
@@ -365,12 +365,25 @@ func (p *processorImpl) extractDocID(request elastic.BulkableRequest) string {
 	return ""
 }
 
-// 409 - Version Conflict
-// 404 - Not Found
-func isSuccessStatus(status int) bool {
-	if status >= 200 && status < 300 || status == 409 || status == 404 {
+func isSuccess(item *elastic.BulkResponseItem) bool {
+	if item.Status >= 200 && item.Status < 300 {
 		return true
 	}
+
+	// Ignore version conflict.
+	if item.Status == 409 {
+		return true
+	}
+
+	if item.Status == 404 {
+		if item.Error != nil && item.Error.Type == "index_not_found_exception" {
+			return false
+		}
+
+		// Ignore document not found during delete operation.
+		return true
+	}
+
 	return false
 }
 
