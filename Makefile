@@ -24,6 +24,7 @@ update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc fix-
 .PHONY: proto
 
 ##### Variables ######
+
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 GOPATH ?= $(shell go env GOPATH)
@@ -101,6 +102,10 @@ SUMMARY_COVER_PROFILE      := $(COVER_ROOT)/summary_coverprofile.out
 #   The default is for each test to analyze only the package being tested.
 #   Packages are specified as import paths.
 INTEG_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/common/...,$(MODULE_ROOT)/service/..."
+
+ifndef DOCKER_IMAGE_TAG
+DOCKER_IMAGE_TAG := "test"
+endif
 
 ##### Tools #####
 update-checkers:
@@ -453,6 +458,23 @@ fossa-test:
 	fossa test --timeout 1800 --no-ansi
 
 build-fossa: bins fossa-init fossa-analyze fossa-test
+
+##### Docker #####
+docker-server:
+	@printf $(COLOR) "Building docker image temporalio/server:$(DOCKE_IMAGE_TAG)..."
+	docker build . -t temporalio/server:$(DOCKE_IMAGE_TAG) --build-arg TARGET=server
+
+docker-auto-setup:
+	@printf $(COLOR) "Build docker image temporalio/auto-setup:$(DOCKE_IMAGE_TAG)..."
+	docker build . -t temporalio/auto-setup:$(DOCKE_IMAGE_TAG) --build-arg TARGET=auto-setup
+
+docker-tctl:
+	@printf $(COLOR) "Build docker image temporalio/tctl:$(DOCKE_IMAGE_TAG)..."
+	docker build . -t temporalio/tctl:$(DOCKE_IMAGE_TAG) --build-arg TARGET=tctl
+
+docker-admin-tools:
+	@printf $(COLOR) "Build docker image temporalio/admin-tools:$(DOCKE_IMAGE_TAG)..."
+	docker build . -t temporalio/admin-tools:$(DOCKE_IMAGE_TAG) --build-arg TARGET=admin-tools
 
 ##### Auxilary #####
 gomodtidy:
