@@ -448,16 +448,23 @@ func (s *processorSuite) TestExtractVisibilityTaskKey_Delete() {
 }
 
 func (s *processorSuite) TestIsResponseSuccess() {
-	for i := 200; i < 300; i++ {
-		s.True(isSuccessStatus(i))
+	item := &elastic.BulkResponseItem{}
+
+	for status := 200; status < 300; status++ {
+		item.Status = status
+		s.True(isSuccess(item))
 	}
-	status := []int{409, 404}
-	for _, code := range status {
-		s.True(isSuccessStatus(code))
-	}
-	status = []int{100, 199, 300, 400, 500, 408, 429, 503, 507}
-	for _, code := range status {
-		s.False(isSuccessStatus(code))
+
+	item.Status = 409
+	s.True(isSuccess(item))
+	item.Status = 404
+	s.True(isSuccess(item))
+	item.Error = &elastic.ErrorDetails{Type: "index_not_found_exception"}
+	s.False(isSuccess(item))
+
+	for _, status := range []int{100, 199, 300, 400, 500, 408, 429, 503, 507} {
+		item.Status = status
+		s.False(isSuccess(item))
 	}
 }
 
