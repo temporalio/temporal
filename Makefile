@@ -23,10 +23,21 @@ update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc fix-
 
 .PHONY: proto
 
-##### Variables ######
+##### Arguments ######
+
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 GOPATH ?= $(shell go env GOPATH)
+
+PERSISTENCE_TYPE ?= nosql
+PERSISTENCE_DRIVER ?= cassandra
+
+# Optional args to create multiple keyspaces:
+# make install-schema TEMPORAL_DB=temporal2 VISIBILITY_DB=temporal_visibility2
+TEMPORAL_DB ?= temporal
+VISIBILITY_DB ?= temporal_visibility
+
+DOCKER_IMAGE_TAG ?= test
 
 # Name resolution requires cgo to be enabled on macOS and Windows: https://golang.org/pkg/net/#hdr-Name_Resolution.
 ifndef CGO_ENABLED
@@ -36,6 +47,12 @@ ifndef CGO_ENABLED
 	CGO_ENABLED := 1
 	endif
 endif
+
+ifdef TEST_TAG
+override TEST_TAG := -tags $(TEST_TAG)
+endif
+
+##### Variables ######
 
 GOBIN := $(if $(shell go env GOBIN),$(shell go env GOBIN),$(GOPATH)/bin)
 PATH := $(GOBIN):$(PATH)
@@ -54,18 +71,6 @@ TEST_TIMEOUT := 20m
 INTEG_TEST_ROOT        := ./host
 INTEG_TEST_XDC_ROOT    := ./host/xdc
 INTEG_TEST_NDC_ROOT    := ./host/ndc
-
-PERSISTENCE_TYPE ?= nosql
-PERSISTENCE_DRIVER ?= cassandra
-
-# optional args to make it possible to create multiple keyspaces:
-# make install-schema TEMPORAL_DB=temporal2 VISIBILITY_DB=temporal_visibility2
-TEMPORAL_DB ?= temporal
-VISIBILITY_DB ?= temporal_visibility
-
-ifdef TEST_TAG
-override TEST_TAG := -tags $(TEST_TAG)
-endif
 
 PROTO_ROOT := proto
 PROTO_FILES = $(shell find ./$(PROTO_ROOT)/internal -name "*.proto")
@@ -453,6 +458,23 @@ fossa-test:
 	fossa test --timeout 1800 --no-ansi
 
 build-fossa: bins fossa-init fossa-analyze fossa-test
+
+##### Docker #####
+docker-server:
+	@printf $(COLOR) "Building docker image temporalio/server:$(DOCKER_IMAGE_TAG)..."
+	docker build . -t temporalio/server:$(DOCKER_IMAGE_TAG) --build-arg TARGET=server
+
+docker-auto-setup:
+	@printf $(COLOR) "Build docker image temporalio/auto-setup:$(DOCKER_IMAGE_TAG)..."
+	docker build . -t temporalio/auto-setup:$(DOCKER_IMAGE_TAG) --build-arg TARGET=auto-setup
+
+docker-tctl:
+	@printf $(COLOR) "Build docker image temporalio/tctl:$(DOCKER_IMAGE_TAG)..."
+	docker build . -t temporalio/tctl:$(DOCKER_IMAGE_TAG) --build-arg TARGET=tctl
+
+docker-admin-tools:
+	@printf $(COLOR) "Build docker image temporalio/admin-tools:$(DOCKER_IMAGE_TAG)..."
+	docker build . -t temporalio/admin-tools:$(DOCKER_IMAGE_TAG) --build-arg TARGET=admin-tools
 
 ##### Auxilary #####
 gomodtidy:

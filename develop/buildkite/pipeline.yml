@@ -201,16 +201,3 @@ steps:
           run: coverage-report
           config: ./develop/buildkite/docker-compose.yml
 
-  - label: ":docker: build and push master"
-    agents:
-      queue: "default"
-      docker: "*"
-    branches: "master"
-    command: "./develop/buildkite/scripts/docker-push.sh"
-    retry:
-      automatic:
-        limit: 1
-    plugins:
-      - docker-login#v2.0.1:
-          username: temporaltech
-          password-env: DOCKER_LOGIN_PASSWORD
