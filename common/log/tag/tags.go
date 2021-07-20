@@ -858,3 +858,8 @@ func TLSKeyFile(filePath string) ZapTag {
 func TLSCertFiles(filePaths []string) ZapTag {
 	return NewStringsTag("tls-cert-files", filePaths)
 }
+
+// Timeout returns tag for timeout
+func Timeout(timeoutValue string) ZapTag {
+	return NewStringTag("timeout", timeoutValue)
+}
