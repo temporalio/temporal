@@ -31,8 +31,10 @@ import (
 	"reflect"
 	"sort"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
 var (
@@ -199,11 +201,27 @@ func extractCurrentWorkflowConflictError(
 
 	actualCurrentRunID := gocql.UUIDToString(record["current_run_id"])
 	if actualCurrentRunID != requestCurrentRunID {
+		binary, _ := record["execution_state"].([]byte)
+		encoding, _ := record["execution_state_encoding"].(string)
+		executionState := &persistencespb.WorkflowExecutionState{}
+		if state, err := serialization.WorkflowExecutionStateFromBlob(binary, encoding); err != nil {
+			// noop, this means execution state cannot be parsed
+		} else {
+			executionState = state
+		}
+		lastWriteVersion, _ := record["workflow_last_write_version"].(int64)
+
+		// TODO maybe assert actualCurrentRunID == executionState.RunId ?
+
 		return &p.CurrentWorkflowConditionFailedError{
 			Msg: fmt.Sprintf("Encounter concurrent workflow error, request run ID: %v, actual run ID: %v",
 				requestCurrentRunID,
 				actualCurrentRunID,
 			),
+			RequestID:        executionState.CreateRequestId,
+			RunID:            executionState.RunId,
+			State:            executionState.State,
+			LastWriteVersion: lastWriteVersion,
 		}
 	}
 	return nil
