@@ -196,7 +196,7 @@ func newTaskQueueManager(
 
 	idblock := noTaskIDs
 	state, err := tlMgr.renewLeaseWithRetry()
-	if errIndicatesForeignLessee(err) {
+	if err != nil && tlMgr.errShouldUnload(err) {
 		return nil, err
 	}
 	if err == nil {
@@ -213,6 +213,10 @@ func newTaskQueueManager(
 	}
 	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.metricScope)
 	return tlMgr, nil
+}
+
+func (c *taskQueueManagerImpl) errShouldUnload(err error) bool {
+	return err != nil && (errIndicatesForeignLessee(err) || !c.config.ResilientSyncMatch())
 }
 
 func errIndicatesForeignLessee(err error) bool {
@@ -489,7 +493,7 @@ func (c *taskQueueManagerImpl) renewLeaseWithRetry() (taskQueueState, error) {
 	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		c.metricScope().IncCounter(metrics.LeaseFailurePerTaskQueueCounter)
-		if errIndicatesForeignLessee(err) {
+		if c.errShouldUnload(err) {
 			c.engine.unloadTaskQueue(c.taskQueueID)
 		}
 		return newState, err
