@@ -109,8 +109,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	cfg := &config.VisibilityConfig{
-		ESIndexMaxResultWindow: dynamicconfig.GetIntPropertyFn(3),
-		ESProcessorAckTimeout:  dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
+		ESProcessorAckTimeout: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 	}
 
 	s.controller = gomock.NewController(s.T())
@@ -333,14 +332,18 @@ func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution_NoRunID() {
 
 func (s *ESVisibilitySuite) TestGetNextPageToken() {
 	token, err := s.visibilityStore.getNextPageToken([]byte{})
-	s.Equal(0, token.From)
 	s.NoError(err)
+	s.Nil(token.SortValue)
+	s.Empty(token.TieBreaker)
 
-	from := 5
-	input, err := s.visibilityStore.serializePageToken(&visibilityPageToken{From: from})
+	input, err := s.visibilityStore.serializePageToken(&visibilityPageToken{SortValue: 123, TieBreaker: "qwe"})
 	s.NoError(err)
 	token, err = s.visibilityStore.getNextPageToken(input)
-	s.Equal(from, token.From)
+	s.NoError(err)
+	tokenSortValue, err := token.SortValue.(json.Number).Int64()
+	s.NoError(err)
+	s.Equal(int64(123), tokenSortValue)
+	s.Equal("qwe", token.TieBreaker)
 	s.NoError(err)
 
 	badInput := []byte("bad input")
@@ -351,8 +354,7 @@ func (s *ESVisibilitySuite) TestGetNextPageToken() {
 
 func (s *ESVisibilitySuite) TestGetSearchResult() {
 	request := createTestRequest()
-	from := 1
-	token := &visibilityPageToken{From: from}
+	token := &visibilityPageToken{SortValue: 123, TieBreaker: "qwe"}
 
 	matchNamespaceQuery := elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID)
 	runningQuery := elastic.NewTermQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
@@ -362,11 +364,11 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	rangeQuery := elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
 	boolQuery := elastic.NewBoolQuery().Filter(runningQuery).Filter(matchNamespaceQuery).Filter(rangeQuery)
 	params := &client.SearchParameters{
-		Index:    testIndex,
-		Query:    boolQuery,
-		From:     from,
-		PageSize: testPageSize,
-		Sorter:   []elastic.Sorter{elastic.NewFieldSort(searchattribute.StartTime).Desc(), tieBreakerSorter},
+		Index:       testIndex,
+		Query:       boolQuery,
+		SearchAfter: []interface{}{123, "qwe"},
+		PageSize:    testPageSize,
+		Sorter:      []elastic.Sorter{elastic.NewFieldSort(searchattribute.StartTime).Desc(), tieBreakerSorter},
 	}
 	s.mockESClient.EXPECT().Search(gomock.Any(), params).Return(nil, nil)
 	_, err := s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
@@ -377,11 +379,11 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	rangeQuery1 := elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
 	boolQuery1 := elastic.NewBoolQuery().Filter(runningQuery).Filter(matchNamespaceQuery).Filter(rangeQuery1)
 	param1 := &client.SearchParameters{
-		Index:    testIndex,
-		Query:    boolQuery1,
-		From:     from,
-		PageSize: testPageSize,
-		Sorter:   []elastic.Sorter{elastic.NewFieldSort(searchattribute.StartTime).Desc(), tieBreakerSorter},
+		Index:       testIndex,
+		Query:       boolQuery1,
+		SearchAfter: []interface{}{123, "qwe"},
+		PageSize:    testPageSize,
+		Sorter:      []elastic.Sorter{elastic.NewFieldSort(searchattribute.StartTime).Desc(), tieBreakerSorter},
 	}
 	s.mockESClient.EXPECT().Search(gomock.Any(), param1).Return(nil, nil)
 	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
@@ -406,12 +408,10 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 	s.NoError(err)
 
 	// test for search after
-	runID := "runID"
 	token = &visibilityPageToken{
 		SortValue:  request.LatestStartTime,
-		TieBreaker: runID,
+		TieBreaker: "qwe",
 	}
-	params.From = 0
 	params.SearchAfter = []interface{}{token.SortValue, token.TieBreaker}
 	s.mockESClient.EXPECT().Search(gomock.Any(), params).Return(nil, nil)
 	_, err = s.visibilityStore.getSearchResult(request, token, elastic.NewBoolQuery().Filter(matchQuery), false)
@@ -419,13 +419,11 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 }
 
 func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
-	token := &visibilityPageToken{From: 0}
-
 	// test for empty hits
 	searchHits := &elastic.SearchHits{
 		TotalHits: &elastic.TotalHits{},
 	}
-	resp, err := s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, 1, nil)
+	resp, err := s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, 1, nil)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(0, len(resp.Executions))
@@ -448,29 +446,25 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	}
 	searchHits.Hits = []*elastic.SearchHit{searchHit}
 	searchHits.TotalHits.Value = 1
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, 1, nil)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, 1, nil)
 	s.NoError(err)
-	serializedToken, _ := s.visibilityStore.serializePageToken(&visibilityPageToken{From: 1})
+	serializedToken, _ := s.visibilityStore.serializePageToken(&visibilityPageToken{SortValue: 1547596872371000000, TieBreaker: "e481009e-14b3-45ae-91af-dce6e2a88365"})
 	s.Equal(serializedToken, resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
 
 	// test for last page hits
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, 2, nil)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, 2, nil)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(1, len(resp.Executions))
 
 	// test for search after
-	token = &visibilityPageToken{}
 	searchHits.Hits = []*elastic.SearchHit{}
-	searchHits.TotalHits = &elastic.TotalHits{
-		Value: int64(s.visibilityStore.config.ESIndexMaxResultWindow() + 1),
-	}
 	for i := int64(0); i < searchHits.TotalHits.Value; i++ {
 		searchHits.Hits = append(searchHits.Hits, searchHit)
 	}
 	numOfHits := len(searchHits.Hits)
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, numOfHits, nil)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, numOfHits, nil)
 	s.NoError(err)
 	s.Equal(numOfHits, len(resp.Executions))
 	nextPageToken, err := s.visibilityStore.deserializePageToken(resp.NextPageToken)
@@ -479,31 +473,25 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.NoError(err)
 	s.Equal(int64(1547596872371000000), resultSortValue)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", nextPageToken.TieBreaker)
-	s.Equal(0, nextPageToken.From)
 	// for last page
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, token, numOfHits+1, nil)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, numOfHits+1, nil)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(numOfHits, len(resp.Executions))
 }
 
 func (s *ESVisibilitySuite) TestDeserializePageToken() {
-	token := &visibilityPageToken{From: 0}
-	data, _ := s.visibilityStore.serializePageToken(token)
-	result, err := s.visibilityStore.deserializePageToken(data)
-	s.NoError(err)
-	s.Equal(token, result)
-
 	badInput := []byte("bad input")
-	result, err = s.visibilityStore.deserializePageToken(badInput)
+	result, err := s.visibilityStore.deserializePageToken(badInput)
 	s.Error(err)
 	s.Nil(result)
 	err, ok := err.(*serviceerror.InvalidArgument)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "unable to deserialize page token"))
 
-	token = &visibilityPageToken{SortValue: int64(64), TieBreaker: "unique"}
-	data, _ = s.visibilityStore.serializePageToken(token)
+	token := &visibilityPageToken{SortValue: int64(64), TieBreaker: "unique"}
+	data, err := s.visibilityStore.serializePageToken(token)
+	s.NoError(err)
 	result, err = s.visibilityStore.deserializePageToken(data)
 	s.NoError(err)
 	resultSortValue, err := result.SortValue.(json.Number).Int64()
@@ -517,21 +505,12 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 	s.True(len(data) > 0)
 	token, err := s.visibilityStore.deserializePageToken(data)
 	s.NoError(err)
-	s.Equal(0, token.From)
-	s.Equal(nil, token.SortValue)
-	s.Equal("", token.TieBreaker)
-
-	newToken := &visibilityPageToken{From: 5}
-	data, err = s.visibilityStore.serializePageToken(newToken)
-	s.NoError(err)
-	s.True(len(data) > 0)
-	token, err = s.visibilityStore.deserializePageToken(data)
-	s.NoError(err)
-	s.Equal(newToken, token)
+	s.Nil(token.SortValue)
+	s.Empty(token.TieBreaker)
 
 	sortTime := int64(123)
 	tieBreaker := "unique"
-	newToken = &visibilityPageToken{SortValue: sortTime, TieBreaker: tieBreaker}
+	newToken := &visibilityPageToken{SortValue: sortTime, TieBreaker: tieBreaker}
 	data, err = s.visibilityStore.serializePageToken(newToken)
 	s.NoError(err)
 	s.True(len(data) > 0)
@@ -639,14 +618,6 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
 
 	_, ok := info.SearchAttributes["UnknownField"]
 	s.False(ok)
-}
-
-func (s *ESVisibilitySuite) TestShouldSearchAfter() {
-	token := &visibilityPageToken{}
-	s.False(shouldSearchAfter(token))
-
-	token.TieBreaker = "a"
-	s.True(shouldSearchAfter(token))
 }
 
 // nolint
