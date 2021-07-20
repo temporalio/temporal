@@ -204,11 +204,14 @@ func extractCurrentWorkflowConflictError(
 		binary, _ := record["execution_state"].([]byte)
 		encoding, _ := record["execution_state_encoding"].(string)
 		executionState := &persistencespb.WorkflowExecutionState{}
-		if state, err := serialization.WorkflowExecutionStateFromBlob(binary, encoding); err != nil {
-			// noop, this means execution state cannot be parsed
-		} else {
+		if state, err := serialization.WorkflowExecutionStateFromBlob(
+			binary,
+			encoding,
+		); err == nil {
 			executionState = state
 		}
+		// if err != nil, this means execution state cannot be parsed, just use default values
+
 		lastWriteVersion, _ := record["workflow_last_write_version"].(int64)
 
 		// TODO maybe assert actualCurrentRunID == executionState.RunId ?
