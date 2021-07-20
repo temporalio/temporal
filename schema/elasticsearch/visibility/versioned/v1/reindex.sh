@@ -19,6 +19,7 @@ ES_VIS_INDEX_V0="${ES_VIS_INDEX_V0:-temporal-visibility-dev}"
 ES_VIS_INDEX_V1="${ES_VIS_INDEX_V1:-temporal_visibility_v1_dev}"
 CUSTOM_SEARCH_ATTRIBUTES="${CUSTOM_SEARCH_ATTRIBUTES:-[\"CustomKeywordField\",\"CustomStringField\",\"CustomIntField\",\"CustomDatetimeField\",\"CustomDoubleField\",\"CustomBoolField\"]}"
 AUTO_CONFIRM="${AUTO_CONFIRM:-}"
+SLICES_COUNT="${SLICES_COUNT:-auto}"
 
 ES_ENDPOINT="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}"
 DIR_NAME="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
@@ -95,7 +96,7 @@ else
 fi
 
 if [ "${REPLY}" = "y" ]; then
-    REINDEX_RESPONSE=$(curl --silent --user "${ES_USER}":"${ES_PWD}" -X POST "${ES_ENDPOINT}/_reindex?wait_for_completion=false&slices=auto" -H "Content-Type: application/json" --data-binary "${REINDEX_JSON}")
+    REINDEX_RESPONSE=$(curl --silent --user "${ES_USER}":"${ES_PWD}" -X POST "${ES_ENDPOINT}/_reindex?wait_for_completion=false&slices=${SLICES_COUNT}" -H "Content-Type: application/json" --data-binary "${REINDEX_JSON}")
     TASK_ID=$(jq --raw-output --raw-input 'fromjson? | .task' <<< "${REINDEX_RESPONSE}")
     if [ "${TASK_ID}" = null ] || [ "${TASK_ID}" = "" ]; then
         echo "${REINDEX_RESPONSE}"
@@ -114,8 +115,16 @@ if [ "${REPLY}" = "y" ]; then
     until curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_tasks/${TASK_ID}" | jq --exit-status '.completed==true | .'; do
         sleep 10
     done
+
+    TASK_JSON=$(curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_tasks/${TASK_ID}")
+    if jq --exit-status '.response.failures | length > 0' <<< "${TASK_JSON}"; then
+        FAILURES_COUNT=$(jq '.response.failures | length' <<< "${TASK_JSON}")
+        echo "There where ${FAILURES_COUNT} failures during reindexing. Check them with:"
+        echo "    curl ${ES_ENDPOINT}/_tasks/${TASK_ID} | jq '.response.failures'"
+    fi
+
     echo "Reindex complete:"
-    curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/_tasks/${TASK_ID}" | jq --raw-output '.task.status | with_entries(select([.key] | inside(["total", "updated", "created", "version_conflicts"])))'
+    jq --raw-output '.task.status | with_entries(select([.key] | inside(["total", "updated", "created", "version_conflicts"])))' <<< "${TASK_JSON}"
     echo "Source index ${ES_VIS_INDEX_V0} document count:"
     curl --silent --user "${ES_USER}":"${ES_PWD}" "${ES_ENDPOINT}/${ES_VIS_INDEX_V0}/_stats/docs" | jq '._all.primaries.docs.count'
     echo "Destination index ${ES_VIS_INDEX_V1} document count:"
