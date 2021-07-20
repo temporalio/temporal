@@ -48,17 +48,10 @@ func AdminAddSearchAttributes(c *cli.Context) {
 	}
 
 	adminClient := cFactory.AdminClient(c)
-	ctx, cancel := newContext(c)
-	defer cancel()
-
-	getRequest := &adminservice.GetSearchAttributesRequest{
-		IndexName: c.String(FlagIndex),
-	}
-	resp, err := adminClient.GetSearchAttributes(ctx, getRequest)
+	existingSearchAttributes, err := getSearchAttributes(c, adminClient)
 	if err != nil {
 		ErrorAndExit("Unable to get existing search attributes.", err)
 	}
-	existingSearchAttributes := resp.CustomAttributes
 
 	searchAttributes := make(map[string]enumspb.IndexedValueType, len(typeStrs))
 	for i := 0; i < len(typeStrs); i++ {
@@ -66,7 +59,7 @@ func AdminAddSearchAttributes(c *cli.Context) {
 		if err != nil {
 			ErrorAndExit(fmt.Sprintf("Unable to parse search attribute type: %s", typeStrs[i]), err)
 		}
-		existingSearchAttributeType, searchAttributeExists := existingSearchAttributes[names[i]]
+		existingSearchAttributeType, searchAttributeExists := existingSearchAttributes.CustomAttributes[names[i]]
 		if !searchAttributeExists {
 			searchAttributes[names[i]] = enumspb.IndexedValueType(typeInt)
 			continue
@@ -79,6 +72,11 @@ func AdminAddSearchAttributes(c *cli.Context) {
 	if len(searchAttributes) == 0 {
 		color.HiYellow("No search attributes to add.")
 		return
+	}
+
+	if c.Bool(FlagSkipSchemaUpdate) {
+		promptMsg := color.RedString("This command will only modify search attributes metadata. You need to modify Elasticsearch schema manually prior to running this command. Continue? Y/N")
+		prompt(promptMsg, c.GlobalBool(FlagAutoConfirm))
 	}
 
 	// ask user for confirmation
@@ -94,16 +92,17 @@ func AdminAddSearchAttributes(c *cli.Context) {
 		SkipSchemaUpdate: c.Bool(FlagSkipSchemaUpdate),
 	}
 
+	ctx, cancel := newContext(c)
+	defer cancel()
 	_, err = adminClient.AddSearchAttributes(ctx, request)
 	if err != nil {
 		ErrorAndExit("Unable to add search attributes.", err)
 	}
 
-	resp, err = adminClient.GetSearchAttributes(ctx, getRequest)
+	resp, err := getSearchAttributes(c, adminClient)
 	if err != nil {
 		ErrorAndExit("Search attributes have been added successfully but there was an error while reading them back.", err)
 	}
-
 	printSearchAttributesResponse(resp, c.String(FlagIndex))
 	color.HiGreen("Search attributes have been added successfully.")
 }
@@ -132,15 +131,10 @@ func AdminRemoveSearchAttributes(c *cli.Context) {
 		ErrorAndExit("Unable to remove search attributes.", err)
 	}
 
-	getRequest := &adminservice.GetSearchAttributesRequest{
-		IndexName: c.String(FlagIndex),
-	}
-
-	resp, err := adminClient.GetSearchAttributes(ctx, getRequest)
+	resp, err := getSearchAttributes(c, adminClient)
 	if err != nil {
 		ErrorAndExit("Search attributes have been removed successfully but there was an error while reading them back.", err)
 	}
-
 	printSearchAttributesResponse(resp, c.String(FlagIndex))
 	color.HiGreen("Search attributes have been removed successfully.")
 }
@@ -148,13 +142,7 @@ func AdminRemoveSearchAttributes(c *cli.Context) {
 // AdminGetSearchAttributes to print search attributes
 func AdminGetSearchAttributes(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
-	ctx, cancel := newContext(c)
-	defer cancel()
-	request := &adminservice.GetSearchAttributesRequest{
-		IndexName: c.String(FlagIndex),
-	}
-
-	resp, err := adminClient.GetSearchAttributes(ctx, request)
+	resp, err := getSearchAttributes(c, adminClient)
 	if err != nil {
 		ErrorAndExit("Unable to get search attributes.", err)
 	}
@@ -163,6 +151,15 @@ func AdminGetSearchAttributes(c *cli.Context) {
 		return
 	}
 	printSearchAttributesResponse(resp, c.String(FlagIndex))
+}
+
+func getSearchAttributes(c *cli.Context, adminClient adminservice.AdminServiceClient) (*adminservice.GetSearchAttributesResponse, error) {
+	ctx, cancel := newContext(c)
+	defer cancel()
+	request := &adminservice.GetSearchAttributesRequest{
+		IndexName: c.String(FlagIndex),
+	}
+	return adminClient.GetSearchAttributes(ctx, request)
 }
 
 func printSearchAttributesResponse(resp *adminservice.GetSearchAttributesResponse, indexName string) {
