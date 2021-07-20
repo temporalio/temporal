@@ -157,6 +157,10 @@ func AdminGetSearchAttributes(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Unable to get search attributes.", err)
 	}
+	if c.Bool(FlagPrintJSON) {
+		printSearchAttributesResponseJSON(resp, c.String(FlagIndex))
+		return
+	}
 	printSearchAttributesResponse(resp, c.String(FlagIndex))
 }
 
@@ -212,4 +216,29 @@ func printSearchAttributes(searchAttributes map[string]enumspb.IndexedValueType,
 	})
 	table.AppendBulk(rows)
 	table.Render()
+}
+
+func printSearchAttributesResponseJSON(resp *adminservice.GetSearchAttributesResponse, indexName string) {
+	json := &clispb.AddSearchAttributesResponse{
+		IndexName:              indexName,
+		CustomSearchAttributes: make(map[string]string, len(resp.CustomAttributes)),
+		SystemSearchAttributes: make(map[string]string, len(resp.SystemAttributes)),
+		Mapping:                resp.GetMapping(),
+		AddWorkflowExecutionInfo: &clispb.WorkflowExecutionInfo{
+			Execution: resp.GetAddWorkflowExecutionInfo().GetExecution(),
+			StartTime: resp.GetAddWorkflowExecutionInfo().GetStartTime(),
+			CloseTime: resp.GetAddWorkflowExecutionInfo().GetCloseTime(),
+			Status:    resp.GetAddWorkflowExecutionInfo().GetStatus(),
+		},
+	}
+
+	for name, value := range resp.GetCustomAttributes() {
+		json.CustomSearchAttributes[name] = value.String()
+	}
+
+	for name, value := range resp.GetSystemAttributes() {
+		json.SystemSearchAttributes[name] = value.String()
+	}
+
+	prettyPrintJSONObject(json)
 }

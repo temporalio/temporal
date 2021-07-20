@@ -635,6 +635,10 @@ func newAdminClusterCommands() []cli.Command {
 			Usage:   "Show exiting search attributes",
 			Flags: []cli.Flag{
 				cli.StringFlag{
+					Name:  FlagPrintJSONWithAlias,
+					Usage: "Output in JSON format",
+				},
+				cli.StringFlag{
 					Name:   FlagIndex,
 					Usage:  "ES index name (optional)",
 					Hidden: true, // don't show it for now

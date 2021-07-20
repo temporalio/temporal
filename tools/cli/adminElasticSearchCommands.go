@@ -157,8 +157,7 @@ func AdminIndex(c *cli.Context) {
 	esProcessor.Start()
 
 	visibilityConfigForES := &config.VisibilityConfig{
-		ESIndexMaxResultWindow: dc.GetIntPropertyFn(10000),
-		ESProcessorAckTimeout:  dc.GetDurationPropertyFn(1 * time.Minute),
+		ESProcessorAckTimeout: dc.GetDurationPropertyFn(1 * time.Minute),
 	}
 
 	// TODO: build search attribute provider to get search attributes from command line args.

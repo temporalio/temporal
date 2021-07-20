@@ -81,3 +81,11 @@ message Failure {
     Failure cause = 4;
     string failure_type = 5;
 }
+
+message AddSearchAttributesResponse {
+    string index_name = 1;
+    map<string, string> custom_search_attributes = 2;
+    map<string, string> system_search_attributes = 3;
+    map<string, string> mapping = 4;
+    WorkflowExecutionInfo add_workflow_execution_info = 5;
+}
