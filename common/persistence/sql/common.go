@@ -71,10 +71,10 @@ func (m *sqlStore) txExecute(ctx context.Context, operation string, f func(tx sq
 		switch err.(type) {
 		case *persistence.ConditionFailedError,
 			*persistence.CurrentWorkflowConditionFailedError,
-			*serviceerror.Internal,
-			*persistence.WorkflowExecutionAlreadyStartedError,
+			*persistence.WorkflowConditionFailedError,
 			*serviceerror.NamespaceAlreadyExists,
-			*persistence.ShardOwnershipLostError:
+			*persistence.ShardOwnershipLostError,
+			*serviceerror.Internal:
 			return err
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("%v: %v", operation, err))

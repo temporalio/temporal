@@ -125,7 +125,15 @@ type (
 		RequestID        string
 		RunID            string
 		State            enumsspb.WorkflowExecutionState
+		Status           enumspb.WorkflowExecutionStatus
 		LastWriteVersion int64
+	}
+
+	// WorkflowConditionFailedError represents a failed conditional update for workflow record
+	WorkflowConditionFailedError struct {
+		Msg             string
+		NextEventID     int64
+		DBRecordVersion int64
 	}
 
 	// ConditionFailedError represents a failed conditional update for execution record
@@ -142,16 +150,6 @@ type (
 	ShardOwnershipLostError struct {
 		ShardID int32
 		Msg     string
-	}
-
-	// WorkflowExecutionAlreadyStartedError is returned when creating a new workflow failed.
-	WorkflowExecutionAlreadyStartedError struct {
-		Msg              string
-		StartRequestID   string
-		RunID            string
-		State            enumsspb.WorkflowExecutionState
-		Status           enumspb.WorkflowExecutionStatus
-		LastWriteVersion int64
 	}
 
 	// TimeoutError is returned when a write operation fails due to a timeout
@@ -1368,6 +1366,10 @@ func (e *CurrentWorkflowConditionFailedError) Error() string {
 	return e.Msg
 }
 
+func (e *WorkflowConditionFailedError) Error() string {
+	return e.Msg
+}
+
 func (e *ConditionFailedError) Error() string {
 	return e.Msg
 }
@@ -1377,10 +1379,6 @@ func (e *ShardAlreadyExistError) Error() string {
 }
 
 func (e *ShardOwnershipLostError) Error() string {
-	return e.Msg
-}
-
-func (e *WorkflowExecutionAlreadyStartedError) Error() string {
 	return e.Msg
 }
 

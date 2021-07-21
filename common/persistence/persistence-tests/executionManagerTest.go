@@ -178,7 +178,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 	req.PreviousLastWriteVersion = common.EmptyVersion
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
 	s.Error(err)
-	s.IsType(&p.WorkflowExecutionAlreadyStartedError{}, err)
+	s.IsType(&p.WorkflowConditionFailedError{}, err)
 }
 
 // TestCreateWorkflowExecutionStateStatus test
@@ -757,11 +757,10 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 	s.Nil(err)
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
 	s.NotNil(err)
-	alreadyStartedErr, ok := err.(*p.WorkflowExecutionAlreadyStartedError)
-	s.True(ok, "err is not WorkflowExecutionAlreadyStartedError")
-	s.Equal(req.NewWorkflowSnapshot.ExecutionState.CreateRequestId, alreadyStartedErr.StartRequestID)
+	alreadyStartedErr, ok := err.(*p.CurrentWorkflowConditionFailedError)
+	s.True(ok, "err is not CurrentWorkflowConditionFailedError")
+	s.Equal(req.NewWorkflowSnapshot.ExecutionState.CreateRequestId, alreadyStartedErr.RequestID)
 	s.Equal(workflowExecution.GetRunId(), alreadyStartedErr.RunID)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, alreadyStartedErr.Status)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, alreadyStartedErr.State)
 }
 
@@ -1011,12 +1010,11 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 	task1, err1 := s.CreateWorkflowExecution(namespaceID, workflowExecution, "queue1", "wType1", timestamp.DurationFromSeconds(20), timestamp.DurationFromSeconds(14), 3, 0, 2, nil)
 	s.Error(err1, "Expected workflow creation to fail.")
 	log.Printf("Unable to start workflow execution: %v", err1)
-	startedErr, ok := err1.(*p.WorkflowExecutionAlreadyStartedError)
-	s.True(ok, fmt.Sprintf("Expected WorkflowExecutionAlreadyStartedError, but actual is %v", err1))
+	startedErr, ok := err1.(*p.CurrentWorkflowConditionFailedError)
+	s.True(ok, fmt.Sprintf("Expected CurrentWorkflowConditionFailedError, but actual is %v", err1))
 	s.Equal(workflowExecution.GetRunId(), startedErr.RunID, startedErr.Msg)
 
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, startedErr.State, startedErr.Msg)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, startedErr.Status, startedErr.Msg)
 	s.Equal(common.EmptyVersion, startedErr.LastWriteVersion, startedErr.Msg)
 	s.Empty(task1, "Expected empty task identifier.")
 
@@ -1326,7 +1324,8 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	failedUpdateState := copyWorkflowExecutionState(updatedState)
 	err4 := s.UpdateWorkflowExecution(failedUpdateInfo, failedUpdateState, state0.NextEventId, []int64{int64(5)}, nil, int64(3), nil, nil, nil, nil, nil)
 	s.Error(err4, "expected non nil error.")
-	s.IsType(&p.ConditionFailedError{}, err4)
+	fmt.Printf("#######%v#######\n", err4)
+	s.IsType(&p.WorkflowConditionFailedError{}, err4)
 	log.Printf("Conditional update failed with error: %v", err4)
 
 	state2, err4 := s.GetWorkflowMutableState(namespaceID, workflowExecution)

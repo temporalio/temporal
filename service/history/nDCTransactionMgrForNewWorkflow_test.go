@@ -578,7 +578,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		targetMutableState,
 		targetWorkflowSnapshot,
 		targetWorkflowHistorySize,
-	).Return(&persistence.WorkflowExecutionAlreadyStartedError{})
+	).Return(&persistence.WorkflowConditionFailedError{})
 	targetContext.EXPECT().ReapplyEvents(targetWorkflowEventsSeq).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, now, targetWorkflow)
@@ -651,7 +651,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		targetMutableState,
 		targetWorkflowSnapshot,
 		targetWorkflowHistorySize,
-	).Return(&persistence.WorkflowExecutionAlreadyStartedError{})
+	).Return(&persistence.WorkflowConditionFailedError{})
 	targetContext.EXPECT().ReapplyEvents(targetWorkflowEventsSeq).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, now, targetWorkflow)

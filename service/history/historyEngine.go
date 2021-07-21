@@ -538,8 +538,8 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		historySize,
 	)
 	if err != nil {
-		if t, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
-			if t.StartRequestID == request.GetRequestId() {
+		if t, ok := err.(*persistence.CurrentWorkflowConditionFailedError); ok {
+			if t.RequestID == request.GetRequestId() {
 				return &historyservice.StartWorkflowExecutionResponse{
 					RunId: t.RunID,
 				}, nil
@@ -559,7 +559,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 			prevRunID = t.RunID
 			prevLastWriteVersion = t.LastWriteVersion
 			if err = e.applyWorkflowIDReusePolicyHelper(
-				t.StartRequestID,
+				t.RequestID,
 				prevRunID,
 				t.State,
 				t.Status,
@@ -2059,8 +2059,8 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		historySize,
 	)
 
-	if t, ok := err.(*persistence.WorkflowExecutionAlreadyStartedError); ok {
-		if t.StartRequestID == request.GetRequestId() {
+	if t, ok := err.(*persistence.CurrentWorkflowConditionFailedError); ok {
+		if t.RequestID == request.GetRequestId() {
 			return &historyservice.SignalWithStartWorkflowExecutionResponse{
 				RunId: t.RunID,
 			}, nil

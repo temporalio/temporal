@@ -41,7 +41,8 @@ var (
 	errorPriority = map[reflect.Type]int{
 		reflect.TypeOf(&p.ShardOwnershipLostError{}):             0,
 		reflect.TypeOf(&p.CurrentWorkflowConditionFailedError{}): 1,
-		reflect.TypeOf(&p.ConditionFailedError{}):                2,
+		reflect.TypeOf(&p.WorkflowConditionFailedError{}):        2,
+		reflect.TypeOf(&p.ConditionFailedError{}):                3,
 	}
 
 	errorDefaultPriority = math.MaxInt64
@@ -126,7 +127,7 @@ func extractErrors(
 	}
 
 	for _, condition := range requestExecutionCASConditions {
-		if err := extractWorkflowVersionConflictError(
+		if err := extractWorkflowConflictError(
 			record,
 			condition.runID,
 			condition.dbVersion,
@@ -224,13 +225,14 @@ func extractCurrentWorkflowConflictError(
 			RequestID:        executionState.CreateRequestId,
 			RunID:            executionState.RunId,
 			State:            executionState.State,
+			Status:           executionState.Status,
 			LastWriteVersion: lastWriteVersion,
 		}
 	}
 	return nil
 }
 
-func extractWorkflowVersionConflictError(
+func extractWorkflowConflictError(
 	record map[string]interface{},
 	requestRunID string,
 	requestDBVersion int64,
@@ -254,22 +256,26 @@ func extractWorkflowVersionConflictError(
 	// TODO remove this block once DB version comparison is the default
 	if requestDBVersion == 0 {
 		if actualNextEventID != requestNextEventID {
-			return &p.ConditionFailedError{
+			return &p.WorkflowConditionFailedError{
 				Msg: fmt.Sprintf("Encounter workflow next event ID mismatch, request next event ID: %v, actual next event ID: %v",
 					requestNextEventID,
 					actualNextEventID,
 				),
+				NextEventID:     actualNextEventID,
+				DBRecordVersion: actualDBVersion,
 			}
 		}
 		return nil
 	}
 
 	if actualDBVersion != requestDBVersion {
-		return &p.ConditionFailedError{
+		return &p.WorkflowConditionFailedError{
 			Msg: fmt.Sprintf("Encounter workflow db version mismatch, request db version ID: %v, actual db version ID: %v",
 				requestDBVersion,
 				actualDBVersion,
 			),
+			NextEventID:     actualNextEventID,
+			DBRecordVersion: actualDBVersion,
 		}
 	}
 	return nil

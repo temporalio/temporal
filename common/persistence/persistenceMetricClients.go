@@ -656,16 +656,16 @@ func (p *workflowExecutionPersistenceClient) RangeCompleteTimerTask(request *Ran
 
 func (p *workflowExecutionPersistenceClient) updateErrorMetric(scope int, err error) {
 	switch err.(type) {
-	case *WorkflowExecutionAlreadyStartedError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrExecutionAlreadyStartedCounter)
 	case *serviceerror.NotFound:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
 	case *ShardOwnershipLostError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardOwnershipLostCounter)
-	case *ConditionFailedError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
 	case *CurrentWorkflowConditionFailedError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrCurrentWorkflowConditionFailedCounter)
+	case *WorkflowConditionFailedError:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrWorkflowConditionFailedCounter)
+	case *ConditionFailedError:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
 	case *TimeoutError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)

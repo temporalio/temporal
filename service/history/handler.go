@@ -818,15 +818,12 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 
 		// Two simultaneous SignalWithStart requests might try to start a workflow at the same time.
 		// This can result in one of the requests failing with one of two possible errors:
-		//    1) If it is a brand new WF ID, one of the requests can fail with WorkflowExecutionAlreadyStartedError
-		//       (createMode is persistence.CreateWorkflowModeBrandNew)
-		//    2) If it an already existing WF ID, one of the requests can fail with a CurrentWorkflowConditionFailedError
-		//       (createMode is persisetence.CreateWorkflowModeWorkflowIDReuse)
+		//    CurrentWorkflowConditionFailedError || WorkflowConditionFailedError
 		// If either error occurs, just go ahead and retry. It should succeed on the subsequent attempt.
 		// For simplicity, we keep trying unless the context finishes or we get an error that is not one of the
 		// two mentioned above.
-		_, isExecutionAlreadyStartedErr := err2.(*persistence.WorkflowExecutionAlreadyStartedError)
-		_, isWorkflowConditionFailedErr := err2.(*persistence.CurrentWorkflowConditionFailedError)
+		_, isCurrentWorkflowConditionFailedErr := err2.(*persistence.CurrentWorkflowConditionFailedError)
+		_, isWorkflowConditionFailedErr := err2.(*persistence.WorkflowConditionFailedError)
 
 		isContextDone := false
 		select {
@@ -838,7 +835,7 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 		default:
 		}
 
-		if (!isExecutionAlreadyStartedErr && !isWorkflowConditionFailedErr) || isContextDone {
+		if (!isCurrentWorkflowConditionFailedErr && !isWorkflowConditionFailedErr) || isContextDone {
 			return nil, h.convertError(err2)
 		}
 	}
@@ -1436,9 +1433,9 @@ func (h *Handler) convertError(err error) error {
 			return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), info.GetAddress())
 		}
 		return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), "<unknown>")
-	case *persistence.WorkflowExecutionAlreadyStartedError:
-		err := err.(*persistence.WorkflowExecutionAlreadyStartedError)
-		return serviceerror.NewWorkflowExecutionAlreadyStarted(err.Msg, err.StartRequestID, err.RunID)
+	case *persistence.WorkflowConditionFailedError:
+		err := err.(*persistence.WorkflowConditionFailedError)
+		return serviceerror.NewInternal(err.Msg)
 	case *persistence.CurrentWorkflowConditionFailedError:
 		err := err.(*persistence.CurrentWorkflowConditionFailedError)
 		return serviceerror.NewInternal(err.Msg)
