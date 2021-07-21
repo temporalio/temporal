@@ -54,7 +54,7 @@ type (
 		IndexName string
 		// Search attributes that need to be added to the index.
 		CustomAttributesToAdd map[string]enumspb.IndexedValueType
-		// If true skip se
+		// If true skip Elasticsearch schema update and only update cluster metadata.
 		SkipSchemaUpdate bool
 	}
 
@@ -167,7 +167,7 @@ func (a *activities) AddESMappingFieldActivity(ctx context.Context, params Workf
 
 func (a *activities) WaitForYellowStatusActivity(ctx context.Context, indexName string) error {
 	if a.esClient == nil {
-		a.logger.Info("Elasticsearch client is not configures. Skipping Elasticsearch status check.")
+		a.logger.Info("Elasticsearch client is not configured. Skipping Elasticsearch status check.")
 		return nil
 	}
 
