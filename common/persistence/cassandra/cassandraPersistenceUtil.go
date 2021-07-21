@@ -610,7 +610,7 @@ func createTransferTasks(
 			ScheduleId:              scheduleID,
 			Version:                 task.GetVersion(),
 			TaskId:                  task.GetTaskID(),
-			VisibilityTime:          timestamp.TimePtr(task.GetVisibilityTimestamp()),
+			VisibilityTime:          timestamp.TimePtr(task.GetVisibilityTime()),
 		}
 
 		dataBlob, err := serialization.TransferTaskInfoToBlob(transferTaskInfo)
@@ -716,7 +716,7 @@ func createVisibilityTasks(
 			TaskId:         task.GetTaskID(),
 			TaskType:       task.GetType(),
 			Version:        task.GetVersion(),
-			VisibilityTime: timestamp.TimePtr(task.GetVisibilityTimestamp()),
+			VisibilityTime: timestamp.TimePtr(task.GetVisibilityTime()),
 		})
 		if err != nil {
 			return err
@@ -802,7 +802,7 @@ func createTimerTasks(
 		}
 
 		// Ignoring possible type cast errors.
-		goTs := task.GetVisibilityTimestamp()
+		goTs := task.GetVisibilityTime()
 		dbTs := p.UnixMilliseconds(goTs)
 
 		datablob, err := serialization.TimerTaskInfoToBlob(&persistencespb.TimerTaskInfo{

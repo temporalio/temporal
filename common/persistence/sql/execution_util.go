@@ -33,6 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -778,7 +779,7 @@ func createTransferTasks(
 			TaskId:            task.GetTaskID(),
 			TaskType:          task.GetType(),
 			Version:           task.GetVersion(),
-			VisibilityTime:    timestamp.TimePtr(task.GetVisibilityTimestamp().UTC()),
+			VisibilityTime:    timestamp.TimePtr(task.GetVisibilityTime().UTC()),
 		}
 
 		switch task.GetType() {
@@ -950,7 +951,7 @@ func createTimerTasks(
 			Version:        task.GetVersion(),
 			TaskType:       task.GetType(),
 			TaskId:         task.GetTaskID(),
-			VisibilityTime: timestamp.TimePtr(task.GetVisibilityTimestamp().UTC()),
+			VisibilityTime: timestamp.TimePtr(task.GetVisibilityTime().UTC()),
 		}
 
 		switch t := task.(type) {
@@ -1034,7 +1035,7 @@ func createVisibilityTasks(
 			TaskId:         task.GetTaskID(),
 			TaskType:       task.GetType(),
 			Version:        task.GetVersion(),
-			VisibilityTime: timestamp.TimePtr(task.GetVisibilityTimestamp().UTC()),
+			VisibilityTime: timestamp.TimePtr(task.GetVisibilityTime().UTC()),
 		}
 
 		switch task.GetType() {
