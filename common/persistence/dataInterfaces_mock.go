@@ -33,7 +33,6 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-
 	v1 "go.temporal.io/server/api/enums/v1"
 )
 
