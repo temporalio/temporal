@@ -236,7 +236,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	protoTaskTime := task.(*persistence.UserTimerTask).GetVisibilityTimestamp()
+	protoTaskTime := task.(*persistence.UserTimerTask).GetVisibilityTime()
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
@@ -319,7 +319,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	protoTaskTime := task.(*persistence.UserTimerTask).GetVisibilityTimestamp()
+	protoTaskTime := task.(*persistence.UserTimerTask).GetVisibilityTime()
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
@@ -390,7 +390,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multipl
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	protoTaskTime := task.(*persistence.UserTimerTask).GetVisibilityTimestamp()
+	protoTaskTime := task.(*persistence.UserTimerTask).GetVisibilityTime()
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
@@ -461,7 +461,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	protoTaskTime := task.(*persistence.ActivityTimeoutTask).GetVisibilityTimestamp()
+	protoTaskTime := task.(*persistence.ActivityTimeoutTask).GetVisibilityTime()
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
@@ -553,7 +553,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success(
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	protoTaskTime := task.(*persistence.ActivityTimeoutTask).GetVisibilityTimestamp()
+	protoTaskTime := task.(*persistence.ActivityTimeoutTask).GetVisibilityTime()
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
