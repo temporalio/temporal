@@ -88,7 +88,6 @@ type (
 		timeSource                clock.TimeSource
 		workflowTaskHandler       workflowTaskHandlerCallbacks
 		clusterMetadata           cluster.Metadata
-		historyV2Mgr              persistence.HistoryManager
 		executionManager          persistence.ExecutionManager
 		visibilityMgr             persistence.VisibilityManager
 		txProcessor               transferQueueProcessor
@@ -142,7 +141,6 @@ func NewEngineWithShardContext(
 		shard:              shard,
 		clusterMetadata:    shard.GetClusterMetadata(),
 		timeSource:         shard.GetTimeSource(),
-		historyV2Mgr:       historyV2Manager,
 		executionManager:   executionManager,
 		visibilityMgr:      visibilityMgr,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
