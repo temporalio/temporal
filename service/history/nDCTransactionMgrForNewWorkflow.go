@@ -33,7 +33,6 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -372,10 +371,5 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) persistNewNDCWorkflowEvents(
 	targetNewWorkflow nDCWorkflow,
 	targetNewWorkflowEvents *persistence.WorkflowEvents,
 ) (int64, error) {
-
-	firstEventID := targetNewWorkflowEvents.Events[0].EventId
-	if firstEventID == common.FirstEventID {
-		return targetNewWorkflow.getContext().PersistFirstWorkflowEvents(targetNewWorkflowEvents)
-	}
-	return targetNewWorkflow.getContext().PersistNonFirstWorkflowEvents(targetNewWorkflowEvents)
+	return targetNewWorkflow.getContext().PersistWorkflowEvents(targetNewWorkflowEvents)
 }

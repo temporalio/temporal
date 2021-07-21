@@ -521,7 +521,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		return nil, serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
-	historySize, err := weContext.PersistFirstWorkflowEvents(newWorkflowEventsSeq[0])
+	historySize, err := weContext.PersistWorkflowEvents(newWorkflowEventsSeq[0])
 	if err != nil {
 		return nil, err
 	}
@@ -2035,7 +2035,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
-	historySize, err := context.PersistFirstWorkflowEvents(newWorkflowEventsSeq[0])
+	historySize, err := context.PersistWorkflowEvents(newWorkflowEventsSeq[0])
 	if err != nil {
 		return nil, err
 	}
