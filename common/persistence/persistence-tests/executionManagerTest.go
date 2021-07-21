@@ -2129,7 +2129,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 	s.Equal(len(tasks), len(txTasks))
 	for index := range tasks {
 		t := txTasks[index].VisibilityTime
-		s.True(timeComparatorGo(tasks[index].GetVisibilityTimestamp(), *t, TimePrecision))
+		s.True(timeComparatorGo(tasks[index].GetVisibilityTime(), *t, TimePrecision))
 	}
 	s.EqualValues(enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK, txTasks[0].TaskType)
 	s.EqualValues(enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK, txTasks[1].TaskType)
@@ -2224,7 +2224,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	s.Equal(len(tasks), len(txTasks))
 	for index := range tasks {
 		t := txTasks[index].VisibilityTime
-		s.True(timeComparatorGo(tasks[index].GetVisibilityTimestamp(), *t, TimePrecision))
+		s.True(timeComparatorGo(tasks[index].GetVisibilityTime(), *t, TimePrecision))
 	}
 	s.EqualValues(enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK, txTasks[0].TaskType)
 	s.EqualValues(enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK, txTasks[1].TaskType)

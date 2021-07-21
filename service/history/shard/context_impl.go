@@ -911,7 +911,7 @@ func (s *ContextImpl) allocateTimerIDsLocked(
 	// assign IDs for the timer tasks. They need to be assigned under shard lock.
 	currentCluster := s.GetClusterMetadata().GetCurrentClusterName()
 	for _, task := range timerTasks {
-		ts := task.GetVisibilityTimestamp()
+		ts := task.GetVisibilityTime()
 		if task.GetVersion() != common.EmptyVersion {
 			// cannot use version to determine the corresponding cluster for timer task
 			// this is because during failover, timer task should be created as active
@@ -928,7 +928,7 @@ func (s *ContextImpl) allocateTimerIDsLocked(
 				tag.Timestamp(ts),
 				tag.CursorTimestamp(readCursorTS),
 				tag.ValueShardAllocateTimerBeforeRead)
-			task.SetVisibilityTimestamp(s.timerMaxReadLevelMap[currentCluster].Add(time.Millisecond))
+			task.SetVisibilityTime(s.timerMaxReadLevelMap[currentCluster].Add(time.Millisecond))
 		}
 
 		seqNum, err := s.generateTransferTaskIDLocked()
@@ -936,7 +936,7 @@ func (s *ContextImpl) allocateTimerIDsLocked(
 			return err
 		}
 		task.SetTaskID(seqNum)
-		visibilityTs := task.GetVisibilityTimestamp()
+		visibilityTs := task.GetVisibilityTime()
 		s.logger.Debug("Assigning new timer",
 			tag.Timestamp(visibilityTs), tag.TaskID(task.GetTaskID()), tag.AckLevel(s.shardInfo.TimerAckLevelTime))
 	}
