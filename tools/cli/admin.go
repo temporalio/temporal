@@ -637,7 +637,7 @@ func newAdminClusterCommands() []cli.Command {
 		{
 			Name:    "get-search-attributes",
 			Aliases: []string{"gsa"},
-			Usage:   "Show exiting search attributes",
+			Usage:   "Show existing search attributes",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagPrintJSONWithAlias,
