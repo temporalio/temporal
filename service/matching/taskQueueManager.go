@@ -39,7 +39,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/clock"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -102,7 +101,6 @@ type (
 		engine           *matchingEngineImpl
 		taskWriter       *taskWriter
 		taskReader       *taskReader // reads tasks from db and async matches it with poller
-		liveness         *liveness
 		taskGC           *taskGC
 		taskAckManager   ackManager   // tracks ackLevel for delivered messages
 		matcher          *TaskMatcher // for matching a task producer with a poller
@@ -178,10 +176,8 @@ func newTaskQueueManager(
 	}
 
 	tlMgr.taskAckManager.setAckLevel(state.ackLevel)
-	tlMgr.liveness = newLiveness(clock.NewRealTimeSource(), taskQueueConfig.IdleTaskqueueCheckInterval(), tlMgr.Stop)
 	tlMgr.taskWriter = newTaskWriter(tlMgr, tlMgr.rangeIDToTaskIDBlock(state.rangeID))
 	tlMgr.taskReader = newTaskReader(tlMgr)
-
 	var fwdr *Forwarder
 	if tlMgr.isFowardingAllowed(taskQueue, taskQueueKind) {
 		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, taskQueue, taskQueueKind, e.matchingClient)
@@ -201,7 +197,6 @@ func (c *taskQueueManagerImpl) Start() {
 		return
 	}
 
-	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
 }
@@ -217,11 +212,6 @@ func (c *taskQueueManagerImpl) Stop() {
 	}
 
 	close(c.shutdownCh)
-
-	_ = c.db.UpdateState(c.taskAckManager.getAckLevel())
-	c.taskGC.RunNow(c.taskAckManager.getAckLevel())
-
-	c.liveness.Stop()
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
 	c.engine.removeTaskQueueManager(c.taskQueueID)
@@ -231,15 +221,7 @@ func (c *taskQueueManagerImpl) Stop() {
 // AddTask adds a task to the task queue. This method will first attempt a synchronous
 // match with a poller. When there are no pollers or if ratelimit is exceeded, task will
 // be written to database and later asynchronously matched with a poller
-func (c *taskQueueManagerImpl) AddTask(
-	ctx context.Context,
-	params addTaskParams,
-) (bool, error) {
-	if params.forwardedFrom == "" {
-		// request sent by history service
-		c.liveness.markAlive(time.Now())
-	}
-
+func (c *taskQueueManagerImpl) AddTask(ctx context.Context, params addTaskParams) (bool, error) {
 	var syncMatch bool
 	_, err := c.executeWithRetry(func() (interface{}, error) {
 		td := params.taskInfo
@@ -274,6 +256,24 @@ func (c *taskQueueManagerImpl) AddTask(
 	return syncMatch, err
 }
 
+// DispatchTask dispatches a task to a poller. When there are no pollers to pick
+// up the task or if rate limit is exceeded, this method will return error. Task
+// *will not* be persisted to db
+func (c *taskQueueManagerImpl) DispatchTask(ctx context.Context, task *internalTask) error {
+	return c.matcher.MustOffer(ctx, task)
+}
+
+// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
+// if dispatched to local poller then nil and nil is returned.
+func (c *taskQueueManagerImpl) DispatchQueryTask(
+	ctx context.Context,
+	taskID string,
+	request *matchingservice.QueryWorkflowRequest,
+) (*matchingservice.QueryWorkflowResponse, error) {
+	task := newInternalQueryTask(taskID, request)
+	return c.matcher.OfferQuery(ctx, task)
+}
+
 // GetTask blocks waiting for a task.
 // Returns error when context deadline is exceeded
 // maxDispatchPerSecond is the max rate at which tasks are allowed
@@ -282,8 +282,16 @@ func (c *taskQueueManagerImpl) GetTask(
 	ctx context.Context,
 	maxDispatchPerSecond *float64,
 ) (*internalTask, error) {
-	c.liveness.markAlive(time.Now())
+	task, err := c.getTask(ctx, maxDispatchPerSecond)
+	if err != nil {
+		return nil, err
+	}
+	task.namespace = c.namespace()
+	task.backlogCountHint = c.taskAckManager.getBacklogCountHint()
+	return task, nil
+}
 
+func (c *taskQueueManagerImpl) getTask(ctx context.Context, maxDispatchPerSecond *float64) (*internalTask, error) {
 	// We need to set a shorter timeout than the original ctx; otherwise, by the time ctx deadline is
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
 	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
@@ -326,35 +334,7 @@ func (c *taskQueueManagerImpl) GetTask(
 		return c.matcher.PollForQuery(childCtx)
 	}
 
-	task, err := c.matcher.Poll(childCtx)
-	if err != nil {
-		return nil, err
-	}
-
-	task.namespace = c.namespace()
-	task.backlogCountHint = c.taskAckManager.getBacklogCountHint()
-	return task, nil
-}
-
-// DispatchTask dispatches a task to a poller. When there are no pollers to pick
-// up the task or if rate limit is exceeded, this method will return error. Task
-// *will not* be persisted to db
-func (c *taskQueueManagerImpl) DispatchTask(
-	ctx context.Context,
-	task *internalTask,
-) error {
-	return c.matcher.MustOffer(ctx, task)
-}
-
-// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
-// if dispatched to local poller then nil and nil is returned.
-func (c *taskQueueManagerImpl) DispatchQueryTask(
-	ctx context.Context,
-	taskID string,
-	request *matchingservice.QueryWorkflowRequest,
-) (*matchingservice.QueryWorkflowResponse, error) {
-	task := newInternalQueryTask(taskID, request)
-	return c.matcher.OfferQuery(ctx, task)
+	return c.matcher.Poll(childCtx)
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
