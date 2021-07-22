@@ -244,6 +244,8 @@ const (
 	FlagBinaryFile = "binary_file"
 	FlagBase64Data = "base64_data"
 	FlagBase64File = "base64_file"
+
+	FlagSkipSchemaUpdate = "skip-schema-update"
 )
 
 var flagsForExecution = []cli.Flag{

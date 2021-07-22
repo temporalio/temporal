@@ -215,9 +215,9 @@ func (t *timerQueueProcessorBase) notifyNewTimers(
 
 	isActive := t.scope == metrics.TimerActiveQueueProcessorScope
 
-	newTime := timerTasks[0].GetVisibilityTimestamp()
+	newTime := timerTasks[0].GetVisibilityTime()
 	for _, task := range timerTasks {
-		ts := task.GetVisibilityTimestamp()
+		ts := task.GetVisibilityTime()
 		if ts.Before(newTime) {
 			newTime = ts
 		}

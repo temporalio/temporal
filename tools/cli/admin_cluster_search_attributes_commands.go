@@ -48,17 +48,10 @@ func AdminAddSearchAttributes(c *cli.Context) {
 	}
 
 	adminClient := cFactory.AdminClient(c)
-	ctx, cancel := newContext(c)
-	defer cancel()
-
-	getRequest := &adminservice.GetSearchAttributesRequest{
-		IndexName: c.String(FlagIndex),
-	}
-	resp, err := adminClient.GetSearchAttributes(ctx, getRequest)
+	existingSearchAttributes, err := getSearchAttributes(c, adminClient)
 	if err != nil {
 		ErrorAndExit("Unable to get existing search attributes.", err)
 	}
-	existingSearchAttributes := resp.CustomAttributes
 
 	searchAttributes := make(map[string]enumspb.IndexedValueType, len(typeStrs))
 	for i := 0; i < len(typeStrs); i++ {
@@ -66,7 +59,7 @@ func AdminAddSearchAttributes(c *cli.Context) {
 		if err != nil {
 			ErrorAndExit(fmt.Sprintf("Unable to parse search attribute type: %s", typeStrs[i]), err)
 		}
-		existingSearchAttributeType, searchAttributeExists := existingSearchAttributes[names[i]]
+		existingSearchAttributeType, searchAttributeExists := existingSearchAttributes.CustomAttributes[names[i]]
 		if !searchAttributeExists {
 			searchAttributes[names[i]] = enumspb.IndexedValueType(typeInt)
 			continue
@@ -81,6 +74,11 @@ func AdminAddSearchAttributes(c *cli.Context) {
 		return
 	}
 
+	if c.Bool(FlagSkipSchemaUpdate) {
+		promptMsg := color.RedString("This command will only modify search attributes metadata. You need to modify Elasticsearch schema manually prior to running this command. Continue? Y/N")
+		prompt(promptMsg, c.GlobalBool(FlagAutoConfirm))
+	}
+
 	// ask user for confirmation
 	promptMsg := fmt.Sprintf(
 		"You are about to add search attributes %s. Continue? Y/N",
@@ -91,18 +89,20 @@ func AdminAddSearchAttributes(c *cli.Context) {
 	request := &adminservice.AddSearchAttributesRequest{
 		SearchAttributes: searchAttributes,
 		IndexName:        c.String(FlagIndex),
+		SkipSchemaUpdate: c.Bool(FlagSkipSchemaUpdate),
 	}
 
+	ctx, cancel := newContext(c)
+	defer cancel()
 	_, err = adminClient.AddSearchAttributes(ctx, request)
 	if err != nil {
 		ErrorAndExit("Unable to add search attributes.", err)
 	}
 
-	resp, err = adminClient.GetSearchAttributes(ctx, getRequest)
+	resp, err := getSearchAttributes(c, adminClient)
 	if err != nil {
 		ErrorAndExit("Search attributes have been added successfully but there was an error while reading them back.", err)
 	}
-
 	printSearchAttributesResponse(resp, c.String(FlagIndex))
 	color.HiGreen("Search attributes have been added successfully.")
 }
@@ -131,15 +131,10 @@ func AdminRemoveSearchAttributes(c *cli.Context) {
 		ErrorAndExit("Unable to remove search attributes.", err)
 	}
 
-	getRequest := &adminservice.GetSearchAttributesRequest{
-		IndexName: c.String(FlagIndex),
-	}
-
-	resp, err := adminClient.GetSearchAttributes(ctx, getRequest)
+	resp, err := getSearchAttributes(c, adminClient)
 	if err != nil {
 		ErrorAndExit("Search attributes have been removed successfully but there was an error while reading them back.", err)
 	}
-
 	printSearchAttributesResponse(resp, c.String(FlagIndex))
 	color.HiGreen("Search attributes have been removed successfully.")
 }
@@ -147,17 +142,24 @@ func AdminRemoveSearchAttributes(c *cli.Context) {
 // AdminGetSearchAttributes to print search attributes
 func AdminGetSearchAttributes(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
+	resp, err := getSearchAttributes(c, adminClient)
+	if err != nil {
+		ErrorAndExit("Unable to get search attributes.", err)
+	}
+	if c.Bool(FlagPrintJSON) {
+		printSearchAttributesResponseJSON(resp, c.String(FlagIndex))
+		return
+	}
+	printSearchAttributesResponse(resp, c.String(FlagIndex))
+}
+
+func getSearchAttributes(c *cli.Context, adminClient adminservice.AdminServiceClient) (*adminservice.GetSearchAttributesResponse, error) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 	request := &adminservice.GetSearchAttributesRequest{
 		IndexName: c.String(FlagIndex),
 	}
-
-	resp, err := adminClient.GetSearchAttributes(ctx, request)
-	if err != nil {
-		ErrorAndExit("Unable to get search attributes.", err)
-	}
-	printSearchAttributesResponse(resp, c.String(FlagIndex))
+	return adminClient.GetSearchAttributes(ctx, request)
 }
 
 func printSearchAttributesResponse(resp *adminservice.GetSearchAttributesResponse, indexName string) {
@@ -212,4 +214,29 @@ func printSearchAttributes(searchAttributes map[string]enumspb.IndexedValueType,
 	})
 	table.AppendBulk(rows)
 	table.Render()
+}
+
+func printSearchAttributesResponseJSON(resp *adminservice.GetSearchAttributesResponse, indexName string) {
+	json := &clispb.AddSearchAttributesResponse{
+		IndexName:              indexName,
+		CustomSearchAttributes: make(map[string]string, len(resp.CustomAttributes)),
+		SystemSearchAttributes: make(map[string]string, len(resp.SystemAttributes)),
+		Mapping:                resp.GetMapping(),
+		AddWorkflowExecutionInfo: &clispb.WorkflowExecutionInfo{
+			Execution: resp.GetAddWorkflowExecutionInfo().GetExecution(),
+			StartTime: resp.GetAddWorkflowExecutionInfo().GetStartTime(),
+			CloseTime: resp.GetAddWorkflowExecutionInfo().GetCloseTime(),
+			Status:    resp.GetAddWorkflowExecutionInfo().GetStatus(),
+		},
+	}
+
+	for name, value := range resp.GetCustomAttributes() {
+		json.CustomSearchAttributes[name] = value.String()
+	}
+
+	for name, value := range resp.GetSystemAttributes() {
+		json.SystemSearchAttributes[name] = value.String()
+	}
+
+	prettyPrintJSONObject(json)
 }

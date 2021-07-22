@@ -189,6 +189,7 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 	wfParams := addsearchattributes.WorkflowParams{
 		CustomAttributesToAdd: request.GetSearchAttributes(),
 		IndexName:             indexName,
+		SkipSchemaUpdate:      request.GetSkipSchemaUpdate(),
 	}
 
 	run, err := adh.GetSDKClient().ExecuteWorkflow(

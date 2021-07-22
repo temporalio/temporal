@@ -40,7 +40,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -86,10 +85,7 @@ type (
 			eventBatches []*persistence.WorkflowEvents,
 		) error
 
-		PersistFirstWorkflowEvents(
-			workflowEvents *persistence.WorkflowEvents,
-		) (int64, error)
-		PersistNonFirstWorkflowEvents(
+		PersistWorkflowEvents(
 			workflowEvents *persistence.WorkflowEvents,
 		) (int64, error)
 
@@ -265,7 +261,7 @@ func (c *ContextImpl) LoadWorkflowExecutionForReplication(
 	}
 
 	if c.MutableState == nil {
-		response, err := c.getWorkflowExecutionWithRetry(&persistence.GetWorkflowExecutionRequest{
+		response, err := getWorkflowExecutionWithRetry(c.shard, &persistence.GetWorkflowExecutionRequest{
 			NamespaceID: c.namespaceID,
 			Execution:   c.workflowExecution,
 		})
@@ -348,7 +344,7 @@ func (c *ContextImpl) LoadWorkflowExecution() (MutableState, error) {
 	}
 
 	if c.MutableState == nil {
-		response, err := c.getWorkflowExecutionWithRetry(&persistence.GetWorkflowExecutionRequest{
+		response, err := getWorkflowExecutionWithRetry(c.shard, &persistence.GetWorkflowExecutionRequest{
 			NamespaceID: c.namespaceID,
 			Execution:   c.workflowExecution,
 		})
@@ -412,6 +408,12 @@ func (c *ContextImpl) LoadWorkflowExecution() (MutableState, error) {
 	return c.MutableState, nil
 }
 
+func (c *ContextImpl) PersistWorkflowEvents(
+	workflowEvents *persistence.WorkflowEvents,
+) (int64, error) {
+	return PersistWorkflowEvents(c.shard, workflowEvents)
+}
+
 func (c *ContextImpl) CreateWorkflowExecution(
 	_ time.Time,
 	createMode persistence.CreateWorkflowMode,
@@ -443,7 +445,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		HistorySize: historySize,
 	}
 
-	_, err := c.createWorkflowExecutionWithRetry(createRequest)
+	_, err := createWorkflowExecutionWithRetry(c.shard, createRequest)
 	if err != nil {
 		return err
 	}
@@ -485,7 +487,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 	}
 	resetHistorySize := c.GetHistorySize()
 	for _, workflowEvents := range resetWorkflowEventsSeq {
-		eventsSize, err := c.PersistNonFirstWorkflowEvents(workflowEvents)
+		eventsSize, err := PersistWorkflowEvents(c.shard, workflowEvents)
 		if err != nil {
 			return err
 		}
@@ -515,7 +517,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}
 		newWorkflowSizeSize := newContext.GetHistorySize()
 		for _, workflowEvents := range newWorkflowEventsSeq {
-			eventsSize, err := c.persistNewWorkflowEvents(workflowEvents)
+			eventsSize, err := PersistWorkflowEvents(c.shard, workflowEvents)
 			if err != nil {
 				return err
 			}
@@ -546,7 +548,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		}
 		currentWorkflowSize := currentContext.GetHistorySize()
 		for _, workflowEvents := range currentWorkflowEventsSeq {
-			eventsSize, err := c.PersistNonFirstWorkflowEvents(workflowEvents)
+			eventsSize, err := PersistWorkflowEvents(c.shard, workflowEvents)
 			if err != nil {
 				return err
 			}
@@ -734,7 +736,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 
 	currentWorkflowSize := c.GetHistorySize()
 	for _, workflowEvents := range currentWorkflowEventsSeq {
-		eventsSize, err := c.PersistNonFirstWorkflowEvents(workflowEvents)
+		eventsSize, err := PersistWorkflowEvents(c.shard, workflowEvents)
 		if err != nil {
 			return err
 		}
@@ -764,7 +766,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		}
 		newWorkflowSizeSize := newContext.GetHistorySize()
 		for _, workflowEvents := range newWorkflowEventsSeq {
-			eventsSize, err := c.persistNewWorkflowEvents(workflowEvents)
+			eventsSize, err := PersistWorkflowEvents(c.shard, workflowEvents)
 			if err != nil {
 				return err
 			}
@@ -792,7 +794,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		return err
 	}
 
-	resp, err := c.updateWorkflowExecutionWithRetry(&persistence.UpdateWorkflowExecutionRequest{
+	resp, err := updateWorkflowExecutionWithRetry(c.shard, &persistence.UpdateWorkflowExecutionRequest{
 		// RangeID , this is set by shard context
 		Mode:                   updateMode,
 		UpdateWorkflowMutation: *currentWorkflow,
@@ -924,201 +926,6 @@ func (c *ContextImpl) mergeContinueAsNewReplicationTasks(
 		return serviceerror.NewInternal("unable to find replication task from current workflow for continue as new replication")
 	}
 	return nil
-}
-
-func (c *ContextImpl) PersistFirstWorkflowEvents(
-	workflowEvents *persistence.WorkflowEvents,
-) (int64, error) {
-
-	if len(workflowEvents.Events) == 0 {
-		return 0, serviceerror.NewInternal("cannot persist first workflow events with empty events")
-	}
-
-	namespaceID := workflowEvents.NamespaceID
-	workflowID := workflowEvents.WorkflowID
-	runID := workflowEvents.RunID
-	execution := commonpb.WorkflowExecution{
-		WorkflowId: workflowEvents.WorkflowID,
-		RunId:      workflowEvents.RunID,
-	}
-	branchToken := workflowEvents.BranchToken
-	events := workflowEvents.Events
-	prevTxnID := workflowEvents.PrevTxnID
-	txnID := workflowEvents.TxnID
-
-	size, err := c.appendHistoryV2EventsWithRetry(
-		namespaceID,
-		execution,
-		&persistence.AppendHistoryNodesRequest{
-			IsNewBranch:       true,
-			Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, runID),
-			BranchToken:       branchToken,
-			Events:            events,
-			PrevTransactionID: prevTxnID,
-			TransactionID:     txnID,
-		},
-	)
-	return size, err
-}
-
-func (c *ContextImpl) PersistNonFirstWorkflowEvents(
-	workflowEvents *persistence.WorkflowEvents,
-) (int64, error) {
-
-	if len(workflowEvents.Events) == 0 {
-		return 0, nil // allow update workflow without events
-	}
-
-	namespaceID := workflowEvents.NamespaceID
-	execution := commonpb.WorkflowExecution{
-		WorkflowId: workflowEvents.WorkflowID,
-		RunId:      workflowEvents.RunID,
-	}
-	branchToken := workflowEvents.BranchToken
-	events := workflowEvents.Events
-	prevTxnID := workflowEvents.PrevTxnID
-	txnID := workflowEvents.TxnID
-
-	size, err := c.appendHistoryV2EventsWithRetry(
-		namespaceID,
-		execution,
-		&persistence.AppendHistoryNodesRequest{
-			IsNewBranch:       false,
-			BranchToken:       branchToken,
-			Events:            events,
-			PrevTransactionID: prevTxnID,
-			TransactionID:     txnID,
-		},
-	)
-	return size, err
-}
-
-func (c *ContextImpl) appendHistoryV2EventsWithRetry(
-	namespaceID string,
-	execution commonpb.WorkflowExecution,
-	request *persistence.AppendHistoryNodesRequest,
-) (int64, error) {
-
-	resp := 0
-	op := func() error {
-		var err error
-		resp, err = c.shard.AppendHistoryEvents(request, namespaceID, execution)
-		return err
-	}
-
-	err := backoff.Retry(
-		op,
-		PersistenceOperationRetryPolicy,
-		common.IsPersistenceTransientError,
-	)
-	return int64(resp), err
-}
-
-func (c *ContextImpl) createWorkflowExecutionWithRetry(
-	request *persistence.CreateWorkflowExecutionRequest,
-) (*persistence.CreateWorkflowExecutionResponse, error) {
-
-	var resp *persistence.CreateWorkflowExecutionResponse
-	op := func() error {
-		var err error
-		resp, err = c.shard.CreateWorkflowExecution(request)
-		return err
-	}
-
-	err := backoff.Retry(
-		op,
-		PersistenceOperationRetryPolicy,
-		common.IsPersistenceTransientError,
-	)
-	switch err.(type) {
-	case nil:
-		return resp, nil
-	case *persistence.WorkflowExecutionAlreadyStartedError:
-		// it is possible that workflow already exists and caller need to apply
-		// workflow ID reuse policy
-		return nil, err
-	default:
-		c.logger.Error(
-			"Persistent store operation Failure",
-			tag.WorkflowID(c.workflowExecution.GetWorkflowId()),
-			tag.WorkflowRunID(c.workflowExecution.GetRunId()),
-			tag.WorkflowNamespaceID(c.namespaceID),
-			tag.StoreOperationCreateWorkflowExecution,
-			tag.Error(err),
-		)
-		return nil, err
-	}
-}
-
-func (c *ContextImpl) getWorkflowExecutionWithRetry(
-	request *persistence.GetWorkflowExecutionRequest,
-) (*persistence.GetWorkflowExecutionResponse, error) {
-
-	var resp *persistence.GetWorkflowExecutionResponse
-	op := func() error {
-		var err error
-		resp, err = c.executionManager.GetWorkflowExecution(request)
-
-		return err
-	}
-
-	err := backoff.Retry(
-		op,
-		PersistenceOperationRetryPolicy,
-		common.IsPersistenceTransientError,
-	)
-	switch err.(type) {
-	case nil:
-		return resp, nil
-	case *serviceerror.NotFound:
-		// it is possible that workflow does not exists
-		return nil, err
-	default:
-		c.logger.Error(
-			"Persistent fetch operation Failure",
-			tag.WorkflowID(c.workflowExecution.GetWorkflowId()),
-			tag.WorkflowRunID(c.workflowExecution.GetRunId()),
-			tag.WorkflowNamespaceID(c.namespaceID),
-			tag.StoreOperationGetWorkflowExecution,
-			tag.Error(err),
-		)
-		return nil, err
-	}
-}
-
-func (c *ContextImpl) updateWorkflowExecutionWithRetry(
-	request *persistence.UpdateWorkflowExecutionRequest,
-) (*persistence.UpdateWorkflowExecutionResponse, error) {
-
-	var resp *persistence.UpdateWorkflowExecutionResponse
-	op := func() error {
-		var err error
-		resp, err = c.shard.UpdateWorkflowExecution(request)
-		return err
-	}
-
-	err := backoff.Retry(
-		op, PersistenceOperationRetryPolicy,
-		common.IsPersistenceTransientError,
-	)
-	switch err.(type) {
-	case nil:
-		return resp, nil
-	case *persistence.ConditionFailedError:
-		// TODO get rid of ErrConflict
-		return nil, consts.ErrConflict
-	default:
-		c.logger.Error(
-			"Persistent store operation Failure",
-			tag.WorkflowID(c.workflowExecution.GetWorkflowId()),
-			tag.WorkflowRunID(c.workflowExecution.GetRunId()),
-			tag.WorkflowNamespaceID(c.namespaceID),
-			tag.StoreOperationUpdateWorkflowExecution,
-			tag.Error(err),
-			tag.Number(c.updateCondition),
-		)
-		return nil, err
-	}
 }
 
 func (c *ContextImpl) updateWorkflowExecutionEventReapply(
@@ -1297,17 +1104,6 @@ func (c *ContextImpl) enforceSizeCheck() (bool, error) {
 	}
 
 	return false, nil
-}
-
-func (c *ContextImpl) persistNewWorkflowEvents(
-	newWorkflowEvents *persistence.WorkflowEvents,
-) (int64, error) {
-
-	firstEventID := newWorkflowEvents.Events[0].EventId
-	if firstEventID == common.FirstEventID {
-		return c.PersistFirstWorkflowEvents(newWorkflowEvents)
-	}
-	return c.PersistNonFirstWorkflowEvents(newWorkflowEvents)
 }
 
 func emitStateTransitionCount(
