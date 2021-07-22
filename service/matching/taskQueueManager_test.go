@@ -37,7 +37,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -51,7 +50,7 @@ func TestDeliverBufferTasks(t *testing.T) {
 
 	tests := []func(tlm *taskQueueManagerImpl){
 		func(tlm *taskQueueManagerImpl) { close(tlm.taskReader.taskBuffer) },
-		func(tlm *taskQueueManagerImpl) { close(tlm.taskReader.shutdownChan) },
+		func(tlm *taskQueueManagerImpl) { close(tlm.taskReader.dispatcherShutdownC) },
 		func(tlm *taskQueueManagerImpl) {
 			rps := 0.1
 			tlm.matcher.UpdateRatelimit(&rps)
@@ -239,6 +238,8 @@ func TestDescribeTaskQueue(t *testing.T) {
 }
 
 func tlMgrStartWithoutNotifyEvent(tlm *taskQueueManagerImpl) {
+	// mimic tlm.Start() but avoid calling notifyEvent
+	tlm.startWG.Done()
 	go tlm.taskReader.dispatchBufferedTasks()
 	go tlm.taskReader.getTasksPump()
 }
@@ -252,30 +253,27 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 
 	// Idle
 	tlm := createTestTaskQueueManagerWithConfig(controller, cfg)
-	tlm.Start()
 	tlMgrStartWithoutNotifyEvent(tlm)
 	time.Sleep(20 * time.Millisecond)
-	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
+	require.False(t, atomic.CompareAndSwapInt32(&tlm.stopped, 0, 1))
 
 	// Active poll-er
 	tlm = createTestTaskQueueManagerWithConfig(controller, cfg)
-	tlm.Start()
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity("test-poll"), nil)
 	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
 	tlMgrStartWithoutNotifyEvent(tlm)
 	time.Sleep(20 * time.Millisecond)
-	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
+	require.Equal(t, int32(0), tlm.stopped)
 	tlm.Stop()
-	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
+	require.Equal(t, int32(1), tlm.stopped)
 
 	// Active adding task
 	tlm = createTestTaskQueueManagerWithConfig(controller, cfg)
-	tlm.Start()
 	require.Equal(t, 0, len(tlm.GetAllPollerInfo()))
 	tlMgrStartWithoutNotifyEvent(tlm)
 	tlm.taskReader.Signal()
 	time.Sleep(20 * time.Millisecond)
-	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
+	require.Equal(t, int32(0), tlm.stopped)
 	tlm.Stop()
-	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
+	require.Equal(t, int32(1), tlm.stopped)
 }

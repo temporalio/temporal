@@ -31,7 +31,6 @@ import (
 	"fmt"
 	"math"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -73,7 +72,6 @@ type (
 	}
 
 	matchingEngineImpl struct {
-		status               int32
 		taskManager          persistence.TaskManager
 		historyService       historyservice.HistoryServiceClient
 		matchingClient       matchingservice.MatchingServiceClient
@@ -119,7 +117,6 @@ func NewEngine(taskManager persistence.TaskManager,
 ) Engine {
 
 	return &matchingEngineImpl{
-		status:               common.DaemonStatusInitialized,
 		taskManager:          taskManager,
 		historyService:       historyService,
 		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
@@ -135,24 +132,11 @@ func NewEngine(taskManager persistence.TaskManager,
 }
 
 func (e *matchingEngineImpl) Start() {
-	if !atomic.CompareAndSwapInt32(
-		&e.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
-		return
-	}
+	// As task queues are initialized lazily nothing is done on startup at this point.
 }
 
 func (e *matchingEngineImpl) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&e.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
-		return
-	}
-
+	// Executes Stop() on each task queue outside of lock
 	for _, l := range e.getTaskQueues(math.MaxInt32) {
 		l.Stop()
 	}
@@ -208,7 +192,11 @@ func (e *matchingEngineImpl) getTaskQueueManager(taskQueue *taskQueueID, taskQue
 	}
 	e.taskQueues[*taskQueue] = mgr
 	e.taskQueuesLock.Unlock()
-	mgr.Start()
+	err = mgr.Start()
+	if err != nil {
+		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType), tag.Error(err))
+		return nil, err
+	}
 	e.logger.Info("", tag.LifeCycleStarted, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType))
 	return mgr, nil
 }

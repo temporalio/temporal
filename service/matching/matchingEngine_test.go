@@ -220,6 +220,10 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueuesEmptyResultWithShortCont
 }
 
 func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
+	s.PollWorkflowTaskQueuesResultTest()
+}
+
+func (s *matchingEngineSuite) PollWorkflowTaskQueuesResultTest() {
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
 	stickyTl := "makeStickyToast"
@@ -607,7 +611,6 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	scope := tally.NewTestScope("test", nil)
 	s.matchingEngine.metricsClient = metrics.NewClient(scope, metrics.Matching)
 
-	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
 	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, tlKind, s.matchingEngine.config)
 	s.NoError(err)
 
@@ -628,8 +631,8 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		RateLimiterImpl: mgrImpl.matcher.rateLimiter.(*quotas.RateLimiterImpl),
 	}
 	s.matchingEngine.updateTaskQueue(tlID, mgr)
-
-	mgr.Start()
+	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
+	s.NoError(mgr.Start())
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	activityTypeName := "activity1"
@@ -801,10 +804,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDisp
 }
 
 func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
-	workerCount int,
-	taskCount int64,
-	dispatchLimitFn func(int, int64) float64,
-) int64 {
+	workerCount int, taskCount int64, dispatchLimitFn func(int, int64) float64) int64 {
 	scope := tally.NewTestScope("test", nil)
 	s.matchingEngine.metricsClient = metrics.NewClient(scope, metrics.Matching)
 	runID := uuid.NewRandom().String()
@@ -820,7 +820,6 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	tlKind := enumspb.TASK_QUEUE_KIND_NORMAL
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
-	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
 	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, tlKind, s.matchingEngine.config)
 	s.NoError(err)
 
@@ -839,7 +838,8 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 		RateLimiterImpl: mgrImpl.matcher.rateLimiter.(*quotas.RateLimiterImpl),
 	}
 	s.matchingEngine.updateTaskQueue(tlID, mgr)
-	mgr.Start()
+	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
+	s.NoError(mgr.Start())
 
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	var wg sync.WaitGroup
@@ -1484,7 +1484,11 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 
 	// stop all goroutines that read / write tasks in the background
 	// remainder of this test works with the in-memory buffer
-	tlMgr.Stop()
+	if !atomic.CompareAndSwapInt32(&tlMgr.stopped, 0, 1) {
+		return
+	}
+	close(tlMgr.shutdownCh)
+	tlMgr.taskWriter.Stop()
 
 	// setReadLevel should NEVER be called without updating ackManager.outstandingTasks
 	// This is only for unit test purpose
