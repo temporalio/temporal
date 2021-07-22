@@ -20,20 +20,54 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package headersprovider
+package plugin
 
 import (
-	"go.temporal.io/server/tools/cli/plugin"
+	"context"
+	"encoding/gob"
+
+	"google.golang.org/grpc/metadata"
 )
 
 var (
-	headersProvider plugin.HeadersProvider = nil
+	grpcIncomingMDKey = "grpc-incoming"
+	grpcOutgoingMDKey = "grpc-outgoing"
 )
 
-func SetCurrent(hp plugin.HeadersProvider) {
-	headersProvider = hp
+type PluginSafeContext struct {
+	Values map[string]interface{}
 }
 
-func GetCurrent() plugin.HeadersProvider {
-	return headersProvider
+func init() {
+	gob.Register(metadata.MD{})
+}
+
+func NewPluginSafeContext(ctx context.Context) PluginSafeContext {
+	values := map[string]interface{}{}
+
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		values[grpcIncomingMDKey] = md
+	}
+	if md, ok := metadata.FromOutgoingContext(ctx); ok {
+		values[grpcOutgoingMDKey] = md
+	}
+
+	return PluginSafeContext{Values: values}
+}
+
+func (sCtx *PluginSafeContext) GetContext() context.Context {
+	ctx := context.Background()
+
+	if rv, ok := sCtx.Values[grpcIncomingMDKey]; ok {
+		if md, ok := rv.(metadata.MD); ok {
+			ctx = metadata.NewIncomingContext(ctx, md)
+		}
+	}
+	if rv, ok := sCtx.Values[grpcOutgoingMDKey]; ok {
+		if md, ok := rv.(metadata.MD); ok {
+			ctx = metadata.NewOutgoingContext(ctx, md)
+		}
+	}
+
+	return ctx
 }
