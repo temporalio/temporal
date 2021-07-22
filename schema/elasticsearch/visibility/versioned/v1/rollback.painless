@@ -1,0 +1,55 @@
+def attrMap = new HashMap();
+
+for (customSearchAttribute in params['customSearchAttributes']) {
+    if (ctx._source[customSearchAttribute] != null){
+        attrMap[customSearchAttribute] = ctx._source.remove(customSearchAttribute);
+    }
+}
+
+if (ctx._source['BatcherNamespace'] != null){
+    attrMap['CustomNamespace'] = ctx._source.remove('BatcherNamespace');
+}
+if (ctx._source['BatcherUser'] != null){
+    attrMap['Operator'] = ctx._source.remove('BatcherUser');
+}
+if (ctx._source['TemporalChangeVersion'] != null){
+    attrMap['TemporalChangeVersion'] = ctx._source.remove('TemporalChangeVersion');
+}
+if (ctx._source['BinaryChecksums'] != null){
+    attrMap['BinaryChecksums'] = ctx._source.remove('BinaryChecksums');
+}
+
+if (attrMap.size() > 0) {
+    ctx._source.Attr = attrMap;
+}
+
+int nanos = 1000000000;
+if (ctx._source.StartTime != null){
+    ZonedDateTime startTime = ZonedDateTime.parse(ctx._source.StartTime);
+    ctx._source.StartTime = startTime.toEpochSecond() * nanos + startTime.getNano();
+}
+if (ctx._source.ExecutionTime != null){
+    ZonedDateTime executionTime = ZonedDateTime.parse(ctx._source.ExecutionTime);
+    ctx._source.ExecutionTime = executionTime.toEpochSecond() * nanos + executionTime.getNano();
+}
+if (ctx._source.CloseTime != null){
+    ZonedDateTime closeTime = ZonedDateTime.parse(ctx._source.CloseTime);
+    ctx._source.CloseTime = closeTime.toEpochSecond() * nanos + closeTime.getNano();
+}
+
+if (ctx._source.ExecutionStatus == 'Running')
+    ctx._source.ExecutionStatus = 1;
+else if (ctx._source.ExecutionStatus == 'Completed')
+    ctx._source.ExecutionStatus = 2;
+else if (ctx._source.ExecutionStatus == 'Failed')
+    ctx._source.ExecutionStatus = 3;
+else if (ctx._source.ExecutionStatus == 'Canceled')
+    ctx._source.ExecutionStatus = 4;
+else if (ctx._source.ExecutionStatus == 'Terminated')
+    ctx._source.ExecutionStatus = 5;
+else if (ctx._source.ExecutionStatus == 'ContinuedAsNew')
+    ctx._source.ExecutionStatus = 6;
+else if (ctx._source.ExecutionStatus == 'TimedOut')
+    ctx._source.ExecutionStatus = 7;
+else
+    ctx._source.ExecutionStatus = null;

@@ -305,7 +305,7 @@ func (r *workflowResetterImpl) persistToDB(
 	}
 	var resetHistorySize int64
 	for _, workflowEvents := range resetWorkflowEventsSeq {
-		size, err := resetWorkflow.getContext().PersistNonFirstWorkflowEvents(workflowEvents)
+		size, err := resetWorkflow.getContext().PersistWorkflowEvents(workflowEvents)
 		if err != nil {
 			return err
 		}

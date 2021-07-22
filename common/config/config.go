@@ -250,8 +250,6 @@ type (
 		VisibilityClosedMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter `yaml:"-" json:"-"`
 		// VisibilityListMaxQPS max QPS for list workflow
 		VisibilityListMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter `yaml:"-" json:"-"`
-		// ESIndexMaxResultWindow ElasticSearch index setting max_result_window
-		ESIndexMaxResultWindow dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
 		// MaxQPS is overall max QPS
 		MaxQPS dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
 		// ESProcessorAckTimeout is the timeout that store will wait to get ack signal from ES processor.
@@ -281,6 +279,8 @@ type (
 		TLS *auth.TLS `yaml:"tls"`
 		// Consistency configuration (defaults to LOCAL_QUORUM / LOCAL_SERIAL for all stores if this field not set)
 		Consistency *CassandraStoreConsistency `yaml:"consistency"`
+		// DisableInitialHostLookup instructs the gocql client to connect only using the supplied hosts
+		DisableInitialHostLookup bool `yaml:"disableInitialHostLookup"`
 	}
 
 	// CassandraStoreConsistency enables you to set the consistency settings for each Cassandra Persistence Store for Temporal

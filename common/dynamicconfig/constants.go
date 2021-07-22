@@ -88,6 +88,8 @@ var Keys = map[Key]string{
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
 	BlobSizeLimitWarn:      "limit.blobSize.warn",
+	MemoSizeLimitError:     "limit.memoSize.error",
+	MemoSizeLimitWarn:      "limit.memoSize.warn",
 	HistorySizeLimitError:  "limit.historySize.error",
 	HistorySizeLimitWarn:   "limit.historySize.warn",
 	HistoryCountLimitError: "limit.historyCount.error",
@@ -151,6 +153,7 @@ var Keys = map[Key]string{
 	MatchingForwarderMaxOutstandingTasks:    "matching.forwarderMaxOutstandingTasks",
 	MatchingForwarderMaxRatePerSecond:       "matching.forwarderMaxRatePerSecond",
 	MatchingForwarderMaxChildrenPerNode:     "matching.forwarderMaxChildrenPerNode",
+	ResilientSyncMatch:                      "matching.resilientSyncMatch",
 	MatchingShutdownDrainDuration:           "matching.shutdownDrainDuration",
 
 	// history settings
@@ -386,6 +389,10 @@ const (
 	BlobSizeLimitError
 	// BlobSizeLimitWarn is the per event blob size limit for warning
 	BlobSizeLimitWarn
+	// MemoSizeLimitError is the per event memo size limit
+	MemoSizeLimitError
+	// MemoSizeLimitWarn is the per event memo size limit for warning
+	MemoSizeLimitWarn
 	// HistorySizeLimitError is the per workflow execution history size limit
 	HistorySizeLimitError
 	// HistorySizeLimitWarn is the per workflow execution history size limit for warning
@@ -525,6 +532,8 @@ const (
 	MatchingForwarderMaxRatePerSecond
 	// MatchingForwarderMaxChildrenPerNode is the max number of children per node in the task queue partition tree
 	MatchingForwarderMaxChildrenPerNode
+	// ResilientSyncMatch enables or disables sync-matching while queue persistence is unavailable
+	ResilientSyncMatch
 	// MatchingShutdownDrainDuration is the duration of traffic drain during shutdown
 	MatchingShutdownDrainDuration
 

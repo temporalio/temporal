@@ -101,18 +101,18 @@ func (mr *MockTaskMockRecorder) GetVersion() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersion", reflect.TypeOf((*MockTask)(nil).GetVersion))
 }
 
-// GetVisibilityTimestamp mocks base method.
-func (m *MockTask) GetVisibilityTimestamp() time.Time {
+// GetVisibilityTime mocks base method.
+func (m *MockTask) GetVisibilityTime() time.Time {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVisibilityTimestamp")
+	ret := m.ctrl.Call(m, "GetVisibilityTime")
 	ret0, _ := ret[0].(time.Time)
 	return ret0
 }
 
-// GetVisibilityTimestamp indicates an expected call of GetVisibilityTimestamp.
-func (mr *MockTaskMockRecorder) GetVisibilityTimestamp() *gomock.Call {
+// GetVisibilityTime indicates an expected call of GetVisibilityTime.
+func (mr *MockTaskMockRecorder) GetVisibilityTime() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTimestamp", reflect.TypeOf((*MockTask)(nil).GetVisibilityTimestamp))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTime", reflect.TypeOf((*MockTask)(nil).GetVisibilityTime))
 }
 
 // SetTaskID mocks base method.
@@ -139,16 +139,16 @@ func (mr *MockTaskMockRecorder) SetVersion(version interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVersion", reflect.TypeOf((*MockTask)(nil).SetVersion), version)
 }
 
-// SetVisibilityTimestamp mocks base method.
-func (m *MockTask) SetVisibilityTimestamp(timestamp time.Time) {
+// SetVisibilityTime mocks base method.
+func (m *MockTask) SetVisibilityTime(timestamp time.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetVisibilityTimestamp", timestamp)
+	m.ctrl.Call(m, "SetVisibilityTime", timestamp)
 }
 
-// SetVisibilityTimestamp indicates an expected call of SetVisibilityTimestamp.
-func (mr *MockTaskMockRecorder) SetVisibilityTimestamp(timestamp interface{}) *gomock.Call {
+// SetVisibilityTime indicates an expected call of SetVisibilityTime.
+func (mr *MockTaskMockRecorder) SetVisibilityTime(timestamp interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVisibilityTimestamp", reflect.TypeOf((*MockTask)(nil).SetVisibilityTimestamp), timestamp)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVisibilityTime", reflect.TypeOf((*MockTask)(nil).SetVisibilityTime), timestamp)
 }
 
 // MockCloseable is a mock of Closeable interface.

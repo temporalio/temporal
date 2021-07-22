@@ -62,6 +62,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
@@ -457,11 +458,12 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
+	namespace := namespaceEntry.GetInfo().Name
 	namespaceID := namespaceEntry.GetInfo().Id
 
 	request := startRequest.StartRequest
-	e.overrideStartWorkflowExecutionRequest(namespaceEntry, request, metrics.HistoryStartWorkflowExecutionScope)
-	err = e.validateStartWorkflowExecutionRequest(request, e.config.MaxIDLengthLimit(), namespaceEntry.GetInfo().GetName())
+	e.overrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope)
+	err = e.validateStartWorkflowExecutionRequest(ctx, request, namespace, "StartWorkflowExecution")
 	if err != nil {
 		return nil, err
 	}
@@ -519,7 +521,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		return nil, serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
-	historySize, err := weContext.PersistFirstWorkflowEvents(newWorkflowEventsSeq[0])
+	historySize, err := weContext.PersistWorkflowEvents(newWorkflowEventsSeq[0])
 	if err != nil {
 		return nil, err
 	}
@@ -1849,6 +1851,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, err
 	}
 	namespaceID := namespaceEntry.GetInfo().Id
+	namespace := namespaceEntry.GetInfo().Name
 
 	sRequest := signalWithStartRequest.SignalWithStartRequest
 	execution := commonpb.WorkflowExecution{
@@ -1884,7 +1887,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			}
 
 			executionInfo := mutableState.GetExecutionInfo()
-			maxAllowedSignals := e.config.MaximumSignalsPerExecution(namespaceEntry.GetInfo().Name)
+			maxAllowedSignals := e.config.MaximumSignalsPerExecution(namespace)
 			if maxAllowedSignals > 0 && int(executionInfo.SignalCount) >= maxAllowedSignals {
 				e.logger.Info("Execution limit reached for maximum signals", tag.WorkflowSignalCount(executionInfo.SignalCount),
 					tag.WorkflowID(execution.GetWorkflowId()),
@@ -1931,9 +1934,23 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	// Start workflow and signal
 	startRequest := e.getStartRequest(namespaceID, sRequest)
 	request := startRequest.StartRequest
-	e.overrideStartWorkflowExecutionRequest(namespaceEntry, request, metrics.HistorySignalWorkflowExecutionScope)
-	err = e.validateStartWorkflowExecutionRequest(request, e.config.MaxIDLengthLimit(), namespaceEntry.GetInfo().GetName())
+	e.overrideStartWorkflowExecutionRequest(request, metrics.HistorySignalWithStartWorkflowExecutionScope)
+	err = e.validateStartWorkflowExecutionRequest(ctx, request, namespace, "SignalWithStartWorkflowExecution")
 	if err != nil {
+		return nil, err
+	}
+
+	if err := common.CheckEventBlobSizeLimit(
+		sRequest.GetSignalInput().Size(),
+		e.config.BlobSizeLimitWarn(namespace),
+		e.config.BlobSizeLimitError(namespace),
+		namespaceID,
+		sRequest.GetWorkflowId(),
+		"",
+		e.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		e.throttledLogger,
+		tag.BlobSizeViolationOperation("SignalWithStartWorkflowExecution"),
+	); err != nil {
 		return nil, err
 	}
 
@@ -1967,7 +1984,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		}
 		if prevLastWriteVersion > mutableState.GetCurrentVersion() {
 			return nil, serviceerror.NewNamespaceNotActive(
-				namespaceEntry.GetInfo().Name,
+				namespace,
 				clusterMetadata.GetCurrentClusterName(),
 				clusterMetadata.ClusterNameForFailoverVersion(prevLastWriteVersion),
 			)
@@ -2018,7 +2035,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
-	historySize, err := context.PersistFirstWorkflowEvents(newWorkflowEventsSeq[0])
+	historySize, err := context.PersistWorkflowEvents(newWorkflowEventsSeq[0])
 	if err != nil {
 		return nil, err
 	}
@@ -2560,10 +2577,17 @@ func (e *historyEngineImpl) NotifyNewVisibilityTasks(
 }
 
 func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
+	ctx context.Context,
 	request *workflowservice.StartWorkflowExecutionRequest,
-	maxIDLengthLimit int,
 	namespace string,
+	operation string,
 ) error {
+
+	maxIDLengthLimit := e.config.MaxIDLengthLimit()
+	blobSizeLimitError := e.config.BlobSizeLimitError(namespace)
+	blobSizeLimitWarn := e.config.BlobSizeLimitWarn(namespace)
+	memoSizeLimitError := e.config.MemoSizeLimitError(namespace)
+	memoSizeLimitWarn := e.config.MemoSizeLimitWarn(namespace)
 
 	if len(request.GetRequestId()) == 0 {
 		return serviceerror.NewInvalidArgument("Missing request ID.")
@@ -2607,18 +2631,45 @@ func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
 		return err
 	}
 
+	if err := common.CheckEventBlobSizeLimit(
+		request.GetInput().Size(),
+		blobSizeLimitWarn,
+		blobSizeLimitError,
+		namespace,
+		request.GetWorkflowId(),
+		"",
+		e.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		e.throttledLogger,
+		tag.BlobSizeViolationOperation(operation),
+	); err != nil {
+		return err
+	}
+
+	if err := common.CheckEventBlobSizeLimit(
+		request.GetMemo().Size(),
+		memoSizeLimitWarn,
+		memoSizeLimitError,
+		namespace,
+		request.GetWorkflowId(),
+		"",
+		e.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		e.throttledLogger,
+		tag.BlobSizeViolationOperation(operation),
+	); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
-	namespaceEntry *cache.NamespaceCacheEntry,
 	request *workflowservice.StartWorkflowExecutionRequest,
 	metricsScope int,
 ) {
-	namespace := namespaceEntry.GetInfo().Name
-
 	// workflow execution timeout is left as is
 	//  if workflow execution timeout == 0 -> infinity
+
+	namespace := request.GetNamespace()
 
 	workflowRunTimeout := common.OverrideWorkflowRunTimeout(
 		timestamp.DurationValue(request.GetWorkflowRunTimeout()),
@@ -2633,7 +2684,7 @@ func (e *historyEngineImpl) overrideStartWorkflowExecutionRequest(
 	}
 
 	workflowTaskStartToCloseTimeout := common.OverrideWorkflowTaskTimeout(
-		request.GetNamespace(),
+		namespace,
 		timestamp.DurationValue(request.GetWorkflowTaskTimeout()),
 		timestamp.DurationValue(request.GetWorkflowRunTimeout()),
 		e.config.DefaultWorkflowTaskTimeout,
@@ -3185,4 +3236,8 @@ func (e *historyEngineImpl) loadWorkflow(
 	}
 
 	return nil, serviceerror.NewInternal("unable to locate current workflow execution")
+}
+
+func (e *historyEngineImpl) metricsScope(ctx context.Context) metrics.Scope {
+	return interceptor.MetricsScope(ctx, e.logger)
 }

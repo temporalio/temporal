@@ -136,7 +136,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 		ctx, namespaceID, workflowID,
 	).Return("", nil)
 
-	weContext.EXPECT().PersistFirstWorkflowEvents(
+	weContext.EXPECT().PersistWorkflowEvents(
 		workflowEventsSeq[0],
 	).Return(workflowHistorySize, nil)
 	weContext.EXPECT().CreateWorkflowExecution(
@@ -194,7 +194,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 		ctx, namespaceID, workflowID,
 	).Return("", nil)
 
-	weContext.EXPECT().PersistNonFirstWorkflowEvents(
+	weContext.EXPECT().PersistWorkflowEvents(
 		workflowEventsSeq[0],
 	).Return(workflowHistorySize, nil)
 	weContext.EXPECT().CreateWorkflowExecution(
@@ -271,7 +271,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	}).AnyTimes()
 	currentWorkflow.EXPECT().getVectorClock().Return(currentLastWriteVersion, int64(0), nil)
 
-	targetContext.EXPECT().PersistFirstWorkflowEvents(
+	targetContext.EXPECT().PersistWorkflowEvents(
 		targetWorkflowEventsSeq[0],
 	).Return(targetWorkflowHistorySize, nil)
 	targetContext.EXPECT().CreateWorkflowExecution(
@@ -349,7 +349,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	}).AnyTimes()
 	currentWorkflow.EXPECT().getVectorClock().Return(currentLastWriteVersion, int64(0), nil)
 
-	targetContext.EXPECT().PersistNonFirstWorkflowEvents(
+	targetContext.EXPECT().PersistWorkflowEvents(
 		targetWorkflowEventsSeq[0],
 	).Return(targetWorkflowHistorySize, nil)
 	targetContext.EXPECT().CreateWorkflowExecution(
@@ -421,7 +421,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(workflow.TransactionPolicyPassive, nil)
 
-	targetContext.EXPECT().PersistFirstWorkflowEvents(
+	targetContext.EXPECT().PersistWorkflowEvents(
 		targetWorkflowEventsSeq[0],
 	).Return(targetWorkflowHistorySize, nil)
 	targetContext.EXPECT().CreateWorkflowExecution(
@@ -494,7 +494,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(workflow.TransactionPolicyPassive, nil)
 
-	targetContext.EXPECT().PersistNonFirstWorkflowEvents(
+	targetContext.EXPECT().PersistWorkflowEvents(
 		targetWorkflowEventsSeq[0],
 	).Return(targetWorkflowHistorySize, nil)
 	targetContext.EXPECT().CreateWorkflowExecution(
@@ -567,7 +567,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(workflow.TransactionPolicyPassive, nil)
 
-	targetContext.EXPECT().PersistFirstWorkflowEvents(
+	targetContext.EXPECT().PersistWorkflowEvents(
 		targetWorkflowEventsSeq[0],
 	).Return(targetWorkflowHistorySize, nil)
 	targetContext.EXPECT().CreateWorkflowExecution(
@@ -640,7 +640,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(workflow.TransactionPolicyPassive, nil)
 
-	targetContext.EXPECT().PersistNonFirstWorkflowEvents(
+	targetContext.EXPECT().PersistWorkflowEvents(
 		targetWorkflowEventsSeq[0],
 	).Return(targetWorkflowHistorySize, nil)
 	targetContext.EXPECT().CreateWorkflowExecution(
