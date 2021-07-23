@@ -711,7 +711,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 			return err
 		}
 		newWorkflow.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
-			HistorySize: c.GetHistorySize(),
+			HistorySize: newContext.GetHistorySize(),
 		}
 	}
 
