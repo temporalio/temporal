@@ -91,7 +91,7 @@ const (
 
 type (
 	cassandraMetadataPersistenceV2 struct {
-		cassandraStore
+		CassandraStore
 		currentClusterName string
 	}
 )
@@ -103,15 +103,15 @@ func newMetadataPersistence(
 	logger log.Logger,
 ) (p.MetadataStore, error) {
 	return &cassandraMetadataPersistenceV2{
-		cassandraStore:     cassandraStore{session: session, logger: logger},
+		CassandraStore:     CassandraStore{Session: session, logger: logger},
 		currentClusterName: currentClusterName,
 	}, nil
 }
 
 // Close releases the resources held by this object
 func (m *cassandraMetadataPersistenceV2) Close() {
-	if m.session != nil {
-		m.session.Close()
+	if m.Session != nil {
+		m.Session.Close()
 	}
 }
 
@@ -121,7 +121,7 @@ func (m *cassandraMetadataPersistenceV2) Close() {
 // delete the orphaned entry from namespaces table.  There is a chance delete entry could fail and we never delete the
 // orphaned entry from namespaces table.  We might need a background job to delete those orphaned record.
 func (m *cassandraMetadataPersistenceV2) CreateNamespace(request *p.InternalCreateNamespaceRequest) (*p.CreateNamespaceResponse, error) {
-	query := m.session.Query(templateCreateNamespaceQuery, request.ID, request.Name)
+	query := m.Session.Query(templateCreateNamespaceQuery, request.ID, request.Name)
 	applied, err := query.MapScanCAS(make(map[string]interface{}))
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
@@ -140,7 +140,7 @@ func (m *cassandraMetadataPersistenceV2) CreateNamespaceInV2Table(request *p.Int
 		return nil, err
 	}
 
-	batch := m.session.NewBatch(gocql.LoggedBatch)
+	batch := m.Session.NewBatch(gocql.LoggedBatch)
 	batch.Query(templateCreateNamespaceByNameQueryWithinBatchV2,
 		constNamespacePartition,
 		request.ID,
@@ -153,7 +153,7 @@ func (m *cassandraMetadataPersistenceV2) CreateNamespaceInV2Table(request *p.Int
 	m.updateMetadataBatch(batch, metadata.NotificationVersion)
 
 	previous := make(map[string]interface{})
-	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
+	applied, iter, err := m.Session.MapExecuteBatchCAS(batch, previous)
 	defer func() {
 		if iter != nil {
 			iter.Close()
@@ -166,7 +166,7 @@ func (m *cassandraMetadataPersistenceV2) CreateNamespaceInV2Table(request *p.Int
 
 	if !applied {
 		// Namespace already exist.  Delete orphan namespace record before returning back to user
-		if errDelete := m.session.Query(templateDeleteNamespaceQuery, request.ID).Exec(); errDelete != nil {
+		if errDelete := m.Session.Query(templateDeleteNamespaceQuery, request.ID).Exec(); errDelete != nil {
 			m.logger.Warn("Unable to delete orphan namespace record. Error", tag.Error(errDelete))
 		}
 
@@ -182,7 +182,7 @@ func (m *cassandraMetadataPersistenceV2) CreateNamespaceInV2Table(request *p.Int
 }
 
 func (m *cassandraMetadataPersistenceV2) UpdateNamespace(request *p.InternalUpdateNamespaceRequest) error {
-	batch := m.session.NewBatch(gocql.LoggedBatch)
+	batch := m.Session.NewBatch(gocql.LoggedBatch)
 	batch.Query(templateUpdateNamespaceByNameQueryWithinBatchV2,
 		request.Namespace.Data,
 		request.Namespace.EncodingType.String(),
@@ -193,7 +193,7 @@ func (m *cassandraMetadataPersistenceV2) UpdateNamespace(request *p.InternalUpda
 	m.updateMetadataBatch(batch, request.NotificationVersion)
 
 	previous := make(map[string]interface{})
-	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
+	applied, iter, err := m.Session.MapExecuteBatchCAS(batch, previous)
 	defer func() {
 		if iter != nil {
 			iter.Close()
@@ -237,14 +237,14 @@ func (m *cassandraMetadataPersistenceV2) GetNamespace(request *p.GetNamespaceReq
 
 	namespace := request.Name
 	if len(request.ID) > 0 {
-		query = m.session.Query(templateGetNamespaceQuery, request.ID)
+		query = m.Session.Query(templateGetNamespaceQuery, request.ID)
 		err = query.Scan(&namespace)
 		if err != nil {
 			return nil, handleError(request.Name, request.ID, err)
 		}
 	}
 
-	query = m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, namespace)
+	query = m.Session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, namespace)
 	err = query.Scan(
 		nil,
 		nil,
@@ -266,7 +266,7 @@ func (m *cassandraMetadataPersistenceV2) GetNamespace(request *p.GetNamespaceReq
 }
 
 func (m *cassandraMetadataPersistenceV2) ListNamespaces(request *p.ListNamespacesRequest) (*p.InternalListNamespacesResponse, error) {
-	query := m.session.Query(templateListNamespaceQueryV2, constNamespacePartition)
+	query := m.Session.Query(templateListNamespaceQueryV2, constNamespacePartition)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalListNamespacesResponse{}
@@ -310,7 +310,7 @@ func (m *cassandraMetadataPersistenceV2) ListNamespaces(request *p.ListNamespace
 
 func (m *cassandraMetadataPersistenceV2) DeleteNamespace(request *p.DeleteNamespaceRequest) error {
 	var name string
-	query := m.session.Query(templateGetNamespaceQuery, request.ID)
+	query := m.Session.Query(templateGetNamespaceQuery, request.ID)
 	err := query.Scan(&name)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
@@ -328,7 +328,7 @@ func (m *cassandraMetadataPersistenceV2) DeleteNamespace(request *p.DeleteNamesp
 
 func (m *cassandraMetadataPersistenceV2) DeleteNamespaceByName(request *p.DeleteNamespaceByNameRequest) error {
 	var ID []byte
-	query := m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, request.Name)
+	query := m.Session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, request.Name)
 	err := query.Scan(&ID, nil, nil, nil, nil, nil)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
@@ -341,7 +341,7 @@ func (m *cassandraMetadataPersistenceV2) DeleteNamespaceByName(request *p.Delete
 
 func (m *cassandraMetadataPersistenceV2) GetMetadata() (*p.GetMetadataResponse, error) {
 	var notificationVersion int64
-	query := m.session.Query(templateGetMetadataQueryV2, constNamespacePartition, namespaceMetadataRecordName)
+	query := m.Session.Query(templateGetMetadataQueryV2, constNamespacePartition, namespaceMetadataRecordName)
 	err := query.Scan(&notificationVersion)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
@@ -373,12 +373,12 @@ func (m *cassandraMetadataPersistenceV2) updateMetadataBatch(
 }
 
 func (m *cassandraMetadataPersistenceV2) deleteNamespace(name string, ID []byte) error {
-	query := m.session.Query(templateDeleteNamespaceByNameQueryV2, constNamespacePartition, name)
+	query := m.Session.Query(templateDeleteNamespaceByNameQueryV2, constNamespacePartition, name)
 	if err := query.Exec(); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("DeleteNamespaceByName operation failed. Error %v", err))
 	}
 
-	query = m.session.Query(templateDeleteNamespaceQuery, ID)
+	query = m.Session.Query(templateDeleteNamespaceQuery, ID)
 	if err := query.Exec(); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("DeleteNamespace operation failed. Error %v", err))
 	}

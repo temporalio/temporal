@@ -28,6 +28,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/persistence/visibility"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -37,7 +38,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
@@ -74,8 +74,8 @@ func NewService(
 			persistenceBean persistenceClient.Bean,
 			searchAttributesProvider searchattribute.Provider,
 			logger log.Logger,
-		) (persistence.VisibilityManager, error) {
-			return persistenceBean.GetVisibilityManager(), nil
+		) (visibility.VisibilityManager, error) {
+			return nil, nil
 		},
 	)
 	if err != nil {

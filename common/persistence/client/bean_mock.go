@@ -169,20 +169,6 @@ func (mr *MockBeanMockRecorder) GetTaskManager() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskManager", reflect.TypeOf((*MockBean)(nil).GetTaskManager))
 }
 
-// GetVisibilityManager mocks base method.
-func (m *MockBean) GetVisibilityManager() persistence.VisibilityManager {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVisibilityManager")
-	ret0, _ := ret[0].(persistence.VisibilityManager)
-	return ret0
-}
-
-// GetVisibilityManager indicates an expected call of GetVisibilityManager.
-func (mr *MockBeanMockRecorder) GetVisibilityManager() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityManager", reflect.TypeOf((*MockBean)(nil).GetVisibilityManager))
-}
-
 // SetClusterMetadataManager mocks base method.
 func (m *MockBean) SetClusterMetadataManager(arg0 persistence.ClusterMetadataManager) {
 	m.ctrl.T.Helper()
@@ -265,16 +251,4 @@ func (m *MockBean) SetTaskManager(arg0 persistence.TaskManager) {
 func (mr *MockBeanMockRecorder) SetTaskManager(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTaskManager", reflect.TypeOf((*MockBean)(nil).SetTaskManager), arg0)
-}
-
-// SetVisibilityManager mocks base method.
-func (m *MockBean) SetVisibilityManager(arg0 persistence.VisibilityManager) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetVisibilityManager", arg0)
-}
-
-// SetVisibilityManager indicates an expected call of SetVisibilityManager.
-func (mr *MockBeanMockRecorder) SetVisibilityManager(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVisibilityManager", reflect.TypeOf((*MockBean)(nil).SetVisibilityManager), arg0)
 }

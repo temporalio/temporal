@@ -34,6 +34,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	common "go.temporal.io/api/common/v1"
 	persistence "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility"
 )
 
 // MockShardStore is a mock of ShardStore interface.
@@ -1278,10 +1279,10 @@ func (mr *MockVisibilityStoreMockRecorder) Close() *gomock.Call {
 }
 
 // CountWorkflowExecutions mocks base method.
-func (m *MockVisibilityStore) CountWorkflowExecutions(request *persistence.CountWorkflowExecutionsRequest) (*persistence.CountWorkflowExecutionsResponse, error) {
+func (m *MockVisibilityStore) CountWorkflowExecutions(request *visibility.CountWorkflowExecutionsRequest) (*visibility.CountWorkflowExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CountWorkflowExecutions", request)
-	ret0, _ := ret[0].(*persistence.CountWorkflowExecutionsResponse)
+	ret0, _ := ret[0].(*visibility.CountWorkflowExecutionsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1293,7 +1294,7 @@ func (mr *MockVisibilityStoreMockRecorder) CountWorkflowExecutions(request inter
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockVisibilityStore) DeleteWorkflowExecution(request *persistence.VisibilityDeleteWorkflowExecutionRequest) error {
+func (m *MockVisibilityStore) DeleteWorkflowExecution(request *visibility.VisibilityDeleteWorkflowExecutionRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", request)
 	ret0, _ := ret[0].(error)
@@ -1307,7 +1308,7 @@ func (mr *MockVisibilityStoreMockRecorder) DeleteWorkflowExecution(request inter
 }
 
 // GetClosedWorkflowExecution mocks base method.
-func (m *MockVisibilityStore) GetClosedWorkflowExecution(request *persistence.GetClosedWorkflowExecutionRequest) (*persistence.InternalGetClosedWorkflowExecutionResponse, error) {
+func (m *MockVisibilityStore) GetClosedWorkflowExecution(request *visibility.GetClosedWorkflowExecutionRequest) (*persistence.InternalGetClosedWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetClosedWorkflowExecution", request)
 	ret0, _ := ret[0].(*persistence.InternalGetClosedWorkflowExecutionResponse)
@@ -1336,7 +1337,7 @@ func (mr *MockVisibilityStoreMockRecorder) GetName() *gomock.Call {
 }
 
 // ListClosedWorkflowExecutions mocks base method.
-func (m *MockVisibilityStore) ListClosedWorkflowExecutions(request *persistence.ListWorkflowExecutionsRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
+func (m *MockVisibilityStore) ListClosedWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListClosedWorkflowExecutions", request)
 	ret0, _ := ret[0].(*persistence.InternalListWorkflowExecutionsResponse)
@@ -1351,7 +1352,7 @@ func (mr *MockVisibilityStoreMockRecorder) ListClosedWorkflowExecutions(request 
 }
 
 // ListClosedWorkflowExecutionsByStatus mocks base method.
-func (m *MockVisibilityStore) ListClosedWorkflowExecutionsByStatus(request *persistence.ListClosedWorkflowExecutionsByStatusRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
+func (m *MockVisibilityStore) ListClosedWorkflowExecutionsByStatus(request *visibility.ListClosedWorkflowExecutionsByStatusRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListClosedWorkflowExecutionsByStatus", request)
 	ret0, _ := ret[0].(*persistence.InternalListWorkflowExecutionsResponse)
@@ -1366,7 +1367,7 @@ func (mr *MockVisibilityStoreMockRecorder) ListClosedWorkflowExecutionsByStatus(
 }
 
 // ListClosedWorkflowExecutionsByType mocks base method.
-func (m *MockVisibilityStore) ListClosedWorkflowExecutionsByType(request *persistence.ListWorkflowExecutionsByTypeRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
+func (m *MockVisibilityStore) ListClosedWorkflowExecutionsByType(request *visibility.ListWorkflowExecutionsByTypeRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListClosedWorkflowExecutionsByType", request)
 	ret0, _ := ret[0].(*persistence.InternalListWorkflowExecutionsResponse)
@@ -1381,7 +1382,7 @@ func (mr *MockVisibilityStoreMockRecorder) ListClosedWorkflowExecutionsByType(re
 }
 
 // ListClosedWorkflowExecutionsByWorkflowID mocks base method.
-func (m *MockVisibilityStore) ListClosedWorkflowExecutionsByWorkflowID(request *persistence.ListWorkflowExecutionsByWorkflowIDRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
+func (m *MockVisibilityStore) ListClosedWorkflowExecutionsByWorkflowID(request *visibility.ListWorkflowExecutionsByWorkflowIDRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListClosedWorkflowExecutionsByWorkflowID", request)
 	ret0, _ := ret[0].(*persistence.InternalListWorkflowExecutionsResponse)
@@ -1396,7 +1397,7 @@ func (mr *MockVisibilityStoreMockRecorder) ListClosedWorkflowExecutionsByWorkflo
 }
 
 // ListOpenWorkflowExecutions mocks base method.
-func (m *MockVisibilityStore) ListOpenWorkflowExecutions(request *persistence.ListWorkflowExecutionsRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
+func (m *MockVisibilityStore) ListOpenWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListOpenWorkflowExecutions", request)
 	ret0, _ := ret[0].(*persistence.InternalListWorkflowExecutionsResponse)
@@ -1411,7 +1412,7 @@ func (mr *MockVisibilityStoreMockRecorder) ListOpenWorkflowExecutions(request in
 }
 
 // ListOpenWorkflowExecutionsByType mocks base method.
-func (m *MockVisibilityStore) ListOpenWorkflowExecutionsByType(request *persistence.ListWorkflowExecutionsByTypeRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
+func (m *MockVisibilityStore) ListOpenWorkflowExecutionsByType(request *visibility.ListWorkflowExecutionsByTypeRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListOpenWorkflowExecutionsByType", request)
 	ret0, _ := ret[0].(*persistence.InternalListWorkflowExecutionsResponse)
@@ -1426,7 +1427,7 @@ func (mr *MockVisibilityStoreMockRecorder) ListOpenWorkflowExecutionsByType(requ
 }
 
 // ListOpenWorkflowExecutionsByWorkflowID mocks base method.
-func (m *MockVisibilityStore) ListOpenWorkflowExecutionsByWorkflowID(request *persistence.ListWorkflowExecutionsByWorkflowIDRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
+func (m *MockVisibilityStore) ListOpenWorkflowExecutionsByWorkflowID(request *visibility.ListWorkflowExecutionsByWorkflowIDRequest) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListOpenWorkflowExecutionsByWorkflowID", request)
 	ret0, _ := ret[0].(*persistence.InternalListWorkflowExecutionsResponse)
@@ -1441,7 +1442,7 @@ func (mr *MockVisibilityStoreMockRecorder) ListOpenWorkflowExecutionsByWorkflowI
 }
 
 // ListWorkflowExecutions mocks base method.
-func (m *MockVisibilityStore) ListWorkflowExecutions(request *persistence.ListWorkflowExecutionsRequestV2) (*persistence.InternalListWorkflowExecutionsResponse, error) {
+func (m *MockVisibilityStore) ListWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListWorkflowExecutions", request)
 	ret0, _ := ret[0].(*persistence.InternalListWorkflowExecutionsResponse)
@@ -1484,7 +1485,7 @@ func (mr *MockVisibilityStoreMockRecorder) RecordWorkflowExecutionStarted(reques
 }
 
 // ScanWorkflowExecutions mocks base method.
-func (m *MockVisibilityStore) ScanWorkflowExecutions(request *persistence.ListWorkflowExecutionsRequestV2) (*persistence.InternalListWorkflowExecutionsResponse, error) {
+func (m *MockVisibilityStore) ScanWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ScanWorkflowExecutions", request)
 	ret0, _ := ret[0].(*persistence.InternalListWorkflowExecutionsResponse)

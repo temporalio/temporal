@@ -31,6 +31,7 @@ import (
 	"sync/atomic"
 
 	"go.temporal.io/server/common/persistence/serialization"
+	client2 "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -56,7 +57,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
@@ -77,7 +77,7 @@ type (
 
 		numberOfHistoryShards int32
 		ESConfig              *config.Elasticsearch
-		ESClient              esclient.Client
+		ESClient              client2.Client
 		config                *Config
 		namespaceDLQHandler   namespace.DLQMessageHandler
 		eventSerializer       serialization.Serializer

@@ -29,19 +29,18 @@ import (
 	"io/ioutil"
 
 	"github.com/stretchr/testify/suite"
-
-	"go.temporal.io/server/common/persistence/elasticsearch/client"
+	client2 "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 )
 
 // CreateESClient create ElasticSearch client for test
-func CreateESClient(s suite.Suite, url string, version string) client.IntegrationTestsClient {
-	client, err := client.NewIntegrationTestsClient(url, version)
+func CreateESClient(s suite.Suite, url string, version string) client2.IntegrationTestsClient {
+	client, err := client2.NewIntegrationTestsClient(url, version)
 	s.Require().NoError(err)
 	return client
 }
 
 // PutIndexTemplate put index template for test
-func PutIndexTemplate(s suite.Suite, esClient client.IntegrationTestsClient, templateConfigFile, templateName string) {
+func PutIndexTemplate(s suite.Suite, esClient client2.IntegrationTestsClient, templateConfigFile, templateName string) {
 	// This function is used exclusively in tests. Excluding it from security checks.
 	// #nosec
 	template, err := ioutil.ReadFile(templateConfigFile)
@@ -52,7 +51,7 @@ func PutIndexTemplate(s suite.Suite, esClient client.IntegrationTestsClient, tem
 }
 
 // CreateIndex create test index
-func CreateIndex(s suite.Suite, esClient client.IntegrationTestsClient, indexName string) {
+func CreateIndex(s suite.Suite, esClient client2.IntegrationTestsClient, indexName string) {
 	exists, err := esClient.IndexExists(context.Background(), indexName)
 	s.Require().NoError(err)
 	if exists {
@@ -67,7 +66,7 @@ func CreateIndex(s suite.Suite, esClient client.IntegrationTestsClient, indexNam
 }
 
 // DeleteIndex delete test index
-func DeleteIndex(s suite.Suite, esClient client.IntegrationTestsClient, indexName string) {
+func DeleteIndex(s suite.Suite, esClient client2.IntegrationTestsClient, indexName string) {
 	acknowledged, err := esClient.DeleteIndex(context.Background(), indexName)
 	s.NoError(err)
 	s.True(acknowledged)

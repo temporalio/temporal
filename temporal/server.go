@@ -46,8 +46,8 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
@@ -269,7 +269,7 @@ func (s *Server) newBootstrapParams(
 	serverReporter metrics.Reporter,
 	sdkReporter metrics.Reporter,
 	esConfig *config.Elasticsearch,
-	esClient esclient.Client,
+	esClient client.Client,
 ) (*resource.BootstrapParams, error) {
 
 	params := &resource.BootstrapParams{
@@ -384,7 +384,7 @@ func (s *Server) newBootstrapParams(
 	return params, nil
 }
 
-func (s *Server) getESConfigClient(advancedVisibilityWritingMode string) (*config.Elasticsearch, esclient.Client, error) {
+func (s *Server) getESConfigClient(advancedVisibilityWritingMode string) (*config.Elasticsearch, client.Client, error) {
 	if advancedVisibilityWritingMode == common.AdvancedVisibilityWritingModeOff {
 		return nil, nil, nil
 	}
@@ -401,13 +401,13 @@ func (s *Server) getESConfigClient(advancedVisibilityWritingMode string) (*confi
 
 	if s.so.elasticseachHttpClient == nil {
 		var err error
-		s.so.elasticseachHttpClient, err = esclient.NewAwsHttpClient(advancedVisibilityStore.ElasticSearch.AWSRequestSigning)
+		s.so.elasticseachHttpClient, err = client.NewAwsHttpClient(advancedVisibilityStore.ElasticSearch.AWSRequestSigning)
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
 		}
 	}
 
-	esClient, err := esclient.NewClient(advancedVisibilityStore.ElasticSearch, s.so.elasticseachHttpClient, s.logger)
+	esClient, err := client.NewClient(advancedVisibilityStore.ElasticSearch, s.so.elasticseachHttpClient, s.logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to create Elasticsearch client: %w", err)
 	}

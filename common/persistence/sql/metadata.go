@@ -38,7 +38,7 @@ import (
 )
 
 type sqlMetadataManagerV2 struct {
-	sqlStore
+	SqlStore
 	activeClusterName string
 }
 
@@ -49,8 +49,8 @@ func newMetadataPersistenceV2(
 	logger log.Logger,
 ) (persistence.MetadataStore, error) {
 	return &sqlMetadataManagerV2{
-		sqlStore: sqlStore{
-			db:     db,
+		SqlStore: SqlStore{
+			Db:     db,
 			logger: logger,
 		},
 		activeClusterName: currentClusterName,
@@ -81,7 +81,7 @@ func (m *sqlMetadataManagerV2) CreateNamespace(
 			IsGlobal:            request.IsGlobal,
 			NotificationVersion: metadata.NotificationVersion,
 		}); err != nil {
-			if m.db.IsDupEntryError(err) {
+			if m.Db.IsDupEntryError(err) {
 				return serviceerror.NewNamespaceAlreadyExists(fmt.Sprintf("name: %v", request.Name))
 			}
 			return err
@@ -119,7 +119,7 @@ func (m *sqlMetadataManagerV2) GetNamespace(
 		return nil, serviceerror.NewInvalidArgument("GetNamespace operation failed.  Both ID and Name are empty.")
 	}
 
-	rows, err := m.db.SelectFromNamespace(ctx, filter)
+	rows, err := m.Db.SelectFromNamespace(ctx, filter)
 	if err != nil {
 		switch err {
 		case sql.ErrNoRows:
@@ -222,7 +222,7 @@ func (m *sqlMetadataManagerV2) DeleteNamespaceByName(request *persistence.Delete
 func (m *sqlMetadataManagerV2) GetMetadata() (*persistence.GetMetadataResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	row, err := m.db.SelectFromNamespaceMetadata(ctx)
+	row, err := m.Db.SelectFromNamespaceMetadata(ctx)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("GetMetadata operation failed. Error: %v", err))
 	}
@@ -237,7 +237,7 @@ func (m *sqlMetadataManagerV2) ListNamespaces(request *persistence.ListNamespace
 		token := primitives.UUID(request.NextPageToken)
 		pageToken = &token
 	}
-	rows, err := m.db.SelectFromNamespace(ctx, sqlplugin.NamespaceFilter{
+	rows, err := m.Db.SelectFromNamespace(ctx, sqlplugin.NamespaceFilter{
 		GreaterThanID: pageToken,
 		PageSize:      &request.PageSize,
 	})

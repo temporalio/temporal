@@ -38,15 +38,15 @@ import (
 )
 
 type sqlClusterMetadataManager struct {
-	sqlStore
+	SqlStore
 }
 
 var _ p.ClusterMetadataStore = (*sqlClusterMetadataManager)(nil)
 
 func (s *sqlClusterMetadataManager) GetClusterMetadata() (*p.InternalGetClusterMetadataResponse, error) {
-	ctx, cancel := newVisibilityContext()
+	ctx, cancel := newExecutionContext()
 	defer cancel()
-	row, err := s.db.GetClusterMetadata(ctx)
+	row, err := s.Db.GetClusterMetadata(ctx)
 
 	if err != nil {
 		return nil, convertCommonErrors("GetClusterMetadata", err)
@@ -123,7 +123,7 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembe
 		filter.RPCAddressEquals = request.RPCAddressEquals.String()
 	}
 
-	rows, err := s.db.GetClusterMembers(ctx, filter)
+	rows, err := s.Db.GetClusterMembers(ctx, filter)
 
 	if err != nil {
 		return nil, convertCommonErrors("GetClusterMembers", err)
@@ -156,7 +156,7 @@ func (s *sqlClusterMetadataManager) UpsertClusterMembership(request *p.UpsertClu
 	defer cancel()
 	now := time.Now().UTC()
 	recordExpiry := now.Add(request.RecordExpiry)
-	_, err := s.db.UpsertClusterMembership(ctx, &sqlplugin.ClusterMembershipRow{
+	_, err := s.Db.UpsertClusterMembership(ctx, &sqlplugin.ClusterMembershipRow{
 		Role:          request.Role,
 		HostID:        request.HostID,
 		RPCAddress:    request.RPCAddress.String(),
@@ -175,7 +175,7 @@ func (s *sqlClusterMetadataManager) UpsertClusterMembership(request *p.UpsertClu
 func (s *sqlClusterMetadataManager) PruneClusterMembership(request *p.PruneClusterMembershipRequest) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	_, err := s.db.PruneClusterMembership(ctx, &sqlplugin.PruneClusterMembershipFilter{
+	_, err := s.Db.PruneClusterMembership(ctx, &sqlplugin.PruneClusterMembershipFilter{
 		PruneRecordsBefore: time.Now().UTC(),
 		MaxRecordsAffected: request.MaxRecordsPruned})
 
@@ -191,8 +191,8 @@ func newClusterMetadataPersistence(
 	logger log.Logger,
 ) (p.ClusterMetadataStore, error) {
 	return &sqlClusterMetadataManager{
-		sqlStore: sqlStore{
-			db:     db,
+		SqlStore: SqlStore{
+			Db:     db,
 			logger: logger,
 		},
 	}, nil

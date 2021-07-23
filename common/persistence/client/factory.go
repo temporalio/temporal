@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -56,8 +55,6 @@ type (
 		NewMetadataManager() (p.MetadataManager, error)
 		// NewExecutionManager returns a new execution manager for a given shardID
 		NewExecutionManager(shardID int32) (p.ExecutionManager, error)
-		// NewVisibilityManager returns a new visibility manager
-		NewVisibilityManager() (p.VisibilityManager, error)
 		// NewNamespaceReplicationQueue returns a new queue for namespace replication
 		NewNamespaceReplicationQueue() (p.NamespaceReplicationQueue, error)
 		// NewClusterMetadata returns a new manager for cluster specific metadata
@@ -78,8 +75,6 @@ type (
 		NewMetadataStore() (p.MetadataStore, error)
 		// NewExecutionStore returns an execution store for given shardID
 		NewExecutionStore(shardID int32) (p.ExecutionStore, error)
-		// NewVisibilityStore returns a new visibility store
-		NewVisibilityStore() (p.VisibilityStore, error)
 		NewQueue(queueType p.QueueType) (p.Queue, error)
 		// NewClusterMetadataStore returns a new metadata store
 		NewClusterMetadataStore() (p.ClusterMetadataStore, error)
@@ -266,39 +261,6 @@ func (f *factoryImpl) NewExecutionManager(
 	if f.metricsClient != nil {
 		result = p.NewWorkflowExecutionPersistenceMetricsClient(result, f.metricsClient, f.logger)
 	}
-	return result, nil
-}
-
-// NewVisibilityManager returns a new visibility manager
-func (f *factoryImpl) NewVisibilityManager() (p.VisibilityManager, error) {
-	visConfig := f.config.VisibilityConfig
-	if visConfig == nil {
-		return nil, nil
-	}
-
-	ds, ok := f.datastores[storeTypeVisibility]
-	if !ok {
-		return nil, nil
-	}
-
-	store, err := ds.factory.NewVisibilityStore()
-	if err != nil {
-		return nil, err
-	}
-
-	// This visibility manager is used by DB visibility only and doesn't care about search attributes.
-	result := p.NewVisibilityManagerImpl(store, searchattribute.NewSystemProvider(), "", f.logger)
-	if ds.ratelimit != nil {
-		result = p.NewVisibilityPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
-	}
-
-	if visConfig.EnableSampling() {
-		result = p.NewVisibilitySamplingClient(result, visConfig, f.metricsClient, f.logger)
-	}
-	if f.metricsClient != nil {
-		result = p.NewVisibilityPersistenceMetricsClient(result, f.metricsClient, f.logger)
-	}
-
 	return result, nil
 }
 

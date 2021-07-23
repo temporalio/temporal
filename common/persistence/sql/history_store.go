@@ -41,7 +41,7 @@ import (
 
 type (
 	sqlHistoryV2Manager struct {
-		sqlStore
+		SqlStore
 	}
 )
 
@@ -57,8 +57,8 @@ func newHistoryV2Persistence(
 ) (p.HistoryStore, error) {
 
 	return &sqlHistoryV2Manager{
-		sqlStore: sqlStore{
-			db:     db,
+		SqlStore: SqlStore{
+			Db:     db,
 			logger: logger,
 		},
 	}, nil
@@ -94,9 +94,9 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 	}
 
 	if !request.IsNewBranch {
-		_, err = m.db.InsertIntoHistoryNode(ctx, nodeRow)
+		_, err = m.Db.InsertIntoHistoryNode(ctx, nodeRow)
 		if err != nil {
-			if m.db.IsDupEntryError(err) {
+			if m.Db.IsDupEntryError(err) {
 				return &p.ConditionFailedError{Msg: fmt.Sprintf("AppendHistoryNodes: row already exist: %v", err)}
 			}
 			return serviceerror.NewInternal(fmt.Sprintf("AppendHistoryNodes: %v", err))
@@ -174,7 +174,7 @@ func (m *sqlHistoryV2Manager) DeleteHistoryNodes(
 		ShardID:  shardID,
 	}
 
-	_, err = m.db.DeleteFromHistoryNode(ctx, nodeRow)
+	_, err = m.Db.DeleteFromHistoryNode(ctx, nodeRow)
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("DeleteHistoryNodes: %v", err))
 	}
@@ -214,7 +214,7 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 		}
 	}
 
-	rows, err := m.db.RangeSelectFromHistoryNode(ctx, sqlplugin.HistoryNodeSelectFilter{
+	rows, err := m.Db.RangeSelectFromHistoryNode(ctx, sqlplugin.HistoryNodeSelectFilter{
 		ShardID:      request.ShardID,
 		TreeID:       treeIDBytes,
 		BranchID:     branchIDBytes,
@@ -330,7 +330,7 @@ func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 		DataEncoding: treeInfoBlob.EncodingType.String(),
 	}
 
-	result, err := m.db.InsertIntoHistoryTree(ctx, row)
+	result, err := m.Db.InsertIntoHistoryTree(ctx, row)
 	if err != nil {
 		return err
 	}
@@ -413,7 +413,7 @@ func (m *sqlHistoryV2Manager) GetHistoryTree(
 		return nil, err
 	}
 
-	rows, err := m.db.SelectFromHistoryTree(ctx, sqlplugin.HistoryTreeSelectFilter{
+	rows, err := m.Db.SelectFromHistoryTree(ctx, sqlplugin.HistoryTreeSelectFilter{
 		TreeID:  treeID,
 		ShardID: *request.ShardID,
 	})

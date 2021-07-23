@@ -106,11 +106,6 @@ func (f *Factory) NewExecutionStore(shardID int32) (p.ExecutionStore, error) {
 	return factory.new(shardID)
 }
 
-// NewVisibilityStore returns a visibility store
-func (f *Factory) NewVisibilityStore() (p.VisibilityStore, error) {
-	return newVisibilityPersistence(f.session, f.logger)
-}
-
 // NewQueue returns a new queue backed by cassandra
 func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
 	return newQueue(f.session, f.logger, queueType)

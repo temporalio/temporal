@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/persistence/visibility"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -2182,7 +2183,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		return nil, err
 	}
 
-	baseReq := persistence.ListWorkflowExecutionsRequest{
+	baseReq := visibility.ListWorkflowExecutionsRequest{
 		NamespaceID:       namespaceID,
 		Namespace:         namespace,
 		PageSize:          int(request.GetMaximumPageSize()),
@@ -2191,13 +2192,13 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()),
 	}
 
-	var persistenceResp *persistence.ListWorkflowExecutionsResponse
+	var persistenceResp *visibility.ListWorkflowExecutionsResponse
 	if request.GetExecutionFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespace) {
 			err = errNoPermission
 		} else {
 			persistenceResp, err = wh.GetVisibilityManager().ListOpenWorkflowExecutionsByWorkflowID(
-				&persistence.ListWorkflowExecutionsByWorkflowIDRequest{
+				&visibility.ListWorkflowExecutionsByWorkflowIDRequest{
 					ListWorkflowExecutionsRequest: baseReq,
 					WorkflowID:                    request.GetExecutionFilter().GetWorkflowId(),
 				})
@@ -2208,7 +2209,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		if wh.config.DisableListVisibilityByFilter(namespace) {
 			err = errNoPermission
 		} else {
-			persistenceResp, err = wh.GetVisibilityManager().ListOpenWorkflowExecutionsByType(&persistence.ListWorkflowExecutionsByTypeRequest{
+			persistenceResp, err = wh.GetVisibilityManager().ListOpenWorkflowExecutionsByType(&visibility.ListWorkflowExecutionsByTypeRequest{
 				ListWorkflowExecutionsRequest: baseReq,
 				WorkflowTypeName:              request.GetTypeFilter().GetName(),
 			})
@@ -2279,7 +2280,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		return nil, err
 	}
 
-	baseReq := persistence.ListWorkflowExecutionsRequest{
+	baseReq := visibility.ListWorkflowExecutionsRequest{
 		NamespaceID:       namespaceID,
 		Namespace:         namespace,
 		PageSize:          int(request.GetMaximumPageSize()),
@@ -2288,13 +2289,13 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()),
 	}
 
-	var persistenceResp *persistence.ListWorkflowExecutionsResponse
+	var persistenceResp *visibility.ListWorkflowExecutionsResponse
 	if request.GetExecutionFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespace) {
 			err = errNoPermission
 		} else {
 			persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByWorkflowID(
-				&persistence.ListWorkflowExecutionsByWorkflowIDRequest{
+				&visibility.ListWorkflowExecutionsByWorkflowIDRequest{
 					ListWorkflowExecutionsRequest: baseReq,
 					WorkflowID:                    request.GetExecutionFilter().GetWorkflowId(),
 				})
@@ -2305,7 +2306,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		if wh.config.DisableListVisibilityByFilter(namespace) {
 			err = errNoPermission
 		} else {
-			persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByType(&persistence.ListWorkflowExecutionsByTypeRequest{
+			persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByType(&visibility.ListWorkflowExecutionsByTypeRequest{
 				ListWorkflowExecutionsRequest: baseReq,
 				WorkflowTypeName:              request.GetTypeFilter().GetName(),
 			})
@@ -2319,7 +2320,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 			if request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED || request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				err = errStatusFilterMustBeNotRunning
 			} else {
-				persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByStatus(&persistence.ListClosedWorkflowExecutionsByStatusRequest{
+				persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByStatus(&visibility.ListClosedWorkflowExecutionsByStatusRequest{
 					ListWorkflowExecutionsRequest: baseReq,
 					Status:                        request.GetStatusFilter().GetStatus(),
 				})
@@ -2379,7 +2380,7 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 		return nil, err
 	}
 
-	req := &persistence.ListWorkflowExecutionsRequestV2{
+	req := &visibility.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   namespaceID,
 		Namespace:     namespace,
 		PageSize:      int(request.GetPageSize()),
@@ -2525,7 +2526,7 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 		return nil, err
 	}
 
-	req := &persistence.ListWorkflowExecutionsRequestV2{
+	req := &visibility.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   namespaceID,
 		Namespace:     namespace,
 		PageSize:      int(request.GetPageSize()),
@@ -2574,7 +2575,7 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 		return nil, err
 	}
 
-	req := &persistence.CountWorkflowExecutionsRequest{
+	req := &visibility.CountWorkflowExecutionsRequest{
 		NamespaceID: namespaceID,
 		Namespace:   namespace,
 		Query:       request.GetQuery(),

@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package persistence
+package visibility
 
 import (
 	"time"
@@ -41,23 +41,23 @@ import (
 type (
 	visibilityManagerImpl struct {
 		serializer                 serialization.Serializer
-		persistence                VisibilityStore
+		store                      VisibilityStore
 		searchAttributesProvider   searchattribute.Provider
 		defaultVisibilityIndexName string
 		logger                     log.Logger
 	}
 )
 
-// VisibilityEncoding is default encoding for visibility data
-const VisibilityEncoding = enumspb.ENCODING_TYPE_PROTO3
+// MemoEncoding is default encoding for visibility memo.
+const MemoEncoding = enumspb.ENCODING_TYPE_PROTO3
 
 var _ VisibilityManager = (*visibilityManagerImpl)(nil)
 
 // NewVisibilityManagerImpl returns new VisibilityManager
-func NewVisibilityManagerImpl(persistence VisibilityStore, searchAttributesProvider searchattribute.Provider, defaultVisibilityIndexName string, logger log.Logger) VisibilityManager {
+func NewVisibilityManagerImpl(store VisibilityStore, searchAttributesProvider searchattribute.Provider, defaultVisibilityIndexName string, logger log.Logger) VisibilityManager {
 	return &visibilityManagerImpl{
 		serializer:                 serialization.NewSerializer(),
-		persistence:                persistence,
+		store:                      store,
 		searchAttributesProvider:   searchAttributesProvider,
 		defaultVisibilityIndexName: defaultVisibilityIndexName,
 		logger:                     logger,
@@ -65,18 +65,18 @@ func NewVisibilityManagerImpl(persistence VisibilityStore, searchAttributesProvi
 }
 
 func (v *visibilityManagerImpl) Close() {
-	v.persistence.Close()
+	v.store.Close()
 }
 
 func (v *visibilityManagerImpl) GetName() string {
-	return v.persistence.GetName()
+	return v.store.GetName()
 }
 
 func (v *visibilityManagerImpl) RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error {
 	req := &InternalRecordWorkflowExecutionStartedRequest{
 		InternalVisibilityRequestBase: v.newInternalVisibilityRequestBase(request.VisibilityRequestBase),
 	}
-	return v.persistence.RecordWorkflowExecutionStarted(req)
+	return v.store.RecordWorkflowExecutionStarted(req)
 }
 
 func (v *visibilityManagerImpl) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
@@ -86,14 +86,14 @@ func (v *visibilityManagerImpl) RecordWorkflowExecutionClosed(request *RecordWor
 		HistoryLength:                 request.HistoryLength,
 		Retention:                     request.Retention,
 	}
-	return v.persistence.RecordWorkflowExecutionClosed(req)
+	return v.store.RecordWorkflowExecutionClosed(req)
 }
 
 func (v *visibilityManagerImpl) UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error {
 	req := &InternalUpsertWorkflowExecutionRequest{
 		InternalVisibilityRequestBase: v.newInternalVisibilityRequestBase(request.VisibilityRequestBase),
 	}
-	return v.persistence.UpsertWorkflowExecution(req)
+	return v.store.UpsertWorkflowExecution(req)
 }
 
 func (v *visibilityManagerImpl) newInternalVisibilityRequestBase(request *VisibilityRequestBase) *InternalVisibilityRequestBase {
@@ -114,7 +114,7 @@ func (v *visibilityManagerImpl) newInternalVisibilityRequestBase(request *Visibi
 }
 
 func (v *visibilityManagerImpl) ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
-	internalResp, err := v.persistence.ListOpenWorkflowExecutions(request)
+	internalResp, err := v.store.ListOpenWorkflowExecutions(request)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func (v *visibilityManagerImpl) ListOpenWorkflowExecutions(request *ListWorkflow
 }
 
 func (v *visibilityManagerImpl) ListClosedWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
-	internalResp, err := v.persistence.ListClosedWorkflowExecutions(request)
+	internalResp, err := v.store.ListClosedWorkflowExecutions(request)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +130,7 @@ func (v *visibilityManagerImpl) ListClosedWorkflowExecutions(request *ListWorkfl
 }
 
 func (v *visibilityManagerImpl) ListOpenWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error) {
-	internalResp, err := v.persistence.ListOpenWorkflowExecutionsByType(request)
+	internalResp, err := v.store.ListOpenWorkflowExecutionsByType(request)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +138,7 @@ func (v *visibilityManagerImpl) ListOpenWorkflowExecutionsByType(request *ListWo
 }
 
 func (v *visibilityManagerImpl) ListClosedWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error) {
-	internalResp, err := v.persistence.ListClosedWorkflowExecutionsByType(request)
+	internalResp, err := v.store.ListClosedWorkflowExecutionsByType(request)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (v *visibilityManagerImpl) ListClosedWorkflowExecutionsByType(request *List
 }
 
 func (v *visibilityManagerImpl) ListOpenWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error) {
-	internalResp, err := v.persistence.ListOpenWorkflowExecutionsByWorkflowID(request)
+	internalResp, err := v.store.ListOpenWorkflowExecutionsByWorkflowID(request)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +154,7 @@ func (v *visibilityManagerImpl) ListOpenWorkflowExecutionsByWorkflowID(request *
 }
 
 func (v *visibilityManagerImpl) ListClosedWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error) {
-	internalResp, err := v.persistence.ListClosedWorkflowExecutionsByWorkflowID(request)
+	internalResp, err := v.store.ListClosedWorkflowExecutionsByWorkflowID(request)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +162,7 @@ func (v *visibilityManagerImpl) ListClosedWorkflowExecutionsByWorkflowID(request
 }
 
 func (v *visibilityManagerImpl) ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error) {
-	internalResp, err := v.persistence.ListClosedWorkflowExecutionsByStatus(request)
+	internalResp, err := v.store.ListClosedWorkflowExecutionsByStatus(request)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func (v *visibilityManagerImpl) ListClosedWorkflowExecutionsByStatus(request *Li
 }
 
 func (v *visibilityManagerImpl) GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error) {
-	internalResp, err := v.persistence.GetClosedWorkflowExecution(request)
+	internalResp, err := v.store.GetClosedWorkflowExecution(request)
 	if err != nil {
 		return nil, err
 	}
@@ -178,11 +178,11 @@ func (v *visibilityManagerImpl) GetClosedWorkflowExecution(request *GetClosedWor
 }
 
 func (v *visibilityManagerImpl) DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error {
-	return v.persistence.DeleteWorkflowExecution(request)
+	return v.store.DeleteWorkflowExecution(request)
 }
 
 func (v *visibilityManagerImpl) ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error) {
-	internalResp, err := v.persistence.ListWorkflowExecutions(request)
+	internalResp, err := v.store.ListWorkflowExecutions(request)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +190,7 @@ func (v *visibilityManagerImpl) ListWorkflowExecutions(request *ListWorkflowExec
 }
 
 func (v *visibilityManagerImpl) ScanWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error) {
-	internalResp, err := v.persistence.ScanWorkflowExecutions(request)
+	internalResp, err := v.store.ScanWorkflowExecutions(request)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +198,7 @@ func (v *visibilityManagerImpl) ScanWorkflowExecutions(request *ListWorkflowExec
 }
 
 func (v *visibilityManagerImpl) CountWorkflowExecutions(request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error) {
-	return v.persistence.CountWorkflowExecutions(request)
+	return v.store.CountWorkflowExecutions(request)
 }
 
 func (v *visibilityManagerImpl) convertInternalGetResponse(internalResp *InternalGetClosedWorkflowExecutionResponse) *GetClosedWorkflowExecutionResponse {
@@ -285,7 +285,7 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 }
 
 func (v *visibilityManagerImpl) serializeMemo(visibilityMemo *commonpb.Memo, namespaceID, wID, rID string) *commonpb.DataBlob {
-	memo, err := v.serializer.SerializeVisibilityMemo(visibilityMemo, VisibilityEncoding)
+	memo, err := v.serializer.SerializeVisibilityMemo(visibilityMemo, MemoEncoding)
 	if err != nil {
 		v.logger.Error("Unable to encode visibility memo",
 			tag.WorkflowNamespaceID(namespaceID),

@@ -37,7 +37,7 @@ import (
 )
 
 type sqlShardStore struct {
-	sqlStore
+	SqlStore
 	currentClusterName string
 }
 
@@ -48,8 +48,8 @@ func newShardPersistence(
 	log log.Logger,
 ) (persistence.ShardStore, error) {
 	return &sqlShardStore{
-		sqlStore: sqlStore{
-			db:     db,
+		SqlStore: SqlStore{
+			Db:     db,
 			logger: log,
 		},
 		currentClusterName: currentClusterName,
@@ -80,7 +80,7 @@ func (m *sqlShardStore) CreateShard(
 		DataEncoding: request.ShardInfo.EncodingType.String(),
 	}
 
-	if _, err := m.db.InsertIntoShards(ctx, row); err != nil {
+	if _, err := m.Db.InsertIntoShards(ctx, row); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("CreateShard operation failed. Failed to insert into shards table. Error: %v", err))
 	}
 
@@ -92,7 +92,7 @@ func (m *sqlShardStore) GetShard(
 ) (*persistence.InternalGetShardResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	row, err := m.db.SelectFromShards(ctx, sqlplugin.ShardsFilter{
+	row, err := m.Db.SelectFromShards(ctx, sqlplugin.ShardsFilter{
 		ShardID: request.ShardID,
 	})
 	switch err {
