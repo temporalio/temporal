@@ -75,7 +75,7 @@ func (nli *NamespaceLogInterceptor) Intercept(
 			}
 		}
 		nli.logger.Debug(
-			"frontend method invoked",
+			"Frontend method invoked.",
 			tag.WorkflowNamespace(namespace),
 			tag.Operation(methodName),
 			tag.ServerName(serverName),
