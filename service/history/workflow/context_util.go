@@ -36,6 +36,135 @@ import (
 	"go.temporal.io/server/service/history/shard"
 )
 
+func CreateWorkflowExecution(
+	shard shard.Context,
+	createMode persistence.CreateWorkflowMode,
+	newWorkflowSnapshot *persistence.WorkflowSnapshot,
+	newWorkflowEventsSeq []*persistence.WorkflowEvents,
+) (int64, error) {
+
+	newWorkflowHistorySizeDiff := int64(0)
+
+	for _, workflowEvents := range newWorkflowEventsSeq {
+		eventsSize, err := PersistWorkflowEvents(shard, workflowEvents)
+		if err != nil {
+			return 0, err
+		}
+		newWorkflowHistorySizeDiff += eventsSize
+	}
+	newWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += newWorkflowHistorySizeDiff
+
+	if err := createWorkflowExecutionWithRetry(shard, &persistence.CreateWorkflowExecutionRequest{
+		// RangeID , this is set by shard context
+		Mode:                createMode,
+		NewWorkflowSnapshot: *newWorkflowSnapshot,
+	}); err != nil {
+		return 0, err
+	}
+	return newWorkflowHistorySizeDiff, nil
+}
+
+func ConflictResolveWorkflowExecution(
+	shard shard.Context,
+	conflictResolveMode persistence.ConflictResolveWorkflowMode,
+	resetWorkflowSnapshot *persistence.WorkflowSnapshot,
+	resetWorkflowEventsSeq []*persistence.WorkflowEvents,
+	newWorkflowSnapshot *persistence.WorkflowSnapshot,
+	newWorkflowEventsSeq []*persistence.WorkflowEvents,
+	currentWorkflowMutation *persistence.WorkflowMutation,
+	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
+) (int64, int64, int64, error) {
+
+	resetHistorySizeDiff := int64(0)
+	newWorkflowHistorySizeDiff := int64(0)
+	currentWorkflowHistorySizeDiff := int64(0)
+
+	for _, workflowEvents := range resetWorkflowEventsSeq {
+		eventsSize, err := PersistWorkflowEvents(shard, workflowEvents)
+		if err != nil {
+			return 0, 0, 0, err
+		}
+		resetHistorySizeDiff += eventsSize
+	}
+	resetWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += resetHistorySizeDiff
+
+	if newWorkflowSnapshot != nil {
+		for _, workflowEvents := range newWorkflowEventsSeq {
+			eventsSize, err := PersistWorkflowEvents(shard, workflowEvents)
+			if err != nil {
+				return 0, 0, 0, err
+			}
+			newWorkflowHistorySizeDiff += eventsSize
+		}
+		newWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += newWorkflowHistorySizeDiff
+	}
+
+	if currentWorkflowMutation != nil {
+		for _, workflowEvents := range currentWorkflowEventsSeq {
+			eventsSize, err := PersistWorkflowEvents(shard, workflowEvents)
+			if err != nil {
+				return 0, 0, 0, err
+			}
+			currentWorkflowHistorySizeDiff += eventsSize
+		}
+		currentWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize += currentWorkflowHistorySizeDiff
+	}
+
+	if err := shard.ConflictResolveWorkflowExecution(&persistence.ConflictResolveWorkflowExecutionRequest{
+		// RangeID , this is set by shard context
+		Mode:                    conflictResolveMode,
+		ResetWorkflowSnapshot:   *resetWorkflowSnapshot,
+		NewWorkflowSnapshot:     newWorkflowSnapshot,
+		CurrentWorkflowMutation: currentWorkflowMutation,
+	}); err != nil {
+		return 0, 0, 0, err
+	}
+	return resetHistorySizeDiff, newWorkflowHistorySizeDiff, currentWorkflowHistorySizeDiff, nil
+}
+
+func UpdateWorkflowExecution(
+	shard shard.Context,
+	updateMode persistence.UpdateWorkflowMode,
+	currentWorkflowMutation *persistence.WorkflowMutation,
+	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
+	newWorkflowSnapshot *persistence.WorkflowSnapshot,
+	newWorkflowEventsSeq []*persistence.WorkflowEvents,
+) (int64, int64, error) {
+
+	currentWorkflowHistorySizeDiff := int64(0)
+	newWorkflowHistorySizeDiff := int64(0)
+
+	for _, workflowEvents := range currentWorkflowEventsSeq {
+		eventsSize, err := PersistWorkflowEvents(shard, workflowEvents)
+		if err != nil {
+			return 0, 0, err
+		}
+		currentWorkflowHistorySizeDiff += eventsSize
+	}
+	currentWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize += currentWorkflowHistorySizeDiff
+
+	if newWorkflowSnapshot != nil {
+		for _, workflowEvents := range newWorkflowEventsSeq {
+			eventsSize, err := PersistWorkflowEvents(shard, workflowEvents)
+			if err != nil {
+				return 0, 0, err
+			}
+			newWorkflowHistorySizeDiff += eventsSize
+		}
+		newWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += newWorkflowHistorySizeDiff
+	}
+
+	if err := updateWorkflowExecutionWithRetry(shard, &persistence.UpdateWorkflowExecutionRequest{
+		// RangeID , this is set by shard context
+		Mode:                   updateMode,
+		UpdateWorkflowMutation: *currentWorkflowMutation,
+		NewWorkflowSnapshot:    newWorkflowSnapshot,
+	}); err != nil {
+		return 0, 0, err
+	}
+	return currentWorkflowHistorySizeDiff, newWorkflowHistorySizeDiff, nil
+}
+
 func PersistWorkflowEvents(
 	shard shard.Context,
 	workflowEvents *persistence.WorkflowEvents,
@@ -144,12 +273,10 @@ func appendHistoryV2EventsWithRetry(
 func createWorkflowExecutionWithRetry(
 	shard shard.Context,
 	request *persistence.CreateWorkflowExecutionRequest,
-) (*persistence.CreateWorkflowExecutionResponse, error) {
+) error {
 
-	var resp *persistence.CreateWorkflowExecutionResponse
 	op := func() error {
-		var err error
-		resp, err = shard.CreateWorkflowExecution(request)
+		_, err := shard.CreateWorkflowExecution(request)
 		return err
 	}
 
@@ -160,11 +287,11 @@ func createWorkflowExecutionWithRetry(
 	)
 	switch err.(type) {
 	case nil:
-		return resp, nil
+		return nil
 	case *persistence.WorkflowExecutionAlreadyStartedError:
 		// it is possible that workflow already exists and caller need to apply
 		// workflow ID reuse policy
-		return nil, err
+		return err
 	default:
 		shard.GetLogger().Error(
 			"Persistent store operation Failure",
@@ -174,7 +301,7 @@ func createWorkflowExecutionWithRetry(
 			tag.StoreOperationCreateWorkflowExecution,
 			tag.Error(err),
 		)
-		return nil, err
+		return err
 	}
 }
 
@@ -218,25 +345,38 @@ func getWorkflowExecutionWithRetry(
 func updateWorkflowExecutionWithRetry(
 	shard shard.Context,
 	request *persistence.UpdateWorkflowExecutionRequest,
-) (*persistence.UpdateWorkflowExecutionResponse, error) {
+) error {
 
 	var resp *persistence.UpdateWorkflowExecutionResponse
+	var err error
 	op := func() error {
-		var err error
 		resp, err = shard.UpdateWorkflowExecution(request)
 		return err
 	}
 
-	err := backoff.Retry(
+	err = backoff.Retry(
 		op, PersistenceOperationRetryPolicy,
 		common.IsPersistenceTransientError,
 	)
 	switch err.(type) {
 	case nil:
-		return resp, nil
+		// TODO @wxing1292
+		//  temporarily move the emission of per update mutable state metrics
+		//  to here, long term story, this emission of metrics should have a
+		//  dedicated layer
+		if namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(
+			request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId,
+		); err == nil {
+			emitSessionUpdateStats(
+				shard.GetMetricsClient(),
+				namespaceEntry.GetInfo().Name,
+				resp.MutableStateUpdateSessionStats,
+			)
+		}
+		return nil
 	case *persistence.ConditionFailedError:
 		// TODO get rid of ErrConflict
-		return nil, consts.ErrConflict
+		return consts.ErrConflict
 	default:
 		shard.GetLogger().Error(
 			"Persistent store operation Failure",
@@ -246,6 +386,51 @@ func updateWorkflowExecutionWithRetry(
 			tag.StoreOperationUpdateWorkflowExecution,
 			tag.Error(err),
 		)
-		return nil, err
+		return err
 	}
+}
+
+func notifyWorkflowSnapshotTasks(
+	engine shard.Engine,
+	workflowSnapshot *persistence.WorkflowSnapshot,
+) {
+	if workflowSnapshot == nil {
+		return
+	}
+	notifyTasks(
+		engine,
+		workflowSnapshot.TransferTasks,
+		workflowSnapshot.TimerTasks,
+		workflowSnapshot.ReplicationTasks,
+		workflowSnapshot.VisibilityTasks,
+	)
+}
+
+func notifyWorkflowMutationTasks(
+	engine shard.Engine,
+	workflowMutation *persistence.WorkflowMutation,
+) {
+	if workflowMutation == nil {
+		return
+	}
+	notifyTasks(
+		engine,
+		workflowMutation.TransferTasks,
+		workflowMutation.TimerTasks,
+		workflowMutation.ReplicationTasks,
+		workflowMutation.VisibilityTasks,
+	)
+}
+
+func notifyTasks(
+	engine shard.Engine,
+	transferTasks []persistence.Task,
+	timerTasks []persistence.Task,
+	replicationTasks []persistence.Task,
+	visibilityTasks []persistence.Task,
+) {
+	engine.NotifyNewTransferTasks(transferTasks)
+	engine.NotifyNewTimerTasks(timerTasks)
+	engine.NotifyNewVisibilityTasks(visibilityTasks)
+	engine.NotifyNewReplicationTasks(replicationTasks)
 }
