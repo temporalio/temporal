@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package persistencetests
+package visibility
 
 import (
 	"testing"
@@ -34,8 +34,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/persistence/visibility"
-
 	c "go.temporal.io/server/common/config"
 
 	"go.temporal.io/server/common/dynamicconfig"
@@ -48,8 +46,8 @@ type VisibilitySamplingSuite struct {
 	suite.Suite
 	controller *gomock.Controller
 
-	client       visibility.VisibilityManager
-	persistence  *visibility.MockVisibilityManager
+	client       VisibilityManager
+	persistence  *MockVisibilityManager
 	metricClient *metrics.MockClient
 }
 
@@ -73,14 +71,14 @@ func (s *VisibilitySamplingSuite) SetupTest() {
 	s.Assertions = require.New(s.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 
 	s.controller = gomock.NewController(s.T())
-	s.persistence = visibility.NewMockVisibilityManager(s.controller)
+	s.persistence = NewMockVisibilityManager(s.controller)
 	s.metricClient = metrics.NewMockClient(s.controller)
 	config := &c.VisibilityConfig{
 		VisibilityOpenMaxQPS:   dynamicconfig.GetIntPropertyFilteredByNamespace(1),
 		VisibilityClosedMaxQPS: dynamicconfig.GetIntPropertyFilteredByNamespace(2),
 		VisibilityListMaxQPS:   dynamicconfig.GetIntPropertyFilteredByNamespace(1),
 	}
-	s.client = visibility.NewVisibilitySamplingClient(s.persistence, config, s.metricClient, log.NewNoopLogger())
+	s.client = NewVisibilitySamplingClient(s.persistence, config, s.metricClient, log.NewNoopLogger())
 }
 
 func (s *VisibilitySamplingSuite) TearDownTest() {
@@ -88,8 +86,8 @@ func (s *VisibilitySamplingSuite) TearDownTest() {
 }
 
 func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionStarted() {
-	request := &visibility.RecordWorkflowExecutionStartedRequest{
-		VisibilityRequestBase: &visibility.VisibilityRequestBase{
+	request := &RecordWorkflowExecutionStartedRequest{
+		VisibilityRequestBase: &VisibilityRequestBase{
 			NamespaceID:      testNamespaceUUID,
 			Namespace:        testNamespace,
 			Execution:        testWorkflowExecution,
@@ -108,8 +106,8 @@ func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionStarted() {
 }
 
 func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionClosed() {
-	request := &visibility.RecordWorkflowExecutionClosedRequest{
-		VisibilityRequestBase: &visibility.VisibilityRequestBase{
+	request := &RecordWorkflowExecutionClosedRequest{
+		VisibilityRequestBase: &VisibilityRequestBase{
 			NamespaceID:      testNamespaceUUID,
 			Namespace:        testNamespace,
 			Execution:        testWorkflowExecution,
@@ -117,8 +115,8 @@ func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionClosed() {
 			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		},
 	}
-	request2 := &visibility.RecordWorkflowExecutionClosedRequest{
-		VisibilityRequestBase: &visibility.VisibilityRequestBase{
+	request2 := &RecordWorkflowExecutionClosedRequest{
+		VisibilityRequestBase: &VisibilityRequestBase{
 			NamespaceID:      testNamespaceUUID,
 			Namespace:        testNamespace,
 			Execution:        testWorkflowExecution,
@@ -145,7 +143,7 @@ func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionClosed() {
 }
 
 func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutions() {
-	request := &visibility.ListWorkflowExecutionsRequest{
+	request := &ListWorkflowExecutionsRequest{
 		NamespaceID: testNamespaceUUID,
 		Namespace:   testNamespace,
 	}
@@ -162,7 +160,7 @@ func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutions() {
 }
 
 func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutions() {
-	request := &visibility.ListWorkflowExecutionsRequest{
+	request := &ListWorkflowExecutionsRequest{
 		NamespaceID: testNamespaceUUID,
 		Namespace:   testNamespace,
 	}
@@ -179,11 +177,11 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutions() {
 }
 
 func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutionsByType() {
-	req := visibility.ListWorkflowExecutionsRequest{
+	req := ListWorkflowExecutionsRequest{
 		NamespaceID: testNamespaceUUID,
 		Namespace:   testNamespace,
 	}
-	request := &visibility.ListWorkflowExecutionsByTypeRequest{
+	request := &ListWorkflowExecutionsByTypeRequest{
 		ListWorkflowExecutionsRequest: req,
 		WorkflowTypeName:              testWorkflowTypeName,
 	}
@@ -200,11 +198,11 @@ func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutionsByType() {
 }
 
 func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByType() {
-	req := visibility.ListWorkflowExecutionsRequest{
+	req := ListWorkflowExecutionsRequest{
 		NamespaceID: testNamespaceUUID,
 		Namespace:   testNamespace,
 	}
-	request := &visibility.ListWorkflowExecutionsByTypeRequest{
+	request := &ListWorkflowExecutionsByTypeRequest{
 		ListWorkflowExecutionsRequest: req,
 		WorkflowTypeName:              testWorkflowTypeName,
 	}
@@ -221,11 +219,11 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByType() {
 }
 
 func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutionsByWorkflowID() {
-	req := visibility.ListWorkflowExecutionsRequest{
+	req := ListWorkflowExecutionsRequest{
 		NamespaceID: testNamespaceUUID,
 		Namespace:   testNamespace,
 	}
-	request := &visibility.ListWorkflowExecutionsByWorkflowIDRequest{
+	request := &ListWorkflowExecutionsByWorkflowIDRequest{
 		ListWorkflowExecutionsRequest: req,
 		WorkflowID:                    testWorkflowExecution.GetWorkflowId(),
 	}
@@ -242,11 +240,11 @@ func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 }
 
 func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByWorkflowID() {
-	req := visibility.ListWorkflowExecutionsRequest{
+	req := ListWorkflowExecutionsRequest{
 		NamespaceID: testNamespaceUUID,
 		Namespace:   testNamespace,
 	}
-	request := &visibility.ListWorkflowExecutionsByWorkflowIDRequest{
+	request := &ListWorkflowExecutionsByWorkflowIDRequest{
 		ListWorkflowExecutionsRequest: req,
 		WorkflowID:                    testWorkflowExecution.GetWorkflowId(),
 	}
@@ -263,11 +261,11 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByWorkflowID()
 }
 
 func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByStatus() {
-	req := visibility.ListWorkflowExecutionsRequest{
+	req := ListWorkflowExecutionsRequest{
 		NamespaceID: testNamespaceUUID,
 		Namespace:   testNamespace,
 	}
-	request := &visibility.ListClosedWorkflowExecutionsByStatusRequest{
+	request := &ListClosedWorkflowExecutionsByStatusRequest{
 		ListWorkflowExecutionsRequest: req,
 		Status:                        enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 	}
