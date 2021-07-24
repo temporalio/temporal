@@ -57,7 +57,7 @@ type (
 		NewExecutionManager(shardID int32) (p.ExecutionManager, error)
 		// NewNamespaceReplicationQueue returns a new queue for namespace replication
 		NewNamespaceReplicationQueue() (p.NamespaceReplicationQueue, error)
-		// NewClusterMetadata returns a new manager for cluster specific metadata
+		// NewClusterMetadataManager returns a new manager for cluster specific metadata
 		NewClusterMetadataManager() (p.ClusterMetadataManager, error)
 	}
 	// DataStoreFactory is a low level interface to be implemented by a datastore
@@ -109,8 +109,6 @@ const (
 	storeTypeShard
 	storeTypeMetadata
 	storeTypeExecution
-	// TODO: remove visibility from here too.
-	storeTypeVisibility
 	storeTypeQueue
 	storeTypeClusterMetadata
 )
@@ -121,7 +119,6 @@ var storeTypes = []storeType{
 	storeTypeShard,
 	storeTypeMetadata,
 	storeTypeExecution,
-	storeTypeVisibility,
 	storeTypeQueue,
 	storeTypeClusterMetadata,
 }
@@ -285,10 +282,6 @@ func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueu
 func (f *factoryImpl) Close() {
 	ds := f.datastores[storeTypeExecution]
 	ds.factory.Close()
-	visDs, ok := f.datastores[storeTypeVisibility]
-	if ok {
-		visDs.factory.Close()
-	}
 }
 
 func (f *factoryImpl) isCassandra() bool {
@@ -322,23 +315,7 @@ func (f *factoryImpl) init(
 		f.logger.Fatal("invalid config: one of cassandra or sql params must be specified for default data store")
 	}
 	for _, sType := range storeTypes {
-		if sType != storeTypeVisibility {
-			f.datastores[sType] = defaultDataStore
-		}
-	}
-
-	if f.config.VisibilityStore != "" {
-		visibilityCfg := f.config.DataStores[f.config.VisibilityStore]
-		visibilityDataStore := Datastore{ratelimit: limiters[f.config.VisibilityStore]}
-		switch {
-		case visibilityCfg.Cassandra != nil:
-			visibilityDataStore.factory = cassandra.NewFactory(*visibilityCfg.Cassandra, r, clusterName, f.logger)
-		case visibilityCfg.SQL != nil:
-			visibilityDataStore.factory = sql.NewFactory(*visibilityCfg.SQL, r, clusterName, f.logger)
-		default:
-			f.logger.Fatal("invalid config: one of cassandra or sql params must be specified for visibility store")
-		}
-		f.datastores[storeTypeVisibility] = visibilityDataStore
+		f.datastores[sType] = defaultDataStore
 	}
 }
 

@@ -55,11 +55,8 @@ func NewSQLExecutionStore(
 ) (p.ExecutionStore, error) {
 
 	return &sqlExecutionStore{
-		shardID: shardID,
-		SqlStore: SqlStore{
-			Db:     db,
-			logger: logger,
-		},
+		shardID:  shardID,
+		SqlStore: NewSqlStore(db, logger),
 	}, nil
 }
 

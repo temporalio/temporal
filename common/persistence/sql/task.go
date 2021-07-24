@@ -62,13 +62,10 @@ var (
 func newTaskPersistence(
 	db sqlplugin.DB,
 	taskScanPartitions int,
-	log log.Logger,
+	logger log.Logger,
 ) (persistence.TaskStore, error) {
 	return &sqlTaskManager{
-		SqlStore: SqlStore{
-			Db:     db,
-			logger: log,
-		},
+		SqlStore:           NewSqlStore(db, logger),
 		taskScanPartitions: uint32(taskScanPartitions),
 	}, nil
 }

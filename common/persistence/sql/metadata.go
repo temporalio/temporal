@@ -49,10 +49,7 @@ func newMetadataPersistenceV2(
 	logger log.Logger,
 ) (persistence.MetadataStore, error) {
 	return &sqlMetadataManagerV2{
-		SqlStore: SqlStore{
-			Db:     db,
-			logger: logger,
-		},
+		SqlStore:          NewSqlStore(db, logger),
 		activeClusterName: currentClusterName,
 	}, nil
 }

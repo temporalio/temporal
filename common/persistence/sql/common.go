@@ -46,7 +46,6 @@ type SqlStore struct {
 	logger log.Logger
 }
 
-// TODO: use this everywhere to construct SqlStore
 func NewSqlStore(db sqlplugin.DB, logger log.Logger) SqlStore {
 	return SqlStore{
 		Db:     db,

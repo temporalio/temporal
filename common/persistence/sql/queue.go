@@ -50,10 +50,7 @@ func newQueue(
 	queueType persistence.QueueType,
 ) (persistence.Queue, error) {
 	queue := &sqlQueue{
-		SqlStore: SqlStore{
-			Db:     db,
-			logger: logger,
-		},
+		SqlStore:  NewSqlStore(db, logger),
 		queueType: queueType,
 		logger:    logger,
 	}

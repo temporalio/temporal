@@ -77,8 +77,7 @@ func NewSQLVisibilityStore(
 		return nil, err
 	}
 	return &visibilityStore{
-		sqlStore: persistencesql.NewSqlStore(
-			db, logger),
+		sqlStore: persistencesql.NewSqlStore(db, logger),
 	}, nil
 }
 
@@ -142,6 +141,7 @@ func (s *visibilityStore) RecordWorkflowExecutionClosed(request *visibility.Inte
 func (s *visibilityStore) UpsertWorkflowExecution(
 	_ *visibility.InternalUpsertWorkflowExecutionRequest,
 ) error {
+	// Not OperationNotSupportedErr!
 	return nil
 }
 
@@ -340,21 +340,21 @@ func (s *visibilityStore) DeleteWorkflowExecution(
 }
 
 func (s *visibilityStore) ListWorkflowExecutions(
-	request *visibility.ListWorkflowExecutionsRequestV2,
+	_ *visibility.ListWorkflowExecutionsRequestV2,
 ) (*visibility.InternalListWorkflowExecutionsResponse, error) {
-	return nil, visibility.NewOperationNotSupportErrorForVis()
+	return nil, visibility.OperationNotSupportedErr
 }
 
 func (s *visibilityStore) ScanWorkflowExecutions(
-	request *visibility.ListWorkflowExecutionsRequestV2,
+	_ *visibility.ListWorkflowExecutionsRequestV2,
 ) (*visibility.InternalListWorkflowExecutionsResponse, error) {
-	return nil, visibility.NewOperationNotSupportErrorForVis()
+	return nil, visibility.OperationNotSupportedErr
 }
 
 func (s *visibilityStore) CountWorkflowExecutions(
-	request *visibility.CountWorkflowExecutionsRequest,
+	_ *visibility.CountWorkflowExecutionsRequest,
 ) (*visibility.CountWorkflowExecutionsResponse, error) {
-	return nil, visibility.NewOperationNotSupportErrorForVis()
+	return nil, visibility.OperationNotSupportedErr
 }
 
 func (s *visibilityStore) rowToInfo(

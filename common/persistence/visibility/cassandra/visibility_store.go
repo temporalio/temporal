@@ -261,7 +261,8 @@ func (v *visibilityStore) RecordWorkflowExecutionClosed(request *visibility.Inte
 	return gocql.ConvertError("RecordWorkflowExecutionClosed", err)
 }
 
-func (v *visibilityStore) UpsertWorkflowExecution(request *visibility.InternalUpsertWorkflowExecutionRequest) error {
+func (v *visibilityStore) UpsertWorkflowExecution(_ *visibility.InternalUpsertWorkflowExecutionRequest) error {
+	// Not OperationNotSupportedErr!
 	return nil
 }
 
@@ -494,20 +495,20 @@ func (v *visibilityStore) GetClosedWorkflowExecution(
 }
 
 // DeleteWorkflowExecution is a no-op since deletes are auto-handled by cassandra TTLs
-func (v *visibilityStore) DeleteWorkflowExecution(request *visibility.VisibilityDeleteWorkflowExecutionRequest) error {
+func (v *visibilityStore) DeleteWorkflowExecution(_ *visibility.VisibilityDeleteWorkflowExecutionRequest) error {
 	return nil
 }
 
-func (v *visibilityStore) ListWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.InternalListWorkflowExecutionsResponse, error) {
-	return nil, visibility.NewOperationNotSupportErrorForVis()
+func (v *visibilityStore) ListWorkflowExecutions(_ *visibility.ListWorkflowExecutionsRequestV2) (*visibility.InternalListWorkflowExecutionsResponse, error) {
+	return nil, visibility.OperationNotSupportedErr
 }
 
-func (v *visibilityStore) ScanWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.InternalListWorkflowExecutionsResponse, error) {
-	return nil, visibility.NewOperationNotSupportErrorForVis()
+func (v *visibilityStore) ScanWorkflowExecutions(_ *visibility.ListWorkflowExecutionsRequestV2) (*visibility.InternalListWorkflowExecutionsResponse, error) {
+	return nil, visibility.OperationNotSupportedErr
 }
 
-func (v *visibilityStore) CountWorkflowExecutions(request *visibility.CountWorkflowExecutionsRequest) (*visibility.CountWorkflowExecutionsResponse, error) {
-	return nil, visibility.NewOperationNotSupportErrorForVis()
+func (v *visibilityStore) CountWorkflowExecutions(_ *visibility.CountWorkflowExecutionsRequest) (*visibility.CountWorkflowExecutionsResponse, error) {
+	return nil, visibility.OperationNotSupportedErr
 }
 
 func readOpenWorkflowExecutionRecord(iter gocql.Iter) (*visibility.VisibilityWorkflowExecutionInfo, bool) {

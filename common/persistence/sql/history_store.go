@@ -57,10 +57,7 @@ func newHistoryV2Persistence(
 ) (p.HistoryStore, error) {
 
 	return &sqlHistoryV2Manager{
-		SqlStore: SqlStore{
-			Db:     db,
-			logger: logger,
-		},
+		SqlStore: NewSqlStore(db, logger),
 	}, nil
 }
 

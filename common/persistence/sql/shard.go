@@ -45,13 +45,10 @@ type sqlShardStore struct {
 func newShardPersistence(
 	db sqlplugin.DB,
 	currentClusterName string,
-	log log.Logger,
+	logger log.Logger,
 ) (persistence.ShardStore, error) {
 	return &sqlShardStore{
-		SqlStore: SqlStore{
-			Db:     db,
-			logger: log,
-		},
+		SqlStore:           NewSqlStore(db, logger),
 		currentClusterName: currentClusterName,
 	}, nil
 }

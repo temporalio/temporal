@@ -191,9 +191,6 @@ func newClusterMetadataPersistence(
 	logger log.Logger,
 ) (p.ClusterMetadataStore, error) {
 	return &sqlClusterMetadataManager{
-		SqlStore: SqlStore{
-			Db:     db,
-			logger: logger,
-		},
+		SqlStore: NewSqlStore(db, logger),
 	}, nil
 }

@@ -28,8 +28,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 )
 
-// TODO: rename
-// NewOperationNotSupportErrorForVis create error for operation not support in visibility
-func NewOperationNotSupportErrorForVis() error {
-	return serviceerror.NewInvalidArgument("Operation not support. Please use on Elasticsearch")
-}
+var (
+	// OperationNotSupportedErr is returned when visibility operation in not supported.
+	OperationNotSupportedErr = serviceerror.NewInvalidArgument("Operation not supported. Please use on Elasticsearch")
+)
