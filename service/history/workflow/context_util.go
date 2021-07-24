@@ -32,7 +32,9 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -61,6 +63,11 @@ func CreateWorkflowExecution(
 	}); err != nil {
 		return 0, err
 	}
+
+	engine := shard.GetEngine()
+	NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
+	_ = NotifyNewHistorySnapshotEvent(engine, newWorkflowSnapshot)
+
 	return newWorkflowHistorySizeDiff, nil
 }
 
@@ -119,6 +126,15 @@ func ConflictResolveWorkflowExecution(
 	}); err != nil {
 		return 0, 0, 0, err
 	}
+
+	engine := shard.GetEngine()
+	NotifyWorkflowSnapshotTasks(engine, resetWorkflowSnapshot)
+	NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
+	NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
+	_ = NotifyNewHistorySnapshotEvent(engine, resetWorkflowSnapshot)
+	_ = NotifyNewHistorySnapshotEvent(engine, newWorkflowSnapshot)
+	_ = NotifyNewHistoryMutationEvent(engine, currentWorkflowMutation)
+
 	return resetHistorySizeDiff, newWorkflowHistorySizeDiff, currentWorkflowHistorySizeDiff, nil
 }
 
@@ -162,6 +178,13 @@ func UpdateWorkflowExecution(
 	}); err != nil {
 		return 0, 0, err
 	}
+
+	engine := shard.GetEngine()
+	NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
+	NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
+	_ = NotifyNewHistoryMutationEvent(engine, currentWorkflowMutation)
+	_ = NotifyNewHistorySnapshotEvent(engine, newWorkflowSnapshot)
+
 	return currentWorkflowHistorySizeDiff, newWorkflowHistorySizeDiff, nil
 }
 
@@ -390,7 +413,7 @@ func updateWorkflowExecutionWithRetry(
 	}
 }
 
-func notifyWorkflowSnapshotTasks(
+func NotifyWorkflowSnapshotTasks(
 	engine shard.Engine,
 	workflowSnapshot *persistence.WorkflowSnapshot,
 ) {
@@ -406,7 +429,7 @@ func notifyWorkflowSnapshotTasks(
 	)
 }
 
-func notifyWorkflowMutationTasks(
+func NotifyWorkflowMutationTasks(
 	engine shard.Engine,
 	workflowMutation *persistence.WorkflowMutation,
 ) {
@@ -433,4 +456,92 @@ func notifyTasks(
 	engine.NotifyNewTimerTasks(timerTasks)
 	engine.NotifyNewVisibilityTasks(visibilityTasks)
 	engine.NotifyNewReplicationTasks(replicationTasks)
+}
+
+func NotifyNewHistorySnapshotEvent(
+	engine shard.Engine,
+	workflowSnapshot *persistence.WorkflowSnapshot,
+) error {
+
+	if workflowSnapshot == nil {
+		return nil
+	}
+
+	executionInfo := workflowSnapshot.ExecutionInfo
+	executionState := workflowSnapshot.ExecutionState
+
+	namespaceID := executionInfo.NamespaceId
+	workflowID := executionInfo.WorkflowId
+	runID := executionState.RunId
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
+	if err != nil {
+		return err
+	}
+	currentBranchToken := currentVersionHistory.BranchToken
+	workflowState := executionState.State
+	workflowStatus := executionState.Status
+	lastFirstEventID := executionInfo.LastFirstEventId
+	lastFirstEventTxnID := executionInfo.LastFirstEventTxnId
+	lastWorkflowTaskStartEventID := executionInfo.LastWorkflowTaskStartId
+	nextEventID := workflowSnapshot.NextEventID
+
+	engine.NotifyNewHistoryEvent(events.NewNotification(
+		namespaceID,
+		&commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+		lastFirstEventID,
+		lastFirstEventTxnID,
+		nextEventID,
+		lastWorkflowTaskStartEventID,
+		currentBranchToken,
+		workflowState,
+		workflowStatus,
+	))
+	return nil
+}
+
+func NotifyNewHistoryMutationEvent(
+	engine shard.Engine,
+	workflowMutation *persistence.WorkflowMutation,
+) error {
+
+	if workflowMutation == nil {
+		return nil
+	}
+
+	executionInfo := workflowMutation.ExecutionInfo
+	executionState := workflowMutation.ExecutionState
+
+	namespaceID := executionInfo.NamespaceId
+	workflowID := executionInfo.WorkflowId
+	runID := executionState.RunId
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
+	if err != nil {
+		return err
+	}
+	currentBranchToken := currentVersionHistory.BranchToken
+	workflowState := executionState.State
+	workflowStatus := executionState.Status
+	lastFirstEventID := executionInfo.LastFirstEventId
+	lastFirstEventTxnID := executionInfo.LastFirstEventTxnId
+	lastWorkflowTaskStartEventID := executionInfo.LastWorkflowTaskStartId
+	nextEventID := workflowMutation.NextEventID
+
+	engine.NotifyNewHistoryEvent(events.NewNotification(
+		namespaceID,
+		&commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+		lastFirstEventID,
+		lastFirstEventTxnID,
+		nextEventID,
+		lastWorkflowTaskStartEventID,
+		currentBranchToken,
+		workflowState,
+		workflowStatus,
+	))
+	return nil
 }
