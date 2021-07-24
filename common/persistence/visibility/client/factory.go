@@ -25,6 +25,11 @@ func NewVisibilityManager(
 		return nil, nil
 	}
 
+	// If standard visibility is not configured.
+	if cfg.VisibilityStore == "" {
+		return nil, nil
+	}
+
 	visibilityStoreCfg := cfg.DataStores[cfg.VisibilityStore]
 
 	var (
