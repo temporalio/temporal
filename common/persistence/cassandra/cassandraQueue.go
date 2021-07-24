@@ -57,7 +57,7 @@ type (
 	cassandraQueue struct {
 		queueType persistence.QueueType
 		logger    log.Logger
-		CassandraStore
+		cassandraStore
 	}
 )
 
@@ -72,7 +72,7 @@ func newQueue(
 	retryPolicy.SetMaximumAttempts(5)
 
 	queue := &cassandraQueue{
-		CassandraStore: CassandraStore{Session: session, logger: logger},
+		cassandraStore: cassandraStore{session: session, logger: logger},
 		logger:         logger,
 		queueType:      queueType,
 	}
@@ -121,7 +121,7 @@ func (q *cassandraQueue) tryEnqueue(
 	messageID int64,
 	blob commonpb.DataBlob,
 ) (int64, error) {
-	query := q.Session.Query(templateEnqueueMessageQuery, queueType, messageID, blob.Data, blob.EncodingType.String())
+	query := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, blob.Data, blob.EncodingType.String())
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
@@ -139,7 +139,7 @@ func (q *cassandraQueue) getLastMessageID(
 	queueType persistence.QueueType,
 ) (int64, error) {
 
-	query := q.Session.Query(templateGetLastMessageIDQuery, queueType)
+	query := q.session.Query(templateGetLastMessageIDQuery, queueType)
 	result := make(map[string]interface{})
 	err := query.MapScan(result)
 	if err != nil {
@@ -156,7 +156,7 @@ func (q *cassandraQueue) ReadMessages(
 	maxCount int,
 ) ([]*persistence.QueueMessage, error) {
 	// Reading replication tasks need to be quorum level consistent, otherwise we could lose tasks
-	query := q.Session.Query(templateGetMessagesQuery,
+	query := q.session.Query(templateGetMessagesQuery,
 		q.queueType,
 		lastMessageID,
 		maxCount,
@@ -187,7 +187,7 @@ func (q *cassandraQueue) ReadMessagesFromDLQ(
 ) ([]*persistence.QueueMessage, []byte, error) {
 	// Reading replication tasks need to be quorum level consistent, otherwise we could lose tasks
 	// Use negative queue type as the dlq type
-	query := q.Session.Query(templateGetMessagesFromDLQQuery,
+	query := q.session.Query(templateGetMessagesFromDLQQuery,
 		q.getDLQTypeFromQueueType(),
 		firstMessageID,
 		lastMessageID,
@@ -216,7 +216,7 @@ func (q *cassandraQueue) DeleteMessagesBefore(
 	messageID int64,
 ) error {
 
-	query := q.Session.Query(templateDeleteMessagesBeforeQuery, q.queueType, messageID)
+	query := q.session.Query(templateDeleteMessagesBeforeQuery, q.queueType, messageID)
 	if err := query.Exec(); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("DeleteMessagesBefore operation failed. Error %v", err))
 	}
@@ -228,7 +228,7 @@ func (q *cassandraQueue) DeleteMessageFromDLQ(
 ) error {
 
 	// Use negative queue type as the dlq type
-	query := q.Session.Query(templateDeleteMessageQuery, q.getDLQTypeFromQueueType(), messageID)
+	query := q.session.Query(templateDeleteMessageQuery, q.getDLQTypeFromQueueType(), messageID)
 	if err := query.Exec(); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("DeleteMessageFromDLQ operation failed. Error %v", err))
 	}
@@ -242,7 +242,7 @@ func (q *cassandraQueue) RangeDeleteMessagesFromDLQ(
 ) error {
 
 	// Use negative queue type as the dlq type
-	query := q.Session.Query(templateDeleteMessagesQuery, q.getDLQTypeFromQueueType(), firstMessageID, lastMessageID)
+	query := q.session.Query(templateDeleteMessagesQuery, q.getDLQTypeFromQueueType(), firstMessageID, lastMessageID)
 	if err := query.Exec(); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("RangeDeleteMessagesFromDLQ operation failed. Error %v", err))
 	}
@@ -285,7 +285,7 @@ func (q *cassandraQueue) insertInitialQueueMetadataRecord(
 	version := 0
 	// TODO: remove once cluster_ack_level is removed from DB
 	clusterAckLevels := map[string]int64{}
-	query := q.Session.Query(templateInsertQueueMetadataQuery,
+	query := q.session.Query(templateInsertQueueMetadataQuery,
 		queueType,
 		clusterAckLevels,
 		blob.Data,
@@ -304,7 +304,7 @@ func (q *cassandraQueue) getQueueMetadata(
 	queueType persistence.QueueType,
 ) (*persistence.InternalQueueMetadata, error) {
 
-	query := q.Session.Query(templateGetQueueMetadataQuery, queueType)
+	query := q.session.Query(templateGetQueueMetadataQuery, queueType)
 	message := make(map[string]interface{})
 	err := query.MapScan(message)
 	if err != nil {
@@ -322,7 +322,7 @@ func (q *cassandraQueue) updateAckLevel(
 	// TODO: remove this once cluster_ack_level is removed from DB
 	metadataStruct, err := serialization.QueueMetadataFromBlob(metadata.Blob.Data, metadata.Blob.EncodingType.String())
 
-	query := q.Session.Query(templateUpdateQueueMetadataQuery,
+	query := q.session.Query(templateUpdateQueueMetadataQuery,
 		metadataStruct.ClusterAckLevels,
 		metadata.Blob.Data,
 		metadata.Blob.EncodingType.String(),
@@ -342,8 +342,8 @@ func (q *cassandraQueue) updateAckLevel(
 }
 
 func (q *cassandraQueue) Close() {
-	if q.Session != nil {
-		q.Session.Close()
+	if q.session != nil {
+		q.session.Close()
 	}
 }
 

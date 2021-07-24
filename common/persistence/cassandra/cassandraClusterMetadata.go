@@ -65,7 +65,7 @@ WHERE membership_partition = ?`
 type (
 	cassandraClusterMetadata struct {
 		logger log.Logger
-		*CassandraStore
+		*cassandraStore
 	}
 )
 
@@ -78,20 +78,20 @@ func newClusterMetadataInstance(
 ) (p.ClusterMetadataStore, error) {
 
 	return &cassandraClusterMetadata{
-		CassandraStore: &CassandraStore{Session: session, logger: logger},
+		cassandraStore: &cassandraStore{session: session, logger: logger},
 		logger:         logger,
 	}, nil
 }
 
 // Close releases the resources held by this object
 func (m *cassandraClusterMetadata) Close() {
-	if m.Session != nil {
-		m.Session.Close()
+	if m.session != nil {
+		m.session.Close()
 	}
 }
 
 func (m *cassandraClusterMetadata) GetClusterMetadata() (*p.InternalGetClusterMetadataResponse, error) {
-	query := m.Session.Query(templateGetClusterMetadata, constMetadataPartition)
+	query := m.session.Query(templateGetClusterMetadata, constMetadataPartition)
 	var clusterMetadata []byte
 	var encoding string
 
@@ -109,7 +109,7 @@ func (m *cassandraClusterMetadata) GetClusterMetadata() (*p.InternalGetClusterMe
 func (m *cassandraClusterMetadata) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
 	var query gocql.Query
 	if request.Version == 0 {
-		query = m.Session.Query(
+		query = m.session.Query(
 			templateCreateClusterMetadata,
 			constMembershipPartition,
 			request.ClusterMetadata.Data,
@@ -117,7 +117,7 @@ func (m *cassandraClusterMetadata) SaveClusterMetadata(request *p.InternalSaveCl
 			1,
 		)
 	} else {
-		query = m.Session.Query(
+		query = m.session.Query(
 			templateUpdateClusterMetadata,
 			request.ClusterMetadata.Data,
 			request.ClusterMetadata.EncodingType.String(),
@@ -171,7 +171,7 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 	}
 
 	queryString.WriteString(templateAllowFiltering)
-	query := m.Session.Query(queryString.String(), operands...)
+	query := m.session.Query(queryString.String(), operands...)
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
@@ -215,7 +215,7 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 }
 
 func (m *cassandraClusterMetadata) UpsertClusterMembership(request *p.UpsertClusterMembershipRequest) error {
-	query := m.Session.Query(templateUpsertActiveClusterMembership, constMembershipPartition, []byte(request.HostID),
+	query := m.session.Query(templateUpsertActiveClusterMembership, constMembershipPartition, []byte(request.HostID),
 		request.RPCAddress, request.RPCPort, request.Role, request.SessionStart, time.Now().UTC(), int64(request.RecordExpiry.Seconds()))
 	err := query.Exec()
 

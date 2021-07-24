@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/resolver"
@@ -42,7 +41,11 @@ import (
 
 // Fixed namespace values for now
 const (
-	namespacePartition = 0
+	namespacePartition       = 0
+	cassandraPersistenceName = "cassandra"
+
+	// ref: https://docs.datastax.com/en/dse-trblshoot/doc/troubleshooting/recoveringTtlYear2038Problem.html
+	maxCassandraTTL = int64(315360000) // Cassandra max support time is 2038-01-19T03:14:06+00:00. Updated this to 10 years to support until year 2028
 )
 
 const (
@@ -128,8 +131,8 @@ const (
 
 type (
 	cassandraVisibilityPersistence struct {
-		cassandraStore cassandra.CassandraStore
-		lowConslevel   gocql.Consistency
+		session      gocql.Session
+		lowConslevel gocql.Consistency
 	}
 )
 
@@ -144,24 +147,24 @@ func NewVisibilityStore(
 	}
 
 	return &cassandraVisibilityPersistence{
-		cassandraStore: cassandra.NewCassandraStore(session, logger),
-		lowConslevel:   gocql.One,
+		session:      session,
+		lowConslevel: gocql.One,
 	}, nil
 }
 
 func (v *cassandraVisibilityPersistence) GetName() string {
-	return v.cassandraStore.GetName()
+	return cassandraPersistenceName
 }
 
 // Close releases the resources held by this object
 func (v *cassandraVisibilityPersistence) Close() {
-	v.cassandraStore.Close()
+	v.session.Close()
 }
 
 func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 	request *visibility.InternalRecordWorkflowExecutionStartedRequest) error {
 
-	query := v.cassandraStore.Session.Query(templateCreateWorkflowExecutionStarted,
+	query := v.session.Query(templateCreateWorkflowExecutionStarted,
 		request.NamespaceID,
 		namespacePartition,
 		request.WorkflowID,
@@ -182,7 +185,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 }
 
 func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(request *visibility.InternalRecordWorkflowExecutionClosedRequest) error {
-	batch := v.cassandraStore.Session.NewBatch(gocql.LoggedBatch)
+	batch := v.session.NewBatch(gocql.LoggedBatch)
 
 	// First, remove execution from the open table
 	batch.Query(templateDeleteWorkflowExecutionStarted,
@@ -199,10 +202,10 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(request *
 	if request.Retention != nil {
 		retentionSeconds = int64(request.Retention.Seconds())
 	} else {
-		retentionSeconds = cassandra.MaxCassandraTTL + 1
+		retentionSeconds = maxCassandraTTL + 1
 	}
 
-	if retentionSeconds > cassandra.MaxCassandraTTL {
+	if retentionSeconds > maxCassandraTTL {
 		batch.Query(templateCreateWorkflowExecutionClosed,
 			request.NamespaceID,
 			namespacePartition,
@@ -252,7 +255,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(request *
 	}
 
 	batch = batch.WithTimestamp(persistence.UnixMilliseconds(batchTimestamp))
-	err := v.cassandraStore.Session.ExecuteBatch(batch)
+	err := v.session.ExecuteBatch(batch)
 	return gocql.ConvertError("RecordWorkflowExecutionClosed", err)
 }
 
@@ -263,7 +266,7 @@ func (v *cassandraVisibilityPersistence) UpsertWorkflowExecution(request *visibi
 func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
 	request *visibility.ListWorkflowExecutionsRequest,
 ) (*visibility.InternalListWorkflowExecutionsResponse, error) {
-	query := v.cassandraStore.Session.
+	query := v.session.
 		Query(templateGetOpenWorkflowExecutions,
 			request.NamespaceID,
 			namespacePartition,
@@ -291,7 +294,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
 
 func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByType(
 	request *visibility.ListWorkflowExecutionsByTypeRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
-	query := v.cassandraStore.Session.
+	query := v.session.
 		Query(templateGetOpenWorkflowExecutionsByType,
 			request.NamespaceID,
 			namespacePartition,
@@ -320,7 +323,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByType(
 
 func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByWorkflowID(
 	request *visibility.ListWorkflowExecutionsByWorkflowIDRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
-	query := v.cassandraStore.Session.
+	query := v.session.
 		Query(templateGetOpenWorkflowExecutionsByID,
 			request.NamespaceID,
 			namespacePartition,
@@ -349,7 +352,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByWorkflowID(
 
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
 	request *visibility.ListWorkflowExecutionsRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
-	query := v.cassandraStore.Session.
+	query := v.session.
 		Query(templateGetClosedWorkflowExecutions,
 			request.NamespaceID,
 			namespacePartition,
@@ -377,7 +380,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
 
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
 	request *visibility.ListWorkflowExecutionsByTypeRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
-	query := v.cassandraStore.Session.
+	query := v.session.
 		Query(templateGetClosedWorkflowExecutionsByType,
 			request.NamespaceID,
 			namespacePartition,
@@ -406,7 +409,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
 
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowID(
 	request *visibility.ListWorkflowExecutionsByWorkflowIDRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
-	query := v.cassandraStore.Session.
+	query := v.session.
 		Query(templateGetClosedWorkflowExecutionsByID,
 			request.NamespaceID,
 			namespacePartition,
@@ -435,7 +438,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowI
 
 func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByStatus(
 	request *visibility.ListClosedWorkflowExecutionsByStatusRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
-	query := v.cassandraStore.Session.
+	query := v.session.
 		Query(templateGetClosedWorkflowExecutionsByStatus,
 			request.NamespaceID,
 			namespacePartition,
@@ -465,7 +468,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByStatus(
 func (v *cassandraVisibilityPersistence) GetClosedWorkflowExecution(
 	request *visibility.GetClosedWorkflowExecutionRequest) (*visibility.InternalGetClosedWorkflowExecutionResponse, error) {
 	execution := request.Execution
-	query := v.cassandraStore.Session.
+	query := v.session.
 		Query(templateGetClosedWorkflowExecution,
 			request.NamespaceID,
 			namespacePartition,
