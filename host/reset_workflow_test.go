@@ -27,7 +27,6 @@ package host
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
@@ -483,14 +482,6 @@ func (s *integrationSuite) testResetWorkflowReapplyBuffer(
 			signalCount++
 		}
 	}
-
-	fmt.Println("#######")
-	prettyPrint := func(input interface{}) string {
-		binary, _ := json.MarshalIndent(input, "", "  ")
-		return string(binary)
-	}
-	fmt.Printf("%v\n", prettyPrint(events))
-	fmt.Println("#######")
 
 	switch reapplyType {
 	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
