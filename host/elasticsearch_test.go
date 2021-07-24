@@ -50,7 +50,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	client2 "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
+	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
@@ -70,7 +70,7 @@ type elasticsearchIntegrationSuite struct {
 	// not merely log an error
 	*require.Assertions
 	IntegrationBase
-	esClient client2.IntegrationTestsClient
+	esClient esclient.IntegrationTestsClient
 
 	testSearchAttributeKey string
 	testSearchAttributeVal string

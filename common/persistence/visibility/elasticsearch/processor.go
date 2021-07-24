@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination processor_mock.go
+//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination processor_mock.go
 
 package elasticsearch
 
@@ -35,14 +35,13 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/olivere/elastic/v7"
-	client2 "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -52,15 +51,15 @@ type (
 		common.Daemon
 
 		// Add request to bulk processor.
-		Add(request *client2.BulkableRequest, visibilityTaskKey string) <-chan bool
+		Add(request *esclient.BulkableRequest, visibilityTaskKey string) <-chan bool
 	}
 
 	// processorImpl implements Processor, it's an agent of elastic.BulkProcessor
 	processorImpl struct {
 		status                  int32
-		bulkProcessor           client2.BulkProcessor
-		bulkProcessorParameters *client2.BulkProcessorParameters
-		client                  client2.Client
+		bulkProcessor           esclient.BulkProcessor
+		bulkProcessorParameters *esclient.BulkProcessorParameters
+		client                  esclient.Client
 		mapToAckChan            collection.ConcurrentTxMap // used to map ES request to ack channel
 		logger                  log.Logger
 		metricsClient           metrics.Client
@@ -95,7 +94,7 @@ const (
 // NewProcessor create new processorImpl
 func NewProcessor(
 	cfg *ProcessorConfig,
-	esClient client2.Client,
+	esClient esclient.Client,
 	logger log.Logger,
 	metricsClient metrics.Client,
 ) *processorImpl {
@@ -106,7 +105,7 @@ func NewProcessor(
 		logger:             log.With(logger, tag.ComponentIndexerESProcessor),
 		metricsClient:      metricsClient,
 		indexerConcurrency: uint32(cfg.IndexerConcurrency()),
-		bulkProcessorParameters: &client2.BulkProcessorParameters{
+		bulkProcessorParameters: &esclient.BulkProcessorParameters{
 			Name:          visibilityProcessorName,
 			NumOfWorkers:  cfg.ESProcessorNumOfWorkers(),
 			BulkActions:   cfg.ESProcessorBulkActions(),
@@ -165,7 +164,7 @@ func (p *processorImpl) hashFn(key interface{}) uint32 {
 }
 
 // Add request to the bulk and return ack channel which will receive ack signal when request is processed.
-func (p *processorImpl) Add(request *client2.BulkableRequest, visibilityTaskKey string) <-chan bool {
+func (p *processorImpl) Add(request *esclient.BulkableRequest, visibilityTaskKey string) <-chan bool {
 	ackCh := newAckChan()
 	retCh := ackCh.ackChInternal
 	_, isDup, _ := p.mapToAckChan.PutOrDo(visibilityTaskKey, ackCh, func(key interface{}, value interface{}) error {
@@ -219,7 +218,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 		// This happens after configured retry, which means something bad happens on cluster or index
 		// When cluster back to live, processor will re-commit those failure requests
 
-		isRetryable := client2.IsRetryableError(err)
+		isRetryable := esclient.IsRetryableError(err)
 		p.logger.Error("Unable to commit bulk ES request.", tag.Error(err), tag.Bool(isRetryable))
 		for _, request := range requests {
 			p.logger.Error("ES request failed.", tag.ESRequest(request.String()))
@@ -259,7 +258,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 		switch {
 		case isSuccess(responseItem):
 			p.sendToAckChan(visibilityTaskKey, true)
-		case !client2.IsRetryableStatus(responseItem.Status):
+		case !esclient.IsRetryableStatus(responseItem.Status):
 			p.logger.Error("ES request failed.",
 				tag.ESResponseStatus(responseItem.Status),
 				tag.ESResponseError(extractErrorReason(responseItem)),

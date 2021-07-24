@@ -36,7 +36,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/suite"
-	client2 "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
+	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -49,9 +49,9 @@ type processorSuite struct {
 	suite.Suite
 	controller        *gomock.Controller
 	esProcessor       *processorImpl
-	mockBulkProcessor *client2.MockBulkProcessor
+	mockBulkProcessor *esclient.MockBulkProcessor
 	mockMetricClient  *metrics.MockClient
-	mockESClient      *client2.MockClient
+	mockESClient      *esclient.MockClient
 }
 
 var (
@@ -80,8 +80,8 @@ func (s *processorSuite) SetupTest() {
 	}
 
 	s.mockMetricClient = metrics.NewMockClient(s.controller)
-	s.mockBulkProcessor = client2.NewMockBulkProcessor(s.controller)
-	s.mockESClient = client2.NewMockClient(s.controller)
+	s.mockBulkProcessor = esclient.NewMockBulkProcessor(s.controller)
+	s.mockESClient = esclient.NewMockClient(s.controller)
 	s.esProcessor = NewProcessor(cfg, s.mockESClient, logger, s.mockMetricClient)
 
 	// esProcessor.Start mock
@@ -105,7 +105,7 @@ func (s *processorSuite) TestNewESProcessorAndStartStop() {
 	p := NewProcessor(config, s.mockESClient, s.esProcessor.logger, s.mockMetricClient)
 
 	s.mockESClient.EXPECT().RunBulkProcessor(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, input *client2.BulkProcessorParameters) (client2.BulkProcessor, error) {
+		DoAndReturn(func(_ context.Context, input *esclient.BulkProcessorParameters) (esclient.BulkProcessor, error) {
 			s.Equal(visibilityProcessorName, input.Name)
 			s.Equal(config.ESProcessorNumOfWorkers(), input.NumOfWorkers)
 			s.Equal(config.ESProcessorBulkActions(), input.BulkActions)
@@ -114,7 +114,7 @@ func (s *processorSuite) TestNewESProcessorAndStartStop() {
 			s.NotNil(input.Backoff)
 			s.NotNil(input.AfterFunc)
 
-			bulkProcessor := client2.NewMockBulkProcessor(s.controller)
+			bulkProcessor := esclient.NewMockBulkProcessor(s.controller)
 			bulkProcessor.EXPECT().Stop()
 			return bulkProcessor, nil
 		}).
@@ -130,7 +130,7 @@ func (s *processorSuite) TestNewESProcessorAndStartStop() {
 }
 
 func (s *processorSuite) TestAdd() {
-	request := &client2.BulkableRequest{}
+	request := &esclient.BulkableRequest{}
 	visibilityTaskKey := "test-key"
 	s.Equal(0, s.esProcessor.mapToAckChan.Len())
 
@@ -163,7 +163,7 @@ func (s *processorSuite) TestAdd() {
 }
 
 func (s *processorSuite) TestAdd_ConcurrentAdd() {
-	request := &client2.BulkableRequest{}
+	request := &esclient.BulkableRequest{}
 	docsCount := 1000
 	parallelFactor := 10
 	ackChs := make([]<-chan bool, docsCount)
@@ -192,7 +192,7 @@ func (s *processorSuite) TestAdd_ConcurrentAdd() {
 }
 
 func (s *processorSuite) TestAdd_ConcurrentAdd_Duplicates() {
-	request := &client2.BulkableRequest{}
+	request := &esclient.BulkableRequest{}
 	key := "test-key"
 	duplicates := 100
 	ackChs := make([]<-chan bool, duplicates)
@@ -363,7 +363,7 @@ func (s *processorSuite) TestAckChan() {
 	// no msg in map, nothing called
 	s.esProcessor.sendToAckChan(key, true)
 
-	request := &client2.BulkableRequest{}
+	request := &esclient.BulkableRequest{}
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
 	s.mockBulkProcessor.EXPECT().Add(request)
 	ackCh := s.esProcessor.Add(request, key)
@@ -384,7 +384,7 @@ func (s *processorSuite) TestNackChan() {
 	// no msg in map, nothing called
 	s.esProcessor.sendToAckChan(key, false)
 
-	request := &client2.BulkableRequest{}
+	request := &esclient.BulkableRequest{}
 	s.mockBulkProcessor.EXPECT().Add(request)
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
 	ackCh := s.esProcessor.Add(request, key)
@@ -481,7 +481,7 @@ func (s *processorSuite) Test_End2End() {
 	parallelFactor := 10
 	version := int64(2208) //random
 
-	request := &client2.BulkableRequest{}
+	request := &esclient.BulkableRequest{}
 	bulkIndexRequests := make([]elastic.BulkableRequest, docsCount)
 	bulkIndexResponse := &elastic.BulkResponse{
 		Took:   3,

@@ -38,19 +38,17 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
-	"go.temporal.io/server/common/persistence/visibility"
-	"go.temporal.io/server/common/persistence/visibility/elasticsearch"
-	client2 "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
-	esql2 "go.temporal.io/server/common/persistence/visibility/elasticsearch/esql"
-	"go.uber.org/atomic"
-
 	"go.temporal.io/server/common/config"
-
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/elasticsearch"
+	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/elasticsearch/esql"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/atomic"
 )
 
 const (
@@ -85,14 +83,14 @@ func timeValProcess(timeStr string) (string, error) {
 	return fmt.Sprintf("%v", parsedTime.UnixNano()), nil
 }
 
-func newESClient(c *cli.Context) client2.CLIClient {
+func newESClient(c *cli.Context) esclient.CLIClient {
 	url := getRequiredOption(c, FlagURL)
 	var version string
 	if c.IsSet(FlagVersion) {
 		version = c.String(FlagVersion)
 	}
 
-	client, err := client2.NewCLIClient(url, version)
+	client, err := esclient.NewCLIClient(url, version)
 	if err != nil {
 		ErrorAndExit("Unable to create Elasticsearch client", err)
 	}
@@ -223,11 +221,11 @@ func AdminDelete(c *cli.Context) {
 	for scanner.Scan() {
 		line := strings.Split(scanner.Text(), "|")
 		docID := strings.TrimSpace(line[1]) + esDocIDDelimiter + strings.TrimSpace(line[2])
-		req := &client2.BulkableRequest{
+		req := &esclient.BulkableRequest{
 			Index:       indexName,
 			ID:          docID,
 			Version:     math.MaxInt64,
-			RequestType: client2.BulkableRequestTypeDelete,
+			RequestType: esclient.BulkableRequestTypeDelete,
 		}
 		bulkRequest.Add(req)
 		if i%batchSize == batchSize-1 {
@@ -311,7 +309,7 @@ func GenerateReport(c *cli.Context) {
 	}
 
 	// convert sql to dsl
-	e := esql2.NewESql()
+	e := esql.NewESql()
 	e.SetTemporal(true)
 	e.ProcessQueryValue(timeKeyFilter, timeValProcess)
 	dsl, sortFields, err := e.ConvertPrettyTemporal(sql, "")

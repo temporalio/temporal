@@ -32,7 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	client2 "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
+	client "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 )
 
 // MockProcessor is a mock of Processor interface.
@@ -59,7 +59,7 @@ func (m *MockProcessor) EXPECT() *MockProcessorMockRecorder {
 }
 
 // Add mocks base method.
-func (m *MockProcessor) Add(request *client2.BulkableRequest, visibilityTaskKey string) <-chan bool {
+func (m *MockProcessor) Add(request *client.BulkableRequest, visibilityTaskKey string) <-chan bool {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Add", request, visibilityTaskKey)
 	ret0, _ := ret[0].(<-chan bool)

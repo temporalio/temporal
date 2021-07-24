@@ -53,7 +53,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
-	client2 "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
+	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -91,7 +91,7 @@ type (
 		RemoteAdminClient    *adminservicemock.MockAdminServiceClient
 		RemoteFrontendClient *workflowservicemock.MockWorkflowServiceClient
 		ClientBean           *client.MockBean
-		ESClient             *client2.MockClient
+		ESClient             *esclient.MockClient
 
 		// persistence clients
 
@@ -202,7 +202,7 @@ func NewTest(
 		RemoteAdminClient:    remoteAdminClient,
 		RemoteFrontendClient: remoteFrontendClient,
 		ClientBean:           clientBean,
-		ESClient:             client2.NewMockClient(controller),
+		ESClient:             esclient.NewMockClient(controller),
 
 		// persistence clients
 

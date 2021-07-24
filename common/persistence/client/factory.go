@@ -109,6 +109,7 @@ const (
 	storeTypeShard
 	storeTypeMetadata
 	storeTypeExecution
+	// TODO: remove visibility from here too.
 	storeTypeVisibility
 	storeTypeQueue
 	storeTypeClusterMetadata

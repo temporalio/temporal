@@ -49,17 +49,16 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	client2 "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
-	"gopkg.in/yaml.v2"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/host"
+	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -77,7 +76,7 @@ type esCrossDCTestSuite struct {
 	cluster2       *host.TestCluster
 	logger         log.Logger
 	clusterConfigs []*host.TestClusterConfig
-	esClient       client2.IntegrationTestsClient
+	esClient       esclient.IntegrationTestsClient
 
 	testSearchAttributeKey string
 	testSearchAttributeVal string
