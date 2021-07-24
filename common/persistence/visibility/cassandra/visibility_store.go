@@ -130,38 +130,40 @@ const (
 )
 
 type (
-	cassandraVisibilityPersistence struct {
+	visibilityStore struct {
 		session      gocql.Session
 		lowConslevel gocql.Consistency
 	}
 )
 
+var _ visibility.VisibilityStore = (*visibilityStore)(nil)
+
 func NewVisibilityStore(
 	cfg config.Cassandra,
 	r resolver.ServiceResolver,
 	logger log.Logger,
-) (visibility.VisibilityStore, error) {
+) (*visibilityStore, error) {
 	session, err := gocql.NewSession(cfg, r, logger)
 	if err != nil {
 		logger.Fatal("unable to initialize cassandra session", tag.Error(err))
 	}
 
-	return &cassandraVisibilityPersistence{
+	return &visibilityStore{
 		session:      session,
 		lowConslevel: gocql.One,
 	}, nil
 }
 
-func (v *cassandraVisibilityPersistence) GetName() string {
+func (v *visibilityStore) GetName() string {
 	return cassandraPersistenceName
 }
 
 // Close releases the resources held by this object
-func (v *cassandraVisibilityPersistence) Close() {
+func (v *visibilityStore) Close() {
 	v.session.Close()
 }
 
-func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
+func (v *visibilityStore) RecordWorkflowExecutionStarted(
 	request *visibility.InternalRecordWorkflowExecutionStartedRequest) error {
 
 	query := v.session.Query(templateCreateWorkflowExecutionStarted,
@@ -184,7 +186,7 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionStarted(
 	return gocql.ConvertError("RecordWorkflowExecutionStarted", err)
 }
 
-func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(request *visibility.InternalRecordWorkflowExecutionClosedRequest) error {
+func (v *visibilityStore) RecordWorkflowExecutionClosed(request *visibility.InternalRecordWorkflowExecutionClosedRequest) error {
 	batch := v.session.NewBatch(gocql.LoggedBatch)
 
 	// First, remove execution from the open table
@@ -259,11 +261,11 @@ func (v *cassandraVisibilityPersistence) RecordWorkflowExecutionClosed(request *
 	return gocql.ConvertError("RecordWorkflowExecutionClosed", err)
 }
 
-func (v *cassandraVisibilityPersistence) UpsertWorkflowExecution(request *visibility.InternalUpsertWorkflowExecutionRequest) error {
+func (v *visibilityStore) UpsertWorkflowExecution(request *visibility.InternalUpsertWorkflowExecutionRequest) error {
 	return nil
 }
 
-func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
+func (v *visibilityStore) ListOpenWorkflowExecutions(
 	request *visibility.ListWorkflowExecutionsRequest,
 ) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
@@ -292,7 +294,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutions(
 	return response, nil
 }
 
-func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByType(
+func (v *visibilityStore) ListOpenWorkflowExecutionsByType(
 	request *visibility.ListWorkflowExecutionsByTypeRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetOpenWorkflowExecutionsByType,
@@ -321,7 +323,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByType(
 	return response, nil
 }
 
-func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByWorkflowID(
+func (v *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 	request *visibility.ListWorkflowExecutionsByWorkflowIDRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetOpenWorkflowExecutionsByID,
@@ -350,7 +352,7 @@ func (v *cassandraVisibilityPersistence) ListOpenWorkflowExecutionsByWorkflowID(
 	return response, nil
 }
 
-func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
+func (v *visibilityStore) ListClosedWorkflowExecutions(
 	request *visibility.ListWorkflowExecutionsRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetClosedWorkflowExecutions,
@@ -378,7 +380,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutions(
 	return response, nil
 }
 
-func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
+func (v *visibilityStore) ListClosedWorkflowExecutionsByType(
 	request *visibility.ListWorkflowExecutionsByTypeRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetClosedWorkflowExecutionsByType,
@@ -407,7 +409,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByType(
 	return response, nil
 }
 
-func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowID(
+func (v *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 	request *visibility.ListWorkflowExecutionsByWorkflowIDRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetClosedWorkflowExecutionsByID,
@@ -436,7 +438,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByWorkflowI
 	return response, nil
 }
 
-func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByStatus(
+func (v *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 	request *visibility.ListClosedWorkflowExecutionsByStatusRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetClosedWorkflowExecutionsByStatus,
@@ -465,7 +467,7 @@ func (v *cassandraVisibilityPersistence) ListClosedWorkflowExecutionsByStatus(
 	return response, nil
 }
 
-func (v *cassandraVisibilityPersistence) GetClosedWorkflowExecution(
+func (v *visibilityStore) GetClosedWorkflowExecution(
 	request *visibility.GetClosedWorkflowExecutionRequest) (*visibility.InternalGetClosedWorkflowExecutionResponse, error) {
 	execution := request.Execution
 	query := v.session.
@@ -492,19 +494,19 @@ func (v *cassandraVisibilityPersistence) GetClosedWorkflowExecution(
 }
 
 // DeleteWorkflowExecution is a no-op since deletes are auto-handled by cassandra TTLs
-func (v *cassandraVisibilityPersistence) DeleteWorkflowExecution(request *visibility.VisibilityDeleteWorkflowExecutionRequest) error {
+func (v *visibilityStore) DeleteWorkflowExecution(request *visibility.VisibilityDeleteWorkflowExecutionRequest) error {
 	return nil
 }
 
-func (v *cassandraVisibilityPersistence) ListWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.InternalListWorkflowExecutionsResponse, error) {
+func (v *visibilityStore) ListWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 	return nil, visibility.NewOperationNotSupportErrorForVis()
 }
 
-func (v *cassandraVisibilityPersistence) ScanWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.InternalListWorkflowExecutionsResponse, error) {
+func (v *visibilityStore) ScanWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 	return nil, visibility.NewOperationNotSupportErrorForVis()
 }
 
-func (v *cassandraVisibilityPersistence) CountWorkflowExecutions(request *visibility.CountWorkflowExecutionsRequest) (*visibility.CountWorkflowExecutionsResponse, error) {
+func (v *visibilityStore) CountWorkflowExecutions(request *visibility.CountWorkflowExecutionsRequest) (*visibility.CountWorkflowExecutionsResponse, error) {
 	return nil, visibility.NewOperationNotSupportErrorForVis()
 }
 
