@@ -114,7 +114,6 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 			RunId:      s.newRunID,
 		},
 		s.mockShard,
-		nil,
 		s.logger,
 	)
 	s.newRunID = uuid.New()
