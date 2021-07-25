@@ -80,7 +80,6 @@ type (
 	SearchParameters struct {
 		Index       string
 		Query       elastic.Query
-		From        int
 		PageSize    int
 		Sorter      []elastic.Sorter
 		SearchAfter []interface{}

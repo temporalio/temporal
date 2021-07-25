@@ -178,7 +178,6 @@ func (s *engineSuite) SetupTest() {
 		shard:              s.mockShard,
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
-		historyV2Mgr:       s.mockHistoryMgr,
 		historyCache:       historyCache,
 		logger:             s.mockShard.GetLogger(),
 		metricsClient:      s.mockShard.GetMetricsClient(),

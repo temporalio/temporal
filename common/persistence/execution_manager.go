@@ -156,9 +156,11 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		NewWorkflowSnapshot:    serializedNewWorkflowSnapshot,
 	}
 
+	if err := m.persistence.UpdateWorkflowExecution(newRequest); err != nil {
+		return nil, err
+	}
 	msuss := m.statsComputer.computeMutableStateUpdateStats(request)
-	err1 := m.persistence.UpdateWorkflowExecution(newRequest)
-	return &UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: msuss}, err1
+	return &UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: msuss}, nil
 }
 
 func (m *executionManagerImpl) ConflictResolveWorkflowExecution(

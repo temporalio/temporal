@@ -23,6 +23,7 @@
 package main
 
 import (
+	"context"
 	"os"
 
 	"github.com/hashicorp/go-plugin"
@@ -33,7 +34,7 @@ type provider struct {
 	token string
 }
 
-func (p provider) GetHeaders(currentHeaders map[string][]string) (map[string]string, error) {
+func (p provider) GetHeaders(ctx context.Context) (map[string]string, error) {
 	return map[string]string{
 		"Authorization": p.token,
 	}, nil

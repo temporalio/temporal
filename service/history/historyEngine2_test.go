@@ -145,7 +145,6 @@ func (s *engine2Suite) SetupTest() {
 		shard:              s.mockShard,
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
-		historyV2Mgr:       s.mockHistoryMgr,
 		historyCache:       historyCache,
 		logger:             s.logger,
 		throttledLogger:    s.logger,

@@ -54,6 +54,8 @@ type (
 		IndexName string
 		// Search attributes that need to be added to the index.
 		CustomAttributesToAdd map[string]enumspb.IndexedValueType
+		// If true skip Elasticsearch schema update and only update cluster metadata.
+		SkipSchemaUpdate bool
 	}
 
 	activities struct {
@@ -115,17 +117,20 @@ func AddSearchAttributesWorkflow(ctx workflow.Context, params WorkflowParams) er
 	logger.Info("Workflow started.", "wf-type", WorkflowName)
 
 	var a *activities
+	var err error
 
-	ctx1 := workflow.WithActivityOptions(ctx, addESMappingFieldActivityOptions)
-	err := workflow.ExecuteActivity(ctx1, a.AddESMappingFieldActivity, params).Get(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("%w: AddESMappingFieldActivity: %v", ErrUnableToExecuteActivity, err)
-	}
+	if !params.SkipSchemaUpdate {
+		ctx1 := workflow.WithActivityOptions(ctx, addESMappingFieldActivityOptions)
+		err = workflow.ExecuteActivity(ctx1, a.AddESMappingFieldActivity, params).Get(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("%w: AddESMappingFieldActivity: %v", ErrUnableToExecuteActivity, err)
+		}
 
-	ctx2 := workflow.WithActivityOptions(ctx, waitForYellowStatusActivityOptions)
-	err = workflow.ExecuteActivity(ctx2, a.WaitForYellowStatusActivity, params.IndexName).Get(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("%w: WaitForYellowStatusActivity: %v", ErrUnableToExecuteActivity, err)
+		ctx2 := workflow.WithActivityOptions(ctx, waitForYellowStatusActivityOptions)
+		err = workflow.ExecuteActivity(ctx2, a.WaitForYellowStatusActivity, params.IndexName).Get(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("%w: WaitForYellowStatusActivity: %v", ErrUnableToExecuteActivity, err)
+		}
 	}
 
 	ctx3 := workflow.WithActivityOptions(ctx, updateClusterMetadataActivityOptions)
@@ -162,7 +167,7 @@ func (a *activities) AddESMappingFieldActivity(ctx context.Context, params Workf
 
 func (a *activities) WaitForYellowStatusActivity(ctx context.Context, indexName string) error {
 	if a.esClient == nil {
-		a.logger.Info("Elasticsearch client is not configures. Skipping Elasticsearch status check.")
+		a.logger.Info("Elasticsearch client is not configured. Skipping Elasticsearch status check.")
 		return nil
 	}
 

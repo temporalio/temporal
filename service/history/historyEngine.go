@@ -88,7 +88,6 @@ type (
 		timeSource                clock.TimeSource
 		workflowTaskHandler       workflowTaskHandlerCallbacks
 		clusterMetadata           cluster.Metadata
-		historyV2Mgr              persistence.HistoryManager
 		executionManager          persistence.ExecutionManager
 		visibilityMgr             persistence.VisibilityManager
 		txProcessor               transferQueueProcessor
@@ -142,7 +141,6 @@ func NewEngineWithShardContext(
 		shard:              shard,
 		clusterMetadata:    shard.GetClusterMetadata(),
 		timeSource:         shard.GetTimeSource(),
-		historyV2Mgr:       historyV2Manager,
 		executionManager:   executionManager,
 		visibilityMgr:      visibilityMgr,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
@@ -521,7 +519,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		return nil, serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
-	historySize, err := weContext.PersistFirstWorkflowEvents(newWorkflowEventsSeq[0])
+	historySize, err := weContext.PersistWorkflowEvents(newWorkflowEventsSeq[0])
 	if err != nil {
 		return nil, err
 	}
@@ -2035,7 +2033,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
-	historySize, err := context.PersistFirstWorkflowEvents(newWorkflowEventsSeq[0])
+	historySize, err := context.PersistWorkflowEvents(newWorkflowEventsSeq[0])
 	if err != nil {
 		return nil, err
 	}

@@ -118,7 +118,6 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 		logger:          logger,
 		metricsClient:   s.mockShard.GetMetricsClient(),
 		visibilityMgr:   s.mockVisibilityManager,
-		historyV2Mgr:    s.mockHistoryMgr,
 		archivalClient:  s.mockArchivalClient,
 		clusterMetadata: s.mockClusterMetadata,
 	}

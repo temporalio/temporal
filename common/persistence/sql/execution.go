@@ -31,6 +31,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -145,6 +146,10 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
 						"LastWriteVersion: %v, PreviousLastWriteVersion: %v",
 						workflowID, row.LastWriteVersion, request.PreviousLastWriteVersion),
+					RequestID:        row.CreateRequestID,
+					RunID:            row.RunID.String(),
+					State:            row.State,
+					LastWriteVersion: row.LastWriteVersion,
 				}
 			}
 			if row.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
@@ -152,6 +157,10 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
 						"State: %v, Expected: %v",
 						workflowID, row.State, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED),
+					RequestID:        row.CreateRequestID,
+					RunID:            row.RunID.String(),
+					State:            row.State,
+					LastWriteVersion: row.LastWriteVersion,
 				}
 			}
 			runIDStr := row.RunID.String()
@@ -160,6 +169,10 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
 						"RunId: %v, PreviousRunId: %v",
 						workflowID, runIDStr, request.PreviousRunID),
+					RequestID:        row.CreateRequestID,
+					RunID:            row.RunID.String(),
+					State:            row.State,
+					LastWriteVersion: row.LastWriteVersion,
 				}
 			}
 
@@ -176,6 +189,10 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
 						"RunId: %v, PreviousRunId: %v",
 						workflowID, runIDStr, request.PreviousRunID),
+					RequestID:        row.CreateRequestID,
+					RunID:            row.RunID.String(),
+					State:            row.State,
+					LastWriteVersion: row.LastWriteVersion,
 				}
 			}
 

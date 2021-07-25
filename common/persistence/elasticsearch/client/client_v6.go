@@ -104,7 +104,6 @@ func newSimpleClientV6(url string) (*clientV6, error) {
 func (c *clientV6) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
 	searchService := c.esClient.Search(p.Index).
 		Query(p.Query).
-		From(p.From).
 		SortBy(convertV7SortersToV6(p.Sorter)...)
 
 	if p.PageSize != 0 {

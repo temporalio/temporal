@@ -64,9 +64,8 @@ func NewCliApp() *cli.App {
 			EnvVar: "TEMPORAL_CONTEXT_TIMEOUT",
 		},
 		cli.BoolFlag{
-			Name:   FlagAutoConfirm,
-			Usage:  "automatically confirm all prompts",
-			Hidden: true,
+			Name:  FlagAutoConfirm,
+			Usage: "automatically confirm all prompts",
 		},
 		cli.StringFlag{
 			Name:   FlagTLSCertPath,

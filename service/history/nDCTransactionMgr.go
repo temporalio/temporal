@@ -249,7 +249,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 		}
 	}()
 
-	if _, err := targetWorkflow.getContext().PersistNonFirstWorkflowEvents(
+	if _, err := targetWorkflow.getContext().PersistWorkflowEvents(
 		targetWorkflowEvents,
 	); err != nil {
 		return err

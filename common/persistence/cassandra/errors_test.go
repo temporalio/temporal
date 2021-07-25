@@ -34,7 +34,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
 type (
@@ -207,13 +209,19 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Failed() 
 func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success() {
 	runID, _ := uuid.Parse(permanentRunID)
 	currentRunID := uuid.New()
+	workflowState := &persistencespb.WorkflowExecutionState{}
+	blob, err := serialization.WorkflowExecutionStateToBlob(workflowState)
+	s.NoError(err)
 	record := map[string]interface{}{
-		"type":           rowTypeExecution,
-		"run_id":         gocql.UUID(runID),
-		"current_run_id": gocql.UUID(currentRunID),
+		"type":                        rowTypeExecution,
+		"run_id":                      gocql.UUID(runID),
+		"current_run_id":              gocql.UUID(currentRunID),
+		"execution_state":             blob.Data,
+		"execution_state_encoding":    blob.EncodingType.String(),
+		"workflow_last_write_version": rand.Int63(),
 	}
 
-	err := extractCurrentWorkflowConflictError(record, uuid.New().String())
+	err = extractCurrentWorkflowConflictError(record, uuid.New().String())
 	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err)
 }
 
