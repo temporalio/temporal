@@ -34,9 +34,9 @@ import (
 
 func NewClient(config *config.Elasticsearch, httpClient *http.Client, logger log.Logger) (Client, error) {
 	switch config.Version {
-	case "v6", "":
+	case "v6":
 		return newClientV6(config, httpClient, logger)
-	case "v7":
+	case "v7", "":
 		return newClientV7(config, httpClient, logger)
 	default:
 		return nil, fmt.Errorf("not supported ElasticSearch version: %v", config.Version)
