@@ -469,16 +469,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	}
 
 	workflowID := request.GetWorkflowId()
-	// grab the current context as a Lock, nothing more
-	_, currentRelease, err := e.historyCache.GetOrCreateCurrentWorkflowExecution(
-		ctx,
-		namespaceID,
-		workflowID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { currentRelease(retError) }()
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
@@ -1955,16 +1945,6 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}
 
 	workflowID := request.GetWorkflowId()
-	// grab the current context as a Lock, nothing more
-	_, currentRelease, err := e.historyCache.GetOrCreateCurrentWorkflowExecution(
-		ctx,
-		namespaceID,
-		workflowID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { currentRelease(retError) }()
 
 	execution = commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
