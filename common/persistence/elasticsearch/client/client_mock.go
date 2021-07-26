@@ -264,6 +264,20 @@ func (mr *MockCLIClientMockRecorder) Count(ctx, index, query interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockCLIClient)(nil).Count), ctx, index, query)
 }
 
+// Delete mocks base method.
+func (m *MockCLIClient) Delete(ctx context.Context, indexName, docID string, version int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Delete", ctx, indexName, docID, version)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Delete indicates an expected call of Delete.
+func (mr *MockCLIClientMockRecorder) Delete(ctx, indexName, docID, version interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockCLIClient)(nil).Delete), ctx, indexName, docID, version)
+}
+
 // GetMapping mocks base method.
 func (m *MockCLIClient) GetMapping(ctx context.Context, index string) (map[string]string, error) {
 	m.ctrl.T.Helper()
