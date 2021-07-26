@@ -231,6 +231,16 @@ func (c *clientV7) IndexGetSettings(ctx context.Context, indexName string) (map[
 	return c.esClient.IndexGetSettings(indexName).Do(ctx)
 }
 
+func (c *clientV7) Delete(ctx context.Context, indexName string, docID string, version int64) error {
+	_, err := c.esClient.Delete().
+		Index(indexName).
+		Id(docID).
+		Version(version).
+		VersionType(versionTypeExternal).
+		Do(ctx)
+	return err
+}
+
 func getLoggerOptions(logLevel string, logger log.Logger) []elastic.ClientOptionFunc {
 	switch {
 	case strings.EqualFold(logLevel, "trace"):
