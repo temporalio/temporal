@@ -171,7 +171,7 @@ func NewCliApp() *cli.App {
 				{
 					Name:        "elasticsearch",
 					Aliases:     []string{"es"},
-					Usage:       "Run admin operation on ElasticSearch",
+					Usage:       "Run admin operation on Elasticsearch",
 					Subcommands: newAdminElasticSearchCommands(),
 				},
 				{
