@@ -505,7 +505,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		return nil, err
 	}
 
-	weContext := workflow.NewContext(namespaceID, execution, e.shard, e.executionManager, e.logger)
+	weContext := workflow.NewContext(namespaceID, execution, e.shard, e.logger)
 
 	now := e.timeSource.Now()
 	newWorkflow, newWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
@@ -2019,7 +2019,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, err
 	}
 
-	context = workflow.NewContext(namespaceID, execution, e.shard, e.executionManager, e.logger)
+	context = workflow.NewContext(namespaceID, execution, e.shard, e.logger)
 
 	now := e.timeSource.Now()
 	newWorkflow, newWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(

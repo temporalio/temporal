@@ -530,7 +530,6 @@ Update_History_Loop:
 						RunId:      continueAsNewExecutionState.RunId,
 					},
 					handler.shard,
-					handler.shard.GetExecutionManager(),
 					handler.logger,
 				),
 				continueAsNewBuilder,

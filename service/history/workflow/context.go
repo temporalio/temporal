@@ -140,11 +140,11 @@ type (
 		workflowExecution commonpb.WorkflowExecution
 		shard             shard.Context
 		engine            shard.Engine
-		executionManager  persistence.ExecutionManager
 		logger            log.Logger
 		metricsClient     metrics.Client
 		timeSource        clock.TimeSource
 		config            *configs.Config
+		transaction       Transaction
 
 		mutex        locks.PriorityMutex
 		MutableState MutableState
@@ -162,7 +162,6 @@ func NewContext(
 	namespaceID string,
 	execution commonpb.WorkflowExecution,
 	shard shard.Context,
-	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 ) *ContextImpl {
 	return &ContextImpl{
@@ -170,12 +169,12 @@ func NewContext(
 		workflowExecution: execution,
 		shard:             shard,
 		engine:            shard.GetEngine(),
-		executionManager:  executionManager,
 		logger:            logger,
 		metricsClient:     shard.GetMetricsClient(),
 		timeSource:        shard.GetTimeSource(),
 		config:            shard.GetConfig(),
 		mutex:             locks.NewPriorityMutex(),
+		transaction:       NewTransaction(shard),
 		stats: &persistencespb.ExecutionStats{
 			HistorySize: 0,
 		},
@@ -533,8 +532,7 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 		return err
 	}
 
-	if resetWorkflowSizeDiff, newWorkflowSizeDiff, currentWorkflowSizeDiff, err := ConflictResolveWorkflowExecution(
-		c.shard,
+	if resetWorkflowSizeDiff, newWorkflowSizeDiff, currentWorkflowSizeDiff, err := c.transaction.ConflictResolveWorkflowExecution(
 		conflictResolveMode,
 		resetWorkflow,
 		resetWorkflowEventsSeq,
@@ -701,8 +699,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		return err
 	}
 
-	if currentWorkflowSizeDiff, newWorkflowSizeDiff, err := UpdateWorkflowExecution(
-		c.shard,
+	if currentWorkflowSizeDiff, newWorkflowSizeDiff, err := c.transaction.UpdateWorkflowExecution(
 		updateMode,
 		currentWorkflow,
 		currentWorkflowEventsSeq,
