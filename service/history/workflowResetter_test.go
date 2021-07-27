@@ -62,7 +62,8 @@ type (
 		mockShard          *shard.ContextTest
 		mockStateRebuilder *MocknDCStateRebuilder
 
-		mockHistoryMgr *persistence.MockHistoryManager
+		mockHistoryMgr  *persistence.MockHistoryManager
+		mockTransaction *workflow.MockTransaction
 
 		logger       log.Logger
 		namespaceID  string
@@ -104,6 +105,7 @@ func (s *workflowResetterSuite) SetupTest() {
 		tests.NewDynamicConfig(),
 	)
 	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
+	s.mockTransaction = workflow.NewMockTransaction(s.controller)
 
 	s.workflowResetter = newWorkflowResetter(
 		s.mockShard,
@@ -113,6 +115,7 @@ func (s *workflowResetterSuite) SetupTest() {
 	s.workflowResetter.newStateRebuilder = func() nDCStateRebuilder {
 		return s.mockStateRebuilder
 	}
+	s.workflowResetter.transaction = s.mockTransaction
 
 	s.namespaceID = tests.NamespaceID
 	s.workflowID = "some random workflow ID"
@@ -135,6 +138,23 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	currentWorkflow.EXPECT().getMutableState().Return(currentMutableState).AnyTimes()
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
+	currentEventsSize := int64(2333)
+	currentNewEventsSize := int64(3444)
+	currentMutation := &persistence.WorkflowMutation{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{},
+	}
+	currentEventsSeq := []*persistence.WorkflowEvents{{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.currentRunID,
+		BranchToken: []byte("some random current branch token"),
+		Events: []*historypb.HistoryEvent{{
+			EventId: 234,
+		}},
+	}}
+	currentContext.EXPECT().GetHistorySize().Return(currentEventsSize).AnyTimes()
+	currentContext.EXPECT().SetHistorySize(currentEventsSize + currentNewEventsSize)
+
 	resetWorkflow := NewMocknDCWorkflow(s.controller)
 	resetReleaseCalled := false
 	resetContext := workflow.NewMockContext(s.controller)
@@ -144,13 +164,36 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	resetWorkflow.EXPECT().getMutableState().Return(resetMutableState).AnyTimes()
 	resetWorkflow.EXPECT().getReleaseFn().Return(targetReleaseFn).AnyTimes()
 
-	currentContext.EXPECT().UpdateWorkflowExecutionWithNewAsActive(
+	resetEventsSize := int64(1444)
+	resetNewEventsSize := int64(4321)
+	resetSnapshot := &persistence.WorkflowSnapshot{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{},
+	}
+	resetEventsSeq := []*persistence.WorkflowEvents{{
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.resetRunID,
+		BranchToken: []byte("some random reset branch token"),
+		Events: []*historypb.HistoryEvent{{
+			EventId: 123,
+		}},
+	}}
+	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
 		gomock.Any(),
-		resetContext,
-		resetMutableState,
-	).Return(nil)
+		workflow.TransactionPolicyActive,
+	).Return(resetSnapshot, resetEventsSeq, nil)
+	resetContext.EXPECT().GetHistorySize().Return(resetEventsSize).AnyTimes()
+	resetContext.EXPECT().SetHistorySize(resetEventsSize + resetNewEventsSize)
 
-	err := s.workflowResetter.persistToDB(true, currentWorkflow, resetWorkflow)
+	s.mockTransaction.EXPECT().UpdateWorkflowExecution(
+		persistence.UpdateWorkflowModeUpdateCurrent,
+		currentMutation,
+		currentEventsSeq,
+		resetSnapshot,
+		resetEventsSeq,
+	).Return(currentNewEventsSize, resetNewEventsSize, nil)
+
+	err := s.workflowResetter.persistToDB(currentWorkflow, currentMutation, currentEventsSeq, resetWorkflow)
 	s.NoError(err)
 	// persistToDB function is not charged of releasing locks
 	s.False(currentReleaseCalled)
@@ -183,7 +226,11 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	resetWorkflow.EXPECT().getMutableState().Return(resetMutableState).AnyTimes()
 	resetWorkflow.EXPECT().getReleaseFn().Return(targetReleaseFn).AnyTimes()
 
-	resetSnapshot := &persistence.WorkflowSnapshot{}
+	resetEventsSize := int64(1444)
+	resetNewEventsSize := int64(4321)
+	resetSnapshot := &persistence.WorkflowSnapshot{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{},
+	}
 	resetEventsSeq := []*persistence.WorkflowEvents{{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.workflowID,
@@ -193,12 +240,12 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 			EventId: 123,
 		}},
 	}}
-	resetEventsSize := int64(4321)
 	resetMutableState.EXPECT().CloseTransactionAsSnapshot(
 		gomock.Any(),
 		workflow.TransactionPolicyActive,
 	).Return(resetSnapshot, resetEventsSeq, nil)
-	resetContext.EXPECT().PersistWorkflowEvents(resetEventsSeq[0]).Return(resetEventsSize, nil)
+	resetContext.EXPECT().GetHistorySize().Return(resetEventsSize).AnyTimes()
+	resetContext.EXPECT().PersistWorkflowEvents(resetEventsSeq[0]).Return(resetNewEventsSize, nil)
 	resetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
 		persistence.CreateWorkflowModeContinueAsNew,
@@ -206,10 +253,10 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		currentLastWriteVersion,
 		resetMutableState,
 		resetSnapshot,
-		resetEventsSize,
+		resetNewEventsSize,
 	).Return(nil)
 
-	err := s.workflowResetter.persistToDB(false, currentWorkflow, resetWorkflow)
+	err := s.workflowResetter.persistToDB(currentWorkflow, nil, nil, resetWorkflow)
 	s.NoError(err)
 	// persistToDB function is not charged of releasing locks
 	s.False(currentReleaseCalled)
