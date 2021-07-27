@@ -207,20 +207,23 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 	require.True(t, sync)
 }
 
-func TestInstantiationFailureWithForeignPartitionOwner(t *testing.T) {
-	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	cfg.ResilientSyncMatch = func(...dynamicconfig.FilterOption) bool { return true }
-	_, err := createTestTaskQueueManagerWithConfig(gomock.NewController(t), cfg,
+func TestStartFailureWithForeignPartitionOwner(t *testing.T) {
+	cc := dynamicconfig.NewMutableEphemeralClient(
+		dynamicconfig.Set(dynamicconfig.ResilientSyncMatch, true))
+	cfg := NewConfig(dynamicconfig.NewCollection(cc, log.NewTestLogger()))
+	tqm := mustCreateTestTaskQueueManagerWithConfig(t, gomock.NewController(t), cfg,
 		makeTestBlocAlloc(func() (taskQueueState, error) {
 			// ConditionFailedError indicates foreign partition owner
 			return taskQueueState{}, &persistence.ConditionFailedError{}
 		}))
-	require.Error(t, err)
+	var err *persistence.ConditionFailedError
+	require.ErrorAs(t, tqm.Start(), &err)
 }
 
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
-	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	cfg.ResilientSyncMatch = func(...dynamicconfig.FilterOption) bool { return true }
+	cc := dynamicconfig.NewMutableEphemeralClient(
+		dynamicconfig.Set(dynamicconfig.ResilientSyncMatch, true))
+	cfg := NewConfig(dynamicconfig.NewCollection(cc, log.NewTestLogger()))
 	cfg.RangeSize = 1 // TaskID block size
 	var leaseErr error = nil
 	tqm := mustCreateTestTaskQueueManagerWithConfig(t, gomock.NewController(t), cfg,
@@ -255,12 +258,20 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 }
 
 func TestAnyErrorCausesUnloadWhenResilientSyncMatchDisabled(t *testing.T) {
-	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	cfg.ResilientSyncMatch = func(...dynamicconfig.FilterOption) bool { return false }
-	_, err := createTestTaskQueueManagerWithConfig(gomock.NewController(t), cfg,
+	cc := dynamicconfig.NewMutableEphemeralClient(
+		dynamicconfig.Set(dynamicconfig.ResilientSyncMatch, true))
+	cfg := NewConfig(dynamicconfig.NewCollection(cc, log.NewTestLogger()))
+	tqm := mustCreateTestTaskQueueManagerWithConfig(t, gomock.NewController(t), cfg,
 		makeTestBlocAlloc(func() (taskQueueState, error) {
 			return taskQueueState{}, errors.New("any error will do")
 		}))
+	tqm.Start()
+	defer tqm.Stop()
+	_, err := tqm.AddTask(context.TODO(), addTaskParams{
+		execution: &commonpb.WorkflowExecution{},
+		taskInfo:  &persistencespb.TaskInfo{},
+		source:    enumsspb.TASK_SOURCE_HISTORY,
+	})
 	require.Error(t, err)
 }
 

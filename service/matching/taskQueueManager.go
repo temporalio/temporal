@@ -77,7 +77,7 @@ type (
 	}
 
 	taskQueueManager interface {
-		Start()
+		Start() error
 		Stop()
 		// AddTask adds a task to the task queue. This method will first attempt a synchronous
 		// match with a poller. When that fails, task will be written to database and later
@@ -178,9 +178,6 @@ func newTaskQueueManager(
 		pollerHistory:       newPollerHistory(),
 		outstandingPollsMap: make(map[string]context.CancelFunc),
 	}
-	for _, opt := range opts {
-		opt(tlMgr)
-	}
 
 	tlMgr.namespaceValue.Store("")
 	if tlMgr.metricScope() == nil { // namespace name lookup failed
@@ -194,17 +191,8 @@ func newTaskQueueManager(
 		))
 	}
 
-	idblock := noTaskIDs
-	state, err := tlMgr.renewLeaseWithRetry()
-	if err != nil && tlMgr.errShouldUnload(err) {
-		return nil, err
-	}
-	if err == nil {
-		idblock = tlMgr.rangeIDToTaskIDBlock(state.rangeID)
-		tlMgr.taskAckManager.setAckLevel(state.ackLevel)
-	}
 	tlMgr.liveness = newLiveness(clock.NewRealTimeSource(), taskQueueConfig.IdleTaskqueueCheckInterval(), tlMgr.Stop)
-	tlMgr.taskWriter = newTaskWriter(tlMgr, idblock)
+	tlMgr.taskWriter = newTaskWriter(tlMgr)
 	tlMgr.taskReader = newTaskReader(tlMgr)
 
 	var fwdr *Forwarder
@@ -212,6 +200,9 @@ func newTaskQueueManager(
 		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, taskQueue, taskQueueKind, e.matchingClient)
 	}
 	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.metricScope)
+	for _, opt := range opts {
+		opt(tlMgr)
+	}
 	return tlMgr, nil
 }
 
@@ -226,17 +217,27 @@ func errIndicatesForeignLessee(err error) bool {
 
 // Start reading pump for the given task queue.
 // The pump fills up taskBuffer from persistence.
-func (c *taskQueueManagerImpl) Start() {
+func (c *taskQueueManagerImpl) Start() error {
 	if !atomic.CompareAndSwapInt32(
 		&c.status,
 		common.DaemonStatusInitialized,
 		common.DaemonStatusStarted,
 	) {
-		return
+		return nil
+	}
+	idblock := noTaskIDs
+	state, err := c.renewLeaseWithRetry()
+	if err != nil && c.errShouldUnload(err) {
+		return err
+	}
+	if err == nil {
+		idblock = c.rangeIDToTaskIDBlock(state.rangeID)
+		c.taskAckManager.setAckLevel(state.ackLevel)
 	}
 	c.liveness.Start()
-	c.taskWriter.Start()
+	c.taskWriter.Start(idblock)
 	c.taskReader.Start()
+	return nil
 }
 
 // Stop pump that fills up taskBuffer from persistence.
