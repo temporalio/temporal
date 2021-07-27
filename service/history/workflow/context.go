@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -147,10 +146,9 @@ type (
 		timeSource        clock.TimeSource
 		config            *configs.Config
 
-		mutex           locks.PriorityMutex
-		MutableState    MutableState
-		stats           *persistencespb.ExecutionStats
-		updateCondition int64
+		mutex        locks.PriorityMutex
+		MutableState MutableState
+		stats        *persistencespb.ExecutionStats
 	}
 )
 
@@ -289,8 +287,6 @@ func (c *ContextImpl) LoadWorkflowExecutionForReplication(
 			}
 		}
 
-		c.updateCondition = response.State.NextEventId
-
 		// finally emit execution and session stats
 		emitWorkflowExecutionStats(
 			c.metricsClient,
@@ -372,8 +368,6 @@ func (c *ContextImpl) LoadWorkflowExecution() (MutableState, error) {
 			}
 		}
 
-		c.updateCondition = response.State.NextEventId
-
 		// finally emit execution and session stats
 		emitWorkflowExecutionStats(
 			c.metricsClient,
@@ -452,7 +446,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		return err
 	}
 
-	notifyWorkflowSnapshotTasks(c.engine, newWorkflow)
+	NotifyWorkflowSnapshotTasks(c.engine, newWorkflow)
 	emitStateTransitionCount(c.metricsClient, newMutableState)
 
 	return nil
@@ -559,30 +553,6 @@ func (c *ContextImpl) ConflictResolveWorkflowExecution(
 			currentContext.SetHistorySize(currentContext.GetHistorySize() + currentWorkflowSizeDiff)
 		}
 	}
-
-	currentBranchToken, err := resetMutableState.GetCurrentBranchToken()
-	if err != nil {
-		return err
-	}
-
-	workflowState, workflowStatus := resetMutableState.GetWorkflowStateStatus()
-	// Current branch changed and notify the watchers
-	lastFirstEventID, lastFirstEventTxnID := resetMutableState.GetLastFirstEventIDTxnID()
-	c.engine.NotifyNewHistoryEvent(events.NewNotification(
-		c.namespaceID,
-		&c.workflowExecution,
-		lastFirstEventID,
-		lastFirstEventTxnID,
-		resetMutableState.GetNextEventID(),
-		resetMutableState.GetPreviousStartedEventID(),
-		currentBranchToken,
-		workflowState,
-		workflowStatus,
-	))
-
-	notifyWorkflowSnapshotTasks(c.engine, resetWorkflow)
-	notifyWorkflowSnapshotTasks(c.engine, newWorkflow)
-	notifyWorkflowMutationTasks(c.engine, currentWorkflow)
 
 	emitStateTransitionCount(c.metricsClient, resetMutableState)
 	emitStateTransitionCount(c.metricsClient, newMutableState)
@@ -746,31 +716,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 			newContext.SetHistorySize(newContext.GetHistorySize() + newWorkflowSizeDiff)
 		}
 	}
-
-	// TODO remove updateCondition in favor of condition in mutable state
-	c.updateCondition = currentWorkflow.NextEventID
-
-	// for any change in the workflow, send a event
-	currentBranchToken, err := c.MutableState.GetCurrentBranchToken()
-	if err != nil {
-		return err
-	}
-	workflowState, workflowStatus := c.MutableState.GetWorkflowStateStatus()
-	lastFirstEventID, lastFirstEventTxnID := c.MutableState.GetLastFirstEventIDTxnID()
-	c.engine.NotifyNewHistoryEvent(events.NewNotification(
-		c.namespaceID,
-		&c.workflowExecution,
-		lastFirstEventID,
-		lastFirstEventTxnID,
-		c.MutableState.GetNextEventID(),
-		c.MutableState.GetPreviousStartedEventID(),
-		currentBranchToken,
-		workflowState,
-		workflowStatus,
-	))
-
-	notifyWorkflowMutationTasks(c.engine, currentWorkflow)
-	notifyWorkflowSnapshotTasks(c.engine, newWorkflow)
 
 	emitStateTransitionCount(c.metricsClient, c.MutableState)
 	emitStateTransitionCount(c.metricsClient, newMutableState)
