@@ -65,7 +65,7 @@ type (
 
 		attempt   int
 		startTime time.Time
-		// todomigryz: added user time variable here
+
 		userLatency time.Duration
 		logger    log.Logger
 
@@ -269,14 +269,12 @@ func (t *taskProcessor) processTaskOnce(
 	scopeIdx, err := task.processor.process(ctx, task)
 	if duration, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency); ok {
 		task.userLatency += time.Duration(duration)
-	} else {
-		// todomigryz: remove or add debug log
-		panic("user latency is not specified")
 	}
 	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getNamespaceTagByID(task.task.GetNamespaceId()))
 	if task.shouldProcessTask {
 		scope.IncCounter(metrics.TaskRequests)
 		scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(startTime))
+		scope.RecordTimer(metrics.TaskNoUserProcessingLatency, time.Since(startTime) - task.userLatency)
 	}
 
 	return scope, err
@@ -344,22 +342,19 @@ func (t *taskProcessor) handleTaskError(
 	return err
 }
 
-// todomigryz: reporting latency metric
-// todomigryz: seems that I can add user latency to TaskInfo
-// todomigryz: what is user latency in this context?
-// todomigryz: is this user latency same as with query case?
-
 func (t *taskProcessor) ackTaskOnce(
 	scope metrics.Scope,
 	task *taskInfo,
 ) {
-
 	task.processor.complete(task)
 	if task.shouldProcessTask {
 		goVisibilityTime := timestamp.TimeValue(task.task.GetVisibilityTime())
 		scope.RecordDistribution(metrics.TaskAttemptTimer, task.attempt)
 		scope.RecordTimer(metrics.TaskLatency, time.Since(task.startTime))
 		scope.RecordTimer(metrics.TaskQueueLatency, time.Since(goVisibilityTime))
+		scope.RecordTimer(metrics.TaskUserLatency, task.userLatency)
+		scope.RecordTimer(metrics.TaskNoUserLatency, time.Since(task.startTime) - task.userLatency)
+		scope.RecordTimer(metrics.TaskNoUserQueueLatency, time.Since(goVisibilityTime) - task.userLatency)
 	}
 }
 

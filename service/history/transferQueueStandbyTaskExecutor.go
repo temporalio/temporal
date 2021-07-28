@@ -99,17 +99,17 @@ func (t *transferQueueStandbyTaskExecutor) execute(
 
 	switch transferTask.TaskType {
 	case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
-		return t.processActivityTask(transferTask)
+		return t.processActivityTask(ctx, transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
-		return t.processWorkflowTask(transferTask)
+		return t.processWorkflowTask(ctx, transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
-		return t.processCloseExecution(transferTask)
+		return t.processCloseExecution(ctx, transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
-		return t.processCancelExecution(transferTask)
+		return t.processCancelExecution(ctx, transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
-		return t.processSignalExecution(transferTask)
+		return t.processSignalExecution(ctx, transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
-		return t.processStartChildExecution(transferTask)
+		return t.processStartChildExecution(ctx, transferTask)
 	case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 		// no reset needed for standby
 		// TODO: add error logs
@@ -120,6 +120,7 @@ func (t *transferQueueStandbyTaskExecutor) execute(
 }
 
 func (t *transferQueueStandbyTaskExecutor) processActivityTask(
+	ctx context.Context,
 	transferTask *persistencespb.TransferTaskInfo,
 ) error {
 
@@ -144,6 +145,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 	}
 
 	return t.processTransfer(
+		ctx,
 		processTaskIfClosed,
 		transferTask,
 		actionFn,
@@ -159,6 +161,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 }
 
 func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
+	ctx context.Context,
 	transferTask *persistencespb.TransferTaskInfo,
 ) error {
 
@@ -207,6 +210,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 	}
 
 	return t.processTransfer(
+		ctx,
 		processTaskIfClosed,
 		transferTask,
 		actionFn,
@@ -222,6 +226,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 }
 
 func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
+	ctx context.Context,
 	transferTask *persistencespb.TransferTaskInfo,
 ) error {
 
@@ -279,6 +284,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 	}
 
 	return t.processTransfer(
+		ctx,
 		processTaskIfClosed,
 		transferTask,
 		actionFn,
@@ -287,6 +293,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 }
 
 func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
+	ctx context.Context,
 	transferTask *persistencespb.TransferTaskInfo,
 ) error {
 
@@ -307,6 +314,7 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 	}
 
 	return t.processTransfer(
+		ctx,
 		processTaskIfClosed,
 		transferTask,
 		actionFn,
@@ -322,6 +330,7 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 }
 
 func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
+	ctx context.Context,
 	transferTask *persistencespb.TransferTaskInfo,
 ) error {
 
@@ -342,6 +351,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 	}
 
 	return t.processTransfer(
+		ctx,
 		processTaskIfClosed,
 		transferTask,
 		actionFn,
@@ -357,6 +367,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 }
 
 func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
+	ctx context.Context,
 	transferTask *persistencespb.TransferTaskInfo,
 ) error {
 
@@ -381,6 +392,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 	}
 
 	return t.processTransfer(
+		ctx,
 		processTaskIfClosed,
 		transferTask,
 		actionFn,
@@ -396,6 +408,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 }
 
 func (t *transferQueueStandbyTaskExecutor) processTransfer(
+	pctx context.Context,
 	processTaskIfClosed bool,
 	taskInfo queueTaskInfo,
 	actionFn standbyActionFn,
@@ -403,7 +416,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 ) (retError error) {
 
 	transferTask := taskInfo.(*persistencespb.TransferTaskInfo)
-	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(transferTask)
 	context, release, err := t.cache.GetOrCreateWorkflowExecution(

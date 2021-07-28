@@ -170,7 +170,6 @@ Loop:
 	return t.updateWorkflowExecution(weContext, mutableState, timerFired)
 }
 
-// todomigryz: can we generalize adding timeout?
 func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	pctx context.Context,
 	task *persistencespb.TimerTaskInfo,
