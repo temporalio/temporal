@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -56,7 +55,6 @@ import (
 	"go.temporal.io/server/common/ringpop"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
@@ -152,14 +150,6 @@ func (s *Server) Start() error {
 	if err != nil {
 		return fmt.Errorf("unable to initialize cluster metadata: %w", err)
 	}
-
-	// TODO: remove this call after 1.10 release
-	copyCustomSearchAttributesFromDynamicConfigToClusterMetadata(
-		s.so.config,
-		s.so.persistenceServiceResolver,
-		s.logger,
-		dc,
-		s.so.customDataStoreFactory)
 
 	err = initSystemNamespaces(
 		&s.so.config.Persistence,
@@ -435,79 +425,6 @@ func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceSe
 		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
 	}
 	return nil
-}
-
-// TODO: remove this func after 1.10 release
-func copyCustomSearchAttributesFromDynamicConfigToClusterMetadata(
-	cfg *config.Config,
-	persistenceServiceResolver resolver.ServiceResolver,
-	logger log.Logger,
-	dc *dynamicconfig.Collection,
-	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
-) {
-
-	var visibilityIndex string
-	if cfg.Persistence.IsAdvancedVisibilityConfigExist() {
-		advancedVisibilityDataStore, ok := cfg.Persistence.DataStores[cfg.Persistence.AdvancedVisibilityStore]
-		if ok {
-			visibilityIndex = advancedVisibilityDataStore.ElasticSearch.GetVisibilityIndex()
-		}
-	}
-
-	if visibilityIndex == "" {
-		logger.Debug("Advanced visibility Elasticsearch index is not configured. Search attributes migration will use empty string as index name.")
-	}
-
-	defaultTypeMap := map[string]interface{}{}
-
-	dcSearchAttributes, err := searchattribute.BuildTypeMap(dc.GetMapProperty(dynamicconfig.ValidSearchAttributes, defaultTypeMap))
-	if err != nil {
-		logger.Error("Unable to read search attributes from dynamic config. Search attributes migration is cancelled.", tag.Error(err))
-		return
-	}
-	dcCustomSearchAttributes := searchattribute.FilterCustomOnly(dcSearchAttributes)
-	if len(dcCustomSearchAttributes) == 0 {
-		logger.Debug("Custom search attributes are not defined in dynamic config. Search attributes migration is cancelled.", tag.Error(err))
-		return
-	}
-
-	factory := persistenceClient.NewFactory(
-		&cfg.Persistence,
-		persistenceServiceResolver,
-		nil,
-		customDataStoreFactory,
-		cfg.ClusterMetadata.CurrentClusterName,
-		nil,
-		logger,
-	)
-
-	clusterMetadataManager, err := factory.NewClusterMetadataManager()
-	if err != nil {
-		logger.Error("Unable to initialize cluster metadata manager. Search attributes migration is cancelled.", tag.Error(err))
-		return
-	}
-	defer clusterMetadataManager.Close()
-
-	saManager := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), clusterMetadataManager)
-
-	existingSearchAttributes, err := saManager.GetSearchAttributes(visibilityIndex, true)
-	if err != nil {
-		logger.Error("Unable to read current search attributes from cluster metadata. Search attributes migration is cancelled.", tag.Error(err), tag.ESIndex(visibilityIndex))
-		return
-	}
-
-	if len(existingSearchAttributes.Custom()) != 0 {
-		logger.Debug("Search attributes already exist in cluster metadata. Search attributes migration is cancelled.", tag.Error(err))
-		return
-	}
-
-	err = saManager.SaveSearchAttributes(visibilityIndex, dcCustomSearchAttributes)
-	if err != nil {
-		logger.Error("Unable to save search attributes to cluster metadata. Search attributes migration is cancelled.", tag.Error(err), tag.ESIndex(visibilityIndex))
-		return
-	}
-
-	logger.Info("Search attributes are successfully saved from dynamic config to cluster metadata.", tag.Value(dcCustomSearchAttributes), tag.ESIndex(visibilityIndex))
 }
 
 // updateClusterMetadataConfig performs a config check against the configured persistence store for cluster metadata.
