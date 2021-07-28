@@ -46,9 +46,7 @@ func Test_fetchCACertFromUrl(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "example cert that does not exist on server",
-			// The prefix for http://example.com/ will be removed from all requests,
-			// and the rest of the path will be treated as if it was a file
+			name:    "example cert that does not exist on server",
 			args:    args{path: "https://example.com/testdata/notfound"},
 			wantErr: true,
 		},
