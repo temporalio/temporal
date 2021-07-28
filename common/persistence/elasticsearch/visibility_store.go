@@ -57,7 +57,8 @@ import (
 const (
 	persistenceName = "elasticsearch"
 
-	delimiter = "~"
+	delimiter                    = "~"
+	pointInTimeKeepAliveInterval = "1m"
 )
 
 type (
@@ -75,7 +76,10 @@ type (
 		SortValue  interface{}
 		TieBreaker string // this is always a runID value
 		// for ES scroll API
+		// Deprecated. Remove after ES v6 support removal.
 		ScrollID string
+		// Not supported in ES v6.
+		PointInTimeID string
 	}
 )
 
@@ -218,7 +222,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutions(
 		return !rec.StartTime.Before(request.EarliestStartTime) && !rec.StartTime.After(request.LatestStartTime)
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult.Hits, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, isRecordValid)
 }
 
 func (s *visibilityStore) ListClosedWorkflowExecutions(
@@ -240,7 +244,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutions(
 		return !rec.CloseTime.Before(request.EarliestStartTime) && !rec.CloseTime.After(request.LatestStartTime)
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult.Hits, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, isRecordValid)
 }
 
 func (s *visibilityStore) ListOpenWorkflowExecutionsByType(
@@ -264,7 +268,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByType(
 		return !rec.StartTime.Before(request.EarliestStartTime) && !rec.StartTime.After(request.LatestStartTime)
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult.Hits, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, isRecordValid)
 }
 
 func (s *visibilityStore) ListClosedWorkflowExecutionsByType(
@@ -287,7 +291,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByType(
 		return !rec.CloseTime.Before(request.EarliestStartTime) && !rec.CloseTime.After(request.LatestStartTime)
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult.Hits, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, isRecordValid)
 }
 
 func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
@@ -311,7 +315,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 		return !rec.StartTime.Before(request.EarliestStartTime) && !rec.StartTime.After(request.LatestStartTime)
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult.Hits, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, isRecordValid)
 }
 
 func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
@@ -334,7 +338,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 		return !rec.CloseTime.Before(request.EarliestStartTime) && !rec.CloseTime.After(request.LatestStartTime)
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult.Hits, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, isRecordValid)
 }
 
 func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(
@@ -356,7 +360,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 		return !rec.CloseTime.Before(request.EarliestStartTime) && !rec.CloseTime.After(request.LatestStartTime)
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult.Hits, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, isRecordValid)
 }
 
 func (s *visibilityStore) GetClosedWorkflowExecution(
@@ -418,7 +422,7 @@ func (s *visibilityStore) ListWorkflowExecutions(
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult.Hits, request.PageSize, nil)
+	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, nil)
 }
 
 func (s *visibilityStore) ScanWorkflowExecutions(
@@ -432,28 +436,59 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 	}
 
 	ctx := context.Background()
-	var searchResult *elastic.SearchResult
-	var scrollService client.ScrollService
-	if len(token.ScrollID) == 0 { // first call
+	if clientV7, isV7 := s.esClient.(client.ClientV7); isV7 {
+		// First call doesn't have PointInTimeID.
+		if token.PointInTimeID == "" {
+			token.PointInTimeID, err = clientV7.OpenPointInTime(ctx, s.index, pointInTimeKeepAliveInterval)
+			if err != nil {
+				return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to create point in time: %v", err))
+			}
+		}
+
 		var queryDSL string
-		queryDSL, err = getESQueryDSLForScan(request)
+		queryDSL, err = s.getESQueryDSL(request, token)
 		if err != nil {
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Error when parse query: %v", err))
 		}
-		searchResult, scrollService, err = s.esClient.ScrollFirstPage(ctx, s.index, queryDSL)
+
+		searchResult, err := clientV7.SearchWithDSLWithPIT(ctx, queryDSL)
+		if err != nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %v", err))
+		}
+
+		if len(searchResult.Hits.Hits) < request.PageSize {
+			// It is the last page, close PIT.
+			_, err = clientV7.ClosePointInTime(ctx, token.PointInTimeID)
+			if err != nil {
+				return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to close point in time: %v", err))
+			}
+		}
+		return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, nil)
 	} else {
-		searchResult, scrollService, err = s.esClient.Scroll(ctx, token.ScrollID)
-	}
+		// Elasticsearch v6.
+		var searchResult *elastic.SearchResult
+		var scrollService client.ScrollService
+		if len(token.ScrollID) == 0 { // first call
+			var queryDSL string
+			queryDSL, err = getESQueryDSLForScan(request)
+			if err != nil {
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Error when parse query: %v", err))
+			}
+			searchResult, scrollService, err = s.esClient.ScrollFirstPage(ctx, s.index, queryDSL)
+		} else {
+			searchResult, scrollService, err = s.esClient.Scroll(ctx, token.ScrollID)
+		}
 
-	isLastPage := false
-	if err == io.EOF { // no more result
-		isLastPage = true
-		_ = scrollService.Clear(context.Background())
-	} else if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
-	}
+		isLastPage := false
+		if err == io.EOF { // no more result
+			isLastPage = true
+			_ = scrollService.Clear(context.Background())
+		} else if err != nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
+		}
 
-	return s.getScanWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, searchResult.ScrollId, isLastPage)
+		return s.getScanWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, searchResult.ScrollId, isLastPage)
+	}
 }
 
 func (s *visibilityStore) CountWorkflowExecutions(request *persistence.CountWorkflowExecutionsRequest) (
@@ -551,6 +586,10 @@ func (s *visibilityStore) getESQueryDSL(request *persistence.ListWorkflowExecuti
 			return "", err
 		}
 		dsl.Set(dslFieldSearchAfter, fastjson.MustParse(valueOfSearchAfter))
+	}
+
+	if token.PointInTimeID != "" {
+		dsl.Set("pit", fastjson.MustParse(fmt.Sprintf(`{"id":"%s", "keep_alive":"%s"}`, token.PointInTimeID, pointInTimeKeepAliveInterval)))
 	}
 
 	return dsl.String(), nil
@@ -815,7 +854,11 @@ func (s *visibilityStore) getScanWorkflowExecutionsResponse(searchHits *elastic.
 	return response, nil
 }
 
-func (s *visibilityStore) getListWorkflowExecutionsResponse(searchHits *elastic.SearchHits, pageSize int, isRecordValid func(rec *persistence.VisibilityWorkflowExecutionInfo) bool) (*persistence.InternalListWorkflowExecutionsResponse, error) {
+func (s *visibilityStore) getListWorkflowExecutionsResponse(
+	searchResult *elastic.SearchResult,
+	pageSize int,
+	isRecordValid func(rec *persistence.VisibilityWorkflowExecutionInfo) bool,
+) (*persistence.InternalListWorkflowExecutionsResponse, error) {
 
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
@@ -824,10 +867,10 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(searchHits *elastic.
 	}
 
 	response := &persistence.InternalListWorkflowExecutionsResponse{
-		Executions: make([]*persistence.VisibilityWorkflowExecutionInfo, 0, len(searchHits.Hits)),
+		Executions: make([]*persistence.VisibilityWorkflowExecutionInfo, 0, len(searchResult.Hits.Hits)),
 	}
 	var lastHitSort []interface{}
-	for _, hit := range searchHits.Hits {
+	for _, hit := range searchResult.Hits.Hits {
 		workflowExecutionInfo := s.parseESDoc(hit, typeMap)
 		// ES6 uses "date" data type not "date_nanos". It truncates dates using milliseconds and might return extra rows.
 		// For example: 2021-06-12T00:21:43.159739259Z fits 2021-06-12T00:21:43.158Z...2021-06-12T00:21:43.159Z range lte/gte query.
@@ -839,10 +882,11 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(searchHits *elastic.
 		}
 	}
 
-	if len(searchHits.Hits) == pageSize && lastHitSort != nil { // this means the response is not the last page
+	if len(searchResult.Hits.Hits) == pageSize && lastHitSort != nil { // this means the response is not the last page
 		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
-			SortValue:  lastHitSort[0],
-			TieBreaker: lastHitSort[1].(string),
+			SortValue:     lastHitSort[0],
+			TieBreaker:    lastHitSort[1].(string),
+			PointInTimeID: searchResult.PitId,
 		})
 		if err != nil {
 			return nil, err

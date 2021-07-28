@@ -420,10 +420,11 @@ func (s *ESVisibilitySuite) TestGetSearchResult() {
 
 func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	// test for empty hits
-	searchHits := &elastic.SearchHits{
-		TotalHits: &elastic.TotalHits{},
-	}
-	resp, err := s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, 1, nil)
+	searchResult := &elastic.SearchResult{
+		Hits: &elastic.SearchHits{
+			TotalHits: &elastic.TotalHits{},
+		}}
+	resp, err := s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, 1, nil)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(0, len(resp.Executions))
@@ -444,27 +445,27 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 		Source: source,
 		Sort:   []interface{}{1547596872371000000, "e481009e-14b3-45ae-91af-dce6e2a88365"},
 	}
-	searchHits.Hits = []*elastic.SearchHit{searchHit}
-	searchHits.TotalHits.Value = 1
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, 1, nil)
+	searchResult.Hits.Hits = []*elastic.SearchHit{searchHit}
+	searchResult.Hits.TotalHits.Value = 1
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, 1, nil)
 	s.NoError(err)
 	serializedToken, _ := s.visibilityStore.serializePageToken(&visibilityPageToken{SortValue: 1547596872371000000, TieBreaker: "e481009e-14b3-45ae-91af-dce6e2a88365"})
 	s.Equal(serializedToken, resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
 
 	// test for last page hits
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, 2, nil)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, 2, nil)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(1, len(resp.Executions))
 
 	// test for search after
-	searchHits.Hits = []*elastic.SearchHit{}
-	for i := int64(0); i < searchHits.TotalHits.Value; i++ {
-		searchHits.Hits = append(searchHits.Hits, searchHit)
+	searchResult.Hits.Hits = []*elastic.SearchHit{}
+	for i := int64(0); i < searchResult.Hits.TotalHits.Value; i++ {
+		searchResult.Hits.Hits = append(searchResult.Hits.Hits, searchHit)
 	}
-	numOfHits := len(searchHits.Hits)
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, numOfHits, nil)
+	numOfHits := len(searchResult.Hits.Hits)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, numOfHits, nil)
 	s.NoError(err)
 	s.Equal(numOfHits, len(resp.Executions))
 	nextPageToken, err := s.visibilityStore.deserializePageToken(resp.NextPageToken)
@@ -474,7 +475,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.Equal(int64(1547596872371000000), resultSortValue)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", nextPageToken.TieBreaker)
 	// for last page
-	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchHits, numOfHits+1, nil)
+	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, numOfHits+1, nil)
 	s.NoError(err)
 	s.Equal(0, len(resp.NextPageToken))
 	s.Equal(numOfHits, len(resp.Executions))
