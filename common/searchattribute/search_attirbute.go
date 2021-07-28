@@ -32,8 +32,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
-	"go.temporal.io/server/common/dynamicconfig"
 )
 
 const (
@@ -56,28 +54,6 @@ var (
 	ErrInvalidType = errors.New("invalid search attribute type")
 )
 
-// BuildTypeMap converts search attributes types from dynamic config map to type map.
-// TODO: Remove after 1.10.0 release
-func BuildTypeMap(validSearchAttributesFn dynamicconfig.MapPropertyFn) (map[string]enumspb.IndexedValueType, error) {
-	if validSearchAttributesFn == nil {
-		return nil, nil
-	}
-	validSearchAttributes := validSearchAttributesFn()
-	if len(validSearchAttributes) == 0 {
-		return nil, nil
-	}
-
-	result := make(map[string]enumspb.IndexedValueType, len(validSearchAttributes))
-	for saName, saType := range validSearchAttributes {
-		var err error
-		result[saName], err = convertDynamicConfigType(saType)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return result, nil
-}
-
 // ApplyTypeMap set type for all valid search attributes which don't have it.
 // It doesn't do any validation and just skip invalid or already set search attributes.
 func ApplyTypeMap(searchAttributes *commonpb.SearchAttributes, typeMap NameTypeMap) {
@@ -92,35 +68,6 @@ func ApplyTypeMap(searchAttributes *commonpb.SearchAttributes, typeMap NameTypeM
 		}
 		setMetadataType(saPayload, valueType)
 	}
-}
-
-// convertDynamicConfigType takes dynamicConfigType as interface{} and convert to IndexedValueType.
-// This func is needed because different implementation of dynamic config client may have different type of dynamicConfigType
-// and to support backward compatibility.
-// TODO: remove after 1.10.0 release.
-func convertDynamicConfigType(dynamicConfigType interface{}) (enumspb.IndexedValueType, error) {
-	switch t := dynamicConfigType.(type) {
-	case float64:
-		ivt := enumspb.IndexedValueType(t)
-		if _, isValid := enumspb.IndexedValueType_name[int32(ivt)]; isValid {
-			return ivt, nil
-		}
-	case int:
-		ivt := enumspb.IndexedValueType(t)
-		if _, isValid := enumspb.IndexedValueType_name[int32(ivt)]; isValid {
-			return ivt, nil
-		}
-	case string:
-		if ivt, ok := enumspb.IndexedValueType_value[t]; ok {
-			return enumspb.IndexedValueType(ivt), nil
-		}
-	case enumspb.IndexedValueType:
-		if _, isValid := enumspb.IndexedValueType_name[int32(t)]; isValid {
-			return t, nil
-		}
-	}
-
-	return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, fmt.Errorf("%w: %v of type %T", ErrInvalidType, dynamicConfigType, dynamicConfigType)
 }
 
 func setMetadataType(p *commonpb.Payload, t enumspb.IndexedValueType) {
