@@ -109,29 +109,30 @@ func (t *transferQueueActiveTaskExecutor) execute(
 
 	switch task.TaskType {
 	case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
-		return t.processActivityTask(task)
+		return t.processActivityTask(ctx, task)
 	case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
-		return t.processWorkflowTask(task)
+		return t.processWorkflowTask(ctx, task)
 	case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
-		return t.processCloseExecution(task)
+		return t.processCloseExecution(ctx, task)
 	case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
-		return t.processCancelExecution(task)
+		return t.processCancelExecution(ctx, task)
 	case enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
-		return t.processSignalExecution(task)
+		return t.processSignalExecution(ctx, task)
 	case enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
-		return t.processStartChildExecution(task)
+		return t.processStartChildExecution(ctx, task)
 	case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
-		return t.processResetWorkflow(task)
+		return t.processResetWorkflow(ctx, task)
 	default:
 		return errUnknownTransferTask
 	}
 }
 
 func (t *transferQueueActiveTaskExecutor) processActivityTask(
+	pctx context.Context,
 	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
-	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
 	context, release, err := t.cache.GetOrCreateWorkflowExecution(
@@ -173,10 +174,11 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 }
 
 func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
+	pctx context.Context,
 	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
-	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
 	context, release, err := t.cache.GetOrCreateWorkflowExecution(
@@ -242,10 +244,11 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 }
 
 func (t *transferQueueActiveTaskExecutor) processCloseExecution(
+	pctx context.Context,
 	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
 
-	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
 	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
@@ -357,11 +360,12 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 }
 
 func (t *transferQueueActiveTaskExecutor) processCancelExecution(
+	pctx context.Context,
 	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
-
-	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
 	defer cancel()
+
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
 	context, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
@@ -447,11 +451,12 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 }
 
 func (t *transferQueueActiveTaskExecutor) processSignalExecution(
+	pctx context.Context,
 	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
-
-	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
 	defer cancel()
+
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
 	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
@@ -564,11 +569,12 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 }
 
 func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
+	pctx context.Context,
 	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
-
-	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
 	defer cancel()
+
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
 	context, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
@@ -681,11 +687,12 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 }
 
 func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
+	pctx context.Context,
 	task *persistencespb.TransferTaskInfo,
 ) (retError error) {
-
-	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
+	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
 	defer cancel()
+
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
 	currentContext, currentRelease, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,

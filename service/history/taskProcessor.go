@@ -267,6 +267,12 @@ func (t *taskProcessor) processTaskOnce(
 	ctx := context.Background()
 	startTime := t.timeSource.Now()
 	scopeIdx, err := task.processor.process(ctx, task)
+	if duration, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency); ok {
+		task.userLatency += time.Duration(duration)
+	} else {
+		// todomigryz: remove or add debug log
+		panic("user latency is not specified")
+	}
 	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getNamespaceTagByID(task.task.GetNamespaceId()))
 	if task.shouldProcessTask {
 		scope.IncCounter(metrics.TaskRequests)
