@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -280,7 +281,8 @@ func (t *queueTaskBase) Execute() error {
 		}
 	}()
 
-	return t.taskExecutor.execute(t.queueTaskInfo, t.shouldProcessTask)
+	ctx := context.Background()
+	return t.taskExecutor.execute(ctx, t.queueTaskInfo, t.shouldProcessTask)
 }
 
 func (t *queueTaskBase) HandleErr(

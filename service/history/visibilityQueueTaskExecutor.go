@@ -95,6 +95,7 @@ func newVisibilityQueueTaskExecutor(
 }
 
 func (t *visibilityQueueTaskExecutor) execute(
+	ctx context.Context,
 	taskInfo queueTaskInfo,
 	shouldProcessTask bool,
 ) error {

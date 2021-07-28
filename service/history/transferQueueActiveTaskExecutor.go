@@ -93,6 +93,7 @@ func newTransferQueueActiveTaskExecutor(
 }
 
 func (t *transferQueueActiveTaskExecutor) execute(
+	ctx context.Context,
 	taskInfo queueTaskInfo,
 	shouldProcessTask bool,
 ) error {

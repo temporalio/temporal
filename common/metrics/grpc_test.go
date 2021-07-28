@@ -171,7 +171,7 @@ func (s *grpcSuite) TestMetadataMetricInjection_NoMetricPresent() {
 }
 
 func (s *grpcSuite) TestContextCounterAdd() {
-	ctx := addMetricsContext(context.Background())
+	ctx := AddMetricsContext(context.Background())
 
 	testCounterName := "test_counter"
 	ContextCounterAdd(ctx, testCounterName, 100)

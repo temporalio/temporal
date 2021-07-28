@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -64,6 +65,8 @@ type (
 
 		attempt   int
 		startTime time.Time
+		// todomigryz: added user time variable here
+		userLatency time.Duration
 		logger    log.Logger
 
 		// used by 2DC task life cycle
@@ -100,6 +103,7 @@ func newTaskInfo(
 		task:              task,
 		attempt:           1,
 		startTime:         time.Now().UTC(), // used for metrics
+		userLatency:       0,
 		logger:            logger,
 		shouldProcessTask: true,
 	}
@@ -260,8 +264,9 @@ func (t *taskProcessor) processTaskOnce(
 	default:
 	}
 
+	ctx := context.Background()
 	startTime := t.timeSource.Now()
-	scopeIdx, err := task.processor.process(task)
+	scopeIdx, err := task.processor.process(ctx, task)
 	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getNamespaceTagByID(task.task.GetNamespaceId()))
 	if task.shouldProcessTask {
 		scope.IncCounter(metrics.TaskRequests)
@@ -332,6 +337,11 @@ func (t *taskProcessor) handleTaskError(
 	task.logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
 	return err
 }
+
+// todomigryz: reporting latency metric
+// todomigryz: seems that I can add user latency to TaskInfo
+// todomigryz: what is user latency in this context?
+// todomigryz: is this user latency same as with query case?
 
 func (t *taskProcessor) ackTaskOnce(
 	scope metrics.Scope,

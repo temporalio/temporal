@@ -82,6 +82,7 @@ func newTimerQueueStandbyTaskExecutor(
 }
 
 func (t *timerQueueStandbyTaskExecutor) execute(
+	ctx context.Context,
 	taskInfo queueTaskInfo,
 	shouldProcessTask bool,
 ) error {
@@ -114,7 +115,7 @@ func (t *timerQueueStandbyTaskExecutor) execute(
 	case enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
 		return t.executeWorkflowBackoffTimerTask(timerTask)
 	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT:
-		return t.executeDeleteHistoryEventTask(timerTask)
+		return t.executeDeleteHistoryEventTask(ctx, timerTask)
 	default:
 		return errUnknownTimerTask
 	}

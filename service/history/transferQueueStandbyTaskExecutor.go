@@ -81,6 +81,7 @@ func newTransferQueueStandbyTaskExecutor(
 }
 
 func (t *transferQueueStandbyTaskExecutor) execute(
+	ctx context.Context,
 	taskInfo queueTaskInfo,
 	shouldProcessTask bool,
 ) error {
