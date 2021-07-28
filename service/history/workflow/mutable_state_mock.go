@@ -1587,6 +1587,21 @@ func (mr *MockMutableStateMockRecorder) IsWorkflowExecutionRunning() *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowExecutionRunning", reflect.TypeOf((*MockMutableState)(nil).IsWorkflowExecutionRunning))
 }
 
+// NewWorkflowForRetryOrCron mocks base method.
+func (m *MockMutableState) NewWorkflowForRetryOrCron(arg0 int64, arg1 *v13.WorkflowExecutionStartedEventAttributes, arg2 *v10.Payloads, arg3 *v12.Failure, arg4 time.Duration, arg5 NewWorkflowType) (MutableState, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewWorkflowForRetryOrCron", arg0, arg1, arg2, arg3, arg4, arg5)
+	ret0, _ := ret[0].(MutableState)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewWorkflowForRetryOrCron indicates an expected call of NewWorkflowForRetryOrCron.
+func (mr *MockMutableStateMockRecorder) NewWorkflowForRetryOrCron(arg0, arg1, arg2, arg3, arg4, arg5 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewWorkflowForRetryOrCron", reflect.TypeOf((*MockMutableState)(nil).NewWorkflowForRetryOrCron), arg0, arg1, arg2, arg3, arg4, arg5)
+}
+
 // ReplicateActivityInfo mocks base method.
 func (m *MockMutableState) ReplicateActivityInfo(arg0 *v17.SyncActivityRequest, arg1 bool) error {
 	m.ctrl.T.Helper()
@@ -2180,36 +2195,6 @@ func (m *MockMutableState) RetryActivity(ai *v18.ActivityInfo, failure *v12.Fail
 func (mr *MockMutableStateMockRecorder) RetryActivity(ai, failure interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryActivity", reflect.TypeOf((*MockMutableState)(nil).RetryActivity), ai, failure)
-}
-
-// RetryAfterCron mocks base method.
-func (m *MockMutableState) RetryAfterCron(arg0, arg1 int64, arg2 *v13.WorkflowExecutionStartedEventAttributes, arg3 *v10.Payloads, arg4 *v12.Failure, arg5 time.Duration) (MutableState, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RetryAfterCron", arg0, arg1, arg2, arg3, arg4, arg5)
-	ret0, _ := ret[0].(MutableState)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RetryAfterCron indicates an expected call of RetryAfterCron.
-func (mr *MockMutableStateMockRecorder) RetryAfterCron(arg0, arg1, arg2, arg3, arg4, arg5 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryAfterCron", reflect.TypeOf((*MockMutableState)(nil).RetryAfterCron), arg0, arg1, arg2, arg3, arg4, arg5)
-}
-
-// RetryAfterFailure mocks base method.
-func (m *MockMutableState) RetryAfterFailure(arg0, arg1 int64, arg2 *v13.WorkflowExecutionStartedEventAttributes, arg3 *v12.Failure, arg4 time.Duration) (MutableState, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RetryAfterFailure", arg0, arg1, arg2, arg3, arg4)
-	ret0, _ := ret[0].(MutableState)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RetryAfterFailure indicates an expected call of RetryAfterFailure.
-func (mr *MockMutableStateMockRecorder) RetryAfterFailure(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryAfterFailure", reflect.TypeOf((*MockMutableState)(nil).RetryAfterFailure), arg0, arg1, arg2, arg3, arg4)
 }
 
 // SetCurrentBranchToken mocks base method.
