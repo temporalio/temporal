@@ -88,6 +88,6 @@ func (p *HeadersProviderPlugin) Server(*plugin.MuxBroker) (interface{}, error) {
 	return &HeadersProviderRPCServer{Impl: p.Impl}, nil
 }
 
-func (HeadersProviderPlugin) Client(b *plugin.MuxBroker, c *rpc.Client) (interface{}, error) {
+func (HeadersProviderPlugin) Client(_ *plugin.MuxBroker, c *rpc.Client) (interface{}, error) {
 	return &HeadersProviderRPC{client: c}, nil
 }
