@@ -25,16 +25,22 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"strconv"
 	"time"
 
+	"github.com/olivere/elastic/v7"
 	"github.com/urfave/cli"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
+	"go.temporal.io/server/common/searchattribute"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -45,7 +51,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence"
-	cassp "go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -67,7 +73,7 @@ func AdminShowWorkflow(c *cli.Context) {
 	serializer := serialization.NewSerializer()
 	var history []*commonpb.DataBlob
 	if len(tid) != 0 {
-		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, log.NewNoopLogger())
+		histV2 := cassandra.NewHistoryV2PersistenceFromSession(session, log.NewNoopLogger())
 		resp, err := histV2.ReadHistoryBranch(&persistence.InternalReadHistoryBranchRequest{
 			TreeID:    tid,
 			BranchID:  bid,
@@ -206,21 +212,20 @@ func AdminListNamespaces(c *cli.Context) {
 	paginate(c, paginationFunc)
 }
 
-// AdminDeleteWorkflow delete a workflow execution for admin
+// AdminDeleteWorkflow delete a workflow execution from Cassandra and visibility document from Elasticsearch.
 func AdminDeleteWorkflow(c *cli.Context) {
-	wid := getRequiredOption(c, FlagWorkflowID)
-	rid := c.String(FlagRunID)
-
 	resp := describeMutableState(c)
 	namespaceID := resp.GetDatabaseMutableState().GetExecutionInfo().GetNamespaceId()
-	skipError := c.Bool(FlagSkipErrorMode)
+	runID := resp.GetDatabaseMutableState().GetExecutionState().GetRunId()
+
+	adminDeleteVisibilityDocument(c, namespaceID)
+
 	session := connectToCassandra(c)
 	shardID := resp.GetShardId()
 	shardIDInt, err := strconv.Atoi(shardID)
 	if err != nil {
-		ErrorAndExit("strconv.Atoi(shardID) err", err)
+		ErrorAndExit("Unable to strconv.Atoi(shardID).", err)
 	}
-	shardIDInt32 := int32(shardIDInt)
 	var branchTokens [][]byte
 	versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories()
 	// if VersionHistories is set, then all branch infos are stored in VersionHistories
@@ -231,57 +236,100 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	for _, branchToken := range branchTokens {
 		branchInfo, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 		if err != nil {
-			ErrorAndExit("HistoryBranchFromBlob decoder err", err)
+			ErrorAndExit("Unable to HistoryBranchFromBlob.", err)
 		}
-		fmt.Println("deleting history events for ...")
+		fmt.Println("Deleting history events for:")
 		prettyPrintJSONObject(branchInfo)
-		histV2 := cassp.NewHistoryV2PersistenceFromSession(session, log.NewNoopLogger())
+		histV2 := cassandra.NewHistoryV2PersistenceFromSession(session, log.NewNoopLogger())
 		histMgr := persistence.NewHistoryV2ManagerImpl(histV2, log.NewNoopLogger(), dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit))
 		err = histMgr.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
 			BranchToken: branchToken,
-			ShardID:     shardIDInt32,
+			ShardID:     int32(shardIDInt),
 		})
 		if err != nil {
-			if skipError {
-				fmt.Println("failed to delete history, ", err)
+			if c.Bool(FlagSkipErrorMode) {
+				fmt.Println("Unable to DeleteHistoryBranch:", err)
 			} else {
-				ErrorAndExit("DeleteHistoryBranch err", err)
+				ErrorAndExit("Unable to DeleteHistoryBranch.", err)
 			}
 		}
 	}
 
-	exeStore, _ := cassp.NewWorkflowExecutionPersistence(shardIDInt32, session, log.NewNoopLogger())
+	exeStore, _ := cassandra.NewWorkflowExecutionPersistence(int32(shardIDInt), session, log.NewNoopLogger())
 	req := &persistence.DeleteWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		WorkflowID:  wid,
-		RunID:       rid,
+		WorkflowID:  getRequiredOption(c, FlagWorkflowID),
+		RunID:       runID,
 	}
-
 	err = exeStore.DeleteWorkflowExecution(req)
 	if err != nil {
-		if skipError {
-			fmt.Println("delete mutableState row failed, ", err)
+		if c.Bool(FlagSkipErrorMode) {
+			fmt.Printf("Unable to DeleteWorkflowExecution for RunID=%s: %v\n", runID, err)
 		} else {
-			ErrorAndExit("delete mutableState row failed", err)
+			ErrorAndExit(fmt.Sprintf("Unable to DeleteWorkflowExecution for RunID=%s.", runID), err)
 		}
+	} else {
+		fmt.Printf("DeleteWorkflowExecution for RunID=%s executed successfully.\n", runID)
 	}
-	fmt.Println("delete mutableState row successfully")
 
 	deleteCurrentReq := &persistence.DeleteCurrentWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
-		WorkflowID:  wid,
-		RunID:       rid,
+		WorkflowID:  getRequiredOption(c, FlagWorkflowID),
+		RunID:       runID,
 	}
-
 	err = exeStore.DeleteCurrentWorkflowExecution(deleteCurrentReq)
 	if err != nil {
-		if skipError {
-			fmt.Println("delete current row failed, ", err)
+		if c.Bool(FlagSkipErrorMode) {
+			fmt.Printf("Unable to DeleteCurrentWorkflowExecution for RunID=%s: %v\n", runID, err)
 		} else {
-			ErrorAndExit("delete current row failed", err)
+			ErrorAndExit(fmt.Sprintf("Unable to DeleteCurrentWorkflowExecution for RunID=%s.", runID), err)
+		}
+	} else {
+		fmt.Printf("DeleteCurrentWorkflowExecution for RunID=%s executed successfully.\n", runID)
+	}
+}
+
+func adminDeleteVisibilityDocument(c *cli.Context, namespaceID string) {
+	if !c.IsSet(FlagIndex) {
+		prompt("Elasticsearch index name is not specified. Continue without visibility document deletion?", c.GlobalBool(FlagAutoConfirm))
+	}
+
+	indexName := getRequiredOption(c, FlagIndex)
+	esClient := newESClient(c)
+
+	query := elastic.NewBoolQuery().
+		Filter(
+			elastic.NewTermQuery(searchattribute.NamespaceID, namespaceID),
+			elastic.NewTermQuery(searchattribute.WorkflowID, getRequiredOption(c, FlagWorkflowID)))
+	if c.IsSet(FlagRunID) {
+		query = query.Filter(elastic.NewTermQuery(searchattribute.RunID, c.String(FlagRunID)))
+	}
+	searchParams := &esclient.SearchParameters{
+		Index:    c.String(FlagIndex),
+		Query:    query,
+		PageSize: 10000,
+	}
+	searchResult, err := esClient.Search(context.Background(), searchParams)
+	if err != nil {
+		if c.Bool(FlagSkipErrorMode) {
+			fmt.Println("Unable to search for visibility documents from Elasticsearch:", err)
+		} else {
+			ErrorAndExit("Unable to search for visibility documents from Elasticsearch.", err)
 		}
 	}
-	fmt.Println("delete current row successfully")
+	fmt.Println("Found", len(searchResult.Hits.Hits), "visibility documents.")
+	for _, searchHit := range searchResult.Hits.Hits {
+		err := esClient.Delete(context.Background(), indexName, searchHit.Id, math.MaxInt64)
+		if err != nil {
+			if c.Bool(FlagSkipErrorMode) {
+				fmt.Println("Unable to delete visibility document from Elasticsearch:", err)
+			} else {
+				ErrorAndExit("Unable to delete visibility document from Elasticsearch.", err)
+			}
+		} else {
+			fmt.Println("Visibility document", searchHit.Id, "deleted successfully.")
+		}
+	}
 }
 
 func readOneRow(query gocql.Query) (map[string]interface{}, error) {

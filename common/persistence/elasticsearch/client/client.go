@@ -60,6 +60,7 @@ type (
 		Client
 		CatIndices(ctx context.Context) (elastic.CatIndicesResponse, error)
 		Bulk() BulkService
+		Delete(ctx context.Context, indexName string, docID string, version int64) error
 	}
 
 	IntegrationTestsClient interface {

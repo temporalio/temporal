@@ -156,9 +156,8 @@ func newWorkflowCommands() []cli.Command {
 		{
 			Name:    "scan",
 			Aliases: []string{"sc", "scanall"},
-			Usage: "scan workflow executions (need to enable Temporal server on ElasticSearch). " +
-				"It will be faster than listall, but result are not sorted.",
-			Flags: getFlagsForScan(),
+			Usage:   "Scan workflow executions (requires Elasticsearch to be enabled). It is faster than listall, but result are not sorted.",
+			Flags:   getFlagsForScan(),
 			Action: func(c *cli.Context) {
 				ScanAllWorkflow(c)
 			},
@@ -166,7 +165,7 @@ func newWorkflowCommands() []cli.Command {
 		{
 			Name:    "count",
 			Aliases: []string{"cnt"},
-			Usage:   "count number of workflow executions (need to enable Temporal server on ElasticSearch)",
+			Usage:   "Count number of workflow executions (requires Elasticsearch to be enabled)",
 			Flags:   getFlagsForCount(),
 			Action: func(c *cli.Context) {
 				CountWorkflow(c)

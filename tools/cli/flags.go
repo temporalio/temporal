@@ -651,3 +651,31 @@ func getDBFlags() []cli.Flag {
 		},
 	}
 }
+
+func getESFlags(index bool) []cli.Flag {
+	flags := []cli.Flag{
+		cli.StringFlag{
+			Name:  FlagURL,
+			Value: "http://127.0.0.1:9200",
+			Usage: "URL of Elasticsearch cluster",
+		},
+		cli.StringFlag{
+			Name:  FlagVersion,
+			Value: "v7",
+			Usage: "Version of Elasticsearch cluster: v6 or v7 (default)",
+		},
+	}
+	if index {
+		flags = append(flags,
+			cli.StringFlag{
+				Name:  FlagIndex,
+				Usage: "Elasticsearch index name",
+			},
+		)
+	}
+	return flags
+}
+
+func getDBAndESFlags() []cli.Flag {
+	return append(getDBFlags(), getESFlags(true)...)
+}

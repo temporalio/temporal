@@ -22,45 +22,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
+package workflow
 
 import (
-	"fmt"
-	"net/http"
-
-	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
 )
 
-func NewClient(config *config.Elasticsearch, httpClient *http.Client, logger log.Logger) (Client, error) {
-	switch config.Version {
-	case "v6":
-		return newClientV6(config, httpClient, logger)
-	case "v7", "":
-		return newClientV7(config, httpClient, logger)
-	default:
-		return nil, fmt.Errorf("not supported ElasticSearch version: %v", config.Version)
-	}
-}
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination transaction_mock.go
+type (
+	Transaction interface {
+		CreateWorkflowExecution(
+			createMode persistence.CreateWorkflowMode,
+			newWorkflowSnapshot *persistence.WorkflowSnapshot,
+			newWorkflowEventsSeq []*persistence.WorkflowEvents,
+		) (int64, error)
 
-func NewCLIClient(url string, version string) (CLIClient, error) {
-	switch version {
-	case "v6":
-		return newSimpleClientV6(url)
-	case "v7", "":
-		return newSimpleClientV7(url)
-	default:
-		return nil, fmt.Errorf("not supported ElasticSearch version: %v", version)
-	}
-}
+		ConflictResolveWorkflowExecution(
+			conflictResolveMode persistence.ConflictResolveWorkflowMode,
+			resetWorkflowSnapshot *persistence.WorkflowSnapshot,
+			resetWorkflowEventsSeq []*persistence.WorkflowEvents,
+			newWorkflowSnapshot *persistence.WorkflowSnapshot,
+			newWorkflowEventsSeq []*persistence.WorkflowEvents,
+			currentWorkflowMutation *persistence.WorkflowMutation,
+			currentWorkflowEventsSeq []*persistence.WorkflowEvents,
+		) (int64, int64, int64, error)
 
-func NewIntegrationTestsClient(url string, version string) (IntegrationTestsClient, error) {
-	switch version {
-	case "v6":
-		return newSimpleClientV6(url)
-	case "v7":
-		return newSimpleClientV7(url)
-	default:
-		return nil, fmt.Errorf("not supported ElasticSearch version: %v", version)
+		UpdateWorkflowExecution(
+			updateMode persistence.UpdateWorkflowMode,
+			currentWorkflowMutation *persistence.WorkflowMutation,
+			currentWorkflowEventsSeq []*persistence.WorkflowEvents,
+			newWorkflowSnapshot *persistence.WorkflowSnapshot,
+			newWorkflowEventsSeq []*persistence.WorkflowEvents,
+		) (int64, int64, error)
 	}
-}
+)
