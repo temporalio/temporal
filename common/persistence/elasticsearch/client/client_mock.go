@@ -197,6 +197,74 @@ func (mr *MockClientMockRecorder) WaitForYellowStatus(ctx, index interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForYellowStatus", reflect.TypeOf((*MockClient)(nil).WaitForYellowStatus), ctx, index)
 }
 
+// MockClientV7 is a mock of ClientV7 interface.
+type MockClientV7 struct {
+	ctrl     *gomock.Controller
+	recorder *MockClientV7MockRecorder
+}
+
+// MockClientV7MockRecorder is the mock recorder for MockClientV7.
+type MockClientV7MockRecorder struct {
+	mock *MockClientV7
+}
+
+// NewMockClientV7 creates a new mock instance.
+func NewMockClientV7(ctrl *gomock.Controller) *MockClientV7 {
+	mock := &MockClientV7{ctrl: ctrl}
+	mock.recorder = &MockClientV7MockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockClientV7) EXPECT() *MockClientV7MockRecorder {
+	return m.recorder
+}
+
+// ClosePointInTime mocks base method.
+func (m *MockClientV7) ClosePointInTime(ctx context.Context, id string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClosePointInTime", ctx, id)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClosePointInTime indicates an expected call of ClosePointInTime.
+func (mr *MockClientV7MockRecorder) ClosePointInTime(ctx, id interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClosePointInTime", reflect.TypeOf((*MockClientV7)(nil).ClosePointInTime), ctx, id)
+}
+
+// OpenPointInTime mocks base method.
+func (m *MockClientV7) OpenPointInTime(ctx context.Context, index, keepAliveInterval string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OpenPointInTime", ctx, index, keepAliveInterval)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// OpenPointInTime indicates an expected call of OpenPointInTime.
+func (mr *MockClientV7MockRecorder) OpenPointInTime(ctx, index, keepAliveInterval interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenPointInTime", reflect.TypeOf((*MockClientV7)(nil).OpenPointInTime), ctx, index, keepAliveInterval)
+}
+
+// SearchWithDSLWithPIT mocks base method.
+func (m *MockClientV7) SearchWithDSLWithPIT(ctx context.Context, query string) (*v7.SearchResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SearchWithDSLWithPIT", ctx, query)
+	ret0, _ := ret[0].(*v7.SearchResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SearchWithDSLWithPIT indicates an expected call of SearchWithDSLWithPIT.
+func (mr *MockClientV7MockRecorder) SearchWithDSLWithPIT(ctx, query interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchWithDSLWithPIT", reflect.TypeOf((*MockClientV7)(nil).SearchWithDSLWithPIT), ctx, query)
+}
+
 // MockCLIClient is a mock of CLIClient interface.
 type MockCLIClient struct {
 	ctrl     *gomock.Controller
