@@ -24,7 +24,7 @@ type httpClientWrapper struct {
 	testUrl string
 }
 
-func (c *httpClientWrapper) Get(url string) (resp *http.Response, err error) {
+func (c *httpClientWrapper) Get(_ string) (resp *http.Response, err error) {
 	// mock all calls to GET using the testUrl instead
 	return c.client.Get(c.testUrl)
 }
@@ -76,11 +76,11 @@ func Test_fetchCACertFromUrl(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			url, err := url.Parse(tt.args.path)
+			parsedUrl, err := url.Parse(tt.args.path)
 			if err != nil {
 				t.Errorf("invalid path error = %v, wantErr %v", err, tt.wantErr)
 			}
-			testUrl := testServer.URL + url.Path
+			testUrl := testServer.URL + parsedUrl.Path
 			netClient = &httpClientWrapper{client: testServer.Client(), testUrl: testUrl}
 			http.DefaultClient = testServer.Client()
 			_, err = fetchCACert(tt.args.path)
