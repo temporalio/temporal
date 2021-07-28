@@ -211,7 +211,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutions(
 		Filter(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 	searchResult, err := s.getSearchResult(request, token, query, true)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutions failed. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
@@ -233,7 +233,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutions(
 		MustNot(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 	searchResult, err := s.getSearchResult(request, token, executionStatusQuery, false)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutions failed. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
@@ -257,7 +257,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByType(
 			elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, true)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByType failed. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByType failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
@@ -280,7 +280,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByType(
 		MustNot(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByType failed. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByType failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
@@ -304,7 +304,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 			elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, true)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByWorkflowID failed. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByWorkflowID failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
@@ -327,7 +327,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 		MustNot(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByWorkflowID failed. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByWorkflowID failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
@@ -349,7 +349,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 		Filter(elastic.NewTermQuery(searchattribute.ExecutionStatus, request.Status.String()))
 	searchResult, err := s.getSearchResult(&request.ListWorkflowExecutionsRequest, token, query, false)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByStatus failed. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByStatus failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	isRecordValid := func(rec *persistence.VisibilityWorkflowExecutionInfo) bool {
@@ -379,7 +379,7 @@ func (s *visibilityStore) GetClosedWorkflowExecution(
 	}
 	searchResult, err := s.esClient.Search(ctx, params)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetClosedWorkflowExecution failed. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("GetClosedWorkflowExecution failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	response := &persistence.InternalGetClosedWorkflowExecutionResponse{}
@@ -415,7 +415,7 @@ func (s *visibilityStore) ListWorkflowExecutions(
 	ctx := context.Background()
 	searchResult, err := s.esClient.SearchWithDSL(ctx, s.index, queryDSL)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListWorkflowExecutions failed. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ListWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	return s.getListWorkflowExecutionsResponse(searchResult.Hits, request.PageSize, nil)
@@ -450,7 +450,7 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 		isLastPage = true
 		_ = scrollService.Clear(context.Background())
 	} else if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	return s.getScanWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, searchResult.ScrollId, isLastPage)
@@ -467,7 +467,7 @@ func (s *visibilityStore) CountWorkflowExecutions(request *persistence.CountWork
 	ctx := context.Background()
 	count, err := s.esClient.Count(ctx, s.index, queryDSL)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("CountWorkflowExecutions failed. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("CountWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	response := &persistence.CountWorkflowExecutionsResponse{Count: count}
@@ -1196,4 +1196,25 @@ func parseHHMMSSDuration(d string) (int64, error) {
 	}
 
 	return hours*int64(time.Hour) + minutes*int64(time.Minute) + seconds*int64(time.Second) + nanos, nil
+}
+
+func detailedErrorMessage(err error) string {
+	elasticErr, isElasticErr := err.(*elastic.Error)
+	if !isElasticErr ||
+		len(elasticErr.Details.RootCause) == 0 ||
+		(len(elasticErr.Details.RootCause) == 1 && elasticErr.Details.RootCause[0].Reason == elasticErr.Details.Reason) {
+		return err.Error()
+	}
+
+	var sb strings.Builder
+	sb.WriteString(elasticErr.Error())
+	sb.WriteString(", root causes:")
+	for i, rootErrDetail := range elasticErr.Details.RootCause {
+		sb.WriteRune(' ')
+		sb.WriteString(rootErrDetail.Reason)
+		if i != len(elasticErr.Details.RootCause)-1 {
+			sb.WriteRune(',')
+		}
+	}
+	return sb.String()
 }
