@@ -49,7 +49,7 @@ import (
 )
 
 const (
-	transferActiveTaskDefaultTimeout = 3 * time.Second
+	transferActiveTaskDefaultTimeout = 60 * time.Second
 )
 
 type (
