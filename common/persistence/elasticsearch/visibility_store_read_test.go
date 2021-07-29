@@ -1110,3 +1110,56 @@ func (s *ESVisibilitySuite) getTokenHelper(sortValue interface{}) *visibilityPag
 	token, _ = v.deserializePageToken(encoded)
 	return token
 }
+
+func (s *ESVisibilitySuite) Test_detailedErrorMessage() {
+	err := errors.New("test message")
+	s.Equal("test message", detailedErrorMessage(err))
+
+	err = &elastic.Error{
+		Status: 500,
+	}
+	s.Equal("elastic: Error 500 (Internal Server Error)", detailedErrorMessage(err))
+
+	err = &elastic.Error{
+		Status: 500,
+		Details: &elastic.ErrorDetails{
+			Type:   "some type",
+			Reason: "some reason",
+		},
+	}
+	s.Equal("elastic: Error 500 (Internal Server Error): some reason [type=some type]", detailedErrorMessage(err))
+
+	err = &elastic.Error{
+		Status: 500,
+		Details: &elastic.ErrorDetails{
+			Type:   "some type",
+			Reason: "some reason",
+			RootCause: []*elastic.ErrorDetails{
+				{
+					Type:   "some type",
+					Reason: "some reason",
+				},
+			},
+		},
+	}
+	s.Equal("elastic: Error 500 (Internal Server Error): some reason [type=some type]", detailedErrorMessage(err))
+
+	err = &elastic.Error{
+		Status: 500,
+		Details: &elastic.ErrorDetails{
+			Type:   "some type",
+			Reason: "some reason",
+			RootCause: []*elastic.ErrorDetails{
+				{
+					Type:   "some other type1",
+					Reason: "some other reason1",
+				},
+				{
+					Type:   "some other type2",
+					Reason: "some other reason2",
+				},
+			},
+		},
+	}
+	s.Equal("elastic: Error 500 (Internal Server Error): some reason [type=some type], root causes: some other reason1 [type=some other type1], some other reason2 [type=some other type2]", detailedErrorMessage(err))
+}

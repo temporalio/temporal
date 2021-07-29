@@ -1199,8 +1199,9 @@ func parseHHMMSSDuration(d string) (int64, error) {
 }
 
 func detailedErrorMessage(err error) string {
-	elasticErr, isElasticErr := err.(*elastic.Error)
-	if !isElasticErr ||
+	var elasticErr *elastic.Error
+	if !errors.As(err, &elasticErr) ||
+		elasticErr.Details == nil ||
 		len(elasticErr.Details.RootCause) == 0 ||
 		(len(elasticErr.Details.RootCause) == 1 && elasticErr.Details.RootCause[0].Reason == elasticErr.Details.Reason) {
 		return err.Error()
@@ -1209,9 +1210,8 @@ func detailedErrorMessage(err error) string {
 	var sb strings.Builder
 	sb.WriteString(elasticErr.Error())
 	sb.WriteString(", root causes:")
-	for i, rootErrDetail := range elasticErr.Details.RootCause {
-		sb.WriteRune(' ')
-		sb.WriteString(rootErrDetail.Reason)
+	for i, rootCause := range elasticErr.Details.RootCause {
+		sb.WriteString(fmt.Sprintf(" %s [type=%s]", rootCause.Reason, rootCause.Type))
 		if i != len(elasticErr.Details.RootCause)-1 {
 			sb.WriteRune(',')
 		}
