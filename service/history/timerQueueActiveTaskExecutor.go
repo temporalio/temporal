@@ -399,7 +399,6 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	return t.updateWorkflowExecution(weContext, mutableState, true)
 }
 
-
 func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	pctx context.Context,
 	task *persistencespb.TimerTaskInfo,

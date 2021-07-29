@@ -2207,24 +2207,24 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ElasticsearchInvalidSearchAttributeCount: {metricName: "elasticsearch_invalid_search_attribute_counter", metricType: Counter},
 	},
 	History: {
-		TaskRequests:                                      {metricName: "task_requests", metricType: Counter},
+		TaskRequests: {metricName: "task_requests", metricType: Counter},
 
-		TaskLatency:                                       {metricName: "task_latency", metricType: Timer}, // overall/all attempts within single worker
-		TaskUserLatency:                                   {metricName: "task_user_latency", metricType: Timer}, // from task generated to task complete
-		TaskNoUserLatency:                                 {metricName: "task_nouser_latency", metricType: Timer}, // from task generated to task complete
+		TaskLatency:       {metricName: "task_latency", metricType: Timer},        // overall/all attempts within single worker
+		TaskUserLatency:   {metricName: "task_user_latency", metricType: Timer},   // from task generated to task complete
+		TaskNoUserLatency: {metricName: "task_nouser_latency", metricType: Timer}, // from task generated to task complete
 
-		TaskAttemptTimer:                                  {metricName: "task_attempt", metricType: Timer},
-		TaskFailures:                                      {metricName: "task_errors", metricType: Counter},
-		TaskDiscarded:                                     {metricName: "task_errors_discarded", metricType: Counter},
-		TaskStandbyRetryCounter:                           {metricName: "task_errors_standby_retry_counter", metricType: Counter},
-		TaskNotActiveCounter:                              {metricName: "task_errors_not_active_counter", metricType: Counter},
-		TaskLimitExceededCounter:                          {metricName: "task_errors_limit_exceeded_counter", metricType: Counter},
+		TaskAttemptTimer:         {metricName: "task_attempt", metricType: Timer},
+		TaskFailures:             {metricName: "task_errors", metricType: Counter},
+		TaskDiscarded:            {metricName: "task_errors_discarded", metricType: Counter},
+		TaskStandbyRetryCounter:  {metricName: "task_errors_standby_retry_counter", metricType: Counter},
+		TaskNotActiveCounter:     {metricName: "task_errors_not_active_counter", metricType: Counter},
+		TaskLimitExceededCounter: {metricName: "task_errors_limit_exceeded_counter", metricType: Counter},
 
-		TaskProcessingLatency:                             {metricName: "task_latency_processing", metricType: Timer}, // per-attempt
-		TaskNoUserProcessingLatency:                       {metricName: "task_nouser_latency_processing", metricType: Timer}, // per-attempt
+		TaskProcessingLatency:       {metricName: "task_latency_processing", metricType: Timer},        // per-attempt
+		TaskNoUserProcessingLatency: {metricName: "task_nouser_latency_processing", metricType: Timer}, // per-attempt
 
-		TaskQueueLatency:                                  {metricName: "task_latency_queue", metricType: Timer}, // from task generated to task complete
-		TaskNoUserQueueLatency:                            {metricName: "task_nouser_latency_queue", metricType: Timer}, // from task generated to task complete
+		TaskQueueLatency:       {metricName: "task_latency_queue", metricType: Timer},        // from task generated to task complete
+		TaskNoUserQueueLatency: {metricName: "task_nouser_latency_queue", metricType: Timer}, // from task generated to task complete
 
 		TransferTaskMissingEventCounter:                   {metricName: "transfer_task_missing_event_counter", metricType: Counter},
 		TaskBatchCompleteCounter:                          {metricName: "task_batch_complete_counter", metricType: Counter},

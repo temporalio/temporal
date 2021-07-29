@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -111,7 +112,7 @@ func (s *queueTaskSuite) TestExecute_ExecutionErr() {
 	})
 
 	executionErr := errors.New("some random error")
-	s.mockQueueTaskExecutor.EXPECT().execute(queueTaskBase.queueTaskInfo, true).Return(executionErr)
+	s.mockQueueTaskExecutor.EXPECT().execute(context.Background(), queueTaskBase.queueTaskInfo, true).Return(executionErr)
 
 	err := queueTaskBase.Execute()
 	s.Equal(executionErr, err)
@@ -122,7 +123,7 @@ func (s *queueTaskSuite) TestExecute_Success() {
 		return true, nil
 	})
 
-	s.mockQueueTaskExecutor.EXPECT().execute(queueTaskBase.queueTaskInfo, true).Return(nil)
+	s.mockQueueTaskExecutor.EXPECT().execute(context.Background(), queueTaskBase.queueTaskInfo, true).Return(nil)
 
 	err := queueTaskBase.Execute()
 	s.NoError(err)

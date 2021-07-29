@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -140,7 +141,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceErrRetry_ProcessNoEr
 	}
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilterErr)
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
-	s.mockProcessor.EXPECT().process(task).Return(s.scopeIdx, nil)
+	s.mockProcessor.EXPECT().process(context.Background(), task).Return(s.scopeIdx, nil)
 	s.mockProcessor.EXPECT().complete(task)
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil)
 	s.taskProcessor.processTaskAndAck(
@@ -157,7 +158,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceFalse_ProcessNoErr()
 		return false, nil
 	}
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
-	s.mockProcessor.EXPECT().process(task).Return(s.scopeIdx, nil)
+	s.mockProcessor.EXPECT().process(context.Background(), task).Return(s.scopeIdx, nil)
 	s.mockProcessor.EXPECT().complete(task)
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil)
 	s.taskProcessor.processTaskAndAck(
@@ -173,7 +174,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessNoErr() 
 		return true, nil
 	}
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
-	s.mockProcessor.EXPECT().process(task).Return(s.scopeIdx, nil)
+	s.mockProcessor.EXPECT().process(context.Background(), task).Return(s.scopeIdx, nil)
 	s.mockProcessor.EXPECT().complete(task)
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil)
 	s.taskProcessor.processTaskAndAck(
@@ -190,8 +191,8 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessErrNoErr
 		return true, nil
 	}
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
-	s.mockProcessor.EXPECT().process(task).Return(s.scopeIdx, err)
-	s.mockProcessor.EXPECT().process(task).Return(s.scopeIdx, nil)
+	s.mockProcessor.EXPECT().process(context.Background(), task).Return(s.scopeIdx, err)
+	s.mockProcessor.EXPECT().process(context.Background(), task).Return(s.scopeIdx, nil)
 	s.mockProcessor.EXPECT().complete(task)
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).Times(2)
 	s.taskProcessor.processTaskAndAck(

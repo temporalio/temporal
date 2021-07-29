@@ -67,7 +67,7 @@ type (
 		startTime time.Time
 
 		userLatency time.Duration
-		logger    log.Logger
+		logger      log.Logger
 
 		// used by 2DC task life cycle
 		// TODO remove when NDC task life cycle is implemented
@@ -274,7 +274,7 @@ func (t *taskProcessor) processTaskOnce(
 	if task.shouldProcessTask {
 		scope.IncCounter(metrics.TaskRequests)
 		scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(startTime))
-		scope.RecordTimer(metrics.TaskNoUserProcessingLatency, time.Since(startTime) - task.userLatency)
+		scope.RecordTimer(metrics.TaskNoUserProcessingLatency, time.Since(startTime)-task.userLatency)
 	}
 
 	return scope, err
@@ -353,8 +353,8 @@ func (t *taskProcessor) ackTaskOnce(
 		scope.RecordTimer(metrics.TaskLatency, time.Since(task.startTime))
 		scope.RecordTimer(metrics.TaskQueueLatency, time.Since(goVisibilityTime))
 		scope.RecordTimer(metrics.TaskUserLatency, task.userLatency)
-		scope.RecordTimer(metrics.TaskNoUserLatency, time.Since(task.startTime) - task.userLatency)
-		scope.RecordTimer(metrics.TaskNoUserQueueLatency, time.Since(goVisibilityTime) - task.userLatency)
+		scope.RecordTimer(metrics.TaskNoUserLatency, time.Since(task.startTime)-task.userLatency)
+		scope.RecordTimer(metrics.TaskNoUserQueueLatency, time.Since(goVisibilityTime)-task.userLatency)
 	}
 }
 
