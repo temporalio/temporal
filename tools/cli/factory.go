@@ -237,12 +237,12 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 	return nil, nil
 }
 
-func fetchCACert(path string) (caPool *x509.CertPool, err error) {
+func fetchCACert(pathOrUrl string) (caPool *x509.CertPool, err error) {
 	caPool = x509.NewCertPool()
 	var caBytes []byte
 
-	if strings.HasPrefix(path, "http") {
-		resp, err := netClient.Get(path)
+	if strings.HasPrefix(pathOrUrl, "http://") || strings.HasPrefix(pathOrUrl, "https://") {
+		resp, err := netClient.Get(pathOrUrl)
 		if err != nil {
 			return nil, err
 		}
@@ -252,7 +252,7 @@ func fetchCACert(path string) (caPool *x509.CertPool, err error) {
 			return nil, err
 		}
 	} else {
-		caBytes, err = ioutil.ReadFile(path)
+		caBytes, err = ioutil.ReadFile(pathOrUrl)
 		if err != nil {
 			return nil, err
 		}
