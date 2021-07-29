@@ -43,10 +43,10 @@ import (
 )
 
 type (
-	// historyManagerImpl implements HistoryManager based on HistoryStore and Serializer
+	// historyManagerImpl implements HistoryManager based on WorkflowStore and Serializer
 	historyV2ManagerImpl struct {
 		historySerializer     serialization.Serializer
-		persistence           HistoryStore
+		persistence           WorkflowStore
 		logger                log.Logger
 		pagingTokenSerializer *jsonHistoryTokenSerializer
 		transactionSizeLimit  dynamicconfig.IntPropertyFn
@@ -65,7 +65,7 @@ var _ HistoryManager = (*historyV2ManagerImpl)(nil)
 
 // NewHistoryV2ManagerImpl returns new HistoryManager
 func NewHistoryV2ManagerImpl(
-	persistence HistoryStore,
+	persistence WorkflowStore,
 	logger log.Logger,
 	transactionSizeLimit dynamicconfig.IntPropertyFn,
 ) HistoryManager {

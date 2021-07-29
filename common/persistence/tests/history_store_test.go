@@ -65,7 +65,7 @@ type (
 
 func newHistoryEventsSuite(
 	t *testing.T,
-	store p.HistoryStore,
+	store p.WorkflowStore,
 	logger log.Logger,
 ) *historyEventsSuite {
 	return &historyEventsSuite{

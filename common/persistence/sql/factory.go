@@ -99,15 +99,6 @@ func (f *Factory) NewShardStore() (p.ShardStore, error) {
 	return newShardPersistence(conn, f.clusterName, f.logger)
 }
 
-// NewHistoryStore returns a new history store
-func (f *Factory) NewHistoryStore() (p.HistoryStore, error) {
-	conn, err := f.mainDBConn.Get()
-	if err != nil {
-		return nil, err
-	}
-	return newHistoryV2Persistence(conn, f.logger)
-}
-
 // NewMetadataStore returns a new metadata store
 func (f *Factory) NewMetadataStore() (p.MetadataStore, error) {
 	conn, err := f.mainDBConn.Get()
@@ -126,13 +117,13 @@ func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
 	return newClusterMetadataPersistence(conn, f.logger)
 }
 
-// NewExecutionStore returns an ExecutionStore for a given shardID
-func (f *Factory) NewExecutionStore(shardID int32) (p.ExecutionStore, error) {
+// NewWorkflowStore returns a WorkflowStore for a given shardID
+func (f *Factory) NewWorkflowStore(shardID int32) (p.WorkflowStore, error) {
 	conn, err := f.mainDBConn.Get()
 	if err != nil {
 		return nil, err
 	}
-	return NewSQLExecutionStore(conn, f.logger, shardID)
+	return NewSQLWorkflowStore(conn, f.logger, shardID)
 }
 
 // NewQueue returns a new queue backed by sql
