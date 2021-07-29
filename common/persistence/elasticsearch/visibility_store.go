@@ -445,7 +445,7 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 		if token.PointInTimeID == "" {
 			token.PointInTimeID, err = esClient.OpenPointInTime(ctx, s.index, pointInTimeKeepAliveInterval)
 			if err != nil {
-				return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to create point in time: %v", err))
+				return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to create point in time: %s", detailedErrorMessage(err)))
 			}
 		}
 
@@ -457,14 +457,14 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 
 		searchResult, err := esClient.SearchWithDSLWithPIT(ctx, queryDSL)
 		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %v", err))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 		}
 
 		if len(searchResult.Hits.Hits) < request.PageSize {
 			// It is the last page, close PIT.
 			_, err = esClient.ClosePointInTime(ctx, token.PointInTimeID)
 			if err != nil {
-				return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to close point in time: %v", err))
+				return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to close point in time: %s", detailedErrorMessage(err)))
 			}
 		}
 		return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, nil)
