@@ -120,38 +120,6 @@ func (mr *MockClientMockRecorder) RunBulkProcessor(ctx, p interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunBulkProcessor", reflect.TypeOf((*MockClient)(nil).RunBulkProcessor), ctx, p)
 }
 
-// Scroll mocks base method.
-func (m *MockClient) Scroll(ctx context.Context, scrollID string) (*v7.SearchResult, ScrollService, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Scroll", ctx, scrollID)
-	ret0, _ := ret[0].(*v7.SearchResult)
-	ret1, _ := ret[1].(ScrollService)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
-
-// Scroll indicates an expected call of Scroll.
-func (mr *MockClientMockRecorder) Scroll(ctx, scrollID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Scroll", reflect.TypeOf((*MockClient)(nil).Scroll), ctx, scrollID)
-}
-
-// ScrollFirstPage mocks base method.
-func (m *MockClient) ScrollFirstPage(ctx context.Context, index, query string) (*v7.SearchResult, ScrollService, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ScrollFirstPage", ctx, index, query)
-	ret0, _ := ret[0].(*v7.SearchResult)
-	ret1, _ := ret[1].(ScrollService)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
-
-// ScrollFirstPage indicates an expected call of ScrollFirstPage.
-func (mr *MockClientMockRecorder) ScrollFirstPage(ctx, index, query interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScrollFirstPage", reflect.TypeOf((*MockClient)(nil).ScrollFirstPage), ctx, index, query)
-}
-
 // Search mocks base method.
 func (m *MockClient) Search(ctx context.Context, p *SearchParameters) (*v7.SearchResult, error) {
 	m.ctrl.T.Helper()
@@ -263,6 +231,61 @@ func (m *MockClientV7) SearchWithDSLWithPIT(ctx context.Context, query string) (
 func (mr *MockClientV7MockRecorder) SearchWithDSLWithPIT(ctx, query interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchWithDSLWithPIT", reflect.TypeOf((*MockClientV7)(nil).SearchWithDSLWithPIT), ctx, query)
+}
+
+// MockClientV6 is a mock of ClientV6 interface.
+type MockClientV6 struct {
+	ctrl     *gomock.Controller
+	recorder *MockClientV6MockRecorder
+}
+
+// MockClientV6MockRecorder is the mock recorder for MockClientV6.
+type MockClientV6MockRecorder struct {
+	mock *MockClientV6
+}
+
+// NewMockClientV6 creates a new mock instance.
+func NewMockClientV6(ctrl *gomock.Controller) *MockClientV6 {
+	mock := &MockClientV6{ctrl: ctrl}
+	mock.recorder = &MockClientV6MockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockClientV6) EXPECT() *MockClientV6MockRecorder {
+	return m.recorder
+}
+
+// Scroll mocks base method.
+func (m *MockClientV6) Scroll(ctx context.Context, scrollID string) (*v7.SearchResult, ScrollService, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Scroll", ctx, scrollID)
+	ret0, _ := ret[0].(*v7.SearchResult)
+	ret1, _ := ret[1].(ScrollService)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// Scroll indicates an expected call of Scroll.
+func (mr *MockClientV6MockRecorder) Scroll(ctx, scrollID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Scroll", reflect.TypeOf((*MockClientV6)(nil).Scroll), ctx, scrollID)
+}
+
+// ScrollFirstPage mocks base method.
+func (m *MockClientV6) ScrollFirstPage(ctx context.Context, index, query string) (*v7.SearchResult, ScrollService, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ScrollFirstPage", ctx, index, query)
+	ret0, _ := ret[0].(*v7.SearchResult)
+	ret1, _ := ret[1].(ScrollService)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// ScrollFirstPage indicates an expected call of ScrollFirstPage.
+func (mr *MockClientV6MockRecorder) ScrollFirstPage(ctx, index, query interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScrollFirstPage", reflect.TypeOf((*MockClientV6)(nil).ScrollFirstPage), ctx, index, query)
 }
 
 // MockCLIClient is a mock of CLIClient interface.
@@ -389,38 +412,6 @@ func (m *MockCLIClient) RunBulkProcessor(ctx context.Context, p *BulkProcessorPa
 func (mr *MockCLIClientMockRecorder) RunBulkProcessor(ctx, p interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunBulkProcessor", reflect.TypeOf((*MockCLIClient)(nil).RunBulkProcessor), ctx, p)
-}
-
-// Scroll mocks base method.
-func (m *MockCLIClient) Scroll(ctx context.Context, scrollID string) (*v7.SearchResult, ScrollService, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Scroll", ctx, scrollID)
-	ret0, _ := ret[0].(*v7.SearchResult)
-	ret1, _ := ret[1].(ScrollService)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
-
-// Scroll indicates an expected call of Scroll.
-func (mr *MockCLIClientMockRecorder) Scroll(ctx, scrollID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Scroll", reflect.TypeOf((*MockCLIClient)(nil).Scroll), ctx, scrollID)
-}
-
-// ScrollFirstPage mocks base method.
-func (m *MockCLIClient) ScrollFirstPage(ctx context.Context, index, query string) (*v7.SearchResult, ScrollService, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ScrollFirstPage", ctx, index, query)
-	ret0, _ := ret[0].(*v7.SearchResult)
-	ret1, _ := ret[1].(ScrollService)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
-
-// ScrollFirstPage indicates an expected call of ScrollFirstPage.
-func (mr *MockCLIClientMockRecorder) ScrollFirstPage(ctx, index, query interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScrollFirstPage", reflect.TypeOf((*MockCLIClient)(nil).ScrollFirstPage), ctx, index, query)
 }
 
 // Search mocks base method.
