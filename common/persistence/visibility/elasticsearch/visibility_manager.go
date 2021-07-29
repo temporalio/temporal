@@ -28,8 +28,8 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility"
+	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -39,16 +39,16 @@ import (
 // In frontend, it only needs ES client and related config for reading data
 func NewVisibilityManager(
 	indexName string,
-	esClient client.Client,
+	esClient esclient.Client,
 	cfg *config.VisibilityConfig,
 	searchAttributesProvider searchattribute.Provider,
 	processor Processor,
 	metricsClient metrics.Client,
 	log log.Logger,
-) persistence.VisibilityManager {
+) visibility.VisibilityManager {
 
 	visStore := NewVisibilityStore(esClient, indexName, searchAttributesProvider, processor, cfg, log, metricsClient)
-	visManager := persistence.NewVisibilityManagerImpl(visStore, searchAttributesProvider, indexName, log)
+	visManager := visibility.NewVisibilityManagerImpl(visStore, searchAttributesProvider, indexName, log)
 
 	if cfg != nil {
 		// wrap with rate limiter
@@ -56,7 +56,7 @@ func NewVisibilityManager(
 			esRateLimiter := quotas.NewDefaultOutgoingDynamicRateLimiter(
 				func() float64 { return float64(cfg.MaxQPS()) },
 			)
-			visManager = persistence.NewVisibilityPersistenceRateLimitedClient(visManager, esRateLimiter, log)
+			visManager = visibility.NewVisibilityPersistenceRateLimitedClient(visManager, esRateLimiter, log)
 		}
 	}
 	if metricsClient != nil {

@@ -22,16 +22,46 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package searchattribute
+//go:generate mockgen -copyright_file ../../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination bulk_processor_mock.go
 
-type (
-	SystemProvider struct{}
+package client
+
+import (
+	"time"
+
+	"github.com/olivere/elastic/v7"
 )
 
-func NewSystemProvider() *SystemProvider {
-	return &SystemProvider{}
-}
+type BulkableRequestType uint8
 
-func (s *SystemProvider) GetSearchAttributes(_ string, _ bool) (NameTypeMap, error) {
-	return NameTypeMap{}, nil
-}
+const (
+	BulkableRequestTypeIndex BulkableRequestType = iota
+	BulkableRequestTypeDelete
+)
+
+type (
+	BulkProcessor interface {
+		Stop() error
+		Add(request *BulkableRequest)
+	}
+
+	// BulkProcessorParameters holds all required and optional parameters for executing bulk service
+	BulkProcessorParameters struct {
+		Name          string
+		NumOfWorkers  int
+		BulkActions   int
+		BulkSize      int
+		FlushInterval time.Duration
+		Backoff       elastic.Backoff
+		BeforeFunc    elastic.BulkBeforeFunc
+		AfterFunc     elastic.BulkAfterFunc
+	}
+
+	BulkableRequest struct {
+		RequestType BulkableRequestType
+		Index       string
+		ID          string
+		Version     int64
+		Doc         map[string]interface{}
+	}
+)

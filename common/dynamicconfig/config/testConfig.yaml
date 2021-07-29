@@ -1,4 +1,4 @@
-frontend.validSearchAttributes:
+frontend.namespaceCount:
 - value:
     NamespaceId: 1
   constraints: {}

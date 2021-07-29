@@ -22,46 +22,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination bulk_processor_mock.go
-
-package client
+package visibility
 
 import (
-	"time"
-
-	"github.com/olivere/elastic/v7"
+	"go.temporal.io/api/serviceerror"
 )
 
-type BulkableRequestType uint8
-
-const (
-	BulkableRequestTypeIndex BulkableRequestType = iota
-	BulkableRequestTypeDelete
-)
-
-type (
-	BulkProcessor interface {
-		Stop() error
-		Add(request *BulkableRequest)
-	}
-
-	// BulkProcessorParameters holds all required and optional parameters for executing bulk service
-	BulkProcessorParameters struct {
-		Name          string
-		NumOfWorkers  int
-		BulkActions   int
-		BulkSize      int
-		FlushInterval time.Duration
-		Backoff       elastic.Backoff
-		BeforeFunc    elastic.BulkBeforeFunc
-		AfterFunc     elastic.BulkAfterFunc
-	}
-
-	BulkableRequest struct {
-		RequestType BulkableRequestType
-		Index       string
-		ID          string
-		Version     int64
-		Doc         map[string]interface{}
-	}
+var (
+	// OperationNotSupportedErr is returned when visibility operation in not supported.
+	OperationNotSupportedErr = serviceerror.NewInvalidArgument("Operation not supported. Please use on Elasticsearch")
 )

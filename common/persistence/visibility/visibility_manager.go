@@ -22,24 +22,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// -aux_files is required here due to Closeable interface being in another file.
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination visibilityInterfaces_mock.go -aux_files go.temporal.io/server/common/persistence=dataInterfaces.go
+package visibility
 
-package persistence
+// -aux_files is required here due to Closeable interface being in another file.
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination visibility_manager_mock.go -aux_files go.temporal.io/server/common/persistence=../dataInterfaces.go
 
 import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/server/common/persistence"
 )
-
-// Interfaces for the Visibility Store.
-// This is a secondary store that is eventually consistent with the main
-// executions store, and stores workflow execution records for visibility
-// purposes.
 
 type (
 	VisibilityRequestBase struct {
@@ -163,7 +158,7 @@ type (
 
 	// VisibilityManager is used to manage the visibility store
 	VisibilityManager interface {
-		Closeable
+		persistence.Closeable
 		GetName() string
 		RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error
 		RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error
@@ -182,8 +177,3 @@ type (
 		CountWorkflowExecutions(request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error)
 	}
 )
-
-// NewOperationNotSupportErrorForVis create error for operation not support in visibility
-func NewOperationNotSupportErrorForVis() error {
-	return serviceerror.NewInvalidArgument("Operation not support. Please use on Elasticsearch")
-}

@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -56,11 +55,9 @@ type (
 		NewMetadataManager() (p.MetadataManager, error)
 		// NewExecutionManager returns a new execution manager for a given shardID
 		NewExecutionManager(shardID int32) (p.ExecutionManager, error)
-		// NewVisibilityManager returns a new visibility manager
-		NewVisibilityManager() (p.VisibilityManager, error)
 		// NewNamespaceReplicationQueue returns a new queue for namespace replication
 		NewNamespaceReplicationQueue() (p.NamespaceReplicationQueue, error)
-		// NewClusterMetadata returns a new manager for cluster specific metadata
+		// NewClusterMetadataManager returns a new manager for cluster specific metadata
 		NewClusterMetadataManager() (p.ClusterMetadataManager, error)
 	}
 	// DataStoreFactory is a low level interface to be implemented by a datastore
@@ -78,8 +75,6 @@ type (
 		NewMetadataStore() (p.MetadataStore, error)
 		// NewExecutionStore returns an execution store for given shardID
 		NewExecutionStore(shardID int32) (p.ExecutionStore, error)
-		// NewVisibilityStore returns a new visibility store
-		NewVisibilityStore() (p.VisibilityStore, error)
 		NewQueue(queueType p.QueueType) (p.Queue, error)
 		// NewClusterMetadataStore returns a new metadata store
 		NewClusterMetadataStore() (p.ClusterMetadataStore, error)
@@ -114,7 +109,6 @@ const (
 	storeTypeShard
 	storeTypeMetadata
 	storeTypeExecution
-	storeTypeVisibility
 	storeTypeQueue
 	storeTypeClusterMetadata
 )
@@ -125,7 +119,6 @@ var storeTypes = []storeType{
 	storeTypeShard,
 	storeTypeMetadata,
 	storeTypeExecution,
-	storeTypeVisibility,
 	storeTypeQueue,
 	storeTypeClusterMetadata,
 }
@@ -269,39 +262,6 @@ func (f *factoryImpl) NewExecutionManager(
 	return result, nil
 }
 
-// NewVisibilityManager returns a new visibility manager
-func (f *factoryImpl) NewVisibilityManager() (p.VisibilityManager, error) {
-	visConfig := f.config.VisibilityConfig
-	if visConfig == nil {
-		return nil, nil
-	}
-
-	ds, ok := f.datastores[storeTypeVisibility]
-	if !ok {
-		return nil, nil
-	}
-
-	store, err := ds.factory.NewVisibilityStore()
-	if err != nil {
-		return nil, err
-	}
-
-	// This visibility manager is used by DB visibility only and doesn't care about search attributes.
-	result := p.NewVisibilityManagerImpl(store, searchattribute.NewSystemProvider(), "", f.logger)
-	if ds.ratelimit != nil {
-		result = p.NewVisibilityPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
-	}
-
-	if visConfig.EnableSampling() {
-		result = p.NewVisibilitySamplingClient(result, visConfig, f.metricsClient, f.logger)
-	}
-	if f.metricsClient != nil {
-		result = p.NewVisibilityPersistenceMetricsClient(result, f.metricsClient, f.logger)
-	}
-
-	return result, nil
-}
-
 func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueue, error) {
 	ds := f.datastores[storeTypeQueue]
 	result, err := ds.factory.NewQueue(p.NamespaceReplicationQueueType)
@@ -322,10 +282,6 @@ func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueu
 func (f *factoryImpl) Close() {
 	ds := f.datastores[storeTypeExecution]
 	ds.factory.Close()
-	visDs, ok := f.datastores[storeTypeVisibility]
-	if ok {
-		visDs.factory.Close()
-	}
 }
 
 func (f *factoryImpl) isCassandra() bool {
@@ -359,23 +315,7 @@ func (f *factoryImpl) init(
 		f.logger.Fatal("invalid config: one of cassandra or sql params must be specified for default data store")
 	}
 	for _, sType := range storeTypes {
-		if sType != storeTypeVisibility {
-			f.datastores[sType] = defaultDataStore
-		}
-	}
-
-	if f.config.VisibilityStore != "" {
-		visibilityCfg := f.config.DataStores[f.config.VisibilityStore]
-		visibilityDataStore := Datastore{ratelimit: limiters[f.config.VisibilityStore]}
-		switch {
-		case visibilityCfg.Cassandra != nil:
-			visibilityDataStore.factory = cassandra.NewFactory(*visibilityCfg.Cassandra, r, clusterName, f.logger)
-		case visibilityCfg.SQL != nil:
-			visibilityDataStore.factory = sql.NewFactory(*visibilityCfg.SQL, r, clusterName, f.logger)
-		default:
-			f.logger.Fatal("invalid config: one of cassandra or sql params must be specified for visibility store")
-		}
-		f.datastores[storeTypeVisibility] = visibilityDataStore
+		f.datastores[sType] = defaultDataStore
 	}
 }
 

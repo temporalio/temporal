@@ -22,13 +22,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package persistence
+package visibility
 
 import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -152,7 +153,7 @@ func (p *visibilitySamplingClient) ListOpenWorkflowExecutions(request *ListWorkf
 	namespace := request.Namespace
 
 	if ok := p.rateLimitersForList.Allow(namespace); !ok {
-		return nil, ErrPersistenceLimitExceededForList
+		return nil, persistence.ErrPersistenceLimitExceededForList
 	}
 
 	return p.persistence.ListOpenWorkflowExecutions(request)
@@ -162,7 +163,7 @@ func (p *visibilitySamplingClient) ListClosedWorkflowExecutions(request *ListWor
 	namespace := request.Namespace
 
 	if ok := p.rateLimitersForList.Allow(namespace); !ok {
-		return nil, ErrPersistenceLimitExceededForList
+		return nil, persistence.ErrPersistenceLimitExceededForList
 	}
 
 	return p.persistence.ListClosedWorkflowExecutions(request)
@@ -172,7 +173,7 @@ func (p *visibilitySamplingClient) ListOpenWorkflowExecutionsByType(request *Lis
 	namespace := request.Namespace
 
 	if ok := p.rateLimitersForList.Allow(namespace); !ok {
-		return nil, ErrPersistenceLimitExceededForList
+		return nil, persistence.ErrPersistenceLimitExceededForList
 	}
 
 	return p.persistence.ListOpenWorkflowExecutionsByType(request)
@@ -182,7 +183,7 @@ func (p *visibilitySamplingClient) ListClosedWorkflowExecutionsByType(request *L
 	namespace := request.Namespace
 
 	if ok := p.rateLimitersForList.Allow(namespace); !ok {
-		return nil, ErrPersistenceLimitExceededForList
+		return nil, persistence.ErrPersistenceLimitExceededForList
 	}
 
 	return p.persistence.ListClosedWorkflowExecutionsByType(request)
@@ -192,7 +193,7 @@ func (p *visibilitySamplingClient) ListOpenWorkflowExecutionsByWorkflowID(reques
 	namespace := request.Namespace
 
 	if ok := p.rateLimitersForList.Allow(namespace); !ok {
-		return nil, ErrPersistenceLimitExceededForList
+		return nil, persistence.ErrPersistenceLimitExceededForList
 	}
 
 	return p.persistence.ListOpenWorkflowExecutionsByWorkflowID(request)
@@ -202,7 +203,7 @@ func (p *visibilitySamplingClient) ListClosedWorkflowExecutionsByWorkflowID(requ
 	namespace := request.Namespace
 
 	if ok := p.rateLimitersForList.Allow(namespace); !ok {
-		return nil, ErrPersistenceLimitExceededForList
+		return nil, persistence.ErrPersistenceLimitExceededForList
 	}
 
 	return p.persistence.ListClosedWorkflowExecutionsByWorkflowID(request)
@@ -212,7 +213,7 @@ func (p *visibilitySamplingClient) ListClosedWorkflowExecutionsByStatus(request 
 	namespace := request.Namespace
 
 	if ok := p.rateLimitersForList.Allow(namespace); !ok {
-		return nil, ErrPersistenceLimitExceededForList
+		return nil, persistence.ErrPersistenceLimitExceededForList
 	}
 
 	return p.persistence.ListClosedWorkflowExecutionsByStatus(request)
