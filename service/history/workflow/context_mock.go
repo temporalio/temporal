@@ -217,34 +217,19 @@ func (mr *MockContextMockRecorder) Lock(ctx, caller interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Lock", reflect.TypeOf((*MockContext)(nil).Lock), ctx, caller)
 }
 
-// PersistFirstWorkflowEvents mocks base method.
-func (m *MockContext) PersistFirstWorkflowEvents(workflowEvents *persistence.WorkflowEvents) (int64, error) {
+// PersistWorkflowEvents mocks base method.
+func (m *MockContext) PersistWorkflowEvents(workflowEvents *persistence.WorkflowEvents) (int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PersistFirstWorkflowEvents", workflowEvents)
+	ret := m.ctrl.Call(m, "PersistWorkflowEvents", workflowEvents)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// PersistFirstWorkflowEvents indicates an expected call of PersistFirstWorkflowEvents.
-func (mr *MockContextMockRecorder) PersistFirstWorkflowEvents(workflowEvents interface{}) *gomock.Call {
+// PersistWorkflowEvents indicates an expected call of PersistWorkflowEvents.
+func (mr *MockContextMockRecorder) PersistWorkflowEvents(workflowEvents interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PersistFirstWorkflowEvents", reflect.TypeOf((*MockContext)(nil).PersistFirstWorkflowEvents), workflowEvents)
-}
-
-// PersistNonFirstWorkflowEvents mocks base method.
-func (m *MockContext) PersistNonFirstWorkflowEvents(workflowEvents *persistence.WorkflowEvents) (int64, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PersistNonFirstWorkflowEvents", workflowEvents)
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// PersistNonFirstWorkflowEvents indicates an expected call of PersistNonFirstWorkflowEvents.
-func (mr *MockContextMockRecorder) PersistNonFirstWorkflowEvents(workflowEvents interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PersistNonFirstWorkflowEvents", reflect.TypeOf((*MockContext)(nil).PersistNonFirstWorkflowEvents), workflowEvents)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PersistWorkflowEvents", reflect.TypeOf((*MockContext)(nil).PersistWorkflowEvents), workflowEvents)
 }
 
 // ReapplyEvents mocks base method.

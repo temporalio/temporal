@@ -44,6 +44,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/searchattribute"
 
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -89,7 +90,7 @@ type (
 		mockProducer           *persistence.MockNamespaceReplicationQueue
 		mockMetadataMgr        *persistence.MockMetadataManager
 		mockHistoryMgr         *persistence.MockHistoryManager
-		mockVisibilityMgr      *persistence.MockVisibilityManager
+		mockVisibilityMgr      *visibility.MockVisibilityManager
 		mockArchivalMetadata   *archiver.MockArchivalMetadata
 		mockArchiverProvider   *provider.MockArchiverProvider
 		mockHistoryArchiver    *archiver.MockHistoryArchiver
@@ -1218,7 +1219,7 @@ func (s *workflowHandlerSuite) TestListWorkflowExecutions() {
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
-	s.mockVisibilityMgr.EXPECT().ListWorkflowExecutions(gomock.Any()).Return(&persistence.ListWorkflowExecutionsResponse{}, nil)
+	s.mockVisibilityMgr.EXPECT().ListWorkflowExecutions(gomock.Any()).Return(&visibility.ListWorkflowExecutionsResponse{}, nil)
 
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.testNamespace,
@@ -1248,7 +1249,7 @@ func (s *workflowHandlerSuite) TestScanWorkflowExecutions() {
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
-	s.mockVisibilityMgr.EXPECT().ScanWorkflowExecutions(gomock.Any()).Return(&persistence.ListWorkflowExecutionsResponse{}, nil)
+	s.mockVisibilityMgr.EXPECT().ScanWorkflowExecutions(gomock.Any()).Return(&visibility.ListWorkflowExecutionsResponse{}, nil)
 
 	scanRequest := &workflowservice.ScanWorkflowExecutionsRequest{
 		Namespace: s.testNamespace,
@@ -1281,7 +1282,7 @@ func (s *workflowHandlerSuite) TestCountWorkflowExecutions() {
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
-	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any()).Return(&persistence.CountWorkflowExecutionsResponse{}, nil)
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any()).Return(&visibility.CountWorkflowExecutionsResponse{}, nil)
 
 	countRequest := &workflowservice.CountWorkflowExecutionsRequest{
 		Namespace: s.testNamespace,

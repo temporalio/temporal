@@ -27,7 +27,6 @@ package persistence
 import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
 )
@@ -76,12 +75,6 @@ type (
 		logger      log.Logger
 	}
 
-	visibilityRateLimitedPersistenceClient struct {
-		rateLimiter quotas.RateLimiter
-		persistence VisibilityManager
-		logger      log.Logger
-	}
-
 	queueRateLimitedPersistenceClient struct {
 		rateLimiter quotas.RateLimiter
 		persistence Queue
@@ -95,7 +88,6 @@ var _ TaskManager = (*taskRateLimitedPersistenceClient)(nil)
 var _ HistoryManager = (*historyV2RateLimitedPersistenceClient)(nil)
 var _ MetadataManager = (*metadataRateLimitedPersistenceClient)(nil)
 var _ ClusterMetadataManager = (*clusterMetadataRateLimitedPersistenceClient)(nil)
-var _ VisibilityManager = (*visibilityRateLimitedPersistenceClient)(nil)
 var _ Queue = (*queueRateLimitedPersistenceClient)(nil)
 
 // NewShardPersistenceRateLimitedClient creates a client to manage shards
@@ -146,15 +138,6 @@ func NewMetadataPersistenceRateLimitedClient(persistence MetadataManager, rateLi
 // NewClusterMetadataPersistenceRateLimitedClient creates a MetadataManager client to manage metadata
 func NewClusterMetadataPersistenceRateLimitedClient(persistence ClusterMetadataManager, rateLimiter quotas.RateLimiter, logger log.Logger) ClusterMetadataManager {
 	return &clusterMetadataRateLimitedPersistenceClient{
-		persistence: persistence,
-		rateLimiter: rateLimiter,
-		logger:      logger,
-	}
-}
-
-// NewVisibilityPersistenceRateLimitedClient creates a client to manage visibility
-func NewVisibilityPersistenceRateLimitedClient(persistence VisibilityManager, rateLimiter quotas.RateLimiter, logger log.Logger) VisibilityManager {
-	return &visibilityRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
 		logger:      logger,
@@ -624,141 +607,6 @@ func (p *metadataRateLimitedPersistenceClient) GetMetadata() (*GetMetadataRespon
 }
 
 func (p *metadataRateLimitedPersistenceClient) Close() {
-	p.persistence.Close()
-}
-
-func (p *visibilityRateLimitedPersistenceClient) GetName() string {
-	return p.persistence.GetName()
-}
-
-func (p *visibilityRateLimitedPersistenceClient) RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
-	}
-
-	err := p.persistence.RecordWorkflowExecutionStarted(request)
-	return err
-}
-
-func (p *visibilityRateLimitedPersistenceClient) RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
-	}
-
-	err := p.persistence.RecordWorkflowExecutionClosed(request)
-	return err
-}
-
-func (p *visibilityRateLimitedPersistenceClient) UpsertWorkflowExecution(request *UpsertWorkflowExecutionRequest) error {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
-	}
-
-	err := p.persistence.UpsertWorkflowExecution(request)
-	return err
-}
-
-func (p *visibilityRateLimitedPersistenceClient) ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-
-	response, err := p.persistence.ListOpenWorkflowExecutions(request)
-	return response, err
-}
-
-func (p *visibilityRateLimitedPersistenceClient) ListClosedWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*ListWorkflowExecutionsResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-
-	response, err := p.persistence.ListClosedWorkflowExecutions(request)
-	return response, err
-}
-
-func (p *visibilityRateLimitedPersistenceClient) ListOpenWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-
-	response, err := p.persistence.ListOpenWorkflowExecutionsByType(request)
-	return response, err
-}
-
-func (p *visibilityRateLimitedPersistenceClient) ListClosedWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*ListWorkflowExecutionsResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-
-	response, err := p.persistence.ListClosedWorkflowExecutionsByType(request)
-	return response, err
-}
-
-func (p *visibilityRateLimitedPersistenceClient) ListOpenWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-
-	response, err := p.persistence.ListOpenWorkflowExecutionsByWorkflowID(request)
-	return response, err
-}
-
-func (p *visibilityRateLimitedPersistenceClient) ListClosedWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-
-	response, err := p.persistence.ListClosedWorkflowExecutionsByWorkflowID(request)
-	return response, err
-}
-
-func (p *visibilityRateLimitedPersistenceClient) ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-
-	response, err := p.persistence.ListClosedWorkflowExecutionsByStatus(request)
-	return response, err
-}
-
-func (p *visibilityRateLimitedPersistenceClient) GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-
-	response, err := p.persistence.GetClosedWorkflowExecution(request)
-	return response, err
-}
-
-func (p *visibilityRateLimitedPersistenceClient) DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
-	}
-	return p.persistence.DeleteWorkflowExecution(request)
-}
-
-func (p *visibilityRateLimitedPersistenceClient) ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-	return p.persistence.ListWorkflowExecutions(request)
-}
-
-func (p *visibilityRateLimitedPersistenceClient) ScanWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-	return p.persistence.ScanWorkflowExecutions(request)
-}
-
-func (p *visibilityRateLimitedPersistenceClient) CountWorkflowExecutions(request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-	return p.persistence.CountWorkflowExecutions(request)
-}
-
-func (p *visibilityRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
 

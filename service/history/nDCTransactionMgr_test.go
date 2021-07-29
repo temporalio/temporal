@@ -169,7 +169,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
 	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: runID})
-	weContext.EXPECT().PersistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil)
+	weContext.EXPECT().PersistWorkflowEvents(workflowEvents).Return(int64(0), nil)
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, workflow.TransactionPolicyActive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
@@ -245,7 +245,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
 
-	weContext.EXPECT().PersistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil)
+	weContext.EXPECT().PersistWorkflowEvents(workflowEvents).Return(int64(0), nil)
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
@@ -280,7 +280,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Op
 	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	mutableState.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
 	weContext.EXPECT().ReapplyEvents([]*persistence.WorkflowEvents{workflowEvents})
-	weContext.EXPECT().PersistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil)
+	weContext.EXPECT().PersistWorkflowEvents(workflowEvents).Return(int64(0), nil)
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
@@ -329,7 +329,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Cl
 		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
 	weContext.EXPECT().ReapplyEvents([]*persistence.WorkflowEvents{workflowEvents})
-	weContext.EXPECT().PersistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil)
+	weContext.EXPECT().PersistWorkflowEvents(workflowEvents).Return(int64(0), nil)
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeUpdateCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
@@ -386,7 +386,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: currentRunID}, nil)
 	weContext.EXPECT().ReapplyEvents([]*persistence.WorkflowEvents{workflowEvents})
-	weContext.EXPECT().PersistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil)
+	weContext.EXPECT().PersistWorkflowEvents(workflowEvents).Return(int64(0), nil)
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)
@@ -442,7 +442,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: currentRunID}, nil)
 	weContext.EXPECT().ReapplyEvents([]*persistence.WorkflowEvents{workflowEvents})
-	weContext.EXPECT().PersistNonFirstWorkflowEvents(workflowEvents).Return(int64(0), nil)
+	weContext.EXPECT().PersistWorkflowEvents(workflowEvents).Return(int64(0), nil)
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		now, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, workflow.TransactionPolicyPassive, (*workflow.TransactionPolicy)(nil),
 	).Return(nil)

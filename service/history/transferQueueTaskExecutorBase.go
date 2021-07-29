@@ -31,6 +31,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/common/persistence/visibility"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -40,7 +41,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -49,7 +49,7 @@ import (
 )
 
 const (
-	transferActiveTaskDefaultTimeout = 3 * time.Second
+	transferActiveTaskDefaultTimeout = 20 * time.Second
 )
 
 type (
@@ -60,7 +60,7 @@ type (
 		logger                   log.Logger
 		metricsClient            metrics.Client
 		matchingClient           matchingservice.MatchingServiceClient
-		visibilityMgr            persistence.VisibilityManager
+		visibilityMgr            visibility.VisibilityManager
 		config                   *configs.Config
 		searchAttributesProvider searchattribute.Provider
 	}

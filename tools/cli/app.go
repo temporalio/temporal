@@ -64,9 +64,8 @@ func NewCliApp() *cli.App {
 			EnvVar: "TEMPORAL_CONTEXT_TIMEOUT",
 		},
 		cli.BoolFlag{
-			Name:   FlagAutoConfirm,
-			Usage:  "automatically confirm all prompts",
-			Hidden: true,
+			Name:  FlagAutoConfirm,
+			Usage: "automatically confirm all prompts",
 		},
 		cli.StringFlag{
 			Name:   FlagTLSCertPath,
@@ -172,7 +171,7 @@ func NewCliApp() *cli.App {
 				{
 					Name:        "elasticsearch",
 					Aliases:     []string{"es"},
-					Usage:       "Run admin operation on ElasticSearch",
+					Usage:       "Run admin operation on Elasticsearch",
 					Subcommands: newAdminElasticSearchCommands(),
 				},
 				{

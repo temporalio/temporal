@@ -31,7 +31,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -39,7 +39,7 @@ type (
 	// addSearchAttributes is the background sub-system that execute workflow to add new search attributes.
 	addSearchAttributes struct {
 		sdkClient     sdkclient.Client
-		esClient      esclient.Client
+		esClient      client.Client
 		saManager     searchattribute.Manager
 		metricsClient metrics.Client
 		logger        log.Logger
@@ -49,7 +49,7 @@ type (
 // New returns a new instance of addSearchAttributes.
 func New(
 	sdkClient sdkclient.Client,
-	esClient esclient.Client,
+	esClient client.Client,
 	saManager searchattribute.Manager,
 	metricsClient metrics.Client,
 	logger log.Logger,

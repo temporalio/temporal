@@ -100,7 +100,8 @@ func newAdminWorkflowCommands() []cli.Command {
 			Name:    "delete",
 			Aliases: []string{"del"},
 			Usage:   "Delete current workflow execution and the mutableState record",
-			Flags: append(getDBFlags(),
+			Flags: append(
+				getDBAndESFlags(),
 				cli.StringFlag{
 					Name:  FlagWorkflowIDWithAlias,
 					Usage: "WorkflowId",
@@ -111,7 +112,7 @@ func newAdminWorkflowCommands() []cli.Command {
 				},
 				cli.BoolFlag{
 					Name:  FlagSkipErrorModeWithAlias,
-					Usage: "skip errors when deleting history",
+					Usage: "skip errors",
 				}),
 			Action: func(c *cli.Context) {
 				AdminDeleteWorkflow(c)
@@ -414,17 +415,8 @@ func newAdminElasticSearchCommands() []cli.Command {
 		{
 			Name:    "catIndex",
 			Aliases: []string{"cind"},
-			Usage:   "Cat Indices on ElasticSearch",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  FlagURL,
-					Usage: "URL of ElasticSearch cluster",
-				},
-				cli.StringFlag{
-					Name:  FlagVersion,
-					Usage: "Version of ElasticSearch cluster: v6 or v7 (default)",
-				},
-			},
+			Usage:   "Cat Indices on Elasticsearch",
+			Flags:   getESFlags(false),
 			Action: func(c *cli.Context) {
 				AdminCatIndices(c)
 			},
@@ -432,20 +424,9 @@ func newAdminElasticSearchCommands() []cli.Command {
 		{
 			Name:    "index",
 			Aliases: []string{"ind"},
-			Usage:   "Index docs on ElasticSearch",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  FlagURL,
-					Usage: "URL of ElasticSearch cluster",
-				},
-				cli.StringFlag{
-					Name:  FlagVersion,
-					Usage: "Version of ElasticSearch cluster: v6 or v7 (default)",
-				},
-				cli.StringFlag{
-					Name:  FlagIndex,
-					Usage: "ElasticSearch target index",
-				},
+			Usage:   "Index docs on Elasticsearch",
+			Flags: append(
+				getESFlags(true),
 				cli.StringFlag{
 					Name:  FlagInputFileWithAlias,
 					Usage: "Input file of indexerspb.Message in json format, separated by newline",
@@ -455,7 +436,7 @@ func newAdminElasticSearchCommands() []cli.Command {
 					Usage: "Optional batch size of actions for bulk operations",
 					Value: 10,
 				},
-			},
+			),
 			Action: func(c *cli.Context) {
 				AdminIndex(c)
 			},
@@ -463,20 +444,9 @@ func newAdminElasticSearchCommands() []cli.Command {
 		{
 			Name:    "delete",
 			Aliases: []string{"del"},
-			Usage:   "Delete docs on ElasticSearch",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  FlagURL,
-					Usage: "URL of ElasticSearch cluster",
-				},
-				cli.StringFlag{
-					Name:  FlagVersion,
-					Usage: "Version of ElasticSearch cluster: v6 or v7 (default)",
-				},
-				cli.StringFlag{
-					Name:  FlagIndex,
-					Usage: "ElasticSearch target index",
-				},
+			Usage:   "Delete docs on Elasticsearch",
+			Flags: append(
+				getESFlags(true),
 				cli.StringFlag{
 					Name: FlagInputFileWithAlias,
 					Usage: "Input file name. Redirect temporal wf list result (with table format) to a file and use as delete input. " +
@@ -492,7 +462,7 @@ func newAdminElasticSearchCommands() []cli.Command {
 					Usage: "Optional batch request rate per second",
 					Value: 30,
 				},
-			},
+			),
 			Action: func(c *cli.Context) {
 				AdminDelete(c)
 			},
@@ -500,16 +470,9 @@ func newAdminElasticSearchCommands() []cli.Command {
 		{
 			Name:    "report",
 			Aliases: []string{"rep"},
-			Usage:   "Generate Report by Aggregation functions on ElasticSearch",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  FlagURL,
-					Usage: "URL of ElasticSearch cluster",
-				},
-				cli.StringFlag{
-					Name:  FlagIndex,
-					Usage: "ElasticSearch target index",
-				},
+			Usage:   "Generate Report by Aggregation functions on Elasticsearch",
+			Flags: append(
+				getESFlags(true),
 				cli.StringFlag{
 					Name:  FlagListQuery,
 					Usage: "SQL query of the report",
@@ -522,7 +485,7 @@ func newAdminElasticSearchCommands() []cli.Command {
 					Name:  FlagOutputFilename,
 					Usage: "Additional output filename with path",
 				},
-			},
+			),
 			Action: func(c *cli.Context) {
 				GenerateReport(c)
 			},
@@ -592,9 +555,14 @@ func newAdminClusterCommands() []cli.Command {
 			Aliases: []string{"asa"},
 			Usage:   "Add custom search attributes",
 			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:     FlagSkipSchemaUpdate,
+					Usage:    "Skip Elasticsearch index schema update (only register in metadata)",
+					Required: false,
+				},
 				cli.StringFlag{
 					Name:   FlagIndex,
-					Usage:  "ES index name (optional)",
+					Usage:  "Elasticsearch index name (optional)",
 					Hidden: true, // don't show it for now
 				},
 				cli.StringSliceFlag{
@@ -613,11 +581,11 @@ func newAdminClusterCommands() []cli.Command {
 		{
 			Name:    "remove-search-attributes",
 			Aliases: []string{"rsa"},
-			Usage:   "Remove custom search attributes metadata only (Elasticsearch schema is not modified)",
+			Usage:   "Remove custom search attributes metadata only (Elasticsearch index schema is not modified)",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:   FlagIndex,
-					Usage:  "ES index name (optional)",
+					Usage:  "Elasticsearch index name (optional)",
 					Hidden: true, // don't show it for now
 				},
 				cli.StringSliceFlag{
@@ -632,11 +600,15 @@ func newAdminClusterCommands() []cli.Command {
 		{
 			Name:    "get-search-attributes",
 			Aliases: []string{"gsa"},
-			Usage:   "Show exiting search attributes",
+			Usage:   "Show existing search attributes",
 			Flags: []cli.Flag{
 				cli.StringFlag{
+					Name:  FlagPrintJSONWithAlias,
+					Usage: "Output in JSON format",
+				},
+				cli.StringFlag{
 					Name:   FlagIndex,
-					Usage:  "ES index name (optional)",
+					Usage:  "Elasticsearch index name (optional)",
 					Hidden: true, // don't show it for now
 				},
 			},

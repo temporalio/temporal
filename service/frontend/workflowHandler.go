@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/persistence/visibility"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -766,19 +767,22 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 
 	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
-		errCancel := wh.cancelOutstandingPoll(ctx, err, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
-		if errCancel != nil {
-			// For all other errors log an error and return it back to client.
-			ctxTimeout := "not-set"
-			ctxDeadline, ok := ctx.Deadline()
-			if ok {
-				ctxTimeout = ctxDeadline.Sub(callTime).String()
-			}
-			wh.GetLogger().Error("PollWorkflowTaskQueue failed.",
-				tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
-				tag.Value(ctxTimeout),
-				tag.Error(errCancel))
+		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
+		if contextWasCanceled {
+			// Clear error as we don't want to report context cancellation error to count against our SLA.
+			// It doesn't matter what to return here, client has already gone. But (nil,nil) is invalid gogo return pair.
+			return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
 		}
+		// For all other errors log an error and return it back to client.
+		ctxTimeout := "not-set"
+		ctxDeadline, ok := ctx.Deadline()
+		if ok {
+			ctxTimeout = ctxDeadline.Sub(callTime).String()
+		}
+		wh.GetLogger().Error("Unable to call matching.PollWorkflowTaskQueue.",
+			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+			tag.Timeout(ctxTimeout),
+			tag.Error(err))
 		return nil, err
 	}
 
@@ -1028,19 +1032,24 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 
 	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
-		errCancel := wh.cancelOutstandingPoll(ctx, err, namespaceID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, request.TaskQueue, pollerID)
-		if errCancel != nil {
-			// For all other errors log an error and return it back to client.
-			ctxTimeout := "not-set"
-			ctxDeadline, ok := ctx.Deadline()
-			if ok {
-				ctxTimeout = ctxDeadline.Sub(callTime).String()
-			}
-			wh.GetLogger().Error("PollActivityTaskQueue failed.",
-				tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
-				tag.Value(ctxTimeout),
-				tag.Error(errCancel))
+		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, request.TaskQueue, pollerID)
+		if contextWasCanceled {
+			// Clear error as we don't want to report context cancellation error to count against our SLA.
+			// It doesn't matter what to return here, client has already gone. But (nil,nil) is invalid gogo return pair.
+			return &workflowservice.PollActivityTaskQueueResponse{}, nil
 		}
+
+		// For all other errors log an error and return it back to client.
+		ctxTimeout := "not-set"
+		ctxDeadline, ok := ctx.Deadline()
+		if ok {
+			ctxTimeout = ctxDeadline.Sub(callTime).String()
+		}
+		wh.GetLogger().Error("Unable to call matching.PollActivityTaskQueue.",
+			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
+			tag.Timeout(ctxTimeout),
+			tag.Error(err))
+
 		return nil, err
 	}
 	return &workflowservice.PollActivityTaskQueueResponse{
@@ -2174,7 +2183,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		return nil, err
 	}
 
-	baseReq := persistence.ListWorkflowExecutionsRequest{
+	baseReq := visibility.ListWorkflowExecutionsRequest{
 		NamespaceID:       namespaceID,
 		Namespace:         namespace,
 		PageSize:          int(request.GetMaximumPageSize()),
@@ -2183,13 +2192,13 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()),
 	}
 
-	var persistenceResp *persistence.ListWorkflowExecutionsResponse
+	var persistenceResp *visibility.ListWorkflowExecutionsResponse
 	if request.GetExecutionFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespace) {
 			err = errNoPermission
 		} else {
 			persistenceResp, err = wh.GetVisibilityManager().ListOpenWorkflowExecutionsByWorkflowID(
-				&persistence.ListWorkflowExecutionsByWorkflowIDRequest{
+				&visibility.ListWorkflowExecutionsByWorkflowIDRequest{
 					ListWorkflowExecutionsRequest: baseReq,
 					WorkflowID:                    request.GetExecutionFilter().GetWorkflowId(),
 				})
@@ -2200,7 +2209,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		if wh.config.DisableListVisibilityByFilter(namespace) {
 			err = errNoPermission
 		} else {
-			persistenceResp, err = wh.GetVisibilityManager().ListOpenWorkflowExecutionsByType(&persistence.ListWorkflowExecutionsByTypeRequest{
+			persistenceResp, err = wh.GetVisibilityManager().ListOpenWorkflowExecutionsByType(&visibility.ListWorkflowExecutionsByTypeRequest{
 				ListWorkflowExecutionsRequest: baseReq,
 				WorkflowTypeName:              request.GetTypeFilter().GetName(),
 			})
@@ -2271,7 +2280,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		return nil, err
 	}
 
-	baseReq := persistence.ListWorkflowExecutionsRequest{
+	baseReq := visibility.ListWorkflowExecutionsRequest{
 		NamespaceID:       namespaceID,
 		Namespace:         namespace,
 		PageSize:          int(request.GetMaximumPageSize()),
@@ -2280,13 +2289,13 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()),
 	}
 
-	var persistenceResp *persistence.ListWorkflowExecutionsResponse
+	var persistenceResp *visibility.ListWorkflowExecutionsResponse
 	if request.GetExecutionFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespace) {
 			err = errNoPermission
 		} else {
 			persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByWorkflowID(
-				&persistence.ListWorkflowExecutionsByWorkflowIDRequest{
+				&visibility.ListWorkflowExecutionsByWorkflowIDRequest{
 					ListWorkflowExecutionsRequest: baseReq,
 					WorkflowID:                    request.GetExecutionFilter().GetWorkflowId(),
 				})
@@ -2297,7 +2306,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		if wh.config.DisableListVisibilityByFilter(namespace) {
 			err = errNoPermission
 		} else {
-			persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByType(&persistence.ListWorkflowExecutionsByTypeRequest{
+			persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByType(&visibility.ListWorkflowExecutionsByTypeRequest{
 				ListWorkflowExecutionsRequest: baseReq,
 				WorkflowTypeName:              request.GetTypeFilter().GetName(),
 			})
@@ -2311,7 +2320,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 			if request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED || request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				err = errStatusFilterMustBeNotRunning
 			} else {
-				persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByStatus(&persistence.ListClosedWorkflowExecutionsByStatusRequest{
+				persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByStatus(&visibility.ListClosedWorkflowExecutionsByStatusRequest{
 					ListWorkflowExecutionsRequest: baseReq,
 					Status:                        request.GetStatusFilter().GetStatus(),
 				})
@@ -2371,7 +2380,7 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 		return nil, err
 	}
 
-	req := &persistence.ListWorkflowExecutionsRequestV2{
+	req := &visibility.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   namespaceID,
 		Namespace:     namespace,
 		PageSize:      int(request.GetPageSize()),
@@ -2517,7 +2526,7 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 		return nil, err
 	}
 
-	req := &persistence.ListWorkflowExecutionsRequestV2{
+	req := &visibility.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   namespaceID,
 		Namespace:     namespace,
 		PageSize:      int(request.GetPageSize()),
@@ -2566,7 +2575,7 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 		return nil, err
 	}
 
-	req := &persistence.CountWorkflowExecutionsRequest{
+	req := &visibility.CountWorkflowExecutionsRequest{
 		NamespaceID: namespaceID,
 		Namespace:   namespace,
 		Query:       request.GetQuery(),
@@ -3385,29 +3394,28 @@ func (wh *WorkflowHandler) isListRequestPageSizeTooLarge(pageSize int32, namespa
 		pageSize > int32(wh.config.ESIndexMaxResultWindow())
 }
 
-func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, err error, namespaceID string, taskQueueType enumspb.TaskQueueType,
-	taskQueue *taskqueuepb.TaskQueue, pollerID string) error {
+// cancelOutstandingPoll cancel outstanding poll if context was canceled and returns true. Otherwise returns false.
+func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, namespaceID string, taskQueueType enumspb.TaskQueueType,
+	taskQueue *taskqueuepb.TaskQueue, pollerID string) bool {
 	// First check if this err is due to context cancellation.  This means client connection to frontend is closed.
-	if ctx.Err() == context.Canceled {
-		// Our rpc stack does not propagates context cancellation to the other service.  Lets make an explicit
-		// call to matching to notify this poller is gone to prevent any tasks being dispatched to zombie pollers.
-		_, err = wh.GetMatchingClient().CancelOutstandingPoll(context.Background(), &matchingservice.CancelOutstandingPollRequest{
-			NamespaceId:   namespaceID,
-			TaskQueueType: taskQueueType,
-			TaskQueue:     taskQueue,
-			PollerId:      pollerID,
-		})
-		// We can not do much if this call fails.  Just log the error and move on
-		if err != nil {
-			wh.GetLogger().Warn("Failed to cancel outstanding poller.",
-				tag.WorkflowTaskQueueName(taskQueue.GetName()), tag.Error(err))
-		}
-
-		// clear error as we don't want to report context cancellation error to count against our SLA
-		return nil
+	if ctx.Err() != context.Canceled {
+		return false
+	}
+	// Our rpc stack does not propagates context cancellation to the other service.  Lets make an explicit
+	// call to matching to notify this poller is gone to prevent any tasks being dispatched to zombie pollers.
+	_, err := wh.GetMatchingClient().CancelOutstandingPoll(context.Background(), &matchingservice.CancelOutstandingPollRequest{
+		NamespaceId:   namespaceID,
+		TaskQueueType: taskQueueType,
+		TaskQueue:     taskQueue,
+		PollerId:      pollerID,
+	})
+	// We can not do much if this call fails.  Just log the error and move on.
+	if err != nil {
+		wh.GetLogger().Warn("Failed to cancel outstanding poller.",
+			tag.WorkflowTaskQueueName(taskQueue.GetName()), tag.Error(err))
 	}
 
-	return err
+	return true
 }
 
 func (wh *WorkflowHandler) checkBadBinary(namespaceEntry *cache.NamespaceCacheEntry, binaryChecksum string) error {

@@ -204,7 +204,7 @@ func (d *RPCFactory) CreateFrontendGRPCConnection(hostName string) *grpc.ClientC
 		}
 	}
 
-	return d.dial(hostName, tlsClientConfig, false)
+	return d.dial(hostName, tlsClientConfig)
 }
 
 // CreateInternodeGRPCConnection creates connection for gRPC calls
@@ -218,24 +218,16 @@ func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.Client
 		}
 	}
 
-	return d.dial(hostName, tlsClientConfig, true)
+	return d.dial(hostName, tlsClientConfig)
 }
 
-func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, enableKeepAlive bool) *grpc.ClientConn {
-	connection, err := Dial(hostName, tlsClientConfig, d.logger, enableKeepAlive)
+func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config) *grpc.ClientConn {
+	connection, err := Dial(hostName, tlsClientConfig, d.logger)
 	if err != nil {
 		d.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
 	}
 
 	return connection
-}
-
-func getBroadcastAddressFromConfig(serverCfg *config.Global, cfg *config.RPC, logger log.Logger) string {
-	if serverCfg.Membership.BroadcastAddress != "" {
-		return serverCfg.Membership.BroadcastAddress
-	} else {
-		return getListenIP(cfg, logger).String()
-	}
 }
 
 func (d *RPCFactory) GetTLSConfigProvider() encryption.TLSConfigProvider {

@@ -36,6 +36,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
@@ -52,6 +53,8 @@ import (
 )
 
 type (
+	workflowResetReapplyEventsFn func(ctx context.Context, resetMutableState workflow.MutableState) error
+
 	workflowResetter interface {
 		// resetWorkflow is the new NDC compatible workflow reset logic
 		resetWorkflow(
@@ -81,6 +84,7 @@ type (
 		historyV2Mgr      persistence.HistoryManager
 		historyCache      *workflow.Cache
 		newStateRebuilder nDCStateRebuilderProvider
+		transaction       workflow.Transaction
 		logger            log.Logger
 	}
 )
@@ -101,7 +105,8 @@ func newWorkflowResetter(
 		newStateRebuilder: func() nDCStateRebuilder {
 			return newNDCStateRebuilder(shard, logger)
 		},
-		logger: logger,
+		transaction: workflow.NewTransaction(shard),
+		logger:      logger,
 	}
 }
 
@@ -128,8 +133,10 @@ func (r *workflowResetterImpl) resetWorkflow(
 	}
 	resetWorkflowVersion := namespaceEntry.GetFailoverVersion()
 
+	var currentWorkflowMutation *persistence.WorkflowMutation
+	var currentWorkflowEventsSeq []*persistence.WorkflowEvents
+	var reapplyEventsFn workflowResetReapplyEventsFn
 	currentMutableState := currentWorkflow.getMutableState()
-	currentWorkflowTerminated := false
 	if currentMutableState.IsWorkflowExecutionRunning() {
 		if err := r.terminateWorkflow(
 			currentMutableState,
@@ -138,7 +145,52 @@ func (r *workflowResetterImpl) resetWorkflow(
 			return err
 		}
 		resetWorkflowVersion = currentMutableState.GetCurrentVersion()
-		currentWorkflowTerminated = true
+
+		currentWorkflowMutation, currentWorkflowEventsSeq, err = currentMutableState.CloseTransactionAsMutation(
+			r.shard.GetTimeSource().Now(),
+			workflow.TransactionPolicyActive,
+		)
+		if err != nil {
+			return err
+		}
+		currentWorkflowMutation.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
+			HistorySize: currentWorkflow.getContext().GetHistorySize(),
+		}
+
+		reapplyEventsFn = func(ctx context.Context, resetMutableState workflow.MutableState) error {
+			if err := r.reapplyContinueAsNewWorkflowEvents(
+				ctx,
+				resetMutableState,
+				namespaceID,
+				workflowID,
+				baseRunID,
+				baseBranchToken,
+				baseRebuildLastEventID+1,
+				baseNextEventID,
+			); err != nil {
+				return err
+			}
+
+			for _, event := range currentWorkflowEventsSeq {
+				if err := r.reapplyEvents(resetMutableState, event.Events); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	} else {
+		reapplyEventsFn = func(ctx context.Context, resetMutableState workflow.MutableState) error {
+			return r.reapplyContinueAsNewWorkflowEvents(
+				ctx,
+				resetMutableState,
+				namespaceID,
+				workflowID,
+				baseRunID,
+				baseBranchToken,
+				baseRebuildLastEventID+1,
+				baseNextEventID,
+			)
+		}
 	}
 
 	resetWorkflow, err := r.prepareResetWorkflow(
@@ -149,22 +201,34 @@ func (r *workflowResetterImpl) resetWorkflow(
 		baseBranchToken,
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
-		baseNextEventID,
 		resetRunID,
 		resetRequestID,
 		resetWorkflowVersion,
 		resetReason,
-		additionalReapplyEvents,
-		resetReapplyType,
 	)
 	if err != nil {
 		return err
 	}
 	defer resetWorkflow.getReleaseFn()(retError)
 
+	if err := r.reapplyEventsToResetWorkflow(
+		ctx,
+		resetWorkflow.getMutableState(),
+		resetReapplyType,
+		reapplyEventsFn,
+		additionalReapplyEvents,
+	); err != nil {
+		return err
+	}
+
+	if err := workflow.ScheduleWorkflowTask(resetWorkflow.getMutableState()); err != nil {
+		return err
+	}
+
 	return r.persistToDB(
-		currentWorkflowTerminated,
 		currentWorkflow,
+		currentWorkflowMutation,
+		currentWorkflowEventsSeq,
 		resetWorkflow,
 	)
 }
@@ -177,13 +241,10 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	baseBranchToken []byte,
 	baseRebuildLastEventID int64,
 	baseRebuildLastEventVersion int64,
-	baseNextEventID int64,
 	resetRunID string,
 	resetRequestID string,
 	resetWorkflowVersion int64,
 	resetReason string,
-	additionalReapplyEvents []*historypb.HistoryEvent,
-	resetReapplyType enumspb.ResetReapplyType,
 ) (nDCWorkflow, error) {
 
 	resetWorkflow, err := r.replayResetWorkflow(
@@ -243,19 +304,23 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		return nil, err
 	}
 
+	return resetWorkflow, nil
+}
+
+func (r *workflowResetterImpl) reapplyEventsToResetWorkflow(
+	ctx context.Context,
+	resetMutableState workflow.MutableState,
+	resetReapplyType enumspb.ResetReapplyType,
+	reapplyEventsApplier workflowResetReapplyEventsFn,
+	additionalReapplyEvents []*historypb.HistoryEvent,
+) error {
 	switch resetReapplyType {
 	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
-		if err := r.reapplyContinueAsNewWorkflowEvents(
+		if err := reapplyEventsApplier(
 			ctx,
 			resetMutableState,
-			namespaceID,
-			workflowID,
-			baseRunID,
-			baseBranchToken,
-			baseRebuildLastEventID+1,
-			baseNextEventID,
 		); err != nil {
-			return nil, err
+			return err
 		}
 	case enumspb.RESET_REAPPLY_TYPE_NONE:
 		// noop
@@ -264,36 +329,18 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	}
 
 	if err := r.reapplyEvents(resetMutableState, additionalReapplyEvents); err != nil {
-		return nil, err
+		return err
 	}
 
-	if err := workflow.ScheduleWorkflowTask(resetMutableState); err != nil {
-		return nil, err
-	}
-
-	return resetWorkflow, nil
+	return nil
 }
 
 func (r *workflowResetterImpl) persistToDB(
-	currentWorkflowTerminated bool,
 	currentWorkflow nDCWorkflow,
+	currentWorkflowMutation *persistence.WorkflowMutation,
+	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
 	resetWorkflow nDCWorkflow,
 ) error {
-
-	if currentWorkflowTerminated {
-		return currentWorkflow.getContext().UpdateWorkflowExecutionWithNewAsActive(
-			r.shard.GetTimeSource().Now(),
-			resetWorkflow.getContext(),
-			resetWorkflow.getMutableState(),
-		)
-	}
-
-	currentMutableState := currentWorkflow.getMutableState()
-	currentRunID := currentMutableState.GetExecutionState().GetRunId()
-	currentLastWriteVersion, err := currentMutableState.GetLastWriteVersion()
-	if err != nil {
-		return err
-	}
 
 	now := r.shard.GetTimeSource().Now()
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.getMutableState().CloseTransactionAsSnapshot(
@@ -303,9 +350,36 @@ func (r *workflowResetterImpl) persistToDB(
 	if err != nil {
 		return err
 	}
+	resetWorkflowSnapshot.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
+		HistorySize: resetWorkflow.getContext().GetHistorySize(),
+	}
+
+	if currentWorkflowMutation != nil {
+		if currentWorkflowSizeDiff, resetWorkflowSizeDiff, err := r.transaction.UpdateWorkflowExecution(
+			persistence.UpdateWorkflowModeUpdateCurrent,
+			currentWorkflowMutation,
+			currentWorkflowEventsSeq,
+			resetWorkflowSnapshot,
+			resetWorkflowEventsSeq,
+		); err != nil {
+			return err
+		} else {
+			currentWorkflow.getContext().SetHistorySize(currentWorkflow.getContext().GetHistorySize() + currentWorkflowSizeDiff)
+			resetWorkflow.getContext().SetHistorySize(resetWorkflow.getContext().GetHistorySize() + resetWorkflowSizeDiff)
+		}
+		return nil
+	}
+
+	currentMutableState := currentWorkflow.getMutableState()
+	currentRunID := currentMutableState.GetExecutionState().GetRunId()
+	currentLastWriteVersion, err := currentMutableState.GetLastWriteVersion()
+	if err != nil {
+		return err
+	}
+
 	var resetHistorySize int64
 	for _, workflowEvents := range resetWorkflowEventsSeq {
-		size, err := resetWorkflow.getContext().PersistNonFirstWorkflowEvents(workflowEvents)
+		size, err := resetWorkflow.getContext().PersistWorkflowEvents(workflowEvents)
 		if err != nil {
 			return err
 		}
@@ -352,7 +426,6 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 			RunId:      resetRunID,
 		},
 		r.shard,
-		r.shard.GetExecutionManager(),
 		r.logger,
 	)
 	resetMutableState, resetHistorySize, err := r.newStateRebuilder().rebuild(
@@ -589,7 +662,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 			// noop
 		case *serviceerror.DataLoss:
 			// log event
-			r.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(workflowID), tag.WorkflowRunID(baseRunID))
+			r.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(workflowID), tag.WorkflowRunID(nextRunID))
 			return err
 		default:
 			return err

@@ -40,7 +40,7 @@ type (
 	sqlQueue struct {
 		queueType persistence.QueueType
 		logger    log.Logger
-		sqlStore
+		SqlStore
 	}
 )
 
@@ -50,10 +50,7 @@ func newQueue(
 	queueType persistence.QueueType,
 ) (persistence.Queue, error) {
 	queue := &sqlQueue{
-		sqlStore: sqlStore{
-			db:     db,
-			logger: logger,
-		},
+		SqlStore:  NewSqlStore(db, logger),
 		queueType: queueType,
 		logger:    logger,
 	}
@@ -106,7 +103,7 @@ func (q *sqlQueue) ReadMessages(
 ) ([]*persistence.QueueMessage, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	rows, err := q.db.RangeSelectFromMessages(ctx, sqlplugin.QueueMessagesRangeFilter{
+	rows, err := q.Db.RangeSelectFromMessages(ctx, sqlplugin.QueueMessagesRangeFilter{
 		QueueType:    q.queueType,
 		MinMessageID: lastMessageID,
 		MaxMessageID: persistence.MaxQueueMessageID,
@@ -133,7 +130,7 @@ func (q *sqlQueue) DeleteMessagesBefore(
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	_, err := q.db.RangeDeleteFromMessages(ctx, sqlplugin.QueueMessagesRangeFilter{
+	_, err := q.Db.RangeDeleteFromMessages(ctx, sqlplugin.QueueMessagesRangeFilter{
 		QueueType:    q.queueType,
 		MinMessageID: persistence.EmptyQueueMessageID,
 		MaxMessageID: messageID - 1,
@@ -176,7 +173,7 @@ func (q *sqlQueue) UpdateAckLevel(metadata *persistence.InternalQueueMetadata) e
 func (q *sqlQueue) GetAckLevels() (*persistence.InternalQueueMetadata, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	row, err := q.db.SelectFromQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
+	row, err := q.Db.SelectFromQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
 		QueueType: q.queueType,
 	})
 	if err != nil {
@@ -235,7 +232,7 @@ func (q *sqlQueue) ReadMessagesFromDLQ(
 		firstMessageID = lastReadMessageID
 	}
 
-	rows, err := q.db.RangeSelectFromMessages(ctx, sqlplugin.QueueMessagesRangeFilter{
+	rows, err := q.Db.RangeSelectFromMessages(ctx, sqlplugin.QueueMessagesRangeFilter{
 		QueueType:    q.getDLQTypeFromQueueType(),
 		MinMessageID: firstMessageID,
 		MaxMessageID: lastMessageID,
@@ -268,7 +265,7 @@ func (q *sqlQueue) DeleteMessageFromDLQ(
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	_, err := q.db.DeleteFromMessages(ctx, sqlplugin.QueueMessagesFilter{
+	_, err := q.Db.DeleteFromMessages(ctx, sqlplugin.QueueMessagesFilter{
 		QueueType: q.getDLQTypeFromQueueType(),
 		MessageID: messageID,
 	})
@@ -284,7 +281,7 @@ func (q *sqlQueue) RangeDeleteMessagesFromDLQ(
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	_, err := q.db.RangeDeleteFromMessages(ctx, sqlplugin.QueueMessagesRangeFilter{
+	_, err := q.Db.RangeDeleteFromMessages(ctx, sqlplugin.QueueMessagesRangeFilter{
 		QueueType:    q.getDLQTypeFromQueueType(),
 		MinMessageID: firstMessageID,
 		MaxMessageID: lastMessageID,
@@ -327,7 +324,7 @@ func (q *sqlQueue) UpdateDLQAckLevel(metadata *persistence.InternalQueueMetadata
 func (q *sqlQueue) GetDLQAckLevels() (*persistence.InternalQueueMetadata, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	row, err := q.db.SelectFromQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
+	row, err := q.Db.SelectFromQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
 		QueueType: q.getDLQTypeFromQueueType(),
 	})
 	if err != nil {
@@ -348,14 +345,14 @@ func (q *sqlQueue) initializeQueueMetadata(
 	ctx context.Context,
 	blob *commonpb.DataBlob,
 ) error {
-	_, err := q.db.SelectFromQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
+	_, err := q.Db.SelectFromQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
 		QueueType: q.queueType,
 	})
 	switch err {
 	case nil:
 		return nil
 	case sql.ErrNoRows:
-		result, err := q.db.InsertIntoQueueMetadata(ctx, &sqlplugin.QueueMetadataRow{
+		result, err := q.Db.InsertIntoQueueMetadata(ctx, &sqlplugin.QueueMetadataRow{
 			QueueType:    q.queueType,
 			Data:         blob.Data,
 			DataEncoding: blob.EncodingType.String(),
@@ -380,14 +377,14 @@ func (q *sqlQueue) initializeDLQMetadata(
 	ctx context.Context,
 	blob *commonpb.DataBlob,
 ) error {
-	_, err := q.db.SelectFromQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
+	_, err := q.Db.SelectFromQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
 		QueueType: q.getDLQTypeFromQueueType(),
 	})
 	switch err {
 	case nil:
 		return nil
 	case sql.ErrNoRows:
-		result, err := q.db.InsertIntoQueueMetadata(ctx, &sqlplugin.QueueMetadataRow{
+		result, err := q.Db.InsertIntoQueueMetadata(ctx, &sqlplugin.QueueMetadataRow{
 			QueueType:    q.getDLQTypeFromQueueType(),
 			Data:         blob.Data,
 			DataEncoding: blob.EncodingType.String(),

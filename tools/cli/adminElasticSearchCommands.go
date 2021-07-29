@@ -38,19 +38,17 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
-	"go.uber.org/atomic"
-
 	"go.temporal.io/server/common/config"
-
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
-	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
-	"go.temporal.io/server/common/persistence/elasticsearch/client"
-	"go.temporal.io/server/common/persistence/elasticsearch/esql"
+	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/elasticsearch"
+	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/elasticsearch/esql"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/atomic"
 )
 
 const (
@@ -85,14 +83,14 @@ func timeValProcess(timeStr string) (string, error) {
 	return fmt.Sprintf("%v", parsedTime.UnixNano()), nil
 }
 
-func newESClient(c *cli.Context) client.CLIClient {
+func newESClient(c *cli.Context) esclient.CLIClient {
 	url := getRequiredOption(c, FlagURL)
 	var version string
 	if c.IsSet(FlagVersion) {
 		version = c.String(FlagVersion)
 	}
 
-	client, err := client.NewCLIClient(url, version)
+	client, err := esclient.NewCLIClient(url, version)
 	if err != nil {
 		ErrorAndExit("Unable to create Elasticsearch client", err)
 	}
@@ -143,7 +141,7 @@ func AdminIndex(c *cli.Context) {
 		ErrorAndExit("Unable to parse RecordWorkflowExecutionClosedRequest message", err)
 	}
 
-	esProcessorConfig := &espersistence.ProcessorConfig{
+	esProcessorConfig := &elasticsearch.ProcessorConfig{
 		IndexerConcurrency:       dc.GetIntPropertyFn(100),
 		ESProcessorNumOfWorkers:  dc.GetIntPropertyFn(1),
 		ESProcessorBulkActions:   dc.GetIntPropertyFn(numOfBatches),
@@ -153,16 +151,15 @@ func AdminIndex(c *cli.Context) {
 
 	logger := log.NewCLILogger()
 
-	esProcessor := espersistence.NewProcessor(esProcessorConfig, esClient, logger, metrics.NewNoopMetricsClient())
+	esProcessor := elasticsearch.NewProcessor(esProcessorConfig, esClient, logger, metrics.NewNoopMetricsClient())
 	esProcessor.Start()
 
 	visibilityConfigForES := &config.VisibilityConfig{
-		ESIndexMaxResultWindow: dc.GetIntPropertyFn(10000),
-		ESProcessorAckTimeout:  dc.GetDurationPropertyFn(1 * time.Minute),
+		ESProcessorAckTimeout: dc.GetDurationPropertyFn(1 * time.Minute),
 	}
 
 	// TODO: build search attribute provider to get search attributes from command line args.
-	visibilityManager := espersistence.NewVisibilityManager(indexName, esClient, visibilityConfigForES, searchattribute.NewSystemProvider(), esProcessor, metrics.NewNoopMetricsClient(), logger)
+	visibilityManager := elasticsearch.NewVisibilityManager(indexName, esClient, visibilityConfigForES, searchattribute.NewSystemProvider(), esProcessor, metrics.NewNoopMetricsClient(), logger)
 
 	successLines := &atomic.Int32{}
 	wg := &sync.WaitGroup{}
@@ -224,11 +221,11 @@ func AdminDelete(c *cli.Context) {
 	for scanner.Scan() {
 		line := strings.Split(scanner.Text(), "|")
 		docID := strings.TrimSpace(line[1]) + esDocIDDelimiter + strings.TrimSpace(line[2])
-		req := &client.BulkableRequest{
+		req := &esclient.BulkableRequest{
 			Index:       indexName,
 			ID:          docID,
 			Version:     math.MaxInt64,
-			RequestType: client.BulkableRequestTypeDelete,
+			RequestType: esclient.BulkableRequestTypeDelete,
 		}
 		bulkRequest.Add(req)
 		if i%batchSize == batchSize-1 {
@@ -241,7 +238,7 @@ func AdminDelete(c *cli.Context) {
 	}
 }
 
-func parseIndexerMessage(fileName string) (messages []*persistence.RecordWorkflowExecutionClosedRequest, err error) {
+func parseIndexerMessage(fileName string) (messages []*visibility.RecordWorkflowExecutionClosedRequest, err error) {
 	file, err := os.Open(fileName)
 	if err != nil {
 		return nil, err
@@ -258,7 +255,7 @@ func parseIndexerMessage(fileName string) (messages []*persistence.RecordWorkflo
 			continue
 		}
 
-		msg := &persistence.RecordWorkflowExecutionClosedRequest{}
+		msg := &visibility.RecordWorkflowExecutionClosedRequest{}
 		err := json.Unmarshal([]byte(line), msg)
 		if err != nil {
 			fmt.Printf("line %v cannot be deserialized to RecordWorkflowExecutionClosedRequest: %v.\n", idx, line)

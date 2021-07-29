@@ -74,8 +74,8 @@ func (nli *NamespaceLogInterceptor) Intercept(
 				certThumbprint = fmt.Sprintf("%x", md5.Sum(cert.Raw))
 			}
 		}
-		nli.logger.Info(
-			"frontend method invoked",
+		nli.logger.Debug(
+			"Frontend method invoked.",
 			tag.WorkflowNamespace(namespace),
 			tag.Operation(methodName),
 			tag.ServerName(serverName),

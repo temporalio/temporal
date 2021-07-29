@@ -31,6 +31,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/persistence/visibility"
 
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/workflow"
@@ -58,7 +59,7 @@ type (
 		mockMutableState             *workflow.MockMutableState
 
 		mockExecutionManager         *persistence.MockExecutionManager
-		mockVisibilityManager        *persistence.MockVisibilityManager
+		mockVisibilityManager        *visibility.MockVisibilityManager
 		mockHistoryMgr               *persistence.MockHistoryManager
 		mockArchivalClient           *archiver.MockClient
 		mockNamespaceCache           *cache.MockNamespaceCache
@@ -118,7 +119,6 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 		logger:          logger,
 		metricsClient:   s.mockShard.GetMetricsClient(),
 		visibilityMgr:   s.mockVisibilityManager,
-		historyV2Mgr:    s.mockHistoryMgr,
 		archivalClient:  s.mockArchivalClient,
 		clusterMetadata: s.mockClusterMetadata,
 	}

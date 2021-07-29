@@ -114,7 +114,6 @@ var Keys = map[Key]string{
 	DisableListVisibilityByFilter:         "frontend.disableListVisibilityByFilter",
 	FrontendThrottledLogRPS:               "frontend.throttledLogRPS",
 	EnableClientVersionCheck:              "frontend.enableClientVersionCheck",
-	ValidSearchAttributes:                 "frontend.validSearchAttributes",
 	SendRawWorkflowHistory:                "frontend.sendRawWorkflowHistory",
 	SearchAttributesNumberOfKeysLimit:     "frontend.searchAttributesNumberOfKeysLimit",
 	SearchAttributesSizeOfValueLimit:      "frontend.searchAttributesSizeOfValueLimit",
@@ -153,6 +152,7 @@ var Keys = map[Key]string{
 	MatchingForwarderMaxOutstandingTasks:    "matching.forwarderMaxOutstandingTasks",
 	MatchingForwarderMaxRatePerSecond:       "matching.forwarderMaxRatePerSecond",
 	MatchingForwarderMaxChildrenPerNode:     "matching.forwarderMaxChildrenPerNode",
+	ResilientSyncMatch:                      "matching.resilientSyncMatch",
 	MatchingShutdownDrainDuration:           "matching.shutdownDrainDuration",
 
 	// history settings
@@ -440,10 +440,6 @@ const (
 
 	// FrontendMaxBadBinaries is the max number of bad binaries in namespace config
 	FrontendMaxBadBinaries
-	// ValidSearchAttributes is legal indexed keys that can be used in list APIs
-	// TODO: remove after 1.10.0 release
-	// Deprecated.
-	ValidSearchAttributes
 	// SendRawWorkflowHistory is whether to enable raw history retrieving
 	SendRawWorkflowHistory
 	// SearchAttributesNumberOfKeysLimit is the limit of number of keys
@@ -531,6 +527,8 @@ const (
 	MatchingForwarderMaxRatePerSecond
 	// MatchingForwarderMaxChildrenPerNode is the max number of children per node in the task queue partition tree
 	MatchingForwarderMaxChildrenPerNode
+	// ResilientSyncMatch enables or disables sync-matching while queue persistence is unavailable
+	ResilientSyncMatch
 	// MatchingShutdownDrainDuration is the duration of traffic drain during shutdown
 	MatchingShutdownDrainDuration
 

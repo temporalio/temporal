@@ -460,7 +460,6 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 				RunId:      newExecutionState.RunId,
 			},
 			r.shard,
-			r.shard.GetExecutionManager(),
 			r.logger,
 		)
 

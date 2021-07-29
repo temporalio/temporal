@@ -150,6 +150,7 @@ message ReapplyEventsResponse {
 message AddSearchAttributesRequest {
     map<string, temporal.api.enums.v1.IndexedValueType> search_attributes = 1;
     string index_name = 2;
+    bool skip_schema_update = 3;
 }
 
 message AddSearchAttributesResponse {

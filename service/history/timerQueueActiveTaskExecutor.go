@@ -599,7 +599,6 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 				RunId:      newExecutionState.RunId,
 			},
 			t.shard,
-			t.shard.GetExecutionManager(),
 			t.logger,
 		),
 		newMutableState,

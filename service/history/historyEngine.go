@@ -41,6 +41,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/server/common/persistence/visibility"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -88,9 +89,8 @@ type (
 		timeSource                clock.TimeSource
 		workflowTaskHandler       workflowTaskHandlerCallbacks
 		clusterMetadata           cluster.Metadata
-		historyV2Mgr              persistence.HistoryManager
 		executionManager          persistence.ExecutionManager
-		visibilityMgr             persistence.VisibilityManager
+		visibilityMgr             visibility.VisibilityManager
 		txProcessor               transferQueueProcessor
 		timerProcessor            timerQueueProcessor
 		visibilityProcessor       visibilityQueueProcessor
@@ -120,7 +120,7 @@ type (
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(
 	shard shard.Context,
-	visibilityMgr persistence.VisibilityManager,
+	visibilityMgr visibility.VisibilityManager,
 	matching matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	publicClient sdkclient.Client,
@@ -142,7 +142,6 @@ func NewEngineWithShardContext(
 		shard:              shard,
 		clusterMetadata:    shard.GetClusterMetadata(),
 		timeSource:         shard.GetTimeSource(),
-		historyV2Mgr:       historyV2Manager,
 		executionManager:   executionManager,
 		visibilityMgr:      visibilityMgr,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
@@ -507,7 +506,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		return nil, err
 	}
 
-	weContext := workflow.NewContext(namespaceID, execution, e.shard, e.executionManager, e.logger)
+	weContext := workflow.NewContext(namespaceID, execution, e.shard, e.logger)
 
 	now := e.timeSource.Now()
 	newWorkflow, newWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
@@ -521,7 +520,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		return nil, serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
-	historySize, err := weContext.PersistFirstWorkflowEvents(newWorkflowEventsSeq[0])
+	historySize, err := weContext.PersistWorkflowEvents(newWorkflowEventsSeq[0])
 	if err != nil {
 		return nil, err
 	}
@@ -2021,7 +2020,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, err
 	}
 
-	context = workflow.NewContext(namespaceID, execution, e.shard, e.executionManager, e.logger)
+	context = workflow.NewContext(namespaceID, execution, e.shard, e.logger)
 
 	now := e.timeSource.Now()
 	newWorkflow, newWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
@@ -2035,7 +2034,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
-	historySize, err := context.PersistFirstWorkflowEvents(newWorkflowEventsSeq[0])
+	historySize, err := context.PersistWorkflowEvents(newWorkflowEventsSeq[0])
 	if err != nil {
 		return nil, err
 	}
