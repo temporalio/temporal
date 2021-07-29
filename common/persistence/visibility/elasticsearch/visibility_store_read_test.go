@@ -907,7 +907,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7() {
 	// test first page
 	pitID := "pitID"
 
-	request := &persistence.ListWorkflowExecutionsRequestV2{
+	request := &visibility.ListWorkflowExecutionsRequestV2{
 		NamespaceID: testNamespaceID,
 		Namespace:   testNamespace,
 		PageSize:    1,
