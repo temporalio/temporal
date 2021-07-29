@@ -45,10 +45,6 @@ type (
 	Client interface {
 		Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error)
 		SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error)
-		// Deprecated. Remove after ES v6 support removal.
-		Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, ScrollService, error)
-		// Deprecated. Remove after ES v6 support removal.
-		ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error)
 		Count(ctx context.Context, index, query string) (int64, error)
 		RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error)
 
@@ -63,6 +59,14 @@ type (
 		OpenPointInTime(ctx context.Context, index string, keepAliveInterval string) (string, error)
 		ClosePointInTime(ctx context.Context, id string) (bool, error)
 		SearchWithDSLWithPIT(ctx context.Context, query string) (*elastic.SearchResult, error)
+	}
+
+	// Deprecated. Remove after ES v6 support removal.
+	ClientV6 interface {
+		// Deprecated. Remove after ES v6 support removal.
+		Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, ScrollService, error)
+		// Deprecated. Remove after ES v6 support removal.
+		ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error)
 	}
 
 	CLIClient interface {

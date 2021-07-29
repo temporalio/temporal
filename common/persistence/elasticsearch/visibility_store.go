@@ -436,10 +436,14 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 	}
 
 	ctx := context.Background()
-	if clientV7, isV7 := s.esClient.(client.ClientV7); isV7 {
+	switch esClient := s.esClient.(type) {
+	case client.ClientV7:
+		// Elasticsearch V7 uses "point in time" (PIT) instead of scroll to scan over all workflows without skipping them.
+		// https://www.elastic.co/guide/en/elasticsearch/reference/7.13/point-in-time-api.html
+
 		// First call doesn't have PointInTimeID.
 		if token.PointInTimeID == "" {
-			token.PointInTimeID, err = clientV7.OpenPointInTime(ctx, s.index, pointInTimeKeepAliveInterval)
+			token.PointInTimeID, err = esClient.OpenPointInTime(ctx, s.index, pointInTimeKeepAliveInterval)
 			if err != nil {
 				return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to create point in time: %v", err))
 			}
@@ -451,21 +455,20 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Error when parse query: %v", err))
 		}
 
-		searchResult, err := clientV7.SearchWithDSLWithPIT(ctx, queryDSL)
+		searchResult, err := esClient.SearchWithDSLWithPIT(ctx, queryDSL)
 		if err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %v", err))
 		}
 
 		if len(searchResult.Hits.Hits) < request.PageSize {
 			// It is the last page, close PIT.
-			_, err = clientV7.ClosePointInTime(ctx, token.PointInTimeID)
+			_, err = esClient.ClosePointInTime(ctx, token.PointInTimeID)
 			if err != nil {
 				return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to close point in time: %v", err))
 			}
 		}
 		return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, nil)
-	} else {
-		// Elasticsearch v6.
+	case client.ClientV6:
 		var searchResult *elastic.SearchResult
 		var scrollService client.ScrollService
 		if len(token.ScrollID) == 0 { // first call
@@ -474,9 +477,9 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 			if err != nil {
 				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Error when parse query: %v", err))
 			}
-			searchResult, scrollService, err = s.esClient.ScrollFirstPage(ctx, s.index, queryDSL)
+			searchResult, scrollService, err = esClient.ScrollFirstPage(ctx, s.index, queryDSL)
 		} else {
-			searchResult, scrollService, err = s.esClient.Scroll(ctx, token.ScrollID)
+			searchResult, scrollService, err = esClient.Scroll(ctx, token.ScrollID)
 		}
 
 		isLastPage := false
@@ -486,8 +489,9 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 		} else if err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 		}
-
 		return s.getScanWorkflowExecutionsResponse(searchResult.Hits, token, request.PageSize, searchResult.ScrollId, isLastPage)
+	default:
+		panic("esClient has unsupported type")
 	}
 }
 

@@ -142,18 +142,6 @@ func (c *clientV7) SearchWithDSL(ctx context.Context, index, query string) (*ela
 	return searchResult, err
 }
 
-func (c *clientV7) Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, ScrollService, error) {
-	scrollService := elastic.NewScrollService(c.esClient)
-	result, err := scrollService.ScrollId(scrollID).Do(ctx)
-	return result, scrollService, err
-}
-
-func (c *clientV7) ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error) {
-	scrollService := elastic.NewScrollService(c.esClient)
-	result, err := scrollService.Index(index).Body(query).Do(ctx)
-	return result, scrollService, err
-}
-
 func (c *clientV7) Count(ctx context.Context, index, query string) (int64, error) {
 	return c.esClient.Count(index).BodyString(query).Do(ctx)
 }
