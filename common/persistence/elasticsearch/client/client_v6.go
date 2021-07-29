@@ -275,6 +275,7 @@ func convertV6SearchResultToV7(result *elastic6.SearchResult) *elastic.SearchRes
 		Error:           convertV6ErrorDetailsToV7(result.Error),
 		Status:          result.Status,
 		Aggregations:    convertV6AggregationsToV7(result.Aggregations),
+		PitId:           "",
 
 		// TODO (alex): these complex structs are not converted. Add conversion funcs before using them in caller code.
 		Suggest: nil, // result.Suggest,

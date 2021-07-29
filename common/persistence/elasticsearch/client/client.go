@@ -45,8 +45,6 @@ type (
 	Client interface {
 		Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error)
 		SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error)
-		Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, ScrollService, error)
-		ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error)
 		Count(ctx context.Context, index, query string) (int64, error)
 		RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error)
 
@@ -54,6 +52,21 @@ type (
 		PutMapping(ctx context.Context, index string, mapping map[string]enumspb.IndexedValueType) (bool, error)
 		WaitForYellowStatus(ctx context.Context, index string) (string, error)
 		GetMapping(ctx context.Context, index string) (map[string]string, error)
+	}
+
+	// Combine ClientV7 with Client interface after ES v6 support removal.
+	ClientV7 interface {
+		OpenPointInTime(ctx context.Context, index string, keepAliveInterval string) (string, error)
+		ClosePointInTime(ctx context.Context, id string) (bool, error)
+		SearchWithDSLWithPIT(ctx context.Context, query string) (*elastic.SearchResult, error)
+	}
+
+	// Deprecated. Remove after ES v6 support removal.
+	ClientV6 interface {
+		// Deprecated. Remove after ES v6 support removal.
+		Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, ScrollService, error)
+		// Deprecated. Remove after ES v6 support removal.
+		ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error)
 	}
 
 	CLIClient interface {
@@ -73,11 +86,12 @@ type (
 	}
 
 	// ScrollService is a interface for elastic.ScrollService
+	// Deprecated. Remove after ES v6 support removal.
 	ScrollService interface {
 		Clear(ctx context.Context) error
 	}
 
-	// SearchParameters holds all required and optional parameters for executing a search
+	// SearchParameters holds all required and optional parameters for executing a search.
 	SearchParameters struct {
 		Index       string
 		Query       elastic.Query
