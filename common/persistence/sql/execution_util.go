@@ -1293,7 +1293,7 @@ func (m *sqlExecutionStore) createExecution(
 	}
 	result, err := tx.InsertIntoExecutions(ctx, row)
 	if err != nil {
-		if m.db.IsDupEntryError(err) {
+		if m.Db.IsDupEntryError(err) {
 			return &p.WorkflowExecutionAlreadyStartedError{
 				Msg:              fmt.Sprintf("Workflow execution already running. WorkflowId: %v", workflowID),
 				StartRequestID:   executionState.CreateRequestId,

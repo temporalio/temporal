@@ -38,7 +38,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/addsearchattributes"
@@ -59,7 +60,7 @@ type (
 		status    int32
 		stopC     chan struct{}
 		sdkClient sdkclient.Client
-		esClient  esclient.Client
+		esClient  client.Client
 		config    *Config
 	}
 
@@ -93,8 +94,8 @@ func NewService(
 			persistenceBean persistenceClient.Bean,
 			searchAttributesProvider searchattribute.Provider,
 			logger log.Logger,
-		) (persistence.VisibilityManager, error) {
-			return persistenceBean.GetVisibilityManager(), nil
+		) (visibility.VisibilityManager, error) {
+			return nil, nil
 		},
 	)
 	if err != nil {

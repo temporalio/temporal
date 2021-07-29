@@ -46,9 +46,6 @@ type (
 		GetTaskManager() persistence.TaskManager
 		SetTaskManager(persistence.TaskManager)
 
-		GetVisibilityManager() persistence.VisibilityManager
-		SetVisibilityManager(persistence.VisibilityManager)
-
 		GetNamespaceReplicationQueue() persistence.NamespaceReplicationQueue
 		SetNamespaceReplicationQueue(persistence.NamespaceReplicationQueue)
 
@@ -67,7 +64,6 @@ type (
 		clusterMetadataManager    persistence.ClusterMetadataManager
 		metadataManager           persistence.MetadataManager
 		taskManager               persistence.TaskManager
-		visibilityManager         persistence.VisibilityManager
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		shardManager              persistence.ShardManager
 		historyManager            persistence.HistoryManager
@@ -99,11 +95,6 @@ func NewBeanFromFactory(
 		return nil, err
 	}
 
-	visibilityMgr, err := factory.NewVisibilityManager()
-	if err != nil {
-		return nil, err
-	}
-
 	namespaceReplicationQueue, err := factory.NewNamespaceReplicationQueue()
 	if err != nil {
 		return nil, err
@@ -123,7 +114,6 @@ func NewBeanFromFactory(
 		clusterMetadataMgr,
 		metadataMgr,
 		taskMgr,
-		visibilityMgr,
 		namespaceReplicationQueue,
 		shardMgr,
 		historyMgr,
@@ -136,7 +126,6 @@ func NewBean(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	metadataManager persistence.MetadataManager,
 	taskManager persistence.TaskManager,
-	visibilityManager persistence.VisibilityManager,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	shardManager persistence.ShardManager,
 	historyManager persistence.HistoryManager,
@@ -146,7 +135,6 @@ func NewBean(
 		clusterMetadataManager:    clusterMetadataManager,
 		metadataManager:           metadataManager,
 		taskManager:               taskManager,
-		visibilityManager:         visibilityManager,
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		shardManager:              shardManager,
 		historyManager:            historyManager,
@@ -213,26 +201,6 @@ func (s *BeanImpl) SetTaskManager(
 	defer s.Unlock()
 
 	s.taskManager = taskManager
-}
-
-// GetVisibilityManager get VisibilityManager
-func (s *BeanImpl) GetVisibilityManager() persistence.VisibilityManager {
-
-	s.RLock()
-	defer s.RUnlock()
-
-	return s.visibilityManager
-}
-
-// SetVisibilityManager set VisibilityManager
-func (s *BeanImpl) SetVisibilityManager(
-	visibilityManager persistence.VisibilityManager,
-) {
-
-	s.Lock()
-	defer s.Unlock()
-
-	s.visibilityManager = visibilityManager
 }
 
 // GetNamespaceReplicationQueue get NamespaceReplicationQueue
@@ -346,9 +314,6 @@ func (s *BeanImpl) Close() {
 	s.clusterMetadataManager.Close()
 	s.metadataManager.Close()
 	s.taskManager.Close()
-	if s.visibilityManager != nil {
-		s.visibilityManager.Close()
-	}
 	s.namespaceReplicationQueue.Stop()
 	s.shardManager.Close()
 	s.historyManager.Close()

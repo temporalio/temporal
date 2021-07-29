@@ -36,6 +36,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/persistence/visibility"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -75,7 +76,7 @@ type (
 		mockNDCHistoryResender *xdc.MockNDCHistoryResender
 		mockMatchingClient     *matchingservicemock.MockMatchingServiceClient
 
-		mockVisibilityMgr    *persistence.MockVisibilityManager
+		mockVisibilityMgr    *visibility.MockVisibilityManager
 		mockExecutionMgr     *persistence.MockExecutionManager
 		mockArchivalMetadata *archiver.MockArchivalMetadata
 		mockArchiverProvider *provider.MockArchiverProvider

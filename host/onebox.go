@@ -35,12 +35,6 @@ import (
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/server/common/searchattribute"
-	"google.golang.org/grpc"
-
-	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/config"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
@@ -48,6 +42,8 @@ import (
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -56,16 +52,20 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility"
+	visibilityclient "go.temporal.io/server/common/persistence/visibility/client"
+	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/replicator"
+	"google.golang.org/grpc"
 )
 
 // Temporal hosts all of temporal services in one process
@@ -96,7 +96,7 @@ type (
 		shardMgr                         persistence.ShardManager
 		historyV2Mgr                     persistence.HistoryManager
 		taskMgr                          persistence.TaskManager
-		visibilityMgr                    persistence.VisibilityManager
+		visibilityMgr                    visibility.VisibilityManager
 		executionMgrFactory              persistence.ExecutionManagerFactory
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		shutdownCh                       chan struct{}
@@ -108,7 +108,7 @@ type (
 		archiverProvider                 provider.ArchiverProvider
 		historyConfig                    *HistoryConfig
 		esConfig                         *config.Elasticsearch
-		esClient                         client.Client
+		esClient                         esclient.Client
 		workerConfig                     *WorkerConfig
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
@@ -132,7 +132,7 @@ type (
 		HistoryV2Mgr                     persistence.HistoryManager
 		ExecutionMgrFactory              persistence.ExecutionManagerFactory
 		TaskMgr                          persistence.TaskManager
-		VisibilityMgr                    persistence.VisibilityManager
+		VisibilityMgr                    visibility.VisibilityManager
 		NamespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		Logger                           log.Logger
 		ClusterNo                        int
@@ -141,7 +141,7 @@ type (
 		EnableReadHistoryFromArchival    bool
 		HistoryConfig                    *HistoryConfig
 		ESConfig                         *config.Elasticsearch
-		ESClient                         client.Client
+		ESClient                         esclient.Client
 		WorkerConfig                     *WorkerConfig
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
@@ -604,8 +604,19 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 			persistenceBean persistenceClient.Bean,
 			searchAttributesProvider searchattribute.Provider,
 			logger log.Logger,
-		) (persistence.VisibilityManager, error) {
-			return persistenceBean.GetVisibilityManager(), nil
+		) (visibility.VisibilityManager, error) {
+			visibilityFromDB, err := visibilityclient.NewVisibilityManager(
+				params.PersistenceConfig,
+				dynamicconfig.GetIntPropertyFn(5000),
+				params.MetricsClient,
+				params.PersistenceServiceResolver,
+				params.Logger,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			return visibilityFromDB, nil
 		},
 	)
 	if err != nil {

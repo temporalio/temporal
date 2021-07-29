@@ -27,17 +27,12 @@ package resource
 import (
 	"net"
 
-	"go.temporal.io/server/common/persistence/serialization"
-
 	"github.com/golang/mock/gomock"
 	"github.com/uber-go/tally"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservicemock/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkmocks "go.temporal.io/sdk/mocks"
-	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
-	"go.temporal.io/server/common/searchattribute"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -56,6 +51,10 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/visibility"
+	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -99,7 +98,7 @@ type (
 		MetadataMgr               *persistence.MockMetadataManager
 		ClusterMetadataMgr        *persistence.MockClusterMetadataManager
 		TaskMgr                   *persistence.MockTaskManager
-		VisibilityMgr             *persistence.MockVisibilityManager
+		VisibilityMgr             *visibility.MockVisibilityManager
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		ShardMgr                  *persistence.MockShardManager
 		HistoryMgr                *persistence.MockHistoryManager
@@ -143,7 +142,7 @@ func NewTest(
 
 	metadataMgr := persistence.NewMockMetadataManager(controller)
 	taskMgr := persistence.NewMockTaskManager(controller)
-	visibilityMgr := persistence.NewMockVisibilityManager(controller)
+	visibilityMgr := visibility.NewMockVisibilityManager(controller)
 	shardMgr := persistence.NewMockShardManager(controller)
 	historyMgr := persistence.NewMockHistoryManager(controller)
 	executionMgr := persistence.NewMockExecutionManager(controller)
@@ -153,7 +152,6 @@ func NewTest(
 	persistenceBean := persistenceClient.NewMockBean(controller)
 	persistenceBean.EXPECT().GetMetadataManager().Return(metadataMgr).AnyTimes()
 	persistenceBean.EXPECT().GetTaskManager().Return(taskMgr).AnyTimes()
-	persistenceBean.EXPECT().GetVisibilityManager().Return(visibilityMgr).AnyTimes()
 	persistenceBean.EXPECT().GetHistoryManager().Return(historyMgr).AnyTimes()
 	persistenceBean.EXPECT().GetShardManager().Return(shardMgr).AnyTimes()
 	persistenceBean.EXPECT().GetExecutionManager(gomock.Any()).Return(executionMgr, nil).AnyTimes()
@@ -391,7 +389,7 @@ func (s *Test) GetTaskManager() persistence.TaskManager {
 }
 
 // GetVisibilityManager for testing
-func (s *Test) GetVisibilityManager() persistence.VisibilityManager {
+func (s *Test) GetVisibilityManager() visibility.VisibilityManager {
 	return s.VisibilityMgr
 }
 
