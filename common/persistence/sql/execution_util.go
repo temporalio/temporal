@@ -1104,7 +1104,6 @@ func assertNotCurrentExecution(
 			// allow bypassing no current record
 			return nil
 		}
-		fmt.Println("#######?#######")
 		return serviceerror.NewInternal(fmt.Sprintf("assertCurrentExecution failed. Unable to load current record. Error: %v", err))
 	}
 	return assertRunIDMismatch(runID, currentRow)

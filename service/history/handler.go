@@ -1425,22 +1425,19 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.
 func (h *Handler) convertError(err error) error {
-	switch err.(type) {
+	switch err := err.(type) {
 	case *persistence.ShardOwnershipLostError:
-		shardID := err.(*persistence.ShardOwnershipLostError).ShardID
+		shardID := err.ShardID
 		info, err := h.GetHistoryServiceResolver().Lookup(convert.Int32ToString(shardID))
 		if err == nil {
 			return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), info.GetAddress())
 		}
 		return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), "<unknown>")
 	case *persistence.WorkflowConditionFailedError:
-		err := err.(*persistence.WorkflowConditionFailedError)
 		return serviceerror.NewInternal(err.Msg)
 	case *persistence.CurrentWorkflowConditionFailedError:
-		err := err.(*persistence.CurrentWorkflowConditionFailedError)
 		return serviceerror.NewInternal(err.Msg)
 	case *persistence.TransactionSizeLimitError:
-		err := err.(*persistence.TransactionSizeLimitError)
 		return serviceerror.NewInvalidArgument(err.Msg)
 	}
 

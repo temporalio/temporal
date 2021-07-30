@@ -1324,7 +1324,6 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	failedUpdateState := copyWorkflowExecutionState(updatedState)
 	err4 := s.UpdateWorkflowExecution(failedUpdateInfo, failedUpdateState, state0.NextEventId, []int64{int64(5)}, nil, int64(3), nil, nil, nil, nil, nil)
 	s.Error(err4, "expected non nil error.")
-	fmt.Printf("#######%v#######\n", err4)
 	s.IsType(&p.WorkflowConditionFailedError{}, err4)
 	log.Printf("Conditional update failed with error: %v", err4)
 

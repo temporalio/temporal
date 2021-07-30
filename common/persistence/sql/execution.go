@@ -137,14 +137,12 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 		LastWriteVersion: 0,
 	}
 	if currentRow != nil {
-		currentWorkflowConditionFailed = &p.CurrentWorkflowConditionFailedError{
-			Msg:              "",
-			RequestID:        currentRow.CreateRequestID,
-			RunID:            currentRow.RunID.String(),
-			State:            currentRow.State,
-			Status:           currentRow.Status,
-			LastWriteVersion: currentRow.LastWriteVersion,
-		}
+		currentWorkflowConditionFailed.Msg = ""
+		currentWorkflowConditionFailed.RequestID = currentRow.CreateRequestID
+		currentWorkflowConditionFailed.RunID = currentRow.RunID.String()
+		currentWorkflowConditionFailed.State = currentRow.State
+		currentWorkflowConditionFailed.Status = currentRow.Status
+		currentWorkflowConditionFailed.LastWriteVersion = currentRow.LastWriteVersion
 	}
 	switch request.Mode {
 	case p.CreateWorkflowModeBrandNew:
