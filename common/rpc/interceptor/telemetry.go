@@ -108,7 +108,9 @@ func (ti *TelemetryInterceptor) Intercept(
 	resp, err := handler(ctx, req)
 
 	if val, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency); ok {
-		timerNoUserLatency.Subtract(time.Duration(val))
+		userLatencyDuration := time.Duration(val)
+		timerNoUserLatency.Subtract(userLatencyDuration)
+		metricsScope.RecordTimer(metrics.ServiceLatencyUserLatency, userLatencyDuration)
 	}
 
 	if err != nil {
