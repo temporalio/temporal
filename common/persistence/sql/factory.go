@@ -117,13 +117,13 @@ func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
 	return newClusterMetadataPersistence(conn, f.logger)
 }
 
-// NewWorkflowStore returns a WorkflowStore for a given shardID
-func (f *Factory) NewWorkflowStore(shardID int32) (p.WorkflowStore, error) {
+// NewExecutionStore returns a ExecutionStore for a given shardID
+func (f *Factory) NewExecutionStore(shardID int32) (p.ExecutionStore, error) {
 	conn, err := f.mainDBConn.Get()
 	if err != nil {
 		return nil, err
 	}
-	return NewSQLWorkflowStore(conn, f.logger, shardID)
+	return NewSQLExecutionStore(conn, f.logger, shardID)
 }
 
 // NewQueue returns a new queue backed by sql

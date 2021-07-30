@@ -40,28 +40,28 @@ import (
 	"go.temporal.io/server/common/primitives"
 )
 
-type sqlWorkflowStore struct {
+type sqlExecutionStore struct {
 	SqlStore
 	shardID int32
 }
 
-var _ p.WorkflowStore = (*sqlWorkflowStore)(nil)
+var _ p.ExecutionStore = (*sqlExecutionStore)(nil)
 
-// NewSQLWorkflowStore creates an instance of WorkflowStore
-func NewSQLWorkflowStore(
+// NewSQLExecutionStore creates an instance of ExecutionStore
+func NewSQLExecutionStore(
 	db sqlplugin.DB,
 	logger log.Logger,
 	shardID int32,
-) (p.WorkflowStore, error) {
+) (p.ExecutionStore, error) {
 
-	return &sqlWorkflowStore{
+	return &sqlExecutionStore{
 		shardID:  shardID,
 		SqlStore: NewSqlStore(db, logger),
 	}, nil
 }
 
 // txExecuteShardLocked executes f under transaction and with read lock on shard row
-func (m *sqlWorkflowStore) txExecuteShardLocked(
+func (m *sqlExecutionStore) txExecuteShardLocked(
 	ctx context.Context,
 	operation string,
 	rangeID int64,
@@ -80,11 +80,11 @@ func (m *sqlWorkflowStore) txExecuteShardLocked(
 	})
 }
 
-func (m *sqlWorkflowStore) GetShardID() int32 {
+func (m *sqlExecutionStore) GetShardID() int32 {
 	return m.shardID
 }
 
-func (m *sqlWorkflowStore) CreateWorkflowExecution(
+func (m *sqlExecutionStore) CreateWorkflowExecution(
 	request *p.InternalCreateWorkflowExecutionRequest,
 ) (response *p.CreateWorkflowExecutionResponse, err error) {
 	ctx, cancel := newExecutionContext()
@@ -99,7 +99,7 @@ func (m *sqlWorkflowStore) CreateWorkflowExecution(
 	return
 }
 
-func (m *sqlWorkflowStore) createWorkflowExecutionTx(
+func (m *sqlExecutionStore) createWorkflowExecutionTx(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	request *p.InternalCreateWorkflowExecutionRequest,
@@ -224,7 +224,7 @@ func (m *sqlWorkflowStore) createWorkflowExecutionTx(
 	return &p.CreateWorkflowExecutionResponse{}, nil
 }
 
-func (m *sqlWorkflowStore) GetWorkflowExecution(
+func (m *sqlExecutionStore) GetWorkflowExecution(
 	request *p.GetWorkflowExecutionRequest,
 ) (*p.InternalGetWorkflowExecutionResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -338,7 +338,7 @@ func (m *sqlWorkflowStore) GetWorkflowExecution(
 	}, nil
 }
 
-func (m *sqlWorkflowStore) UpdateWorkflowExecution(
+func (m *sqlExecutionStore) UpdateWorkflowExecution(
 	request *p.InternalUpdateWorkflowExecutionRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -351,7 +351,7 @@ func (m *sqlWorkflowStore) UpdateWorkflowExecution(
 		})
 }
 
-func (m *sqlWorkflowStore) updateWorkflowExecutionTx(
+func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	request *p.InternalUpdateWorkflowExecutionRequest,
@@ -446,7 +446,7 @@ func (m *sqlWorkflowStore) updateWorkflowExecutionTx(
 	return nil
 }
 
-func (m *sqlWorkflowStore) ConflictResolveWorkflowExecution(
+func (m *sqlExecutionStore) ConflictResolveWorkflowExecution(
 	request *p.InternalConflictResolveWorkflowExecutionRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -459,7 +459,7 @@ func (m *sqlWorkflowStore) ConflictResolveWorkflowExecution(
 		})
 }
 
-func (m *sqlWorkflowStore) conflictResolveWorkflowExecutionTx(
+func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	request *p.InternalConflictResolveWorkflowExecutionRequest,
@@ -573,7 +573,7 @@ func (m *sqlWorkflowStore) conflictResolveWorkflowExecutionTx(
 	return nil
 }
 
-func (m *sqlWorkflowStore) DeleteWorkflowExecution(
+func (m *sqlExecutionStore) DeleteWorkflowExecution(
 	request *p.DeleteWorkflowExecutionRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -593,7 +593,7 @@ func (m *sqlWorkflowStore) DeleteWorkflowExecution(
 // here was finished. In that case, current_executions table will have the same workflowID but different
 // runID. The following code will delete the row from current_executions if and only if the runID is
 // same as the one we are trying to delete here
-func (m *sqlWorkflowStore) DeleteCurrentWorkflowExecution(
+func (m *sqlExecutionStore) DeleteCurrentWorkflowExecution(
 	request *p.DeleteCurrentWorkflowExecutionRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -609,7 +609,7 @@ func (m *sqlWorkflowStore) DeleteCurrentWorkflowExecution(
 	return err
 }
 
-func (m *sqlWorkflowStore) GetCurrentExecution(
+func (m *sqlExecutionStore) GetCurrentExecution(
 	request *p.GetCurrentExecutionRequest,
 ) (*p.InternalGetCurrentExecutionResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -637,7 +637,7 @@ func (m *sqlWorkflowStore) GetCurrentExecution(
 	}, nil
 }
 
-func (m *sqlWorkflowStore) ListConcreteExecutions(
+func (m *sqlExecutionStore) ListConcreteExecutions(
 	_ *p.ListConcreteExecutionsRequest,
 ) (*p.InternalListConcreteExecutionsResponse, error) {
 	return nil, serviceerror.NewUnimplemented("ListConcreteExecutions is not implemented")

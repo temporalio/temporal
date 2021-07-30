@@ -416,7 +416,7 @@ func applyWorkflowSnapshotTxAsReset(
 	return nil
 }
 
-func (m *sqlWorkflowStore) applyWorkflowSnapshotTxAsNew(
+func (m *sqlExecutionStore) applyWorkflowSnapshotTxAsNew(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
@@ -1265,7 +1265,7 @@ func buildExecutionRow(
 	}, nil
 }
 
-func (m *sqlWorkflowStore) createExecution(
+func (m *sqlExecutionStore) createExecution(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	namespaceID string,
