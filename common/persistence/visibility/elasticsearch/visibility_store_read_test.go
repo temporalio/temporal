@@ -40,7 +40,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/valyala/fastjson"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/config"
@@ -300,53 +299,6 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
 	_, ok := err.(*serviceerror.Internal)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ListClosedWorkflowExecutionsByStatus failed"))
-}
-
-func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, input *esclient.SearchParameters) (*elastic.SearchResult, error) {
-			source, _ := input.Query.Source()
-			sourceStr := fmt.Sprintf("%v", source)
-			s.True(strings.Contains(sourceStr, filterClose))
-			s.True(strings.Contains(sourceStr, filterByWID))
-			s.True(strings.Contains(sourceStr, filterByRunID))
-			return testSearchResult, nil
-		})
-	request := &visibility.GetClosedWorkflowExecutionRequest{
-		NamespaceID: testNamespaceID,
-		Execution: commonpb.WorkflowExecution{
-			WorkflowId: testWorkflowID,
-			RunId:      testRunID,
-		},
-	}
-	_, err := s.visibilityStore.GetClosedWorkflowExecution(request)
-	s.NoError(err)
-
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.GetClosedWorkflowExecution(request)
-	s.Error(err)
-	_, ok := err.(*serviceerror.Internal)
-	s.True(ok)
-	s.True(strings.Contains(err.Error(), "GetClosedWorkflowExecution failed"))
-}
-
-func (s *ESVisibilitySuite) TestGetClosedWorkflowExecution_NoRunID() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, input *esclient.SearchParameters) (*elastic.SearchResult, error) {
-			source, _ := input.Query.Source()
-			s.True(strings.Contains(fmt.Sprintf("%v", source), filterClose))
-			s.True(strings.Contains(fmt.Sprintf("%v", source), filterByWID))
-			s.False(strings.Contains(fmt.Sprintf("%v", source), filterByRunID))
-			return testSearchResult, nil
-		})
-	request := &visibility.GetClosedWorkflowExecutionRequest{
-		NamespaceID: testNamespaceID,
-		Execution: commonpb.WorkflowExecution{
-			WorkflowId: testWorkflowID,
-		},
-	}
-	_, err := s.visibilityStore.GetClosedWorkflowExecution(request)
-	s.NoError(err)
 }
 
 func (s *ESVisibilitySuite) TestGetNextPageToken() {

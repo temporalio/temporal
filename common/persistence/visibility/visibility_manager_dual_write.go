@@ -157,11 +157,6 @@ func (v *visibilityManagerWrapper) ListClosedWorkflowExecutionsByStatus(request 
 	return manager.ListClosedWorkflowExecutionsByStatus(request)
 }
 
-func (v *visibilityManagerWrapper) GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error) {
-	manager := v.chooseVisibilityManagerForNamespace(request.Namespace)
-	return manager.GetClosedWorkflowExecution(request)
-}
-
 func (v *visibilityManagerWrapper) DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error {
 	switch v.advancedVisWritingMode() {
 	case common.AdvancedVisibilityWritingModeOff:
