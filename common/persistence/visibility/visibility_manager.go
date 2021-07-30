@@ -136,18 +136,6 @@ type (
 		Status enumspb.WorkflowExecutionStatus
 	}
 
-	// GetClosedWorkflowExecutionRequest is used retrieve the record for a specific execution
-	GetClosedWorkflowExecutionRequest struct {
-		NamespaceID string
-		Namespace   string // namespace name is not persisted, but used as config filter key
-		Execution   commonpb.WorkflowExecution
-	}
-
-	// GetClosedWorkflowExecutionResponse is the response to GetClosedWorkflowExecutionRequest
-	GetClosedWorkflowExecutionResponse struct {
-		Execution *workflowpb.WorkflowExecutionInfo
-	}
-
 	// VisibilityDeleteWorkflowExecutionRequest contains the request params for DeleteWorkflowExecution call
 	VisibilityDeleteWorkflowExecutionRequest struct {
 		NamespaceID string
@@ -170,7 +158,6 @@ type (
 		ListOpenWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error)
-		GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error
 		ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
 		ScanWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)

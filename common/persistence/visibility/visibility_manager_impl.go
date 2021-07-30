@@ -169,14 +169,6 @@ func (v *visibilityManagerImpl) ListClosedWorkflowExecutionsByStatus(request *Li
 	return v.convertInternalListResponse(internalResp), nil
 }
 
-func (v *visibilityManagerImpl) GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error) {
-	internalResp, err := v.store.GetClosedWorkflowExecution(request)
-	if err != nil {
-		return nil, err
-	}
-	return v.convertInternalGetResponse(internalResp), nil
-}
-
 func (v *visibilityManagerImpl) DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error {
 	return v.store.DeleteWorkflowExecution(request)
 }
@@ -199,20 +191,6 @@ func (v *visibilityManagerImpl) ScanWorkflowExecutions(request *ListWorkflowExec
 
 func (v *visibilityManagerImpl) CountWorkflowExecutions(request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error) {
 	return v.store.CountWorkflowExecutions(request)
-}
-
-func (v *visibilityManagerImpl) convertInternalGetResponse(internalResp *InternalGetClosedWorkflowExecutionResponse) *GetClosedWorkflowExecutionResponse {
-	if internalResp == nil {
-		return nil
-	}
-
-	resp := &GetClosedWorkflowExecutionResponse{}
-	saTypeMap, err := v.searchAttributesProvider.GetSearchAttributes(v.defaultVisibilityIndexName, false)
-	if err != nil {
-		v.logger.Error("Unable to read valid search attributes.", tag.Error(err))
-	}
-	resp.Execution = v.convertVisibilityWorkflowExecutionInfo(internalResp.Execution, saTypeMap)
-	return resp
 }
 
 func (v *visibilityManagerImpl) convertInternalListResponse(internalResp *InternalListWorkflowExecutionsResponse) *ListWorkflowExecutionsResponse {
