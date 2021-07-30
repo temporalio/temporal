@@ -259,6 +259,7 @@ func (c *ContextImpl) LoadWorkflowExecutionForReplication(
 
 	if c.MutableState == nil {
 		response, err := getWorkflowExecutionWithRetry(c.shard, &persistence.GetWorkflowExecutionRequest{
+			ShardID: c.shard.GetShardID(),
 			NamespaceID: c.namespaceID,
 			Execution:   c.workflowExecution,
 		})
@@ -340,6 +341,7 @@ func (c *ContextImpl) LoadWorkflowExecution() (MutableState, error) {
 
 	if c.MutableState == nil {
 		response, err := getWorkflowExecutionWithRetry(c.shard, &persistence.GetWorkflowExecutionRequest{
+			ShardID: c.shard.GetShardID(),
 			NamespaceID: c.namespaceID,
 			Execution:   c.workflowExecution,
 		})

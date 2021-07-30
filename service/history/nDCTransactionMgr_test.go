@@ -458,6 +458,7 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesNotExists() {
 	runID := "some random run ID"
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
+		ShardID: s.mockShard.GetShardID(),
 		NamespaceID: namespaceID,
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
@@ -477,6 +478,7 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesExists() {
 	runID := "some random run ID"
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
+		ShardID: s.mockShard.GetShardID(),
 		NamespaceID: namespaceID,
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,

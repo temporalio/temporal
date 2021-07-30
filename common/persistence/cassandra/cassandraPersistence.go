@@ -1441,6 +1441,7 @@ func (d *cassandraPersistence) assertNotCurrentExecution(
 ) error {
 
 	if resp, err := d.GetCurrentExecution(&p.GetCurrentExecutionRequest{
+		ShardID: d.shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 	}); err != nil {

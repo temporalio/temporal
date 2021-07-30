@@ -441,6 +441,7 @@ type (
 
 	// GetWorkflowExecutionRequest is used to retrieve the info of a workflow execution
 	GetWorkflowExecutionRequest struct {
+		ShardID int32
 		NamespaceID string
 		Execution   commonpb.WorkflowExecution
 	}
@@ -454,6 +455,7 @@ type (
 
 	// GetCurrentExecutionRequest is used to retrieve the current RunId for an execution
 	GetCurrentExecutionRequest struct {
+		ShardID int32
 		NamespaceID string
 		WorkflowID  string
 	}
@@ -596,6 +598,7 @@ type (
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution
 	DeleteWorkflowExecutionRequest struct {
+		ShardID int32
 		NamespaceID string
 		WorkflowID  string
 		RunID       string
@@ -603,6 +606,7 @@ type (
 
 	// DeleteCurrentWorkflowExecutionRequest is used to delete the current workflow execution
 	DeleteCurrentWorkflowExecutionRequest struct {
+		ShardID int32
 		NamespaceID string
 		WorkflowID  string
 		RunID       string

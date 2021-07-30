@@ -257,6 +257,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 
 	exeStore := cassandra.NewExecutionStore(int32(shardIDInt), session, log.NewNoopLogger())
 	req := &persistence.DeleteWorkflowExecutionRequest{
+		ShardID: int32(shardIDInt),
 		NamespaceID: namespaceID,
 		WorkflowID:  getRequiredOption(c, FlagWorkflowID),
 		RunID:       runID,
@@ -273,6 +274,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	}
 
 	deleteCurrentReq := &persistence.DeleteCurrentWorkflowExecutionRequest{
+		ShardID: int32(shardIDInt),
 		NamespaceID: namespaceID,
 		WorkflowID:  getRequiredOption(c, FlagWorkflowID),
 		RunID:       runID,

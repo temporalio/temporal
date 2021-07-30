@@ -1699,6 +1699,7 @@ func (s *ExecutionManagerSuite) TestGetCurrentWorkflow() {
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	response, err := s.ExecutionManager.GetCurrentExecution(&p.GetCurrentExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowExecution.GetWorkflowId(),
 	})

@@ -295,6 +295,7 @@ type (
 
 	// InternalCreateWorkflowExecutionRequest is used to write a new workflow execution
 	InternalCreateWorkflowExecutionRequest struct {
+		ShardID int32
 		RangeID int64
 
 		Mode CreateWorkflowMode
@@ -323,6 +324,7 @@ type (
 
 	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
 	InternalUpdateWorkflowExecutionRequest struct {
+		ShardID int32
 		RangeID int64
 
 		Mode UpdateWorkflowMode
@@ -334,6 +336,7 @@ type (
 
 	// InternalConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for Persistence Interface
 	InternalConflictResolveWorkflowExecutionRequest struct {
+		ShardID int32
 		RangeID int64
 
 		Mode ConflictResolveWorkflowMode

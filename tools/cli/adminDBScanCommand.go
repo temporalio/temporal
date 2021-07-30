@@ -714,6 +714,7 @@ func concreteExecutionStillExists(
 	totalDBRequests *int64,
 ) (*ExecutionCheckFailure, bool) {
 	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
+		ShardID: shardID,
 		NamespaceID: executionInfo.NamespaceId,
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: executionInfo.WorkflowId,
@@ -750,6 +751,7 @@ func concreteExecutionStillOpen(
 	totalDBRequests *int64,
 ) (*ExecutionCheckFailure, bool) {
 	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
+		ShardID: shardID,
 		NamespaceID: executionInfo.NamespaceId,
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: executionInfo.WorkflowId,

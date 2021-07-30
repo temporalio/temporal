@@ -476,6 +476,7 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 func (s *TestBase) GetWorkflowExecutionInfoWithStats(namespaceID string, workflowExecution commonpb.WorkflowExecution) (
 	*persistence.MutableStateStats, *persistencespb.WorkflowMutableState, error) {
 	response, err := s.ExecutionManager.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		NamespaceID: namespaceID,
 		Execution:   workflowExecution,
 	})
@@ -490,6 +491,7 @@ func (s *TestBase) GetWorkflowExecutionInfoWithStats(namespaceID string, workflo
 func (s *TestBase) GetWorkflowMutableState(namespaceID string, workflowExecution commonpb.WorkflowExecution) (
 	*persistencespb.WorkflowMutableState, error) {
 	response, err := s.ExecutionManager.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
+		ShardID:  s.ShardInfo.GetShardId(),
 		NamespaceID: namespaceID,
 		Execution:   workflowExecution,
 	})
@@ -502,6 +504,7 @@ func (s *TestBase) GetWorkflowMutableState(namespaceID string, workflowExecution
 // GetCurrentWorkflowRunID returns the workflow run ID for the given params
 func (s *TestBase) GetCurrentWorkflowRunID(namespaceID, workflowID string) (string, error) {
 	response, err := s.ExecutionManager.GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 	})
@@ -932,6 +935,7 @@ func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWr
 // DeleteWorkflowExecution is a utility method to delete a workflow execution
 func (s *TestBase) DeleteWorkflowExecution(info *persistencespb.WorkflowExecutionInfo, state *persistencespb.WorkflowExecutionState) error {
 	return s.ExecutionManager.DeleteWorkflowExecution(&persistence.DeleteWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		NamespaceID: info.NamespaceId,
 		WorkflowID:  info.WorkflowId,
 		RunID:       state.GetRunId(),
@@ -941,6 +945,7 @@ func (s *TestBase) DeleteWorkflowExecution(info *persistencespb.WorkflowExecutio
 // DeleteCurrentWorkflowExecution is a utility method to delete the workflow current execution
 func (s *TestBase) DeleteCurrentWorkflowExecution(info *persistencespb.WorkflowExecutionInfo, state *persistencespb.WorkflowExecutionState) error {
 	return s.ExecutionManager.DeleteCurrentWorkflowExecution(&persistence.DeleteCurrentWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		NamespaceID: info.NamespaceId,
 		WorkflowID:  info.WorkflowId,
 		RunID:       state.GetRunId(),

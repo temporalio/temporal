@@ -392,6 +392,7 @@ func (r *nDCTransactionMgrImpl) checkWorkflowExists(
 
 	_, err := r.shard.GetExecutionManager().GetWorkflowExecution(
 		&persistence.GetWorkflowExecutionRequest{
+			ShardID:  r.shard.GetShardID(),
 			NamespaceID: namespaceID,
 			Execution: commonpb.WorkflowExecution{
 				WorkflowId: workflowID,

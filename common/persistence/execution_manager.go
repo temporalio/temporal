@@ -148,6 +148,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	}
 
 	newRequest := &InternalUpdateWorkflowExecutionRequest{
+		ShardID: m.GetShardID(),
 		RangeID: request.RangeID,
 
 		Mode: request.Mode,
@@ -196,6 +197,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	}
 
 	newRequest := &InternalConflictResolveWorkflowExecutionRequest{
+		ShardID: m.GetShardID(),
 		RangeID: request.RangeID,
 
 		Mode: request.Mode,
@@ -233,6 +235,7 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 	}
 
 	newRequest := &InternalCreateWorkflowExecutionRequest{
+		ShardID: m.GetShardID(),
 		RangeID:                  request.RangeID,
 		Mode:                     request.Mode,
 		PreviousRunID:            request.PreviousRunID,

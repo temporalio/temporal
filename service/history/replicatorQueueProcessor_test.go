@@ -223,6 +223,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 		ScheduledId: scheduleID,
 	}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
+		ShardID: s.mockShard.GetShardID(),
 		NamespaceID: namespaceID,
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,

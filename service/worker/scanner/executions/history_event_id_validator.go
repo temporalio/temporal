@@ -90,6 +90,7 @@ func (v *historyEventIDValidator) Validate(
 	case *serviceerror.NotFound, *serviceerror.DataLoss:
 		// additionally validate mutable state is still present in DB
 		_, err = v.executionManager.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
+			ShardID: v.shardID,
 			NamespaceID: mutableState.GetExecutionInfo().NamespaceId,
 			Execution: commonpb.WorkflowExecution{
 				WorkflowId: mutableState.GetExecutionInfo().WorkflowId,
