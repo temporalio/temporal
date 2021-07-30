@@ -46,7 +46,7 @@ type (
 		RangeSize                    int64
 		GetTasksBatchSize            dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		UpdateAckInterval            dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
-		IdleTaskqueueCheckInterval   dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
+		IdleTaskqueueCheckInterval   dynamicconfig.DurationPropertyFn
 		MaxTaskqueueIdleTime         dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
 		NumTaskqueueWritePartitions  dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		NumTaskqueueReadPartitions   dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
@@ -86,7 +86,6 @@ type (
 		RangeSize                  int64
 		GetTasksBatchSize          func() int
 		UpdateAckInterval          func() time.Duration
-		IdleTaskqueueCheckInterval func() time.Duration
 		MaxTaskqueueIdleTime       func() time.Duration
 		MinTaskThrottlingBurstSize func() int
 		MaxTaskDeleteBatchSize     func() int
@@ -117,7 +116,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		RangeSize:                       100000,
 		GetTasksBatchSize:               dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingGetTasksBatchSize, 1000),
 		UpdateAckInterval:               dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingUpdateAckInterval, 1*time.Minute),
-		IdleTaskqueueCheckInterval:      dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingIdleTaskqueueCheckInterval, 5*time.Minute),
+		IdleTaskqueueCheckInterval:      dc.GetDurationProperty(dynamicconfig.MatchingIdleTaskqueueCheckInterval, 30*time.Second),
 		MaxTaskqueueIdleTime:            dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MaxTaskqueueIdleTime, 5*time.Minute),
 		LongPollExpirationInterval:      dc.GetDurationPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingLongPollExpirationInterval, time.Minute),
 		MinTaskThrottlingBurstSize:      dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingMinTaskThrottlingBurstSize, 1),
@@ -163,9 +162,6 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespaceCache cache.Na
 		},
 		UpdateAckInterval: func() time.Duration {
 			return config.UpdateAckInterval(namespace, taskQueueName, taskType)
-		},
-		IdleTaskqueueCheckInterval: func() time.Duration {
-			return config.IdleTaskqueueCheckInterval(namespace, taskQueueName, taskType)
 		},
 		MaxTaskqueueIdleTime: func() time.Duration {
 			return config.MaxTaskqueueIdleTime(namespace, taskQueueName, taskType)

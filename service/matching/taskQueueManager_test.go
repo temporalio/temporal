@@ -29,7 +29,6 @@ import (
 	"errors"
 	"math"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -41,8 +40,8 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
@@ -212,12 +211,15 @@ func TestStartFailureWithForeignPartitionOwner(t *testing.T) {
 		dynamicconfig.Set(dynamicconfig.ResilientSyncMatch, true))
 	cfg := NewConfig(dynamicconfig.NewCollection(cc, log.NewTestLogger()))
 	tqm := mustCreateTestTaskQueueManagerWithConfig(t, gomock.NewController(t), cfg,
+		withFatalSignaler(func(id *taskQueueID) {
+			t.Fatal("TaskQueueManager MUST NOT signal fatal during " +
+				"startup due to possiblity of deadlock")
+		}),
 		makeTestBlocAlloc(func() (taskQueueState, error) {
 			// ConditionFailedError indicates foreign partition owner
 			return taskQueueState{}, &persistence.ConditionFailedError{}
 		}))
-	var err *persistence.ConditionFailedError
-	require.ErrorAs(t, tqm.Start(), &err)
+	require.Error(t, tqm.Start())
 }
 
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
@@ -225,8 +227,10 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 		dynamicconfig.Set(dynamicconfig.ResilientSyncMatch, true))
 	cfg := NewConfig(dynamicconfig.NewCollection(cc, log.NewTestLogger()))
 	cfg.RangeSize = 1 // TaskID block size
-	var leaseErr error = nil
+	var leaseErr error
+	var deadid *taskQueueID
 	tqm := mustCreateTestTaskQueueManagerWithConfig(t, gomock.NewController(t), cfg,
+		withFatalSignaler(func(id *taskQueueID) { deadid = id }),
 		makeTestBlocAlloc(func() (taskQueueState, error) {
 			return taskQueueState{rangeID: 1}, leaseErr
 		}))
@@ -241,6 +245,7 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 		source:    enumsspb.TASK_SOURCE_HISTORY})
 	require.False(t, sync)
 	require.NoError(t, err)
+	require.Nil(t, deadid)
 
 	// TQM's ID block should be empty so the next AddTask will trigger an
 	// attempt to obtain more IDs. This specific error type indicates that
@@ -254,25 +259,23 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 		source:    enumsspb.TASK_SOURCE_HISTORY,
 	})
 	require.False(t, sync)
-	require.ErrorIs(t, err, errShutdown)
+	require.Error(t, err)
+	require.Equal(t, tqm.taskQueueID, deadid)
 }
 
 func TestAnyErrorCausesUnloadWhenResilientSyncMatchDisabled(t *testing.T) {
 	cc := dynamicconfig.NewMutableEphemeralClient(
-		dynamicconfig.Set(dynamicconfig.ResilientSyncMatch, true))
+		dynamicconfig.Set(dynamicconfig.ResilientSyncMatch, false))
 	cfg := NewConfig(dynamicconfig.NewCollection(cc, log.NewTestLogger()))
 	tqm := mustCreateTestTaskQueueManagerWithConfig(t, gomock.NewController(t), cfg,
+		withFatalSignaler(func(id *taskQueueID) {
+			t.Fatal("TaskQueueManager MUST NOT signal fatal during " +
+				"startup due to possiblity of deadlock")
+		}),
 		makeTestBlocAlloc(func() (taskQueueState, error) {
 			return taskQueueState{}, errors.New("any error will do")
 		}))
-	tqm.Start()
-	defer tqm.Stop()
-	_, err := tqm.AddTask(context.TODO(), addTaskParams{
-		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{},
-		source:    enumsspb.TASK_SOURCE_HISTORY,
-	})
-	require.Error(t, err)
+	require.Error(t, tqm.Start())
 }
 
 func mustCreateTestTaskQueueManager(
@@ -395,44 +398,48 @@ func TestDescribeTaskQueue(t *testing.T) {
 	require.Zero(t, taskQueueStatus.GetBacklogCountHint())
 }
 
-func tlMgrStartWithoutNotifyEvent(tlm *taskQueueManagerImpl) {
-	go tlm.taskReader.dispatchBufferedTasks()
-	go tlm.taskReader.getTasksPump()
-}
-
-func TestCheckIdleTaskQueue(t *testing.T) {
+func TestLivenessUpdating(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
 
-	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	cfg.IdleTaskqueueCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(2 * time.Second)
+	clock := clock.NewEventTimeSource()
+	tqm := mustCreateTestTaskQueueManager(t, controller, withClock(clock))
 
-	// Idle
-	tlm := mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg)
-	tlm.Start()
-	tlMgrStartWithoutNotifyEvent(tlm)
-	time.Sleep(1 * time.Second)
-	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
+	advanceTimePastIdleThreshold := func() {
+		t.Helper()
+		clock.Update(clock.Now().Add(24 * time.Hour))
+		alive, _ := tqm.Liveness()
+		require.False(t, alive, "After 24h, TaskQueueManager should be dead")
+	}
 
-	// Active poll-er
-	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg)
-	tlm.Start()
-	tlm.pollerHistory.updatePollerInfo(pollerIdentity("test-poll"), nil)
-	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
-	tlMgrStartWithoutNotifyEvent(tlm)
-	time.Sleep(1 * time.Second)
-	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
-	tlm.Stop()
-	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
+	require.NoError(t, tqm.Start())
+	alive, _ := tqm.Liveness()
+	require.True(t, alive, "Newly started TaskQueueManager should be alive")
 
-	// Active adding task
-	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg)
-	tlm.Start()
-	require.Equal(t, 0, len(tlm.GetAllPollerInfo()))
-	tlMgrStartWithoutNotifyEvent(tlm)
-	tlm.taskReader.Signal()
-	time.Sleep(1 * time.Second)
-	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
-	tlm.Stop()
-	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
+	advanceTimePastIdleThreshold()
+
+	tqm.GetTask(context.TODO(), &rpsInf)
+	alive, _ = tqm.Liveness()
+	require.True(t, alive, "Call to GetTask should make TaskQueueManager alive")
+
+	advanceTimePastIdleThreshold()
+
+	tqm.AddTask(context.TODO(), addTaskParams{
+		execution: &commonpb.WorkflowExecution{},
+		taskInfo:  &persistencespb.TaskInfo{},
+		source:    enumsspb.TASK_SOURCE_HISTORY,
+	})
+	alive, _ = tqm.Liveness()
+	require.True(t, alive, "Call to AddTask should make TaskQueueManage alive")
+
+	advanceTimePastIdleThreshold()
+
+	tqm.AddTask(context.TODO(), addTaskParams{
+		execution:     &commonpb.WorkflowExecution{},
+		taskInfo:      &persistencespb.TaskInfo{},
+		source:        enumsspb.TASK_SOURCE_HISTORY,
+		forwardedFrom: "any-non-empty-string-will-do",
+	})
+	alive, _ = tqm.Liveness()
+	require.False(t, alive, "Forwarded call to AddTask should NOT make TaskQueueManage alive")
 }

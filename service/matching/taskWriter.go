@@ -156,6 +156,9 @@ func (w *taskWriter) allocTaskIDs(count int) ([]int64, error) {
 		if w.taskIDBlock.start > w.taskIDBlock.end {
 			// we ran out of current allocation block
 			newBlock, err := w.tlMgr.allocTaskIDBlock(w.taskIDBlock.end)
+			if err != nil && w.tlMgr.errShouldUnload(err) {
+				w.tlMgr.signalFatalProblem(w.tlMgr.taskQueueID)
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -170,17 +173,12 @@ func (w *taskWriter) allocTaskIDs(count int) ([]int64, error) {
 func (w *taskWriter) appendTasks(
 	tasks []*persistencespb.AllocatedTaskInfo,
 ) (*persistence.CreateTasksResponse, error) {
-
 	resp, err := w.tlMgr.db.CreateTasks(tasks)
-	switch err.(type) {
-	case nil:
-		return resp, nil
-
-	case *persistence.ConditionFailedError:
-		w.tlMgr.Stop()
+	if err != nil && errIndicatesForeignLessee(err) {
+		w.tlMgr.signalFatalProblem(w.tlMgr.taskQueueID)
 		return nil, err
-
-	default:
+	}
+	if err != nil {
 		w.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCreateTask,
 			tag.Error(err),
@@ -189,6 +187,7 @@ func (w *taskWriter) appendTasks(
 		)
 		return nil, err
 	}
+	return resp, nil
 }
 
 func (w *taskWriter) taskWriterLoop() {

@@ -29,6 +29,8 @@ import (
 	"sync"
 )
 
+type ValueMap map[Key]interface{}
+
 // MutableEphemeralClient is a dynamicconfig.Client implementation that is
 // safely mutable in the presence of an unbounded number of reads and writes.
 // Writers block other writers but not readers. Readers don't block anything.
@@ -143,7 +145,7 @@ func (c *MutableEphemeralClient) Add(
 // MSet assigns to multiple keys atomically. The supplied MutationConstraints
 // are applied to each of the resulting configuration values.
 func (c *MutableEphemeralClient) MSet(
-	kvs map[Key]interface{},
+	kvs ValueMap,
 	mcs ...MutationConstraint,
 ) {
 	c.multi(Set, kvs, mcs...)
@@ -152,7 +154,7 @@ func (c *MutableEphemeralClient) MSet(
 // MSet appends to multiple keys atomically. The supplied MutationConstraints
 // are applied to each of the resulting configuration values.
 func (c *MutableEphemeralClient) MAdd(
-	kvs map[Key]interface{},
+	kvs ValueMap,
 	mcs ...MutationConstraint,
 ) {
 	c.multi(Add, kvs, mcs...)
@@ -160,7 +162,7 @@ func (c *MutableEphemeralClient) MAdd(
 
 func (c *MutableEphemeralClient) multi(
 	f func(Key, interface{}, ...MutationConstraint) Mutation,
-	kvs map[Key]interface{},
+	kvs ValueMap,
 	mcs ...MutationConstraint,
 ) {
 	mutations := make([]Mutation, 0, len(kvs))

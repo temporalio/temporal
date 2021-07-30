@@ -56,6 +56,8 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
+const tqmonStopTimeout = 3 * time.Second
+
 // Implements matching.Engine
 // TODO: Switch implementation from lock/channel based to a partitioned agent
 // to simplify code and reduce possibility of synchronization errors.
@@ -86,6 +88,7 @@ type (
 		lockableQueryTaskMap lockableQueryTaskMap
 		namespaceCache       cache.NamespaceCache
 		keyResolver          membership.ServiceResolver
+		tqMonitor            *taskQueueMonitor
 	}
 )
 
@@ -131,6 +134,7 @@ func NewEngine(taskManager persistence.TaskManager,
 		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
 		namespaceCache:       namespaceCache,
 		keyResolver:          resolver,
+		tqMonitor:            newTaskQueueMonitor(),
 	}
 }
 
@@ -142,6 +146,7 @@ func (e *matchingEngineImpl) Start() {
 	) {
 		return
 	}
+	go e.tqMonitor.Run(e, e.config)
 }
 
 func (e *matchingEngineImpl) Stop() {
@@ -153,6 +158,13 @@ func (e *matchingEngineImpl) Stop() {
 		return
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), tqmonStopTimeout)
+	err := e.tqMonitor.Stop(ctx)
+	cancel()
+	if err != nil {
+		e.logger.Warn("Timed out stopping taskQueueMonitor",
+			tag.Error(err), tag.Timeout(tqmonStopTimeout.String()))
+	}
 	for _, l := range e.getTaskQueues(math.MaxInt32) {
 		l.Stop()
 	}
@@ -195,25 +207,19 @@ func (e *matchingEngineImpl) getTaskQueueManager(taskQueue *taskQueueID, taskQue
 	e.taskQueuesLock.RUnlock()
 	// If it gets here, write lock and check again in case a task queue is created between the two locks
 	e.taskQueuesLock.Lock()
+	defer e.taskQueuesLock.Unlock()
 	if result, ok := e.taskQueues[*taskQueue]; ok {
-		e.taskQueuesLock.Unlock()
 		return result, nil
 	}
 	mgr, err := newTaskQueueManager(e, taskQueue, taskQueueKind, e.config)
 	if err != nil {
-		e.taskQueuesLock.Unlock()
 		return nil, err
 	}
-	e.logger.Info("", tag.LifeCycleStarting, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType))
 	err = mgr.Start()
 	if err != nil {
-		e.taskQueuesLock.Unlock()
-		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType), tag.Error(err))
 		return nil, err
 	}
 	e.taskQueues[*taskQueue] = mgr
-	e.taskQueuesLock.Unlock()
-	e.logger.Info("", tag.LifeCycleStarted, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType))
 	return mgr, nil
 }
 
@@ -719,6 +725,10 @@ func (e *matchingEngineImpl) unloadTaskQueue(id *taskQueueID) {
 	if ok {
 		tlMgr.Stop()
 	}
+}
+
+func (e *matchingEngineImpl) requestUnload(id *taskQueueID) {
+	e.tqMonitor.Signal(tqmonUsurped{id: id})
 }
 
 // Populate the workflow task response based on context and scheduled/started events.

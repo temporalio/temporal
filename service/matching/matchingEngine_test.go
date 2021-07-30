@@ -77,6 +77,7 @@ type (
 		taskManager    *testTaskManager
 		logger         log.Logger
 		handlerContext *handlerContext
+		cfgClient      *dynamicconfig.MutableEphemeralClient
 		sync.Mutex
 	}
 )
@@ -115,7 +116,9 @@ func (s *matchingEngineSuite) SetupTest() {
 		log.NewNoopLogger(),
 	)
 
-	s.matchingEngine = s.newMatchingEngine(defaultTestConfig(), s.taskManager)
+	s.cfgClient = dynamicconfig.NewMutableEphemeralClient()
+	s.matchingEngine = s.newMatchingEngine(
+		defaultTestConfigFromClient(s.cfgClient), s.taskManager)
 	s.matchingEngine.Start()
 }
 
@@ -143,6 +146,7 @@ func newMatchingEngine(
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		config:          config,
 		namespaceCache:  mockNamespaceCache,
+		tqMonitor:       newTaskQueueMonitor(),
 	}
 }
 
@@ -229,7 +233,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 	stickyTaskQueue := &taskqueuepb.TaskQueue{Name: stickyTl, Kind: stickyTlKind}
 
 	s.matchingEngine.config.RangeSize = 2 // to test that range is not updated without tasks
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(10 * time.Millisecond)
+	s.cfgClient.Set(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Millisecond)
 
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
@@ -783,7 +787,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDispatch() {
 	// Set a short long poll expiration so we don't have to wait too long for 0 throttling cases
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(20 * time.Millisecond)
+	s.cfgClient.Set(dynamicconfig.MatchingLongPollExpirationInterval, 20*time.Millisecond)
 	dispatchLimitFn := func(wc int, tc int64) float64 {
 		if tc%50 == 0 && wc%5 == 0 { // Gets triggered atleast 20 times
 			return 0
@@ -1581,10 +1585,14 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 	const taskCount = 20
 	const rangeSize = 10
 	s.matchingEngine.config.RangeSize = rangeSize
-	s.matchingEngine.config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFilteredByTaskQueueInfo(2)
-	// set idle timer check to a really small value to assert that we don't accidentally drop tasks while blocking
-	// on enqueuing a task to task buffer
-	s.matchingEngine.config.IdleTaskqueueCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(time.Millisecond)
+	s.cfgClient.MSet(dynamicconfig.ValueMap{
+		dynamicconfig.MatchingMaxTaskDeleteBatchSize: 2,
+		// set idle timer check to a really small value to assert that we don't
+		// accidentally drop tasks while blocking on enqueuing a task to task buffer
+		dynamicconfig.MatchingIdleTaskqueueCheckInterval: time.Millisecond,
+	})
+	// trigger GC to pick up the new interval config
+	s.matchingEngine.tqMonitor.Signal(tqmonGC{})
 
 	testCases := []struct {
 		maxTimeBtwnDeletes time.Duration
@@ -1985,10 +1993,15 @@ func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
 }
 
 func defaultTestConfig() *Config {
-	config := NewConfig(dynamicconfig.NewNoopCollection())
-	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(100 * time.Millisecond)
-	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFilteredByTaskQueueInfo(1)
-	return config
+	return defaultTestConfigFromClient(dynamicconfig.NewMutableEphemeralClient())
+}
+
+func defaultTestConfigFromClient(cc *dynamicconfig.MutableEphemeralClient) *Config {
+	cc.MSet(dynamicconfig.ValueMap{
+		dynamicconfig.MatchingLongPollExpirationInterval: 100 * time.Millisecond,
+		dynamicconfig.MatchingMaxTaskDeleteBatchSize:     1,
+	})
+	return NewConfig(dynamicconfig.NewCollection(cc, log.NewTestLogger()))
 }
 
 type (

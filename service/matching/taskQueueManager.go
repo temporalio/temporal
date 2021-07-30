@@ -40,12 +40,12 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/clock"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -59,16 +59,6 @@ const (
 
 	// Fake Task ID to wrap a task for syncmatch
 	syncMatchTaskId = -137
-)
-
-// fatalSignalBehavior indicates to functions that may inovke the
-// taskQueueManagerImpl.signalFatalProblem callback whether they should or
-// should not do that.
-type fatalSignalBehavior int
-
-const (
-	emitFatalSignal fatalSignalBehavior = iota + 1
-	suppressFatalSignal
 )
 
 type (
@@ -107,6 +97,9 @@ type (
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		// DescribeTaskQueue returns information about the target task queue
 		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
+		// Liveness indicates whether this TaskQueueManager has observed traffic
+		// within its configured MaxTaskqueueIdleTime and the id of this queue
+		Liveness() (bool, *taskQueueID)
 		String() string
 	}
 
@@ -121,7 +114,6 @@ type (
 		engine           *matchingEngineImpl
 		taskWriter       *taskWriter
 		taskReader       *taskReader // reads tasks from db and async matches it with poller
-		liveness         *liveness
 		taskGC           *taskGC
 		taskAckManager   ackManager   // tracks ackLevel for delivered messages
 		matcher          *TaskMatcher // for matching a task producer with a poller
@@ -140,6 +132,8 @@ type (
 		outstandingPollsLock sync.Mutex
 		outstandingPollsMap  map[string]context.CancelFunc
 		shutdownCh           chan struct{} // Delivers stop to the pump that populates taskBuffer
+		clock                clock.TimeSource
+		lastActivity         atomic.Value // time.Time
 		signalFatalProblem   func(id *taskQueueID)
 	}
 )
@@ -153,6 +147,18 @@ var errRemoteSyncMatchFailed = serviceerror.NewCanceled("remote sync match faile
 func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
 	return func(tqm *taskQueueManagerImpl) {
 		tqm.idAlloc = ibl
+	}
+}
+
+func withClock(ts clock.TimeSource) taskQueueManagerOpt {
+	return func(tqm *taskQueueManagerImpl) {
+		tqm.clock = ts
+	}
+}
+
+func withFatalSignaler(f func(id *taskQueueID)) taskQueueManagerOpt {
+	return func(tqm *taskQueueManagerImpl) {
+		tqm.signalFatalProblem = f
 	}
 }
 
@@ -187,7 +193,8 @@ func newTaskQueueManager(
 		config:              taskQueueConfig,
 		pollerHistory:       newPollerHistory(),
 		outstandingPollsMap: make(map[string]context.CancelFunc),
-		signalFatalProblem:  e.unloadTaskQueue,
+		clock:               clock.NewRealTimeSource(),
+		signalFatalProblem:  e.requestUnload,
 	}
 
 	tlMgr.namespaceValue.Store("")
@@ -202,7 +209,6 @@ func newTaskQueueManager(
 		))
 	}
 
-	tlMgr.liveness = newLiveness(clock.NewRealTimeSource(), taskQueueConfig.IdleTaskqueueCheckInterval(), tlMgr.Stop)
 	tlMgr.taskWriter = newTaskWriter(tlMgr)
 	tlMgr.taskReader = newTaskReader(tlMgr)
 
@@ -211,6 +217,7 @@ func newTaskQueueManager(
 		fwdr = newForwarder(&taskQueueConfig.forwarderConfig, taskQueue, taskQueueKind, e.matchingClient)
 	}
 	tlMgr.matcher = newTaskMatcher(taskQueueConfig, fwdr, tlMgr.metricScope)
+	tlMgr.lastActivity.Store(time.Time{})
 	for _, opt := range opts {
 		opt(tlMgr)
 	}
@@ -236,18 +243,21 @@ func (c *taskQueueManagerImpl) Start() error {
 	) {
 		return nil
 	}
+	c.logger.Info("", tag.LifeCycleStarting)
 	idblock := noTaskIDs
-	state, err := c.renewLeaseWithRetry(suppressFatalSignal)
+	state, err := c.renewLeaseWithRetry()
 	if err != nil && c.errShouldUnload(err) {
+		c.logger.Info("", tag.LifeCycleStartFailed, tag.Error(err))
 		return err
 	}
 	if err == nil {
 		idblock = c.rangeIDToTaskIDBlock(state.rangeID)
 		c.taskAckManager.setAckLevel(state.ackLevel)
 	}
-	c.liveness.Start()
 	c.taskWriter.Start(idblock)
 	c.taskReader.Start()
+	c.lastActivity.Store(c.clock.Now())
+	c.logger.Info("", tag.LifeCycleStarted)
 	return nil
 }
 
@@ -260,13 +270,13 @@ func (c *taskQueueManagerImpl) Stop() {
 	) {
 		return
 	}
+	c.logger.Info("", tag.LifeCycleStopping)
 
 	close(c.shutdownCh)
 
 	_ = c.db.UpdateState(c.taskAckManager.getAckLevel())
 	c.taskGC.RunNow(c.taskAckManager.getAckLevel())
 
-	c.liveness.Stop()
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
 	c.engine.removeTaskQueueManager(c.taskQueueID)
@@ -282,7 +292,7 @@ func (c *taskQueueManagerImpl) AddTask(
 ) (bool, error) {
 	if params.forwardedFrom == "" {
 		// request sent by history service
-		c.liveness.markAlive(time.Now())
+		c.lastActivity.Store(c.clock.Now())
 	}
 
 	var syncMatch bool
@@ -327,7 +337,7 @@ func (c *taskQueueManagerImpl) GetTask(
 	ctx context.Context,
 	maxDispatchPerSecond *float64,
 ) (*internalTask, error) {
-	c.liveness.markAlive(time.Now())
+	c.lastActivity.Store(c.clock.Now())
 
 	// We need to set a shorter timeout than the original ctx; otherwise, by the time ctx deadline is
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
@@ -441,6 +451,12 @@ func (c *taskQueueManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *m
 	return response
 }
 
+func (c *taskQueueManagerImpl) Liveness() (bool, *taskQueueID) {
+	max := c.config.MaxTaskqueueIdleTime()
+	la := c.lastActivity.Load().(time.Time)
+	return c.clock.Now().Sub(la) < max, c.taskQueueID
+}
+
 func (c *taskQueueManagerImpl) String() string {
 	buf := new(bytes.Buffer)
 	if c.taskQueueID.taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
@@ -495,7 +511,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 	c.taskGC.Run(ackLevel)
 }
 
-func (c *taskQueueManagerImpl) renewLeaseWithRetry(fsb fatalSignalBehavior) (taskQueueState, error) {
+func (c *taskQueueManagerImpl) renewLeaseWithRetry() (taskQueueState, error) {
 	var newState taskQueueState
 	op := func() (err error) {
 		newState, err = c.idAlloc.RenewLease()
@@ -505,9 +521,6 @@ func (c *taskQueueManagerImpl) renewLeaseWithRetry(fsb fatalSignalBehavior) (tas
 	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		c.metricScope().IncCounter(metrics.LeaseFailurePerTaskQueueCounter)
-		if fsb == emitFatalSignal && c.errShouldUnload(err) {
-			c.signalFatalProblem(c.taskQueueID)
-		}
 		return newState, err
 	}
 	return newState, nil
@@ -526,7 +539,7 @@ func (c *taskQueueManagerImpl) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock
 		return taskIDBlock{},
 			fmt.Errorf("allocTaskIDBlock: invalid state: prevBlockEnd:%v != currTaskIDBlock:%+v", prevBlockEnd, currBlock)
 	}
-	state, err := c.renewLeaseWithRetry(emitFatalSignal)
+	state, err := c.renewLeaseWithRetry()
 	if err != nil {
 		return taskIDBlock{}, err
 	}

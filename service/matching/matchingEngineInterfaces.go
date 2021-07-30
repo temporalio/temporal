@@ -31,6 +31,7 @@ import (
 type (
 	// Engine exposes interfaces for clients to poll for activity and workflow tasks.
 	Engine interface {
+		Start()
 		Stop()
 		AddWorkflowTask(hCtx *handlerContext, addRequest *matchingservice.AddWorkflowTaskRequest) (syncMatch bool, err error)
 		AddActivityTask(hCtx *handlerContext, addRequest *matchingservice.AddActivityTaskRequest) (syncMatch bool, err error)
