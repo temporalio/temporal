@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
-func (m *sqlExecutionStore) AddTasks(
+func (m *sqlWorkflowStore) AddTasks(
 	request *p.AddTasksRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -64,7 +64,7 @@ func (m *sqlExecutionStore) AddTasks(
 		})
 }
 
-func (m *sqlExecutionStore) GetTransferTask(
+func (m *sqlWorkflowStore) GetTransferTask(
 	request *persistence.GetTransferTaskRequest,
 ) (*persistence.GetTransferTaskResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -95,7 +95,7 @@ func (m *sqlExecutionStore) GetTransferTask(
 	return resp, nil
 }
 
-func (m *sqlExecutionStore) GetTransferTasks(
+func (m *sqlWorkflowStore) GetTransferTasks(
 	request *p.GetTransferTasksRequest,
 ) (*p.GetTransferTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -122,7 +122,7 @@ func (m *sqlExecutionStore) GetTransferTasks(
 	return resp, nil
 }
 
-func (m *sqlExecutionStore) CompleteTransferTask(
+func (m *sqlWorkflowStore) CompleteTransferTask(
 	request *p.CompleteTransferTaskRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -136,7 +136,7 @@ func (m *sqlExecutionStore) CompleteTransferTask(
 	return nil
 }
 
-func (m *sqlExecutionStore) RangeCompleteTransferTask(
+func (m *sqlWorkflowStore) RangeCompleteTransferTask(
 	request *p.RangeCompleteTransferTaskRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -151,7 +151,7 @@ func (m *sqlExecutionStore) RangeCompleteTransferTask(
 	return nil
 }
 
-func (m *sqlExecutionStore) GetTimerTask(
+func (m *sqlWorkflowStore) GetTimerTask(
 	request *persistence.GetTimerTaskRequest,
 ) (*persistence.GetTimerTaskResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -183,7 +183,7 @@ func (m *sqlExecutionStore) GetTimerTask(
 	return resp, nil
 }
 
-func (m *sqlExecutionStore) GetTimerIndexTasks(
+func (m *sqlWorkflowStore) GetTimerIndexTasks(
 	request *p.GetTimerIndexTasksRequest,
 ) (*p.GetTimerIndexTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -237,7 +237,7 @@ func (m *sqlExecutionStore) GetTimerIndexTasks(
 	return resp, nil
 }
 
-func (m *sqlExecutionStore) CompleteTimerTask(
+func (m *sqlWorkflowStore) CompleteTimerTask(
 	request *p.CompleteTimerTaskRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -252,7 +252,7 @@ func (m *sqlExecutionStore) CompleteTimerTask(
 	return nil
 }
 
-func (m *sqlExecutionStore) RangeCompleteTimerTask(
+func (m *sqlWorkflowStore) RangeCompleteTimerTask(
 	request *p.RangeCompleteTimerTaskRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -269,7 +269,7 @@ func (m *sqlExecutionStore) RangeCompleteTimerTask(
 	return nil
 }
 
-func (m *sqlExecutionStore) GetReplicationTask(
+func (m *sqlWorkflowStore) GetReplicationTask(
 	request *persistence.GetReplicationTaskRequest,
 ) (*persistence.GetReplicationTaskResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -300,7 +300,7 @@ func (m *sqlExecutionStore) GetReplicationTask(
 	return resp, nil
 }
 
-func (m *sqlExecutionStore) GetReplicationTasks(
+func (m *sqlWorkflowStore) GetReplicationTasks(
 	request *p.GetReplicationTasksRequest,
 ) (*p.GetReplicationTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -342,7 +342,7 @@ func getReadLevels(
 	return readLevel, maxReadLevelInclusive, nil
 }
 
-func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
+func (m *sqlWorkflowStore) populateGetReplicationTasksResponse(
 	rows []sqlplugin.ReplicationTasksRow,
 	requestMaxReadLevel int64,
 ) (*p.GetReplicationTasksResponse, error) {
@@ -370,7 +370,7 @@ func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
 	}, nil
 }
 
-func (m *sqlExecutionStore) populateGetReplicationDLQTasksResponse(
+func (m *sqlWorkflowStore) populateGetReplicationDLQTasksResponse(
 	rows []sqlplugin.ReplicationDLQTasksRow,
 	requestMaxReadLevel int64,
 ) (*p.GetReplicationTasksResponse, error) {
@@ -398,7 +398,7 @@ func (m *sqlExecutionStore) populateGetReplicationDLQTasksResponse(
 	}, nil
 }
 
-func (m *sqlExecutionStore) CompleteReplicationTask(
+func (m *sqlWorkflowStore) CompleteReplicationTask(
 	request *p.CompleteReplicationTaskRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -412,7 +412,7 @@ func (m *sqlExecutionStore) CompleteReplicationTask(
 	return nil
 }
 
-func (m *sqlExecutionStore) RangeCompleteReplicationTask(
+func (m *sqlWorkflowStore) RangeCompleteReplicationTask(
 	request *p.RangeCompleteReplicationTaskRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -427,7 +427,7 @@ func (m *sqlExecutionStore) RangeCompleteReplicationTask(
 	return nil
 }
 
-func (m *sqlExecutionStore) PutReplicationTaskToDLQ(
+func (m *sqlWorkflowStore) PutReplicationTaskToDLQ(
 	request *p.PutReplicationTaskToDLQRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -456,7 +456,7 @@ func (m *sqlExecutionStore) PutReplicationTaskToDLQ(
 	return nil
 }
 
-func (m *sqlExecutionStore) GetReplicationTasksFromDLQ(
+func (m *sqlWorkflowStore) GetReplicationTasksFromDLQ(
 	request *p.GetReplicationTasksFromDLQRequest,
 ) (*p.GetReplicationTasksFromDLQResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -484,7 +484,7 @@ func (m *sqlExecutionStore) GetReplicationTasksFromDLQ(
 	}
 }
 
-func (m *sqlExecutionStore) DeleteReplicationTaskFromDLQ(
+func (m *sqlWorkflowStore) DeleteReplicationTaskFromDLQ(
 	request *p.DeleteReplicationTaskFromDLQRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -499,7 +499,7 @@ func (m *sqlExecutionStore) DeleteReplicationTaskFromDLQ(
 	return nil
 }
 
-func (m *sqlExecutionStore) RangeDeleteReplicationTaskFromDLQ(
+func (m *sqlWorkflowStore) RangeDeleteReplicationTaskFromDLQ(
 	request *p.RangeDeleteReplicationTaskFromDLQRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -515,7 +515,7 @@ func (m *sqlExecutionStore) RangeDeleteReplicationTaskFromDLQ(
 	return nil
 }
 
-func (m *sqlExecutionStore) GetVisibilityTask(
+func (m *sqlWorkflowStore) GetVisibilityTask(
 	request *persistence.GetVisibilityTaskRequest,
 ) (*persistence.GetVisibilityTaskResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -546,7 +546,7 @@ func (m *sqlExecutionStore) GetVisibilityTask(
 	return resp, nil
 }
 
-func (m *sqlExecutionStore) GetVisibilityTasks(
+func (m *sqlWorkflowStore) GetVisibilityTasks(
 	request *p.GetVisibilityTasksRequest,
 ) (*p.GetVisibilityTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -573,7 +573,7 @@ func (m *sqlExecutionStore) GetVisibilityTasks(
 	return resp, nil
 }
 
-func (m *sqlExecutionStore) CompleteVisibilityTask(
+func (m *sqlWorkflowStore) CompleteVisibilityTask(
 	request *p.CompleteVisibilityTaskRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -587,7 +587,7 @@ func (m *sqlExecutionStore) CompleteVisibilityTask(
 	return nil
 }
 
-func (m *sqlExecutionStore) RangeCompleteVisibilityTask(
+func (m *sqlWorkflowStore) RangeCompleteVisibilityTask(
 	request *p.RangeCompleteVisibilityTaskRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
