@@ -40,8 +40,8 @@ import (
 )
 
 const (
-	maxConcurrentActivityTaskPollers = 16
-	maxConcurrentWorkflowTaskPollers = 16
+	maxConcurrentActivityTaskPollers = 8
+	maxConcurrentWorkflowTaskPollers = 8
 )
 
 type (
