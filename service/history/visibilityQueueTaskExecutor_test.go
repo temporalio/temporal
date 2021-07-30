@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -234,7 +235,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionClosed(gomock.Any()).Return(nil)
 
-	err = s.visibilityQueueTaskExecutor.execute(visibilityTask, true)
+	err = s.visibilityQueueTaskExecutor.execute(context.Background(), visibilityTask, true)
 	s.Nil(err)
 }
 
@@ -284,7 +285,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.EXPECT().RecordWorkflowExecutionStarted(s.createRecordWorkflowExecutionStartedRequest(s.namespace, event, visibiltyTask, mutableState, backoff, taskQueueName)).Return(nil)
 
-	err = s.visibilityQueueTaskExecutor.execute(visibiltyTask, true)
+	err = s.visibilityQueueTaskExecutor.execute(context.Background(), visibiltyTask, true)
 	s.Nil(err)
 }
 
@@ -330,7 +331,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockVisibilityMgr.EXPECT().UpsertWorkflowExecution(s.createUpsertWorkflowSearchAttributesRequest(s.namespace, visibilityTask, mutableState, taskQueueName)).Return(nil)
 
-	err = s.visibilityQueueTaskExecutor.execute(visibilityTask, true)
+	err = s.visibilityQueueTaskExecutor.execute(context.Background(), visibilityTask, true)
 	s.NoError(err)
 }
 

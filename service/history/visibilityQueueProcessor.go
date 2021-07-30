@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"errors"
 	"sync/atomic"
 	"time"
@@ -306,11 +307,12 @@ func (t *visibilityQueueProcessorImpl) complete(
 }
 
 func (t *visibilityQueueProcessorImpl) process(
+	ctx context.Context,
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
 	metricScope := getVisibilityTaskMetricsScope(taskInfo.task.GetTaskType())
-	return metricScope, t.taskExecutor.execute(taskInfo.task, taskInfo.shouldProcessTask)
+	return metricScope, t.taskExecutor.execute(ctx, taskInfo.task, taskInfo.shouldProcessTask)
 }
 
 // processor interfaces
