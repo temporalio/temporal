@@ -95,6 +95,7 @@ func newVisibilityQueueTaskExecutor(
 }
 
 func (t *visibilityQueueTaskExecutor) execute(
+	ctx context.Context,
 	taskInfo queueTaskInfo,
 	shouldProcessTask bool,
 ) error {
@@ -110,11 +111,11 @@ func (t *visibilityQueueTaskExecutor) execute(
 
 	switch task.GetTaskType() {
 	case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION:
-		return t.processStartOrUpsertExecution(task, true)
+		return t.processStartOrUpsertExecution(ctx, task, true)
 	case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION:
-		return t.processStartOrUpsertExecution(task, false)
+		return t.processStartOrUpsertExecution(ctx, task, false)
 	case enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION:
-		return t.processCloseExecution(task)
+		return t.processCloseExecution(ctx, task)
 	case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
 		return t.processDeleteExecution(task)
 	default:
@@ -123,11 +124,13 @@ func (t *visibilityQueueTaskExecutor) execute(
 }
 
 func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
+	ctx context.Context,
 	task *persistencespb.VisibilityTaskInfo,
 	isStartExecution bool,
 ) (retError error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
 
-	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
 	defer cancel()
 	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
@@ -303,10 +306,12 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 }
 
 func (t *visibilityQueueTaskExecutor) processCloseExecution(
+	ctx context.Context,
 	task *persistencespb.VisibilityTaskInfo,
 ) (retError error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
 
-	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
 	defer cancel()
 	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,

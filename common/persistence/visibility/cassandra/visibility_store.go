@@ -25,11 +25,9 @@
 package cassandra
 
 import (
-	"fmt"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -89,13 +87,6 @@ const (
 		`AND start_time >= ? ` +
 		`AND start_time <= ? ` +
 		`AND workflow_id = ? `
-
-	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
-		`FROM closed_executions ` +
-		`WHERE namespace_id = ? ` +
-		`AND namespace_partition = ? ` +
-		`AND workflow_id = ? ` +
-		`AND run_id = ? ALLOW FILTERING `
 
 	templateGetClosedWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
 		`FROM closed_executions ` +
@@ -466,32 +457,6 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 		return nil, gocql.ConvertError("ListClosedWorkflowExecutionsByStatus", err)
 	}
 	return response, nil
-}
-
-func (v *visibilityStore) GetClosedWorkflowExecution(
-	request *visibility.GetClosedWorkflowExecutionRequest) (*visibility.InternalGetClosedWorkflowExecutionResponse, error) {
-	execution := request.Execution
-	query := v.session.
-		Query(templateGetClosedWorkflowExecution,
-			request.NamespaceID,
-			namespacePartition,
-			execution.GetWorkflowId(),
-			execution.GetRunId(),
-		)
-	iter := query.Iter()
-
-	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
-	if !has {
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow execution not found.  WorkflowId: %v, RunId: %v",
-			execution.GetWorkflowId(), execution.GetRunId()))
-	}
-
-	if err := iter.Close(); err != nil {
-		return nil, gocql.ConvertError("GetClosedWorkflowExecution", err)
-	}
-	return &visibility.InternalGetClosedWorkflowExecutionResponse{
-		Execution: wfexecution,
-	}, nil
 }
 
 // DeleteWorkflowExecution is a no-op since deletes are auto-handled by cassandra TTLs

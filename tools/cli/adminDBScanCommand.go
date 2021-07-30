@@ -236,7 +236,6 @@ func AdminDBScan(c *cli.Context) {
 	rateLimiter := getRateLimiter(startingRPS, targetRPS)
 	session := connectToCassandra(c)
 	defer session.Close()
-	historyStore := cassp.NewHistoryV2PersistenceFromSession(session, log.NewNoopLogger())
 	scanOutputDirectories := createScanOutputDirectories()
 
 	reports := make(chan *ShardScanReport)
@@ -250,8 +249,7 @@ func AdminDBScan(c *cli.Context) {
 						scanOutputDirectories,
 						rateLimiter,
 						executionsPageSize,
-						payloadSerializer,
-						historyStore)
+						payloadSerializer)
 				}
 			}
 		}(i)
@@ -279,7 +277,6 @@ func scanShard(
 	limiter quotas.RateLimiter,
 	executionsPageSize int,
 	payloadSerializer serialization.Serializer,
-	historyStore persistence.HistoryStore,
 ) *ShardScanReport {
 	outputFiles, closeFn := createShardScanOutputFiles(shardID, scanOutputDirectories)
 	report := &ShardScanReport{
@@ -294,15 +291,8 @@ func scanShard(
 		deleteEmptyFiles(outputFiles.CorruptedExecutionFile, outputFiles.ExecutionCheckFailureFile, outputFiles.ShardScanReportFile)
 		closeFn()
 	}()
-	execStore, err := cassp.NewWorkflowExecutionPersistence(shardID, session, log.NewNoopLogger())
-	if err != nil {
-		report.Failure = &ShardScanReportFailure{
-			Note:    "failed to create execution store",
-			Details: err.Error(),
-		}
-		return report
-	}
-	execMan := persistence.NewExecutionManager(execStore, log.NewNoopLogger())
+	workflowStore := cassp.NewExecutionStore(shardID, session, log.NewNoopLogger())
+	execMan := persistence.NewExecutionManager(workflowStore, log.NewNoopLogger())
 
 	var token []byte
 	isFirstIteration := true
@@ -335,9 +325,8 @@ func scanShard(
 				checkFailureWriter,
 				shardID,
 				limiter,
-				historyStore,
+				workflowStore,
 				&report.TotalDBRequests,
-				execStore,
 			)
 			switch historyVerificationResult {
 			case VerificationResultNoCorruption:
@@ -440,9 +429,8 @@ func fetchAndVerifyHistoryExists(
 	checkFailureWriter BufferedWriter,
 	shardID int32,
 	limiter quotas.RateLimiter,
-	historyStore persistence.HistoryStore,
+	workflowStore persistence.ExecutionStore,
 	totalDBRequests *int64,
-	execStore persistence.ExecutionStore,
 ) (VerificationResult, *persistence.InternalReadHistoryBranchResponse, *persistencespb.HistoryBranch) {
 	var branch *persistencespb.HistoryBranch
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
@@ -473,9 +461,9 @@ func fetchAndVerifyHistoryExists(
 		PageSize:  historyPageSize,
 	}
 	preconditionForDBCall(totalDBRequests, limiter)
-	history, err := historyStore.ReadHistoryBranch(readHistoryBranchReq)
+	history, err := workflowStore.ReadHistoryBranch(readHistoryBranchReq)
 
-	ecf, stillExists := concreteExecutionStillExists(executionInfo, executionState, shardID, execStore, limiter, totalDBRequests)
+	ecf, stillExists := concreteExecutionStillExists(executionInfo, executionState, shardID, workflowStore, limiter, totalDBRequests)
 	if ecf != nil {
 		checkFailureWriter.Add(ecf)
 		return VerificationResultCheckFailure, nil, nil
@@ -721,7 +709,7 @@ func concreteExecutionStillExists(
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
 	shardID int32,
-	execStore persistence.ExecutionStore,
+	workflowStore persistence.ExecutionStore,
 	limiter quotas.RateLimiter,
 	totalDBRequests *int64,
 ) (*ExecutionCheckFailure, bool) {
@@ -733,7 +721,7 @@ func concreteExecutionStillExists(
 		},
 	}
 	preconditionForDBCall(totalDBRequests, limiter)
-	_, err := execStore.GetWorkflowExecution(getConcreteExecution)
+	_, err := workflowStore.GetWorkflowExecution(getConcreteExecution)
 	if err == nil {
 		return nil, true
 	}

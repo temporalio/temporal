@@ -98,21 +98,6 @@ func (mr *MockVisibilityStoreMockRecorder) DeleteWorkflowExecution(request inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockVisibilityStore)(nil).DeleteWorkflowExecution), request)
 }
 
-// GetClosedWorkflowExecution mocks base method.
-func (m *MockVisibilityStore) GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*InternalGetClosedWorkflowExecutionResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetClosedWorkflowExecution", request)
-	ret0, _ := ret[0].(*InternalGetClosedWorkflowExecutionResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetClosedWorkflowExecution indicates an expected call of GetClosedWorkflowExecution.
-func (mr *MockVisibilityStoreMockRecorder) GetClosedWorkflowExecution(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClosedWorkflowExecution", reflect.TypeOf((*MockVisibilityStore)(nil).GetClosedWorkflowExecution), request)
-}
-
 // GetName mocks base method.
 func (m *MockVisibilityStore) GetName() string {
 	m.ctrl.T.Helper()

@@ -365,44 +365,6 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, isRecordValid)
 }
 
-func (s *visibilityStore) GetClosedWorkflowExecution(
-	request *visibility.GetClosedWorkflowExecutionRequest) (*visibility.InternalGetClosedWorkflowExecutionResponse, error) {
-
-	boolQuery := elastic.NewBoolQuery().
-		Filter(
-			elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID),
-			elastic.NewTermQuery(searchattribute.WorkflowID, request.Execution.GetWorkflowId())).
-		MustNot(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
-	rid := request.Execution.GetRunId()
-	if rid != "" {
-		boolQuery = boolQuery.Filter(elastic.NewTermQuery(searchattribute.RunID, rid))
-	}
-
-	ctx := context.Background()
-	params := &esclient.SearchParameters{
-		Index: s.index,
-		Query: boolQuery,
-	}
-	searchResult, err := s.esClient.Search(ctx, params)
-	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetClosedWorkflowExecution failed. Error: %s", detailedErrorMessage(err)))
-	}
-
-	response := &visibility.InternalGetClosedWorkflowExecutionResponse{}
-	if len(searchResult.Hits.Hits) == 0 {
-		return response, nil
-	}
-
-	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
-	if err != nil {
-		s.logger.Error("Unable to read search attribute types.", tag.Error(err))
-		return nil, err
-	}
-
-	response.Execution = s.parseESDoc(searchResult.Hits.Hits[0], typeMap)
-	return response, nil
-}
-
 func (s *visibilityStore) ListWorkflowExecutions(
 	request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 

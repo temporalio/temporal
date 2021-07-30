@@ -25,6 +25,8 @@
 package history
 
 import (
+	"context"
+
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/collection"
@@ -189,9 +191,10 @@ func (t *transferQueueStandbyProcessorImpl) complete(
 }
 
 func (t *transferQueueStandbyProcessorImpl) process(
+	ctx context.Context,
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
 	metricScope := getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), false)
-	return metricScope, t.taskExecutor.execute(taskInfo.task, taskInfo.shouldProcessTask)
+	return metricScope, t.taskExecutor.execute(ctx, taskInfo.task, taskInfo.shouldProcessTask)
 }

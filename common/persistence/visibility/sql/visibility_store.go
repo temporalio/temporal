@@ -26,7 +26,6 @@ package sql
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -65,7 +64,7 @@ func newVisibilityContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, visibilityTimeout)
 }
 
-// NewSQLVisibilityStore creates an instance of ExecutionStore
+// NewSQLVisibilityStore creates an instance of VisibilityStore
 func NewSQLVisibilityStore(
 	cfg config.SQL,
 	r resolver.ServiceResolver,
@@ -299,29 +298,6 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 				PageSize:    &request.PageSize,
 			})
 		})
-}
-
-func (s *visibilityStore) GetClosedWorkflowExecution(
-	request *visibility.GetClosedWorkflowExecutionRequest,
-) (*visibility.InternalGetClosedWorkflowExecutionResponse, error) {
-	ctx, cancel := newVisibilityContext()
-	defer cancel()
-	execution := request.Execution
-	rows, err := s.sqlStore.Db.SelectFromVisibility(ctx, sqlplugin.VisibilitySelectFilter{
-		NamespaceID: request.NamespaceID,
-		RunID:       &execution.RunId,
-	})
-	switch err {
-	case nil:
-		rows[0].NamespaceID = request.NamespaceID
-		rows[0].RunID = execution.GetRunId()
-		rows[0].WorkflowID = execution.GetWorkflowId()
-		return &visibility.InternalGetClosedWorkflowExecutionResponse{Execution: s.rowToInfo(&rows[0])}, nil
-	case sql.ErrNoRows:
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow execution not found.  WorkflowId: %v, RunId: %v", execution.GetWorkflowId(), execution.GetRunId()))
-	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetClosedWorkflowExecution operation failed. Select failed: %v", err))
-	}
 }
 
 func (s *visibilityStore) DeleteWorkflowExecution(

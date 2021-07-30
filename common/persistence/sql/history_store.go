@@ -30,19 +30,10 @@ import (
 	"math"
 
 	commonpb "go.temporal.io/api/common/v1"
-
 	"go.temporal.io/api/serviceerror"
-
-	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
-)
-
-type (
-	sqlHistoryV2Manager struct {
-		SqlStore
-	}
 )
 
 const (
@@ -50,19 +41,8 @@ const (
 	MinTxnID = math.MaxInt64
 )
 
-// newHistoryV2Persistence creates an instance of HistoryManager
-func newHistoryV2Persistence(
-	db sqlplugin.DB,
-	logger log.Logger,
-) (p.HistoryStore, error) {
-
-	return &sqlHistoryV2Manager{
-		SqlStore: NewSqlStore(db, logger),
-	}, nil
-}
-
 // AppendHistoryNodes add(or override) a node to a history branch
-func (m *sqlHistoryV2Manager) AppendHistoryNodes(
+func (m *sqlExecutionStore) AppendHistoryNodes(
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -138,7 +118,7 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 	})
 }
 
-func (m *sqlHistoryV2Manager) DeleteHistoryNodes(
+func (m *sqlExecutionStore) DeleteHistoryNodes(
 	request *p.InternalDeleteHistoryNodesRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -179,7 +159,7 @@ func (m *sqlHistoryV2Manager) DeleteHistoryNodes(
 }
 
 // ReadHistoryBranch returns history node data for a branch
-func (m *sqlHistoryV2Manager) ReadHistoryBranch(
+func (m *sqlExecutionStore) ReadHistoryBranch(
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -303,7 +283,7 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 //       \
 //       8[8,9]
 //
-func (m *sqlHistoryV2Manager) ForkHistoryBranch(
+func (m *sqlExecutionStore) ForkHistoryBranch(
 	request *p.InternalForkHistoryBranchRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -343,7 +323,7 @@ func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 }
 
 // DeleteHistoryBranch removes a branch
-func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
+func (m *sqlExecutionStore) DeleteHistoryBranch(
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -390,7 +370,7 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 	})
 }
 
-func (m *sqlHistoryV2Manager) GetAllHistoryTreeBranches(
+func (m *sqlExecutionStore) GetAllHistoryTreeBranches(
 	request *p.GetAllHistoryTreeBranchesRequest,
 ) (*p.InternalGetAllHistoryTreeBranchesResponse, error) {
 
@@ -400,7 +380,7 @@ func (m *sqlHistoryV2Manager) GetAllHistoryTreeBranches(
 }
 
 // GetHistoryTree returns all branch information of a tree
-func (m *sqlHistoryV2Manager) GetHistoryTree(
+func (m *sqlExecutionStore) GetHistoryTree(
 	request *p.GetHistoryTreeRequest,
 ) (*p.InternalGetHistoryTreeResponse, error) {
 	ctx, cancel := newExecutionContext()

@@ -25,6 +25,8 @@
 package history
 
 import (
+	"context"
+
 	"github.com/pborman/uuid"
 	"go.temporal.io/server/common/persistence/visibility"
 
@@ -321,9 +323,10 @@ func (t *transferQueueActiveProcessorImpl) complete(
 }
 
 func (t *transferQueueActiveProcessorImpl) process(
+	ctx context.Context,
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
 	metricScope := getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), true)
-	return metricScope, t.taskExecutor.execute(taskInfo.task, taskInfo.shouldProcessTask)
+	return metricScope, t.taskExecutor.execute(ctx, taskInfo.task, taskInfo.shouldProcessTask)
 }

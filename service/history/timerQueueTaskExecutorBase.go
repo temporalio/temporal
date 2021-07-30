@@ -76,11 +76,14 @@ func newTimerQueueTaskExecutorBase(
 }
 
 func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
+	ctx context.Context,
 	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
 
-	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
 	defer cancel()
+
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
 	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,

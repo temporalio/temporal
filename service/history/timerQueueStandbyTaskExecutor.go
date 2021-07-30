@@ -82,6 +82,7 @@ func newTimerQueueStandbyTaskExecutor(
 }
 
 func (t *timerQueueStandbyTaskExecutor) execute(
+	ctx context.Context,
 	taskInfo queueTaskInfo,
 	shouldProcessTask bool,
 ) error {
@@ -100,27 +101,28 @@ func (t *timerQueueStandbyTaskExecutor) execute(
 
 	switch timerTask.TaskType {
 	case enumsspb.TASK_TYPE_USER_TIMER:
-		return t.executeUserTimerTimeoutTask(timerTask)
+		return t.executeUserTimerTimeoutTask(ctx, timerTask)
 	case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT:
-		return t.executeActivityTimeoutTask(timerTask)
+		return t.executeActivityTimeoutTask(ctx, timerTask)
 	case enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
-		return t.executeWorkflowTaskTimeoutTask(timerTask)
+		return t.executeWorkflowTaskTimeoutTask(ctx, timerTask)
 	case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
-		return t.executeWorkflowTimeoutTask(timerTask)
+		return t.executeWorkflowTimeoutTask(ctx, timerTask)
 	case enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
 		// retry backoff timer should not get created on passive cluster
 		// TODO: add error logs
 		return nil
 	case enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
-		return t.executeWorkflowBackoffTimerTask(timerTask)
+		return t.executeWorkflowBackoffTimerTask(ctx, timerTask)
 	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT:
-		return t.executeDeleteHistoryEventTask(timerTask)
+		return t.executeDeleteHistoryEventTask(ctx, timerTask)
 	default:
 		return errUnknownTimerTask
 	}
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
+	ctx context.Context,
 	timerTask *persistencespb.TimerTaskInfo,
 ) error {
 
@@ -152,6 +154,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 	}
 
 	return t.processTimer(
+		ctx,
 		timerTask,
 		actionFn,
 		getStandbyPostActionFn(
@@ -166,6 +169,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
+	ctx context.Context,
 	timerTask *persistencespb.TimerTaskInfo,
 ) error {
 
@@ -255,6 +259,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 	}
 
 	return t.processTimer(
+		ctx,
 		timerTask,
 		actionFn,
 		getStandbyPostActionFn(
@@ -269,6 +274,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
+	ctx context.Context,
 	timerTask *persistencespb.TimerTaskInfo,
 ) error {
 
@@ -295,6 +301,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 	}
 
 	return t.processTimer(
+		ctx,
 		timerTask,
 		actionFn,
 		getStandbyPostActionFn(
@@ -309,6 +316,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
+	ctx context.Context,
 	timerTask *persistencespb.TimerTaskInfo,
 ) error {
 
@@ -334,6 +342,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 	}
 
 	return t.processTimer(
+		ctx,
 		timerTask,
 		actionFn,
 		getStandbyPostActionFn(
@@ -348,6 +357,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
+	ctx context.Context,
 	timerTask *persistencespb.TimerTaskInfo,
 ) error {
 
@@ -369,6 +379,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 	}
 
 	return t.processTimer(
+		ctx,
 		timerTask,
 		actionFn,
 		getStandbyPostActionFn(
@@ -399,12 +410,14 @@ func (t *timerQueueStandbyTaskExecutor) getTimerSequence(
 }
 
 func (t *timerQueueStandbyTaskExecutor) processTimer(
+	ctx context.Context,
 	timerTask *persistencespb.TimerTaskInfo,
 	actionFn standbyActionFn,
 	postActionFn standbyPostActionFn,
 ) (retError error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
 
-	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(timerTask)
 	context, release, err := t.cache.GetOrCreateWorkflowExecution(

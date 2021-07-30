@@ -219,10 +219,6 @@ func (p *visibilitySamplingClient) ListClosedWorkflowExecutionsByStatus(request 
 	return p.persistence.ListClosedWorkflowExecutionsByStatus(request)
 }
 
-func (p *visibilitySamplingClient) GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error) {
-	return p.persistence.GetClosedWorkflowExecution(request)
-}
-
 func (p *visibilitySamplingClient) DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error {
 	return p.persistence.DeleteWorkflowExecution(request)
 }

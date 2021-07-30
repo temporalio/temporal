@@ -39,6 +39,11 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
+const (
+	maxConcurrentActivityTaskPollers = 8
+	maxConcurrentWorkflowTaskPollers = 8
+)
+
 type (
 	// BootstrapParams contains the set of params needed to bootstrap
 	// the sub-system
@@ -76,7 +81,9 @@ func New(params *BootstrapParams) *Processor {
 func (s *Processor) Start() error {
 	ctx := context.WithValue(context.Background(), processorContextKey, s)
 	workerOpts := worker.Options{
-		BackgroundActivityContext: ctx,
+		MaxConcurrentActivityTaskPollers: maxConcurrentActivityTaskPollers,
+		MaxConcurrentWorkflowTaskPollers: maxConcurrentWorkflowTaskPollers,
+		BackgroundActivityContext:        ctx,
 	}
 	processorWorker := worker.New(s.svcClient, processorTaskQueueName, workerOpts)
 

@@ -742,16 +742,16 @@ func newShardPersistence(
 	}, nil
 }
 
-// NewWorkflowExecutionPersistence is used to create an instance of workflowExecutionManager implementation
-func NewWorkflowExecutionPersistence(
+// NewExecutionStore is used to create an instance of workflowExecutionManager implementation
+func NewExecutionStore(
 	shardID int32,
 	session gocql.Session,
 	logger log.Logger,
-) (p.ExecutionStore, error) {
+) p.ExecutionStore {
 	return &cassandraPersistence{
 		cassandraStore: cassandraStore{session: session, logger: logger},
 		shardID:        shardID,
-	}, nil
+	}
 }
 
 // newTaskPersistence is used to create an instance of TaskManager implementation

@@ -647,6 +647,20 @@ func (mr *MockExecutionStoreMockRecorder) AddTasks(request interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockExecutionStore)(nil).AddTasks), request)
 }
 
+// AppendHistoryNodes mocks base method.
+func (m *MockExecutionStore) AppendHistoryNodes(request *persistence.InternalAppendHistoryNodesRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AppendHistoryNodes", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AppendHistoryNodes indicates an expected call of AppendHistoryNodes.
+func (mr *MockExecutionStoreMockRecorder) AppendHistoryNodes(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendHistoryNodes", reflect.TypeOf((*MockExecutionStore)(nil).AppendHistoryNodes), request)
+}
+
 // Close mocks base method.
 func (m *MockExecutionStore) Close() {
 	m.ctrl.T.Helper()
@@ -758,6 +772,34 @@ func (mr *MockExecutionStoreMockRecorder) DeleteCurrentWorkflowExecution(request
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCurrentWorkflowExecution", reflect.TypeOf((*MockExecutionStore)(nil).DeleteCurrentWorkflowExecution), request)
 }
 
+// DeleteHistoryBranch mocks base method.
+func (m *MockExecutionStore) DeleteHistoryBranch(request *persistence.InternalDeleteHistoryBranchRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteHistoryBranch", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteHistoryBranch indicates an expected call of DeleteHistoryBranch.
+func (mr *MockExecutionStoreMockRecorder) DeleteHistoryBranch(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteHistoryBranch", reflect.TypeOf((*MockExecutionStore)(nil).DeleteHistoryBranch), request)
+}
+
+// DeleteHistoryNodes mocks base method.
+func (m *MockExecutionStore) DeleteHistoryNodes(request *persistence.InternalDeleteHistoryNodesRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteHistoryNodes", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteHistoryNodes indicates an expected call of DeleteHistoryNodes.
+func (mr *MockExecutionStoreMockRecorder) DeleteHistoryNodes(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteHistoryNodes", reflect.TypeOf((*MockExecutionStore)(nil).DeleteHistoryNodes), request)
+}
+
 // DeleteReplicationTaskFromDLQ mocks base method.
 func (m *MockExecutionStore) DeleteReplicationTaskFromDLQ(request *persistence.DeleteReplicationTaskFromDLQRequest) error {
 	m.ctrl.T.Helper()
@@ -786,6 +828,35 @@ func (mr *MockExecutionStoreMockRecorder) DeleteWorkflowExecution(request interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockExecutionStore)(nil).DeleteWorkflowExecution), request)
 }
 
+// ForkHistoryBranch mocks base method.
+func (m *MockExecutionStore) ForkHistoryBranch(request *persistence.InternalForkHistoryBranchRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ForkHistoryBranch", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ForkHistoryBranch indicates an expected call of ForkHistoryBranch.
+func (mr *MockExecutionStoreMockRecorder) ForkHistoryBranch(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForkHistoryBranch", reflect.TypeOf((*MockExecutionStore)(nil).ForkHistoryBranch), request)
+}
+
+// GetAllHistoryTreeBranches mocks base method.
+func (m *MockExecutionStore) GetAllHistoryTreeBranches(request *persistence.GetAllHistoryTreeBranchesRequest) (*persistence.InternalGetAllHistoryTreeBranchesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAllHistoryTreeBranches", request)
+	ret0, _ := ret[0].(*persistence.InternalGetAllHistoryTreeBranchesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAllHistoryTreeBranches indicates an expected call of GetAllHistoryTreeBranches.
+func (mr *MockExecutionStoreMockRecorder) GetAllHistoryTreeBranches(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllHistoryTreeBranches", reflect.TypeOf((*MockExecutionStore)(nil).GetAllHistoryTreeBranches), request)
+}
+
 // GetCurrentExecution mocks base method.
 func (m *MockExecutionStore) GetCurrentExecution(request *persistence.GetCurrentExecutionRequest) (*persistence.InternalGetCurrentExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -799,6 +870,21 @@ func (m *MockExecutionStore) GetCurrentExecution(request *persistence.GetCurrent
 func (mr *MockExecutionStoreMockRecorder) GetCurrentExecution(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentExecution", reflect.TypeOf((*MockExecutionStore)(nil).GetCurrentExecution), request)
+}
+
+// GetHistoryTree mocks base method.
+func (m *MockExecutionStore) GetHistoryTree(request *persistence.GetHistoryTreeRequest) (*persistence.InternalGetHistoryTreeResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHistoryTree", request)
+	ret0, _ := ret[0].(*persistence.InternalGetHistoryTreeResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetHistoryTree indicates an expected call of GetHistoryTree.
+func (mr *MockExecutionStoreMockRecorder) GetHistoryTree(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTree", reflect.TypeOf((*MockExecutionStore)(nil).GetHistoryTree), request)
 }
 
 // GetName mocks base method.
@@ -1078,6 +1164,21 @@ func (mr *MockExecutionStoreMockRecorder) RangeDeleteReplicationTaskFromDLQ(requ
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeDeleteReplicationTaskFromDLQ", reflect.TypeOf((*MockExecutionStore)(nil).RangeDeleteReplicationTaskFromDLQ), request)
 }
 
+// ReadHistoryBranch mocks base method.
+func (m *MockExecutionStore) ReadHistoryBranch(request *persistence.InternalReadHistoryBranchRequest) (*persistence.InternalReadHistoryBranchResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadHistoryBranch", request)
+	ret0, _ := ret[0].(*persistence.InternalReadHistoryBranchResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadHistoryBranch indicates an expected call of ReadHistoryBranch.
+func (mr *MockExecutionStoreMockRecorder) ReadHistoryBranch(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadHistoryBranch", reflect.TypeOf((*MockExecutionStore)(nil).ReadHistoryBranch), request)
+}
+
 // UpdateWorkflowExecution mocks base method.
 func (m *MockExecutionStore) UpdateWorkflowExecution(request *persistence.InternalUpdateWorkflowExecutionRequest) error {
 	m.ctrl.T.Helper()
@@ -1090,156 +1191,6 @@ func (m *MockExecutionStore) UpdateWorkflowExecution(request *persistence.Intern
 func (mr *MockExecutionStoreMockRecorder) UpdateWorkflowExecution(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecution", reflect.TypeOf((*MockExecutionStore)(nil).UpdateWorkflowExecution), request)
-}
-
-// MockHistoryStore is a mock of HistoryStore interface.
-type MockHistoryStore struct {
-	ctrl     *gomock.Controller
-	recorder *MockHistoryStoreMockRecorder
-}
-
-// MockHistoryStoreMockRecorder is the mock recorder for MockHistoryStore.
-type MockHistoryStoreMockRecorder struct {
-	mock *MockHistoryStore
-}
-
-// NewMockHistoryStore creates a new mock instance.
-func NewMockHistoryStore(ctrl *gomock.Controller) *MockHistoryStore {
-	mock := &MockHistoryStore{ctrl: ctrl}
-	mock.recorder = &MockHistoryStoreMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockHistoryStore) EXPECT() *MockHistoryStoreMockRecorder {
-	return m.recorder
-}
-
-// AppendHistoryNodes mocks base method.
-func (m *MockHistoryStore) AppendHistoryNodes(request *persistence.InternalAppendHistoryNodesRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AppendHistoryNodes", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AppendHistoryNodes indicates an expected call of AppendHistoryNodes.
-func (mr *MockHistoryStoreMockRecorder) AppendHistoryNodes(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendHistoryNodes", reflect.TypeOf((*MockHistoryStore)(nil).AppendHistoryNodes), request)
-}
-
-// Close mocks base method.
-func (m *MockHistoryStore) Close() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Close")
-}
-
-// Close indicates an expected call of Close.
-func (mr *MockHistoryStoreMockRecorder) Close() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockHistoryStore)(nil).Close))
-}
-
-// DeleteHistoryBranch mocks base method.
-func (m *MockHistoryStore) DeleteHistoryBranch(request *persistence.InternalDeleteHistoryBranchRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteHistoryBranch", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DeleteHistoryBranch indicates an expected call of DeleteHistoryBranch.
-func (mr *MockHistoryStoreMockRecorder) DeleteHistoryBranch(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteHistoryBranch", reflect.TypeOf((*MockHistoryStore)(nil).DeleteHistoryBranch), request)
-}
-
-// DeleteHistoryNodes mocks base method.
-func (m *MockHistoryStore) DeleteHistoryNodes(request *persistence.InternalDeleteHistoryNodesRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteHistoryNodes", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DeleteHistoryNodes indicates an expected call of DeleteHistoryNodes.
-func (mr *MockHistoryStoreMockRecorder) DeleteHistoryNodes(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteHistoryNodes", reflect.TypeOf((*MockHistoryStore)(nil).DeleteHistoryNodes), request)
-}
-
-// ForkHistoryBranch mocks base method.
-func (m *MockHistoryStore) ForkHistoryBranch(request *persistence.InternalForkHistoryBranchRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ForkHistoryBranch", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ForkHistoryBranch indicates an expected call of ForkHistoryBranch.
-func (mr *MockHistoryStoreMockRecorder) ForkHistoryBranch(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForkHistoryBranch", reflect.TypeOf((*MockHistoryStore)(nil).ForkHistoryBranch), request)
-}
-
-// GetAllHistoryTreeBranches mocks base method.
-func (m *MockHistoryStore) GetAllHistoryTreeBranches(request *persistence.GetAllHistoryTreeBranchesRequest) (*persistence.InternalGetAllHistoryTreeBranchesResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAllHistoryTreeBranches", request)
-	ret0, _ := ret[0].(*persistence.InternalGetAllHistoryTreeBranchesResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetAllHistoryTreeBranches indicates an expected call of GetAllHistoryTreeBranches.
-func (mr *MockHistoryStoreMockRecorder) GetAllHistoryTreeBranches(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllHistoryTreeBranches", reflect.TypeOf((*MockHistoryStore)(nil).GetAllHistoryTreeBranches), request)
-}
-
-// GetHistoryTree mocks base method.
-func (m *MockHistoryStore) GetHistoryTree(request *persistence.GetHistoryTreeRequest) (*persistence.InternalGetHistoryTreeResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetHistoryTree", request)
-	ret0, _ := ret[0].(*persistence.InternalGetHistoryTreeResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetHistoryTree indicates an expected call of GetHistoryTree.
-func (mr *MockHistoryStoreMockRecorder) GetHistoryTree(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTree", reflect.TypeOf((*MockHistoryStore)(nil).GetHistoryTree), request)
-}
-
-// GetName mocks base method.
-func (m *MockHistoryStore) GetName() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetName")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// GetName indicates an expected call of GetName.
-func (mr *MockHistoryStoreMockRecorder) GetName() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockHistoryStore)(nil).GetName))
-}
-
-// ReadHistoryBranch mocks base method.
-func (m *MockHistoryStore) ReadHistoryBranch(request *persistence.InternalReadHistoryBranchRequest) (*persistence.InternalReadHistoryBranchResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReadHistoryBranch", request)
-	ret0, _ := ret[0].(*persistence.InternalReadHistoryBranchResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ReadHistoryBranch indicates an expected call of ReadHistoryBranch.
-func (mr *MockHistoryStoreMockRecorder) ReadHistoryBranch(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadHistoryBranch", reflect.TypeOf((*MockHistoryStore)(nil).ReadHistoryBranch), request)
 }
 
 // MockQueue is a mock of Queue interface.
