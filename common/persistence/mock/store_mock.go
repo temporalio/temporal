@@ -610,31 +610,31 @@ func (mr *MockClusterMetadataStoreMockRecorder) UpsertClusterMembership(request 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertClusterMembership", reflect.TypeOf((*MockClusterMetadataStore)(nil).UpsertClusterMembership), request)
 }
 
-// MockExecutionStore is a mock of ExecutionStore interface.
-type MockExecutionStore struct {
+// MockWorkflowStore is a mock of WorkflowStore interface.
+type MockWorkflowStore struct {
 	ctrl     *gomock.Controller
-	recorder *MockExecutionStoreMockRecorder
+	recorder *MockWorkflowStoreMockRecorder
 }
 
-// MockExecutionStoreMockRecorder is the mock recorder for MockExecutionStore.
-type MockExecutionStoreMockRecorder struct {
-	mock *MockExecutionStore
+// MockWorkflowStoreMockRecorder is the mock recorder for MockWorkflowStore.
+type MockWorkflowStoreMockRecorder struct {
+	mock *MockWorkflowStore
 }
 
-// NewMockExecutionStore creates a new mock instance.
-func NewMockExecutionStore(ctrl *gomock.Controller) *MockExecutionStore {
-	mock := &MockExecutionStore{ctrl: ctrl}
-	mock.recorder = &MockExecutionStoreMockRecorder{mock}
+// NewMockWorkflowStore creates a new mock instance.
+func NewMockWorkflowStore(ctrl *gomock.Controller) *MockWorkflowStore {
+	mock := &MockWorkflowStore{ctrl: ctrl}
+	mock.recorder = &MockWorkflowStoreMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockExecutionStore) EXPECT() *MockExecutionStoreMockRecorder {
+func (m *MockWorkflowStore) EXPECT() *MockWorkflowStoreMockRecorder {
 	return m.recorder
 }
 
 // AddTasks mocks base method.
-func (m *MockExecutionStore) AddTasks(request *persistence.AddTasksRequest) error {
+func (m *MockWorkflowStore) AddTasks(request *persistence.AddTasksRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddTasks", request)
 	ret0, _ := ret[0].(error)
@@ -642,25 +642,39 @@ func (m *MockExecutionStore) AddTasks(request *persistence.AddTasksRequest) erro
 }
 
 // AddTasks indicates an expected call of AddTasks.
-func (mr *MockExecutionStoreMockRecorder) AddTasks(request interface{}) *gomock.Call {
+func (mr *MockWorkflowStoreMockRecorder) AddTasks(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockExecutionStore)(nil).AddTasks), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockWorkflowStore)(nil).AddTasks), request)
+}
+
+// AppendHistoryNodes mocks base method.
+func (m *MockWorkflowStore) AppendHistoryNodes(request *persistence.InternalAppendHistoryNodesRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AppendHistoryNodes", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AppendHistoryNodes indicates an expected call of AppendHistoryNodes.
+func (mr *MockWorkflowStoreMockRecorder) AppendHistoryNodes(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendHistoryNodes", reflect.TypeOf((*MockWorkflowStore)(nil).AppendHistoryNodes), request)
 }
 
 // Close mocks base method.
-func (m *MockExecutionStore) Close() {
+func (m *MockWorkflowStore) Close() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Close")
 }
 
 // Close indicates an expected call of Close.
-func (mr *MockExecutionStoreMockRecorder) Close() *gomock.Call {
+func (mr *MockWorkflowStoreMockRecorder) Close() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockExecutionStore)(nil).Close))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockWorkflowStore)(nil).Close))
 }
 
 // CompleteReplicationTask mocks base method.
-func (m *MockExecutionStore) CompleteReplicationTask(request *persistence.CompleteReplicationTaskRequest) error {
+func (m *MockWorkflowStore) CompleteReplicationTask(request *persistence.CompleteReplicationTaskRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CompleteReplicationTask", request)
 	ret0, _ := ret[0].(error)
@@ -668,13 +682,13 @@ func (m *MockExecutionStore) CompleteReplicationTask(request *persistence.Comple
 }
 
 // CompleteReplicationTask indicates an expected call of CompleteReplicationTask.
-func (mr *MockExecutionStoreMockRecorder) CompleteReplicationTask(request interface{}) *gomock.Call {
+func (mr *MockWorkflowStoreMockRecorder) CompleteReplicationTask(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteReplicationTask", reflect.TypeOf((*MockExecutionStore)(nil).CompleteReplicationTask), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteReplicationTask", reflect.TypeOf((*MockWorkflowStore)(nil).CompleteReplicationTask), request)
 }
 
 // CompleteTimerTask mocks base method.
-func (m *MockExecutionStore) CompleteTimerTask(request *persistence.CompleteTimerTaskRequest) error {
+func (m *MockWorkflowStore) CompleteTimerTask(request *persistence.CompleteTimerTaskRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CompleteTimerTask", request)
 	ret0, _ := ret[0].(error)
@@ -682,13 +696,13 @@ func (m *MockExecutionStore) CompleteTimerTask(request *persistence.CompleteTime
 }
 
 // CompleteTimerTask indicates an expected call of CompleteTimerTask.
-func (mr *MockExecutionStoreMockRecorder) CompleteTimerTask(request interface{}) *gomock.Call {
+func (mr *MockWorkflowStoreMockRecorder) CompleteTimerTask(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTimerTask", reflect.TypeOf((*MockExecutionStore)(nil).CompleteTimerTask), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTimerTask", reflect.TypeOf((*MockWorkflowStore)(nil).CompleteTimerTask), request)
 }
 
 // CompleteTransferTask mocks base method.
-func (m *MockExecutionStore) CompleteTransferTask(request *persistence.CompleteTransferTaskRequest) error {
+func (m *MockWorkflowStore) CompleteTransferTask(request *persistence.CompleteTransferTaskRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CompleteTransferTask", request)
 	ret0, _ := ret[0].(error)
@@ -696,13 +710,13 @@ func (m *MockExecutionStore) CompleteTransferTask(request *persistence.CompleteT
 }
 
 // CompleteTransferTask indicates an expected call of CompleteTransferTask.
-func (mr *MockExecutionStoreMockRecorder) CompleteTransferTask(request interface{}) *gomock.Call {
+func (mr *MockWorkflowStoreMockRecorder) CompleteTransferTask(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTransferTask", reflect.TypeOf((*MockExecutionStore)(nil).CompleteTransferTask), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTransferTask", reflect.TypeOf((*MockWorkflowStore)(nil).CompleteTransferTask), request)
 }
 
 // CompleteVisibilityTask mocks base method.
-func (m *MockExecutionStore) CompleteVisibilityTask(request *persistence.CompleteVisibilityTaskRequest) error {
+func (m *MockWorkflowStore) CompleteVisibilityTask(request *persistence.CompleteVisibilityTaskRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CompleteVisibilityTask", request)
 	ret0, _ := ret[0].(error)
@@ -710,13 +724,13 @@ func (m *MockExecutionStore) CompleteVisibilityTask(request *persistence.Complet
 }
 
 // CompleteVisibilityTask indicates an expected call of CompleteVisibilityTask.
-func (mr *MockExecutionStoreMockRecorder) CompleteVisibilityTask(request interface{}) *gomock.Call {
+func (mr *MockWorkflowStoreMockRecorder) CompleteVisibilityTask(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteVisibilityTask", reflect.TypeOf((*MockExecutionStore)(nil).CompleteVisibilityTask), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteVisibilityTask", reflect.TypeOf((*MockWorkflowStore)(nil).CompleteVisibilityTask), request)
 }
 
 // ConflictResolveWorkflowExecution mocks base method.
-func (m *MockExecutionStore) ConflictResolveWorkflowExecution(request *persistence.InternalConflictResolveWorkflowExecutionRequest) error {
+func (m *MockWorkflowStore) ConflictResolveWorkflowExecution(request *persistence.InternalConflictResolveWorkflowExecutionRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConflictResolveWorkflowExecution", request)
 	ret0, _ := ret[0].(error)
@@ -724,13 +738,13 @@ func (m *MockExecutionStore) ConflictResolveWorkflowExecution(request *persisten
 }
 
 // ConflictResolveWorkflowExecution indicates an expected call of ConflictResolveWorkflowExecution.
-func (mr *MockExecutionStoreMockRecorder) ConflictResolveWorkflowExecution(request interface{}) *gomock.Call {
+func (mr *MockWorkflowStoreMockRecorder) ConflictResolveWorkflowExecution(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConflictResolveWorkflowExecution", reflect.TypeOf((*MockExecutionStore)(nil).ConflictResolveWorkflowExecution), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConflictResolveWorkflowExecution", reflect.TypeOf((*MockWorkflowStore)(nil).ConflictResolveWorkflowExecution), request)
 }
 
 // CreateWorkflowExecution mocks base method.
-func (m *MockExecutionStore) CreateWorkflowExecution(request *persistence.InternalCreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
+func (m *MockWorkflowStore) CreateWorkflowExecution(request *persistence.InternalCreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateWorkflowExecution", request)
 	ret0, _ := ret[0].(*persistence.CreateWorkflowExecutionResponse)
@@ -739,13 +753,13 @@ func (m *MockExecutionStore) CreateWorkflowExecution(request *persistence.Intern
 }
 
 // CreateWorkflowExecution indicates an expected call of CreateWorkflowExecution.
-func (mr *MockExecutionStoreMockRecorder) CreateWorkflowExecution(request interface{}) *gomock.Call {
+func (mr *MockWorkflowStoreMockRecorder) CreateWorkflowExecution(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockExecutionStore)(nil).CreateWorkflowExecution), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockWorkflowStore)(nil).CreateWorkflowExecution), request)
 }
 
 // DeleteCurrentWorkflowExecution mocks base method.
-func (m *MockExecutionStore) DeleteCurrentWorkflowExecution(request *persistence.DeleteCurrentWorkflowExecutionRequest) error {
+func (m *MockWorkflowStore) DeleteCurrentWorkflowExecution(request *persistence.DeleteCurrentWorkflowExecutionRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteCurrentWorkflowExecution", request)
 	ret0, _ := ret[0].(error)
@@ -753,396 +767,13 @@ func (m *MockExecutionStore) DeleteCurrentWorkflowExecution(request *persistence
 }
 
 // DeleteCurrentWorkflowExecution indicates an expected call of DeleteCurrentWorkflowExecution.
-func (mr *MockExecutionStoreMockRecorder) DeleteCurrentWorkflowExecution(request interface{}) *gomock.Call {
+func (mr *MockWorkflowStoreMockRecorder) DeleteCurrentWorkflowExecution(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCurrentWorkflowExecution", reflect.TypeOf((*MockExecutionStore)(nil).DeleteCurrentWorkflowExecution), request)
-}
-
-// DeleteReplicationTaskFromDLQ mocks base method.
-func (m *MockExecutionStore) DeleteReplicationTaskFromDLQ(request *persistence.DeleteReplicationTaskFromDLQRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteReplicationTaskFromDLQ", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DeleteReplicationTaskFromDLQ indicates an expected call of DeleteReplicationTaskFromDLQ.
-func (mr *MockExecutionStoreMockRecorder) DeleteReplicationTaskFromDLQ(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteReplicationTaskFromDLQ", reflect.TypeOf((*MockExecutionStore)(nil).DeleteReplicationTaskFromDLQ), request)
-}
-
-// DeleteWorkflowExecution mocks base method.
-func (m *MockExecutionStore) DeleteWorkflowExecution(request *persistence.DeleteWorkflowExecutionRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
-func (mr *MockExecutionStoreMockRecorder) DeleteWorkflowExecution(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockExecutionStore)(nil).DeleteWorkflowExecution), request)
-}
-
-// GetCurrentExecution mocks base method.
-func (m *MockExecutionStore) GetCurrentExecution(request *persistence.GetCurrentExecutionRequest) (*persistence.InternalGetCurrentExecutionResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCurrentExecution", request)
-	ret0, _ := ret[0].(*persistence.InternalGetCurrentExecutionResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetCurrentExecution indicates an expected call of GetCurrentExecution.
-func (mr *MockExecutionStoreMockRecorder) GetCurrentExecution(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentExecution", reflect.TypeOf((*MockExecutionStore)(nil).GetCurrentExecution), request)
-}
-
-// GetName mocks base method.
-func (m *MockExecutionStore) GetName() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetName")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// GetName indicates an expected call of GetName.
-func (mr *MockExecutionStoreMockRecorder) GetName() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockExecutionStore)(nil).GetName))
-}
-
-// GetReplicationTask mocks base method.
-func (m *MockExecutionStore) GetReplicationTask(request *persistence.GetReplicationTaskRequest) (*persistence.GetReplicationTaskResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReplicationTask", request)
-	ret0, _ := ret[0].(*persistence.GetReplicationTaskResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetReplicationTask indicates an expected call of GetReplicationTask.
-func (mr *MockExecutionStoreMockRecorder) GetReplicationTask(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTask", reflect.TypeOf((*MockExecutionStore)(nil).GetReplicationTask), request)
-}
-
-// GetReplicationTasks mocks base method.
-func (m *MockExecutionStore) GetReplicationTasks(request *persistence.GetReplicationTasksRequest) (*persistence.GetReplicationTasksResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReplicationTasks", request)
-	ret0, _ := ret[0].(*persistence.GetReplicationTasksResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetReplicationTasks indicates an expected call of GetReplicationTasks.
-func (mr *MockExecutionStoreMockRecorder) GetReplicationTasks(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTasks", reflect.TypeOf((*MockExecutionStore)(nil).GetReplicationTasks), request)
-}
-
-// GetReplicationTasksFromDLQ mocks base method.
-func (m *MockExecutionStore) GetReplicationTasksFromDLQ(request *persistence.GetReplicationTasksFromDLQRequest) (*persistence.GetReplicationTasksFromDLQResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReplicationTasksFromDLQ", request)
-	ret0, _ := ret[0].(*persistence.GetReplicationTasksFromDLQResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetReplicationTasksFromDLQ indicates an expected call of GetReplicationTasksFromDLQ.
-func (mr *MockExecutionStoreMockRecorder) GetReplicationTasksFromDLQ(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTasksFromDLQ", reflect.TypeOf((*MockExecutionStore)(nil).GetReplicationTasksFromDLQ), request)
-}
-
-// GetShardID mocks base method.
-func (m *MockExecutionStore) GetShardID() int32 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetShardID")
-	ret0, _ := ret[0].(int32)
-	return ret0
-}
-
-// GetShardID indicates an expected call of GetShardID.
-func (mr *MockExecutionStoreMockRecorder) GetShardID() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShardID", reflect.TypeOf((*MockExecutionStore)(nil).GetShardID))
-}
-
-// GetTimerIndexTasks mocks base method.
-func (m *MockExecutionStore) GetTimerIndexTasks(request *persistence.GetTimerIndexTasksRequest) (*persistence.GetTimerIndexTasksResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTimerIndexTasks", request)
-	ret0, _ := ret[0].(*persistence.GetTimerIndexTasksResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetTimerIndexTasks indicates an expected call of GetTimerIndexTasks.
-func (mr *MockExecutionStoreMockRecorder) GetTimerIndexTasks(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimerIndexTasks", reflect.TypeOf((*MockExecutionStore)(nil).GetTimerIndexTasks), request)
-}
-
-// GetTimerTask mocks base method.
-func (m *MockExecutionStore) GetTimerTask(request *persistence.GetTimerTaskRequest) (*persistence.GetTimerTaskResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTimerTask", request)
-	ret0, _ := ret[0].(*persistence.GetTimerTaskResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetTimerTask indicates an expected call of GetTimerTask.
-func (mr *MockExecutionStoreMockRecorder) GetTimerTask(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimerTask", reflect.TypeOf((*MockExecutionStore)(nil).GetTimerTask), request)
-}
-
-// GetTransferTask mocks base method.
-func (m *MockExecutionStore) GetTransferTask(request *persistence.GetTransferTaskRequest) (*persistence.GetTransferTaskResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTransferTask", request)
-	ret0, _ := ret[0].(*persistence.GetTransferTaskResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetTransferTask indicates an expected call of GetTransferTask.
-func (mr *MockExecutionStoreMockRecorder) GetTransferTask(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransferTask", reflect.TypeOf((*MockExecutionStore)(nil).GetTransferTask), request)
-}
-
-// GetTransferTasks mocks base method.
-func (m *MockExecutionStore) GetTransferTasks(request *persistence.GetTransferTasksRequest) (*persistence.GetTransferTasksResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTransferTasks", request)
-	ret0, _ := ret[0].(*persistence.GetTransferTasksResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetTransferTasks indicates an expected call of GetTransferTasks.
-func (mr *MockExecutionStoreMockRecorder) GetTransferTasks(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransferTasks", reflect.TypeOf((*MockExecutionStore)(nil).GetTransferTasks), request)
-}
-
-// GetVisibilityTask mocks base method.
-func (m *MockExecutionStore) GetVisibilityTask(request *persistence.GetVisibilityTaskRequest) (*persistence.GetVisibilityTaskResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVisibilityTask", request)
-	ret0, _ := ret[0].(*persistence.GetVisibilityTaskResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetVisibilityTask indicates an expected call of GetVisibilityTask.
-func (mr *MockExecutionStoreMockRecorder) GetVisibilityTask(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTask", reflect.TypeOf((*MockExecutionStore)(nil).GetVisibilityTask), request)
-}
-
-// GetVisibilityTasks mocks base method.
-func (m *MockExecutionStore) GetVisibilityTasks(request *persistence.GetVisibilityTasksRequest) (*persistence.GetVisibilityTasksResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVisibilityTasks", request)
-	ret0, _ := ret[0].(*persistence.GetVisibilityTasksResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetVisibilityTasks indicates an expected call of GetVisibilityTasks.
-func (mr *MockExecutionStoreMockRecorder) GetVisibilityTasks(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTasks", reflect.TypeOf((*MockExecutionStore)(nil).GetVisibilityTasks), request)
-}
-
-// GetWorkflowExecution mocks base method.
-func (m *MockExecutionStore) GetWorkflowExecution(request *persistence.GetWorkflowExecutionRequest) (*persistence.InternalGetWorkflowExecutionResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetWorkflowExecution", request)
-	ret0, _ := ret[0].(*persistence.InternalGetWorkflowExecutionResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetWorkflowExecution indicates an expected call of GetWorkflowExecution.
-func (mr *MockExecutionStoreMockRecorder) GetWorkflowExecution(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecution", reflect.TypeOf((*MockExecutionStore)(nil).GetWorkflowExecution), request)
-}
-
-// ListConcreteExecutions mocks base method.
-func (m *MockExecutionStore) ListConcreteExecutions(request *persistence.ListConcreteExecutionsRequest) (*persistence.InternalListConcreteExecutionsResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListConcreteExecutions", request)
-	ret0, _ := ret[0].(*persistence.InternalListConcreteExecutionsResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListConcreteExecutions indicates an expected call of ListConcreteExecutions.
-func (mr *MockExecutionStoreMockRecorder) ListConcreteExecutions(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListConcreteExecutions", reflect.TypeOf((*MockExecutionStore)(nil).ListConcreteExecutions), request)
-}
-
-// PutReplicationTaskToDLQ mocks base method.
-func (m *MockExecutionStore) PutReplicationTaskToDLQ(request *persistence.PutReplicationTaskToDLQRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PutReplicationTaskToDLQ", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// PutReplicationTaskToDLQ indicates an expected call of PutReplicationTaskToDLQ.
-func (mr *MockExecutionStoreMockRecorder) PutReplicationTaskToDLQ(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutReplicationTaskToDLQ", reflect.TypeOf((*MockExecutionStore)(nil).PutReplicationTaskToDLQ), request)
-}
-
-// RangeCompleteReplicationTask mocks base method.
-func (m *MockExecutionStore) RangeCompleteReplicationTask(request *persistence.RangeCompleteReplicationTaskRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RangeCompleteReplicationTask", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RangeCompleteReplicationTask indicates an expected call of RangeCompleteReplicationTask.
-func (mr *MockExecutionStoreMockRecorder) RangeCompleteReplicationTask(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteReplicationTask", reflect.TypeOf((*MockExecutionStore)(nil).RangeCompleteReplicationTask), request)
-}
-
-// RangeCompleteTimerTask mocks base method.
-func (m *MockExecutionStore) RangeCompleteTimerTask(request *persistence.RangeCompleteTimerTaskRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RangeCompleteTimerTask", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RangeCompleteTimerTask indicates an expected call of RangeCompleteTimerTask.
-func (mr *MockExecutionStoreMockRecorder) RangeCompleteTimerTask(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteTimerTask", reflect.TypeOf((*MockExecutionStore)(nil).RangeCompleteTimerTask), request)
-}
-
-// RangeCompleteTransferTask mocks base method.
-func (m *MockExecutionStore) RangeCompleteTransferTask(request *persistence.RangeCompleteTransferTaskRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RangeCompleteTransferTask", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RangeCompleteTransferTask indicates an expected call of RangeCompleteTransferTask.
-func (mr *MockExecutionStoreMockRecorder) RangeCompleteTransferTask(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteTransferTask", reflect.TypeOf((*MockExecutionStore)(nil).RangeCompleteTransferTask), request)
-}
-
-// RangeCompleteVisibilityTask mocks base method.
-func (m *MockExecutionStore) RangeCompleteVisibilityTask(request *persistence.RangeCompleteVisibilityTaskRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RangeCompleteVisibilityTask", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RangeCompleteVisibilityTask indicates an expected call of RangeCompleteVisibilityTask.
-func (mr *MockExecutionStoreMockRecorder) RangeCompleteVisibilityTask(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteVisibilityTask", reflect.TypeOf((*MockExecutionStore)(nil).RangeCompleteVisibilityTask), request)
-}
-
-// RangeDeleteReplicationTaskFromDLQ mocks base method.
-func (m *MockExecutionStore) RangeDeleteReplicationTaskFromDLQ(request *persistence.RangeDeleteReplicationTaskFromDLQRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RangeDeleteReplicationTaskFromDLQ", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RangeDeleteReplicationTaskFromDLQ indicates an expected call of RangeDeleteReplicationTaskFromDLQ.
-func (mr *MockExecutionStoreMockRecorder) RangeDeleteReplicationTaskFromDLQ(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeDeleteReplicationTaskFromDLQ", reflect.TypeOf((*MockExecutionStore)(nil).RangeDeleteReplicationTaskFromDLQ), request)
-}
-
-// UpdateWorkflowExecution mocks base method.
-func (m *MockExecutionStore) UpdateWorkflowExecution(request *persistence.InternalUpdateWorkflowExecutionRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkflowExecution", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateWorkflowExecution indicates an expected call of UpdateWorkflowExecution.
-func (mr *MockExecutionStoreMockRecorder) UpdateWorkflowExecution(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecution", reflect.TypeOf((*MockExecutionStore)(nil).UpdateWorkflowExecution), request)
-}
-
-// MockHistoryStore is a mock of HistoryStore interface.
-type MockHistoryStore struct {
-	ctrl     *gomock.Controller
-	recorder *MockHistoryStoreMockRecorder
-}
-
-// MockHistoryStoreMockRecorder is the mock recorder for MockHistoryStore.
-type MockHistoryStoreMockRecorder struct {
-	mock *MockHistoryStore
-}
-
-// NewMockHistoryStore creates a new mock instance.
-func NewMockHistoryStore(ctrl *gomock.Controller) *MockHistoryStore {
-	mock := &MockHistoryStore{ctrl: ctrl}
-	mock.recorder = &MockHistoryStoreMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockHistoryStore) EXPECT() *MockHistoryStoreMockRecorder {
-	return m.recorder
-}
-
-// AppendHistoryNodes mocks base method.
-func (m *MockHistoryStore) AppendHistoryNodes(request *persistence.InternalAppendHistoryNodesRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AppendHistoryNodes", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AppendHistoryNodes indicates an expected call of AppendHistoryNodes.
-func (mr *MockHistoryStoreMockRecorder) AppendHistoryNodes(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendHistoryNodes", reflect.TypeOf((*MockHistoryStore)(nil).AppendHistoryNodes), request)
-}
-
-// Close mocks base method.
-func (m *MockHistoryStore) Close() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Close")
-}
-
-// Close indicates an expected call of Close.
-func (mr *MockHistoryStoreMockRecorder) Close() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockHistoryStore)(nil).Close))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCurrentWorkflowExecution", reflect.TypeOf((*MockWorkflowStore)(nil).DeleteCurrentWorkflowExecution), request)
 }
 
 // DeleteHistoryBranch mocks base method.
-func (m *MockHistoryStore) DeleteHistoryBranch(request *persistence.InternalDeleteHistoryBranchRequest) error {
+func (m *MockWorkflowStore) DeleteHistoryBranch(request *persistence.InternalDeleteHistoryBranchRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteHistoryBranch", request)
 	ret0, _ := ret[0].(error)
@@ -1150,13 +781,13 @@ func (m *MockHistoryStore) DeleteHistoryBranch(request *persistence.InternalDele
 }
 
 // DeleteHistoryBranch indicates an expected call of DeleteHistoryBranch.
-func (mr *MockHistoryStoreMockRecorder) DeleteHistoryBranch(request interface{}) *gomock.Call {
+func (mr *MockWorkflowStoreMockRecorder) DeleteHistoryBranch(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteHistoryBranch", reflect.TypeOf((*MockHistoryStore)(nil).DeleteHistoryBranch), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteHistoryBranch", reflect.TypeOf((*MockWorkflowStore)(nil).DeleteHistoryBranch), request)
 }
 
 // DeleteHistoryNodes mocks base method.
-func (m *MockHistoryStore) DeleteHistoryNodes(request *persistence.InternalDeleteHistoryNodesRequest) error {
+func (m *MockWorkflowStore) DeleteHistoryNodes(request *persistence.InternalDeleteHistoryNodesRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteHistoryNodes", request)
 	ret0, _ := ret[0].(error)
@@ -1164,13 +795,41 @@ func (m *MockHistoryStore) DeleteHistoryNodes(request *persistence.InternalDelet
 }
 
 // DeleteHistoryNodes indicates an expected call of DeleteHistoryNodes.
-func (mr *MockHistoryStoreMockRecorder) DeleteHistoryNodes(request interface{}) *gomock.Call {
+func (mr *MockWorkflowStoreMockRecorder) DeleteHistoryNodes(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteHistoryNodes", reflect.TypeOf((*MockHistoryStore)(nil).DeleteHistoryNodes), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteHistoryNodes", reflect.TypeOf((*MockWorkflowStore)(nil).DeleteHistoryNodes), request)
+}
+
+// DeleteReplicationTaskFromDLQ mocks base method.
+func (m *MockWorkflowStore) DeleteReplicationTaskFromDLQ(request *persistence.DeleteReplicationTaskFromDLQRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteReplicationTaskFromDLQ", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteReplicationTaskFromDLQ indicates an expected call of DeleteReplicationTaskFromDLQ.
+func (mr *MockWorkflowStoreMockRecorder) DeleteReplicationTaskFromDLQ(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteReplicationTaskFromDLQ", reflect.TypeOf((*MockWorkflowStore)(nil).DeleteReplicationTaskFromDLQ), request)
+}
+
+// DeleteWorkflowExecution mocks base method.
+func (m *MockWorkflowStore) DeleteWorkflowExecution(request *persistence.DeleteWorkflowExecutionRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
+func (mr *MockWorkflowStoreMockRecorder) DeleteWorkflowExecution(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockWorkflowStore)(nil).DeleteWorkflowExecution), request)
 }
 
 // ForkHistoryBranch mocks base method.
-func (m *MockHistoryStore) ForkHistoryBranch(request *persistence.InternalForkHistoryBranchRequest) error {
+func (m *MockWorkflowStore) ForkHistoryBranch(request *persistence.InternalForkHistoryBranchRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ForkHistoryBranch", request)
 	ret0, _ := ret[0].(error)
@@ -1178,13 +837,13 @@ func (m *MockHistoryStore) ForkHistoryBranch(request *persistence.InternalForkHi
 }
 
 // ForkHistoryBranch indicates an expected call of ForkHistoryBranch.
-func (mr *MockHistoryStoreMockRecorder) ForkHistoryBranch(request interface{}) *gomock.Call {
+func (mr *MockWorkflowStoreMockRecorder) ForkHistoryBranch(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForkHistoryBranch", reflect.TypeOf((*MockHistoryStore)(nil).ForkHistoryBranch), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForkHistoryBranch", reflect.TypeOf((*MockWorkflowStore)(nil).ForkHistoryBranch), request)
 }
 
 // GetAllHistoryTreeBranches mocks base method.
-func (m *MockHistoryStore) GetAllHistoryTreeBranches(request *persistence.GetAllHistoryTreeBranchesRequest) (*persistence.InternalGetAllHistoryTreeBranchesResponse, error) {
+func (m *MockWorkflowStore) GetAllHistoryTreeBranches(request *persistence.GetAllHistoryTreeBranchesRequest) (*persistence.InternalGetAllHistoryTreeBranchesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAllHistoryTreeBranches", request)
 	ret0, _ := ret[0].(*persistence.InternalGetAllHistoryTreeBranchesResponse)
@@ -1193,13 +852,28 @@ func (m *MockHistoryStore) GetAllHistoryTreeBranches(request *persistence.GetAll
 }
 
 // GetAllHistoryTreeBranches indicates an expected call of GetAllHistoryTreeBranches.
-func (mr *MockHistoryStoreMockRecorder) GetAllHistoryTreeBranches(request interface{}) *gomock.Call {
+func (mr *MockWorkflowStoreMockRecorder) GetAllHistoryTreeBranches(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllHistoryTreeBranches", reflect.TypeOf((*MockHistoryStore)(nil).GetAllHistoryTreeBranches), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllHistoryTreeBranches", reflect.TypeOf((*MockWorkflowStore)(nil).GetAllHistoryTreeBranches), request)
+}
+
+// GetCurrentExecution mocks base method.
+func (m *MockWorkflowStore) GetCurrentExecution(request *persistence.GetCurrentExecutionRequest) (*persistence.InternalGetCurrentExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCurrentExecution", request)
+	ret0, _ := ret[0].(*persistence.InternalGetCurrentExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCurrentExecution indicates an expected call of GetCurrentExecution.
+func (mr *MockWorkflowStoreMockRecorder) GetCurrentExecution(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentExecution", reflect.TypeOf((*MockWorkflowStore)(nil).GetCurrentExecution), request)
 }
 
 // GetHistoryTree mocks base method.
-func (m *MockHistoryStore) GetHistoryTree(request *persistence.GetHistoryTreeRequest) (*persistence.InternalGetHistoryTreeResponse, error) {
+func (m *MockWorkflowStore) GetHistoryTree(request *persistence.GetHistoryTreeRequest) (*persistence.InternalGetHistoryTreeResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetHistoryTree", request)
 	ret0, _ := ret[0].(*persistence.InternalGetHistoryTreeResponse)
@@ -1208,13 +882,13 @@ func (m *MockHistoryStore) GetHistoryTree(request *persistence.GetHistoryTreeReq
 }
 
 // GetHistoryTree indicates an expected call of GetHistoryTree.
-func (mr *MockHistoryStoreMockRecorder) GetHistoryTree(request interface{}) *gomock.Call {
+func (mr *MockWorkflowStoreMockRecorder) GetHistoryTree(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTree", reflect.TypeOf((*MockHistoryStore)(nil).GetHistoryTree), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTree", reflect.TypeOf((*MockWorkflowStore)(nil).GetHistoryTree), request)
 }
 
 // GetName mocks base method.
-func (m *MockHistoryStore) GetName() string {
+func (m *MockWorkflowStore) GetName() string {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetName")
 	ret0, _ := ret[0].(string)
@@ -1222,13 +896,276 @@ func (m *MockHistoryStore) GetName() string {
 }
 
 // GetName indicates an expected call of GetName.
-func (mr *MockHistoryStoreMockRecorder) GetName() *gomock.Call {
+func (mr *MockWorkflowStoreMockRecorder) GetName() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockHistoryStore)(nil).GetName))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockWorkflowStore)(nil).GetName))
+}
+
+// GetReplicationTask mocks base method.
+func (m *MockWorkflowStore) GetReplicationTask(request *persistence.GetReplicationTaskRequest) (*persistence.GetReplicationTaskResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReplicationTask", request)
+	ret0, _ := ret[0].(*persistence.GetReplicationTaskResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetReplicationTask indicates an expected call of GetReplicationTask.
+func (mr *MockWorkflowStoreMockRecorder) GetReplicationTask(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTask", reflect.TypeOf((*MockWorkflowStore)(nil).GetReplicationTask), request)
+}
+
+// GetReplicationTasks mocks base method.
+func (m *MockWorkflowStore) GetReplicationTasks(request *persistence.GetReplicationTasksRequest) (*persistence.GetReplicationTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReplicationTasks", request)
+	ret0, _ := ret[0].(*persistence.GetReplicationTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetReplicationTasks indicates an expected call of GetReplicationTasks.
+func (mr *MockWorkflowStoreMockRecorder) GetReplicationTasks(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTasks", reflect.TypeOf((*MockWorkflowStore)(nil).GetReplicationTasks), request)
+}
+
+// GetReplicationTasksFromDLQ mocks base method.
+func (m *MockWorkflowStore) GetReplicationTasksFromDLQ(request *persistence.GetReplicationTasksFromDLQRequest) (*persistence.GetReplicationTasksFromDLQResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReplicationTasksFromDLQ", request)
+	ret0, _ := ret[0].(*persistence.GetReplicationTasksFromDLQResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetReplicationTasksFromDLQ indicates an expected call of GetReplicationTasksFromDLQ.
+func (mr *MockWorkflowStoreMockRecorder) GetReplicationTasksFromDLQ(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTasksFromDLQ", reflect.TypeOf((*MockWorkflowStore)(nil).GetReplicationTasksFromDLQ), request)
+}
+
+// GetShardID mocks base method.
+func (m *MockWorkflowStore) GetShardID() int32 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetShardID")
+	ret0, _ := ret[0].(int32)
+	return ret0
+}
+
+// GetShardID indicates an expected call of GetShardID.
+func (mr *MockWorkflowStoreMockRecorder) GetShardID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShardID", reflect.TypeOf((*MockWorkflowStore)(nil).GetShardID))
+}
+
+// GetTimerIndexTasks mocks base method.
+func (m *MockWorkflowStore) GetTimerIndexTasks(request *persistence.GetTimerIndexTasksRequest) (*persistence.GetTimerIndexTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTimerIndexTasks", request)
+	ret0, _ := ret[0].(*persistence.GetTimerIndexTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTimerIndexTasks indicates an expected call of GetTimerIndexTasks.
+func (mr *MockWorkflowStoreMockRecorder) GetTimerIndexTasks(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimerIndexTasks", reflect.TypeOf((*MockWorkflowStore)(nil).GetTimerIndexTasks), request)
+}
+
+// GetTimerTask mocks base method.
+func (m *MockWorkflowStore) GetTimerTask(request *persistence.GetTimerTaskRequest) (*persistence.GetTimerTaskResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTimerTask", request)
+	ret0, _ := ret[0].(*persistence.GetTimerTaskResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTimerTask indicates an expected call of GetTimerTask.
+func (mr *MockWorkflowStoreMockRecorder) GetTimerTask(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimerTask", reflect.TypeOf((*MockWorkflowStore)(nil).GetTimerTask), request)
+}
+
+// GetTransferTask mocks base method.
+func (m *MockWorkflowStore) GetTransferTask(request *persistence.GetTransferTaskRequest) (*persistence.GetTransferTaskResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTransferTask", request)
+	ret0, _ := ret[0].(*persistence.GetTransferTaskResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTransferTask indicates an expected call of GetTransferTask.
+func (mr *MockWorkflowStoreMockRecorder) GetTransferTask(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransferTask", reflect.TypeOf((*MockWorkflowStore)(nil).GetTransferTask), request)
+}
+
+// GetTransferTasks mocks base method.
+func (m *MockWorkflowStore) GetTransferTasks(request *persistence.GetTransferTasksRequest) (*persistence.GetTransferTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTransferTasks", request)
+	ret0, _ := ret[0].(*persistence.GetTransferTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTransferTasks indicates an expected call of GetTransferTasks.
+func (mr *MockWorkflowStoreMockRecorder) GetTransferTasks(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransferTasks", reflect.TypeOf((*MockWorkflowStore)(nil).GetTransferTasks), request)
+}
+
+// GetVisibilityTask mocks base method.
+func (m *MockWorkflowStore) GetVisibilityTask(request *persistence.GetVisibilityTaskRequest) (*persistence.GetVisibilityTaskResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetVisibilityTask", request)
+	ret0, _ := ret[0].(*persistence.GetVisibilityTaskResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetVisibilityTask indicates an expected call of GetVisibilityTask.
+func (mr *MockWorkflowStoreMockRecorder) GetVisibilityTask(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTask", reflect.TypeOf((*MockWorkflowStore)(nil).GetVisibilityTask), request)
+}
+
+// GetVisibilityTasks mocks base method.
+func (m *MockWorkflowStore) GetVisibilityTasks(request *persistence.GetVisibilityTasksRequest) (*persistence.GetVisibilityTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetVisibilityTasks", request)
+	ret0, _ := ret[0].(*persistence.GetVisibilityTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetVisibilityTasks indicates an expected call of GetVisibilityTasks.
+func (mr *MockWorkflowStoreMockRecorder) GetVisibilityTasks(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTasks", reflect.TypeOf((*MockWorkflowStore)(nil).GetVisibilityTasks), request)
+}
+
+// GetWorkflowExecution mocks base method.
+func (m *MockWorkflowStore) GetWorkflowExecution(request *persistence.GetWorkflowExecutionRequest) (*persistence.InternalGetWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowExecution", request)
+	ret0, _ := ret[0].(*persistence.InternalGetWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowExecution indicates an expected call of GetWorkflowExecution.
+func (mr *MockWorkflowStoreMockRecorder) GetWorkflowExecution(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecution", reflect.TypeOf((*MockWorkflowStore)(nil).GetWorkflowExecution), request)
+}
+
+// ListConcreteExecutions mocks base method.
+func (m *MockWorkflowStore) ListConcreteExecutions(request *persistence.ListConcreteExecutionsRequest) (*persistence.InternalListConcreteExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListConcreteExecutions", request)
+	ret0, _ := ret[0].(*persistence.InternalListConcreteExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListConcreteExecutions indicates an expected call of ListConcreteExecutions.
+func (mr *MockWorkflowStoreMockRecorder) ListConcreteExecutions(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListConcreteExecutions", reflect.TypeOf((*MockWorkflowStore)(nil).ListConcreteExecutions), request)
+}
+
+// PutReplicationTaskToDLQ mocks base method.
+func (m *MockWorkflowStore) PutReplicationTaskToDLQ(request *persistence.PutReplicationTaskToDLQRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PutReplicationTaskToDLQ", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// PutReplicationTaskToDLQ indicates an expected call of PutReplicationTaskToDLQ.
+func (mr *MockWorkflowStoreMockRecorder) PutReplicationTaskToDLQ(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutReplicationTaskToDLQ", reflect.TypeOf((*MockWorkflowStore)(nil).PutReplicationTaskToDLQ), request)
+}
+
+// RangeCompleteReplicationTask mocks base method.
+func (m *MockWorkflowStore) RangeCompleteReplicationTask(request *persistence.RangeCompleteReplicationTaskRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RangeCompleteReplicationTask", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RangeCompleteReplicationTask indicates an expected call of RangeCompleteReplicationTask.
+func (mr *MockWorkflowStoreMockRecorder) RangeCompleteReplicationTask(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteReplicationTask", reflect.TypeOf((*MockWorkflowStore)(nil).RangeCompleteReplicationTask), request)
+}
+
+// RangeCompleteTimerTask mocks base method.
+func (m *MockWorkflowStore) RangeCompleteTimerTask(request *persistence.RangeCompleteTimerTaskRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RangeCompleteTimerTask", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RangeCompleteTimerTask indicates an expected call of RangeCompleteTimerTask.
+func (mr *MockWorkflowStoreMockRecorder) RangeCompleteTimerTask(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteTimerTask", reflect.TypeOf((*MockWorkflowStore)(nil).RangeCompleteTimerTask), request)
+}
+
+// RangeCompleteTransferTask mocks base method.
+func (m *MockWorkflowStore) RangeCompleteTransferTask(request *persistence.RangeCompleteTransferTaskRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RangeCompleteTransferTask", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RangeCompleteTransferTask indicates an expected call of RangeCompleteTransferTask.
+func (mr *MockWorkflowStoreMockRecorder) RangeCompleteTransferTask(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteTransferTask", reflect.TypeOf((*MockWorkflowStore)(nil).RangeCompleteTransferTask), request)
+}
+
+// RangeCompleteVisibilityTask mocks base method.
+func (m *MockWorkflowStore) RangeCompleteVisibilityTask(request *persistence.RangeCompleteVisibilityTaskRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RangeCompleteVisibilityTask", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RangeCompleteVisibilityTask indicates an expected call of RangeCompleteVisibilityTask.
+func (mr *MockWorkflowStoreMockRecorder) RangeCompleteVisibilityTask(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteVisibilityTask", reflect.TypeOf((*MockWorkflowStore)(nil).RangeCompleteVisibilityTask), request)
+}
+
+// RangeDeleteReplicationTaskFromDLQ mocks base method.
+func (m *MockWorkflowStore) RangeDeleteReplicationTaskFromDLQ(request *persistence.RangeDeleteReplicationTaskFromDLQRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RangeDeleteReplicationTaskFromDLQ", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RangeDeleteReplicationTaskFromDLQ indicates an expected call of RangeDeleteReplicationTaskFromDLQ.
+func (mr *MockWorkflowStoreMockRecorder) RangeDeleteReplicationTaskFromDLQ(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeDeleteReplicationTaskFromDLQ", reflect.TypeOf((*MockWorkflowStore)(nil).RangeDeleteReplicationTaskFromDLQ), request)
 }
 
 // ReadHistoryBranch mocks base method.
-func (m *MockHistoryStore) ReadHistoryBranch(request *persistence.InternalReadHistoryBranchRequest) (*persistence.InternalReadHistoryBranchResponse, error) {
+func (m *MockWorkflowStore) ReadHistoryBranch(request *persistence.InternalReadHistoryBranchRequest) (*persistence.InternalReadHistoryBranchResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReadHistoryBranch", request)
 	ret0, _ := ret[0].(*persistence.InternalReadHistoryBranchResponse)
@@ -1237,9 +1174,23 @@ func (m *MockHistoryStore) ReadHistoryBranch(request *persistence.InternalReadHi
 }
 
 // ReadHistoryBranch indicates an expected call of ReadHistoryBranch.
-func (mr *MockHistoryStoreMockRecorder) ReadHistoryBranch(request interface{}) *gomock.Call {
+func (mr *MockWorkflowStoreMockRecorder) ReadHistoryBranch(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadHistoryBranch", reflect.TypeOf((*MockHistoryStore)(nil).ReadHistoryBranch), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadHistoryBranch", reflect.TypeOf((*MockWorkflowStore)(nil).ReadHistoryBranch), request)
+}
+
+// UpdateWorkflowExecution mocks base method.
+func (m *MockWorkflowStore) UpdateWorkflowExecution(request *persistence.InternalUpdateWorkflowExecutionRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkflowExecution", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateWorkflowExecution indicates an expected call of UpdateWorkflowExecution.
+func (mr *MockWorkflowStoreMockRecorder) UpdateWorkflowExecution(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecution", reflect.TypeOf((*MockWorkflowStore)(nil).UpdateWorkflowExecution), request)
 }
 
 // MockQueue is a mock of Queue interface.

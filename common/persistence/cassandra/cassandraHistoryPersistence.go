@@ -31,7 +31,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/primitives"
@@ -65,39 +64,9 @@ const (
 	v2templateScanAllTreeBranches = `SELECT tree_id, branch_id, branch, branch_encoding FROM history_tree `
 )
 
-type (
-	cassandraHistoryV2Persistence struct {
-		cassandraStore
-	}
-)
-
-// NewHistoryV2PersistenceFromSession returns new HistoryStore
-func NewHistoryV2PersistenceFromSession(
-	session gocql.Session,
-	logger log.Logger,
-) p.HistoryStore {
-
-	return &cassandraHistoryV2Persistence{
-		cassandraStore: cassandraStore{session: session, logger: logger},
-	}
-}
-
-// newHistoryPersistence is used to create an instance of HistoryManager implementation
-func newHistoryPersistence(
-	session gocql.Session,
-	logger log.Logger,
-) (p.HistoryStore, error) {
-	return &cassandraHistoryV2Persistence{
-		cassandraStore: cassandraStore{
-			session: session,
-			logger:  logger,
-		},
-	}, nil
-}
-
 // AppendHistoryNodes upsert a batch of events as a single node to a history branch
 // Note that it's not allowed to append above the branch's ancestors' nodes, which means nodeID >= ForkNodeID
-func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
+func (h *cassandraPersistence) AppendHistoryNodes(
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
 	branchInfo := request.BranchInfo
@@ -143,7 +112,7 @@ func (h *cassandraHistoryV2Persistence) AppendHistoryNodes(
 }
 
 // DeleteHistoryNodes delete a history node
-func (h *cassandraHistoryV2Persistence) DeleteHistoryNodes(
+func (h *cassandraPersistence) DeleteHistoryNodes(
 	request *p.InternalDeleteHistoryNodesRequest,
 ) error {
 	branchInfo := request.BranchInfo
@@ -172,7 +141,7 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryNodes(
 
 // ReadHistoryBranch returns history node data for a branch
 // NOTE: For branch that has ancestors, we need to query Cassandra multiple times, because it doesn't support OR/UNION operator
-func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
+func (h *cassandraPersistence) ReadHistoryBranch(
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
 
@@ -258,7 +227,7 @@ func (h *cassandraHistoryV2Persistence) ReadHistoryBranch(
 //       \
 //       8[8,9]
 //
-func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
+func (h *cassandraPersistence) ForkHistoryBranch(
 	request *p.InternalForkHistoryBranchRequest,
 ) error {
 
@@ -284,7 +253,7 @@ func (h *cassandraHistoryV2Persistence) ForkHistoryBranch(
 }
 
 // DeleteHistoryBranch removes a branch
-func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
+func (h *cassandraPersistence) DeleteHistoryBranch(
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
 	batch := h.session.NewBatch(gocql.LoggedBatch)
@@ -302,7 +271,7 @@ func (h *cassandraHistoryV2Persistence) DeleteHistoryBranch(
 	return nil
 }
 
-func (h *cassandraHistoryV2Persistence) deleteBranchRangeNodes(
+func (h *cassandraPersistence) deleteBranchRangeNodes(
 	batch gocql.Batch,
 	treeID string,
 	branchID string,
@@ -315,7 +284,7 @@ func (h *cassandraHistoryV2Persistence) deleteBranchRangeNodes(
 		beginNodeID)
 }
 
-func (h *cassandraHistoryV2Persistence) GetAllHistoryTreeBranches(
+func (h *cassandraPersistence) GetAllHistoryTreeBranches(
 	request *p.GetAllHistoryTreeBranchesRequest,
 ) (*p.InternalGetAllHistoryTreeBranchesResponse, error) {
 
@@ -359,7 +328,7 @@ func (h *cassandraHistoryV2Persistence) GetAllHistoryTreeBranches(
 }
 
 // GetHistoryTree returns all branch information of a tree
-func (h *cassandraHistoryV2Persistence) GetHistoryTree(
+func (h *cassandraPersistence) GetHistoryTree(
 	request *p.GetHistoryTreeRequest,
 ) (*p.InternalGetHistoryTreeResponse, error) {
 
@@ -403,7 +372,7 @@ func (h *cassandraHistoryV2Persistence) GetHistoryTree(
 	}, nil
 }
 
-func (h *cassandraHistoryV2Persistence) sortAncestors(
+func (h *cassandraPersistence) sortAncestors(
 	ans []*persistencespb.HistoryBranchRange,
 ) {
 	if len(ans) > 0 {

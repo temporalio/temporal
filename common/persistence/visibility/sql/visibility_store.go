@@ -64,7 +64,7 @@ func newVisibilityContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, visibilityTimeout)
 }
 
-// NewSQLVisibilityStore creates an instance of ExecutionStore
+// NewSQLVisibilityStore creates an instance of VisibilityStore
 func NewSQLVisibilityStore(
 	cfg config.SQL,
 	r resolver.ServiceResolver,

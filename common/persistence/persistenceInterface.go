@@ -100,8 +100,8 @@ type (
 		PruneClusterMembership(request *PruneClusterMembershipRequest) error
 	}
 
-	// ExecutionStore is used to manage workflow executions for Persistence layer
-	ExecutionStore interface {
+	// WorkflowStore is used to manage workflow including execution's mutable states / history / tasks.
+	WorkflowStore interface {
 		Closeable
 		GetName() string
 		GetShardID() int32
@@ -148,12 +148,6 @@ type (
 		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error)
 		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
 		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
-	}
-
-	// HistoryStore is to manager workflow history events
-	HistoryStore interface {
-		Closeable
-		GetName() string
 
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
