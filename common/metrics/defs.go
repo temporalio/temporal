@@ -1613,6 +1613,7 @@ const (
 	ServiceCriticalFailures
 	ServiceLatency
 	ServiceLatencyNoUserLatency
+	ServiceLatencyUserLatency
 	ServiceErrInvalidArgumentCounter
 	ServiceErrNamespaceNotActiveCounter
 	ServiceErrResourceExhaustedCounter
@@ -2040,6 +2041,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceCriticalFailures:                             {metricName: "service_errors_critical", metricType: Counter},
 		ServiceLatency:                                      {metricName: "service_latency", metricType: Timer},
 		ServiceLatencyNoUserLatency:                         {metricName: "service_latency_nouserlatency", metricType: Timer},
+		ServiceLatencyUserLatency:                           {metricName: "service_latency_userlatency", metricType: Timer},
 		ServiceErrInvalidArgumentCounter:                    {metricName: "service_errors_invalid_argument", metricType: Counter},
 		ServiceErrNamespaceNotActiveCounter:                 {metricName: "service_errors_namespace_not_active", metricType: Counter},
 		ServiceErrResourceExhaustedCounter:                  {metricName: "service_errors_resource_exhausted", metricType: Counter},
