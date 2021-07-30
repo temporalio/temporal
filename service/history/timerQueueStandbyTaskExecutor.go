@@ -410,13 +410,14 @@ func (t *timerQueueStandbyTaskExecutor) getTimerSequence(
 }
 
 func (t *timerQueueStandbyTaskExecutor) processTimer(
-	pctx context.Context,
+	ctx context.Context,
 	timerTask *persistencespb.TimerTaskInfo,
 	actionFn standbyActionFn,
 	postActionFn standbyPostActionFn,
 ) (retError error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
 
-	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(timerTask)
 	context, release, err := t.cache.GetOrCreateWorkflowExecution(

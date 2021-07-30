@@ -408,15 +408,16 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 }
 
 func (t *transferQueueStandbyTaskExecutor) processTransfer(
-	pctx context.Context,
+	ctx context.Context,
 	processTaskIfClosed bool,
 	taskInfo queueTaskInfo,
 	actionFn standbyActionFn,
 	postActionFn standbyPostActionFn,
 ) (retError error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
 
 	transferTask := taskInfo.(*persistencespb.TransferTaskInfo)
-	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(transferTask)
 	context, release, err := t.cache.GetOrCreateWorkflowExecution(

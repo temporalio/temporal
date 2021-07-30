@@ -124,12 +124,13 @@ func (t *visibilityQueueTaskExecutor) execute(
 }
 
 func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
-	pctx context.Context,
+	ctx context.Context,
 	task *persistencespb.VisibilityTaskInfo,
 	isStartExecution bool,
 ) (retError error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
 
-	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
 	defer cancel()
 	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
@@ -305,11 +306,12 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 }
 
 func (t *visibilityQueueTaskExecutor) processCloseExecution(
-	pctx context.Context,
+	ctx context.Context,
 	task *persistencespb.VisibilityTaskInfo,
 ) (retError error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
 
-	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
 	defer cancel()
 	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
