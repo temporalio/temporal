@@ -494,7 +494,7 @@ func (c *taskQueueManagerImpl) renewLeaseWithRetry() (taskQueueState, error) {
 	if err != nil {
 		c.metricScope().IncCounter(metrics.LeaseFailurePerTaskQueueCounter)
 		if c.errShouldUnload(err) {
-			c.engine.unloadTaskQueue(c.taskQueueID)
+			go c.engine.unloadTaskQueue(c.taskQueueID)
 		}
 		return newState, err
 	}
