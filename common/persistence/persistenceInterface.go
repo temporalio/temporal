@@ -100,8 +100,8 @@ type (
 		PruneClusterMembership(request *PruneClusterMembershipRequest) error
 	}
 
-	// WorkflowStore is used to manage workflow including execution's mutable states / history / tasks.
-	WorkflowStore interface {
+	// ExecutionStore is used to manage workflow execution including mutable states / history / tasks.
+	ExecutionStore interface {
 		Closeable
 		GetName() string
 		GetShardID() int32
