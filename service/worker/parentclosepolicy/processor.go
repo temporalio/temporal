@@ -40,10 +40,8 @@ import (
 )
 
 const (
-	maxConcurrentActivityExecutionSize = 10
-	maxConcurrentWorkflowExecutionSize = 10
-	maxConcurrentActivityTaskPollers   = 16
-	maxConcurrentWorkflowTaskPollers   = 16
+	maxConcurrentActivityTaskPollers = 16
+	maxConcurrentWorkflowTaskPollers = 16
 )
 
 type (
@@ -83,11 +81,9 @@ func New(params *BootstrapParams) *Processor {
 func (s *Processor) Start() error {
 	ctx := context.WithValue(context.Background(), processorContextKey, s)
 	workerOpts := worker.Options{
-		MaxConcurrentActivityExecutionSize:     maxConcurrentActivityExecutionSize,
-		MaxConcurrentWorkflowTaskExecutionSize: maxConcurrentWorkflowExecutionSize,
-		MaxConcurrentActivityTaskPollers:       maxConcurrentActivityTaskPollers,
-		MaxConcurrentWorkflowTaskPollers:       maxConcurrentWorkflowTaskPollers,
-		BackgroundActivityContext:              ctx,
+		MaxConcurrentActivityTaskPollers: maxConcurrentActivityTaskPollers,
+		MaxConcurrentWorkflowTaskPollers: maxConcurrentWorkflowTaskPollers,
+		BackgroundActivityContext:        ctx,
 	}
 	processorWorker := worker.New(s.svcClient, processorTaskQueueName, workerOpts)
 
