@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -273,14 +274,21 @@ func (t *queueTaskBase) Execute() error {
 
 	executionStartTime := t.timeSource.Now()
 
+	ctx := context.Background()
+	ctx = metrics.AddMetricsContext(ctx)
+
 	defer func() {
 		if t.shouldProcessTask {
 			t.scope.IncCounter(metrics.TaskRequests)
 			t.scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(executionStartTime))
+			if userLatency, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency); ok {
+				userLatencyDuration := time.Duration(userLatency)
+				t.scope.RecordTimer(metrics.TaskNoUserProcessingLatency, time.Since(executionStartTime)-userLatencyDuration)
+			}
 		}
 	}()
 
-	return t.taskExecutor.execute(t.queueTaskInfo, t.shouldProcessTask)
+	return t.taskExecutor.execute(ctx, t.queueTaskInfo, t.shouldProcessTask)
 }
 
 func (t *queueTaskBase) HandleErr(
