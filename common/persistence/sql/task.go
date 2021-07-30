@@ -48,7 +48,7 @@ type (
 	}
 
 	sqlTaskManager struct {
-		sqlStore
+		SqlStore
 		taskScanPartitions uint32
 	}
 )
@@ -62,13 +62,10 @@ var (
 func newTaskPersistence(
 	db sqlplugin.DB,
 	taskScanPartitions int,
-	log log.Logger,
+	logger log.Logger,
 ) (persistence.TaskStore, error) {
 	return &sqlTaskManager{
-		sqlStore: sqlStore{
-			db:     db,
-			logger: log,
-		},
+		SqlStore:           NewSqlStore(db, logger),
 		taskScanPartitions: uint32(taskScanPartitions),
 	}, nil
 }
@@ -89,7 +86,7 @@ func (m *sqlTaskManager) CreateTaskQueue(request *persistence.InternalCreateTask
 		Data:         request.TaskQueueInfo.Data,
 		DataEncoding: request.TaskQueueInfo.EncodingType.String(),
 	}
-	if _, err := m.db.InsertIntoTaskQueues(ctx, &row); err != nil {
+	if _, err := m.Db.InsertIntoTaskQueues(ctx, &row); err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("CreateTaskQueue operation failed. Failed to make task queue %v of type %v. Error: %v", request.TaskQueue, request.TaskType, err))
 	}
 
@@ -104,7 +101,7 @@ func (m *sqlTaskManager) GetTaskQueue(request *persistence.InternalGetTaskQueueR
 		return nil, serviceerror.NewInternal(err.Error())
 	}
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
-	rows, err := m.db.SelectFromTaskQueues(ctx, sqlplugin.TaskQueuesFilter{
+	rows, err := m.Db.SelectFromTaskQueues(ctx, sqlplugin.TaskQueuesFilter{
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
 	})
@@ -266,7 +263,7 @@ func (m *sqlTaskManager) ListTaskQueue(request *persistence.ListTaskQueueRequest
 			lastPageFull = false
 		}
 
-		rows, err = m.db.SelectFromTaskQueues(ctx, filter)
+		rows, err = m.Db.SelectFromTaskQueues(ctx, filter)
 		if err != nil {
 			return nil, serviceerror.NewInternal(err.Error())
 		}
@@ -362,7 +359,7 @@ func (m *sqlTaskManager) DeleteTaskQueue(
 		return serviceerror.NewInternal(err.Error())
 	}
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue.Name, request.TaskQueue.TaskType)
-	result, err := m.db.DeleteFromTaskQueues(ctx, sqlplugin.TaskQueuesFilter{
+	result, err := m.Db.DeleteFromTaskQueues(ctx, sqlplugin.TaskQueuesFilter{
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
 		RangeID:     &request.RangeID,
@@ -432,7 +429,7 @@ func (m *sqlTaskManager) GetTasks(
 	}
 
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
-	rows, err := m.db.SelectFromTasks(ctx, sqlplugin.TasksFilter{
+	rows, err := m.Db.SelectFromTasks(ctx, sqlplugin.TasksFilter{
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
 		MinTaskID:   &request.ReadLevel,
@@ -463,7 +460,7 @@ func (m *sqlTaskManager) CompleteTask(
 
 	taskID := request.TaskID
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue.Name, request.TaskQueue.TaskType)
-	_, err = m.db.DeleteFromTasks(ctx, sqlplugin.TasksFilter{
+	_, err = m.Db.DeleteFromTasks(ctx, sqlplugin.TasksFilter{
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
 		TaskID:      &taskID})
@@ -483,7 +480,7 @@ func (m *sqlTaskManager) CompleteTasksLessThan(
 		return 0, serviceerror.NewInternal(err.Error())
 	}
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueueName, request.TaskType)
-	result, err := m.db.DeleteFromTasks(ctx, sqlplugin.TasksFilter{
+	result, err := m.Db.DeleteFromTasks(ctx, sqlplugin.TasksFilter{
 		RangeHash:            tqHash,
 		TaskQueueID:          tqId,
 		TaskIDLessThanEquals: &request.TaskID,

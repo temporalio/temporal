@@ -40,10 +40,10 @@ import (
 )
 
 type (
-	// executionManagerImpl implements ExecutionManager based on ExecutionStore, statsComputer and Serializer
+	// executionManagerImpl implements ExecutionManager based on WorkflowStore, statsComputer and Serializer
 	executionManagerImpl struct {
 		serializer    serialization.Serializer
-		persistence   ExecutionStore
+		persistence   WorkflowStore
 		statsComputer statsComputer
 		logger        log.Logger
 	}
@@ -53,7 +53,7 @@ var _ ExecutionManager = (*executionManagerImpl)(nil)
 
 // NewExecutionManager returns new ExecutionManager
 func NewExecutionManager(
-	persistence ExecutionStore,
+	persistence WorkflowStore,
 	logger log.Logger,
 ) ExecutionManager {
 

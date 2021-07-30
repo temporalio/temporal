@@ -30,14 +30,12 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"gopkg.in/yaml.v2"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 var _ Client = (*fileBasedClient)(nil)
@@ -46,11 +44,6 @@ const (
 	minPollInterval = time.Second * 5
 	fileMode        = 0644 // used for update config file
 )
-
-type constrainedValue struct {
-	Value       interface{}
-	Constraints map[string]interface{}
-}
 
 // FileBasedClientConfig is the config for the file based dynamic config client.
 // It specifies where the config file is stored and how often the config should be
@@ -61,7 +54,7 @@ type FileBasedClientConfig struct {
 }
 
 type fileBasedClient struct {
-	values          atomic.Value
+	*basicClient
 	lastUpdatedTime time.Time
 	config          *FileBasedClientConfig
 	doneCh          <-chan interface{}
@@ -75,9 +68,10 @@ func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh
 	}
 
 	client := &fileBasedClient{
-		config: config,
-		doneCh: doneCh,
-		logger: logger,
+		basicClient: newBasicClient(),
+		config:      config,
+		doneCh:      doneCh,
+		logger:      logger,
 	}
 	if err := client.update(); err != nil {
 		return nil, err
@@ -100,103 +94,12 @@ func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh
 	return client, nil
 }
 
-func (fc *fileBasedClient) GetValue(name Key, defaultValue interface{}) (interface{}, error) {
-	return fc.getValueWithFilters(name, nil, defaultValue)
-}
-
-func (fc *fileBasedClient) GetValueWithFilters(name Key, filters map[Filter]interface{}, defaultValue interface{}) (interface{}, error) {
-	return fc.getValueWithFilters(name, filters, defaultValue)
-}
-
-func (fc *fileBasedClient) GetIntValue(name Key, filters map[Filter]interface{}, defaultValue int) (int, error) {
-	val, err := fc.getValueWithFilters(name, filters, defaultValue)
-	if err != nil {
-		return defaultValue, err
-	}
-
-	if intVal, ok := val.(int); ok {
-		return intVal, nil
-	}
-	return defaultValue, errors.New("value type is not int")
-}
-
-func (fc *fileBasedClient) GetFloatValue(name Key, filters map[Filter]interface{}, defaultValue float64) (float64, error) {
-	val, err := fc.getValueWithFilters(name, filters, defaultValue)
-	if err != nil {
-		return defaultValue, err
-	}
-
-	if floatVal, ok := val.(float64); ok {
-		return floatVal, nil
-	} else if intVal, ok := val.(int); ok {
-		return float64(intVal), nil
-	}
-	return defaultValue, errors.New("value type is not float64")
-}
-
-func (fc *fileBasedClient) GetBoolValue(name Key, filters map[Filter]interface{}, defaultValue bool) (bool, error) {
-	val, err := fc.getValueWithFilters(name, filters, defaultValue)
-	if err != nil {
-		return defaultValue, err
-	}
-
-	if boolVal, ok := val.(bool); ok {
-		return boolVal, nil
-	}
-	return defaultValue, errors.New("value type is not bool")
-}
-
-func (fc *fileBasedClient) GetStringValue(name Key, filters map[Filter]interface{}, defaultValue string) (string, error) {
-	val, err := fc.getValueWithFilters(name, filters, defaultValue)
-	if err != nil {
-		return defaultValue, err
-	}
-
-	if stringVal, ok := val.(string); ok {
-		return stringVal, nil
-	}
-	return defaultValue, errors.New("value type is not string")
-}
-
-func (fc *fileBasedClient) GetMapValue(
-	name Key, filters map[Filter]interface{}, defaultValue map[string]interface{},
-) (map[string]interface{}, error) {
-	val, err := fc.getValueWithFilters(name, filters, defaultValue)
-	if err != nil {
-		return defaultValue, err
-	}
-	if mapVal, ok := val.(map[string]interface{}); ok {
-		return mapVal, nil
-	}
-	return defaultValue, errors.New("value type is not map")
-}
-
-func (fc *fileBasedClient) GetDurationValue(
-	name Key, filters map[Filter]interface{}, defaultValue time.Duration,
-) (time.Duration, error) {
-	val, err := fc.getValueWithFilters(name, filters, defaultValue)
-	if err != nil {
-		return defaultValue, err
-	}
-
-	durationString, ok := val.(string)
-	if !ok {
-		return defaultValue, errors.New("value type is not string")
-	}
-
-	durationVal, err := timestamp.ParseDurationDefaultDays(durationString)
-	if err != nil {
-		return defaultValue, fmt.Errorf("failed to parse duration: %v", err)
-	}
-	return durationVal, nil
-}
-
 func (fc *fileBasedClient) update() error {
 	defer func() {
 		fc.lastUpdatedTime = time.Now().UTC()
 	}()
 
-	newValues := make(map[string][]*constrainedValue)
+	newValues := make(configValueMap)
 
 	info, err := os.Stat(fc.config.Filepath)
 	if err != nil {
@@ -219,7 +122,7 @@ func (fc *fileBasedClient) update() error {
 }
 
 func (fc *fileBasedClient) storeValues(newValues map[string][]*constrainedValue) error {
-	formattedNewValues := make(map[string][]*constrainedValue, len(newValues))
+	formattedNewValues := make(configValueMap, len(newValues))
 
 	// yaml will unmarshal map into map[interface{}]interface{} instead of map[string]interface{}
 	// manually convert key type to string for all values here
@@ -241,39 +144,17 @@ func (fc *fileBasedClient) storeValues(newValues map[string][]*constrainedValue)
 	return nil
 }
 
-func (fc *fileBasedClient) getValueWithFilters(key Key, filters map[Filter]interface{}, defaultValue interface{}) (interface{}, error) {
-	keyName := strings.ToLower(Keys[key])
-	values := fc.values.Load().(map[string][]*constrainedValue)
-	found := false
-	for _, constrainedValue := range values[keyName] {
-		if len(constrainedValue.Constraints) == 0 {
-			// special handling for default value (value without any constraints)
-			defaultValue = constrainedValue.Value
-			found = true
-			continue
-		}
-		if match(constrainedValue, filters) {
-			return constrainedValue.Value, nil
-		}
+func validateConfig(config *FileBasedClientConfig) error {
+	if config == nil {
+		return errors.New("no config found for file based dynamic config client")
 	}
-	if !found {
-		return defaultValue, errors.New("unable to find key")
+	if _, err := os.Stat(config.Filepath); err != nil {
+		return fmt.Errorf("dynamic config: %s: %w", config.Filepath, err)
 	}
-	return defaultValue, nil
-}
-
-// match will return true if the constraints matches the filters exactly
-func match(v *constrainedValue, filters map[Filter]interface{}) bool {
-	if len(v.Constraints) != len(filters) {
-		return false
+	if config.PollInterval < minPollInterval {
+		return fmt.Errorf("poll interval should be at least %v", minPollInterval)
 	}
-
-	for filter, filterValue := range filters {
-		if v.Constraints[filter.String()] != filterValue {
-			return false
-		}
-	}
-	return true
+	return nil
 }
 
 func convertKeyTypeToString(v interface{}) (interface{}, error) {
@@ -313,17 +194,4 @@ func convertKeyTypeToStringSlice(s []interface{}) ([]interface{}, error) {
 		stringKeySlice[idx] = convertedValue
 	}
 	return stringKeySlice, nil
-}
-
-func validateConfig(config *FileBasedClientConfig) error {
-	if config == nil {
-		return errors.New("no config found for file based dynamic config client")
-	}
-	if _, err := os.Stat(config.Filepath); err != nil {
-		return fmt.Errorf("error checking dynamic config file at path %s, error: %v", config.Filepath, err)
-	}
-	if config.PollInterval < minPollInterval {
-		return fmt.Errorf("poll interval should be at least %v", minPollInterval)
-	}
-	return nil
 }

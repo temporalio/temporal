@@ -38,7 +38,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
+	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/resolver"
 )
 

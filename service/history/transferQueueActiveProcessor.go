@@ -26,6 +26,7 @@ package history
 
 import (
 	"github.com/pborman/uuid"
+	"go.temporal.io/server/common/persistence/visibility"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -56,7 +57,7 @@ type (
 func newTransferQueueActiveProcessor(
 	shard shard.Context,
 	historyService *historyEngineImpl,
-	visibilityMgr persistence.VisibilityManager,
+	visibilityMgr visibility.VisibilityManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	taskAllocator taskAllocator,
@@ -172,7 +173,7 @@ func newTransferQueueActiveProcessor(
 func newTransferQueueFailoverProcessor(
 	shard shard.Context,
 	historyService *historyEngineImpl,
-	visibilityMgr persistence.VisibilityManager,
+	visibilityMgr visibility.VisibilityManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	namespaceIDs map[string]struct{},

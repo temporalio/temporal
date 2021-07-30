@@ -68,7 +68,7 @@ func TestCassandraHistoryStoreSuite(t *testing.T) {
 		testCassandraClusterName,
 		logger,
 	)
-	store, err := factory.NewHistoryStore()
+	store, err := factory.NewWorkflowStore(-1)
 	if err != nil {
 		t.Fatalf("unable to create Cassandra DB: %v", err)
 	}

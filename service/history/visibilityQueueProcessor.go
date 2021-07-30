@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -69,7 +70,7 @@ type (
 		// from transferQueueProcessorImpl
 		config             *configs.Config
 		historyService     *historyEngineImpl
-		visibilityMgr      persistence.VisibilityManager
+		visibilityMgr      visibility.VisibilityManager
 		matchingClient     matchingservice.MatchingServiceClient
 		historyClient      historyservice.HistoryServiceClient
 		ackLevel           int64
@@ -84,7 +85,7 @@ type (
 func newVisibilityQueueProcessor(
 	shard shard.Context,
 	historyService *historyEngineImpl,
-	visibilityMgr persistence.VisibilityManager,
+	visibilityMgr visibility.VisibilityManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	queueTaskProcessor queueTaskProcessor,

@@ -38,7 +38,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/adminservice/v1"
-	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
+	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -73,7 +73,7 @@ func AdminShowWorkflow(c *cli.Context) {
 	serializer := serialization.NewSerializer()
 	var history []*commonpb.DataBlob
 	if len(tid) != 0 {
-		histV2 := cassandra.NewHistoryV2PersistenceFromSession(session, log.NewNoopLogger())
+		histV2 := cassandra.NewWorkflowStore(-1, session, log.NewNoopLogger())
 		resp, err := histV2.ReadHistoryBranch(&persistence.InternalReadHistoryBranchRequest{
 			TreeID:    tid,
 			BranchID:  bid,
@@ -240,7 +240,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		}
 		fmt.Println("Deleting history events for:")
 		prettyPrintJSONObject(branchInfo)
-		histV2 := cassandra.NewHistoryV2PersistenceFromSession(session, log.NewNoopLogger())
+		histV2 := cassandra.NewWorkflowStore(-1, session, log.NewNoopLogger())
 		histMgr := persistence.NewHistoryV2ManagerImpl(histV2, log.NewNoopLogger(), dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit))
 		err = histMgr.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
 			BranchToken: branchToken,
@@ -255,7 +255,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		}
 	}
 
-	exeStore, _ := cassandra.NewWorkflowExecutionPersistence(int32(shardIDInt), session, log.NewNoopLogger())
+	exeStore := cassandra.NewWorkflowStore(int32(shardIDInt), session, log.NewNoopLogger())
 	req := &persistence.DeleteWorkflowExecutionRequest{
 		NamespaceID: namespaceID,
 		WorkflowID:  getRequiredOption(c, FlagWorkflowID),

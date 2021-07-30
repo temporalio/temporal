@@ -266,8 +266,6 @@ const (
 	PersistenceListClosedWorkflowExecutionsByWorkflowIDScope
 	// PersistenceListClosedWorkflowExecutionsByStatusScope tracks ListClosedWorkflowExecutionsByStatus calls made by service to persistence layer
 	PersistenceListClosedWorkflowExecutionsByStatusScope
-	// PersistenceGetClosedWorkflowExecutionScope tracks GetClosedWorkflowExecution calls made by service to persistence layer
-	PersistenceGetClosedWorkflowExecutionScope
 	// PersistenceVisibilityDeleteWorkflowExecutionScope is the metrics scope for persistence.VisibilityManager.DeleteWorkflowExecution
 	PersistenceVisibilityDeleteWorkflowExecutionScope
 	// PersistenceListWorkflowExecutionsScope tracks ListWorkflowExecutions calls made by service to persistence layer
@@ -647,8 +645,6 @@ const (
 	ElasticsearchListClosedWorkflowExecutionsByWorkflowIDScope
 	// ElasticsearchListClosedWorkflowExecutionsByStatusScope tracks ListClosedWorkflowExecutionsByStatus calls made by service to persistence layer
 	ElasticsearchListClosedWorkflowExecutionsByStatusScope
-	// ElasticsearchGetClosedWorkflowExecutionScope tracks GetClosedWorkflowExecution calls made by service to persistence layer
-	ElasticsearchGetClosedWorkflowExecutionScope
 	// ElasticsearchListWorkflowExecutionsScope tracks ListWorkflowExecutions calls made by service to persistence layer
 	ElasticsearchListWorkflowExecutionsScope
 	// ElasticsearchScanWorkflowExecutionsScope tracks ScanWorkflowExecutions calls made by service to persistence layer
@@ -1181,7 +1177,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceListOpenWorkflowExecutionsByWorkflowIDScope:   {operation: "ListOpenWorkflowExecutionsByWorkflowID"},
 		PersistenceListClosedWorkflowExecutionsByWorkflowIDScope: {operation: "ListClosedWorkflowExecutionsByWorkflowID"},
 		PersistenceListClosedWorkflowExecutionsByStatusScope:     {operation: "ListClosedWorkflowExecutionsByStatus"},
-		PersistenceGetClosedWorkflowExecutionScope:               {operation: "GetClosedWorkflowExecution"},
 		PersistenceVisibilityDeleteWorkflowExecutionScope:        {operation: "VisibilityDeleteWorkflowExecution"},
 		PersistenceListWorkflowExecutionsScope:                   {operation: "ListWorkflowExecutions"},
 		PersistenceScanWorkflowExecutionsScope:                   {operation: "ScanWorkflowExecutions"},
@@ -1374,7 +1369,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ElasticsearchListOpenWorkflowExecutionsByWorkflowIDScope:   {operation: "ListOpenWorkflowExecutionsByWorkflowID"},
 		ElasticsearchListClosedWorkflowExecutionsByWorkflowIDScope: {operation: "ListClosedWorkflowExecutionsByWorkflowID"},
 		ElasticsearchListClosedWorkflowExecutionsByStatusScope:     {operation: "ListClosedWorkflowExecutionsByStatus"},
-		ElasticsearchGetClosedWorkflowExecutionScope:               {operation: "GetClosedWorkflowExecution"},
 		ElasticsearchListWorkflowExecutionsScope:                   {operation: "ListWorkflowExecutions"},
 		ElasticsearchScanWorkflowExecutionsScope:                   {operation: "ScanWorkflowExecutions"},
 		ElasticsearchCountWorkflowExecutionsScope:                  {operation: "CountWorkflowExecutions"},

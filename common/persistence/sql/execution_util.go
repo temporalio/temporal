@@ -416,7 +416,7 @@ func applyWorkflowSnapshotTxAsReset(
 	return nil
 }
 
-func (m *sqlExecutionStore) applyWorkflowSnapshotTxAsNew(
+func (m *sqlWorkflowStore) applyWorkflowSnapshotTxAsNew(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
@@ -1265,7 +1265,7 @@ func buildExecutionRow(
 	}, nil
 }
 
-func (m *sqlExecutionStore) createExecution(
+func (m *sqlWorkflowStore) createExecution(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	namespaceID string,
@@ -1293,7 +1293,7 @@ func (m *sqlExecutionStore) createExecution(
 	}
 	result, err := tx.InsertIntoExecutions(ctx, row)
 	if err != nil {
-		if m.db.IsDupEntryError(err) {
+		if m.Db.IsDupEntryError(err) {
 			return &p.WorkflowExecutionAlreadyStartedError{
 				Msg:              fmt.Sprintf("Workflow execution already running. WorkflowId: %v", workflowID),
 				StartRequestID:   executionState.CreateRequestId,

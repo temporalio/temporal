@@ -41,7 +41,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
-func (m *sqlExecutionStore) AddTasks(
+func (m *sqlWorkflowStore) AddTasks(
 	request *p.AddTasksRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -64,12 +64,12 @@ func (m *sqlExecutionStore) AddTasks(
 		})
 }
 
-func (m *sqlExecutionStore) GetTransferTask(
+func (m *sqlWorkflowStore) GetTransferTask(
 	request *persistence.GetTransferTaskRequest,
 ) (*persistence.GetTransferTaskResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	rows, err := m.db.SelectFromTransferTasks(ctx, sqlplugin.TransferTasksFilter{
+	rows, err := m.Db.SelectFromTransferTasks(ctx, sqlplugin.TransferTasksFilter{
 		ShardID: request.ShardID,
 		TaskID:  request.TaskID,
 	})
@@ -95,12 +95,12 @@ func (m *sqlExecutionStore) GetTransferTask(
 	return resp, nil
 }
 
-func (m *sqlExecutionStore) GetTransferTasks(
+func (m *sqlWorkflowStore) GetTransferTasks(
 	request *p.GetTransferTasksRequest,
 ) (*p.GetTransferTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	rows, err := m.db.RangeSelectFromTransferTasks(ctx, sqlplugin.TransferTasksRangeFilter{
+	rows, err := m.Db.RangeSelectFromTransferTasks(ctx, sqlplugin.TransferTasksRangeFilter{
 		ShardID:   m.shardID,
 		MinTaskID: request.ReadLevel,
 		MaxTaskID: request.MaxReadLevel,
@@ -122,12 +122,12 @@ func (m *sqlExecutionStore) GetTransferTasks(
 	return resp, nil
 }
 
-func (m *sqlExecutionStore) CompleteTransferTask(
+func (m *sqlWorkflowStore) CompleteTransferTask(
 	request *p.CompleteTransferTaskRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	if _, err := m.db.DeleteFromTransferTasks(ctx, sqlplugin.TransferTasksFilter{
+	if _, err := m.Db.DeleteFromTransferTasks(ctx, sqlplugin.TransferTasksFilter{
 		ShardID: m.shardID,
 		TaskID:  request.TaskID,
 	}); err != nil {
@@ -136,12 +136,12 @@ func (m *sqlExecutionStore) CompleteTransferTask(
 	return nil
 }
 
-func (m *sqlExecutionStore) RangeCompleteTransferTask(
+func (m *sqlWorkflowStore) RangeCompleteTransferTask(
 	request *p.RangeCompleteTransferTaskRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	if _, err := m.db.RangeDeleteFromTransferTasks(ctx, sqlplugin.TransferTasksRangeFilter{
+	if _, err := m.Db.RangeDeleteFromTransferTasks(ctx, sqlplugin.TransferTasksRangeFilter{
 		ShardID:   m.shardID,
 		MinTaskID: request.ExclusiveBeginTaskID,
 		MaxTaskID: request.InclusiveEndTaskID,
@@ -151,12 +151,12 @@ func (m *sqlExecutionStore) RangeCompleteTransferTask(
 	return nil
 }
 
-func (m *sqlExecutionStore) GetTimerTask(
+func (m *sqlWorkflowStore) GetTimerTask(
 	request *persistence.GetTimerTaskRequest,
 ) (*persistence.GetTimerTaskResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	rows, err := m.db.SelectFromTimerTasks(ctx, sqlplugin.TimerTasksFilter{
+	rows, err := m.Db.SelectFromTimerTasks(ctx, sqlplugin.TimerTasksFilter{
 		ShardID:             request.ShardID,
 		TaskID:              request.TaskID,
 		VisibilityTimestamp: request.VisibilityTimestamp,
@@ -183,7 +183,7 @@ func (m *sqlExecutionStore) GetTimerTask(
 	return resp, nil
 }
 
-func (m *sqlExecutionStore) GetTimerIndexTasks(
+func (m *sqlWorkflowStore) GetTimerIndexTasks(
 	request *p.GetTimerIndexTasksRequest,
 ) (*p.GetTimerIndexTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -195,7 +195,7 @@ func (m *sqlExecutionStore) GetTimerIndexTasks(
 		}
 	}
 
-	rows, err := m.db.RangeSelectFromTimerTasks(ctx, sqlplugin.TimerTasksRangeFilter{
+	rows, err := m.Db.RangeSelectFromTimerTasks(ctx, sqlplugin.TimerTasksRangeFilter{
 		ShardID:                m.shardID,
 		MinVisibilityTimestamp: pageToken.Timestamp,
 		TaskID:                 pageToken.TaskID,
@@ -237,12 +237,12 @@ func (m *sqlExecutionStore) GetTimerIndexTasks(
 	return resp, nil
 }
 
-func (m *sqlExecutionStore) CompleteTimerTask(
+func (m *sqlWorkflowStore) CompleteTimerTask(
 	request *p.CompleteTimerTaskRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	if _, err := m.db.DeleteFromTimerTasks(ctx, sqlplugin.TimerTasksFilter{
+	if _, err := m.Db.DeleteFromTimerTasks(ctx, sqlplugin.TimerTasksFilter{
 		ShardID:             m.shardID,
 		VisibilityTimestamp: request.VisibilityTimestamp,
 		TaskID:              request.TaskID,
@@ -252,14 +252,14 @@ func (m *sqlExecutionStore) CompleteTimerTask(
 	return nil
 }
 
-func (m *sqlExecutionStore) RangeCompleteTimerTask(
+func (m *sqlWorkflowStore) RangeCompleteTimerTask(
 	request *p.RangeCompleteTimerTaskRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	start := request.InclusiveBeginTimestamp
 	end := request.ExclusiveEndTimestamp
-	if _, err := m.db.RangeDeleteFromTimerTasks(ctx, sqlplugin.TimerTasksRangeFilter{
+	if _, err := m.Db.RangeDeleteFromTimerTasks(ctx, sqlplugin.TimerTasksRangeFilter{
 		ShardID:                m.shardID,
 		MinVisibilityTimestamp: start,
 		MaxVisibilityTimestamp: end,
@@ -269,12 +269,12 @@ func (m *sqlExecutionStore) RangeCompleteTimerTask(
 	return nil
 }
 
-func (m *sqlExecutionStore) GetReplicationTask(
+func (m *sqlWorkflowStore) GetReplicationTask(
 	request *persistence.GetReplicationTaskRequest,
 ) (*persistence.GetReplicationTaskResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	rows, err := m.db.SelectFromReplicationTasks(ctx, sqlplugin.ReplicationTasksFilter{
+	rows, err := m.Db.SelectFromReplicationTasks(ctx, sqlplugin.ReplicationTasksFilter{
 		ShardID: request.ShardID,
 		TaskID:  request.TaskID,
 	})
@@ -300,7 +300,7 @@ func (m *sqlExecutionStore) GetReplicationTask(
 	return resp, nil
 }
 
-func (m *sqlExecutionStore) GetReplicationTasks(
+func (m *sqlWorkflowStore) GetReplicationTasks(
 	request *p.GetReplicationTasksRequest,
 ) (*p.GetReplicationTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -310,7 +310,7 @@ func (m *sqlExecutionStore) GetReplicationTasks(
 		return nil, err
 	}
 
-	rows, err := m.db.RangeSelectFromReplicationTasks(ctx, sqlplugin.ReplicationTasksRangeFilter{
+	rows, err := m.Db.RangeSelectFromReplicationTasks(ctx, sqlplugin.ReplicationTasksRangeFilter{
 		ShardID:   m.shardID,
 		MinTaskID: readLevel,
 		MaxTaskID: maxReadLevelInclusive,
@@ -342,7 +342,7 @@ func getReadLevels(
 	return readLevel, maxReadLevelInclusive, nil
 }
 
-func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
+func (m *sqlWorkflowStore) populateGetReplicationTasksResponse(
 	rows []sqlplugin.ReplicationTasksRow,
 	requestMaxReadLevel int64,
 ) (*p.GetReplicationTasksResponse, error) {
@@ -370,7 +370,7 @@ func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
 	}, nil
 }
 
-func (m *sqlExecutionStore) populateGetReplicationDLQTasksResponse(
+func (m *sqlWorkflowStore) populateGetReplicationDLQTasksResponse(
 	rows []sqlplugin.ReplicationDLQTasksRow,
 	requestMaxReadLevel int64,
 ) (*p.GetReplicationTasksResponse, error) {
@@ -398,12 +398,12 @@ func (m *sqlExecutionStore) populateGetReplicationDLQTasksResponse(
 	}, nil
 }
 
-func (m *sqlExecutionStore) CompleteReplicationTask(
+func (m *sqlWorkflowStore) CompleteReplicationTask(
 	request *p.CompleteReplicationTaskRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	if _, err := m.db.DeleteFromReplicationTasks(ctx, sqlplugin.ReplicationTasksFilter{
+	if _, err := m.Db.DeleteFromReplicationTasks(ctx, sqlplugin.ReplicationTasksFilter{
 		ShardID: m.shardID,
 		TaskID:  request.TaskID,
 	}); err != nil {
@@ -412,12 +412,12 @@ func (m *sqlExecutionStore) CompleteReplicationTask(
 	return nil
 }
 
-func (m *sqlExecutionStore) RangeCompleteReplicationTask(
+func (m *sqlWorkflowStore) RangeCompleteReplicationTask(
 	request *p.RangeCompleteReplicationTaskRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	if _, err := m.db.RangeDeleteFromReplicationTasks(ctx, sqlplugin.ReplicationTasksRangeFilter{
+	if _, err := m.Db.RangeDeleteFromReplicationTasks(ctx, sqlplugin.ReplicationTasksRangeFilter{
 		ShardID:   m.shardID,
 		MinTaskID: 0,
 		MaxTaskID: request.InclusiveEndTaskID,
@@ -427,7 +427,7 @@ func (m *sqlExecutionStore) RangeCompleteReplicationTask(
 	return nil
 }
 
-func (m *sqlExecutionStore) PutReplicationTaskToDLQ(
+func (m *sqlWorkflowStore) PutReplicationTaskToDLQ(
 	request *p.PutReplicationTaskToDLQRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -439,7 +439,7 @@ func (m *sqlExecutionStore) PutReplicationTaskToDLQ(
 		return err
 	}
 
-	_, err = m.db.InsertIntoReplicationDLQTasks(ctx, []sqlplugin.ReplicationDLQTasksRow{{
+	_, err = m.Db.InsertIntoReplicationDLQTasks(ctx, []sqlplugin.ReplicationDLQTasksRow{{
 		SourceClusterName: request.SourceClusterName,
 		ShardID:           m.shardID,
 		TaskID:            replicationTask.GetTaskId(),
@@ -449,14 +449,14 @@ func (m *sqlExecutionStore) PutReplicationTaskToDLQ(
 
 	// Tasks are immutable. So it's fine if we already persisted it before.
 	// This can happen when tasks are retried (ack and cleanup can have lag on source side).
-	if err != nil && !m.db.IsDupEntryError(err) {
+	if err != nil && !m.Db.IsDupEntryError(err) {
 		return serviceerror.NewInternal(fmt.Sprintf("Failed to create replication tasks. Error: %v", err))
 	}
 
 	return nil
 }
 
-func (m *sqlExecutionStore) GetReplicationTasksFromDLQ(
+func (m *sqlWorkflowStore) GetReplicationTasksFromDLQ(
 	request *p.GetReplicationTasksFromDLQRequest,
 ) (*p.GetReplicationTasksFromDLQResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -466,7 +466,7 @@ func (m *sqlExecutionStore) GetReplicationTasksFromDLQ(
 		return nil, err
 	}
 
-	rows, err := m.db.RangeSelectFromReplicationDLQTasks(ctx, sqlplugin.ReplicationDLQTasksRangeFilter{
+	rows, err := m.Db.RangeSelectFromReplicationDLQTasks(ctx, sqlplugin.ReplicationDLQTasksRangeFilter{
 		ShardID:           m.shardID,
 		MinTaskID:         readLevel,
 		MaxTaskID:         maxReadLevelInclusive,
@@ -484,12 +484,12 @@ func (m *sqlExecutionStore) GetReplicationTasksFromDLQ(
 	}
 }
 
-func (m *sqlExecutionStore) DeleteReplicationTaskFromDLQ(
+func (m *sqlWorkflowStore) DeleteReplicationTaskFromDLQ(
 	request *p.DeleteReplicationTaskFromDLQRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	if _, err := m.db.DeleteFromReplicationDLQTasks(ctx, sqlplugin.ReplicationDLQTasksFilter{
+	if _, err := m.Db.DeleteFromReplicationDLQTasks(ctx, sqlplugin.ReplicationDLQTasksFilter{
 		ShardID:           m.shardID,
 		TaskID:            request.TaskID,
 		SourceClusterName: request.SourceClusterName,
@@ -499,12 +499,12 @@ func (m *sqlExecutionStore) DeleteReplicationTaskFromDLQ(
 	return nil
 }
 
-func (m *sqlExecutionStore) RangeDeleteReplicationTaskFromDLQ(
+func (m *sqlWorkflowStore) RangeDeleteReplicationTaskFromDLQ(
 	request *p.RangeDeleteReplicationTaskFromDLQRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	if _, err := m.db.RangeDeleteFromReplicationDLQTasks(ctx, sqlplugin.ReplicationDLQTasksRangeFilter{
+	if _, err := m.Db.RangeDeleteFromReplicationDLQTasks(ctx, sqlplugin.ReplicationDLQTasksRangeFilter{
 		ShardID:           m.shardID,
 		SourceClusterName: request.SourceClusterName,
 		MinTaskID:         request.ExclusiveBeginTaskID,
@@ -515,12 +515,12 @@ func (m *sqlExecutionStore) RangeDeleteReplicationTaskFromDLQ(
 	return nil
 }
 
-func (m *sqlExecutionStore) GetVisibilityTask(
+func (m *sqlWorkflowStore) GetVisibilityTask(
 	request *persistence.GetVisibilityTaskRequest,
 ) (*persistence.GetVisibilityTaskResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	rows, err := m.db.SelectFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksFilter{
+	rows, err := m.Db.SelectFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksFilter{
 		ShardID: request.ShardID,
 		TaskID:  request.TaskID,
 	})
@@ -546,12 +546,12 @@ func (m *sqlExecutionStore) GetVisibilityTask(
 	return resp, nil
 }
 
-func (m *sqlExecutionStore) GetVisibilityTasks(
+func (m *sqlWorkflowStore) GetVisibilityTasks(
 	request *p.GetVisibilityTasksRequest,
 ) (*p.GetVisibilityTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	rows, err := m.db.RangeSelectFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksRangeFilter{
+	rows, err := m.Db.RangeSelectFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksRangeFilter{
 		ShardID:   m.shardID,
 		MinTaskID: request.ReadLevel,
 		MaxTaskID: request.MaxReadLevel,
@@ -573,12 +573,12 @@ func (m *sqlExecutionStore) GetVisibilityTasks(
 	return resp, nil
 }
 
-func (m *sqlExecutionStore) CompleteVisibilityTask(
+func (m *sqlWorkflowStore) CompleteVisibilityTask(
 	request *p.CompleteVisibilityTaskRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	if _, err := m.db.DeleteFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksFilter{
+	if _, err := m.Db.DeleteFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksFilter{
 		ShardID: m.shardID,
 		TaskID:  request.TaskID,
 	}); err != nil {
@@ -587,12 +587,12 @@ func (m *sqlExecutionStore) CompleteVisibilityTask(
 	return nil
 }
 
-func (m *sqlExecutionStore) RangeCompleteVisibilityTask(
+func (m *sqlWorkflowStore) RangeCompleteVisibilityTask(
 	request *p.RangeCompleteVisibilityTaskRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	if _, err := m.db.RangeDeleteFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksRangeFilter{
+	if _, err := m.Db.RangeDeleteFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksRangeFilter{
 		ShardID:   m.shardID,
 		MinTaskID: request.ExclusiveBeginTaskID,
 		MaxTaskID: request.InclusiveEndTaskID,

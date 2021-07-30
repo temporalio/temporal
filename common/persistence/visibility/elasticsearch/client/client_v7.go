@@ -44,6 +44,7 @@ type (
 )
 
 var _ Client = (*clientV7)(nil)
+var _ ClientV7 = (*clientV7)(nil)
 
 // newClientV7 create a ES client
 func newClientV7(config *config.Elasticsearch, httpClient *http.Client, logger log.Logger) (*clientV7, error) {
@@ -114,21 +115,31 @@ func (c *clientV7) Search(ctx context.Context, p *SearchParameters) (*elastic.Se
 	return searchService.Do(ctx)
 }
 
-func (c *clientV7) SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error) {
-	searchResult, err := c.esClient.Search(index).Source(query).Do(ctx)
+func (c *clientV7) OpenPointInTime(ctx context.Context, index string, keepAliveInterval string) (string, error) {
+	resp, err := c.esClient.OpenPointInTime(index).KeepAlive(keepAliveInterval).Do(ctx)
+	if err != nil {
+		return "", err
+	}
+	return resp.Id, nil
+}
+
+func (c *clientV7) ClosePointInTime(ctx context.Context, id string) (bool, error) {
+	resp, err := c.esClient.ClosePointInTime(id).Do(ctx)
+	if err != nil {
+		return false, err
+	}
+	return resp.Succeeded, nil
+}
+
+func (c *clientV7) SearchWithDSLWithPIT(ctx context.Context, query string) (*elastic.SearchResult, error) {
+	// When pit.id is specified index must not be used.
+	searchResult, err := c.esClient.Search().Source(query).Do(ctx)
 	return searchResult, err
 }
 
-func (c *clientV7) Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, ScrollService, error) {
-	scrollService := elastic.NewScrollService(c.esClient)
-	result, err := scrollService.ScrollId(scrollID).Do(ctx)
-	return result, scrollService, err
-}
-
-func (c *clientV7) ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error) {
-	scrollService := elastic.NewScrollService(c.esClient)
-	result, err := scrollService.Index(index).Body(query).Do(ctx)
-	return result, scrollService, err
+func (c *clientV7) SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error) {
+	searchResult, err := c.esClient.Search(index).Source(query).Do(ctx)
+	return searchResult, err
 }
 
 func (c *clientV7) Count(ctx context.Context, index, query string) (int64, error) {

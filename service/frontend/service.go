@@ -31,11 +31,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
-	"google.golang.org/grpc"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/keepalive"
-	"google.golang.org/grpc/reflection"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
@@ -48,13 +43,19 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility"
+	visibilityclient "go.temporal.io/server/common/persistence/visibility/client"
+	"go.temporal.io/server/common/persistence/visibility/elasticsearch"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/frontend/configs"
+	"google.golang.org/grpc"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/reflection"
 )
 
 // Config represents configuration for frontend service
@@ -216,20 +217,29 @@ func NewService(
 		persistenceBean persistenceClient.Bean,
 		searchAttributesProvider searchattribute.Provider,
 		logger log.Logger,
-	) (persistence.VisibilityManager, error) {
-		visibilityFromDB := persistenceBean.GetVisibilityManager()
+	) (visibility.VisibilityManager, error) {
+		visibilityFromDB, err := visibilityclient.NewVisibilityManager(
+			params.PersistenceConfig,
+			serviceConfig.PersistenceMaxQPS,
+			params.MetricsClient,
+			params.PersistenceServiceResolver,
+			params.Logger,
+		)
+		if err != nil {
+			return nil, err
+		}
 
-		var visibilityFromES persistence.VisibilityManager
+		var visibilityFromES visibility.VisibilityManager
 		if params.ESConfig != nil {
 			visibilityIndexName := params.ESConfig.GetVisibilityIndex()
 			visibilityConfigForES := &config.VisibilityConfig{
 				MaxQPS:               serviceConfig.PersistenceMaxQPS,
 				VisibilityListMaxQPS: serviceConfig.ESVisibilityListMaxQPS,
 			}
-			visibilityFromES = espersistence.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
+			visibilityFromES = elasticsearch.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
 				searchAttributesProvider, nil, params.MetricsClient, logger)
 		}
-		return persistence.NewVisibilityManagerWrapper(
+		return visibility.NewVisibilityManagerWrapper(
 			visibilityFromDB,
 			visibilityFromES,
 			serviceConfig.EnableReadVisibilityFromES,

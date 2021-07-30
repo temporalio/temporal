@@ -31,17 +31,18 @@ import (
 	"github.com/golang/mock/gomock"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/persistence/visibility"
+	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
 )
 
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 	// test non-empty request fields match
-	request := &persistence.InternalRecordWorkflowExecutionStartedRequest{
-		InternalVisibilityRequestBase: &persistence.InternalVisibilityRequestBase{
+	request := &visibility.InternalRecordWorkflowExecutionStartedRequest{
+		InternalVisibilityRequestBase: &visibility.InternalVisibilityRequestBase{
 			NamespaceID:      "namespaceID",
 			WorkflowID:       "wid",
 			RunID:            "rid",
@@ -62,7 +63,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) <-chan bool {
+		DoAndReturn(func(bulkRequest *esclient.BulkableRequest, visibilityTaskKey string) <-chan bool {
 			s.Equal("2208~111", visibilityTaskKey)
 
 			body := bulkRequest.Doc
@@ -83,7 +84,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 			// %q because request has JSON encoded string.
 			s.EqualValues(request.SearchAttributes.GetIndexedFields()["CustomStringField"].Data, fmt.Sprintf("%q", customStringField))
 
-			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
+			s.Equal(esclient.BulkableRequestTypeIndex, bulkRequest.RequestType)
 			s.EqualValues(request.TaskID, bulkRequest.Version)
 			s.Equal("wid~rid", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
@@ -99,14 +100,14 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 	// test empty request
-	request := &persistence.InternalRecordWorkflowExecutionStartedRequest{
-		InternalVisibilityRequestBase: &persistence.InternalVisibilityRequestBase{
+	request := &visibility.InternalRecordWorkflowExecutionStartedRequest{
+		InternalVisibilityRequestBase: &visibility.InternalVisibilityRequestBase{
 			Memo: &commonpb.DataBlob{},
 		},
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) <-chan bool {
+		DoAndReturn(func(bulkRequest *esclient.BulkableRequest, visibilityTaskKey string) <-chan bool {
 			s.Equal("0~0", visibilityTaskKey)
 
 			body := bulkRequest.Doc
@@ -116,7 +117,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 			_, ok = body[searchattribute.MemoEncoding]
 			s.False(ok)
 
-			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
+			s.Equal(esclient.BulkableRequestTypeIndex, bulkRequest.RequestType)
 			s.EqualValues(request.TaskID, bulkRequest.Version)
 			s.Equal("~", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
@@ -132,8 +133,8 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	// test non-empty request fields match
-	request := &persistence.InternalRecordWorkflowExecutionClosedRequest{
-		InternalVisibilityRequestBase: &persistence.InternalVisibilityRequestBase{
+	request := &visibility.InternalRecordWorkflowExecutionClosedRequest{
+		InternalVisibilityRequestBase: &visibility.InternalVisibilityRequestBase{
 			NamespaceID:      "namespaceID",
 			WorkflowID:       "wid",
 			RunID:            "rid",
@@ -156,7 +157,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) <-chan bool {
+		DoAndReturn(func(bulkRequest *esclient.BulkableRequest, visibilityTaskKey string) <-chan bool {
 			s.Equal("2208~111", visibilityTaskKey)
 
 			body := bulkRequest.Doc
@@ -173,7 +174,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 			s.EqualValues(request.Status.String(), body[searchattribute.ExecutionStatus])
 			s.EqualValues(request.HistoryLength, body[searchattribute.HistoryLength])
 
-			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
+			s.Equal(esclient.BulkableRequestTypeIndex, bulkRequest.RequestType)
 			s.EqualValues(request.TaskID, bulkRequest.Version)
 			s.Equal("wid~rid", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
@@ -189,14 +190,14 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 	// test empty request
-	request := &persistence.InternalRecordWorkflowExecutionClosedRequest{
-		InternalVisibilityRequestBase: &persistence.InternalVisibilityRequestBase{
+	request := &visibility.InternalRecordWorkflowExecutionClosedRequest{
+		InternalVisibilityRequestBase: &visibility.InternalVisibilityRequestBase{
 			Memo: &commonpb.DataBlob{},
 		},
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) <-chan bool {
+		DoAndReturn(func(bulkRequest *esclient.BulkableRequest, visibilityTaskKey string) <-chan bool {
 			s.Equal("0~0", visibilityTaskKey)
 
 			body := bulkRequest.Doc
@@ -206,7 +207,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 			_, ok = body[searchattribute.MemoEncoding]
 			s.False(ok)
 
-			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
+			s.Equal(esclient.BulkableRequestTypeIndex, bulkRequest.RequestType)
 			s.EqualValues(request.TaskID, bulkRequest.Version)
 			s.Equal("~", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
@@ -222,7 +223,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 
 func (s *ESVisibilitySuite) TestDeleteExecution() {
 	// test non-empty request fields match
-	request := &persistence.VisibilityDeleteWorkflowExecutionRequest{
+	request := &visibility.VisibilityDeleteWorkflowExecutionRequest{
 		NamespaceID: "namespaceID",
 		RunID:       "rid",
 		WorkflowID:  "wid",
@@ -230,10 +231,10 @@ func (s *ESVisibilitySuite) TestDeleteExecution() {
 	}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) <-chan bool {
+		DoAndReturn(func(bulkRequest *esclient.BulkableRequest, visibilityTaskKey string) <-chan bool {
 			s.Equal("wid~rid", visibilityTaskKey)
 
-			s.Equal(client.BulkableRequestTypeDelete, bulkRequest.RequestType)
+			s.Equal(esclient.BulkableRequestTypeDelete, bulkRequest.RequestType)
 			s.EqualValues(request.TaskID, bulkRequest.Version)
 			s.Equal("wid~rid", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
@@ -249,13 +250,13 @@ func (s *ESVisibilitySuite) TestDeleteExecution() {
 
 func (s *ESVisibilitySuite) TestDeleteExecution_EmptyRequest() {
 	// test empty request
-	request := &persistence.VisibilityDeleteWorkflowExecutionRequest{}
+	request := &visibility.VisibilityDeleteWorkflowExecutionRequest{}
 
 	s.mockProcessor.EXPECT().Add(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(bulkRequest *client.BulkableRequest, visibilityTaskKey string) <-chan bool {
+		DoAndReturn(func(bulkRequest *esclient.BulkableRequest, visibilityTaskKey string) <-chan bool {
 			s.Equal("~", visibilityTaskKey)
 
-			s.Equal(client.BulkableRequestTypeDelete, bulkRequest.RequestType)
+			s.Equal(esclient.BulkableRequestTypeDelete, bulkRequest.RequestType)
 			s.Equal("~", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
 
