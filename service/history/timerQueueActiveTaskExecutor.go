@@ -116,7 +116,7 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 	var cancel context.CancelFunc
-	ctx, cancel = t.addDefaultTimeout(ctx)
+	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
 
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
@@ -176,7 +176,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 	var cancel context.CancelFunc
-	ctx, cancel = t.addDefaultTimeout(ctx)
+	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
 
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
@@ -286,7 +286,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 	var cancel context.CancelFunc
-	ctx, cancel = t.addDefaultTimeout(ctx)
+	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
 
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
@@ -366,7 +366,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 	var cancel context.CancelFunc
-	ctx, cancel = t.addDefaultTimeout(ctx)
+	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
 
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
@@ -409,7 +409,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 	var cancel context.CancelFunc
-	ctx, cancel = t.addDefaultTimeout(ctx)
+	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
 
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
@@ -503,7 +503,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	task *persistencespb.TimerTaskInfo,
 ) (retError error) {
 	var cancel context.CancelFunc
-	ctx, cancel = t.addDefaultTimeout(ctx)
+	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
 
 	defer cancel()
 
@@ -676,8 +676,4 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 		metricsScope.IncCounter(metrics.HeartbeatTimeoutCounter)
 	}
-}
-
-func (t *timerQueueActiveTaskExecutor) addDefaultTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(ctx, taskTimeout)
 }
