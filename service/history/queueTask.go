@@ -283,7 +283,7 @@ func (t *queueTaskBase) Execute() error {
 			t.scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(executionStartTime))
 			if userLatency, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency); ok {
 				userLatencyDuration := time.Duration(userLatency)
-				t.scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(executionStartTime)-userLatencyDuration)
+				t.scope.RecordTimer(metrics.TaskNoUserProcessingLatency, time.Since(executionStartTime)-userLatencyDuration)
 			}
 		}
 	}()
