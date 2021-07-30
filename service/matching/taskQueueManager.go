@@ -61,6 +61,16 @@ const (
 	syncMatchTaskId = -137
 )
 
+// fatalSignalBehavior indicates to functions that may inovke the
+// taskQueueManagerImpl.signalFatalProblem callback whether they should or
+// should not do that.
+type fatalSignalBehavior int
+
+const (
+	emitFatalSignal fatalSignalBehavior = iota + 1
+	suppressFatalSignal
+)
+
 type (
 	taskQueueManagerOpt func(*taskQueueManagerImpl)
 
@@ -129,8 +139,8 @@ type (
 		// prevent tasks being dispatched to zombie pollers.
 		outstandingPollsLock sync.Mutex
 		outstandingPollsMap  map[string]context.CancelFunc
-
-		shutdownCh chan struct{} // Delivers stop to the pump that populates taskBuffer
+		shutdownCh           chan struct{} // Delivers stop to the pump that populates taskBuffer
+		signalFatalProblem   func(id *taskQueueID)
 	}
 )
 
@@ -177,6 +187,7 @@ func newTaskQueueManager(
 		config:              taskQueueConfig,
 		pollerHistory:       newPollerHistory(),
 		outstandingPollsMap: make(map[string]context.CancelFunc),
+		signalFatalProblem:  e.unloadTaskQueue,
 	}
 
 	tlMgr.namespaceValue.Store("")
@@ -226,7 +237,7 @@ func (c *taskQueueManagerImpl) Start() error {
 		return nil
 	}
 	idblock := noTaskIDs
-	state, err := c.renewLeaseWithRetry()
+	state, err := c.renewLeaseWithRetry(suppressFatalSignal)
 	if err != nil && c.errShouldUnload(err) {
 		return err
 	}
@@ -474,7 +485,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 				tag.Error(err),
 				tag.WorkflowTaskQueueName(c.taskQueueID.name),
 				tag.WorkflowTaskQueueType(c.taskQueueID.taskType))
-			c.Stop()
+			c.signalFatalProblem(c.taskQueueID)
 			return
 		}
 		c.taskReader.Signal()
@@ -484,7 +495,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 	c.taskGC.Run(ackLevel)
 }
 
-func (c *taskQueueManagerImpl) renewLeaseWithRetry() (taskQueueState, error) {
+func (c *taskQueueManagerImpl) renewLeaseWithRetry(fsb fatalSignalBehavior) (taskQueueState, error) {
 	var newState taskQueueState
 	op := func() (err error) {
 		newState, err = c.idAlloc.RenewLease()
@@ -494,8 +505,8 @@ func (c *taskQueueManagerImpl) renewLeaseWithRetry() (taskQueueState, error) {
 	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		c.metricScope().IncCounter(metrics.LeaseFailurePerTaskQueueCounter)
-		if c.errShouldUnload(err) {
-			c.engine.unloadTaskQueue(c.taskQueueID)
+		if fsb == emitFatalSignal && c.errShouldUnload(err) {
+			c.signalFatalProblem(c.taskQueueID)
 		}
 		return newState, err
 	}
@@ -515,7 +526,7 @@ func (c *taskQueueManagerImpl) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock
 		return taskIDBlock{},
 			fmt.Errorf("allocTaskIDBlock: invalid state: prevBlockEnd:%v != currTaskIDBlock:%+v", prevBlockEnd, currBlock)
 	}
-	state, err := c.renewLeaseWithRetry()
+	state, err := c.renewLeaseWithRetry(emitFatalSignal)
 	if err != nil {
 		return taskIDBlock{}, err
 	}
