@@ -62,7 +62,7 @@ func NewServerMetricsContextInjectorInterceptor() grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (interface{}, error) {
-		ctxWithMetricsBaggage := addMetricsContext(ctx)
+		ctxWithMetricsBaggage := AddMetricsContext(ctx)
 		return handler(ctxWithMetricsBaggage, req)
 	}
 }
@@ -157,7 +157,7 @@ func getMetricsContext(ctx context.Context) *metricsContext {
 	return metricsCtx.(*metricsContext)
 }
 
-func addMetricsContext(ctx context.Context) context.Context {
+func AddMetricsContext(ctx context.Context) context.Context {
 	metricsCtx := &metricsContext{}
 	return context.WithValue(ctx, metricsCtxKey, metricsCtx)
 }

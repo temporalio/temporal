@@ -143,15 +143,6 @@ func (p *visibilityRateLimitedPersistenceClient) ListClosedWorkflowExecutionsByS
 	return response, err
 }
 
-func (p *visibilityRateLimitedPersistenceClient) GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return nil, persistence.ErrPersistenceLimitExceeded
-	}
-
-	response, err := p.persistence.GetClosedWorkflowExecution(request)
-	return response, err
-}
-
 func (p *visibilityRateLimitedPersistenceClient) DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return persistence.ErrPersistenceLimitExceeded

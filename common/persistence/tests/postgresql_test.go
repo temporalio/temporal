@@ -71,7 +71,7 @@ func TestPostgreSQLHistoryStoreSuite(t *testing.T) {
 		testPostgreSQLClusterName,
 		logger,
 	)
-	store, err := factory.NewHistoryStore()
+	store, err := factory.NewExecutionStore(-1)
 	if err != nil {
 		t.Fatalf("unable to create PostgreSQL DB: %v", err)
 	}

@@ -194,20 +194,6 @@ func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByStatus(request 
 	return response, err
 }
 
-func (m *visibilityManagerMetrics) GetClosedWorkflowExecution(request *visibility.GetClosedWorkflowExecutionRequest) (*visibility.GetClosedWorkflowExecutionResponse, error) {
-	m.metricClient.IncCounter(metrics.ElasticsearchGetClosedWorkflowExecutionScope, metrics.ElasticsearchRequests)
-
-	sw := m.metricClient.StartTimer(metrics.ElasticsearchGetClosedWorkflowExecutionScope, metrics.ElasticsearchLatency)
-	response, err := m.persistence.GetClosedWorkflowExecution(request)
-	sw.Stop()
-
-	if err != nil {
-		m.updateErrorMetric(metrics.ElasticsearchGetClosedWorkflowExecutionScope, err)
-	}
-
-	return response, err
-}
-
 func (m *visibilityManagerMetrics) ListWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.ListWorkflowExecutionsResponse, error) {
 	m.metricClient.IncCounter(metrics.ElasticsearchListWorkflowExecutionsScope, metrics.ElasticsearchRequests)
 

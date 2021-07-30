@@ -697,17 +697,17 @@ func (m *MockqueueTaskExecutor) EXPECT() *MockqueueTaskExecutorMockRecorder {
 }
 
 // execute mocks base method.
-func (m *MockqueueTaskExecutor) execute(taskInfo queueTaskInfo, shouldProcessTask bool) error {
+func (m *MockqueueTaskExecutor) execute(ctx context.Context, taskInfo queueTaskInfo, shouldProcessTask bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "execute", taskInfo, shouldProcessTask)
+	ret := m.ctrl.Call(m, "execute", ctx, taskInfo, shouldProcessTask)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // execute indicates an expected call of execute.
-func (mr *MockqueueTaskExecutorMockRecorder) execute(taskInfo, shouldProcessTask interface{}) *gomock.Call {
+func (mr *MockqueueTaskExecutorMockRecorder) execute(ctx, taskInfo, shouldProcessTask interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "execute", reflect.TypeOf((*MockqueueTaskExecutor)(nil).execute), taskInfo, shouldProcessTask)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "execute", reflect.TypeOf((*MockqueueTaskExecutor)(nil).execute), ctx, taskInfo, shouldProcessTask)
 }
 
 // MockqueueTaskProcessor is a mock of queueTaskProcessor interface.
@@ -848,18 +848,18 @@ func (mr *MocktaskExecutorMockRecorder) getTaskFilter() *gomock.Call {
 }
 
 // process mocks base method.
-func (m *MocktaskExecutor) process(taskInfo *taskInfo) (int, error) {
+func (m *MocktaskExecutor) process(ctx context.Context, taskInfo *taskInfo) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "process", taskInfo)
+	ret := m.ctrl.Call(m, "process", ctx, taskInfo)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // process indicates an expected call of process.
-func (mr *MocktaskExecutorMockRecorder) process(taskInfo interface{}) *gomock.Call {
+func (mr *MocktaskExecutorMockRecorder) process(ctx, taskInfo interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "process", reflect.TypeOf((*MocktaskExecutor)(nil).process), taskInfo)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "process", reflect.TypeOf((*MocktaskExecutor)(nil).process), ctx, taskInfo)
 }
 
 // Mockprocessor is a mock of processor interface.
@@ -912,18 +912,18 @@ func (mr *MockprocessorMockRecorder) getTaskFilter() *gomock.Call {
 }
 
 // process mocks base method.
-func (m *Mockprocessor) process(taskInfo *taskInfo) (int, error) {
+func (m *Mockprocessor) process(ctx context.Context, taskInfo *taskInfo) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "process", taskInfo)
+	ret := m.ctrl.Call(m, "process", ctx, taskInfo)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // process indicates an expected call of process.
-func (mr *MockprocessorMockRecorder) process(taskInfo interface{}) *gomock.Call {
+func (mr *MockprocessorMockRecorder) process(ctx, taskInfo interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "process", reflect.TypeOf((*Mockprocessor)(nil).process), taskInfo)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "process", reflect.TypeOf((*Mockprocessor)(nil).process), ctx, taskInfo)
 }
 
 // queueShutdown mocks base method.
@@ -1032,18 +1032,18 @@ func (mr *MocktimerProcessorMockRecorder) notifyNewTimers(timerTask interface{})
 }
 
 // process mocks base method.
-func (m *MocktimerProcessor) process(taskInfo *taskInfo) (int, error) {
+func (m *MocktimerProcessor) process(ctx context.Context, taskInfo *taskInfo) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "process", taskInfo)
+	ret := m.ctrl.Call(m, "process", ctx, taskInfo)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // process indicates an expected call of process.
-func (mr *MocktimerProcessorMockRecorder) process(taskInfo interface{}) *gomock.Call {
+func (mr *MocktimerProcessorMockRecorder) process(ctx, taskInfo interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "process", reflect.TypeOf((*MocktimerProcessor)(nil).process), taskInfo)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "process", reflect.TypeOf((*MocktimerProcessor)(nil).process), ctx, taskInfo)
 }
 
 // MocktimerQueueAckMgr is a mock of timerQueueAckMgr interface.

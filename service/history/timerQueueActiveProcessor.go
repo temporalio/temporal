@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -297,9 +298,10 @@ func (t *timerQueueActiveProcessorImpl) complete(
 }
 
 func (t *timerQueueActiveProcessorImpl) process(
+	ctx context.Context,
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
 	metricScope := getTimerTaskMetricScope(taskInfo.task.GetTaskType(), true)
-	return metricScope, t.taskExecutor.execute(taskInfo.task, taskInfo.shouldProcessTask)
+	return metricScope, t.taskExecutor.execute(ctx, taskInfo.task, taskInfo.shouldProcessTask)
 }

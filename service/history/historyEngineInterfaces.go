@@ -86,7 +86,7 @@ type (
 	}
 
 	queueTaskExecutor interface {
-		execute(taskInfo queueTaskInfo, shouldProcessTask bool) error
+		execute(ctx context.Context, taskInfo queueTaskInfo, shouldProcessTask bool) error
 	}
 
 	queueTaskProcessor interface {
@@ -99,7 +99,7 @@ type (
 	// TODO: deprecate this interface in favor of the task interface
 	// defined in common/task package
 	taskExecutor interface {
-		process(taskInfo *taskInfo) (int, error)
+		process(ctx context.Context, taskInfo *taskInfo) (int, error)
 		complete(taskInfo *taskInfo)
 		getTaskFilter() taskFilter
 	}
