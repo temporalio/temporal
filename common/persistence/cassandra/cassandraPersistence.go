@@ -727,7 +727,7 @@ type (
 	}
 )
 
-var _ p.WorkflowStore = (*cassandraPersistence)(nil)
+var _ p.ExecutionStore = (*cassandraPersistence)(nil)
 
 // newShardPersistence is used to create an instance of ShardManager implementation
 func newShardPersistence(
@@ -742,12 +742,12 @@ func newShardPersistence(
 	}, nil
 }
 
-// NewWorkflowStore is used to create an instance of workflowExecutionManager implementation
-func NewWorkflowStore(
+// NewExecutionStore is used to create an instance of workflowExecutionManager implementation
+func NewExecutionStore(
 	shardID int32,
 	session gocql.Session,
 	logger log.Logger,
-) p.WorkflowStore {
+) p.ExecutionStore {
 	return &cassandraPersistence{
 		cassandraStore: cassandraStore{session: session, logger: logger},
 		shardID:        shardID,

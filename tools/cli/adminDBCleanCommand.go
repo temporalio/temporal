@@ -176,7 +176,7 @@ func cleanShard(
 		return report
 	}
 	defer shardCorruptedFile.Close()
-	execStore := cassp.NewWorkflowStore(shardID, session, log.NewNoopLogger())
+	execStore := cassp.NewExecutionStore(shardID, session, log.NewNoopLogger())
 
 	scanner := bufio.NewScanner(shardCorruptedFile)
 	for scanner.Scan() {

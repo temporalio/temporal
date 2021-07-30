@@ -42,7 +42,7 @@ const (
 )
 
 // AppendHistoryNodes add(or override) a node to a history branch
-func (m *sqlWorkflowStore) AppendHistoryNodes(
+func (m *sqlExecutionStore) AppendHistoryNodes(
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -118,7 +118,7 @@ func (m *sqlWorkflowStore) AppendHistoryNodes(
 	})
 }
 
-func (m *sqlWorkflowStore) DeleteHistoryNodes(
+func (m *sqlExecutionStore) DeleteHistoryNodes(
 	request *p.InternalDeleteHistoryNodesRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -159,7 +159,7 @@ func (m *sqlWorkflowStore) DeleteHistoryNodes(
 }
 
 // ReadHistoryBranch returns history node data for a branch
-func (m *sqlWorkflowStore) ReadHistoryBranch(
+func (m *sqlExecutionStore) ReadHistoryBranch(
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -283,7 +283,7 @@ func (m *sqlWorkflowStore) ReadHistoryBranch(
 //       \
 //       8[8,9]
 //
-func (m *sqlWorkflowStore) ForkHistoryBranch(
+func (m *sqlExecutionStore) ForkHistoryBranch(
 	request *p.InternalForkHistoryBranchRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -323,7 +323,7 @@ func (m *sqlWorkflowStore) ForkHistoryBranch(
 }
 
 // DeleteHistoryBranch removes a branch
-func (m *sqlWorkflowStore) DeleteHistoryBranch(
+func (m *sqlExecutionStore) DeleteHistoryBranch(
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -370,7 +370,7 @@ func (m *sqlWorkflowStore) DeleteHistoryBranch(
 	})
 }
 
-func (m *sqlWorkflowStore) GetAllHistoryTreeBranches(
+func (m *sqlExecutionStore) GetAllHistoryTreeBranches(
 	request *p.GetAllHistoryTreeBranchesRequest,
 ) (*p.InternalGetAllHistoryTreeBranchesResponse, error) {
 
@@ -380,7 +380,7 @@ func (m *sqlWorkflowStore) GetAllHistoryTreeBranches(
 }
 
 // GetHistoryTree returns all branch information of a tree
-func (m *sqlWorkflowStore) GetHistoryTree(
+func (m *sqlExecutionStore) GetHistoryTree(
 	request *p.GetHistoryTreeRequest,
 ) (*p.InternalGetHistoryTreeResponse, error) {
 	ctx, cancel := newExecutionContext()

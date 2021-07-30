@@ -86,9 +86,9 @@ func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
 	return newClusterMetadataInstance(f.session, f.logger)
 }
 
-// NewWorkflowStore returns an WorkflowStore for a given shardID
-func (f *Factory) NewWorkflowStore(shardID int32) (p.WorkflowStore, error) {
-	return NewWorkflowStore(shardID, f.session, f.logger), nil
+// NewExecutionStore returns an ExecutionStore for a given shardID
+func (f *Factory) NewExecutionStore(shardID int32) (p.ExecutionStore, error) {
+	return NewExecutionStore(shardID, f.session, f.logger), nil
 }
 
 // NewQueue returns a new queue backed by cassandra

@@ -71,8 +71,8 @@ type (
 		NewShardStore() (p.ShardStore, error)
 		// NewMetadataStore returns a new metadata store
 		NewMetadataStore() (p.MetadataStore, error)
-		// NewWorkflowStore returns a workflow store for given shardID
-		NewWorkflowStore(shardID int32) (p.WorkflowStore, error)
+		// NewExecutionStore returns a workflow store for given shardID
+		NewExecutionStore(shardID int32) (p.ExecutionStore, error)
 		NewQueue(queueType p.QueueType) (p.Queue, error)
 		// NewClusterMetadataStore returns a new metadata store
 		NewClusterMetadataStore() (p.ClusterMetadataStore, error)
@@ -186,7 +186,7 @@ func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
 // NewHistoryManager returns a new history manager
 func (f *factoryImpl) NewHistoryManager() (p.HistoryManager, error) {
 	ds := f.datastores[storeTypeHistory]
-	store, err := ds.factory.NewWorkflowStore(-1)
+	store, err := ds.factory.NewExecutionStore(-1)
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +246,7 @@ func (f *factoryImpl) NewExecutionManager(
 ) (p.ExecutionManager, error) {
 
 	ds := f.datastores[storeTypeExecution]
-	store, err := ds.factory.NewWorkflowStore(shardID)
+	store, err := ds.factory.NewExecutionStore(shardID)
 	if err != nil {
 		return nil, err
 	}

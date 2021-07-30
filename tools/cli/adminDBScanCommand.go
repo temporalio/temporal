@@ -291,7 +291,7 @@ func scanShard(
 		deleteEmptyFiles(outputFiles.CorruptedExecutionFile, outputFiles.ExecutionCheckFailureFile, outputFiles.ShardScanReportFile)
 		closeFn()
 	}()
-	workflowStore := cassp.NewWorkflowStore(shardID, session, log.NewNoopLogger())
+	workflowStore := cassp.NewExecutionStore(shardID, session, log.NewNoopLogger())
 	execMan := persistence.NewExecutionManager(workflowStore, log.NewNoopLogger())
 
 	var token []byte
@@ -429,7 +429,7 @@ func fetchAndVerifyHistoryExists(
 	checkFailureWriter BufferedWriter,
 	shardID int32,
 	limiter quotas.RateLimiter,
-	workflowStore persistence.WorkflowStore,
+	workflowStore persistence.ExecutionStore,
 	totalDBRequests *int64,
 ) (VerificationResult, *persistence.InternalReadHistoryBranchResponse, *persistencespb.HistoryBranch) {
 	var branch *persistencespb.HistoryBranch
@@ -709,7 +709,7 @@ func concreteExecutionStillExists(
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
 	shardID int32,
-	workflowStore persistence.WorkflowStore,
+	workflowStore persistence.ExecutionStore,
 	limiter quotas.RateLimiter,
 	totalDBRequests *int64,
 ) (*ExecutionCheckFailure, bool) {
