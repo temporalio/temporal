@@ -128,6 +128,7 @@ func (q *namespaceReplicationQueueImpl) Stop() {
 		return
 	}
 	close(q.done)
+	q.queue.Close()
 }
 
 func (q *namespaceReplicationQueueImpl) Publish(message interface{}) error {

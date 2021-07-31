@@ -1298,7 +1298,7 @@ func (s *TestBase) TearDownWorkflowStore() {
 	s.HistoryV2Mgr.Close()
 	s.ClusterMetadataManager.Close()
 	s.MetadataManager.Close()
-	s.VisibilityMgr.Close()
+	s.NamespaceReplicationQueue.Stop()
 
 	// TODO VisibilityMgr/Store is created with a separated code path, this is incorrect and may cause leaking connection
 	// And Postgres requires all connection to be closed before dropping a database
