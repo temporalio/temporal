@@ -71,7 +71,7 @@ type (
 		NewShardStore() (p.ShardStore, error)
 		// NewMetadataStore returns a new metadata store
 		NewMetadataStore() (p.MetadataStore, error)
-		// NewExecutionStore returns a workflow store
+		// NewExecutionStore returns a execution store
 		NewExecutionStore() (p.ExecutionStore, error)
 		NewQueue(queueType p.QueueType) (p.Queue, error)
 		// NewClusterMetadataStore returns a new metadata store

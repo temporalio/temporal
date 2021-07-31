@@ -606,7 +606,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
 		RunId:       runID,
 	}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
-		ShardID: s.mockShard.GetShardID(),
+		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: namespaceID,
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
