@@ -30,7 +30,6 @@ import (
 	"database/sql"
 	"fmt"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -128,71 +127,64 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 	}
 
 	// current run ID, last write version, current workflow state check
-	currentWorkflowConditionFailed := &p.CurrentWorkflowConditionFailedError{
-		Msg:              "",
-		RequestID:        "",
-		RunID:            "",
-		State:            enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED,
-		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
-		LastWriteVersion: 0,
-	}
-	if currentRow != nil {
-		currentWorkflowConditionFailed.Msg = ""
-		currentWorkflowConditionFailed.RequestID = currentRow.CreateRequestID
-		currentWorkflowConditionFailed.RunID = currentRow.RunID.String()
-		currentWorkflowConditionFailed.State = currentRow.State
-		currentWorkflowConditionFailed.Status = currentRow.Status
-		currentWorkflowConditionFailed.LastWriteVersion = currentRow.LastWriteVersion
-	}
 	switch request.Mode {
 	case p.CreateWorkflowModeBrandNew:
 		if currentRow == nil {
 			// current row does not exists, suits the create mode
 		} else {
 			if currentRow.RunID.String() != request.PreviousRunID {
-				currentWorkflowConditionFailed.Msg = fmt.Sprintf(
-					"Workflow execution creation condition failed. workflow ID: %v, current run ID: %v, request run ID: %v",
-					workflowID,
-					currentRow.RunID.String(),
-					request.PreviousRunID,
+				return nil, extractCurrentWorkflowConflictError(
+					currentRow,
+					fmt.Sprintf(
+						"Workflow execution creation condition failed. workflow ID: %v, current run ID: %v, request run ID: %v",
+						workflowID,
+						currentRow.RunID.String(),
+						request.PreviousRunID,
+					),
 				)
-				return nil, currentWorkflowConditionFailed
 			}
 			// current run ID is already request ID
 		}
 
 	case p.CreateWorkflowModeWorkflowIDReuse:
 		if currentRow == nil {
-			return nil, currentWorkflowConditionFailed
+			return nil, extractCurrentWorkflowConflictError(currentRow, "")
 		}
 
 		// currentRow != nil
 
 		if currentRow.RunID.String() != request.PreviousRunID {
-			currentWorkflowConditionFailed.Msg = fmt.Sprintf(
-				"Workflow execution creation condition failed. workflow ID: %v, current run ID: %v, request run ID: %v",
-				workflowID,
-				currentRow.RunID.String(),
-				request.PreviousRunID,
+			return nil, extractCurrentWorkflowConflictError(
+				currentRow,
+				fmt.Sprintf(
+					"Workflow execution creation condition failed. workflow ID: %v, current run ID: %v, request run ID: %v",
+					workflowID,
+					currentRow.RunID.String(),
+					request.PreviousRunID,
+				),
 			)
-			return nil, currentWorkflowConditionFailed
 		}
 		if request.PreviousLastWriteVersion != currentRow.LastWriteVersion {
-			currentWorkflowConditionFailed.Msg = fmt.Sprintf(
-				"Workflow execution creation condition failed. workflow ID: %v, current last write version: %v, request last write version: %v",
-				workflowID,
-				currentRow.LastWriteVersion,
-				request.PreviousLastWriteVersion,
+			return nil, extractCurrentWorkflowConflictError(
+				currentRow,
+				fmt.Sprintf(
+					"Workflow execution creation condition failed. workflow ID: %v, current last write version: %v, request last write version: %v",
+					workflowID,
+					currentRow.LastWriteVersion,
+					request.PreviousLastWriteVersion,
+				),
 			)
-			return nil, currentWorkflowConditionFailed
 		}
 		if currentRow.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-			currentWorkflowConditionFailed.Msg = fmt.Sprintf("Workflow execution creation condition failed. workflow ID: %v, current state: %v, request state: %v",
-				workflowID,
-				currentRow.State,
-				enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			return nil, extractCurrentWorkflowConflictError(
+				currentRow,
+				fmt.Sprintf(
+					"Workflow execution creation condition failed. workflow ID: %v, current state: %v, request state: %v",
+					workflowID,
+					currentRow.State,
+					enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+				),
 			)
-			return nil, currentWorkflowConditionFailed
 		}
 
 	case p.CreateWorkflowModeZombie:
@@ -205,16 +197,21 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 
 	case p.CreateWorkflowModeContinueAsNew:
 		if currentRow == nil {
-			return nil, currentWorkflowConditionFailed
+			return nil, extractCurrentWorkflowConflictError(currentRow, "")
 		}
+
+		// currentRow
+
 		if currentRow.RunID.String() != request.PreviousRunID {
-			currentWorkflowConditionFailed.Msg = fmt.Sprintf(
-				"Workflow execution creation condition failed. workflow ID: %v, current run ID: %v, request run ID: %v",
-				workflowID,
-				currentRow.RunID.String(),
-				request.PreviousRunID,
+			return nil, extractCurrentWorkflowConflictError(
+				currentRow,
+				fmt.Sprintf(
+					"Workflow execution creation condition failed. workflow ID: %v, current run ID: %v, request run ID: %v",
+					workflowID,
+					currentRow.RunID.String(),
+					request.PreviousRunID,
+				),
 			)
-			return nil, currentWorkflowConditionFailed
 		}
 
 	default:

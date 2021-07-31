@@ -1191,18 +1191,14 @@ func assertRunIDMismatch(requestRunID primitives.UUID, currentRow *sqlplugin.Cur
 		return nil
 	}
 	if bytes.Equal(currentRow.RunID, requestRunID) {
-		return &p.CurrentWorkflowConditionFailedError{
-			Msg: fmt.Sprintf(
-				"assertRunIDMismatch failed. Current RunId was %v, input %v",
-				currentRow.RunID.String(),
+		return extractCurrentWorkflowConflictError(
+			currentRow,
+			fmt.Sprintf(
+				"assertRunIDMismatch failed. request run ID: %v, current run ID: %v",
 				requestRunID,
+				currentRow.RunID.String(),
 			),
-			RequestID:        currentRow.CreateRequestID,
-			RunID:            currentRow.RunID.String(),
-			State:            currentRow.State,
-			Status:           currentRow.Status,
-			LastWriteVersion: currentRow.LastWriteVersion,
-		}
+		)
 	}
 	return nil
 }
