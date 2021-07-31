@@ -70,7 +70,6 @@ type (
 		executionManager          persistence.ExecutionManager
 
 		sync.RWMutex
-		shardIDToExecutionManager map[int32]persistence.ExecutionManager
 	}
 )
 
@@ -144,8 +143,6 @@ func NewBean(
 		shardManager:              shardManager,
 		historyManager:            historyManager,
 		executionManager:          executionManager,
-
-		shardIDToExecutionManager: make(map[int32]persistence.ExecutionManager),
 	}
 }
 
@@ -300,7 +297,4 @@ func (s *BeanImpl) Close() {
 	s.shardManager.Close()
 	s.historyManager.Close()
 	s.executionManager.Close()
-	for _, executionMgr := range s.shardIDToExecutionManager {
-		executionMgr.Close()
-	}
 }

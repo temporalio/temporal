@@ -90,6 +90,7 @@ type (
 		suite.Suite
 		ShardMgr                  persistence.ShardManager
 		AbstractDataStoreFactory  client.AbstractDataStoreFactory
+		Factory                   client.Factory
 		ExecutionManager          persistence.ExecutionManager
 		TaskMgr                   persistence.TaskManager
 		HistoryV2Mgr              persistence.HistoryManager
@@ -238,6 +239,8 @@ func (s *TestBase) Setup(clusterMetadataConfig *config.ClusterMetadata) {
 
 	s.ExecutionManager, err = factory.NewExecutionManager()
 	s.fatalOnError("NewExecutionManager", err)
+
+	s.Factory = factory
 
 	// SQL currently doesn't have support for visibility manager
 	vCfg := s.VisibilityTestCluster.Config()
@@ -1292,13 +1295,7 @@ func (s *TestBase) CompleteTask(namespaceID string, taskQueue string, taskType e
 
 // TearDownWorkflowStore to cleanup
 func (s *TestBase) TearDownWorkflowStore() {
-	s.ShardMgr.Close()
-	s.ExecutionManager.Close()
-	s.TaskMgr.Close()
-	s.HistoryV2Mgr.Close()
-	s.ClusterMetadataManager.Close()
-	s.MetadataManager.Close()
-	s.NamespaceReplicationQueue.Stop()
+	s.Factory.Close()
 
 	// TODO VisibilityMgr/Store is created with a separated code path, this is incorrect and may cause leaking connection
 	// And Postgres requires all connection to be closed before dropping a database
