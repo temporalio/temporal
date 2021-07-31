@@ -1128,7 +1128,7 @@ func assertRunIDAndUpdateCurrentExecution(
 		if !bytes.Equal(currentRow.RunID, previousRunID) {
 			return &p.CurrentWorkflowConditionFailedError{
 				Msg: fmt.Sprintf(
-					"assertRunIDAndUpdateCurrentExecution failed. Current RunId was %v, expected %v",
+					"assertRunIDAndUpdateCurrentExecution failed. current run ID: %v, request run ID: %v",
 					currentRow.RunID,
 					previousRunID,
 				),
