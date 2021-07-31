@@ -27,7 +27,6 @@
 package persistence
 
 import (
-	"fmt"
 	"math"
 	"time"
 
@@ -101,7 +100,7 @@ type (
 		PruneClusterMembership(request *PruneClusterMembershipRequest) error
 	}
 
-	// ExecutionStore is used to manage workflow executions for Persistence layer
+	// ExecutionStore is used to manage workflow execution including mutable states / history / tasks.
 	ExecutionStore interface {
 		Closeable
 		GetName() string
@@ -149,12 +148,6 @@ type (
 		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error)
 		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
 		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
-	}
-
-	// HistoryStore is to manager workflow history events
-	HistoryStore interface {
-		Closeable
-		GetName() string
 
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
@@ -173,27 +166,6 @@ type (
 		GetHistoryTree(request *GetHistoryTreeRequest) (*InternalGetHistoryTreeResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees
 		GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*InternalGetAllHistoryTreeBranchesResponse, error)
-	}
-
-	// VisibilityStore is the store interface for visibility
-	VisibilityStore interface {
-		Closeable
-		GetName() string
-		RecordWorkflowExecutionStarted(request *InternalRecordWorkflowExecutionStartedRequest) error
-		RecordWorkflowExecutionClosed(request *InternalRecordWorkflowExecutionClosedRequest) error
-		UpsertWorkflowExecution(request *InternalUpsertWorkflowExecutionRequest) error
-		ListOpenWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListClosedWorkflowExecutions(request *ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListOpenWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListClosedWorkflowExecutionsByType(request *ListWorkflowExecutionsByTypeRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListOpenWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListClosedWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*InternalListWorkflowExecutionsResponse, error)
-		GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*InternalGetClosedWorkflowExecutionResponse, error)
-		DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error
-		ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
-		ScanWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
-		CountWorkflowExecutions(request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error)
 	}
 
 	// Queue is a store to enqueue and get messages
@@ -606,70 +578,6 @@ type (
 		TreeInfos []*commonpb.DataBlob
 	}
 
-	// VisibilityWorkflowExecutionInfo is visibility info for internal response
-	VisibilityWorkflowExecutionInfo struct {
-		WorkflowID           string
-		RunID                string
-		TypeName             string
-		StartTime            time.Time
-		ExecutionTime        time.Time
-		CloseTime            time.Time
-		Status               enumspb.WorkflowExecutionStatus
-		HistoryLength        int64
-		StateTransitionCount int64
-		Memo                 *commonpb.DataBlob
-		TaskQueue            string
-		SearchAttributes     map[string]interface{}
-	}
-
-	// InternalListWorkflowExecutionsResponse is response from ListWorkflowExecutions
-	InternalListWorkflowExecutionsResponse struct {
-		Executions []*VisibilityWorkflowExecutionInfo
-		// Token to read next page if there are more workflow executions beyond page size.
-		// Use this to set NextPageToken on ListWorkflowExecutionsRequest to read the next page.
-		NextPageToken []byte
-	}
-
-	// InternalGetClosedWorkflowExecutionResponse is response from GetWorkflowExecution
-	InternalGetClosedWorkflowExecutionResponse struct {
-		Execution *VisibilityWorkflowExecutionInfo
-	}
-
-	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted
-	InternalVisibilityRequestBase struct {
-		NamespaceID          string
-		WorkflowID           string
-		RunID                string
-		WorkflowTypeName     string
-		StartTime            time.Time
-		Status               enumspb.WorkflowExecutionStatus
-		ExecutionTime        time.Time
-		StateTransitionCount int64
-		TaskID               int64
-		ShardID              int32
-		Memo                 *commonpb.DataBlob
-		TaskQueue            string
-		SearchAttributes     *commonpb.SearchAttributes
-	}
-
-	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted
-	InternalRecordWorkflowExecutionStartedRequest struct {
-		*InternalVisibilityRequestBase
-	}
-
-	// InternalRecordWorkflowExecutionClosedRequest is request to RecordWorkflowExecutionClosed
-	InternalRecordWorkflowExecutionClosedRequest struct {
-		*InternalVisibilityRequestBase
-		CloseTime     time.Time
-		HistoryLength int64
-		Retention     *time.Duration
-	}
-
-	// InternalUpsertWorkflowExecutionRequest is request to UpsertWorkflowExecution
-	InternalUpsertWorkflowExecutionRequest struct {
-		*InternalVisibilityRequestBase
-	}
-
 	// InternalCreateNamespaceRequest is used to create the namespace
 	InternalCreateNamespaceRequest struct {
 		ID        string
@@ -738,37 +646,3 @@ type (
 		RecordExpiry time.Time
 	}
 )
-
-// NewDataBlob returns a new DataBlob
-func NewDataBlob(data []byte, encodingTypeStr string) *commonpb.DataBlob {
-	if len(data) == 0 {
-		return nil
-	}
-
-	encodingType, ok := enumspb.EncodingType_value[encodingTypeStr]
-	if !ok || (enumspb.EncodingType(encodingType) != enumspb.ENCODING_TYPE_PROTO3 &&
-		enumspb.EncodingType(encodingType) != enumspb.ENCODING_TYPE_JSON) {
-		panic(fmt.Sprintf("Invalid encoding: \"%v\"", encodingTypeStr))
-	}
-
-	return &commonpb.DataBlob{
-		Data:         data,
-		EncodingType: enumspb.EncodingType(encodingType),
-	}
-}
-
-// FromDataBlob decodes a datablob into a (payload, encodingType) tuple
-func FromDataBlob(blob *commonpb.DataBlob) ([]byte, string) {
-	if blob == nil || len(blob.Data) == 0 {
-		return nil, ""
-	}
-	return blob.Data, blob.EncodingType.String()
-}
-
-// NewDataBlobFromProto convert data blob from Proto representation
-func NewDataBlobFromProto(blob *commonpb.DataBlob) *commonpb.DataBlob {
-	return &commonpb.DataBlob{
-		EncodingType: blob.GetEncodingType(),
-		Data:         blob.Data,
-	}
-}

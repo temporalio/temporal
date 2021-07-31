@@ -22,24 +22,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// -aux_files is required here due to Closeable interface being in another file.
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination visibilityInterfaces_mock.go -aux_files go.temporal.io/server/common/persistence=dataInterfaces.go
+package visibility
 
-package persistence
+// -aux_files is required here due to Closeable interface being in another file.
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination visibility_manager_mock.go -aux_files go.temporal.io/server/common/persistence=../dataInterfaces.go
 
 import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/server/common/persistence"
 )
-
-// Interfaces for the Visibility Store.
-// This is a secondary store that is eventually consistent with the main
-// executions store, and stores workflow execution records for visibility
-// purposes.
 
 type (
 	VisibilityRequestBase struct {
@@ -141,18 +136,6 @@ type (
 		Status enumspb.WorkflowExecutionStatus
 	}
 
-	// GetClosedWorkflowExecutionRequest is used retrieve the record for a specific execution
-	GetClosedWorkflowExecutionRequest struct {
-		NamespaceID string
-		Namespace   string // namespace name is not persisted, but used as config filter key
-		Execution   commonpb.WorkflowExecution
-	}
-
-	// GetClosedWorkflowExecutionResponse is the response to GetClosedWorkflowExecutionRequest
-	GetClosedWorkflowExecutionResponse struct {
-		Execution *workflowpb.WorkflowExecutionInfo
-	}
-
 	// VisibilityDeleteWorkflowExecutionRequest contains the request params for DeleteWorkflowExecution call
 	VisibilityDeleteWorkflowExecutionRequest struct {
 		NamespaceID string
@@ -163,7 +146,7 @@ type (
 
 	// VisibilityManager is used to manage the visibility store
 	VisibilityManager interface {
-		Closeable
+		persistence.Closeable
 		GetName() string
 		RecordWorkflowExecutionStarted(request *RecordWorkflowExecutionStartedRequest) error
 		RecordWorkflowExecutionClosed(request *RecordWorkflowExecutionClosedRequest) error
@@ -175,15 +158,9 @@ type (
 		ListOpenWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutionsByWorkflowID(request *ListWorkflowExecutionsByWorkflowIDRequest) (*ListWorkflowExecutionsResponse, error)
 		ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error)
-		GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error
 		ListWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
 		ScanWorkflowExecutions(request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
 		CountWorkflowExecutions(request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error)
 	}
 )
-
-// NewOperationNotSupportErrorForVis create error for operation not support in visibility
-func NewOperationNotSupportErrorForVis() error {
-	return serviceerror.NewInvalidArgument("Operation not support. Please use on Elasticsearch")
-}

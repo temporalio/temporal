@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package persistence
+package visibility
 
 import (
 	"fmt"
@@ -155,11 +155,6 @@ func (v *visibilityManagerWrapper) ListClosedWorkflowExecutionsByWorkflowID(requ
 func (v *visibilityManagerWrapper) ListClosedWorkflowExecutionsByStatus(request *ListClosedWorkflowExecutionsByStatusRequest) (*ListWorkflowExecutionsResponse, error) {
 	manager := v.chooseVisibilityManagerForNamespace(request.Namespace)
 	return manager.ListClosedWorkflowExecutionsByStatus(request)
-}
-
-func (v *visibilityManagerWrapper) GetClosedWorkflowExecution(request *GetClosedWorkflowExecutionRequest) (*GetClosedWorkflowExecutionResponse, error) {
-	manager := v.chooseVisibilityManagerForNamespace(request.Namespace)
-	return manager.GetClosedWorkflowExecution(request)
 }
 
 func (v *visibilityManagerWrapper) DeleteWorkflowExecution(request *VisibilityDeleteWorkflowExecutionRequest) error {

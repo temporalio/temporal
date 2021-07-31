@@ -38,24 +38,22 @@ import (
 )
 
 const (
-	executionTimeout  = 8 * time.Second
-	visibilityTimeout = 16 * time.Second
+	executionTimeout = 8 * time.Second
 )
 
 type (
 	// Factory vends store objects backed by MySQL
 	Factory struct {
-		cfg              config.SQL
-		mainDBConn       dbConn
-		visibilityDBConn dbConn
-		clusterName      string
-		logger           log.Logger
+		cfg         config.SQL
+		mainDBConn  DbConn
+		clusterName string
+		logger      log.Logger
 	}
 
-	// dbConn represents a logical mysql connection - its a
+	// DbConn represents a logical mysql connection - its a
 	// wrapper around the standard sql connection pool with
 	// additional reference counting
-	dbConn struct {
+	DbConn struct {
 		dbKind   sqlplugin.DbKind
 		cfg      *config.SQL
 		resolver resolver.ServiceResolver
@@ -76,17 +74,16 @@ func NewFactory(
 	logger log.Logger,
 ) *Factory {
 	return &Factory{
-		cfg:              cfg,
-		clusterName:      clusterName,
-		logger:           logger,
-		mainDBConn:       newRefCountedDBConn(sqlplugin.DbKindMain, &cfg, r),
-		visibilityDBConn: newRefCountedDBConn(sqlplugin.DbKindVisibility, &cfg, r),
+		cfg:         cfg,
+		clusterName: clusterName,
+		logger:      logger,
+		mainDBConn:  NewRefCountedDBConn(sqlplugin.DbKindMain, &cfg, r),
 	}
 }
 
 // NewTaskStore returns a new task store
 func (f *Factory) NewTaskStore() (p.TaskStore, error) {
-	conn, err := f.mainDBConn.get()
+	conn, err := f.mainDBConn.Get()
 	if err != nil {
 		return nil, err
 	}
@@ -95,25 +92,16 @@ func (f *Factory) NewTaskStore() (p.TaskStore, error) {
 
 // NewShardStore returns a new shard store
 func (f *Factory) NewShardStore() (p.ShardStore, error) {
-	conn, err := f.mainDBConn.get()
+	conn, err := f.mainDBConn.Get()
 	if err != nil {
 		return nil, err
 	}
 	return newShardPersistence(conn, f.clusterName, f.logger)
 }
 
-// NewHistoryStore returns a new history store
-func (f *Factory) NewHistoryStore() (p.HistoryStore, error) {
-	conn, err := f.mainDBConn.get()
-	if err != nil {
-		return nil, err
-	}
-	return newHistoryV2Persistence(conn, f.logger)
-}
-
 // NewMetadataStore returns a new metadata store
 func (f *Factory) NewMetadataStore() (p.MetadataStore, error) {
-	conn, err := f.mainDBConn.get()
+	conn, err := f.mainDBConn.Get()
 	if err != nil {
 		return nil, err
 	}
@@ -122,34 +110,25 @@ func (f *Factory) NewMetadataStore() (p.MetadataStore, error) {
 
 // NewClusterMetadataStore returns a new ClusterMetadata store
 func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
-	conn, err := f.mainDBConn.get()
+	conn, err := f.mainDBConn.Get()
 	if err != nil {
 		return nil, err
 	}
 	return newClusterMetadataPersistence(conn, f.logger)
 }
 
-// NewExecutionStore returns an ExecutionStore for a given shardID
+// NewExecutionStore returns a ExecutionStore for a given shardID
 func (f *Factory) NewExecutionStore(shardID int32) (p.ExecutionStore, error) {
-	conn, err := f.mainDBConn.get()
+	conn, err := f.mainDBConn.Get()
 	if err != nil {
 		return nil, err
 	}
 	return NewSQLExecutionStore(conn, f.logger, shardID)
 }
 
-// NewVisibilityStore returns a visibility store
-func (f *Factory) NewVisibilityStore() (p.VisibilityStore, error) {
-	conn, err := f.visibilityDBConn.get()
-	if err != nil {
-		return nil, err
-	}
-	return NewSQLVisibilityStore(conn, f.logger)
-}
-
 // NewQueue returns a new queue backed by sql
 func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
-	conn, err := f.mainDBConn.get()
+	conn, err := f.mainDBConn.Get()
 	if err != nil {
 		return nil, err
 	}
@@ -159,30 +138,29 @@ func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
 
 // Close closes the factory
 func (f *Factory) Close() {
-	f.mainDBConn.forceClose()
-	f.visibilityDBConn.forceClose()
+	f.mainDBConn.ForceClose()
 }
 
-// newRefCountedDBConn returns a  logical mysql connection that
+// NewRefCountedDBConn returns a  logical mysql connection that
 // uses reference counting to decide when to close the
 // underlying connection object. The reference count gets incremented
 // everytime get() is called and decremented everytime Close() is called
-func newRefCountedDBConn(
+func NewRefCountedDBConn(
 	dbKind sqlplugin.DbKind,
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
-) dbConn {
-	return dbConn{
+) DbConn {
+	return DbConn{
 		dbKind:   dbKind,
 		cfg:      cfg,
 		resolver: r,
 	}
 }
 
-// get returns a mysql db connection and increments a reference count
+// Get returns a mysql db connection and increments a reference count
 // this method will create a new connection, if an existing connection
 // does not exist
-func (c *dbConn) get() (sqlplugin.DB, error) {
+func (c *DbConn) Get() (sqlplugin.DB, error) {
 	c.Lock()
 	defer c.Unlock()
 	if c.refCnt == 0 {
@@ -196,8 +174,8 @@ func (c *dbConn) get() (sqlplugin.DB, error) {
 	return c, nil
 }
 
-// forceClose ignores reference counts and shutsdown the underlying connection pool
-func (c *dbConn) forceClose() {
+// ForceClose ignores reference counts and shutsdown the underlying connection pool
+func (c *DbConn) ForceClose() {
 	c.Lock()
 	defer c.Unlock()
 	if c.DB != nil {
@@ -210,7 +188,7 @@ func (c *dbConn) forceClose() {
 }
 
 // Close closes the underlying connection if the reference count becomes zero
-func (c *dbConn) Close() error {
+func (c *DbConn) Close() error {
 	c.Lock()
 	defer c.Unlock()
 	c.refCnt--
@@ -222,13 +200,8 @@ func (c *dbConn) Close() error {
 	return nil
 }
 
-// TODO remove this 2 functions when NoSQL & SQL layer all support context timeout
+// TODO remove this function when NoSQL & SQL layer all support context timeout
 func newExecutionContext() (context.Context, context.CancelFunc) {
 	ctx := context.Background()
 	return context.WithTimeout(ctx, executionTimeout)
-}
-
-func newVisibilityContext() (context.Context, context.CancelFunc) {
-	ctx := context.Background()
-	return context.WithTimeout(ctx, visibilityTimeout)
 }

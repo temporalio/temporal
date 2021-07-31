@@ -30,19 +30,10 @@ import (
 	"math"
 
 	commonpb "go.temporal.io/api/common/v1"
-
 	"go.temporal.io/api/serviceerror"
-
-	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
-)
-
-type (
-	sqlHistoryV2Manager struct {
-		sqlStore
-	}
 )
 
 const (
@@ -50,22 +41,8 @@ const (
 	MinTxnID = math.MaxInt64
 )
 
-// newHistoryV2Persistence creates an instance of HistoryManager
-func newHistoryV2Persistence(
-	db sqlplugin.DB,
-	logger log.Logger,
-) (p.HistoryStore, error) {
-
-	return &sqlHistoryV2Manager{
-		sqlStore: sqlStore{
-			db:     db,
-			logger: logger,
-		},
-	}, nil
-}
-
 // AppendHistoryNodes add(or override) a node to a history branch
-func (m *sqlHistoryV2Manager) AppendHistoryNodes(
+func (m *sqlExecutionStore) AppendHistoryNodes(
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -94,9 +71,9 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 	}
 
 	if !request.IsNewBranch {
-		_, err = m.db.InsertIntoHistoryNode(ctx, nodeRow)
+		_, err = m.Db.InsertIntoHistoryNode(ctx, nodeRow)
 		if err != nil {
-			if m.db.IsDupEntryError(err) {
+			if m.Db.IsDupEntryError(err) {
 				return &p.ConditionFailedError{Msg: fmt.Sprintf("AppendHistoryNodes: row already exist: %v", err)}
 			}
 			return serviceerror.NewInternal(fmt.Sprintf("AppendHistoryNodes: %v", err))
@@ -141,7 +118,7 @@ func (m *sqlHistoryV2Manager) AppendHistoryNodes(
 	})
 }
 
-func (m *sqlHistoryV2Manager) DeleteHistoryNodes(
+func (m *sqlExecutionStore) DeleteHistoryNodes(
 	request *p.InternalDeleteHistoryNodesRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -174,7 +151,7 @@ func (m *sqlHistoryV2Manager) DeleteHistoryNodes(
 		ShardID:  shardID,
 	}
 
-	_, err = m.db.DeleteFromHistoryNode(ctx, nodeRow)
+	_, err = m.Db.DeleteFromHistoryNode(ctx, nodeRow)
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("DeleteHistoryNodes: %v", err))
 	}
@@ -182,7 +159,7 @@ func (m *sqlHistoryV2Manager) DeleteHistoryNodes(
 }
 
 // ReadHistoryBranch returns history node data for a branch
-func (m *sqlHistoryV2Manager) ReadHistoryBranch(
+func (m *sqlExecutionStore) ReadHistoryBranch(
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -214,7 +191,7 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 		}
 	}
 
-	rows, err := m.db.RangeSelectFromHistoryNode(ctx, sqlplugin.HistoryNodeSelectFilter{
+	rows, err := m.Db.RangeSelectFromHistoryNode(ctx, sqlplugin.HistoryNodeSelectFilter{
 		ShardID:      request.ShardID,
 		TreeID:       treeIDBytes,
 		BranchID:     branchIDBytes,
@@ -306,7 +283,7 @@ func (m *sqlHistoryV2Manager) ReadHistoryBranch(
 //       \
 //       8[8,9]
 //
-func (m *sqlHistoryV2Manager) ForkHistoryBranch(
+func (m *sqlExecutionStore) ForkHistoryBranch(
 	request *p.InternalForkHistoryBranchRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -330,7 +307,7 @@ func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 		DataEncoding: treeInfoBlob.EncodingType.String(),
 	}
 
-	result, err := m.db.InsertIntoHistoryTree(ctx, row)
+	result, err := m.Db.InsertIntoHistoryTree(ctx, row)
 	if err != nil {
 		return err
 	}
@@ -346,7 +323,7 @@ func (m *sqlHistoryV2Manager) ForkHistoryBranch(
 }
 
 // DeleteHistoryBranch removes a branch
-func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
+func (m *sqlExecutionStore) DeleteHistoryBranch(
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -393,7 +370,7 @@ func (m *sqlHistoryV2Manager) DeleteHistoryBranch(
 	})
 }
 
-func (m *sqlHistoryV2Manager) GetAllHistoryTreeBranches(
+func (m *sqlExecutionStore) GetAllHistoryTreeBranches(
 	request *p.GetAllHistoryTreeBranchesRequest,
 ) (*p.InternalGetAllHistoryTreeBranchesResponse, error) {
 
@@ -403,7 +380,7 @@ func (m *sqlHistoryV2Manager) GetAllHistoryTreeBranches(
 }
 
 // GetHistoryTree returns all branch information of a tree
-func (m *sqlHistoryV2Manager) GetHistoryTree(
+func (m *sqlExecutionStore) GetHistoryTree(
 	request *p.GetHistoryTreeRequest,
 ) (*p.InternalGetHistoryTreeResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -413,7 +390,7 @@ func (m *sqlHistoryV2Manager) GetHistoryTree(
 		return nil, err
 	}
 
-	rows, err := m.db.SelectFromHistoryTree(ctx, sqlplugin.HistoryTreeSelectFilter{
+	rows, err := m.Db.SelectFromHistoryTree(ctx, sqlplugin.HistoryTreeSelectFilter{
 		TreeID:  treeID,
 		ShardID: *request.ShardID,
 	})

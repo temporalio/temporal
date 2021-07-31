@@ -41,23 +41,30 @@ import (
 )
 
 // TODO: Rename all SQL Managers to Stores
-type sqlStore struct {
-	db     sqlplugin.DB
+type SqlStore struct {
+	Db     sqlplugin.DB
 	logger log.Logger
 }
 
-func (m *sqlStore) GetName() string {
-	return m.db.PluginName()
-}
-
-func (m *sqlStore) Close() {
-	if m.db != nil {
-		m.db.Close()
+func NewSqlStore(db sqlplugin.DB, logger log.Logger) SqlStore {
+	return SqlStore{
+		Db:     db,
+		logger: logger,
 	}
 }
 
-func (m *sqlStore) txExecute(ctx context.Context, operation string, f func(tx sqlplugin.Tx) error) error {
-	tx, err := m.db.BeginTx(ctx)
+func (m *SqlStore) GetName() string {
+	return m.Db.PluginName()
+}
+
+func (m *SqlStore) Close() {
+	if m.Db != nil {
+		m.Db.Close()
+	}
+}
+
+func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sqlplugin.Tx) error) error {
+	tx, err := m.Db.BeginTx(ctx)
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("%s failed. Failed to start transaction. Error: %v", operation, err))
 	}

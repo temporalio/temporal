@@ -24,10 +24,6 @@
 
 package searchattribute
 
-import (
-	enumspb "go.temporal.io/api/enums/v1"
-)
-
 type (
 	SystemProvider struct{}
 )
@@ -38,19 +34,4 @@ func NewSystemProvider() *SystemProvider {
 
 func (s *SystemProvider) GetSearchAttributes(_ string, _ bool) (NameTypeMap, error) {
 	return NameTypeMap{}, nil
-}
-
-// FilterCustomOnly returns new search attributes map with only custom search attributes in it.
-// TODO: Remove this after 1.10.0 release
-func FilterCustomOnly(searchAttributes map[string]enumspb.IndexedValueType) map[string]enumspb.IndexedValueType {
-	customSearchAttributes := map[string]enumspb.IndexedValueType{}
-	for saName, saType := range searchAttributes {
-		if saName == NamespaceID {
-			continue
-		}
-		if _, isSystem := system[saName]; !isSystem {
-			customSearchAttributes[saName] = saType
-		}
-	}
-	return customSearchAttributes
 }

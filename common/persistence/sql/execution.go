@@ -41,7 +41,7 @@ import (
 )
 
 type sqlExecutionStore struct {
-	sqlStore
+	SqlStore
 	shardID int32
 }
 
@@ -55,11 +55,8 @@ func NewSQLExecutionStore(
 ) (p.ExecutionStore, error) {
 
 	return &sqlExecutionStore{
-		shardID: shardID,
-		sqlStore: sqlStore{
-			db:     db,
-			logger: logger,
-		},
+		shardID:  shardID,
+		SqlStore: NewSqlStore(db, logger),
 	}, nil
 }
 
@@ -252,7 +249,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.Execution.RunId)
 	wfID := request.Execution.WorkflowId
-	executionsRow, err := m.db.SelectFromExecutions(ctx, sqlplugin.ExecutionsFilter{
+	executionsRow, err := m.Db.SelectFromExecutions(ctx, sqlplugin.ExecutionsFilter{
 		ShardID:     m.shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  wfID,
@@ -276,7 +273,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 	}
 
 	state.ActivityInfos, err = getActivityInfoMap(ctx,
-		m.db,
+		m.Db,
 		m.shardID,
 		namespaceID,
 		wfID,
@@ -287,7 +284,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 	}
 
 	state.TimerInfos, err = getTimerInfoMap(ctx,
-		m.db,
+		m.Db,
 		m.shardID,
 		namespaceID,
 		wfID,
@@ -298,7 +295,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 	}
 
 	state.ChildExecutionInfos, err = getChildExecutionInfoMap(ctx,
-		m.db,
+		m.Db,
 		m.shardID,
 		namespaceID,
 		wfID,
@@ -309,7 +306,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 	}
 
 	state.RequestCancelInfos, err = getRequestCancelInfoMap(ctx,
-		m.db,
+		m.Db,
 		m.shardID,
 		namespaceID,
 		wfID,
@@ -320,7 +317,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 	}
 
 	state.SignalInfos, err = getSignalInfoMap(ctx,
-		m.db,
+		m.Db,
 		m.shardID,
 		namespaceID,
 		wfID,
@@ -331,7 +328,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 	}
 
 	state.BufferedEvents, err = getBufferedEvents(ctx,
-		m.db,
+		m.Db,
 		m.shardID,
 		namespaceID,
 		wfID,
@@ -342,7 +339,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 	}
 
 	state.SignalRequestedIDs, err = getSignalsRequested(ctx,
-		m.db,
+		m.Db,
 		m.shardID,
 		namespaceID,
 		wfID,
@@ -600,7 +597,7 @@ func (m *sqlExecutionStore) DeleteWorkflowExecution(
 	defer cancel()
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.RunID)
-	_, err := m.db.DeleteFromExecutions(ctx, sqlplugin.ExecutionsFilter{
+	_, err := m.Db.DeleteFromExecutions(ctx, sqlplugin.ExecutionsFilter{
 		ShardID:     m.shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  request.WorkflowID,
@@ -620,7 +617,7 @@ func (m *sqlExecutionStore) DeleteCurrentWorkflowExecution(
 	defer cancel()
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.RunID)
-	_, err := m.db.DeleteFromCurrentExecutions(ctx, sqlplugin.CurrentExecutionsFilter{
+	_, err := m.Db.DeleteFromCurrentExecutions(ctx, sqlplugin.CurrentExecutionsFilter{
 		ShardID:     m.shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  request.WorkflowID,
@@ -634,7 +631,7 @@ func (m *sqlExecutionStore) GetCurrentExecution(
 ) (*p.InternalGetCurrentExecutionResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	row, err := m.db.SelectFromCurrentExecutions(ctx, sqlplugin.CurrentExecutionsFilter{
+	row, err := m.Db.SelectFromCurrentExecutions(ctx, sqlplugin.CurrentExecutionsFilter{
 		ShardID:     m.shardID,
 		NamespaceID: primitives.MustParseUUID(request.NamespaceID),
 		WorkflowID:  request.WorkflowID,

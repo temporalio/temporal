@@ -40,6 +40,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/server/common/persistence/visibility"
+	visibilityclient "go.temporal.io/server/common/persistence/visibility/client"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -94,7 +96,7 @@ type (
 		HistoryV2Mgr              persistence.HistoryManager
 		ClusterMetadataManager    persistence.ClusterMetadataManager
 		MetadataManager           persistence.MetadataManager
-		VisibilityMgr             persistence.VisibilityManager
+		VisibilityMgr             visibility.VisibilityManager
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		ShardInfo                 *persistencespb.ShardInfo
 		TaskIDGenerator           TransferTaskIDGenerator
@@ -239,13 +241,15 @@ func (s *TestBase) Setup(clusterMetadataConfig *config.ClusterMetadata) {
 	s.ExecutionManager, err = factory.NewExecutionManager(shardID)
 	s.fatalOnError("NewExecutionManager", err)
 
-	visibilityFactory := factory
-	if s.VisibilityTestCluster != s.DefaultTestCluster {
-		vCfg := s.VisibilityTestCluster.Config()
-		visibilityFactory = client.NewFactory(&vCfg, resolver.NewNoopResolver(), nil, nil, clusterName, nil, s.logger)
-	}
 	// SQL currently doesn't have support for visibility manager
-	s.VisibilityMgr, err = visibilityFactory.NewVisibilityManager()
+	vCfg := s.VisibilityTestCluster.Config()
+	s.VisibilityMgr, err = visibilityclient.NewVisibilityManager(
+		vCfg,
+		nil,
+		nil,
+		resolver.NewNoopResolver(),
+		s.logger,
+	)
 	if err != nil {
 		s.fatalOnError("NewVisibilityManager", err)
 	}

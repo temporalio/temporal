@@ -104,6 +104,9 @@ const (
 
 const (
 	taskQueueTaskID = -12345
+
+	// ref: https://docs.datastax.com/en/dse-trblshoot/doc/troubleshooting/recoveringTtlYear2038Problem.html
+	maxCassandraTTL = int64(315360000) // Cassandra max support time is 2038-01-19T03:14:06+00:00. Updated this to 10 years to support until year 2028
 )
 
 const (
@@ -739,16 +742,16 @@ func newShardPersistence(
 	}, nil
 }
 
-// NewWorkflowExecutionPersistence is used to create an instance of workflowExecutionManager implementation
-func NewWorkflowExecutionPersistence(
+// NewExecutionStore is used to create an instance of workflowExecutionManager implementation
+func NewExecutionStore(
 	shardID int32,
 	session gocql.Session,
 	logger log.Logger,
-) (p.ExecutionStore, error) {
+) p.ExecutionStore {
 	return &cassandraPersistence{
 		cassandraStore: cassandraStore{session: session, logger: logger},
 		shardID:        shardID,
-	}, nil
+	}
 }
 
 // newTaskPersistence is used to create an instance of TaskManager implementation

@@ -25,7 +25,10 @@
 package history
 
 import (
+	"context"
+
 	"github.com/pborman/uuid"
+	"go.temporal.io/server/common/persistence/visibility"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -56,7 +59,7 @@ type (
 func newTransferQueueActiveProcessor(
 	shard shard.Context,
 	historyService *historyEngineImpl,
-	visibilityMgr persistence.VisibilityManager,
+	visibilityMgr visibility.VisibilityManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	taskAllocator taskAllocator,
@@ -172,7 +175,7 @@ func newTransferQueueActiveProcessor(
 func newTransferQueueFailoverProcessor(
 	shard shard.Context,
 	historyService *historyEngineImpl,
-	visibilityMgr persistence.VisibilityManager,
+	visibilityMgr visibility.VisibilityManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	namespaceIDs map[string]struct{},
@@ -320,9 +323,10 @@ func (t *transferQueueActiveProcessorImpl) complete(
 }
 
 func (t *transferQueueActiveProcessorImpl) process(
+	ctx context.Context,
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
 	metricScope := getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), true)
-	return metricScope, t.taskExecutor.execute(taskInfo.task, taskInfo.shouldProcessTask)
+	return metricScope, t.taskExecutor.execute(ctx, taskInfo.task, taskInfo.shouldProcessTask)
 }

@@ -28,6 +28,7 @@ import (
 	"net"
 
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/visibility"
 
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -99,7 +100,7 @@ type (
 		GetMetadataManager() persistence.MetadataManager
 		GetClusterMetadataManager() persistence.ClusterMetadataManager
 		GetTaskManager() persistence.TaskManager
-		GetVisibilityManager() persistence.VisibilityManager
+		GetVisibilityManager() visibility.VisibilityManager
 		GetNamespaceReplicationQueue() persistence.NamespaceReplicationQueue
 		GetShardManager() persistence.ShardManager
 		GetHistoryManager() persistence.HistoryManager

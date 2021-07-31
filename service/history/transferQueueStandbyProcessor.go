@@ -25,13 +25,15 @@
 package history
 
 import (
+	"context"
+
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -57,7 +59,7 @@ func newTransferQueueStandbyProcessor(
 	clusterName string,
 	shard shard.Context,
 	historyService *historyEngineImpl,
-	visibilityMgr persistence.VisibilityManager,
+	visibilityMgr visibility.VisibilityManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
 	nDCHistoryResender xdc.NDCHistoryResender,
@@ -189,9 +191,10 @@ func (t *transferQueueStandbyProcessorImpl) complete(
 }
 
 func (t *transferQueueStandbyProcessorImpl) process(
+	ctx context.Context,
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
 	metricScope := getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), false)
-	return metricScope, t.taskExecutor.execute(taskInfo.task, taskInfo.shouldProcessTask)
+	return metricScope, t.taskExecutor.execute(ctx, taskInfo.task, taskInfo.shouldProcessTask)
 }

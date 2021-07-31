@@ -32,6 +32,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/persistence/visibility"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -41,7 +42,6 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -57,7 +57,7 @@ type (
 		logger                  log.Logger
 		metricsClient           metrics.Client
 		matchingClient          matchingservice.MatchingServiceClient
-		visibilityMgr           persistence.VisibilityManager
+		visibilityMgr           visibility.VisibilityManager
 		config                  *configs.Config
 		historyClient           historyservice.HistoryServiceClient
 		parentClosePolicyClient parentclosepolicy.Client
@@ -95,6 +95,7 @@ func newVisibilityQueueTaskExecutor(
 }
 
 func (t *visibilityQueueTaskExecutor) execute(
+	ctx context.Context,
 	taskInfo queueTaskInfo,
 	shouldProcessTask bool,
 ) error {
@@ -110,11 +111,11 @@ func (t *visibilityQueueTaskExecutor) execute(
 
 	switch task.GetTaskType() {
 	case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION:
-		return t.processStartOrUpsertExecution(task, true)
+		return t.processStartOrUpsertExecution(ctx, task, true)
 	case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION:
-		return t.processStartOrUpsertExecution(task, false)
+		return t.processStartOrUpsertExecution(ctx, task, false)
 	case enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION:
-		return t.processCloseExecution(task)
+		return t.processCloseExecution(ctx, task)
 	case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
 		return t.processDeleteExecution(task)
 	default:
@@ -123,11 +124,13 @@ func (t *visibilityQueueTaskExecutor) execute(
 }
 
 func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
+	ctx context.Context,
 	task *persistencespb.VisibilityTaskInfo,
 	isStartExecution bool,
 ) (retError error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
 
-	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
 	defer cancel()
 	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
@@ -237,8 +240,8 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 		return nil
 	}
 
-	request := &persistence.RecordWorkflowExecutionStartedRequest{
-		VisibilityRequestBase: &persistence.VisibilityRequestBase{
+	request := &visibility.RecordWorkflowExecutionStartedRequest{
+		VisibilityRequestBase: &visibility.VisibilityRequestBase{
 			NamespaceID: namespaceID,
 			Namespace:   namespaceEntry.GetInfo().Name,
 			Execution: commonpb.WorkflowExecution{
@@ -279,8 +282,8 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 		return err
 	}
 
-	request := &persistence.UpsertWorkflowExecutionRequest{
-		VisibilityRequestBase: &persistence.VisibilityRequestBase{
+	request := &visibility.UpsertWorkflowExecutionRequest{
+		VisibilityRequestBase: &visibility.VisibilityRequestBase{
 			NamespaceID: namespaceID,
 			Namespace:   namespaceEntry.GetInfo().Name,
 			Execution: commonpb.WorkflowExecution{
@@ -303,10 +306,12 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 }
 
 func (t *visibilityQueueTaskExecutor) processCloseExecution(
+	ctx context.Context,
 	task *persistencespb.VisibilityTaskInfo,
 ) (retError error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
 
-	ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
 	defer cancel()
 	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
@@ -413,8 +418,8 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 	}
 
 	if recordWorkflowClose {
-		return t.visibilityMgr.RecordWorkflowExecutionClosed(&persistence.RecordWorkflowExecutionClosedRequest{
-			VisibilityRequestBase: &persistence.VisibilityRequestBase{
+		return t.visibilityMgr.RecordWorkflowExecutionClosed(&visibility.RecordWorkflowExecutionClosedRequest{
+			VisibilityRequestBase: &visibility.VisibilityRequestBase{
 				NamespaceID: namespaceID,
 				Namespace:   namespaceEntry.GetInfo().Name,
 				Execution: commonpb.WorkflowExecution{
@@ -444,7 +449,7 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 	task *persistencespb.VisibilityTaskInfo,
 ) (retError error) {
 	op := func() error {
-		request := &persistence.VisibilityDeleteWorkflowExecutionRequest{
+		request := &visibility.VisibilityDeleteWorkflowExecutionRequest{
 			NamespaceID: task.GetNamespaceId(),
 			WorkflowID:  task.GetWorkflowId(),
 			RunID:       task.GetRunId(),

@@ -28,9 +28,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"google.golang.org/grpc"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
@@ -40,14 +37,17 @@ import (
 	"go.temporal.io/server/common/masker"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/migration"
-	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	espersistence "go.temporal.io/server/common/persistence/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility"
+	visibilityclient "go.temporal.io/server/common/persistence/visibility/client"
+	"go.temporal.io/server/common/persistence/visibility/elasticsearch"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
+	"google.golang.org/grpc"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 // Service represents the history service
@@ -84,15 +84,24 @@ func NewService(
 		persistenceBean persistenceClient.Bean,
 		searchAttributesProvider searchattribute.Provider,
 		logger log.Logger,
-	) (persistence.VisibilityManager, error) {
-		visibilityFromDB := persistenceBean.GetVisibilityManager()
+	) (visibility.VisibilityManager, error) {
+		visibilityFromDB, err := visibilityclient.NewVisibilityManager(
+			params.PersistenceConfig,
+			serviceConfig.PersistenceMaxQPS,
+			params.MetricsClient,
+			params.PersistenceServiceResolver,
+			params.Logger,
+		)
+		if err != nil {
+			return nil, err
+		}
 
-		var visibilityFromES persistence.VisibilityManager
+		var visibilityFromES visibility.VisibilityManager
 		if params.ESConfig != nil {
 			logger.Info("Elasticsearch config", tag.ESConfig(masker.MaskStruct(params.ESConfig, masker.DefaultFieldNames)))
 			visibilityIndexName := params.ESConfig.GetVisibilityIndex()
 
-			esProcessorConfig := &espersistence.ProcessorConfig{
+			esProcessorConfig := &elasticsearch.ProcessorConfig{
 				IndexerConcurrency:       serviceConfig.IndexerConcurrency,
 				ESProcessorNumOfWorkers:  serviceConfig.ESProcessorNumOfWorkers,
 				ESProcessorBulkActions:   serviceConfig.ESProcessorBulkActions,
@@ -100,15 +109,15 @@ func NewService(
 				ESProcessorFlushInterval: serviceConfig.ESProcessorFlushInterval,
 			}
 
-			esProcessor := espersistence.NewProcessor(esProcessorConfig, params.ESClient, logger, params.MetricsClient)
+			esProcessor := elasticsearch.NewProcessor(esProcessorConfig, params.ESClient, logger, params.MetricsClient)
 			esProcessor.Start()
 
 			visibilityConfigForES := &config.VisibilityConfig{
 				ESProcessorAckTimeout: serviceConfig.ESProcessorAckTimeout,
 			}
-			visibilityFromES = espersistence.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES, searchAttributesProvider, esProcessor, params.MetricsClient, logger)
+			visibilityFromES = elasticsearch.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES, searchAttributesProvider, esProcessor, params.MetricsClient, logger)
 		}
-		return persistence.NewVisibilityManagerWrapper(
+		return visibility.NewVisibilityManagerWrapper(
 			visibilityFromDB,
 			visibilityFromES,
 			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // history visibility never read

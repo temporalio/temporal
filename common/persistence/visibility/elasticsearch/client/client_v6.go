@@ -239,6 +239,16 @@ func (c *clientV6) IndexGetSettings(ctx context.Context, indexName string) (map[
 	return convertV6IndicesGetSettingsResponseMapToV7(resp), convertV6ErrorToV7(err)
 }
 
+func (c *clientV6) Delete(ctx context.Context, indexName string, docID string, version int64) error {
+	_, err := c.esClient.Delete().
+		Index(indexName).
+		Id(docID).
+		Version(version).
+		VersionType(versionTypeExternal).
+		Do(ctx)
+	return err
+}
+
 // =============== V6/V7 adapters ===============
 
 func convertV7SortersToV6(sorters []elastic.Sorter) []elastic6.Sorter {
@@ -265,6 +275,7 @@ func convertV6SearchResultToV7(result *elastic6.SearchResult) *elastic.SearchRes
 		Error:           convertV6ErrorDetailsToV7(result.Error),
 		Status:          result.Status,
 		Aggregations:    convertV6AggregationsToV7(result.Aggregations),
+		PitId:           "",
 
 		// TODO (alex): these complex structs are not converted. Add conversion funcs before using them in caller code.
 		Suggest: nil, // result.Suggest,

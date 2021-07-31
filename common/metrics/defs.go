@@ -266,8 +266,6 @@ const (
 	PersistenceListClosedWorkflowExecutionsByWorkflowIDScope
 	// PersistenceListClosedWorkflowExecutionsByStatusScope tracks ListClosedWorkflowExecutionsByStatus calls made by service to persistence layer
 	PersistenceListClosedWorkflowExecutionsByStatusScope
-	// PersistenceGetClosedWorkflowExecutionScope tracks GetClosedWorkflowExecution calls made by service to persistence layer
-	PersistenceGetClosedWorkflowExecutionScope
 	// PersistenceVisibilityDeleteWorkflowExecutionScope is the metrics scope for persistence.VisibilityManager.DeleteWorkflowExecution
 	PersistenceVisibilityDeleteWorkflowExecutionScope
 	// PersistenceListWorkflowExecutionsScope tracks ListWorkflowExecutions calls made by service to persistence layer
@@ -647,8 +645,6 @@ const (
 	ElasticsearchListClosedWorkflowExecutionsByWorkflowIDScope
 	// ElasticsearchListClosedWorkflowExecutionsByStatusScope tracks ListClosedWorkflowExecutionsByStatus calls made by service to persistence layer
 	ElasticsearchListClosedWorkflowExecutionsByStatusScope
-	// ElasticsearchGetClosedWorkflowExecutionScope tracks GetClosedWorkflowExecution calls made by service to persistence layer
-	ElasticsearchGetClosedWorkflowExecutionScope
 	// ElasticsearchListWorkflowExecutionsScope tracks ListWorkflowExecutions calls made by service to persistence layer
 	ElasticsearchListWorkflowExecutionsScope
 	// ElasticsearchScanWorkflowExecutionsScope tracks ScanWorkflowExecutions calls made by service to persistence layer
@@ -1181,7 +1177,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceListOpenWorkflowExecutionsByWorkflowIDScope:   {operation: "ListOpenWorkflowExecutionsByWorkflowID"},
 		PersistenceListClosedWorkflowExecutionsByWorkflowIDScope: {operation: "ListClosedWorkflowExecutionsByWorkflowID"},
 		PersistenceListClosedWorkflowExecutionsByStatusScope:     {operation: "ListClosedWorkflowExecutionsByStatus"},
-		PersistenceGetClosedWorkflowExecutionScope:               {operation: "GetClosedWorkflowExecution"},
 		PersistenceVisibilityDeleteWorkflowExecutionScope:        {operation: "VisibilityDeleteWorkflowExecution"},
 		PersistenceListWorkflowExecutionsScope:                   {operation: "ListWorkflowExecutions"},
 		PersistenceScanWorkflowExecutionsScope:                   {operation: "ScanWorkflowExecutions"},
@@ -1374,7 +1369,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ElasticsearchListOpenWorkflowExecutionsByWorkflowIDScope:   {operation: "ListOpenWorkflowExecutionsByWorkflowID"},
 		ElasticsearchListClosedWorkflowExecutionsByWorkflowIDScope: {operation: "ListClosedWorkflowExecutionsByWorkflowID"},
 		ElasticsearchListClosedWorkflowExecutionsByStatusScope:     {operation: "ListClosedWorkflowExecutionsByStatus"},
-		ElasticsearchGetClosedWorkflowExecutionScope:               {operation: "GetClosedWorkflowExecution"},
 		ElasticsearchListWorkflowExecutionsScope:                   {operation: "ListWorkflowExecutions"},
 		ElasticsearchScanWorkflowExecutionsScope:                   {operation: "ScanWorkflowExecutions"},
 		ElasticsearchCountWorkflowExecutionsScope:                  {operation: "CountWorkflowExecutions"},
@@ -1619,6 +1613,7 @@ const (
 	ServiceCriticalFailures
 	ServiceLatency
 	ServiceLatencyNoUserLatency
+	ServiceLatencyUserLatency
 	ServiceErrInvalidArgumentCounter
 	ServiceErrNamespaceNotActiveCounter
 	ServiceErrResourceExhaustedCounter
@@ -1776,7 +1771,11 @@ const (
 	TaskLimitExceededCounter
 	TaskBatchCompleteCounter
 	TaskProcessingLatency
+	TaskNoUserProcessingLatency
 	TaskQueueLatency
+	TaskUserLatency
+	TaskNoUserLatency
+	TaskNoUserQueueLatency
 	TaskRedispatchQueuePendingTasksTimer
 
 	TransferTaskMissingEventCounter
@@ -2046,6 +2045,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceCriticalFailures:                             {metricName: "service_errors_critical", metricType: Counter},
 		ServiceLatency:                                      {metricName: "service_latency", metricType: Timer},
 		ServiceLatencyNoUserLatency:                         {metricName: "service_latency_nouserlatency", metricType: Timer},
+		ServiceLatencyUserLatency:                           {metricName: "service_latency_userlatency", metricType: Timer},
 		ServiceErrInvalidArgumentCounter:                    {metricName: "service_errors_invalid_argument", metricType: Counter},
 		ServiceErrNamespaceNotActiveCounter:                 {metricName: "service_errors_namespace_not_active", metricType: Counter},
 		ServiceErrResourceExhaustedCounter:                  {metricName: "service_errors_resource_exhausted", metricType: Counter},
@@ -2209,16 +2209,25 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ElasticsearchInvalidSearchAttributeCount: {metricName: "elasticsearch_invalid_search_attribute_counter", metricType: Counter},
 	},
 	History: {
-		TaskRequests:                                      {metricName: "task_requests", metricType: Counter},
-		TaskLatency:                                       {metricName: "task_latency", metricType: Timer},
-		TaskAttemptTimer:                                  {metricName: "task_attempt", metricType: Timer},
-		TaskFailures:                                      {metricName: "task_errors", metricType: Counter},
-		TaskDiscarded:                                     {metricName: "task_errors_discarded", metricType: Counter},
-		TaskStandbyRetryCounter:                           {metricName: "task_errors_standby_retry_counter", metricType: Counter},
-		TaskNotActiveCounter:                              {metricName: "task_errors_not_active_counter", metricType: Counter},
-		TaskLimitExceededCounter:                          {metricName: "task_errors_limit_exceeded_counter", metricType: Counter},
-		TaskProcessingLatency:                             {metricName: "task_latency_processing", metricType: Timer},
-		TaskQueueLatency:                                  {metricName: "task_latency_queue", metricType: Timer},
+		TaskRequests: {metricName: "task_requests", metricType: Counter},
+
+		TaskLatency:       {metricName: "task_latency", metricType: Timer},               // overall/all attempts within single worker
+		TaskUserLatency:   {metricName: "task_latency_userlatency", metricType: Timer},   // from task generated to task complete
+		TaskNoUserLatency: {metricName: "task_latency_nouserlatency", metricType: Timer}, // from task generated to task complete
+
+		TaskAttemptTimer:         {metricName: "task_attempt", metricType: Timer},
+		TaskFailures:             {metricName: "task_errors", metricType: Counter},
+		TaskDiscarded:            {metricName: "task_errors_discarded", metricType: Counter},
+		TaskStandbyRetryCounter:  {metricName: "task_errors_standby_retry_counter", metricType: Counter},
+		TaskNotActiveCounter:     {metricName: "task_errors_not_active_counter", metricType: Counter},
+		TaskLimitExceededCounter: {metricName: "task_errors_limit_exceeded_counter", metricType: Counter},
+
+		TaskProcessingLatency:       {metricName: "task_latency_processing", metricType: Timer},               // per-attempt
+		TaskNoUserProcessingLatency: {metricName: "task_latency_processing_nouserlatency", metricType: Timer}, // per-attempt
+
+		TaskQueueLatency:       {metricName: "task_latency_queue", metricType: Timer},               // from task generated to task complete
+		TaskNoUserQueueLatency: {metricName: "task_latency_queue_nouserlatency", metricType: Timer}, // from task generated to task complete
+
 		TransferTaskMissingEventCounter:                   {metricName: "transfer_task_missing_event_counter", metricType: Counter},
 		TaskBatchCompleteCounter:                          {metricName: "task_batch_complete_counter", metricType: Counter},
 		TaskRedispatchQueuePendingTasksTimer:              {metricName: "task_redispatch_queue_pending_tasks", metricType: Timer},

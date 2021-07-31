@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	esclient "go.temporal.io/server/common/persistence/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -59,7 +59,7 @@ type (
 	}
 
 	activities struct {
-		esClient      esclient.Client
+		esClient      client.Client
 		saManager     searchattribute.Manager
 		metricsClient metrics.Client
 		logger        log.Logger
@@ -98,7 +98,7 @@ var (
 )
 
 func newActivities(
-	esClient esclient.Client,
+	esClient client.Client,
 	saManager searchattribute.Manager,
 	metricsClient metrics.Client,
 	logger log.Logger,
@@ -153,7 +153,7 @@ func (a *activities) AddESMappingFieldActivity(ctx context.Context, params Workf
 	_, err := a.esClient.PutMapping(ctx, params.IndexName, params.CustomAttributesToAdd)
 	if err != nil {
 		a.metricsClient.IncCounter(metrics.AddSearchAttributesWorkflowScope, metrics.AddSearchAttributesFailuresCount)
-		if esclient.IsRetryableError(err) {
+		if client.IsRetryableError(err) {
 			a.logger.Error("Unable to update Elasticsearch mapping (retryable error).", tag.ESIndex(params.IndexName), tag.Error(err))
 			return fmt.Errorf("%w: %v", ErrUnableToUpdateESMapping, err)
 		}
