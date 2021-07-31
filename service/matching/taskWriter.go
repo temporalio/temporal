@@ -73,7 +73,6 @@ var errShutdown = &persistence.ConditionFailedError{Msg: "task queue shutting do
 
 func newTaskWriter(
 	tlMgr *taskQueueManagerImpl,
-	block taskIDBlock,
 ) *taskWriter {
 	return &taskWriter{
 		status:       common.DaemonStatusInitialized,
@@ -81,15 +80,12 @@ func newTaskWriter(
 		config:       tlMgr.config,
 		taskQueueID:  tlMgr.taskQueueID,
 		appendCh:     make(chan *writeTaskRequest, tlMgr.config.OutstandingTaskAppendsThreshold()),
-		taskIDBlock:  block,
-		maxReadLevel: block.start - 1,
 		logger:       tlMgr.logger,
-
 		shutdownChan: make(chan struct{}),
 	}
 }
 
-func (w *taskWriter) Start() {
+func (w *taskWriter) Start(initialBlock taskIDBlock) {
 	if !atomic.CompareAndSwapInt32(
 		&w.status,
 		common.DaemonStatusInitialized,
@@ -98,6 +94,8 @@ func (w *taskWriter) Start() {
 		return
 	}
 
+	w.taskIDBlock = initialBlock
+	w.maxReadLevel = initialBlock.start - 1
 	go w.taskWriterLoop()
 }
 
