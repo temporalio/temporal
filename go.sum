@@ -382,8 +382,8 @@ github.com/stretchr/testify v1.7.0 h1:nwc3DEeHmmLAfoZucVR881uASk0Mfjw8xYJ99tb5Cc
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/temporalio/ringpop-go v0.0.0-20200708034907-1e016ebb537a h1:yyEBPFtXeNbtqFitJ+X3L7wpI9MrKrl8zSH3M29pREo=
 github.com/temporalio/ringpop-go v0.0.0-20200708034907-1e016ebb537a/go.mod h1:Ek9J8CAfI1IwVSqHpTOgj7FjzRSJ5SM/ud52eCmkhsw=
-github.com/temporalio/tctl v0.0.0-20210722235117-a400f112efa4 h1:ct74RUMXHWFwylvtdYD2VZqamA7Im7xPNHvGWPMUP1g=
-github.com/temporalio/tctl v0.0.0-20210722235117-a400f112efa4/go.mod h1:L+iwYmhBxN3Q9sp4jL1u0+ExEwAFu5OhmyrXX+pMInI=
+github.com/temporalio/tctl v0.0.0-20210730234214-fa5d45a3ed6c h1:Mg5MzlLxwfEzJylIX5uqpcmU/33STqN7LNzEXqRrylw=
+github.com/temporalio/tctl v0.0.0-20210730234214-fa5d45a3ed6c/go.mod h1:L+iwYmhBxN3Q9sp4jL1u0+ExEwAFu5OhmyrXX+pMInI=
 github.com/uber-common/bark v1.0.0/go.mod h1:g0ZuPcD7XiExKHynr93Q742G/sbrdVQkghrqLGOoFuY=
 github.com/uber-common/bark v1.3.0 h1:DkuZCBaQS9LWuNAPrCO6yQVANckIX3QI0QwLemUnzCo=
 github.com/uber-common/bark v1.3.0/go.mod h1:5fDe/YcIVP55XhFF9hUihX2lDsDcpFrTZEAwAVwtPDw=
