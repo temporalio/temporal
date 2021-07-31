@@ -3219,6 +3219,7 @@ func (e *historyEngineImpl) loadWorkflow(
 		// workflow not running, need to check current record
 		resp, err := e.shard.GetExecutionManager().GetCurrentExecution(
 			&persistence.GetCurrentExecutionRequest{
+				ShardID:     e.shard.GetShardID(),
 				NamespaceID: namespaceID,
 				WorkflowID:  workflowID,
 			},

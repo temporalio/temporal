@@ -742,6 +742,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 			mutableState.GetExecutionInfo().ExecutionStats = &persistencespb.ExecutionStats{}
 
 			s.Equal(&persistence.UpdateWorkflowExecutionRequest{
+				ShardID: s.mockShard.GetShardID(),
 				UpdateWorkflowMutation: persistence.WorkflowMutation{
 					ExecutionInfo:             mutableState.GetExecutionInfo(),
 					ExecutionState:            mutableState.GetExecutionState(),

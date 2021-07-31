@@ -207,7 +207,7 @@ func (s *integrationSuite) isMutableStateDeleted(namespaceID string, execution *
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(),
 		s.testClusterConfig.HistoryConfig.NumHistoryShards)
 	request := &persistence.GetWorkflowExecutionRequest{
-		ShardID: shardID,
+		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: execution.WorkflowId,

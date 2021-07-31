@@ -166,6 +166,7 @@ func (t *task) validate(
 func (t *task) getPaginationFn() collection.PaginationFn {
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
 		req := &persistence.ListConcreteExecutionsRequest{
+			ShardID:   t.shardID,
 			PageSize:  executionsPageSize,
 			PageToken: paginationToken,
 		}

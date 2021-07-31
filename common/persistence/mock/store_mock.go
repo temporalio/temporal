@@ -946,20 +946,6 @@ func (mr *MockExecutionStoreMockRecorder) GetReplicationTasksFromDLQ(request int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTasksFromDLQ", reflect.TypeOf((*MockExecutionStore)(nil).GetReplicationTasksFromDLQ), request)
 }
 
-// GetShardID mocks base method.
-func (m *MockExecutionStore) GetShardID() int32 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetShardID")
-	ret0, _ := ret[0].(int32)
-	return ret0
-}
-
-// GetShardID indicates an expected call of GetShardID.
-func (mr *MockExecutionStoreMockRecorder) GetShardID() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShardID", reflect.TypeOf((*MockExecutionStore)(nil).GetShardID))
-}
-
 // GetTimerIndexTasks mocks base method.
 func (m *MockExecutionStore) GetTimerIndexTasks(request *persistence.GetTimerIndexTasksRequest) (*persistence.GetTimerIndexTasksResponse, error) {
 	m.ctrl.T.Helper()

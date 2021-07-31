@@ -87,8 +87,8 @@ func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
 }
 
 // NewExecutionStore returns an ExecutionStore for a given shardID
-func (f *Factory) NewExecutionStore(shardID int32) (p.ExecutionStore, error) {
-	return NewExecutionStore(shardID, f.session, f.logger), nil
+func (f *Factory) NewExecutionStore() (p.ExecutionStore, error) {
+	return NewExecutionStore(f.session, f.logger), nil
 }
 
 // NewQueue returns a new queue backed by cassandra

@@ -291,7 +291,7 @@ func scanShard(
 		deleteEmptyFiles(outputFiles.CorruptedExecutionFile, outputFiles.ExecutionCheckFailureFile, outputFiles.ShardScanReportFile)
 		closeFn()
 	}()
-	workflowStore := cassp.NewExecutionStore(shardID, session, log.NewNoopLogger())
+	workflowStore := cassp.NewExecutionStore(session, log.NewNoopLogger())
 	execMan := persistence.NewExecutionManager(workflowStore, log.NewNoopLogger())
 
 	var token []byte
@@ -299,6 +299,7 @@ func scanShard(
 	for isFirstIteration || len(token) != 0 {
 		isFirstIteration = false
 		req := &persistence.ListConcreteExecutionsRequest{
+			ShardID:   shardID,
 			PageSize:  executionsPageSize,
 			PageToken: token,
 		}
@@ -640,6 +641,7 @@ func verifyCurrentExecution(
 		return VerificationResultNoCorruption
 	}
 	getCurrentExecutionRequest := &persistence.GetCurrentExecutionRequest{
+		ShardID:     shardID,
 		NamespaceID: executionInfo.NamespaceId,
 		WorkflowID:  executionInfo.WorkflowId,
 	}
@@ -714,7 +716,7 @@ func concreteExecutionStillExists(
 	totalDBRequests *int64,
 ) (*ExecutionCheckFailure, bool) {
 	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
-		ShardID: shardID,
+		ShardID:     shardID,
 		NamespaceID: executionInfo.NamespaceId,
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: executionInfo.WorkflowId,
@@ -751,7 +753,7 @@ func concreteExecutionStillOpen(
 	totalDBRequests *int64,
 ) (*ExecutionCheckFailure, bool) {
 	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
-		ShardID: shardID,
+		ShardID:     shardID,
 		NamespaceID: executionInfo.NamespaceId,
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: executionInfo.WorkflowId,

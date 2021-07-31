@@ -371,6 +371,7 @@ func (p *ReplicationTaskProcessorImpl) convertTaskToDLQTask(
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK:
 		taskAttributes := replicationTask.GetSyncActivityTaskAttributes()
 		return &persistence.PutReplicationTaskToDLQRequest{
+			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistencespb.ReplicationTaskInfo{
 				NamespaceId: taskAttributes.GetNamespaceId(),
@@ -401,6 +402,7 @@ func (p *ReplicationTaskProcessorImpl) convertTaskToDLQTask(
 		nextEventID := lastEvent.GetEventId() + 1
 
 		return &persistence.PutReplicationTaskToDLQRequest{
+			ShardID:           p.shard.GetShardID(),
 			SourceClusterName: p.sourceCluster,
 			TaskInfo: &persistencespb.ReplicationTaskInfo{
 				NamespaceId:  taskAttributes.GetNamespaceId(),

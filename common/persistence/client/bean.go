@@ -55,8 +55,8 @@ type (
 		GetHistoryManager() persistence.HistoryManager
 		SetHistoryManager(persistence.HistoryManager)
 
-		GetExecutionManager(int32) (persistence.ExecutionManager, error)
-		SetExecutionManager(int32, persistence.ExecutionManager)
+		GetExecutionManager() persistence.ExecutionManager
+		SetExecutionManager(persistence.ExecutionManager)
 	}
 
 	// BeanImpl stores persistence managers
@@ -67,7 +67,7 @@ type (
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		shardManager              persistence.ShardManager
 		historyManager            persistence.HistoryManager
-		executionManagerFactory   persistence.ExecutionManagerFactory
+		executionManager          persistence.ExecutionManager
 
 		sync.RWMutex
 		shardIDToExecutionManager map[int32]persistence.ExecutionManager
@@ -110,6 +110,11 @@ func NewBeanFromFactory(
 		return nil, err
 	}
 
+	executionManager, err := factory.NewExecutionManager()
+	if err != nil {
+		return nil, err
+	}
+
 	return NewBean(
 		clusterMetadataMgr,
 		metadataMgr,
@@ -117,7 +122,7 @@ func NewBeanFromFactory(
 		namespaceReplicationQueue,
 		shardMgr,
 		historyMgr,
-		factory,
+		executionManager,
 	), nil
 }
 
@@ -129,7 +134,7 @@ func NewBean(
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	shardManager persistence.ShardManager,
 	historyManager persistence.HistoryManager,
-	executionManagerFactory persistence.ExecutionManagerFactory,
+	executionManager persistence.ExecutionManager,
 ) *BeanImpl {
 	return &BeanImpl{
 		clusterMetadataManager:    clusterMetadataManager,
@@ -138,7 +143,7 @@ func NewBean(
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		shardManager:              shardManager,
 		historyManager:            historyManager,
-		executionManagerFactory:   executionManagerFactory,
+		executionManager:          executionManager,
 
 		shardIDToExecutionManager: make(map[int32]persistence.ExecutionManager),
 	}
@@ -264,45 +269,22 @@ func (s *BeanImpl) SetHistoryManager(
 }
 
 // GetExecutionManager get ExecutionManager
-func (s *BeanImpl) GetExecutionManager(
-	shardID int32,
-) (persistence.ExecutionManager, error) {
-
+func (s *BeanImpl) GetExecutionManager() persistence.ExecutionManager {
 	s.RLock()
-	executionManager, ok := s.shardIDToExecutionManager[shardID]
-	if ok {
-		s.RUnlock()
-		return executionManager, nil
-	}
-	s.RUnlock()
+	defer s.RUnlock()
 
-	s.Lock()
-	defer s.Unlock()
-
-	executionManager, ok = s.shardIDToExecutionManager[shardID]
-	if ok {
-		return executionManager, nil
-	}
-
-	executionManager, err := s.executionManagerFactory.NewExecutionManager(shardID)
-	if err != nil {
-		return nil, err
-	}
-
-	s.shardIDToExecutionManager[shardID] = executionManager
-	return executionManager, nil
+	return s.executionManager
 }
 
 // SetExecutionManager set ExecutionManager
 func (s *BeanImpl) SetExecutionManager(
-	shardID int32,
 	executionManager persistence.ExecutionManager,
 ) {
 
 	s.Lock()
 	defer s.Unlock()
 
-	s.shardIDToExecutionManager[shardID] = executionManager
+	s.executionManager = executionManager
 }
 
 // Close cleanup connections
@@ -317,7 +299,7 @@ func (s *BeanImpl) Close() {
 	s.namespaceReplicationQueue.Stop()
 	s.shardManager.Close()
 	s.historyManager.Close()
-	s.executionManagerFactory.Close()
+	s.executionManager.Close()
 	for _, executionMgr := range s.shardIDToExecutionManager {
 		executionMgr.Close()
 	}

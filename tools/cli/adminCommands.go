@@ -73,7 +73,7 @@ func AdminShowWorkflow(c *cli.Context) {
 	serializer := serialization.NewSerializer()
 	var history []*commonpb.DataBlob
 	if len(tid) != 0 {
-		histV2 := cassandra.NewExecutionStore(-1, session, log.NewNoopLogger())
+		histV2 := cassandra.NewExecutionStore(session, log.NewNoopLogger())
 		resp, err := histV2.ReadHistoryBranch(&persistence.InternalReadHistoryBranchRequest{
 			TreeID:    tid,
 			BranchID:  bid,
@@ -240,7 +240,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		}
 		fmt.Println("Deleting history events for:")
 		prettyPrintJSONObject(branchInfo)
-		histV2 := cassandra.NewExecutionStore(-1, session, log.NewNoopLogger())
+		histV2 := cassandra.NewExecutionStore(session, log.NewNoopLogger())
 		histMgr := persistence.NewHistoryV2ManagerImpl(histV2, log.NewNoopLogger(), dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit))
 		err = histMgr.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
 			BranchToken: branchToken,
@@ -255,9 +255,9 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		}
 	}
 
-	exeStore := cassandra.NewExecutionStore(int32(shardIDInt), session, log.NewNoopLogger())
+	exeStore := cassandra.NewExecutionStore(session, log.NewNoopLogger())
 	req := &persistence.DeleteWorkflowExecutionRequest{
-		ShardID: int32(shardIDInt),
+		ShardID:     int32(shardIDInt),
 		NamespaceID: namespaceID,
 		WorkflowID:  getRequiredOption(c, FlagWorkflowID),
 		RunID:       runID,
@@ -274,7 +274,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	}
 
 	deleteCurrentReq := &persistence.DeleteCurrentWorkflowExecutionRequest{
-		ShardID: int32(shardIDInt),
+		ShardID:     int32(shardIDInt),
 		NamespaceID: namespaceID,
 		WorkflowID:  getRequiredOption(c, FlagWorkflowID),
 		RunID:       runID,
@@ -441,7 +441,7 @@ func AdminDescribeTask(c *cli.Context) {
 	}
 
 	pFactory := CreatePersistenceFactory(c)
-	executionManager, err := pFactory.NewExecutionManager(sid)
+	executionManager, err := pFactory.NewExecutionManager()
 	if err != nil {
 		ErrorAndExit("Failed to initialize execution manager", err)
 	}
@@ -493,13 +493,13 @@ func AdminListTasks(c *cli.Context) {
 	}
 
 	pFactory := CreatePersistenceFactory(c)
-	executionManager, err := pFactory.NewExecutionManager(sid)
+	executionManager, err := pFactory.NewExecutionManager()
 	if err != nil {
 		ErrorAndExit("Failed to initialize execution manager", err)
 	}
 
 	if category == enumsspb.TASK_CATEGORY_TRANSFER {
-		req := &persistence.GetTransferTasksRequest{}
+		req := &persistence.GetTransferTasksRequest{ShardID: sid}
 
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
@@ -517,7 +517,7 @@ func AdminListTasks(c *cli.Context) {
 		}
 		paginate(c, paginationFunc)
 	} else if category == enumsspb.TASK_CATEGORY_VISIBILITY {
-		req := &persistence.GetVisibilityTasksRequest{}
+		req := &persistence.GetVisibilityTasksRequest{ShardID: sid}
 
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
@@ -538,7 +538,11 @@ func AdminListTasks(c *cli.Context) {
 		minVis := parseTime(c.String(FlagMinVisibilityTimestamp), time.Time{}, time.Now().UTC())
 		maxVis := parseTime(c.String(FlagMaxVisibilityTimestamp), time.Time{}, time.Now().UTC())
 
-		req := &persistence.GetTimerIndexTasksRequest{MinTimestamp: minVis, MaxTimestamp: maxVis}
+		req := &persistence.GetTimerIndexTasksRequest{
+			ShardID:      sid,
+			MinTimestamp: minVis,
+			MaxTimestamp: maxVis,
+		}
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
 			response, err := executionManager.GetTimerIndexTasks(req)

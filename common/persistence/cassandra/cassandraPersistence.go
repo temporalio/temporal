@@ -722,7 +722,7 @@ type (
 	// Implements ExecutionManager, ShardManager and TaskManager
 	cassandraPersistence struct {
 		cassandraStore
-		shardID            int32
+		//shardID            int32
 		currentClusterName string
 	}
 )
@@ -737,20 +737,17 @@ func newShardPersistence(
 ) (p.ShardStore, error) {
 	return &cassandraPersistence{
 		cassandraStore:     cassandraStore{session: session, logger: logger},
-		shardID:            -1,
 		currentClusterName: clusterName,
 	}, nil
 }
 
 // NewExecutionStore is used to create an instance of workflowExecutionManager implementation
 func NewExecutionStore(
-	shardID int32,
 	session gocql.Session,
 	logger log.Logger,
 ) p.ExecutionStore {
 	return &cassandraPersistence{
 		cassandraStore: cassandraStore{session: session, logger: logger},
-		shardID:        shardID,
 	}
 }
 
@@ -761,7 +758,6 @@ func newTaskPersistence(
 ) (p.TaskStore, error) {
 	return &cassandraPersistence{
 		cassandraStore: cassandraStore{session: session, logger: logger},
-		shardID:        -1,
 	}, nil
 }
 
@@ -774,10 +770,6 @@ func (d *cassandraStore) Close() {
 	if d.session != nil {
 		d.session.Close()
 	}
-}
-
-func (d *cassandraPersistence) GetShardID() int32 {
-	return d.shardID
 }
 
 func (d *cassandraPersistence) GetClusterName() string {
@@ -864,7 +856,7 @@ func (d *cassandraPersistence) UpdateShard(
 		}
 
 		return &p.ShardOwnershipLostError{
-			ShardID: d.shardID,
+			ShardID: request.ShardID,
 			Msg: fmt.Sprintf("Failed to update shard.  previous_range_id: %v, columns: (%v)",
 				request.PreviousRangeID, strings.Join(columns, ",")),
 		}
@@ -890,7 +882,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 	default:
 		if err := createOrUpdateCurrentExecution(batch,
 			request.Mode,
-			d.shardID,
+			request.ShardID,
 			namespaceID,
 			workflowID,
 			runID,
@@ -905,7 +897,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 	}
 
 	if err := applyWorkflowSnapshotBatchAsNew(batch,
-		d.shardID,
+		request.ShardID,
 		&newWorkflow,
 	); err != nil {
 		return nil, err
@@ -913,7 +905,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 
 	batch.Query(templateUpdateLeaseQuery,
 		request.RangeID,
-		d.shardID,
+		request.ShardID,
 		rowTypeShard,
 		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
@@ -948,7 +940,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 				if rangeID, ok := previous["range_id"].(int64); ok && rangeID != request.RangeID {
 					// CreateWorkflowExecution failed because rangeID was modified
 					return nil, &p.ShardOwnershipLostError{
-						ShardID: d.shardID,
+						ShardID: request.ShardID,
 						Msg: fmt.Sprintf("Failed to create workflow execution.  Request RangeID: %v, Actual RangeID: %v",
 							request.RangeID, rangeID),
 					}
@@ -1051,7 +1043,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
 		}
 		return nil, &p.ShardOwnershipLostError{
-			ShardID: d.shardID,
+			ShardID: request.ShardID,
 			Msg: fmt.Sprintf("Failed to create workflow execution.  Request RangeID: %v, columns: (%v)",
 				request.RangeID, strings.Join(columns, ",")),
 		}
@@ -1065,7 +1057,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(
 ) (*p.InternalGetWorkflowExecutionResponse, error) {
 	execution := request.Execution
 	query := d.session.Query(templateGetWorkflowExecutionQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeExecution,
 		request.NamespaceID,
 		execution.WorkflowId,
@@ -1159,11 +1151,12 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(
 	namespaceID := updateWorkflow.NamespaceID
 	workflowID := updateWorkflow.WorkflowID
 	runID := updateWorkflow.RunID
-	shardID := d.shardID
+	shardID := request.ShardID
 
 	switch request.Mode {
 	case p.UpdateWorkflowModeBypassCurrent:
 		if err := d.assertNotCurrentExecution(
+			request.ShardID,
 			namespaceID,
 			workflowID,
 			runID); err != nil {
@@ -1182,7 +1175,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(
 			}
 			if err := createOrUpdateCurrentExecution(batch,
 				p.CreateWorkflowModeContinueAsNew,
-				d.shardID,
+				request.ShardID,
 				newNamespaceID,
 				newWorkflowID,
 				newRunID,
@@ -1209,7 +1202,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(
 				executionStateDatablob.EncodingType.String(),
 				lastWriteVersion,
 				updateWorkflow.ExecutionState.State,
-				d.shardID,
+				request.ShardID,
 				rowTypeExecution,
 				namespaceID,
 				workflowID,
@@ -1229,7 +1222,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(
 	}
 	if newWorkflow != nil {
 		if err := applyWorkflowSnapshotBatchAsNew(batch,
-			d.shardID,
+			request.ShardID,
 			newWorkflow,
 		); err != nil {
 			return err
@@ -1239,7 +1232,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(
 	// Verifies that the RangeID has not changed
 	batch.Query(templateUpdateLeaseQuery,
 		request.RangeID,
-		d.shardID,
+		request.ShardID,
 		rowTypeShard,
 		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
@@ -1262,7 +1255,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(
 		return convertErrors(
 			record,
 			iter,
-			d.shardID,
+			request.ShardID,
 			request.RangeID,
 			updateWorkflow.ExecutionState.RunId,
 			[]executionCASCondition{{
@@ -1286,7 +1279,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(
 	resetWorkflow := request.ResetWorkflowSnapshot
 	newWorkflow := request.NewWorkflowSnapshot
 
-	shardID := d.shardID
+	shardID := request.ShardID
 
 	namespaceID := resetWorkflow.NamespaceID
 	workflowID := resetWorkflow.WorkflowID
@@ -1296,6 +1289,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(
 	switch request.Mode {
 	case p.ConflictResolveWorkflowModeBypassCurrent:
 		if err := d.assertNotCurrentExecution(
+			shardID,
 			namespaceID,
 			workflowID,
 			resetWorkflow.ExecutionState.RunId,
@@ -1386,7 +1380,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(
 	// Verifies that the RangeID has not changed
 	batch.Query(templateUpdateLeaseQuery,
 		request.RangeID,
-		d.shardID,
+		request.ShardID,
 		rowTypeShard,
 		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
@@ -1425,7 +1419,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(
 		return convertErrors(
 			record,
 			iter,
-			d.shardID,
+			request.ShardID,
 			request.RangeID,
 			currentRunID,
 			executionCASConditions,
@@ -1435,13 +1429,14 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(
 }
 
 func (d *cassandraPersistence) assertNotCurrentExecution(
+	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
 
 	if resp, err := d.GetCurrentExecution(&p.GetCurrentExecutionRequest{
-		ShardID: d.shardID,
+		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 	}); err != nil {
@@ -1463,7 +1458,7 @@ func (d *cassandraPersistence) DeleteWorkflowExecution(
 	request *p.DeleteWorkflowExecutionRequest,
 ) error {
 	query := d.session.Query(templateDeleteWorkflowExecutionMutableStateQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeExecution,
 		request.NamespaceID,
 		request.WorkflowID,
@@ -1479,7 +1474,7 @@ func (d *cassandraPersistence) DeleteCurrentWorkflowExecution(
 	request *p.DeleteCurrentWorkflowExecutionRequest,
 ) error {
 	query := d.session.Query(templateDeleteWorkflowExecutionCurrentRowQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeExecution,
 		request.NamespaceID,
 		request.WorkflowID,
@@ -1497,7 +1492,7 @@ func (d *cassandraPersistence) GetCurrentExecution(
 ) (*p.InternalGetCurrentExecutionResponse,
 	error) {
 	query := d.session.Query(templateGetCurrentExecutionQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeExecution,
 		request.NamespaceID,
 		request.WorkflowID,
@@ -1535,7 +1530,7 @@ func (d *cassandraPersistence) ListConcreteExecutions(
 ) (*p.InternalListConcreteExecutionsResponse, error) {
 	query := d.session.Query(
 		templateListWorkflowExecutionQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeExecution,
 	)
 	iter := query.PageSize(request.PageSize).PageState(request.PageToken).Iter()
@@ -1570,7 +1565,7 @@ func (d *cassandraPersistence) AddTasks(
 
 	if err := applyTasks(
 		batch,
-		d.shardID,
+		request.ShardID,
 		request.NamespaceID,
 		request.WorkflowID,
 		request.RunID,
@@ -1584,7 +1579,7 @@ func (d *cassandraPersistence) AddTasks(
 
 	batch.Query(templateUpdateLeaseQuery,
 		request.RangeID,
-		d.shardID,
+		request.ShardID,
 		rowTypeShard,
 		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
@@ -1607,7 +1602,7 @@ func (d *cassandraPersistence) AddTasks(
 		if previousRangeID, ok := previous["range_id"].(int64); ok && previousRangeID != request.RangeID {
 			// CreateWorkflowExecution failed because rangeID was modified
 			return &p.ShardOwnershipLostError{
-				ShardID: d.shardID,
+				ShardID: request.ShardID,
 				Msg:     fmt.Sprintf("Failed to add tasks.  Request RangeID: %v, Actual RangeID: %v", request.RangeID, previousRangeID),
 			}
 		} else {
@@ -1620,7 +1615,7 @@ func (d *cassandraPersistence) AddTasks(
 func (d *cassandraPersistence) GetTransferTask(
 	request *p.GetTransferTaskRequest,
 ) (*p.GetTransferTaskResponse, error) {
-	shardID := d.shardID
+	shardID := request.ShardID
 	taskID := request.TaskID
 	query := d.session.Query(templateGetTransferTaskQuery,
 		shardID,
@@ -1652,7 +1647,7 @@ func (d *cassandraPersistence) GetTransferTasks(
 
 	// Reading transfer tasks need to be quorum level consistent, otherwise we could lose task
 	query := d.session.Query(templateGetTransferTasksQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeTransferTask,
 		rowTypeTransferNamespaceID,
 		rowTypeTransferWorkflowID,
@@ -1689,7 +1684,7 @@ func (d *cassandraPersistence) GetTransferTasks(
 func (d *cassandraPersistence) GetVisibilityTask(
 	request *p.GetVisibilityTaskRequest,
 ) (*p.GetVisibilityTaskResponse, error) {
-	shardID := d.shardID
+	shardID := request.ShardID
 	taskID := request.TaskID
 	query := d.session.Query(templateGetVisibilityTaskQuery,
 		shardID,
@@ -1721,7 +1716,7 @@ func (d *cassandraPersistence) GetVisibilityTasks(
 
 	// Reading Visibility tasks need to be quorum level consistent, otherwise we could lose task
 	query := d.session.Query(templateGetVisibilityTasksQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeVisibilityTask,
 		rowTypeVisibilityTaskNamespaceID,
 		rowTypeVisibilityTaskWorkflowID,
@@ -1758,7 +1753,7 @@ func (d *cassandraPersistence) GetVisibilityTasks(
 func (d *cassandraPersistence) GetReplicationTask(
 	request *p.GetReplicationTaskRequest,
 ) (*p.GetReplicationTaskResponse, error) {
-	shardID := d.shardID
+	shardID := request.ShardID
 	taskID := request.TaskID
 	query := d.session.Query(templateGetReplicationTaskQuery,
 		shardID,
@@ -1790,7 +1785,7 @@ func (d *cassandraPersistence) GetReplicationTasks(
 
 	// Reading replication tasks need to be quorum level consistent, otherwise we could lose task
 	query := d.session.Query(templateGetReplicationTasksQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeReplicationTask,
 		rowTypeReplicationNamespaceID,
 		rowTypeReplicationWorkflowID,
@@ -1837,7 +1832,7 @@ func (d *cassandraPersistence) CompleteTransferTask(
 	request *p.CompleteTransferTaskRequest,
 ) error {
 	query := d.session.Query(templateCompleteTransferTaskQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeTransferTask,
 		rowTypeTransferNamespaceID,
 		rowTypeTransferWorkflowID,
@@ -1853,7 +1848,7 @@ func (d *cassandraPersistence) RangeCompleteTransferTask(
 	request *p.RangeCompleteTransferTaskRequest,
 ) error {
 	query := d.session.Query(templateRangeCompleteTransferTaskQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeTransferTask,
 		rowTypeTransferNamespaceID,
 		rowTypeTransferWorkflowID,
@@ -1871,7 +1866,7 @@ func (d *cassandraPersistence) CompleteVisibilityTask(
 	request *p.CompleteVisibilityTaskRequest,
 ) error {
 	query := d.session.Query(templateCompleteVisibilityTaskQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeVisibilityTask,
 		rowTypeVisibilityTaskNamespaceID,
 		rowTypeVisibilityTaskWorkflowID,
@@ -1887,7 +1882,7 @@ func (d *cassandraPersistence) RangeCompleteVisibilityTask(
 	request *p.RangeCompleteVisibilityTaskRequest,
 ) error {
 	query := d.session.Query(templateRangeCompleteVisibilityTaskQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeVisibilityTask,
 		rowTypeVisibilityTaskNamespaceID,
 		rowTypeVisibilityTaskWorkflowID,
@@ -1905,7 +1900,7 @@ func (d *cassandraPersistence) CompleteReplicationTask(
 	request *p.CompleteReplicationTaskRequest,
 ) error {
 	query := d.session.Query(templateCompleteReplicationTaskQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeReplicationTask,
 		rowTypeReplicationNamespaceID,
 		rowTypeReplicationWorkflowID,
@@ -1922,7 +1917,7 @@ func (d *cassandraPersistence) RangeCompleteReplicationTask(
 ) error {
 
 	query := d.session.Query(templateCompleteReplicationTaskBeforeQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeReplicationTask,
 		rowTypeReplicationNamespaceID,
 		rowTypeReplicationWorkflowID,
@@ -1940,7 +1935,7 @@ func (d *cassandraPersistence) CompleteTimerTask(
 ) error {
 	ts := p.UnixMilliseconds(request.VisibilityTimestamp)
 	query := d.session.Query(templateCompleteTimerTaskQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeTimerTask,
 		rowTypeTimerNamespaceID,
 		rowTypeTimerWorkflowID,
@@ -1958,7 +1953,7 @@ func (d *cassandraPersistence) RangeCompleteTimerTask(
 	start := p.UnixMilliseconds(request.InclusiveBeginTimestamp)
 	end := p.UnixMilliseconds(request.ExclusiveEndTimestamp)
 	query := d.session.Query(templateRangeCompleteTimerTaskQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeTimerTask,
 		rowTypeTimerNamespaceID,
 		rowTypeTimerWorkflowID,
@@ -2332,7 +2327,7 @@ func (d *cassandraPersistence) CompleteTasksLessThan(
 func (d *cassandraPersistence) GetTimerTask(
 	request *p.GetTimerTaskRequest,
 ) (*p.GetTimerTaskResponse, error) {
-	shardID := d.shardID
+	shardID := request.ShardID
 	taskID := request.TaskID
 	visibilityTs := request.VisibilityTimestamp
 	query := d.session.Query(templateGetTimerTaskQuery,
@@ -2366,7 +2361,7 @@ func (d *cassandraPersistence) GetTimerIndexTasks(
 	minTimestamp := p.UnixMilliseconds(request.MinTimestamp)
 	maxTimestamp := p.UnixMilliseconds(request.MaxTimestamp)
 	query := d.session.Query(templateGetTimerTasksQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeTimerTask,
 		rowTypeTimerNamespaceID,
 		rowTypeTimerWorkflowID,
@@ -2411,7 +2406,7 @@ func (d *cassandraPersistence) PutReplicationTaskToDLQ(
 
 	// Use source cluster name as the workflow id for replication dlq
 	query := d.session.Query(templateCreateReplicationTaskQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeDLQ,
 		rowTypeDLQNamespaceID,
 		request.SourceClusterName,
@@ -2434,7 +2429,7 @@ func (d *cassandraPersistence) GetReplicationTasksFromDLQ(
 ) (*p.GetReplicationTasksFromDLQResponse, error) {
 	// Reading replication tasks need to be quorum level consistent, otherwise we could lose tasks
 	query := d.session.Query(templateGetReplicationTasksQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeDLQ,
 		rowTypeDLQNamespaceID,
 		request.SourceClusterName,
@@ -2452,7 +2447,7 @@ func (d *cassandraPersistence) DeleteReplicationTaskFromDLQ(
 ) error {
 
 	query := d.session.Query(templateCompleteReplicationTaskQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeDLQ,
 		rowTypeDLQNamespaceID,
 		request.SourceClusterName,
@@ -2470,7 +2465,7 @@ func (d *cassandraPersistence) RangeDeleteReplicationTaskFromDLQ(
 ) error {
 
 	query := d.session.Query(templateRangeCompleteReplicationTaskQuery,
-		d.shardID,
+		request.ShardID,
 		rowTypeDLQ,
 		rowTypeDLQNamespaceID,
 		request.SourceClusterName,

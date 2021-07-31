@@ -69,10 +69,6 @@ func (m *executionManagerImpl) GetName() string {
 	return m.persistence.GetName()
 }
 
-func (m *executionManagerImpl) GetShardID() int32 {
-	return m.persistence.GetShardID()
-}
-
 // The below three APIs are related to serialization/deserialization
 func (m *executionManagerImpl) GetWorkflowExecution(
 	request *GetWorkflowExecutionRequest,
@@ -148,7 +144,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	}
 
 	newRequest := &InternalUpdateWorkflowExecutionRequest{
-		ShardID: m.GetShardID(),
+		ShardID: request.ShardID,
 		RangeID: request.RangeID,
 
 		Mode: request.Mode,
@@ -197,7 +193,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	}
 
 	newRequest := &InternalConflictResolveWorkflowExecutionRequest{
-		ShardID: m.GetShardID(),
+		ShardID: request.ShardID,
 		RangeID: request.RangeID,
 
 		Mode: request.Mode,
@@ -235,7 +231,7 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 	}
 
 	newRequest := &InternalCreateWorkflowExecutionRequest{
-		ShardID: m.GetShardID(),
+		ShardID:                  request.ShardID,
 		RangeID:                  request.RangeID,
 		Mode:                     request.Mode,
 		PreviousRunID:            request.PreviousRunID,

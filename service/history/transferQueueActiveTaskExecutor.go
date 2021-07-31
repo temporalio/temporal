@@ -724,6 +724,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		// it means this this might not be current anymore, we need to check
 		var resp *persistence.GetCurrentExecutionResponse
 		resp, err = t.shard.GetExecutionManager().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
+			ShardID:     t.shard.GetShardID(),
 			NamespaceID: task.GetNamespaceId(),
 			WorkflowID:  task.GetWorkflowId(),
 		})

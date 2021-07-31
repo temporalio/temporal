@@ -126,6 +126,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 	csum := s.newRandomChecksum()
 
 	req := &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
@@ -162,6 +163,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 	updatedState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	updatedState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
 			ExecutionState: updatedState,
@@ -201,6 +203,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 	csum := s.newRandomChecksum()
 
 	req := &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
@@ -323,6 +326,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 	csum := s.newRandomChecksum()
 
 	req := &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
@@ -411,6 +415,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 	csum := s.newRandomChecksum()
 
 	req := &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
@@ -451,6 +456,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 	updatedState.State = enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
 	updatedState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
 			ExecutionState: updatedState,
@@ -474,6 +480,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 	for _, status := range statuses {
 		updatedState.Status = status
 		_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+			ShardID: s.ShardInfo.GetShardId(),
 			UpdateWorkflowMutation: p.WorkflowMutation{
 				ExecutionInfo:  updatedInfo,
 				ExecutionState: updatedState,
@@ -491,6 +498,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 	updatedState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	updatedState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
 			ExecutionState: updatedState,
@@ -505,6 +513,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 	for _, status := range statuses {
 		updatedState.Status = status
 		_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+			ShardID: s.ShardInfo.GetShardId(),
 			UpdateWorkflowMutation: p.WorkflowMutation{
 				ExecutionInfo:  updatedInfo,
 				ExecutionState: updatedState,
@@ -542,6 +551,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 	updatedState.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
 	updatedState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
 			ExecutionState: updatedState,
@@ -563,6 +573,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 	for _, status := range statuses {
 		updatedState.Status = status
 		_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+			ShardID: s.ShardInfo.GetShardId(),
 			UpdateWorkflowMutation: p.WorkflowMutation{
 				ExecutionInfo:  updatedInfo,
 				ExecutionState: updatedState,
@@ -594,6 +605,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 
 	// create and update a workflow to make it completed
 	req := &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
@@ -634,6 +646,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 	updatedState.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
 	updatedState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
 			ExecutionState: updatedState,
@@ -651,6 +664,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 	updatedState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	updatedState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
 			ExecutionState: updatedState,
@@ -691,6 +705,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 	updatedState.State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
 	updatedState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
 			ExecutionState: updatedState,
@@ -728,6 +743,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 	nextEventID := int64(3)
 
 	req := &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
@@ -783,6 +799,7 @@ func (s *ExecutionManagerSuite) TestUpsertWorkflowActivity() {
 
 	// create and update a workflow to make it completed
 	req := &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
@@ -822,6 +839,7 @@ func (s *ExecutionManagerSuite) TestUpsertWorkflowActivity() {
 	updatedInfo := copyWorkflowExecutionInfo(info.ExecutionInfo)
 	updatedState := copyWorkflowExecutionState(info.ExecutionState)
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
 			ExecutionState: updatedState,
@@ -848,6 +866,7 @@ func (s *ExecutionManagerSuite) TestUpsertWorkflowActivity() {
 
 	// upsert the previous activity
 	_, err = s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
 			ExecutionState: updatedState,
@@ -911,6 +930,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 	// this create should work since we are relying the business logic in history engine
 	// to check whether the existing running workflow has finished
 	_, err3 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
@@ -1021,6 +1041,7 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 	s.Empty(task1, "Expected empty task identifier.")
 
 	response, err2 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                namespaceID,
@@ -1092,6 +1113,7 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 	csum := s.newRandomChecksum()
 
 	createReq := &p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId:                     uuid.New(),
@@ -1655,6 +1677,7 @@ func (s *ExecutionManagerSuite) TestCleanupCorruptedWorkflow() {
 	// mark it as corrupted
 	info0.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED
 	_, err6 := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  info0.ExecutionInfo,
 			ExecutionState: info0.ExecutionState,
@@ -1699,7 +1722,7 @@ func (s *ExecutionManagerSuite) TestGetCurrentWorkflow() {
 	s.NotNil(task0, "Expected non empty task identifier.")
 
 	response, err := s.ExecutionManager.GetCurrentExecution(&p.GetCurrentExecutionRequest{
-		ShardID: s.ShardInfo.GetShardId(),
+		ShardID:     s.ShardInfo.GetShardId(),
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowExecution.GetWorkflowId(),
 	})

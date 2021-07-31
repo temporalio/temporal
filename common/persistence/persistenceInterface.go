@@ -104,7 +104,6 @@ type (
 	ExecutionStore interface {
 		Closeable
 		GetName() string
-		GetShardID() int32
 		// The below three APIs are related to serialization/deserialization
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *InternalUpdateWorkflowExecutionRequest) error
