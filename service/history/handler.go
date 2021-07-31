@@ -1428,8 +1428,7 @@ func (h *Handler) convertError(err error) error {
 	switch err := err.(type) {
 	case *persistence.ShardOwnershipLostError:
 		shardID := err.ShardID
-		info, err := h.GetHistoryServiceResolver().Lookup(convert.Int32ToString(shardID))
-		if err == nil {
+		if info, err := h.GetHistoryServiceResolver().Lookup(convert.Int32ToString(shardID)); err == nil {
 			return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), info.GetAddress())
 		}
 		return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), "<unknown>")
