@@ -268,7 +268,7 @@ func (s *Service) startArchiver() {
 		SdkClient:        s.GetSDKClient(),
 		MetricsClient:    s.GetMetricsClient(),
 		Logger:           s.GetLogger(),
-		HistoryV2Manager: s.GetHistoryManager(),
+		HistoryV2Manager: s.GetExecutionManager(),
 		NamespaceCache:   s.GetNamespaceCache(),
 		Config:           s.config.ArchiverConfig,
 		ArchiverProvider: s.GetArchiverProvider(),

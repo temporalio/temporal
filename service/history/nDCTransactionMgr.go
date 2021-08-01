@@ -158,7 +158,7 @@ type (
 		namespaceCache   cache.NamespaceCache
 		historyCache     *workflow.Cache
 		clusterMetadata  cluster.Metadata
-		historyV2Mgr     persistence.HistoryManager
+		executionManager persistence.ExecutionManager
 		serializer       serialization.Serializer
 		metricsClient    metrics.Client
 		workflowResetter workflowResetter
@@ -180,13 +180,13 @@ func newNDCTransactionMgr(
 ) *nDCTransactionMgrImpl {
 
 	transactionMgr := &nDCTransactionMgrImpl{
-		shard:           shard,
-		namespaceCache:  shard.GetNamespaceCache(),
-		historyCache:    historyCache,
-		clusterMetadata: shard.GetClusterMetadata(),
-		historyV2Mgr:    shard.GetHistoryManager(),
-		serializer:      shard.GetService().GetPayloadSerializer(),
-		metricsClient:   shard.GetMetricsClient(),
+		shard:            shard,
+		namespaceCache:   shard.GetNamespaceCache(),
+		historyCache:     historyCache,
+		clusterMetadata:  shard.GetClusterMetadata(),
+		executionManager: shard.GetExecutionManager(),
+		serializer:       shard.GetService().GetPayloadSerializer(),
+		metricsClient:    shard.GetMetricsClient(),
 		workflowResetter: newWorkflowResetter(
 			shard,
 			historyCache,

@@ -83,9 +83,9 @@ func (s *ScavengerTestSuite) SetupTest() {
 
 func (s *ScavengerTestSuite) createTestScavenger(
 	rps int,
-) (*persistence.MockHistoryManager, *historyservicemock.MockHistoryServiceClient, *Scavenger, *gomock.Controller) {
+) (*persistence.MockExecutionManager, *historyservicemock.MockHistoryServiceClient, *Scavenger, *gomock.Controller) {
 	controller := gomock.NewController(s.T())
-	db := persistence.NewMockHistoryManager(controller)
+	db := persistence.NewMockExecutionManager(controller)
 	historyClient := historyservicemock.NewMockHistoryServiceClient(controller)
 	scvgr := NewScavenger(s.numShards, db, rps, historyClient, ScavengerHeartbeatDetails{}, s.metric, s.logger)
 	scvgr.isInTest = true

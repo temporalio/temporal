@@ -66,7 +66,6 @@ type (
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockExecutionMgr *persistence.MockExecutionManager
-		mockHistoryMgr   *persistence.MockHistoryManager
 
 		logger log.Logger
 
@@ -106,7 +105,6 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
-	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
@@ -115,7 +113,7 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	historyCache := workflow.NewCache(s.mockShard)
 
 	s.replicatorQueueProcessor = newReplicatorQueueProcessor(
-		s.mockShard, historyCache, s.mockExecutionMgr, s.mockHistoryMgr, s.logger,
+		s.mockShard, historyCache, s.mockExecutionMgr, s.logger,
 	)
 }
 

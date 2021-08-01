@@ -45,7 +45,7 @@ type (
 		logger      log.Logger
 	}
 
-	workflowExecutionRateLimitedPersistenceClient struct {
+	executionRateLimitedPersistenceClient struct {
 		rateLimiter quotas.RateLimiter
 		persistence ExecutionManager
 		logger      log.Logger
@@ -54,12 +54,6 @@ type (
 	taskRateLimitedPersistenceClient struct {
 		rateLimiter quotas.RateLimiter
 		persistence TaskManager
-		logger      log.Logger
-	}
-
-	historyV2RateLimitedPersistenceClient struct {
-		rateLimiter quotas.RateLimiter
-		persistence HistoryManager
 		logger      log.Logger
 	}
 
@@ -83,9 +77,8 @@ type (
 )
 
 var _ ShardManager = (*shardRateLimitedPersistenceClient)(nil)
-var _ ExecutionManager = (*workflowExecutionRateLimitedPersistenceClient)(nil)
+var _ ExecutionManager = (*executionRateLimitedPersistenceClient)(nil)
 var _ TaskManager = (*taskRateLimitedPersistenceClient)(nil)
-var _ HistoryManager = (*historyV2RateLimitedPersistenceClient)(nil)
 var _ MetadataManager = (*metadataRateLimitedPersistenceClient)(nil)
 var _ ClusterMetadataManager = (*clusterMetadataRateLimitedPersistenceClient)(nil)
 var _ Queue = (*queueRateLimitedPersistenceClient)(nil)
@@ -99,9 +92,9 @@ func NewShardPersistenceRateLimitedClient(persistence ShardManager, rateLimiter 
 	}
 }
 
-// NewWorkflowExecutionPersistenceRateLimitedClient creates a client to manage executions
-func NewWorkflowExecutionPersistenceRateLimitedClient(persistence ExecutionManager, rateLimiter quotas.RateLimiter, logger log.Logger) ExecutionManager {
-	return &workflowExecutionRateLimitedPersistenceClient{
+// NewExecutionPersistenceRateLimitedClient creates a client to manage executions
+func NewExecutionPersistenceRateLimitedClient(persistence ExecutionManager, rateLimiter quotas.RateLimiter, logger log.Logger) ExecutionManager {
+	return &executionRateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
 		logger:      logger,
@@ -111,15 +104,6 @@ func NewWorkflowExecutionPersistenceRateLimitedClient(persistence ExecutionManag
 // NewTaskPersistenceRateLimitedClient creates a client to manage tasks
 func NewTaskPersistenceRateLimitedClient(persistence TaskManager, rateLimiter quotas.RateLimiter, logger log.Logger) TaskManager {
 	return &taskRateLimitedPersistenceClient{
-		persistence: persistence,
-		rateLimiter: rateLimiter,
-		logger:      logger,
-	}
-}
-
-// NewHistoryV2PersistenceRateLimitedClient creates a HistoryManager client to manage workflow execution history
-func NewHistoryV2PersistenceRateLimitedClient(persistence HistoryManager, rateLimiter quotas.RateLimiter, logger log.Logger) HistoryManager {
-	return &historyV2RateLimitedPersistenceClient{
 		persistence: persistence,
 		rateLimiter: rateLimiter,
 		logger:      logger,
@@ -188,11 +172,11 @@ func (p *shardRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) GetName() string {
+func (p *executionRateLimitedPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error) {
+func (p *executionRateLimitedPersistenceClient) CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -201,7 +185,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) CreateWorkflowExecution(
 	return response, err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error) {
+func (p *executionRateLimitedPersistenceClient) GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -210,7 +194,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) GetWorkflowExecution(req
 	return response, err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error) {
+func (p *executionRateLimitedPersistenceClient) UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -219,7 +203,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) UpdateWorkflowExecution(
 	return resp, err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) error {
+func (p *executionRateLimitedPersistenceClient) ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
@@ -228,7 +212,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) ConflictResolveWorkflowE
 	return err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error {
+func (p *executionRateLimitedPersistenceClient) DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
@@ -237,7 +221,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) DeleteWorkflowExecution(
 	return err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error {
+func (p *executionRateLimitedPersistenceClient) DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
@@ -246,7 +230,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) DeleteCurrentWorkflowExe
 	return err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error) {
+func (p *executionRateLimitedPersistenceClient) GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -255,7 +239,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) GetCurrentExecution(requ
 	return response, err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error) {
+func (p *executionRateLimitedPersistenceClient) ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -264,7 +248,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) ListConcreteExecutions(r
 	return response, err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) AddTasks(request *AddTasksRequest) error {
+func (p *executionRateLimitedPersistenceClient) AddTasks(request *AddTasksRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
@@ -273,7 +257,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) AddTasks(request *AddTas
 	return err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error) {
+func (p *executionRateLimitedPersistenceClient) GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -282,7 +266,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) GetTransferTask(request 
 	return response, err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error) {
+func (p *executionRateLimitedPersistenceClient) GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -291,7 +275,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) GetTransferTasks(request
 	return response, err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) GetVisibilityTask(request *GetVisibilityTaskRequest) (*GetVisibilityTaskResponse, error) {
+func (p *executionRateLimitedPersistenceClient) GetVisibilityTask(request *GetVisibilityTaskRequest) (*GetVisibilityTaskResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -300,7 +284,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) GetVisibilityTask(reques
 	return response, err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error) {
+func (p *executionRateLimitedPersistenceClient) GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -309,7 +293,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) GetVisibilityTasks(reque
 	return response, err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error) {
+func (p *executionRateLimitedPersistenceClient) GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -318,7 +302,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) GetReplicationTask(reque
 	return response, err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error) {
+func (p *executionRateLimitedPersistenceClient) GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -327,7 +311,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) GetReplicationTasks(requ
 	return response, err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) CompleteTransferTask(request *CompleteTransferTaskRequest) error {
+func (p *executionRateLimitedPersistenceClient) CompleteTransferTask(request *CompleteTransferTaskRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
@@ -336,7 +320,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) CompleteTransferTask(req
 	return err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error {
+func (p *executionRateLimitedPersistenceClient) RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
@@ -345,7 +329,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) RangeCompleteTransferTas
 	return err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error {
+func (p *executionRateLimitedPersistenceClient) CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
@@ -354,7 +338,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) CompleteVisibilityTask(r
 	return err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error {
+func (p *executionRateLimitedPersistenceClient) RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
@@ -363,7 +347,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) RangeCompleteVisibilityT
 	return err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) CompleteReplicationTask(request *CompleteReplicationTaskRequest) error {
+func (p *executionRateLimitedPersistenceClient) CompleteReplicationTask(request *CompleteReplicationTaskRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
@@ -372,7 +356,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) CompleteReplicationTask(
 	return err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error {
+func (p *executionRateLimitedPersistenceClient) RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
@@ -381,7 +365,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) RangeCompleteReplication
 	return err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) PutReplicationTaskToDLQ(
+func (p *executionRateLimitedPersistenceClient) PutReplicationTaskToDLQ(
 	request *PutReplicationTaskToDLQRequest,
 ) error {
 	if ok := p.rateLimiter.Allow(); !ok {
@@ -391,7 +375,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) PutReplicationTaskToDLQ(
 	return p.persistence.PutReplicationTaskToDLQ(request)
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) GetReplicationTasksFromDLQ(
+func (p *executionRateLimitedPersistenceClient) GetReplicationTasksFromDLQ(
 	request *GetReplicationTasksFromDLQRequest,
 ) (*GetReplicationTasksFromDLQResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
@@ -401,7 +385,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) GetReplicationTasksFromD
 	return p.persistence.GetReplicationTasksFromDLQ(request)
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) DeleteReplicationTaskFromDLQ(
+func (p *executionRateLimitedPersistenceClient) DeleteReplicationTaskFromDLQ(
 	request *DeleteReplicationTaskFromDLQRequest,
 ) error {
 	if ok := p.rateLimiter.Allow(); !ok {
@@ -411,7 +395,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) DeleteReplicationTaskFro
 	return p.persistence.DeleteReplicationTaskFromDLQ(request)
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) RangeDeleteReplicationTaskFromDLQ(
+func (p *executionRateLimitedPersistenceClient) RangeDeleteReplicationTaskFromDLQ(
 	request *RangeDeleteReplicationTaskFromDLQRequest,
 ) error {
 	if ok := p.rateLimiter.Allow(); !ok {
@@ -421,7 +405,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) RangeDeleteReplicationTa
 	return p.persistence.RangeDeleteReplicationTaskFromDLQ(request)
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error) {
+func (p *executionRateLimitedPersistenceClient) GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -430,7 +414,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) GetTimerTask(request *Ge
 	return response, err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error) {
+func (p *executionRateLimitedPersistenceClient) GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -439,7 +423,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) GetTimerIndexTasks(reque
 	return resonse, err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) CompleteTimerTask(request *CompleteTimerTaskRequest) error {
+func (p *executionRateLimitedPersistenceClient) CompleteTimerTask(request *CompleteTimerTaskRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
@@ -448,7 +432,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) CompleteTimerTask(reques
 	return err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error {
+func (p *executionRateLimitedPersistenceClient) RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
@@ -457,7 +441,7 @@ func (p *workflowExecutionRateLimitedPersistenceClient) RangeCompleteTimerTask(r
 	return err
 }
 
-func (p *workflowExecutionRateLimitedPersistenceClient) Close() {
+func (p *executionRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
 
@@ -606,16 +590,8 @@ func (p *metadataRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-func (p *historyV2RateLimitedPersistenceClient) GetName() string {
-	return p.persistence.GetName()
-}
-
-func (p *historyV2RateLimitedPersistenceClient) Close() {
-	p.persistence.Close()
-}
-
 // AppendHistoryNodes add a node to history node table
-func (p *historyV2RateLimitedPersistenceClient) AppendHistoryNodes(request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error) {
+func (p *executionRateLimitedPersistenceClient) AppendHistoryNodes(request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -623,7 +599,7 @@ func (p *historyV2RateLimitedPersistenceClient) AppendHistoryNodes(request *Appe
 }
 
 // ReadHistoryBranch returns history node data for a branch
-func (p *historyV2RateLimitedPersistenceClient) ReadHistoryBranch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error) {
+func (p *executionRateLimitedPersistenceClient) ReadHistoryBranch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -632,7 +608,7 @@ func (p *historyV2RateLimitedPersistenceClient) ReadHistoryBranch(request *ReadH
 }
 
 // ReadHistoryBranchByBatch returns history node data for a branch
-func (p *historyV2RateLimitedPersistenceClient) ReadHistoryBranchByBatch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchByBatchResponse, error) {
+func (p *executionRateLimitedPersistenceClient) ReadHistoryBranchByBatch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchByBatchResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -641,7 +617,7 @@ func (p *historyV2RateLimitedPersistenceClient) ReadHistoryBranchByBatch(request
 }
 
 // ReadHistoryBranchByBatch returns history node data for a branch
-func (p *historyV2RateLimitedPersistenceClient) ReadRawHistoryBranch(request *ReadHistoryBranchRequest) (*ReadRawHistoryBranchResponse, error) {
+func (p *executionRateLimitedPersistenceClient) ReadRawHistoryBranch(request *ReadHistoryBranchRequest) (*ReadRawHistoryBranchResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -650,7 +626,7 @@ func (p *historyV2RateLimitedPersistenceClient) ReadRawHistoryBranch(request *Re
 }
 
 // ForkHistoryBranch forks a new branch from a old branch
-func (p *historyV2RateLimitedPersistenceClient) ForkHistoryBranch(request *ForkHistoryBranchRequest) (*ForkHistoryBranchResponse, error) {
+func (p *executionRateLimitedPersistenceClient) ForkHistoryBranch(request *ForkHistoryBranchRequest) (*ForkHistoryBranchResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -659,7 +635,7 @@ func (p *historyV2RateLimitedPersistenceClient) ForkHistoryBranch(request *ForkH
 }
 
 // DeleteHistoryBranch removes a branch
-func (p *historyV2RateLimitedPersistenceClient) DeleteHistoryBranch(request *DeleteHistoryBranchRequest) error {
+func (p *executionRateLimitedPersistenceClient) DeleteHistoryBranch(request *DeleteHistoryBranchRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
@@ -668,7 +644,7 @@ func (p *historyV2RateLimitedPersistenceClient) DeleteHistoryBranch(request *Del
 }
 
 // TrimHistoryBranch trims a branch
-func (p *historyV2RateLimitedPersistenceClient) TrimHistoryBranch(request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error) {
+func (p *executionRateLimitedPersistenceClient) TrimHistoryBranch(request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -677,7 +653,7 @@ func (p *historyV2RateLimitedPersistenceClient) TrimHistoryBranch(request *TrimH
 }
 
 // GetHistoryTree returns all branch information of a tree
-func (p *historyV2RateLimitedPersistenceClient) GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error) {
+func (p *executionRateLimitedPersistenceClient) GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
@@ -685,7 +661,7 @@ func (p *historyV2RateLimitedPersistenceClient) GetHistoryTree(request *GetHisto
 	return response, err
 }
 
-func (p *historyV2RateLimitedPersistenceClient) GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error) {
+func (p *executionRateLimitedPersistenceClient) GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}

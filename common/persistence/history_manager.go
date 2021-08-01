@@ -35,22 +35,9 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
-)
-
-type (
-	// historyManagerImpl implements HistoryManager based on ExecutionStore and Serializer
-	historyV2ManagerImpl struct {
-		historySerializer     serialization.Serializer
-		persistence           ExecutionStore
-		logger                log.Logger
-		pagingTokenSerializer *jsonHistoryTokenSerializer
-		transactionSizeLimit  dynamicconfig.IntPropertyFn
-	}
 )
 
 const (
@@ -61,30 +48,10 @@ const (
 	trimHistoryBranchPageSize = 1000
 )
 
-var _ HistoryManager = (*historyV2ManagerImpl)(nil)
-
-// NewHistoryV2ManagerImpl returns new HistoryManager
-func NewHistoryV2ManagerImpl(
-	persistence ExecutionStore,
-	logger log.Logger,
-	transactionSizeLimit dynamicconfig.IntPropertyFn,
-) HistoryManager {
-
-	return &historyV2ManagerImpl{
-		historySerializer:     serialization.NewSerializer(),
-		persistence:           persistence,
-		logger:                logger,
-		pagingTokenSerializer: newJSONHistoryTokenSerializer(),
-		transactionSizeLimit:  transactionSizeLimit,
-	}
-}
-
-func (m *historyV2ManagerImpl) GetName() string {
-	return m.persistence.GetName()
-}
+var _ ExecutionManager = (*executionManagerImpl)(nil)
 
 // ForkHistoryBranch forks a new branch from a old branch
-func (m *historyV2ManagerImpl) ForkHistoryBranch(
+func (m *executionManagerImpl) ForkHistoryBranch(
 	request *ForkHistoryBranchRequest,
 ) (*ForkHistoryBranchResponse, error) {
 
@@ -94,7 +61,7 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(
 		}
 	}
 
-	forkBranch, err := m.historySerializer.HistoryBranchFromBlob(&commonpb.DataBlob{
+	forkBranch, err := m.serializer.HistoryBranchFromBlob(&commonpb.DataBlob{
 		Data:         request.ForkBranchToken,
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 	})
@@ -139,7 +106,7 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(
 		Info:       request.Info,
 	}
 
-	treeInfoBlob, err := m.historySerializer.HistoryTreeInfoToBlob(treeInfo, enumspb.ENCODING_TYPE_PROTO3)
+	treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(treeInfo, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +125,7 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(
 		return nil, err
 	}
 
-	branchInfoBlob, err := m.historySerializer.HistoryBranchToBlob(newBranchInfo, enumspb.ENCODING_TYPE_PROTO3)
+	branchInfoBlob, err := m.serializer.HistoryBranchToBlob(newBranchInfo, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +136,7 @@ func (m *historyV2ManagerImpl) ForkHistoryBranch(
 }
 
 // DeleteHistoryBranch removes a branch
-func (m *historyV2ManagerImpl) DeleteHistoryBranch(
+func (m *executionManagerImpl) DeleteHistoryBranch(
 	request *DeleteHistoryBranchRequest,
 ) error {
 
@@ -243,7 +210,7 @@ findDeleteRanges:
 }
 
 // TrimHistoryBranch trims a branch
-func (m *historyV2ManagerImpl) TrimHistoryBranch(
+func (m *executionManagerImpl) TrimHistoryBranch(
 	request *TrimHistoryBranchRequest,
 ) (*TrimHistoryBranchResponse, error) {
 
@@ -338,7 +305,7 @@ func (m *historyV2ManagerImpl) TrimHistoryBranch(
 }
 
 // GetHistoryTree returns all branch information of a tree
-func (m *historyV2ManagerImpl) GetHistoryTree(
+func (m *executionManagerImpl) GetHistoryTree(
 	request *GetHistoryTreeRequest,
 ) (*GetHistoryTreeResponse, error) {
 
@@ -355,7 +322,7 @@ func (m *historyV2ManagerImpl) GetHistoryTree(
 	}
 	branches := make([]*persistencespb.HistoryBranch, 0, len(resp.TreeInfos))
 	for _, blob := range resp.TreeInfos {
-		br, err := m.historySerializer.HistoryTreeInfoFromBlob(NewDataBlob(blob.Data, blob.EncodingType.String()))
+		br, err := m.serializer.HistoryTreeInfoFromBlob(NewDataBlob(blob.Data, blob.EncodingType.String()))
 		if err != nil {
 			return nil, err
 		}
@@ -365,11 +332,11 @@ func (m *historyV2ManagerImpl) GetHistoryTree(
 }
 
 // AppendHistoryNodes add a node to history node table
-func (m *historyV2ManagerImpl) AppendHistoryNodes(
+func (m *executionManagerImpl) AppendHistoryNodes(
 	request *AppendHistoryNodesRequest,
 ) (*AppendHistoryNodesResponse, error) {
 
-	branch, err := m.historySerializer.HistoryBranchFromBlob(&commonpb.DataBlob{Data: request.BranchToken, EncodingType: enumspb.ENCODING_TYPE_PROTO3})
+	branch, err := m.serializer.HistoryBranchFromBlob(&commonpb.DataBlob{Data: request.BranchToken, EncodingType: enumspb.ENCODING_TYPE_PROTO3})
 	if err != nil {
 		return nil, err
 	}
@@ -404,7 +371,7 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(
 	}
 
 	// nodeID will be the first eventID
-	blob, err := m.historySerializer.SerializeEvents(request.Events, enumspb.ENCODING_TYPE_PROTO3)
+	blob, err := m.serializer.SerializeEvents(request.Events, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return nil, err
 	}
@@ -431,7 +398,7 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(
 
 	if req.IsNewBranch {
 		// TreeInfo is only needed for new branch
-		treeInfoBlob, err := m.historySerializer.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
+		treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
 			BranchInfo: branch,
 			ForkTime:   timestamp.TimeNowPtrUtc(),
 			Info:       request.Info,
@@ -457,7 +424,7 @@ func (m *historyV2ManagerImpl) AppendHistoryNodes(
 
 // ReadHistoryBranchByBatch returns history node data for a branch by batch
 // Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
-func (m *historyV2ManagerImpl) ReadHistoryBranchByBatch(
+func (m *executionManagerImpl) ReadHistoryBranchByBatch(
 	request *ReadHistoryBranchRequest,
 ) (*ReadHistoryBranchByBatchResponse, error) {
 
@@ -469,7 +436,7 @@ func (m *historyV2ManagerImpl) ReadHistoryBranchByBatch(
 
 // ReadHistoryBranch returns history node data for a branch
 // Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
-func (m *historyV2ManagerImpl) ReadHistoryBranch(
+func (m *executionManagerImpl) ReadHistoryBranch(
 	request *ReadHistoryBranchRequest,
 ) (*ReadHistoryBranchResponse, error) {
 
@@ -482,7 +449,7 @@ func (m *historyV2ManagerImpl) ReadHistoryBranch(
 // ReadRawHistoryBranch returns raw history binary data for a branch
 // Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
 // NOTE: this API should only be used by 3+DC
-func (m *historyV2ManagerImpl) ReadRawHistoryBranch(
+func (m *executionManagerImpl) ReadRawHistoryBranch(
 	request *ReadHistoryBranchRequest,
 ) (*ReadRawHistoryBranchResponse, error) {
 
@@ -503,7 +470,7 @@ func (m *historyV2ManagerImpl) ReadRawHistoryBranch(
 	}, nil
 }
 
-func (m *historyV2ManagerImpl) GetAllHistoryTreeBranches(
+func (m *executionManagerImpl) GetAllHistoryTreeBranches(
 	request *GetAllHistoryTreeBranchesRequest,
 ) (*GetAllHistoryTreeBranchesResponse, error) {
 	resp, err := m.persistence.GetAllHistoryTreeBranches(request)
@@ -513,7 +480,7 @@ func (m *historyV2ManagerImpl) GetAllHistoryTreeBranches(
 	branches := make([]HistoryBranchDetail, 0, len(resp.Branches))
 	for _, branch := range resp.Branches {
 		blob := NewDataBlob(branch.Data, branch.Encoding)
-		treeInfo, err := m.historySerializer.HistoryTreeInfoFromBlob(blob)
+		treeInfo, err := m.serializer.HistoryTreeInfoFromBlob(blob)
 		if err != nil {
 			return nil, err
 		}
@@ -533,16 +500,16 @@ func (m *historyV2ManagerImpl) GetAllHistoryTreeBranches(
 	}, nil
 }
 
-func (m *historyV2ManagerImpl) readRawHistoryBranch(
+func (m *executionManagerImpl) readRawHistoryBranch(
 	shardID int32,
 	treeID string,
 	branchAncestors []*persistencespb.HistoryBranchRange,
 	minNodeID int64,
 	maxNodeID int64,
-	token *historyV2PagingToken,
+	token *historyPagingToken,
 	pageSize int,
 	metadataOnly bool,
-) ([]InternalHistoryNode, *historyV2PagingToken, error) {
+) ([]InternalHistoryNode, *historyPagingToken, error) {
 
 	if token.CurrentRangeIndex == notStartedIndex {
 		for idx, br := range branchAncestors {
@@ -590,9 +557,9 @@ func (m *historyV2ManagerImpl) readRawHistoryBranch(
 	return resp.Nodes, token, nil
 }
 
-func (m *historyV2ManagerImpl) readRawHistoryBranchAndFilter(
+func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 	request *ReadHistoryBranchRequest,
-) ([]*commonpb.DataBlob, *historyV2PagingToken, int, error) {
+) ([]*commonpb.DataBlob, *historyPagingToken, int, error) {
 
 	shardID := request.ShardID
 	branchToken := request.BranchToken
@@ -668,7 +635,7 @@ func (m *historyV2ManagerImpl) readRawHistoryBranchAndFilter(
 	return dataBlobs, token, dataSize, nil
 }
 
-func (m *historyV2ManagerImpl) readHistoryBranch(
+func (m *executionManagerImpl) readHistoryBranch(
 	byBatch bool,
 	request *ReadHistoryBranchRequest,
 ) ([]*historypb.HistoryEvent, []*historypb.History, []byte, int, error) {
@@ -682,7 +649,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 	historyEventBatches := make([]*historypb.History, 0, request.PageSize)
 
 	for _, batch := range dataBlobs {
-		events, err := m.historySerializer.DeserializeEvents(batch)
+		events, err := m.serializer.DeserializeEvents(batch)
 		if err != nil {
 			return historyEvents, historyEventBatches, nil, dataSize, err
 		}
@@ -727,7 +694,7 @@ func (m *historyV2ManagerImpl) readHistoryBranch(
 	return historyEvents, historyEventBatches, nextPageToken, dataSize, nil
 }
 
-func (m *historyV2ManagerImpl) filterHistoryNodes(
+func (m *executionManagerImpl) filterHistoryNodes(
 	lastNodeID int64,
 	lastTransactionID int64,
 	nodes []InternalHistoryNode,
@@ -763,10 +730,10 @@ func (m *historyV2ManagerImpl) filterHistoryNodes(
 	return result, nil
 }
 
-func (m *historyV2ManagerImpl) deserializeToken(
+func (m *executionManagerImpl) deserializeToken(
 	token []byte,
 	defaultLastEventID int64,
-) (*historyV2PagingToken, error) {
+) (*historyPagingToken, error) {
 
 	return m.pagingTokenSerializer.Deserialize(
 		token,
@@ -776,8 +743,8 @@ func (m *historyV2ManagerImpl) deserializeToken(
 	)
 }
 
-func (m *historyV2ManagerImpl) serializeToken(
-	pagingToken *historyV2PagingToken,
+func (m *executionManagerImpl) serializeToken(
+	pagingToken *historyPagingToken,
 ) ([]byte, error) {
 
 	if len(pagingToken.StoreToken) == 0 {
@@ -791,8 +758,4 @@ func (m *historyV2ManagerImpl) serializeToken(
 	}
 
 	return m.pagingTokenSerializer.Serialize(pagingToken)
-}
-
-func (m *historyV2ManagerImpl) Close() {
-	m.persistence.Close()
 }

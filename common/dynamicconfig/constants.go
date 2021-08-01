@@ -109,7 +109,6 @@ var Keys = map[Key]string{
 	FrontendMaxNamespaceRPSPerInstance:    "frontend.namespaceRPS",
 	FrontendMaxNamespaceCountPerInstance:  "frontend.namespaceCount",
 	FrontendGlobalNamespaceRPS:            "frontend.globalNamespacerps",
-	FrontendHistoryMgrNumConns:            "frontend.historyMgrNumConns",
 	FrontendShutdownDrainDuration:         "frontend.shutdownDrainDuration",
 	DisableListVisibilityByFilter:         "frontend.disableListVisibilityByFilter",
 	FrontendThrottledLogRPS:               "frontend.throttledLogRPS",
@@ -429,8 +428,6 @@ const (
 	FrontendMaxNamespaceCountPerInstance
 	// FrontendGlobalNamespaceRPS is workflow namespace rate limit per second for the whole cluster
 	FrontendGlobalNamespaceRPS
-	// FrontendHistoryMgrNumConns is for persistence cluster.NumConns
-	FrontendHistoryMgrNumConns
 	// FrontendThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	FrontendThrottledLogRPS
 	// FrontendShutdownDrainDuration is the duration of traffic drain during shutdown

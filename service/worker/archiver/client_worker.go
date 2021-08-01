@@ -60,7 +60,7 @@ type (
 		SdkClient        sdkclient.Client
 		MetricsClient    metrics.Client
 		Logger           log.Logger
-		HistoryV2Manager persistence.HistoryManager
+		HistoryV2Manager persistence.ExecutionManager
 		NamespaceCache   cache.NamespaceCache
 		Config           *Config
 		ArchiverProvider provider.ArchiverProvider

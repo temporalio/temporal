@@ -62,8 +62,8 @@ type (
 		mockShard          *shard.ContextTest
 		mockStateRebuilder *MocknDCStateRebuilder
 
-		mockHistoryMgr  *persistence.MockHistoryManager
-		mockTransaction *workflow.MockTransaction
+		mockExecutionMgr *persistence.MockExecutionManager
+		mockTransaction  *workflow.MockTransaction
 
 		logger       log.Logger
 		namespaceID  string
@@ -104,7 +104,7 @@ func (s *workflowResetterSuite) SetupTest() {
 			}},
 		tests.NewDynamicConfig(),
 	)
-	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
+	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
 	s.mockTransaction = workflow.NewMockTransaction(s.controller)
 
 	s.workflowResetter = newWorkflowResetter(
@@ -276,7 +276,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 	resetMutableState := workflow.NewMockMutableState(s.controller)
 
 	shardID := s.mockShard.GetShardID()
-	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
+	s.mockExecutionMgr.EXPECT().ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID, s.workflowID, s.resetRunID),
@@ -485,7 +485,7 @@ func (s *workflowResetterSuite) TestGenerateBranchToken() {
 	resetBranchToken := []byte("some random reset branch token")
 
 	shardID := s.mockShard.GetShardID()
-	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
+	s.mockExecutionMgr.EXPECT().ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID, s.workflowID, s.resetRunID),
@@ -597,7 +597,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 
 	baseEvents := []*historypb.HistoryEvent{baseEvent1, baseEvent2, baseEvent3, baseEvent4}
 	shardID := s.mockShard.GetShardID()
-	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   baseBranchToken,
 		MinEventID:    baseFirstEventID,
 		MaxEventID:    baseNextEventID,
@@ -610,7 +610,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 	}, nil)
 
 	newEvents := []*historypb.HistoryEvent{newEvent1, newEvent2, newEvent3, newEvent4, newEvent5}
-	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   newBranchToken,
 		MinEventID:    newFirstEventID,
 		MaxEventID:    newNextEventID,
@@ -682,7 +682,7 @@ func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {
 	}
 	events := []*historypb.HistoryEvent{event1, event2, event3, event4, event5}
 	shardID := s.mockShard.GetShardID()
-	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -786,7 +786,7 @@ func (s *workflowResetterSuite) TestPagination() {
 	pageToken := []byte("some random token")
 
 	shardID := s.mockShard.GetShardID()
-	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -798,7 +798,7 @@ func (s *workflowResetterSuite) TestPagination() {
 		NextPageToken: pageToken,
 		Size:          12345,
 	}, nil)
-	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,

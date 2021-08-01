@@ -89,7 +89,7 @@ type (
 
 		mockProducer           *persistence.MockNamespaceReplicationQueue
 		mockMetadataMgr        *persistence.MockMetadataManager
-		mockHistoryMgr         *persistence.MockHistoryManager
+		mockExecutionManager   *persistence.MockExecutionManager
 		mockVisibilityMgr      *visibility.MockVisibilityManager
 		mockArchivalMetadata   *archiver.MockArchivalMetadata
 		mockArchiverProvider   *provider.MockArchiverProvider
@@ -129,7 +129,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
 	s.mockSearchAttributesProvider = s.mockResource.SearchAttributesProvider
 	s.mockMetadataMgr = s.mockResource.MetadataMgr
-	s.mockHistoryMgr = s.mockResource.HistoryMgr
+	s.mockExecutionManager = s.mockResource.ExecutionMgr
 	s.mockVisibilityMgr = s.mockResource.VisibilityMgr
 	s.mockArchivalMetadata = s.mockResource.ArchivalMetadata
 	s.mockArchiverProvider = s.mockResource.ArchiverProvider
@@ -1068,7 +1068,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		NextPageToken: []byte{},
 		ShardID:       shardID,
 	}
-	s.mockHistoryMgr.EXPECT().ReadHistoryBranch(req).Return(&persistence.ReadHistoryBranchResponse{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranch(req).Return(&persistence.ReadHistoryBranchResponse{
 		HistoryEvents: []*historypb.HistoryEvent{
 			{
 				EventId:   int64(100),

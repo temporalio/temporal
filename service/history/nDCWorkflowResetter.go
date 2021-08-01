@@ -61,7 +61,7 @@ type (
 	nDCWorkflowResetterImpl struct {
 		shard          shard.Context
 		transactionMgr nDCTransactionMgr
-		historyV2Mgr   persistence.HistoryManager
+		executionMgr   persistence.ExecutionManager
 		stateRebuilder nDCStateRebuilder
 
 		namespaceID string
@@ -90,7 +90,7 @@ func newNDCWorkflowResetter(
 	return &nDCWorkflowResetterImpl{
 		shard:          shard,
 		transactionMgr: transactionMgr,
-		historyV2Mgr:   shard.GetHistoryManager(),
+		executionMgr:   shard.GetExecutionManager(),
 		stateRebuilder: newNDCStateRebuilder(shard, logger),
 
 		namespaceID: namespaceID,
@@ -211,7 +211,7 @@ func (r *nDCWorkflowResetterImpl) getResetBranchToken(
 
 	// fork a new history branch
 	shardID := r.shard.GetShardID()
-	resp, err := r.historyV2Mgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
+	resp, err := r.executionMgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseLastEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(r.namespaceID, r.workflowID, r.newRunID),

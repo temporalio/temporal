@@ -291,7 +291,7 @@ func New(
 	)
 
 	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
-		HistoryV2Manager: persistenceBean.GetHistoryManager(),
+		ExecutionManager: persistenceBean.GetExecutionManager(),
 		Logger:           logger,
 		MetricsClient:    params.MetricsClient,
 		ClusterMetadata:  clusterMetadata,
@@ -597,11 +597,6 @@ func (h *Impl) GetNamespaceReplicationQueue() persistence.NamespaceReplicationQu
 // GetShardManager return shard manager
 func (h *Impl) GetShardManager() persistence.ShardManager {
 	return h.persistenceBean.GetShardManager()
-}
-
-// GetHistoryManager return history manager
-func (h *Impl) GetHistoryManager() persistence.HistoryManager {
-	return h.persistenceBean.GetHistoryManager()
 }
 
 // GetExecutionManager return execution manager

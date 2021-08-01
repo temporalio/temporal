@@ -580,7 +580,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	defer func() {
 		// lastFirstEventTxnID != 0 exists due to forward / backward compatibility
 		if _, ok := retError.(*serviceerror.DataLoss); ok && lastFirstEventTxnID != 0 {
-			_, _ = wh.GetHistoryManager().TrimHistoryBranch(&persistence.TrimHistoryBranchRequest{
+			_, _ = wh.GetExecutionManager().TrimHistoryBranch(&persistence.TrimHistoryBranchRequest{
 				ShardID:       common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(), wh.config.NumHistoryShards),
 				BranchToken:   continuationToken.BranchToken,
 				NodeID:        lastFirstEventID,
@@ -2976,7 +2976,7 @@ func (wh *WorkflowHandler) getRawHistory(
 	var rawHistory []*commonpb.DataBlob
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(), wh.config.NumHistoryShards)
 
-	resp, err := wh.GetHistoryManager().ReadRawHistoryBranch(&persistence.ReadHistoryBranchRequest{
+	resp, err := wh.GetExecutionManager().ReadRawHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -3044,7 +3044,7 @@ func (wh *WorkflowHandler) getHistory(
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, execution.GetWorkflowId(), wh.config.NumHistoryShards)
 	var err error
 	var historyEvents []*historypb.HistoryEvent
-	historyEvents, size, nextPageToken, err = persistence.ReadFullPageV2Events(wh.GetHistoryManager(), &persistence.ReadHistoryBranchRequest{
+	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEvents(wh.GetExecutionManager(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,

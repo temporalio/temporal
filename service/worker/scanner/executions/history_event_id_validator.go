@@ -43,22 +43,19 @@ type (
 	historyEventIDValidator struct {
 		shardID          int32
 		executionManager persistence.ExecutionManager
-		historyManager   persistence.HistoryManager
 	}
 )
 
 var _ Validator = (*historyEventIDValidator)(nil)
 
-// NewEventIDValidator returns new instance.
+// NewHistoryEventIDValidator returns new instance.
 func NewHistoryEventIDValidator(
 	shardID int32,
 	executionManager persistence.ExecutionManager,
-	historyManager persistence.HistoryManager,
 ) *historyEventIDValidator {
 	return &historyEventIDValidator{
 		shardID:          shardID,
 		executionManager: executionManager,
-		historyManager:   historyManager,
 	}
 }
 
@@ -75,7 +72,7 @@ func (v *historyEventIDValidator) Validate(
 	// TODO currently history event ID validator only verifies
 	//  the first event batch exists, before doing whole history
 	//  validation, ensure not too much capacity is consumed
-	_, err = v.historyManager.ReadRawHistoryBranch(&persistence.ReadHistoryBranchRequest{
+	_, err = v.executionManager.ReadRawHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		MinEventID:    common.FirstEventID,
 		MaxEventID:    common.FirstEventID + 1,
 		BranchToken:   currentVersionHistory.BranchToken,

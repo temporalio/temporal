@@ -1294,35 +1294,6 @@ type (
 		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error)
 		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
 		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
-	}
-
-	// TaskManager is used to manage tasks
-	TaskManager interface {
-		Closeable
-		GetName() string
-		LeaseTaskQueue(request *LeaseTaskQueueRequest) (*LeaseTaskQueueResponse, error)
-		UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
-		ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error)
-		DeleteTaskQueue(request *DeleteTaskQueueRequest) error
-		CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error)
-		GetTasks(request *GetTasksRequest) (*GetTasksResponse, error)
-		CompleteTask(request *CompleteTaskRequest) error
-		// CompleteTasksLessThan completes tasks less than or equal to the given task id
-		// This API takes a limit parameter which specifies the count of maxRows that
-		// can be deleted. This parameter may be ignored by the underlying storage, but
-		// its mandatory to specify it. On success this method returns the number of rows
-		// actually deleted. If the underlying storage doesn't support "limit", all rows
-		// less than or equal to taskID will be deleted.
-		// On success, this method returns:
-		//  - number of rows actually deleted, if limit is honored
-		//  - UnknownNumRowsDeleted, when all rows below value are deleted
-		CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error)
-	}
-
-	// HistoryManager is used to manager workflow history events
-	HistoryManager interface {
-		Closeable
-		GetName() string
 
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
@@ -1348,6 +1319,29 @@ type (
 		GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees
 		GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error)
+	}
+
+	// TaskManager is used to manage tasks
+	TaskManager interface {
+		Closeable
+		GetName() string
+		LeaseTaskQueue(request *LeaseTaskQueueRequest) (*LeaseTaskQueueResponse, error)
+		UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
+		ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error)
+		DeleteTaskQueue(request *DeleteTaskQueueRequest) error
+		CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error)
+		GetTasks(request *GetTasksRequest) (*GetTasksResponse, error)
+		CompleteTask(request *CompleteTaskRequest) error
+		// CompleteTasksLessThan completes tasks less than or equal to the given task id
+		// This API takes a limit parameter which specifies the count of maxRows that
+		// can be deleted. This parameter may be ignored by the underlying storage, but
+		// its mandatory to specify it. On success this method returns the number of rows
+		// actually deleted. If the underlying storage doesn't support "limit", all rows
+		// less than or equal to taskID will be deleted.
+		// On success, this method returns:
+		//  - number of rows actually deleted, if limit is honored
+		//  - UnknownNumRowsDeleted, when all rows below value are deleted
+		CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error)
 	}
 
 	// MetadataManager is used to manage metadata CRUD for namespace entities

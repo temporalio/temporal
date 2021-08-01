@@ -93,7 +93,6 @@ type (
 		Factory                   client.Factory
 		ExecutionManager          persistence.ExecutionManager
 		TaskMgr                   persistence.TaskManager
-		HistoryV2Mgr              persistence.HistoryManager
 		ClusterMetadataManager    persistence.ClusterMetadataManager
 		MetadataManager           persistence.MetadataManager
 		VisibilityMgr             visibility.VisibilityManager
@@ -230,9 +229,6 @@ func (s *TestBase) Setup(clusterMetadataConfig *config.ClusterMetadata) {
 
 	s.MetadataManager, err = factory.NewMetadataManager()
 	s.fatalOnError("NewMetadataManager", err)
-
-	s.HistoryV2Mgr, err = factory.NewHistoryManager()
-	s.fatalOnError("NewHistoryManager", err)
 
 	s.ShardMgr, err = factory.NewShardManager()
 	s.fatalOnError("NewShardManager", err)
@@ -1298,7 +1294,7 @@ func (s *TestBase) TearDownWorkflowStore() {
 	s.TaskMgr.Close()
 	s.ClusterMetadataManager.Close()
 	s.MetadataManager.Close()
-	s.HistoryV2Mgr.Close()
+	s.ExecutionManager.Close()
 	s.ShardMgr.Close()
 	s.ExecutionManager.Close()
 	s.NamespaceReplicationQueue.Stop()

@@ -103,7 +103,7 @@ type (
 	nDCHistoryReplicatorImpl struct {
 		shard             shard.Context
 		clusterMetadata   cluster.Metadata
-		historyV2Mgr      persistence.HistoryManager
+		executionMgr      persistence.ExecutionManager
 		historySerializer serialization.Serializer
 		metricsClient     metrics.Client
 		namespaceCache    cache.NamespaceCache
@@ -133,7 +133,7 @@ func newNDCHistoryReplicator(
 	replicator := &nDCHistoryReplicatorImpl{
 		shard:             shard,
 		clusterMetadata:   shard.GetService().GetClusterMetadata(),
-		historyV2Mgr:      shard.GetHistoryManager(),
+		executionMgr:      shard.GetExecutionManager(),
 		historySerializer: serialization.NewSerializer(),
 		metricsClient:     shard.GetMetricsClient(),
 		namespaceCache:    shard.GetNamespaceCache(),

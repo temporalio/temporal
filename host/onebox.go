@@ -94,7 +94,6 @@ type (
 		metadataMgr                      persistence.MetadataManager
 		clusterMetadataMgr               persistence.ClusterMetadataManager
 		shardMgr                         persistence.ShardManager
-		historyV2Mgr                     persistence.HistoryManager
 		taskMgr                          persistence.TaskManager
 		visibilityMgr                    visibility.VisibilityManager
 		executionManager                 persistence.ExecutionManager
@@ -129,7 +128,6 @@ type (
 		MetadataMgr                      persistence.MetadataManager
 		ClusterMetadataManager           persistence.ClusterMetadataManager
 		ShardMgr                         persistence.ShardManager
-		HistoryV2Mgr                     persistence.HistoryManager
 		ExecutionManager                 persistence.ExecutionManager
 		TaskMgr                          persistence.TaskManager
 		VisibilityMgr                    visibility.VisibilityManager
@@ -163,7 +161,6 @@ func NewTemporal(params *TemporalParams) Temporal {
 		clusterMetadataMgr:               params.ClusterMetadataManager,
 		visibilityMgr:                    params.VisibilityMgr,
 		shardMgr:                         params.ShardMgr,
-		historyV2Mgr:                     params.HistoryV2Mgr,
 		taskMgr:                          params.TaskMgr,
 		executionManager:                 params.ExecutionManager,
 		namespaceReplicationQueue:        params.NamespaceReplicationQueue,
@@ -682,7 +679,7 @@ func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams,
 		SdkClient:        params.SdkClient,
 		MetricsClient:    service.GetMetricsClient(),
 		Logger:           c.logger,
-		HistoryV2Manager: c.historyV2Mgr,
+		HistoryV2Manager: c.executionManager,
 		NamespaceCache:   namespaceCache,
 		Config:           workerConfig.ArchiverConfig,
 		ArchiverProvider: c.archiverProvider,

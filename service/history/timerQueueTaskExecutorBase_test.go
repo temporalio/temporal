@@ -60,7 +60,6 @@ type (
 
 		mockExecutionManager         *persistence.MockExecutionManager
 		mockVisibilityManager        *visibility.MockVisibilityManager
-		mockHistoryMgr               *persistence.MockHistoryManager
 		mockArchivalClient           *archiver.MockClient
 		mockNamespaceCache           *cache.MockNamespaceCache
 		mockClusterMetadata          *cluster.MockMetadata
@@ -106,7 +105,6 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockVisibilityManager = s.mockShard.Resource.VisibilityMgr
-	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
 	s.mockArchivalClient = archiver.NewMockClient(s.controller)
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
@@ -155,7 +153,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 
 	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any()).Return(nil)
 	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any()).Return(nil)
-	s.mockHistoryMgr.EXPECT().DeleteHistoryBranch(gomock.Any()).Return(nil)
+	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any()).Return(nil)
 	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil)
 
 	err := s.timerQueueTaskExecutorBase.deleteWorkflow(task, s.mockWorkflowExecutionContext, s.mockMutableState)

@@ -29,8 +29,8 @@ import "encoding/json"
 type (
 	jsonHistoryTokenSerializer struct{}
 
-	// historyV2PagingToken is used to serialize/deserialize pagination token for ReadHistoryBranchRequest
-	historyV2PagingToken struct {
+	// historyPagingToken is used to serialize/deserialize pagination token for ReadHistoryBranchRequest
+	historyPagingToken struct {
 		LastEventID int64
 		// the pagination token passing to persistence
 		StoreToken []byte
@@ -52,7 +52,7 @@ func newJSONHistoryTokenSerializer() *jsonHistoryTokenSerializer {
 	return &jsonHistoryTokenSerializer{}
 }
 
-func (t *historyV2PagingToken) SetRangeIndexes(
+func (t *historyPagingToken) SetRangeIndexes(
 	current int,
 	final int,
 ) {
@@ -62,7 +62,7 @@ func (t *historyV2PagingToken) SetRangeIndexes(
 }
 
 func (j *jsonHistoryTokenSerializer) Serialize(
-	token *historyV2PagingToken,
+	token *historyPagingToken,
 ) ([]byte, error) {
 
 	data, err := json.Marshal(token)
@@ -74,10 +74,10 @@ func (j *jsonHistoryTokenSerializer) Deserialize(
 	defaultLastEventID int64,
 	defaultLastNodeID int64,
 	defaultLastTransactionID int64,
-) (*historyV2PagingToken, error) {
+) (*historyPagingToken, error) {
 
 	if len(data) == 0 {
-		token := historyV2PagingToken{
+		token := historyPagingToken{
 			LastEventID:       defaultLastEventID,
 			CurrentRangeIndex: notStartedIndex,
 			LastNodeID:        defaultLastNodeID,
@@ -86,7 +86,7 @@ func (j *jsonHistoryTokenSerializer) Deserialize(
 		return &token, nil
 	}
 
-	token := historyV2PagingToken{}
+	token := historyPagingToken{}
 	err := json.Unmarshal(data, &token)
 	return &token, err
 }

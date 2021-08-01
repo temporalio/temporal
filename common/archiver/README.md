@@ -127,8 +127,8 @@ func (a *Archiver) Archive(
 
 **How does my history archiver implementation read history?**
 
-The `archiver` package provides a utility class called `HistoryIterator` which is a wrapper of `HistoryManager`. 
-Its usage is simpler than the `HistoryManager` given in the `BootstrapContainer`, 
+The `archiver` package provides a utility class called `HistoryIterator` which is a wrapper of `ExecutionManager`. 
+Its usage is simpler than the `ExecutionManager` given in the `BootstrapContainer`, 
 so archiver implementations can choose to use it when reading workflow histories. 
 See the `historyIterator.go` file for more details. 
 Sample usage can be found in the filestore historyArchiver implementation.

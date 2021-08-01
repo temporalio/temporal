@@ -58,7 +58,6 @@ type (
 		config             *configs.Config
 		historyCache       *workflow.Cache
 		executionMgr       persistence.ExecutionManager
-		historyMgr         persistence.HistoryManager
 		metricsClient      metrics.Client
 		logger             log.Logger
 		retryPolicy        backoff.RetryPolicy
@@ -79,7 +78,6 @@ func newReplicatorQueueProcessor(
 	shard shard.Context,
 	historyCache *workflow.Cache,
 	executionMgr persistence.ExecutionManager,
-	historyMgr persistence.HistoryManager,
 	logger log.Logger,
 ) *replicatorQueueProcessorImpl {
 
@@ -96,7 +94,6 @@ func newReplicatorQueueProcessor(
 		config:             shard.GetConfig(),
 		historyCache:       historyCache,
 		executionMgr:       executionMgr,
-		historyMgr:         historyMgr,
 		metricsClient:      shard.GetMetricsClient(),
 		logger:             log.With(logger, tag.ComponentReplicatorQueue),
 		retryPolicy:        retryPolicy,
@@ -470,7 +467,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 	}
 
 	for {
-		resp, err := p.historyMgr.ReadRawHistoryBranch(req)
+		resp, err := p.executionMgr.ReadRawHistoryBranch(req)
 		if err != nil {
 			return nil, err
 		}

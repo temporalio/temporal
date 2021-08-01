@@ -81,7 +81,7 @@ type (
 		shard             shard.Context
 		namespaceCache    cache.NamespaceCache
 		clusterMetadata   cluster.Metadata
-		historyV2Mgr      persistence.HistoryManager
+		executionMgr      persistence.ExecutionManager
 		historyCache      *workflow.Cache
 		newStateRebuilder nDCStateRebuilderProvider
 		transaction       workflow.Transaction
@@ -100,7 +100,7 @@ func newWorkflowResetter(
 		shard:           shard,
 		namespaceCache:  shard.GetNamespaceCache(),
 		clusterMetadata: shard.GetClusterMetadata(),
-		historyV2Mgr:    shard.GetHistoryManager(),
+		executionMgr:    shard.GetExecutionManager(),
 		historyCache:    historyCache,
 		newStateRebuilder: func() nDCStateRebuilder {
 			return newNDCStateRebuilder(shard, logger)
@@ -555,7 +555,7 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 ) ([]byte, error) {
 	// fork a new history branch
 	shardID := r.shard.GetShardID()
-	resp, err := r.historyV2Mgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
+	resp, err := r.executionMgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: forkBranchToken,
 		ForkNodeID:      forkNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, resetRunID),
@@ -742,7 +742,7 @@ func (r *workflowResetterImpl) getPaginationFn(
 
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
 
-		resp, err := r.historyV2Mgr.ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+		resp, err := r.executionMgr.ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 			BranchToken:   branchToken,
 			MinEventID:    firstEventID,
 			MaxEventID:    nextEventID,

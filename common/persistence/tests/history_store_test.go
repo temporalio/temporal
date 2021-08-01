@@ -58,7 +58,7 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		store  p.HistoryManager
+		store  p.ExecutionManager
 		logger log.Logger
 	}
 )
@@ -70,7 +70,7 @@ func newHistoryEventsSuite(
 ) *historyEventsSuite {
 	return &historyEventsSuite{
 		Assertions: require.New(t),
-		store: p.NewHistoryV2ManagerImpl(
+		store: p.NewExecutionManager(
 			store,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),

@@ -49,8 +49,6 @@ type (
 		NewTaskManager() (p.TaskManager, error)
 		// NewShardManager returns a new shard manager
 		NewShardManager() (p.ShardManager, error)
-		// NewHistoryManager returns a new history manager
-		NewHistoryManager() (p.HistoryManager, error)
 		// NewMetadataManager returns a new metadata manager
 		NewMetadataManager() (p.MetadataManager, error)
 		// NewExecutionManager returns a new execution manager
@@ -183,23 +181,6 @@ func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
 	return result, nil
 }
 
-// NewHistoryManager returns a new history manager
-func (f *factoryImpl) NewHistoryManager() (p.HistoryManager, error) {
-	ds := f.datastores[storeTypeHistory]
-	store, err := ds.factory.NewExecutionStore()
-	if err != nil {
-		return nil, err
-	}
-	result := p.NewHistoryV2ManagerImpl(store, f.logger, f.config.TransactionSizeLimit)
-	if ds.ratelimit != nil {
-		result = p.NewHistoryV2PersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
-	}
-	if f.metricsClient != nil {
-		result = p.NewHistoryV2PersistenceMetricsClient(result, f.metricsClient, f.logger)
-	}
-	return result, nil
-}
-
 // NewMetadataManager returns a new metadata manager
 func (f *factoryImpl) NewMetadataManager() (p.MetadataManager, error) {
 	var err error
@@ -248,12 +229,12 @@ func (f *factoryImpl) NewExecutionManager() (p.ExecutionManager, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := p.NewExecutionManager(store, f.logger)
+	result := p.NewExecutionManager(store, f.logger, f.config.TransactionSizeLimit)
 	if ds.ratelimit != nil {
-		result = p.NewWorkflowExecutionPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
+		result = p.NewExecutionPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}
 	if f.metricsClient != nil {
-		result = p.NewWorkflowExecutionPersistenceMetricsClient(result, f.metricsClient, f.logger)
+		result = p.NewExecutionPersistenceMetricsClient(result, f.metricsClient, f.logger)
 	}
 	return result, nil
 }

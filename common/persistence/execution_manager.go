@@ -29,6 +29,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -42,10 +43,12 @@ import (
 type (
 	// executionManagerImpl implements ExecutionManager based on ExecutionStore, statsComputer and Serializer
 	executionManagerImpl struct {
-		serializer    serialization.Serializer
-		persistence   ExecutionStore
-		statsComputer statsComputer
-		logger        log.Logger
+		serializer            serialization.Serializer
+		persistence           ExecutionStore
+		logger                log.Logger
+		statsComputer         statsComputer
+		pagingTokenSerializer *jsonHistoryTokenSerializer
+		transactionSizeLimit  dynamicconfig.IntPropertyFn
 	}
 )
 
@@ -55,13 +58,16 @@ var _ ExecutionManager = (*executionManagerImpl)(nil)
 func NewExecutionManager(
 	persistence ExecutionStore,
 	logger log.Logger,
+	transactionSizeLimit dynamicconfig.IntPropertyFn,
 ) ExecutionManager {
 
 	return &executionManagerImpl{
-		serializer:    serialization.NewSerializer(),
-		persistence:   persistence,
-		statsComputer: statsComputer{},
-		logger:        logger,
+		serializer:            serialization.NewSerializer(),
+		persistence:           persistence,
+		logger:                logger,
+		statsComputer:         statsComputer{},
+		pagingTokenSerializer: newJSONHistoryTokenSerializer(),
+		transactionSizeLimit:  transactionSizeLimit,
 	}
 }
 

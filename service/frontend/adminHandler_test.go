@@ -64,7 +64,7 @@ type (
 		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
 		mockNamespaceCache *cache.MockNamespaceCache
 
-		mockHistoryMgr *persistence.MockHistoryManager
+		mockExecutionMgr *persistence.MockExecutionManager
 
 		namespace   string
 		namespaceID string
@@ -88,7 +88,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockResource = resource.NewTest(s.controller, metrics.Frontend)
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 	s.mockHistoryClient = s.mockResource.HistoryClient
-	s.mockHistoryMgr = s.mockResource.HistoryMgr
+	s.mockExecutionMgr = s.mockResource.ExecutionMgr
 
 	params := &resource.BootstrapParams{
 		PersistenceConfig: config.Persistence{
@@ -199,7 +199,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 	}
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mState, nil).AnyTimes()
 
-	s.mockHistoryMgr.EXPECT().ReadRawHistoryBranch(gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{},
 		NextPageToken:     []byte{},
 		Size:              0,

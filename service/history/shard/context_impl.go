@@ -641,7 +641,7 @@ func (s *ContextImpl) AppendHistoryEvents(
 				tag.WorkflowHistorySizeBytes(size))
 		}
 	}()
-	resp, err0 := s.GetHistoryManager().AppendHistoryNodes(request)
+	resp, err0 := s.GetExecutionManager().AppendHistoryNodes(request)
 	if resp != nil {
 		size = resp.Size
 	}
@@ -1130,7 +1130,7 @@ func acquireShard(
 		shardContext.GetConfig().EventsCacheInitialSize(),
 		shardContext.GetConfig().EventsCacheMaxSize(),
 		shardContext.GetConfig().EventsCacheTTL(),
-		shardContext.GetHistoryManager(),
+		shardContext.GetExecutionManager(),
 		false,
 		shardContext.GetLogger(),
 		shardContext.GetMetricsClient(),

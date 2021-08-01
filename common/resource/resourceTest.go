@@ -101,7 +101,6 @@ type (
 		VisibilityMgr             *visibility.MockVisibilityManager
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		ShardMgr                  *persistence.MockShardManager
-		HistoryMgr                *persistence.MockHistoryManager
 		ExecutionMgr              *persistence.MockExecutionManager
 		PersistenceBean           *persistenceClient.MockBean
 
@@ -144,7 +143,6 @@ func NewTest(
 	taskMgr := persistence.NewMockTaskManager(controller)
 	visibilityMgr := visibility.NewMockVisibilityManager(controller)
 	shardMgr := persistence.NewMockShardManager(controller)
-	historyMgr := persistence.NewMockHistoryManager(controller)
 	executionMgr := persistence.NewMockExecutionManager(controller)
 	namespaceReplicationQueue := persistence.NewMockNamespaceReplicationQueue(controller)
 	namespaceReplicationQueue.EXPECT().Start().AnyTimes()
@@ -152,7 +150,6 @@ func NewTest(
 	persistenceBean := persistenceClient.NewMockBean(controller)
 	persistenceBean.EXPECT().GetMetadataManager().Return(metadataMgr).AnyTimes()
 	persistenceBean.EXPECT().GetTaskManager().Return(taskMgr).AnyTimes()
-	persistenceBean.EXPECT().GetHistoryManager().Return(historyMgr).AnyTimes()
 	persistenceBean.EXPECT().GetShardManager().Return(shardMgr).AnyTimes()
 	persistenceBean.EXPECT().GetExecutionManager().Return(executionMgr).AnyTimes()
 	persistenceBean.EXPECT().GetNamespaceReplicationQueue().Return(namespaceReplicationQueue).AnyTimes()
@@ -212,7 +209,6 @@ func NewTest(
 		VisibilityMgr:             visibilityMgr,
 		NamespaceReplicationQueue: namespaceReplicationQueue,
 		ShardMgr:                  shardMgr,
-		HistoryMgr:                historyMgr,
 		ExecutionMgr:              executionMgr,
 		PersistenceBean:           persistenceBean,
 
@@ -402,11 +398,6 @@ func (s *Test) GetNamespaceReplicationQueue() persistence.NamespaceReplicationQu
 // GetShardManager for testing
 func (s *Test) GetShardManager() persistence.ShardManager {
 	return s.ShardMgr
-}
-
-// GetHistoryManager for testing
-func (s *Test) GetHistoryManager() persistence.HistoryManager {
-	return s.HistoryMgr
 }
 
 // GetExecutionManager for testing

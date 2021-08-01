@@ -98,20 +98,6 @@ func (mr *MockBeanMockRecorder) GetExecutionManager() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionManager", reflect.TypeOf((*MockBean)(nil).GetExecutionManager))
 }
 
-// GetHistoryManager mocks base method.
-func (m *MockBean) GetHistoryManager() persistence.HistoryManager {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetHistoryManager")
-	ret0, _ := ret[0].(persistence.HistoryManager)
-	return ret0
-}
-
-// GetHistoryManager indicates an expected call of GetHistoryManager.
-func (mr *MockBeanMockRecorder) GetHistoryManager() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryManager", reflect.TypeOf((*MockBean)(nil).GetHistoryManager))
-}
-
 // GetMetadataManager mocks base method.
 func (m *MockBean) GetMetadataManager() persistence.MetadataManager {
 	m.ctrl.T.Helper()
@@ -166,88 +152,4 @@ func (m *MockBean) GetTaskManager() persistence.TaskManager {
 func (mr *MockBeanMockRecorder) GetTaskManager() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskManager", reflect.TypeOf((*MockBean)(nil).GetTaskManager))
-}
-
-// SetClusterMetadataManager mocks base method.
-func (m *MockBean) SetClusterMetadataManager(arg0 persistence.ClusterMetadataManager) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetClusterMetadataManager", arg0)
-}
-
-// SetClusterMetadataManager indicates an expected call of SetClusterMetadataManager.
-func (mr *MockBeanMockRecorder) SetClusterMetadataManager(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetClusterMetadataManager", reflect.TypeOf((*MockBean)(nil).SetClusterMetadataManager), arg0)
-}
-
-// SetExecutionManager mocks base method.
-func (m *MockBean) SetExecutionManager(arg0 persistence.ExecutionManager) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetExecutionManager", arg0)
-}
-
-// SetExecutionManager indicates an expected call of SetExecutionManager.
-func (mr *MockBeanMockRecorder) SetExecutionManager(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetExecutionManager", reflect.TypeOf((*MockBean)(nil).SetExecutionManager), arg0)
-}
-
-// SetHistoryManager mocks base method.
-func (m *MockBean) SetHistoryManager(arg0 persistence.HistoryManager) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetHistoryManager", arg0)
-}
-
-// SetHistoryManager indicates an expected call of SetHistoryManager.
-func (mr *MockBeanMockRecorder) SetHistoryManager(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetHistoryManager", reflect.TypeOf((*MockBean)(nil).SetHistoryManager), arg0)
-}
-
-// SetMetadataManager mocks base method.
-func (m *MockBean) SetMetadataManager(arg0 persistence.MetadataManager) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetMetadataManager", arg0)
-}
-
-// SetMetadataManager indicates an expected call of SetMetadataManager.
-func (mr *MockBeanMockRecorder) SetMetadataManager(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMetadataManager", reflect.TypeOf((*MockBean)(nil).SetMetadataManager), arg0)
-}
-
-// SetNamespaceReplicationQueue mocks base method.
-func (m *MockBean) SetNamespaceReplicationQueue(arg0 persistence.NamespaceReplicationQueue) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetNamespaceReplicationQueue", arg0)
-}
-
-// SetNamespaceReplicationQueue indicates an expected call of SetNamespaceReplicationQueue.
-func (mr *MockBeanMockRecorder) SetNamespaceReplicationQueue(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetNamespaceReplicationQueue", reflect.TypeOf((*MockBean)(nil).SetNamespaceReplicationQueue), arg0)
-}
-
-// SetShardManager mocks base method.
-func (m *MockBean) SetShardManager(arg0 persistence.ShardManager) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetShardManager", arg0)
-}
-
-// SetShardManager indicates an expected call of SetShardManager.
-func (mr *MockBeanMockRecorder) SetShardManager(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetShardManager", reflect.TypeOf((*MockBean)(nil).SetShardManager), arg0)
-}
-
-// SetTaskManager mocks base method.
-func (m *MockBean) SetTaskManager(arg0 persistence.TaskManager) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetTaskManager", arg0)
-}
-
-// SetTaskManager indicates an expected call of SetTaskManager.
-func (mr *MockBeanMockRecorder) SetTaskManager(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTaskManager", reflect.TypeOf((*MockBean)(nil).SetTaskManager), arg0)
 }

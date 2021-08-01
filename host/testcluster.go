@@ -208,7 +208,6 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		MetadataMgr:                      testBase.MetadataManager,
 		ClusterMetadataManager:           testBase.ClusterMetadataManager,
 		ShardMgr:                         testBase.ShardMgr,
-		HistoryV2Mgr:                     testBase.HistoryV2Mgr,
 		ExecutionManager:                 testBase.ExecutionManager,
 		NamespaceReplicationQueue:        testBase.NamespaceReplicationQueue,
 		TaskMgr:                          testBase.TaskMgr,

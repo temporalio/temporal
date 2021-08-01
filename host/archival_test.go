@@ -193,7 +193,7 @@ func (s *integrationSuite) isHistoryDeleted(execution *commonpb.WorkflowExecutio
 		ShardID: convert.Int32Ptr(shardID),
 	}
 	for i := 0; i < retryLimit; i++ {
-		resp, err := s.testCluster.testBase.HistoryV2Mgr.GetHistoryTree(request)
+		resp, err := s.testCluster.testBase.ExecutionManager.GetHistoryTree(request)
 		s.NoError(err)
 		if len(resp.Branches) == 0 {
 			return true

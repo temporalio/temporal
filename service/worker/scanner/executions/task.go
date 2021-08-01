@@ -55,7 +55,6 @@ type (
 	task struct {
 		shardID          int32
 		executionManager persistence.ExecutionManager
-		historyManager   persistence.HistoryManager
 		metrics          metrics.Client
 		logger           log.Logger
 		scavenger        *Scavenger
@@ -70,7 +69,6 @@ type (
 func newTask(
 	shardID int32,
 	executionManager persistence.ExecutionManager,
-	historyManager persistence.HistoryManager,
 	metrics metrics.Client,
 	logger log.Logger,
 	scavenger *Scavenger,
@@ -79,7 +77,6 @@ func newTask(
 	return &task{
 		shardID:          shardID,
 		executionManager: executionManager,
-		historyManager:   historyManager,
 
 		metrics:   metrics,
 		logger:    logger,
@@ -147,7 +144,6 @@ func (t *task) validate(
 	if validationResults, err := NewHistoryEventIDValidator(
 		t.shardID,
 		t.executionManager,
-		t.historyManager,
 	).Validate(mutableState); err != nil {
 		t.logger.Error("unable to validate history event ID being contiguous",
 			tag.ShardID(t.shardID),

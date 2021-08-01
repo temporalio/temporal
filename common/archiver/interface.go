@@ -72,7 +72,7 @@ type (
 
 	// HistoryBootstrapContainer contains components needed by all history Archiver implementations
 	HistoryBootstrapContainer struct {
-		HistoryV2Manager persistence.HistoryManager
+		ExecutionManager persistence.ExecutionManager
 		Logger           log.Logger
 		MetricsClient    metrics.Client
 		ClusterMetadata  cluster.Metadata

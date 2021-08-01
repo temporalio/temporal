@@ -64,8 +64,8 @@ type activitiesSuite struct {
 	suite.Suite
 	testsuite.WorkflowTestSuite
 
-	controller     *gomock.Controller
-	mockHistoryMgr *persistence.MockHistoryManager
+	controller       *gomock.Controller
+	mockExecutionMgr *persistence.MockExecutionManager
 
 	logger             log.Logger
 	metricsClient      *metrics.MockClient
@@ -82,7 +82,7 @@ func TestActivitiesSuite(t *testing.T) {
 func (s *activitiesSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
-	s.mockHistoryMgr = persistence.NewMockHistoryManager(s.controller)
+	s.mockExecutionMgr = persistence.NewMockExecutionManager(s.controller)
 
 	s.logger = log.NewNoopLogger()
 	s.metricsClient = metrics.NewMockClient(s.controller)
@@ -247,11 +247,11 @@ func (s *activitiesSuite) TestUploadHistory_Success() {
 func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryableError() {
 	s.metricsClient.EXPECT().Scope(metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverNonRetryableErrorCount)
-	s.mockHistoryMgr.EXPECT().DeleteHistoryBranch(gomock.Any()).Return(errPersistenceNonRetryable)
+	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any()).Return(errPersistenceNonRetryable)
 	container := &BootstrapContainer{
 		Logger:           s.logger,
 		MetricsClient:    s.metricsClient,
-		HistoryV2Manager: s.mockHistoryMgr,
+		HistoryV2Manager: s.mockExecutionMgr,
 	}
 	env := s.NewTestActivityEnvironment()
 	s.registerWorkflows(env)
