@@ -331,6 +331,7 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 
 	if lowerAckLevel < upperAckLevel {
 		err := t.shard.GetExecutionManager().RangeCompleteTransferTask(&persistence.RangeCompleteTransferTaskRequest{
+			ShardID:              t.shard.GetShardID(),
 			ExclusiveBeginTaskID: lowerAckLevel,
 			InclusiveEndTaskID:   upperAckLevel,
 		})

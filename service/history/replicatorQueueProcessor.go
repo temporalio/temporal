@@ -191,6 +191,7 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 	tasks := make([]*replicationspb.ReplicationTask, 0, batchSize)
 	for {
 		response, err := p.executionMgr.GetReplicationTasks(&persistence.GetReplicationTasksRequest{
+			ShardID:       p.shard.GetShardID(),
 			MinTaskID:     minTaskID,
 			MaxTaskID:     maxTaskID,
 			BatchSize:     batchSize,

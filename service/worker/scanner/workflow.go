@@ -51,8 +51,8 @@ type (
 
 func (s scannerCtxExecMgrFactory) Close() {}
 
-func (s scannerCtxExecMgrFactory) NewExecutionManager(shardID int32) (persistence.ExecutionManager, error) {
-	return s.ctx.GetExecutionManager(shardID)
+func (s scannerCtxExecMgrFactory) NewExecutionManager() persistence.ExecutionManager {
+	return s.ctx.GetExecutionManager()
 }
 
 const (
@@ -202,7 +202,7 @@ func ExecutionsScavengerActivity(
 	metricsClient := ctx.GetMetricsClient()
 	scavenger := executions.NewScavenger(
 		ctx.cfg.Persistence.NumHistoryShards,
-		scannerCtxExecMgrFactory{ctx}, // as persistence.ExecutionManagerFactory
+		ctx.GetExecutionManager(),
 		ctx.GetHistoryManager(),
 		metricsClient,
 		ctx.GetLogger(),

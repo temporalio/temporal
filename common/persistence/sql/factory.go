@@ -118,12 +118,12 @@ func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
 }
 
 // NewExecutionStore returns a ExecutionStore for a given shardID
-func (f *Factory) NewExecutionStore(shardID int32) (p.ExecutionStore, error) {
+func (f *Factory) NewExecutionStore() (p.ExecutionStore, error) {
 	conn, err := f.mainDBConn.Get()
 	if err != nil {
 		return nil, err
 	}
-	return NewSQLExecutionStore(conn, f.logger, shardID)
+	return NewSQLExecutionStore(conn, f.logger)
 }
 
 // NewQueue returns a new queue backed by sql

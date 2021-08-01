@@ -176,6 +176,7 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
 	batchSize := 10
 
 	request := &persistence.GetTimerIndexTasksRequest{
+		ShardID:       s.mockShard.GetShardID(),
 		MinTimestamp:  minTimestamp,
 		MaxTimestamp:  maxTimestamp,
 		BatchSize:     batchSize,
@@ -213,6 +214,7 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
 	batchSize := 10
 
 	request := &persistence.GetTimerIndexTasksRequest{
+		ShardID:       s.mockShard.GetShardID(),
 		MinTimestamp:  minTimestamp,
 		MaxTimestamp:  maxTimestamp,
 		BatchSize:     batchSize,

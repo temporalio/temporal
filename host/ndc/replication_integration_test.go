@@ -80,7 +80,7 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {
 }
 
 func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
-
+	var shardID int32 = 1
 	workflowID := "replication-message-dlq-test" + uuid.New()
 	runID := uuid.New()
 	workflowType := "event-generator-workflow-type"
@@ -110,10 +110,7 @@ func (s *nDCIntegrationTestSuite) TestReplicationMessageDLQ() {
 		historyBatch,
 	)
 
-	execMgrFactory := s.active.GetExecutionManagerFactory()
-	executionManager, err := execMgrFactory.NewExecutionManager(1)
-	s.NoError(err)
-
+	executionManager := s.active.GetExecutionManager()
 	expectedDLQMsgs := map[int64]bool{}
 	for _, batch := range historyBatch {
 		firstEventID := batch.Events[0].GetEventId()
@@ -128,7 +125,7 @@ Loop:
 
 		actualDLQMsgs := map[int64]bool{}
 		request := persistence.NewGetReplicationTasksFromDLQRequest(
-			"standby", -1, math.MaxInt64, math.MaxInt64, nil,
+			shardID, "standby", -1, math.MaxInt64, math.MaxInt64, nil,
 		)
 		var token []byte
 		for doPaging := true; doPaging; doPaging = len(token) > 0 {

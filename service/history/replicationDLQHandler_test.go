@@ -171,6 +171,7 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 	}
 
 	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
+		ShardID:           s.mockShard.GetShardID(),
 		SourceClusterName: s.sourceCluster,
 		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
 			MinTaskID:     persistence.EmptyQueueMessageID,
@@ -196,6 +197,7 @@ func (s *replicationDLQHandlerSuite) TestPurgeMessages() {
 
 	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(
 		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
+			ShardID:              s.mockShard.GetShardID(),
 			SourceClusterName:    s.sourceCluster,
 			ExclusiveBeginTaskID: persistence.EmptyQueueMessageID,
 			InclusiveEndTaskID:   lastMessageID,
@@ -254,6 +256,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 	}
 
 	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
+		ShardID:           s.mockShard.GetShardID(),
 		SourceClusterName: s.sourceCluster,
 		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
 			MinTaskID:     persistence.EmptyQueueMessageID,
@@ -270,6 +273,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 		}, nil)
 	s.taskExecutor.EXPECT().execute(remoteTask, true).Return(0, nil)
 	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(&persistence.RangeDeleteReplicationTaskFromDLQRequest{
+		ShardID:              s.mockShard.GetShardID(),
 		SourceClusterName:    s.sourceCluster,
 		ExclusiveBeginTaskID: persistence.EmptyQueueMessageID,
 		InclusiveEndTaskID:   lastMessageID,
