@@ -69,6 +69,8 @@ type (
 		historyManager            persistence.HistoryManager
 		executionManager          persistence.ExecutionManager
 
+		factory Factory
+
 		sync.RWMutex
 	}
 )
@@ -115,6 +117,7 @@ func NewBeanFromFactory(
 	}
 
 	return NewBean(
+		factory,
 		clusterMetadataMgr,
 		metadataMgr,
 		taskMgr,
@@ -127,6 +130,7 @@ func NewBeanFromFactory(
 
 // NewBean create a new store bean
 func NewBean(
+	factory Factory,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	metadataManager persistence.MetadataManager,
 	taskManager persistence.TaskManager,
@@ -136,6 +140,7 @@ func NewBean(
 	executionManager persistence.ExecutionManager,
 ) *BeanImpl {
 	return &BeanImpl{
+		factory:                   factory,
 		clusterMetadataManager:    clusterMetadataManager,
 		metadataManager:           metadataManager,
 		taskManager:               taskManager,
@@ -297,4 +302,6 @@ func (s *BeanImpl) Close() {
 	s.shardManager.Close()
 	s.historyManager.Close()
 	s.executionManager.Close()
+
+	s.factory.Close()
 }

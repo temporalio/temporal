@@ -1295,6 +1295,13 @@ func (s *TestBase) CompleteTask(namespaceID string, taskQueue string, taskType e
 
 // TearDownWorkflowStore to cleanup
 func (s *TestBase) TearDownWorkflowStore() {
+	s.TaskMgr.Close()
+	s.ClusterMetadataManager.Close()
+	s.MetadataManager.Close()
+	s.HistoryV2Mgr.Close()
+	s.ShardMgr.Close()
+	s.ExecutionManager.Close()
+	s.NamespaceReplicationQueue.Stop()
 	s.Factory.Close()
 
 	// TODO VisibilityMgr/Store is created with a separated code path, this is incorrect and may cause leaking connection
