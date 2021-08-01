@@ -2310,6 +2310,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 
 	// also load the current run of the workflow, it can be different from the base runID
 	resp, err := e.executionManager.GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
+		ShardID:     e.shard.GetShardID(),
 		NamespaceID: namespaceID,
 		WorkflowID:  request.WorkflowExecution.GetWorkflowId(),
 	})
