@@ -276,8 +276,9 @@ func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueu
 
 // Close closes this factory
 func (f *factoryImpl) Close() {
-	ds := f.datastores[storeTypeExecution]
-	ds.factory.Close()
+	for _, ds := range f.datastores {
+		ds.factory.Close()
+	}
 }
 
 func (f *factoryImpl) isCassandra() bool {
