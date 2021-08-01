@@ -722,7 +722,6 @@ type (
 	// Implements ExecutionManager, ShardManager and TaskManager
 	cassandraPersistence struct {
 		cassandraStore
-		//shardID            int32
 		currentClusterName string
 	}
 )
