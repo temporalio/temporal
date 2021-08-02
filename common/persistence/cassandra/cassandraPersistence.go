@@ -869,7 +869,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 
-	shardID := d.shardID
+	shardID := request.ShardID
 	newWorkflow := request.NewWorkflowSnapshot
 	lastWriteVersion := newWorkflow.LastWriteVersion
 	namespaceID := newWorkflow.NamespaceID
