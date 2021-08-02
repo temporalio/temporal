@@ -53,8 +53,8 @@ type (
 		NewHistoryManager() (p.HistoryManager, error)
 		// NewMetadataManager returns a new metadata manager
 		NewMetadataManager() (p.MetadataManager, error)
-		// NewExecutionManager returns a new execution manager for a given shardID
-		NewExecutionManager(shardID int32) (p.ExecutionManager, error)
+		// NewExecutionManager returns a new execution manager
+		NewExecutionManager() (p.ExecutionManager, error)
 		// NewNamespaceReplicationQueue returns a new queue for namespace replication
 		NewNamespaceReplicationQueue() (p.NamespaceReplicationQueue, error)
 		// NewClusterMetadataManager returns a new manager for cluster specific metadata
@@ -71,8 +71,8 @@ type (
 		NewShardStore() (p.ShardStore, error)
 		// NewMetadataStore returns a new metadata store
 		NewMetadataStore() (p.MetadataStore, error)
-		// NewExecutionStore returns a workflow store for given shardID
-		NewExecutionStore(shardID int32) (p.ExecutionStore, error)
+		// NewExecutionStore returns a execution store
+		NewExecutionStore() (p.ExecutionStore, error)
 		NewQueue(queueType p.QueueType) (p.Queue, error)
 		// NewClusterMetadataStore returns a new metadata store
 		NewClusterMetadataStore() (p.ClusterMetadataStore, error)
@@ -186,7 +186,7 @@ func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
 // NewHistoryManager returns a new history manager
 func (f *factoryImpl) NewHistoryManager() (p.HistoryManager, error) {
 	ds := f.datastores[storeTypeHistory]
-	store, err := ds.factory.NewExecutionStore(-1)
+	store, err := ds.factory.NewExecutionStore()
 	if err != nil {
 		return nil, err
 	}
@@ -241,12 +241,10 @@ func (f *factoryImpl) NewClusterMetadataManager() (p.ClusterMetadataManager, err
 }
 
 // NewExecutionManager returns a new execution manager for a given shardID
-func (f *factoryImpl) NewExecutionManager(
-	shardID int32,
-) (p.ExecutionManager, error) {
+func (f *factoryImpl) NewExecutionManager() (p.ExecutionManager, error) {
 
 	ds := f.datastores[storeTypeExecution]
-	store, err := ds.factory.NewExecutionStore(shardID)
+	store, err := ds.factory.NewExecutionStore()
 	if err != nil {
 		return nil, err
 	}
@@ -278,8 +276,9 @@ func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueu
 
 // Close closes this factory
 func (f *factoryImpl) Close() {
-	ds := f.datastores[storeTypeExecution]
-	ds.factory.Close()
+	for _, ds := range f.datastores {
+		ds.factory.Close()
+	}
 }
 
 func (f *factoryImpl) isCassandra() bool {

@@ -85,18 +85,17 @@ func (mr *MockBeanMockRecorder) GetClusterMetadataManager() *gomock.Call {
 }
 
 // GetExecutionManager mocks base method.
-func (m *MockBean) GetExecutionManager(arg0 int32) (persistence.ExecutionManager, error) {
+func (m *MockBean) GetExecutionManager() persistence.ExecutionManager {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetExecutionManager", arg0)
+	ret := m.ctrl.Call(m, "GetExecutionManager")
 	ret0, _ := ret[0].(persistence.ExecutionManager)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // GetExecutionManager indicates an expected call of GetExecutionManager.
-func (mr *MockBeanMockRecorder) GetExecutionManager(arg0 interface{}) *gomock.Call {
+func (mr *MockBeanMockRecorder) GetExecutionManager() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionManager", reflect.TypeOf((*MockBean)(nil).GetExecutionManager), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionManager", reflect.TypeOf((*MockBean)(nil).GetExecutionManager))
 }
 
 // GetHistoryManager mocks base method.
@@ -182,15 +181,15 @@ func (mr *MockBeanMockRecorder) SetClusterMetadataManager(arg0 interface{}) *gom
 }
 
 // SetExecutionManager mocks base method.
-func (m *MockBean) SetExecutionManager(arg0 int32, arg1 persistence.ExecutionManager) {
+func (m *MockBean) SetExecutionManager(arg0 persistence.ExecutionManager) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetExecutionManager", arg0, arg1)
+	m.ctrl.Call(m, "SetExecutionManager", arg0)
 }
 
 // SetExecutionManager indicates an expected call of SetExecutionManager.
-func (mr *MockBeanMockRecorder) SetExecutionManager(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockBeanMockRecorder) SetExecutionManager(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetExecutionManager", reflect.TypeOf((*MockBean)(nil).SetExecutionManager), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetExecutionManager", reflect.TypeOf((*MockBean)(nil).SetExecutionManager), arg0)
 }
 
 // SetHistoryManager mocks base method.

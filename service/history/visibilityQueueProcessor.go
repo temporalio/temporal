@@ -276,6 +276,7 @@ func (t *visibilityQueueProcessorImpl) completeTask() error {
 
 	if lowerAckLevel < upperAckLevel {
 		err := t.shard.GetExecutionManager().RangeCompleteVisibilityTask(&persistence.RangeCompleteVisibilityTaskRequest{
+			ShardID:              t.shard.GetShardID(),
 			ExclusiveBeginTaskID: lowerAckLevel,
 			InclusiveEndTaskID:   upperAckLevel,
 		})
@@ -321,6 +322,7 @@ func (t *visibilityQueueProcessorImpl) readTasks(
 ) ([]queueTaskInfo, bool, error) {
 
 	response, err := t.executionManager.GetVisibilityTasks(&persistence.GetVisibilityTasksRequest{
+		ShardID:      t.shard.GetShardID(),
 		ReadLevel:    readLevel,
 		MaxReadLevel: t.maxReadAckLevel(),
 		BatchSize:    t.options.BatchSize(),

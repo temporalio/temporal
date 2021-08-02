@@ -216,6 +216,7 @@ func (c *Cache) validateWorkflowExecutionInfo(
 	// RunID is not provided, lets try to retrieve the RunID for current active execution
 	if execution.GetRunId() == "" {
 		response, err := c.getCurrentExecutionWithRetry(&persistence.GetCurrentExecutionRequest{
+			ShardID:     c.shard.GetShardID(),
 			NamespaceID: namespaceID,
 			WorkflowID:  execution.GetWorkflowId(),
 		})

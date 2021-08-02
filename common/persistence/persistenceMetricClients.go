@@ -220,10 +220,6 @@ func (p *workflowExecutionPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *workflowExecutionPersistenceClient) GetShardID() int32 {
-	return p.persistence.GetShardID()
-}
-
 func (p *workflowExecutionPersistenceClient) CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceCreateWorkflowExecutionScope, metrics.PersistenceRequests)
 
@@ -658,7 +654,7 @@ func (p *workflowExecutionPersistenceClient) updateErrorMetric(scope int, err er
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:
 		p.logger.Error("Operation failed with internal error.",
-			tag.Error(err), tag.MetricScope(scope), tag.ShardID(p.GetShardID()))
+			tag.Error(err), tag.MetricScope(scope))
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	}
 }

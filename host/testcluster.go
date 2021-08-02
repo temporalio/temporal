@@ -209,7 +209,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		ClusterMetadataManager:           testBase.ClusterMetadataManager,
 		ShardMgr:                         testBase.ShardMgr,
 		HistoryV2Mgr:                     testBase.HistoryV2Mgr,
-		ExecutionMgrFactory:              testBase.ExecutionMgrFactory,
+		ExecutionManager:                 testBase.ExecutionManager,
 		NamespaceReplicationQueue:        testBase.NamespaceReplicationQueue,
 		TaskMgr:                          testBase.TaskMgr,
 		VisibilityMgr:                    visibilityMgr,
@@ -328,7 +328,7 @@ func (tc *TestCluster) GetHistoryClient() HistoryClient {
 	return tc.host.GetHistoryClient()
 }
 
-// GetExecutionManagerFactory returns an execution manager factory from the test cluster
-func (tc *TestCluster) GetExecutionManagerFactory() persistence.ExecutionManagerFactory {
-	return tc.host.GetExecutionManagerFactory()
+// GetExecutionManager returns an execution manager factory from the test cluster
+func (tc *TestCluster) GetExecutionManager() persistence.ExecutionManager {
+	return tc.host.GetExecutionManager()
 }

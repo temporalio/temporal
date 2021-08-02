@@ -1103,7 +1103,7 @@ func acquireShard(
 		timerMaxReadLevelMap[clusterName] = timerMaxReadLevelMap[clusterName].Truncate(time.Millisecond)
 	}
 
-	executionMgr, err := shardItem.GetExecutionManager(shardItem.shardID)
+	executionMgr := shardItem.GetExecutionManager()
 	if err != nil {
 		return nil, err
 	}

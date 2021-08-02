@@ -118,6 +118,7 @@ func (s *contextSuite) TestAddTasks_Success() {
 	visibilityTasks := []persistence.Task{&persistence.DeleteExecutionVisibilityTask{}}
 
 	addTasksRequest := &persistence.AddTasksRequest{
+		ShardID:     s.shardContext.GetShardID(),
 		NamespaceID: task.GetNamespaceId(),
 		WorkflowID:  task.GetWorkflowId(),
 		RunID:       task.GetRunId(),

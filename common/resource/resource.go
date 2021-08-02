@@ -104,7 +104,7 @@ type (
 		GetNamespaceReplicationQueue() persistence.NamespaceReplicationQueue
 		GetShardManager() persistence.ShardManager
 		GetHistoryManager() persistence.HistoryManager
-		GetExecutionManager(int32) (persistence.ExecutionManager, error)
+		GetExecutionManager() persistence.ExecutionManager
 		GetPersistenceBean() persistenceClient.Bean
 
 		// loggers

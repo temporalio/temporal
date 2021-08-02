@@ -91,6 +91,7 @@ func newSimpleClientV7(url string) (*clientV7, error) {
 	var err error
 	if client, err = elastic.NewClient(
 		elastic.SetURL(url),
+		elastic.SetSniff(false),
 		elastic.SetRetrier(retrier),
 	); err != nil {
 		return nil, err

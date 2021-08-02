@@ -409,6 +409,7 @@ type (
 
 	// AddTasksRequest is used to write new tasks
 	AddTasksRequest struct {
+		ShardID int32
 		RangeID int64
 
 		NamespaceID string
@@ -423,6 +424,7 @@ type (
 
 	// CreateWorkflowExecutionRequest is used to write a new workflow execution
 	CreateWorkflowExecutionRequest struct {
+		ShardID int32
 		RangeID int64
 
 		Mode CreateWorkflowMode
@@ -439,6 +441,7 @@ type (
 
 	// GetWorkflowExecutionRequest is used to retrieve the info of a workflow execution
 	GetWorkflowExecutionRequest struct {
+		ShardID     int32
 		NamespaceID string
 		Execution   commonpb.WorkflowExecution
 	}
@@ -452,12 +455,14 @@ type (
 
 	// GetCurrentExecutionRequest is used to retrieve the current RunId for an execution
 	GetCurrentExecutionRequest struct {
+		ShardID     int32
 		NamespaceID string
 		WorkflowID  string
 	}
 
 	// ListConcreteExecutionsRequest is request to ListConcreteExecutions
 	ListConcreteExecutionsRequest struct {
+		ShardID   int32
 		PageSize  int
 		PageToken []byte
 	}
@@ -479,6 +484,7 @@ type (
 
 	// UpdateWorkflowExecutionRequest is used to update a workflow execution
 	UpdateWorkflowExecutionRequest struct {
+		ShardID int32
 		RangeID int64
 
 		Mode UpdateWorkflowMode
@@ -490,6 +496,7 @@ type (
 
 	// ConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for a single run
 	ConflictResolveWorkflowExecutionRequest struct {
+		ShardID int32
 		RangeID int64
 
 		Mode ConflictResolveWorkflowMode
@@ -594,6 +601,7 @@ type (
 
 	// DeleteWorkflowExecutionRequest is used to delete a workflow execution
 	DeleteWorkflowExecutionRequest struct {
+		ShardID     int32
 		NamespaceID string
 		WorkflowID  string
 		RunID       string
@@ -601,6 +609,7 @@ type (
 
 	// DeleteCurrentWorkflowExecutionRequest is used to delete the current workflow execution
 	DeleteCurrentWorkflowExecutionRequest struct {
+		ShardID     int32
 		NamespaceID string
 		WorkflowID  string
 		RunID       string
@@ -619,6 +628,7 @@ type (
 
 	// GetTransferTasksRequest is used to read tasks from the transfer task queue
 	GetTransferTasksRequest struct {
+		ShardID       int32
 		ReadLevel     int64
 		MaxReadLevel  int64
 		BatchSize     int
@@ -644,6 +654,7 @@ type (
 
 	// GetVisibilityTasksRequest is used to read tasks from the visibility task queue
 	GetVisibilityTasksRequest struct {
+		ShardID       int32
 		ReadLevel     int64
 		MaxReadLevel  int64
 		BatchSize     int
@@ -669,6 +680,7 @@ type (
 
 	// GetReplicationTasksRequest is used to read tasks from the replication task queue
 	GetReplicationTasksRequest struct {
+		ShardID       int32
 		MinTaskID     int64
 		MaxTaskID     int64
 		BatchSize     int
@@ -683,56 +695,66 @@ type (
 
 	// CompleteTransferTaskRequest is used to complete a task in the transfer task queue
 	CompleteTransferTaskRequest struct {
-		TaskID int64
+		ShardID int32
+		TaskID  int64
 	}
 
 	// RangeCompleteTransferTaskRequest is used to complete a range of tasks in the transfer task queue
 	RangeCompleteTransferTaskRequest struct {
+		ShardID              int32
 		ExclusiveBeginTaskID int64
 		InclusiveEndTaskID   int64
 	}
 
 	// CompleteVisibilityTaskRequest is used to complete a task in the visibility task queue
 	CompleteVisibilityTaskRequest struct {
-		TaskID int64
+		ShardID int32
+		TaskID  int64
 	}
 
 	// RangeCompleteVisibilityTaskRequest is used to complete a range of tasks in the visibility task queue
 	RangeCompleteVisibilityTaskRequest struct {
+		ShardID              int32
 		ExclusiveBeginTaskID int64
 		InclusiveEndTaskID   int64
 	}
 
 	// CompleteReplicationTaskRequest is used to complete a task in the replication task queue
 	CompleteReplicationTaskRequest struct {
-		TaskID int64
+		ShardID int32
+		TaskID  int64
 	}
 
 	// RangeCompleteReplicationTaskRequest is used to complete a range of task in the replication task queue
 	RangeCompleteReplicationTaskRequest struct {
+		ShardID            int32
 		InclusiveEndTaskID int64
 	}
 
 	// PutReplicationTaskToDLQRequest is used to put a replication task to dlq
 	PutReplicationTaskToDLQRequest struct {
+		ShardID           int32
 		SourceClusterName string
 		TaskInfo          *persistencespb.ReplicationTaskInfo
 	}
 
 	// GetReplicationTasksFromDLQRequest is used to get replication tasks from dlq
 	GetReplicationTasksFromDLQRequest struct {
+		ShardID           int32
 		SourceClusterName string
 		GetReplicationTasksRequest
 	}
 
 	// DeleteReplicationTaskFromDLQRequest is used to delete replication task from DLQ
 	DeleteReplicationTaskFromDLQRequest struct {
+		ShardID           int32
 		SourceClusterName string
 		TaskID            int64
 	}
 
 	// RangeDeleteReplicationTaskFromDLQRequest is used to delete replication tasks from DLQ
 	RangeDeleteReplicationTaskFromDLQRequest struct {
+		ShardID              int32
 		SourceClusterName    string
 		ExclusiveBeginTaskID int64
 		InclusiveEndTaskID   int64
@@ -743,12 +765,14 @@ type (
 
 	// RangeCompleteTimerTaskRequest is used to complete a range of tasks in the timer task queue
 	RangeCompleteTimerTaskRequest struct {
+		ShardID                 int32
 		InclusiveBeginTimestamp time.Time
 		ExclusiveEndTimestamp   time.Time
 	}
 
 	// CompleteTimerTaskRequest is used to complete a task in the timer task queue
 	CompleteTimerTaskRequest struct {
+		ShardID             int32
 		VisibilityTimestamp time.Time
 		TaskID              int64
 	}
@@ -855,6 +879,7 @@ type (
 	// GetTimerIndexTasksRequest is the request for GetTimerIndexTasks
 	// TODO: replace this with an iterator that can configure min and max index.
 	GetTimerIndexTasksRequest struct {
+		ShardID       int32
 		MinTimestamp  time.Time
 		MaxTimestamp  time.Time
 		BatchSize     int
@@ -1221,7 +1246,6 @@ type (
 	ExecutionManager interface {
 		Closeable
 		GetName() string
-		GetShardID() int32
 
 		CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
@@ -1270,12 +1294,6 @@ type (
 		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error)
 		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
 		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
-	}
-
-	// ExecutionManagerFactory creates an instance of ExecutionManager for a given shard
-	ExecutionManagerFactory interface {
-		Closeable
-		NewExecutionManager(shardID int32) (ExecutionManager, error)
 	}
 
 	// TaskManager is used to manage tasks
@@ -2163,6 +2181,7 @@ func SplitHistoryGarbageCleanupInfo(info string) (namespaceID, workflowID, runID
 
 // NewGetReplicationTasksFromDLQRequest creates a new GetReplicationTasksFromDLQRequest
 func NewGetReplicationTasksFromDLQRequest(
+	shardID int32,
 	sourceClusterName string,
 	readLevel int64,
 	maxReadLevel int64,
@@ -2170,6 +2189,7 @@ func NewGetReplicationTasksFromDLQRequest(
 	nextPageToken []byte,
 ) *GetReplicationTasksFromDLQRequest {
 	return &GetReplicationTasksFromDLQRequest{
+		ShardID:           shardID,
 		SourceClusterName: sourceClusterName,
 		GetReplicationTasksRequest: GetReplicationTasksRequest{
 			MinTaskID:     readLevel,

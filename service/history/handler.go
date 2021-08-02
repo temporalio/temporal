@@ -587,28 +587,30 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 
 // RemoveTask returns information about the internal states of a history host
 func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTaskRequest) (_ *historyservice.RemoveTaskResponse, retError error) {
-	executionMgr, err := h.GetExecutionManager(request.GetShardId())
-	if err != nil {
-		return nil, err
-	}
+	executionMgr := h.GetExecutionManager()
 
+	var err error
 	switch request.GetCategory() {
 	case enumsspb.TASK_CATEGORY_TRANSFER:
 		err = executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{
-			TaskID: request.GetTaskId(),
+			ShardID: request.GetShardId(),
+			TaskID:  request.GetTaskId(),
 		})
 	case enumsspb.TASK_CATEGORY_VISIBILITY:
 		err = executionMgr.CompleteVisibilityTask(&persistence.CompleteVisibilityTaskRequest{
-			TaskID: request.GetTaskId(),
+			ShardID: request.GetShardId(),
+			TaskID:  request.GetTaskId(),
 		})
 	case enumsspb.TASK_CATEGORY_TIMER:
 		err = executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
+			ShardID:             request.GetShardId(),
 			VisibilityTimestamp: timestamp.TimeValue(request.GetVisibilityTime()),
 			TaskID:              request.GetTaskId(),
 		})
 	case enumsspb.TASK_CATEGORY_REPLICATION:
 		err = executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{
-			TaskID: request.GetTaskId(),
+			ShardID: request.GetShardId(),
+			TaskID:  request.GetTaskId(),
 		})
 	default:
 		err = errInvalidTaskType

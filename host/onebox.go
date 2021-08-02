@@ -75,7 +75,7 @@ type Temporal interface {
 	GetAdminClient() adminservice.AdminServiceClient
 	GetFrontendClient() workflowservice.WorkflowServiceClient
 	GetHistoryClient() historyservice.HistoryServiceClient
-	GetExecutionManagerFactory() persistence.ExecutionManagerFactory
+	GetExecutionManager() persistence.ExecutionManager
 }
 
 type (
@@ -97,7 +97,7 @@ type (
 		historyV2Mgr                     persistence.HistoryManager
 		taskMgr                          persistence.TaskManager
 		visibilityMgr                    visibility.VisibilityManager
-		executionMgrFactory              persistence.ExecutionManagerFactory
+		executionManager                 persistence.ExecutionManager
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		shutdownCh                       chan struct{}
 		shutdownWG                       sync.WaitGroup
@@ -130,7 +130,7 @@ type (
 		ClusterMetadataManager           persistence.ClusterMetadataManager
 		ShardMgr                         persistence.ShardManager
 		HistoryV2Mgr                     persistence.HistoryManager
-		ExecutionMgrFactory              persistence.ExecutionManagerFactory
+		ExecutionManager                 persistence.ExecutionManager
 		TaskMgr                          persistence.TaskManager
 		VisibilityMgr                    visibility.VisibilityManager
 		NamespaceReplicationQueue        persistence.NamespaceReplicationQueue
@@ -165,7 +165,7 @@ func NewTemporal(params *TemporalParams) Temporal {
 		shardMgr:                         params.ShardMgr,
 		historyV2Mgr:                     params.HistoryV2Mgr,
 		taskMgr:                          params.TaskMgr,
-		executionMgrFactory:              params.ExecutionMgrFactory,
+		executionManager:                 params.ExecutionManager,
 		namespaceReplicationQueue:        params.NamespaceReplicationQueue,
 		shutdownCh:                       make(chan struct{}),
 		clusterNo:                        params.ClusterNo,
@@ -702,8 +702,8 @@ func (c *temporalImpl) createSystemNamespace() error {
 	return nil
 }
 
-func (c *temporalImpl) GetExecutionManagerFactory() persistence.ExecutionManagerFactory {
-	return c.executionMgrFactory
+func (c *temporalImpl) GetExecutionManager() persistence.ExecutionManager {
+	return c.executionManager
 }
 
 func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
