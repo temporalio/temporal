@@ -975,7 +975,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 		return nil, convertErrors(
 			record,
 			iter,
-			request.ShardID,
+			shardID,
 			request.RangeID,
 			requestCurrentRunID,
 			[]executionCASCondition{{
