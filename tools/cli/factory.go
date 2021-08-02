@@ -241,7 +241,11 @@ func fetchCACert(pathOrUrl string) (caPool *x509.CertPool, err error) {
 	caPool = x509.NewCertPool()
 	var caBytes []byte
 
-	if strings.HasPrefix(pathOrUrl, "http://") || strings.HasPrefix(pathOrUrl, "https://") {
+	if strings.HasPrefix(pathOrUrl, "http://") {
+		return nil, errors.New("HTTP is not supported for CA cert URLs. Provide HTTPS URL")
+	}
+
+	if strings.HasPrefix(pathOrUrl, "https://") {
 		resp, err := netClient.Get(pathOrUrl)
 		if err != nil {
 			return nil, err

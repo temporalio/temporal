@@ -74,6 +74,11 @@ func Test_fetchCACertFromUrl(t *testing.T) {
 			args:    args{path: "https://example.com/testdata/notfound"},
 			wantErr: true,
 		},
+		{
+			name:    "example cert that is passed over http",
+			args:    args{path: "http://example.com/testdata/notfound"},
+			wantErr: true,
+		},
 	}
 	// generate a test server so we can capture and inspect the request
 	testServer := httptest.NewServer(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
