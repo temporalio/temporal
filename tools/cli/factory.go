@@ -31,6 +31,9 @@ import (
 	"errors"
 	"io/ioutil"
 	"net"
+	"net/http"
+	"strings"
+	"time"
 
 	"github.com/urfave/cli"
 	"go.temporal.io/api/workflowservice/v1"
@@ -47,6 +50,15 @@ import (
 	"go.temporal.io/server/tools/cli/headersprovider"
 	"go.temporal.io/server/tools/cli/plugin"
 )
+
+var netClient HttpGetter = &http.Client{
+	Timeout: time.Second * 10,
+}
+
+// HttpGetter defines http.Client.Get(...) as an interface so we can mock it
+type HttpGetter interface {
+	Get(url string) (resp *http.Response, err error)
+}
 
 // ClientFactory is used to construct rpc clients
 type ClientFactory interface {
@@ -225,11 +237,25 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 	return nil, nil
 }
 
-func fetchCACert(path string) (*x509.CertPool, error) {
-	caPool := x509.NewCertPool()
-	caBytes, err := ioutil.ReadFile(path)
-	if err != nil {
-		return nil, err
+func fetchCACert(pathOrUrl string) (caPool *x509.CertPool, err error) {
+	caPool = x509.NewCertPool()
+	var caBytes []byte
+
+	if strings.HasPrefix(pathOrUrl, "http://") || strings.HasPrefix(pathOrUrl, "https://") {
+		resp, err := netClient.Get(pathOrUrl)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		caBytes, err = ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		caBytes, err = ioutil.ReadFile(pathOrUrl)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if !caPool.AppendCertsFromPEM(caBytes) {
