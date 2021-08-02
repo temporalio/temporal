@@ -900,9 +900,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 	lastWriteVersion := common.EmptyVersion
 
 	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil)
-	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any()).Return(nil, &persistence.WorkflowExecutionAlreadyStartedError{
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any()).Return(nil, &persistence.CurrentWorkflowConditionFailedError{
 		Msg:              "random message",
-		StartRequestID:   requestID,
+		RequestID:        requestID,
 		RunID:            runID,
 		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -937,9 +937,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 	lastWriteVersion := common.EmptyVersion
 
 	s.mockHistoryMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&persistence.AppendHistoryNodesResponse{Size: 0}, nil)
-	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any()).Return(nil, &persistence.WorkflowExecutionAlreadyStartedError{
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any()).Return(nil, &persistence.CurrentWorkflowConditionFailedError{
 		Msg:              "random message",
-		StartRequestID:   "oldRequestID",
+		RequestID:        "oldRequestID",
 		RunID:            runID,
 		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -988,9 +988,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 		newCreateWorkflowExecutionRequestMatcher(func(request *persistence.CreateWorkflowExecutionRequest) bool {
 			return request.Mode == persistence.CreateWorkflowModeBrandNew
 		}),
-	).Return(nil, &persistence.WorkflowExecutionAlreadyStartedError{
+	).Return(nil, &persistence.CurrentWorkflowConditionFailedError{
 		Msg:              "random message",
-		StartRequestID:   "oldRequestID",
+		RequestID:        "oldRequestID",
 		RunID:            runID,
 		State:            enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
@@ -1067,9 +1067,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 			newCreateWorkflowExecutionRequestMatcher(func(request *persistence.CreateWorkflowExecutionRequest) bool {
 				return request.Mode == persistence.CreateWorkflowModeBrandNew
 			}),
-		).Return(nil, &persistence.WorkflowExecutionAlreadyStartedError{
+		).Return(nil, &persistence.CurrentWorkflowConditionFailedError{
 			Msg:              "random message",
-			StartRequestID:   "oldRequestID",
+			RequestID:        "oldRequestID",
 			RunID:            runIDs[i],
 			State:            enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			Status:           status,
@@ -1307,9 +1307,9 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 	ms.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
-	workflowAlreadyStartedErr := &persistence.WorkflowExecutionAlreadyStartedError{
+	workflowAlreadyStartedErr := &persistence.CurrentWorkflowConditionFailedError{
 		Msg:              "random message",
-		StartRequestID:   requestID, // use same requestID
+		RequestID:        requestID, // use same requestID
 		RunID:            runID,
 		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -1383,9 +1383,9 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	ms.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
-	workflowAlreadyStartedErr := &persistence.WorkflowExecutionAlreadyStartedError{
+	workflowAlreadyStartedErr := &persistence.CurrentWorkflowConditionFailedError{
 		Msg:              "random message",
-		StartRequestID:   "new request ID",
+		RequestID:        "new request ID",
 		RunID:            runID,
 		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,

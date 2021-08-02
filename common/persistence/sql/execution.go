@@ -108,8 +108,8 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 	runID := primitives.MustParseUUID(newWorkflow.RunID)
 
 	var err error
-	var row *sqlplugin.CurrentExecutionsRow
-	if row, err = lockCurrentExecutionIfExists(ctx,
+	var currentRow *sqlplugin.CurrentExecutionsRow
+	if currentRow, err = lockCurrentExecutionIfExists(ctx,
 		tx,
 		shardID,
 		namespaceID,
@@ -118,79 +118,96 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 		return nil, err
 	}
 
-	// current workflow record check
-	if row != nil {
-		// current run ID, last write version, current workflow state check
-		switch request.Mode {
-		case p.CreateWorkflowModeBrandNew:
-			return nil, &p.WorkflowExecutionAlreadyStartedError{
-				Msg:              fmt.Sprintf("Workflow execution already running. WorkflowId: %v", row.WorkflowID),
-				StartRequestID:   row.CreateRequestID,
-				RunID:            row.RunID.String(),
-				State:            row.State,
-				Status:           row.Status,
-				LastWriteVersion: row.LastWriteVersion,
+	// current run ID, last write version, current workflow state check
+	switch request.Mode {
+	case p.CreateWorkflowModeBrandNew:
+		if currentRow == nil {
+			// current row does not exists, suits the create mode
+		} else {
+			if currentRow.RunID.String() != request.PreviousRunID {
+				return nil, extractCurrentWorkflowConflictError(
+					currentRow,
+					fmt.Sprintf(
+						"Workflow execution creation condition failed. workflow ID: %v, current run ID: %v, request run ID: %v",
+						workflowID,
+						currentRow.RunID.String(),
+						request.PreviousRunID,
+					),
+				)
 			}
-
-		case p.CreateWorkflowModeWorkflowIDReuse:
-			if request.PreviousLastWriteVersion != row.LastWriteVersion {
-				return nil, &p.CurrentWorkflowConditionFailedError{
-					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
-						"LastWriteVersion: %v, PreviousLastWriteVersion: %v",
-						workflowID, row.LastWriteVersion, request.PreviousLastWriteVersion),
-					RequestID:        row.CreateRequestID,
-					RunID:            row.RunID.String(),
-					State:            row.State,
-					LastWriteVersion: row.LastWriteVersion,
-				}
-			}
-			if row.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-				return nil, &p.CurrentWorkflowConditionFailedError{
-					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
-						"State: %v, Expected: %v",
-						workflowID, row.State, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED),
-					RequestID:        row.CreateRequestID,
-					RunID:            row.RunID.String(),
-					State:            row.State,
-					LastWriteVersion: row.LastWriteVersion,
-				}
-			}
-			runIDStr := row.RunID.String()
-			if runIDStr != request.PreviousRunID {
-				return nil, &p.CurrentWorkflowConditionFailedError{
-					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
-						"RunId: %v, PreviousRunId: %v",
-						workflowID, runIDStr, request.PreviousRunID),
-					RequestID:        row.CreateRequestID,
-					RunID:            row.RunID.String(),
-					State:            row.State,
-					LastWriteVersion: row.LastWriteVersion,
-				}
-			}
-
-		case p.CreateWorkflowModeZombie:
-			// zombie workflow creation with existence of current record, this is a noop
-			if err := assertRunIDMismatch(primitives.MustParseUUID(newWorkflow.ExecutionState.RunId), row.RunID); err != nil {
-				return nil, err
-			}
-
-		case p.CreateWorkflowModeContinueAsNew:
-			runIDStr := row.RunID.String()
-			if runIDStr != request.PreviousRunID {
-				return nil, &p.CurrentWorkflowConditionFailedError{
-					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
-						"RunId: %v, PreviousRunId: %v",
-						workflowID, runIDStr, request.PreviousRunID),
-					RequestID:        row.CreateRequestID,
-					RunID:            row.RunID.String(),
-					State:            row.State,
-					LastWriteVersion: row.LastWriteVersion,
-				}
-			}
-
-		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("CreteWorkflowExecution: unknown mode: %v", request.Mode))
+			// current run ID is already request ID
 		}
+
+	case p.CreateWorkflowModeWorkflowIDReuse:
+		if currentRow == nil {
+			return nil, extractCurrentWorkflowConflictError(currentRow, "")
+		}
+
+		// currentRow != nil
+
+		if currentRow.RunID.String() != request.PreviousRunID {
+			return nil, extractCurrentWorkflowConflictError(
+				currentRow,
+				fmt.Sprintf(
+					"Workflow execution creation condition failed. workflow ID: %v, current run ID: %v, request run ID: %v",
+					workflowID,
+					currentRow.RunID.String(),
+					request.PreviousRunID,
+				),
+			)
+		}
+		if request.PreviousLastWriteVersion != currentRow.LastWriteVersion {
+			return nil, extractCurrentWorkflowConflictError(
+				currentRow,
+				fmt.Sprintf(
+					"Workflow execution creation condition failed. workflow ID: %v, current last write version: %v, request last write version: %v",
+					workflowID,
+					currentRow.LastWriteVersion,
+					request.PreviousLastWriteVersion,
+				),
+			)
+		}
+		if currentRow.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+			return nil, extractCurrentWorkflowConflictError(
+				currentRow,
+				fmt.Sprintf(
+					"Workflow execution creation condition failed. workflow ID: %v, current state: %v, request state: %v",
+					workflowID,
+					currentRow.State,
+					enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+				),
+			)
+		}
+
+	case p.CreateWorkflowModeZombie:
+		if err := assertRunIDMismatch(
+			primitives.MustParseUUID(newWorkflow.ExecutionState.RunId),
+			currentRow,
+		); err != nil {
+			return nil, err
+		}
+
+	case p.CreateWorkflowModeContinueAsNew:
+		if currentRow == nil {
+			return nil, extractCurrentWorkflowConflictError(currentRow, "")
+		}
+
+		// currentRow
+
+		if currentRow.RunID.String() != request.PreviousRunID {
+			return nil, extractCurrentWorkflowConflictError(
+				currentRow,
+				fmt.Sprintf(
+					"Workflow execution creation condition failed. workflow ID: %v, current run ID: %v, request run ID: %v",
+					workflowID,
+					currentRow.RunID.String(),
+					request.PreviousRunID,
+				),
+			)
+		}
+
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("CreteWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
 	if err := createOrUpdateCurrentExecution(ctx,

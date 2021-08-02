@@ -342,7 +342,9 @@ func createWorkflowExecutionWithRetry(
 	switch err.(type) {
 	case nil:
 		return nil
-	case *persistence.WorkflowExecutionAlreadyStartedError:
+	case *persistence.CurrentWorkflowConditionFailedError,
+		*persistence.WorkflowConditionFailedError,
+		*persistence.ConditionFailedError:
 		// it is possible that workflow already exists and caller need to apply
 		// workflow ID reuse policy
 		return err
@@ -428,7 +430,9 @@ func updateWorkflowExecutionWithRetry(
 			)
 		}
 		return nil
-	case *persistence.ConditionFailedError:
+	case *persistence.CurrentWorkflowConditionFailedError,
+		*persistence.WorkflowConditionFailedError,
+		*persistence.ConditionFailedError:
 		// TODO get rid of ErrConflict
 		return consts.ErrConflict
 	default:

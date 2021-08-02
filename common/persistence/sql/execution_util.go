@@ -76,7 +76,7 @@ func applyWorkflowMutationTx(
 		workflowMutation.DBRecordVersion,
 	); err != nil {
 		switch err.(type) {
-		case *p.ConditionFailedError:
+		case *p.WorkflowConditionFailedError:
 			return err
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowMutationTx failed. Failed to lock executions row. Error: %v", err))
@@ -238,7 +238,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowSnapshot.DBRecordVersion,
 	); err != nil {
 		switch err.(type) {
-		case *p.ConditionFailedError:
+		case *p.WorkflowConditionFailedError:
 			return err
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to lock executions row. Error: %v", err))
@@ -708,8 +708,10 @@ func lockAndCheckExecution(
 	}
 
 	if nextEventID != condition {
-		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("lockAndCheckExecution failed. Next_event_id was %v when it should have been %v.", nextEventID, condition),
+		return &p.WorkflowConditionFailedError{
+			Msg:             fmt.Sprintf("lockAndCheckExecution failed. Next_event_id was %v when it should have been %v.", nextEventID, condition),
+			NextEventID:     nextEventID,
+			DBRecordVersion: version,
 		}
 	}
 
@@ -717,8 +719,10 @@ func lockAndCheckExecution(
 		dbRecordVersion -= 1
 	}
 	if version != dbRecordVersion {
-		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("lockAndCheckExecution failed. DBRecordVersion expected: %v, actually %v.", dbRecordVersion, version),
+		return &p.WorkflowConditionFailedError{
+			Msg:             fmt.Sprintf("lockAndCheckExecution failed. DBRecordVersion expected: %v, actually %v.", dbRecordVersion, version),
+			NextEventID:     nextEventID,
+			DBRecordVersion: version,
 		}
 	}
 
@@ -1102,7 +1106,7 @@ func assertNotCurrentExecution(
 		}
 		return serviceerror.NewInternal(fmt.Sprintf("assertCurrentExecution failed. Unable to load current record. Error: %v", err))
 	}
-	return assertRunIDMismatch(runID, currentRow.RunID)
+	return assertRunIDMismatch(runID, currentRow)
 }
 
 func assertRunIDAndUpdateCurrentExecution(
@@ -1122,11 +1126,18 @@ func assertRunIDAndUpdateCurrentExecution(
 
 	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
 		if !bytes.Equal(currentRow.RunID, previousRunID) {
-			return &p.ConditionFailedError{Msg: fmt.Sprintf(
-				"assertRunIDAndUpdateCurrentExecution failed. Current RunId was %v, expected %v",
-				currentRow.RunID,
-				previousRunID,
-			)}
+			return &p.CurrentWorkflowConditionFailedError{
+				Msg: fmt.Sprintf(
+					"assertRunIDAndUpdateCurrentExecution failed. current run ID: %v, request run ID: %v",
+					currentRow.RunID,
+					previousRunID,
+				),
+				RequestID:        currentRow.CreateRequestID,
+				RunID:            currentRow.RunID.String(),
+				State:            currentRow.State,
+				Status:           currentRow.Status,
+				LastWriteVersion: currentRow.LastWriteVersion,
+			}
 		}
 		return nil
 	}
@@ -1174,14 +1185,20 @@ func assertCurrentExecution(
 	return assertFn(currentRow)
 }
 
-func assertRunIDMismatch(runID primitives.UUID, currentRunID primitives.UUID) error {
+func assertRunIDMismatch(requestRunID primitives.UUID, currentRow *sqlplugin.CurrentExecutionsRow) error {
 	// zombie workflow creation with existence of current record, this is a noop
-	if bytes.Equal(currentRunID, runID) {
-		return &p.ConditionFailedError{Msg: fmt.Sprintf(
-			"assertRunIDMismatch failed. Current RunId was %v, input %v",
-			currentRunID,
-			runID,
-		)}
+	if currentRow == nil {
+		return nil
+	}
+	if bytes.Equal(currentRow.RunID, requestRunID) {
+		return extractCurrentWorkflowConflictError(
+			currentRow,
+			fmt.Sprintf(
+				"assertRunIDMismatch failed. request run ID: %v, current run ID: %v",
+				requestRunID,
+				currentRow.RunID.String(),
+			),
+		)
 	}
 	return nil
 }
@@ -1294,13 +1311,10 @@ func (m *sqlExecutionStore) createExecution(
 	result, err := tx.InsertIntoExecutions(ctx, row)
 	if err != nil {
 		if m.Db.IsDupEntryError(err) {
-			return &p.WorkflowExecutionAlreadyStartedError{
-				Msg:              fmt.Sprintf("Workflow execution already running. WorkflowId: %v", workflowID),
-				StartRequestID:   executionState.CreateRequestId,
-				RunID:            executionState.RunId,
-				State:            executionState.State,
-				Status:           executionState.Status,
-				LastWriteVersion: row.LastWriteVersion,
+			return &p.WorkflowConditionFailedError{
+				Msg:             fmt.Sprintf("Workflow execution already running. WorkflowId: %v", workflowID),
+				NextEventID:     0,
+				DBRecordVersion: 0,
 			}
 		}
 		return serviceerror.NewInternal(fmt.Sprintf("createExecution failed. Erorr: %v", err))

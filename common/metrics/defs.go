@@ -1639,10 +1639,10 @@ const (
 	PersistenceErrShardOwnershipLostCounter
 	PersistenceErrConditionFailedCounter
 	PersistenceErrCurrentWorkflowConditionFailedCounter
+	PersistenceErrWorkflowConditionFailedCounter
 	PersistenceErrTimeoutCounter
 	PersistenceErrBusyCounter
 	PersistenceErrEntityNotExistsCounter
-	PersistenceErrExecutionAlreadyStartedCounter
 	PersistenceErrNamespaceAlreadyExistsCounter
 	PersistenceErrBadRequestCounter
 	PersistenceSampledCounter
@@ -2070,10 +2070,10 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		PersistenceErrShardOwnershipLostCounter:             {metricName: "persistence_errors_shard_ownership_lost", metricType: Counter},
 		PersistenceErrConditionFailedCounter:                {metricName: "persistence_errors_condition_failed", metricType: Counter},
 		PersistenceErrCurrentWorkflowConditionFailedCounter: {metricName: "persistence_errors_current_workflow_condition_failed", metricType: Counter},
+		PersistenceErrWorkflowConditionFailedCounter:        {metricName: "persistence_errors_workflow_condition_failed", metricType: Counter},
 		PersistenceErrTimeoutCounter:                        {metricName: "persistence_errors_timeout", metricType: Counter},
 		PersistenceErrBusyCounter:                           {metricName: "persistence_errors_busy", metricType: Counter},
 		PersistenceErrEntityNotExistsCounter:                {metricName: "persistence_errors_entity_not_exists", metricType: Counter},
-		PersistenceErrExecutionAlreadyStartedCounter:        {metricName: "persistence_errors_execution_already_started", metricType: Counter},
 		PersistenceErrNamespaceAlreadyExistsCounter:         {metricName: "persistence_errors_namespace_already_exists", metricType: Counter},
 		PersistenceErrBadRequestCounter:                     {metricName: "persistence_errors_bad_request", metricType: Counter},
 		PersistenceSampledCounter:                           {metricName: "persistence_sampled", metricType: Counter},

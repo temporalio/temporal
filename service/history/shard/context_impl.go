@@ -976,8 +976,8 @@ func (s *ContextImpl) handleError(err error) error {
 	case nil:
 		return nil
 
-	case *serviceerror.WorkflowExecutionAlreadyStarted,
-		*persistence.WorkflowExecutionAlreadyStartedError,
+	case *persistence.CurrentWorkflowConditionFailedError,
+		*persistence.WorkflowConditionFailedError,
 		*persistence.ConditionFailedError,
 		*serviceerror.ResourceExhausted:
 		// No special handling required for these errors

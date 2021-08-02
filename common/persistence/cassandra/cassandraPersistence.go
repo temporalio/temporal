@@ -32,14 +32,14 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -869,30 +869,78 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 
+	shardID := request.ShardID
 	newWorkflow := request.NewWorkflowSnapshot
 	lastWriteVersion := newWorkflow.LastWriteVersion
 	namespaceID := newWorkflow.NamespaceID
 	workflowID := newWorkflow.WorkflowID
 	runID := newWorkflow.RunID
 
+	var requestCurrentRunID string
+
 	switch request.Mode {
 	case p.CreateWorkflowModeZombie:
 		// noop
-	default:
-		if err := createOrUpdateCurrentExecution(batch,
-			request.Mode,
-			request.ShardID,
+
+	case p.CreateWorkflowModeContinueAsNew:
+		batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
+			runID,
+			newWorkflow.ExecutionStateBlob.Data,
+			newWorkflow.ExecutionStateBlob.EncodingType.String(),
+			lastWriteVersion,
+			newWorkflow.ExecutionState.State,
+			shardID,
+			rowTypeExecution,
 			namespaceID,
 			workflowID,
+			permanentRunID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID,
+			request.PreviousRunID,
+		)
+		requestCurrentRunID = request.PreviousRunID
+
+	case p.CreateWorkflowModeWorkflowIDReuse:
+		batch.Query(templateUpdateCurrentWorkflowExecutionForNewQuery,
 			runID,
-			newWorkflow.ExecutionState.State,
+			newWorkflow.ExecutionStateBlob.Data,
+			newWorkflow.ExecutionStateBlob.EncodingType.String(),
 			lastWriteVersion,
+			newWorkflow.ExecutionState.State,
+			shardID,
+			rowTypeExecution,
+			namespaceID,
+			workflowID,
+			permanentRunID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID,
 			request.PreviousRunID,
 			request.PreviousLastWriteVersion,
-			newWorkflow.ExecutionStateBlob,
-		); err != nil {
-			return nil, err
-		}
+			enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		)
+
+		requestCurrentRunID = request.PreviousRunID
+
+	case p.CreateWorkflowModeBrandNew:
+		batch.Query(templateCreateCurrentWorkflowExecutionQuery,
+			shardID,
+			rowTypeExecution,
+			namespaceID,
+			workflowID,
+			permanentRunID,
+			defaultVisibilityTimestamp,
+			rowTypeExecutionTaskID,
+			runID,
+			newWorkflow.ExecutionStateBlob.Data,
+			newWorkflow.ExecutionStateBlob.EncodingType.String(),
+			lastWriteVersion,
+			newWorkflow.ExecutionState.State,
+		)
+
+		requestCurrentRunID = ""
+
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown mode: %v", request.Mode))
 	}
 
 	if err := applyWorkflowSnapshotBatchAsNew(batch,
@@ -914,8 +962,8 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 		request.RangeID,
 	)
 
-	previous := make(map[string]interface{})
-	applied, iter, err := d.session.MapExecuteBatchCAS(batch, previous)
+	record := make(map[string]interface{})
+	applied, iter, err := d.session.MapExecuteBatchCAS(batch, record)
 	if err != nil {
 		return nil, gocql.ConvertError("CreateWorkflowExecution", err)
 	}
@@ -924,128 +972,20 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 	}()
 
 	if !applied {
-		// There can be two reasons why the query does not get applied. Either the RangeID has changed, or
-		// the workflow is already started. Check the row info returned by Cassandra to figure out which one it is.
-	GetFailureReasonLoop:
-		for {
-			rowType, ok := previous["type"].(int)
-			if !ok {
-				// This should never happen, as all our rows have the type field.
-				break GetFailureReasonLoop
-			}
-			runID := gocql.UUIDToString(previous["run_id"])
-
-			if rowType == rowTypeShard {
-				if rangeID, ok := previous["range_id"].(int64); ok && rangeID != request.RangeID {
-					// CreateWorkflowExecution failed because rangeID was modified
-					return nil, &p.ShardOwnershipLostError{
-						ShardID: request.ShardID,
-						Msg: fmt.Sprintf("Failed to create workflow execution.  Request RangeID: %v, Actual RangeID: %v",
-							request.RangeID, rangeID),
-					}
-				}
-
-			} else if rowType == rowTypeExecution && runID == permanentRunID {
-				var columns []string
-				for k, v := range previous {
-					columns = append(columns, fmt.Sprintf("%s=%v", k, v))
-				}
-
-				if state, ok := previous["execution_state"].([]byte); ok {
-					stateEncoding, ok := previous["execution_state_encoding"].(string)
-					if !ok {
-						return nil, newPersistedTypeMismatchError("execution_state_encoding", "", stateEncoding, previous)
-					}
-
-					// TODO: fix blob
-					protoState, err := serialization.WorkflowExecutionStateFromBlob(state, stateEncoding)
-					if err != nil {
-						return nil, err
-					}
-
-					lastWriteVersion := previous["workflow_last_write_version"].(int64)
-
-					msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeID: %v, columns: (%v)",
-						newWorkflow.WorkflowID, protoState.RunId, request.RangeID, strings.Join(columns, ","))
-					if request.Mode == p.CreateWorkflowModeBrandNew {
-						// todo: Look at moving these errors upstream to manager
-						return nil, &p.WorkflowExecutionAlreadyStartedError{
-							Msg:              msg,
-							StartRequestID:   protoState.CreateRequestId,
-							RunID:            protoState.RunId,
-							State:            protoState.State,
-							Status:           protoState.Status,
-							LastWriteVersion: lastWriteVersion,
-						}
-					}
-					return nil, &p.CurrentWorkflowConditionFailedError{Msg: msg}
-				}
-
-				if prevRunID := gocql.UUIDToString(previous["current_run_id"]); prevRunID != request.PreviousRunID {
-					// currentRunID on previous run has been changed, return to caller to handle
-					msg := fmt.Sprintf("Workflow execution creation condition failed by mismatch runID. WorkflowId: %v, Expected Current RunId: %v, Actual Current RunId: %v",
-						newWorkflow.WorkflowID, request.PreviousRunID, prevRunID)
-					return nil, &p.CurrentWorkflowConditionFailedError{Msg: msg}
-				}
-
-				msg := fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, CurrentRunId: %v, columns: (%v)",
-					newWorkflow.WorkflowID, newWorkflow.ExecutionState.RunId, strings.Join(columns, ","))
-				return nil, &p.CurrentWorkflowConditionFailedError{Msg: msg}
-			} else if rowType == rowTypeExecution && runID == newWorkflow.ExecutionState.RunId {
-				msg := fmt.Sprintf("Workflow execution already running. WorkflowId: %v, RunId: %v, rangeId: %v",
-					newWorkflow.WorkflowID, newWorkflow.ExecutionState.RunId, request.RangeID)
-
-				mutableState, err := mutableStateFromRow(previous)
-				if err != nil {
-					return nil, serviceerror.NewInternal(fmt.Sprintf("CreateWorkflowExecution operation error check failed. Error: %v", err))
-				}
-				lastWriteVersion := common.EmptyVersion
-				// TODO: fix blob
-				executionInfo, err := serialization.WorkflowExecutionInfoFromBlob(mutableState.ExecutionInfo.Data, mutableState.ExecutionInfo.EncodingType.String())
-				if err != nil {
-					return nil, serviceerror.NewInternal(fmt.Sprintf("CreateWorkflowExecution operation error check failed. Error: %v", err))
-				}
-				if executionInfo.VersionHistories != nil {
-					currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
-					if err != nil {
-						return nil, serviceerror.NewInternal(fmt.Sprintf("CreateWorkflowExecution operation error check failed. Error: %v", err))
-					}
-					lastItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
-					if err != nil {
-						return nil, serviceerror.NewInternal(fmt.Sprintf("CreateWorkflowExecution operation error check failed. Error: %v", err))
-					}
-					lastWriteVersion = lastItem.GetVersion()
-				}
-				return nil, &p.WorkflowExecutionAlreadyStartedError{
-					Msg:              msg,
-					StartRequestID:   newWorkflow.ExecutionState.CreateRequestId,
-					RunID:            newWorkflow.ExecutionState.RunId,
-					State:            newWorkflow.ExecutionState.State,
-					Status:           newWorkflow.ExecutionState.Status,
-					LastWriteVersion: lastWriteVersion,
-				}
-			}
-
-			previous = make(map[string]interface{})
-			if !iter.MapScan(previous) {
-				// Cassandra returns the actual row that caused a condition failure, so we should always return
-				// from the checks above, but just in case.
-				break GetFailureReasonLoop
-			}
-		}
-
-		// At this point we only know that the write was not applied.
-		// It's much safer to return ShardOwnershipLostError as the default to force the application to reload
-		// shard to recover from such errors
-		var columns []string
-		for k, v := range previous {
-			columns = append(columns, fmt.Sprintf("%s=%v", k, v))
-		}
-		return nil, &p.ShardOwnershipLostError{
-			ShardID: request.ShardID,
-			Msg: fmt.Sprintf("Failed to create workflow execution.  Request RangeID: %v, columns: (%v)",
-				request.RangeID, strings.Join(columns, ",")),
-		}
+		return nil, convertErrors(
+			record,
+			iter,
+			shardID,
+			request.RangeID,
+			requestCurrentRunID,
+			[]executionCASCondition{{
+				runID: newWorkflow.ExecutionState.RunId,
+				// dbVersion is for CAS, so the db record version will be set to `updateWorkflow.DBRecordVersion`
+				// while CAS on `updateWorkflow.DBRecordVersion - 1`
+				dbVersion:   newWorkflow.DBRecordVersion - 1,
+				nextEventID: newWorkflow.Condition,
+			}},
+		)
 	}
 
 	return &p.CreateWorkflowExecutionResponse{}, nil
@@ -1172,20 +1112,22 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(
 			if namespaceID != newNamespaceID {
 				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another namespace"))
 			}
-			if err := createOrUpdateCurrentExecution(batch,
-				p.CreateWorkflowModeContinueAsNew,
-				request.ShardID,
+
+			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
+				newRunID,
+				newWorkflow.ExecutionStateBlob.Data,
+				newWorkflow.ExecutionStateBlob.EncodingType.String(),
+				newLastWriteVersion,
+				newWorkflow.ExecutionState.State,
+				shardID,
+				rowTypeExecution,
 				newNamespaceID,
 				newWorkflowID,
-				newRunID,
-				newWorkflow.ExecutionState.State,
-				newLastWriteVersion,
+				permanentRunID,
+				defaultVisibilityTimestamp,
+				rowTypeExecutionTaskID,
 				runID,
-				0, // for continue as new, this is not used
-				newWorkflow.ExecutionStateBlob,
-			); err != nil {
-				return err
-			}
+			)
 
 		} else {
 			lastWriteVersion := updateWorkflow.LastWriteVersion
@@ -1336,6 +1278,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(
 				rowTypeExecutionTaskID,
 				currentRunID,
 			)
+
 		} else {
 			// reset workflow is current
 			currentRunID = resetWorkflow.ExecutionState.RunId
