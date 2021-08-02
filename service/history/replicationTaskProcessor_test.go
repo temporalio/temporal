@@ -240,6 +240,7 @@ func (s *replicationTaskProcessorSuite) TestHandleReplicationDLQTask_SyncActivit
 	workflowID := uuid.New()
 	runID := uuid.NewRandom().String()
 	request := &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           s.mockShard.GetShardID(),
 		SourceClusterName: cluster.TestAlternativeClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId: namespaceID,
@@ -260,6 +261,7 @@ func (s *replicationTaskProcessorSuite) TestHandleReplicationDLQTask_History() {
 	runID := uuid.NewRandom().String()
 
 	request := &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           s.mockShard.GetShardID(),
 		SourceClusterName: cluster.TestAlternativeClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId:  namespaceID,
@@ -291,6 +293,7 @@ func (s *replicationTaskProcessorSuite) TestConvertTaskToDLQTask_SyncActivity() 
 		}},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           s.mockShard.GetShardID(),
 		SourceClusterName: cluster.TestAlternativeClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId: namespaceID,
@@ -337,6 +340,7 @@ func (s *replicationTaskProcessorSuite) TestConvertTaskToDLQTask_History() {
 		},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           s.mockShard.GetShardID(),
 		SourceClusterName: cluster.TestAlternativeClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId:  namespaceID,
@@ -373,6 +377,7 @@ func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
 
 	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID - 1
 	s.mockExecutionManager.EXPECT().RangeCompleteReplicationTask(&persistence.RangeCompleteReplicationTaskRequest{
+		ShardID:            s.mockShard.GetShardID(),
 		InclusiveEndTaskID: ackedTaskID,
 	}).Return(nil)
 	err = s.replicationTaskProcessor.cleanupReplicationTasks()

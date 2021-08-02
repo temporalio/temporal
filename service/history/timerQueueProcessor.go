@@ -325,6 +325,7 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 
 	if lowerAckLevel.VisibilityTimestamp.Before(upperAckLevel.VisibilityTimestamp) {
 		err := t.shard.GetExecutionManager().RangeCompleteTimerTask(&persistence.RangeCompleteTimerTaskRequest{
+			ShardID:                 t.shard.GetShardID(),
 			InclusiveBeginTimestamp: lowerAckLevel.VisibilityTimestamp,
 			ExclusiveEndTimestamp:   upperAckLevel.VisibilityTimestamp,
 		})

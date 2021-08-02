@@ -115,6 +115,7 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 
 	ackLevel := r.shard.GetReplicatorDLQAckLevel(sourceCluster)
 	resp, err := r.shard.GetExecutionManager().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
+		ShardID:           r.shard.GetShardID(),
 		SourceClusterName: sourceCluster,
 		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
 			MinTaskID:     ackLevel,
@@ -169,6 +170,7 @@ func (r *replicationDLQHandlerImpl) purgeMessages(
 	ackLevel := r.shard.GetReplicatorDLQAckLevel(sourceCluster)
 	err := r.shard.GetExecutionManager().RangeDeleteReplicationTaskFromDLQ(
 		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
+			ShardID:              r.shard.GetShardID(),
 			SourceClusterName:    sourceCluster,
 			ExclusiveBeginTaskID: ackLevel,
 			InclusiveEndTaskID:   lastMessageID,
@@ -219,6 +221,7 @@ func (r *replicationDLQHandlerImpl) mergeMessages(
 
 	err = r.shard.GetExecutionManager().RangeDeleteReplicationTaskFromDLQ(
 		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
+			ShardID:              r.shard.GetShardID(),
 			SourceClusterName:    sourceCluster,
 			ExclusiveBeginTaskID: ackLevel,
 			InclusiveEndTaskID:   lastMessageID,

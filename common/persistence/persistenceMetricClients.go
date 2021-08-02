@@ -220,10 +220,6 @@ func (p *workflowExecutionPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *workflowExecutionPersistenceClient) GetShardID() int32 {
-	return p.persistence.GetShardID()
-}
-
 func (p *workflowExecutionPersistenceClient) CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceCreateWorkflowExecutionScope, metrics.PersistenceRequests)
 
@@ -640,16 +636,16 @@ func (p *workflowExecutionPersistenceClient) RangeCompleteTimerTask(request *Ran
 
 func (p *workflowExecutionPersistenceClient) updateErrorMetric(scope int, err error) {
 	switch err.(type) {
-	case *WorkflowExecutionAlreadyStartedError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrExecutionAlreadyStartedCounter)
 	case *serviceerror.NotFound:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
 	case *ShardOwnershipLostError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardOwnershipLostCounter)
-	case *ConditionFailedError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
 	case *CurrentWorkflowConditionFailedError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrCurrentWorkflowConditionFailedCounter)
+	case *WorkflowConditionFailedError:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrWorkflowConditionFailedCounter)
+	case *ConditionFailedError:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
 	case *TimeoutError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
@@ -658,7 +654,7 @@ func (p *workflowExecutionPersistenceClient) updateErrorMetric(scope int, err er
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	default:
 		p.logger.Error("Operation failed with internal error.",
-			tag.Error(err), tag.MetricScope(scope), tag.ShardID(p.GetShardID()))
+			tag.Error(err), tag.MetricScope(scope))
 		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	}
 }

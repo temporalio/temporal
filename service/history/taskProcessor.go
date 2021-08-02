@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -64,7 +65,9 @@ type (
 
 		attempt   int
 		startTime time.Time
-		logger    log.Logger
+
+		userLatency time.Duration
+		logger      log.Logger
 
 		// used by 2DC task life cycle
 		// TODO remove when NDC task life cycle is implemented
@@ -100,6 +103,7 @@ func newTaskInfo(
 		task:              task,
 		attempt:           1,
 		startTime:         time.Now().UTC(), // used for metrics
+		userLatency:       0,
 		logger:            logger,
 		shouldProcessTask: true,
 	}
@@ -260,12 +264,17 @@ func (t *taskProcessor) processTaskOnce(
 	default:
 	}
 
+	ctx := context.Background()
 	startTime := t.timeSource.Now()
-	scopeIdx, err := task.processor.process(task)
+	scopeIdx, err := task.processor.process(ctx, task)
+	if duration, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency); ok {
+		task.userLatency += time.Duration(duration)
+	}
 	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getNamespaceTagByID(task.task.GetNamespaceId()))
 	if task.shouldProcessTask {
 		scope.IncCounter(metrics.TaskRequests)
 		scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(startTime))
+		scope.RecordTimer(metrics.TaskNoUserProcessingLatency, time.Since(startTime)-task.userLatency)
 	}
 
 	return scope, err
@@ -337,13 +346,15 @@ func (t *taskProcessor) ackTaskOnce(
 	scope metrics.Scope,
 	task *taskInfo,
 ) {
-
 	task.processor.complete(task)
 	if task.shouldProcessTask {
 		goVisibilityTime := timestamp.TimeValue(task.task.GetVisibilityTime())
 		scope.RecordDistribution(metrics.TaskAttemptTimer, task.attempt)
 		scope.RecordTimer(metrics.TaskLatency, time.Since(task.startTime))
 		scope.RecordTimer(metrics.TaskQueueLatency, time.Since(goVisibilityTime))
+		scope.RecordTimer(metrics.TaskUserLatency, task.userLatency)
+		scope.RecordTimer(metrics.TaskNoUserLatency, time.Since(task.startTime)-task.userLatency)
+		scope.RecordTimer(metrics.TaskNoUserQueueLatency, time.Since(goVisibilityTime)-task.userLatency)
 	}
 }
 

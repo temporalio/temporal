@@ -108,7 +108,9 @@ func New(
 func (s *Scanner) Start() error {
 	workerOpts := worker.Options{
 		MaxConcurrentActivityExecutionSize:     maxConcurrentActivityExecutionSize,
-		MaxConcurrentWorkflowTaskExecutionSize: maxConcurrentWorkflowTaskExecutionSize,
+		MaxConcurrentWorkflowTaskExecutionSize: maxConcurrentWorkflowExecutionSize,
+		MaxConcurrentActivityTaskPollers:       maxConcurrentActivityTaskPollers,
+		MaxConcurrentWorkflowTaskPollers:       maxConcurrentWorkflowTaskPollers,
 		BackgroundActivityContext:              context.WithValue(context.Background(), scannerContextKey, s.context),
 	}
 

@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"errors"
 	"sync/atomic"
 	"time"
@@ -275,6 +276,7 @@ func (t *visibilityQueueProcessorImpl) completeTask() error {
 
 	if lowerAckLevel < upperAckLevel {
 		err := t.shard.GetExecutionManager().RangeCompleteVisibilityTask(&persistence.RangeCompleteVisibilityTaskRequest{
+			ShardID:              t.shard.GetShardID(),
 			ExclusiveBeginTaskID: lowerAckLevel,
 			InclusiveEndTaskID:   upperAckLevel,
 		})
@@ -306,11 +308,12 @@ func (t *visibilityQueueProcessorImpl) complete(
 }
 
 func (t *visibilityQueueProcessorImpl) process(
+	ctx context.Context,
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
 	metricScope := getVisibilityTaskMetricsScope(taskInfo.task.GetTaskType())
-	return metricScope, t.taskExecutor.execute(taskInfo.task, taskInfo.shouldProcessTask)
+	return metricScope, t.taskExecutor.execute(ctx, taskInfo.task, taskInfo.shouldProcessTask)
 }
 
 // processor interfaces
@@ -319,6 +322,7 @@ func (t *visibilityQueueProcessorImpl) readTasks(
 ) ([]queueTaskInfo, bool, error) {
 
 	response, err := t.executionManager.GetVisibilityTasks(&persistence.GetVisibilityTasksRequest{
+		ShardID:      t.shard.GetShardID(),
 		ReadLevel:    readLevel,
 		MaxReadLevel: t.maxReadAckLevel(),
 		BatchSize:    t.options.BatchSize(),

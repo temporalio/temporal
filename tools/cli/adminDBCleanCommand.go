@@ -176,7 +176,7 @@ func cleanShard(
 		return report
 	}
 	defer shardCorruptedFile.Close()
-	execStore := cassp.NewExecutionStore(shardID, session, log.NewNoopLogger())
+	execStore := cassp.NewExecutionStore(session, log.NewNoopLogger())
 
 	scanner := bufio.NewScanner(shardCorruptedFile)
 	for scanner.Scan() {
@@ -196,6 +196,7 @@ func cleanShard(
 		}
 
 		deleteConcreteReq := &persistence.DeleteWorkflowExecutionRequest{
+			ShardID:     shardID,
 			NamespaceID: ce.NamespaceID,
 			WorkflowID:  ce.WorkflowID,
 			RunID:       ce.RunID,
@@ -211,6 +212,7 @@ func cleanShard(
 		successfullyCleanWriter.Add(&ce)
 		if ce.CorruptedExceptionMetadata.CorruptionType != OpenExecutionInvalidCurrentExecution {
 			deleteCurrentReq := &persistence.DeleteCurrentWorkflowExecutionRequest{
+				ShardID:     shardID,
 				NamespaceID: ce.NamespaceID,
 				WorkflowID:  ce.WorkflowID,
 				RunID:       ce.RunID,

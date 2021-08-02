@@ -42,7 +42,6 @@ import (
 
 type sqlExecutionStore struct {
 	SqlStore
-	shardID int32
 }
 
 var _ p.ExecutionStore = (*sqlExecutionStore)(nil)
@@ -51,11 +50,9 @@ var _ p.ExecutionStore = (*sqlExecutionStore)(nil)
 func NewSQLExecutionStore(
 	db sqlplugin.DB,
 	logger log.Logger,
-	shardID int32,
 ) (p.ExecutionStore, error) {
 
 	return &sqlExecutionStore{
-		shardID:  shardID,
 		SqlStore: NewSqlStore(db, logger),
 	}, nil
 }
@@ -64,12 +61,13 @@ func NewSQLExecutionStore(
 func (m *sqlExecutionStore) txExecuteShardLocked(
 	ctx context.Context,
 	operation string,
+	shardID int32,
 	rangeID int64,
 	fn func(tx sqlplugin.Tx) error,
 ) error {
 
 	return m.txExecute(ctx, operation, func(tx sqlplugin.Tx) error {
-		if err := readLockShard(ctx, tx, m.shardID, rangeID); err != nil {
+		if err := readLockShard(ctx, tx, shardID, rangeID); err != nil {
 			return err
 		}
 		err := fn(tx)
@@ -80,10 +78,6 @@ func (m *sqlExecutionStore) txExecuteShardLocked(
 	})
 }
 
-func (m *sqlExecutionStore) GetShardID() int32 {
-	return m.shardID
-}
-
 func (m *sqlExecutionStore) CreateWorkflowExecution(
 	request *p.InternalCreateWorkflowExecutionRequest,
 ) (response *p.CreateWorkflowExecutionResponse, err error) {
@@ -91,6 +85,7 @@ func (m *sqlExecutionStore) CreateWorkflowExecution(
 	defer cancel()
 	err = m.txExecuteShardLocked(ctx,
 		"CreateWorkflowExecution",
+		request.ShardID,
 		request.RangeID,
 		func(tx sqlplugin.Tx) error {
 			response, err = m.createWorkflowExecutionTx(ctx, tx, request)
@@ -107,101 +102,118 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 
 	newWorkflow := request.NewWorkflowSnapshot
 	lastWriteVersion := newWorkflow.LastWriteVersion
-	shardID := m.shardID
+	shardID := request.ShardID
 	namespaceID := primitives.MustParseUUID(newWorkflow.NamespaceID)
 	workflowID := newWorkflow.WorkflowID
 	runID := primitives.MustParseUUID(newWorkflow.RunID)
 
 	var err error
-	var row *sqlplugin.CurrentExecutionsRow
-	if row, err = lockCurrentExecutionIfExists(ctx,
+	var currentRow *sqlplugin.CurrentExecutionsRow
+	if currentRow, err = lockCurrentExecutionIfExists(ctx,
 		tx,
-		m.shardID,
+		shardID,
 		namespaceID,
 		workflowID,
 	); err != nil {
 		return nil, err
 	}
 
-	// current workflow record check
-	if row != nil {
-		// current run ID, last write version, current workflow state check
-		switch request.Mode {
-		case p.CreateWorkflowModeBrandNew:
-			return nil, &p.WorkflowExecutionAlreadyStartedError{
-				Msg:              fmt.Sprintf("Workflow execution already running. WorkflowId: %v", row.WorkflowID),
-				StartRequestID:   row.CreateRequestID,
-				RunID:            row.RunID.String(),
-				State:            row.State,
-				Status:           row.Status,
-				LastWriteVersion: row.LastWriteVersion,
+	// current run ID, last write version, current workflow state check
+	switch request.Mode {
+	case p.CreateWorkflowModeBrandNew:
+		if currentRow == nil {
+			// current row does not exists, suits the create mode
+		} else {
+			if currentRow.RunID.String() != request.PreviousRunID {
+				return nil, extractCurrentWorkflowConflictError(
+					currentRow,
+					fmt.Sprintf(
+						"Workflow execution creation condition failed. workflow ID: %v, current run ID: %v, request run ID: %v",
+						workflowID,
+						currentRow.RunID.String(),
+						request.PreviousRunID,
+					),
+				)
 			}
-
-		case p.CreateWorkflowModeWorkflowIDReuse:
-			if request.PreviousLastWriteVersion != row.LastWriteVersion {
-				return nil, &p.CurrentWorkflowConditionFailedError{
-					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
-						"LastWriteVersion: %v, PreviousLastWriteVersion: %v",
-						workflowID, row.LastWriteVersion, request.PreviousLastWriteVersion),
-					RequestID:        row.CreateRequestID,
-					RunID:            row.RunID.String(),
-					State:            row.State,
-					LastWriteVersion: row.LastWriteVersion,
-				}
-			}
-			if row.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-				return nil, &p.CurrentWorkflowConditionFailedError{
-					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
-						"State: %v, Expected: %v",
-						workflowID, row.State, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED),
-					RequestID:        row.CreateRequestID,
-					RunID:            row.RunID.String(),
-					State:            row.State,
-					LastWriteVersion: row.LastWriteVersion,
-				}
-			}
-			runIDStr := row.RunID.String()
-			if runIDStr != request.PreviousRunID {
-				return nil, &p.CurrentWorkflowConditionFailedError{
-					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
-						"RunId: %v, PreviousRunId: %v",
-						workflowID, runIDStr, request.PreviousRunID),
-					RequestID:        row.CreateRequestID,
-					RunID:            row.RunID.String(),
-					State:            row.State,
-					LastWriteVersion: row.LastWriteVersion,
-				}
-			}
-
-		case p.CreateWorkflowModeZombie:
-			// zombie workflow creation with existence of current record, this is a noop
-			if err := assertRunIDMismatch(primitives.MustParseUUID(newWorkflow.ExecutionState.RunId), row.RunID); err != nil {
-				return nil, err
-			}
-
-		case p.CreateWorkflowModeContinueAsNew:
-			runIDStr := row.RunID.String()
-			if runIDStr != request.PreviousRunID {
-				return nil, &p.CurrentWorkflowConditionFailedError{
-					Msg: fmt.Sprintf("Workflow execution creation condition failed. WorkflowId: %v, "+
-						"RunId: %v, PreviousRunId: %v",
-						workflowID, runIDStr, request.PreviousRunID),
-					RequestID:        row.CreateRequestID,
-					RunID:            row.RunID.String(),
-					State:            row.State,
-					LastWriteVersion: row.LastWriteVersion,
-				}
-			}
-
-		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("CreteWorkflowExecution: unknown mode: %v", request.Mode))
+			// current run ID is already request ID
 		}
+
+	case p.CreateWorkflowModeWorkflowIDReuse:
+		if currentRow == nil {
+			return nil, extractCurrentWorkflowConflictError(currentRow, "")
+		}
+
+		// currentRow != nil
+
+		if currentRow.RunID.String() != request.PreviousRunID {
+			return nil, extractCurrentWorkflowConflictError(
+				currentRow,
+				fmt.Sprintf(
+					"Workflow execution creation condition failed. workflow ID: %v, current run ID: %v, request run ID: %v",
+					workflowID,
+					currentRow.RunID.String(),
+					request.PreviousRunID,
+				),
+			)
+		}
+		if request.PreviousLastWriteVersion != currentRow.LastWriteVersion {
+			return nil, extractCurrentWorkflowConflictError(
+				currentRow,
+				fmt.Sprintf(
+					"Workflow execution creation condition failed. workflow ID: %v, current last write version: %v, request last write version: %v",
+					workflowID,
+					currentRow.LastWriteVersion,
+					request.PreviousLastWriteVersion,
+				),
+			)
+		}
+		if currentRow.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+			return nil, extractCurrentWorkflowConflictError(
+				currentRow,
+				fmt.Sprintf(
+					"Workflow execution creation condition failed. workflow ID: %v, current state: %v, request state: %v",
+					workflowID,
+					currentRow.State,
+					enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+				),
+			)
+		}
+
+	case p.CreateWorkflowModeZombie:
+		if err := assertRunIDMismatch(
+			primitives.MustParseUUID(newWorkflow.ExecutionState.RunId),
+			currentRow,
+		); err != nil {
+			return nil, err
+		}
+
+	case p.CreateWorkflowModeContinueAsNew:
+		if currentRow == nil {
+			return nil, extractCurrentWorkflowConflictError(currentRow, "")
+		}
+
+		// currentRow
+
+		if currentRow.RunID.String() != request.PreviousRunID {
+			return nil, extractCurrentWorkflowConflictError(
+				currentRow,
+				fmt.Sprintf(
+					"Workflow execution creation condition failed. workflow ID: %v, current run ID: %v, request run ID: %v",
+					workflowID,
+					currentRow.RunID.String(),
+					request.PreviousRunID,
+				),
+			)
+		}
+
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("CreteWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
 	if err := createOrUpdateCurrentExecution(ctx,
 		tx,
 		request.Mode,
-		m.shardID,
+		request.ShardID,
 		namespaceID,
 		workflowID,
 		runID,
@@ -233,7 +245,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 	runID := primitives.MustParseUUID(request.Execution.RunId)
 	wfID := request.Execution.WorkflowId
 	executionsRow, err := m.Db.SelectFromExecutions(ctx, sqlplugin.ExecutionsFilter{
-		ShardID:     m.shardID,
+		ShardID:     request.ShardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  wfID,
 		RunID:       runID,
@@ -257,7 +269,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 
 	state.ActivityInfos, err = getActivityInfoMap(ctx,
 		m.Db,
-		m.shardID,
+		request.ShardID,
 		namespaceID,
 		wfID,
 		runID,
@@ -268,7 +280,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 
 	state.TimerInfos, err = getTimerInfoMap(ctx,
 		m.Db,
-		m.shardID,
+		request.ShardID,
 		namespaceID,
 		wfID,
 		runID,
@@ -279,7 +291,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 
 	state.ChildExecutionInfos, err = getChildExecutionInfoMap(ctx,
 		m.Db,
-		m.shardID,
+		request.ShardID,
 		namespaceID,
 		wfID,
 		runID,
@@ -290,7 +302,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 
 	state.RequestCancelInfos, err = getRequestCancelInfoMap(ctx,
 		m.Db,
-		m.shardID,
+		request.ShardID,
 		namespaceID,
 		wfID,
 		runID,
@@ -301,7 +313,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 
 	state.SignalInfos, err = getSignalInfoMap(ctx,
 		m.Db,
-		m.shardID,
+		request.ShardID,
 		namespaceID,
 		wfID,
 		runID,
@@ -312,7 +324,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 
 	state.BufferedEvents, err = getBufferedEvents(ctx,
 		m.Db,
-		m.shardID,
+		request.ShardID,
 		namespaceID,
 		wfID,
 		runID,
@@ -323,7 +335,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 
 	state.SignalRequestedIDs, err = getSignalsRequested(ctx,
 		m.Db,
-		m.shardID,
+		request.ShardID,
 		namespaceID,
 		wfID,
 		runID,
@@ -345,6 +357,7 @@ func (m *sqlExecutionStore) UpdateWorkflowExecution(
 	defer cancel()
 	return m.txExecuteShardLocked(ctx,
 		"UpdateWorkflowExecution",
+		request.ShardID,
 		request.RangeID,
 		func(tx sqlplugin.Tx) error {
 			return m.updateWorkflowExecutionTx(ctx, tx, request)
@@ -363,7 +376,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 	namespaceID := primitives.MustParseUUID(updateWorkflow.NamespaceID)
 	workflowID := updateWorkflow.WorkflowID
 	runID := primitives.MustParseUUID(updateWorkflow.ExecutionState.RunId)
-	shardID := m.shardID
+	shardID := request.ShardID
 
 	switch request.Mode {
 	case p.UpdateWorkflowModeBypassCurrent:
@@ -453,6 +466,7 @@ func (m *sqlExecutionStore) ConflictResolveWorkflowExecution(
 	defer cancel()
 	return m.txExecuteShardLocked(ctx,
 		"ConflictResolveWorkflowExecution",
+		request.ShardID,
 		request.RangeID,
 		func(tx sqlplugin.Tx) error {
 			return m.conflictResolveWorkflowExecutionTx(ctx, tx, request)
@@ -469,7 +483,7 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 	resetWorkflow := request.ResetWorkflowSnapshot
 	newWorkflow := request.NewWorkflowSnapshot
 
-	shardID := m.shardID
+	shardID := request.ShardID
 
 	namespaceID := primitives.MustParseUUID(resetWorkflow.NamespaceID)
 	workflowID := resetWorkflow.WorkflowID
@@ -505,7 +519,7 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 
 			if err := assertRunIDAndUpdateCurrentExecution(ctx,
 				tx,
-				m.shardID,
+				shardID,
 				namespaceID,
 				workflowID,
 				runID,
@@ -524,7 +538,7 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 
 			if err := assertRunIDAndUpdateCurrentExecution(ctx,
 				tx,
-				m.shardID,
+				shardID,
 				namespaceID,
 				workflowID,
 				runID,
@@ -581,7 +595,7 @@ func (m *sqlExecutionStore) DeleteWorkflowExecution(
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.RunID)
 	_, err := m.Db.DeleteFromExecutions(ctx, sqlplugin.ExecutionsFilter{
-		ShardID:     m.shardID,
+		ShardID:     request.ShardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  request.WorkflowID,
 		RunID:       runID,
@@ -601,7 +615,7 @@ func (m *sqlExecutionStore) DeleteCurrentWorkflowExecution(
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
 	runID := primitives.MustParseUUID(request.RunID)
 	_, err := m.Db.DeleteFromCurrentExecutions(ctx, sqlplugin.CurrentExecutionsFilter{
-		ShardID:     m.shardID,
+		ShardID:     request.ShardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  request.WorkflowID,
 		RunID:       runID,
@@ -615,7 +629,7 @@ func (m *sqlExecutionStore) GetCurrentExecution(
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	row, err := m.Db.SelectFromCurrentExecutions(ctx, sqlplugin.CurrentExecutionsFilter{
-		ShardID:     m.shardID,
+		ShardID:     request.ShardID,
 		NamespaceID: primitives.MustParseUUID(request.NamespaceID),
 		WorkflowID:  request.WorkflowID,
 	})

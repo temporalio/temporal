@@ -71,7 +71,7 @@ func TestMySQLHistoryStoreSuite(t *testing.T) {
 		testMySQLClusterName,
 		logger,
 	)
-	store, err := factory.NewExecutionStore(-1)
+	store, err := factory.NewExecutionStore()
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}

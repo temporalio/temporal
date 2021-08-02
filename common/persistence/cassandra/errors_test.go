@@ -68,21 +68,24 @@ func (s *cassandraErrorsSuite) TearDownTest() {
 
 func (s *cassandraErrorsSuite) TestSortErrors_Sorted() {
 	shardOwnershipLostErr := &p.ShardOwnershipLostError{}
-	concurrentWorkflowErr := &p.CurrentWorkflowConditionFailedError{}
-	workflowConditionFailedErr := &p.ConditionFailedError{}
+	currentWorkflowErr := &p.CurrentWorkflowConditionFailedError{}
+	workflowErr := &p.WorkflowConditionFailedError{}
+	genericErr := &p.ConditionFailedError{}
 	randomErr := errors.New("random error")
 
 	expectedErrors := []error{
 		shardOwnershipLostErr,
-		concurrentWorkflowErr,
-		workflowConditionFailedErr,
+		currentWorkflowErr,
+		workflowErr,
+		genericErr,
 		randomErr,
 	}
 
 	errorsCaseSorted := []error{
 		shardOwnershipLostErr,
-		concurrentWorkflowErr,
-		workflowConditionFailedErr,
+		currentWorkflowErr,
+		workflowErr,
+		genericErr,
 		randomErr,
 	}
 	s.Equal(expectedErrors, sortErrors(errorsCaseSorted))
@@ -90,21 +93,24 @@ func (s *cassandraErrorsSuite) TestSortErrors_Sorted() {
 
 func (s *cassandraErrorsSuite) TestSortErrors_ReverseSorted() {
 	shardOwnershipLostErr := &p.ShardOwnershipLostError{}
-	concurrentWorkflowErr := &p.CurrentWorkflowConditionFailedError{}
-	workflowConditionFailedErr := &p.ConditionFailedError{}
+	currentWorkflowErr := &p.CurrentWorkflowConditionFailedError{}
+	workflowErr := &p.WorkflowConditionFailedError{}
+	genericErr := &p.ConditionFailedError{}
 	randomErr := errors.New("random error")
 
 	expectedErrors := []error{
 		shardOwnershipLostErr,
-		concurrentWorkflowErr,
-		workflowConditionFailedErr,
+		currentWorkflowErr,
+		workflowErr,
+		genericErr,
 		randomErr,
 	}
 
 	errorsCaseReverseSorted := []error{
 		randomErr,
-		workflowConditionFailedErr,
-		concurrentWorkflowErr,
+		genericErr,
+		workflowErr,
+		currentWorkflowErr,
 		shardOwnershipLostErr,
 	}
 	s.Equal(expectedErrors, sortErrors(errorsCaseReverseSorted))
@@ -112,21 +118,24 @@ func (s *cassandraErrorsSuite) TestSortErrors_ReverseSorted() {
 
 func (s *cassandraErrorsSuite) TestSortErrors_Random() {
 	shardOwnershipLostErr := &p.ShardOwnershipLostError{}
-	concurrentWorkflowErr := &p.CurrentWorkflowConditionFailedError{}
-	workflowConditionFailedErr := &p.ConditionFailedError{}
+	currentWorkflowErr := &p.CurrentWorkflowConditionFailedError{}
+	workflowErr := &p.WorkflowConditionFailedError{}
+	genericErr := &p.ConditionFailedError{}
 	randomErr := errors.New("random error")
 
 	expectedErrors := []error{
 		shardOwnershipLostErr,
-		concurrentWorkflowErr,
-		workflowConditionFailedErr,
+		currentWorkflowErr,
+		workflowErr,
+		genericErr,
 		randomErr,
 	}
 
 	errorsCaseShuffled := []error{
 		randomErr,
-		workflowConditionFailedErr,
-		concurrentWorkflowErr,
+		genericErr,
+		workflowErr,
+		currentWorkflowErr,
 		shardOwnershipLostErr,
 	}
 	rand.Shuffle(len(errorsCaseShuffled), func(i int, j int) {
@@ -137,13 +146,15 @@ func (s *cassandraErrorsSuite) TestSortErrors_Random() {
 
 func (s *cassandraErrorsSuite) TestSortErrors_One() {
 	shardOwnershipLostErr := &p.ShardOwnershipLostError{}
-	concurrentWorkflowErr := &p.CurrentWorkflowConditionFailedError{}
-	workflowConditionFailedErr := &p.ConditionFailedError{}
+	currentWorkflowErr := &p.CurrentWorkflowConditionFailedError{}
+	workflowErr := &p.WorkflowConditionFailedError{}
+	genericErr := &p.ConditionFailedError{}
 	randomErr := errors.New("random error")
 
 	s.Equal([]error{shardOwnershipLostErr}, sortErrors([]error{shardOwnershipLostErr}))
-	s.Equal([]error{concurrentWorkflowErr}, sortErrors([]error{concurrentWorkflowErr}))
-	s.Equal([]error{workflowConditionFailedErr}, sortErrors([]error{workflowConditionFailedErr}))
+	s.Equal([]error{currentWorkflowErr}, sortErrors([]error{currentWorkflowErr}))
+	s.Equal([]error{workflowErr}, sortErrors([]error{workflowErr}))
+	s.Equal([]error{genericErr}, sortErrors([]error{genericErr}))
 	s.Equal([]error{randomErr}, sortErrors([]error{randomErr}))
 }
 
@@ -225,28 +236,28 @@ func (s *cassandraErrorsSuite) TestExtractCurrentWorkflowConflictError_Success()
 	s.IsType(&p.CurrentWorkflowConditionFailedError{}, err)
 }
 
-func (s *cassandraErrorsSuite) TestExtractWorkflowVersionConflictError_Failed() {
+func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Failed() {
 	runID := uuid.New()
 	dbVersion := rand.Int63() + 1
 
-	err := extractWorkflowVersionConflictError(map[string]interface{}{}, runID.String(), dbVersion, rand.Int63())
+	err := extractWorkflowConflictError(map[string]interface{}{}, runID.String(), dbVersion, rand.Int63())
 	s.NoError(err)
 
-	err = extractWorkflowVersionConflictError(map[string]interface{}{
+	err = extractWorkflowConflictError(map[string]interface{}{
 		"type":       rowTypeShard,
 		"run_id":     gocql.UUID(runID),
 		"db_version": dbVersion,
 	}, runID.String(), dbVersion+1, rand.Int63())
 	s.NoError(err)
 
-	err = extractWorkflowVersionConflictError(map[string]interface{}{
+	err = extractWorkflowConflictError(map[string]interface{}{
 		"type":       rowTypeExecution,
 		"run_id":     gocql.UUID([16]byte{}),
 		"db_version": dbVersion,
 	}, runID.String(), dbVersion+1, rand.Int63())
 	s.NoError(err)
 
-	err = extractWorkflowVersionConflictError(map[string]interface{}{
+	err = extractWorkflowConflictError(map[string]interface{}{
 		"type":       rowTypeExecution,
 		"run_id":     gocql.UUID(runID),
 		"db_version": dbVersion,
@@ -254,7 +265,7 @@ func (s *cassandraErrorsSuite) TestExtractWorkflowVersionConflictError_Failed() 
 	s.NoError(err)
 }
 
-func (s *cassandraErrorsSuite) TestExtractWorkflowVersionConflictError_Success() {
+func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Success() {
 	runID := uuid.New()
 	dbVersion := rand.Int63() + 1
 	record := map[string]interface{}{
@@ -263,33 +274,33 @@ func (s *cassandraErrorsSuite) TestExtractWorkflowVersionConflictError_Success()
 		"db_version": dbVersion,
 	}
 
-	err := extractWorkflowVersionConflictError(record, runID.String(), dbVersion+1, rand.Int63())
-	s.IsType(&p.ConditionFailedError{}, err)
+	err := extractWorkflowConflictError(record, runID.String(), dbVersion+1, rand.Int63())
+	s.IsType(&p.WorkflowConditionFailedError{}, err)
 }
 
 // TODO remove this block once DB version comparison is the default
-func (s *cassandraErrorsSuite) TestExtractWorkflowVersionConflictError_Failed_NextEventID() {
+func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Failed_NextEventID() {
 	runID := uuid.New()
 	nextEventID := rand.Int63()
 
-	err := extractWorkflowVersionConflictError(map[string]interface{}{}, runID.String(), 0, nextEventID)
+	err := extractWorkflowConflictError(map[string]interface{}{}, runID.String(), 0, nextEventID)
 	s.NoError(err)
 
-	err = extractWorkflowVersionConflictError(map[string]interface{}{
+	err = extractWorkflowConflictError(map[string]interface{}{
 		"type":          rowTypeShard,
 		"run_id":        gocql.UUID(runID),
 		"next_event_id": nextEventID + 1,
 	}, runID.String(), 0, nextEventID)
 	s.NoError(err)
 
-	err = extractWorkflowVersionConflictError(map[string]interface{}{
+	err = extractWorkflowConflictError(map[string]interface{}{
 		"type":          rowTypeExecution,
 		"run_id":        gocql.UUID([16]byte{}),
 		"next_event_id": nextEventID + 1,
 	}, runID.String(), 0, nextEventID)
 	s.NoError(err)
 
-	err = extractWorkflowVersionConflictError(map[string]interface{}{
+	err = extractWorkflowConflictError(map[string]interface{}{
 		"type":          rowTypeExecution,
 		"run_id":        gocql.UUID(runID),
 		"next_event_id": nextEventID,
@@ -298,7 +309,7 @@ func (s *cassandraErrorsSuite) TestExtractWorkflowVersionConflictError_Failed_Ne
 }
 
 // TODO remove this block once DB version comparison is the default
-func (s *cassandraErrorsSuite) TestExtractWorkflowVersionConflictError_Success_NextEventID() {
+func (s *cassandraErrorsSuite) TestExtractWorkflowConflictError_Success_NextEventID() {
 	runID := uuid.New()
 	nextEventID := int64(1234)
 	record := map[string]interface{}{
@@ -307,6 +318,6 @@ func (s *cassandraErrorsSuite) TestExtractWorkflowVersionConflictError_Success_N
 		"next_event_id": nextEventID,
 	}
 
-	err := extractWorkflowVersionConflictError(record, runID.String(), 0, nextEventID+1)
-	s.IsType(&p.ConditionFailedError{}, err)
+	err := extractWorkflowConflictError(record, runID.String(), 0, nextEventID+1)
+	s.IsType(&p.WorkflowConditionFailedError{}, err)
 }

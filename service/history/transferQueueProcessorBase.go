@@ -74,6 +74,7 @@ func (t *transferQueueProcessorBase) readTasks(
 ) ([]queueTaskInfo, bool, error) {
 
 	response, err := t.executionManager.GetTransferTasks(&persistence.GetTransferTasksRequest{
+		ShardID:      t.shard.GetShardID(),
 		ReadLevel:    readLevel,
 		MaxReadLevel: t.maxReadAckLevel(),
 		BatchSize:    t.options.BatchSize(),

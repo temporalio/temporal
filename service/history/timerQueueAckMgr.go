@@ -410,6 +410,7 @@ MoveAckLevelLoop:
 // all timer tasks are in this queue and filter will be applied.
 func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestamp time.Time, batchSize int, pageToken []byte) ([]*persistencespb.TimerTaskInfo, []byte, error) {
 	request := &persistence.GetTimerIndexTasksRequest{
+		ShardID:       t.shard.GetShardID(),
 		MinTimestamp:  minTimestamp,
 		MaxTimestamp:  maxTimestamp,
 		BatchSize:     batchSize,

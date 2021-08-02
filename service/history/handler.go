@@ -587,28 +587,30 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 
 // RemoveTask returns information about the internal states of a history host
 func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTaskRequest) (_ *historyservice.RemoveTaskResponse, retError error) {
-	executionMgr, err := h.GetExecutionManager(request.GetShardId())
-	if err != nil {
-		return nil, err
-	}
+	executionMgr := h.GetExecutionManager()
 
+	var err error
 	switch request.GetCategory() {
 	case enumsspb.TASK_CATEGORY_TRANSFER:
 		err = executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{
-			TaskID: request.GetTaskId(),
+			ShardID: request.GetShardId(),
+			TaskID:  request.GetTaskId(),
 		})
 	case enumsspb.TASK_CATEGORY_VISIBILITY:
 		err = executionMgr.CompleteVisibilityTask(&persistence.CompleteVisibilityTaskRequest{
-			TaskID: request.GetTaskId(),
+			ShardID: request.GetShardId(),
+			TaskID:  request.GetTaskId(),
 		})
 	case enumsspb.TASK_CATEGORY_TIMER:
 		err = executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
+			ShardID:             request.GetShardId(),
 			VisibilityTimestamp: timestamp.TimeValue(request.GetVisibilityTime()),
 			TaskID:              request.GetTaskId(),
 		})
 	case enumsspb.TASK_CATEGORY_REPLICATION:
 		err = executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{
-			TaskID: request.GetTaskId(),
+			ShardID: request.GetShardId(),
+			TaskID:  request.GetTaskId(),
 		})
 	default:
 		err = errInvalidTaskType
@@ -818,15 +820,12 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 
 		// Two simultaneous SignalWithStart requests might try to start a workflow at the same time.
 		// This can result in one of the requests failing with one of two possible errors:
-		//    1) If it is a brand new WF ID, one of the requests can fail with WorkflowExecutionAlreadyStartedError
-		//       (createMode is persistence.CreateWorkflowModeBrandNew)
-		//    2) If it an already existing WF ID, one of the requests can fail with a CurrentWorkflowConditionFailedError
-		//       (createMode is persisetence.CreateWorkflowModeWorkflowIDReuse)
+		//    CurrentWorkflowConditionFailedError || WorkflowConditionFailedError
 		// If either error occurs, just go ahead and retry. It should succeed on the subsequent attempt.
 		// For simplicity, we keep trying unless the context finishes or we get an error that is not one of the
 		// two mentioned above.
-		_, isExecutionAlreadyStartedErr := err2.(*persistence.WorkflowExecutionAlreadyStartedError)
-		_, isWorkflowConditionFailedErr := err2.(*persistence.CurrentWorkflowConditionFailedError)
+		_, isCurrentWorkflowConditionFailedErr := err2.(*persistence.CurrentWorkflowConditionFailedError)
+		_, isWorkflowConditionFailedErr := err2.(*persistence.WorkflowConditionFailedError)
 
 		isContextDone := false
 		select {
@@ -838,7 +837,7 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 		default:
 		}
 
-		if (!isExecutionAlreadyStartedErr && !isWorkflowConditionFailedErr) || isContextDone {
+		if (!isCurrentWorkflowConditionFailedErr && !isWorkflowConditionFailedErr) || isContextDone {
 			return nil, h.convertError(err2)
 		}
 	}
@@ -1428,22 +1427,17 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.
 func (h *Handler) convertError(err error) error {
-	switch err.(type) {
+	switch err := err.(type) {
 	case *persistence.ShardOwnershipLostError:
-		shardID := err.(*persistence.ShardOwnershipLostError).ShardID
-		info, err := h.GetHistoryServiceResolver().Lookup(convert.Int32ToString(shardID))
-		if err == nil {
+		if info, err := h.GetHistoryServiceResolver().Lookup(convert.Int32ToString(err.ShardID)); err == nil {
 			return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), info.GetAddress())
 		}
 		return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), "<unknown>")
-	case *persistence.WorkflowExecutionAlreadyStartedError:
-		err := err.(*persistence.WorkflowExecutionAlreadyStartedError)
-		return serviceerror.NewWorkflowExecutionAlreadyStarted(err.Msg, err.StartRequestID, err.RunID)
+	case *persistence.WorkflowConditionFailedError:
+		return serviceerror.NewInternal(err.Msg)
 	case *persistence.CurrentWorkflowConditionFailedError:
-		err := err.(*persistence.CurrentWorkflowConditionFailedError)
 		return serviceerror.NewInternal(err.Msg)
 	case *persistence.TransactionSizeLimitError:
-		err := err.(*persistence.TransactionSizeLimitError)
 		return serviceerror.NewInvalidArgument(err.Msg)
 	}
 

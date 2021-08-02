@@ -154,7 +154,7 @@ func NewTest(
 	persistenceBean.EXPECT().GetTaskManager().Return(taskMgr).AnyTimes()
 	persistenceBean.EXPECT().GetHistoryManager().Return(historyMgr).AnyTimes()
 	persistenceBean.EXPECT().GetShardManager().Return(shardMgr).AnyTimes()
-	persistenceBean.EXPECT().GetExecutionManager(gomock.Any()).Return(executionMgr, nil).AnyTimes()
+	persistenceBean.EXPECT().GetExecutionManager().Return(executionMgr).AnyTimes()
 	persistenceBean.EXPECT().GetNamespaceReplicationQueue().Return(namespaceReplicationQueue).AnyTimes()
 	persistenceBean.EXPECT().GetClusterMetadataManager().Return(clusterMetadataManager).AnyTimes()
 
@@ -410,11 +410,8 @@ func (s *Test) GetHistoryManager() persistence.HistoryManager {
 }
 
 // GetExecutionManager for testing
-func (s *Test) GetExecutionManager(
-	shardID int32,
-) (persistence.ExecutionManager, error) {
-
-	return s.ExecutionMgr, nil
+func (s *Test) GetExecutionManager() persistence.ExecutionManager {
+	return s.ExecutionMgr
 }
 
 // GetPersistenceBean for testing

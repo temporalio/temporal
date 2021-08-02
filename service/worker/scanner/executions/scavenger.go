@@ -51,12 +51,12 @@ type (
 		status           int32
 		numHistoryShards int32
 
-		execMgrFactory persistence.ExecutionManagerFactory
-		historyManager persistence.HistoryManager
-		executor       executor.Executor
-		rateLimiter    quotas.RateLimiter
-		metrics        metrics.Client
-		logger         log.Logger
+		executionManager persistence.ExecutionManager
+		historyManager   persistence.HistoryManager
+		executor         executor.Executor
+		rateLimiter      quotas.RateLimiter
+		metrics          metrics.Client
+		logger           log.Logger
 
 		stopC  chan struct{}
 		stopWG sync.WaitGroup
@@ -75,14 +75,14 @@ type (
 //  - Stop() method is called to stop the scavenger
 func NewScavenger(
 	numHistoryShards int32,
-	execMgrFactory persistence.ExecutionManagerFactory,
+	executionManager persistence.ExecutionManager,
 	historyManager persistence.HistoryManager,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) *Scavenger {
 	return &Scavenger{
 		numHistoryShards: numHistoryShards,
-		execMgrFactory:   execMgrFactory,
+		executionManager: executionManager,
 		historyManager:   historyManager,
 		executor: executor.NewFixedSizePoolExecutor(
 			executorPoolSize,
@@ -147,31 +147,22 @@ func (s *Scavenger) run() {
 	}()
 
 	for shardID := int32(1); shardID <= s.numHistoryShards; shardID++ {
-		if executionManager, err := s.execMgrFactory.NewExecutionManager(
+		submitted := s.executor.Submit(newTask(
 			shardID,
-		); err != nil {
-			s.logger.Error("unable to initialize execution manager",
-				tag.ShardID(shardID),
-				tag.Error(err),
-			)
-		} else {
-			submitted := s.executor.Submit(newTask(
-				shardID,
-				executionManager,
-				s.historyManager,
-				s.metrics,
-				s.logger,
-				s,
-				quotas.NewMultiRateLimiter([]quotas.RateLimiter{
-					quotas.NewDefaultOutgoingDynamicRateLimiter(
-						func() float64 { return float64(ratePerShard) },
-					),
-					s.rateLimiter,
-				}),
-			))
-			if !submitted {
-				s.logger.Error("unable to submit task to executor", tag.ShardID(shardID))
-			}
+			s.executionManager,
+			s.historyManager,
+			s.metrics,
+			s.logger,
+			s,
+			quotas.NewMultiRateLimiter([]quotas.RateLimiter{
+				quotas.NewDefaultOutgoingDynamicRateLimiter(
+					func() float64 { return float64(ratePerShard) },
+				),
+				s.rateLimiter,
+			}),
+		))
+		if !submitted {
+			s.logger.Error("unable to submit task to executor", tag.ShardID(shardID))
 		}
 	}
 

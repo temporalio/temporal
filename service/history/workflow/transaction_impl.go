@@ -75,6 +75,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 	newWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += newWorkflowHistorySizeDiff
 
 	if err := createWorkflowExecutionWithRetry(t.shard, &persistence.CreateWorkflowExecutionRequest{
+		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
 		Mode:                createMode,
 		NewWorkflowSnapshot: *newWorkflowSnapshot,
@@ -137,6 +138,7 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 	}
 
 	if err := t.shard.ConflictResolveWorkflowExecution(&persistence.ConflictResolveWorkflowExecutionRequest{
+		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
 		Mode:                    conflictResolveMode,
 		ResetWorkflowSnapshot:   *resetWorkflowSnapshot,
@@ -195,6 +197,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	}
 
 	if err := updateWorkflowExecutionWithRetry(t.shard, &persistence.UpdateWorkflowExecutionRequest{
+		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
 		Mode:                   updateMode,
 		UpdateWorkflowMutation: *currentWorkflowMutation,
@@ -339,7 +342,9 @@ func createWorkflowExecutionWithRetry(
 	switch err.(type) {
 	case nil:
 		return nil
-	case *persistence.WorkflowExecutionAlreadyStartedError:
+	case *persistence.CurrentWorkflowConditionFailedError,
+		*persistence.WorkflowConditionFailedError,
+		*persistence.ConditionFailedError:
 		// it is possible that workflow already exists and caller need to apply
 		// workflow ID reuse policy
 		return err
@@ -425,7 +430,9 @@ func updateWorkflowExecutionWithRetry(
 			)
 		}
 		return nil
-	case *persistence.ConditionFailedError:
+	case *persistence.CurrentWorkflowConditionFailedError,
+		*persistence.WorkflowConditionFailedError,
+		*persistence.ConditionFailedError:
 		// TODO get rid of ErrConflict
 		return consts.ErrConflict
 	default:

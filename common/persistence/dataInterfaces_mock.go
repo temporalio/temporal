@@ -528,20 +528,6 @@ func (mr *MockExecutionManagerMockRecorder) GetReplicationTasksFromDLQ(request i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTasksFromDLQ", reflect.TypeOf((*MockExecutionManager)(nil).GetReplicationTasksFromDLQ), request)
 }
 
-// GetShardID mocks base method.
-func (m *MockExecutionManager) GetShardID() int32 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetShardID")
-	ret0, _ := ret[0].(int32)
-	return ret0
-}
-
-// GetShardID indicates an expected call of GetShardID.
-func (mr *MockExecutionManagerMockRecorder) GetShardID() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShardID", reflect.TypeOf((*MockExecutionManager)(nil).GetShardID))
-}
-
 // GetTimerIndexTasks mocks base method.
 func (m *MockExecutionManager) GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -759,56 +745,6 @@ func (m *MockExecutionManager) UpdateWorkflowExecution(request *UpdateWorkflowEx
 func (mr *MockExecutionManagerMockRecorder) UpdateWorkflowExecution(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).UpdateWorkflowExecution), request)
-}
-
-// MockExecutionManagerFactory is a mock of ExecutionManagerFactory interface.
-type MockExecutionManagerFactory struct {
-	ctrl     *gomock.Controller
-	recorder *MockExecutionManagerFactoryMockRecorder
-}
-
-// MockExecutionManagerFactoryMockRecorder is the mock recorder for MockExecutionManagerFactory.
-type MockExecutionManagerFactoryMockRecorder struct {
-	mock *MockExecutionManagerFactory
-}
-
-// NewMockExecutionManagerFactory creates a new mock instance.
-func NewMockExecutionManagerFactory(ctrl *gomock.Controller) *MockExecutionManagerFactory {
-	mock := &MockExecutionManagerFactory{ctrl: ctrl}
-	mock.recorder = &MockExecutionManagerFactoryMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockExecutionManagerFactory) EXPECT() *MockExecutionManagerFactoryMockRecorder {
-	return m.recorder
-}
-
-// Close mocks base method.
-func (m *MockExecutionManagerFactory) Close() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Close")
-}
-
-// Close indicates an expected call of Close.
-func (mr *MockExecutionManagerFactoryMockRecorder) Close() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockExecutionManagerFactory)(nil).Close))
-}
-
-// NewExecutionManager mocks base method.
-func (m *MockExecutionManagerFactory) NewExecutionManager(shardID int32) (ExecutionManager, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewExecutionManager", shardID)
-	ret0, _ := ret[0].(ExecutionManager)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// NewExecutionManager indicates an expected call of NewExecutionManager.
-func (mr *MockExecutionManagerFactoryMockRecorder) NewExecutionManager(shardID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewExecutionManager", reflect.TypeOf((*MockExecutionManagerFactory)(nil).NewExecutionManager), shardID)
 }
 
 // MockTaskManager is a mock of TaskManager interface.
