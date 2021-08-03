@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -43,7 +42,6 @@ type (
 	// Replicator is the processor for replication tasks
 	Replicator struct {
 		status                           int32
-		config                           *Config
 		clusterMetadata                  cluster.Metadata
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 		clientBean                       client.Bean
@@ -57,16 +55,6 @@ type (
 
 	// Config contains all the replication config for worker
 	Config struct {
-		PersistenceMaxQPS                  dynamicconfig.IntPropertyFn
-		ReplicatorMetaTaskConcurrency      dynamicconfig.IntPropertyFn
-		ReplicatorTaskConcurrency          dynamicconfig.IntPropertyFn
-		ReplicatorMessageConcurrency       dynamicconfig.IntPropertyFn
-		ReplicatorActivityBufferRetryCount dynamicconfig.IntPropertyFn
-		ReplicatorHistoryBufferRetryCount  dynamicconfig.IntPropertyFn
-		ReplicationTaskMaxRetryCount       dynamicconfig.IntPropertyFn
-		ReplicationTaskMaxRetryDuration    dynamicconfig.DurationPropertyFn
-		ReplicationTaskContextTimeout      dynamicconfig.DurationPropertyFn
-		ReReplicationContextTimeout        dynamicconfig.DurationPropertyFnWithNamespaceIDFilter
 	}
 )
 
@@ -74,7 +62,6 @@ type (
 func NewReplicator(
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
-	config *Config,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	hostInfo *membership.HostInfo,
@@ -107,7 +94,6 @@ func NewReplicator(
 	}
 	return &Replicator{
 		status:                           common.DaemonStatusInitialized,
-		config:                           config,
 		hostInfo:                         hostInfo,
 		serviceResolver:                  serviceResolver,
 		clusterMetadata:                  clusterMetadata,

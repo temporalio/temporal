@@ -287,40 +287,49 @@ var Keys = map[Key]string{
 	ReplicationEventsFromCurrentCluster:                    "history.ReplicationEventsFromCurrentCluster",
 	StandbyTaskReReplicationContextTimeout:                 "history.standbyTaskReReplicationContextTimeout",
 	EnableDropStuckTaskByNamespaceID:                       "history.DropStuckTaskByNamespace",
-	SkipReapplicationByNamespaceId:                         "history.SkipReapplicationByNamespaceId",
+	SkipReapplicationByNamespaceID:                         "history.SkipReapplicationByNamespaceID",
 	DefaultActivityRetryPolicy:                             "history.defaultActivityRetryPolicy",
 	DefaultWorkflowRetryPolicy:                             "history.defaultWorkflowRetryPolicy",
 
-	WorkerPersistenceMaxQPS:                         "worker.persistenceMaxQPS",
-	WorkerPersistenceGlobalMaxQPS:                   "worker.persistenceGlobalMaxQPS",
-	WorkerReplicatorMetaTaskConcurrency:             "worker.replicatorMetaTaskConcurrency",
-	WorkerReplicatorTaskConcurrency:                 "worker.replicatorTaskConcurrency",
-	WorkerReplicatorMessageConcurrency:              "worker.replicatorMessageConcurrency",
-	WorkerReplicatorActivityBufferRetryCount:        "worker.replicatorActivityBufferRetryCount",
-	WorkerReplicatorHistoryBufferRetryCount:         "worker.replicatorHistoryBufferRetryCount",
-	WorkerReplicationTaskMaxRetryCount:              "worker.replicationTaskMaxRetryCount",
-	WorkerReplicationTaskMaxRetryDuration:           "worker.replicationTaskMaxRetryDuration",
-	WorkerReplicationTaskContextDuration:            "worker.replicationTaskContextDuration",
-	WorkerReReplicationContextTimeout:               "worker.workerReReplicationContextTimeout",
-	WorkerIndexerConcurrency:                        "worker.indexerConcurrency",
-	WorkerESProcessorNumOfWorkers:                   "worker.ESProcessorNumOfWorkers",
-	WorkerESProcessorBulkActions:                    "worker.ESProcessorBulkActions",
-	WorkerESProcessorBulkSize:                       "worker.ESProcessorBulkSize",
-	WorkerESProcessorFlushInterval:                  "worker.ESProcessorFlushInterval",
-	WorkerESProcessorAckTimeout:                     "worker.ESProcessorAckTimeout",
-	EnableArchivalCompression:                       "worker.EnableArchivalCompression",
-	WorkerHistoryPageSize:                           "worker.WorkerHistoryPageSize",
-	WorkerTargetArchivalBlobSize:                    "worker.WorkerTargetArchivalBlobSize",
-	WorkerArchiverConcurrency:                       "worker.ArchiverConcurrency",
-	WorkerArchivalsPerIteration:                     "worker.ArchivalsPerIteration",
-	WorkerDeterministicConstructionCheckProbability: "worker.DeterministicConstructionCheckProbability",
-	WorkerBlobIntegrityCheckProbability:             "worker.BlobIntegrityCheckProbability",
-	WorkerTimeLimitPerArchivalIteration:             "worker.TimeLimitPerArchivalIteration",
-	WorkerThrottledLogRPS:                           "worker.throttledLogRPS",
-	ScannerPersistenceMaxQPS:                        "worker.scannerPersistenceMaxQPS",
-	TaskQueueScannerEnabled:                         "worker.taskQueueScannerEnabled",
-	HistoryScannerEnabled:                           "worker.historyScannerEnabled",
-	ExecutionsScannerEnabled:                        "worker.executionsScannerEnabled",
+	// worker settings
+	WorkerPersistenceMaxQPS:       "worker.persistenceMaxQPS",
+	WorkerPersistenceGlobalMaxQPS: "worker.persistenceGlobalMaxQPS",
+
+	WorkerIndexerConcurrency:       "worker.indexerConcurrency",
+	WorkerESProcessorNumOfWorkers:  "worker.ESProcessorNumOfWorkers",
+	WorkerESProcessorBulkActions:   "worker.ESProcessorBulkActions",
+	WorkerESProcessorBulkSize:      "worker.ESProcessorBulkSize",
+	WorkerESProcessorFlushInterval: "worker.ESProcessorFlushInterval",
+	WorkerESProcessorAckTimeout:    "worker.ESProcessorAckTimeout",
+
+	WorkerArchiverMaxConcurrentActivityExecutionSize:     "worker.ArchiverMaxConcurrentActivityExecutionSize",
+	WorkerArchiverMaxConcurrentWorkflowTaskExecutionSize: "worker.ArchiverMaxConcurrentWorkflowTaskExecutionSize",
+	WorkerArchiverMaxConcurrentActivityTaskPollers:       "worker.ArchiverMaxConcurrentActivityTaskPollers",
+	WorkerArchiverMaxConcurrentWorkflowTaskPollers:       "worker.ArchiverMaxConcurrentWorkflowTaskPollers",
+	WorkerArchiverConcurrency:                            "worker.ArchiverConcurrency",
+	WorkerArchivalsPerIteration:                          "worker.ArchivalsPerIteration",
+
+	WorkerScannerMaxConcurrentActivityExecutionSize:     "worker.ScannerMaxConcurrentActivityExecutionSize",
+	WorkerScannerMaxConcurrentWorkflowTaskExecutionSize: "worker.ScannerMaxConcurrentWorkflowTaskExecutionSize",
+	WorkerScannerMaxConcurrentActivityTaskPollers:       "worker.ScannerMaxConcurrentActivityTaskPollers",
+	WorkerScannerMaxConcurrentWorkflowTaskPollers:       "worker.ScannerMaxConcurrentWorkflowTaskPollers",
+
+	WorkerBatcherMaxConcurrentActivityExecutionSize:     "worker.BatcherMaxConcurrentActivityExecutionSize",
+	WorkerBatcherMaxConcurrentWorkflowTaskExecutionSize: "worker.BatcherMaxConcurrentWorkflowTaskExecutionSize",
+	WorkerBatcherMaxConcurrentActivityTaskPollers:       "worker.BatcherMaxConcurrentActivityTaskPollers",
+	WorkerBatcherMaxConcurrentWorkflowTaskPollers:       "worker.BatcherMaxConcurrentWorkflowTaskPollers",
+
+	WorkerParentCloseMaxConcurrentActivityExecutionSize:     "worker.ParentCloseMaxConcurrentActivityExecutionSize",
+	WorkerParentCloseMaxConcurrentWorkflowTaskExecutionSize: "worker.ParentCloseMaxConcurrentWorkflowTaskExecutionSize",
+	WorkerParentCloseMaxConcurrentActivityTaskPollers:       "worker.ParentCloseMaxConcurrentActivityTaskPollers",
+	WorkerParentCloseMaxConcurrentWorkflowTaskPollers:       "worker.ParentCloseMaxConcurrentWorkflowTaskPollers",
+
+	WorkerTimeLimitPerArchivalIteration: "worker.TimeLimitPerArchivalIteration",
+	WorkerThrottledLogRPS:               "worker.throttledLogRPS",
+	ScannerPersistenceMaxQPS:            "worker.scannerPersistenceMaxQPS",
+	TaskQueueScannerEnabled:             "worker.taskQueueScannerEnabled",
+	HistoryScannerEnabled:               "worker.historyScannerEnabled",
+	ExecutionsScannerEnabled:            "worker.executionsScannerEnabled",
 }
 
 const (
@@ -760,8 +769,8 @@ const (
 
 	// EnableDropStuckTaskByNamespaceID is whether stuck timer/transfer task should be dropped for a namespace
 	EnableDropStuckTaskByNamespaceID
-	// SkipReapplicationByNameSpaceId is whether skipping a event re-application for a namespace
-	SkipReapplicationByNamespaceId
+	// SkipReapplicationByNamespaceID is whether skipping a event re-application for a namespace
+	SkipReapplicationByNamespaceID
 
 	// key for worker
 
@@ -769,24 +778,6 @@ const (
 	WorkerPersistenceMaxQPS
 	// WorkerPersistenceGlobalMaxQPS is the max qps worker cluster can query DB
 	WorkerPersistenceGlobalMaxQPS
-	// WorkerReplicatorMetaTaskConcurrency is the number of coroutine handling metadata related tasks
-	WorkerReplicatorMetaTaskConcurrency
-	// WorkerReplicatorTaskConcurrency is the number of coroutine handling non metadata related tasks
-	WorkerReplicatorTaskConcurrency
-	// WorkerReplicatorMessageConcurrency is the max concurrent tasks provided by messaging client
-	WorkerReplicatorMessageConcurrency
-	// WorkerReplicatorActivityBufferRetryCount is the retry attempt when encounter retry error on activity
-	WorkerReplicatorActivityBufferRetryCount
-	// WorkerReplicatorHistoryBufferRetryCount is the retry attempt when encounter retry error on history
-	WorkerReplicatorHistoryBufferRetryCount
-	// WorkerReplicationTaskMaxRetryCount is the max retry count for any task
-	WorkerReplicationTaskMaxRetryCount
-	// WorkerReplicationTaskMaxRetryDuration is the max retry duration for any task
-	WorkerReplicationTaskMaxRetryDuration
-	// WorkerReplicationTaskContextDuration is the context timeout for apply replication tasks
-	WorkerReplicationTaskContextDuration
-	// WorkerReReplicationContextTimeout is the context timeout for end to end  re-replication process
-	WorkerReReplicationContextTimeout
 	// WorkerIndexerConcurrency is the max concurrent messages to be processed at any given time
 	WorkerIndexerConcurrency
 	// WorkerESProcessorNumOfWorkers is num of workers for esProcessor
@@ -800,24 +791,30 @@ const (
 	// WorkerESProcessorAckTimeout is the timeout that store will wait to get ack signal from ES processor.
 	// Should be at least WorkerESProcessorFlushInterval+<time to process request>.
 	WorkerESProcessorAckTimeout
-	// EnableArchivalCompression indicates whether blobs are compressed before they are archived
-	EnableArchivalCompression
-	// WorkerHistoryPageSize indicates the page size of history fetched from persistence for archival
-	WorkerHistoryPageSize
-	// WorkerTargetArchivalBlobSize indicates the target blob size in bytes for archival, actual blob size may vary
-	WorkerTargetArchivalBlobSize
+	// WorkerArchiverMaxConcurrentActivityExecutionSize indicates worker archiver max concurrent activity execution size
+	WorkerArchiverMaxConcurrentActivityExecutionSize
+	// WorkerArchiverMaxConcurrentWorkflowTaskExecutionSize indicates worker archiver max concurrent workflow execution size
+	WorkerArchiverMaxConcurrentWorkflowTaskExecutionSize
+	// WorkerArchiverMaxConcurrentActivityTaskPollers indicates worker archiver max concurrent activity pollers
+	WorkerArchiverMaxConcurrentActivityTaskPollers
+	// WorkerArchiverMaxConcurrentWorkflowTaskPollers indicates worker archiver max concurrent workflow pollers
+	WorkerArchiverMaxConcurrentWorkflowTaskPollers
 	// WorkerArchiverConcurrency controls the number of coroutines handling archival work per archival workflow
 	WorkerArchiverConcurrency
 	// WorkerArchivalsPerIteration controls the number of archivals handled in each iteration of archival workflow
 	WorkerArchivalsPerIteration
-	// WorkerDeterministicConstructionCheckProbability controls the probability of running a deterministic construction check for any given archival
-	WorkerDeterministicConstructionCheckProbability
-	// WorkerBlobIntegrityCheckProbability controls the probability of running an integrity check for any given archival
-	WorkerBlobIntegrityCheckProbability
 	// WorkerTimeLimitPerArchivalIteration controls the time limit of each iteration of archival workflow
 	WorkerTimeLimitPerArchivalIteration
 	// WorkerThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
 	WorkerThrottledLogRPS
+	// WorkerScannerMaxConcurrentActivityExecutionSize indicates worker scanner max concurrent activity execution size
+	WorkerScannerMaxConcurrentActivityExecutionSize
+	// WorkerScannerMaxConcurrentWorkflowTaskExecutionSize indicates worker scanner max concurrent workflow execution size
+	WorkerScannerMaxConcurrentWorkflowTaskExecutionSize
+	// WorkerScannerMaxConcurrentActivityTaskPollers indicates worker scanner max concurrent activity pollers
+	WorkerScannerMaxConcurrentActivityTaskPollers
+	// WorkerScannerMaxConcurrentWorkflowTaskPollers indicates worker scanner max concurrent workflow pollers
+	WorkerScannerMaxConcurrentWorkflowTaskPollers
 	// ScannerPersistenceMaxQPS is the maximum rate of persistence calls from worker.Scanner
 	ScannerPersistenceMaxQPS
 	// TaskQueueScannerEnabled indicates if task queue scanner should be started as part of worker.Scanner
@@ -826,8 +823,24 @@ const (
 	HistoryScannerEnabled
 	// ExecutionsScannerEnabled indicates if executions scanner should be started as part of worker.Scanner
 	ExecutionsScannerEnabled
+	// WorkerBatcherMaxConcurrentActivityExecutionSize indicates worker batcher max concurrent activity execution size
+	WorkerBatcherMaxConcurrentActivityExecutionSize
+	// WorkerBatcherMaxConcurrentWorkflowTaskExecutionSize indicates worker batcher max concurrent workflow execution size
+	WorkerBatcherMaxConcurrentWorkflowTaskExecutionSize
+	// WorkerBatcherMaxConcurrentActivityTaskPollers indicates worker batcher max concurrent activity pollers
+	WorkerBatcherMaxConcurrentActivityTaskPollers
+	// WorkerBatcherMaxConcurrentWorkflowTaskPollers indicates worker batcher max concurrent workflow pollers
+	WorkerBatcherMaxConcurrentWorkflowTaskPollers
 	// EnableBatcher decides whether start batcher in our worker
 	EnableBatcher
+	// WorkerParentCloseMaxConcurrentActivityExecutionSize indicates worker parent close worker max concurrent activity execution size
+	WorkerParentCloseMaxConcurrentActivityExecutionSize
+	// WorkerParentCloseMaxConcurrentWorkflowTaskExecutionSize indicates worker parent close worker max concurrent workflow execution size
+	WorkerParentCloseMaxConcurrentWorkflowTaskExecutionSize
+	// WorkerParentCloseMaxConcurrentActivityTaskPollers indicates worker parent close worker max concurrent activity pollers
+	WorkerParentCloseMaxConcurrentActivityTaskPollers
+	// WorkerParentCloseMaxConcurrentWorkflowTaskPollers indicates worker parent close worker max concurrent workflow pollers
+	WorkerParentCloseMaxConcurrentWorkflowTaskPollers
 	// EnableParentClosePolicyWorker decides whether or not enable system workers for processing parent close policy task
 	EnableParentClosePolicyWorker
 	// EnableStickyQuery indicates if sticky query should be enabled per namespace
@@ -865,7 +878,7 @@ const (
 	ReplicationTaskProcessorHostQPS
 	// ReplicationTaskProcessorShardQPS is the qps of task processing rate limiter on shard level
 	ReplicationTaskProcessorShardQPS
-	// EnableConsistentQuery indicates if consistent query is enabled for the cluster
+	// MaxBufferedQueryCount indicates max buffer query count
 	MaxBufferedQueryCount
 	// MutableStateChecksumGenProbability is the probability [0-100] that checksum will be generated for mutable state
 	MutableStateChecksumGenProbability
@@ -913,7 +926,7 @@ const (
 	TaskQueueName
 	// TaskType is the task type (0:Workflow, 1:Activity)
 	TaskType
-	// RangeHash is the shard id
+	// ShardID is the shard id
 	ShardID
 
 	// lastFilterTypeForTest must be the last one in this const group for testing purpose

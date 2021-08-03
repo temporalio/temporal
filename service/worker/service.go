@@ -26,10 +26,10 @@ package worker
 
 import (
 	"sync/atomic"
-	"time"
 
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -66,11 +66,12 @@ type (
 
 	// Config contains all the service config for worker
 	Config struct {
-		ReplicationCfg                *replicator.Config
 		ArchiverConfig                *archiver.Config
 		ScannerCfg                    *scanner.Config
+		ParentCloseCfg                *parentclosepolicy.Config
 		BatcherCfg                    *batcher.Config
 		ThrottledLogRPS               dynamicconfig.IntPropertyFn
+		PersistenceMaxQPS             dynamicconfig.IntPropertyFn
 		PersistenceGlobalMaxQPS       dynamicconfig.IntPropertyFn
 		EnableBatcher                 dynamicconfig.BoolPropertyFn
 		EnableParentClosePolicyWorker dynamicconfig.BoolPropertyFn
@@ -87,7 +88,7 @@ func NewService(
 	serviceResource, err := resource.New(
 		params,
 		common.WorkerServiceName,
-		serviceConfig.ReplicationCfg.PersistenceMaxQPS,
+		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
 		serviceConfig.ThrottledLogRPS,
 		func(
@@ -116,34 +117,44 @@ func NewService(
 func NewConfig(params *resource.BootstrapParams) *Config {
 	dc := dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger)
 	config := &Config{
-		ReplicationCfg: &replicator.Config{
-			PersistenceMaxQPS:                  dc.GetIntProperty(dynamicconfig.WorkerPersistenceMaxQPS, 500),
-			ReplicatorMetaTaskConcurrency:      dc.GetIntProperty(dynamicconfig.WorkerReplicatorMetaTaskConcurrency, 64),
-			ReplicatorTaskConcurrency:          dc.GetIntProperty(dynamicconfig.WorkerReplicatorTaskConcurrency, 256),
-			ReplicatorMessageConcurrency:       dc.GetIntProperty(dynamicconfig.WorkerReplicatorMessageConcurrency, 2048),
-			ReplicatorActivityBufferRetryCount: dc.GetIntProperty(dynamicconfig.WorkerReplicatorActivityBufferRetryCount, 8),
-			ReplicatorHistoryBufferRetryCount:  dc.GetIntProperty(dynamicconfig.WorkerReplicatorHistoryBufferRetryCount, 8),
-			ReplicationTaskMaxRetryCount:       dc.GetIntProperty(dynamicconfig.WorkerReplicationTaskMaxRetryCount, 400),
-			ReplicationTaskMaxRetryDuration:    dc.GetDurationProperty(dynamicconfig.WorkerReplicationTaskMaxRetryDuration, 15*time.Minute),
-			ReplicationTaskContextTimeout:      dc.GetDurationProperty(dynamicconfig.WorkerReplicationTaskContextDuration, 30*time.Second),
-			ReReplicationContextTimeout:        dc.GetDurationPropertyFilteredByNamespaceID(dynamicconfig.WorkerReReplicationContextTimeout, 0*time.Second),
-		},
 		ArchiverConfig: &archiver.Config{
+			MaxConcurrentActivityExecutionSize:     dc.GetIntProperty(dynamicconfig.WorkerArchiverMaxConcurrentActivityExecutionSize, 1000),
+			MaxConcurrentWorkflowTaskExecutionSize: dc.GetIntProperty(dynamicconfig.WorkerArchiverMaxConcurrentWorkflowTaskExecutionSize, 1000),
+			MaxConcurrentActivityTaskPollers:       dc.GetIntProperty(dynamicconfig.WorkerArchiverMaxConcurrentActivityTaskPollers, 4),
+			MaxConcurrentWorkflowTaskPollers:       dc.GetIntProperty(dynamicconfig.WorkerArchiverMaxConcurrentWorkflowTaskPollers, 4),
+
 			ArchiverConcurrency:           dc.GetIntProperty(dynamicconfig.WorkerArchiverConcurrency, 50),
 			ArchivalsPerIteration:         dc.GetIntProperty(dynamicconfig.WorkerArchivalsPerIteration, 1000),
 			TimeLimitPerArchivalIteration: dc.GetDurationProperty(dynamicconfig.WorkerTimeLimitPerArchivalIteration, archiver.MaxArchivalIterationTimeout()),
 		},
+		BatcherCfg: &batcher.Config{
+			MaxConcurrentActivityExecutionSize:     dc.GetIntProperty(dynamicconfig.WorkerBatcherMaxConcurrentActivityExecutionSize, 1000),
+			MaxConcurrentWorkflowTaskExecutionSize: dc.GetIntProperty(dynamicconfig.WorkerBatcherMaxConcurrentWorkflowTaskExecutionSize, 1000),
+			MaxConcurrentActivityTaskPollers:       dc.GetIntProperty(dynamicconfig.WorkerBatcherMaxConcurrentActivityTaskPollers, 4),
+			MaxConcurrentWorkflowTaskPollers:       dc.GetIntProperty(dynamicconfig.WorkerBatcherMaxConcurrentWorkflowTaskPollers, 4),
+		},
+		ParentCloseCfg: &parentclosepolicy.Config{
+			MaxConcurrentActivityExecutionSize:     dc.GetIntProperty(dynamicconfig.WorkerParentCloseMaxConcurrentActivityExecutionSize, 1000),
+			MaxConcurrentWorkflowTaskExecutionSize: dc.GetIntProperty(dynamicconfig.WorkerParentCloseMaxConcurrentWorkflowTaskExecutionSize, 1000),
+			MaxConcurrentActivityTaskPollers:       dc.GetIntProperty(dynamicconfig.WorkerParentCloseMaxConcurrentActivityTaskPollers, 4),
+			MaxConcurrentWorkflowTaskPollers:       dc.GetIntProperty(dynamicconfig.WorkerParentCloseMaxConcurrentWorkflowTaskPollers, 4),
+		},
 		ScannerCfg: &scanner.Config{
+			MaxConcurrentActivityExecutionSize:     dc.GetIntProperty(dynamicconfig.WorkerScannerMaxConcurrentActivityExecutionSize, 10),
+			MaxConcurrentWorkflowTaskExecutionSize: dc.GetIntProperty(dynamicconfig.WorkerScannerMaxConcurrentWorkflowTaskExecutionSize, 10),
+			MaxConcurrentActivityTaskPollers:       dc.GetIntProperty(dynamicconfig.WorkerScannerMaxConcurrentActivityTaskPollers, 8),
+			MaxConcurrentWorkflowTaskPollers:       dc.GetIntProperty(dynamicconfig.WorkerScannerMaxConcurrentWorkflowTaskPollers, 8),
+
 			PersistenceMaxQPS:        dc.GetIntProperty(dynamicconfig.ScannerPersistenceMaxQPS, 100),
 			Persistence:              &params.PersistenceConfig,
 			TaskQueueScannerEnabled:  dc.GetBoolProperty(dynamicconfig.TaskQueueScannerEnabled, true),
 			HistoryScannerEnabled:    dc.GetBoolProperty(dynamicconfig.HistoryScannerEnabled, true),
 			ExecutionsScannerEnabled: dc.GetBoolProperty(dynamicconfig.ExecutionsScannerEnabled, false),
 		},
-		BatcherCfg:                    &batcher.Config{},
 		EnableBatcher:                 dc.GetBoolProperty(dynamicconfig.EnableBatcher, true),
 		EnableParentClosePolicyWorker: dc.GetBoolProperty(dynamicconfig.EnableParentClosePolicyWorker, true),
 		ThrottledLogRPS:               dc.GetIntProperty(dynamicconfig.WorkerThrottledLogRPS, 20),
+		PersistenceMaxQPS:             dc.GetIntProperty(dynamicconfig.WorkerPersistenceMaxQPS, 500),
 		PersistenceGlobalMaxQPS:       dc.GetIntProperty(dynamicconfig.WorkerPersistenceGlobalMaxQPS, 0),
 	}
 	return config
@@ -198,6 +209,7 @@ func (s *Service) Stop() {
 
 func (s *Service) startParentClosePolicyProcessor() {
 	params := &parentclosepolicy.BootstrapParams{
+		Config:        *s.config.ParentCloseCfg,
 		ServiceClient: s.sdkClient,
 		MetricsClient: s.GetMetricsClient(),
 		Logger:        s.GetLogger(),
@@ -252,7 +264,6 @@ func (s *Service) startReplicator() {
 	msgReplicator := replicator.NewReplicator(
 		s.GetClusterMetadata(),
 		s.GetClientBean(),
-		s.config.ReplicationCfg,
 		s.GetLogger(),
 		s.GetMetricsClient(),
 		s.GetHostInfo(),

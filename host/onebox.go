@@ -35,6 +35,8 @@ import (
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"google.golang.org/grpc"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
@@ -65,7 +67,6 @@ import (
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/replicator"
-	"google.golang.org/grpc"
 )
 
 // Temporal hosts all of temporal services in one process
@@ -628,7 +629,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
 		replicatorNamespaceCache = cache.NewNamespaceCache(metadataManager, clusterMetadata, service.GetMetricsClient(), service.GetLogger())
 		replicatorNamespaceCache.Start()
-		c.startWorkerReplicator(params, service, clusterMetadata)
+		c.startWorkerReplicator(service, clusterMetadata)
 	}
 
 	var clientWorkerNamespaceCache cache.NamespaceCache
@@ -650,9 +651,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	c.shutdownWG.Done()
 }
 
-func (c *temporalImpl) startWorkerReplicator(params *resource.BootstrapParams, service resource.Resource, clusterMetadata cluster.Metadata) {
-	workerConfig := worker.NewConfig(params)
-	workerConfig.ReplicationCfg.ReplicatorMessageConcurrency = dynamicconfig.GetIntPropertyFn(10)
+func (c *temporalImpl) startWorkerReplicator(service resource.Resource, clusterMetadata cluster.Metadata) {
 	serviceResolver, err := service.GetMembershipMonitor().GetResolver(common.WorkerServiceName)
 	if err != nil {
 		c.logger.Fatal("Fail to start replicator when start worker", tag.Error(err))
@@ -660,7 +659,6 @@ func (c *temporalImpl) startWorkerReplicator(params *resource.BootstrapParams, s
 	c.replicator = replicator.NewReplicator(
 		clusterMetadata,
 		service.GetClientBean(),
-		workerConfig.ReplicationCfg,
 		c.logger,
 		service.GetMetricsClient(),
 		service.GetHostInfo(),

@@ -34,26 +34,32 @@ import (
 	"go.temporal.io/sdk/worker"
 
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 )
 
-const (
-	maxConcurrentActivityTaskPollers = 8
-	maxConcurrentWorkflowTaskPollers = 8
-)
-
 type (
+	// Config defines the configuration for parent close policy worker
+	Config struct {
+		MaxConcurrentActivityExecutionSize     dynamicconfig.IntPropertyFn
+		MaxConcurrentWorkflowTaskExecutionSize dynamicconfig.IntPropertyFn
+		MaxConcurrentActivityTaskPollers       dynamicconfig.IntPropertyFn
+		MaxConcurrentWorkflowTaskPollers       dynamicconfig.IntPropertyFn
+	}
+
 	// BootstrapParams contains the set of params needed to bootstrap
 	// the sub-system
 	BootstrapParams struct {
-		// Config contains the configuration for scanner
 		// ServiceClient is an instance of temporal service client
 		ServiceClient sdkclient.Client
 		// MetricsClient is an instance of metrics object for emitting stats
 		MetricsClient metrics.Client
-		Logger        log.Logger
+		// Logger is the logger
+		Logger log.Logger
+		// Config contains the configuration for scanner
+		Config Config
 		// ClientBean is an instance of client.Bean for a collection of clients
 		ClientBean client.Bean
 	}
@@ -63,6 +69,7 @@ type (
 		svcClient     sdkclient.Client
 		clientBean    client.Bean
 		metricsClient metrics.Client
+		cfg           Config
 		logger        log.Logger
 	}
 )
@@ -72,6 +79,7 @@ func New(params *BootstrapParams) *Processor {
 	return &Processor{
 		svcClient:     params.ServiceClient,
 		metricsClient: params.MetricsClient,
+		cfg:           params.Config,
 		logger:        log.With(params.Logger, tag.ComponentBatcher),
 		clientBean:    params.ClientBean,
 	}
@@ -81,9 +89,11 @@ func New(params *BootstrapParams) *Processor {
 func (s *Processor) Start() error {
 	ctx := context.WithValue(context.Background(), processorContextKey, s)
 	workerOpts := worker.Options{
-		MaxConcurrentActivityTaskPollers: maxConcurrentActivityTaskPollers,
-		MaxConcurrentWorkflowTaskPollers: maxConcurrentWorkflowTaskPollers,
-		BackgroundActivityContext:        ctx,
+		MaxConcurrentActivityExecutionSize:     s.cfg.MaxConcurrentActivityExecutionSize(),
+		MaxConcurrentWorkflowTaskExecutionSize: s.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
+		MaxConcurrentActivityTaskPollers:       s.cfg.MaxConcurrentActivityTaskPollers(),
+		MaxConcurrentWorkflowTaskPollers:       s.cfg.MaxConcurrentWorkflowTaskPollers(),
+		BackgroundActivityContext:              ctx,
 	}
 	processorWorker := worker.New(s.svcClient, processorTaskQueueName, workerOpts)
 
