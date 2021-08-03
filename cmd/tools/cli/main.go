@@ -27,21 +27,12 @@ package main
 import (
 	"os"
 
-	"github.com/temporalio/tctl/pkg/config"
 	"go.temporal.io/server/tools/cli"
-	"go.temporal.io/server/tools/cli_next"
 )
 
 // Start using this CLI tool with command
 // See temporal/tools/cli/README.md for usage
 func main() {
-	version, _ := config.Get("version")
-
-	if version == "next" {
-		appNext := cli_next.NewCliApp()
-		_ = appNext.Run(os.Args)
-	} else {
-		app := cli.NewCliApp()
-		_ = app.Run(os.Args)
-	}
+	app := cli.NewCliApp()
+	_ = app.Run(os.Args)
 }
