@@ -42,7 +42,6 @@ type (
 	// Replicator is the processor for replication tasks
 	Replicator struct {
 		status                           int32
-		config                           *Config
 		clusterMetadata                  cluster.Metadata
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 		clientBean                       client.Bean
@@ -63,7 +62,6 @@ type (
 func NewReplicator(
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
-	config *Config,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	hostInfo *membership.HostInfo,
@@ -96,7 +94,6 @@ func NewReplicator(
 	}
 	return &Replicator{
 		status:                           common.DaemonStatusInitialized,
-		config:                           config,
 		hostInfo:                         hostInfo,
 		serviceResolver:                  serviceResolver,
 		clusterMetadata:                  clusterMetadata,

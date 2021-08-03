@@ -66,7 +66,6 @@ type (
 
 	// Config contains all the service config for worker
 	Config struct {
-		ReplicationCfg                *replicator.Config
 		ArchiverConfig                *archiver.Config
 		ScannerCfg                    *scanner.Config
 		ParentCloseCfg                *parentclosepolicy.Config
@@ -118,7 +117,6 @@ func NewService(
 func NewConfig(params *resource.BootstrapParams) *Config {
 	dc := dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger)
 	config := &Config{
-		ReplicationCfg: &replicator.Config{},
 		ArchiverConfig: &archiver.Config{
 			MaxConcurrentActivityExecutionSize:     dc.GetIntProperty(dynamicconfig.WorkerArchiverMaxConcurrentActivityExecutionSize, 1000),
 			MaxConcurrentWorkflowTaskExecutionSize: dc.GetIntProperty(dynamicconfig.WorkerArchiverMaxConcurrentWorkflowTaskExecutionSize, 1000),
@@ -266,7 +264,6 @@ func (s *Service) startReplicator() {
 	msgReplicator := replicator.NewReplicator(
 		s.GetClusterMetadata(),
 		s.GetClientBean(),
-		s.config.ReplicationCfg,
 		s.GetLogger(),
 		s.GetMetricsClient(),
 		s.GetHostInfo(),
