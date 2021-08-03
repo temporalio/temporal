@@ -58,11 +58,7 @@ func (s scannerCtxExecMgrFactory) NewExecutionManager() persistence.ExecutionMan
 const (
 	scannerContextKey = contextKey(0)
 
-	maxConcurrentActivityExecutionSize = 10
-	maxConcurrentWorkflowExecutionSize = 10
-	maxConcurrentActivityTaskPollers   = 8
-	maxConcurrentWorkflowTaskPollers   = 8
-	infiniteDuration                   = 20 * 365 * 24 * time.Hour
+	infiniteDuration = 20 * 365 * 24 * time.Hour
 
 	tqScannerWFID                  = "temporal-sys-tq-scanner"
 	tqScannerWFTypeName            = "temporal-sys-tq-scanner-workflow"

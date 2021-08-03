@@ -68,6 +68,11 @@ type (
 
 	// Config for ClientWorker
 	Config struct {
+		MaxConcurrentActivityExecutionSize     dynamicconfig.IntPropertyFn
+		MaxConcurrentWorkflowTaskExecutionSize dynamicconfig.IntPropertyFn
+		MaxConcurrentActivityTaskPollers       dynamicconfig.IntPropertyFn
+		MaxConcurrentWorkflowTaskPollers       dynamicconfig.IntPropertyFn
+
 		ArchiverConcurrency           dynamicconfig.IntPropertyFn
 		ArchivalsPerIteration         dynamicconfig.IntPropertyFn
 		TimeLimitPerArchivalIteration dynamicconfig.DurationPropertyFn
@@ -101,7 +106,11 @@ func NewClientWorker(container *BootstrapContainer) ClientWorker {
 	globalConfig = container.Config
 	actCtx := context.WithValue(context.Background(), bootstrapContainerKey, container)
 	wo := worker.Options{
-		BackgroundActivityContext: actCtx,
+		MaxConcurrentActivityExecutionSize:     container.Config.MaxConcurrentActivityExecutionSize(),
+		MaxConcurrentWorkflowTaskExecutionSize: container.Config.MaxConcurrentWorkflowTaskExecutionSize(),
+		MaxConcurrentActivityTaskPollers:       container.Config.MaxConcurrentActivityTaskPollers(),
+		MaxConcurrentWorkflowTaskPollers:       container.Config.MaxConcurrentWorkflowTaskPollers(),
+		BackgroundActivityContext:              actCtx,
 	}
 	clientWorker := &clientWorker{
 		worker:         worker.New(container.SdkClient, workflowTaskQueue, wo),

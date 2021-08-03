@@ -50,6 +50,11 @@ const (
 type (
 	// Config defines the configuration for scanner
 	Config struct {
+		MaxConcurrentActivityExecutionSize     dynamicconfig.IntPropertyFn
+		MaxConcurrentWorkflowTaskExecutionSize dynamicconfig.IntPropertyFn
+		MaxConcurrentActivityTaskPollers       dynamicconfig.IntPropertyFn
+		MaxConcurrentWorkflowTaskPollers       dynamicconfig.IntPropertyFn
+
 		// PersistenceMaxQPS the max rate of calls to persistence
 		PersistenceMaxQPS dynamicconfig.IntPropertyFn
 		// Persistence contains the persistence configuration
@@ -107,11 +112,12 @@ func New(
 // Start starts the scanner
 func (s *Scanner) Start() error {
 	workerOpts := worker.Options{
-		MaxConcurrentActivityExecutionSize:     maxConcurrentActivityExecutionSize,
-		MaxConcurrentWorkflowTaskExecutionSize: maxConcurrentWorkflowExecutionSize,
-		MaxConcurrentActivityTaskPollers:       maxConcurrentActivityTaskPollers,
-		MaxConcurrentWorkflowTaskPollers:       maxConcurrentWorkflowTaskPollers,
-		BackgroundActivityContext:              context.WithValue(context.Background(), scannerContextKey, s.context),
+		MaxConcurrentActivityExecutionSize:     s.context.cfg.MaxConcurrentActivityExecutionSize(),
+		MaxConcurrentWorkflowTaskExecutionSize: s.context.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
+		MaxConcurrentActivityTaskPollers:       s.context.cfg.MaxConcurrentActivityTaskPollers(),
+		MaxConcurrentWorkflowTaskPollers:       s.context.cfg.MaxConcurrentWorkflowTaskPollers(),
+
+		BackgroundActivityContext: context.WithValue(context.Background(), scannerContextKey, s.context),
 	}
 
 	var workerTaskQueueNames []string

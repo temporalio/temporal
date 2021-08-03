@@ -41,6 +41,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+
 	"go.temporal.io/server/common/persistence/visibility"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -2907,7 +2908,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 	reapplyEvents []*historypb.HistoryEvent,
 ) error {
 
-	if e.config.SkipReapplicationByNamespaceId(namespaceUUID) {
+	if e.config.SkipReapplicationByNamespaceID(namespaceUUID) {
 		return nil
 	}
 

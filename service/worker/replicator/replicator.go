@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -57,16 +56,6 @@ type (
 
 	// Config contains all the replication config for worker
 	Config struct {
-		PersistenceMaxQPS                  dynamicconfig.IntPropertyFn
-		ReplicatorMetaTaskConcurrency      dynamicconfig.IntPropertyFn
-		ReplicatorTaskConcurrency          dynamicconfig.IntPropertyFn
-		ReplicatorMessageConcurrency       dynamicconfig.IntPropertyFn
-		ReplicatorActivityBufferRetryCount dynamicconfig.IntPropertyFn
-		ReplicatorHistoryBufferRetryCount  dynamicconfig.IntPropertyFn
-		ReplicationTaskMaxRetryCount       dynamicconfig.IntPropertyFn
-		ReplicationTaskMaxRetryDuration    dynamicconfig.DurationPropertyFn
-		ReplicationTaskContextTimeout      dynamicconfig.DurationPropertyFn
-		ReReplicationContextTimeout        dynamicconfig.DurationPropertyFnWithNamespaceIDFilter
 	}
 )
 
