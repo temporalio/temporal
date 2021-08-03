@@ -629,7 +629,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
 		replicatorNamespaceCache = cache.NewNamespaceCache(metadataManager, clusterMetadata, service.GetMetricsClient(), service.GetLogger())
 		replicatorNamespaceCache.Start()
-		c.startWorkerReplicator(params, service, clusterMetadata)
+		c.startWorkerReplicator(service, clusterMetadata)
 	}
 
 	var clientWorkerNamespaceCache cache.NamespaceCache
@@ -651,7 +651,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	c.shutdownWG.Done()
 }
 
-func (c *temporalImpl) startWorkerReplicator(params *resource.BootstrapParams, service resource.Resource, clusterMetadata cluster.Metadata) {
+func (c *temporalImpl) startWorkerReplicator(service resource.Resource, clusterMetadata cluster.Metadata) {
 	serviceResolver, err := service.GetMembershipMonitor().GetResolver(common.WorkerServiceName)
 	if err != nil {
 		c.logger.Fatal("Fail to start replicator when start worker", tag.Error(err))
