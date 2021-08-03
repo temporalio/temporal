@@ -652,7 +652,6 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 }
 
 func (c *temporalImpl) startWorkerReplicator(params *resource.BootstrapParams, service resource.Resource, clusterMetadata cluster.Metadata) {
-	workerConfig := worker.NewConfig(params)
 	serviceResolver, err := service.GetMembershipMonitor().GetResolver(common.WorkerServiceName)
 	if err != nil {
 		c.logger.Fatal("Fail to start replicator when start worker", tag.Error(err))
@@ -660,7 +659,6 @@ func (c *temporalImpl) startWorkerReplicator(params *resource.BootstrapParams, s
 	c.replicator = replicator.NewReplicator(
 		clusterMetadata,
 		service.GetClientBean(),
-		workerConfig.ReplicationCfg,
 		c.logger,
 		service.GetMetricsClient(),
 		service.GetHostInfo(),
