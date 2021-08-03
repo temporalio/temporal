@@ -143,7 +143,7 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 	historyIterator := h.historyIterator
 	var progress progress
 	if historyIterator == nil { // will only be set by testing code
-		historyIterator, _ = loadHistoryIterator(ctx, request, h.container.HistoryV2Manager, featureCatalog, &progress)
+		historyIterator, _ = loadHistoryIterator(ctx, request, h.container.ExecutionManager, featureCatalog, &progress)
 	}
 
 	encoder := codec.NewJSONPBEncoder()
@@ -377,11 +377,11 @@ func (h *historyArchiver) getHighestVersion(ctx context.Context, URI archiver.UR
 	return highestVersion, highestVersionPart, lowestVersionPart, nil
 }
 
-func loadHistoryIterator(ctx context.Context, request *archiver.ArchiveHistoryRequest, historyManager persistence.HistoryManager, featureCatalog *archiver.ArchiveFeatureCatalog, progress *progress) (historyIterator archiver.HistoryIterator, err error) {
+func loadHistoryIterator(ctx context.Context, request *archiver.ArchiveHistoryRequest, executionManager persistence.ExecutionManager, featureCatalog *archiver.ArchiveFeatureCatalog, progress *progress) (historyIterator archiver.HistoryIterator, err error) {
 
 	defer func() {
 		if err != nil || historyIterator == nil {
-			historyIterator, err = archiver.NewHistoryIteratorFromState(request, historyManager, targetHistoryBlobSize, nil)
+			historyIterator, err = archiver.NewHistoryIteratorFromState(request, executionManager, targetHistoryBlobSize, nil)
 		}
 	}()
 
@@ -389,7 +389,7 @@ func loadHistoryIterator(ctx context.Context, request *archiver.ArchiveHistoryRe
 		if featureCatalog.ProgressManager.HasProgress(ctx) {
 			err = featureCatalog.ProgressManager.LoadProgress(ctx, &progress)
 			if err == nil {
-				historyIterator, err = archiver.NewHistoryIteratorFromState(request, historyManager, targetHistoryBlobSize, progress.IteratorState)
+				historyIterator, err = archiver.NewHistoryIteratorFromState(request, executionManager, targetHistoryBlobSize, progress.IteratorState)
 			}
 		}
 

@@ -46,8 +46,8 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller     *gomock.Controller
-		mockHistoryMgr *persistence.MockHistoryManager
+		controller           *gomock.Controller
+		mockExecutionManager *persistence.MockExecutionManager
 
 		logger log.Logger
 
@@ -73,7 +73,7 @@ func (s *eventsCacheSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockHistoryMgr = persistence.NewMockHistoryManager(s.controller)
+	s.mockExecutionManager = persistence.NewMockExecutionManager(s.controller)
 
 	s.logger = log.NewTestLogger()
 	s.cache = s.newTestEventsCache()
@@ -90,7 +90,7 @@ func (s *eventsCacheSuite) newTestEventsCache() *CacheImpl {
 		16,
 		32,
 		time.Minute,
-		s.mockHistoryMgr,
+		s.mockExecutionManager,
 		false,
 		s.logger,
 		metrics.NewClient(tally.NoopScope, metrics.History),
@@ -150,7 +150,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 	}
 
 	shardID := int32(10)
-	s.mockHistoryMgr.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    event1.GetEventId(),
 		MaxEventID:    event6.GetEventId() + 1,
@@ -176,7 +176,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 
 	shardID := int32(10)
 	expectedErr := errors.New("persistence call failed")
-	s.mockHistoryMgr.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    int64(11),
 		MaxEventID:    int64(15),
@@ -207,7 +207,7 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 	}
 
 	shardID := int32(10)
-	s.mockHistoryMgr.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    event2.GetEventId(),
 		MaxEventID:    event2.GetEventId() + 1,

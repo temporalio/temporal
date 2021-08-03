@@ -240,9 +240,9 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		}
 		fmt.Println("Deleting history events for:")
 		prettyPrintJSONObject(branchInfo)
-		histV2 := cassandra.NewExecutionStore(session, log.NewNoopLogger())
-		histMgr := persistence.NewHistoryV2ManagerImpl(histV2, log.NewNoopLogger(), dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit))
-		err = histMgr.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+		execStore := cassandra.NewExecutionStore(session, log.NewNoopLogger())
+		execMgr := persistence.NewExecutionManager(execStore, log.NewNoopLogger(), dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit))
+		err = execMgr.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
 			BranchToken: branchToken,
 			ShardID:     int32(shardIDInt),
 		})

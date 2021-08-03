@@ -163,7 +163,7 @@ func HistoryScavengerActivity(
 
 	scavenger := history.NewScavenger(
 		numShards,
-		ctx.GetHistoryManager(),
+		ctx.GetExecutionManager(),
 		rps,
 		ctx.GetHistoryClient(),
 		hbd,
@@ -203,7 +203,6 @@ func ExecutionsScavengerActivity(
 	scavenger := executions.NewScavenger(
 		ctx.cfg.Persistence.NumHistoryShards,
 		ctx.GetExecutionManager(),
-		ctx.GetHistoryManager(),
 		metricsClient,
 		ctx.GetLogger(),
 	)

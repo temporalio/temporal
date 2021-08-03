@@ -60,8 +60,8 @@ type (
 		mockTransactionMgr      *MocknDCTransactionMgr
 		mockStateBuilder        *MocknDCStateRebuilder
 
-		logger         log.Logger
-		mockHistoryMgr *persistence.MockHistoryManager
+		logger          log.Logger
+		mockExecManager *persistence.MockExecutionManager
 
 		namespaceID string
 		namespace   string
@@ -99,7 +99,7 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 		tests.NewDynamicConfig(),
 	)
 
-	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
+	s.mockExecManager = s.mockShard.Resource.ExecutionMgr
 
 	s.logger = s.mockShard.GetLogger()
 
@@ -187,7 +187,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	).Return(s.mockRebuiltMutableState, rebuiltHistorySize, nil)
 
 	shardID := s.mockShard.GetShardID()
-	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
+	s.mockExecManager.EXPECT().ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: branchToken,
 		ForkNodeID:      baseEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID, s.workflowID, s.newRunID),

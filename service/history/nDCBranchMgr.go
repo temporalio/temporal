@@ -61,7 +61,7 @@ type (
 		shard           shard.Context
 		namespaceCache  cache.NamespaceCache
 		clusterMetadata cluster.Metadata
-		historyV2Mgr    persistence.HistoryManager
+		executionMgr    persistence.ExecutionManager
 
 		context      workflow.Context
 		mutableState workflow.MutableState
@@ -82,7 +82,7 @@ func newNDCBranchMgr(
 		shard:           shard,
 		namespaceCache:  shard.GetNamespaceCache(),
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
-		historyV2Mgr:    shard.GetHistoryManager(),
+		executionMgr:    shard.GetExecutionManager(),
 
 		context:      context,
 		mutableState: mutableState,
@@ -243,7 +243,7 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 	namespaceID := executionInfo.NamespaceId
 	workflowID := executionInfo.WorkflowId
 
-	resp, err := r.historyV2Mgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
+	resp, err := r.executionMgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseBranchLastEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, uuid.New()),

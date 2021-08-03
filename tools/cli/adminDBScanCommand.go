@@ -36,10 +36,10 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	cassp "go.temporal.io/server/common/persistence/cassandra"
@@ -292,7 +292,7 @@ func scanShard(
 		closeFn()
 	}()
 	workflowStore := cassp.NewExecutionStore(session, log.NewNoopLogger())
-	execMan := persistence.NewExecutionManager(workflowStore, log.NewNoopLogger())
+	execMan := persistence.NewExecutionManager(workflowStore, log.NewNoopLogger(), dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit))
 
 	var token []byte
 	isFirstIteration := true
@@ -430,7 +430,7 @@ func fetchAndVerifyHistoryExists(
 	checkFailureWriter BufferedWriter,
 	shardID int32,
 	limiter quotas.RateLimiter,
-	workflowStore persistence.ExecutionStore,
+	executionStore persistence.ExecutionStore,
 	totalDBRequests *int64,
 ) (VerificationResult, *persistence.InternalReadHistoryBranchResponse, *persistencespb.HistoryBranch) {
 	var branch *persistencespb.HistoryBranch
@@ -462,9 +462,9 @@ func fetchAndVerifyHistoryExists(
 		PageSize:  historyPageSize,
 	}
 	preconditionForDBCall(totalDBRequests, limiter)
-	history, err := workflowStore.ReadHistoryBranch(readHistoryBranchReq)
+	history, err := executionStore.ReadHistoryBranch(readHistoryBranchReq)
 
-	ecf, stillExists := concreteExecutionStillExists(executionInfo, executionState, shardID, workflowStore, limiter, totalDBRequests)
+	ecf, stillExists := concreteExecutionStillExists(executionInfo, executionState, shardID, executionStore, limiter, totalDBRequests)
 	if ecf != nil {
 		checkFailureWriter.Add(ecf)
 		return VerificationResultCheckFailure, nil, nil
@@ -711,7 +711,7 @@ func concreteExecutionStillExists(
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
 	shardID int32,
-	workflowStore persistence.ExecutionStore,
+	executionStore persistence.ExecutionStore,
 	limiter quotas.RateLimiter,
 	totalDBRequests *int64,
 ) (*ExecutionCheckFailure, bool) {
@@ -724,7 +724,7 @@ func concreteExecutionStillExists(
 		},
 	}
 	preconditionForDBCall(totalDBRequests, limiter)
-	_, err := workflowStore.GetWorkflowExecution(getConcreteExecution)
+	_, err := executionStore.GetWorkflowExecution(getConcreteExecution)
 	if err == nil {
 		return nil, true
 	}

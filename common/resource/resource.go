@@ -103,7 +103,6 @@ type (
 		GetVisibilityManager() visibility.VisibilityManager
 		GetNamespaceReplicationQueue() persistence.NamespaceReplicationQueue
 		GetShardManager() persistence.ShardManager
-		GetHistoryManager() persistence.HistoryManager
 		GetExecutionManager() persistence.ExecutionManager
 		GetPersistenceBean() persistenceClient.Bean
 

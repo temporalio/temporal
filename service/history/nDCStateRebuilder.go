@@ -69,7 +69,7 @@ type (
 		namespaceCache  cache.NamespaceCache
 		eventsCache     events.Cache
 		clusterMetadata cluster.Metadata
-		historyV2Mgr    persistence.HistoryManager
+		executionMgr    persistence.ExecutionManager
 		taskRefresher   workflow.TaskRefresher
 
 		rebuiltHistorySize int64
@@ -89,7 +89,7 @@ func newNDCStateRebuilder(
 		namespaceCache:  shard.GetNamespaceCache(),
 		eventsCache:     shard.GetEventsCache(),
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
-		historyV2Mgr:    shard.GetHistoryManager(),
+		executionMgr:    shard.GetExecutionManager(),
 		taskRefresher: workflow.NewTaskRefresher(
 			shard.GetConfig(),
 			shard.GetNamespaceCache(),
@@ -242,7 +242,7 @@ func (r *nDCStateRebuilderImpl) getPaginationFn(
 
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
 
-		resp, err := r.historyV2Mgr.ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+		resp, err := r.executionMgr.ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 			BranchToken:   branchToken,
 			MinEventID:    firstEventID,
 			MaxEventID:    nextEventID,

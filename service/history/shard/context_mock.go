@@ -310,20 +310,6 @@ func (mr *MockContextMockRecorder) GetExecutionManager() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionManager", reflect.TypeOf((*MockContext)(nil).GetExecutionManager))
 }
 
-// GetHistoryManager mocks base method.
-func (m *MockContext) GetHistoryManager() persistence.HistoryManager {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetHistoryManager")
-	ret0, _ := ret[0].(persistence.HistoryManager)
-	return ret0
-}
-
-// GetHistoryManager indicates an expected call of GetHistoryManager.
-func (mr *MockContextMockRecorder) GetHistoryManager() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryManager", reflect.TypeOf((*MockContext)(nil).GetHistoryManager))
-}
-
 // GetLastUpdatedTime mocks base method.
 func (m *MockContext) GetLastUpdatedTime() time.Time {
 	m.ctrl.T.Helper()

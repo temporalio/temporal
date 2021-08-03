@@ -65,8 +65,8 @@ type (
 		*require.Assertions
 		suite.Suite
 
-		controller     *gomock.Controller
-		mockHistoryMgr *persistence.MockHistoryManager
+		controller       *gomock.Controller
+		mockExecutionMgr *persistence.MockExecutionManager
 	}
 
 	page struct {
@@ -98,7 +98,7 @@ func TestHistoryIteratorSuite(t *testing.T) {
 func (s *HistoryIteratorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
-	s.mockHistoryMgr = persistence.NewMockHistoryManager(s.controller)
+	s.mockExecutionMgr = persistence.NewMockExecutionManager(s.controller)
 }
 
 func (s *HistoryIteratorSuite) TearDownTest() {
@@ -106,8 +106,8 @@ func (s *HistoryIteratorSuite) TearDownTest() {
 }
 
 func (s *HistoryIteratorSuite) TestReadHistory_Failed_EventsV2() {
-	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any()).Return(nil, errors.New("got error reading history branch"))
-	itr := s.constructTestHistoryIterator(s.mockHistoryMgr, testDefaultTargetHistoryBlobSize, nil)
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any()).Return(nil, errors.New("got error reading history branch"))
+	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, testDefaultTargetHistoryBlobSize, nil)
 	history, err := itr.readHistory(common.FirstEventID)
 	s.Error(err)
 	s.Nil(history)
@@ -118,8 +118,8 @@ func (s *HistoryIteratorSuite) TestReadHistory_Success_EventsV2() {
 		History:       []*historypb.History{},
 		NextPageToken: []byte{},
 	}
-	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any()).Return(&resp, nil)
-	itr := s.constructTestHistoryIterator(s.mockHistoryMgr, testDefaultTargetHistoryBlobSize, nil)
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any()).Return(&resp, nil)
+	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, testDefaultTargetHistoryBlobSize, nil)
 	history, err := itr.readHistory(common.FirstEventID)
 	s.NoError(err)
 	s.Len(history, 0)
@@ -142,8 +142,8 @@ func (s *HistoryIteratorSuite) TestReadHistoryBatches_Fail_FirstCallToReadHistor
 			lastEventFailoverVersion:  1,
 		},
 	}
-	s.initMockHistoryManager(batchInfo, 0, false, pages...)
-	itr := s.constructTestHistoryIterator(s.mockHistoryMgr, testDefaultTargetHistoryBlobSize, nil)
+	s.initMockExecutionManager(batchInfo, 0, false, pages...)
+	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, testDefaultTargetHistoryBlobSize, nil)
 	startingIteratorState := s.copyIteratorState(itr)
 	events, nextIterState, err := itr.readHistoryBatches(common.FirstEventID)
 	s.Error(err)
@@ -169,8 +169,8 @@ func (s *HistoryIteratorSuite) TestReadHistoryBatches_Fail_NonFirstCallToReadHis
 			lastEventFailoverVersion:  1,
 		},
 	}
-	s.initMockHistoryManager(batchInfo, 1, false, pages...)
-	itr := s.constructTestHistoryIterator(s.mockHistoryMgr, testDefaultTargetHistoryBlobSize, nil)
+	s.initMockExecutionManager(batchInfo, 1, false, pages...)
+	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, testDefaultTargetHistoryBlobSize, nil)
 	startingIteratorState := s.copyIteratorState(itr)
 	events, nextIterState, err := itr.readHistoryBatches(common.FirstEventID)
 	s.Error(err)
@@ -202,9 +202,9 @@ func (s *HistoryIteratorSuite) TestReadHistoryBatches_Success_ReadToHistoryEnd()
 			lastEventFailoverVersion:  1,
 		},
 	}
-	s.initMockHistoryManager(batchInfo, -1, true, pages...)
+	s.initMockExecutionManager(batchInfo, -1, true, pages...)
 	// ensure target history batches size is greater than total history length to ensure all of history is read
-	itr := s.constructTestHistoryIterator(s.mockHistoryMgr, 20*testDefaultHistoryEventSize, nil)
+	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, 20*testDefaultHistoryEventSize, nil)
 	startingIteratorState := s.copyIteratorState(itr)
 	history, nextIterState, err := itr.readHistoryBatches(common.FirstEventID)
 	s.NoError(err)
@@ -237,9 +237,9 @@ func (s *HistoryIteratorSuite) TestReadHistoryBatches_Success_TargetSizeSatisfie
 			lastEventFailoverVersion:  1,
 		},
 	}
-	s.initMockHistoryManager(batchInfo, -1, false, pages...)
+	s.initMockExecutionManager(batchInfo, -1, false, pages...)
 	// ensure target history batches is smaller than full length of history so that not all of history is read
-	itr := s.constructTestHistoryIterator(s.mockHistoryMgr, 11*testDefaultHistoryEventSize, nil)
+	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, 11*testDefaultHistoryEventSize, nil)
 	startingIteratorState := s.copyIteratorState(itr)
 	history, nextIterState, err := itr.readHistoryBatches(common.FirstEventID)
 	s.NoError(err)
@@ -272,9 +272,9 @@ func (s *HistoryIteratorSuite) TestReadHistoryBatches_Success_ReadExactlyToHisto
 			lastEventFailoverVersion:  1,
 		},
 	}
-	s.initMockHistoryManager(batchInfo, -1, true, pages...)
+	s.initMockExecutionManager(batchInfo, -1, true, pages...)
 	// ensure target history batches size is equal to the full length of history so that all of history is read
-	itr := s.constructTestHistoryIterator(s.mockHistoryMgr, 16*testDefaultHistoryEventSize, nil)
+	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, 16*testDefaultHistoryEventSize, nil)
 	startingIteratorState := s.copyIteratorState(itr)
 	history, nextIterState, err := itr.readHistoryBatches(common.FirstEventID)
 	s.NoError(err)
@@ -301,9 +301,9 @@ func (s *HistoryIteratorSuite) TestReadHistoryBatches_Success_ReadPageMultipleTi
 			lastEventFailoverVersion:  1,
 		},
 	}
-	s.initMockHistoryManager(batchInfo, -1, true, pages...)
+	s.initMockExecutionManager(batchInfo, -1, true, pages...)
 	// ensure target history batches is very small so that one page needs multiple read
-	itr := s.constructTestHistoryIterator(s.mockHistoryMgr, 2*testDefaultHistoryEventSize, nil)
+	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, 2*testDefaultHistoryEventSize, nil)
 	startingIteratorState := s.copyIteratorState(itr)
 	history, nextIterState, err := itr.readHistoryBatches(common.FirstEventID)
 	s.NoError(err)
@@ -344,9 +344,9 @@ func (s *HistoryIteratorSuite) TestNext_Fail_IteratorDepleted() {
 			lastEventFailoverVersion:  5,
 		},
 	}
-	s.initMockHistoryManager(batchInfo, -1, true, pages...)
+	s.initMockExecutionManager(batchInfo, -1, true, pages...)
 	// set target history batches such that a single call to next will read all of history
-	itr := s.constructTestHistoryIterator(s.mockHistoryMgr, 16*testDefaultHistoryEventSize, nil)
+	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, 16*testDefaultHistoryEventSize, nil)
 	blob, err := itr.Next()
 	s.Nil(err)
 
@@ -408,9 +408,9 @@ func (s *HistoryIteratorSuite) TestNext_Fail_ReturnErrOnSecondCallToNext() {
 			lastEventFailoverVersion:  1,
 		},
 	}
-	s.initMockHistoryManager(batchInfo, 3, false, pages...)
+	s.initMockExecutionManager(batchInfo, 3, false, pages...)
 	// set target blob size such that the first two pages are read for blob one without error, third page will return error
-	itr := s.constructTestHistoryIterator(s.mockHistoryMgr, 6*testDefaultHistoryEventSize, nil)
+	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, 6*testDefaultHistoryEventSize, nil)
 	blob, err := itr.Next()
 	s.NoError(err)
 	expectedIteratorState := historyIteratorState{
@@ -456,9 +456,9 @@ func (s *HistoryIteratorSuite) TestNext_Success_TenCallsToNext() {
 		}
 		pages = append(pages, p)
 	}
-	s.initMockHistoryManager(batchInfo, -1, true, pages...)
+	s.initMockExecutionManager(batchInfo, -1, true, pages...)
 	// set target blob size size such that every 10 persistence pages is one group of history batches
-	itr := s.constructTestHistoryIterator(s.mockHistoryMgr, 20*10*testDefaultHistoryEventSize, nil)
+	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, 20*10*testDefaultHistoryEventSize, nil)
 	expectedIteratorState := historyIteratorState{
 		FinishedIteration: false,
 		NextEventID:       common.FirstEventID,
@@ -534,8 +534,8 @@ func (s *HistoryIteratorSuite) TestNext_Success_SameHistoryDifferentPage() {
 	}
 	eventsPerRead := 6
 	targetBlobSize := eventsPerRead * testDefaultHistoryEventSize
-	s.initMockHistoryManager(batchInfo, -1, true, pages...)
-	itr1 := s.constructTestHistoryIterator(s.mockHistoryMgr, targetBlobSize, nil)
+	s.initMockExecutionManager(batchInfo, -1, true, pages...)
+	itr1 := s.constructTestHistoryIterator(s.mockExecutionMgr, targetBlobSize, nil)
 
 	pages = []page{
 		{
@@ -569,8 +569,8 @@ func (s *HistoryIteratorSuite) TestNext_Success_SameHistoryDifferentPage() {
 			lastEventFailoverVersion:  1,
 		},
 	}
-	s.initMockHistoryManager(batchInfo, -1, true, pages...)
-	itr2 := s.constructTestHistoryIterator(s.mockHistoryMgr, targetBlobSize, nil)
+	s.initMockExecutionManager(batchInfo, -1, true, pages...)
+	itr2 := s.constructTestHistoryIterator(s.mockExecutionMgr, targetBlobSize, nil)
 
 	totalPages := 3
 	expectedFirstEventID := []int64{1, 7, 14}
@@ -612,7 +612,7 @@ func (s *HistoryIteratorSuite) TestNewIteratorWithState() {
 	s.assertStateMatches(testIteratorState, newItr)
 }
 
-func (s *HistoryIteratorSuite) initMockHistoryManager(batchInfo []int, returnErrorOnPage int, addNotExistCall bool, pages ...page) {
+func (s *HistoryIteratorSuite) initMockExecutionManager(batchInfo []int, returnErrorOnPage int, addNotExistCall bool, pages ...page) {
 	firstEventIDs := []int64{common.FirstEventID}
 	for i, batchSize := range batchInfo {
 		firstEventIDs = append(firstEventIDs, firstEventIDs[i]+int64(batchSize))
@@ -628,14 +628,14 @@ func (s *HistoryIteratorSuite) initMockHistoryManager(batchInfo []int, returnErr
 			ShardID:     testShardId,
 		}
 		if returnErrorOnPage == i {
-			s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(req).Return(nil, errors.New("got error getting workflow execution history"))
+			s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(req).Return(nil, errors.New("got error getting workflow execution history"))
 			return
 		}
 
 		resp := &persistence.ReadHistoryBranchByBatchResponse{
 			History: s.constructHistoryBatches(batchInfo, p, firstEventIDs[p.firstbatchIdx]),
 		}
-		s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(req).Return(resp, nil).MaxTimes(2)
+		s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(req).Return(resp, nil).MaxTimes(2)
 	}
 
 	if addNotExistCall {
@@ -646,7 +646,7 @@ func (s *HistoryIteratorSuite) initMockHistoryManager(batchInfo []int, returnErr
 			PageSize:    testDefaultPersistencePageSize,
 			ShardID:     testShardId,
 		}
-		s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(req).Return(nil, serviceerror.NewNotFound("Reach the end"))
+		s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(req).Return(nil, serviceerror.NewNotFound("Reach the end"))
 	}
 }
 
@@ -683,7 +683,7 @@ func (s *HistoryIteratorSuite) constructHistoryBatches(batchInfo []int, page pag
 }
 
 func (s *HistoryIteratorSuite) constructTestHistoryIterator(
-	mockHistoryMgr *persistence.MockHistoryManager,
+	mockExecutionMgr *persistence.MockExecutionManager,
 	targetHistoryBlobSize int,
 	initialState []byte,
 ) *historyIterator {
@@ -697,7 +697,7 @@ func (s *HistoryIteratorSuite) constructTestHistoryIterator(
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
-	itr := newHistoryIterator(request, mockHistoryMgr, targetHistoryBlobSize)
+	itr := newHistoryIterator(request, mockExecutionMgr, targetHistoryBlobSize)
 	if initialState != nil {
 		err := itr.reset(initialState)
 		s.NoError(err)

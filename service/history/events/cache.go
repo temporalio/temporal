@@ -66,7 +66,7 @@ type (
 
 	CacheImpl struct {
 		cache.Cache
-		eventsMgr     persistence.HistoryManager
+		eventsMgr     persistence.ExecutionManager
 		disabled      bool
 		logger        log.Logger
 		metricsClient metrics.Client
@@ -92,7 +92,7 @@ func NewEventsCache(
 	initialCount int,
 	maxCount int,
 	ttl time.Duration,
-	eventsMgr persistence.HistoryManager,
+	eventsMgr persistence.ExecutionManager,
 	disabled bool,
 	logger log.Logger,
 	metrics metrics.Client,

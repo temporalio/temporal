@@ -38,25 +38,11 @@ type (
 		Close()
 
 		GetClusterMetadataManager() persistence.ClusterMetadataManager
-		SetClusterMetadataManager(persistence.ClusterMetadataManager)
-
 		GetMetadataManager() persistence.MetadataManager
-		SetMetadataManager(persistence.MetadataManager)
-
 		GetTaskManager() persistence.TaskManager
-		SetTaskManager(persistence.TaskManager)
-
 		GetNamespaceReplicationQueue() persistence.NamespaceReplicationQueue
-		SetNamespaceReplicationQueue(persistence.NamespaceReplicationQueue)
-
 		GetShardManager() persistence.ShardManager
-		SetShardManager(persistence.ShardManager)
-
-		GetHistoryManager() persistence.HistoryManager
-		SetHistoryManager(persistence.HistoryManager)
-
 		GetExecutionManager() persistence.ExecutionManager
-		SetExecutionManager(persistence.ExecutionManager)
 	}
 
 	// BeanImpl stores persistence managers
@@ -66,7 +52,6 @@ type (
 		taskManager               persistence.TaskManager
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		shardManager              persistence.ShardManager
-		historyManager            persistence.HistoryManager
 		executionManager          persistence.ExecutionManager
 
 		factory Factory
@@ -106,11 +91,6 @@ func NewBeanFromFactory(
 		return nil, err
 	}
 
-	historyMgr, err := factory.NewHistoryManager()
-	if err != nil {
-		return nil, err
-	}
-
 	executionManager, err := factory.NewExecutionManager()
 	if err != nil {
 		return nil, err
@@ -123,7 +103,6 @@ func NewBeanFromFactory(
 		taskMgr,
 		namespaceReplicationQueue,
 		shardMgr,
-		historyMgr,
 		executionManager,
 	), nil
 }
@@ -136,7 +115,6 @@ func NewBean(
 	taskManager persistence.TaskManager,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	shardManager persistence.ShardManager,
-	historyManager persistence.HistoryManager,
 	executionManager persistence.ExecutionManager,
 ) *BeanImpl {
 	return &BeanImpl{
@@ -146,7 +124,6 @@ func NewBean(
 		taskManager:               taskManager,
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		shardManager:              shardManager,
-		historyManager:            historyManager,
 		executionManager:          executionManager,
 	}
 }
@@ -159,17 +136,6 @@ func (s *BeanImpl) GetClusterMetadataManager() persistence.ClusterMetadataManage
 	return s.clusterMetadataManager
 }
 
-// SetClusterMetadataManager set ClusterMetadataManager
-func (s *BeanImpl) SetClusterMetadataManager(
-	clusterMetadataManager persistence.ClusterMetadataManager,
-) {
-
-	s.Lock()
-	defer s.Unlock()
-
-	s.clusterMetadataManager = clusterMetadataManager
-}
-
 // GetMetadataManager get MetadataManager
 func (s *BeanImpl) GetMetadataManager() persistence.MetadataManager {
 
@@ -177,17 +143,6 @@ func (s *BeanImpl) GetMetadataManager() persistence.MetadataManager {
 	defer s.RUnlock()
 
 	return s.metadataManager
-}
-
-// SetMetadataManager set MetadataManager
-func (s *BeanImpl) SetMetadataManager(
-	metadataManager persistence.MetadataManager,
-) {
-
-	s.Lock()
-	defer s.Unlock()
-
-	s.metadataManager = metadataManager
 }
 
 // GetTaskManager get TaskManager
@@ -199,17 +154,6 @@ func (s *BeanImpl) GetTaskManager() persistence.TaskManager {
 	return s.taskManager
 }
 
-// SetTaskManager set TaskManager
-func (s *BeanImpl) SetTaskManager(
-	taskManager persistence.TaskManager,
-) {
-
-	s.Lock()
-	defer s.Unlock()
-
-	s.taskManager = taskManager
-}
-
 // GetNamespaceReplicationQueue get NamespaceReplicationQueue
 func (s *BeanImpl) GetNamespaceReplicationQueue() persistence.NamespaceReplicationQueue {
 
@@ -217,17 +161,6 @@ func (s *BeanImpl) GetNamespaceReplicationQueue() persistence.NamespaceReplicati
 	defer s.RUnlock()
 
 	return s.namespaceReplicationQueue
-}
-
-// SetNamespaceReplicationQueue set NamespaceReplicationQueue
-func (s *BeanImpl) SetNamespaceReplicationQueue(
-	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
-) {
-
-	s.Lock()
-	defer s.Unlock()
-
-	s.namespaceReplicationQueue = namespaceReplicationQueue
 }
 
 // GetShardManager get ShardManager
@@ -239,54 +172,12 @@ func (s *BeanImpl) GetShardManager() persistence.ShardManager {
 	return s.shardManager
 }
 
-// SetShardManager set ShardManager
-func (s *BeanImpl) SetShardManager(
-	shardManager persistence.ShardManager,
-) {
-
-	s.Lock()
-	defer s.Unlock()
-
-	s.shardManager = shardManager
-}
-
-// GetHistoryManager get HistoryManager
-func (s *BeanImpl) GetHistoryManager() persistence.HistoryManager {
-
-	s.RLock()
-	defer s.RUnlock()
-
-	return s.historyManager
-}
-
-// SetHistoryManager set HistoryManager
-func (s *BeanImpl) SetHistoryManager(
-	historyManager persistence.HistoryManager,
-) {
-
-	s.Lock()
-	defer s.Unlock()
-
-	s.historyManager = historyManager
-}
-
 // GetExecutionManager get ExecutionManager
 func (s *BeanImpl) GetExecutionManager() persistence.ExecutionManager {
 	s.RLock()
 	defer s.RUnlock()
 
 	return s.executionManager
-}
-
-// SetExecutionManager set ExecutionManager
-func (s *BeanImpl) SetExecutionManager(
-	executionManager persistence.ExecutionManager,
-) {
-
-	s.Lock()
-	defer s.Unlock()
-
-	s.executionManager = executionManager
 }
 
 // Close cleanup connections
@@ -300,7 +191,6 @@ func (s *BeanImpl) Close() {
 	s.taskManager.Close()
 	s.namespaceReplicationQueue.Stop()
 	s.shardManager.Close()
-	s.historyManager.Close()
 	s.executionManager.Close()
 
 	s.factory.Close()

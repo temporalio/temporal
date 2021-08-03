@@ -145,7 +145,7 @@ func (h *historyArchiver) Archive(
 
 	historyIterator := h.historyIterator
 	if historyIterator == nil { // will only be set by testing code
-		historyIterator = archiver.NewHistoryIterator(request, h.container.HistoryV2Manager, targetHistoryBlobSize)
+		historyIterator = archiver.NewHistoryIterator(request, h.container.ExecutionManager, targetHistoryBlobSize)
 	}
 
 	var historyBatches []*historypb.History

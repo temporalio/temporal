@@ -115,11 +115,11 @@ func (s *HistoryV2PersistenceSuite) TestGenUUIDs() {
 // TestScanAllTrees test
 func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 	// TODO https://go.temporal.io/server/issues/2458
-	if s.HistoryV2Mgr.GetName() != "cassandra" {
+	if s.ExecutionManager.GetName() != "cassandra" {
 		return
 	}
 
-	resp, err := s.HistoryV2Mgr.GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
+	resp, err := s.ExecutionManager.GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
 		PageSize: 1,
 	})
 	s.Nil(err)
@@ -142,7 +142,7 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 
 	var pgToken []byte
 	for {
-		resp, err := s.HistoryV2Mgr.GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
+		resp, err := s.ExecutionManager.GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
 			PageSize:      pgSize,
 			NextPageToken: pgToken,
 		})
@@ -219,7 +219,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 		ShardID:       s.ShardInfo.GetShardId(),
 	}
 	// first page
-	resp, err := s.HistoryV2Mgr.ReadHistoryBranch(req)
+	resp, err := s.ExecutionManager.ReadHistoryBranch(req)
 	s.Nil(err)
 	s.Equal(4, len(resp.HistoryEvents))
 	s.Equal(int64(6), resp.HistoryEvents[0].GetEventId())
@@ -282,7 +282,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	}
 
 	// first page
-	resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
+	resp, err = s.ExecutionManager.ReadHistoryBranch(req)
 	s.Nil(err)
 
 	s.Equal(8, len(resp.HistoryEvents))
@@ -292,13 +292,13 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	// this page is all stale batches
 	// doe to difference in Cassandra / MySQL pagination
 	// the stale event batch may get returned
-	resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
+	resp, err = s.ExecutionManager.ReadHistoryBranch(req)
 	s.Nil(err)
 	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
 	req.NextPageToken = resp.NextPageToken
 	if len(resp.HistoryEvents) == 0 {
 		// second page
-		resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
+		resp, err = s.ExecutionManager.ReadHistoryBranch(req)
 		s.Nil(err)
 		s.Equal(3, len(resp.HistoryEvents))
 		historyR.Events = append(historyR.Events, resp.HistoryEvents...)
@@ -310,14 +310,14 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	}
 
 	// 3rd page, since we fork from nodeID=13, we can only see one batch of 12 here
-	resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
+	resp, err = s.ExecutionManager.ReadHistoryBranch(req)
 	s.Nil(err)
 	s.Equal(1, len(resp.HistoryEvents))
 	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
 	req.NextPageToken = resp.NextPageToken
 
 	// 4th page, 13~17
-	resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
+	resp, err = s.ExecutionManager.ReadHistoryBranch(req)
 	s.Nil(err)
 	s.Equal(5, len(resp.HistoryEvents))
 	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
@@ -329,13 +329,13 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	// If it does return a token, we need to ensure that if the token returned is used
 	// to get history again, no error and history events should be returned.
 	req.PageSize = 1
-	resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
+	resp, err = s.ExecutionManager.ReadHistoryBranch(req)
 	s.Nil(err)
 	s.Equal(3, len(resp.HistoryEvents))
 	historyR.Events = append(historyR.Events, resp.HistoryEvents...)
 	req.NextPageToken = resp.NextPageToken
 	if len(resp.NextPageToken) != 0 {
-		resp, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
+		resp, err = s.ExecutionManager.ReadHistoryBranch(req)
 		s.Nil(err)
 		s.Equal(0, len(resp.HistoryEvents))
 	}
@@ -347,7 +347,7 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 	// is empty), the call should return an error.
 	req.MinEventID = 19
 	req.NextPageToken = nil
-	_, err = s.HistoryV2Mgr.ReadHistoryBranch(req)
+	_, err = s.ExecutionManager.ReadHistoryBranch(req)
 	s.IsType(&serviceerror.NotFound{}, err)
 
 	err = s.deleteHistoryBranch(bi2)
@@ -709,7 +709,7 @@ func (s *HistoryV2PersistenceSuite) deleteHistoryBranch(branch []byte) error {
 
 	op := func() error {
 		var err error
-		err = s.HistoryV2Mgr.DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
+		err = s.ExecutionManager.DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
 			BranchToken: branch,
 			ShardID:     s.ShardInfo.GetShardId(),
 		})
@@ -721,7 +721,7 @@ func (s *HistoryV2PersistenceSuite) deleteHistoryBranch(branch []byte) error {
 
 // persistence helper
 func (s *HistoryV2PersistenceSuite) descTreeByToken(br []byte) []*persistencespb.HistoryBranch {
-	resp, err := s.HistoryV2Mgr.GetHistoryTree(&p.GetHistoryTreeRequest{
+	resp, err := s.ExecutionManager.GetHistoryTree(&p.GetHistoryTreeRequest{
 		BranchToken: br,
 		ShardID:     convert.Int32Ptr(s.ShardInfo.GetShardId()),
 	})
@@ -730,7 +730,7 @@ func (s *HistoryV2PersistenceSuite) descTreeByToken(br []byte) []*persistencespb
 }
 
 func (s *HistoryV2PersistenceSuite) descTree(treeID string) []*persistencespb.HistoryBranch {
-	resp, err := s.HistoryV2Mgr.GetHistoryTree(&p.GetHistoryTreeRequest{
+	resp, err := s.ExecutionManager.GetHistoryTree(&p.GetHistoryTreeRequest{
 		TreeID:  treeID,
 		ShardID: convert.Int32Ptr(s.ShardInfo.GetShardId()),
 	})
@@ -752,7 +752,7 @@ func (s *HistoryV2PersistenceSuite) readWithError(branch []byte, minID, maxID in
 	res := make([]*historypb.HistoryEvent, 0)
 	token := []byte{}
 	for {
-		resp, err := s.HistoryV2Mgr.ReadHistoryBranch(&p.ReadHistoryBranchRequest{
+		resp, err := s.ExecutionManager.ReadHistoryBranch(&p.ReadHistoryBranchRequest{
 			BranchToken:   branch,
 			MinEventID:    minID,
 			MaxEventID:    maxID,
@@ -801,7 +801,7 @@ func (s *HistoryV2PersistenceSuite) append(branch []byte, events []*historypb.Hi
 
 	op := func() error {
 		var err error
-		resp, err = s.HistoryV2Mgr.AppendHistoryNodes(&p.AppendHistoryNodesRequest{
+		resp, err = s.ExecutionManager.AppendHistoryNodes(&p.AppendHistoryNodesRequest{
 			IsNewBranch:   isNewBranch,
 			Info:          branchInfo,
 			BranchToken:   branch,
@@ -828,7 +828,7 @@ func (s *HistoryV2PersistenceSuite) fork(forkBranch []byte, forkNodeID int64) ([
 
 	op := func() error {
 		var err error
-		resp, err := s.HistoryV2Mgr.ForkHistoryBranch(&p.ForkHistoryBranchRequest{
+		resp, err := s.ExecutionManager.ForkHistoryBranch(&p.ForkHistoryBranchRequest{
 			ForkBranchToken: forkBranch,
 			ForkNodeID:      forkNodeID,
 			Info:            testForkRunID,

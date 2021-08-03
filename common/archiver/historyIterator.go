@@ -62,7 +62,7 @@ type (
 		historyIteratorState
 
 		request               *ArchiveHistoryRequest
-		historyV2Manager      persistence.HistoryManager
+		executionManager      persistence.ExecutionManager
 		sizeEstimator         SizeEstimator
 		historyPageSize       int
 		targetHistoryBlobSize int
@@ -76,20 +76,20 @@ var (
 // NewHistoryIterator returns a new HistoryIterator
 func NewHistoryIterator(
 	request *ArchiveHistoryRequest,
-	historyV2Manager persistence.HistoryManager,
+	executionManager persistence.ExecutionManager,
 	targetHistoryBlobSize int,
 ) HistoryIterator {
-	return newHistoryIterator(request, historyV2Manager, targetHistoryBlobSize)
+	return newHistoryIterator(request, executionManager, targetHistoryBlobSize)
 }
 
 // NewHistoryIteratorFromState returns a new HistoryIterator with specified state
 func NewHistoryIteratorFromState(
 	request *ArchiveHistoryRequest,
-	historyV2Manager persistence.HistoryManager,
+	executionManager persistence.ExecutionManager,
 	targetHistoryBlobSize int,
 	initialState []byte,
 ) (HistoryIterator, error) {
-	it := newHistoryIterator(request, historyV2Manager, targetHistoryBlobSize)
+	it := newHistoryIterator(request, executionManager, targetHistoryBlobSize)
 	if initialState == nil {
 		return it, nil
 	}
@@ -101,7 +101,7 @@ func NewHistoryIteratorFromState(
 
 func newHistoryIterator(
 	request *ArchiveHistoryRequest,
-	historyV2Manager persistence.HistoryManager,
+	executionManager persistence.ExecutionManager,
 	targetHistoryBlobSize int,
 ) *historyIterator {
 	return &historyIterator{
@@ -110,7 +110,7 @@ func newHistoryIterator(
 			FinishedIteration: false,
 		},
 		request:               request,
-		historyV2Manager:      historyV2Manager,
+		executionManager:      executionManager,
 		historyPageSize:       historyPageSize,
 		targetHistoryBlobSize: targetHistoryBlobSize,
 		sizeEstimator:         NewJSONSizeEstimator(),
@@ -220,7 +220,7 @@ func (i *historyIterator) readHistory(firstEventID int64) ([]*historypb.History,
 		PageSize:    i.historyPageSize,
 		ShardID:     i.request.ShardID,
 	}
-	historyBatches, _, _, err := persistence.ReadFullPageV2EventsByBatch(i.historyV2Manager, req)
+	historyBatches, _, _, err := persistence.ReadFullPageEventsByBatch(i.executionManager, req)
 	return historyBatches, err
 }
 

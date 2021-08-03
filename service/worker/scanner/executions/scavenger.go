@@ -52,7 +52,6 @@ type (
 		numHistoryShards int32
 
 		executionManager persistence.ExecutionManager
-		historyManager   persistence.HistoryManager
 		executor         executor.Executor
 		rateLimiter      quotas.RateLimiter
 		metrics          metrics.Client
@@ -76,14 +75,12 @@ type (
 func NewScavenger(
 	numHistoryShards int32,
 	executionManager persistence.ExecutionManager,
-	historyManager persistence.HistoryManager,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) *Scavenger {
 	return &Scavenger{
 		numHistoryShards: numHistoryShards,
 		executionManager: executionManager,
-		historyManager:   historyManager,
 		executor: executor.NewFixedSizePoolExecutor(
 			executorPoolSize,
 			executorMaxDeferredTasks,
@@ -150,7 +147,6 @@ func (s *Scavenger) run() {
 		submitted := s.executor.Submit(newTask(
 			shardID,
 			s.executionManager,
-			s.historyManager,
 			s.metrics,
 			s.logger,
 			s,

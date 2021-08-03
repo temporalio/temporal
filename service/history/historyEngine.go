@@ -134,7 +134,6 @@ func NewEngineWithShardContext(
 
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
-	historyV2Manager := shard.GetHistoryManager()
 	historyCache := workflow.NewCache(shard)
 	historyEngImpl := &historyEngineImpl{
 		status:             common.DaemonStatusInitialized,
@@ -175,7 +174,6 @@ func NewEngineWithShardContext(
 			shard,
 			historyEngImpl.historyCache,
 			executionManager,
-			historyV2Manager,
 			logger,
 		)
 		historyEngImpl.nDCReplicator = newNDCHistoryReplicator(

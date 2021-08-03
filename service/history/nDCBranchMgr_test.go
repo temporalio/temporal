@@ -59,7 +59,7 @@ type (
 		mockMutableState    *workflow.MockMutableState
 		mockClusterMetadata *cluster.MockMetadata
 
-		mockHistoryMgr *persistence.MockHistoryManager
+		mockExecutionManager *persistence.MockExecutionManager
 
 		logger log.Logger
 
@@ -95,7 +95,7 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 		tests.NewDynamicConfig(),
 	)
 
-	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
+	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
@@ -144,7 +144,7 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 	}).AnyTimes()
 
 	shardID := s.mockShard.GetShardID()
-	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(gomock.Any()).DoAndReturn(
+	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any()).DoAndReturn(
 		func(input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
 			input.Info = ""
 			s.Equal(&persistence.ForkHistoryBranchRequest{
@@ -325,7 +325,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 	}).AnyTimes()
 
 	shardID := s.mockShard.GetShardID()
-	s.mockHistoryMgr.EXPECT().ForkHistoryBranch(gomock.Any()).DoAndReturn(
+	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any()).DoAndReturn(
 		func(input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
 			input.Info = ""
 			s.Equal(&persistence.ForkHistoryBranchRequest{

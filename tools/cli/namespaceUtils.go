@@ -335,7 +335,7 @@ func initializeArchivalProvider(
 	)
 
 	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
-		HistoryV2Manager: nil, // not used
+		ExecutionManager: nil, // not used
 		Logger:           logger,
 		MetricsClient:    metricsClient,
 		ClusterMetadata:  clusterMetadata,

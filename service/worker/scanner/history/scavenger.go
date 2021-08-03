@@ -58,7 +58,7 @@ type (
 	// Scavenger is the type that holds the state for history scavenger daemon
 	Scavenger struct {
 		numShards   int32
-		db          persistence.HistoryManager
+		db          persistence.ExecutionManager
 		client      historyservice.HistoryServiceClient
 		rateLimiter quotas.RateLimiter
 		metrics     metrics.Client
@@ -101,7 +101,7 @@ const (
 //  - deletion of history itself, if there are no workflow execution
 func NewScavenger(
 	numShards int32,
-	db persistence.HistoryManager,
+	db persistence.ExecutionManager,
 	rps int,
 	client historyservice.HistoryServiceClient,
 	hbd ScavengerHeartbeatDetails,

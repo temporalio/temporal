@@ -138,7 +138,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.mockShard.GetConfig().EventsCacheInitialSize(),
 		s.mockShard.GetConfig().EventsCacheMaxSize(),
 		s.mockShard.GetConfig().EventsCacheTTL(),
-		s.mockShard.GetHistoryManager(),
+		s.mockShard.GetExecutionManager(),
 		false,
 		s.mockShard.GetLogger(),
 		s.mockShard.GetMetricsClient(),

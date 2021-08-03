@@ -68,8 +68,8 @@ type (
 		mockNamespaceCache  *cache.MockNamespaceCache
 		mockClusterMetadata *cluster.MockMetadata
 
-		mockHistoryMgr *persistence.MockHistoryManager
-		logger         log.Logger
+		mockExecutionManager *persistence.MockExecutionManager
+		logger               log.Logger
 
 		namespaceID string
 		workflowID  string
@@ -102,7 +102,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 		tests.NewDynamicConfig(),
 	)
 
-	s.mockHistoryMgr = s.mockShard.Resource.HistoryMgr
+	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockEventsCache = s.mockShard.MockEventsCache
@@ -201,7 +201,7 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 	pageToken := []byte("some random token")
 
 	shardID := s.mockShard.GetShardID()
-	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -213,7 +213,7 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 		NextPageToken: pageToken,
 		Size:          12345,
 	}, nil)
-	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -284,7 +284,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	historySize1 := 12345
 	historySize2 := 67890
 	shardID := s.mockShard.GetShardID()
-	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -296,7 +296,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		NextPageToken: pageToken,
 		Size:          historySize1,
 	}, nil)
-	s.mockHistoryMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,

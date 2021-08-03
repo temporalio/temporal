@@ -47,7 +47,6 @@ type (
 		GetShardID() int32
 		GetService() resource.Resource
 		GetExecutionManager() persistence.ExecutionManager
-		GetHistoryManager() persistence.HistoryManager
 		GetNamespaceCache() cache.NamespaceCache
 		GetClusterMetadata() cluster.Metadata
 		GetConfig() *configs.Config
