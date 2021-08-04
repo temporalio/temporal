@@ -331,15 +331,14 @@ func (m *executionManagerImpl) GetHistoryTree(
 	return &GetHistoryTreeResponse{Branches: branches}, nil
 }
 
-// AppendHistoryNodes add a node to history node table
-func (m *executionManagerImpl) AppendHistoryNodes(
+func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 	request *AppendHistoryNodesRequest,
-) (*AppendHistoryNodesResponse, error) {
-
+) (*InternalAppendHistoryNodesRequest, error) {
 	branch, err := m.serializer.HistoryBranchFromBlob(&commonpb.DataBlob{Data: request.BranchToken, EncodingType: enumspb.ENCODING_TYPE_PROTO3})
 	if err != nil {
 		return nil, err
 	}
+
 	if len(request.Events) == 0 {
 		return nil, &InvalidPersistenceRequestError{
 			Msg: fmt.Sprintf("events to be appended cannot be empty"),
@@ -415,10 +414,24 @@ func (m *executionManagerImpl) AppendHistoryNodes(
 		}
 	}
 
+	return req, nil
+}
+
+// AppendHistoryNodes add a node to history node table
+func (m *executionManagerImpl) AppendHistoryNodes(
+	request *AppendHistoryNodesRequest,
+) (*AppendHistoryNodesResponse, error) {
+
+	req, err := m.serializeAppendHistoryNodesRequest(request)
+
+	if err != nil {
+		return nil, err
+	}
+
 	err = m.persistence.AppendHistoryNodes(req)
 
 	return &AppendHistoryNodesResponse{
-		Size: size,
+		Size: len(req.Node.Events.Data),
 	}, err
 }
 

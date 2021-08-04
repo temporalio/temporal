@@ -173,35 +173,19 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
 ) (int64, int64, error) {
 
-	currentWorkflowHistorySizeDiff := int64(0)
-	newWorkflowHistorySizeDiff := int64(0)
-
-	for _, workflowEvents := range currentWorkflowEventsSeq {
-		eventsSize, err := PersistWorkflowEvents(t.shard, workflowEvents)
-		if err != nil {
-			return 0, 0, err
-		}
-		currentWorkflowHistorySizeDiff += eventsSize
-	}
-	currentWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize += currentWorkflowHistorySizeDiff
-
+	originalCurrentWorkflowHistorySize := currentWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize
+	originalNewWorkflowHistorySize := int64(0)
 	if newWorkflowSnapshot != nil {
-		for _, workflowEvents := range newWorkflowEventsSeq {
-			eventsSize, err := PersistWorkflowEvents(t.shard, workflowEvents)
-			if err != nil {
-				return 0, 0, err
-			}
-			newWorkflowHistorySizeDiff += eventsSize
-		}
-		newWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += newWorkflowHistorySizeDiff
+		originalNewWorkflowHistorySize = newWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize
 	}
-
 	if err := updateWorkflowExecutionWithRetry(t.shard, &persistence.UpdateWorkflowExecutionRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
 		Mode:                   updateMode,
 		UpdateWorkflowMutation: *currentWorkflowMutation,
+		CurrentWorkflowEvents:  currentWorkflowEventsSeq,
 		NewWorkflowSnapshot:    newWorkflowSnapshot,
+		NewWorkflowEvents:      newWorkflowEventsSeq,
 	}); err != nil {
 		return 0, 0, err
 	}
@@ -215,7 +199,11 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	if err := NotifyNewHistorySnapshotEvent(engine, newWorkflowSnapshot); err != nil {
 		t.logger.Error("unable to notify workflow creation", tag.Error(err))
 	}
-
+	currentWorkflowHistorySizeDiff := currentWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize - originalCurrentWorkflowHistorySize
+	newWorkflowHistorySizeDiff := int64(0)
+	if newWorkflowSnapshot != nil {
+		newWorkflowHistorySizeDiff = newWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize - originalNewWorkflowHistorySize
+	}
 	return currentWorkflowHistorySizeDiff, newWorkflowHistorySizeDiff, nil
 }
 

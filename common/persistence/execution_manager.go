@@ -29,11 +29,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/server/common/dynamicconfig"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -121,6 +120,30 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	request *UpdateWorkflowExecutionRequest,
 ) (*UpdateWorkflowExecutionResponse, error) {
 
+	var updateWorkflowNewEvents []*InternalAppendHistoryNodesRequest
+	var newWorkflowNewEvents []*InternalAppendHistoryNodesRequest
+	for _, workflowEvents := range request.CurrentWorkflowEvents {
+		newEvents, err := m.serializeWorkflowEvents(workflowEvents)
+		if err != nil {
+			return nil, err
+		}
+		if newEvents != nil {
+			updateWorkflowNewEvents = append(updateWorkflowNewEvents, newEvents)
+			request.UpdateWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize += int64(len(newEvents.Node.Events.Data))
+		}
+	}
+
+	for _, workflowEvents := range request.NewWorkflowEvents {
+		newEvents, err := m.serializeWorkflowEvents(workflowEvents)
+		if err != nil {
+			return nil, err
+		}
+		if newEvents != nil {
+			newWorkflowNewEvents = append(newWorkflowNewEvents, newEvents)
+			request.NewWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(len(newEvents.Node.Events.Data))
+		}
+	}
+
 	mutation := request.UpdateWorkflowMutation
 	newSnapshot := request.NewWorkflowSnapshot
 	if err := ValidateUpdateWorkflowModeState(
@@ -155,8 +178,10 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 
 		Mode: request.Mode,
 
-		UpdateWorkflowMutation: *serializedWorkflowMutation,
-		NewWorkflowSnapshot:    serializedNewWorkflowSnapshot,
+		UpdateWorkflowMutation:  *serializedWorkflowMutation,
+		UpdateWorkflowNewEvents: updateWorkflowNewEvents,
+		NewWorkflowSnapshot:     serializedNewWorkflowSnapshot,
+		NewWorkflowNewEvents:    newWorkflowNewEvents,
 	}
 
 	if err := m.persistence.UpdateWorkflowExecution(newRequest); err != nil {
@@ -246,6 +271,28 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 	}
 
 	return m.persistence.CreateWorkflowExecution(newRequest)
+}
+
+func (m *executionManagerImpl) serializeWorkflowEvents(
+	workflowEvents *WorkflowEvents,
+) (*InternalAppendHistoryNodesRequest, error) {
+	if len(workflowEvents.Events) == 0 {
+		return nil, nil // allow update workflow without events
+	}
+
+	request := &AppendHistoryNodesRequest{
+		BranchToken:       workflowEvents.BranchToken,
+		Events:            workflowEvents.Events,
+		PrevTransactionID: workflowEvents.PrevTxnID,
+		TransactionID:     workflowEvents.TxnID,
+	}
+
+	if workflowEvents.Events[0].EventId == common.FirstEventID {
+		request.IsNewBranch = true
+		request.Info = BuildHistoryGarbageCleanupInfo(workflowEvents.NamespaceID, workflowEvents.WorkflowID, workflowEvents.RunID)
+	}
+
+	return m.serializeAppendHistoryNodesRequest(request)
 }
 
 func (m *executionManagerImpl) SerializeWorkflowMutation(

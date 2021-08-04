@@ -490,8 +490,9 @@ type (
 		Mode UpdateWorkflowMode
 
 		UpdateWorkflowMutation WorkflowMutation
-
-		NewWorkflowSnapshot *WorkflowSnapshot
+		CurrentWorkflowEvents  []*WorkflowEvents
+		NewWorkflowSnapshot    *WorkflowSnapshot
+		NewWorkflowEvents      []*WorkflowEvents
 	}
 
 	// ConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for a single run
