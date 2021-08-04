@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	tlog "go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -50,6 +51,19 @@ type (
 		sdkReporter    metrics.Reporter
 	}
 	ServerInterruptCh <-chan interface{}
+
+	UserLoggerProvider                     func(c *cli.Context) log.Logger
+	UserNamespaceLoggerProvider            func(c *cli.Context) log.Logger
+	UserMetricsReporterProvider            func(cfg *config.Config, logger tlog.Logger) (*MetricsReporters, error)
+
+	UserAuthorizerProvider                 func(params ProviderCommonParams) authorization.Authorizer
+	UserTlsConfigProvider                  func(params ProviderCommonParams) encryption.TLSConfigProvider
+	UserClaimMapperProvider                func(params ProviderCommonParams) authorization.ClaimMapper
+	UserAudienceGetterProvider             func(params ProviderCommonParams) authorization.JWTAudienceMapper
+	UserPersistenceServiceResolverProvider func(params ProviderCommonParams) resolver.ServiceResolver
+	UserElasticseachHttpClientProvider     func(params ProviderCommonParams) *http.Client
+	UserDynamicConfigClientProvider        func(params ProviderCommonParams) dynamicconfig.Client
+	UserCustomDataStoreFactoryProvider     func(params ProviderCommonParams) persistenceClient.AbstractDataStoreFactory
 )
 
 func DefaultConfigProvider(c *cli.Context) (*config.Config, error) {
@@ -64,8 +78,18 @@ func DefaultConfigProvider(c *cli.Context) (*config.Config, error) {
 	return cfg, err
 }
 
-func DefaultLogger(cfg *config.Config) tlog.Logger {
+func DefaultLoggerProvider(cfg *config.Config, options serverOptions) tlog.Logger {
+	if options.UserLoggerProvider != nil {
+		return options.UserLoggerProvider(cfg)
+	}
 	return tlog.NewZapLogger(tlog.BuildZapLogger(cfg.Log))
+}
+
+func DefaultNamespaceLoggerProvider(cfg *config.Config, options serverOptions, logger tlog.Logger) NamespaceLogger {
+	if options.UserNamespaceLoggerProvider != nil {
+		return options.UserNamespaceLoggerProvider(cfg)
+	}
+	return logger
 }
 
 func DefaultServiceNameListProvider(log tlog.Logger, c *cli.Context) ServiceNamesList {

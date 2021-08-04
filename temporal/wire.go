@@ -27,13 +27,12 @@ package temporal
 import (
 	"github.com/google/wire"
 	"github.com/urfave/cli/v2"
-	tlog "go.temporal.io/server/common/log"
 )
 
 func InitializeDefaultUserProviderSet(c *cli.Context) wire.ProviderSet {
 	return wire.NewSet(
 		DefaultConfigProvider,
-		DefaultLogger,
+		DefaultLoggerProvider,
 		DefaultDynamicConfigClientProvider,
 		DefaultAuthorizerProvider,
 		DefaultClaimMapper,
@@ -50,8 +49,8 @@ func InitializeDefaultUserProviderSet(c *cli.Context) wire.ProviderSet {
 
 var UserSet = wire.NewSet(
 	DefaultConfigProvider,
-	DefaultLogger,
-	wire.Bind(new(NamespaceLogger), new(tlog.Logger)),
+	DefaultLoggerProvider,
+	DefaultNamespaceLoggerProvider,
 	DefaultDynamicConfigClientProvider,
 	DefaultAuthorizerProvider,
 	DefaultClaimMapper,
@@ -74,6 +73,7 @@ var serverSet = wire.NewSet(
 	ESConfigProvider,
 	AdvancedVisibilityWritingModeProvider,
 	wire.Struct(new(ServicesProviderDeps), "*"), // we can use this to inject dependencies into sub-modules
+	wire.Struct(new(ProviderCommonParams), "*"), // we can use this to inject dependencies into sub-modules
 )
 
 func InitializeServer(c *cli.Context) (*Server, error) {

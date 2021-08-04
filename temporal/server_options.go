@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -60,6 +61,32 @@ type (
 		elasticseachHttpClient     *http.Client
 		dynamicConfigClient        dynamicconfig.Client
 		customDataStoreFactory     client.AbstractDataStoreFactory
+
+
+		UserLoggerProvider                     func(c *config.Config) log.Logger
+		UserNamespaceLoggerProvider            func(c *config.Config) log.Logger
+
+		UserAuthorizerProvider                 func(params ProviderCommonParams) authorization.Authorizer
+		UserTlsConfigProvider                  func(params ProviderCommonParams) encryption.TLSConfigProvider
+		UserClaimMapperProvider                func(params ProviderCommonParams) authorization.ClaimMapper
+		UserAudienceGetterProvider             func(params ProviderCommonParams) authorization.JWTAudienceMapper
+		UserMetricsReporterProvider            func(*config.Config) interface{}
+		UserPersistenceServiceResolverProvider func(params ProviderCommonParams) resolver.ServiceResolver
+		UserElasticseachHttpClientProvider     func(params ProviderCommonParams) *http.Client
+		UserDynamicConfigClientProvider        func(params ProviderCommonParams) dynamicconfig.Client
+		UserCustomDataStoreFactoryProvider     func(params ProviderCommonParams) persistenceClient.AbstractDataStoreFactory
+
+		loggerProvider             func (c *cli.Context) log.Logger
+		namespaceLoggerProvider    func (c *cli.Context) log.Logger
+		authorizerProvider         func (params ProviderCommonParams) authorization.Authorizer
+		// tlsConfigProvider          encryption.TLSConfigProvider
+		// claimMapper                authorization.ClaimMapper
+		// audienceGetter             authorization.JWTAudienceMapper
+		// metricsReporter            interface{}
+		// persistenceServiceResolver resolver.ServiceResolver
+		// elasticseachHttpClient     *http.Client
+		// dynamicConfigClient        dynamicconfig.Client
+		// customDataStoreFactory     client.AbstractDataStoreFactory
 	}
 )
 

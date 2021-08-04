@@ -42,7 +42,7 @@ func InitializeServer(c *cli.Context) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	logger := DefaultLogger(config)
+	logger := DefaultLoggerProvider(config)
 	serviceNamesList := DefaultServiceNameListProvider(logger, c)
 	authorizer, err := DefaultAuthorizerProvider(config)
 	if err != nil {
@@ -116,7 +116,7 @@ func InitializeServer(c *cli.Context) (*Server, error) {
 func InitializeDefaultUserProviderSet(c *cli.Context) wire.ProviderSet {
 	return wire.NewSet(
 		DefaultConfigProvider,
-		DefaultLogger,
+		DefaultLoggerProvider,
 		DefaultDynamicConfigClientProvider,
 		DefaultAuthorizerProvider,
 		DefaultClaimMapper,
@@ -133,7 +133,9 @@ func InitializeDefaultUserProviderSet(c *cli.Context) wire.ProviderSet {
 
 var UserSet = wire.NewSet(
 	DefaultConfigProvider,
-	DefaultLogger, wire.Bind(new(NamespaceLogger), new(log.Logger)), DefaultDynamicConfigClientProvider,
+	DefaultLoggerProvider,
+	wire.Bind(new(NamespaceLogger), new(log.Logger)),
+	DefaultDynamicConfigClientProvider,
 	DefaultAuthorizerProvider,
 	DefaultClaimMapper,
 	DefaultServiceNameListProvider,
