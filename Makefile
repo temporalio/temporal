@@ -454,10 +454,15 @@ fossa-init:
 fossa-analyze:
 	fossa analyze --no-ansi -b $${BUILDKITE_BRANCH:-$$(git branch --show-current)}
 
+fossa-delay:
+	echo "Fossa requested to add delay of 5 mins between analyze and test due to API race condition"
+	sleep 300
+	echo "Fossa wait complete"
+
 fossa-test:
 	fossa test --timeout 1800 --no-ansi
 
-build-fossa: bins fossa-init fossa-analyze fossa-test
+build-fossa: bins fossa-init fossa-analyze fossa-delay fossa-test
 
 ##### Docker #####
 docker-server:
