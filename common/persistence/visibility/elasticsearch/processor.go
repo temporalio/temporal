@@ -406,10 +406,12 @@ func (a *ackChan) start(metricsClient metrics.Client) {
 }
 
 func (a *ackChan) done(ack bool, metricsClient metrics.Client) {
-	a.ackChInternal <- ack
-
-	metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, time.Now().UTC().Sub(a.addedAt))
-	if !a.startedAt.IsZero() {
-		metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorCommitLatency, time.Now().UTC().Sub(a.startedAt))
+	select {
+	case a.ackChInternal <- ack:
+		metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, time.Now().UTC().Sub(a.addedAt))
+		if !a.startedAt.IsZero() {
+			metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorCommitLatency, time.Now().UTC().Sub(a.startedAt))
+		}
+	default:
 	}
 }
