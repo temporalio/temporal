@@ -52,14 +52,6 @@ const (
 	TransactionPolicyPassive TransactionPolicy = 1
 )
 
-type NewWorkflowType int
-
-const (
-	NewWorkflowUnspecified NewWorkflowType = iota
-	NewWorkflowRetry
-	NewWorkflowCron
-)
-
 func (policy TransactionPolicy) Ptr() *TransactionPolicy {
 	return &policy
 }
@@ -103,7 +95,7 @@ type (
 		AddChildWorkflowExecutionTerminatedEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionTerminatedEventAttributes) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionTimedOutEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionTimedOutEventAttributes) (*historypb.HistoryEvent, error)
 		AddCompletedWorkflowEvent(int64, *commandpb.CompleteWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, error)
-		NewWorkflowForRetryOrCron(int64, *historypb.WorkflowExecutionStartedEventAttributes, *commonpb.Payloads, *failurepb.Failure, time.Duration, NewWorkflowType) (MutableState, error)
+		NewWorkflowForRetryOrCron(int64, *historypb.WorkflowExecutionStartedEventAttributes, *commonpb.Payloads, *failurepb.Failure, time.Duration, enumspb.ContinueAsNewInitiator) (MutableState, error)
 		AddContinueAsNewEvent(int64, int64, string, *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes) (*historypb.HistoryEvent, MutableState, error)
 		AddWorkflowTaskCompletedEvent(int64, int64, *workflowservice.RespondWorkflowTaskCompletedRequest, int) (*historypb.HistoryEvent, error)
 		AddWorkflowTaskFailedEvent(scheduleEventID int64, startedEventID int64, cause enumspb.WorkflowTaskFailedCause, failure *failurepb.Failure, identity, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*historypb.HistoryEvent, error)

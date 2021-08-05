@@ -1588,7 +1588,7 @@ func (mr *MockMutableStateMockRecorder) IsWorkflowExecutionRunning() *gomock.Cal
 }
 
 // NewWorkflowForRetryOrCron mocks base method.
-func (m *MockMutableState) NewWorkflowForRetryOrCron(arg0 int64, arg1 *v13.WorkflowExecutionStartedEventAttributes, arg2 *v10.Payloads, arg3 *v12.Failure, arg4 time.Duration, arg5 NewWorkflowType) (MutableState, error) {
+func (m *MockMutableState) NewWorkflowForRetryOrCron(arg0 int64, arg1 *v13.WorkflowExecutionStartedEventAttributes, arg2 *v10.Payloads, arg3 *v12.Failure, arg4 time.Duration, arg5 v11.ContinueAsNewInitiator) (MutableState, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewWorkflowForRetryOrCron", arg0, arg1, arg2, arg3, arg4, arg5)
 	ret0, _ := ret[0].(MutableState)

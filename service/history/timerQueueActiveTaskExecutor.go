@@ -539,17 +539,17 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	timeoutFailure := failure.NewTimeoutFailure("workflow timeout", enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 	backoffInterval := backoff.NoBackoff
 	retryState := enumspb.RETRY_STATE_TIMEOUT
-	newType := workflow.NewWorkflowUnspecified
+	initiator := enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED
 
 	wfExpTime := timestamp.TimeValue(mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime)
 	if wfExpTime.IsZero() || wfExpTime.After(t.shard.GetTimeSource().Now()) {
 		backoffInterval, retryState = mutableState.GetRetryBackoffDuration(timeoutFailure)
 		if backoffInterval != backoff.NoBackoff {
 			// We have a retry policy and we should retry.
-			newType = workflow.NewWorkflowRetry
+			initiator = enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY
 		} else if backoffInterval = mutableState.GetCronBackoffDuration(); backoffInterval != backoff.NoBackoff {
 			// We have a cron schedule.
-			newType = workflow.NewWorkflowCron
+			initiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
 		}
 	}
 
@@ -563,7 +563,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 
 	// No more retries, or workflow is expired.
-	if newType == workflow.NewWorkflowUnspecified {
+	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED {
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
 		return t.updateWorkflowExecution(weContext, mutableState, false)
@@ -581,7 +581,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		startAttr.LastCompletionResult,
 		timeoutFailure,
 		backoffInterval,
-		newType,
+		initiator,
 	)
 	if err != nil {
 		return err

@@ -1217,7 +1217,7 @@ func (e *MutableStateImpl) addWorkflowExecutionStartedEventForCronOrRetry(
 	failure *failurepb.Failure,
 	firstRunID string,
 	backoffInterval time.Duration,
-	newType NewWorkflowType,
+	initiator enumspb.ContinueAsNewInitiator,
 ) (*historypb.HistoryEvent, error) {
 
 	previousExecutionInfo := previousExecutionState.GetExecutionInfo()
@@ -1265,13 +1265,8 @@ func (e *MutableStateImpl) addWorkflowExecutionStartedEventForCronOrRetry(
 		SearchAttributes:         startAttr.SearchAttributes,
 	}
 
-	initiator := enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED
 	attempt := int32(1)
-	switch newType {
-	case NewWorkflowCron:
-		initiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
-	case NewWorkflowRetry:
-		initiator = enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY
+	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
 	}
 
@@ -1281,7 +1276,7 @@ func (e *MutableStateImpl) addWorkflowExecutionStartedEventForCronOrRetry(
 		ParentExecutionInfo:      parentExecutionInfo,
 		LastCompletionResult:     lastCompletionResult,
 		ContinuedFailure:         failure,
-		ContinueAsNewInitiator:   initiator, // QUESTION: should we fill this in?
+		ContinueAsNewInitiator:   initiator,
 		FirstWorkflowTaskBackoff: timestamp.DurationPtr(backoffInterval),
 		Attempt:                  attempt,
 	}
@@ -3054,13 +3049,14 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionSignaled(
 }
 
 // FIXME: name this better
+// FIXME: move to other file?
 func (e *MutableStateImpl) NewWorkflowForRetryOrCron(
 	firstEventID int64,
 	startAttr *historypb.WorkflowExecutionStartedEventAttributes,
 	lastCompletionResult *commonpb.Payloads,
 	failure *failurepb.Failure,
 	backoffInterval time.Duration,
-	newType NewWorkflowType,
+	initiator enumspb.ContinueAsNewInitiator,
 ) (MutableState, error) {
 
 	startTime := e.timeSource.Now()
@@ -3106,7 +3102,7 @@ func (e *MutableStateImpl) NewWorkflowForRetryOrCron(
 		failure,
 		firstRunID,
 		backoffInterval,
-		newType,
+		initiator,
 	); err != nil {
 		return nil, serviceerror.NewInternal("Failed to add workflow execution started event.")
 	}

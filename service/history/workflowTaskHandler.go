@@ -937,7 +937,7 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 		nil,
 		failure,
 		backoffInterval,
-		workflow.NewWorkflowRetry,
+		enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY,
 	)
 	if err != nil {
 		return err
@@ -968,7 +968,7 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 		lastCompletionResult,
 		failure,
 		backoffInterval,
-		workflow.NewWorkflowCron,
+		enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
 	)
 	if err != nil {
 		return err
