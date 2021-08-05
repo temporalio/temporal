@@ -26,7 +26,6 @@ package gocql
 
 import (
 	"context"
-
 	"sync"
 	"sync/atomic"
 	"time"
@@ -104,7 +103,7 @@ func (s *session) refresh() {
 	s.sessionInitTime = time.Now().UTC()
 	oldSession := s.Value.Load().(*gocql.Session)
 	s.Value.Store(newSession)
-	oldSession.Close()
+	go oldSession.Close()
 	s.logger.Warn("successfully refreshed cql session")
 }
 
