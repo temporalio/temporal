@@ -766,6 +766,21 @@ func (e *MutableStateImpl) GetStartEvent() (*historypb.HistoryEvent, error) {
 	return startEvent, nil
 }
 
+func (e *MutableStateImpl) GetFirstRunID() (string, error) {
+	firstRunID := e.executionInfo.FirstExecutionRunId
+	// This is needed for backwards compatibility.  Workflow execution create with Temporal release v0.28.0 or earlier
+	// does not have FirstExecutionRunID stored as part of mutable state.  If this is not set then load it from
+	// workflow execution started event.
+	if len(firstRunID) != 0 {
+		return firstRunID, nil
+	}
+	currentStartEvent, err := e.GetStartEvent()
+	if err != nil {
+		return "", err
+	}
+	return currentStartEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstExecutionRunId(), nil
+}
+
 // DeletePendingChildExecution deletes details about a ChildExecutionInfo.
 func (e *MutableStateImpl) DeletePendingChildExecution(
 	initiatedEventID int64,
@@ -1208,93 +1223,6 @@ func (e *MutableStateImpl) DeleteSignalRequested(
 	e.deleteSignalRequestedIDs[requestID] = struct{}{}
 }
 
-func (e *MutableStateImpl) addWorkflowExecutionStartedEventForCronOrRetry(
-	parentExecutionInfo *workflowspb.ParentExecutionInfo,
-	execution commonpb.WorkflowExecution,
-	previousExecutionState MutableState,
-	startAttr *historypb.WorkflowExecutionStartedEventAttributes,
-	lastCompletionResult *commonpb.Payloads,
-	failure *failurepb.Failure,
-	firstRunID string,
-	backoffInterval time.Duration,
-	initiator enumspb.ContinueAsNewInitiator,
-) (*historypb.HistoryEvent, error) {
-
-	previousExecutionInfo := previousExecutionState.GetExecutionInfo()
-	taskQueue := previousExecutionInfo.TaskQueue
-	if startAttr.TaskQueue != nil {
-		taskQueue = startAttr.TaskQueue.GetName()
-	}
-	tq := &taskqueuepb.TaskQueue{
-		Name: taskQueue,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-
-	workflowType := previousExecutionInfo.WorkflowTypeName
-	if startAttr.WorkflowType != nil {
-		workflowType = startAttr.WorkflowType.GetName()
-	}
-	wType := &commonpb.WorkflowType{}
-	wType.Name = workflowType
-
-	var taskTimeout *time.Duration
-	if timestamp.DurationValue(startAttr.GetWorkflowTaskTimeout()) == 0 {
-		taskTimeout = previousExecutionInfo.DefaultWorkflowTaskTimeout
-	} else {
-		taskTimeout = startAttr.GetWorkflowTaskTimeout()
-	}
-
-	// Workflow runTimeout is already set to the correct value in
-	// validateContinueAsNewWorkflowExecutionAttributes
-	runTimeout := startAttr.GetWorkflowRunTimeout()
-
-	createRequest := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                uuid.New(),
-		Namespace:                e.namespaceEntry.GetInfo().Name,
-		WorkflowId:               execution.WorkflowId,
-		TaskQueue:                tq,
-		WorkflowType:             wType,
-		WorkflowExecutionTimeout: previousExecutionState.GetExecutionInfo().WorkflowExecutionTimeout,
-		WorkflowRunTimeout:       runTimeout,
-		WorkflowTaskTimeout:      taskTimeout,
-		Input:                    startAttr.Input,
-		Header:                   startAttr.Header,
-		RetryPolicy:              startAttr.RetryPolicy,
-		CronSchedule:             startAttr.CronSchedule,
-		Memo:                     startAttr.Memo,
-		SearchAttributes:         startAttr.SearchAttributes,
-	}
-
-	attempt := int32(1)
-	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
-		attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
-	}
-
-	req := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:              e.namespaceEntry.GetInfo().Id,
-		StartRequest:             createRequest,
-		ParentExecutionInfo:      parentExecutionInfo,
-		LastCompletionResult:     lastCompletionResult,
-		ContinuedFailure:         failure,
-		ContinueAsNewInitiator:   initiator,
-		FirstWorkflowTaskBackoff: timestamp.DurationPtr(backoffInterval),
-		Attempt:                  attempt,
-	}
-	workflowTimeoutTime := timestamp.TimeValue(previousExecutionState.GetExecutionInfo().WorkflowExecutionExpirationTime)
-	if !workflowTimeoutTime.IsZero() {
-		req.WorkflowExecutionExpirationTime = &workflowTimeoutTime
-	}
-
-	return e.finishAddWorkflowExecutionStartedEvent(
-		parentExecutionInfo.GetNamespaceId(),
-		execution,
-		previousExecutionInfo.AutoResetPoints,
-		req,
-		previousExecutionState.GetExecutionState().GetRunId(),
-		firstRunID,
-	)
-}
-
 func (e *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	parentExecutionInfo *workflowspb.ParentExecutionInfo,
 	execution commonpb.WorkflowExecution,
@@ -1369,21 +1297,22 @@ func (e *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		req.WorkflowExecutionExpirationTime = &workflowTimeoutTime
 	}
 
-	return e.finishAddWorkflowExecutionStartedEvent(
-		parentExecutionInfo.GetNamespaceId(),
+	return e.AddWorkflowExecutionStartedEventWithOptions(
 		execution,
-		previousExecutionInfo.AutoResetPoints,
 		req,
+		parentExecutionInfo.GetNamespaceId(),
+		previousExecutionInfo.AutoResetPoints,
 		previousExecutionState.GetExecutionState().GetRunId(),
 		firstRunID,
 	)
 }
 
-func (e *MutableStateImpl) finishAddWorkflowExecutionStartedEvent(
-	parentNamespaceID string,
+// FIXME: try to unify this with AddWorkflowExecutionStartedEvent more
+func (e *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	execution commonpb.WorkflowExecution,
-	resetPoints *workflowpb.ResetPoints,
 	req *historyservice.StartWorkflowExecutionRequest,
+	parentNamespaceID string,
+	resetPoints *workflowpb.ResetPoints,
 	prevRunID string,
 	firstRunID string,
 ) (*historypb.HistoryEvent, error) {
@@ -1405,6 +1334,7 @@ func (e *MutableStateImpl) finishAddWorkflowExecutionStartedEvent(
 		return nil, err
 	}
 
+	// QUESTION: hmm, maybe we can get rid of this since it's called earlier?
 	if err := e.SetHistoryTree(e.GetExecutionState().GetRunId()); err != nil {
 		return nil, err
 	}
@@ -3048,68 +2978,6 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionSignaled(
 	return nil
 }
 
-// FIXME: name this better
-// FIXME: move to other file?
-func (e *MutableStateImpl) NewWorkflowForRetryOrCron(
-	firstEventID int64,
-	startAttr *historypb.WorkflowExecutionStartedEventAttributes,
-	lastCompletionResult *commonpb.Payloads,
-	failure *failurepb.Failure,
-	backoffInterval time.Duration,
-	initiator enumspb.ContinueAsNewInitiator,
-) (MutableState, error) {
-
-	startTime := e.timeSource.Now()
-	newRunID := uuid.New()
-	newExecution := commonpb.WorkflowExecution{
-		WorkflowId: e.executionInfo.WorkflowId,
-		RunId:      newRunID,
-	}
-
-	// Extract ParentExecutionInfo from current run so it can be passed down to the next
-	var parentInfo *workflowspb.ParentExecutionInfo
-	if e.HasParentExecution() {
-		parentInfo = &workflowspb.ParentExecutionInfo{
-			NamespaceId: e.executionInfo.ParentNamespaceId,
-			Namespace:   startAttr.GetParentWorkflowNamespace(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: e.executionInfo.ParentWorkflowId,
-				RunId:      e.executionInfo.ParentRunId,
-			},
-			InitiatedId: e.executionInfo.InitiatedId,
-		}
-	}
-
-	firstRunID, err := e.getFirstRunID()
-	if err != nil {
-		return nil, err
-	}
-
-	newStateBuilder := NewMutableState(
-		e.shard,
-		e.shard.GetEventsCache(),
-		e.logger,
-		e.namespaceEntry,
-		startTime,
-	)
-
-	if _, err := newStateBuilder.addWorkflowExecutionStartedEventForCronOrRetry(
-		parentInfo,
-		newExecution,
-		e,
-		startAttr,
-		lastCompletionResult,
-		failure,
-		firstRunID,
-		backoffInterval,
-		initiator,
-	); err != nil {
-		return nil, serviceerror.NewInternal("Failed to add workflow execution started event.")
-	}
-
-	return newStateBuilder, nil
-}
-
 func (e *MutableStateImpl) AddContinueAsNewEvent(
 	firstEventID int64,
 	workflowTaskCompletedEventID int64,
@@ -3149,7 +3017,7 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 		command,
 	)
 
-	firstRunID, err := e.getFirstRunID()
+	firstRunID, err := e.GetFirstRunID()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -3186,21 +3054,6 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 	}
 
 	return continueAsNewEvent, newStateBuilder, nil
-}
-
-func (e *MutableStateImpl) getFirstRunID() (string, error) {
-	firstRunID := e.executionInfo.FirstExecutionRunId
-	// This is needed for backwards compatibility.  Workflow execution create with Temporal release v0.28.0 or earlier
-	// does not have FirstExecutionRunID stored as part of mutable state.  If this is not set then load it from
-	// workflow execution started event.
-	if len(firstRunID) != 0 {
-		return firstRunID, nil
-	}
-	currentStartEvent, err := e.GetStartEvent()
-	if err != nil {
-		return "", err
-	}
-	return currentStartEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstExecutionRunId(), nil
 }
 
 func rolloverAutoResetPointsWithExpiringTime(

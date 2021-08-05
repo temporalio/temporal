@@ -28,9 +28,17 @@ import (
 	"math"
 	"time"
 
+	"github.com/pborman/uuid"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 
+	"go.temporal.io/server/api/historyservice/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -130,4 +138,122 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 		}
 	}
 	return true
+}
+
+// Helpers for creating new retry/cron workflows:
+
+// FIXME: name this better?
+func SetupNewWorkflowForRetryOrCron(
+	oldMs MutableState,
+	newMs MutableState,
+	newRunId string, // FIXME: can we get this from newMs?
+	startAttr *historypb.WorkflowExecutionStartedEventAttributes,
+	lastCompletionResult *commonpb.Payloads,
+	failure *failurepb.Failure,
+	backoffInterval time.Duration,
+	initiator enumspb.ContinueAsNewInitiator,
+) error {
+
+	// Extract ParentExecutionInfo from current run so it can be passed down to the next
+	var parentInfo *workflowspb.ParentExecutionInfo
+	executionInfo := oldMs.GetExecutionInfo()
+	if oldMs.HasParentExecution() {
+		parentInfo = &workflowspb.ParentExecutionInfo{
+			NamespaceId: executionInfo.ParentNamespaceId,
+			Namespace:   startAttr.GetParentWorkflowNamespace(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: executionInfo.ParentWorkflowId,
+				RunId:      executionInfo.ParentRunId,
+			},
+			InitiatedId: executionInfo.InitiatedId,
+		}
+	}
+
+	newExecution := commonpb.WorkflowExecution{
+		WorkflowId: executionInfo.WorkflowId,
+		RunId:      newRunId,
+	}
+
+	firstRunID, err := oldMs.GetFirstRunID()
+	if err != nil {
+		return err
+	}
+
+	previousExecutionInfo := oldMs.GetExecutionInfo()
+	taskQueue := previousExecutionInfo.TaskQueue
+	if startAttr.TaskQueue != nil {
+		taskQueue = startAttr.TaskQueue.GetName()
+	}
+	tq := &taskqueuepb.TaskQueue{
+		Name: taskQueue,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
+
+	workflowType := previousExecutionInfo.WorkflowTypeName
+	if startAttr.WorkflowType != nil {
+		workflowType = startAttr.WorkflowType.GetName()
+	}
+	wType := &commonpb.WorkflowType{}
+	wType.Name = workflowType
+
+	var taskTimeout *time.Duration
+	if timestamp.DurationValue(startAttr.GetWorkflowTaskTimeout()) == 0 {
+		taskTimeout = previousExecutionInfo.DefaultWorkflowTaskTimeout
+	} else {
+		taskTimeout = startAttr.GetWorkflowTaskTimeout()
+	}
+
+	// Workflow runTimeout is already set to the correct value in
+	// validateContinueAsNewWorkflowExecutionAttributes
+	runTimeout := startAttr.GetWorkflowRunTimeout()
+
+	createRequest := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                uuid.New(),
+		Namespace:                newMs.GetNamespaceEntry().GetInfo().Name,
+		WorkflowId:               newExecution.WorkflowId,
+		TaskQueue:                tq,
+		WorkflowType:             wType,
+		WorkflowExecutionTimeout: oldMs.GetExecutionInfo().WorkflowExecutionTimeout,
+		WorkflowRunTimeout:       runTimeout,
+		WorkflowTaskTimeout:      taskTimeout,
+		Input:                    startAttr.Input,
+		Header:                   startAttr.Header,
+		RetryPolicy:              startAttr.RetryPolicy,
+		CronSchedule:             startAttr.CronSchedule,
+		Memo:                     startAttr.Memo,
+		SearchAttributes:         startAttr.SearchAttributes,
+	}
+
+	attempt := int32(1)
+	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
+		attempt = oldMs.GetExecutionInfo().Attempt + 1
+	}
+
+	req := &historyservice.StartWorkflowExecutionRequest{
+		NamespaceId:              newMs.GetNamespaceEntry().GetInfo().Id,
+		StartRequest:             createRequest,
+		ParentExecutionInfo:      parentInfo,
+		LastCompletionResult:     lastCompletionResult,
+		ContinuedFailure:         failure,
+		ContinueAsNewInitiator:   initiator,
+		FirstWorkflowTaskBackoff: timestamp.DurationPtr(backoffInterval),
+		Attempt:                  attempt,
+	}
+	workflowTimeoutTime := timestamp.TimeValue(oldMs.GetExecutionInfo().WorkflowExecutionExpirationTime)
+	if !workflowTimeoutTime.IsZero() {
+		req.WorkflowExecutionExpirationTime = &workflowTimeoutTime
+	}
+
+	if _, err := newMs.AddWorkflowExecutionStartedEventWithOptions(
+		newExecution,
+		req,
+		parentInfo.GetNamespaceId(),
+		previousExecutionInfo.AutoResetPoints,
+		oldMs.GetExecutionState().GetRunId(),
+		firstRunID,
+	); err != nil {
+		return serviceerror.NewInternal("Failed to add workflow execution started event.")
+	}
+
+	return nil
 }

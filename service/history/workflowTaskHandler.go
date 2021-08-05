@@ -72,6 +72,7 @@ type (
 		namespaceCache cache.NamespaceCache
 		metricsClient  metrics.Client
 		config         *configs.Config
+		historyEngine  *historyEngineImpl
 	}
 
 	workflowTaskFailedCause struct {
@@ -90,6 +91,7 @@ func newWorkflowTaskHandler(
 	namespaceCache cache.NamespaceCache,
 	metricsClient metrics.Client,
 	config *configs.Config,
+	historyEngine *historyEngineImpl,
 ) *workflowTaskHandlerImpl {
 
 	return &workflowTaskHandlerImpl{
@@ -113,6 +115,7 @@ func newWorkflowTaskHandler(
 		namespaceCache: namespaceCache,
 		metricsClient:  metricsClient,
 		config:         config,
+		historyEngine:  historyEngine,
 	}
 }
 
@@ -931,8 +934,18 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newStateBuilder, err := handler.mutableState.NewWorkflowForRetryOrCron(
-		handler.workflowTaskCompletedID,
+	newRunId := uuid.New()
+	newStateBuilder, err := handler.historyEngine.createMutableState(
+		handler.mutableState.GetNamespaceEntry(),
+		newRunId,
+	)
+	if err != nil {
+		return err
+	}
+	err = workflow.SetupNewWorkflowForRetryOrCron(
+		handler.mutableState,
+		newStateBuilder,
+		newRunId,
 		startAttr,
 		nil,
 		failure,
@@ -962,8 +975,18 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 		lastCompletionResult = startAttr.LastCompletionResult
 	}
 
-	newStateBuilder, err := handler.mutableState.NewWorkflowForRetryOrCron(
-		handler.workflowTaskCompletedID,
+	newRunId := uuid.New()
+	newStateBuilder, err := handler.historyEngine.createMutableState(
+		handler.mutableState.GetNamespaceEntry(),
+		newRunId,
+	)
+	if err != nil {
+		return err
+	}
+	err = workflow.SetupNewWorkflowForRetryOrCron(
+		handler.mutableState,
+		newStateBuilder,
+		newRunId,
 		startAttr,
 		lastCompletionResult,
 		failure,

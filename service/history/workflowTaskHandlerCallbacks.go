@@ -443,6 +443,7 @@ Update_History_Loop:
 				handler.namespaceCache,
 				handler.metricsClient,
 				handler.config,
+				handler.historyEngine,
 			)
 
 			if err := workflowTaskHandler.handleCommands(
