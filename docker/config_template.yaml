@@ -150,6 +150,11 @@ global:
         maxJoinDuration: 30s
         broadcastAddress: "{{ default .Env.TEMPORAL_BROADCAST_ADDRESS "" }}"
     tls:
+        refreshInterval: {{ default .Env.TEMPORAL_TLS_REFRESH_INTERVAL "0s" }}
+        expirationChecks:
+            warningWindow: {{ default .Env.TEMPORAL_TLS_EXPIRATION_CHECKS_WARNING_WINDOW "0s" }}
+            errorWindow: {{ default .Env.TEMPORAL_TLS_EXPIRATION_CHECKS_ERROR_WINDOW "0s" }}
+            checkInterval: {{ default .Env.TEMPORAL_TLS_EXPIRATION_CHECKS_CHECK_INTERVAL "0s" }}
         internode:
             # This server section configures the TLS certificate that internal temporal
             # cluster nodes (history or matching) present to other clients within the Temporal Cluster. 
