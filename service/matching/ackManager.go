@@ -25,6 +25,7 @@
 package matching
 
 import (
+	"sort"
 	"sync"
 
 	"go.uber.org/atomic"
@@ -102,15 +103,23 @@ func (m *ackManager) completeTask(taskID int64) (ackLevel int64) {
 		m.outstandingTasks[taskID] = true
 		m.backlogCounter.Dec()
 	}
+
+	// TODO the ack level management shuld be done by a dedicated coroutine
+	//  this is only a temporarily solution
+
+	taskIDs := make(taskIDs, 0, len(m.outstandingTasks))
+	for taskID := range m.outstandingTasks {
+		taskIDs = append(taskIDs, taskID)
+	}
+	sort.Sort(taskIDs)
+
 	// Update ackLevel
-	for current := m.ackLevel + 1; current <= m.readLevel; current++ {
-		if acked, ok := m.outstandingTasks[current]; ok {
-			if acked {
-				m.ackLevel = current
-				delete(m.outstandingTasks, current)
-			} else {
-				return m.ackLevel
-			}
+	for _, taskID := range taskIDs {
+		if acked := m.outstandingTasks[taskID]; acked {
+			m.ackLevel = taskID
+			delete(m.outstandingTasks, taskID)
+		} else {
+			return m.ackLevel
 		}
 	}
 	return m.ackLevel
