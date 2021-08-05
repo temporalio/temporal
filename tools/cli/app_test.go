@@ -25,6 +25,7 @@
 package cli
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -435,6 +436,14 @@ func (s *cliAppSuite) TestListWorkflow() {
 	s.sdkClient.AssertExpectations(s.T())
 }
 
+func (s *cliAppSuite) TestListWorkflow_DeadlineExceeded() {
+	s.sdkClient.On("ListClosedWorkflow", mock.Anything, mock.Anything).Return(nil, context.DeadlineExceeded).Once()
+	s.sdkClient.On("ListClosedWorkflow", mock.Anything, mock.Anything).Return(listClosedWorkflowExecutionsResponse, nil).Once()
+	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "list"})
+	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
+}
+
 func (s *cliAppSuite) TestListWorkflow_WithWorkflowID() {
 	s.sdkClient.On("ListClosedWorkflow", mock.Anything, mock.Anything).Return(listClosedWorkflowExecutionsResponse, nil).Once()
 	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "list", "-wid", "nothing"})
@@ -470,6 +479,14 @@ func (s *cliAppSuite) TestListWorkflow_Open() {
 	s.sdkClient.AssertExpectations(s.T())
 }
 
+func (s *cliAppSuite) TestListWorkflow_Open_DeadlineExceeded() {
+	s.sdkClient.On("ListOpenWorkflow", mock.Anything, mock.Anything).Return(nil, context.DeadlineExceeded).Once()
+	s.sdkClient.On("ListOpenWorkflow", mock.Anything, mock.Anything).Return(listOpenWorkflowExecutionsResponse, nil).Once()
+	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "list", "-op"})
+	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
+}
+
 func (s *cliAppSuite) TestListWorkflow_Open_WithWorkflowID() {
 	s.sdkClient.On("ListOpenWorkflow", mock.Anything, mock.Anything).Return(listOpenWorkflowExecutionsResponse, nil).Once()
 	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "list", "-op", "-wid", "nothing"})
@@ -499,6 +516,14 @@ func (s *cliAppSuite) TestCountWorkflow() {
 
 	s.sdkClient.On("CountWorkflow", mock.Anything, mock.Anything).Return(&workflowservice.CountWorkflowExecutionsResponse{}, nil).Once()
 	err = s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "count", "-q", "'CloseTime = missing'"})
+	s.Nil(err)
+	s.sdkClient.AssertExpectations(s.T())
+}
+
+func (s *cliAppSuite) TestCountWorkflowDeadlineExceeded() {
+	s.sdkClient.On("CountWorkflow", mock.Anything, mock.Anything).Return(nil, context.DeadlineExceeded).Once()
+	s.sdkClient.On("CountWorkflow", mock.Anything, mock.Anything).Return(&workflowservice.CountWorkflowExecutionsResponse{}, nil).Once()
+	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "count", "-q", "'CloseTime = missing'"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
