@@ -197,6 +197,40 @@ func (s *matchingEngineSuite) TestAckManager() {
 	s.EqualValues(t5, m.getReadLevel())
 }
 
+func (s *matchingEngineSuite) TestAckManager_Sort() {
+	m := newAckManager(s.logger)
+	const t0 = 100
+	m.setAckLevel(t0)
+	s.EqualValues(t0, m.getAckLevel())
+	s.EqualValues(t0, m.getReadLevel())
+	const t1 = 200
+	const t2 = 220
+	const t3 = 320
+	const t4 = 340
+	const t5 = 360
+
+	m.addTask(t1)
+	m.addTask(t2)
+	m.addTask(t3)
+	m.addTask(t4)
+	m.addTask(t5)
+
+	m.completeTask(t2)
+	s.EqualValues(t0, m.getAckLevel())
+
+	m.completeTask(t1)
+	s.EqualValues(t2, m.getAckLevel())
+
+	m.completeTask(t5)
+	s.EqualValues(t2, m.getAckLevel())
+
+	m.completeTask(t4)
+	s.EqualValues(t2, m.getAckLevel())
+
+	m.completeTask(t3)
+	s.EqualValues(t5, m.getAckLevel())
+}
+
 func (s *matchingEngineSuite) TestPollActivityTaskQueuesEmptyResult() {
 	s.PollForTasksEmptyResultTest(context.Background(), enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 }
