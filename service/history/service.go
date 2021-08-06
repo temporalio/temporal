@@ -28,6 +28,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"google.golang.org/grpc"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
@@ -46,8 +49,6 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
-	"google.golang.org/grpc"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 // Service represents the history service
@@ -229,7 +230,7 @@ func (s *Service) Stop() {
 	remainingTime = s.sleep(gossipPropagationDelay, remainingTime)
 
 	logger.Info("ShutdownHandler: Initiating shardController shutdown")
-	s.handler.controller.PrepareToStop()
+	s.handler.controller.Stop()
 	logger.Info("ShutdownHandler: Waiting for traffic to drain")
 	remainingTime = s.sleep(shardOwnershipTransferDelay, remainingTime)
 

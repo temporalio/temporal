@@ -54,7 +54,6 @@ type (
 		membershipUpdateCh chan *membership.ChangedEvent
 		engineFactory      EngineFactory
 		status             int32
-		shuttingDown       int32
 		shutdownWG         sync.WaitGroup
 		shutdownCh         chan struct{}
 		logger             log.Logger
@@ -133,7 +132,11 @@ func newHistoryShardsItem(
 }
 
 func (c *ControllerImpl) Start() {
-	if !atomic.CompareAndSwapInt32(&c.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
+	if !atomic.CompareAndSwapInt32(
+		&c.status,
+		common.DaemonStatusInitialized,
+		common.DaemonStatusStarted,
+	) {
 		return
 	}
 
@@ -141,8 +144,10 @@ func (c *ControllerImpl) Start() {
 	c.shutdownWG.Add(1)
 	go c.shardManagementPump()
 
-	err := c.GetHistoryServiceResolver().AddListener(shardControllerMembershipUpdateListenerName, c.membershipUpdateCh)
-	if err != nil {
+	if err := c.GetHistoryServiceResolver().AddListener(
+		shardControllerMembershipUpdateListenerName,
+		c.membershipUpdateCh,
+	); err != nil {
 		c.logger.Error("Error adding listener", tag.Error(err))
 	}
 
@@ -150,16 +155,21 @@ func (c *ControllerImpl) Start() {
 }
 
 func (c *ControllerImpl) Stop() {
-	if !atomic.CompareAndSwapInt32(&c.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
+	if !atomic.CompareAndSwapInt32(
+		&c.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
 		return
 	}
 
-	c.PrepareToStop()
+	close(c.shutdownCh)
 
-	if err := c.GetHistoryServiceResolver().RemoveListener(shardControllerMembershipUpdateListenerName); err != nil {
+	if err := c.GetHistoryServiceResolver().RemoveListener(
+		shardControllerMembershipUpdateListenerName,
+	); err != nil {
 		c.logger.Error("Error removing membership update listener", tag.Error(err), tag.OperationFailed)
 	}
-	close(c.shutdownCh)
 
 	if success := common.AwaitWaitGroup(&c.shutdownWG, time.Minute); !success {
 		c.logger.Warn("", tag.LifeCycleStopTimedout)
@@ -168,17 +178,8 @@ func (c *ControllerImpl) Stop() {
 	c.logger.Info("", tag.LifeCycleStopped)
 }
 
-// PrepareToStop starts the graceful shutdown process for controller
-func (c *ControllerImpl) PrepareToStop() {
-	atomic.StoreInt32(&c.shuttingDown, 1)
-}
-
 func (c *ControllerImpl) Status() int32 {
 	return atomic.LoadInt32(&c.status)
-}
-
-func (c *ControllerImpl) isShuttingDown() bool {
-	return atomic.LoadInt32(&c.shuttingDown) != 0
 }
 
 func (c *ControllerImpl) GetEngine(namespaceID, workflowID string) (Engine, error) {
@@ -240,7 +241,7 @@ func (c *ControllerImpl) getOrCreateHistoryShardItem(shardID int32) (*historySha
 		// if item not valid then process to create a new one
 	}
 
-	if c.isShuttingDown() || atomic.LoadInt32(&c.status) == common.DaemonStatusStopped {
+	if atomic.LoadInt32(&c.status) == common.DaemonStatusStopped {
 		return nil, fmt.Errorf("ControllerImpl for host '%v' shutting down", c.GetHostInfo().Identity())
 	}
 	info, err := c.GetHistoryServiceResolver().Lookup(convert.Int32ToString(shardID))
@@ -340,29 +341,35 @@ func (c *ControllerImpl) acquireShards() {
 		go func() {
 			defer wg.Done()
 			for shardID := range shardActionCh {
-				if c.isShuttingDown() {
+				select {
+				case <-c.shutdownCh:
 					return
-				}
-				info, err := c.GetHistoryServiceResolver().Lookup(convert.Int32ToString(shardID))
-				if err != nil {
-					c.logger.Error("Error looking up host for shardID", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
-				} else {
-					if info.Identity() == c.GetHostInfo().Identity() {
-						_, err1 := c.GetEngineForShard(shardID)
-						if err1 != nil {
-							c.metricsScope.IncCounter(metrics.GetEngineForShardErrorCounter)
-							c.logger.Error("Unable to create history shard engine", tag.Error(err1), tag.OperationFailed, tag.ShardID(shardID))
+				default:
+					if info, err := c.GetHistoryServiceResolver().Lookup(
+						convert.Int32ToString(shardID),
+					); err != nil {
+						c.logger.Error("Error looking up host for shardID", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
+					} else {
+						if info.Identity() == c.GetHostInfo().Identity() {
+							if _, err := c.GetEngineForShard(shardID); err != nil {
+								c.metricsScope.IncCounter(metrics.GetEngineForShardErrorCounter)
+								c.logger.Error("Unable to create history shard engine", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
+							}
 						}
 					}
 				}
 			}
 		}()
 	}
+
 	// Submit tasks to the channel.
+LoopSubmit:
 	for shardID := int32(1); shardID <= c.config.NumberOfShards; shardID++ {
-		shardActionCh <- shardID
-		if c.isShuttingDown() {
-			return
+		select {
+		case <-c.shutdownCh:
+			break LoopSubmit
+		case shardActionCh <- shardID:
+			// noop
 		}
 	}
 	close(shardActionCh)
