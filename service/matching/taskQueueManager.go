@@ -141,7 +141,7 @@ type (
 		outstandingPollsMap  map[string]context.CancelFunc
 		shutdownCh           chan struct{} // Delivers stop to the pump that populates taskBuffer
 		signalFatalProblem   func(id *taskQueueID)
-		startGate            sync.WaitGroup
+		startGate            *sync.WaitGroup
 	}
 )
 
@@ -172,7 +172,7 @@ func newTaskQueueManager(
 
 	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue.name, taskQueue.taskType, taskQueueKind, e.logger)
 
-	startGate := sync.WaitGroup{}
+	startGate := &sync.WaitGroup{}
 	startGate.Add(1)
 	tlMgr := &taskQueueManagerImpl{
 		status:              common.DaemonStatusInitialized,

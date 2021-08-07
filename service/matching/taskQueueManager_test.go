@@ -324,6 +324,7 @@ func createTestTaskQueueManagerWithConfig(
 		return nil, err
 	}
 	me.taskQueues[*tlID] = tlMgr
+	tlMgr.Start()
 	return tlMgr.(*taskQueueManagerImpl), nil
 }
 
