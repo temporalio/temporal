@@ -1046,7 +1046,6 @@ func acquireShard(
 		}
 		_, ok := err.(*persistence.ShardAlreadyExistError)
 		return ok
-
 	}
 
 	getShard := func() error {
