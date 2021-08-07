@@ -413,5 +413,6 @@ func (a *ackChan) done(ack bool, metricsClient metrics.Client) {
 			metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorCommitLatency, time.Now().UTC().Sub(a.startedAt))
 		}
 	default:
+		metricsClient.IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorDeadlock)
 	}
 }
