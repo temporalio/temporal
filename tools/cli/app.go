@@ -222,12 +222,6 @@ func NewCliApp() *cli.App {
 			Usage:       "Operate Custom Data Converter",
 			Subcommands: newDataConverterCommands(),
 		},
-		{
-			Name:        "config",
-			Aliases:     []string{"c"},
-			Usage:       "Configure tctl",
-			Subcommands: newConfigCommands(),
-		},
 	}
 	app.Before = loadPlugins
 	app.After = stopPlugins
