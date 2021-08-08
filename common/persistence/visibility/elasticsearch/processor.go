@@ -185,6 +185,7 @@ func (p *processorImpl) Add(request *esclient.BulkableRequest, visibilityTaskKey
 		ackChExisting.ackChInternal = ackCh.ackChInternal
 		return nil
 	})
+	println("added. queued size", p.mapToAckChan.Len())
 	if !isDup {
 		p.bulkProcessor.Add(request)
 	}
@@ -195,6 +196,9 @@ func (p *processorImpl) Add(request *esclient.BulkableRequest, visibilityTaskKey
 func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableRequest) {
 	p.metricsClient.AddCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequests, int64(len(requests)))
 	p.metricsClient.RecordDistribution(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorBulkSize, len(requests))
+	p.metricsClient.RecordDistribution(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorQueuedRequests, p.mapToAckChan.Len()-len(requests))
+	println("bulk size", len(requests))
+	println("queued requests left", p.mapToAckChan.Len()-len(requests))
 
 	for _, request := range requests {
 		visibilityTaskKey := p.extractVisibilityTaskKey(request)
@@ -210,6 +214,7 @@ func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableReq
 			return nil
 		})
 	}
+	time.Sleep(2 * time.Second)
 }
 
 // bulkAfterAction is triggered after bulk processor commit
@@ -401,6 +406,7 @@ func newAckChan() *ackChan {
 }
 
 func (a *ackChan) start(metricsClient metrics.Client) {
+	println("waited for", time.Now().UTC().Sub(a.addedAt).Milliseconds())
 	metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitLatency, time.Now().UTC().Sub(a.addedAt))
 	a.startedAt = time.Now().UTC()
 }
