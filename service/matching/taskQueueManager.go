@@ -141,6 +141,7 @@ type (
 		outstandingPollsMap  map[string]context.CancelFunc
 		shutdownCh           chan struct{} // Delivers stop to the pump that populates taskBuffer
 		signalFatalProblem   func(id *taskQueueID)
+		startGate            *sync.WaitGroup
 	}
 )
 
@@ -171,6 +172,8 @@ func newTaskQueueManager(
 
 	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue.name, taskQueue.taskType, taskQueueKind, e.logger)
 
+	startGate := &sync.WaitGroup{}
+	startGate.Add(1)
 	tlMgr := &taskQueueManagerImpl{
 		status:              common.DaemonStatusInitialized,
 		namespaceCache:      e.namespaceCache,
@@ -188,6 +191,7 @@ func newTaskQueueManager(
 		pollerHistory:       newPollerHistory(),
 		outstandingPollsMap: make(map[string]context.CancelFunc),
 		signalFatalProblem:  e.unloadTaskQueue,
+		startGate:           startGate,
 	}
 
 	tlMgr.namespaceValue.Store("")
@@ -248,6 +252,7 @@ func (c *taskQueueManagerImpl) Start() error {
 	c.liveness.Start()
 	c.taskWriter.Start(idblock)
 	c.taskReader.Start()
+	c.startGate.Done()
 	return nil
 }
 
@@ -280,6 +285,7 @@ func (c *taskQueueManagerImpl) AddTask(
 	ctx context.Context,
 	params addTaskParams,
 ) (bool, error) {
+	c.startGate.Wait()
 	if params.forwardedFrom == "" {
 		// request sent by history service
 		c.liveness.markAlive(time.Now())
@@ -327,6 +333,7 @@ func (c *taskQueueManagerImpl) GetTask(
 	ctx context.Context,
 	maxDispatchPerSecond *float64,
 ) (*internalTask, error) {
+	c.startGate.Wait()
 	c.liveness.markAlive(time.Now())
 
 	// We need to set a shorter timeout than the original ctx; otherwise, by the time ctx deadline is
@@ -388,6 +395,7 @@ func (c *taskQueueManagerImpl) DispatchTask(
 	ctx context.Context,
 	task *internalTask,
 ) error {
+	c.startGate.Wait()
 	return c.matcher.MustOffer(ctx, task)
 }
 
@@ -398,16 +406,19 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 	taskID string,
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
+	c.startGate.Wait()
 	task := newInternalQueryTask(taskID, request)
 	return c.matcher.OfferQuery(ctx, task)
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
 func (c *taskQueueManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerInfo {
+	c.startGate.Wait()
 	return c.pollerHistory.getAllPollerInfo()
 }
 
 func (c *taskQueueManagerImpl) CancelPoller(pollerID string) {
+	c.startGate.Wait()
 	c.outstandingPollsLock.Lock()
 	cancel, ok := c.outstandingPollsMap[pollerID]
 	c.outstandingPollsLock.Unlock()
@@ -421,6 +432,7 @@ func (c *taskQueueManagerImpl) CancelPoller(pollerID string) {
 // pollers which polled this taskqueue in last few minutes and status of taskqueue's ackManager
 // (readLevel, ackLevel, backlogCountHint and taskIDBlock).
 func (c *taskQueueManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
+	c.startGate.Wait()
 	response := &matchingservice.DescribeTaskQueueResponse{Pollers: c.GetAllPollerInfo()}
 	if !includeTaskQueueStatus {
 		return response
@@ -442,6 +454,7 @@ func (c *taskQueueManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *m
 }
 
 func (c *taskQueueManagerImpl) String() string {
+	c.startGate.Wait()
 	buf := new(bytes.Buffer)
 	if c.taskQueueID.taskType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
 		buf.WriteString("Activity")

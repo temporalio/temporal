@@ -205,14 +205,16 @@ func (e *matchingEngineImpl) getTaskQueueManager(taskQueue *taskQueueID, taskQue
 		return nil, err
 	}
 	e.logger.Info("", tag.LifeCycleStarting, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType))
+	e.taskQueues[*taskQueue] = mgr
+	e.taskQueuesLock.Unlock()
+
 	err = mgr.Start()
 	if err != nil {
-		e.taskQueuesLock.Unlock()
+		e.removeTaskQueueManager(taskQueue)
 		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType), tag.Error(err))
 		return nil, err
 	}
-	e.taskQueues[*taskQueue] = mgr
-	e.taskQueuesLock.Unlock()
+
 	e.logger.Info("", tag.LifeCycleStarted, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType))
 	return mgr, nil
 }
