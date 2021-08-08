@@ -1585,6 +1585,8 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 	tlMgr, ok := tlMgr0.(*taskQueueManagerImpl)
 	s.True(ok)
 
+	tlMgr.Start()
+
 	tlMgr.taskAckManager.setReadLevel(0)
 	atomic.StoreInt64(&tlMgr.taskWriter.maxReadLevel, maxReadLevel)
 	tasks, readLevel, isReadBatchDone, err := tlMgr.taskReader.getTaskBatch()
