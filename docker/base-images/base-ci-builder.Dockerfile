@@ -7,4 +7,5 @@ RUN apk add --update --no-cache \
     build-base \
     shellcheck
 
-RUN wget -O- https://raw.githubusercontent.com/fossas/fossa-cli/master/install.sh | sh
+RUN wget -O- https://github.com/fossas/spectrometer/blob/master/install.sh
+
