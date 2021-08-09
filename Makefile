@@ -455,8 +455,8 @@ fossa-analyze:
 	fossa analyze --no-ansi -b $${BUILDKITE_BRANCH:-$$(git branch --show-current)}
 
 fossa-delay:
-	echo "Fossa requested to add delay of 5 mins between analyze and test due to API race condition"
-	sleep 300
+	echo "Fossa requested to add delay between analyze and test due to API race condition"
+	sleep 30
 	echo "Fossa wait complete"
 
 fossa-test:
