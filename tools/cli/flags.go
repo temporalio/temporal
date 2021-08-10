@@ -645,6 +645,10 @@ func getDBFlags() []cli.Flag {
 			Name:  FlagTLSCaPath,
 			Usage: "DB tls client ca path (tls must be enabled)",
 		},
+		cli.StringFlag{
+			Name:  FlagTLSServerName,
+			Usage: "DB tls server name (tls must be enabled)",
+		},
 		cli.BoolFlag{
 			Name:  FlagTLSDisableHostVerification,
 			Usage: "DB tls verify hostname and server cert (tls must be enabled)",
