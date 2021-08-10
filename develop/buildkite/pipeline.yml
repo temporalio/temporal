@@ -177,7 +177,7 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make fossa-init fossa-analyze fossa-delay fossa-test"
+    command: "make fossa-analyze fossa-delay fossa-test"
     retry:
       automatic:
         limit: 2
