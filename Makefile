@@ -462,7 +462,7 @@ fossa-delay:
 fossa-test:
 	fossa test --timeout 1800 --no-ansi
 
-build-fossa: bins fossa-init fossa-analyze fossa-delay fossa-test
+build-fossa: bins fossa-analyze fossa-delay fossa-test
 
 ##### Docker #####
 docker-server:
