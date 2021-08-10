@@ -13,7 +13,7 @@ RUN mkdir -p /xsrc && \
     rm -rf /xsrc
 
 ##### base-server target #####
-FROM alpine:3.12 AS base-server
+FROM alpine:3.13 AS base-server
 
 RUN apk add --update --no-cache \
     ca-certificates \
@@ -21,6 +21,9 @@ RUN apk add --update --no-cache \
     bash \
     curl \
     vim
+
+RUN addgroup -g 1000 temporal
+RUN adduser -u 1000 -G temporal -h /home/temporal -D temporal
 
 COPY --from=dockerize-builder /usr/local/bin/dockerize /usr/local/bin/dockerize
 # set up nsswitch.conf for Go's "netgo" implementation

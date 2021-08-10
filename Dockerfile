@@ -18,20 +18,23 @@ RUN make bins
 ##### Temporal server #####
 FROM ${BASE_SERVER_IMAGE} AS temporal-server
 WORKDIR /etc/temporal
+
 ENV TEMPORAL_HOME /etc/temporal
 ENV SERVICES "history:matching:frontend:worker"
 EXPOSE 6933 6934 6935 6939 7233 7234 7235 7239
-ENTRYPOINT ["./entrypoint.sh"]
 
 COPY config/dynamicconfig /etc/temporal/config/dynamicconfig
 COPY docker/config_template.yaml /etc/temporal/config/config_template.yaml
 COPY docker/entrypoint.sh /etc/temporal/entrypoint.sh
 COPY docker/start-temporal.sh /etc/temporal/start-temporal.sh
-
 COPY --from=temporal-builder /temporal/tctl /usr/local/bin
 COPY --from=temporal-builder /temporal/tctl-authorization-plugin /usr/local/bin
 COPY --from=temporal-builder /temporal/temporal-server /usr/local/bin
 
+RUN chown -R temporal:temporal /etc/temporal
+USER temporal
+
+ENTRYPOINT ["./entrypoint.sh"]
 ##### Auto setup Temporal server #####
 FROM temporal-server AS temporal-auto-setup
 CMD ["autosetup"]
