@@ -448,9 +448,6 @@ mocks: go-generate external-mocks
 fossa-install:
 	curl -H 'Cache-Control: no-cache' https://raw.githubusercontent.com/fossas/fossa-cli/master/install.sh | bash
 
-fossa-init:
-	fossa init --include-all --no-ansi
-
 fossa-analyze:
 	fossa analyze --no-ansi -b $${BUILDKITE_BRANCH:-$$(git branch --show-current)}
 
@@ -462,7 +459,7 @@ fossa-delay:
 fossa-test:
 	fossa test --timeout 1800 --no-ansi
 
-build-fossa: bins fossa-init fossa-analyze fossa-delay fossa-test
+build-fossa: bins fossa-analyze fossa-delay fossa-test
 
 ##### Docker #####
 docker-server:
