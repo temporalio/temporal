@@ -28,10 +28,11 @@ import "flag"
 
 // TestFlags contains the feature flags for integration tests
 var TestFlags struct {
-	FrontendAddr          string
-	PersistenceType       string
-	PersistenceDriver     string
-	TestClusterConfigFile string
+	FrontendAddr                  string
+	PersistenceType               string
+	PersistenceDriver             string
+	TestClusterConfigFile         string
+	PersistenceFaultInjectionRate float64
 }
 
 func init() {
@@ -39,4 +40,5 @@ func init() {
 	flag.StringVar(&TestFlags.PersistenceType, "persistenceType", "nosql", "type of persistence - [nosql or sql]")
 	flag.StringVar(&TestFlags.PersistenceDriver, "persistenceDriver", "cassandra", "driver of nosql / sql- [cassandra, mysql, postgresql]")
 	flag.StringVar(&TestFlags.TestClusterConfigFile, "TestClusterConfigFile", "", "test cluster config file location")
+	flag.Float64Var(&TestFlags.PersistenceFaultInjectionRate, "PersistenceFaultInjectionRate", 0, "rate of persistence error injection. value: [0..1]. 0 = no injection")
 }

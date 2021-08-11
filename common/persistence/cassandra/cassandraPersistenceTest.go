@@ -52,11 +52,12 @@ type TestCluster struct {
 	schemaDir string
 	session   gocql.Session
 	cfg       config.Cassandra
+	faultInjection *config.FaultInjection
 	logger    log.Logger
 }
 
 // NewTestCluster returns a new cassandra test cluster
-func NewTestCluster(keyspace, username, password, host string, port int, schemaDir string, logger log.Logger) *TestCluster {
+func NewTestCluster(keyspace, username, password, host string, port int, schemaDir string, faultInjection *config.FaultInjection, logger log.Logger) *TestCluster {
 	var result TestCluster
 	result.logger = logger
 	result.keyspace = keyspace
@@ -79,6 +80,7 @@ func NewTestCluster(keyspace, username, password, host string, port int, schemaD
 		ConnectTimeout: 600 * time.Millisecond,
 		Keyspace:       keyspace,
 	}
+	result.faultInjection = faultInjection
 	return &result
 }
 
@@ -89,7 +91,7 @@ func (s *TestCluster) Config() config.Persistence {
 		DefaultStore:    "test",
 		VisibilityStore: "test",
 		DataStores: map[string]config.DataStore{
-			"test": {Cassandra: &cfg},
+			"test": {Cassandra: &cfg, FaultInjection: s.faultInjection},
 		},
 		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
 		VisibilityConfig: &config.VisibilityConfig{

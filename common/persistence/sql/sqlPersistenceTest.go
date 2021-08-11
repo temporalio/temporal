@@ -46,6 +46,7 @@ type TestCluster struct {
 	dbName    string
 	schemaDir string
 	cfg       config.SQL
+	faultInjection *config.FaultInjection
 	logger    log.Logger
 }
 
@@ -58,6 +59,7 @@ func NewTestCluster(
 	host string,
 	port int,
 	schemaDir string,
+	faultInjection *config.FaultInjection,
 	logger log.Logger,
 ) *TestCluster {
 	var result TestCluster
@@ -77,6 +79,7 @@ func NewTestCluster(
 		DatabaseName:       dbName,
 		TaskScanPartitions: 4,
 	}
+	result.faultInjection = faultInjection
 	return &result
 }
 

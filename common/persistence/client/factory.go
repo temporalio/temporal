@@ -292,6 +292,11 @@ func (f *factoryImpl) init(
 	default:
 		f.logger.Fatal("invalid config: one of cassandra or sql params must be specified for default data store")
 	}
+
+	if defaultCfg.FaultInjection != nil {
+		defaultDataStore.factory = NewFaultInjectionDatastoreFactory(defaultCfg.FaultInjection, defaultDataStore.factory)
+	}
+
 	for _, sType := range storeTypes {
 		f.datastores[sType] = defaultDataStore
 	}

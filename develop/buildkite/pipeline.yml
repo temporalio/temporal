@@ -38,6 +38,21 @@ steps:
           run: integration-test-cassandra
           config: ./develop/buildkite/docker-compose.yml
 
+  - label: ":golang: fault injection integration test with cassandra"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make integration-with-fault-injection-test-coverage"
+    artifact_paths:
+      - ".coverage/*.out"
+    retry:
+      automatic:
+        limit: 2
+    plugins:
+      - docker-compose#v3.1.0:
+          run: integration-test-cassandra
+          config: ./develop/buildkite/docker-compose.yml
+
   - label: ":golang: integration test with cassandra (ES6)"
     agents:
       queue: "default"
