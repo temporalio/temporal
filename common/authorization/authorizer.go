@@ -50,7 +50,7 @@ type CallTarget struct {
 	APIName string
 	// If a Namespace is not being targeted this be set to an empty string.
 	Namespace string
-	// If a Namespace is not being targeted this be set to an empty string.
+	// Request contains a deserialized copy of the API request object
 	Request interface{}
 }
 
