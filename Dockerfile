@@ -17,6 +17,10 @@ RUN make bins
 
 ##### Temporal server #####
 FROM ${BASE_SERVER_IMAGE} AS temporal-server
+
+RUN addgroup -g 1000 temporal
+RUN adduser -u 1000 -G temporal -D temporal
+
 WORKDIR /etc/temporal
 
 ENV TEMPORAL_HOME /etc/temporal
@@ -27,6 +31,7 @@ COPY config/dynamicconfig /etc/temporal/config/dynamicconfig
 COPY docker/config_template.yaml /etc/temporal/config/config_template.yaml
 COPY docker/entrypoint.sh /etc/temporal/entrypoint.sh
 COPY docker/start-temporal.sh /etc/temporal/start-temporal.sh
+
 COPY --from=temporal-builder /temporal/tctl /usr/local/bin
 COPY --from=temporal-builder /temporal/tctl-authorization-plugin /usr/local/bin
 COPY --from=temporal-builder /temporal/temporal-server /usr/local/bin

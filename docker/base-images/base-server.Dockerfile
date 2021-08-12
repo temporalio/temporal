@@ -22,9 +22,6 @@ RUN apk add --update --no-cache \
     curl \
     vim
 
-RUN addgroup -g 1000 temporal
-RUN adduser -u 1000 -G temporal -h /home/temporal -D temporal
-
 COPY --from=dockerize-builder /usr/local/bin/dockerize /usr/local/bin/dockerize
 # set up nsswitch.conf for Go's "netgo" implementation
 # https://github.com/gliderlabs/docker-alpine/issues/367#issuecomment-424546457
