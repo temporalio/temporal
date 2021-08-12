@@ -2,34 +2,26 @@ package query
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/olivere/elastic/v7"
 	"github.com/xwb1989/sqlparser"
 )
 
-func sanitizeColName(str string) string {
-	return strings.Replace(str, "`", "", -1)
-}
-func sanitizeColValue(str string) string {
-	return strings.Trim(str, `'`)
-}
-
 func handleSelect(sel *sqlparser.Select) (elastic.Query, []elastic.Sorter, error) {
 	var (
-		rootParent sqlparser.Expr
-		query      elastic.Query
-		err        error
+		query elastic.Query
+		err   error
 	)
 
 	if sel.Where != nil {
-		// top level node pass in an empty interface
-		// to tell the children this is root
-		// is there any better way?
-		query, err = handleSelectWhere(sel.Where.Expr, true, rootParent)
+		query, err = handleSelectWhere(sel.Where.Expr)
 		if err != nil {
 			return nil, nil, err
+		}
+		// Result must be BoolQuery.
+		if _, isBoolQuery := query.(*elastic.BoolQuery); !isBoolQuery {
+			query = elastic.NewBoolQuery().Filter(query)
 		}
 	}
 
@@ -45,22 +37,21 @@ func handleSelect(sel *sqlparser.Select) (elastic.Query, []elastic.Sorter, error
 	return query, sorter, nil
 }
 
-func handleSelectWhere(expr sqlparser.Expr, topLevel bool, parent sqlparser.Expr) (elastic.Query, error) {
+func handleSelectWhere(expr sqlparser.Expr) (elastic.Query, error) {
 	if expr == nil {
 		return nil, errors.New("expression cannot be nil")
 	}
 
 	switch e := (expr).(type) {
 	case *sqlparser.AndExpr:
-		return handleSelectWhereAndExpr(e, topLevel, parent)
+		return handleSelectWhereAndExpr(e)
 	case *sqlparser.OrExpr:
-		return handleSelectWhereOrExpr(e, topLevel, parent)
+		return handleSelectWhereOrExpr(e)
 	case *sqlparser.ComparisonExpr:
-		return handleSelectWhereComparisonExpr(e, topLevel, parent)
+		return handleSelectWhereComparisonExpr(e)
 	case *sqlparser.RangeCond:
 		// between a and b
 		colName, ok := e.Left.(*sqlparser.ColName)
-
 		if !ok {
 			return nil, errors.New("range column name is missing")
 		}
@@ -69,11 +60,9 @@ func handleSelectWhere(expr sqlparser.Expr, topLevel bool, parent sqlparser.Expr
 		fromStr := sanitizeColValue(sqlparser.String(e.From))
 		toStr := sanitizeColValue(sqlparser.String(e.To))
 
-		rangeQuery := elastic.NewRangeQuery(colNameStr).Gte(fromStr).Lte(toStr)
-		return rangeQuery, nil
+		return elastic.NewRangeQuery(colNameStr).Gte(fromStr).Lte(toStr), nil
 	case *sqlparser.ParenExpr:
-		boolExpr := e.Expr
-		return handleSelectWhere(boolExpr, topLevel, parent)
+		return handleSelectWhere(e.Expr)
 	case *sqlparser.IsExpr:
 		return nil, errors.New("'is' expression is not supported")
 	case *sqlparser.NotExpr:
@@ -83,170 +72,154 @@ func handleSelectWhere(expr sqlparser.Expr, topLevel bool, parent sqlparser.Expr
 	}
 }
 
-func handleSelectWhereAndExpr(expr *sqlparser.AndExpr, topLevel bool, parent sqlparser.Expr) (elastic.Query, error) {
+func handleSelectWhereAndExpr(expr *sqlparser.AndExpr) (elastic.Query, error) {
 	leftExpr := expr.Left
 	rightExpr := expr.Right
-	leftQuery, err := handleSelectWhere(leftExpr, false, expr)
+	leftQuery, err := handleSelectWhere(leftExpr)
 	if err != nil {
 		return nil, err
 	}
-	rightQuery, err := handleSelectWhere(rightExpr, false, expr)
+	rightQuery, err := handleSelectWhere(rightExpr)
 	if err != nil {
 		return nil, err
 	}
 
-	// not toplevel
-	// if the parent node is also and, then the result can be merged
-
-	var resultStr string
-	if leftStr == "" || rightStr == "" {
-		resultStr = leftStr + rightStr
-	} else {
-		resultStr = leftStr + `,` + rightStr
+	// If left or right is a BoolQuery built from AndExpr then reuse it w/o creating new BoolQuery.
+	lqBool, isLQBool := leftQuery.(*elastic.BoolQuery)
+	_, isLEAnd := leftExpr.(*sqlparser.AndExpr)
+	if isLQBool && isLEAnd {
+		return lqBool.Filter(rightQuery), nil
 	}
 
-	if _, ok := (*parent).(*sqlparser.AndExpr); ok {
-		return resultStr, nil
+	rqBool, isRQBool := rightQuery.(*elastic.BoolQuery)
+	_, isREAnd := rightExpr.(*sqlparser.AndExpr)
+	if isRQBool && isREAnd {
+		return rqBool.Filter(leftQuery), nil
 	}
-	return fmt.Sprintf(`{"bool" : {"must" : [%v]}}`, resultStr), nil
 
-	elastic.NewBoolQuery().
-
-	query := elastic.NewBoolQuery().Filter(leftQuery, rightQuery)
-	return query, nil
+	return elastic.NewBoolQuery().Filter(leftQuery, rightQuery), nil
 }
 
-func handleSelectWhereOrExpr(expr *sqlparser.OrExpr, topLevel bool, parent sqlparser.Expr) (elastic.Query, error) {
+func handleSelectWhereOrExpr(expr *sqlparser.OrExpr) (elastic.Query, error) {
 	leftExpr := expr.Left
 	rightExpr := expr.Right
-	leftQuery, err := handleSelectWhere(leftExpr, false, expr)
+	leftQuery, err := handleSelectWhere(leftExpr)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	rightQuery, err := handleSelectWhere(rightExpr, false, expr)
+	rightQuery, err := handleSelectWhere(rightExpr)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	query := elastic.NewBoolQuery().Filter().Should(leftQuery, rightQuery)
-	return query, nil
-
-	var resultStr string
-	if leftStr == "" || rightStr == "" {
-		resultStr = leftStr + rightStr
-	} else {
-		resultStr = leftStr + `,` + rightStr
+	// If left or right is a BoolQuery built from OrExpr then reuse it w/o creating new BoolQuery.
+	lqBool, isLQBool := leftQuery.(*elastic.BoolQuery)
+	_, isLEOr := leftExpr.(*sqlparser.OrExpr)
+	if isLQBool && isLEOr {
+		return lqBool.Should(rightQuery), nil
 	}
 
-	// not toplevel
-	// if the parent node is also or node, then merge the query param
-	if _, ok := (*parent).(*sqlparser.OrExpr); ok {
-		return resultStr, nil
+	rqBool, isRQBool := rightQuery.(*elastic.BoolQuery)
+	_, isREOr := rightExpr.(*sqlparser.OrExpr)
+	if isRQBool && isREOr {
+		return rqBool.Should(leftQuery), nil
 	}
 
-	return fmt.Sprintf(`{"bool" : {"should" : [%v]}}`, resultStr), nil
+	return elastic.NewBoolQuery().Should(leftQuery, rightQuery), nil
 }
 
-func handleSelectWhereComparisonExpr(expr *sqlparser.ComparisonExpr, topLevel bool, parent sqlparser.Expr) (elastic.Query, error) {
+func handleSelectWhereComparisonExpr(expr *sqlparser.ComparisonExpr) (elastic.Query, error) {
 	colName, ok := expr.Left.(*sqlparser.ColName)
-
 	if !ok {
-		return nil, errors.New("elasticsql: invalid comparison expression, the left must be a column name")
+		return nil, errors.New("invalid comparison expression, the left must be a column name")
 	}
 
 	colNameStr := sqlparser.String(colName)
-	colNameStr = strings.Replace(colNameStr, "`", "", -1)
+	colNameStr = sanitizeColName(colNameStr)
 	rightStr, missingCheck, err := buildComparisonExprRightStr(expr.Right)
 	if err != nil {
 		return nil, err
 	}
 
-	resultStr := ""
-
+	var query elastic.Query
 	switch expr.Operator {
 	case ">=":
-		resultStr = fmt.Sprintf(`{"range" : {"%v" : {"from" : "%v"}}}`, colNameStr, rightStr)
+		query = elastic.NewRangeQuery(colNameStr).Gte(rightStr)
 	case "<=":
-		resultStr = fmt.Sprintf(`{"range" : {"%v" : {"to" : "%v"}}}`, colNameStr, rightStr)
+		query = elastic.NewRangeQuery(colNameStr).Lte(rightStr)
 	case "=":
 		// field is missing
 		if missingCheck {
-			resultStr = fmt.Sprintf(`{"missing":{"field":"%v"}}`, colNameStr)
+			query = elastic.NewBoolQuery().MustNot(elastic.NewExistsQuery(colNameStr))
 		} else {
-			resultStr = fmt.Sprintf(`{"match_phrase" : {"%v" : {"query" : "%v"}}}`, colNameStr, rightStr)
+			query = elastic.NewMatchPhraseQuery(colNameStr, rightStr)
 		}
 	case ">":
-		resultStr = fmt.Sprintf(`{"range" : {"%v" : {"gt" : "%v"}}}`, colNameStr, rightStr)
+		query = elastic.NewRangeQuery(colNameStr).Gt(rightStr)
 	case "<":
-		resultStr = fmt.Sprintf(`{"range" : {"%v" : {"lt" : "%v"}}}`, colNameStr, rightStr)
+		query = elastic.NewRangeQuery(colNameStr).Lt(rightStr)
 	case "!=":
 		if missingCheck {
-			resultStr = fmt.Sprintf(`{"bool" : {"must_not" : [{"missing":{"field":"%v"}}]}}`, colNameStr)
+			query = elastic.NewExistsQuery(colNameStr)
 		} else {
-			resultStr = fmt.Sprintf(`{"bool" : {"must_not" : [{"match_phrase" : {"%v" : {"query" : "%v"}}}]}}`, colNameStr, rightStr)
+			query = elastic.NewBoolQuery().MustNot(elastic.NewMatchPhraseQuery(colNameStr, rightStr))
 		}
 	case "in":
 		// the default valTuple is ('1', '2', '3') like
 		// so need to drop the () and replace ' to "
 		rightStr = strings.Replace(rightStr, `'`, `"`, -1)
-		rightStr = strings.Trim(rightStr, "(")
-		rightStr = strings.Trim(rightStr, ")")
-		resultStr = fmt.Sprintf(`{"terms" : {"%v" : [%v]}}`, colNameStr, rightStr)
+		rightStr = strings.Trim(rightStr, "()")
+		rightStrs := strings.Split(rightStr, ",")
+		for i := range rightStrs {
+			rightStrs[i] = strings.Trim(rightStrs[i], " ")
+		}
+		query = elastic.NewTermQuery(colNameStr, rightStrs)
 	case "like":
 		rightStr = strings.Replace(rightStr, `%`, ``, -1)
-		resultStr = fmt.Sprintf(`{"match_phrase" : {"%v" : {"query" : "%v"}}}`, colNameStr, rightStr)
+		query = elastic.NewMatchPhraseQuery(colNameStr, rightStr)
 	case "not like":
 		rightStr = strings.Replace(rightStr, `%`, ``, -1)
-		resultStr = fmt.Sprintf(`{"bool" : {"must_not" : {"match_phrase" : {"%v" : {"query" : "%v"}}}}}`, colNameStr, rightStr)
+		query = elastic.NewBoolQuery().MustNot(elastic.NewMatchPhraseQuery(colNameStr, rightStr))
 	case "not in":
 		// the default valTuple is ('1', '2', '3') like
 		// so need to drop the () and replace ' to "
 		rightStr = strings.Replace(rightStr, `'`, `"`, -1)
-		rightStr = strings.Trim(rightStr, "(")
-		rightStr = strings.Trim(rightStr, ")")
-		resultStr = fmt.Sprintf(`{"bool" : {"must_not" : {"terms" : {"%v" : [%v]}}}}`, colNameStr, rightStr)
+		rightStr = strings.Trim(rightStr, "()")
+		rightStrs := strings.Split(rightStr, ",")
+		for i := range rightStrs {
+			rightStrs[i] = strings.Trim(rightStrs[i], " ")
+		}
+		query = elastic.NewBoolQuery().MustNot(elastic.NewTermQuery(colNameStr, rightStrs))
 	}
 
-	// the root node need to have bool and must
-	if topLevel {
-		resultStr = fmt.Sprintf(`{"bool" : {"must" : [%v]}}`, resultStr)
-	}
-
-	return resultStr, nil
+	return query, nil
 }
 
 func buildComparisonExprRightStr(expr sqlparser.Expr) (string, bool, error) {
-	var rightStr string
-	var err error
-	var missingCheck = false
 	switch expr.(type) {
 	case *sqlparser.SQLVal:
-		rightStr = sqlparser.String(expr)
-		rightStr = strings.Trim(rightStr, `'`)
+		rightStr := sanitizeColValue(sqlparser.String(expr))
+		return rightStr, false, nil
 	case *sqlparser.GroupConcatExpr:
-		return "", missingCheck, errors.New("elasticsql: group_concat not supported")
+		return "", false, errors.New("group_concat not supported")
 	case *sqlparser.FuncExpr:
-		// parse nested
-		funcExpr := expr.(*sqlparser.FuncExpr)
-		rightStr, err = buildNestedFuncStrValue(funcExpr)
-		if err != nil {
-			return "", missingCheck, err
-		}
+		return "", false, errors.New("nested func not supported")
 	case *sqlparser.ColName:
 		if sqlparser.String(expr) == "missing" {
-			missingCheck = true
-			return "", missingCheck, nil
+			return "", true, nil
 		}
-
-		return "", missingCheck, errors.New("elasticsql: column name on the right side of compare operator is not supported")
+		return "", false, errors.New("column name on the right side of compare operator is not supported")
 	case sqlparser.ValTuple:
-		rightStr = sqlparser.String(expr)
+		return sqlparser.String(expr), false, nil
 	default:
 		// cannot reach here
+		return "", false, errors.New("unexpected type")
 	}
-	return rightStr, missingCheck, err
 }
 
-func buildNestedFuncStrValue(nestedFunc *sqlparser.FuncExpr) (string, error) {
-	return "", errors.New("elasticsql: unsupported function" + nestedFunc.Name.String())
+func sanitizeColName(str string) string {
+	return strings.Replace(str, "`", "", -1)
+}
+func sanitizeColValue(str string) string {
+	return strings.Trim(str, `'`)
 }
