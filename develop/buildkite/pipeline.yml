@@ -42,7 +42,7 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make integration-with-fault-injection-test-coverage"
+    command: "make integration-with-fault-injection-test"
     artifact_paths:
       - ".coverage/*.out"
     retry:
