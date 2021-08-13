@@ -48,12 +48,12 @@ const (
 
 // TestCluster allows executing cassandra operations in testing.
 type TestCluster struct {
-	keyspace  string
-	schemaDir string
-	session   gocql.Session
-	cfg       config.Cassandra
+	keyspace       string
+	schemaDir      string
+	session        gocql.Session
+	cfg            config.Cassandra
 	faultInjection *config.FaultInjection
-	logger    log.Logger
+	logger         log.Logger
 }
 
 // NewTestCluster returns a new cassandra test cluster

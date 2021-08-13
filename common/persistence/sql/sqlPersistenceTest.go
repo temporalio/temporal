@@ -43,11 +43,11 @@ import (
 
 // TestCluster allows executing cassandra operations in testing.
 type TestCluster struct {
-	dbName    string
-	schemaDir string
-	cfg       config.SQL
+	dbName         string
+	schemaDir      string
+	cfg            config.SQL
 	faultInjection *config.FaultInjection
-	logger    log.Logger
+	logger         log.Logger
 }
 
 // NewTestCluster returns a new SQL test cluster

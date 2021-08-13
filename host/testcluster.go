@@ -85,7 +85,7 @@ type (
 		ESConfig        *config.Elasticsearch
 		WorkerConfig    *WorkerConfig
 		MockAdminClient map[string]adminservice.AdminServiceClient
-		FaultInjection config.FaultInjection
+		FaultInjection  config.FaultInjection
 	}
 
 	// WorkerConfig is the config for enabling/disabling Temporal worker
