@@ -535,7 +535,64 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 	s.NoError(err)
 }
 
-func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
+func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithOutContinueAsNewChain() {
+	ctx := context.Background()
+	baseFirstEventID := int64(124)
+	baseNextEventID := int64(456)
+	baseBranchToken := []byte("some random base branch token")
+
+	baseEvent1 := &historypb.HistoryEvent{
+		EventId:    124,
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{}},
+	}
+	baseEvent2 := &historypb.HistoryEvent{
+		EventId:    125,
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{}},
+	}
+	baseEvent3 := &historypb.HistoryEvent{
+		EventId:    126,
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{}},
+	}
+	baseEvent4 := &historypb.HistoryEvent{
+		EventId:    127,
+		EventType:  enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{}},
+	}
+
+	baseEvents := []*historypb.HistoryEvent{baseEvent1, baseEvent2, baseEvent3, baseEvent4}
+	shardID := s.mockShard.GetShardID()
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+		BranchToken:   baseBranchToken,
+		MinEventID:    baseFirstEventID,
+		MaxEventID:    baseNextEventID,
+		PageSize:      nDCDefaultPageSize,
+		NextPageToken: nil,
+		ShardID:       shardID,
+	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
+		History:       []*historypb.History{{Events: baseEvents}},
+		NextPageToken: nil,
+	}, nil)
+
+	mutableState := workflow.NewMockMutableState(s.controller)
+
+	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
+		ctx,
+		mutableState,
+		s.namespaceID,
+		s.workflowID,
+		s.baseRunID,
+		baseBranchToken,
+		baseFirstEventID,
+		baseNextEventID,
+	)
+	s.NoError(err)
+	s.Equal(s.baseRunID, lastVisitedRunID)
+}
+
+func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithContinueAsNewChain() {
 	ctx := context.Background()
 	baseFirstEventID := int64(124)
 	baseNextEventID := int64(456)
@@ -634,7 +691,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 
 	mutableState := workflow.NewMockMutableState(s.controller)
 
-	err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
+	lastVisitedRunID, err := s.workflowResetter.reapplyContinueAsNewWorkflowEvents(
 		ctx,
 		mutableState,
 		s.namespaceID,
@@ -645,6 +702,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents() {
 		baseNextEventID,
 	)
 	s.NoError(err)
+	s.Equal(newRunID, lastVisitedRunID)
 }
 
 func (s *workflowResetterSuite) TestReapplyWorkflowEvents() {

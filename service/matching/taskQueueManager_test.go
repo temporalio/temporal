@@ -64,7 +64,7 @@ func TestDeliverBufferTasks(t *testing.T) {
 			tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{}
 			err := tlm.matcher.rateLimiter.Wait(context.Background()) // consume the token
 			assert.NoError(t, err)
-			tlm.taskReader.cancelFunc()
+			tlm.taskReader.Stop()
 		},
 	}
 	for _, test := range tests {
@@ -94,7 +94,7 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 		wg.Done()
 	}()
 	time.Sleep(100 * time.Millisecond) // let go routine run first and block on tasksForPoll
-	tlm.taskReader.cancelFunc()
+	tlm.taskReader.Stop()
 	wg.Wait()
 }
 
