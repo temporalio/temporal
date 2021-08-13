@@ -2,6 +2,8 @@ package query
 
 import (
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/olivere/elastic/v7"
@@ -23,6 +25,8 @@ func handleSelect(sel *sqlparser.Select) (elastic.Query, []elastic.Sorter, error
 		if _, isBoolQuery := query.(*elastic.BoolQuery); !isBoolQuery {
 			query = elastic.NewBoolQuery().Filter(query)
 		}
+	} else {
+		query = elastic.NewBoolQuery().Filter(elastic.NewMatchAllQuery())
 	}
 
 	var sorter []elastic.Sorter
@@ -57,10 +61,15 @@ func handleSelectWhere(expr sqlparser.Expr) (elastic.Query, error) {
 		}
 
 		colNameStr := sanitizeColName(sqlparser.String(colName))
-		fromStr := sanitizeColValue(sqlparser.String(e.From))
-		toStr := sanitizeColValue(sqlparser.String(e.To))
-
-		return elastic.NewRangeQuery(colNameStr).Gte(fromStr).Lte(toStr), nil
+		fromValue, err := parseSqlValue(sqlparser.String(e.From))
+		if err != nil {
+			return nil, err
+		}
+		toValue, err := parseSqlValue(sqlparser.String(e.To))
+		if err != nil {
+			return nil, err
+		}
+		return elastic.NewRangeQuery(colNameStr).Gte(fromValue).Lte(toValue), nil
 	case *sqlparser.ParenExpr:
 		return handleSelectWhere(e.Expr)
 	case *sqlparser.IsExpr:
@@ -134,9 +143,8 @@ func handleSelectWhereComparisonExpr(expr *sqlparser.ComparisonExpr) (elastic.Qu
 		return nil, errors.New("invalid comparison expression, the left must be a column name")
 	}
 
-	colNameStr := sqlparser.String(colName)
-	colNameStr = sanitizeColName(colNameStr)
-	rightStr, missingCheck, err := buildComparisonExprRightStr(expr.Right)
+	colNameStr := sanitizeColName(sqlparser.String(colName))
+	colValue, missingCheck, err := parseComparisonExprValue(expr.Right)
 	if err != nil {
 		return nil, err
 	}
@@ -144,62 +152,72 @@ func handleSelectWhereComparisonExpr(expr *sqlparser.ComparisonExpr) (elastic.Qu
 	var query elastic.Query
 	switch expr.Operator {
 	case ">=":
-		query = elastic.NewRangeQuery(colNameStr).Gte(rightStr)
+		query = elastic.NewRangeQuery(colNameStr).Gte(colValue)
 	case "<=":
-		query = elastic.NewRangeQuery(colNameStr).Lte(rightStr)
+		query = elastic.NewRangeQuery(colNameStr).Lte(colValue)
 	case "=":
 		// field is missing
 		if missingCheck {
 			query = elastic.NewBoolQuery().MustNot(elastic.NewExistsQuery(colNameStr))
 		} else {
-			query = elastic.NewMatchPhraseQuery(colNameStr, rightStr)
+			query = elastic.NewMatchPhraseQuery(colNameStr, colValue)
 		}
 	case ">":
-		query = elastic.NewRangeQuery(colNameStr).Gt(rightStr)
+		query = elastic.NewRangeQuery(colNameStr).Gt(colValue)
 	case "<":
-		query = elastic.NewRangeQuery(colNameStr).Lt(rightStr)
+		query = elastic.NewRangeQuery(colNameStr).Lt(colValue)
 	case "!=":
 		if missingCheck {
 			query = elastic.NewExistsQuery(colNameStr)
 		} else {
-			query = elastic.NewBoolQuery().MustNot(elastic.NewMatchPhraseQuery(colNameStr, rightStr))
+			query = elastic.NewBoolQuery().MustNot(elastic.NewMatchPhraseQuery(colNameStr, colValue))
 		}
 	case "in":
-		// the default valTuple is ('1', '2', '3') like
-		// so need to drop the () and replace ' to "
-		rightStr = strings.Replace(rightStr, `'`, `"`, -1)
-		rightStr = strings.Trim(rightStr, "()")
-		rightStrs := strings.Split(rightStr, ",")
-		for i := range rightStrs {
-			rightStrs[i] = strings.Trim(rightStrs[i], " ")
+		colValueStr, isString := colValue.(string)
+		if !isString {
+			return nil, fmt.Errorf("'in' operator value must be a string but was %T", colValue)
 		}
-		query = elastic.NewTermQuery(colNameStr, rightStrs)
-	case "like":
-		rightStr = strings.Replace(rightStr, `%`, ``, -1)
-		query = elastic.NewMatchPhraseQuery(colNameStr, rightStr)
-	case "not like":
-		rightStr = strings.Replace(rightStr, `%`, ``, -1)
-		query = elastic.NewBoolQuery().MustNot(elastic.NewMatchPhraseQuery(colNameStr, rightStr))
+		// colValueStr is a string like ('1', '2', '3').
+		parsedValues, err := parseSqlRange(colValueStr)
+		if err != nil {
+			return nil, err
+		}
+		query = elastic.NewTermsQuery(colNameStr, parsedValues...)
 	case "not in":
-		// the default valTuple is ('1', '2', '3') like
-		// so need to drop the () and replace ' to "
-		rightStr = strings.Replace(rightStr, `'`, `"`, -1)
-		rightStr = strings.Trim(rightStr, "()")
-		rightStrs := strings.Split(rightStr, ",")
-		for i := range rightStrs {
-			rightStrs[i] = strings.Trim(rightStrs[i], " ")
+		colValueStr, isString := colValue.(string)
+		if !isString {
+			return nil, fmt.Errorf("'not in' operator value must be a string but was %T", colValue)
 		}
-		query = elastic.NewBoolQuery().MustNot(elastic.NewTermQuery(colNameStr, rightStrs))
+		// colValue is a string like ('1', '2', '3').
+		parsedValues, err := parseSqlRange(colValueStr)
+		if err != nil {
+			return nil, err
+		}
+		query = elastic.NewBoolQuery().MustNot(elastic.NewTermsQuery(colNameStr, parsedValues...))
+	case "like":
+		colValueStr, isString := colValue.(string)
+		if !isString {
+			return nil, fmt.Errorf("'like' operator value must be a string but was %T", colValue)
+		}
+		colValue = strings.Replace(colValueStr, `%`, ``, -1)
+		query = elastic.NewMatchPhraseQuery(colNameStr, colValue)
+	case "not like":
+		colValueStr, isString := colValue.(string)
+		if !isString {
+			return nil, fmt.Errorf("'not like' operator value must be a string but was %T", colValue)
+		}
+		colValue = strings.Replace(colValueStr, `%`, ``, -1)
+		query = elastic.NewBoolQuery().MustNot(elastic.NewMatchPhraseQuery(colNameStr, colValue))
 	}
 
 	return query, nil
 }
 
-func buildComparisonExprRightStr(expr sqlparser.Expr) (string, bool, error) {
-	switch expr.(type) {
+func parseComparisonExprValue(expr sqlparser.Expr) (interface{}, bool, error) {
+	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
-		rightStr := sanitizeColValue(sqlparser.String(expr))
-		return rightStr, false, nil
+		sqlValue, err := parseSqlValue(sqlparser.String(e))
+		return sqlValue, false, err
 	case *sqlparser.GroupConcatExpr:
 		return "", false, errors.New("group_concat not supported")
 	case *sqlparser.FuncExpr:
@@ -220,6 +238,34 @@ func buildComparisonExprRightStr(expr sqlparser.Expr) (string, bool, error) {
 func sanitizeColName(str string) string {
 	return strings.Replace(str, "`", "", -1)
 }
-func sanitizeColValue(str string) string {
-	return strings.Trim(str, `'`)
+
+// parseSqlRange parses strings like "('1', '2', '3')" which comes from sql parser.
+func parseSqlRange(sqlRange string) ([]interface{}, error) {
+	sqlRange = strings.Trim(sqlRange, "()")
+	var values []interface{}
+	for _, v := range strings.Split(sqlRange, ", ") {
+		parsedValue, err := parseSqlValue(v)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, parsedValue)
+	}
+	return values, nil
+}
+
+func parseSqlValue(sqlValue string) (interface{}, error) {
+	if sqlValue == "" {
+		return "", nil
+	}
+
+	if sqlValue[0] == '\'' && sqlValue[len(sqlValue)-1] == '\'' {
+		return strings.Trim(sqlValue, "'"), nil
+	}
+
+	floatValue, err := strconv.ParseFloat(sqlValue, 64)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse %s to float64: %w", sqlValue, err)
+	}
+
+	return floatValue, nil
 }
