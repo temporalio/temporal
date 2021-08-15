@@ -43,7 +43,7 @@ func handleSelect(sel *sqlparser.Select) (elastic.Query, []elastic.Sorter, error
 
 func handleSelectWhere(expr sqlparser.Expr) (elastic.Query, error) {
 	if expr == nil {
-		return nil, errors.New("expression cannot be nil")
+		return nil, errors.New("'where' expression cannot be nil")
 	}
 
 	switch e := (expr).(type) {
@@ -60,9 +60,11 @@ func handleSelectWhere(expr sqlparser.Expr) (elastic.Query, error) {
 	case *sqlparser.IsExpr:
 		return handleSelectIsExpr(e)
 	case *sqlparser.NotExpr:
-		return nil, errors.New("'not' expression is not supported")
+		return nil, fmt.Errorf("%w: 'not' expression", NotSupportedErr)
+	case *sqlparser.FuncExpr:
+		return nil, fmt.Errorf("%w: function expression", NotSupportedErr)
 	default:
-		return nil, errors.New("function is not supported")
+		return nil, fmt.Errorf("%w: expression of type %T", NotSupportedErr, expr)
 	}
 }
 
@@ -122,29 +124,38 @@ func handleSelectWhereOrExpr(expr *sqlparser.OrExpr) (elastic.Query, error) {
 	return elastic.NewBoolQuery().Should(leftQuery, rightQuery), nil
 }
 
-func handleSelectWhereRangeCondExpr(e *sqlparser.RangeCond) (elastic.Query, error) {
-	// between a and b
-	colName, ok := e.Left.(*sqlparser.ColName)
+func handleSelectWhereRangeCondExpr(expr *sqlparser.RangeCond) (elastic.Query, error) {
+	colName, ok := expr.Left.(*sqlparser.ColName)
 	if !ok {
-		return nil, errors.New("range column name is missing")
+		return nil, fmt.Errorf("%w: left part of 'range condition' expression must be a column name", InvalidExpressionErr)
 	}
 
 	colNameStr := sanitizeColName(sqlparser.String(colName))
-	fromValue, err := parseSqlValue(sqlparser.String(e.From))
+	fromValue, err := parseSqlValue(sqlparser.String(expr.From))
 	if err != nil {
 		return nil, err
 	}
-	toValue, err := parseSqlValue(sqlparser.String(e.To))
+	toValue, err := parseSqlValue(sqlparser.String(expr.To))
 	if err != nil {
 		return nil, err
 	}
-	return elastic.NewRangeQuery(colNameStr).Gte(fromValue).Lte(toValue), nil
+
+	var query elastic.Query
+	switch expr.Operator {
+	case "between":
+		query = elastic.NewRangeQuery(colNameStr).Gte(fromValue).Lte(toValue)
+	case "not between":
+		query = elastic.NewBoolQuery().MustNot(elastic.NewRangeQuery(colNameStr).Gte(fromValue).Lte(toValue))
+	default:
+		return nil, fmt.Errorf("%w: range operator must be 'between' or 'not between'", InvalidExpressionErr)
+	}
+	return query, nil
 }
 
 func handleSelectIsExpr(expr *sqlparser.IsExpr) (elastic.Query, error) {
 	colName, ok := expr.Expr.(*sqlparser.ColName)
 	if !ok {
-		return nil, errors.New("invalid 'is expression', the left must be a column name")
+		return nil, fmt.Errorf("%w: left part of 'is' expression must be a column name", InvalidExpressionErr)
 	}
 
 	colNameStr := sanitizeColName(sqlparser.String(colName))
@@ -155,7 +166,7 @@ func handleSelectIsExpr(expr *sqlparser.IsExpr) (elastic.Query, error) {
 	case "is not null":
 		query = elastic.NewExistsQuery(colNameStr)
 	default:
-		return nil, errors.New("'is' operator can be used with 'null' and 'not null' only")
+		return nil, fmt.Errorf("%w: 'is' operator can be used with 'null' and 'not null' only", InvalidExpressionErr)
 	}
 
 	return query, nil
@@ -164,7 +175,7 @@ func handleSelectIsExpr(expr *sqlparser.IsExpr) (elastic.Query, error) {
 func handleSelectWhereComparisonExpr(expr *sqlparser.ComparisonExpr) (elastic.Query, error) {
 	colName, ok := expr.Left.(*sqlparser.ColName)
 	if !ok {
-		return nil, errors.New("invalid comparison expression, the left must be a column name")
+		return nil, fmt.Errorf("%w: left part of 'comparison' expression must be a column name", InvalidExpressionErr)
 	}
 
 	colNameStr := sanitizeColName(sqlparser.String(colName))
@@ -199,7 +210,7 @@ func handleSelectWhereComparisonExpr(expr *sqlparser.ComparisonExpr) (elastic.Qu
 	case "in":
 		colValueStr, isString := colValue.(string)
 		if !isString {
-			return nil, fmt.Errorf("'in' operator value must be a string but was %T", colValue)
+			return nil, fmt.Errorf("%w: 'in' operator value must be a string but was %T", InvalidExpressionErr, colValue)
 		}
 		// colValueStr is a string like ('1', '2', '3').
 		parsedValues, err := parseSqlRange(colValueStr)
@@ -210,7 +221,7 @@ func handleSelectWhereComparisonExpr(expr *sqlparser.ComparisonExpr) (elastic.Qu
 	case "not in":
 		colValueStr, isString := colValue.(string)
 		if !isString {
-			return nil, fmt.Errorf("'not in' operator value must be a string but was %T", colValue)
+			return nil, fmt.Errorf("%w: 'not in' operator value must be a string but was %T", InvalidExpressionErr, colValue)
 		}
 		// colValue is a string like ('1', '2', '3').
 		parsedValues, err := parseSqlRange(colValueStr)
@@ -221,16 +232,16 @@ func handleSelectWhereComparisonExpr(expr *sqlparser.ComparisonExpr) (elastic.Qu
 	case "like":
 		colValueStr, isString := colValue.(string)
 		if !isString {
-			return nil, fmt.Errorf("'like' operator value must be a string but was %T", colValue)
+			return nil, fmt.Errorf("%w: 'like' operator value must be a string but was %T", InvalidExpressionErr, colValue)
 		}
-		colValue = strings.Replace(colValueStr, `%`, ``, -1)
+		colValue = strings.Replace(colValueStr, "%", "", -1)
 		query = elastic.NewMatchPhraseQuery(colNameStr, colValue)
 	case "not like":
 		colValueStr, isString := colValue.(string)
 		if !isString {
-			return nil, fmt.Errorf("'not like' operator value must be a string but was %T", colValue)
+			return nil, fmt.Errorf("%w: 'not like' operator value must be a string but was %T", InvalidExpressionErr, colValue)
 		}
-		colValue = strings.Replace(colValueStr, `%`, ``, -1)
+		colValue = strings.Replace(colValueStr, "%", "", -1)
 		query = elastic.NewBoolQuery().MustNot(elastic.NewMatchPhraseQuery(colNameStr, colValue))
 	}
 
@@ -243,19 +254,19 @@ func parseComparisonExprValue(expr sqlparser.Expr) (interface{}, bool, error) {
 		sqlValue, err := parseSqlValue(sqlparser.String(e))
 		return sqlValue, false, err
 	case *sqlparser.GroupConcatExpr:
-		return "", false, errors.New("'group_concat' is not supported")
+		return "", false, fmt.Errorf("%w: 'group_concat'", NotSupportedErr)
 	case *sqlparser.FuncExpr:
-		return "", false, errors.New("nested func is not supported")
+		return "", false, fmt.Errorf("%w: nested func", NotSupportedErr)
 	case *sqlparser.ColName:
 		if sqlparser.String(expr) == "missing" {
 			return "", true, nil
 		}
-		return "", false, errors.New("column name on the right side of compare operator is not supported")
+		return "", false, fmt.Errorf("%w: column name on the right side of compare operator", NotSupportedErr)
 	case sqlparser.ValTuple:
 		return sqlparser.String(expr), false, nil
 	default:
 		// cannot reach here
-		return "", false, fmt.Errorf("unexpected type %T", expr)
+		return "", false, fmt.Errorf("%w: unexpected value type %T", InvalidExpressionErr, expr)
 	}
 }
 
@@ -288,7 +299,7 @@ func parseSqlValue(sqlValue string) (interface{}, error) {
 
 	floatValue, err := strconv.ParseFloat(sqlValue, 64)
 	if err != nil {
-		return nil, fmt.Errorf("unable to parse %s to float64: %w", sqlValue, err)
+		return nil, fmt.Errorf("%w: unable to parse %s to float64: %v", InvalidExpressionErr, sqlValue, err)
 	}
 
 	return floatValue, nil
