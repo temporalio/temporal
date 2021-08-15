@@ -4,6 +4,8 @@
 //
 // Copyright (c) 2020 Uber Technologies, Inc.
 //
+// Copyright (c) 2017 Xargin
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -22,6 +24,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// Package query is inspired by github.com/cch123/elasticsql.
 package query
 
 import (
@@ -57,6 +60,8 @@ func NewConverter(fnInterceptor FieldNameInterceptor, fvInterceptor FieldValuesI
 	return cvt
 }
 
+// ConvertWhereOrderBy transforms WHERE SQL statement to Elasticsearch query.
+// It also supports ORDER BY clause.
 func (c *Converter) ConvertWhereOrderBy(whereOrderBy string) (elastic.Query, []elastic.Sorter, error) {
 	whereOrderBy = strings.Trim(whereOrderBy, " ")
 	if whereOrderBy != "" && !strings.HasPrefix(whereOrderBy, "order by ") {
