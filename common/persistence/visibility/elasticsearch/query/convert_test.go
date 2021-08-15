@@ -9,17 +9,18 @@ import (
 )
 
 var errorCases = map[string]error{
-	"delete":                           MalformedSqlQueryErr,
-	"update x":                         MalformedSqlQueryErr,
-	"insert ":                          MalformedSqlQueryErr,
-	"insert into a values(1,2)":        NotSupportedErr,
-	"update a set id = 1":              NotSupportedErr,
-	"delete from a where id=1":         NotSupportedErr,
-	"select * from ak where NOT(id=1)": NotSupportedErr,
-	"select * from ak where 1 = 1":     InvalidExpressionErr,
-	"select * from a where 1=a":        InvalidExpressionErr,
-	"select * from aaa where zz(k=2)":  NotSupportedErr,
-	"select * from aaa where  a= 1 and multi_match(zz=1, query='this is a test', fields=(title,title.origin), type=phrase)": NotSupportedErr,
+	"delete":                          MalformedSqlQueryErr,
+	"update x":                        MalformedSqlQueryErr,
+	"insert ":                         MalformedSqlQueryErr,
+	"insert into a values(1,2)":       NotSupportedErr,
+	"update a set id = 1":             NotSupportedErr,
+	"delete from a where id=1":        NotSupportedErr,
+	"select * from a where NOT(id=1)": NotSupportedErr,
+	"select * from a where 1 = 1":     InvalidExpressionErr,
+	"select * from a where 1=a":       InvalidExpressionErr,
+	"select * from a where zz(k=2)":   NotSupportedErr,
+	"select * from a group by k":      NotSupportedErr,
+	"select * from a where  a= 1 and multi_match(zz=1, query='this is a test', fields=(title,title.origin), type=phrase)": NotSupportedErr,
 }
 
 var supportedWhereCases = map[string]string{
@@ -103,7 +104,7 @@ func TestSupportedSelectWhereOrder(t *testing.T) {
 
 func TestNotSupported(t *testing.T) {
 	for sql, expectedErr := range errorCases {
-		_, _, err := convert(sql)
+		_, _, err := convertSql(sql)
 		assert.ErrorIs(t, err, expectedErr)
 	}
 }

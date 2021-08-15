@@ -10,14 +10,42 @@ import (
 	"github.com/xwb1989/sqlparser"
 )
 
-func handleSelect(sel *sqlparser.Select) (elastic.Query, []elastic.Sorter, error) {
+func ConvertWhereOrderBy(whereOrderBy string) (elastic.Query, []elastic.Sorter, error) {
+	whereOrderBy = strings.Trim(whereOrderBy, " ")
+	if whereOrderBy != "" && !strings.HasPrefix(whereOrderBy, "order by ") {
+		whereOrderBy = "where " + whereOrderBy
+	}
+	sql := fmt.Sprintf("select * from table1 %s", whereOrderBy)
+	return convertSql(sql)
+}
+
+// convertSql transforms sql to Elasticsearch query.
+func convertSql(sql string) (elastic.Query, []elastic.Sorter, error) {
+	stmt, err := sqlparser.Parse(sql)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %v", MalformedSqlQueryErr, err)
+	}
+
+	selectStmt, isSelect := stmt.(*sqlparser.Select)
+	if !isSelect {
+		return nil, nil, fmt.Errorf("%w: statement must be 'select' not %T", NotSupportedErr, stmt)
+	}
+
+	return convertSelect(selectStmt)
+}
+
+func convertSelect(sel *sqlparser.Select) (elastic.Query, []elastic.Sorter, error) {
 	var (
 		query elastic.Query
 		err   error
 	)
 
+	if sel.GroupBy != nil {
+		return nil, nil, fmt.Errorf("%w: 'group by' clause", NotSupportedErr)
+	}
+
 	if sel.Where != nil {
-		query, err = handleSelectWhere(sel.Where.Expr)
+		query, err = convertSelectWhere(sel.Where.Expr)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -41,24 +69,24 @@ func handleSelect(sel *sqlparser.Select) (elastic.Query, []elastic.Sorter, error
 	return query, sorter, nil
 }
 
-func handleSelectWhere(expr sqlparser.Expr) (elastic.Query, error) {
+func convertSelectWhere(expr sqlparser.Expr) (elastic.Query, error) {
 	if expr == nil {
 		return nil, errors.New("'where' expression cannot be nil")
 	}
 
 	switch e := (expr).(type) {
 	case *sqlparser.AndExpr:
-		return handleSelectWhereAndExpr(e)
+		return convertSelectWhereAndExpr(e)
 	case *sqlparser.OrExpr:
-		return handleSelectWhereOrExpr(e)
+		return convertSelectWhereOrExpr(e)
 	case *sqlparser.ComparisonExpr:
-		return handleSelectWhereComparisonExpr(e)
+		return convertSelectWhereComparisonExpr(e)
 	case *sqlparser.RangeCond:
-		return handleSelectWhereRangeCondExpr(e)
+		return convertSelectWhereRangeCondExpr(e)
 	case *sqlparser.ParenExpr:
-		return handleSelectWhere(e.Expr)
+		return convertSelectWhere(e.Expr)
 	case *sqlparser.IsExpr:
-		return handleSelectIsExpr(e)
+		return convertSelectIsExpr(e)
 	case *sqlparser.NotExpr:
 		return nil, fmt.Errorf("%w: 'not' expression", NotSupportedErr)
 	case *sqlparser.FuncExpr:
@@ -68,14 +96,14 @@ func handleSelectWhere(expr sqlparser.Expr) (elastic.Query, error) {
 	}
 }
 
-func handleSelectWhereAndExpr(expr *sqlparser.AndExpr) (elastic.Query, error) {
+func convertSelectWhereAndExpr(expr *sqlparser.AndExpr) (elastic.Query, error) {
 	leftExpr := expr.Left
 	rightExpr := expr.Right
-	leftQuery, err := handleSelectWhere(leftExpr)
+	leftQuery, err := convertSelectWhere(leftExpr)
 	if err != nil {
 		return nil, err
 	}
-	rightQuery, err := handleSelectWhere(rightExpr)
+	rightQuery, err := convertSelectWhere(rightExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -96,14 +124,14 @@ func handleSelectWhereAndExpr(expr *sqlparser.AndExpr) (elastic.Query, error) {
 	return elastic.NewBoolQuery().Filter(leftQuery, rightQuery), nil
 }
 
-func handleSelectWhereOrExpr(expr *sqlparser.OrExpr) (elastic.Query, error) {
+func convertSelectWhereOrExpr(expr *sqlparser.OrExpr) (elastic.Query, error) {
 	leftExpr := expr.Left
 	rightExpr := expr.Right
-	leftQuery, err := handleSelectWhere(leftExpr)
+	leftQuery, err := convertSelectWhere(leftExpr)
 	if err != nil {
 		return nil, err
 	}
-	rightQuery, err := handleSelectWhere(rightExpr)
+	rightQuery, err := convertSelectWhere(rightExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +152,7 @@ func handleSelectWhereOrExpr(expr *sqlparser.OrExpr) (elastic.Query, error) {
 	return elastic.NewBoolQuery().Should(leftQuery, rightQuery), nil
 }
 
-func handleSelectWhereRangeCondExpr(expr *sqlparser.RangeCond) (elastic.Query, error) {
+func convertSelectWhereRangeCondExpr(expr *sqlparser.RangeCond) (elastic.Query, error) {
 	colName, ok := expr.Left.(*sqlparser.ColName)
 	if !ok {
 		return nil, fmt.Errorf("%w: left part of 'range condition' expression must be a column name", InvalidExpressionErr)
@@ -152,7 +180,7 @@ func handleSelectWhereRangeCondExpr(expr *sqlparser.RangeCond) (elastic.Query, e
 	return query, nil
 }
 
-func handleSelectIsExpr(expr *sqlparser.IsExpr) (elastic.Query, error) {
+func convertSelectIsExpr(expr *sqlparser.IsExpr) (elastic.Query, error) {
 	colName, ok := expr.Expr.(*sqlparser.ColName)
 	if !ok {
 		return nil, fmt.Errorf("%w: left part of 'is' expression must be a column name", InvalidExpressionErr)
@@ -172,10 +200,10 @@ func handleSelectIsExpr(expr *sqlparser.IsExpr) (elastic.Query, error) {
 	return query, nil
 }
 
-func handleSelectWhereComparisonExpr(expr *sqlparser.ComparisonExpr) (elastic.Query, error) {
+func convertSelectWhereComparisonExpr(expr *sqlparser.ComparisonExpr) (elastic.Query, error) {
 	colName, ok := expr.Left.(*sqlparser.ColName)
 	if !ok {
-		return nil, fmt.Errorf("%w: left part of 'comparison' expression must be a column name", InvalidExpressionErr)
+		return nil, fmt.Errorf("%w: left part of comparison expression must be a column name", InvalidExpressionErr)
 	}
 
 	colNameStr := sanitizeColName(sqlparser.String(colName))
@@ -261,17 +289,13 @@ func parseComparisonExprValue(expr sqlparser.Expr) (interface{}, bool, error) {
 		if sqlparser.String(expr) == "missing" {
 			return "", true, nil
 		}
-		return "", false, fmt.Errorf("%w: column name on the right side of compare operator", NotSupportedErr)
+		return "", false, fmt.Errorf("%w: column name on the right side of comparison expression", NotSupportedErr)
 	case sqlparser.ValTuple:
 		return sqlparser.String(expr), false, nil
 	default:
 		// cannot reach here
 		return "", false, fmt.Errorf("%w: unexpected value type %T", InvalidExpressionErr, expr)
 	}
-}
-
-func sanitizeColName(str string) string {
-	return strings.Replace(str, "`", "", -1)
 }
 
 // parseSqlRange parses strings like "('1', '2', '3')" which comes from sql parser.
@@ -303,4 +327,8 @@ func parseSqlValue(sqlValue string) (interface{}, error) {
 	}
 
 	return floatValue, nil
+}
+
+func sanitizeColName(str string) string {
+	return strings.Replace(str, "`", "", -1)
 }
