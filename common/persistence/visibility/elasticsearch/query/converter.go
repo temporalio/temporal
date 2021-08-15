@@ -97,7 +97,7 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (elastic.Query, []elast
 	}
 
 	if sel.Where != nil {
-		query, err = c.convertSelectWhere(sel.Where.Expr)
+		query, err = c.convertWhere(sel.Where.Expr)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -125,24 +125,24 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (elastic.Query, []elast
 	return query, sorter, nil
 }
 
-func (c *Converter) convertSelectWhere(expr sqlparser.Expr) (elastic.Query, error) {
+func (c *Converter) convertWhere(expr sqlparser.Expr) (elastic.Query, error) {
 	if expr == nil {
 		return nil, errors.New("'where' expression cannot be nil")
 	}
 
 	switch e := (expr).(type) {
 	case *sqlparser.AndExpr:
-		return c.convertSelectWhereAndExpr(e)
+		return c.convertAndExpr(e)
 	case *sqlparser.OrExpr:
-		return c.convertSelectWhereOrExpr(e)
+		return c.convertOrExpr(e)
 	case *sqlparser.ComparisonExpr:
-		return c.convertSelectWhereComparisonExpr(e)
+		return c.convertComparisonExpr(e)
 	case *sqlparser.RangeCond:
-		return c.convertSelectWhereRangeCondExpr(e)
+		return c.convertRangeCondExpr(e)
 	case *sqlparser.ParenExpr:
-		return c.convertSelectWhere(e.Expr)
+		return c.convertWhere(e.Expr)
 	case *sqlparser.IsExpr:
-		return c.convertSelectIsExpr(e)
+		return c.convertIsExpr(e)
 	case *sqlparser.NotExpr:
 		return nil, fmt.Errorf("%w: 'not' expression", NotSupportedErr)
 	case *sqlparser.FuncExpr:
@@ -152,14 +152,14 @@ func (c *Converter) convertSelectWhere(expr sqlparser.Expr) (elastic.Query, erro
 	}
 }
 
-func (c *Converter) convertSelectWhereAndExpr(expr *sqlparser.AndExpr) (elastic.Query, error) {
+func (c *Converter) convertAndExpr(expr *sqlparser.AndExpr) (elastic.Query, error) {
 	leftExpr := expr.Left
 	rightExpr := expr.Right
-	leftQuery, err := c.convertSelectWhere(leftExpr)
+	leftQuery, err := c.convertWhere(leftExpr)
 	if err != nil {
 		return nil, err
 	}
-	rightQuery, err := c.convertSelectWhere(rightExpr)
+	rightQuery, err := c.convertWhere(rightExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -180,14 +180,14 @@ func (c *Converter) convertSelectWhereAndExpr(expr *sqlparser.AndExpr) (elastic.
 	return elastic.NewBoolQuery().Filter(leftQuery, rightQuery), nil
 }
 
-func (c *Converter) convertSelectWhereOrExpr(expr *sqlparser.OrExpr) (elastic.Query, error) {
+func (c *Converter) convertOrExpr(expr *sqlparser.OrExpr) (elastic.Query, error) {
 	leftExpr := expr.Left
 	rightExpr := expr.Right
-	leftQuery, err := c.convertSelectWhere(leftExpr)
+	leftQuery, err := c.convertWhere(leftExpr)
 	if err != nil {
 		return nil, err
 	}
-	rightQuery, err := c.convertSelectWhere(rightExpr)
+	rightQuery, err := c.convertWhere(rightExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +208,7 @@ func (c *Converter) convertSelectWhereOrExpr(expr *sqlparser.OrExpr) (elastic.Qu
 	return elastic.NewBoolQuery().Should(leftQuery, rightQuery), nil
 }
 
-func (c *Converter) convertSelectWhereRangeCondExpr(expr *sqlparser.RangeCond) (elastic.Query, error) {
+func (c *Converter) convertRangeCondExpr(expr *sqlparser.RangeCond) (elastic.Query, error) {
 	colName, err := c.convertColName(expr.Left)
 	if err != nil {
 		return nil, fmt.Errorf("unable to convert left part of 'between' expression: %w", err)
@@ -242,7 +242,7 @@ func (c *Converter) convertSelectWhereRangeCondExpr(expr *sqlparser.RangeCond) (
 	return query, nil
 }
 
-func (c *Converter) convertSelectIsExpr(expr *sqlparser.IsExpr) (elastic.Query, error) {
+func (c *Converter) convertIsExpr(expr *sqlparser.IsExpr) (elastic.Query, error) {
 	colName, err := c.convertColName(expr.Expr)
 	if err != nil {
 		return nil, fmt.Errorf("unable to convert left part of 'is' expression: %w", err)
@@ -261,7 +261,7 @@ func (c *Converter) convertSelectIsExpr(expr *sqlparser.IsExpr) (elastic.Query, 
 	return query, nil
 }
 
-func (c *Converter) convertSelectWhereComparisonExpr(expr *sqlparser.ComparisonExpr) (elastic.Query, error) {
+func (c *Converter) convertComparisonExpr(expr *sqlparser.ComparisonExpr) (elastic.Query, error) {
 	colName, err := c.convertColName(expr.Left)
 	if err != nil {
 		return nil, fmt.Errorf("unable to convert left part of comparison expression: %w", err)
