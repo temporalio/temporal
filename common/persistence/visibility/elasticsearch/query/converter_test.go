@@ -125,14 +125,14 @@ func TestSupportedSelectWhereOrder(t *testing.T) {
 
 		actualQueryMap, _ := query.Source()
 		actualQueryJson, _ := json.Marshal(actualQueryMap)
+		assert.Equal(t, expectedJson.query, string(actualQueryJson), fmt.Sprintf("sql: %s", sql))
+
 		var actualSorterMaps []interface{}
 		for _, sorter := range sorters {
 			actualSorterMap, _ := sorter.Source()
 			actualSorterMaps = append(actualSorterMaps, actualSorterMap)
 		}
 		actualSorterJson, _ := json.Marshal(actualSorterMaps)
-
-		assert.Equal(t, expectedJson.query, string(actualQueryJson), fmt.Sprintf("sql: %s", sql))
 		assert.Equal(t, expectedJson.sorter, string(actualSorterJson), fmt.Sprintf("sql: %s", sql))
 	}
 }
