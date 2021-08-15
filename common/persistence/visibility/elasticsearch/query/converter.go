@@ -312,12 +312,14 @@ func (c *Converter) convertSelectWhereComparisonExpr(expr *sqlparser.ComparisonE
 		if missingCheck {
 			query = elastic.NewBoolQuery().MustNot(elastic.NewExistsQuery(colName))
 		} else {
+			// Not elastic.NewTermQuery to support String custom search attributes.
 			query = elastic.NewMatchPhraseQuery(colName, colValues[0])
 		}
 	case "!=":
 		if missingCheck {
 			query = elastic.NewExistsQuery(colName)
 		} else {
+			// Not elastic.NewTermQuery to support String custom search attributes.
 			query = elastic.NewBoolQuery().MustNot(elastic.NewMatchPhraseQuery(colName, colValues[0]))
 		}
 	case "in":
