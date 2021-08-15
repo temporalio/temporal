@@ -24,6 +24,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// Package query is inspired and partially copied from by github.com/cch123/elasticsql.
 package query
 
 import (
@@ -58,7 +59,7 @@ var supportedWhereCases = map[string]string{
 	"process_id > 1":                `{"bool":{"filter":{"range":{"process_id":{"from":1,"include_lower":false,"include_upper":true,"to":null}}}}}`,
 	"process_id < 1":                `{"bool":{"filter":{"range":{"process_id":{"from":null,"include_lower":true,"include_upper":false,"to":1}}}}}`,
 	"process_id <= 1":               `{"bool":{"filter":{"range":{"process_id":{"from":null,"include_lower":true,"include_upper":true,"to":1}}}}}`,
-	"process_id >= '1'":             `{"bool":{"filter":{"range":{"process_id":{"from":"1","include_lower":true,"include_upper":true,"to":null}}}}}`,
+	"process_id >= 1":               `{"bool":{"filter":{"range":{"process_id":{"from":1,"include_lower":true,"include_upper":true,"to":null}}}}}`,
 	"process_id != 1":               `{"bool":{"must_not":{"match_phrase":{"process_id":{"query":1}}}}}`,
 	"process_id = 0 and status= 1 and channel = 4": `{"bool":{"filter":[{"match_phrase":{"process_id":{"query":0}}},{"match_phrase":{"status":{"query":1}}},{"match_phrase":{"channel":{"query":4}}}]}}`,
 	"process_id > 1 and status = 1":                `{"bool":{"filter":[{"range":{"process_id":{"from":1,"include_lower":false,"include_upper":true,"to":null}}},{"match_phrase":{"status":{"query":1}}}]}}`,
@@ -77,6 +78,9 @@ var supportedWhereCases = map[string]string{
 	"id is null":                                   `{"bool":{"must_not":{"exists":{"field":"id"}}}}`,
 	"id != missing":                                `{"bool":{"filter":{"exists":{"field":"id"}}}}`,
 	"id = missing":                                 `{"bool":{"must_not":{"exists":{"field":"id"}}}}`,
+	"value = '1'":                                  `{"bool":{"filter":{"match_phrase":{"value":{"query":true}}}}}`,
+	"value = 'true'":                               `{"bool":{"filter":{"match_phrase":{"value":{"query":true}}}}}`,
+	"value = 'True'":                               `{"bool":{"filter":{"match_phrase":{"value":{"query":true}}}}}`,
 	"":                                             `{"bool":{"filter":{"match_all":{}}}}`,
 	"id in (\"text1\",'text2') and content = 'aaaa'":                          `{"bool":{"filter":[{"terms":{"id":["text1","text2"]}},{"match_phrase":{"content":{"query":"aaaa"}}}]}}`,
 	"create_time between '2015-01-01 00:00:00' and '2016-02-02 00:00:00'":     `{"bool":{"filter":{"range":{"create_time":{"from":"2015-01-01 00:00:00","include_lower":true,"include_upper":true,"to":"2016-02-02 00:00:00"}}}}}`,
@@ -133,7 +137,7 @@ func TestSupportedSelectWhereOrder(t *testing.T) {
 	}
 }
 
-func TestNotSupported(t *testing.T) {
+func TestErrors(t *testing.T) {
 	c := NewConverter(nil, nil)
 	for sql, expectedErr := range errorCases {
 		_, _, err := c.convertSql(sql)

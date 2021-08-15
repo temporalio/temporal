@@ -24,7 +24,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// Package query is inspired by github.com/cch123/elasticsql.
+// Package query is inspired and partially copied from by github.com/cch123/elasticsql.
 package query
 
 import (
@@ -223,6 +223,13 @@ func (c *Converter) convertSelectWhereRangeCondExpr(expr *sqlparser.RangeCond) (
 		return nil, err
 	}
 
+	values, err := c.fvInterceptor.Values(colName, fromValue, toValue)
+	if err != nil {
+		return nil, fmt.Errorf("unable to convert values of 'between' expression: %w", err)
+	}
+	fromValue = values[0]
+	toValue = values[1]
+
 	var query elastic.Query
 	switch expr.Operator {
 	case "between":
@@ -265,65 +272,62 @@ func (c *Converter) convertSelectWhereComparisonExpr(expr *sqlparser.ComparisonE
 		return nil, err
 	}
 
-	var query elastic.Query
-	switch expr.Operator {
-	case ">=":
-		query = elastic.NewRangeQuery(colName).Gte(colValue)
-	case "<=":
-		query = elastic.NewRangeQuery(colName).Lte(colValue)
-	case "=":
-		// field is missing
-		if missingCheck {
-			query = elastic.NewBoolQuery().MustNot(elastic.NewExistsQuery(colName))
-		} else {
-			query = elastic.NewMatchPhraseQuery(colName, colValue)
-		}
-	case ">":
-		query = elastic.NewRangeQuery(colName).Gt(colValue)
-	case "<":
-		query = elastic.NewRangeQuery(colName).Lt(colValue)
-	case "!=":
-		if missingCheck {
-			query = elastic.NewExistsQuery(colName)
-		} else {
-			query = elastic.NewBoolQuery().MustNot(elastic.NewMatchPhraseQuery(colName, colValue))
-		}
-	case "in":
+	var colValues []interface{}
+	if expr.Operator == "in" || expr.Operator == "not in" {
 		colValueStr, isString := colValue.(string)
 		if !isString {
 			return nil, fmt.Errorf("%w: 'in' operator value must be a string but was %T", InvalidExpressionErr, colValue)
 		}
 		// colValueStr is a string like ('1', '2', '3').
-		parsedValues, err := c.parseSqlRange(colValueStr)
+		colValues, err = c.parseSqlRange(colValueStr)
 		if err != nil {
 			return nil, err
 		}
-		query = elastic.NewTermsQuery(colName, parsedValues...)
-	case "not in":
-		colValueStr, isString := colValue.(string)
-		if !isString {
-			return nil, fmt.Errorf("%w: 'not in' operator value must be a string but was %T", InvalidExpressionErr, colValue)
-		}
-		// colValue is a string like ('1', '2', '3').
-		parsedValues, err := c.parseSqlRange(colValueStr)
-		if err != nil {
-			return nil, err
-		}
-		query = elastic.NewBoolQuery().MustNot(elastic.NewTermsQuery(colName, parsedValues...))
-	case "like":
+	} else if expr.Operator == "like" || expr.Operator == "not like" {
 		colValueStr, isString := colValue.(string)
 		if !isString {
 			return nil, fmt.Errorf("%w: 'like' operator value must be a string but was %T", InvalidExpressionErr, colValue)
 		}
-		colValue = strings.Replace(colValueStr, "%", "", -1)
-		query = elastic.NewMatchPhraseQuery(colName, colValue)
-	case "not like":
-		colValueStr, isString := colValue.(string)
-		if !isString {
-			return nil, fmt.Errorf("%w: 'not like' operator value must be a string but was %T", InvalidExpressionErr, colValue)
+		colValues = append(colValues, strings.Replace(colValueStr, "%", "", -1))
+	} else {
+		colValues = append(colValues, colValue)
+	}
+
+	colValues, err = c.fvInterceptor.Values(colName, colValues...)
+	if err != nil {
+		return nil, fmt.Errorf("unable to convert values of comparison expression: %w", err)
+	}
+
+	var query elastic.Query
+	switch expr.Operator {
+	case ">=":
+		query = elastic.NewRangeQuery(colName).Gte(colValues[0])
+	case "<=":
+		query = elastic.NewRangeQuery(colName).Lte(colValues[0])
+	case ">":
+		query = elastic.NewRangeQuery(colName).Gt(colValues[0])
+	case "<":
+		query = elastic.NewRangeQuery(colName).Lt(colValues[0])
+	case "=":
+		if missingCheck {
+			query = elastic.NewBoolQuery().MustNot(elastic.NewExistsQuery(colName))
+		} else {
+			query = elastic.NewMatchPhraseQuery(colName, colValues[0])
 		}
-		colValue = strings.Replace(colValueStr, "%", "", -1)
-		query = elastic.NewBoolQuery().MustNot(elastic.NewMatchPhraseQuery(colName, colValue))
+	case "!=":
+		if missingCheck {
+			query = elastic.NewExistsQuery(colName)
+		} else {
+			query = elastic.NewBoolQuery().MustNot(elastic.NewMatchPhraseQuery(colName, colValues[0]))
+		}
+	case "in":
+		query = elastic.NewTermsQuery(colName, colValues...)
+	case "not in":
+		query = elastic.NewBoolQuery().MustNot(elastic.NewTermsQuery(colName, colValues...))
+	case "like":
+		query = elastic.NewMatchPhraseQuery(colName, colValues[0])
+	case "not like":
+		query = elastic.NewBoolQuery().MustNot(elastic.NewMatchPhraseQuery(colName, colValues[0]))
 	}
 
 	return query, nil
@@ -351,7 +355,7 @@ func (c *Converter) convertComparisonExprValue(expr sqlparser.Expr) (interface{}
 	}
 }
 
-// parseSqlRange parses strings like "('1', '2', '3')" which comes from sql parser.
+// parseSqlRange parses strings like "('1', '2', '3')" which comes from SQL parser.
 func (c *Converter) parseSqlRange(sqlRange string) ([]interface{}, error) {
 	sqlRange = strings.Trim(sqlRange, "()")
 	var values []interface{}
@@ -371,9 +375,15 @@ func (c *Converter) parseSqlValue(sqlValue string) (interface{}, error) {
 	}
 
 	if sqlValue[0] == '\'' && sqlValue[len(sqlValue)-1] == '\'' {
-		return strings.Trim(sqlValue, "'"), nil
+		strValue := strings.Trim(sqlValue, "'")
+		boolValue, err := strconv.ParseBool(strValue)
+		if err == nil {
+			return boolValue, nil
+		}
+		return strValue, nil
 	}
 
+	// Unquoted value must be a number. Numbers in JSON are float64.
 	floatValue, err := strconv.ParseFloat(sqlValue, 64)
 	if err != nil {
 		return nil, fmt.Errorf("%w: unable to parse %s to float64: %v", InvalidExpressionErr, sqlValue, err)
