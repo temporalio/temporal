@@ -19,7 +19,6 @@ var unsupportedCaseList = []string{
 	"select * from ak where NOT(id=1)",
 	"select * from ak where 1 = 1",
 	"select * from a where 1=a",
-	"select * from a where id is null",
 	"select * from aaa where  a= 1 and multi_match(zz=1, query='this is a test', fields=(title,title.origin), type=phrase)",
 	"select * from aaa where zz(k=2)",
 }
@@ -50,9 +49,9 @@ var selectWhereCaseMap = map[string]string{
 	"select * from `order`.abcd where `by` = 1":                                                      `{"bool":{"filter":{"match_phrase":{"by":{"query":1}}}}}`,
 	"select * from table1 where id not like '%aaa%'":                                                 `{"bool":{"must_not":{"match_phrase":{"id":{"query":"aaa"}}}}}`,
 	"select * from table1 where id not in (1,2,3)":                                                   `{"bool":{"must_not":{"terms":{"id":[1,2,3]}}}}`,
-	"select * from a where id != missing":                                                            `{"bool":{"filter":{"exists":{"field":"id"}}}}`,
-	"select * from a where id = missing":                                                             `{"bool":{"must_not":{"exists":{"field":"id"}}}}`,
-	"select * from a":                                                                                `{"bool":{"filter":{"match_all":{}}}}`,
+	"select * from table1 where id is not null":                                                      `{"bool":{"filter":{"exists":{"field":"id"}}}}`,
+	"select * from table1 where id is null":                                                          `{"bool":{"must_not":{"exists":{"field":"id"}}}}`,
+	"select * from table1":                                                                           `{"bool":{"filter":{"match_all":{}}}}`,
 
 	"select * from table1 where create_time between '2015-01-01T00:00:00+0800' and '2017-01-01T00:00:00+0800' and process_id = 0 and status >= 1 and content = '三个男人' and phone = '15810324322'": `{"bool":{"filter":[{"range":{"create_time":{"from":"2015-01-01T00:00:00+0800","include_lower":true,"include_upper":true,"to":"2017-01-01T00:00:00+0800"}}},{"match_phrase":{"process_id":{"query":0}}},{"range":{"status":{"from":1,"include_lower":true,"include_upper":true,"to":null}}},{"match_phrase":{"content":{"query":"三个男人"}}},{"match_phrase":{"phone":{"query":"15810324322"}}}]}}`,
 }

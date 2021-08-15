@@ -2,6 +2,7 @@ package query
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/olivere/elastic/v7"
 	"github.com/xwb1989/sqlparser"
@@ -20,4 +21,9 @@ func Convert(sql string) (elastic.Query, []elastic.Sorter, error) {
 	}
 
 	return handleSelect(selectStmt)
+}
+
+func ConvertWhereOrderBy(whereOrderBy string) (elastic.Query, []elastic.Sorter, error) {
+	sql := fmt.Sprintf("select * from dummy where %s", whereOrderBy)
+	return Convert(sql)
 }

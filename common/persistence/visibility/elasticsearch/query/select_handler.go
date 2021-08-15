@@ -54,22 +54,7 @@ func handleSelectWhere(expr sqlparser.Expr) (elastic.Query, error) {
 	case *sqlparser.ComparisonExpr:
 		return handleSelectWhereComparisonExpr(e)
 	case *sqlparser.RangeCond:
-		// between a and b
-		colName, ok := e.Left.(*sqlparser.ColName)
-		if !ok {
-			return nil, errors.New("range column name is missing")
-		}
-
-		colNameStr := sanitizeColName(sqlparser.String(colName))
-		fromValue, err := parseSqlValue(sqlparser.String(e.From))
-		if err != nil {
-			return nil, err
-		}
-		toValue, err := parseSqlValue(sqlparser.String(e.To))
-		if err != nil {
-			return nil, err
-		}
-		return elastic.NewRangeQuery(colNameStr).Gte(fromValue).Lte(toValue), nil
+		return handleSelectWhereRangeCondExpr(e)
 	case *sqlparser.ParenExpr:
 		return handleSelectWhere(e.Expr)
 	case *sqlparser.IsExpr:
@@ -135,6 +120,25 @@ func handleSelectWhereOrExpr(expr *sqlparser.OrExpr) (elastic.Query, error) {
 	}
 
 	return elastic.NewBoolQuery().Should(leftQuery, rightQuery), nil
+}
+
+func handleSelectWhereRangeCondExpr(e *sqlparser.RangeCond) (elastic.Query, error) {
+	// between a and b
+	colName, ok := e.Left.(*sqlparser.ColName)
+	if !ok {
+		return nil, errors.New("range column name is missing")
+	}
+
+	colNameStr := sanitizeColName(sqlparser.String(colName))
+	fromValue, err := parseSqlValue(sqlparser.String(e.From))
+	if err != nil {
+		return nil, err
+	}
+	toValue, err := parseSqlValue(sqlparser.String(e.To))
+	if err != nil {
+		return nil, err
+	}
+	return elastic.NewRangeQuery(colNameStr).Gte(fromValue).Lte(toValue), nil
 }
 
 func handleSelectWhereComparisonExpr(expr *sqlparser.ComparisonExpr) (elastic.Query, error) {
