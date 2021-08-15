@@ -28,6 +28,7 @@ var supportedWhereCases = map[string]string{
 	"(process_id= 1)":               `{"bool":{"filter":{"match_phrase":{"process_id":{"query":1}}}}}`,
 	"((process_id= 1))":             `{"bool":{"filter":{"match_phrase":{"process_id":{"query":1}}}}}`,
 	"(process_id = 1 and status=1)": `{"bool":{"filter":[{"match_phrase":{"process_id":{"query":1}}},{"match_phrase":{"status":{"query":1}}}]}}`,
+	"`status`=1":                    `{"bool":{"filter":{"match_phrase":{"status":{"query":1}}}}}`,
 	"process_id > 1":                `{"bool":{"filter":{"range":{"process_id":{"from":1,"include_lower":false,"include_upper":true,"to":null}}}}}`,
 	"process_id < 1":                `{"bool":{"filter":{"range":{"process_id":{"from":null,"include_lower":true,"include_upper":false,"to":1}}}}}`,
 	"process_id <= 1":               `{"bool":{"filter":{"range":{"process_id":{"from":null,"include_lower":true,"include_upper":true,"to":1}}}}}`,
@@ -72,8 +73,10 @@ var supportedWhereOrderCases = map[string]struct {
 }
 
 func TestSupportedSelectWhere(t *testing.T) {
+	c := NewConverter(nil, nil)
+
 	for sql, expectedJson := range supportedWhereCases {
-		query, _, err := ConvertWhereOrderBy(sql)
+		query, _, err := c.ConvertWhereOrderBy(sql)
 		assert.NoError(t, err)
 
 		actualMap, _ := query.Source()
@@ -84,8 +87,10 @@ func TestSupportedSelectWhere(t *testing.T) {
 }
 
 func TestSupportedSelectWhereOrder(t *testing.T) {
+	c := NewConverter(nil, nil)
+
 	for sql, expectedJson := range supportedWhereOrderCases {
-		query, sorters, err := ConvertWhereOrderBy(sql)
+		query, sorters, err := c.ConvertWhereOrderBy(sql)
 		assert.NoError(t, err)
 
 		actualQueryMap, _ := query.Source()
@@ -103,8 +108,9 @@ func TestSupportedSelectWhereOrder(t *testing.T) {
 }
 
 func TestNotSupported(t *testing.T) {
+	c := NewConverter(nil, nil)
 	for sql, expectedErr := range errorCases {
-		_, _, err := convertSql(sql)
+		_, _, err := c.convertSql(sql)
 		assert.ErrorIs(t, err, expectedErr)
 	}
 }
