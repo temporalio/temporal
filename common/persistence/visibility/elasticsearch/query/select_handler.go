@@ -58,7 +58,7 @@ func handleSelectWhere(expr sqlparser.Expr) (elastic.Query, error) {
 	case *sqlparser.ParenExpr:
 		return handleSelectWhere(e.Expr)
 	case *sqlparser.IsExpr:
-		return nil, errors.New("'is' expression is not supported")
+		return handleSelectIsExpr(e)
 	case *sqlparser.NotExpr:
 		return nil, errors.New("'not' expression is not supported")
 	default:
@@ -139,6 +139,26 @@ func handleSelectWhereRangeCondExpr(e *sqlparser.RangeCond) (elastic.Query, erro
 		return nil, err
 	}
 	return elastic.NewRangeQuery(colNameStr).Gte(fromValue).Lte(toValue), nil
+}
+
+func handleSelectIsExpr(expr *sqlparser.IsExpr) (elastic.Query, error) {
+	colName, ok := expr.Expr.(*sqlparser.ColName)
+	if !ok {
+		return nil, errors.New("invalid 'is expression', the left must be a column name")
+	}
+
+	colNameStr := sanitizeColName(sqlparser.String(colName))
+	var query elastic.Query
+	switch expr.Operator {
+	case "is null":
+		query = elastic.NewBoolQuery().MustNot(elastic.NewExistsQuery(colNameStr))
+	case "is not null":
+		query = elastic.NewExistsQuery(colNameStr)
+	default:
+		return nil, errors.New("'is' operator can be used with 'null' and 'not null' only")
+	}
+
+	return query, nil
 }
 
 func handleSelectWhereComparisonExpr(expr *sqlparser.ComparisonExpr) (elastic.Query, error) {
@@ -223,9 +243,9 @@ func parseComparisonExprValue(expr sqlparser.Expr) (interface{}, bool, error) {
 		sqlValue, err := parseSqlValue(sqlparser.String(e))
 		return sqlValue, false, err
 	case *sqlparser.GroupConcatExpr:
-		return "", false, errors.New("group_concat not supported")
+		return "", false, errors.New("'group_concat' is not supported")
 	case *sqlparser.FuncExpr:
-		return "", false, errors.New("nested func not supported")
+		return "", false, errors.New("nested func is not supported")
 	case *sqlparser.ColName:
 		if sqlparser.String(expr) == "missing" {
 			return "", true, nil
@@ -235,7 +255,7 @@ func parseComparisonExprValue(expr sqlparser.Expr) (interface{}, bool, error) {
 		return sqlparser.String(expr), false, nil
 	default:
 		// cannot reach here
-		return "", false, errors.New("unexpected type")
+		return "", false, fmt.Errorf("unexpected type %T", expr)
 	}
 }
 
