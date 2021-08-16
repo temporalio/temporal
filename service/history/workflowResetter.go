@@ -158,29 +158,7 @@ func (r *workflowResetterImpl) resetWorkflow(
 		}
 
 		reapplyEventsFn = func(ctx context.Context, resetMutableState workflow.MutableState) error {
-			if err := r.reapplyContinueAsNewWorkflowEvents(
-				ctx,
-				resetMutableState,
-				namespaceID,
-				workflowID,
-				baseRunID,
-				baseBranchToken,
-				baseRebuildLastEventID+1,
-				baseNextEventID,
-			); err != nil {
-				return err
-			}
-
-			for _, event := range currentWorkflowEventsSeq {
-				if err := r.reapplyEvents(resetMutableState, event.Events); err != nil {
-					return err
-				}
-			}
-			return nil
-		}
-	} else {
-		reapplyEventsFn = func(ctx context.Context, resetMutableState workflow.MutableState) error {
-			return r.reapplyContinueAsNewWorkflowEvents(
+			lastVisitedRunID, err := r.reapplyContinueAsNewWorkflowEvents(
 				ctx,
 				resetMutableState,
 				namespaceID,
@@ -190,6 +168,32 @@ func (r *workflowResetterImpl) resetWorkflow(
 				baseRebuildLastEventID+1,
 				baseNextEventID,
 			)
+			if err != nil {
+				return err
+			}
+
+			if lastVisitedRunID == currentMutableState.GetExecutionState().RunId {
+				for _, event := range currentWorkflowEventsSeq {
+					if err := r.reapplyEvents(resetMutableState, event.Events); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		}
+	} else {
+		reapplyEventsFn = func(ctx context.Context, resetMutableState workflow.MutableState) error {
+			_, err := r.reapplyContinueAsNewWorkflowEvents(
+				ctx,
+				resetMutableState,
+				namespaceID,
+				workflowID,
+				baseRunID,
+				baseBranchToken,
+				baseRebuildLastEventID+1,
+				baseNextEventID,
+			)
+			return err
 		}
 	}
 
@@ -592,10 +596,12 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	baseBranchToken []byte,
 	baseRebuildNextEventID int64,
 	baseNextEventID int64,
-) error {
+) (string, error) {
 
 	// TODO change this logic to fetching all workflow [baseWorkflow, currentWorkflow]
 	//  from visibility for better coverage of events eligible for re-application.
+
+	lastVisitedRunID := baseRunID
 
 	// first special handling the remaining events for base workflow
 	nextRunID, err := r.reapplyWorkflowEvents(
@@ -610,9 +616,9 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	case *serviceerror.DataLoss:
 		// log event
 		r.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(workflowID), tag.WorkflowRunID(baseRunID))
-		return err
+		return "", err
 	default:
-		return err
+		return "", err
 	}
 
 	getNextEventIDBranchToken := func(runID string) (nextEventID int64, branchToken []byte, retError error) {
@@ -646,9 +652,10 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 
 	// second for remaining continue as new workflow, reapply eligible events
 	for len(nextRunID) != 0 {
+		lastVisitedRunID = nextRunID
 		nextWorkflowNextEventID, nextWorkflowBranchToken, err := getNextEventIDBranchToken(nextRunID)
 		if err != nil {
-			return err
+			return "", err
 		}
 
 		nextRunID, err = r.reapplyWorkflowEvents(
@@ -663,12 +670,12 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		case *serviceerror.DataLoss:
 			// log event
 			r.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(workflowID), tag.WorkflowRunID(nextRunID))
-			return err
+			return "", err
 		default:
-			return err
+			return "", err
 		}
 	}
-	return nil
+	return lastVisitedRunID, nil
 }
 
 func (r *workflowResetterImpl) reapplyWorkflowEvents(
