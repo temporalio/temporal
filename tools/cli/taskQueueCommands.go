@@ -51,10 +51,6 @@ func DescribeTaskQueue(c *cli.Context) {
 	}
 
 	pollers := response.Pollers
-	if len(pollers) == 0 {
-		ErrorAndExit(colorMagenta("No poller for taskqueue: "+taskQueue), nil)
-	}
-
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
