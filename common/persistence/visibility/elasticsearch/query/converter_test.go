@@ -145,6 +145,6 @@ func TestErrors(t *testing.T) {
 	c := NewConverter(nil, nil)
 	for sql, expectedErr := range errorCases {
 		_, _, err := c.convertSql(sql)
-		assert.ErrorIs(t, err, expectedErr)
+		assert.ErrorIs(t, err, expectedErr, sql)
 	}
 }

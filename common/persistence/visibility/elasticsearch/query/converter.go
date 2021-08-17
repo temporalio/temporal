@@ -35,7 +35,6 @@ import (
 
 	"github.com/olivere/elastic/v7"
 	"github.com/xwb1989/sqlparser"
-	"go.temporal.io/api/serviceerror"
 )
 
 type (
@@ -148,7 +147,7 @@ func (c *Converter) convertWhere(expr sqlparser.Expr) (elastic.Query, error) {
 	case *sqlparser.NotExpr:
 		return nil, fmt.Errorf("%w: 'not' expression", NotSupportedErr)
 	case *sqlparser.FuncExpr:
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("%v: function expression", NotSupportedErr.Error()))
+		//return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("%v: function expression", NotSupportedErr.Error()))
 		return nil, fmt.Errorf("%w: function expression", NotSupportedErr)
 	default:
 		return nil, fmt.Errorf("%w: expression of type %T", NotSupportedErr, expr)
