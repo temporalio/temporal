@@ -100,6 +100,10 @@ var supportedWhereOrderCases = map[string]struct {
 		query:  `{"bool":{"filter":{"match_all":{}}}}`,
 		sorter: `[{"order.abc":{"order":"asc"}}]`,
 	},
+	"ORdeR BY random_id DESC": {
+		query:  `{"bool":{"filter":{"match_all":{}}}}`,
+		sorter: `[{"random_id":{"order":"desc"}}]`,
+	},
 }
 
 func TestSupportedSelectWhere(t *testing.T) {

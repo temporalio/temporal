@@ -35,6 +35,7 @@ import (
 
 	"github.com/olivere/elastic/v7"
 	"github.com/xwb1989/sqlparser"
+	"go.temporal.io/api/serviceerror"
 )
 
 type (
@@ -63,8 +64,9 @@ func NewConverter(fnInterceptor FieldNameInterceptor, fvInterceptor FieldValuesI
 // ConvertWhereOrderBy transforms WHERE SQL statement to Elasticsearch query.
 // It also supports ORDER BY clause.
 func (c *Converter) ConvertWhereOrderBy(whereOrderBy string) (elastic.Query, []elastic.Sorter, error) {
-	whereOrderBy = strings.Trim(whereOrderBy, " ")
-	if whereOrderBy != "" && !strings.HasPrefix(whereOrderBy, "order by ") {
+	whereOrderBy = strings.TrimSpace(whereOrderBy)
+
+	if whereOrderBy != "" && !strings.HasPrefix(strings.ToLower(whereOrderBy), "order by ") {
 		whereOrderBy = "where " + whereOrderBy
 	}
 	sql := fmt.Sprintf("select * from table1 %s", whereOrderBy)
@@ -99,7 +101,7 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (elastic.Query, []elast
 	if sel.Where != nil {
 		query, err = c.convertWhere(sel.Where.Expr)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("unable to convert filter expression: %w", err)
 		}
 		// Result must be BoolQuery.
 		if _, isBoolQuery := query.(*elastic.BoolQuery); !isBoolQuery {
@@ -127,7 +129,7 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (elastic.Query, []elast
 
 func (c *Converter) convertWhere(expr sqlparser.Expr) (elastic.Query, error) {
 	if expr == nil {
-		return nil, errors.New("'where' expression cannot be nil")
+		return nil, errors.New("cannot be nil")
 	}
 
 	switch e := (expr).(type) {
@@ -146,6 +148,7 @@ func (c *Converter) convertWhere(expr sqlparser.Expr) (elastic.Query, error) {
 	case *sqlparser.NotExpr:
 		return nil, fmt.Errorf("%w: 'not' expression", NotSupportedErr)
 	case *sqlparser.FuncExpr:
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("%v: function expression", NotSupportedErr.Error()))
 		return nil, fmt.Errorf("%w: function expression", NotSupportedErr)
 	default:
 		return nil, fmt.Errorf("%w: expression of type %T", NotSupportedErr, expr)
@@ -269,7 +272,7 @@ func (c *Converter) convertComparisonExpr(expr *sqlparser.ComparisonExpr) (elast
 
 	colValue, missingCheck, err := c.convertComparisonExprValue(expr.Right)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to convert right part of comparison expression: %w", err)
 	}
 
 	var colValues []interface{}
