@@ -276,19 +276,16 @@ func (c *Converter) convertComparisonExpr(expr *sqlparser.ComparisonExpr) (elast
 		return nil, fmt.Errorf("unable to convert right part of comparison expression: %w", err)
 	}
 
-	var colValues []interface{}
-	if expr.Operator == "in" || expr.Operator == "not in" {
-		colValues, err = c.parseInValue(colValue)
+	if expr.Operator == "like" || expr.Operator == "not like" {
+		colValue, err = c.cleanLikeValue(colValue)
 		if err != nil {
 			return nil, err
 		}
-	} else if expr.Operator == "like" || expr.Operator == "not like" {
-		colValue, err = c.parseLikeValue(colValue)
-		if err != nil {
-			return nil, err
-		}
-		colValues = []interface{}{colValue}
-	} else {
+	}
+
+	colValues, isArray := colValue.([]interface{})
+	// colValue should be an array only for "in (1,2,3)" queries.
+	if !isArray {
 		colValues = []interface{}{colValue}
 	}
 
@@ -337,39 +334,40 @@ func (c *Converter) convertComparisonExpr(expr *sqlparser.ComparisonExpr) (elast
 func (c *Converter) convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
-		return c.parseSqlValue(sqlparser.String(e))
+		v, err := c.parseSqlValue(sqlparser.String(e))
+		if err != nil {
+			return nil, err
+		}
+		return v, nil
 	case sqlparser.BoolVal:
 		return bool(e), nil
 	case sqlparser.ValTuple:
-		return sqlparser.String(expr), nil
+		// This is "in (1,2,3)" case.
+		exprs := []sqlparser.Expr(e)
+		var result []interface{}
+		for _, expr := range exprs {
+			v, err := c.convertComparisonExprValue(expr)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, v)
+		}
+		return result, nil
 	case *sqlparser.GroupConcatExpr:
-		return "", fmt.Errorf("%w: 'group_concat'", NotSupportedErr)
+		return nil, fmt.Errorf("%w: 'group_concat'", NotSupportedErr)
 	case *sqlparser.FuncExpr:
-		return "", fmt.Errorf("%w: nested func", NotSupportedErr)
+		return nil, fmt.Errorf("%w: nested func", NotSupportedErr)
 	case *sqlparser.ColName:
 		if sqlparser.String(expr) == "missing" {
 			return missingCheck{}, nil
 		}
-		return missingCheck{}, fmt.Errorf("%w: column name on the right side of comparison expression", NotSupportedErr)
+		return nil, fmt.Errorf("%w: column name on the right side of comparison expression", NotSupportedErr)
 	default:
-		return "", fmt.Errorf("%w: unexpected value type %T", InvalidExpressionErr, expr)
+		return nil, fmt.Errorf("%w: unexpected value type %T", InvalidExpressionErr, expr)
 	}
 }
 
-func (c *Converter) parseInValue(colValue interface{}) ([]interface{}, error) {
-	colValueStr, isString := colValue.(string)
-	if !isString {
-		return nil, fmt.Errorf("%w: 'in' operator value must be a string but was %T", InvalidExpressionErr, colValue)
-	}
-	// colValueStr is a string like ('1', '2', '3').
-	colValues, err := c.parseSqlRange(colValueStr)
-	if err != nil {
-		return nil, err
-	}
-	return colValues, nil
-}
-
-func (c *Converter) parseLikeValue(colValue interface{}) (string, error) {
+func (c *Converter) cleanLikeValue(colValue interface{}) (string, error) {
 	colValueStr, isString := colValue.(string)
 	if !isString {
 		return "", fmt.Errorf("%w: 'like' operator value must be a string but was %T", InvalidExpressionErr, colValue)
