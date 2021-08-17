@@ -217,6 +217,7 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 	request *CreateWorkflowExecutionRequest,
 ) (*CreateWorkflowExecutionResponse, error) {
 	snapshot := request.NewWorkflowSnapshot
+	// help!
 	if err := ValidateCreateWorkflowModeState(
 		request.Mode,
 		snapshot,
