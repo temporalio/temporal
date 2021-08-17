@@ -337,8 +337,11 @@ func (c *Converter) convertComparisonExpr(expr *sqlparser.ComparisonExpr) (elast
 func (c *Converter) convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
-		sqlValue, err := c.parseSqlValue(sqlparser.String(e))
-		return sqlValue, err
+		return c.parseSqlValue(sqlparser.String(e))
+	case sqlparser.BoolVal:
+		return bool(e), nil
+	case sqlparser.ValTuple:
+		return sqlparser.String(expr), nil
 	case *sqlparser.GroupConcatExpr:
 		return "", fmt.Errorf("%w: 'group_concat'", NotSupportedErr)
 	case *sqlparser.FuncExpr:
@@ -348,10 +351,7 @@ func (c *Converter) convertComparisonExprValue(expr sqlparser.Expr) (interface{}
 			return missingCheck{}, nil
 		}
 		return missingCheck{}, fmt.Errorf("%w: column name on the right side of comparison expression", NotSupportedErr)
-	case sqlparser.ValTuple:
-		return sqlparser.String(expr), nil
 	default:
-		// cannot reach here
 		return "", fmt.Errorf("%w: unexpected value type %T", InvalidExpressionErr, expr)
 	}
 }
@@ -374,7 +374,7 @@ func (c *Converter) parseLikeValue(colValue interface{}) (string, error) {
 	if !isString {
 		return "", fmt.Errorf("%w: 'like' operator value must be a string but was %T", InvalidExpressionErr, colValue)
 	}
-	return strings.Replace(colValueStr, "%", "", -1), nil
+	return strings.ReplaceAll(colValueStr, "%", ""), nil
 }
 
 // parseSqlRange parses strings like "('1', '2', '3')" which comes from SQL parser.
@@ -398,10 +398,6 @@ func (c *Converter) parseSqlValue(sqlValue string) (interface{}, error) {
 
 	if sqlValue[0] == '\'' && sqlValue[len(sqlValue)-1] == '\'' {
 		strValue := strings.Trim(sqlValue, "'")
-		boolValue, err := strconv.ParseBool(strValue)
-		if err == nil {
-			return boolValue, nil
-		}
 		return strValue, nil
 	}
 
@@ -421,6 +417,6 @@ func (c *Converter) convertColName(colNameExpr sqlparser.Expr) (string, error) {
 	}
 
 	colNameStr := sqlparser.String(colName)
-	colNameStr = strings.Replace(colNameStr, "`", "", -1)
+	colNameStr = strings.ReplaceAll(colNameStr, "`", "")
 	return c.fnInterceptor.Name(colNameStr)
 }
