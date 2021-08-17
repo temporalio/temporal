@@ -1351,8 +1351,6 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEvent(
 		return nil, e.createInternalServerError(opTag)
 	}
 
-	e.executionInfo.ExecutionTime = timestamp.TimePtr(e.executionInfo.StartTime.Add(timestamp.DurationValue(startRequest.GetFirstWorkflowTaskBackoff())))
-
 	event := e.hBuilder.AddWorkflowExecutionStartedEvent(
 		*e.executionInfo.StartTime,
 		startRequest,
@@ -1437,6 +1435,10 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	} else {
 		e.executionInfo.InitiatedId = common.EmptyEventID
 	}
+
+	e.executionInfo.ExecutionTime = timestamp.TimePtr(
+		e.executionInfo.StartTime.Add(timestamp.DurationValue(event.GetFirstWorkflowTaskBackoff())),
+	)
 
 	e.executionInfo.Attempt = event.GetAttempt()
 	if !timestamp.TimeValue(event.GetWorkflowExecutionExpirationTime()).IsZero() {
