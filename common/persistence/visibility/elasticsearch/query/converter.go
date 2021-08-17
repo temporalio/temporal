@@ -277,23 +277,18 @@ func (c *Converter) convertComparisonExpr(expr *sqlparser.ComparisonExpr) (elast
 
 	var colValues []interface{}
 	if expr.Operator == "in" || expr.Operator == "not in" {
-		colValueStr, isString := colValue.(string)
-		if !isString {
-			return nil, fmt.Errorf("%w: 'in' operator value must be a string but was %T", InvalidExpressionErr, colValue)
-		}
-		// colValueStr is a string like ('1', '2', '3').
-		colValues, err = c.parseSqlRange(colValueStr)
+		colValues, err = c.parseInValue(colValue)
 		if err != nil {
 			return nil, err
 		}
 	} else if expr.Operator == "like" || expr.Operator == "not like" {
-		colValueStr, isString := colValue.(string)
-		if !isString {
-			return nil, fmt.Errorf("%w: 'like' operator value must be a string but was %T", InvalidExpressionErr, colValue)
+		colValue, err = c.parseLikeValue(colValue)
+		if err != nil {
+			return nil, err
 		}
-		colValues = append(colValues, strings.Replace(colValueStr, "%", "", -1))
+		colValues = []interface{}{colValue}
 	} else {
-		colValues = append(colValues, colValue)
+		colValues = []interface{}{colValue}
 	}
 
 	colValues, err = c.fvInterceptor.Values(colName, colValues...)
@@ -358,6 +353,27 @@ func (c *Converter) convertComparisonExprValue(expr sqlparser.Expr) (interface{}
 		// cannot reach here
 		return "", false, fmt.Errorf("%w: unexpected value type %T", InvalidExpressionErr, expr)
 	}
+}
+
+func (c *Converter) parseInValue(colValue interface{}) ([]interface{}, error) {
+	colValueStr, isString := colValue.(string)
+	if !isString {
+		return nil, fmt.Errorf("%w: 'in' operator value must be a string but was %T", InvalidExpressionErr, colValue)
+	}
+	// colValueStr is a string like ('1', '2', '3').
+	colValues, err := c.parseSqlRange(colValueStr)
+	if err != nil {
+		return nil, err
+	}
+	return colValues, nil
+}
+
+func (c *Converter) parseLikeValue(colValue interface{}) (string, error) {
+	colValueStr, isString := colValue.(string)
+	if !isString {
+		return "", fmt.Errorf("%w: 'like' operator value must be a string but was %T", InvalidExpressionErr, colValue)
+	}
+	return strings.Replace(colValueStr, "%", "", -1), nil
 }
 
 // parseSqlRange parses strings like "('1', '2', '3')" which comes from SQL parser.
