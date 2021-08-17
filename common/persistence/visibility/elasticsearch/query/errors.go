@@ -24,12 +24,22 @@
 
 package query
 
-import (
-	"errors"
+type (
+	ConverterError struct {
+		text string
+	}
 )
 
 var (
-	MalformedSqlQueryErr = errors.New("malformed SQL query")
-	NotSupportedErr      = errors.New("operation is not supported")
-	InvalidExpressionErr = errors.New("invalid expression")
+	MalformedSqlQueryErr = NewConverterError("malformed SQL query")
+	NotSupportedErr      = NewConverterError("operation is not supported")
+	InvalidExpressionErr = NewConverterError("invalid expression")
 )
+
+func NewConverterError(text string) error {
+	return &ConverterError{text: text}
+}
+
+func (c *ConverterError) Error() string {
+	return c.text
+}
