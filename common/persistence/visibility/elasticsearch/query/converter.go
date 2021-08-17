@@ -42,6 +42,8 @@ type (
 		fnInterceptor FieldNameInterceptor
 		fvInterceptor FieldValuesInterceptor
 	}
+
+	missingCheck struct{}
 )
 
 func NewConverter(fnInterceptor FieldNameInterceptor, fvInterceptor FieldValuesInterceptor) *Converter {
@@ -269,7 +271,7 @@ func (c *Converter) convertComparisonExpr(expr *sqlparser.ComparisonExpr) (elast
 		return nil, fmt.Errorf("unable to convert left part of comparison expression: %w", err)
 	}
 
-	colValue, missingCheck, err := c.convertComparisonExprValue(expr.Right)
+	colValue, err := c.convertComparisonExprValue(expr.Right)
 	if err != nil {
 		return nil, fmt.Errorf("unable to convert right part of comparison expression: %w", err)
 	}
@@ -306,14 +308,14 @@ func (c *Converter) convertComparisonExpr(expr *sqlparser.ComparisonExpr) (elast
 	case "<":
 		query = elastic.NewRangeQuery(colName).Lt(colValues[0])
 	case "=":
-		if missingCheck {
+		if _, isMissingCheck := colValues[0].(missingCheck); isMissingCheck {
 			query = elastic.NewBoolQuery().MustNot(elastic.NewExistsQuery(colName))
 		} else {
 			// Not elastic.NewTermQuery to support String custom search attributes.
 			query = elastic.NewMatchPhraseQuery(colName, colValues[0])
 		}
 	case "!=":
-		if missingCheck {
+		if _, isMissingCheck := colValues[0].(missingCheck); isMissingCheck {
 			query = elastic.NewExistsQuery(colName)
 		} else {
 			// Not elastic.NewTermQuery to support String custom search attributes.
@@ -332,25 +334,25 @@ func (c *Converter) convertComparisonExpr(expr *sqlparser.ComparisonExpr) (elast
 	return query, nil
 }
 
-func (c *Converter) convertComparisonExprValue(expr sqlparser.Expr) (interface{}, bool, error) {
+func (c *Converter) convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
 		sqlValue, err := c.parseSqlValue(sqlparser.String(e))
-		return sqlValue, false, err
+		return sqlValue, err
 	case *sqlparser.GroupConcatExpr:
-		return "", false, fmt.Errorf("%w: 'group_concat'", NotSupportedErr)
+		return "", fmt.Errorf("%w: 'group_concat'", NotSupportedErr)
 	case *sqlparser.FuncExpr:
-		return "", false, fmt.Errorf("%w: nested func", NotSupportedErr)
+		return "", fmt.Errorf("%w: nested func", NotSupportedErr)
 	case *sqlparser.ColName:
 		if sqlparser.String(expr) == "missing" {
-			return "", true, nil
+			return missingCheck{}, nil
 		}
-		return "", false, fmt.Errorf("%w: column name on the right side of comparison expression", NotSupportedErr)
+		return missingCheck{}, fmt.Errorf("%w: column name on the right side of comparison expression", NotSupportedErr)
 	case sqlparser.ValTuple:
-		return sqlparser.String(expr), false, nil
+		return sqlparser.String(expr), nil
 	default:
 		// cannot reach here
-		return "", false, fmt.Errorf("%w: unexpected value type %T", InvalidExpressionErr, expr)
+		return "", fmt.Errorf("%w: unexpected value type %T", InvalidExpressionErr, expr)
 	}
 }
 
