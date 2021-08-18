@@ -33,8 +33,6 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
-
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 // DescribeTaskQueue show pollers info of a given taskqueue
@@ -51,20 +49,7 @@ func DescribeTaskQueue(c *cli.Context) {
 	}
 
 	pollers := response.Pollers
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetBorder(false)
-	table.SetColumnSeparator("|")
-	if taskQueueType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
-		table.SetHeader([]string{"Activity Poller Identity", "Last Access Time"})
-	} else {
-		table.SetHeader([]string{"Workflow Poller Identity", "Last Access Time"})
-	}
-	table.SetHeaderLine(false)
-	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
-	for _, poller := range pollers {
-		table.Append([]string{poller.GetIdentity(), formatTime(timestamp.TimeValue(poller.GetLastAccessTime()), false)})
-	}
-	table.Render()
+	printPollerInfo(pollers, taskQueueType)
 }
 
 // ListTaskQueuePartitions gets all the taskqueue partition and host information.

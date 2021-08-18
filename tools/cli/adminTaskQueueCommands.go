@@ -33,11 +33,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	"go.temporal.io/server/common/convert"
-
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 // AdminDescribeTaskQueue displays poller and status information of task queue.
@@ -78,9 +75,6 @@ func AdminDescribeTaskQueue(c *cli.Context) {
 	fmt.Printf("\n")
 
 	pollers := response.Pollers
-	if len(pollers) == 0 {
-		ErrorAndExit(colorMagenta("No poller for taskqueue: "+taskQueue), nil)
-	}
 	printPollerInfo(pollers, tlType)
 }
 
@@ -98,23 +92,6 @@ func printTaskQueueStatus(taskQueueStatus *taskqueuepb.TaskQueueStatus) {
 		convert.Int64ToString(taskQueueStatus.GetBacklogCountHint()),
 		convert.Int64ToString(taskIDBlock.GetStartId()),
 		convert.Int64ToString(taskIDBlock.GetEndId())})
-	table.Render()
-}
-
-func printPollerInfo(pollers []*taskqueuepb.PollerInfo, taskQueueType enumspb.TaskQueueType) {
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetBorder(false)
-	table.SetColumnSeparator("|")
-	if taskQueueType == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
-		table.SetHeader([]string{"Activity Poller Identity", "Last Access Time"})
-	} else {
-		table.SetHeader([]string{"Workflow Poller Identity", "Last Access Time"})
-	}
-	table.SetHeaderLine(false)
-	table.SetHeaderColor(tableHeaderBlue, tableHeaderBlue)
-	for _, poller := range pollers {
-		table.Append([]string{poller.GetIdentity(), formatTime(timestamp.TimeValue(poller.GetLastAccessTime()), false)})
-	}
 	table.Render()
 }
 
