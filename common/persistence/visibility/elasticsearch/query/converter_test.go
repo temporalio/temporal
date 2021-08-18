@@ -35,19 +35,19 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var errorCases = map[string]error{
-	"delete":                          MalformedSqlQueryErr,
-	"update x":                        MalformedSqlQueryErr,
-	"insert ":                         MalformedSqlQueryErr,
-	"insert into a values(1,2)":       NotSupportedErr,
-	"update a set id = 1":             NotSupportedErr,
-	"delete from a where id=1":        NotSupportedErr,
-	"select * from a where NOT(id=1)": NotSupportedErr,
-	"select * from a where 1 = 1":     InvalidExpressionErr,
-	"select * from a where 1=a":       InvalidExpressionErr,
-	"select * from a where zz(k=2)":   NotSupportedErr,
-	"select * from a group by k":      NotSupportedErr,
-	"select * from a where  a= 1 and multi_match(zz=1, query='this is a test', fields=(title,title.origin), type=phrase)": NotSupportedErr,
+var errorCases = map[string]string{
+	"delete":                          malformedSqlQueryErrMessage,
+	"update x":                        malformedSqlQueryErrMessage,
+	"insert ":                         malformedSqlQueryErrMessage,
+	"insert into a values(1,2)":       notSupportedErrMessage,
+	"update a set id = 1":             notSupportedErrMessage,
+	"delete from a where id=1":        notSupportedErrMessage,
+	"select * from a where NOT(id=1)": notSupportedErrMessage,
+	"select * from a where 1 = 1":     invalidExpressionErrMessage,
+	"select * from a where 1=a":       invalidExpressionErrMessage,
+	"select * from a where zz(k=2)":   notSupportedErrMessage,
+	"select * from a group by k":      notSupportedErrMessage,
+	"select * from a where  a= 1 and multi_match(zz=1, query='this is a test', fields=(title,title.origin), type=phrase)": notSupportedErrMessage,
 }
 
 var supportedWhereCases = map[string]string{
@@ -145,8 +145,8 @@ func TestSupportedSelectWhereOrder(t *testing.T) {
 
 func TestErrors(t *testing.T) {
 	c := NewConverter(nil, nil)
-	for sql, expectedErr := range errorCases {
+	for sql, expectedErrMessage := range errorCases {
 		_, _, err := c.convertSql(sql)
-		assert.ErrorIs(t, err, expectedErr, sql)
+		assert.Contains(t, err.Error(), expectedErrMessage, sql)
 	}
 }

@@ -31,9 +31,9 @@ type (
 )
 
 var (
-	MalformedSqlQueryErr = NewConverterError("malformed SQL query")
-	NotSupportedErr      = NewConverterError("operation is not supported")
-	InvalidExpressionErr = NewConverterError("invalid expression")
+	malformedSqlQueryErrMessage = "malformed SQL query"
+	notSupportedErrMessage      = "operation is not supported"
+	invalidExpressionErrMessage = "invalid expression"
 )
 
 func NewConverterError(text string) error {

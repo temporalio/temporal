@@ -78,12 +78,12 @@ func (c *Converter) ConvertWhereOrderBy(whereOrderBy string) (elastic.Query, []e
 func (c *Converter) convertSql(sql string) (elastic.Query, []elastic.Sorter, error) {
 	stmt, err := sqlparser.Parse(sql)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w: %v", MalformedSqlQueryErr, err)
+		return nil, nil, NewConverterError(fmt.Sprintf("%s: %v", malformedSqlQueryErrMessage, err))
 	}
 
 	selectStmt, isSelect := stmt.(*sqlparser.Select)
 	if !isSelect {
-		return nil, nil, fmt.Errorf("%w: statement must be 'select' not %T", NotSupportedErr, stmt)
+		return nil, nil, NewConverterError(fmt.Sprintf("%s: statement must be 'select' not %T", notSupportedErrMessage, stmt))
 	}
 
 	return c.convertSelect(selectStmt)
@@ -96,13 +96,13 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (elastic.Query, []elast
 	)
 
 	if sel.GroupBy != nil {
-		return nil, nil, fmt.Errorf("%w: 'group by' clause", NotSupportedErr)
+		return nil, nil, NewConverterError(fmt.Sprintf("%s: 'group by' clause", notSupportedErrMessage))
 	}
 
 	if sel.Where != nil {
 		query, err = c.convertWhere(sel.Where.Expr)
 		if err != nil {
-			return nil, nil, fmt.Errorf("unable to convert filter expression: %w", err)
+			return nil, nil, NewConverterError(fmt.Sprintf("unable to convert filter expression: %s", err))
 		}
 		// Result must be BoolQuery.
 		if _, isBoolQuery := query.(*elastic.BoolQuery); !isBoolQuery {
@@ -116,7 +116,7 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (elastic.Query, []elast
 	for _, orderByExpr := range sel.OrderBy {
 		colName, err := c.convertColName(orderByExpr.Expr)
 		if err != nil {
-			return nil, nil, fmt.Errorf("unable to convert 'order by' column name: %w", err)
+			return nil, nil, NewConverterError(fmt.Sprintf("unable to convert 'order by' column name: %s", err))
 		}
 		sortField := elastic.NewFieldSort(colName)
 		if orderByExpr.Direction == sqlparser.DescScr {
@@ -147,12 +147,12 @@ func (c *Converter) convertWhere(expr sqlparser.Expr) (elastic.Query, error) {
 	case *sqlparser.IsExpr:
 		return c.convertIsExpr(e)
 	case *sqlparser.NotExpr:
-		return nil, fmt.Errorf("%w: 'not' expression", NotSupportedErr)
+		return nil, NewConverterError(fmt.Sprintf("%s: 'not' expression", notSupportedErrMessage))
 	case *sqlparser.FuncExpr:
-		//return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("%v: function expression", NotSupportedErr.Error()))
-		return nil, fmt.Errorf("%w: function expression", NotSupportedErr)
+		//return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("%v: function expression", notSupportedErrMessage.Error()))
+		return nil, NewConverterError(fmt.Sprintf("%s: function expression", notSupportedErrMessage))
 	default:
-		return nil, fmt.Errorf("%w: expression of type %T", NotSupportedErr, expr)
+		return nil, NewConverterError(fmt.Sprintf("%s: expression of type %T", notSupportedErrMessage, expr))
 	}
 }
 
@@ -215,7 +215,7 @@ func (c *Converter) convertOrExpr(expr *sqlparser.OrExpr) (elastic.Query, error)
 func (c *Converter) convertRangeCondExpr(expr *sqlparser.RangeCond) (elastic.Query, error) {
 	colName, err := c.convertColName(expr.Left)
 	if err != nil {
-		return nil, fmt.Errorf("unable to convert left part of 'between' expression: %w", err)
+		return nil, NewConverterError(fmt.Sprintf("unable to convert left part of 'between' expression: %s", err))
 	}
 
 	fromValue, err := c.parseSqlValue(sqlparser.String(expr.From))
@@ -229,7 +229,7 @@ func (c *Converter) convertRangeCondExpr(expr *sqlparser.RangeCond) (elastic.Que
 
 	values, err := c.fvInterceptor.Values(colName, fromValue, toValue)
 	if err != nil {
-		return nil, fmt.Errorf("unable to convert values of 'between' expression: %w", err)
+		return nil, NewConverterError(fmt.Sprintf("unable to convert values of 'between' expression: %s", err))
 	}
 	fromValue = values[0]
 	toValue = values[1]
@@ -241,7 +241,7 @@ func (c *Converter) convertRangeCondExpr(expr *sqlparser.RangeCond) (elastic.Que
 	case "not between":
 		query = elastic.NewBoolQuery().MustNot(elastic.NewRangeQuery(colName).Gte(fromValue).Lte(toValue))
 	default:
-		return nil, fmt.Errorf("%w: range condition operator must be 'between' or 'not between'", InvalidExpressionErr)
+		return nil, NewConverterError(fmt.Sprintf("%s: range condition operator must be 'between' or 'not between'", invalidExpressionErrMessage))
 	}
 	return query, nil
 }
@@ -249,7 +249,7 @@ func (c *Converter) convertRangeCondExpr(expr *sqlparser.RangeCond) (elastic.Que
 func (c *Converter) convertIsExpr(expr *sqlparser.IsExpr) (elastic.Query, error) {
 	colName, err := c.convertColName(expr.Expr)
 	if err != nil {
-		return nil, fmt.Errorf("unable to convert left part of 'is' expression: %w", err)
+		return nil, NewConverterError(fmt.Sprintf("unable to convert left part of 'is' expression: %s", err))
 	}
 
 	var query elastic.Query
@@ -259,7 +259,7 @@ func (c *Converter) convertIsExpr(expr *sqlparser.IsExpr) (elastic.Query, error)
 	case "is not null":
 		query = elastic.NewExistsQuery(colName)
 	default:
-		return nil, fmt.Errorf("%w: 'is' operator can be used with 'null' and 'not null' only", InvalidExpressionErr)
+		return nil, NewConverterError(fmt.Sprintf("%s: 'is' operator can be used with 'null' and 'not null' only", invalidExpressionErrMessage))
 	}
 
 	return query, nil
@@ -268,12 +268,12 @@ func (c *Converter) convertIsExpr(expr *sqlparser.IsExpr) (elastic.Query, error)
 func (c *Converter) convertComparisonExpr(expr *sqlparser.ComparisonExpr) (elastic.Query, error) {
 	colName, err := c.convertColName(expr.Left)
 	if err != nil {
-		return nil, fmt.Errorf("unable to convert left part of comparison expression: %w", err)
+		return nil, NewConverterError(fmt.Sprintf("unable to convert left part of comparison expression: %s", err))
 	}
 
 	colValue, err := c.convertComparisonExprValue(expr.Right)
 	if err != nil {
-		return nil, fmt.Errorf("unable to convert right part of comparison expression: %w", err)
+		return nil, NewConverterError(fmt.Sprintf("unable to convert right part of comparison expression: %s", err))
 	}
 
 	if expr.Operator == "like" || expr.Operator == "not like" {
@@ -291,7 +291,7 @@ func (c *Converter) convertComparisonExpr(expr *sqlparser.ComparisonExpr) (elast
 
 	colValues, err = c.fvInterceptor.Values(colName, colValues...)
 	if err != nil {
-		return nil, fmt.Errorf("unable to convert values of comparison expression: %w", err)
+		return nil, NewConverterError(fmt.Sprintf("unable to convert values of comparison expression: %s", err))
 	}
 
 	var query elastic.Query
@@ -354,23 +354,23 @@ func (c *Converter) convertComparisonExprValue(expr sqlparser.Expr) (interface{}
 		}
 		return result, nil
 	case *sqlparser.GroupConcatExpr:
-		return nil, fmt.Errorf("%w: 'group_concat'", NotSupportedErr)
+		return nil, NewConverterError(fmt.Sprintf("%s: 'group_concat'", notSupportedErrMessage))
 	case *sqlparser.FuncExpr:
-		return nil, fmt.Errorf("%w: nested func", NotSupportedErr)
+		return nil, NewConverterError(fmt.Sprintf("%s: nested func", notSupportedErrMessage))
 	case *sqlparser.ColName:
 		if sqlparser.String(expr) == "missing" {
 			return missingCheck{}, nil
 		}
-		return nil, fmt.Errorf("%w: column name on the right side of comparison expression", NotSupportedErr)
+		return nil, NewConverterError(fmt.Sprintf("%s: column name on the right side of comparison expression", notSupportedErrMessage))
 	default:
-		return nil, fmt.Errorf("%w: unexpected value type %T", InvalidExpressionErr, expr)
+		return nil, NewConverterError(fmt.Sprintf("%s: unexpected value type %T", invalidExpressionErrMessage, expr))
 	}
 }
 
 func (c *Converter) cleanLikeValue(colValue interface{}) (string, error) {
 	colValueStr, isString := colValue.(string)
 	if !isString {
-		return "", fmt.Errorf("%w: 'like' operator value must be a string but was %T", InvalidExpressionErr, colValue)
+		return "", NewConverterError(fmt.Sprintf("%s: 'like' operator value must be a string but was %T", invalidExpressionErrMessage, colValue))
 	}
 	return strings.ReplaceAll(colValueStr, "%", ""), nil
 }
@@ -402,7 +402,7 @@ func (c *Converter) parseSqlValue(sqlValue string) (interface{}, error) {
 	// Unquoted value must be a number. Numbers in JSON are float64.
 	floatValue, err := strconv.ParseFloat(sqlValue, 64)
 	if err != nil {
-		return nil, fmt.Errorf("%w: unable to parse %s to float64: %v", InvalidExpressionErr, sqlValue, err)
+		return nil, NewConverterError(fmt.Sprintf("%s: unable to parse %s to float64: %v", invalidExpressionErrMessage, sqlValue, err))
 	}
 
 	return floatValue, nil
@@ -411,7 +411,7 @@ func (c *Converter) parseSqlValue(sqlValue string) (interface{}, error) {
 func (c *Converter) convertColName(colNameExpr sqlparser.Expr) (string, error) {
 	colName, isColName := colNameExpr.(*sqlparser.ColName)
 	if !isColName {
-		return "", fmt.Errorf("%w: must be a column name but was %T", InvalidExpressionErr, colNameExpr)
+		return "", NewConverterError(fmt.Sprintf("%s: must be a column name but was %T", invalidExpressionErrMessage, colNameExpr))
 	}
 
 	colNameStr := sqlparser.String(colName)
