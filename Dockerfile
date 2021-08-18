@@ -29,6 +29,7 @@ COPY docker/entrypoint.sh /etc/temporal/entrypoint.sh
 COPY docker/start-temporal.sh /etc/temporal/start-temporal.sh
 
 COPY --from=temporal-builder /temporal/tctl /usr/local/bin
+COPY --from=temporal-builder /temporal/tctl-authorization-plugin /usr/local/bin
 COPY --from=temporal-builder /temporal/temporal-server /usr/local/bin
 
 ##### Auto setup Temporal server #####
@@ -55,6 +56,7 @@ FROM ${BASE_SERVER_IMAGE} AS temporal-tctl
 WORKDIR /etc/temporal
 ENTRYPOINT ["tctl"]
 COPY --from=temporal-builder /temporal/tctl /usr/local/bin
+COPY --from=temporal-builder /temporal/tctl-authorization-plugin /usr/local/bin
 
 ##### Temporal admin tools #####
 FROM ${BASE_ADMIN_TOOLS_IMAGE} as temporal-admin-tools
@@ -66,6 +68,7 @@ COPY --from=temporal-builder /temporal/schema /etc/temporal/schema
 COPY --from=temporal-builder /temporal/temporal-cassandra-tool /usr/local/bin
 COPY --from=temporal-builder /temporal/temporal-sql-tool /usr/local/bin
 COPY --from=temporal-builder /temporal/tctl /usr/local/bin
+COPY --from=temporal-builder /temporal/tctl-authorization-plugin /usr/local/bin
 
 ##### Build requested image #####
 FROM temporal-${TARGET}
