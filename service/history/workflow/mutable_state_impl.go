@@ -314,6 +314,7 @@ func newMutableStateBuilderFromDB(
 	}
 
 	mutableState.pendingSignalRequestedIDs = convert.StringSliceToSet(dbRecord.SignalRequestedIds)
+	mutableState.executionState = dbRecord.ExecutionState
 	mutableState.executionInfo = dbRecord.ExecutionInfo
 
 	// Workflows created before 1.11 doesn't have ExecutionTime and it must be computed for backwards compatibility.
@@ -326,7 +327,6 @@ func newMutableStateBuilderFromDB(
 		backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff())
 		mutableState.executionInfo.ExecutionTime = timestamp.TimePtr(timestamp.TimeValue(mutableState.executionInfo.GetStartTime()).Add(backoffDuration))
 	}
-	mutableState.executionState = dbRecord.ExecutionState
 
 	mutableState.hBuilder = NewMutableHistoryBuilder(
 		mutableState.timeSource,
