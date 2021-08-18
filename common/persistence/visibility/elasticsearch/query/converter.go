@@ -70,6 +70,7 @@ func (c *Converter) ConvertWhereOrderBy(whereOrderBy string) (elastic.Query, []e
 	if whereOrderBy != "" && !strings.HasPrefix(strings.ToLower(whereOrderBy), "order by ") {
 		whereOrderBy = "where " + whereOrderBy
 	}
+	// sqlparser can't parse just WHERE clause but instead accepts only valid SQL statement.
 	sql := fmt.Sprintf("select * from table1 %s", whereOrderBy)
 	return c.convertSql(sql)
 }
@@ -373,20 +374,6 @@ func (c *Converter) cleanLikeValue(colValue interface{}) (string, error) {
 		return "", NewConverterError(fmt.Sprintf("%s: 'like' operator value must be a string but was %T", invalidExpressionErrMessage, colValue))
 	}
 	return strings.ReplaceAll(colValueStr, "%", ""), nil
-}
-
-// parseSqlRange parses strings like "('1', '2', '3')" which comes from SQL parser.
-func (c *Converter) parseSqlRange(sqlRange string) ([]interface{}, error) {
-	sqlRange = strings.Trim(sqlRange, "()")
-	var values []interface{}
-	for _, v := range strings.Split(sqlRange, ", ") {
-		parsedValue, err := c.parseSqlValue(v)
-		if err != nil {
-			return nil, err
-		}
-		values = append(values, parsedValue)
-	}
-	return values, nil
 }
 
 func (c *Converter) parseSqlValue(sqlValue string) (interface{}, error) {
