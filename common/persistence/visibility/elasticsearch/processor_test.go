@@ -348,6 +348,7 @@ func (s *processorSuite) TestBulkBeforeAction() {
 
 	s.mockMetricClient.EXPECT().AddCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequests, int64(1))
 	s.mockMetricClient.EXPECT().RecordDistribution(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorBulkSize, 1)
+	s.mockMetricClient.EXPECT().RecordDistribution(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorQueuedRequests, 0)
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitLatency, gomock.Any())
 
 	mapVal := newAckChan()
@@ -526,6 +527,7 @@ func (s *processorSuite) Test_End2End() {
 	// Emulate bulk commit.
 
 	s.mockMetricClient.EXPECT().AddCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequests, int64(docsCount))
+	s.mockMetricClient.EXPECT().RecordDistribution(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorQueuedRequests, 0)
 	s.mockMetricClient.EXPECT().RecordDistribution(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorBulkSize, docsCount)
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitLatency, gomock.Any()).Times(docsCount)
 	s.esProcessor.bulkBeforeAction(0, bulkIndexRequests)
