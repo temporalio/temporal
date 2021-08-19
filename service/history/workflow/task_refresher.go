@@ -304,6 +304,7 @@ Loop:
 			executionState.RunId,
 			activityInfo.ScheduledEventBatchId,
 			activityInfo.ScheduleId,
+			activityInfo.Version,
 			currentBranchToken,
 		)
 		if err != nil {
@@ -385,6 +386,7 @@ Loop:
 			executionState.RunId,
 			childWorkflowInfo.InitiatedEventBatchId,
 			childWorkflowInfo.InitiatedId,
+			childWorkflowInfo.Version,
 			currentBranchToken,
 		)
 		if err != nil {
@@ -424,6 +426,7 @@ func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 			executionState.RunId,
 			requestCancelInfo.GetInitiatedEventBatchId(),
 			requestCancelInfo.GetInitiatedId(),
+			requestCancelInfo.GetVersion(),
 			currentBranchToken,
 		)
 		if err != nil {
@@ -463,6 +466,7 @@ func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 			executionState.RunId,
 			signalInfo.GetInitiatedEventBatchId(),
 			signalInfo.GetInitiatedId(),
+			signalInfo.GetVersion(),
 			currentBranchToken,
 		)
 		if err != nil {

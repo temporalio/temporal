@@ -578,6 +578,7 @@ func (e *MutableStateImpl) GetActivityScheduledEvent(
 		e.executionState.RunId,
 		ai.ScheduledEventBatchId,
 		ai.ScheduleId,
+		ai.Version,
 		currentBranchToken,
 	)
 	if err != nil {
@@ -650,6 +651,7 @@ func (e *MutableStateImpl) GetChildExecutionInitiatedEvent(
 		e.executionState.RunId,
 		ci.InitiatedEventBatchId,
 		ci.InitiatedId,
+		ci.Version,
 		currentBranchToken,
 	)
 	if err != nil {
@@ -719,6 +721,10 @@ func (e *MutableStateImpl) GetCompletionEvent() (*historypb.HistoryEvent, error)
 	if err != nil {
 		return nil, err
 	}
+	lastWriteVersion, err := e.GetLastWriteVersion()
+	if err != nil {
+		return nil, err
+	}
 
 	// Completion EventID is always one less than NextEventID after workflow is completed
 	completionEventID := e.hBuilder.NextEventID() - 1
@@ -729,6 +735,7 @@ func (e *MutableStateImpl) GetCompletionEvent() (*historypb.HistoryEvent, error)
 		e.executionState.RunId,
 		firstEventID,
 		completionEventID,
+		lastWriteVersion,
 		currentBranchToken,
 	)
 	if err != nil {
@@ -748,6 +755,10 @@ func (e *MutableStateImpl) GetStartEvent() (*historypb.HistoryEvent, error) {
 	if err != nil {
 		return nil, err
 	}
+	startVersion, err := e.GetStartVersion()
+	if err != nil {
+		return nil, err
+	}
 
 	startEvent, err := e.eventsCache.GetEvent(
 		e.executionInfo.NamespaceId,
@@ -755,6 +766,7 @@ func (e *MutableStateImpl) GetStartEvent() (*historypb.HistoryEvent, error) {
 		e.executionState.RunId,
 		common.FirstEventID,
 		common.FirstEventID,
+		startVersion,
 		currentBranchToken,
 	)
 	if err != nil {
@@ -832,7 +844,6 @@ func (e *MutableStateImpl) DeletePendingSignal(
 func (e *MutableStateImpl) writeEventToCache(
 	event *historypb.HistoryEvent,
 ) {
-
 	// For start event: store it within events cache so the recordWorkflowStarted transfer task doesn't need to
 	// load it from database
 	// For completion event: store it within events cache so we can communicate the result to parent execution
@@ -842,6 +853,7 @@ func (e *MutableStateImpl) writeEventToCache(
 		e.executionInfo.WorkflowId,
 		e.executionState.RunId,
 		event.GetEventId(),
+		event.GetVersion(),
 		event,
 	)
 }
@@ -1749,13 +1761,7 @@ func (e *MutableStateImpl) AddActivityTaskScheduledEvent(
 	event := e.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command)
 
 	// Write the event to cache only on active cluster for processing on activity started or retried
-	e.eventsCache.PutEvent(
-		e.executionInfo.NamespaceId,
-		e.executionInfo.WorkflowId,
-		e.executionState.RunId,
-		event.GetEventId(),
-		event,
-	)
+	e.writeEventToCache(event)
 
 	ai, err := e.ReplicateActivityTaskScheduledEvent(workflowTaskCompletedEventID, event)
 	// TODO merge active & passive task generation
@@ -3090,8 +3096,7 @@ func (e *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 
 	event := e.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command)
 	// Write the event to cache only on active cluster
-	e.eventsCache.PutEvent(e.executionInfo.NamespaceId, e.executionInfo.WorkflowId, e.executionState.RunId,
-		event.GetEventId(), event)
+	e.writeEventToCache(event)
 
 	ci, err := e.ReplicateStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event, createRequestID)
 	if err != nil {

@@ -492,7 +492,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 
 	s.mockEventsCache.EXPECT().PutEvent(
 		namespaceID, execution.GetWorkflowId(), execution.GetRunId(),
-		workflowStartEvent.GetEventId(), workflowStartEvent,
+		workflowStartEvent.GetEventId(), version, workflowStartEvent,
 	)
 	err := s.mutableState.ReplicateWorkflowExecutionStartedEvent(
 		"",

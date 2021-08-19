@@ -48,6 +48,7 @@ type (
 			runID string,
 			firstEventID int64,
 			eventID int64,
+			version int64,
 			branchToken []byte,
 		) (*historypb.HistoryEvent, error)
 		PutEvent(
@@ -55,6 +56,7 @@ type (
 			workflowID string,
 			runID string,
 			eventID int64,
+			version int64,
 			event *historypb.HistoryEvent,
 		)
 		DeleteEvent(
@@ -62,6 +64,7 @@ type (
 			workflowID string,
 			runID string,
 			eventID int64,
+			version int64,
 		)
 	}
 
@@ -79,6 +82,7 @@ type (
 		workflowID  string
 		runID       string
 		eventID     int64
+		version     int64
 	}
 )
 
@@ -112,16 +116,17 @@ func NewEventsCache(
 	}
 }
 
-func newEventKey(namespaceID, workflowID, runID string, eventID int64) eventKey {
+func newEventKey(namespaceID, workflowID, runID string, eventID, version int64) eventKey {
 	return eventKey{
 		namespaceID: namespaceID,
 		workflowID:  workflowID,
 		runID:       runID,
 		eventID:     eventID,
+		version:     version,
 	}
 }
 
-func (e *CacheImpl) validateIds(namespaceID, workflowID, runID string, eventID int64) bool {
+func (e *CacheImpl) validateIds(namespaceID, workflowID, runID string, eventID, version int64) bool {
 	if len(namespaceID) == 0 || len(workflowID) == 0 || len(runID) == 0 || eventID < common.FirstEventID {
 		// This is definitely a bug, but just warn and don't crash so we can find anywhere this happens.
 		e.logger.Warn("one or more ids is invalid in event cache",
@@ -134,14 +139,14 @@ func (e *CacheImpl) validateIds(namespaceID, workflowID, runID string, eventID i
 	return true
 }
 
-func (e *CacheImpl) GetEvent(namespaceID, workflowID, runID string, firstEventID, eventID int64,
+func (e *CacheImpl) GetEvent(namespaceID, workflowID, runID string, firstEventID, eventID, version int64,
 	branchToken []byte) (*historypb.HistoryEvent, error) {
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetEventScope, metrics.CacheLatency)
 	defer sw.Stop()
 
-	validKey := e.validateIds(namespaceID, workflowID, runID, eventID)
-	key := newEventKey(namespaceID, workflowID, runID, eventID)
+	validKey := e.validateIds(namespaceID, workflowID, runID, eventID, version)
+	key := newEventKey(namespaceID, workflowID, runID, eventID, version)
 	// Test hook for disabling cache
 	if !e.disabled {
 		event, cacheHit := e.Cache.Get(key).(*historypb.HistoryEvent)
@@ -151,7 +156,7 @@ func (e *CacheImpl) GetEvent(namespaceID, workflowID, runID string, firstEventID
 	}
 
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheMissCounter)
-	event, err := e.getHistoryEventFromStore(namespaceID, workflowID, runID, firstEventID, eventID, branchToken)
+	event, err := e.getHistoryEventFromStore(namespaceID, workflowID, runID, firstEventID, eventID, version, branchToken)
 	if err != nil {
 		e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheFailures)
 		e.logger.Error("Cache unable to retrieve event from store",
@@ -169,25 +174,25 @@ func (e *CacheImpl) GetEvent(namespaceID, workflowID, runID string, firstEventID
 	return event, nil
 }
 
-func (e *CacheImpl) PutEvent(namespaceID, workflowID, runID string, eventID int64, event *historypb.HistoryEvent) {
+func (e *CacheImpl) PutEvent(namespaceID, workflowID, runID string, eventID, version int64, event *historypb.HistoryEvent) {
 	e.metricsClient.IncCounter(metrics.EventsCachePutEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCachePutEventScope, metrics.CacheLatency)
 	defer sw.Stop()
 
-	if !e.validateIds(namespaceID, workflowID, runID, eventID) {
+	if !e.validateIds(namespaceID, workflowID, runID, eventID, version) {
 		return
 	}
-	key := newEventKey(namespaceID, workflowID, runID, eventID)
+	key := newEventKey(namespaceID, workflowID, runID, eventID, version)
 	e.Put(key, event)
 }
 
-func (e *CacheImpl) DeleteEvent(namespaceID, workflowID, runID string, eventID int64) {
+func (e *CacheImpl) DeleteEvent(namespaceID, workflowID, runID string, eventID, version int64) {
 	e.metricsClient.IncCounter(metrics.EventsCacheDeleteEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheDeleteEventScope, metrics.CacheLatency)
 	defer sw.Stop()
 
-	e.validateIds(namespaceID, workflowID, runID, eventID)
-	key := newEventKey(namespaceID, workflowID, runID, eventID)
+	e.validateIds(namespaceID, workflowID, runID, eventID, version)
+	key := newEventKey(namespaceID, workflowID, runID, eventID, version)
 	e.Delete(key)
 }
 
@@ -197,6 +202,7 @@ func (e *CacheImpl) getHistoryEventFromStore(
 	runID string,
 	firstEventID int64,
 	eventID int64,
+	version int64,
 	branchToken []byte,
 ) (*historypb.HistoryEvent, error) {
 
@@ -227,7 +233,7 @@ func (e *CacheImpl) getHistoryEventFromStore(
 
 	// find history event from batch and return back single event to caller
 	for _, e := range response.HistoryEvents {
-		if e.GetEventId() == eventID {
+		if e.EventId == eventID && e.Version == version {
 			return e, nil
 		}
 	}
