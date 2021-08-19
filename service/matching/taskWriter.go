@@ -71,6 +71,8 @@ type (
 // errShutdown indicates that the task queue is shutting down
 var errShutdown = &persistence.ConditionFailedError{Msg: "task queue shutting down"}
 
+var noTaskIDs = taskIDBlock{start: 1, end: 0}
+
 func newTaskWriter(
 	tlMgr *taskQueueManagerImpl,
 ) *taskWriter {
@@ -80,12 +82,14 @@ func newTaskWriter(
 		config:       tlMgr.config,
 		taskQueueID:  tlMgr.taskQueueID,
 		appendCh:     make(chan *writeTaskRequest, tlMgr.config.OutstandingTaskAppendsThreshold()),
+		taskIDBlock:  noTaskIDs,
+		maxReadLevel: noTaskIDs.start - 1,
 		logger:       tlMgr.logger,
 		shutdownChan: make(chan struct{}),
 	}
 }
 
-func (w *taskWriter) Start(initialBlock taskIDBlock) {
+func (w *taskWriter) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&w.status,
 		common.DaemonStatusInitialized,
@@ -93,10 +97,15 @@ func (w *taskWriter) Start(initialBlock taskIDBlock) {
 	) {
 		return
 	}
-
-	w.taskIDBlock = initialBlock
-	w.maxReadLevel = initialBlock.start - 1
-	go w.taskWriterLoop()
+	go func() {
+		if state, err := w.tlMgr.renewLeaseWithRetry(suppressFatalSignal); err == nil {
+			w.taskIDBlock = w.tlMgr.rangeIDToTaskIDBlock(state.rangeID)
+			atomic.StoreInt64(&w.maxReadLevel, w.taskIDBlock.start-1)
+			w.tlMgr.taskAckManager.setAckLevel(state.ackLevel)
+			w.tlMgr.taskReader.Signal()
+		}
+		w.taskWriterLoop()
+	}()
 }
 
 // Stop stops the taskWriter
@@ -108,7 +117,6 @@ func (w *taskWriter) Stop() {
 	) {
 		return
 	}
-
 	close(w.shutdownChan)
 }
 
