@@ -388,6 +388,18 @@ func (e *MutableStateImpl) GetCurrentBranchToken() ([]byte, error) {
 	return currentVersionHistory.GetBranchToken(), nil
 }
 
+func (e *MutableStateImpl) getCurrentBranchTokenAndEventVersion(eventID int64) ([]byte, int64, error) {
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
+	if err != nil {
+		return nil, 0, err
+	}
+	version, err := versionhistory.GetVersionHistoryEventVersion(currentVersionHistory, eventID)
+	if err != nil {
+		return nil, 0, err
+	}
+	return currentVersionHistory.GetBranchToken(), version, nil
+}
+
 // SetHistoryTree set treeID/historyBranches
 func (e *MutableStateImpl) SetHistoryTree(
 	treeID string,
@@ -568,7 +580,7 @@ func (e *MutableStateImpl) GetActivityScheduledEvent(
 		return nil, ErrMissingActivityInfo
 	}
 
-	currentBranchToken, err := e.GetCurrentBranchToken()
+	currentBranchToken, version, err := e.getCurrentBranchTokenAndEventVersion(ai.ScheduleId)
 	if err != nil {
 		return nil, err
 	}
@@ -578,7 +590,7 @@ func (e *MutableStateImpl) GetActivityScheduledEvent(
 		e.executionState.RunId,
 		ai.ScheduledEventBatchId,
 		ai.ScheduleId,
-		ai.Version,
+		version,
 		currentBranchToken,
 	)
 	if err != nil {
@@ -641,7 +653,7 @@ func (e *MutableStateImpl) GetChildExecutionInitiatedEvent(
 		return nil, ErrMissingChildWorkflowInfo
 	}
 
-	currentBranchToken, err := e.GetCurrentBranchToken()
+	currentBranchToken, version, err := e.getCurrentBranchTokenAndEventVersion(ci.InitiatedId)
 	if err != nil {
 		return nil, err
 	}
@@ -651,7 +663,7 @@ func (e *MutableStateImpl) GetChildExecutionInitiatedEvent(
 		e.executionState.RunId,
 		ci.InitiatedEventBatchId,
 		ci.InitiatedId,
-		ci.Version,
+		version,
 		currentBranchToken,
 	)
 	if err != nil {
