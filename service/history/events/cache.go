@@ -32,6 +32,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -120,12 +121,26 @@ func newEventKey(namespaceID, workflowID, runID string, eventID int64) eventKey 
 	}
 }
 
+func (e *CacheImpl) validateIds(namespaceID, workflowID, runID string, eventID int64) bool {
+	if len(namespaceID) == 0 || len(workflowID) == 0 || len(runID) == 0 || eventID < common.FirstEventID {
+		// This is definitely a bug, but just warn and don't crash so we can find anywhere this happens.
+		e.logger.Warn("one or more ids is invalid in event cache",
+			tag.WorkflowID(workflowID),
+			tag.WorkflowRunID(runID),
+			tag.WorkflowNamespaceID(namespaceID),
+			tag.WorkflowEventID(eventID))
+		return false
+	}
+	return true
+}
+
 func (e *CacheImpl) GetEvent(namespaceID, workflowID, runID string, firstEventID, eventID int64,
 	branchToken []byte) (*historypb.HistoryEvent, error) {
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetEventScope, metrics.CacheLatency)
 	defer sw.Stop()
 
+	validKey := e.validateIds(namespaceID, workflowID, runID, eventID)
 	key := newEventKey(namespaceID, workflowID, runID, eventID)
 	// Test hook for disabling cache
 	if !e.disabled {
@@ -148,7 +163,9 @@ func (e *CacheImpl) GetEvent(namespaceID, workflowID, runID string, firstEventID
 		return nil, err
 	}
 
-	e.Put(key, event)
+	if validKey {
+		e.Put(key, event)
+	}
 	return event, nil
 }
 
@@ -157,6 +174,9 @@ func (e *CacheImpl) PutEvent(namespaceID, workflowID, runID string, eventID int6
 	sw := e.metricsClient.StartTimer(metrics.EventsCachePutEventScope, metrics.CacheLatency)
 	defer sw.Stop()
 
+	if !e.validateIds(namespaceID, workflowID, runID, eventID) {
+		return
+	}
 	key := newEventKey(namespaceID, workflowID, runID, eventID)
 	e.Put(key, event)
 }
@@ -166,6 +186,7 @@ func (e *CacheImpl) DeleteEvent(namespaceID, workflowID, runID string, eventID i
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheDeleteEventScope, metrics.CacheLatency)
 	defer sw.Stop()
 
+	e.validateIds(namespaceID, workflowID, runID, eventID)
 	key := newEventKey(namespaceID, workflowID, runID, eventID)
 	e.Delete(key)
 }
