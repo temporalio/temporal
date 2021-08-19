@@ -1935,6 +1935,7 @@ const (
 	MutableStateChecksumInvalidated
 
 	ElasticsearchBulkProcessorRequests
+	ElasticsearchBulkProcessorQueuedRequests
 	ElasticsearchBulkProcessorRetries
 	ElasticsearchBulkProcessorFailures
 	ElasticsearchBulkProcessorCorruptedData
@@ -1942,6 +1943,7 @@ const (
 	ElasticsearchBulkProcessorCommitLatency
 	ElasticsearchBulkProcessorWaitLatency
 	ElasticsearchBulkProcessorBulkSize
+	ElasticsearchBulkProcessorDeadlock
 
 	NumHistoryMetrics
 )
@@ -2385,6 +2387,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		MutableStateChecksumInvalidated:                   {metricName: "mutable_state_checksum_invalidated", metricType: Counter},
 
 		ElasticsearchBulkProcessorRequests:       {metricName: "elasticsearch_bulk_processor_requests"},
+		ElasticsearchBulkProcessorQueuedRequests: {metricName: "elasticsearch_bulk_processor_queued_requests"},
 		ElasticsearchBulkProcessorRetries:        {metricName: "elasticsearch_bulk_processor_retries"},
 		ElasticsearchBulkProcessorFailures:       {metricName: "elasticsearch_bulk_processor_errors"},
 		ElasticsearchBulkProcessorCorruptedData:  {metricName: "elasticsearch_bulk_processor_corrupted_data"},
@@ -2392,6 +2395,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ElasticsearchBulkProcessorCommitLatency:  {metricName: "elasticsearch_bulk_processor_commit_latency", metricType: Timer},
 		ElasticsearchBulkProcessorWaitLatency:    {metricName: "elasticsearch_bulk_processor_wait_latency", metricType: Timer},
 		ElasticsearchBulkProcessorBulkSize:       {metricName: "elasticsearch_bulk_processor_bulk_size", metricType: Timer},
+		ElasticsearchBulkProcessorDeadlock:       {metricName: "elasticsearch_bulk_processor_deadlock"},
 	},
 	Matching: {
 		PollSuccessPerTaskQueueCounter:            {metricName: "poll_success_per_tl", metricRollupName: "poll_success"},
