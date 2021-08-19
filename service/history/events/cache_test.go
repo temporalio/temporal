@@ -227,3 +227,63 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 	s.Nil(err)
 	s.Equal(event2, actualEvent)
 }
+
+func (s *eventsCacheSuite) TestEventsCacheGetCachesResult() {
+	namespaceID := "events-cache-get-caches-namespace"
+	workflowID := "events-cache-get-caches-workflow-id"
+	runID := "events-cache-get-caches-run-id"
+	branchToken := []byte("store_token")
+
+	shardID := int32(10)
+	event1 := &historypb.HistoryEvent{
+		EventId:   14,
+		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
+	}
+	s.mockExecutionManager.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    int64(11),
+		MaxEventID:    int64(15),
+		PageSize:      1,
+		NextPageToken: nil,
+		ShardID:       shardID,
+	}).Return(&persistence.ReadHistoryBranchResponse{
+		HistoryEvents: []*historypb.HistoryEvent{event1},
+		NextPageToken: nil,
+	}, nil).Times(1) // will only be called once with two calls to GetEvent
+
+	gotEvent1, _ := s.cache.GetEvent(namespaceID, workflowID, runID, int64(11), int64(14), branchToken)
+	s.Equal(gotEvent1, event1)
+	gotEvent2, _ := s.cache.GetEvent(namespaceID, workflowID, runID, int64(11), int64(14), branchToken)
+	s.Equal(gotEvent2, event1)
+}
+
+func (s *eventsCacheSuite) TestEventsCacheInvalidKey() {
+	namespaceID := "events-cache-invalid-key-namespace"
+	workflowID := "events-cache-invalid-key-workflow-id"
+	runID := "" // <-- this is invalid
+	branchToken := []byte("store_token")
+
+	shardID := int32(10)
+	event1 := &historypb.HistoryEvent{
+		EventId:   14,
+		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
+	}
+	s.mockExecutionManager.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    int64(11),
+		MaxEventID:    int64(15),
+		PageSize:      1,
+		NextPageToken: nil,
+		ShardID:       shardID,
+	}).Return(&persistence.ReadHistoryBranchResponse{
+		HistoryEvents: []*historypb.HistoryEvent{event1},
+		NextPageToken: nil,
+	}, nil).Times(2) // will be called twice since the key is invalid
+
+	s.cache.PutEvent(namespaceID, workflowID, runID, event1.EventId, event1)
+
+	gotEvent1, _ := s.cache.GetEvent(namespaceID, workflowID, runID, int64(11), int64(14), branchToken)
+	s.Equal(gotEvent1, event1)
+	gotEvent2, _ := s.cache.GetEvent(namespaceID, workflowID, runID, int64(11), int64(14), branchToken)
+	s.Equal(gotEvent2, event1)
+}
