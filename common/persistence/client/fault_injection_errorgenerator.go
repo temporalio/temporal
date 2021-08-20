@@ -1,0 +1,155 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package client
+
+import (
+	"fmt"
+	"math/rand"
+	"sort"
+	"sync"
+	"time"
+)
+
+type (
+	DefaultErrorGenerator struct {
+		sync.Mutex
+		rate          float64         // chance for error to be returned
+		r             *rand.Rand      // rand is not thread-safe
+		faultMetadata []FaultMetadata //
+	}
+
+	ErrorGenerator interface {
+		Generate() error
+		UpdateRate(rate float64)
+		UpdateWeights(weights []FaultWeight)
+	}
+
+	FaultWeight struct {
+		errFactory ErrorFactory
+		weight     float64
+	}
+
+	ErrorFactory func(string) error
+
+	FaultMetadata struct {
+		errFactory ErrorFactory
+		threshold  float64
+	}
+
+	NoopErrorGenerator struct{}
+)
+
+func (p *NoopErrorGenerator) UpdateRate(rate float64) {}
+
+func (p *NoopErrorGenerator) UpdateWeights(weights []FaultWeight) {}
+
+func calculateErrorRates(rate float64, weights []FaultWeight) []FaultMetadata {
+	totalCount := 0.0
+	for _, w := range weights {
+		totalCount += w.weight
+	}
+
+	faultMeta := make([]FaultMetadata, len(weights))
+	count := 0
+	for _, w := range weights {
+		faultMeta[count] = FaultMetadata{
+			errFactory: w.errFactory,
+			threshold:  w.weight / totalCount * rate,
+		}
+	}
+
+	sort.Slice(
+		faultMeta,
+		func(left int, right int) bool { return faultMeta[left].threshold < faultMeta[right].threshold },
+	)
+
+	return faultMeta
+}
+
+func (p *DefaultErrorGenerator) UpdateRate(rate float64) {
+	p.Lock()
+	defer p.Unlock()
+
+	if rate > 1 {
+		rate = 1
+	}
+
+	thresholdUpdate := rate / p.rate
+	p.rate = rate
+	for _, v := range p.faultMetadata {
+		v.threshold = v.threshold * thresholdUpdate
+	}
+}
+
+func (p *DefaultErrorGenerator) UpdateWeights(errorWeights []FaultWeight) {
+	updatedRates := calculateErrorRates(p.rate, errorWeights)
+	p.Lock()
+	defer p.Unlock()
+	p.faultMetadata = updatedRates
+}
+
+func NewDefaultErrorGenerator(rate float64, errorWeights []FaultWeight) *DefaultErrorGenerator {
+	result := &DefaultErrorGenerator{
+		r: rand.New(rand.NewSource(time.Now().UnixNano())),
+	}
+	result.UpdateRate(rate)
+	result.UpdateWeights(errorWeights)
+	return result
+}
+
+func (p *DefaultErrorGenerator) Generate() error {
+	if p.rate <= 0 {
+		return nil
+	}
+
+	p.Lock()
+	defer p.Unlock()
+
+	if roll := p.r.Float64(); roll < p.rate {
+		var result error
+		for _, fm := range p.faultMetadata {
+			if roll < fm.threshold {
+				msg := fmt.Sprintf(
+					"FaultInjectionGenerator. rate %f, roll: %f, treshold: %f",
+					p.rate,
+					roll,
+					fm.threshold,
+				)
+				result = fm.errFactory(msg)
+				break
+			}
+		}
+		return result
+	}
+	return nil
+}
+
+func NewNoopErrorGenerator() *NoopErrorGenerator {
+	return &NoopErrorGenerator{}
+}
+
+func (p *NoopErrorGenerator) Generate() error {
+	return nil
+}
