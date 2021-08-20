@@ -1315,6 +1315,21 @@ func (e *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	return event, nil
 }
 
+func (e *MutableStateImpl) AddWorkflowExecutionStartedEvent(
+	execution commonpb.WorkflowExecution,
+	startRequest *historyservice.StartWorkflowExecutionRequest,
+) (*historypb.HistoryEvent, error) {
+
+	return e.AddWorkflowExecutionStartedEventWithOptions(
+		execution,
+		startRequest,
+		startRequest.ParentExecutionInfo.GetNamespaceId(),
+		nil, // resetPoints
+		"",  // prevRunID
+		execution.GetRunId(),
+	)
+}
+
 func (e *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	execution commonpb.WorkflowExecution,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
@@ -1368,21 +1383,6 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 		return nil, err
 	}
 	return event, nil
-}
-
-func (e *MutableStateImpl) AddWorkflowExecutionStartedEvent(
-	execution commonpb.WorkflowExecution,
-	startRequest *historyservice.StartWorkflowExecutionRequest,
-) (*historypb.HistoryEvent, error) {
-
-	return e.AddWorkflowExecutionStartedEventWithOptions(
-		execution,
-		startRequest,
-		startRequest.ParentExecutionInfo.GetNamespaceId(),
-		nil, // resetPoints
-		"",  // prevRunID
-		execution.GetRunId(),
-	)
 }
 
 func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
