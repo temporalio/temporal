@@ -729,25 +729,22 @@ func (e *MutableStateImpl) GetCompletionEvent() (*historypb.HistoryEvent, error)
 		return nil, ErrMissingWorkflowCompletionEvent
 	}
 
-	currentBranchToken, err := e.GetCurrentBranchToken()
-	if err != nil {
-		return nil, err
-	}
-	lastWriteVersion, err := e.GetLastWriteVersion()
+	// Completion EventID is always one less than NextEventID after workflow is completed
+	completionEventID := e.hBuilder.NextEventID() - 1
+	firstEventID := e.executionInfo.CompletionEventBatchId
+
+	currentBranchToken, version, err := e.getCurrentBranchTokenAndEventVersion(completionEventID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Completion EventID is always one less than NextEventID after workflow is completed
-	completionEventID := e.hBuilder.NextEventID() - 1
-	firstEventID := e.executionInfo.CompletionEventBatchId
 	completionEvent, err := e.eventsCache.GetEvent(
 		e.executionInfo.NamespaceId,
 		e.executionInfo.WorkflowId,
 		e.executionState.RunId,
 		firstEventID,
 		completionEventID,
-		lastWriteVersion,
+		version,
 		currentBranchToken,
 	)
 	if err != nil {
