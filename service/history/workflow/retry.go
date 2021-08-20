@@ -142,11 +142,11 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 
 // Helpers for creating new retry/cron workflows:
 
-// FIXME: name this better?
+// QUESTION: is this a good name? any suggestions?
 func SetupNewWorkflowForRetryOrCron(
 	oldMs MutableState,
 	newMs MutableState,
-	newRunId string, // FIXME: can we get this from newMs?
+	newRunId string,
 	startAttr *historypb.WorkflowExecutionStartedEventAttributes,
 	lastCompletionResult *commonpb.Payloads,
 	failure *failurepb.Failure,
