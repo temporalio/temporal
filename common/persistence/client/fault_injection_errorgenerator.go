@@ -74,11 +74,14 @@ func calculateErrorRates(rate float64, weights []FaultWeight) []FaultMetadata {
 
 	faultMeta := make([]FaultMetadata, len(weights))
 	count := 0
+	weightSum := 0.0
 	for _, w := range weights {
+		weightSum += w.weight
 		faultMeta[count] = FaultMetadata{
 			errFactory: w.errFactory,
-			threshold:  w.weight / totalCount * rate,
+			threshold:  weightSum / totalCount * rate,
 		}
+		count++
 	}
 
 	sort.Slice(
@@ -95,10 +98,10 @@ func (p *DefaultErrorGenerator) UpdateRate(rate float64) {
 	}
 
 	if rate <= 0 {
-		rate = 1
+		rate = 0
 	}
 
-	newFaultMetadata := calculateErrorRates(p.rate, p.faultWeights)
+	newFaultMetadata := calculateErrorRates(rate, p.faultWeights)
 
 	p.Lock()
 	defer p.Unlock()
@@ -112,6 +115,7 @@ func (p *DefaultErrorGenerator) UpdateWeights(errorWeights []FaultWeight) {
 	p.Lock()
 	defer p.Unlock()
 	p.faultMetadata = updatedRates
+	p.faultWeights = errorWeights
 }
 
 func NewDefaultErrorGenerator(rate float64, errorWeights []FaultWeight) *DefaultErrorGenerator {

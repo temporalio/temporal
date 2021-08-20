@@ -59,3 +59,9 @@ func (s *errorGeneratorSuite) TestZeroRateCanUpdateToNonZero() {
 	testObject.UpdateRate(1)
 	s.NotNil(testObject.Generate())
 }
+
+func (s *errorGeneratorSuite) TestAfterUpdateToZeroRateGenerateReturnsNoErrors() {
+	testObject := NewDefaultErrorGenerator(1.0, defaultErrors)
+	testObject.UpdateRate(0)
+	s.Nil(testObject.Generate())
+}
