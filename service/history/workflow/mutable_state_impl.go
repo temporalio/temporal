@@ -1297,7 +1297,7 @@ func (e *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		req.WorkflowExecutionExpirationTime = &workflowTimeoutTime
 	}
 
-	return e.AddWorkflowExecutionStartedEventWithOptions(
+	event, err := e.AddWorkflowExecutionStartedEventWithOptions(
 		execution,
 		req,
 		parentExecutionInfo.GetNamespaceId(),
@@ -1305,66 +1305,23 @@ func (e *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		previousExecutionState.GetExecutionState().GetRunId(),
 		firstRunID,
 	)
-}
-
-// FIXME: try to unify this with AddWorkflowExecutionStartedEvent more
-func (e *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
-	execution commonpb.WorkflowExecution,
-	req *historyservice.StartWorkflowExecutionRequest,
-	parentNamespaceID string,
-	resetPoints *workflowpb.ResetPoints,
-	prevRunID string,
-	firstRunID string,
-) (*historypb.HistoryEvent, error) {
-
-	event := e.hBuilder.AddWorkflowExecutionStartedEvent(
-		*e.executionInfo.StartTime,
-		req,
-		resetPoints,
-		prevRunID,
-		firstRunID,
-		execution.GetRunId(),
-	)
-	if err := e.ReplicateWorkflowExecutionStartedEvent(
-		parentNamespaceID, // History event only has namespace so namespaceID has to be passed in explicitly to update the mutable state
-		execution,
-		req.StartRequest.GetRequestId(),
-		event,
-	); err != nil {
+	if err != nil {
 		return nil, err
 	}
-
-	// QUESTION: hmm, maybe we can get rid of this since it's called earlier?
-	if err := e.SetHistoryTree(e.GetExecutionState().GetRunId()); err != nil {
-		return nil, err
-	}
-
-	// TODO merge active & passive task generation
-	if err := e.taskGenerator.GenerateWorkflowStartTasks(
-		timestamp.TimeValue(event.GetEventTime()),
-		event,
-	); err != nil {
-		return nil, err
-	}
-	if err := e.taskGenerator.GenerateRecordWorkflowStartedTasks(
-		timestamp.TimeValue(event.GetEventTime()),
-		event,
-	); err != nil {
-		return nil, err
-	}
-
-	if err := e.AddFirstWorkflowTaskScheduled(
-		event,
-	); err != nil {
+	if err = e.AddFirstWorkflowTaskScheduled(event); err != nil {
 		return nil, err
 	}
 
 	return event, nil
 }
 
-func (e *MutableStateImpl) AddWorkflowExecutionStartedEvent(
+func (e *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	execution commonpb.WorkflowExecution,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
+	parentNamespaceID string,
+	resetPoints *workflowpb.ResetPoints,
+	prevRunID string,
+	firstRunID string,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowStarted
@@ -1372,7 +1329,6 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEvent(
 		return nil, err
 	}
 
-	request := startRequest.StartRequest
 	eventID := e.GetNextEventID()
 	if eventID != common.FirstEventID {
 		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
@@ -1384,24 +1340,20 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEvent(
 	event := e.hBuilder.AddWorkflowExecutionStartedEvent(
 		*e.executionInfo.StartTime,
 		startRequest,
-		nil,
-		"",
-		execution.GetRunId(),
+		resetPoints,
+		prevRunID,
+		firstRunID,
 		execution.GetRunId(),
 	)
-
-	var parentNamespaceID string
-	if startRequest.ParentExecutionInfo != nil {
-		parentNamespaceID = startRequest.ParentExecutionInfo.GetNamespaceId()
-	}
 	if err := e.ReplicateWorkflowExecutionStartedEvent(
 		parentNamespaceID,
 		execution,
-		request.GetRequestId(),
+		startRequest.StartRequest.GetRequestId(),
 		event,
 	); err != nil {
 		return nil, err
 	}
+
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowStartTasks(
 		timestamp.TimeValue(event.GetEventTime()),
@@ -1416,6 +1368,21 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEvent(
 		return nil, err
 	}
 	return event, nil
+}
+
+func (e *MutableStateImpl) AddWorkflowExecutionStartedEvent(
+	execution commonpb.WorkflowExecution,
+	startRequest *historyservice.StartWorkflowExecutionRequest,
+) (*historypb.HistoryEvent, error) {
+
+	return e.AddWorkflowExecutionStartedEventWithOptions(
+		execution,
+		startRequest,
+		startRequest.ParentExecutionInfo.GetNamespaceId(),
+		nil, // resetPoints
+		"",  // prevRunID
+		execution.GetRunId(),
+	)
 }
 
 func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
@@ -3029,6 +2996,10 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 		e.namespaceEntry,
 		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
 	)
+
+	if err = newStateBuilder.SetHistoryTree(newRunID); err != nil {
+		return nil, nil, err
+	}
 
 	if _, err = newStateBuilder.addWorkflowExecutionStartedEventForContinueAsNew(
 		parentInfo,

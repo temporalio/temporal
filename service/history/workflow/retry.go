@@ -244,15 +244,19 @@ func SetupNewWorkflowForRetryOrCron(
 		req.WorkflowExecutionExpirationTime = &workflowTimeoutTime
 	}
 
-	if _, err := newMs.AddWorkflowExecutionStartedEventWithOptions(
+	event, err := newMs.AddWorkflowExecutionStartedEventWithOptions(
 		newExecution,
 		req,
 		parentInfo.GetNamespaceId(),
 		previousExecutionInfo.AutoResetPoints,
 		oldMs.GetExecutionState().GetRunId(),
 		firstRunID,
-	); err != nil {
+	)
+	if err != nil {
 		return serviceerror.NewInternal("Failed to add workflow execution started event.")
+	}
+	if err = newMs.AddFirstWorkflowTaskScheduled(event); err != nil {
+		return err
 	}
 
 	return nil
