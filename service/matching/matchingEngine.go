@@ -195,26 +195,17 @@ func (e *matchingEngineImpl) getTaskQueueManager(taskQueue *taskQueueID, taskQue
 	e.taskQueuesLock.RUnlock()
 	// If it gets here, write lock and check again in case a task queue is created between the two locks
 	e.taskQueuesLock.Lock()
+	defer e.taskQueuesLock.Unlock()
 	if result, ok := e.taskQueues[*taskQueue]; ok {
-		e.taskQueuesLock.Unlock()
 		return result, nil
 	}
 	mgr, err := newTaskQueueManager(e, taskQueue, taskQueueKind, e.config)
 	if err != nil {
-		e.taskQueuesLock.Unlock()
 		return nil, err
 	}
 	e.logger.Info("", tag.LifeCycleStarting, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType))
+	mgr.Start()
 	e.taskQueues[*taskQueue] = mgr
-	e.taskQueuesLock.Unlock()
-
-	err = mgr.Start()
-	if err != nil {
-		e.removeTaskQueueManager(taskQueue)
-		e.logger.Info("", tag.LifeCycleStartFailed, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType), tag.Error(err))
-		return nil, err
-	}
-
 	e.logger.Info("", tag.LifeCycleStarted, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType))
 	return mgr, nil
 }

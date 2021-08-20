@@ -314,6 +314,7 @@ func newMutableStateBuilderFromDB(
 	}
 
 	mutableState.pendingSignalRequestedIDs = convert.StringSliceToSet(dbRecord.SignalRequestedIds)
+	mutableState.executionState = dbRecord.ExecutionState
 	mutableState.executionInfo = dbRecord.ExecutionInfo
 
 	// Workflows created before 1.11 doesn't have ExecutionTime and it must be computed for backwards compatibility.
@@ -326,7 +327,6 @@ func newMutableStateBuilderFromDB(
 		backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff())
 		mutableState.executionInfo.ExecutionTime = timestamp.TimePtr(timestamp.TimeValue(mutableState.executionInfo.GetStartTime()).Add(backoffDuration))
 	}
-	mutableState.executionState = dbRecord.ExecutionState
 
 	mutableState.hBuilder = NewMutableHistoryBuilder(
 		mutableState.timeSource,
@@ -1351,8 +1351,6 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEvent(
 		return nil, e.createInternalServerError(opTag)
 	}
 
-	e.executionInfo.ExecutionTime = timestamp.TimePtr(e.executionInfo.StartTime.Add(timestamp.DurationValue(startRequest.GetFirstWorkflowTaskBackoff())))
-
 	event := e.hBuilder.AddWorkflowExecutionStartedEvent(
 		*e.executionInfo.StartTime,
 		startRequest,
@@ -1437,6 +1435,10 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	} else {
 		e.executionInfo.InitiatedId = common.EmptyEventID
 	}
+
+	e.executionInfo.ExecutionTime = timestamp.TimePtr(
+		e.executionInfo.StartTime.Add(timestamp.DurationValue(event.GetFirstWorkflowTaskBackoff())),
+	)
 
 	e.executionInfo.Attempt = event.GetAttempt()
 	if !timestamp.TimeValue(event.GetWorkflowExecutionExpirationTime()).IsZero() {

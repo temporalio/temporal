@@ -394,7 +394,7 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 		s.NotEmpty(descResp.Pollers[0].GetLastAccessTime())
 		s.Nil(descResp.GetTaskQueueStatus())
 	}
-	s.EqualValues(1, s.taskManager.taskQueues[*tlID].rangeID)
+	s.EqualValues(1, s.taskManager.getTaskQueueManager(tlID).RangeID())
 }
 
 func (s *matchingEngineSuite) TestAddActivityTasks() {
@@ -1555,6 +1555,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 
 		s.NoError(err)
 		s.NotNil(result)
+		s.NotEqual(emptyPollActivityTaskQueueResponse, result)
 		if len(result.TaskToken) == 0 {
 			s.logger.Debug("empty poll returned")
 			continue
@@ -1587,6 +1588,10 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 
 	tlMgr.Start()
 
+	// tlMgr.taskWriter startup is async so give it time to complete, otherwise
+	// the following few lines get clobbered as part of the taskWriter.Start()
+	time.Sleep(100 * time.Millisecond)
+
 	tlMgr.taskAckManager.setReadLevel(0)
 	atomic.StoreInt64(&tlMgr.taskWriter.maxReadLevel, maxReadLevel)
 	tasks, readLevel, isReadBatchDone, err := tlMgr.taskReader.getTaskBatch()
@@ -1618,9 +1623,6 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 	const rangeSize = 10
 	s.matchingEngine.config.RangeSize = rangeSize
 	s.matchingEngine.config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFilteredByTaskQueueInfo(2)
-	// set idle timer check to a really small value to assert that we don't accidentally drop tasks while blocking
-	// on enqueuing a task to task buffer
-	s.matchingEngine.config.IdleTaskqueueCheckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(time.Millisecond)
 
 	testCases := []struct {
 		maxTimeBtwnDeletes time.Duration
@@ -1672,6 +1674,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 				result, err := s.matchingEngine.PollActivityTaskQueue(s.handlerContext, pollReq)
 				s.NoError(err)
 				s.NotNil(result)
+				s.NotEqual(result, emptyPollActivityTaskQueueResponse)
 			}
 			remaining -= taskCount / 2
 			// since every other task is expired, we expect half the tasks to be deleted
@@ -1786,6 +1789,12 @@ type testTaskQueueManager struct {
 	ackLevel        int64
 	createTaskCount int
 	tasks           *treemap.Map
+}
+
+func (m *testTaskQueueManager) RangeID() int64 {
+	m.Lock()
+	defer m.Unlock()
+	return m.rangeID
 }
 
 func Int64Comparator(a, b interface{}) int {

@@ -57,7 +57,7 @@ func TestDeliverBufferTasks(t *testing.T) {
 
 	tests := []func(tlm *taskQueueManagerImpl){
 		func(tlm *taskQueueManagerImpl) { close(tlm.taskReader.taskBuffer) },
-		func(tlm *taskQueueManagerImpl) { tlm.taskReader.Stop() },
+		func(tlm *taskQueueManagerImpl) { close(tlm.taskReader.shutdownChan) },
 		func(tlm *taskQueueManagerImpl) {
 			rps := 0.1
 			tlm.matcher.UpdateRatelimit(&rps)
@@ -207,20 +207,6 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 	require.True(t, sync)
 }
 
-func TestStartFailureWithForeignPartitionOwner(t *testing.T) {
-	cc := dynamicconfig.NewMutableEphemeralClient(
-		dynamicconfig.Set(dynamicconfig.ResilientSyncMatch, true))
-	cfg := NewConfig(dynamicconfig.NewCollection(cc, log.NewTestLogger()))
-	tqm, err1 := createTestTaskQueueManagerWithConfigAndStart(gomock.NewController(t), cfg, false,
-		makeTestBlocAlloc(func() (taskQueueState, error) {
-			// ConditionFailedError indicates foreign partition owner
-			return taskQueueState{}, &persistence.ConditionFailedError{}
-		}))
-	require.NoError(t, err1)
-	var err *persistence.ConditionFailedError
-	require.ErrorAs(t, tqm.Start(), &err)
-}
-
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	cc := dynamicconfig.NewMutableEphemeralClient(
 		dynamicconfig.Set(dynamicconfig.ResilientSyncMatch, true))
@@ -285,13 +271,6 @@ func mustCreateTestTaskQueueManager(
 	return mustCreateTestTaskQueueManagerWithConfig(t, controller, defaultTestConfig(), opts...)
 }
 
-func createTestTaskQueueManager(
-	controller *gomock.Controller,
-	opts ...taskQueueManagerOpt,
-) (*taskQueueManagerImpl, error) {
-	return createTestTaskQueueManagerWithConfig(controller, defaultTestConfig(), opts...)
-}
-
 func mustCreateTestTaskQueueManagerWithConfig(
 	t *testing.T,
 	controller *gomock.Controller,
@@ -307,15 +286,6 @@ func mustCreateTestTaskQueueManagerWithConfig(
 func createTestTaskQueueManagerWithConfig(
 	controller *gomock.Controller,
 	cfg *Config,
-	opts ...taskQueueManagerOpt,
-) (*taskQueueManagerImpl, error) {
-	return createTestTaskQueueManagerWithConfigAndStart(controller, cfg, true, opts...)
-}
-
-func createTestTaskQueueManagerWithConfigAndStart(
-	controller *gomock.Controller,
-	cfg *Config,
-	start bool,
 	opts ...taskQueueManagerOpt,
 ) (*taskQueueManagerImpl, error) {
 	logger := log.NewTestLogger()
@@ -334,9 +304,6 @@ func createTestTaskQueueManagerWithConfigAndStart(
 		return nil, err
 	}
 	me.taskQueues[*tlID] = tlMgr
-	if start {
-		tlMgr.Start()
-	}
 	return tlMgr.(*taskQueueManagerImpl), nil
 }
 
