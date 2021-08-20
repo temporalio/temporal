@@ -38,7 +38,7 @@ type (
 	FaultInjectionDataStoreFactory struct {
 		baseFactory    DataStoreFactory
 		config         *config.FaultInjection
-		errorGenerator ErrorGenerator
+		ErrorGenerator ErrorGenerator
 
 		TaskStore      *FaultInjectionTaskStore
 		ShardStore     *FaultInjectionShardStore
@@ -48,44 +48,36 @@ type (
 		ClusterMDStore *FaultInjectionClusterMetadataStore
 	}
 
-	// FaultInjectionShardStore is a lower level of ShardManager
 	FaultInjectionShardStore struct {
 		baseShardStore persistence.ShardStore
 		config         *config.FaultInjection
 		ErrorGenerator ErrorGenerator
 	}
 
-	// FaultInjectionTaskStore is a lower level of TaskManager
 	FaultInjectionTaskStore struct {
 		baseTaskStore  persistence.TaskStore
 		config         *config.FaultInjection
 		ErrorGenerator ErrorGenerator
 	}
 
-	// FaultInjectionMetadataStore is a lower level of MetadataManager
 	FaultInjectionMetadataStore struct {
 		baseMetadataStore persistence.MetadataStore
 		config            *config.FaultInjection
 		ErrorGenerator    ErrorGenerator
 	}
 
-	// FaultInjectionClusterMetadataStore is a lower level of ClusterMetadataManager.
-	// There is no Internal constructs needed to abstract away at the interface level currently,
-	//  so we can reimplement the ClusterMetadataManager and leave this as a placeholder.
 	FaultInjectionClusterMetadataStore struct {
 		baseCMStore    persistence.ClusterMetadataStore
 		config         *config.FaultInjection
 		ErrorGenerator ErrorGenerator
 	}
 
-	// FaultInjectionExecutionStore is used to manage workflow execution including mutable states / history / tasks.
 	FaultInjectionExecutionStore struct {
 		baseExecutionStore persistence.ExecutionStore
 		config             *config.FaultInjection
 		ErrorGenerator     ErrorGenerator
 	}
 
-	// FaultInjectionQueue is a store to enqueue and get messages
 	FaultInjectionQueue struct {
 		baseQueue      persistence.Queue
 		config         *config.FaultInjection
@@ -143,7 +135,7 @@ func NewFaultInjectionDatastoreFactory(
 	return &FaultInjectionDataStoreFactory{
 		baseFactory:    baseFactory,
 		config:         config,
-		errorGenerator: errorGenerator,
+		ErrorGenerator: errorGenerator,
 	}
 }
 
@@ -152,7 +144,7 @@ func (d *FaultInjectionDataStoreFactory) Close() {
 }
 
 func (d *FaultInjectionDataStoreFactory) UpdateRate(rate float64) {
-	d.errorGenerator.UpdateRate(rate)
+	d.ErrorGenerator.UpdateRate(rate)
 	d.TaskStore.UpdateRate(rate)
 	d.ShardStore.UpdateRate(rate)
 	d.MetadataStore.UpdateRate(rate)
