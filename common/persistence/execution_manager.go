@@ -123,7 +123,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	var updateWorkflowNewEvents []*InternalAppendHistoryNodesRequest
 	var newWorkflowNewEvents []*InternalAppendHistoryNodesRequest
 	for _, workflowEvents := range request.CurrentWorkflowEvents {
-		newEvents, err := m.serializeWorkflowEvents(workflowEvents)
+		newEvents, err := m.serializeWorkflowEvents(request.ShardID, workflowEvents)
 		if err != nil {
 			return nil, err
 		}
@@ -134,7 +134,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	}
 
 	for _, workflowEvents := range request.NewWorkflowEvents {
-		newEvents, err := m.serializeWorkflowEvents(workflowEvents)
+		newEvents, err := m.serializeWorkflowEvents(request.ShardID, workflowEvents)
 		if err != nil {
 			return nil, err
 		}
@@ -274,6 +274,7 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 }
 
 func (m *executionManagerImpl) serializeWorkflowEvents(
+	shardID int32,
 	workflowEvents *WorkflowEvents,
 ) (*InternalAppendHistoryNodesRequest, error) {
 	if len(workflowEvents.Events) == 0 {
@@ -281,6 +282,7 @@ func (m *executionManagerImpl) serializeWorkflowEvents(
 	}
 
 	request := &AppendHistoryNodesRequest{
+		ShardID:           shardID,
 		BranchToken:       workflowEvents.BranchToken,
 		Events:            workflowEvents.Events,
 		PrevTransactionID: workflowEvents.PrevTxnID,
