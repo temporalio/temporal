@@ -38,6 +38,7 @@ type (
 		rate          float64         // chance for error to be returned
 		r             *rand.Rand      // rand is not thread-safe
 		faultMetadata []FaultMetadata //
+		faultWeights  []FaultWeight
 	}
 
 	ErrorGenerator interface {
@@ -89,18 +90,21 @@ func calculateErrorRates(rate float64, weights []FaultWeight) []FaultMetadata {
 }
 
 func (p *DefaultErrorGenerator) UpdateRate(rate float64) {
-	p.Lock()
-	defer p.Unlock()
-
 	if rate > 1 {
 		rate = 1
 	}
 
-	thresholdUpdate := rate / p.rate
-	p.rate = rate
-	for _, v := range p.faultMetadata {
-		v.threshold = v.threshold * thresholdUpdate
+	if rate <= 0 {
+		rate = 1
 	}
+
+	newFaultMetadata := calculateErrorRates(p.rate, p.faultWeights)
+
+	p.Lock()
+	defer p.Unlock()
+
+	p.rate = rate
+	p.faultMetadata = newFaultMetadata
 }
 
 func (p *DefaultErrorGenerator) UpdateWeights(errorWeights []FaultWeight) {
