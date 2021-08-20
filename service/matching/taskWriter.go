@@ -103,27 +103,7 @@ func (w *taskWriter) Start() {
 	) {
 		return
 	}
-	go func() {
-		retryForever := backoff.NewExponentialRetryPolicy(1 * time.Second)
-		retryForever.SetMaximumInterval(10 * time.Second)
-		retryForever.SetExpirationInterval(backoff.NoInterval)
-
-		state, err := w.renewLeaseWithRetry(
-			retryForever, common.IsPersistenceTransientError)
-		if err != nil {
-			// because we're retrying transient storage errors forever,
-			// anything else that comes out of here is fatal
-			close(w.shutdownChan)
-			atomic.StoreInt32(&w.status, common.DaemonStatusStopped)
-			w.tlMgr.signalFatalProblem(w.tlMgr.taskQueueID)
-			return
-		}
-		w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
-		atomic.StoreInt64(&w.maxReadLevel, w.taskIDBlock.start-1)
-		w.tlMgr.taskAckManager.setAckLevel(state.ackLevel)
-		w.tlMgr.taskReader.Signal()
-		w.taskWriterLoop()
-	}()
+	go w.taskWriterLoop()
 }
 
 // Stop stops the taskWriter
@@ -136,6 +116,27 @@ func (w *taskWriter) Stop() {
 		return
 	}
 	close(w.shutdownChan)
+}
+
+func (w *taskWriter) initReadWriteState() {
+	retryForever := backoff.NewExponentialRetryPolicy(1 * time.Second)
+	retryForever.SetMaximumInterval(10 * time.Second)
+	retryForever.SetExpirationInterval(backoff.NoInterval)
+
+	state, err := w.renewLeaseWithRetry(
+		retryForever, common.IsPersistenceTransientError)
+	if err != nil {
+		// because we're retrying transient storage errors forever,
+		// anything else that comes out of here is fatal
+		close(w.shutdownChan)
+		atomic.StoreInt32(&w.status, common.DaemonStatusStopped)
+		w.tlMgr.signalFatalProblem(w.tlMgr.taskQueueID)
+		return
+	}
+	w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
+	atomic.StoreInt64(&w.maxReadLevel, w.taskIDBlock.start-1)
+	w.tlMgr.taskAckManager.setAckLevel(state.ackLevel)
+	w.tlMgr.taskReader.Signal()
 }
 
 func (w *taskWriter) appendTask(
@@ -218,6 +219,7 @@ func (w *taskWriter) appendTasks(
 }
 
 func (w *taskWriter) taskWriterLoop() {
+	w.initReadWriteState()
 writerLoop:
 	for {
 		select {
