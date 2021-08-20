@@ -25,15 +25,19 @@
 package matching
 
 import (
+	"fmt"
 	"sync/atomic"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -65,6 +69,7 @@ type (
 		maxReadLevel int64
 		logger       log.Logger
 		shutdownChan chan struct{}
+		idAlloc      idBlockAllocator
 	}
 )
 
@@ -86,6 +91,7 @@ func newTaskWriter(
 		maxReadLevel: noTaskIDs.start - 1,
 		logger:       tlMgr.logger,
 		shutdownChan: make(chan struct{}),
+		idAlloc:      tlMgr.db,
 	}
 }
 
@@ -98,12 +104,24 @@ func (w *taskWriter) Start() {
 		return
 	}
 	go func() {
-		if state, err := w.tlMgr.renewLeaseWithRetry(suppressFatalSignal); err == nil {
-			w.taskIDBlock = w.tlMgr.rangeIDToTaskIDBlock(state.rangeID)
-			atomic.StoreInt64(&w.maxReadLevel, w.taskIDBlock.start-1)
-			w.tlMgr.taskAckManager.setAckLevel(state.ackLevel)
-			w.tlMgr.taskReader.Signal()
+		retryForever := backoff.NewExponentialRetryPolicy(1 * time.Second)
+		retryForever.SetMaximumInterval(10 * time.Second)
+		retryForever.SetExpirationInterval(backoff.NoInterval)
+
+		state, err := w.renewLeaseWithRetry(
+			retryForever, common.IsPersistenceTransientError)
+		if err != nil {
+			// because we're retrying transient storage errors forever,
+			// anything else that comes out of here is fatal
+			close(w.shutdownChan)
+			atomic.StoreInt32(&w.status, common.DaemonStatusStopped)
+			w.tlMgr.signalFatalProblem(w.tlMgr.taskQueueID)
+			return
 		}
+		w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
+		atomic.StoreInt64(&w.maxReadLevel, w.taskIDBlock.start-1)
+		w.tlMgr.taskAckManager.setAckLevel(state.ackLevel)
+		w.tlMgr.taskReader.Signal()
 		w.taskWriterLoop()
 	}()
 }
@@ -163,7 +181,7 @@ func (w *taskWriter) allocTaskIDs(count int) ([]int64, error) {
 	for i := 0; i < count; i++ {
 		if w.taskIDBlock.start > w.taskIDBlock.end {
 			// we ran out of current allocation block
-			newBlock, err := w.tlMgr.allocTaskIDBlock(w.taskIDBlock.end)
+			newBlock, err := w.allocTaskIDBlock(w.taskIDBlock.end)
 			if err != nil {
 				return nil, err
 			}
@@ -265,4 +283,38 @@ func (w *taskWriter) sendWriteResponse(
 
 		req.responseCh <- resp
 	}
+}
+
+func (w *taskWriter) renewLeaseWithRetry(
+	retryPolicy backoff.RetryPolicy,
+	retryErrors backoff.IsRetryable,
+) (taskQueueState, error) {
+	var newState taskQueueState
+	op := func() (err error) {
+		newState, err = w.idAlloc.RenewLease()
+		return
+	}
+	w.tlMgr.metricScope().IncCounter(metrics.LeaseRequestPerTaskQueueCounter)
+	err := backoff.Retry(op, retryPolicy, retryErrors)
+	if err != nil {
+		w.tlMgr.metricScope().IncCounter(metrics.LeaseFailurePerTaskQueueCounter)
+		return newState, err
+	}
+	return newState, nil
+}
+
+func (w *taskWriter) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock, error) {
+	currBlock := rangeIDToTaskIDBlock(w.idAlloc.RangeID(), w.config.RangeSize)
+	if currBlock.end != prevBlockEnd {
+		return taskIDBlock{},
+			fmt.Errorf("allocTaskIDBlock: invalid state: prevBlockEnd:%v != currTaskIDBlock:%+v", prevBlockEnd, currBlock)
+	}
+	state, err := w.renewLeaseWithRetry(persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	if err != nil {
+		if w.tlMgr.errShouldUnload(err) {
+			w.tlMgr.signalFatalProblem(w.taskQueueID)
+		}
+		return taskIDBlock{}, err
+	}
+	return rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize), nil
 }
