@@ -22,23 +22,46 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package host
+package client
 
-import "flag"
+import (
+	"testing"
 
-// TestFlags contains the feature flags for integration tests
-var TestFlags struct {
-	FrontendAddr                  string
-	PersistenceType               string
-	PersistenceDriver             string
-	TestClusterConfigFile         string
-	PersistenceFaultInjectionRate float64
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+)
+
+type (
+	errorGeneratorSuite struct {
+		suite.Suite
+		*require.Assertions
+	}
+)
+
+func TestErrorGeneratorSuite(t *testing.T) {
+	s := new(errorGeneratorSuite)
+	suite.Run(t, s)
 }
 
-func init() {
-	flag.StringVar(&TestFlags.FrontendAddr, "frontendAddress", "", "host:port for temporal frontend service")
-	flag.StringVar(&TestFlags.PersistenceType, "persistenceType", "nosql", "type of persistence - [nosql or sql]")
-	flag.StringVar(&TestFlags.PersistenceDriver, "persistenceDriver", "cassandra", "driver of nosql / sql- [cassandra, mysql, postgresql]")
-	flag.StringVar(&TestFlags.TestClusterConfigFile, "TestClusterConfigFile", "", "test cluster config file location")
-	flag.Float64Var(&TestFlags.PersistenceFaultInjectionRate, "PersistenceFaultInjectionRate", 0, "rate of persistence error injection. value: [0..1]. 0 = no injection")
+func (s *errorGeneratorSuite) SetupSuite() {}
+
+func (s *errorGeneratorSuite) TearDownSuite() {}
+
+func (s *errorGeneratorSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
+}
+
+func (s *errorGeneratorSuite) TearDownTest() {}
+
+func (s *errorGeneratorSuite) TestZeroRateCanUpdateToNonZero() {
+	testObject := NewDefaultErrorGenerator(0.0, defaultErrors)
+	testObject.UpdateRate(1)
+	s.NotNil(testObject.Generate())
+}
+
+func (s *errorGeneratorSuite) TestAfterUpdateToZeroRateGenerateReturnsNoErrors() {
+	testObject := NewDefaultErrorGenerator(1.0, defaultErrors)
+	testObject.UpdateRate(0)
+	s.Nil(testObject.Generate())
 }
