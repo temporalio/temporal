@@ -490,7 +490,7 @@ type (
 		Mode UpdateWorkflowMode
 
 		UpdateWorkflowMutation WorkflowMutation
-		CurrentWorkflowEvents  []*WorkflowEvents
+		UpdateWorkflowEvents   []*WorkflowEvents
 		NewWorkflowSnapshot    *WorkflowSnapshot
 		NewWorkflowEvents      []*WorkflowEvents
 	}
@@ -997,6 +997,10 @@ type (
 		DeleteChildInfoCount         int
 		DeleteSignalInfoCount        int
 		DeleteRequestCancelInfoCount int
+
+		// History size diff
+		UpdateWorkflowHistorySizeDiff int64
+		NewWorkflowHistorySizeDiff    int64
 	}
 
 	// UpdateWorkflowExecutionResponse is response for UpdateWorkflowExecutionRequest

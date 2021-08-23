@@ -122,15 +122,20 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 
 	var updateWorkflowNewEvents []*InternalAppendHistoryNodesRequest
 	var newWorkflowNewEvents []*InternalAppendHistoryNodesRequest
-	for _, workflowEvents := range request.CurrentWorkflowEvents {
+	var updateWorkflowHistoryDiff, newWorkflowHistoryDiff int64 = 0, 0
+	for _, workflowEvents := range request.UpdateWorkflowEvents {
 		newEvents, err := m.serializeWorkflowEvents(request.ShardID, workflowEvents)
+		newEvents.ShardID = request.ShardID
 		if err != nil {
 			return nil, err
 		}
 		if newEvents != nil {
 			updateWorkflowNewEvents = append(updateWorkflowNewEvents, newEvents)
-			request.UpdateWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize += int64(len(newEvents.Node.Events.Data))
+			updateWorkflowHistoryDiff += int64(len(newEvents.Node.Events.Data))
 		}
+	}
+	if updateWorkflowHistoryDiff > 0 {
+		request.UpdateWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize += updateWorkflowHistoryDiff
 	}
 
 	for _, workflowEvents := range request.NewWorkflowEvents {
@@ -140,8 +145,11 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		}
 		if newEvents != nil {
 			newWorkflowNewEvents = append(newWorkflowNewEvents, newEvents)
-			request.NewWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(len(newEvents.Node.Events.Data))
+			newWorkflowHistoryDiff += int64(len(newEvents.Node.Events.Data))
 		}
+	}
+	if newWorkflowHistoryDiff > 0 {
+		request.NewWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += newWorkflowHistoryDiff
 	}
 
 	mutation := request.UpdateWorkflowMutation
@@ -188,6 +196,8 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		return nil, err
 	}
 	msuss := m.statsComputer.computeMutableStateUpdateStats(request)
+	msuss.UpdateWorkflowHistorySizeDiff = updateWorkflowHistoryDiff
+	msuss.NewWorkflowHistorySizeDiff = newWorkflowHistoryDiff
 	return &UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: msuss}, nil
 }
 

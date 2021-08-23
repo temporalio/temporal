@@ -173,20 +173,16 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
 ) (int64, int64, error) {
 
-	originalCurrentWorkflowHistorySize := currentWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize
-	originalNewWorkflowHistorySize := int64(0)
-	if newWorkflowSnapshot != nil {
-		originalNewWorkflowHistorySize = newWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize
-	}
-	if err := updateWorkflowExecutionWithRetry(t.shard, &persistence.UpdateWorkflowExecutionRequest{
+	resp, err := updateWorkflowExecutionWithRetry(t.shard, &persistence.UpdateWorkflowExecutionRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
 		Mode:                   updateMode,
 		UpdateWorkflowMutation: *currentWorkflowMutation,
-		CurrentWorkflowEvents:  currentWorkflowEventsSeq,
+		UpdateWorkflowEvents:   currentWorkflowEventsSeq,
 		NewWorkflowSnapshot:    newWorkflowSnapshot,
 		NewWorkflowEvents:      newWorkflowEventsSeq,
-	}); err != nil {
+	})
+	if err != nil {
 		return 0, 0, err
 	}
 
@@ -199,12 +195,8 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	if err := NotifyNewHistorySnapshotEvent(engine, newWorkflowSnapshot); err != nil {
 		t.logger.Error("unable to notify workflow creation", tag.Error(err))
 	}
-	currentWorkflowHistorySizeDiff := currentWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize - originalCurrentWorkflowHistorySize
-	newWorkflowHistorySizeDiff := int64(0)
-	if newWorkflowSnapshot != nil {
-		newWorkflowHistorySizeDiff = newWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize - originalNewWorkflowHistorySize
-	}
-	return currentWorkflowHistorySizeDiff, newWorkflowHistorySizeDiff, nil
+	stats := resp.MutableStateUpdateSessionStats
+	return stats.UpdateWorkflowHistorySizeDiff, stats.NewWorkflowHistorySizeDiff, nil
 }
 
 func PersistWorkflowEvents(
@@ -389,7 +381,7 @@ func getWorkflowExecutionWithRetry(
 func updateWorkflowExecutionWithRetry(
 	shard shard.Context,
 	request *persistence.UpdateWorkflowExecutionRequest,
-) error {
+) (*persistence.UpdateWorkflowExecutionResponse, error) {
 
 	var resp *persistence.UpdateWorkflowExecutionResponse
 	var err error
@@ -417,12 +409,12 @@ func updateWorkflowExecutionWithRetry(
 				resp.MutableStateUpdateSessionStats,
 			)
 		}
-		return nil
+		return resp, nil
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,
 		*persistence.ConditionFailedError:
 		// TODO get rid of ErrConflict
-		return consts.ErrConflict
+		return nil, consts.ErrConflict
 	default:
 		shard.GetLogger().Error(
 			"Persistent store operation Failure",
@@ -432,7 +424,7 @@ func updateWorkflowExecutionWithRetry(
 			tag.StoreOperationUpdateWorkflowExecution,
 			tag.Error(err),
 		)
-		return err
+		return nil, err
 	}
 }
 
