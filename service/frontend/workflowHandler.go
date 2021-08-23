@@ -1034,6 +1034,10 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 	if err != nil {
 		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, request.TaskQueue, pollerID)
 		if contextWasCanceled {
+			wh.metricsScope(ctx).Tagged(
+				metrics.TaskQueueTag(request.TaskQueue.Name),
+			).IncCounter(metrics.CanceledMatchingPollTaskQueueCounter)
+
 			// Clear error as we don't want to report context cancellation error to count against our SLA.
 			// It doesn't matter what to return here, client has already gone. But (nil,nil) is invalid gogo return pair.
 			return &workflowservice.PollActivityTaskQueueResponse{}, nil

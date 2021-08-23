@@ -1756,6 +1756,8 @@ const (
 
 	ElasticsearchInvalidSearchAttributeCount
 
+	CanceledMatchingPollTaskQueueCounter
+
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
 
