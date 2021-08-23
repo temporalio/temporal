@@ -117,7 +117,6 @@ type (
 		taskQueueKind    enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
 		config           *taskQueueConfig
 		db               *taskQueueDB
-		idAlloc          idBlockAllocator
 		engine           *matchingEngineImpl
 		taskWriter       *taskWriter
 		taskReader       *taskReader // reads tasks from db and async matches it with poller
@@ -150,7 +149,7 @@ var errRemoteSyncMatchFailed = serviceerror.NewCanceled("remote sync match faile
 
 func withIDBlockAllocator(ibl idBlockAllocator) taskQueueManagerOpt {
 	return func(tqm *taskQueueManagerImpl) {
-		tqm.idAlloc = ibl
+		tqm.taskWriter.idAlloc = ibl
 	}
 }
 
@@ -179,7 +178,6 @@ func newTaskQueueManager(
 		taskQueueKind:       taskQueueKind,
 		logger:              log.With(e.logger, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType)),
 		db:                  db,
-		idAlloc:             db,
 		taskAckManager:      newAckManager(e.logger),
 		taskGC:              newTaskGC(db, taskQueueConfig),
 		config:              taskQueueConfig,
@@ -414,7 +412,7 @@ func (c *taskQueueManagerImpl) DescribeTaskQueue(includeTaskQueueStatus bool) *m
 		return response
 	}
 
-	taskIDBlock := c.rangeIDToTaskIDBlock(c.db.RangeID())
+	taskIDBlock := rangeIDToTaskIDBlock(c.db.RangeID(), c.config.RangeSize)
 	response.TaskQueueStatus = &taskqueuepb.TaskQueueStatus{
 		ReadLevel:        c.taskAckManager.getReadLevel(),
 		AckLevel:         c.taskAckManager.getAckLevel(),
@@ -439,7 +437,7 @@ func (c *taskQueueManagerImpl) String() string {
 	rangeID := c.db.RangeID()
 	_, _ = fmt.Fprintf(buf, " task queue %v\n", c.taskQueueID.name)
 	_, _ = fmt.Fprintf(buf, "RangeID=%v\n", rangeID)
-	_, _ = fmt.Fprintf(buf, "TaskIDBlock=%+v\n", c.rangeIDToTaskIDBlock(rangeID))
+	_, _ = fmt.Fprintf(buf, "TaskIDBlock=%+v\n", rangeIDToTaskIDBlock(rangeID, c.config.RangeSize))
 	_, _ = fmt.Fprintf(buf, "AckLevel=%v\n", c.taskAckManager.ackLevel)
 	_, _ = fmt.Fprintf(buf, "MaxReadLevel=%v\n", c.taskAckManager.getReadLevel())
 
@@ -483,42 +481,11 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 	c.taskGC.Run(ackLevel)
 }
 
-func (c *taskQueueManagerImpl) renewLeaseWithRetry(fsb fatalSignalBehavior) (taskQueueState, error) {
-	var newState taskQueueState
-	op := func() (err error) {
-		newState, err = c.idAlloc.RenewLease()
-		return
-	}
-	c.metricScope().IncCounter(metrics.LeaseRequestPerTaskQueueCounter)
-	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-	if err != nil {
-		c.metricScope().IncCounter(metrics.LeaseFailurePerTaskQueueCounter)
-		if fsb == emitFatalSignal && c.errShouldUnload(err) {
-			c.signalFatalProblem(c.taskQueueID)
-		}
-		return newState, err
-	}
-	return newState, nil
-}
-
-func (c *taskQueueManagerImpl) rangeIDToTaskIDBlock(rangeID int64) taskIDBlock {
+func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
 	return taskIDBlock{
-		start: (rangeID-1)*c.config.RangeSize + 1,
-		end:   rangeID * c.config.RangeSize,
+		start: (rangeID-1)*rangeSize + 1,
+		end:   rangeID * rangeSize,
 	}
-}
-
-func (c *taskQueueManagerImpl) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock, error) {
-	currBlock := c.rangeIDToTaskIDBlock(c.idAlloc.RangeID())
-	if currBlock.end != prevBlockEnd {
-		return taskIDBlock{},
-			fmt.Errorf("allocTaskIDBlock: invalid state: prevBlockEnd:%v != currTaskIDBlock:%+v", prevBlockEnd, currBlock)
-	}
-	state, err := c.renewLeaseWithRetry(emitFatalSignal)
-	if err != nil {
-		return taskIDBlock{}, err
-	}
-	return c.rangeIDToTaskIDBlock(state.rangeID), nil
 }
 
 // Retry operation on transient error. On rangeID update by another process calls c.Stop().
