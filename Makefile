@@ -288,7 +288,17 @@ integration-test: clean-test-results
 	@go test $(INTEG_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) | tee -a test.log
 	@! grep -q "^--- FAIL" test.log
 
-test: unit-test integration-test
+integration-with-fault-injection-test: clean-test-results
+	@printf $(COLOR) "Run integration tests..."
+	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS),\
+		@go test $(INTEG_TEST_DIR) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race  -PersistenceFaultInjectionRate=0.005 | tee -a test.log \
+	$(NEWLINE))
+# Need to run xdc tests with race detector off because of ringpop bug causing data race issue.
+	@go test $(INTEG_TEST_XDC_ROOT) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -PersistenceFaultInjectionRate=0.005 | tee -a test.log
+	@! grep -q "^--- FAIL" test.log
+
+
+test: unit-test integration-test integration-with-fault-injection-test
 
 ##### Coverage #####
 $(COVER_ROOT):

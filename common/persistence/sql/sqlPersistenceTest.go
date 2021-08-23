@@ -43,10 +43,11 @@ import (
 
 // TestCluster allows executing cassandra operations in testing.
 type TestCluster struct {
-	dbName    string
-	schemaDir string
-	cfg       config.SQL
-	logger    log.Logger
+	dbName         string
+	schemaDir      string
+	cfg            config.SQL
+	faultInjection *config.FaultInjection
+	logger         log.Logger
 }
 
 // NewTestCluster returns a new SQL test cluster
@@ -58,6 +59,7 @@ func NewTestCluster(
 	host string,
 	port int,
 	schemaDir string,
+	faultInjection *config.FaultInjection,
 	logger log.Logger,
 ) *TestCluster {
 	var result TestCluster
@@ -77,6 +79,7 @@ func NewTestCluster(
 		DatabaseName:       dbName,
 		TaskScanPartitions: 4,
 	}
+	result.faultInjection = faultInjection
 	return &result
 }
 

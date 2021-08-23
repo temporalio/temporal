@@ -83,6 +83,7 @@ type (
 		DBPort          int    `yaml:"-"`
 		StoreType       string `yaml:"-"`
 		SchemaDir       string `yaml:"-"`
+		FaultInjection  *config.FaultInjection
 	}
 
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
@@ -131,7 +132,7 @@ func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
 		options.DBName = "test_" + GenerateRandomDBName(3)
 	}
 	logger := log.NewTestLogger()
-	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, logger)
+	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, options.FaultInjection, logger)
 	return newTestBase(testCluster, logger)
 }
 
@@ -162,7 +163,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 			panic(fmt.Sprintf("unknown sql store drier: %v", options.SQLDBPluginName))
 		}
 	}
-	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, logger)
+	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, options.FaultInjection, logger)
 	return newTestBase(testCluster, logger)
 }
 

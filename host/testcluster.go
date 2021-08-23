@@ -85,6 +85,7 @@ type (
 		ESConfig        *config.Elasticsearch
 		WorkerConfig    *WorkerConfig
 		MockAdminClient map[string]adminservice.AdminServiceClient
+		FaultInjection  config.FaultInjection
 	}
 
 	// WorkerConfig is the config for enabling/disabling Temporal worker
@@ -139,6 +140,10 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		// noop for now
 	default:
 		panic(fmt.Sprintf("unknown store type: %v", options.Persistence.StoreType))
+	}
+
+	if TestFlags.PersistenceFaultInjectionRate > 0 {
+		options.Persistence.FaultInjection = &config.FaultInjection{Rate: TestFlags.PersistenceFaultInjectionRate}
 	}
 
 	testBase := persistencetests.NewTestBase(&options.Persistence)
