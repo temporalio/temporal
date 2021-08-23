@@ -25,6 +25,7 @@
 package backoff
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -185,6 +186,44 @@ func (s *RetrySuite) TestConcurrentRetrier() {
 		s.Equal(done, val)
 	}
 }
+
+func (s *RetrySuite) TestRetryContextCancel() {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := RetryContext(ctx, func(ctx context.Context) error { return ctx.Err() },
+		NewExponentialRetryPolicy(1*time.Millisecond), retryEverything)
+	s.ErrorIs(err, context.Canceled)
+}
+
+func (s *RetrySuite) TestRetryContextTimeout() {
+	timeout := 10 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	start := time.Now()
+	err := RetryContext(ctx, func(ctx context.Context) error { return &someError{} },
+		NewExponentialRetryPolicy(1*time.Second), retryEverything)
+	elapsed := time.Now().Sub(start)
+	s.ErrorIs(err, context.DeadlineExceeded)
+	s.GreaterOrEqual(elapsed, timeout,
+		"Call to retry should take at least as long as the context timeout")
+}
+
+func (s *RetrySuite) TestContextErrorFromSomeOtherContext() {
+	// These errors are returned by the function being retried by they are not
+	// actually from the context.Context passed to RetryContext
+	script := []error{context.Canceled, context.DeadlineExceeded, nil}
+	invocation := -1
+	err := RetryContext(context.Background(),
+		func(ctx context.Context) error {
+			invocation++
+			return script[invocation]
+		},
+		NewExponentialRetryPolicy(1*time.Millisecond),
+		retryEverything)
+	s.NoError(err)
+}
+
+var retryEverything IsRetryable = nil
 
 func (e *someError) Error() string {
 	return "Some Error"
