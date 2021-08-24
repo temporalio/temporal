@@ -134,9 +134,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 			updateWorkflowHistoryDiff += int64(len(newEvents.Node.Events.Data))
 		}
 	}
-	if updateWorkflowHistoryDiff > 0 {
-		request.UpdateWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize += updateWorkflowHistoryDiff
-	}
+	request.UpdateWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize += updateWorkflowHistoryDiff
 
 	for _, workflowEvents := range request.NewWorkflowEvents {
 		newEvents, err := m.serializeWorkflowEvents(request.ShardID, workflowEvents)
@@ -148,7 +146,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 			newWorkflowHistoryDiff += int64(len(newEvents.Node.Events.Data))
 		}
 	}
-	if newWorkflowHistoryDiff > 0 {
+	if request.NewWorkflowSnapshot != nil {
 		request.NewWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += newWorkflowHistoryDiff
 	}
 
