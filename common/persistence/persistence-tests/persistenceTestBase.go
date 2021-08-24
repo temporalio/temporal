@@ -557,8 +557,7 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *persistencespb.WorkflowEx
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
 				AutoResetPoints:            prevResetPoints,
 				StartTime:                  timestamp.TimeNowPtrUtc(),
-				ExecutionStats:             &persistencespb.ExecutionStats{
-				},
+				ExecutionStats:             &persistencespb.ExecutionStats{},
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
