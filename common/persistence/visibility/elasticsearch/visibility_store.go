@@ -206,9 +206,20 @@ func (s *visibilityStore) addBulkRequestAndWait(bulkRequest *esclient.BulkableRe
 	}
 }
 
+func (s *visibilityStore) checkProcessor() {
+	if s.processor == nil {
+		// must be bug, check history setup
+		panic("elastic search processor is nil")
+	}
+	if s.config.ESProcessorAckTimeout == nil {
+		// must be bug, check history setup
+		panic("config.ESProcessorAckTimeout is nil")
+	}
+}
+
 func (s *visibilityStore) ListOpenWorkflowExecutions(
 	request *visibility.ListWorkflowExecutionsRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
-	token, err := s.getNextPageToken(request.NextPageToken)
+	token, err := s.deserializePageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +241,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutions(
 func (s *visibilityStore) ListClosedWorkflowExecutions(
 	request *visibility.ListWorkflowExecutionsRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := s.getNextPageToken(request.NextPageToken)
+	token, err := s.deserializePageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +263,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutions(
 func (s *visibilityStore) ListOpenWorkflowExecutionsByType(
 	request *visibility.ListWorkflowExecutionsByTypeRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := s.getNextPageToken(request.NextPageToken)
+	token, err := s.deserializePageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +287,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByType(
 func (s *visibilityStore) ListClosedWorkflowExecutionsByType(
 	request *visibility.ListWorkflowExecutionsByTypeRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := s.getNextPageToken(request.NextPageToken)
+	token, err := s.deserializePageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +310,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByType(
 func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 	request *visibility.ListWorkflowExecutionsByWorkflowIDRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := s.getNextPageToken(request.NextPageToken)
+	token, err := s.deserializePageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +334,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 	request *visibility.ListWorkflowExecutionsByWorkflowIDRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := s.getNextPageToken(request.NextPageToken)
+	token, err := s.deserializePageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +357,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 	request *visibility.ListClosedWorkflowExecutionsByStatusRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := s.getNextPageToken(request.NextPageToken)
+	token, err := s.deserializePageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +381,7 @@ func (s *visibilityStore) ListWorkflowExecutions(
 
 	checkPageSize(request)
 
-	token, err := s.getNextPageToken(request.NextPageToken)
+	token, err := s.deserializePageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
@@ -398,26 +409,12 @@ func (s *visibilityStore) ListWorkflowExecutions(
 	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, nil)
 }
 
-func (s *visibilityStore) setDefaultFieldSort(fieldSorts []*elastic.FieldSort) []elastic.Sorter {
-	var res []elastic.Sorter
-	if len(fieldSorts) == 0 {
-		// set default sorting by StartTime desc.
-		res = []elastic.Sorter{elastic.NewFieldSort(searchattribute.StartTime).Desc()}
-	} else { // user provide sorting using order by
-		for _, fs := range fieldSorts {
-			res = append(res, fs)
-		}
-	}
-	// Add RunID as tiebreaker.
-	return append(res, elastic.NewFieldSort(searchattribute.RunID).Desc())
-}
-
 func (s *visibilityStore) ScanWorkflowExecutions(
 	request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 
 	checkPageSize(request)
 
-	token, err := s.getNextPageToken(request.NextPageToken)
+	token, err := s.deserializePageToken(request.NextPageToken)
 	if err != nil {
 		return nil, err
 	}
@@ -523,41 +520,34 @@ func (s *visibilityStore) CountWorkflowExecutions(request *visibility.CountWorkf
 	return response, nil
 }
 
-func (s *visibilityStore) checkProcessor() {
-	if s.processor == nil {
-		// must be bug, check history setup
-		panic("elastic search processor is nil")
+func (s *visibilityStore) setDefaultFieldSort(fieldSorts []*elastic.FieldSort) []elastic.Sorter {
+	var res []elastic.Sorter
+	if len(fieldSorts) == 0 {
+		// set default sorting by StartTime desc.
+		res = []elastic.Sorter{elastic.NewFieldSort(searchattribute.StartTime).Desc()}
+	} else { // user provide sorting using order by
+		for _, fs := range fieldSorts {
+			res = append(res, fs)
+		}
 	}
-	if s.config.ESProcessorAckTimeout == nil {
-		// must be bug, check history setup
-		panic("config.ESProcessorAckTimeout is nil")
-	}
+	// Add RunID as tiebreaker.
+	return append(res, elastic.NewFieldSort(searchattribute.RunID).Desc())
 }
 
-func (s *visibilityStore) getNextPageToken(token []byte) (*visibilityPageToken, error) {
-	var result *visibilityPageToken
-	var err error
-	if len(token) > 0 {
-		result, err = s.deserializePageToken(token)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		result = &visibilityPageToken{}
+func (s *visibilityStore) setDefaultPageSize(request *visibility.ListWorkflowExecutionsRequestV2) {
+	if request.PageSize == 0 {
+		request.PageSize = 1000
 	}
-	return result, nil
 }
 
 func (s *visibilityStore) getSearchResult(request *visibility.ListWorkflowExecutionsRequest, token *visibilityPageToken,
 	boolQuery *elastic.BoolQuery, overStartTime bool) (*elastic.SearchResult, error) {
 
-	query := elastic.NewBoolQuery()
-	if boolQuery != nil {
-		*query = *boolQuery
+	if boolQuery == nil {
+		boolQuery = elastic.NewBoolQuery()
 	}
 
-	matchNamespaceQuery := elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID)
-	query = query.Filter(matchNamespaceQuery)
+	boolQuery.Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID))
 
 	if !request.EarliestStartTime.IsZero() || !request.LatestStartTime.IsZero() {
 		var rangeQuery *elastic.RangeQuery
@@ -574,13 +564,13 @@ func (s *visibilityStore) getSearchResult(request *visibility.ListWorkflowExecut
 		if !request.LatestStartTime.IsZero() {
 			rangeQuery = rangeQuery.Lte(request.LatestStartTime)
 		}
-		query = query.Filter(rangeQuery)
+		boolQuery.Filter(rangeQuery)
 	}
 
 	ctx := context.Background()
 	params := &esclient.SearchParameters{
 		Index:       s.index,
-		Query:       query,
+		Query:       boolQuery,
 		PageSize:    request.PageSize,
 		SearchAfter: token.SearchAfter,
 	}
@@ -664,20 +654,22 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(
 }
 
 func (s *visibilityStore) deserializePageToken(data []byte) (*visibilityPageToken, error) {
-	var token visibilityPageToken
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.UseNumber()
-	err := dec.Decode(&token)
-	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to deserialize page token. err: %v", err))
+	if len(data) == 0 {
+		return &visibilityPageToken{}, nil
 	}
-	return &token, nil
+
+	var token *visibilityPageToken
+	err := json.Unmarshal(data, &token)
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to deserialize page token: %v", err))
+	}
+	return token, nil
 }
 
 func (s *visibilityStore) serializePageToken(token *visibilityPageToken) ([]byte, error) {
 	data, err := json.Marshal(token)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to serialize page token. err: %v", err))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to serialize page token: %v", err))
 	}
 	return data, nil
 }
@@ -861,12 +853,6 @@ func finishParseJSONValue(val interface{}, t enumspb.IndexedValueType) (interfac
 	}
 
 	panic(fmt.Sprintf("Unknown field type: %v", t))
-}
-
-func checkPageSize(request *visibility.ListWorkflowExecutionsRequestV2) {
-	if request.PageSize == 0 {
-		request.PageSize = 1000
-	}
 }
 
 func detailedErrorMessage(err error) string {
