@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -72,7 +73,7 @@ type (
 		namespaceCache cache.NamespaceCache
 		metricsClient  metrics.Client
 		config         *configs.Config
-		historyEngine  *historyEngineImpl
+		shard          shard.Context
 	}
 
 	workflowTaskFailedCause struct {
@@ -91,7 +92,7 @@ func newWorkflowTaskHandler(
 	namespaceCache cache.NamespaceCache,
 	metricsClient metrics.Client,
 	config *configs.Config,
-	historyEngine *historyEngineImpl,
+	shard shard.Context,
 ) *workflowTaskHandlerImpl {
 
 	return &workflowTaskHandlerImpl{
@@ -115,7 +116,7 @@ func newWorkflowTaskHandler(
 		namespaceCache: namespaceCache,
 		metricsClient:  metricsClient,
 		config:         config,
-		historyEngine:  historyEngine,
+		shard:          shard,
 	}
 }
 
@@ -364,23 +365,19 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 	}
 
 	// Check if this workflow has a cron schedule
-	if cronBackoff := handler.mutableState.GetCronBackoffDuration(); cronBackoff != backoff.NoBackoff {
-		_, err = handler.mutableState.AddCompletedWorkflowEvent(
-			handler.workflowTaskCompletedID,
-			attr)
-		if err != nil {
-			return serviceerror.NewInternal("Unable to add complete workflow event.")
-		}
-		return handler.handleCron(cronBackoff, attr.GetResult(), nil)
-	}
+	cronBackoff := handler.mutableState.GetCronBackoffDuration()
 
-	// Not cron, so complete this workflow execution
-	_, err = handler.mutableState.AddCompletedWorkflowEvent(
-		handler.workflowTaskCompletedID,
-		attr)
+	// Always add workflow completed event to this one
+	_, err = handler.mutableState.AddCompletedWorkflowEvent(handler.workflowTaskCompletedID, attr)
 	if err != nil {
 		return serviceerror.NewInternal("Unable to add complete workflow event.")
 	}
+
+	// If cron, need to start another workflow
+	if cronBackoff != backoff.NoBackoff {
+		return handler.handleCron(cronBackoff, attr.GetResult(), nil)
+	}
+
 	return nil
 }
 
@@ -431,36 +428,31 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 	}
 
 	// First check retry policy to do a retry.
-	backoffInterval, retryState := handler.mutableState.GetRetryBackoffDuration(attr.GetFailure())
-	if backoffInterval != backoff.NoBackoff {
-		_, err := handler.mutableState.AddFailWorkflowEvent(
-			handler.workflowTaskCompletedID,
-			retryState,
-			attr)
-		if err != nil {
-			return err
-		}
-		return handler.handleRetry(backoffInterval, retryState, attr.GetFailure())
+	retryBackoff, retryState := handler.mutableState.GetRetryBackoffDuration(attr.GetFailure())
+	cronBackoff := backoff.NoBackoff
+	if retryBackoff == backoff.NoBackoff {
+		// If no retry, check cron.
+		cronBackoff = handler.mutableState.GetCronBackoffDuration()
 	}
 
-	// If no retry, check cron.
-	if cronBackoff := handler.mutableState.GetCronBackoffDuration(); cronBackoff != backoff.NoBackoff {
-		_, err := handler.mutableState.AddFailWorkflowEvent(
-			handler.workflowTaskCompletedID,
-			retryState, // QUESTION: should we use retryState here or always enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET?
-			attr)
-		if err != nil {
-			return err
-		}
+	// Always add workflow failed event
+	if _, err = handler.mutableState.AddFailWorkflowEvent(
+		handler.workflowTaskCompletedID,
+		retryState,
+		attr,
+	); err != nil {
+		return err
+	}
+
+	// Handle retry or cron
+	if retryBackoff != backoff.NoBackoff {
+		return handler.handleRetry(retryBackoff, retryState, attr.GetFailure())
+	} else if cronBackoff != backoff.NoBackoff {
 		return handler.handleCron(cronBackoff, nil, attr.GetFailure())
 	}
 
-	// No retry or cron.
-	_, err = handler.mutableState.AddFailWorkflowEvent(
-		handler.workflowTaskCompletedID,
-		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
-		attr)
-	return err
+	// No retry or cron
+	return nil
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
@@ -934,10 +926,11 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newRunId := uuid.New()
-	newStateBuilder, err := handler.historyEngine.createMutableState(
+	newRunID := uuid.New()
+	newStateBuilder, err := createMutableState(
+		handler.shard,
 		handler.mutableState.GetNamespaceEntry(),
-		newRunId,
+		newRunID,
 	)
 	if err != nil {
 		return err
@@ -945,7 +938,7 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	err = workflow.SetupNewWorkflowForRetryOrCron(
 		handler.mutableState,
 		newStateBuilder,
-		newRunId,
+		newRunID,
 		startAttr,
 		nil,
 		failure,
@@ -976,7 +969,8 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 	}
 
 	newRunId := uuid.New()
-	newStateBuilder, err := handler.historyEngine.createMutableState(
+	newStateBuilder, err := createMutableState(
+		handler.shard,
 		handler.mutableState.GetNamespaceEntry(),
 		newRunId,
 	)

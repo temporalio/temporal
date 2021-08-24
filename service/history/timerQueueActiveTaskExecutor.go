@@ -29,6 +29,7 @@ import (
 	"fmt"
 
 	"github.com/pborman/uuid"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -576,19 +577,19 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newRunId := uuid.New()
-	// QUESTION: this calls SetHistoryTree while the old path did not. is that ok?
-	newMs, err := t.historyService.createMutableState(
+	newRunID := uuid.New()
+	newMutableState, err := createMutableState(
+		t.shard,
 		mutableState.GetNamespaceEntry(),
-		newRunId,
+		newRunID,
 	)
 	if err != nil {
 		return err
 	}
 	err = workflow.SetupNewWorkflowForRetryOrCron(
 		mutableState,
-		newMs,
-		newRunId,
+		newMutableState,
+		newRunID,
 		startAttr,
 		startAttr.LastCompletionResult,
 		timeoutFailure,
@@ -599,8 +600,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		return err
 	}
 
-	newExecutionInfo := newMs.GetExecutionInfo()
-	newExecutionState := newMs.GetExecutionState()
+	newExecutionInfo := newMutableState.GetExecutionInfo()
+	newExecutionState := newMutableState.GetExecutionState()
 	return weContext.UpdateWorkflowExecutionWithNewAsActive(
 		t.shard.GetTimeSource().Now(),
 		workflow.NewContext(
@@ -612,7 +613,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 			t.shard,
 			t.logger,
 		),
-		newMs,
+		newMutableState,
 	)
 }
 

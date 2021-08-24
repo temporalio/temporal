@@ -142,11 +142,10 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 
 // Helpers for creating new retry/cron workflows:
 
-// QUESTION: is this a good name? any suggestions?
 func SetupNewWorkflowForRetryOrCron(
-	oldMs MutableState,
-	newMs MutableState,
-	newRunId string,
+	previousMutableState MutableState,
+	newMutableState MutableState,
+	newRunID string,
 	startAttr *historypb.WorkflowExecutionStartedEventAttributes,
 	lastCompletionResult *commonpb.Payloads,
 	failure *failurepb.Failure,
@@ -156,30 +155,29 @@ func SetupNewWorkflowForRetryOrCron(
 
 	// Extract ParentExecutionInfo from current run so it can be passed down to the next
 	var parentInfo *workflowspb.ParentExecutionInfo
-	executionInfo := oldMs.GetExecutionInfo()
-	if oldMs.HasParentExecution() {
+	previousExecutionInfo := previousMutableState.GetExecutionInfo()
+	if previousMutableState.HasParentExecution() {
 		parentInfo = &workflowspb.ParentExecutionInfo{
-			NamespaceId: executionInfo.ParentNamespaceId,
+			NamespaceId: previousExecutionInfo.ParentNamespaceId,
 			Namespace:   startAttr.GetParentWorkflowNamespace(),
 			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: executionInfo.ParentWorkflowId,
-				RunId:      executionInfo.ParentRunId,
+				WorkflowId: previousExecutionInfo.ParentWorkflowId,
+				RunId:      previousExecutionInfo.ParentRunId,
 			},
-			InitiatedId: executionInfo.InitiatedId,
+			InitiatedId: previousExecutionInfo.InitiatedId,
 		}
 	}
 
 	newExecution := commonpb.WorkflowExecution{
-		WorkflowId: executionInfo.WorkflowId,
-		RunId:      newRunId,
+		WorkflowId: previousExecutionInfo.WorkflowId,
+		RunId:      newRunID,
 	}
 
-	firstRunID, err := oldMs.GetFirstRunID()
+	firstRunID, err := previousMutableState.GetFirstRunID()
 	if err != nil {
 		return err
 	}
 
-	previousExecutionInfo := oldMs.GetExecutionInfo()
 	taskQueue := previousExecutionInfo.TaskQueue
 	if startAttr.TaskQueue != nil {
 		taskQueue = startAttr.TaskQueue.GetName()
@@ -193,8 +191,9 @@ func SetupNewWorkflowForRetryOrCron(
 	if startAttr.WorkflowType != nil {
 		workflowType = startAttr.WorkflowType.GetName()
 	}
-	wType := &commonpb.WorkflowType{}
-	wType.Name = workflowType
+	wType := &commonpb.WorkflowType{
+		Name: workflowType,
+	}
 
 	var taskTimeout *time.Duration
 	if timestamp.DurationValue(startAttr.GetWorkflowTaskTimeout()) == 0 {
@@ -209,11 +208,11 @@ func SetupNewWorkflowForRetryOrCron(
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.New(),
-		Namespace:                newMs.GetNamespaceEntry().GetInfo().Name,
+		Namespace:                newMutableState.GetNamespaceEntry().GetInfo().Name,
 		WorkflowId:               newExecution.WorkflowId,
 		TaskQueue:                tq,
 		WorkflowType:             wType,
-		WorkflowExecutionTimeout: oldMs.GetExecutionInfo().WorkflowExecutionTimeout,
+		WorkflowExecutionTimeout: previousExecutionInfo.WorkflowExecutionTimeout,
 		WorkflowRunTimeout:       runTimeout,
 		WorkflowTaskTimeout:      taskTimeout,
 		Input:                    startAttr.Input,
@@ -226,11 +225,11 @@ func SetupNewWorkflowForRetryOrCron(
 
 	attempt := int32(1)
 	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
-		attempt = oldMs.GetExecutionInfo().Attempt + 1
+		attempt = previousExecutionInfo.Attempt + 1
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:              newMs.GetNamespaceEntry().GetInfo().Id,
+		NamespaceId:              newMutableState.GetNamespaceEntry().GetInfo().Id,
 		StartRequest:             createRequest,
 		ParentExecutionInfo:      parentInfo,
 		LastCompletionResult:     lastCompletionResult,
@@ -239,23 +238,23 @@ func SetupNewWorkflowForRetryOrCron(
 		FirstWorkflowTaskBackoff: timestamp.DurationPtr(backoffInterval),
 		Attempt:                  attempt,
 	}
-	workflowTimeoutTime := timestamp.TimeValue(oldMs.GetExecutionInfo().WorkflowExecutionExpirationTime)
+	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {
 		req.WorkflowExecutionExpirationTime = &workflowTimeoutTime
 	}
 
-	event, err := newMs.AddWorkflowExecutionStartedEventWithOptions(
+	event, err := newMutableState.AddWorkflowExecutionStartedEventWithOptions(
 		newExecution,
 		req,
 		parentInfo.GetNamespaceId(),
 		previousExecutionInfo.AutoResetPoints,
-		oldMs.GetExecutionState().GetRunId(),
+		previousMutableState.GetExecutionState().GetRunId(),
 		firstRunID,
 	)
 	if err != nil {
 		return serviceerror.NewInternal("Failed to add workflow execution started event.")
 	}
-	if err = newMs.AddFirstWorkflowTaskScheduled(event); err != nil {
+	if err = newMutableState.AddFirstWorkflowTaskScheduled(event); err != nil {
 		return err
 	}
 
