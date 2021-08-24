@@ -101,9 +101,16 @@ func newSimpleClientV7(url string) (*clientV7, error) {
 }
 
 func (c *clientV7) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
-	searchService := c.esClient.Search(p.Index).
+	searchService := c.esClient.Search().
 		Query(p.Query).
 		SortBy(p.Sorter...)
+
+	// When pit.id is specified index must not be used.
+	if p.PointInTime == nil {
+		searchService.Index(p.Index)
+	} else {
+		searchService.PointInTime(p.PointInTime)
+	}
 
 	if p.PageSize != 0 {
 		searchService.Size(p.PageSize)

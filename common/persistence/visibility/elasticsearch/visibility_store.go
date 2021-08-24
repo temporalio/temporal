@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/elasticsearch/query"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
@@ -72,6 +73,7 @@ type (
 		config                   *config.VisibilityConfig
 		metricsClient            metrics.Client
 		processor                Processor
+		queryConverter           *query.Converter
 	}
 
 	visibilityPageToken struct {
@@ -111,6 +113,10 @@ func NewVisibilityStore(
 		logger:                   log.With(logger, tag.ComponentESVisibilityManager),
 		config:                   cfg,
 		metricsClient:            metricsClient,
+		queryConverter: query.NewConverter(
+			newNameInterceptor(index, searchAttributesProvider),
+			newValuesInterceptor(),
+		),
 	}
 }
 
@@ -375,18 +381,44 @@ func (s *visibilityStore) ListWorkflowExecutions(
 		return nil, err
 	}
 
-	queryDSL, err := s.getESQueryDSL(request, token)
+	bq, fs, err := s.queryConverter.ConvertWhereOrderBy(request.Query)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Error when parse query: %v", err))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse query: %v", err))
 	}
+	bq.Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID))
 
 	ctx := context.Background()
-	searchResult, err := s.esClient.SearchWithDSL(ctx, s.index, queryDSL)
+	p := &esclient.SearchParameters{
+		Index:    s.index,
+		Query:    bq,
+		PageSize: request.PageSize,
+		Sorter:   s.setDefaultFieldSort(fs),
+	}
+
+	if token.SortValue != nil && token.TieBreaker != "" {
+		p.SearchAfter = []interface{}{token.SortValue, token.TieBreaker}
+	}
+
+	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, nil)
+}
+
+func (s *visibilityStore) setDefaultFieldSort(fieldSorts []*elastic.FieldSort) []elastic.Sorter {
+	var res []elastic.Sorter
+	if len(fieldSorts) == 0 {
+		// set default sorting by StartTime desc.
+		res = []elastic.Sorter{elastic.NewFieldSort(searchattribute.StartTime).Desc()}
+	} else { // user provide sorting using order by
+		for _, fs := range fieldSorts {
+			res = append(res, fs)
+		}
+	}
+	// Add RunID as tiebreaker.
+	return append(res, elastic.NewFieldSort(searchattribute.RunID).Desc())
 }
 
 func (s *visibilityStore) ScanWorkflowExecutions(
@@ -412,6 +444,10 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 				return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to create point in time: %s", detailedErrorMessage(err)))
 			}
 		}
+
+		// if token.PointInTimeID != "" {
+		// 	p.PointInTime = elastic.NewPointInTime(token.PointInTimeID, pointInTimeKeepAliveInterval)
+		// }
 
 		var queryDSL string
 		queryDSL, err = s.getESQueryDSL(request, token)

@@ -98,5 +98,6 @@ type (
 		PageSize    int
 		Sorter      []elastic.Sorter
 		SearchAfter []interface{}
+		PointInTime *elastic.PointInTime
 	}
 )

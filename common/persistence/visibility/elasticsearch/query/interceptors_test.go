@@ -38,7 +38,7 @@ type (
 	testValuesInterceptor struct{}
 )
 
-func (t *testNameInterceptor) Name(name string) (string, error) {
+func (t *testNameInterceptor) Name(name string, usage FieldNameUsage) (string, error) {
 	if name == "error" {
 		return "", errors.New("interceptor error")
 	}
