@@ -65,16 +65,6 @@ type (
 		mockProcessor     *MockProcessor
 		mockMetricsClient *metrics.MockClient
 	}
-
-	mockESClientV7 struct {
-		*client.MockClient
-		*client.MockClientV7
-	}
-
-	mockESClientV6 struct {
-		*client.MockClient
-		*client.MockClientV6
-	}
 )
 
 var (
@@ -130,11 +120,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.mockESClient = esclient.NewMockClient(s.controller)
 	s.mockESClientV6 = client.NewMockClientV6(s.controller)
 	s.mockESClientV7 = client.NewMockClientV7(s.controller)
-	mClientV7 := &mockESClientV7{
-		MockClient:   s.mockESClient,
-		MockClientV7: s.mockESClientV7,
-	}
-	s.visibilityStore = NewVisibilityStore(mClientV7, testIndex, searchattribute.NewTestProvider(), s.mockProcessor, cfg, log.NewNoopLogger(), s.mockMetricsClient)
+	s.visibilityStore = NewVisibilityStore(s.mockESClientV7, testIndex, searchattribute.NewTestProvider(), s.mockProcessor, cfg, log.NewNoopLogger(), s.mockMetricsClient)
 }
 
 func (s *ESVisibilitySuite) TearDownTest() {
@@ -794,10 +780,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 
 func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV6() {
 	// Set v6 client for test.
-	s.visibilityStore.esClient = &mockESClientV6{
-		MockClient:   s.mockESClient,
-		MockClientV6: s.mockESClientV6,
-	}
+	s.visibilityStore.esClient = s.mockESClientV6
 	// test first page
 	s.mockESClientV6.EXPECT().ScrollFirstPage(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
 		func(ctx context.Context, index, input string) (*elastic.SearchResult, esclient.ScrollService, error) {
@@ -849,10 +832,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV6() {
 	s.True(strings.Contains(err.Error(), "ScanWorkflowExecutions failed"))
 
 	// Restore v7 client.
-	s.visibilityStore.esClient = &mockESClientV7{
-		MockClient:   s.mockESClient,
-		MockClientV7: s.mockESClientV7,
-	}
+	s.visibilityStore.esClient = s.mockESClientV7
 }
 
 func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7() {

@@ -91,11 +91,6 @@ func (c *Converter) convertSql(sql string) (*elastic.BoolQuery, []*elastic.Field
 }
 
 func (c *Converter) convertSelect(sel *sqlparser.Select) (*elastic.BoolQuery, []*elastic.FieldSort, error) {
-	var (
-		query *elastic.BoolQuery
-		err   error
-	)
-
 	if sel.GroupBy != nil {
 		return nil, nil, NewConverterError(fmt.Sprintf("%s: 'group by' clause", notSupportedErrMessage))
 	}
@@ -104,15 +99,16 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (*elastic.BoolQuery, []
 		return nil, nil, NewConverterError(fmt.Sprintf("%s: 'limit' clause", notSupportedErrMessage))
 	}
 
+	var query *elastic.BoolQuery
 	if sel.Where != nil {
-		var q elastic.Query
-		q, err = c.convertWhere(sel.Where.Expr)
+		q, err := c.convertWhere(sel.Where.Expr)
 		if err != nil {
 			return nil, nil, NewConverterError(fmt.Sprintf("unable to convert filter expression: %s", err))
 		}
 		// Result must be BoolQuery.
-		if _, isBoolQuery := q.(*elastic.BoolQuery); !isBoolQuery {
-			query = elastic.NewBoolQuery().Filter(query)
+		var isBoolQuery bool
+		if query, isBoolQuery = q.(*elastic.BoolQuery); !isBoolQuery {
+			query = elastic.NewBoolQuery().Filter(q)
 		}
 	} else {
 		query = elastic.NewBoolQuery().Filter(elastic.NewMatchAllQuery())
