@@ -230,11 +230,7 @@ func IsServiceNonRetryableError(err error) bool {
 		return true
 	}
 
-	if IsContextDeadlineExceededErr(err) {
-		return true
-	}
-
-	return false
+	return IsContextDeadlineExceededErr(err) || IsContextCanceledErr(err)
 }
 
 // IsContextDeadlineExceededErr checks if the error is context.DeadlineExceeded or serviceerror.DeadlineExceeded error
