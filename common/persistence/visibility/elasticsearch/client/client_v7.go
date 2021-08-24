@@ -139,19 +139,8 @@ func (c *clientV7) ClosePointInTime(ctx context.Context, id string) (bool, error
 	return resp.Succeeded, nil
 }
 
-func (c *clientV7) SearchWithDSLWithPIT(ctx context.Context, query string) (*elastic.SearchResult, error) {
-	// When pit.id is specified index must not be used.
-	searchResult, err := c.esClient.Search().Source(query).Do(ctx)
-	return searchResult, err
-}
-
-func (c *clientV7) SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error) {
-	searchResult, err := c.esClient.Search(index).Source(query).Do(ctx)
-	return searchResult, err
-}
-
-func (c *clientV7) Count(ctx context.Context, index, query string) (int64, error) {
-	return c.esClient.Count(index).BodyString(query).Do(ctx)
+func (c *clientV7) Count(ctx context.Context, p *SearchParameters) (int64, error) {
+	return c.esClient.Count(p.Index).Query(p.Query).Do(ctx)
 }
 
 func (c *clientV7) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {

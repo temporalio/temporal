@@ -32,15 +32,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/cch123/elasticsql"
 	"github.com/olivere/elastic/v7"
-	"github.com/valyala/fastjson"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -48,7 +43,6 @@ import (
 	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/visibility/elasticsearch/query"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -77,9 +71,9 @@ type (
 	}
 
 	visibilityPageToken struct {
-		SortValue  interface{}
-		TieBreaker string // this is always a runID value
-		// for ES scroll API
+		SearchAfter []interface{}
+
+		// For ScanWorkflowExecutions API.
 		// Deprecated. Remove after ES v6 support removal.
 		ScrollID string
 		// Not supported in ES v6.
@@ -387,18 +381,15 @@ func (s *visibilityStore) ListWorkflowExecutions(
 	}
 	bq.Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID))
 
-	ctx := context.Background()
 	p := &esclient.SearchParameters{
-		Index:    s.index,
-		Query:    bq,
-		PageSize: request.PageSize,
-		Sorter:   s.setDefaultFieldSort(fs),
+		Index:       s.index,
+		Query:       bq,
+		PageSize:    request.PageSize,
+		Sorter:      s.setDefaultFieldSort(fs),
+		SearchAfter: token.SearchAfter,
 	}
 
-	if token.SortValue != nil && token.TieBreaker != "" {
-		p.SearchAfter = []interface{}{token.SortValue, token.TieBreaker}
-	}
-
+	ctx := context.Background()
 	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
@@ -445,17 +436,21 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 			}
 		}
 
-		// if token.PointInTimeID != "" {
-		// 	p.PointInTime = elastic.NewPointInTime(token.PointInTimeID, pointInTimeKeepAliveInterval)
-		// }
-
-		var queryDSL string
-		queryDSL, err = s.getESQueryDSL(request, token)
+		bq, fs, err := s.queryConverter.ConvertWhereOrderBy(request.Query)
 		if err != nil {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Error when parse query: %v", err))
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse query: %v", err))
+		}
+		bq.Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID))
+
+		p := &esclient.SearchParameters{
+			Query:       bq,
+			PageSize:    request.PageSize,
+			Sorter:      s.setDefaultFieldSort(fs),
+			SearchAfter: token.SearchAfter,
+			PointInTime: elastic.NewPointInTime(token.PointInTimeID, pointInTimeKeepAliveInterval),
 		}
 
-		searchResult, err := esClient.SearchWithDSLWithPIT(ctx, queryDSL)
+		searchResult, err := esClient.Search(ctx, p)
 		if err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 		}
@@ -472,12 +467,21 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 		var searchResult *elastic.SearchResult
 		var scrollService esclient.ScrollService
 		if len(token.ScrollID) == 0 { // first call
-			var queryDSL string
-			queryDSL, err = getESQueryDSLForScan(request)
+			bq, fs, err := s.queryConverter.ConvertWhereOrderBy(request.Query)
 			if err != nil {
-				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Error when parse query: %v", err))
+				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse query: %v", err))
 			}
-			searchResult, scrollService, err = esClient.ScrollFirstPage(ctx, s.index, queryDSL)
+			bq.Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID))
+
+			p := &esclient.SearchParameters{
+				Index:       s.index,
+				Query:       bq,
+				PageSize:    request.PageSize,
+				Sorter:      s.setDefaultFieldSort(fs),
+				SearchAfter: token.SearchAfter,
+			}
+
+			searchResult, scrollService, err = esClient.ScrollFirstPage(ctx, p)
 		} else {
 			searchResult, scrollService, err = esClient.Scroll(ctx, token.ScrollID)
 		}
@@ -498,262 +502,25 @@ func (s *visibilityStore) ScanWorkflowExecutions(
 func (s *visibilityStore) CountWorkflowExecutions(request *visibility.CountWorkflowExecutionsRequest) (
 	*visibility.CountWorkflowExecutionsResponse, error) {
 
-	queryDSL, err := getESQueryDSLForCount(request)
+	bq, _, err := s.queryConverter.ConvertWhereOrderBy(request.Query)
 	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Error when parse query: %v", err))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse query: %v", err))
+	}
+	bq.Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID))
+
+	p := &esclient.SearchParameters{
+		Index: s.index,
+		Query: bq,
 	}
 
 	ctx := context.Background()
-	count, err := s.esClient.Count(ctx, s.index, queryDSL)
+	count, err := s.esClient.Count(ctx, p)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("CountWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	response := &visibility.CountWorkflowExecutionsResponse{Count: count}
 	return response, nil
-}
-
-// TODO (alex): move this to separate file
-// TODO (alex): consider replacing this code with Elasticsearch SQL from X-Pack: https://www.elastic.co/what-is/open-x-pack.
-const (
-	jsonMissingCloseTime   = `{"missing":{"field":"CloseTime"}}`
-	jsonSortForOpen        = `[{"StartTime":"desc"},{"RunId":"desc"}]`
-	jsonSortWithTieBreaker = `{"RunId":"desc"}`
-
-	dslFieldSort        = "sort"
-	dslFieldSearchAfter = "search_after"
-	dslFieldFrom        = "from"
-	dslFieldSize        = "size"
-)
-
-var (
-	timeKeys = map[string]struct{}{
-		searchattribute.StartTime:     {},
-		searchattribute.CloseTime:     {},
-		searchattribute.ExecutionTime: {},
-	}
-	rangeKeys = map[string]struct{}{
-		"from":  {},
-		"to":    {},
-		"gt":    {},
-		"lt":    {},
-		"query": {},
-	}
-
-	exactMatchKeys = map[string]struct{}{
-		"query": {},
-	}
-)
-
-func getESQueryDSLForScan(request *visibility.ListWorkflowExecutionsRequestV2) (string, error) {
-	sql := getSQLFromListRequest(request)
-	dsl, err := getCustomizedDSLFromSQL(sql, request.NamespaceID)
-	if err != nil {
-		return "", err
-	}
-
-	// remove not needed fields
-	dsl.Del(dslFieldSort)
-	return dsl.String(), nil
-}
-
-func getESQueryDSLForCount(request *visibility.CountWorkflowExecutionsRequest) (string, error) {
-	sql := getSQLFromCountRequest(request)
-	dsl, err := getCustomizedDSLFromSQL(sql, request.NamespaceID)
-	if err != nil {
-		return "", err
-	}
-
-	// remove not needed fields
-	dsl.Del(dslFieldFrom)
-	dsl.Del(dslFieldSize)
-	dsl.Del(dslFieldSort)
-
-	return dsl.String(), nil
-}
-
-func (s *visibilityStore) getESQueryDSL(request *visibility.ListWorkflowExecutionsRequestV2, token *visibilityPageToken) (string, error) {
-	sql := getSQLFromListRequest(request)
-	dsl, err := getCustomizedDSLFromSQL(sql, request.NamespaceID)
-	if err != nil {
-		return "", err
-	}
-
-	sortField, err := s.processSortField(dsl)
-	if err != nil {
-		return "", err
-	}
-
-	if token.TieBreaker != "" {
-		valueOfSearchAfter, err := s.getValueOfSearchAfterInJSON(token, sortField)
-		if err != nil {
-			return "", err
-		}
-		dsl.Set(dslFieldSearchAfter, fastjson.MustParse(valueOfSearchAfter))
-	}
-
-	if token.PointInTimeID != "" {
-		dsl.Set("pit", fastjson.MustParse(fmt.Sprintf(`{"id":"%s", "keep_alive":"%s"}`, token.PointInTimeID, pointInTimeKeepAliveInterval)))
-	}
-
-	return dsl.String(), nil
-}
-
-func getSQLFromListRequest(request *visibility.ListWorkflowExecutionsRequestV2) string {
-	var sql string
-	query := strings.TrimSpace(request.Query)
-	if query == "" {
-		sql = fmt.Sprintf("select * from dummy limit %d", request.PageSize)
-	} else if common.IsJustOrderByClause(query) {
-		sql = fmt.Sprintf("select * from dummy %s limit %d", request.Query, request.PageSize)
-	} else {
-		sql = fmt.Sprintf("select * from dummy where %s limit %d", request.Query, request.PageSize)
-	}
-	return sql
-}
-
-func getSQLFromCountRequest(request *visibility.CountWorkflowExecutionsRequest) string {
-	var sql string
-	if strings.TrimSpace(request.Query) == "" {
-		sql = "select * from dummy"
-	} else {
-		sql = fmt.Sprintf("select * from dummy where %s", request.Query)
-	}
-	return sql
-}
-
-// getCustomizedDSLFromSQL converts SQL-ish query to Elasticsearch JSON query.
-// This is primarily done by `elasticsql` package.
-// Queries like `ExecutionStatus="Running"` are converted to: `{"query":{"bool":{"must":[{"match_phrase":{"ExecutionStatus":{"query":"Running"}}}]}},"from":0,"size":20}`.
-// Then `fastjson` parse this JSON and substitute some values.
-func getCustomizedDSLFromSQL(sql string, namespaceID string) (*fastjson.Value, error) {
-	dslStr, _, err := elasticsql.Convert(sql)
-	if err != nil {
-		return nil, err
-	}
-	dsl, err := fastjson.Parse(dslStr) // dsl.String() will be a compact json without spaces
-	if err != nil {
-		return nil, err
-	}
-	dslStr = dsl.String()
-	if strings.Contains(dslStr, jsonMissingCloseTime) { // isOpen
-		dsl = replaceQueryForOpen(dsl)
-	}
-	addNamespaceToQuery(dsl, namespaceID)
-	if err := processAllValuesForKey(dsl, timeKeyFilter, timeProcessFunc); err != nil {
-		return nil, err
-	}
-	if err := processAllValuesForKey(dsl, statusKeyFilter, statusProcessFunc); err != nil {
-		return nil, err
-	}
-	if err := processAllValuesForKey(dsl, durationKeyFilter, durationProcessFunc); err != nil {
-		return nil, err
-	}
-	return dsl, nil
-}
-
-// ES v6 only accepts "must_not exists" query instead of "missing" query, but elasticsql produces "missing",
-// so use this func to replace.
-// Note it also means a temp limitation that we cannot support field missing search
-func replaceQueryForOpen(dsl *fastjson.Value) *fastjson.Value {
-	re := regexp.MustCompile(jsonMissingCloseTime)
-	newDslStr := re.ReplaceAllString(dsl.String(), `{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}`)
-	dsl = fastjson.MustParse(newDslStr)
-	return dsl
-}
-
-func addNamespaceToQuery(dsl *fastjson.Value, namespaceID string) {
-	if len(namespaceID) == 0 {
-		return
-	}
-
-	namespaceQueryString := fmt.Sprintf(`{"match_phrase":{"NamespaceId":{"query":"%s"}}}`, namespaceID)
-	addMustQuery(dsl, namespaceQueryString)
-}
-
-// addMustQuery is wrapping bool query with new bool query with must,
-// reason not making a flat bool query is to ensure "should (or)" query works correctly in query context.
-func addMustQuery(dsl *fastjson.Value, queryString string) {
-	valOfTopQuery := dsl.Get("query")
-	valOfBool := dsl.Get("query", "bool")
-	newValOfBool := fmt.Sprintf(`{"must":[%s,{"bool":%s}]}`, queryString, valOfBool.String())
-	valOfTopQuery.Set("bool", fastjson.MustParse(newValOfBool))
-}
-
-func (s *visibilityStore) processSortField(dsl *fastjson.Value) (string, error) {
-	isSorted := dsl.Exists(dslFieldSort)
-	var sortField string
-
-	if !isSorted { // set default sorting by StartTime desc
-		dsl.Set(dslFieldSort, fastjson.MustParse(jsonSortForOpen))
-		sortField = searchattribute.StartTime
-	} else { // user provide sorting using order by
-		// sort validation on length
-		if len(dsl.GetArray(dslFieldSort)) > 1 {
-			return "", errors.New("only one field can be used to sort")
-		}
-		// sort validation to exclude IndexedValueTypeString
-		obj, _ := dsl.GetArray(dslFieldSort)[0].Object()
-		obj.Visit(func(k []byte, v *fastjson.Value) { // visit is only way to get object key in fastjson
-			sortField = string(k)
-		})
-		if s.getFieldType(sortField) == enumspb.INDEXED_VALUE_TYPE_STRING {
-			return "", errors.New("unable to sort by field of String type, use field of type Keyword")
-		}
-		// add RunID as tie-breaker
-		dsl.Get(dslFieldSort).Set("1", fastjson.MustParse(jsonSortWithTieBreaker))
-	}
-
-	return sortField, nil
-}
-
-func (s *visibilityStore) getFieldType(fieldName string) enumspb.IndexedValueType {
-	searchAttributes, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
-	if err != nil {
-		s.logger.Error("Unable to read search attribute types.", tag.Error(err))
-	}
-	fieldType, _ := searchAttributes.GetType(fieldName)
-	return fieldType
-}
-
-func (s *visibilityStore) getValueOfSearchAfterInJSON(token *visibilityPageToken, sortField string) (string, error) {
-	var sortVal interface{}
-	var err error
-	switch s.getFieldType(sortField) {
-	case enumspb.INDEXED_VALUE_TYPE_INT, enumspb.INDEXED_VALUE_TYPE_DATETIME, enumspb.INDEXED_VALUE_TYPE_BOOL:
-		sortVal, err = token.SortValue.(json.Number).Int64()
-		if err != nil {
-			err, ok := err.(*strconv.NumError) // field not present, ES will return big int +-9223372036854776000
-			if !ok {
-				return "", err
-			}
-			if err.Num[0] == '-' { // desc
-				sortVal = math.MinInt64
-			} else { // asc
-				sortVal = math.MaxInt64
-			}
-		}
-	case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
-		switch token.SortValue.(type) {
-		case json.Number:
-			sortVal, err = token.SortValue.(json.Number).Float64()
-			if err != nil {
-				return "", err
-			}
-		case string: // field not present, ES will return "-Infinity" or "Infinity"
-			sortVal = fmt.Sprintf(`"%s"`, token.SortValue.(string))
-		}
-	case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
-		if token.SortValue != nil {
-			sortVal = fmt.Sprintf(`"%s"`, token.SortValue.(string))
-		} else { // field not present, ES will return null (so token.SortValue is nil)
-			sortVal = "null"
-		}
-	default:
-		sortVal = token.SortValue
-	}
-
-	return fmt.Sprintf(`[%v, "%s"]`, sortVal, token.TieBreaker), nil
 }
 
 func (s *visibilityStore) checkProcessor() {
@@ -812,9 +579,10 @@ func (s *visibilityStore) getSearchResult(request *visibility.ListWorkflowExecut
 
 	ctx := context.Background()
 	params := &esclient.SearchParameters{
-		Index:    s.index,
-		Query:    query,
-		PageSize: request.PageSize,
+		Index:       s.index,
+		Query:       query,
+		PageSize:    request.PageSize,
+		SearchAfter: token.SearchAfter,
 	}
 	if overStartTime {
 		params.Sorter = append(params.Sorter, elastic.NewFieldSort(searchattribute.StartTime).Desc())
@@ -822,10 +590,6 @@ func (s *visibilityStore) getSearchResult(request *visibility.ListWorkflowExecut
 		params.Sorter = append(params.Sorter, elastic.NewFieldSort(searchattribute.CloseTime).Desc())
 	}
 	params.Sorter = append(params.Sorter, elastic.NewFieldSort(searchattribute.RunID).Desc())
-
-	if token.TieBreaker != "" {
-		params.SearchAfter = []interface{}{token.SortValue, token.TieBreaker}
-	}
 
 	return s.esClient.Search(ctx, params)
 }
@@ -888,8 +652,7 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(
 
 	if len(searchResult.Hits.Hits) == pageSize && lastHitSort != nil { // this means the response is not the last page
 		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
-			SortValue:     lastHitSort[0],
-			TieBreaker:    lastHitSort[1].(string),
+			SearchAfter:   lastHitSort,
 			PointInTimeID: searchResult.PitId,
 		})
 		if err != nil {
@@ -1104,146 +867,6 @@ func checkPageSize(request *visibility.ListWorkflowExecutionsRequestV2) {
 	if request.PageSize == 0 {
 		request.PageSize = 1000
 	}
-}
-
-func processAllValuesForKey(
-	dsl *fastjson.Value,
-	keyFilter func(k string) bool,
-	processFunc func(obj *fastjson.Object, key string, v *fastjson.Value) error,
-) error {
-	switch dsl.Type() {
-	case fastjson.TypeArray:
-		for _, val := range dsl.GetArray() {
-			if err := processAllValuesForKey(val, keyFilter, processFunc); err != nil {
-				return err
-			}
-		}
-	case fastjson.TypeObject:
-		objectVal := dsl.GetObject()
-		var keys []string
-		objectVal.Visit(func(key []byte, val *fastjson.Value) {
-			keys = append(keys, string(key))
-		})
-
-		for _, key := range keys {
-			var err error
-			val := objectVal.Get(key)
-			if keyFilter(key) {
-				err = processFunc(objectVal, key, val)
-			} else {
-				err = processAllValuesForKey(val, keyFilter, processFunc)
-			}
-			if err != nil {
-				return err
-			}
-		}
-	default:
-		// do nothing, since there's no key
-	}
-	return nil
-}
-
-func timeKeyFilter(key string) bool {
-	_, ok := timeKeys[key]
-	return ok
-}
-
-func timeProcessFunc(_ *fastjson.Object, _ string, value *fastjson.Value) error {
-	return processAllValuesForKey(
-		value,
-		func(key string) bool {
-			_, ok := rangeKeys[key]
-			return ok
-		},
-		func(obj *fastjson.Object, key string, v *fastjson.Value) error {
-			timeStr := string(v.GetStringBytes())
-
-			// To support dates passed as int64 "nanoseconds since epoch".
-			if nanos, err := strconv.ParseInt(timeStr, 10, 64); err == nil {
-				obj.Set(key, fastjson.MustParse(fmt.Sprintf(`"%s"`, time.Unix(0, nanos).UTC().Format(time.RFC3339Nano))))
-			}
-			return nil
-		})
-}
-
-// statusKeyFilter catch `ExecutionStatus` key and sends its value `{"query":"Running"}` to the statusProcessFunc.
-func statusKeyFilter(key string) bool {
-	return key == searchattribute.ExecutionStatus
-}
-
-// statusProcessFunc treats passed value as regular JSON and calls processAllValuesForKey for it.
-// keyFilterFunc func catches `query` key and call `processFunc` with value "Running".
-// In case of string it is just ignored but if it is a `int`, it gets converted to string and set back to `obj`.
-func statusProcessFunc(_ *fastjson.Object, _ string, value *fastjson.Value) error {
-	return processAllValuesForKey(
-		value,
-		func(key string) bool {
-			_, ok := exactMatchKeys[key]
-			return ok
-		},
-		func(obj *fastjson.Object, key string, v *fastjson.Value) error {
-			statusStr := string(v.GetStringBytes())
-
-			// To support statuses passed as integers for backward compatibility.
-			// Might be removed one day (added 6/15/21).
-			if statusInt, err := strconv.ParseInt(statusStr, 10, 32); err == nil {
-				statusStr = enumspb.WorkflowExecutionStatus_name[int32(statusInt)]
-				obj.Set(key, fastjson.MustParse(fmt.Sprintf(`"%s"`, statusStr)))
-			}
-			return nil
-		})
-}
-func durationKeyFilter(key string) bool {
-	return key == searchattribute.ExecutionDuration
-}
-
-func durationProcessFunc(_ *fastjson.Object, _ string, value *fastjson.Value) error {
-	return processAllValuesForKey(
-		value,
-		func(key string) bool {
-			_, ok := rangeKeys[key]
-			return ok
-		},
-		func(obj *fastjson.Object, key string, v *fastjson.Value) error {
-			durationStr := string(v.GetStringBytes())
-
-			// To support durations passed as golang durations such as "300ms", "-1.5h" or "2h45m".
-			// Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
-			if duration, err := time.ParseDuration(durationStr); err == nil {
-				obj.Set(key, fastjson.MustParse(strconv.FormatInt(duration.Nanoseconds(), 10)))
-				return nil
-			}
-
-			// To support "hh:mm:ss" durations.
-			durationNanos, err := parseHHMMSSDuration(durationStr)
-			if errors.Is(err, ErrInvalidDuration) {
-				return err
-			}
-			if err == nil {
-				obj.Set(key, fastjson.MustParse(strconv.FormatInt(durationNanos, 10)))
-			}
-
-			return nil
-		})
-}
-
-func parseHHMMSSDuration(d string) (int64, error) {
-	var hours, minutes, seconds, nanos int64
-	_, err := fmt.Sscanf(d, "%d:%d:%d", &hours, &minutes, &seconds)
-	if err != nil {
-		return 0, err
-	}
-	if hours < 0 {
-		return 0, fmt.Errorf("%w: hours must be positive number", ErrInvalidDuration)
-	}
-	if minutes < 0 || minutes > 59 {
-		return 0, fmt.Errorf("%w: minutes must be from 0 to 59", ErrInvalidDuration)
-	}
-	if seconds < 0 || seconds > 59 {
-		return 0, fmt.Errorf("%w: seconds must be from 0 to 59", ErrInvalidDuration)
-	}
-
-	return hours*int64(time.Hour) + minutes*int64(time.Minute) + seconds*int64(time.Second) + nanos, nil
 }
 
 func detailedErrorMessage(err error) string {

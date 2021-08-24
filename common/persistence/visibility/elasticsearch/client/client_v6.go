@@ -133,14 +133,22 @@ func (c *clientV6) Scroll(ctx context.Context, scrollID string) (*elastic.Search
 	return convertV6SearchResultToV7(result), scrollService, convertV6ErrorToV7(err)
 }
 
-func (c *clientV6) ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error) {
-	scrollService := elastic6.NewScrollService(c.esClient)
-	result, err := scrollService.Index(index).Body(query).Do(ctx)
-	return convertV6SearchResultToV7(result), scrollService, convertV6ErrorToV7(err)
+func (c *clientV6) ScrollFirstPage(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, ScrollService, error) {
+	scrollService := elastic6.NewScrollService(c.esClient).
+		Index(p.Index).
+		Query(p.Query).
+		SortBy(convertV7SortersToV6(p.Sorter)...)
+
+	if p.PageSize != 0 {
+		scrollService.Size(p.PageSize)
+	}
+
+	searchResult, err := scrollService.Do(ctx)
+	return convertV6SearchResultToV7(searchResult), scrollService, convertV6ErrorToV7(err)
 }
 
-func (c *clientV6) Count(ctx context.Context, index, query string) (int64, error) {
-	count, err := c.esClient.Count(index).BodyString(query).Do(ctx)
+func (c *clientV6) Count(ctx context.Context, p *SearchParameters) (int64, error) {
+	count, err := c.esClient.Count(p.Index).Query(p.Query).Do(ctx)
 	return count, convertV6ErrorToV7(err)
 }
 
