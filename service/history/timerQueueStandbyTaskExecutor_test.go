@@ -766,7 +766,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 					NewBufferedEvents:         nil,
 					ClearBufferedEvents:       false,
 				},
-				NewWorkflowSnapshot: nil,
+				UpdateWorkflowEvents: []*persistence.WorkflowEvents{},
 			}, input)
 			return &persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil
 		})

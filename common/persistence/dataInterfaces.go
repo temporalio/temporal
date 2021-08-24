@@ -490,8 +490,9 @@ type (
 		Mode UpdateWorkflowMode
 
 		UpdateWorkflowMutation WorkflowMutation
-
-		NewWorkflowSnapshot *WorkflowSnapshot
+		UpdateWorkflowEvents   []*WorkflowEvents
+		NewWorkflowSnapshot    *WorkflowSnapshot
+		NewWorkflowEvents      []*WorkflowEvents
 	}
 
 	// ConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for a single run
@@ -996,6 +997,10 @@ type (
 		DeleteChildInfoCount         int
 		DeleteSignalInfoCount        int
 		DeleteRequestCancelInfoCount int
+
+		// History size diff
+		UpdateWorkflowHistorySizeDiff int64
+		NewWorkflowHistorySizeDiff    int64
 	}
 
 	// UpdateWorkflowExecutionResponse is response for UpdateWorkflowExecutionRequest

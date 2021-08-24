@@ -328,9 +328,10 @@ type (
 
 		Mode UpdateWorkflowMode
 
-		UpdateWorkflowMutation InternalWorkflowMutation
-
-		NewWorkflowSnapshot *InternalWorkflowSnapshot
+		UpdateWorkflowMutation  InternalWorkflowMutation
+		UpdateWorkflowNewEvents []*InternalAppendHistoryNodesRequest
+		NewWorkflowSnapshot     *InternalWorkflowSnapshot
+		NewWorkflowNewEvents    []*InternalAppendHistoryNodesRequest
 	}
 
 	// InternalConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for Persistence Interface
