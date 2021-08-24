@@ -217,20 +217,23 @@ func IsPersistenceTransientError(err error) bool {
 
 // IsServiceTransientError checks if the error is a retryable error.
 func IsServiceTransientError(err error) bool {
-	return !IsServiceNonRetryableError(err)
-}
-
-// IsServiceNonRetryableError checks if the error is a non retryable error.
-func IsServiceNonRetryableError(err error) bool {
 	switch err.(type) {
 	case *serviceerror.NotFound,
 		*serviceerror.InvalidArgument,
 		*serviceerror.NamespaceNotActive,
 		*serviceerror.WorkflowExecutionAlreadyStarted:
-		return true
+		return false
 	}
 
-	return IsContextDeadlineExceededErr(err) || IsContextCanceledErr(err)
+	if IsContextDeadlineExceededErr(err) {
+		return false
+	}
+
+	if IsContextCanceledErr(err) {
+		return false
+	}
+
+	return true
 }
 
 // IsContextDeadlineExceededErr checks if the error is context.DeadlineExceeded or serviceerror.DeadlineExceeded error
