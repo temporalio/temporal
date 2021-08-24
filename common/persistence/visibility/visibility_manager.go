@@ -118,21 +118,21 @@ type (
 	// ListWorkflowExecutionsByTypeRequest is used to list executions of
 	// a specific type in a namespace
 	ListWorkflowExecutionsByTypeRequest struct {
-		ListWorkflowExecutionsRequest
+		*ListWorkflowExecutionsRequest
 		WorkflowTypeName string
 	}
 
 	// ListWorkflowExecutionsByWorkflowIDRequest is used to list executions that
 	// have specific WorkflowID in a namespace
 	ListWorkflowExecutionsByWorkflowIDRequest struct {
-		ListWorkflowExecutionsRequest
+		*ListWorkflowExecutionsRequest
 		WorkflowID string
 	}
 
 	// ListClosedWorkflowExecutionsByStatusRequest is used to list executions that
 	// have specific close status
 	ListClosedWorkflowExecutionsByStatusRequest struct {
-		ListWorkflowExecutionsRequest
+		*ListWorkflowExecutionsRequest
 		Status enumspb.WorkflowExecutionStatus
 	}
 

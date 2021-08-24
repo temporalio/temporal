@@ -2183,7 +2183,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		return nil, err
 	}
 
-	baseReq := visibility.ListWorkflowExecutionsRequest{
+	baseReq := &visibility.ListWorkflowExecutionsRequest{
 		NamespaceID:       namespaceID,
 		Namespace:         namespace,
 		PageSize:          int(request.GetMaximumPageSize()),
@@ -2217,7 +2217,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		wh.GetLogger().Debug("List open workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByType)
 	} else {
-		persistenceResp, err = wh.GetVisibilityManager().ListOpenWorkflowExecutions(&baseReq)
+		persistenceResp, err = wh.GetVisibilityManager().ListOpenWorkflowExecutions(baseReq)
 	}
 
 	if err != nil {
@@ -2280,7 +2280,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		return nil, err
 	}
 
-	baseReq := visibility.ListWorkflowExecutionsRequest{
+	baseReq := &visibility.ListWorkflowExecutionsRequest{
 		NamespaceID:       namespaceID,
 		Namespace:         namespace,
 		PageSize:          int(request.GetMaximumPageSize()),
@@ -2329,7 +2329,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		wh.GetLogger().Debug("List closed workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByStatus)
 	} else {
-		persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutions(&baseReq)
+		persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutions(baseReq)
 	}
 
 	if err != nil {

@@ -151,7 +151,6 @@ func (c *Converter) convertWhere(expr sqlparser.Expr) (elastic.Query, error) {
 	case *sqlparser.NotExpr:
 		return nil, NewConverterError(fmt.Sprintf("%s: 'not' expression", notSupportedErrMessage))
 	case *sqlparser.FuncExpr:
-		//return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("%v: function expression", notSupportedErrMessage.Error()))
 		return nil, NewConverterError(fmt.Sprintf("%s: function expression", notSupportedErrMessage))
 	default:
 		return nil, NewConverterError(fmt.Sprintf("%s: expression of type %T", notSupportedErrMessage, expr))
