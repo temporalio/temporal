@@ -503,6 +503,136 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	request.NextPageToken = nil
 }
 
+func (s *ESVisibilitySuite) TestBuildSearchParametersV2_Query() {
+	queryToJSON := func(q elastic.Query) string {
+		m, err := q.Source()
+		s.NoError(err)
+		b, err := json.Marshal(m)
+		s.NoError(err)
+		return string(b)
+	}
+
+	sorterToJSON := func(sorters []elastic.Sorter) string {
+		var ms []interface{}
+		for _, sorter := range sorters {
+			m, err := sorter.Source()
+			s.NoError(err)
+			ms = append(ms, m)
+		}
+		b, err := json.Marshal(ms)
+		s.NoError(err)
+		return string(b)
+	}
+
+	request := &visibility.ListWorkflowExecutionsRequestV2{
+		NamespaceID: testNamespaceID,
+		Namespace:   testNamespace,
+		PageSize:    testPageSize,
+	}
+
+	request.Query = `WorkflowId = 'wid'`
+	p, err := s.visibilityStore.buildSearchParametersV2(request)
+	s.NoError(err)
+	s.Equal(`{"bool":{"filter":[{"match_phrase":{"WorkflowId":{"query":"wid"}}},{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}]}}`, queryToJSON(p.Query))
+	s.Equal(`[{"StartTime":{"order":"desc"}},{"RunId":{"order":"desc"}}]`, sorterToJSON(p.Sorter))
+
+	request.Query = `WorkflowId = 'wid' or WorkflowId = 'another-wid'`
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.NoError(err)
+	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"should":[{"match_phrase":{"WorkflowId":{"query":"wid"}}},{"match_phrase":{"WorkflowId":{"query":"another-wid"}}}]}}`, queryToJSON(p.Query))
+	s.Equal(`[{"StartTime":{"order":"desc"}},{"RunId":{"order":"desc"}}]`, sorterToJSON(p.Sorter))
+
+	request.Query = `WorkflowId = 'wid' order by StartTime desc`
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.NoError(err)
+	s.Equal(`{"bool":{"filter":[{"match_phrase":{"WorkflowId":{"query":"wid"}}},{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}]}}`, queryToJSON(p.Query))
+	s.Equal(`[{"StartTime":{"order":"desc"}},{"RunId":{"order":"desc"}}]`, sorterToJSON(p.Sorter))
+
+	request.Query = `WorkflowId = 'wid' and CloseTime = missing`
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.NoError(err)
+	s.Equal(`{"bool":{"filter":[{"match_phrase":{"WorkflowId":{"query":"wid"}}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}},{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}]}}`, queryToJSON(p.Query))
+	s.Equal(`[{"StartTime":{"order":"desc"}},{"RunId":{"order":"desc"}}]`, sorterToJSON(p.Sorter))
+
+	request.Query = `WorkflowId = 'wid' or CloseTime = missing`
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.NoError(err)
+	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"should":[{"match_phrase":{"WorkflowId":{"query":"wid"}}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}]}}`, queryToJSON(p.Query))
+	s.Equal(`[{"StartTime":{"order":"desc"}},{"RunId":{"order":"desc"}}]`, sorterToJSON(p.Sorter))
+
+	request.Query = `CloseTime = missing order by CloseTime desc`
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.NoError(err)
+	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"CloseTime"}}}}`, queryToJSON(p.Query))
+	s.Equal(`[{"CloseTime":{"order":"desc"}},{"RunId":{"order":"desc"}}]`, sorterToJSON(p.Sorter))
+
+	request.Query = `StartTime = "2018-06-07T15:04:05-08:00"`
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.NoError(err)
+	s.Equal(`{"bool":{"filter":[{"match_phrase":{"StartTime":{"query":"2018-06-07T15:04:05-08:00"}}},{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}]}}`, queryToJSON(p.Query))
+	s.Equal(`[{"StartTime":{"order":"desc"}},{"RunId":{"order":"desc"}}]`, sorterToJSON(p.Sorter))
+
+	request.Query = `WorkflowId = 'wid' and StartTime > "2018-06-07T15:04:05+00:00"`
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.NoError(err)
+	s.Equal(`{"bool":{"filter":[{"match_phrase":{"WorkflowId":{"query":"wid"}}},{"range":{"StartTime":{"from":"2018-06-07T15:04:05+00:00","include_lower":false,"include_upper":true,"to":null}}},{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}]}}`, queryToJSON(p.Query))
+	s.Equal(`[{"StartTime":{"order":"desc"}},{"RunId":{"order":"desc"}}]`, sorterToJSON(p.Sorter))
+
+	request.Query = `ExecutionTime < 1000000`
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.NoError(err)
+	s.Equal(`{"bool":{"filter":[{"range":{"ExecutionTime":{"from":null,"include_lower":true,"include_upper":false,"to":"1970-01-01T00:00:00.001Z"}}},{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}]}}`, queryToJSON(p.Query))
+	s.Equal(`[{"StartTime":{"order":"desc"}},{"RunId":{"order":"desc"}}]`, sorterToJSON(p.Sorter))
+
+	request.Query = `ExecutionTime between 1 and 2`
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.NoError(err)
+	s.Equal(`{"bool":{"filter":[{"range":{"ExecutionTime":{"from":"1970-01-01T00:00:00.000000001Z","include_lower":true,"include_upper":true,"to":"1970-01-01T00:00:00.000000002Z"}}},{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}]}}`, queryToJSON(p.Query))
+	s.Equal(`[{"StartTime":{"order":"desc"}},{"RunId":{"order":"desc"}}]`, sorterToJSON(p.Sorter))
+
+	request.Query = `ExecutionTime < 1000000 or ExecutionTime > 2000000`
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.NoError(err)
+	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"should":[{"range":{"ExecutionTime":{"from":null,"include_lower":true,"include_upper":false,"to":"1970-01-01T00:00:00.001Z"}}},{"range":{"ExecutionTime":{"from":"1970-01-01T00:00:00.002Z","include_lower":false,"include_upper":true,"to":null}}}]}}`, queryToJSON(p.Query))
+	s.Equal(`[{"StartTime":{"order":"desc"}},{"RunId":{"order":"desc"}}]`, sorterToJSON(p.Sorter))
+
+	request.Query = `order by ExecutionTime`
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.NoError(err)
+	s.Equal(`{"bool":{"filter":[{"match_all":{}},{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}]}}`, queryToJSON(p.Query))
+	s.Equal(`[{"ExecutionTime":{"order":"asc"}},{"RunId":{"order":"desc"}}]`, sorterToJSON(p.Sorter))
+
+	request.Query = `order by StartTime desc, CloseTime asc`
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.NoError(err)
+	s.Equal(`{"bool":{"filter":[{"match_all":{}},{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}]}}`, queryToJSON(p.Query))
+	s.Equal(`[{"StartTime":{"order":"desc"}},{"CloseTime":{"order":"asc"}},{"RunId":{"order":"desc"}}]`, sorterToJSON(p.Sorter))
+
+	request.Query = `order by CustomStringField desc`
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.Error(err)
+	s.IsType(&serviceerror.InvalidArgument{}, err)
+	s.Equal(err.(*serviceerror.InvalidArgument).Error(), "unable to parse query: unable to convert 'order by' column name: unable to sort by field of String type, use field of type Keyword")
+
+	request.Query = `order by CustomIntField asc`
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.NoError(err)
+	s.Equal(`{"bool":{"filter":[{"match_all":{}},{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}]}}`, queryToJSON(p.Query))
+	s.Equal(`[{"CustomIntField":{"order":"asc"}},{"RunId":{"order":"desc"}}]`, sorterToJSON(p.Sorter))
+
+	request.Query = `ExecutionTime < "unable to parse"`
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	// Wrong dates goes directly to Elasticsearch, and it returns an error.
+	s.NoError(err)
+	s.Equal(`{"bool":{"filter":[{"range":{"ExecutionTime":{"from":null,"include_lower":true,"include_upper":false,"to":"unable to parse"}}},{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}]}}`, queryToJSON(p.Query))
+	s.Equal(`[{"StartTime":{"order":"desc"}},{"RunId":{"order":"desc"}}]`, sorterToJSON(p.Sorter))
+
+	// invalid union injection
+	request.Query = `WorkflowId = 'wid' union select * from dummy`
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.Error(err)
+}
+
 func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	// test for empty hits
 	searchResult := &elastic.SearchResult{
