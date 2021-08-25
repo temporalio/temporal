@@ -585,12 +585,14 @@ func (e *MutableStateImpl) GetActivityScheduledEvent(
 		return nil, err
 	}
 	scheduledEvent, err := e.eventsCache.GetEvent(
-		e.executionInfo.NamespaceId,
-		e.executionInfo.WorkflowId,
-		e.executionState.RunId,
+		events.EventKey{
+			NamespaceID: e.executionInfo.NamespaceId,
+			WorkflowID:  e.executionInfo.WorkflowId,
+			RunID:       e.executionState.RunId,
+			EventID:     ai.ScheduleId,
+			Version:     version,
+		},
 		ai.ScheduledEventBatchId,
-		ai.ScheduleId,
-		version,
 		currentBranchToken,
 	)
 	if err != nil {
@@ -658,12 +660,14 @@ func (e *MutableStateImpl) GetChildExecutionInitiatedEvent(
 		return nil, err
 	}
 	initiatedEvent, err := e.eventsCache.GetEvent(
-		e.executionInfo.NamespaceId,
-		e.executionInfo.WorkflowId,
-		e.executionState.RunId,
+		events.EventKey{
+			NamespaceID: e.executionInfo.NamespaceId,
+			WorkflowID:  e.executionInfo.WorkflowId,
+			RunID:       e.executionState.RunId,
+			EventID:     ci.InitiatedId,
+			Version:     version,
+		},
 		ci.InitiatedEventBatchId,
-		ci.InitiatedId,
-		version,
 		currentBranchToken,
 	)
 	if err != nil {
@@ -739,12 +743,14 @@ func (e *MutableStateImpl) GetCompletionEvent() (*historypb.HistoryEvent, error)
 	}
 
 	completionEvent, err := e.eventsCache.GetEvent(
-		e.executionInfo.NamespaceId,
-		e.executionInfo.WorkflowId,
-		e.executionState.RunId,
+		events.EventKey{
+			NamespaceID: e.executionInfo.NamespaceId,
+			WorkflowID:  e.executionInfo.WorkflowId,
+			RunID:       e.executionState.RunId,
+			EventID:     completionEventID,
+			Version:     version,
+		},
 		firstEventID,
-		completionEventID,
-		version,
 		currentBranchToken,
 	)
 	if err != nil {
@@ -770,12 +776,14 @@ func (e *MutableStateImpl) GetStartEvent() (*historypb.HistoryEvent, error) {
 	}
 
 	startEvent, err := e.eventsCache.GetEvent(
-		e.executionInfo.NamespaceId,
-		e.executionInfo.WorkflowId,
-		e.executionState.RunId,
+		events.EventKey{
+			NamespaceID: e.executionInfo.NamespaceId,
+			WorkflowID:  e.executionInfo.WorkflowId,
+			RunID:       e.executionState.RunId,
+			EventID:     common.FirstEventID,
+			Version:     startVersion,
+		},
 		common.FirstEventID,
-		common.FirstEventID,
-		startVersion,
 		currentBranchToken,
 	)
 	if err != nil {
@@ -858,11 +866,13 @@ func (e *MutableStateImpl) writeEventToCache(
 	// For completion event: store it within events cache so we can communicate the result to parent execution
 	// during the processing of DeleteTransferTask without loading this event from database
 	e.eventsCache.PutEvent(
-		e.executionInfo.NamespaceId,
-		e.executionInfo.WorkflowId,
-		e.executionState.RunId,
-		event.GetEventId(),
-		event.GetVersion(),
+		events.EventKey{
+			NamespaceID: e.executionInfo.NamespaceId,
+			WorkflowID:  e.executionInfo.WorkflowId,
+			RunID:       e.executionState.RunId,
+			EventID:     event.GetEventId(),
+			Version:     event.GetVersion(),
+		},
 		event,
 	)
 }

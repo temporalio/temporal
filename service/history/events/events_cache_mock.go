@@ -32,7 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	history "go.temporal.io/api/history/v1"
+	v1 "go.temporal.io/api/history/v1"
 )
 
 // MockCache is a mock of Cache interface.
@@ -59,40 +59,40 @@ func (m *MockCache) EXPECT() *MockCacheMockRecorder {
 }
 
 // DeleteEvent mocks base method.
-func (m *MockCache) DeleteEvent(namespaceID, workflowID, runID string, eventID, version int64) {
+func (m *MockCache) DeleteEvent(key EventKey) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "DeleteEvent", namespaceID, workflowID, runID, eventID, version)
+	m.ctrl.Call(m, "DeleteEvent", key)
 }
 
 // DeleteEvent indicates an expected call of DeleteEvent.
-func (mr *MockCacheMockRecorder) DeleteEvent(namespaceID, workflowID, runID, eventID, version interface{}) *gomock.Call {
+func (mr *MockCacheMockRecorder) DeleteEvent(key interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteEvent", reflect.TypeOf((*MockCache)(nil).DeleteEvent), namespaceID, workflowID, runID, eventID, version)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteEvent", reflect.TypeOf((*MockCache)(nil).DeleteEvent), key)
 }
 
 // GetEvent mocks base method.
-func (m *MockCache) GetEvent(namespaceID, workflowID, runID string, firstEventID, eventID, version int64, branchToken []byte) (*history.HistoryEvent, error) {
+func (m *MockCache) GetEvent(key EventKey, firstEventID int64, branchToken []byte) (*v1.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetEvent", namespaceID, workflowID, runID, firstEventID, eventID, version, branchToken)
-	ret0, _ := ret[0].(*history.HistoryEvent)
+	ret := m.ctrl.Call(m, "GetEvent", key, firstEventID, branchToken)
+	ret0, _ := ret[0].(*v1.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetEvent indicates an expected call of GetEvent.
-func (mr *MockCacheMockRecorder) GetEvent(namespaceID, workflowID, runID, firstEventID, eventID, version, branchToken interface{}) *gomock.Call {
+func (mr *MockCacheMockRecorder) GetEvent(key, firstEventID, branchToken interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEvent", reflect.TypeOf((*MockCache)(nil).GetEvent), namespaceID, workflowID, runID, firstEventID, eventID, version, branchToken)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEvent", reflect.TypeOf((*MockCache)(nil).GetEvent), key, firstEventID, branchToken)
 }
 
 // PutEvent mocks base method.
-func (m *MockCache) PutEvent(namespaceID, workflowID, runID string, eventID, version int64, event *history.HistoryEvent) {
+func (m *MockCache) PutEvent(key EventKey, event *v1.HistoryEvent) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "PutEvent", namespaceID, workflowID, runID, eventID, version, event)
+	m.ctrl.Call(m, "PutEvent", key, event)
 }
 
 // PutEvent indicates an expected call of PutEvent.
-func (mr *MockCacheMockRecorder) PutEvent(namespaceID, workflowID, runID, eventID, version, event interface{}) *gomock.Call {
+func (mr *MockCacheMockRecorder) PutEvent(key, event interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutEvent", reflect.TypeOf((*MockCache)(nil).PutEvent), namespaceID, workflowID, runID, eventID, version, event)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutEvent", reflect.TypeOf((*MockCache)(nil).PutEvent), key, event)
 }

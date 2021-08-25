@@ -299,12 +299,14 @@ Loop:
 		}
 
 		scheduleEvent, err := r.eventsCache.GetEvent(
-			executionInfo.NamespaceId,
-			executionInfo.WorkflowId,
-			executionState.RunId,
+			events.EventKey{
+				NamespaceID: executionInfo.NamespaceId,
+				WorkflowID:  executionInfo.WorkflowId,
+				RunID:       executionState.RunId,
+				EventID:     activityInfo.ScheduleId,
+				Version:     activityInfo.Version,
+			},
 			activityInfo.ScheduledEventBatchId,
-			activityInfo.ScheduleId,
-			activityInfo.Version,
 			currentBranchToken,
 		)
 		if err != nil {
@@ -381,12 +383,14 @@ Loop:
 		}
 
 		scheduleEvent, err := r.eventsCache.GetEvent(
-			executionInfo.NamespaceId,
-			executionInfo.WorkflowId,
-			executionState.RunId,
+			events.EventKey{
+				NamespaceID: executionInfo.NamespaceId,
+				WorkflowID:  executionInfo.WorkflowId,
+				RunID:       executionState.RunId,
+				EventID:     childWorkflowInfo.InitiatedId,
+				Version:     childWorkflowInfo.Version,
+			},
 			childWorkflowInfo.InitiatedEventBatchId,
-			childWorkflowInfo.InitiatedId,
-			childWorkflowInfo.Version,
 			currentBranchToken,
 		)
 		if err != nil {
@@ -421,12 +425,14 @@ func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 
 	for _, requestCancelInfo := range pendingRequestCancelInfos {
 		initiateEvent, err := r.eventsCache.GetEvent(
-			executionInfo.NamespaceId,
-			executionInfo.WorkflowId,
-			executionState.RunId,
+			events.EventKey{
+				NamespaceID: executionInfo.NamespaceId,
+				WorkflowID:  executionInfo.WorkflowId,
+				RunID:       executionState.RunId,
+				EventID:     requestCancelInfo.GetInitiatedId(),
+				Version:     requestCancelInfo.GetVersion(),
+			},
 			requestCancelInfo.GetInitiatedEventBatchId(),
-			requestCancelInfo.GetInitiatedId(),
-			requestCancelInfo.GetVersion(),
 			currentBranchToken,
 		)
 		if err != nil {
@@ -461,12 +467,14 @@ func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 
 	for _, signalInfo := range pendingSignalInfos {
 		initiateEvent, err := r.eventsCache.GetEvent(
-			executionInfo.NamespaceId,
-			executionInfo.WorkflowId,
-			executionState.RunId,
+			events.EventKey{
+				NamespaceID: executionInfo.NamespaceId,
+				WorkflowID:  executionInfo.WorkflowId,
+				RunID:       executionState.RunId,
+				EventID:     signalInfo.GetInitiatedId(),
+				Version:     signalInfo.GetVersion(),
+			},
 			signalInfo.GetInitiatedEventBatchId(),
-			signalInfo.GetInitiatedId(),
-			signalInfo.GetVersion(),
 			currentBranchToken,
 		)
 		if err != nil {

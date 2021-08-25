@@ -41,31 +41,18 @@ import (
 )
 
 type (
+	EventKey struct {
+		NamespaceID string
+		WorkflowID  string
+		RunID       string
+		EventID     int64
+		Version     int64
+	}
+
 	Cache interface {
-		GetEvent(
-			namespaceID string,
-			workflowID string,
-			runID string,
-			firstEventID int64,
-			eventID int64,
-			version int64,
-			branchToken []byte,
-		) (*historypb.HistoryEvent, error)
-		PutEvent(
-			namespaceID string,
-			workflowID string,
-			runID string,
-			eventID int64,
-			version int64,
-			event *historypb.HistoryEvent,
-		)
-		DeleteEvent(
-			namespaceID string,
-			workflowID string,
-			runID string,
-			eventID int64,
-			version int64,
-		)
+		GetEvent(key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error)
+		PutEvent(key EventKey, event *historypb.HistoryEvent)
+		DeleteEvent(key EventKey)
 	}
 
 	CacheImpl struct {
@@ -75,14 +62,6 @@ type (
 		logger        log.Logger
 		metricsClient metrics.Client
 		shardID       int32
-	}
-
-	eventKey struct {
-		namespaceID string
-		workflowID  string
-		runID       string
-		eventID     int64
-		version     int64
 	}
 )
 
@@ -116,37 +95,26 @@ func NewEventsCache(
 	}
 }
 
-func newEventKey(namespaceID, workflowID, runID string, eventID, version int64) eventKey {
-	return eventKey{
-		namespaceID: namespaceID,
-		workflowID:  workflowID,
-		runID:       runID,
-		eventID:     eventID,
-		version:     version,
-	}
-}
-
-func (e *CacheImpl) validateIds(namespaceID, workflowID, runID string, eventID, version int64) bool {
-	if len(namespaceID) == 0 || len(workflowID) == 0 || len(runID) == 0 || eventID < common.FirstEventID {
+func (e *CacheImpl) validateKey(key EventKey) bool {
+	if len(key.NamespaceID) == 0 || len(key.WorkflowID) == 0 || len(key.RunID) == 0 || key.EventID < common.FirstEventID {
 		// This is definitely a bug, but just warn and don't crash so we can find anywhere this happens.
 		e.logger.Warn("one or more ids is invalid in event cache",
-			tag.WorkflowID(workflowID),
-			tag.WorkflowRunID(runID),
-			tag.WorkflowNamespaceID(namespaceID),
-			tag.WorkflowEventID(eventID))
+			tag.WorkflowID(key.WorkflowID),
+			tag.WorkflowRunID(key.RunID),
+			tag.WorkflowNamespaceID(key.NamespaceID),
+			tag.WorkflowEventID(key.EventID))
 		return false
 	}
 	return true
 }
 
-func (e *CacheImpl) GetEvent(namespaceID, workflowID, runID string, firstEventID, eventID, version int64,
-	branchToken []byte) (*historypb.HistoryEvent, error) {
+func (e *CacheImpl) GetEvent(key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error) {
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetEventScope, metrics.CacheLatency)
 	defer sw.Stop()
 
-	validKey := e.validateIds(namespaceID, workflowID, runID, eventID, version)
-	key := newEventKey(namespaceID, workflowID, runID, eventID, version)
+	validKey := e.validateKey(key)
+
 	// Test hook for disabling cache
 	if !e.disabled {
 		event, cacheHit := e.Cache.Get(key).(*historypb.HistoryEvent)
@@ -156,53 +124,48 @@ func (e *CacheImpl) GetEvent(namespaceID, workflowID, runID string, firstEventID
 	}
 
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheMissCounter)
-	event, err := e.getHistoryEventFromStore(namespaceID, workflowID, runID, firstEventID, eventID, version, branchToken)
+	event, err := e.getHistoryEventFromStore(key, firstEventID, branchToken)
 	if err != nil {
 		e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheFailures)
 		e.logger.Error("Cache unable to retrieve event from store",
 			tag.Error(err),
-			tag.WorkflowID(workflowID),
-			tag.WorkflowRunID(runID),
-			tag.WorkflowNamespaceID(namespaceID),
-			tag.WorkflowEventID(eventID))
+			tag.WorkflowID(key.WorkflowID),
+			tag.WorkflowRunID(key.RunID),
+			tag.WorkflowNamespaceID(key.NamespaceID),
+			tag.WorkflowEventID(key.EventID))
 		return nil, err
 	}
 
+	// If invalid, return event anyway, but don't store in cache
 	if validKey {
 		e.Put(key, event)
 	}
 	return event, nil
 }
 
-func (e *CacheImpl) PutEvent(namespaceID, workflowID, runID string, eventID, version int64, event *historypb.HistoryEvent) {
+func (e *CacheImpl) PutEvent(key EventKey, event *historypb.HistoryEvent) {
 	e.metricsClient.IncCounter(metrics.EventsCachePutEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCachePutEventScope, metrics.CacheLatency)
 	defer sw.Stop()
 
-	if !e.validateIds(namespaceID, workflowID, runID, eventID, version) {
+	if !e.validateKey(key) {
 		return
 	}
-	key := newEventKey(namespaceID, workflowID, runID, eventID, version)
 	e.Put(key, event)
 }
 
-func (e *CacheImpl) DeleteEvent(namespaceID, workflowID, runID string, eventID, version int64) {
+func (e *CacheImpl) DeleteEvent(key EventKey) {
 	e.metricsClient.IncCounter(metrics.EventsCacheDeleteEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheDeleteEventScope, metrics.CacheLatency)
 	defer sw.Stop()
 
-	e.validateIds(namespaceID, workflowID, runID, eventID, version)
-	key := newEventKey(namespaceID, workflowID, runID, eventID, version)
+	e.validateKey(key) // just for log message, delete anyway
 	e.Delete(key)
 }
 
 func (e *CacheImpl) getHistoryEventFromStore(
-	namespaceID string,
-	workflowID string,
-	runID string,
+	key EventKey,
 	firstEventID int64,
-	eventID int64,
-	version int64,
 	branchToken []byte,
 ) (*historypb.HistoryEvent, error) {
 
@@ -213,7 +176,7 @@ func (e *CacheImpl) getHistoryEventFromStore(
 	response, err := e.eventsMgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
-		MaxEventID:    eventID + 1,
+		MaxEventID:    key.EventID + 1,
 		PageSize:      1,
 		NextPageToken: nil,
 		ShardID:       e.shardID,
@@ -223,7 +186,7 @@ func (e *CacheImpl) getHistoryEventFromStore(
 		// noop
 	case *serviceerror.DataLoss:
 		// log event
-		e.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(workflowID), tag.WorkflowRunID(runID))
+		e.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(key.NamespaceID), tag.WorkflowID(key.WorkflowID), tag.WorkflowRunID(key.RunID))
 		e.metricsClient.IncCounter(metrics.EventsCacheGetFromStoreScope, metrics.CacheFailures)
 		return nil, err
 	default:
@@ -233,7 +196,7 @@ func (e *CacheImpl) getHistoryEventFromStore(
 
 	// find history event from batch and return back single event to caller
 	for _, e := range response.HistoryEvents {
-		if e.EventId == eventID && e.Version == version {
+		if e.EventId == key.EventID && e.Version == key.Version {
 			return e, nil
 		}
 	}
