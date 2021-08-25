@@ -3,7 +3,6 @@ package elasticsearch
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -65,7 +64,7 @@ func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]inter
 				// To support durations passed as golang durations such as "300ms", "-1.5h" or "2h45m".
 				// Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
 				if duration, err := time.ParseDuration(durationStr); err == nil {
-					value = strconv.FormatInt(duration.Nanoseconds(), 10)
+					value = duration.Nanoseconds()
 				} else {
 					// To support "hh:mm:ss" durations.
 					durationNanos, err := vi.parseHHMMSSDuration(durationStr)
@@ -73,7 +72,7 @@ func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]inter
 						return nil, err
 					}
 					if err == nil {
-						value = strconv.FormatInt(durationNanos, 10)
+						value = durationNanos
 					}
 				}
 			}

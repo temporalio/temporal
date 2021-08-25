@@ -44,7 +44,7 @@ type (
 	// bleed through, as the main purpose is testability not abstraction.
 	Client interface {
 		Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error)
-		Count(ctx context.Context, p *SearchParameters) (int64, error)
+		Count(ctx context.Context, index string, query elastic.Query) (int64, error)
 		RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error)
 
 		// TODO (alex): move this to some admin client (and join with IntegrationTestsClient)

@@ -61,18 +61,18 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // Count mocks base method.
-func (m *MockClient) Count(ctx context.Context, p *SearchParameters) (int64, error) {
+func (m *MockClient) Count(ctx context.Context, index string, query v7.Query) (int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Count", ctx, p)
+	ret := m.ctrl.Call(m, "Count", ctx, index, query)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Count indicates an expected call of Count.
-func (mr *MockClientMockRecorder) Count(ctx, p interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) Count(ctx, index, query interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockClient)(nil).Count), ctx, p)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockClient)(nil).Count), ctx, index, query)
 }
 
 // GetMapping mocks base method.
@@ -189,18 +189,18 @@ func (mr *MockClientV7MockRecorder) ClosePointInTime(ctx, id interface{}) *gomoc
 }
 
 // Count mocks base method.
-func (m *MockClientV7) Count(ctx context.Context, p *SearchParameters) (int64, error) {
+func (m *MockClientV7) Count(ctx context.Context, index string, query v7.Query) (int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Count", ctx, p)
+	ret := m.ctrl.Call(m, "Count", ctx, index, query)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Count indicates an expected call of Count.
-func (mr *MockClientV7MockRecorder) Count(ctx, p interface{}) *gomock.Call {
+func (mr *MockClientV7MockRecorder) Count(ctx, index, query interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockClientV7)(nil).Count), ctx, p)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockClientV7)(nil).Count), ctx, index, query)
 }
 
 // GetMapping mocks base method.
@@ -317,18 +317,18 @@ func (m *MockClientV6) EXPECT() *MockClientV6MockRecorder {
 }
 
 // Count mocks base method.
-func (m *MockClientV6) Count(ctx context.Context, p *SearchParameters) (int64, error) {
+func (m *MockClientV6) Count(ctx context.Context, index string, query v7.Query) (int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Count", ctx, p)
+	ret := m.ctrl.Call(m, "Count", ctx, index, query)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Count indicates an expected call of Count.
-func (mr *MockClientV6MockRecorder) Count(ctx, p interface{}) *gomock.Call {
+func (mr *MockClientV6MockRecorder) Count(ctx, index, query interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockClientV6)(nil).Count), ctx, p)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockClientV6)(nil).Count), ctx, index, query)
 }
 
 // GetMapping mocks base method.
@@ -491,18 +491,18 @@ func (mr *MockCLIClientMockRecorder) CatIndices(ctx interface{}) *gomock.Call {
 }
 
 // Count mocks base method.
-func (m *MockCLIClient) Count(ctx context.Context, p *SearchParameters) (int64, error) {
+func (m *MockCLIClient) Count(ctx context.Context, index string, query v7.Query) (int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Count", ctx, p)
+	ret := m.ctrl.Call(m, "Count", ctx, index, query)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Count indicates an expected call of Count.
-func (mr *MockCLIClientMockRecorder) Count(ctx, p interface{}) *gomock.Call {
+func (mr *MockCLIClientMockRecorder) Count(ctx, index, query interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockCLIClient)(nil).Count), ctx, p)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockCLIClient)(nil).Count), ctx, index, query)
 }
 
 // Delete mocks base method.

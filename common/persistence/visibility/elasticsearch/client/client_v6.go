@@ -147,8 +147,8 @@ func (c *clientV6) ScrollFirstPage(ctx context.Context, p *SearchParameters) (*e
 	return convertV6SearchResultToV7(searchResult), scrollService, convertV6ErrorToV7(err)
 }
 
-func (c *clientV6) Count(ctx context.Context, p *SearchParameters) (int64, error) {
-	count, err := c.esClient.Count(p.Index).Query(p.Query).Do(ctx)
+func (c *clientV6) Count(ctx context.Context, index string, query elastic.Query) (int64, error) {
+	count, err := c.esClient.Count(index).Query(query).Do(ctx)
 	return count, convertV6ErrorToV7(err)
 }
 

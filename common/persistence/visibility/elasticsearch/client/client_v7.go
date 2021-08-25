@@ -139,8 +139,8 @@ func (c *clientV7) ClosePointInTime(ctx context.Context, id string) (bool, error
 	return resp.Succeeded, nil
 }
 
-func (c *clientV7) Count(ctx context.Context, p *SearchParameters) (int64, error) {
-	return c.esClient.Count(p.Index).Query(p.Query).Do(ctx)
+func (c *clientV7) Count(ctx context.Context, index string, query elastic.Query) (int64, error) {
+	return c.esClient.Count(index).Query(query).Do(ctx)
 }
 
 func (c *clientV7) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {
