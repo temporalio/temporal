@@ -364,17 +364,14 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 		return nil
 	}
 
-	// Check if this workflow has a cron schedule
-	cronBackoff := handler.mutableState.GetCronBackoffDuration()
-
 	// Always add workflow completed event to this one
 	_, err = handler.mutableState.AddCompletedWorkflowEvent(handler.workflowTaskCompletedID, attr)
 	if err != nil {
 		return serviceerror.NewInternal("Unable to add complete workflow event.")
 	}
 
-	// If cron, need to start another workflow
-	if cronBackoff != backoff.NoBackoff {
+	// Check if this workflow has a cron schedule
+	if cronBackoff := handler.mutableState.GetCronBackoffDuration(); cronBackoff != backoff.NoBackoff {
 		return handler.handleCron(cronBackoff, attr.GetResult(), nil)
 	}
 
