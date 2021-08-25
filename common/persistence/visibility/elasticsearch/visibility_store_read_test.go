@@ -46,7 +46,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility"
-	"go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -58,9 +57,8 @@ type (
 		*require.Assertions
 		controller        *gomock.Controller
 		visibilityStore   *visibilityStore
-		mockESClient      *esclient.MockClient
-		mockESClientV6    *client.MockClientV6
-		mockESClientV7    *client.MockClientV7
+		mockESClientV6    *esclient.MockClientV6
+		mockESClientV7    *esclient.MockClientV7
 		mockProcessor     *MockProcessor
 		mockMetricsClient *metrics.MockClient
 	}
@@ -116,9 +114,8 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockMetricsClient = metrics.NewMockClient(s.controller)
 	s.mockProcessor = NewMockProcessor(s.controller)
-	s.mockESClient = esclient.NewMockClient(s.controller)
-	s.mockESClientV6 = client.NewMockClientV6(s.controller)
-	s.mockESClientV7 = client.NewMockClientV7(s.controller)
+	s.mockESClientV6 = esclient.NewMockClientV6(s.controller)
+	s.mockESClientV7 = esclient.NewMockClientV7(s.controller)
 	s.visibilityStore = NewVisibilityStore(s.mockESClientV7, testIndex, searchattribute.NewTestProvider(), s.mockProcessor, cfg, log.NewNoopLogger(), s.mockMetricsClient)
 }
 
@@ -127,7 +124,7 @@ func (s *ESVisibilitySuite) TearDownTest() {
 }
 
 func (s *ESVisibilitySuite) TestListOpenWorkflowExecutions() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
+	s.mockESClientV7.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, input *esclient.SearchParameters) (*elastic.SearchResult, error) {
 			source, _ := input.Query.Source()
 			s.True(strings.Contains(fmt.Sprintf("%v", source), filterOpen))
@@ -136,7 +133,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutions() {
 	_, err := s.visibilityStore.ListOpenWorkflowExecutions(createTestRequest())
 	s.NoError(err)
 
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
+	s.mockESClientV7.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ListOpenWorkflowExecutions(createTestRequest())
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
@@ -145,7 +142,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutions() {
 }
 
 func (s *ESVisibilitySuite) TestListClosedWorkflowExecutions() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
+	s.mockESClientV7.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, input *esclient.SearchParameters) (*elastic.SearchResult, error) {
 			source, _ := input.Query.Source()
 			s.True(strings.Contains(fmt.Sprintf("%v", source), filterClose))
@@ -154,7 +151,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutions() {
 	_, err := s.visibilityStore.ListClosedWorkflowExecutions(createTestRequest())
 	s.NoError(err)
 
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
+	s.mockESClientV7.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ListClosedWorkflowExecutions(createTestRequest())
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
@@ -163,7 +160,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutions() {
 }
 
 func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByType() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
+	s.mockESClientV7.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, input *esclient.SearchParameters) (*elastic.SearchResult, error) {
 			source, _ := input.Query.Source()
 			s.True(strings.Contains(fmt.Sprintf("%v", source), filterOpen))
@@ -179,7 +176,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByType() {
 	_, err := s.visibilityStore.ListOpenWorkflowExecutionsByType(request)
 	s.NoError(err)
 
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
+	s.mockESClientV7.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ListOpenWorkflowExecutionsByType(request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
@@ -188,7 +185,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByType() {
 }
 
 func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByType() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
+	s.mockESClientV7.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, input *esclient.SearchParameters) (*elastic.SearchResult, error) {
 			source, _ := input.Query.Source()
 			s.True(strings.Contains(fmt.Sprintf("%v", source), filterClose))
@@ -204,7 +201,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByType() {
 	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByType(request)
 	s.NoError(err)
 
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
+	s.mockESClientV7.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByType(request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
@@ -213,7 +210,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByType() {
 }
 
 func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByWorkflowID() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
+	s.mockESClientV7.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, input *esclient.SearchParameters) (*elastic.SearchResult, error) {
 			source, _ := input.Query.Source()
 			s.True(strings.Contains(fmt.Sprintf("%v", source), filterOpen))
@@ -229,7 +226,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 	_, err := s.visibilityStore.ListOpenWorkflowExecutionsByWorkflowID(request)
 	s.NoError(err)
 
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
+	s.mockESClientV7.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ListOpenWorkflowExecutionsByWorkflowID(request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
@@ -238,7 +235,7 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 }
 
 func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByWorkflowID() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
+	s.mockESClientV7.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, input *esclient.SearchParameters) (*elastic.SearchResult, error) {
 			source, _ := input.Query.Source()
 			s.True(strings.Contains(fmt.Sprintf("%v", source), filterClose))
@@ -254,7 +251,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByWorkflowID() {
 	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByWorkflowID(request)
 	s.NoError(err)
 
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
+	s.mockESClientV7.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByWorkflowID(request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
@@ -263,7 +260,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByWorkflowID() {
 }
 
 func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
+	s.mockESClientV7.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, input *esclient.SearchParameters) (*elastic.SearchResult, error) {
 			source, _ := input.Query.Source()
 			s.True(strings.Contains(fmt.Sprintf("%v", source), filterByExecutionStatus))
@@ -278,7 +275,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
 	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByStatus(request)
 	s.NoError(err)
 
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
+	s.mockESClientV7.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByStatus(request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
@@ -288,19 +285,24 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
 
 func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 	request := createTestRequest()
-	token := &visibilityPageToken{SearchAfter: []interface{}{123, "qwe"}}
 
 	matchNamespaceQuery := elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID)
 	runningQuery := elastic.NewTermQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
+	token := &visibilityPageToken{SearchAfter: []interface{}{123, "qwe"}}
+	var err error
+	request.NextPageToken, err = s.visibilityStore.serializePageToken(token)
+	s.NoError(err)
+
 	// test for open
 	rangeQuery := elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
 	boolQuery := elastic.NewBoolQuery().Filter(runningQuery).Filter(matchNamespaceQuery).Filter(rangeQuery)
-	p := s.visibilityStore.buildSearchParameters(request, token, elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
+	p, err := s.visibilityStore.buildSearchParameters(request, elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
+	s.NoError(err)
 	s.Equal(&esclient.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,
-		SearchAfter: []interface{}{123, "qwe"},
+		SearchAfter: []interface{}{float64(123), "qwe"},
 		PageSize:    testPageSize,
 		Sorter: []elastic.Sorter{
 			elastic.NewFieldSort(searchattribute.StartTime).Desc(),
@@ -312,11 +314,12 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 	request.LatestStartTime = time.Unix(0, math.MaxInt64).UTC()
 	rangeQuery = elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
 	boolQuery = elastic.NewBoolQuery().Filter(runningQuery).Filter(matchNamespaceQuery).Filter(rangeQuery)
-	p = s.visibilityStore.buildSearchParameters(request, token, elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
+	p, err = s.visibilityStore.buildSearchParameters(request, elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), true)
+	s.NoError(err)
 	s.Equal(&esclient.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,
-		SearchAfter: []interface{}{123, "qwe"},
+		SearchAfter: []interface{}{float64(123), "qwe"},
 		PageSize:    testPageSize,
 		Sorter: []elastic.Sorter{
 			elastic.NewFieldSort(searchattribute.StartTime).Desc(),
@@ -328,11 +331,12 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 	// test for closed
 	rangeQuery = elastic.NewRangeQuery(searchattribute.CloseTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
 	boolQuery = elastic.NewBoolQuery().MustNot(runningQuery).Filter(matchNamespaceQuery).Filter(rangeQuery)
-	p = s.visibilityStore.buildSearchParameters(request, token, elastic.NewBoolQuery().MustNot(elastic.NewTermQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), false)
+	p, err = s.visibilityStore.buildSearchParameters(request, elastic.NewBoolQuery().MustNot(elastic.NewTermQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))), false)
+	s.NoError(err)
 	s.Equal(&esclient.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,
-		SearchAfter: []interface{}{123, "qwe"},
+		SearchAfter: nil,
 		PageSize:    testPageSize,
 		Sorter: []elastic.Sorter{
 			elastic.NewFieldSort(searchattribute.CloseTime).Desc(),
@@ -344,11 +348,12 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 	rangeQuery = elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
 	matchQuery := elastic.NewTermQuery(searchattribute.ExecutionStatus, int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 	boolQuery = elastic.NewBoolQuery().Filter(matchQuery).Filter(matchNamespaceQuery).Filter(rangeQuery)
-	p = s.visibilityStore.buildSearchParameters(request, token, elastic.NewBoolQuery().Filter(matchQuery), true)
+	p, err = s.visibilityStore.buildSearchParameters(request, elastic.NewBoolQuery().Filter(matchQuery), true)
+	s.NoError(err)
 	s.Equal(&esclient.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,
-		SearchAfter: []interface{}{123, "qwe"},
+		SearchAfter: nil,
 		PageSize:    testPageSize,
 		Sorter: []elastic.Sorter{
 			elastic.NewFieldSort(searchattribute.StartTime).Desc(),
@@ -357,10 +362,14 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 	}, p)
 
 	// test for search after
-	token = &visibilityPageToken{SearchAfter: []interface{}{request.LatestStartTime, "qwe"}}
+	token = &visibilityPageToken{SearchAfter: []interface{}{float64(request.LatestStartTime.UnixNano()), "qwe"}}
+	request.NextPageToken, err = s.visibilityStore.serializePageToken(token)
+	s.NoError(err)
+
 	rangeQuery = elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
 	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery).Filter(rangeQuery)
-	p = s.visibilityStore.buildSearchParameters(request, token, elastic.NewBoolQuery(), true)
+	p, err = s.visibilityStore.buildSearchParameters(request, elastic.NewBoolQuery(), true)
+	s.NoError(err)
 	s.Equal(&esclient.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,
@@ -371,16 +380,18 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 			elastic.NewFieldSort(searchattribute.RunID).Desc(),
 		},
 	}, p)
+	request = createTestRequest() // revert
 
 	// test for default page size
 	request.PageSize = 0
 	rangeQuery = elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
 	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery).Filter(rangeQuery)
-	p = s.visibilityStore.buildSearchParameters(request, token, elastic.NewBoolQuery(), true)
+	p, err = s.visibilityStore.buildSearchParameters(request, elastic.NewBoolQuery(), true)
+	s.NoError(err)
 	s.Equal(&esclient.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,
-		SearchAfter: token.SearchAfter,
+		SearchAfter: nil,
 		PageSize:    1000,
 		Sorter: []elastic.Sorter{
 			elastic.NewFieldSort(searchattribute.StartTime).Desc(),
@@ -392,11 +403,14 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 	// test for nil token
 	rangeQuery = elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
 	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery).Filter(rangeQuery)
-	p = s.visibilityStore.buildSearchParameters(request, nil, elastic.NewBoolQuery(), true)
+	request.NextPageToken = nil
+	p, err = s.visibilityStore.buildSearchParameters(request, elastic.NewBoolQuery(), true)
+	s.NoError(err)
 	s.Equal(&esclient.SearchParameters{
-		Index:    testIndex,
-		Query:    boolQuery,
-		PageSize: testPageSize,
+		Index:       testIndex,
+		Query:       boolQuery,
+		PageSize:    testPageSize,
+		SearchAfter: nil,
 		Sorter: []elastic.Sorter{
 			elastic.NewFieldSort(searchattribute.StartTime).Desc(),
 			elastic.NewFieldSort(searchattribute.RunID).Desc(),
@@ -406,12 +420,10 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 
 func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	request := &visibility.ListWorkflowExecutionsRequestV2{
-		NamespaceID:   testNamespaceID,
-		Namespace:     testNamespace,
-		PageSize:      testPageSize,
-		NextPageToken: nil,
+		NamespaceID: testNamespaceID,
+		Namespace:   testNamespace,
+		PageSize:    testPageSize,
 	}
-	token := &visibilityPageToken{SearchAfter: []interface{}{123, "qwe"}}
 
 	matchNamespaceQuery := elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID)
 
@@ -419,50 +431,76 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	request.Query = `WorkflowId="guid-2208"`
 	filterQuery := elastic.NewMatchPhraseQuery(searchattribute.WorkflowID, "guid-2208")
 	boolQuery := elastic.NewBoolQuery().Filter(filterQuery).Filter(matchNamespaceQuery)
-	p, err := s.visibilityStore.buildSearchParametersV2(request, token)
+	p, err := s.visibilityStore.buildSearchParametersV2(request)
 	s.NoError(err)
 	s.Equal(&esclient.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,
-		SearchAfter: []interface{}{123, "qwe"},
+		SearchAfter: nil,
+		PointInTime: nil,
 		PageSize:    testPageSize,
 		Sorter: []elastic.Sorter{
 			elastic.NewFieldSort(searchattribute.StartTime).Desc(),
 			elastic.NewFieldSort(searchattribute.RunID).Desc(),
 		},
 	}, p)
+	request.Query = ""
 
-	// test for default page size
-	request.PageSize = 0
-	request.Query = ``
+	// test for search after and pid
+	token := &visibilityPageToken{
+		SearchAfter:   []interface{}{123, "qwe"},
+		PointInTimeID: "pid",
+	}
+	request.NextPageToken, err = s.visibilityStore.serializePageToken(token)
+	s.NoError(err)
+
 	boolQuery = elastic.NewBoolQuery().Filter(elastic.NewMatchAllQuery()).Filter(matchNamespaceQuery)
-	p, err = s.visibilityStore.buildSearchParametersV2(request, token)
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
 	s.NoError(err)
 	s.Equal(&esclient.SearchParameters{
 		Index:       testIndex,
 		Query:       boolQuery,
-		SearchAfter: token.SearchAfter,
+		SearchAfter: []interface{}{float64(123), "qwe"},
+		PointInTime: elastic.NewPointInTime("pid", "1m"),
+		PageSize:    testPageSize,
+		Sorter: []elastic.Sorter{
+			elastic.NewFieldSort(searchattribute.StartTime).Desc(),
+			elastic.NewFieldSort(searchattribute.RunID).Desc(),
+		},
+	}, p)
+	request.NextPageToken = nil
+
+	// test for default page size
+	request.PageSize = 0
+	boolQuery = elastic.NewBoolQuery().Filter(elastic.NewMatchAllQuery()).Filter(matchNamespaceQuery)
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.NoError(err)
+	s.Equal(&esclient.SearchParameters{
+		Index:       testIndex,
+		Query:       boolQuery,
+		SearchAfter: nil,
+		PointInTime: nil,
 		PageSize:    1000,
 		Sorter: []elastic.Sorter{
 			elastic.NewFieldSort(searchattribute.StartTime).Desc(),
 			elastic.NewFieldSort(searchattribute.RunID).Desc(),
 		},
 	}, p)
+	request.PageSize = testPageSize
 
-	// test for nil token
-	request.Query = ``
-	boolQuery = elastic.NewBoolQuery().Filter(elastic.NewMatchAllQuery()).Filter(matchNamespaceQuery)
-	p, err = s.visibilityStore.buildSearchParametersV2(request, nil)
-	s.NoError(err)
-	s.Equal(&esclient.SearchParameters{
-		Index:    testIndex,
-		Query:    boolQuery,
-		PageSize: 1000,
-		Sorter: []elastic.Sorter{
-			elastic.NewFieldSort(searchattribute.StartTime).Desc(),
-			elastic.NewFieldSort(searchattribute.RunID).Desc(),
-		},
-	}, p)
+	// test for wrong query
+	request.Query = "invalid query"
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.Nil(p)
+	s.Error(err)
+	request.Query = ""
+
+	// test for wrong token
+	request.NextPageToken = []byte{1}
+	p, err = s.visibilityStore.buildSearchParametersV2(request)
+	s.Nil(p)
+	s.Error(err)
+	request.NextPageToken = nil
 }
 
 func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
@@ -517,9 +555,8 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	s.Equal(numOfHits, len(resp.Executions))
 	nextPageToken, err := s.visibilityStore.deserializePageToken(resp.NextPageToken)
 	s.NoError(err)
-	resultSortValue, err := nextPageToken.SearchAfter[0].(json.Number).Int64()
-	s.NoError(err)
-	s.Equal(int64(1547596872371000000), resultSortValue)
+	resultSortValue := nextPageToken.SearchAfter[0].(float64)
+	s.Equal(float64(1547596872371000000), resultSortValue)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", nextPageToken.SearchAfter[1])
 	// for last page
 	resp, err = s.visibilityStore.getListWorkflowExecutionsResponse(searchResult, numOfHits+1, nil)
@@ -670,11 +707,13 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
 }
 
 func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, p *client.SearchParameters) (*elastic.SearchResult, error) {
+	s.mockESClientV7.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, p *esclient.SearchParameters) (*elastic.SearchResult, error) {
 			s.Equal(testIndex, p.Index)
 			s.Equal(
-				elastic.NewBoolQuery().Filter(elastic.NewMatchPhraseQuery("ExecutionStatus", "Terminated")),
+				elastic.NewBoolQuery().
+					Filter(elastic.NewMatchPhraseQuery("ExecutionStatus", "Terminated")).
+					Filter(elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID)),
 				p.Query,
 			)
 			return testSearchResult, nil
@@ -689,7 +728,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 	_, err := s.visibilityStore.ListWorkflowExecutions(request)
 	s.NoError(err)
 
-	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
+	s.mockESClientV7.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ListWorkflowExecutions(request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Internal)
@@ -701,7 +740,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 	s.Error(err)
 	_, ok = err.(*serviceerror.InvalidArgument)
 	s.True(ok)
-	s.True(strings.Contains(err.Error(), "Error when parse query"))
+	s.True(strings.HasPrefix(err.Error(), "unable to parse query"))
 }
 
 func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV6() {
@@ -709,10 +748,12 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV6() {
 	s.visibilityStore.esClient = s.mockESClientV6
 	// test first page
 	s.mockESClientV6.EXPECT().ScrollFirstPage(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, p *client.SearchParameters) (*elastic.SearchResult, esclient.ScrollService, error) {
+		func(ctx context.Context, p *esclient.SearchParameters) (*elastic.SearchResult, esclient.ScrollService, error) {
 			s.Equal(testIndex, p.Index)
 			s.Equal(
-				elastic.NewBoolQuery().Filter(elastic.NewMatchPhraseQuery("ExecutionStatus", "Terminated")),
+				elastic.NewBoolQuery().
+					Filter(elastic.NewMatchPhraseQuery("ExecutionStatus", "Terminated")).
+					Filter(elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID)),
 				p.Query,
 			)
 			return testSearchResult, nil, nil
@@ -733,7 +774,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV6() {
 	s.Error(err)
 	_, ok := err.(*serviceerror.InvalidArgument)
 	s.True(ok)
-	s.True(strings.Contains(err.Error(), "Error when parse query"))
+	s.True(strings.HasPrefix(err.Error(), "unable to parse query"))
 
 	// test scroll
 	scrollID := "scrollID-1"
@@ -803,18 +844,17 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7() {
 
 	// test bad request
 	request.Query = `invalid query`
-	s.mockESClientV7.EXPECT().OpenPointInTime(gomock.Any(), testIndex, gomock.Any()).Return(pitID, nil)
 	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.InvalidArgument)
 	s.True(ok)
-	s.True(strings.Contains(err.Error(), "Error when parse query"))
+	s.True(strings.HasPrefix(err.Error(), "unable to parse query"))
 
 	// test search
 	request.Query = `ExecutionStatus = "Terminated"`
 	s.mockESClientV7.EXPECT().Search(gomock.Any(), gomock.Any()).Return(searchResult, nil)
 
-	token := &visibilityPageToken{PointInTimeID: pitID}
+	token := &visibilityPageToken{PointInTimeID: pitID, SearchAfter: []interface{}{2208, "qwe"}}
 	tokenBytes, err := s.visibilityStore.serializePageToken(token)
 	s.NoError(err)
 	request.NextPageToken = tokenBytes
@@ -826,6 +866,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7() {
 		Hits: &elastic.SearchHits{
 			Hits: []*elastic.SearchHit{},
 		},
+		PitId: pitID,
 	}
 	s.mockESClientV7.EXPECT().Search(gomock.Any(), gomock.Any()).Return(searchResult, nil)
 	s.mockESClientV7.EXPECT().ClosePointInTime(gomock.Any(), pitID).Return(true, nil)
@@ -842,10 +883,12 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7() {
 }
 
 func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
-	s.mockESClient.EXPECT().Count(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
+	s.mockESClientV7.EXPECT().Count(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
 		func(ctx context.Context, index string, query elastic.Query) (int64, error) {
 			s.Equal(
-				elastic.NewBoolQuery().Filter(elastic.NewMatchPhraseQuery("ExecutionStatus", "Terminated")),
+				elastic.NewBoolQuery().
+					Filter(elastic.NewMatchPhraseQuery("ExecutionStatus", "Terminated")).
+					Filter(elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID)),
 				query,
 			)
 			return int64(1), nil
@@ -861,10 +904,12 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 	s.Equal(int64(1), resp.Count)
 
 	// test internal error
-	s.mockESClient.EXPECT().Count(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
+	s.mockESClientV7.EXPECT().Count(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
 		func(ctx context.Context, index string, query elastic.Query) (int64, error) {
 			s.Equal(
-				elastic.NewBoolQuery().Filter(elastic.NewMatchPhraseQuery("ExecutionStatus", "Terminated")),
+				elastic.NewBoolQuery().
+					Filter(elastic.NewMatchPhraseQuery("ExecutionStatus", "Terminated")).
+					Filter(elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID)),
 				query,
 			)
 			return int64(0), errTestESSearch
@@ -882,7 +927,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 	s.Error(err)
 	_, ok = err.(*serviceerror.InvalidArgument)
 	s.True(ok)
-	s.True(strings.Contains(err.Error(), "Error when parse query"))
+	s.True(strings.HasPrefix(err.Error(), "unable to parse query"))
 }
 
 // func (s *ESVisibilitySuite) TestGetValueOfSearchAfterInJSON() {

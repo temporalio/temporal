@@ -220,16 +220,16 @@ func (s *visibilityStore) checkProcessor() {
 
 func (s *visibilityStore) ListOpenWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := s.deserializePageToken(request.NextPageToken)
+	boolQuery := elastic.NewBoolQuery().
+		Filter(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
+
+	p, err := s.buildSearchParameters(request, boolQuery, true)
 	if err != nil {
 		return nil, err
 	}
 
-	boolQuery := elastic.NewBoolQuery().
-		Filter(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
-
 	ctx := context.Background()
-	searchResult, err := s.esClient.Search(ctx, s.buildSearchParameters(request, token, boolQuery, true))
+	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
@@ -243,16 +243,16 @@ func (s *visibilityStore) ListOpenWorkflowExecutions(request *visibility.ListWor
 
 func (s *visibilityStore) ListClosedWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := s.deserializePageToken(request.NextPageToken)
+	boolQuery := elastic.NewBoolQuery().
+		MustNot(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
+
+	p, err := s.buildSearchParameters(request, boolQuery, false)
 	if err != nil {
 		return nil, err
 	}
 
-	boolQuery := elastic.NewBoolQuery().
-		MustNot(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
-
 	ctx := context.Background()
-	searchResult, err := s.esClient.Search(ctx, s.buildSearchParameters(request, token, boolQuery, false))
+	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
@@ -266,17 +266,18 @@ func (s *visibilityStore) ListClosedWorkflowExecutions(request *visibility.ListW
 
 func (s *visibilityStore) ListOpenWorkflowExecutionsByType(request *visibility.ListWorkflowExecutionsByTypeRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := s.deserializePageToken(request.NextPageToken)
-	if err != nil {
-		return nil, err
-	}
-
 	boolQuery := elastic.NewBoolQuery().
 		Filter(
 			elastic.NewTermQuery(searchattribute.WorkflowType, request.WorkflowTypeName),
 			elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
+
+	p, err := s.buildSearchParameters(request.ListWorkflowExecutionsRequest, boolQuery, true)
+	if err != nil {
+		return nil, err
+	}
+
 	ctx := context.Background()
-	searchResult, err := s.esClient.Search(ctx, s.buildSearchParameters(request.ListWorkflowExecutionsRequest, token, boolQuery, true))
+	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByType failed. Error: %s", detailedErrorMessage(err)))
 	}
@@ -290,17 +291,17 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByType(request *visibility.L
 
 func (s *visibilityStore) ListClosedWorkflowExecutionsByType(request *visibility.ListWorkflowExecutionsByTypeRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := s.deserializePageToken(request.NextPageToken)
-	if err != nil {
-		return nil, err
-	}
-
 	boolQuery := elastic.NewBoolQuery().
 		Filter(elastic.NewTermQuery(searchattribute.WorkflowType, request.WorkflowTypeName)).
 		MustNot(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 
+	p, err := s.buildSearchParameters(request.ListWorkflowExecutionsRequest, boolQuery, false)
+	if err != nil {
+		return nil, err
+	}
+
 	ctx := context.Background()
-	searchResult, err := s.esClient.Search(ctx, s.buildSearchParameters(request.ListWorkflowExecutionsRequest, token, boolQuery, false))
+	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByType failed. Error: %s", detailedErrorMessage(err)))
 	}
@@ -314,18 +315,18 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByType(request *visibility
 
 func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(request *visibility.ListWorkflowExecutionsByWorkflowIDRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := s.deserializePageToken(request.NextPageToken)
-	if err != nil {
-		return nil, err
-	}
-
 	boolQuery := elastic.NewBoolQuery().
 		Filter(
 			elastic.NewTermQuery(searchattribute.WorkflowID, request.WorkflowID),
 			elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 
+	p, err := s.buildSearchParameters(request.ListWorkflowExecutionsRequest, boolQuery, true)
+	if err != nil {
+		return nil, err
+	}
+
 	ctx := context.Background()
-	searchResult, err := s.esClient.Search(ctx, s.buildSearchParameters(request.ListWorkflowExecutionsRequest, token, boolQuery, true))
+	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByWorkflowID failed. Error: %s", detailedErrorMessage(err)))
 	}
@@ -339,17 +340,17 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(request *visibi
 
 func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(request *visibility.ListWorkflowExecutionsByWorkflowIDRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := s.deserializePageToken(request.NextPageToken)
-	if err != nil {
-		return nil, err
-	}
-
 	boolQuery := elastic.NewBoolQuery().
 		Filter(elastic.NewTermQuery(searchattribute.WorkflowID, request.WorkflowID)).
 		MustNot(elastic.NewTermQuery(searchattribute.ExecutionStatus, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String()))
 
+	p, err := s.buildSearchParameters(request.ListWorkflowExecutionsRequest, boolQuery, false)
+	if err != nil {
+		return nil, err
+	}
+
 	ctx := context.Background()
-	searchResult, err := s.esClient.Search(ctx, s.buildSearchParameters(request.ListWorkflowExecutionsRequest, token, boolQuery, false))
+	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByWorkflowID failed. Error: %s", detailedErrorMessage(err)))
 	}
@@ -363,16 +364,16 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(request *visi
 
 func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(request *visibility.ListClosedWorkflowExecutionsByStatusRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := s.deserializePageToken(request.NextPageToken)
+	boolQuery := elastic.NewBoolQuery().
+		Filter(elastic.NewTermQuery(searchattribute.ExecutionStatus, request.Status.String()))
+
+	p, err := s.buildSearchParameters(request.ListWorkflowExecutionsRequest, boolQuery, false)
 	if err != nil {
 		return nil, err
 	}
 
-	boolQuery := elastic.NewBoolQuery().
-		Filter(elastic.NewTermQuery(searchattribute.ExecutionStatus, request.Status.String()))
-
 	ctx := context.Background()
-	searchResult, err := s.esClient.Search(ctx, s.buildSearchParameters(request.ListWorkflowExecutionsRequest, token, boolQuery, false))
+	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByStatus failed. Error: %s", detailedErrorMessage(err)))
 	}
@@ -386,12 +387,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(request *visibili
 
 func (s *visibilityStore) ListWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := s.deserializePageToken(request.NextPageToken)
-	if err != nil {
-		return nil, err
-	}
-
-	p, err := s.buildSearchParametersV2(request, token)
+	p, err := s.buildSearchParametersV2(request)
 	if err != nil {
 		return nil, err
 	}
@@ -407,31 +403,24 @@ func (s *visibilityStore) ListWorkflowExecutions(request *visibility.ListWorkflo
 
 func (s *visibilityStore) ScanWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.InternalListWorkflowExecutionsResponse, error) {
 
-	token, err := s.deserializePageToken(request.NextPageToken)
-	if err != nil {
-		return nil, err
-	}
-
 	ctx := context.Background()
 	switch esClient := s.esClient.(type) {
 	case client.ClientV7:
 		// Elasticsearch V7 uses "point in time" (PIT) instead of scroll to scan over all workflows without skipping them.
 		// https://www.elastic.co/guide/en/elasticsearch/reference/7.13/point-in-time-api.html
 
-		// First call doesn't have PointInTimeID.
-		if token == nil {
-			token = &visibilityPageToken{}
+		p, err := s.buildSearchParametersV2(request)
+		if err != nil {
+			return nil, err
 		}
-		if token.PointInTimeID == "" {
-			token.PointInTimeID, err = esClient.OpenPointInTime(ctx, s.index, pointInTimeKeepAliveInterval)
+
+		// First call doesn't have token with PointInTimeID.
+		if p.PointInTime == nil {
+			pointInTimeID, err := esClient.OpenPointInTime(ctx, s.index, pointInTimeKeepAliveInterval)
 			if err != nil {
 				return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to create point in time: %s", detailedErrorMessage(err)))
 			}
-		}
-
-		p, err := s.buildSearchParametersV2(request, token)
-		if err != nil {
-			return nil, err
+			p.PointInTime = elastic.NewPointInTime(pointInTimeID, pointInTimeKeepAliveInterval)
 		}
 
 		searchResult, err := esClient.Search(ctx, p)
@@ -441,32 +430,44 @@ func (s *visibilityStore) ScanWorkflowExecutions(request *visibility.ListWorkflo
 
 		if len(searchResult.Hits.Hits) < request.PageSize {
 			// It is the last page, close PIT.
-			_, err = esClient.ClosePointInTime(ctx, token.PointInTimeID)
+			_, err = esClient.ClosePointInTime(ctx, searchResult.PitId)
 			if err != nil {
 				return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to close point in time: %s", detailedErrorMessage(err)))
 			}
 		}
 		return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, nil)
 	case client.ClientV6:
-		var searchResult *elastic.SearchResult
-		var scrollService esclient.ScrollService
-		if token == nil || token.ScrollID == "" {
+		var (
+			searchResult  *elastic.SearchResult
+			scrollService esclient.ScrollService
+			scrollErr     error
+		)
+
+		// First call doesn't have token with ScrollID.
+		if len(request.NextPageToken) == 0 {
 			// First page.
-			p, err := s.buildSearchParametersV2(request, token)
+			p, err := s.buildSearchParametersV2(request)
 			if err != nil {
 				return nil, err
 			}
-			searchResult, scrollService, err = esClient.ScrollFirstPage(ctx, p)
+			searchResult, scrollService, scrollErr = esClient.ScrollFirstPage(ctx, p)
 		} else {
-			searchResult, scrollService, err = esClient.Scroll(ctx, token.ScrollID)
+			token, err := s.deserializePageToken(request.NextPageToken)
+			if err != nil {
+				return nil, err
+			}
+			if token.ScrollID == "" {
+				return nil, serviceerror.NewInvalidArgument("scrollId must present in pagination token")
+			}
+			searchResult, scrollService, scrollErr = esClient.Scroll(ctx, token.ScrollID)
 		}
 
 		isLastPage := false
-		if err == io.EOF { // no more result
+		if scrollErr == io.EOF { // no more result
 			isLastPage = true
 			_ = scrollService.Clear(context.Background())
-		} else if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
+		} else if scrollErr != nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(scrollErr)))
 		}
 		return s.getScrollWorkflowExecutionsResponse(searchResult.Hits, request.PageSize, searchResult.ScrollId, isLastPage)
 	default:
@@ -494,10 +495,14 @@ func (s *visibilityStore) CountWorkflowExecutions(request *visibility.CountWorkf
 
 func (s *visibilityStore) buildSearchParameters(
 	request *visibility.ListWorkflowExecutionsRequest,
-	token *visibilityPageToken,
 	boolQuery *elastic.BoolQuery,
 	overStartTime bool,
-) *client.SearchParameters {
+) (*client.SearchParameters, error) {
+
+	token, err := s.deserializePageToken(request.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
 
 	boolQuery.Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID))
 
@@ -542,13 +547,18 @@ func (s *visibilityStore) buildSearchParameters(
 	// RunID is explicit tiebreaker.
 	params.Sorter = append(params.Sorter, elastic.NewFieldSort(searchattribute.RunID).Desc())
 
-	return params
+	return params, nil
 }
 
 func (s *visibilityStore) buildSearchParametersV2(
 	request *visibility.ListWorkflowExecutionsRequestV2,
-	token *visibilityPageToken,
 ) (*client.SearchParameters, error) {
+
+	token, err := s.deserializePageToken(request.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+
 	boolQuery, fieldSorts, err := s.queryConverter.ConvertWhereOrderBy(request.Query)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse query: %v", err))
@@ -579,18 +589,22 @@ func (s *visibilityStore) buildSearchParametersV2(
 }
 
 func (s *visibilityStore) setDefaultFieldSort(fieldSorts []*elastic.FieldSort) []elastic.Sorter {
-	var res []elastic.Sorter
 	if len(fieldSorts) == 0 {
-		// set default sorting by StartTime desc.
-		res = []elastic.Sorter{elastic.NewFieldSort(searchattribute.StartTime).Desc()}
-	} else { // user provide sorting using order by
-		for _, fs := range fieldSorts {
-			res = append(res, fs)
+		// Set default sorting by StartTime desc and RunID as tiebreaker.
+		return []elastic.Sorter{
+			elastic.NewFieldSort(searchattribute.StartTime).Desc(),
+			elastic.NewFieldSort(searchattribute.RunID).Desc(),
 		}
 	}
 
+	res := make([]elastic.Sorter, len(fieldSorts)+1)
+	for i, fs := range fieldSorts {
+		res[i] = fs
+	}
 	// RunID is explicit tiebreaker.
-	return append(res, elastic.NewFieldSort(searchattribute.RunID).Desc())
+	res[len(res)-1] = elastic.NewFieldSort(searchattribute.RunID).Desc()
+
+	return res
 }
 
 func (s *visibilityStore) getScrollWorkflowExecutionsResponse(
@@ -613,12 +627,12 @@ func (s *visibilityStore) getScrollWorkflowExecutionsResponse(
 	}
 
 	if len(searchHits.Hits) == pageSize && !isLastPage {
-		nextPageToken, err := s.serializePageToken(&visibilityPageToken{ScrollID: scrollID})
+		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
+			ScrollID: scrollID,
+		})
 		if err != nil {
 			return nil, err
 		}
-		response.NextPageToken = make([]byte, len(nextPageToken))
-		copy(response.NextPageToken, nextPageToken)
 	}
 
 	return response, nil
