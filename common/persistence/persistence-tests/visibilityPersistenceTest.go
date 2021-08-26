@@ -419,7 +419,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 
 	// List open with filtering
 	resp, err2 := s.VisibilityMgr.ListOpenWorkflowExecutionsByType(&visibility.ListWorkflowExecutionsByTypeRequest{
-		ListWorkflowExecutionsRequest: visibility.ListWorkflowExecutionsRequest{
+		ListWorkflowExecutionsRequest: &visibility.ListWorkflowExecutionsRequest{
 			NamespaceID:       testNamespaceUUID,
 			PageSize:          2,
 			EarliestStartTime: startTime,
@@ -458,7 +458,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 
 	// List closed with filtering
 	resp, err5 := s.VisibilityMgr.ListClosedWorkflowExecutionsByType(&visibility.ListWorkflowExecutionsByTypeRequest{
-		ListWorkflowExecutionsRequest: visibility.ListWorkflowExecutionsRequest{
+		ListWorkflowExecutionsRequest: &visibility.ListWorkflowExecutionsRequest{
 			NamespaceID:       testNamespaceUUID,
 			PageSize:          2,
 			EarliestStartTime: startTime,
@@ -507,7 +507,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 
 	// List open with filtering
 	resp, err2 := s.VisibilityMgr.ListOpenWorkflowExecutionsByWorkflowID(&visibility.ListWorkflowExecutionsByWorkflowIDRequest{
-		ListWorkflowExecutionsRequest: visibility.ListWorkflowExecutionsRequest{
+		ListWorkflowExecutionsRequest: &visibility.ListWorkflowExecutionsRequest{
 			NamespaceID:       testNamespaceUUID,
 			PageSize:          2,
 			EarliestStartTime: startTime,
@@ -546,7 +546,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 
 	// List closed with filtering
 	resp, err5 := s.VisibilityMgr.ListClosedWorkflowExecutionsByWorkflowID(&visibility.ListWorkflowExecutionsByWorkflowIDRequest{
-		ListWorkflowExecutionsRequest: visibility.ListWorkflowExecutionsRequest{
+		ListWorkflowExecutionsRequest: &visibility.ListWorkflowExecutionsRequest{
 			NamespaceID:       testNamespaceUUID,
 			PageSize:          2,
 			EarliestStartTime: startTime,
@@ -622,7 +622,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 
 	// List closed with filtering
 	resp, err4 := s.VisibilityMgr.ListClosedWorkflowExecutionsByStatus(&visibility.ListClosedWorkflowExecutionsByStatusRequest{
-		ListWorkflowExecutionsRequest: visibility.ListWorkflowExecutionsRequest{
+		ListWorkflowExecutionsRequest: &visibility.ListWorkflowExecutionsRequest{
 			NamespaceID:       testNamespaceUUID,
 			PageSize:          2,
 			EarliestStartTime: startTime,

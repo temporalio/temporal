@@ -38,7 +38,7 @@ type (
 	testValuesInterceptor struct{}
 )
 
-func (t *testNameInterceptor) Name(name string) (string, error) {
+func (t *testNameInterceptor) Name(name string, usage FieldNameUsage) (string, error) {
 	if name == "error" {
 		return "", errors.New("interceptor error")
 	}
@@ -54,9 +54,9 @@ func (t *testValuesInterceptor) Values(name string, values ...interface{}) ([]in
 	var result []interface{}
 	for _, value := range values {
 		if name == "ExecutionStatus" {
-			floatVal, isFloatVal := value.(float64)
-			if isFloatVal {
-				result = append(result, fmt.Sprintf("Status%v", floatVal))
+			intVal, isIntVal := value.(int64)
+			if isIntVal {
+				result = append(result, fmt.Sprintf("Status%v", intVal))
 				continue
 			}
 		}

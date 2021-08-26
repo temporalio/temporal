@@ -61,7 +61,7 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // Count mocks base method.
-func (m *MockClient) Count(ctx context.Context, index, query string) (int64, error) {
+func (m *MockClient) Count(ctx context.Context, index string, query v7.Query) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Count", ctx, index, query)
 	ret0, _ := ret[0].(int64)
@@ -135,21 +135,6 @@ func (mr *MockClientMockRecorder) Search(ctx, p interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Search", reflect.TypeOf((*MockClient)(nil).Search), ctx, p)
 }
 
-// SearchWithDSL mocks base method.
-func (m *MockClient) SearchWithDSL(ctx context.Context, index, query string) (*v7.SearchResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SearchWithDSL", ctx, index, query)
-	ret0, _ := ret[0].(*v7.SearchResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SearchWithDSL indicates an expected call of SearchWithDSL.
-func (mr *MockClientMockRecorder) SearchWithDSL(ctx, index, query interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchWithDSL", reflect.TypeOf((*MockClient)(nil).SearchWithDSL), ctx, index, query)
-}
-
 // WaitForYellowStatus mocks base method.
 func (m *MockClient) WaitForYellowStatus(ctx context.Context, index string) (string, error) {
 	m.ctrl.T.Helper()
@@ -203,6 +188,36 @@ func (mr *MockClientV7MockRecorder) ClosePointInTime(ctx, id interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClosePointInTime", reflect.TypeOf((*MockClientV7)(nil).ClosePointInTime), ctx, id)
 }
 
+// Count mocks base method.
+func (m *MockClientV7) Count(ctx context.Context, index string, query v7.Query) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Count", ctx, index, query)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Count indicates an expected call of Count.
+func (mr *MockClientV7MockRecorder) Count(ctx, index, query interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockClientV7)(nil).Count), ctx, index, query)
+}
+
+// GetMapping mocks base method.
+func (m *MockClientV7) GetMapping(ctx context.Context, index string) (map[string]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMapping", ctx, index)
+	ret0, _ := ret[0].(map[string]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMapping indicates an expected call of GetMapping.
+func (mr *MockClientV7MockRecorder) GetMapping(ctx, index interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMapping", reflect.TypeOf((*MockClientV7)(nil).GetMapping), ctx, index)
+}
+
 // OpenPointInTime mocks base method.
 func (m *MockClientV7) OpenPointInTime(ctx context.Context, index, keepAliveInterval string) (string, error) {
 	m.ctrl.T.Helper()
@@ -218,19 +233,64 @@ func (mr *MockClientV7MockRecorder) OpenPointInTime(ctx, index, keepAliveInterva
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OpenPointInTime", reflect.TypeOf((*MockClientV7)(nil).OpenPointInTime), ctx, index, keepAliveInterval)
 }
 
-// SearchWithDSLWithPIT mocks base method.
-func (m *MockClientV7) SearchWithDSLWithPIT(ctx context.Context, query string) (*v7.SearchResult, error) {
+// PutMapping mocks base method.
+func (m *MockClientV7) PutMapping(ctx context.Context, index string, mapping map[string]v1.IndexedValueType) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SearchWithDSLWithPIT", ctx, query)
+	ret := m.ctrl.Call(m, "PutMapping", ctx, index, mapping)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PutMapping indicates an expected call of PutMapping.
+func (mr *MockClientV7MockRecorder) PutMapping(ctx, index, mapping interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutMapping", reflect.TypeOf((*MockClientV7)(nil).PutMapping), ctx, index, mapping)
+}
+
+// RunBulkProcessor mocks base method.
+func (m *MockClientV7) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RunBulkProcessor", ctx, p)
+	ret0, _ := ret[0].(BulkProcessor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RunBulkProcessor indicates an expected call of RunBulkProcessor.
+func (mr *MockClientV7MockRecorder) RunBulkProcessor(ctx, p interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunBulkProcessor", reflect.TypeOf((*MockClientV7)(nil).RunBulkProcessor), ctx, p)
+}
+
+// Search mocks base method.
+func (m *MockClientV7) Search(ctx context.Context, p *SearchParameters) (*v7.SearchResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Search", ctx, p)
 	ret0, _ := ret[0].(*v7.SearchResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// SearchWithDSLWithPIT indicates an expected call of SearchWithDSLWithPIT.
-func (mr *MockClientV7MockRecorder) SearchWithDSLWithPIT(ctx, query interface{}) *gomock.Call {
+// Search indicates an expected call of Search.
+func (mr *MockClientV7MockRecorder) Search(ctx, p interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchWithDSLWithPIT", reflect.TypeOf((*MockClientV7)(nil).SearchWithDSLWithPIT), ctx, query)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Search", reflect.TypeOf((*MockClientV7)(nil).Search), ctx, p)
+}
+
+// WaitForYellowStatus mocks base method.
+func (m *MockClientV7) WaitForYellowStatus(ctx context.Context, index string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WaitForYellowStatus", ctx, index)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WaitForYellowStatus indicates an expected call of WaitForYellowStatus.
+func (mr *MockClientV7MockRecorder) WaitForYellowStatus(ctx, index interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForYellowStatus", reflect.TypeOf((*MockClientV7)(nil).WaitForYellowStatus), ctx, index)
 }
 
 // MockClientV6 is a mock of ClientV6 interface.
@@ -256,6 +316,66 @@ func (m *MockClientV6) EXPECT() *MockClientV6MockRecorder {
 	return m.recorder
 }
 
+// Count mocks base method.
+func (m *MockClientV6) Count(ctx context.Context, index string, query v7.Query) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Count", ctx, index, query)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Count indicates an expected call of Count.
+func (mr *MockClientV6MockRecorder) Count(ctx, index, query interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Count", reflect.TypeOf((*MockClientV6)(nil).Count), ctx, index, query)
+}
+
+// GetMapping mocks base method.
+func (m *MockClientV6) GetMapping(ctx context.Context, index string) (map[string]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMapping", ctx, index)
+	ret0, _ := ret[0].(map[string]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMapping indicates an expected call of GetMapping.
+func (mr *MockClientV6MockRecorder) GetMapping(ctx, index interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMapping", reflect.TypeOf((*MockClientV6)(nil).GetMapping), ctx, index)
+}
+
+// PutMapping mocks base method.
+func (m *MockClientV6) PutMapping(ctx context.Context, index string, mapping map[string]v1.IndexedValueType) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PutMapping", ctx, index, mapping)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PutMapping indicates an expected call of PutMapping.
+func (mr *MockClientV6MockRecorder) PutMapping(ctx, index, mapping interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutMapping", reflect.TypeOf((*MockClientV6)(nil).PutMapping), ctx, index, mapping)
+}
+
+// RunBulkProcessor mocks base method.
+func (m *MockClientV6) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RunBulkProcessor", ctx, p)
+	ret0, _ := ret[0].(BulkProcessor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RunBulkProcessor indicates an expected call of RunBulkProcessor.
+func (mr *MockClientV6MockRecorder) RunBulkProcessor(ctx, p interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunBulkProcessor", reflect.TypeOf((*MockClientV6)(nil).RunBulkProcessor), ctx, p)
+}
+
 // Scroll mocks base method.
 func (m *MockClientV6) Scroll(ctx context.Context, scrollID string) (*v7.SearchResult, ScrollService, error) {
 	m.ctrl.T.Helper()
@@ -273,9 +393,9 @@ func (mr *MockClientV6MockRecorder) Scroll(ctx, scrollID interface{}) *gomock.Ca
 }
 
 // ScrollFirstPage mocks base method.
-func (m *MockClientV6) ScrollFirstPage(ctx context.Context, index, query string) (*v7.SearchResult, ScrollService, error) {
+func (m *MockClientV6) ScrollFirstPage(ctx context.Context, p *SearchParameters) (*v7.SearchResult, ScrollService, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ScrollFirstPage", ctx, index, query)
+	ret := m.ctrl.Call(m, "ScrollFirstPage", ctx, p)
 	ret0, _ := ret[0].(*v7.SearchResult)
 	ret1, _ := ret[1].(ScrollService)
 	ret2, _ := ret[2].(error)
@@ -283,9 +403,39 @@ func (m *MockClientV6) ScrollFirstPage(ctx context.Context, index, query string)
 }
 
 // ScrollFirstPage indicates an expected call of ScrollFirstPage.
-func (mr *MockClientV6MockRecorder) ScrollFirstPage(ctx, index, query interface{}) *gomock.Call {
+func (mr *MockClientV6MockRecorder) ScrollFirstPage(ctx, p interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScrollFirstPage", reflect.TypeOf((*MockClientV6)(nil).ScrollFirstPage), ctx, index, query)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScrollFirstPage", reflect.TypeOf((*MockClientV6)(nil).ScrollFirstPage), ctx, p)
+}
+
+// Search mocks base method.
+func (m *MockClientV6) Search(ctx context.Context, p *SearchParameters) (*v7.SearchResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Search", ctx, p)
+	ret0, _ := ret[0].(*v7.SearchResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Search indicates an expected call of Search.
+func (mr *MockClientV6MockRecorder) Search(ctx, p interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Search", reflect.TypeOf((*MockClientV6)(nil).Search), ctx, p)
+}
+
+// WaitForYellowStatus mocks base method.
+func (m *MockClientV6) WaitForYellowStatus(ctx context.Context, index string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WaitForYellowStatus", ctx, index)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WaitForYellowStatus indicates an expected call of WaitForYellowStatus.
+func (mr *MockClientV6MockRecorder) WaitForYellowStatus(ctx, index interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForYellowStatus", reflect.TypeOf((*MockClientV6)(nil).WaitForYellowStatus), ctx, index)
 }
 
 // MockCLIClient is a mock of CLIClient interface.
@@ -341,7 +491,7 @@ func (mr *MockCLIClientMockRecorder) CatIndices(ctx interface{}) *gomock.Call {
 }
 
 // Count mocks base method.
-func (m *MockCLIClient) Count(ctx context.Context, index, query string) (int64, error) {
+func (m *MockCLIClient) Count(ctx context.Context, index string, query v7.Query) (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Count", ctx, index, query)
 	ret0, _ := ret[0].(int64)
@@ -427,21 +577,6 @@ func (m *MockCLIClient) Search(ctx context.Context, p *SearchParameters) (*v7.Se
 func (mr *MockCLIClientMockRecorder) Search(ctx, p interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Search", reflect.TypeOf((*MockCLIClient)(nil).Search), ctx, p)
-}
-
-// SearchWithDSL mocks base method.
-func (m *MockCLIClient) SearchWithDSL(ctx context.Context, index, query string) (*v7.SearchResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SearchWithDSL", ctx, index, query)
-	ret0, _ := ret[0].(*v7.SearchResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SearchWithDSL indicates an expected call of SearchWithDSL.
-func (mr *MockCLIClientMockRecorder) SearchWithDSL(ctx, index, query interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchWithDSL", reflect.TypeOf((*MockCLIClient)(nil).SearchWithDSL), ctx, index, query)
 }
 
 // WaitForYellowStatus mocks base method.

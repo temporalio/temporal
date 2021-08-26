@@ -26,7 +26,7 @@ package query
 
 type (
 	FieldNameInterceptor interface {
-		Name(name string) (string, error)
+		Name(name string, usage FieldNameUsage) (string, error)
 	}
 	FieldValuesInterceptor interface {
 		Values(name string, values ...interface{}) ([]interface{}, error)
@@ -35,9 +35,16 @@ type (
 	nopFieldNameInterceptor struct{}
 
 	nopFieldValuesInterceptor struct{}
+
+	FieldNameUsage int
 )
 
-func (n *nopFieldNameInterceptor) Name(name string) (string, error) {
+const (
+	FieldNameFilter FieldNameUsage = iota
+	FieldNameSorter
+)
+
+func (n *nopFieldNameInterceptor) Name(name string, usage FieldNameUsage) (string, error) {
 	return name, nil
 }
 
