@@ -744,10 +744,10 @@ func (mr *MockExecutionStoreMockRecorder) ConflictResolveWorkflowExecution(reque
 }
 
 // CreateWorkflowExecution mocks base method.
-func (m *MockExecutionStore) CreateWorkflowExecution(request *persistence.InternalCreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
+func (m *MockExecutionStore) CreateWorkflowExecution(request *persistence.InternalCreateWorkflowExecutionRequest) (*persistence.InternalCreateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateWorkflowExecution", request)
-	ret0, _ := ret[0].(*persistence.CreateWorkflowExecutionResponse)
+	ret0, _ := ret[0].(*persistence.InternalCreateWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

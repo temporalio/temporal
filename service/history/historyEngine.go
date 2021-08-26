@@ -520,11 +520,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		return nil, serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
-	historySize, err := weContext.PersistWorkflowEvents(newWorkflowEventsSeq[0])
-	if err != nil {
-		return nil, err
-	}
-
 	// create as brand new
 	createMode := persistence.CreateWorkflowModeBrandNew
 	prevRunID := ""
@@ -536,7 +531,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		prevLastWriteVersion,
 		mutableState,
 		newWorkflow,
-		historySize,
+		newWorkflowEventsSeq,
 	)
 	if err != nil {
 		if t, ok := err.(*persistence.CurrentWorkflowConditionFailedError); ok {
@@ -577,7 +572,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 				prevLastWriteVersion,
 				mutableState,
 				newWorkflow,
-				historySize,
+				newWorkflowEventsSeq,
 			)
 		}
 	}
@@ -2034,11 +2029,6 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
-	historySize, err := context.PersistWorkflowEvents(newWorkflowEventsSeq[0])
-	if err != nil {
-		return nil, err
-	}
-
 	createMode := persistence.CreateWorkflowModeBrandNew
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
@@ -2057,7 +2047,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		prevLastWriteVersion,
 		mutableState,
 		newWorkflow,
-		historySize,
+		newWorkflowEventsSeq,
 	)
 
 	if t, ok := err.(*persistence.CurrentWorkflowConditionFailedError); ok {

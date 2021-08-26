@@ -239,7 +239,6 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 
-	s.mockExecutionMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil)
 	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any()).Return(&p.CreateWorkflowExecutionResponse{}, nil)
 
 	requestID := uuid.New()
@@ -344,7 +343,6 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	notExistErr := serviceerror.NewNotFound("Workflow not exist")
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any()).Return(nil, notExistErr)
-	s.mockExecutionMgr.EXPECT().AppendHistoryNodes(gomock.Any()).Return(&p.AppendHistoryNodesResponse{Size: 0}, nil)
 	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any()).Return(&p.CreateWorkflowExecutionResponse{}, nil)
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(context.Background(), sRequest)

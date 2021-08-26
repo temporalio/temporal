@@ -120,7 +120,6 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 			EventId: common.FirstEventID,
 		}},
 	}}
-	workflowHistorySize := int64(12345)
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -136,9 +135,6 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 		ctx, namespaceID, workflowID,
 	).Return("", nil)
 
-	weContext.EXPECT().PersistWorkflowEvents(
-		workflowEventsSeq[0],
-	).Return(workflowHistorySize, nil)
 	weContext.EXPECT().CreateWorkflowExecution(
 		now,
 		persistence.CreateWorkflowModeBrandNew,
@@ -146,7 +142,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 		int64(0),
 		mutableState,
 		workflowSnapshot,
-		workflowHistorySize,
+		workflowEventsSeq,
 	).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, now, newWorkflow)
@@ -178,7 +174,6 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 			EventId: common.FirstEventID + 1,
 		}},
 	}}
-	workflowHistorySize := int64(12345)
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -194,9 +189,6 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 		ctx, namespaceID, workflowID,
 	).Return("", nil)
 
-	weContext.EXPECT().PersistWorkflowEvents(
-		workflowEventsSeq[0],
-	).Return(workflowHistorySize, nil)
 	weContext.EXPECT().CreateWorkflowExecution(
 		now,
 		persistence.CreateWorkflowModeBrandNew,
@@ -204,7 +196,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 		int64(0),
 		mutableState,
 		workflowSnapshot,
-		workflowHistorySize,
+		workflowEventsSeq,
 	).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, now, newWorkflow)
@@ -245,7 +237,6 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 			EventId: common.FirstEventID,
 		}},
 	}}
-	targetWorkflowHistorySize := int64(12345)
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -271,9 +262,6 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	}).AnyTimes()
 	currentWorkflow.EXPECT().getVectorClock().Return(currentLastWriteVersion, int64(0), nil)
 
-	targetContext.EXPECT().PersistWorkflowEvents(
-		targetWorkflowEventsSeq[0],
-	).Return(targetWorkflowHistorySize, nil)
 	targetContext.EXPECT().CreateWorkflowExecution(
 		now,
 		persistence.CreateWorkflowModeWorkflowIDReuse,
@@ -281,7 +269,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		currentLastWriteVersion,
 		targetMutableState,
 		targetWorkflowSnapshot,
-		targetWorkflowHistorySize,
+		targetWorkflowEventsSeq,
 	).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, now, targetWorkflow)
@@ -323,7 +311,6 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 			EventId: common.FirstEventID + 1,
 		}},
 	}}
-	targetWorkflowHistorySize := int64(12345)
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -349,9 +336,6 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	}).AnyTimes()
 	currentWorkflow.EXPECT().getVectorClock().Return(currentLastWriteVersion, int64(0), nil)
 
-	targetContext.EXPECT().PersistWorkflowEvents(
-		targetWorkflowEventsSeq[0],
-	).Return(targetWorkflowHistorySize, nil)
 	targetContext.EXPECT().CreateWorkflowExecution(
 		now,
 		persistence.CreateWorkflowModeWorkflowIDReuse,
@@ -359,7 +343,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		currentLastWriteVersion,
 		targetMutableState,
 		targetWorkflowSnapshot,
-		targetWorkflowHistorySize,
+		targetWorkflowEventsSeq,
 	).Return(nil)
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, now, targetWorkflow)
@@ -403,7 +387,6 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 			EventId: common.FirstEventID,
 		}},
 	}}
-	targetWorkflowHistorySize := int64(12345)
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -421,9 +404,6 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(workflow.TransactionPolicyPassive, nil)
 
-	targetContext.EXPECT().PersistWorkflowEvents(
-		targetWorkflowEventsSeq[0],
-	).Return(targetWorkflowHistorySize, nil)
 	targetContext.EXPECT().CreateWorkflowExecution(
 		now,
 		persistence.CreateWorkflowModeZombie,
@@ -431,7 +411,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		int64(0),
 		targetMutableState,
 		targetWorkflowSnapshot,
-		targetWorkflowHistorySize,
+		targetWorkflowEventsSeq,
 	).Return(nil)
 	targetContext.EXPECT().ReapplyEvents(targetWorkflowEventsSeq).Return(nil)
 
@@ -476,7 +456,6 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 			EventId: common.FirstEventID + 1,
 		}},
 	}}
-	targetWorkflowHistorySize := int64(12345)
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -494,9 +473,6 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(workflow.TransactionPolicyPassive, nil)
 
-	targetContext.EXPECT().PersistWorkflowEvents(
-		targetWorkflowEventsSeq[0],
-	).Return(targetWorkflowHistorySize, nil)
 	targetContext.EXPECT().CreateWorkflowExecution(
 		now,
 		persistence.CreateWorkflowModeZombie,
@@ -504,7 +480,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		int64(0),
 		targetMutableState,
 		targetWorkflowSnapshot,
-		targetWorkflowHistorySize,
+		targetWorkflowEventsSeq,
 	).Return(nil)
 	targetContext.EXPECT().ReapplyEvents(targetWorkflowEventsSeq).Return(nil)
 
@@ -549,7 +525,6 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 			EventId: common.FirstEventID,
 		}},
 	}}
-	targetWorkflowHistorySize := int64(12345)
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -567,9 +542,6 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(workflow.TransactionPolicyPassive, nil)
 
-	targetContext.EXPECT().PersistWorkflowEvents(
-		targetWorkflowEventsSeq[0],
-	).Return(targetWorkflowHistorySize, nil)
 	targetContext.EXPECT().CreateWorkflowExecution(
 		now,
 		persistence.CreateWorkflowModeZombie,
@@ -577,7 +549,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		int64(0),
 		targetMutableState,
 		targetWorkflowSnapshot,
-		targetWorkflowHistorySize,
+		targetWorkflowEventsSeq,
 	).Return(&persistence.WorkflowConditionFailedError{})
 	targetContext.EXPECT().ReapplyEvents(targetWorkflowEventsSeq).Return(nil)
 
@@ -622,7 +594,6 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 			EventId: common.FirstEventID + 1,
 		}},
 	}}
-	targetWorkflowHistorySize := int64(12345)
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: namespaceID,
 		WorkflowId:  workflowID,
@@ -640,9 +611,6 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(false, nil)
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(workflow.TransactionPolicyPassive, nil)
 
-	targetContext.EXPECT().PersistWorkflowEvents(
-		targetWorkflowEventsSeq[0],
-	).Return(targetWorkflowHistorySize, nil)
 	targetContext.EXPECT().CreateWorkflowExecution(
 		now,
 		persistence.CreateWorkflowModeZombie,
@@ -650,7 +618,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		int64(0),
 		targetMutableState,
 		targetWorkflowSnapshot,
-		targetWorkflowHistorySize,
+		targetWorkflowEventsSeq,
 	).Return(&persistence.WorkflowConditionFailedError{})
 	targetContext.EXPECT().ReapplyEvents(targetWorkflowEventsSeq).Return(nil)
 

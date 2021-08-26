@@ -35,7 +35,8 @@ const (
 	// below are templates for history_node table
 	addHistoryNodesQuery = `INSERT INTO history_node (` +
 		`shard_id, tree_id, branch_id, node_id, prev_txn_id, txn_id, data, data_encoding) ` +
-		`VALUES (:shard_id, :tree_id, :branch_id, :node_id, :prev_txn_id, :txn_id, :data, :data_encoding) `
+		`VALUES (:shard_id, :tree_id, :branch_id, :node_id, :prev_txn_id, :txn_id, :data, :data_encoding) ` +
+		`ON DUPLICATE KEY UPDATE prev_txn_id=:prev_txn_id, data=:data, data_encoding=:data_encoding `
 
 	getHistoryNodesQuery = `SELECT node_id, prev_txn_id, txn_id, data, data_encoding FROM history_node ` +
 		`WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND ((node_id = ? AND txn_id > ?) OR node_id > ?) AND node_id < ? ` +

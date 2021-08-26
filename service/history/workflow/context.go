@@ -95,7 +95,7 @@ type (
 			prevLastWriteVersion int64,
 			newMutableState MutableState,
 			newWorkflow *persistence.WorkflowSnapshot,
-			historySize int64,
+			newWorkflowEvents []*persistence.WorkflowEvents,
 		) error
 		ConflictResolveWorkflowExecution(
 			now time.Time,
@@ -416,7 +416,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	prevLastWriteVersion int64,
 	newMutableState MutableState,
 	newWorkflow *persistence.WorkflowSnapshot,
-	historySize int64,
+	newWorkflowEvents []*persistence.WorkflowEvents,
 ) (retError error) {
 
 	defer func() {
@@ -433,20 +433,17 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		PreviousLastWriteVersion: prevLastWriteVersion,
 
 		NewWorkflowSnapshot: *newWorkflow,
+		NewWorkflowEvents:   newWorkflowEvents,
 	}
 
-	historySize += c.GetHistorySize()
-	c.SetHistorySize(historySize)
-	createRequest.NewWorkflowSnapshot.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
-		HistorySize: historySize,
-	}
-
-	if err := createWorkflowExecutionWithRetry(
+	resp, err := createWorkflowExecutionWithRetry(
 		c.shard,
 		createRequest,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
+	c.SetHistorySize(resp.HistorySize)
 
 	NotifyWorkflowSnapshotTasks(c.engine, newWorkflow)
 	emitStateTransitionCount(c.metricsClient, newMutableState)

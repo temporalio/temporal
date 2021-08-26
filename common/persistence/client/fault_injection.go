@@ -419,7 +419,7 @@ func (e *FaultInjectionExecutionStore) ConflictResolveWorkflowExecution(request 
 }
 
 func (e *FaultInjectionExecutionStore) CreateWorkflowExecution(request *persistence.InternalCreateWorkflowExecutionRequest) (
-	*persistence.CreateWorkflowExecutionResponse,
+	*persistence.InternalCreateWorkflowExecutionResponse,
 	error,
 ) {
 	if err := e.ErrorGenerator.Generate(); err != nil {

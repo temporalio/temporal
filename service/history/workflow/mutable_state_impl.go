@@ -252,6 +252,7 @@ func NewMutableState(
 
 		StartTime:        timestamp.TimePtr(startTime),
 		VersionHistories: versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
+		ExecutionStats:   &persistencespb.ExecutionStats{HistorySize: 0},
 	}
 	s.executionState = &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}

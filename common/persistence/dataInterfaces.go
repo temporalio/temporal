@@ -433,10 +433,12 @@ type (
 		PreviousLastWriteVersion int64
 
 		NewWorkflowSnapshot WorkflowSnapshot
+		NewWorkflowEvents   []*WorkflowEvents
 	}
 
 	// CreateWorkflowExecutionResponse is the response to CreateWorkflowExecutionRequest
 	CreateWorkflowExecutionResponse struct {
+		HistorySize int64
 	}
 
 	// GetWorkflowExecutionRequest is used to retrieve the info of a workflow execution

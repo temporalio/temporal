@@ -63,23 +63,14 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
 ) (int64, error) {
 
-	newWorkflowHistorySizeDiff := int64(0)
-
-	for _, workflowEvents := range newWorkflowEventsSeq {
-		eventsSize, err := PersistWorkflowEvents(t.shard, workflowEvents)
-		if err != nil {
-			return 0, err
-		}
-		newWorkflowHistorySizeDiff += eventsSize
-	}
-	newWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += newWorkflowHistorySizeDiff
-
-	if err := createWorkflowExecutionWithRetry(t.shard, &persistence.CreateWorkflowExecutionRequest{
+	resp, err := createWorkflowExecutionWithRetry(t.shard, &persistence.CreateWorkflowExecutionRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
 		Mode:                createMode,
 		NewWorkflowSnapshot: *newWorkflowSnapshot,
-	}); err != nil {
+		NewWorkflowEvents:   newWorkflowEventsSeq,
+	})
+	if err != nil {
 		return 0, err
 	}
 
@@ -89,7 +80,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 		t.logger.Error("unable to notify workflow creation", tag.Error(err))
 	}
 
-	return newWorkflowHistorySizeDiff, nil
+	return resp.HistorySize, nil
 }
 
 func (t *TransactionImpl) ConflictResolveWorkflowExecution(
@@ -307,10 +298,12 @@ func appendHistoryV2EventsWithRetry(
 func createWorkflowExecutionWithRetry(
 	shard shard.Context,
 	request *persistence.CreateWorkflowExecutionRequest,
-) error {
+) (*persistence.CreateWorkflowExecutionResponse, error) {
 
+	var resp *persistence.CreateWorkflowExecutionResponse
 	op := func() error {
-		_, err := shard.CreateWorkflowExecution(request)
+		var err error
+		resp, err = shard.CreateWorkflowExecution(request)
 		return err
 	}
 
@@ -321,13 +314,13 @@ func createWorkflowExecutionWithRetry(
 	)
 	switch err.(type) {
 	case nil:
-		return nil
+		return resp, nil
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,
 		*persistence.ConditionFailedError:
 		// it is possible that workflow already exists and caller need to apply
 		// workflow ID reuse policy
-		return err
+		return nil, err
 	default:
 		shard.GetLogger().Error(
 			"Persistent store operation Failure",
@@ -337,7 +330,7 @@ func createWorkflowExecutionWithRetry(
 			tag.StoreOperationCreateWorkflowExecution,
 			tag.Error(err),
 		)
-		return err
+		return nil, err
 	}
 }
 

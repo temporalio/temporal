@@ -865,7 +865,12 @@ func (d *cassandraPersistence) UpdateShard(
 }
 func (d *cassandraPersistence) CreateWorkflowExecution(
 	request *p.InternalCreateWorkflowExecutionRequest,
-) (*p.CreateWorkflowExecutionResponse, error) {
+) (*p.InternalCreateWorkflowExecutionResponse, error) {
+	for _, req := range request.NewWorkflowNewEvents {
+		if err := d.AppendHistoryNodes(req); err != nil {
+			return nil, err
+		}
+	}
 
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 
@@ -988,7 +993,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 		)
 	}
 
-	return &p.CreateWorkflowExecutionResponse{}, nil
+	return &p.InternalCreateWorkflowExecutionResponse{}, nil
 }
 
 func (d *cassandraPersistence) GetWorkflowExecution(
