@@ -467,29 +467,6 @@ func newAdminElasticSearchCommands() []cli.Command {
 				AdminDelete(c)
 			},
 		},
-		{
-			Name:    "report",
-			Aliases: []string{"rep"},
-			Usage:   "Generate Report by Aggregation functions on Elasticsearch",
-			Flags: append(
-				getESFlags(true),
-				cli.StringFlag{
-					Name:  FlagListQuery,
-					Usage: "SQL query of the report",
-				},
-				cli.StringFlag{
-					Name:  FlagOutputFormat,
-					Usage: "Additional output format (html or csv)",
-				},
-				cli.StringFlag{
-					Name:  FlagOutputFilename,
-					Usage: "Additional output filename with path",
-				},
-			),
-			Action: func(c *cli.Context) {
-				GenerateReport(c)
-			},
-		},
 	}
 }
 
