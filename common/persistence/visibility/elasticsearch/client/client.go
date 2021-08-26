@@ -44,8 +44,7 @@ type (
 	// bleed through, as the main purpose is testability not abstraction.
 	Client interface {
 		Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error)
-		SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error)
-		Count(ctx context.Context, index, query string) (int64, error)
+		Count(ctx context.Context, index string, query elastic.Query) (int64, error)
 		RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error)
 
 		// TODO (alex): move this to some admin client (and join with IntegrationTestsClient)
@@ -56,17 +55,18 @@ type (
 
 	// Combine ClientV7 with Client interface after ES v6 support removal.
 	ClientV7 interface {
+		Client
 		OpenPointInTime(ctx context.Context, index string, keepAliveInterval string) (string, error)
 		ClosePointInTime(ctx context.Context, id string) (bool, error)
-		SearchWithDSLWithPIT(ctx context.Context, query string) (*elastic.SearchResult, error)
 	}
 
 	// Deprecated. Remove after ES v6 support removal.
 	ClientV6 interface {
+		Client
 		// Deprecated. Remove after ES v6 support removal.
 		Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, ScrollService, error)
 		// Deprecated. Remove after ES v6 support removal.
-		ScrollFirstPage(ctx context.Context, index, query string) (*elastic.SearchResult, ScrollService, error)
+		ScrollFirstPage(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, ScrollService, error)
 	}
 
 	CLIClient interface {
@@ -85,7 +85,7 @@ type (
 		IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error)
 	}
 
-	// ScrollService is a interface for elastic.ScrollService
+	// ScrollService is an interface for elastic.ScrollService.
 	// Deprecated. Remove after ES v6 support removal.
 	ScrollService interface {
 		Clear(ctx context.Context) error
@@ -98,5 +98,6 @@ type (
 		PageSize    int
 		Sorter      []elastic.Sorter
 		SearchAfter []interface{}
+		PointInTime *elastic.PointInTime
 	}
 )
