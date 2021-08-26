@@ -33,16 +33,22 @@ func newValuesInterceptor() *valuesInterceptor {
 }
 
 func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string, error) {
+	searchAttributes, err := ni.searchAttributesProvider.GetSearchAttributes(ni.index, false)
+	if err != nil {
+		return "", fmt.Errorf("unable to read search attribute types: %v", err)
+	}
+
+	if !searchAttributes.IsDefined(name) {
+		return "", fmt.Errorf("invalid search attribute: %s", name)
+	}
+
 	if usage == query.FieldNameSorter {
-		searchAttributes, err := ni.searchAttributesProvider.GetSearchAttributes(ni.index, false)
-		if err != nil {
-			return "", fmt.Errorf("unable to read search attribute types: %v", err)
-		}
 		fieldType, _ := searchAttributes.GetType(name)
 		if fieldType == enumspb.INDEXED_VALUE_TYPE_STRING {
 			return "", errors.New("unable to sort by field of String type, use field of type Keyword")
 		}
 	}
+
 	return name, nil
 }
 
