@@ -31,6 +31,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/persistence/visibility/elasticsearch/query"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -93,7 +94,8 @@ func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]inter
 			if durationStr, isString := value.(string); isString {
 				// To support durations passed as golang durations such as "300ms", "-1.5h" or "2h45m".
 				// Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
-				if duration, err := time.ParseDuration(durationStr); err == nil {
+				// Custom timestamp.ParseDuration also supports "d" as additional unit for days.
+				if duration, err := timestamp.ParseDuration(durationStr); err == nil {
 					value = duration.Nanoseconds()
 				} else {
 					// To support "hh:mm:ss" durations.
