@@ -475,14 +475,11 @@ func (b *HistoryBuilder) AddContinuedAsNewEvent(
 		WorkflowRunTimeout:           command.WorkflowRunTimeout,
 		WorkflowTaskTimeout:          command.WorkflowTaskTimeout,
 		BackoffStartInterval:         command.BackoffStartInterval,
-		Initiator:                    enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
+		Initiator:                    command.Initiator,
 		Failure:                      command.Failure,
 		LastCompletionResult:         command.LastCompletionResult,
 		Memo:                         command.Memo,
 		SearchAttributes:             command.SearchAttributes,
-	}
-	if len(command.CronSchedule) != 0 {
-		attributes.Initiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
 	}
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
 		WorkflowExecutionContinuedAsNewEventAttributes: attributes,

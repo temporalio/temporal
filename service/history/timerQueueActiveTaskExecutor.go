@@ -28,7 +28,8 @@ import (
 	"context"
 	"fmt"
 
-	commandpb "go.temporal.io/api/command/v1"
+	"github.com/pborman/uuid"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -537,66 +538,63 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 
 	eventBatchFirstEventID := mutableState.GetNextEventID()
-
 	timeoutFailure := failure.NewTimeoutFailure("workflow timeout", enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
 	backoffInterval := backoff.NoBackoff
 	retryState := enumspb.RETRY_STATE_TIMEOUT
-	continueAsNewInitiator := enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY
+	initiator := enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED
 
 	wfExpTime := timestamp.TimeValue(mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime)
-	// Retry if WorkflowExpirationTime is not set or workflow is not expired.
 	if wfExpTime.IsZero() || wfExpTime.After(t.shard.GetTimeSource().Now()) {
 		backoffInterval, retryState = mutableState.GetRetryBackoffDuration(timeoutFailure)
-
-		if backoffInterval == backoff.NoBackoff {
-			// Check if a cron backoff is needed.
-			backoffInterval, err = mutableState.GetCronBackoffDuration()
-			if err != nil {
-				return err
-			}
-			continueAsNewInitiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
+		if backoffInterval != backoff.NoBackoff {
+			// We have a retry policy and we should retry.
+			initiator = enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY
+		} else if backoffInterval = mutableState.GetCronBackoffDuration(); backoffInterval != backoff.NoBackoff {
+			// We have a cron schedule.
+			initiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
 		}
 	}
 
-	// No more retries, or workflow is expired.
-	if backoffInterval == backoff.NoBackoff {
-		if err := workflow.TimeoutWorkflow(mutableState, eventBatchFirstEventID, retryState); err != nil {
-			return err
-		}
+	// First add timeout workflow event, no matter what we're doing next.
+	if err := workflow.TimeoutWorkflow(
+		mutableState,
+		eventBatchFirstEventID,
+		retryState,
+	); err != nil {
+		return err
+	}
 
+	// No more retries, or workflow is expired.
+	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED {
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
 		return t.updateWorkflowExecution(weContext, mutableState, false)
 	}
 
-	// workflow timeout, but a retry or cron is needed, so we do continue as new to retry or cron
 	startEvent, err := mutableState.GetStartEvent()
 	if err != nil {
 		return err
 	}
+	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	continueAsNewAttributes := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-		WorkflowType:         startAttributes.WorkflowType,
-		TaskQueue:            startAttributes.TaskQueue,
-		Input:                startAttributes.Input,
-		WorkflowRunTimeout:   startAttributes.WorkflowRunTimeout,
-		WorkflowTaskTimeout:  startAttributes.WorkflowTaskTimeout,
-		BackoffStartInterval: &backoffInterval,
-		RetryPolicy:          startAttributes.RetryPolicy,
-		Initiator:            continueAsNewInitiator,
-		Failure:              timeoutFailure,
-		LastCompletionResult: startAttributes.LastCompletionResult,
-		CronSchedule:         mutableState.GetExecutionInfo().CronSchedule,
-		Header:               startAttributes.Header,
-		Memo:                 startAttributes.Memo,
-		SearchAttributes:     startAttributes.SearchAttributes,
+	newRunID := uuid.New()
+	newMutableState, err := createMutableState(
+		t.shard,
+		mutableState.GetNamespaceEntry(),
+		newRunID,
+	)
+	if err != nil {
+		return err
 	}
-	newMutableState, err := workflow.RetryWorkflow(
+	err = workflow.SetupNewWorkflowForRetryOrCron(
 		mutableState,
-		eventBatchFirstEventID,
-		startAttributes.GetParentWorkflowNamespace(),
-		continueAsNewAttributes,
+		newMutableState,
+		newRunID,
+		startAttr,
+		startAttr.LastCompletionResult,
+		timeoutFailure,
+		backoffInterval,
+		initiator,
 	)
 	if err != nil {
 		return err
