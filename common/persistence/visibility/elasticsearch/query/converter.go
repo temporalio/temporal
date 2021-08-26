@@ -110,24 +110,22 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (*elastic.BoolQuery, []
 		if query, isBoolQuery = q.(*elastic.BoolQuery); !isBoolQuery {
 			query = elastic.NewBoolQuery().Filter(q)
 		}
-	} else {
-		query = elastic.NewBoolQuery().Filter(elastic.NewMatchAllQuery())
 	}
 
-	var sorter []*elastic.FieldSort
+	var fieldSorts []*elastic.FieldSort
 	for _, orderByExpr := range sel.OrderBy {
 		colName, err := c.convertColName(orderByExpr.Expr, FieldNameSorter)
 		if err != nil {
 			return nil, nil, NewConverterError(fmt.Sprintf("unable to convert 'order by' column name: %s", err))
 		}
-		sortField := elastic.NewFieldSort(colName)
+		fieldSort := elastic.NewFieldSort(colName)
 		if orderByExpr.Direction == sqlparser.DescScr {
-			sortField = sortField.Desc()
+			fieldSort = fieldSort.Desc()
 		}
-		sorter = append(sorter, sortField)
+		fieldSorts = append(fieldSorts, fieldSort)
 	}
 
-	return query, sorter, nil
+	return query, fieldSorts, nil
 }
 
 func (c *Converter) convertWhere(expr sqlparser.Expr) (elastic.Query, error) {
@@ -386,13 +384,17 @@ func (c *Converter) parseSqlValue(sqlValue string) (interface{}, error) {
 		return strValue, nil
 	}
 
-	// Unquoted value must be a number. Numbers in JSON are float64.
-	floatValue, err := strconv.ParseFloat(sqlValue, 64)
-	if err != nil {
-		return nil, NewConverterError(fmt.Sprintf("%s: unable to parse %s to float64: %v", invalidExpressionErrMessage, sqlValue, err))
+	// Unquoted value must be a number. Try int64 first.
+	if intValue, err := strconv.ParseInt(sqlValue, 10, 64); err == nil {
+		return intValue, nil
 	}
 
-	return floatValue, nil
+	// Then float64.
+	if floatValue, err := strconv.ParseFloat(sqlValue, 64); err == nil {
+		return floatValue, nil
+	}
+
+	return nil, NewConverterError(fmt.Sprintf("%s: unable to parse %s", invalidExpressionErrMessage, sqlValue))
 }
 
 func (c *Converter) convertColName(colNameExpr sqlparser.Expr, usage FieldNameUsage) (string, error) {

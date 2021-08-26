@@ -68,6 +68,7 @@ var supportedWhereCases = map[string]string{
 	"id > 1 and d = 1 or process_id = 0 and x = 2": `{"bool":{"should":[{"bool":{"filter":[{"range":{"id":{"from":1,"include_lower":false,"include_upper":true,"to":null}}},{"match_phrase":{"d":{"query":1}}}]}},{"bool":{"filter":[{"match_phrase":{"process_id":{"query":0}}},{"match_phrase":{"x":{"query":2}}}]}}]}}`,
 	"(id > 1 and d = 1)":                           `{"bool":{"filter":[{"range":{"id":{"from":1,"include_lower":false,"include_upper":true,"to":null}}},{"match_phrase":{"d":{"query":1}}}]}}`,
 	"(id > 1 and d = 1) or (c=1)":                  `{"bool":{"should":[{"bool":{"filter":[{"range":{"id":{"from":1,"include_lower":false,"include_upper":true,"to":null}}},{"match_phrase":{"d":{"query":1}}}]}},{"match_phrase":{"c":{"query":1}}}]}}`,
+	"nid=1 and (cif = 1 or cif = 2)":               `{"bool":{"filter":[{"match_phrase":{"nid":{"query":1}}},{"bool":{"should":[{"match_phrase":{"cif":{"query":1}}},{"match_phrase":{"cif":{"query":2}}}]}}]}}`,
 	"id > 1 or (process_id = 0)":                   `{"bool":{"should":[{"range":{"id":{"from":1,"include_lower":false,"include_upper":true,"to":null}}},{"match_phrase":{"process_id":{"query":0}}}]}}`,
 	"id in (1,2,3,4)":                              `{"bool":{"filter":{"terms":{"id":[1,2,3,4]}}}}`,
 	"a = 'text'":                                   `{"bool":{"filter":{"match_phrase":{"a":{"query":"text"}}}}}`,
@@ -84,7 +85,10 @@ var supportedWhereCases = map[string]string{
 	"value = 'True'":                               `{"bool":{"filter":{"match_phrase":{"value":{"query":"True"}}}}}`,
 	"value = true":                                 `{"bool":{"filter":{"match_phrase":{"value":{"query":true}}}}}`,
 	"value = True":                                 `{"bool":{"filter":{"match_phrase":{"value":{"query":true}}}}}`,
-	"":                                             `{"bool":{"filter":{"match_all":{}}}}`,
+	"value = 1528358645123456789":                  `{"bool":{"filter":{"match_phrase":{"value":{"query":1528358645123456789}}}}}`,
+	"value = 1528358645.1234567":                   `{"bool":{"filter":{"match_phrase":{"value":{"query":1528358645.1234567}}}}}`,
+	// Long float is truncated.
+	"value = 1528358645.123456790":                                            `{"bool":{"filter":{"match_phrase":{"value":{"query":1528358645.1234567}}}}}`,
 	"id in (\"text1\",'text2') and content = 'aaaa'":                          `{"bool":{"filter":[{"terms":{"id":["text1","text2"]}},{"match_phrase":{"content":{"query":"aaaa"}}}]}}`,
 	"create_time BETWEEN '2015-01-01 00:00:00' and '2016-02-02 00:00:00'":     `{"bool":{"filter":{"range":{"create_time":{"from":"2015-01-01 00:00:00","include_lower":true,"include_upper":true,"to":"2016-02-02 00:00:00"}}}}}`,
 	"create_time nOt between '2015-01-01 00:00:00' and '2016-02-02 00:00:00'": `{"bool":{"must_not":{"range":{"create_time":{"from":"2015-01-01 00:00:00","include_lower":true,"include_upper":true,"to":"2016-02-02 00:00:00"}}}}}`,
@@ -99,12 +103,12 @@ var supportedWhereOrderCases = map[string]struct {
 		query:  `{"bool":{"filter":{"range":{"id":{"from":1,"include_lower":false,"include_upper":true,"to":null}}}}}`,
 		sorter: `[{"id":{"order":"asc"}},{"order_id":{"order":"desc"}}]`,
 	},
-	"order by `order`.abc": {
-		query:  `{"bool":{"filter":{"match_all":{}}}}`,
+	"id is null order by `order`.abc": {
+		query:  `{"bool":{"must_not":{"exists":{"field":"id"}}}}`,
 		sorter: `[{"order.abc":{"order":"asc"}}]`,
 	},
-	"ORdeR BY random_id DESC": {
-		query:  `{"bool":{"filter":{"match_all":{}}}}`,
+	"id beTweeN 1 AnD 3 ORdeR BY random_id DESC": {
+		query:  `{"bool":{"filter":{"range":{"id":{"from":1,"include_lower":true,"include_upper":true,"to":3}}}}}`,
 		sorter: `[{"random_id":{"order":"desc"}}]`,
 	},
 }
@@ -121,6 +125,23 @@ func TestSupportedSelectWhere(t *testing.T) {
 
 		assert.Equal(t, expectedJson, string(actualJson), fmt.Sprintf("sql: %s", sql))
 	}
+}
+
+func TestEmptySelectWhere(t *testing.T) {
+	c := NewConverter(nil, nil)
+
+	query, sorters, err := c.ConvertWhereOrderBy("")
+	assert.NoError(t, err)
+	assert.Nil(t, query)
+	assert.Nil(t, sorters)
+
+	query, sorters, err = c.ConvertWhereOrderBy("order by Id desc")
+	assert.NoError(t, err)
+	assert.Nil(t, query)
+	assert.Len(t, sorters, 1)
+	actualSorterMap, _ := sorters[0].Source()
+	actualSorterJson, _ := json.Marshal([]interface{}{actualSorterMap})
+	assert.Equal(t, `[{"Id":{"order":"desc"}}]`, string(actualSorterJson))
 }
 
 func TestSupportedSelectWhereOrder(t *testing.T) {

@@ -52,11 +52,11 @@ func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]inter
 
 		switch name {
 		case searchattribute.StartTime, searchattribute.CloseTime, searchattribute.ExecutionTime:
-			if nanos, isNumber := value.(float64); isNumber {
+			if nanos, isNumber := value.(int64); isNumber {
 				value = time.Unix(0, int64(nanos)).UTC().Format(time.RFC3339Nano)
 			}
 		case searchattribute.ExecutionStatus:
-			if status, isNumber := value.(float64); isNumber {
+			if status, isNumber := value.(int64); isNumber {
 				value = enumspb.WorkflowExecutionStatus_name[int32(status)]
 			}
 		case searchattribute.ExecutionDuration:

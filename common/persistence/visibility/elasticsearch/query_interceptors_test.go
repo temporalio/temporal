@@ -37,7 +37,7 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 		key   string
 		value interface{}
 	}{
-		{key: searchattribute.StartTime, value: float64(1528358645000000000)},
+		{key: searchattribute.StartTime, value: int64(1528358645123456789)},
 		{key: searchattribute.CloseTime, value: "2018-06-07T15:04:05+07:00"},
 		{key: searchattribute.ExecutionTime, value: "some invalid time string"},
 		{key: searchattribute.WorkflowID, value: "should not be modified"},
@@ -46,7 +46,7 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 		value     string
 		returnErr bool
 	}{
-		{value: "2018-06-07T08:04:05Z", returnErr: false},
+		{value: "2018-06-07T08:04:05.123456789Z", returnErr: false},
 		{value: "2018-06-07T15:04:05+07:00", returnErr: false},
 		{value: "some invalid time string", returnErr: false},
 		{value: "should not be modified", returnErr: false},
@@ -72,9 +72,9 @@ func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 		value interface{}
 	}{
 		{key: searchattribute.ExecutionStatus, value: "Completed"},
-		{key: searchattribute.ExecutionStatus, value: float64(1)},
+		{key: searchattribute.ExecutionStatus, value: int64(1)},
 		{key: searchattribute.ExecutionStatus, value: "1"},
-		{key: searchattribute.ExecutionStatus, value: float64(100)},
+		{key: searchattribute.ExecutionStatus, value: int64(100)},
 		{key: searchattribute.ExecutionStatus, value: "100"},
 		{key: searchattribute.ExecutionStatus, value: "BadStatus"},
 		{key: searchattribute.WorkflowID, value: "should not be modified"},

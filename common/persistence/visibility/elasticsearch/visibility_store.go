@@ -477,11 +477,16 @@ func (s *visibilityStore) ScanWorkflowExecutions(request *visibility.ListWorkflo
 
 func (s *visibilityStore) CountWorkflowExecutions(request *visibility.CountWorkflowExecutionsRequest) (*visibility.CountWorkflowExecutionsResponse, error) {
 
-	boolQuery, _, err := s.queryConverter.ConvertWhereOrderBy(request.Query)
+	requestQuery, _, err := s.queryConverter.ConvertWhereOrderBy(request.Query)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse query: %v", err))
 	}
-	boolQuery.Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID))
+
+	// Create new bool query because request query might have only "should" (="or") queries.
+	boolQuery := elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID))
+	if requestQuery != nil {
+		boolQuery.Filter(requestQuery)
+	}
 
 	ctx := context.Background()
 	count, err := s.esClient.Count(ctx, s.index, boolQuery)
@@ -559,11 +564,16 @@ func (s *visibilityStore) buildSearchParametersV2(
 		return nil, err
 	}
 
-	boolQuery, fieldSorts, err := s.queryConverter.ConvertWhereOrderBy(request.Query)
+	requestQuery, fieldSorts, err := s.queryConverter.ConvertWhereOrderBy(request.Query)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse query: %v", err))
 	}
-	boolQuery.Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID))
+
+	// Create new bool query because request query might have only "should" (="or") queries.
+	boolQuery := elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID))
+	if requestQuery != nil {
+		boolQuery.Filter(requestQuery)
+	}
 
 	params := &esclient.SearchParameters{
 		Index:    s.index,
@@ -685,7 +695,10 @@ func (s *visibilityStore) deserializePageToken(data []byte) (*visibilityPageToke
 	}
 
 	var token *visibilityPageToken
-	err := json.Unmarshal(data, &token)
+	dec := json.NewDecoder(bytes.NewReader(data))
+	// UseNumber will not lose precision on big int64.
+	dec.UseNumber()
+	err := dec.Decode(&token)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to deserialize page token: %v", err))
 	}

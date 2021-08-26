@@ -448,7 +448,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_MaxWindowSize() {
 		Namespace:     s.namespace,
 		PageSize:      int32(defaultTestValueOfESIndexMaxResultWindow),
 		NextPageToken: nextPageToken,
-		Query:         fmt.Sprintf(`WorkflowType = '%s' and CloseTime = missing`, wt),
+		Query:         fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = "Running"`, wt),
 	}
 	// get first page
 	for i := 0; i < numOfRetry; i++ {

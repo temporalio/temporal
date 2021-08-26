@@ -54,8 +54,8 @@ func (t *testValuesInterceptor) Values(name string, values ...interface{}) ([]in
 	var result []interface{}
 	for _, value := range values {
 		if name == "ExecutionStatus" {
-			floatVal, isFloatVal := value.(float64)
-			if isFloatVal {
+			floatVal, isIntVal := value.(int64)
+			if isIntVal {
 				result = append(result, fmt.Sprintf("Status%v", floatVal))
 				continue
 			}
