@@ -269,7 +269,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_SearchAttribute() {
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		PageSize:  int32(2),
-		Query:     fmt.Sprintf(`WorkflowType = '%s' and CloseTime = missing and BinaryChecksums = 'binary-v1'`, wt),
+		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running' and BinaryChecksums = 'binary-v1'`, wt),
 	}
 	// verify upsert data is on ES
 	s.testListResultForUpsertSearchAttributes(listRequest)
@@ -404,7 +404,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
 	s.Equal(2, searchVal)
 
 	// query for open
-	query3 := fmt.Sprintf(`(CustomIntField = %d or CustomIntField = %d) and CloseTime = missing`, 2, 3)
+	query3 := fmt.Sprintf(`(CustomIntField = %d or CustomIntField = %d) and ExecutionStatus = 'Running'`, 2, 3)
 	listRequest.Query = query3
 	for i := 0; i < numOfRetry; i++ {
 		resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
@@ -629,14 +629,14 @@ func (s *elasticsearchIntegrationSuite) testListWorkflowHelper(numOfWorkflows, p
 		Namespace:     s.namespace,
 		PageSize:      int32(pageSize),
 		NextPageToken: nextPageToken,
-		Query:         fmt.Sprintf(`WorkflowType = '%s' and CloseTime = missing`, wType),
+		Query:         fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wType),
 	}
 
 	scanRequest := &workflowservice.ScanWorkflowExecutionsRequest{
 		Namespace:     s.namespace,
 		PageSize:      int32(pageSize),
 		NextPageToken: nextPageToken,
-		Query:         fmt.Sprintf(`WorkflowType = '%s' and CloseTime = missing`, wType),
+		Query:         fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wType),
 	}
 
 	// test first page
@@ -970,7 +970,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution() {
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		PageSize:  int32(2),
-		Query:     fmt.Sprintf(`WorkflowType = '%s' and CloseTime = missing`, wt),
+		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
 	}
 	verified := false
 	for i := 0; i < numOfRetry; i++ {

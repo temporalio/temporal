@@ -276,7 +276,7 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: namespace,
 		PageSize:  int32(2),
-		Query:     fmt.Sprintf(`WorkflowType = '%s' and CloseTime = missing`, wt),
+		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
 	}
 
 	testListResult = func(client host.FrontendClient) {
