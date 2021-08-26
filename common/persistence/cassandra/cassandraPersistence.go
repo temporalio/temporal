@@ -1082,6 +1082,19 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(
 	request *p.InternalUpdateWorkflowExecutionRequest,
 ) error {
 
+	// first append history events
+	for _, req := range request.UpdateWorkflowNewEvents {
+		if err := d.AppendHistoryNodes(req); err != nil {
+			return err
+		}
+	}
+	for _, req := range request.NewWorkflowNewEvents {
+		if err := d.AppendHistoryNodes(req); err != nil {
+			return err
+		}
+	}
+
+	// then update mutable state
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 
 	updateWorkflow := request.UpdateWorkflowMutation

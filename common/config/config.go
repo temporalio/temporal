@@ -230,6 +230,8 @@ type (
 
 	// DataStore is the configuration for a single datastore
 	DataStore struct {
+		// FaultInjection contains the config for fault injector wrapper.
+		FaultInjection *FaultInjection `yaml:"faultInjection"`
 		// Cassandra contains the config for a cassandra datastore
 		Cassandra *Cassandra `yaml:"cassandra"`
 		// SQL contains the config for a SQL based datastore
@@ -238,6 +240,10 @@ type (
 		CustomDataStoreConfig *CustomDatastoreConfig `yaml:"customDatastore"`
 		// ElasticSearch contains the config for a ElasticSearch datastore
 		ElasticSearch *Elasticsearch `yaml:"elasticsearch"`
+	}
+
+	FaultInjection struct {
+		Rate float64 `yaml:"rate"`
 	}
 
 	// VisibilityConfig is config for visibility sampling

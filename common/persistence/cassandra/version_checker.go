@@ -59,7 +59,7 @@ func checkMainKeyspace(
 ) error {
 	ds, ok := cfg.DataStores[cfg.DefaultStore]
 	if ok && ds.Cassandra != nil {
-		return checkCompatibleVersion(*ds.Cassandra, r, cassandraschema.Version)
+		return CheckCompatibleVersion(*ds.Cassandra, r, cassandraschema.Version)
 	}
 	return nil
 }
@@ -70,13 +70,13 @@ func checkVisibilityKeyspace(
 ) error {
 	ds, ok := cfg.DataStores[cfg.VisibilityStore]
 	if ok && ds.Cassandra != nil {
-		return checkCompatibleVersion(*ds.Cassandra, r, cassandraschema.VisibilityVersion)
+		return CheckCompatibleVersion(*ds.Cassandra, r, cassandraschema.VisibilityVersion)
 	}
 	return nil
 }
 
-// checkCompatibleVersion check the version compatibility
-func checkCompatibleVersion(
+// CheckCompatibleVersion check the version compatibility
+func CheckCompatibleVersion(
 	cfg config.Cassandra,
 	r resolver.ServiceResolver,
 	expectedVersion string,

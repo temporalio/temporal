@@ -83,6 +83,7 @@ type (
 		DBPort          int    `yaml:"-"`
 		StoreType       string `yaml:"-"`
 		SchemaDir       string `yaml:"-"`
+		FaultInjection  *config.FaultInjection
 	}
 
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
@@ -131,8 +132,8 @@ func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
 		options.DBName = "test_" + GenerateRandomDBName(3)
 	}
 	logger := log.NewTestLogger()
-	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, logger)
-	return newTestBase(testCluster, logger)
+	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, options.FaultInjection, logger)
+	return NewTestBaseForCluster(testCluster, logger)
 }
 
 // NewTestBaseWithSQL returns a new persistence test base backed by SQL
@@ -162,8 +163,8 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 			panic(fmt.Sprintf("unknown sql store drier: %v", options.SQLDBPluginName))
 		}
 	}
-	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, logger)
-	return newTestBase(testCluster, logger)
+	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, options.FaultInjection, logger)
+	return NewTestBaseForCluster(testCluster, logger)
 }
 
 // NewTestBase returns a persistence test base backed by either cassandra or sql
@@ -178,7 +179,7 @@ func NewTestBase(options *TestBaseOptions) TestBase {
 	}
 }
 
-func newTestBase(testCluster PersistenceTestCluster, logger log.Logger) TestBase {
+func NewTestBaseForCluster(testCluster PersistenceTestCluster, logger log.Logger) TestBase {
 	return TestBase{
 		DefaultTestCluster:    testCluster,
 		VisibilityTestCluster: testCluster,
@@ -556,6 +557,7 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *persistencespb.WorkflowEx
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
 				AutoResetPoints:            prevResetPoints,
 				StartTime:                  timestamp.TimeNowPtrUtc(),
+				ExecutionStats:             &persistencespb.ExecutionStats{},
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{

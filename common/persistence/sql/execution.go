@@ -353,6 +353,19 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 func (m *sqlExecutionStore) UpdateWorkflowExecution(
 	request *p.InternalUpdateWorkflowExecutionRequest,
 ) error {
+	// first append history
+	for _, req := range request.UpdateWorkflowNewEvents {
+		if err := m.AppendHistoryNodes(req); err != nil {
+			return err
+		}
+	}
+	for _, req := range request.NewWorkflowNewEvents {
+		if err := m.AppendHistoryNodes(req); err != nil {
+			return err
+		}
+	}
+
+	// then update mutable state
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	return m.txExecuteShardLocked(ctx,
