@@ -388,6 +388,18 @@ func (e *MutableStateImpl) GetCurrentBranchToken() ([]byte, error) {
 	return currentVersionHistory.GetBranchToken(), nil
 }
 
+func (e *MutableStateImpl) getCurrentBranchTokenAndEventVersion(eventID int64) ([]byte, int64, error) {
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
+	if err != nil {
+		return nil, 0, err
+	}
+	version, err := versionhistory.GetVersionHistoryEventVersion(currentVersionHistory, eventID)
+	if err != nil {
+		return nil, 0, err
+	}
+	return currentVersionHistory.GetBranchToken(), version, nil
+}
+
 // SetHistoryTree set treeID/historyBranches
 func (e *MutableStateImpl) SetHistoryTree(
 	treeID string,
@@ -568,16 +580,19 @@ func (e *MutableStateImpl) GetActivityScheduledEvent(
 		return nil, ErrMissingActivityInfo
 	}
 
-	currentBranchToken, err := e.GetCurrentBranchToken()
+	currentBranchToken, version, err := e.getCurrentBranchTokenAndEventVersion(ai.ScheduleId)
 	if err != nil {
 		return nil, err
 	}
 	scheduledEvent, err := e.eventsCache.GetEvent(
-		e.executionInfo.NamespaceId,
-		e.executionInfo.WorkflowId,
-		e.executionState.RunId,
+		events.EventKey{
+			NamespaceID: e.executionInfo.NamespaceId,
+			WorkflowID:  e.executionInfo.WorkflowId,
+			RunID:       e.executionState.RunId,
+			EventID:     ai.ScheduleId,
+			Version:     version,
+		},
 		ai.ScheduledEventBatchId,
-		ai.ScheduleId,
 		currentBranchToken,
 	)
 	if err != nil {
@@ -640,16 +655,19 @@ func (e *MutableStateImpl) GetChildExecutionInitiatedEvent(
 		return nil, ErrMissingChildWorkflowInfo
 	}
 
-	currentBranchToken, err := e.GetCurrentBranchToken()
+	currentBranchToken, version, err := e.getCurrentBranchTokenAndEventVersion(ci.InitiatedId)
 	if err != nil {
 		return nil, err
 	}
 	initiatedEvent, err := e.eventsCache.GetEvent(
-		e.executionInfo.NamespaceId,
-		e.executionInfo.WorkflowId,
-		e.executionState.RunId,
+		events.EventKey{
+			NamespaceID: e.executionInfo.NamespaceId,
+			WorkflowID:  e.executionInfo.WorkflowId,
+			RunID:       e.executionState.RunId,
+			EventID:     ci.InitiatedId,
+			Version:     version,
+		},
 		ci.InitiatedEventBatchId,
-		ci.InitiatedId,
 		currentBranchToken,
 	)
 	if err != nil {
@@ -715,20 +733,24 @@ func (e *MutableStateImpl) GetCompletionEvent() (*historypb.HistoryEvent, error)
 		return nil, ErrMissingWorkflowCompletionEvent
 	}
 
-	currentBranchToken, err := e.GetCurrentBranchToken()
+	// Completion EventID is always one less than NextEventID after workflow is completed
+	completionEventID := e.hBuilder.NextEventID() - 1
+	firstEventID := e.executionInfo.CompletionEventBatchId
+
+	currentBranchToken, version, err := e.getCurrentBranchTokenAndEventVersion(completionEventID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Completion EventID is always one less than NextEventID after workflow is completed
-	completionEventID := e.hBuilder.NextEventID() - 1
-	firstEventID := e.executionInfo.CompletionEventBatchId
 	completionEvent, err := e.eventsCache.GetEvent(
-		e.executionInfo.NamespaceId,
-		e.executionInfo.WorkflowId,
-		e.executionState.RunId,
+		events.EventKey{
+			NamespaceID: e.executionInfo.NamespaceId,
+			WorkflowID:  e.executionInfo.WorkflowId,
+			RunID:       e.executionState.RunId,
+			EventID:     completionEventID,
+			Version:     version,
+		},
 		firstEventID,
-		completionEventID,
 		currentBranchToken,
 	)
 	if err != nil {
@@ -748,12 +770,19 @@ func (e *MutableStateImpl) GetStartEvent() (*historypb.HistoryEvent, error) {
 	if err != nil {
 		return nil, err
 	}
+	startVersion, err := e.GetStartVersion()
+	if err != nil {
+		return nil, err
+	}
 
 	startEvent, err := e.eventsCache.GetEvent(
-		e.executionInfo.NamespaceId,
-		e.executionInfo.WorkflowId,
-		e.executionState.RunId,
-		common.FirstEventID,
+		events.EventKey{
+			NamespaceID: e.executionInfo.NamespaceId,
+			WorkflowID:  e.executionInfo.WorkflowId,
+			RunID:       e.executionState.RunId,
+			EventID:     common.FirstEventID,
+			Version:     startVersion,
+		},
 		common.FirstEventID,
 		currentBranchToken,
 	)
@@ -832,16 +861,18 @@ func (e *MutableStateImpl) DeletePendingSignal(
 func (e *MutableStateImpl) writeEventToCache(
 	event *historypb.HistoryEvent,
 ) {
-
 	// For start event: store it within events cache so the recordWorkflowStarted transfer task doesn't need to
 	// load it from database
 	// For completion event: store it within events cache so we can communicate the result to parent execution
 	// during the processing of DeleteTransferTask without loading this event from database
 	e.eventsCache.PutEvent(
-		e.executionInfo.NamespaceId,
-		e.executionInfo.WorkflowId,
-		e.executionState.RunId,
-		event.GetEventId(),
+		events.EventKey{
+			NamespaceID: e.executionInfo.NamespaceId,
+			WorkflowID:  e.executionInfo.WorkflowId,
+			RunID:       e.executionState.RunId,
+			EventID:     event.GetEventId(),
+			Version:     event.GetVersion(),
+		},
 		event,
 	)
 }
@@ -1749,13 +1780,7 @@ func (e *MutableStateImpl) AddActivityTaskScheduledEvent(
 	event := e.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command)
 
 	// Write the event to cache only on active cluster for processing on activity started or retried
-	e.eventsCache.PutEvent(
-		e.executionInfo.NamespaceId,
-		e.executionInfo.WorkflowId,
-		e.executionState.RunId,
-		event.GetEventId(),
-		event,
-	)
+	e.writeEventToCache(event)
 
 	ai, err := e.ReplicateActivityTaskScheduledEvent(workflowTaskCompletedEventID, event)
 	// TODO merge active & passive task generation
@@ -3090,8 +3115,7 @@ func (e *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 
 	event := e.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command)
 	// Write the event to cache only on active cluster
-	e.eventsCache.PutEvent(e.executionInfo.NamespaceId, e.executionInfo.WorkflowId, e.executionState.RunId,
-		event.GetEventId(), event)
+	e.writeEventToCache(event)
 
 	ci, err := e.ReplicateStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event, createRequestID)
 	if err != nil {
