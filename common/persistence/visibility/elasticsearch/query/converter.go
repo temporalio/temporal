@@ -150,6 +150,8 @@ func (c *Converter) convertWhere(expr sqlparser.Expr) (elastic.Query, error) {
 		return nil, NewConverterError(fmt.Sprintf("%s: 'not' expression", notSupportedErrMessage))
 	case *sqlparser.FuncExpr:
 		return nil, NewConverterError(fmt.Sprintf("%s: function expression", notSupportedErrMessage))
+	case *sqlparser.ColName:
+		return nil, NewConverterError("incomplete expression")
 	default:
 		return nil, NewConverterError(fmt.Sprintf("%s: expression of type %T", notSupportedErrMessage, expr))
 	}
