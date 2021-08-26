@@ -407,7 +407,8 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 	)
 }
 
-func (e *historyEngineImpl) createMutableState(
+func createMutableState(
+	shard shard.Context,
 	namespaceEntry *cache.NamespaceCacheEntry,
 	runID string,
 ) (workflow.MutableState, error) {
@@ -415,11 +416,11 @@ func (e *historyEngineImpl) createMutableState(
 	var newMutableState workflow.MutableState
 	// version history applies to both local and global namespace
 	newMutableState = workflow.NewMutableState(
-		e.shard,
-		e.shard.GetEventsCache(),
-		e.logger,
+		shard,
+		shard.GetEventsCache(),
+		shard.GetLogger(),
 		namespaceEntry,
-		e.shard.GetTimeSource().Now(),
+		shard.GetTimeSource().Now(),
 	)
 
 	if err := newMutableState.SetHistoryTree(runID); err != nil {
@@ -483,7 +484,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		RunId:      uuid.New(),
 	}
 	clusterMetadata := e.shard.GetService().GetClusterMetadata()
-	mutableState, err := e.createMutableState(namespaceEntry, execution.GetRunId())
+	mutableState, err := createMutableState(e.shard, namespaceEntry, execution.GetRunId())
 	if err != nil {
 		return nil, err
 	}
@@ -1965,7 +1966,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}
 
 	clusterMetadata := e.shard.GetService().GetClusterMetadata()
-	mutableState, err := e.createMutableState(namespaceEntry, execution.GetRunId())
+	mutableState, err := createMutableState(e.shard, namespaceEntry, execution.GetRunId())
 	if err != nil {
 		return nil, err
 	}

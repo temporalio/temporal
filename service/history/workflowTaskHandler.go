@@ -33,7 +33,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
@@ -46,6 +45,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -60,7 +60,7 @@ type (
 		hasBufferedEvents               bool
 		workflowTaskFailedCause         *workflowTaskFailedCause
 		activityNotStartedCancelled     bool
-		continueAsNewBuilder            workflow.MutableState
+		newStateBuilder                 workflow.MutableState
 		stopProcessing                  bool // should stop processing any more commands
 		mutableState                    workflow.MutableState
 		initiatedChildExecutionsInBatch map[string]struct{} // Set of initiated child executions in the workflow task
@@ -73,6 +73,7 @@ type (
 		namespaceCache cache.NamespaceCache
 		metricsClient  metrics.Client
 		config         *configs.Config
+		shard          shard.Context
 	}
 
 	workflowTaskFailedCause struct {
@@ -91,6 +92,7 @@ func newWorkflowTaskHandler(
 	namespaceCache cache.NamespaceCache,
 	metricsClient metrics.Client,
 	config *configs.Config,
+	shard shard.Context,
 ) *workflowTaskHandlerImpl {
 
 	return &workflowTaskHandlerImpl{
@@ -101,7 +103,7 @@ func newWorkflowTaskHandler(
 		hasBufferedEvents:               mutableState.HasBufferedEvents(),
 		workflowTaskFailedCause:         nil,
 		activityNotStartedCancelled:     false,
-		continueAsNewBuilder:            nil,
+		newStateBuilder:                 nil,
 		stopProcessing:                  false,
 		mutableState:                    mutableState,
 		initiatedChildExecutionsInBatch: make(map[string]struct{}),
@@ -114,6 +116,7 @@ func newWorkflowTaskHandler(
 		namespaceCache: namespaceCache,
 		metricsClient:  metricsClient,
 		config:         config,
+		shard:          shard,
 	}
 }
 
@@ -361,33 +364,18 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 		return nil
 	}
 
-	// check if this is a cron workflow
-	cronBackoff, err := handler.mutableState.GetCronBackoffDuration()
+	// Always add workflow completed event to this one
+	_, err = handler.mutableState.AddCompletedWorkflowEvent(handler.workflowTaskCompletedID, attr)
 	if err != nil {
-		handler.stopProcessing = true
-		return err
-	}
-	if cronBackoff == backoff.NoBackoff {
-		// not cron, so complete this workflow execution
-		if _, err := handler.mutableState.AddCompletedWorkflowEvent(handler.workflowTaskCompletedID, attr); err != nil {
-			return serviceerror.NewInternal("Unable to add complete workflow event.")
-		}
-		return nil
+		return serviceerror.NewInternal("Unable to add complete workflow event.")
 	}
 
-	// this is a cron workflow
-	startEvent, err := handler.mutableState.GetStartEvent()
-	if err != nil {
-		return err
+	// Check if this workflow has a cron schedule
+	if cronBackoff := handler.mutableState.GetCronBackoffDuration(); cronBackoff != backoff.NoBackoff {
+		return handler.handleCron(cronBackoff, attr.GetResult(), nil)
 	}
-	startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	return handler.retryCronContinueAsNew(
-		startAttributes,
-		cronBackoff,
-		enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
-		nil,
-		attr.Result,
-	)
+
+	return nil
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
@@ -436,41 +424,32 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 		return nil
 	}
 
-	// below will check whether to do continue as new based on backoff & backoff or cron
-	backoffInterval, retryState := handler.mutableState.GetRetryBackoffDuration(attr.GetFailure())
-	continueAsNewInitiator := enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY
-	// first check the backoff retry
-	if backoffInterval == backoff.NoBackoff {
-		// if no backoff retry, set the backoffInterval using cron schedule
-		backoffInterval, err = handler.mutableState.GetCronBackoffDuration()
-		if err != nil {
-			handler.stopProcessing = true
-			return err
-		}
-		continueAsNewInitiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
-	}
-	// second check the backoff / cron schedule
-	if backoffInterval == backoff.NoBackoff {
-		// no retry or cron
-		if _, err := handler.mutableState.AddFailWorkflowEvent(handler.workflowTaskCompletedID, retryState, attr); err != nil {
-			return err
-		}
-		return nil
+	// First check retry policy to do a retry.
+	retryBackoff, retryState := handler.mutableState.GetRetryBackoffDuration(attr.GetFailure())
+	cronBackoff := backoff.NoBackoff
+	if retryBackoff == backoff.NoBackoff {
+		// If no retry, check cron.
+		cronBackoff = handler.mutableState.GetCronBackoffDuration()
 	}
 
-	// this is a cron / backoff workflow
-	startEvent, err := handler.mutableState.GetStartEvent()
-	if err != nil {
+	// Always add workflow failed event
+	if _, err = handler.mutableState.AddFailWorkflowEvent(
+		handler.workflowTaskCompletedID,
+		retryState,
+		attr,
+	); err != nil {
 		return err
 	}
-	startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	return handler.retryCronContinueAsNew(
-		startAttributes,
-		backoffInterval,
-		continueAsNewInitiator,
-		attr.GetFailure(),
-		startAttributes.LastCompletionResult,
-	)
+
+	// Handle retry or cron
+	if retryBackoff != backoff.NoBackoff {
+		return handler.handleRetry(retryBackoff, retryState, attr.GetFailure())
+	} else if cronBackoff != backoff.NoBackoff {
+		return handler.handleCron(cronBackoff, nil, attr.GetFailure())
+	}
+
+	// No retry or cron
+	return nil
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
@@ -718,7 +697,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return err
 	}
 
-	handler.continueAsNewBuilder = newStateBuilder
+	handler.newStateBuilder = newStateBuilder
 	return nil
 }
 
@@ -933,42 +912,83 @@ func searchAttributesSize(fields map[string]*commonpb.Payload) int {
 	return result
 }
 
-func (handler *workflowTaskHandlerImpl) retryCronContinueAsNew(
-	attr *historypb.WorkflowExecutionStartedEventAttributes,
+func (handler *workflowTaskHandlerImpl) handleRetry(
 	backoffInterval time.Duration,
-	continueAsNewInitiator enumspb.ContinueAsNewInitiator,
+	retryState enumspb.RetryState,
 	failure *failurepb.Failure,
-	lastCompletionResult *commonpb.Payloads,
 ) error {
-
-	continueAsNewAttributes := &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
-		WorkflowType:         attr.WorkflowType,
-		TaskQueue:            attr.TaskQueue,
-		RetryPolicy:          attr.RetryPolicy,
-		Input:                attr.Input,
-		WorkflowRunTimeout:   attr.WorkflowRunTimeout,
-		WorkflowTaskTimeout:  attr.WorkflowTaskTimeout,
-		CronSchedule:         attr.CronSchedule,
-		BackoffStartInterval: &backoffInterval,
-		Initiator:            continueAsNewInitiator,
-		Failure:              failure,
-		LastCompletionResult: lastCompletionResult,
-		Header:               attr.Header,
-		Memo:                 attr.Memo,
-		SearchAttributes:     attr.SearchAttributes,
+	startEvent, err := handler.mutableState.GetStartEvent()
+	if err != nil {
+		return err
 	}
+	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(
-		handler.workflowTaskCompletedID,
-		handler.workflowTaskCompletedID,
-		attr.GetParentWorkflowNamespace(),
-		continueAsNewAttributes,
+	newRunID := uuid.New()
+	newStateBuilder, err := createMutableState(
+		handler.shard,
+		handler.mutableState.GetNamespaceEntry(),
+		newRunID,
+	)
+	if err != nil {
+		return err
+	}
+	err = workflow.SetupNewWorkflowForRetryOrCron(
+		handler.mutableState,
+		newStateBuilder,
+		newRunID,
+		startAttr,
+		nil,
+		failure,
+		backoffInterval,
+		enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY,
 	)
 	if err != nil {
 		return err
 	}
 
-	handler.continueAsNewBuilder = newStateBuilder
+	handler.newStateBuilder = newStateBuilder
+	return nil
+}
+
+func (handler *workflowTaskHandlerImpl) handleCron(
+	backoffInterval time.Duration,
+	lastCompletionResult *commonpb.Payloads,
+	failure *failurepb.Failure,
+) error {
+	startEvent, err := handler.mutableState.GetStartEvent()
+	if err != nil {
+		return err
+	}
+	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
+
+	if failure != nil {
+		lastCompletionResult = startAttr.LastCompletionResult
+	}
+
+	newRunId := uuid.New()
+	newStateBuilder, err := createMutableState(
+		handler.shard,
+		handler.mutableState.GetNamespaceEntry(),
+		newRunId,
+	)
+	if err != nil {
+		return err
+	}
+	err = workflow.SetupNewWorkflowForRetryOrCron(
+		handler.mutableState,
+		newStateBuilder,
+		newRunId,
+		startAttr,
+		lastCompletionResult,
+		failure,
+		backoffInterval,
+		enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
+	)
+	if err != nil {
+		return err
+	}
+
+	handler.newStateBuilder = newStateBuilder
 	return nil
 }
 
