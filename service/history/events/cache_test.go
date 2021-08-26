@@ -36,6 +36,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -108,8 +109,12 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 		Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{}},
 	}
 
-	s.cache.PutEvent(namespaceID, workflowID, runID, eventID, event)
-	actualEvent, err := s.cache.GetEvent(namespaceID, workflowID, runID, eventID, eventID, nil)
+	s.cache.PutEvent(
+		EventKey{namespaceID, workflowID, runID, eventID, common.EmptyVersion},
+		event)
+	actualEvent, err := s.cache.GetEvent(
+		EventKey{namespaceID, workflowID, runID, eventID, common.EmptyVersion},
+		eventID, nil)
 	s.Nil(err)
 	s.Equal(event, actualEvent)
 }
@@ -162,9 +167,12 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 		NextPageToken: nil,
 	}, nil)
 
-	s.cache.PutEvent(namespaceID, workflowID, runID, event2.GetEventId(), event2)
-	actualEvent, err := s.cache.GetEvent(namespaceID, workflowID, runID, event1.GetEventId(), event6.GetEventId(),
-		[]byte("store_token"))
+	s.cache.PutEvent(
+		EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
+		event2)
+	actualEvent, err := s.cache.GetEvent(
+		EventKey{namespaceID, workflowID, runID, event6.GetEventId(), common.EmptyVersion},
+		event1.GetEventId(), []byte("store_token"))
 	s.Nil(err)
 	s.Equal(event6, actualEvent)
 }
@@ -185,8 +193,9 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 		ShardID:       shardID,
 	}).Return(nil, expectedErr)
 
-	actualEvent, err := s.cache.GetEvent(namespaceID, workflowID, runID, int64(11), int64(14),
-		[]byte("store_token"))
+	actualEvent, err := s.cache.GetEvent(
+		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
+		int64(11), []byte("store_token"))
 	s.Nil(actualEvent)
 	s.Equal(expectedErr, err)
 }
@@ -219,11 +228,16 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 		NextPageToken: nil,
 	}, nil)
 
-	s.cache.PutEvent(namespaceID, workflowID, runID, event1.GetEventId(), event1)
-	s.cache.PutEvent(namespaceID, workflowID, runID, event2.GetEventId(), event2)
+	s.cache.PutEvent(
+		EventKey{namespaceID, workflowID, runID, event1.GetEventId(), common.EmptyVersion},
+		event1)
+	s.cache.PutEvent(
+		EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
+		event2)
 	s.cache.disabled = true
-	actualEvent, err := s.cache.GetEvent(namespaceID, workflowID, runID, event2.GetEventId(), event2.GetEventId(),
-		[]byte("store_token"))
+	actualEvent, err := s.cache.GetEvent(
+		EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
+		event2.GetEventId(), []byte("store_token"))
 	s.Nil(err)
 	s.Equal(event2, actualEvent)
 }
@@ -251,9 +265,13 @@ func (s *eventsCacheSuite) TestEventsCacheGetCachesResult() {
 		NextPageToken: nil,
 	}, nil).Times(1) // will only be called once with two calls to GetEvent
 
-	gotEvent1, _ := s.cache.GetEvent(namespaceID, workflowID, runID, int64(11), int64(14), branchToken)
+	gotEvent1, _ := s.cache.GetEvent(
+		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
+		int64(11), branchToken)
 	s.Equal(gotEvent1, event1)
-	gotEvent2, _ := s.cache.GetEvent(namespaceID, workflowID, runID, int64(11), int64(14), branchToken)
+	gotEvent2, _ := s.cache.GetEvent(
+		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
+		int64(11), branchToken)
 	s.Equal(gotEvent2, event1)
 }
 
@@ -280,10 +298,16 @@ func (s *eventsCacheSuite) TestEventsCacheInvalidKey() {
 		NextPageToken: nil,
 	}, nil).Times(2) // will be called twice since the key is invalid
 
-	s.cache.PutEvent(namespaceID, workflowID, runID, event1.EventId, event1)
+	s.cache.PutEvent(
+		EventKey{namespaceID, workflowID, runID, event1.EventId, common.EmptyVersion},
+		event1)
 
-	gotEvent1, _ := s.cache.GetEvent(namespaceID, workflowID, runID, int64(11), int64(14), branchToken)
+	gotEvent1, _ := s.cache.GetEvent(
+		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
+		int64(11), branchToken)
 	s.Equal(gotEvent1, event1)
-	gotEvent2, _ := s.cache.GetEvent(namespaceID, workflowID, runID, int64(11), int64(14), branchToken)
+	gotEvent2, _ := s.cache.GetEvent(
+		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
+		int64(11), branchToken)
 	s.Equal(gotEvent2, event1)
 }
