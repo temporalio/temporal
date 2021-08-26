@@ -152,7 +152,7 @@ Loop:
 			Identity:  p.Identity,
 		})
 
-		if common.IsServiceNonRetryableError(err1) {
+		if !common.IsServiceTransientError(err1) {
 			return false, nil, err1
 		}
 
