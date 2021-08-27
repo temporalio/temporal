@@ -324,11 +324,11 @@ func NewService(
 		grpc.ChainUnaryInterceptor(
 			namespaceLogInterceptor.Intercept,
 			rpc.ServiceErrorInterceptor,
+			metrics.NewServerMetricsContextInjectorInterceptor(),
 			metricsInterceptor.Intercept,
 			rateLimiterInterceptor.Intercept,
 			namespaceRateLimiterInterceptor.Intercept,
 			namespaceCountLimiterInterceptor.Intercept,
-			metrics.NewServerMetricsContextInjectorInterceptor(),
 			authorization.NewAuthorizationInterceptor(
 				params.ClaimMapper,
 				params.Authorizer,
