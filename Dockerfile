@@ -17,15 +17,19 @@ RUN make bins
 
 ##### Temporal server #####
 FROM ${BASE_SERVER_IMAGE} AS temporal-server
-
-RUN addgroup -g 1000 temporal
-RUN adduser -u 1000 -G temporal -D temporal
-
 WORKDIR /etc/temporal
-
 ENV TEMPORAL_HOME /etc/temporal
 ENV SERVICES "history:matching:frontend:worker"
 EXPOSE 6933 6934 6935 6939 7233 7234 7235 7239
+
+# TODO (alex): switch WORKDIR to /home/temporal and remove "mkdir" and "chown" calls.
+RUN addgroup -g 1000 temporal
+RUN adduser -u 1000 -G temporal -D temporal
+RUN mkdir /etc/temporal/config
+RUN chown -R temporal:temporal /etc/temporal/config
+
+USER temporal
+ENTRYPOINT ["./entrypoint.sh"]
 
 COPY config/dynamicconfig /etc/temporal/config/dynamicconfig
 COPY docker/config_template.yaml /etc/temporal/config/config_template.yaml
@@ -36,10 +40,6 @@ COPY --from=temporal-builder /temporal/tctl /usr/local/bin
 COPY --from=temporal-builder /temporal/tctl-authorization-plugin /usr/local/bin
 COPY --from=temporal-builder /temporal/temporal-server /usr/local/bin
 
-RUN chown -R temporal:temporal /etc/temporal
-USER temporal
-
-ENTRYPOINT ["./entrypoint.sh"]
 ##### Auto setup Temporal server #####
 FROM temporal-server AS temporal-auto-setup
 CMD ["autosetup"]
@@ -52,6 +52,8 @@ COPY --from=temporal-builder /temporal/temporal-sql-tool /usr/local/bin
 
 ##### Development configuration for Temporal with additional set of tools #####
 FROM temporal-auto-setup as temporal-develop
+
+USER root
 # iproute2 contains tc, which can be used for traffic shaping in resiliancy testing. 
 ONBUILD RUN apk add iproute2
 
