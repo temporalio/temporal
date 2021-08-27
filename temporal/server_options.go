@@ -58,7 +58,7 @@ type (
 		audienceGetter             authorization.JWTAudienceMapper
 		metricsReporter            interface{}
 		persistenceServiceResolver resolver.ServiceResolver
-		elasticseachHttpClient     *http.Client
+		elasticsearchHttpClient    *http.Client
 		dynamicConfigClient        dynamicconfig.Client
 		customDataStoreFactory     persistenceClient.AbstractDataStoreFactory
 		clientFactoryProvider      client.FactoryProvider

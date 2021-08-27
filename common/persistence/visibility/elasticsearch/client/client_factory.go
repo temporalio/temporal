@@ -39,7 +39,7 @@ func NewClient(config *config.Elasticsearch, httpClient *http.Client, logger log
 	case "v7", "":
 		return newClientV7(config, httpClient, logger)
 	default:
-		return nil, fmt.Errorf("not supported ElasticSearch version: %v", config.Version)
+		return nil, fmt.Errorf("not supported Elasticsearch version: %v", config.Version)
 	}
 }
 
@@ -50,7 +50,7 @@ func NewCLIClient(url string, version string) (CLIClient, error) {
 	case "v7", "":
 		return newSimpleClientV7(url)
 	default:
-		return nil, fmt.Errorf("not supported ElasticSearch version: %v", version)
+		return nil, fmt.Errorf("not supported Elasticsearch version: %v", version)
 	}
 }
 
@@ -61,6 +61,6 @@ func NewIntegrationTestsClient(url string, version string) (IntegrationTestsClie
 	case "v7":
 		return newSimpleClientV7(url)
 	default:
-		return nil, fmt.Errorf("not supported ElasticSearch version: %v", version)
+		return nil, fmt.Errorf("not supported Elasticsearch version: %v", version)
 	}
 }

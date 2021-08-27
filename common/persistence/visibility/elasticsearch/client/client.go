@@ -28,14 +28,16 @@ package client
 
 import (
 	"context"
+	"time"
 
 	"github.com/olivere/elastic/v7"
 	enumspb "go.temporal.io/api/enums/v1"
 )
 
 const (
-	docTypeV6           = "_doc"
-	versionTypeExternal = "external"
+	docTypeV6                           = "_doc"
+	versionTypeExternal                 = "external"
+	minimumCloseIdleConnectionsInterval = 15 * time.Second
 )
 
 type (

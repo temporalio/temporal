@@ -131,7 +131,7 @@ func WithPersistenceServiceResolver(r resolver.ServiceResolver) ServerOption {
 // Set custom persistence service resolver which will convert service name or address value from config to another a....
 func WithElasticsearchHttpClient(c *http.Client) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
-		s.elasticseachHttpClient = c
+		s.elasticsearchHttpClient = c
 	})
 }
 

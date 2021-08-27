@@ -27,6 +27,7 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"time"
 )
 
 const (
@@ -37,13 +38,16 @@ const (
 // Config for connecting to Elasticsearch
 type (
 	Elasticsearch struct {
-		Version           string                    `yaml:"version"`
-		URL               url.URL                   `yaml:"url"` //nolint:govet
-		Username          string                    `yaml:"username"`
-		Password          string                    `yaml:"password"`
-		Indices           map[string]string         `yaml:"indices"` //nolint:govet
-		LogLevel          string                    `yaml:"logLevel"`
-		AWSRequestSigning ESAWSRequestSigningConfig `yaml:"aws-request-signing"`
+		Version                      string                    `yaml:"version"`
+		URL                          url.URL                   `yaml:"url"` //nolint:govet
+		Username                     string                    `yaml:"username"`
+		Password                     string                    `yaml:"password"`
+		Indices                      map[string]string         `yaml:"indices"` //nolint:govet
+		LogLevel                     string                    `yaml:"logLevel"`
+		AWSRequestSigning            ESAWSRequestSigningConfig `yaml:"aws-request-signing"`
+		CloseIdleConnectionsInterval time.Duration             `yaml:"closeIdleConnectionsInterval"`
+		EnableSniff                  bool                      `yaml:"enableSniff"`
+		EnableHealthcheck            bool                      `yaml:"enableHealthcheck"`
 	}
 
 	// ESAWSRequestSigningConfig represents configuration for signing ES requests to AWS

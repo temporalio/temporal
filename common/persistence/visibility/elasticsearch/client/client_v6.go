@@ -49,40 +49,56 @@ type (
 var _ Client = (*clientV6)(nil)
 
 // newClientV6 create a ES client
-func newClientV6(config *config.Elasticsearch, httpClient *http.Client, logger log.Logger) (*clientV6, error) {
+func newClientV6(cfg *config.Elasticsearch, httpClient *http.Client, logger log.Logger) (*clientV6, error) {
 	options := []elastic6.ClientOptionFunc{
-		elastic6.SetURL(config.URL.String()),
-		elastic6.SetSniff(false),
-		elastic6.SetBasicAuth(config.Username, config.Password),
-
-		// Disable health check so we don't block client creation (and thus temporal server startup)
-		// if the ES instance happens to be down.
+		elastic6.SetURL(cfg.URL.String()),
+		elastic6.SetBasicAuth(cfg.Username, cfg.Password),
+		// Disable healthcheck to prevent blocking client creation (and thus Temporal server startup) if the Elasticsearch is down.
 		elastic6.SetHealthcheck(false),
-
+		elastic6.SetSniff(cfg.EnableSniff),
 		elastic6.SetRetrier(elastic6.NewBackoffRetrier(elastic6.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))),
-
-		// critical to ensure decode of int64 won't lose precision
+		// Critical to ensure decode of int64 won't lose precision.
 		elastic6.SetDecoder(&elastic6.NumberDecoder{}),
 	}
 
-	options = append(options, getLoggerOptionsV6(config.LogLevel, logger)...)
+	options = append(options, getLoggerOptionsV6(cfg.LogLevel, logger)...)
 
-	if httpClient != nil {
-		options = append(options, elastic6.SetHttpClient(httpClient))
+	if httpClient == nil {
+		httpClient = http.DefaultClient
 	}
+
+	// TODO (alex): Remove this when https://github.com/olivere/elastic/pull/1507 is merged.
+	if cfg.CloseIdleConnectionsInterval != time.Duration(0) {
+		if cfg.CloseIdleConnectionsInterval < minimumCloseIdleConnectionsInterval {
+			cfg.CloseIdleConnectionsInterval = minimumCloseIdleConnectionsInterval
+		}
+		go func(interval time.Duration, httpClient *http.Client) {
+			closeTimer := time.NewTimer(interval)
+			defer closeTimer.Stop()
+			for {
+				<-closeTimer.C
+				closeTimer.Reset(interval)
+				httpClient.CloseIdleConnections()
+			}
+		}(cfg.CloseIdleConnectionsInterval, httpClient)
+	}
+
+	options = append(options, elastic6.SetHttpClient(httpClient))
 
 	client, err := elastic6.NewClient(options...)
 	if err != nil {
 		return nil, convertV6ErrorToV7(err)
 	}
 
-	// Re-enable the health check after client has successfully been created.
-	client.Stop()
-	err = elastic6.SetHealthcheck(true)(client)
-	if err != nil {
-		return nil, convertV6ErrorToV7(err)
+	// Enable healthcheck (if configured) after client is successfully created.
+	if cfg.EnableHealthcheck {
+		client.Stop()
+		err = elastic6.SetHealthcheck(true)(client)
+		if err != nil {
+			return nil, err
+		}
+		client.Start()
 	}
-	client.Start()
 
 	return &clientV6{esClient: client}, nil
 }
@@ -93,6 +109,8 @@ func newSimpleClientV6(url string) (*clientV6, error) {
 	var err error
 	if client, err = elastic6.NewClient(
 		elastic6.SetURL(url),
+		elastic6.SetSniff(false),
+		elastic6.SetHealthcheck(false),
 		elastic6.SetRetrier(retrier),
 	); err != nil {
 		return nil, convertV6ErrorToV7(err)
