@@ -57,7 +57,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/validator"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
@@ -94,7 +93,6 @@ type (
 		config                          *Config
 		versionChecker                  headers.VersionChecker
 		namespaceHandler                namespace.Handler
-		visibilityQueryValidator        *validator.VisibilityQueryValidator
 		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
 	}
 
@@ -129,7 +127,6 @@ func NewWorkflowHandler(
 			resource.GetArchivalMetadata(),
 			resource.GetArchiverProvider(),
 		),
-		visibilityQueryValidator:        validator.NewQueryValidator(resource.GetSearchAttributesProvider()),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 	}
 
@@ -2370,10 +2367,6 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errPageSizeTooBigMessage, wh.config.ESIndexMaxResultWindow()))
 	}
 
-	if err := wh.visibilityQueryValidator.ValidateListRequestForQuery(request, wh.config.ESIndexName); err != nil {
-		return nil, err
-	}
-
 	namespace := request.GetNamespace()
 	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(namespace)
 	if err != nil {
@@ -2516,10 +2509,6 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errPageSizeTooBigMessage, wh.config.ESIndexMaxResultWindow()))
 	}
 
-	if err := wh.visibilityQueryValidator.ValidateScanRequestForQuery(request, wh.config.ESIndexName); err != nil {
-		return nil, err
-	}
-
 	namespace := request.GetNamespace()
 	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(namespace)
 	if err != nil {
@@ -2563,10 +2552,6 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 
 	if request.GetNamespace() == "" {
 		return nil, errNamespaceNotSet
-	}
-
-	if err := wh.visibilityQueryValidator.ValidateCountRequestForQuery(request, wh.config.ESIndexName); err != nil {
-		return nil, err
 	}
 
 	namespace := request.GetNamespace()
