@@ -620,3 +620,165 @@ func (s *integrationSuite) TestRetryChildWorkflowExecution() {
 	s.NoError(err)
 	s.Equal("Child Done", r)
 }
+
+func (s *integrationSuite) TestRetryFailChildWorkflowExecution() {
+	parentID := "integration-retry-fail-child-workflow-test-parent"
+	childID := "integration-retry-fail-child-workflow-test-child"
+	wtParent := "integration-retry-fail-child-workflow-test-parent-type"
+	wtChild := "integration-retry-fail-child-workflow-test-child-type"
+	tlParent := "integration-retry-fail-child-workflow-test-parent-taskqueue"
+	tlChild := "integration-retry-fail-child-workflow-test-child-taskqueue"
+	identity := "worker1"
+
+	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
+	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
+	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent}
+	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          parentID,
+		WorkflowType:        parentWorkflowType,
+		TaskQueue:           taskQueueParent,
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
+	}
+
+	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err0)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	// workflow logic
+	childExecutionStarted := false
+	var startedEvent *historypb.HistoryEvent
+	var completedEvent *historypb.HistoryEvent
+
+	// Parent workflow logic
+	wtHandlerParent := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+		s.Logger.Info("Processing workflow task for ", tag.WorkflowID(execution.WorkflowId))
+
+		if !childExecutionStarted {
+			s.Logger.Info("Starting child execution")
+			childExecutionStarted = true
+
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
+					WorkflowId:          childID,
+					WorkflowType:        childWorkflowType,
+					TaskQueue:           taskQueueChild,
+					Input:               payloads.EncodeString("child-workflow-input"),
+					WorkflowRunTimeout:  timestamp.DurationPtr(200 * time.Second),
+					WorkflowTaskTimeout: timestamp.DurationPtr(2 * time.Second),
+					Control:             "",
+					RetryPolicy: &commonpb.RetryPolicy{
+						InitialInterval:    timestamp.DurationPtr(1 * time.Millisecond),
+						BackoffCoefficient: 2.0,
+						MaximumAttempts:    3,
+					},
+				}},
+			}}, nil
+		} else if previousStartedEventID > 0 {
+			for _, event := range history.Events[previousStartedEventID:] {
+				if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED {
+					startedEvent = event
+					return []*commandpb.Command{}, nil
+				}
+				if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED {
+					completedEvent = event
+					return []*commandpb.Command{{
+						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+							Result: payloads.EncodeString("Done"),
+						}},
+					}}, nil
+				}
+			}
+		}
+
+		return nil, nil
+	}
+
+	// Child workflow logic
+	wtHandlerChild := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
+		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
+
+		s.Logger.Info("Processing workflow task for Child ", tag.WorkflowID(execution.WorkflowId), tag.WorkflowRunID(execution.RunId))
+
+		attempt := history.Events[0].GetWorkflowExecutionStartedEventAttributes().Attempt
+		// We shouldn't see more than 3 attempts
+		s.LessOrEqual(int(attempt), 3)
+
+		// Always fail
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{
+				FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+					Failure: &failurepb.Failure{
+						Message: fmt.Sprintf("Failed attempt %d", attempt),
+					},
+				}},
+		}}, nil
+	}
+
+	pollerParent := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueueParent,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandlerParent,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	pollerChild := &TaskPoller{
+		Engine:              s.engine,
+		Namespace:           s.namespace,
+		TaskQueue:           taskQueueChild,
+		Identity:            identity,
+		WorkflowTaskHandler: wtHandlerChild,
+		Logger:              s.Logger,
+		T:                   s.T(),
+	}
+
+	// Make first workflow task to start child execution
+	_, err := pollerParent.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
+	s.True(childExecutionStarted)
+
+	// Process ChildExecution Started event
+	_, err = pollerParent.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
+	s.NotNil(startedEvent)
+
+	// Process Child Execution #1
+	_, err = pollerChild.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
+
+	// Process Child Execution #2
+	_, err = pollerChild.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
+
+	// Process Child Execution #3
+	_, err = pollerChild.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
+
+	// Parent should see child complete
+	_, err = pollerParent.PollAndProcessWorkflowTask(false, false)
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
+
+	// Child failure should be present in completion event
+	s.NotNil(completedEvent)
+	attrs := completedEvent.GetChildWorkflowExecutionFailedEventAttributes()
+	s.Equal(attrs.Failure.Message, "Failed attempt 3")
+}
