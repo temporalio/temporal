@@ -2016,14 +2016,14 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	_, err = poller2.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
 	events := s.getHistory(client2, namespace, executions[0])
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, events[len(events)-1].GetEventType())
 	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	// second attempt
 	_, err = poller2.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
 	events = s.getHistory(client2, namespace, executions[1])
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, events[len(events)-1].GetEventType())
 	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	// third attempt. Still failing, should stop retry.

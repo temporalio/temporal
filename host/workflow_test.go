@@ -640,7 +640,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		if i == maximumAttempts {
 			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, events[len(events)-1].GetEventType())
 		} else {
-			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
+			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, events[len(events)-1].GetEventType())
 		}
 		s.Equal(int32(i), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
@@ -734,13 +734,13 @@ func (s *integrationSuite) TestWorkflowRetryFailures() {
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.True(err == nil, err)
 	events := s.getHistory(s.namespace, executions[0])
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, events[len(events)-1].GetEventType())
 	s.Equal(int32(1), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.True(err == nil, err)
 	events = s.getHistory(s.namespace, executions[1])
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, events[len(events)-1].GetEventType())
 	s.Equal(int32(2), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 
 	_, err = poller.PollAndProcessWorkflowTask(false, false)

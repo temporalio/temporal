@@ -332,24 +332,30 @@ func (s *integrationSuite) TestCronWorkflow_Failed() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, lastExecution.GetStatus())
 
 	finalCronExecution := closedExecutions[1]
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, finalCronExecution.GetStatus())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, finalCronExecution.GetStatus())
 	events := s.getHistory(s.namespace, finalCronExecution.GetExecution())
 	lastEvent := events[len(events)-1]
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
-	attrs1 := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, lastEvent.GetEventType())
+	attributes := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
+	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, attributes.GetInitiator())
 	var r int
-	err = payloads.Decode(attrs1.GetResult(), &r)
+	err = payloads.Decode(attributes.GetLastCompletionResult(), &r)
 	s.NoError(err)
 	s.Equal(3, r)
 
 	lastFailedExecution := closedExecutions[2]
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, lastFailedExecution.GetStatus())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, lastFailedExecution.GetStatus())
 	// check when workflow timeout, continueAsNew event contains expected fields
 	events = s.getHistory(s.namespace, lastFailedExecution.GetExecution())
 	lastEvent = events[len(events)-1]
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, lastEvent.GetEventType())
-	attrs2 := lastEvent.GetWorkflowExecutionFailedEventAttributes()
-	s.Equal("cron-test-error", attrs2.GetFailure().GetMessage())
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, lastEvent.GetEventType())
+	attributes = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
+	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, attributes.GetInitiator())
+	s.Equal("cron-test-error", attributes.GetFailure().GetMessage())
+	s.NotNil(attributes.GetLastCompletionResult())
+	err = payloads.Decode(attributes.GetLastCompletionResult(), &r)
+	s.NoError(err)
+	s.Equal(2, r)
 }
 
 func (s *integrationSuite) TestCronWorkflow() {
@@ -795,24 +801,29 @@ func (s *integrationSuite) TestCronWorkflow_Success() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, lastExecution.GetStatus())
 
 	finalCronExecution := closedExecutions[1]
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, finalCronExecution.GetStatus())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, finalCronExecution.GetStatus())
 	events := s.getHistory(s.namespace, finalCronExecution.GetExecution())
 	lastEvent := events[len(events)-1]
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
-	attrs1 := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, lastEvent.GetEventType())
+	attributes := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
+	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, attributes.GetInitiator())
 	var r int
-	err = payloads.Decode(attrs1.GetResult(), &r)
+	err = payloads.Decode(attributes.GetLastCompletionResult(), &r)
 	s.NoError(err)
 	s.Equal(3, r)
 
 	timedoutExecution := closedExecutions[2]
-	// When cron workflow timesout we continue as new to start the new run,
-	// but with status set to TIMED_OUT
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, timedoutExecution.GetStatus())
+	// When cron workflow timesout we continue as new to start the new run
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, timedoutExecution.GetStatus())
 	// check when workflow timeout, continueAsNew event contains expected fields
 	events = s.getHistory(s.namespace, timedoutExecution.GetExecution())
 	lastEvent = events[len(events)-1]
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT, lastEvent.GetEventType())
-	attrs2 := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
-	s.Equal(attrs2.GetRetryState(), enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, lastEvent.GetEventType())
+	attributes = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
+	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, attributes.GetInitiator())
+	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, attributes.GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+	s.NotNil(attributes.GetLastCompletionResult())
+	err = payloads.Decode(attributes.GetLastCompletionResult(), &r)
+	s.NoError(err)
+	s.Equal(2, r)
 }
