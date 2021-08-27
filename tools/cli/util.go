@@ -26,9 +26,11 @@ package cli
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"reflect"
@@ -685,6 +687,20 @@ func readJSONInputs(c *cli.Context, jType jsonType) [][]byte {
 		return [][]byte{data}
 	}
 	return nil
+}
+
+// validate whether input is a valid json or multi valid json concatenated with spaces/newlines
+func validateJSONs(input []byte) error {
+	dec := json.NewDecoder(bytes.NewReader(input))
+	for {
+		_, err := dec.Token()
+		if err == io.EOF {
+			return nil // End of input, valid JSON
+		}
+		if err != nil {
+			return err // Invalid input
+		}
+	}
 }
 
 func truncate(str string) string {

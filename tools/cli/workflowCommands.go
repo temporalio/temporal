@@ -31,6 +31,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -348,10 +349,26 @@ func unmarshalMemoFromCLI(c *cli.Context) map[string]interface{} {
 		return nil
 	}
 
+	if err := validateJSONs(jsonsRaw[0]); err != nil {
+
+	}
+
 	var memoValues []interface{}
-	// StringFlag may contain up to one json.
-	if err := json.Unmarshal(jsonsRaw[0], &memoValues); err != nil {
-		ErrorAndExit("Input is not valid JSON, or JSONs concatenated with spaces/newlines.", err)
+
+	// StringFlag may contain up to one json
+	dec := json.NewDecoder(bytes.NewReader(jsonsRaw[0]))
+	for {
+		t, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			ErrorAndExit("Input is not valid JSON, or JSONs concatenated with spaces/newlines.", err)
+		}
+		if _, isDelim := t.(json.Delim); isDelim {
+			continue
+		}
+		memoValues = append(memoValues, t)
 	}
 
 	if len(memoKeys) != len(memoValues) {
