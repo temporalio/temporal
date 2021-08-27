@@ -111,6 +111,8 @@ func newSimpleClientV6(url string) (*clientV6, error) {
 	var err error
 	if client, err = elastic6.NewClient(
 		elastic6.SetURL(url),
+		elastic6.SetSniff(false),
+		elastic6.SetHealthcheck(false),
 		elastic6.SetRetrier(retrier),
 	); err != nil {
 		return nil, convertV6ErrorToV7(err)
