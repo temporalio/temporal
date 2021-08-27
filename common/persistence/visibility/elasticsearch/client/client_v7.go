@@ -51,7 +51,8 @@ func newClientV7(cfg *config.Elasticsearch, httpClient *http.Client, logger log.
 	options := []elastic.ClientOptionFunc{
 		elastic.SetURL(cfg.URL.String()),
 		elastic.SetBasicAuth(cfg.Username, cfg.Password),
-		elastic.SetHealthcheck(cfg.EnableHealthcheck),
+		// Disable healthcheck to prevent blocking client creation (and thus Temporal server startup) if the Elasticsearch is down.
+		elastic.SetHealthcheck(false),
 		elastic.SetSniff(cfg.EnableSniff),
 		elastic.SetRetrier(elastic.NewBackoffRetrier(elastic.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))),
 		// Critical to ensure decode of int64 won't lose precision.
@@ -85,6 +86,16 @@ func newClientV7(cfg *config.Elasticsearch, httpClient *http.Client, logger log.
 	client, err := elastic.NewClient(options...)
 	if err != nil {
 		return nil, err
+	}
+
+	// Enable healthcheck (if configured) after client is successfully created.
+	if cfg.EnableHealthcheck {
+		client.Stop()
+		err = elastic.SetHealthcheck(true)(client)
+		if err != nil {
+			return nil, err
+		}
+		client.Start()
 	}
 
 	return &clientV7{esClient: client}, nil

@@ -53,10 +53,11 @@ func newClientV6(cfg *config.Elasticsearch, httpClient *http.Client, logger log.
 	options := []elastic6.ClientOptionFunc{
 		elastic6.SetURL(cfg.URL.String()),
 		elastic6.SetBasicAuth(cfg.Username, cfg.Password),
-		elastic6.SetHealthcheck(cfg.EnableHealthcheck),
+		// Disable healthcheck to prevent blocking client creation (and thus Temporal server startup) if the Elasticsearch is down.
+		elastic6.SetHealthcheck(false),
 		elastic6.SetSniff(cfg.EnableSniff),
 		elastic6.SetRetrier(elastic6.NewBackoffRetrier(elastic6.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))),
-		// critical to ensure decode of int64 won't lose precision
+		// Critical to ensure decode of int64 won't lose precision.
 		elastic6.SetDecoder(&elastic6.NumberDecoder{}),
 	}
 
@@ -87,6 +88,16 @@ func newClientV6(cfg *config.Elasticsearch, httpClient *http.Client, logger log.
 	client, err := elastic6.NewClient(options...)
 	if err != nil {
 		return nil, convertV6ErrorToV7(err)
+	}
+
+	// Enable healthcheck (if configured) after client is successfully created.
+	if cfg.EnableHealthcheck {
+		client.Stop()
+		err = elastic6.SetHealthcheck(true)(client)
+		if err != nil {
+			return nil, err
+		}
+		client.Start()
 	}
 
 	return &clientV6{esClient: client}, nil
