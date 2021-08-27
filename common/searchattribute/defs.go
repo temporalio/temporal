@@ -25,6 +25,8 @@
 package searchattribute
 
 import (
+	"strings"
+
 	enumspb "go.temporal.io/api/enums/v1"
 )
 
@@ -50,6 +52,8 @@ const (
 	MemoEncoding      = "MemoEncoding"
 	Memo              = "Memo"
 	VisibilityTaskKey = "VisibilityTaskKey"
+
+	ReservedPrefix = "Temporal"
 )
 
 var (
@@ -96,5 +100,5 @@ func IsReserved(fieldName string) bool {
 	if _, ok := reserved[fieldName]; ok {
 		return true
 	}
-	return false
+	return strings.HasPrefix(fieldName, ReservedPrefix)
 }
