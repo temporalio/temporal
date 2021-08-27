@@ -27,11 +27,13 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"time"
 )
 
 const (
 	// VisibilityAppName is used to find ES indexName for visibility
-	VisibilityAppName = "visibility"
+	VisibilityAppName                                = "visibility"
+	DefaultElasticsearchCloseIdleConnectionsInterval = 15 * time.Second
 )
 
 // Config for connecting to Elasticsearch
@@ -44,6 +46,10 @@ type (
 		Indices           map[string]string         `yaml:"indices"` //nolint:govet
 		LogLevel          string                    `yaml:"logLevel"`
 		AWSRequestSigning ESAWSRequestSigningConfig `yaml:"aws-request-signing"`
+		// Default is DefaultElasticsearchCloseIdleConnectionsInterval, set it to -1 to disable.
+		CloseIdleConnectionsInterval time.Duration `yaml:"closeIdleConnectionsInterval"`
+		EnableSniff                  bool          `yaml:"enableSniff"`
+		EnableHealthcheck            bool          `yaml:"enableHealthcheck"`
 	}
 
 	// ESAWSRequestSigningConfig represents configuration for signing ES requests to AWS

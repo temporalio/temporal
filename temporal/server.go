@@ -399,15 +399,15 @@ func (s *Server) getESConfigClient(advancedVisibilityWritingMode string) (*confi
 		return nil, nil, errors.New("visibility index in missing in Elasticsearch config")
 	}
 
-	if s.so.elasticseachHttpClient == nil {
+	if s.so.elasticsearchHttpClient == nil {
 		var err error
-		s.so.elasticseachHttpClient, err = client.NewAwsHttpClient(advancedVisibilityStore.ElasticSearch.AWSRequestSigning)
+		s.so.elasticsearchHttpClient, err = client.NewAwsHttpClient(advancedVisibilityStore.ElasticSearch.AWSRequestSigning)
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
 		}
 	}
 
-	esClient, err := client.NewClient(advancedVisibilityStore.ElasticSearch, s.so.elasticseachHttpClient, s.logger)
+	esClient, err := client.NewClient(advancedVisibilityStore.ElasticSearch, s.so.elasticsearchHttpClient, s.logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to create Elasticsearch client: %w", err)
 	}
