@@ -24,7 +24,11 @@
 
 package cli
 
-import "github.com/urfave/cli"
+import (
+	"fmt"
+
+	"github.com/urfave/cli"
+)
 
 // Flags used to specify cli command line arguments
 const (
@@ -178,7 +182,7 @@ const (
 	FlagMemo                                  = "memo"
 	FlagMemoFile                              = "memo_file"
 	FlagSearchAttributesKey                   = "search_attr_key"
-	FlagSearchAttributesVal                   = "search_attr_value"
+	FlagSearchAttributesValue                 = "search_attr_value"
 	FlagSearchAttributesType                  = "search_attr_type"
 	FlagAddBadBinary                          = "add_bad_binary"
 	FlagRemoveBadBinary                       = "remove_bad_binary"
@@ -362,30 +366,28 @@ func getFlagsForStart() []cli.Flag {
 			Usage: "Optional input for the workflow from JSON file. If there are multiple JSON, concatenate them and separate by space or newline. " +
 				"Input from file will be overwrite by input from command line",
 		},
-		cli.StringFlag{
+		cli.StringSliceFlag{
 			Name:  FlagMemoKey,
-			Usage: "Optional key of memo. If there are multiple keys, concatenate them and separate by space",
+			Usage: fmt.Sprintf("Optional key of memo. If there are multiple keys, provide multiple %s flags", FlagMemoKey),
 		},
-		cli.StringFlag{
+		cli.StringSliceFlag{
 			Name: FlagMemo,
-			Usage: "Optional info that can be showed when list workflow, in JSON format. If there are multiple JSON, concatenate them and separate by space. " +
-				"The order must be same as memo_key",
+			Usage: fmt.Sprintf("Optional info that can be showed when list workflow. If there are multiple values, provide multiple %s flags. "+
+				"The order must be same as %s", FlagMemo, FlagMemoKey),
 		},
 		cli.StringFlag{
 			Name: FlagMemoFile,
-			Usage: "Optional info that can be listed in list workflow, from JSON format file. If there are multiple JSON, concatenate them and separate by space or newline. " +
-				"The order must be same as memo_key",
+			Usage: fmt.Sprintf("File name of optional info that can be showed when list workflow. If there are multiple values, separate them by newline. "+
+				"The order of lines must be same as %s", FlagMemoKey),
 		},
-		cli.StringFlag{
-			Name: FlagSearchAttributesKey,
-			Usage: "Optional search attributes keys that can be be used in list query. If there are multiple keys, concatenate them and separate by |. " +
-				"Use 'cluster get-search-attr' cmd to list legal keys.",
+		cli.StringSliceFlag{
+			Name:  FlagSearchAttributesKey,
+			Usage: fmt.Sprintf("Optional search attributes keys that can be be used in list query. If there are multiple keys, provide multiple %s flags", FlagSearchAttributesKey),
 		},
-		cli.StringFlag{
-			Name: FlagSearchAttributesVal,
-			Usage: "Optional search attributes value that can be be used in list query. If there are multiple keys, concatenate them and separate by |. " +
-				"If value is array, use json array like [\"a\",\"b\"], [1,2], [\"true\",\"false\"], [\"2019-06-07T17:16:34-08:00\",\"2019-06-07T18:16:34-08:00\"]. " +
-				"Use 'cluster get-search-attr' cmd to list legal keys and value types",
+		cli.StringSliceFlag{
+			Name: FlagSearchAttributesValue,
+			Usage: fmt.Sprintf("Optional search attributes value that can be be used in list query in JSON format. If there are multiple values, provide multiple %s flags. "+
+				"If value is array, use JSON array syntax: [\"a\",\"b\"] or [1,2].", FlagSearchAttributesValue),
 		},
 	}
 }

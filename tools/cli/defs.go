@@ -92,13 +92,6 @@ var resetReapplyTypesMap = map[string]interface{}{
 	"None":   enumspb.RESET_REAPPLY_TYPE_NONE,
 }
 
-type jsonType int
-
-const (
-	jsonTypeInput jsonType = iota
-	jsonTypeMemo
-)
-
 var (
 	cFactory ClientFactory
 

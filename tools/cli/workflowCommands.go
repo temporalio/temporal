@@ -31,7 +31,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -269,7 +268,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 }
 
 func unmarshalInputsFromCLI(c *cli.Context) []interface{} {
-	jsonsRaw := readJSONInputs(c, jsonTypeInput)
+	jsonsRaw := readJSONInputs(c)
 
 	var result []interface{}
 	for _, jsonRaw := range jsonsRaw {
@@ -298,81 +297,69 @@ func formatInputsForDisplay(inputs []interface{}) string {
 }
 
 func unmarshalSearchAttrFromCLI(c *cli.Context) map[string]interface{} {
-	sanitize := func(val string) []string {
-		trimmedVal := strings.TrimSpace(val)
-		if len(trimmedVal) == 0 {
-			return nil
-		}
-		splitVal := strings.Split(trimmedVal, searchAttrInputSeparator)
-		result := make([]string, len(splitVal))
-		for i, v := range splitVal {
-			result[i] = strings.TrimSpace(v)
-		}
-		return result
+	if !c.IsSet(FlagSearchAttributesKey) && c.IsSet(FlagSearchAttributesValue) {
+		ErrorAndExit(fmt.Sprintf("Search attribute keys must be provided using %s.", FlagSearchAttributesKey), nil)
 	}
 
-	searchAttrKeys := sanitize(c.String(FlagSearchAttributesKey))
-	if len(searchAttrKeys) == 0 {
-		return nil
-	}
-	rawSearchAttrVals := sanitize(c.String(FlagSearchAttributesVal))
-	if len(rawSearchAttrVals) == 0 {
+	saKeys := c.StringSlice(FlagSearchAttributesKey)
+
+	var saValues []string
+	if c.IsSet(FlagSearchAttributesValue) {
+		saValues = c.StringSlice(FlagSearchAttributesValue)
+	} else if c.IsSet(FlagSearchAttributesKey) {
+		ErrorAndExit(fmt.Sprintf("Search attribute values must be provided using %s.", FlagSearchAttributesValue), nil)
+	} else {
 		return nil
 	}
 
-	if len(searchAttrKeys) != len(rawSearchAttrVals) {
-		ErrorAndExit(fmt.Sprintf("Uneven number of search attributes keys (%d): %v and values(%d): %v.", len(searchAttrKeys), searchAttrKeys, len(rawSearchAttrVals), rawSearchAttrVals), nil)
+	if len(saKeys) != len(saValues) {
+		ErrorAndExit(fmt.Sprintf("Number of search attributes keys %d and values %d are not equal.", len(saKeys), len(saValues)), nil)
 	}
 
-	fields := make(map[string]interface{}, len(searchAttrKeys))
+	fields := make(map[string]interface{}, len(saKeys))
 
-	for i, v := range rawSearchAttrVals {
+	for i, saValue := range saValues {
 		var j interface{}
-		if err := json.Unmarshal([]byte(v), &j); err != nil {
+		if err := json.Unmarshal([]byte(saValue), &j); err != nil {
 			ErrorAndExit("Search attribute JSON parse error.", err)
 		}
-		fields[searchAttrKeys[i]] = j
+		fields[saKeys[i]] = j
 	}
 
 	return fields
 }
 
 func unmarshalMemoFromCLI(c *cli.Context) map[string]interface{} {
-	rawMemoKey := c.String(FlagMemoKey)
-	var memoKeys []string
-	if strings.TrimSpace(rawMemoKey) != "" {
-		memoKeys = strings.Split(rawMemoKey, " ")
+	if !c.IsSet(FlagMemoKey) && (c.IsSet(FlagMemo) || c.IsSet(FlagMemoFile)) {
+		ErrorAndExit(fmt.Sprintf("Memo keys must be provided using %s.", FlagMemoKey), nil)
 	}
 
-	jsonsRaw := readJSONInputs(c, jsonTypeMemo)
-	if len(jsonsRaw) == 0 {
+	memoKeys := c.StringSlice(FlagMemoKey)
+
+	if c.IsSet(FlagMemo) && c.IsSet(FlagMemoFile) {
+		ErrorAndExit(fmt.Sprintf("Only one of %s or %s should be used.", FlagMemo, FlagMemoFile), nil)
+	}
+
+	var memoValues []string
+	if c.IsSet(FlagMemoFile) {
+		inputFile := c.String(FlagMemoFile)
+		// This method is purely used to parse input from the CLI. The input comes from a trusted user
+		// #nosec
+		data, err := os.ReadFile(inputFile)
+		if err != nil {
+			ErrorAndExit(fmt.Sprintf("Error reading memo file %s.", inputFile), err)
+		}
+		memoValues = strings.Split(string(data), "\n")
+	} else if c.IsSet(FlagMemo) {
+		memoValues = c.StringSlice(FlagMemo)
+	} else if c.IsSet(FlagMemoKey) {
+		ErrorAndExit(fmt.Sprintf("Memo values must be provided using %s or %s.", FlagMemo, FlagMemoFile), nil)
+	} else {
 		return nil
 	}
 
-	if err := validateJSONs(jsonsRaw[0]); err != nil {
-
-	}
-
-	var memoValues []interface{}
-
-	// StringFlag may contain up to one json
-	dec := json.NewDecoder(bytes.NewReader(jsonsRaw[0]))
-	for {
-		t, err := dec.Token()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			ErrorAndExit("Input is not valid JSON, or JSONs concatenated with spaces/newlines.", err)
-		}
-		if _, isDelim := t.(json.Delim); isDelim {
-			continue
-		}
-		memoValues = append(memoValues, t)
-	}
-
 	if len(memoKeys) != len(memoValues) {
-		ErrorAndExit("Number of memo keys and values are not equal.", nil)
+		ErrorAndExit(fmt.Sprintf("Number of memo keys %d and values %d are not equal.", len(memoKeys), len(memoValues)), nil)
 	}
 
 	fields := make(map[string]interface{}, len(memoKeys))
@@ -388,9 +375,8 @@ func getPrintableMemo(memo *commonpb.Memo) string {
 		var memo string
 		err := payload.Decode(v, &memo)
 		if err != nil {
-			ErrorAndExit("Memo has incorrect format.", err)
+			memo = "Memo has incorrect format"
 		}
-
 		_, _ = fmt.Fprintf(buf, "%s=%s\n", k, memo)
 	}
 	return buf.String()
