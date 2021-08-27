@@ -18,7 +18,6 @@ persistence:
         indices:
           visibility: temporal_visibility_v1_dev
         closeIdleConnectionsInterval: 15s
-        enableHealthcheck: true
 global:
   membership:
     maxJoinDuration: 30s
