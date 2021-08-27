@@ -43,7 +43,6 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
 	"github.com/urfave/cli"
-	"github.com/valyala/fastjson"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -348,22 +347,13 @@ func unmarshalMemoFromCLI(c *cli.Context) map[string]interface{} {
 	if len(jsonsRaw) == 0 {
 		return nil
 	}
-	rawMemoValue := string(jsonsRaw[0]) // StringFlag may contain up to one json
 
-	if err := validateJSONs(rawMemoValue); err != nil {
+	var memoValues []interface{}
+	// StringFlag may contain up to one json.
+	if err := json.Unmarshal(jsonsRaw[0], &memoValues); err != nil {
 		ErrorAndExit("Input is not valid JSON, or JSONs concatenated with spaces/newlines.", err)
 	}
 
-	var memoValues []interface{}
-
-	var sc fastjson.Scanner
-	sc.Init(rawMemoValue)
-	for sc.Next() {
-		memoValues = append(memoValues, sc.Value())
-	}
-	if err := sc.Error(); err != nil {
-		ErrorAndExit("Memo JSON parse error.", err)
-	}
 	if len(memoKeys) != len(memoValues) {
 		ErrorAndExit("Number of memo keys and values are not equal.", nil)
 	}
