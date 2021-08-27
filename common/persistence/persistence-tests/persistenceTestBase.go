@@ -133,7 +133,7 @@ func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {
 	}
 	logger := log.NewTestLogger()
 	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, options.FaultInjection, logger)
-	return newTestBase(testCluster, logger)
+	return NewTestBaseForCluster(testCluster, logger)
 }
 
 // NewTestBaseWithSQL returns a new persistence test base backed by SQL
@@ -164,7 +164,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 		}
 	}
 	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, options.FaultInjection, logger)
-	return newTestBase(testCluster, logger)
+	return NewTestBaseForCluster(testCluster, logger)
 }
 
 // NewTestBase returns a persistence test base backed by either cassandra or sql
@@ -179,7 +179,7 @@ func NewTestBase(options *TestBaseOptions) TestBase {
 	}
 }
 
-func newTestBase(testCluster PersistenceTestCluster, logger log.Logger) TestBase {
+func NewTestBaseForCluster(testCluster PersistenceTestCluster, logger log.Logger) TestBase {
 	return TestBase{
 		DefaultTestCluster:    testCluster,
 		VisibilityTestCluster: testCluster,
@@ -557,6 +557,7 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *persistencespb.WorkflowEx
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
 				AutoResetPoints:            prevResetPoints,
 				StartTime:                  timestamp.TimeNowPtrUtc(),
+				ExecutionStats:             &persistencespb.ExecutionStats{},
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{

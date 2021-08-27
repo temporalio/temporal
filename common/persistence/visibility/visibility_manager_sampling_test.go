@@ -177,7 +177,7 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutions() {
 }
 
 func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutionsByType() {
-	req := ListWorkflowExecutionsRequest{
+	req := &ListWorkflowExecutionsRequest{
 		NamespaceID: testNamespaceUUID,
 		Namespace:   testNamespace,
 	}
@@ -198,7 +198,7 @@ func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutionsByType() {
 }
 
 func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByType() {
-	req := ListWorkflowExecutionsRequest{
+	req := &ListWorkflowExecutionsRequest{
 		NamespaceID: testNamespaceUUID,
 		Namespace:   testNamespace,
 	}
@@ -219,7 +219,7 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByType() {
 }
 
 func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutionsByWorkflowID() {
-	req := ListWorkflowExecutionsRequest{
+	req := &ListWorkflowExecutionsRequest{
 		NamespaceID: testNamespaceUUID,
 		Namespace:   testNamespace,
 	}
@@ -240,7 +240,7 @@ func (s *VisibilitySamplingSuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 }
 
 func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByWorkflowID() {
-	req := ListWorkflowExecutionsRequest{
+	req := &ListWorkflowExecutionsRequest{
 		NamespaceID: testNamespaceUUID,
 		Namespace:   testNamespace,
 	}
@@ -261,7 +261,7 @@ func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByWorkflowID()
 }
 
 func (s *VisibilitySamplingSuite) TestListClosedWorkflowExecutionsByStatus() {
-	req := ListWorkflowExecutionsRequest{
+	req := &ListWorkflowExecutionsRequest{
 		NamespaceID: testNamespaceUUID,
 		Namespace:   testNamespace,
 	}

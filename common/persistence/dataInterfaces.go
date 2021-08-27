@@ -433,10 +433,12 @@ type (
 		PreviousLastWriteVersion int64
 
 		NewWorkflowSnapshot WorkflowSnapshot
+		NewWorkflowEvents   []*WorkflowEvents
 	}
 
 	// CreateWorkflowExecutionResponse is the response to CreateWorkflowExecutionRequest
 	CreateWorkflowExecutionResponse struct {
+		HistorySize int64
 	}
 
 	// GetWorkflowExecutionRequest is used to retrieve the info of a workflow execution
@@ -490,8 +492,9 @@ type (
 		Mode UpdateWorkflowMode
 
 		UpdateWorkflowMutation WorkflowMutation
-
-		NewWorkflowSnapshot *WorkflowSnapshot
+		UpdateWorkflowEvents   []*WorkflowEvents
+		NewWorkflowSnapshot    *WorkflowSnapshot
+		NewWorkflowEvents      []*WorkflowEvents
 	}
 
 	// ConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for a single run
@@ -996,6 +999,10 @@ type (
 		DeleteChildInfoCount         int
 		DeleteSignalInfoCount        int
 		DeleteRequestCancelInfoCount int
+
+		// History size diff
+		UpdateWorkflowHistorySizeDiff int64
+		NewWorkflowHistorySizeDiff    int64
 	}
 
 	// UpdateWorkflowExecutionResponse is response for UpdateWorkflowExecutionRequest

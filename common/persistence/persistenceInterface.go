@@ -109,7 +109,7 @@ type (
 		UpdateWorkflowExecution(request *InternalUpdateWorkflowExecutionRequest) error
 		ConflictResolveWorkflowExecution(request *InternalConflictResolveWorkflowExecutionRequest) error
 
-		CreateWorkflowExecution(request *InternalCreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
+		CreateWorkflowExecution(request *InternalCreateWorkflowExecutionRequest) (*InternalCreateWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
 		DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*InternalGetCurrentExecutionResponse, error)
@@ -302,7 +302,12 @@ type (
 		PreviousRunID            string
 		PreviousLastWriteVersion int64
 
-		NewWorkflowSnapshot InternalWorkflowSnapshot
+		NewWorkflowSnapshot  InternalWorkflowSnapshot
+		NewWorkflowNewEvents []*InternalAppendHistoryNodesRequest
+	}
+
+	// InternalCreateWorkflowExecutionResponse is the response from persistence for create new workflow execution
+	InternalCreateWorkflowExecutionResponse struct {
 	}
 
 	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
@@ -328,9 +333,10 @@ type (
 
 		Mode UpdateWorkflowMode
 
-		UpdateWorkflowMutation InternalWorkflowMutation
-
-		NewWorkflowSnapshot *InternalWorkflowSnapshot
+		UpdateWorkflowMutation  InternalWorkflowMutation
+		UpdateWorkflowNewEvents []*InternalAppendHistoryNodesRequest
+		NewWorkflowSnapshot     *InternalWorkflowSnapshot
+		NewWorkflowNewEvents    []*InternalAppendHistoryNodesRequest
 	}
 
 	// InternalConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for Persistence Interface
