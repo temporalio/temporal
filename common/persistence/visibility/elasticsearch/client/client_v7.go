@@ -51,13 +51,9 @@ func newClientV7(cfg *config.Elasticsearch, httpClient *http.Client, logger log.
 	options := []elastic.ClientOptionFunc{
 		elastic.SetURL(cfg.URL.String()),
 		elastic.SetBasicAuth(cfg.Username, cfg.Password),
-
-		// Disable healthcheck to prevent blocking client creation (and thus Temporal server startup) if the Elasticsearch is down.
-		elastic.SetHealthcheck(false),
-
+		elastic.SetHealthcheck(cfg.EnableHealthcheck),
 		elastic.SetSniff(cfg.EnableSniff),
 		elastic.SetRetrier(elastic.NewBackoffRetrier(elastic.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))),
-
 		// Critical to ensure decode of int64 won't lose precision.
 		elastic.SetDecoder(&elastic.NumberDecoder{}),
 	}
@@ -69,12 +65,13 @@ func newClientV7(cfg *config.Elasticsearch, httpClient *http.Client, logger log.
 	}
 
 	// TODO (alex): Remove this when https://github.com/olivere/elastic/pull/1507 is merged.
-	if cfg.CloseIdleConnectionsInterval != time.Duration(-1) {
-		if cfg.CloseIdleConnectionsInterval < config.DefaultElasticsearchCloseIdleConnectionsInterval {
-			cfg.CloseIdleConnectionsInterval = config.DefaultElasticsearchCloseIdleConnectionsInterval
+	if cfg.CloseIdleConnectionsInterval != time.Duration(0) {
+		if cfg.CloseIdleConnectionsInterval < minimumCloseIdleConnectionsInterval {
+			cfg.CloseIdleConnectionsInterval = minimumCloseIdleConnectionsInterval
 		}
 		go func(interval time.Duration, httpClient *http.Client) {
 			closeTimer := time.NewTimer(interval)
+			defer closeTimer.Stop()
 			for {
 				<-closeTimer.C
 				closeTimer.Reset(interval)
@@ -88,16 +85,6 @@ func newClientV7(cfg *config.Elasticsearch, httpClient *http.Client, logger log.
 	client, err := elastic.NewClient(options...)
 	if err != nil {
 		return nil, err
-	}
-
-	// Enable healthcheck (if configured) after client is successfully created.
-	if cfg.EnableHealthcheck {
-		client.Stop()
-		err = elastic.SetHealthcheck(true)(client)
-		if err != nil {
-			return nil, err
-		}
-		client.Start()
 	}
 
 	return &clientV7{esClient: client}, nil
