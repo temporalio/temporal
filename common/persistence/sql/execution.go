@@ -80,7 +80,13 @@ func (m *sqlExecutionStore) txExecuteShardLocked(
 
 func (m *sqlExecutionStore) CreateWorkflowExecution(
 	request *p.InternalCreateWorkflowExecutionRequest,
-) (response *p.CreateWorkflowExecutionResponse, err error) {
+) (response *p.InternalCreateWorkflowExecutionResponse, err error) {
+	for _, req := range request.NewWorkflowNewEvents {
+		if err := m.AppendHistoryNodes(req); err != nil {
+			return nil, err
+		}
+	}
+
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	err = m.txExecuteShardLocked(ctx,
@@ -98,7 +104,7 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	request *p.InternalCreateWorkflowExecutionRequest,
-) (*p.CreateWorkflowExecutionResponse, error) {
+) (*p.InternalCreateWorkflowExecutionResponse, error) {
 
 	newWorkflow := request.NewWorkflowSnapshot
 	lastWriteVersion := newWorkflow.LastWriteVersion
@@ -233,7 +239,7 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 		return nil, err
 	}
 
-	return &p.CreateWorkflowExecutionResponse{}, nil
+	return &p.InternalCreateWorkflowExecutionResponse{}, nil
 }
 
 func (m *sqlExecutionStore) GetWorkflowExecution(

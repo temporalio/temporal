@@ -166,14 +166,6 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 		return serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
-	targetWorkflowHistorySize, err := r.persistNewNDCWorkflowEvents(
-		targetWorkflow,
-		targetWorkflowEventsSeq[0],
-	)
-	if err != nil {
-		return err
-	}
-
 	// target workflow to be created as current
 	if currentWorkflow != nil {
 		// current workflow exists, need to do compare and swap
@@ -190,7 +182,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 			prevLastWriteVersion,
 			targetWorkflow.getMutableState(),
 			targetWorkflowSnapshot,
-			targetWorkflowHistorySize,
+			targetWorkflowEventsSeq,
 		)
 	}
 
@@ -205,7 +197,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 		prevLastWriteVersion,
 		targetWorkflow.getMutableState(),
 		targetWorkflowSnapshot,
-		targetWorkflowHistorySize,
+		targetWorkflowEventsSeq,
 	)
 }
 
@@ -242,14 +234,6 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		return serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
-	targetWorkflowHistorySize, err := r.persistNewNDCWorkflowEvents(
-		targetWorkflow,
-		targetWorkflowEventsSeq[0],
-	)
-	if err != nil {
-		return err
-	}
-
 	if err := targetWorkflow.getContext().ReapplyEvents(
 		targetWorkflowEventsSeq,
 	); err != nil {
@@ -266,7 +250,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		prevLastWriteVersion,
 		targetWorkflow.getMutableState(),
 		targetWorkflowSnapshot,
-		targetWorkflowHistorySize,
+		targetWorkflowEventsSeq,
 	)
 	switch err.(type) {
 	case nil:

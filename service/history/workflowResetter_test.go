@@ -226,8 +226,6 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	resetWorkflow.EXPECT().getMutableState().Return(resetMutableState).AnyTimes()
 	resetWorkflow.EXPECT().getReleaseFn().Return(targetReleaseFn).AnyTimes()
 
-	resetEventsSize := int64(1444)
-	resetNewEventsSize := int64(4321)
 	resetSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{},
 	}
@@ -244,8 +242,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		gomock.Any(),
 		workflow.TransactionPolicyActive,
 	).Return(resetSnapshot, resetEventsSeq, nil)
-	resetContext.EXPECT().GetHistorySize().Return(resetEventsSize).AnyTimes()
-	resetContext.EXPECT().PersistWorkflowEvents(resetEventsSeq[0]).Return(resetNewEventsSize, nil)
+	resetContext.EXPECT().GetHistorySize().Return(int64(123)).AnyTimes()
 	resetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
 		persistence.CreateWorkflowModeContinueAsNew,
@@ -253,7 +250,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		currentLastWriteVersion,
 		resetMutableState,
 		resetSnapshot,
-		resetNewEventsSize,
+		resetEventsSeq,
 	).Return(nil)
 
 	err := s.workflowResetter.persistToDB(currentWorkflow, nil, nil, resetWorkflow)

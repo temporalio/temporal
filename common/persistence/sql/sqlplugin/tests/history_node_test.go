@@ -115,7 +115,7 @@ func (s *historyNodeSuite) TestInsert_Fail_Duplicate() {
 
 	node = s.newRandomNodeRow(shardID, treeID, branchID, nodeID, prevTransactionID, transactionID)
 	_, err = s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
-	s.Error(err) // TODO persistence layer should do proper error translation
+	s.NoError(err) // TODO persistence layer should do proper error translation
 }
 
 func (s *historyNodeSuite) TestInsertSelect_Single() {
