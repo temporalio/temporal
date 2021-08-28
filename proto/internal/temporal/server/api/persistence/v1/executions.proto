@@ -124,6 +124,13 @@ message WorkflowExecutionInfo {
     int64 last_first_event_txn_id = 58;
     int64 state_transition_count = 59;
     google.protobuf.Timestamp execution_time = 60 [(gogoproto.stdtime) = true];
+    // If continued-as-new, or retried, or cron, holds the new run id.
+    string new_execution_run_id = 61;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "to" is the clearest way to express this --)
+    // If this is a child workflow and completed, whether this completion should be reported to a
+    // parent workflow. This would be false if the child workflow fails and is retried, for example.
+    bool report_completion_to_parent = 62;
 }
 
 message ExecutionStats {
