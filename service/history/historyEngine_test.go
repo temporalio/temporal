@@ -5137,9 +5137,12 @@ func addChildWorkflowExecutionCompletedEvent(builder workflow.MutableState, init
 
 func addCompleteWorkflowEvent(builder workflow.MutableState, workflowTaskCompletedEventID int64,
 	result *commonpb.Payloads) *historypb.HistoryEvent {
-	event, _ := builder.AddCompletedWorkflowEvent(workflowTaskCompletedEventID, &commandpb.CompleteWorkflowExecutionCommandAttributes{
-		Result: result,
-	})
+	event, _ := builder.AddCompletedWorkflowEvent(
+		workflowTaskCompletedEventID,
+		&commandpb.CompleteWorkflowExecutionCommandAttributes{
+			Result: result,
+		},
+		"")
 	return event
 }
 
@@ -5155,6 +5158,7 @@ func addFailWorkflowEvent(
 		&commandpb.FailWorkflowExecutionCommandAttributes{
 			Failure: failure,
 		},
+		"",
 	)
 	return event
 }

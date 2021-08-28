@@ -2228,6 +2228,7 @@ func (e *MutableStateImpl) ReplicateActivityTaskCanceledEvent(
 func (e *MutableStateImpl) AddCompletedWorkflowEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.CompleteWorkflowExecutionCommandAttributes,
+	newExecutionRunID string,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowCompleted
@@ -2235,7 +2236,7 @@ func (e *MutableStateImpl) AddCompletedWorkflowEvent(
 		return nil, err
 	}
 
-	event := e.hBuilder.AddCompletedWorkflowEvent(workflowTaskCompletedEventID, command)
+	event := e.hBuilder.AddCompletedWorkflowEvent(workflowTaskCompletedEventID, command, newExecutionRunID)
 	if err := e.ReplicateWorkflowExecutionCompletedEvent(workflowTaskCompletedEventID, event); err != nil {
 		return nil, err
 	}
@@ -2260,6 +2261,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionCompletedEvent(
 		return err
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	e.setNewExecutionRunID(event.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId())
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -2269,6 +2271,7 @@ func (e *MutableStateImpl) AddFailWorkflowEvent(
 	workflowTaskCompletedEventID int64,
 	retryState enumspb.RetryState,
 	command *commandpb.FailWorkflowExecutionCommandAttributes,
+	newExecutionRunID string,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowFailed
@@ -2276,7 +2279,7 @@ func (e *MutableStateImpl) AddFailWorkflowEvent(
 		return nil, err
 	}
 
-	event := e.hBuilder.AddFailWorkflowEvent(workflowTaskCompletedEventID, retryState, command)
+	event := e.hBuilder.AddFailWorkflowEvent(workflowTaskCompletedEventID, retryState, command, newExecutionRunID)
 	if err := e.ReplicateWorkflowExecutionFailedEvent(workflowTaskCompletedEventID, event); err != nil {
 		return nil, err
 	}
@@ -2301,6 +2304,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionFailedEvent(
 		return err
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	e.setNewExecutionRunID(event.GetWorkflowExecutionFailedEventAttributes().GetNewExecutionRunId())
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -2309,6 +2313,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionFailedEvent(
 func (e *MutableStateImpl) AddTimeoutWorkflowEvent(
 	firstEventID int64,
 	retryState enumspb.RetryState,
+	newExecutionRunID string,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowTimeout
@@ -2316,7 +2321,7 @@ func (e *MutableStateImpl) AddTimeoutWorkflowEvent(
 		return nil, err
 	}
 
-	event := e.hBuilder.AddTimeoutWorkflowEvent(retryState)
+	event := e.hBuilder.AddTimeoutWorkflowEvent(retryState, newExecutionRunID)
 	if err := e.ReplicateWorkflowExecutionTimedoutEvent(firstEventID, event); err != nil {
 		return nil, err
 	}
@@ -2341,6 +2346,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionTimedoutEvent(
 		return err
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	e.setNewExecutionRunID(event.GetWorkflowExecutionTimedOutEventAttributes().GetNewExecutionRunId())
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -3088,6 +3094,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionContinuedAsNewEvent(
 		return err
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	e.setNewExecutionRunID(continueAsNewEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId())
 	e.ClearStickyness()
 	e.writeEventToCache(continueAsNewEvent)
 	return nil
@@ -4401,6 +4408,12 @@ func (_ *MutableStateImpl) unixNanoToTime(
 ) time.Time {
 
 	return time.Unix(0, timestampNanos).UTC()
+}
+
+func (e *MutableStateImpl) setNewExecutionRunID(newExecutionRunID string) {
+	e.executionInfo.NewExecutionRunId = newExecutionRunID
+	// Report to parent if there is no new execution, i.e. no more retries or cron or continue-as-new.
+	e.executionInfo.ReportCompletionToParent = newExecutionRunID == ""
 }
 
 func (e *MutableStateImpl) logInfo(msg string, tags ...tag.Tag) {

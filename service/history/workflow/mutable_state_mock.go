@@ -270,18 +270,18 @@ func (mr *MockMutableStateMockRecorder) AddChildWorkflowExecutionTimedOutEvent(a
 }
 
 // AddCompletedWorkflowEvent mocks base method.
-func (m *MockMutableState) AddCompletedWorkflowEvent(arg0 int64, arg1 *v1.CompleteWorkflowExecutionCommandAttributes) (*v13.HistoryEvent, error) {
+func (m *MockMutableState) AddCompletedWorkflowEvent(arg0 int64, arg1 *v1.CompleteWorkflowExecutionCommandAttributes, arg2 string) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddCompletedWorkflowEvent", arg0, arg1)
+	ret := m.ctrl.Call(m, "AddCompletedWorkflowEvent", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddCompletedWorkflowEvent indicates an expected call of AddCompletedWorkflowEvent.
-func (mr *MockMutableStateMockRecorder) AddCompletedWorkflowEvent(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddCompletedWorkflowEvent(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddCompletedWorkflowEvent", reflect.TypeOf((*MockMutableState)(nil).AddCompletedWorkflowEvent), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddCompletedWorkflowEvent", reflect.TypeOf((*MockMutableState)(nil).AddCompletedWorkflowEvent), arg0, arg1, arg2)
 }
 
 // AddContinueAsNewEvent mocks base method.
@@ -331,18 +331,18 @@ func (mr *MockMutableStateMockRecorder) AddExternalWorkflowExecutionSignaled(arg
 }
 
 // AddFailWorkflowEvent mocks base method.
-func (m *MockMutableState) AddFailWorkflowEvent(arg0 int64, arg1 v11.RetryState, arg2 *v1.FailWorkflowExecutionCommandAttributes) (*v13.HistoryEvent, error) {
+func (m *MockMutableState) AddFailWorkflowEvent(arg0 int64, arg1 v11.RetryState, arg2 *v1.FailWorkflowExecutionCommandAttributes, arg3 string) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddFailWorkflowEvent", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "AddFailWorkflowEvent", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddFailWorkflowEvent indicates an expected call of AddFailWorkflowEvent.
-func (mr *MockMutableStateMockRecorder) AddFailWorkflowEvent(arg0, arg1, arg2 interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddFailWorkflowEvent(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddFailWorkflowEvent", reflect.TypeOf((*MockMutableState)(nil).AddFailWorkflowEvent), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddFailWorkflowEvent", reflect.TypeOf((*MockMutableState)(nil).AddFailWorkflowEvent), arg0, arg1, arg2, arg3)
 }
 
 // AddFirstWorkflowTaskScheduled mocks base method.
@@ -480,18 +480,18 @@ func (mr *MockMutableStateMockRecorder) AddStartChildWorkflowExecutionInitiatedE
 }
 
 // AddTimeoutWorkflowEvent mocks base method.
-func (m *MockMutableState) AddTimeoutWorkflowEvent(arg0 int64, arg1 v11.RetryState) (*v13.HistoryEvent, error) {
+func (m *MockMutableState) AddTimeoutWorkflowEvent(arg0 int64, arg1 v11.RetryState, arg2 string) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddTimeoutWorkflowEvent", arg0, arg1)
+	ret := m.ctrl.Call(m, "AddTimeoutWorkflowEvent", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddTimeoutWorkflowEvent indicates an expected call of AddTimeoutWorkflowEvent.
-func (mr *MockMutableStateMockRecorder) AddTimeoutWorkflowEvent(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddTimeoutWorkflowEvent(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTimeoutWorkflowEvent", reflect.TypeOf((*MockMutableState)(nil).AddTimeoutWorkflowEvent), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTimeoutWorkflowEvent", reflect.TypeOf((*MockMutableState)(nil).AddTimeoutWorkflowEvent), arg0, arg1, arg2)
 }
 
 // AddTimerCanceledEvent mocks base method.

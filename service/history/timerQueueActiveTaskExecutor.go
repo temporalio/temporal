@@ -555,11 +555,17 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		}
 	}
 
+	var newRunID string
+	if initiator != enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED {
+		newRunID = uuid.New()
+	}
+
 	// First add timeout workflow event, no matter what we're doing next.
 	if err := workflow.TimeoutWorkflow(
 		mutableState,
 		eventBatchFirstEventID,
 		retryState,
+		newRunID,
 	); err != nil {
 		return err
 	}
@@ -577,7 +583,6 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newRunID := uuid.New()
 	newMutableState, err := createMutableState(
 		t.shard,
 		mutableState.GetNamespaceEntry(),
