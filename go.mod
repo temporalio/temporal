@@ -59,7 +59,7 @@ require (
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.opentelemetry.io/otel v0.15.0
 	go.opentelemetry.io/otel/exporters/metric/prometheus v0.15.0
-	go.temporal.io/api v1.4.1-0.20210729221809-0a6aea88f2b9
+	go.temporal.io/api v1.4.1-0.20210827235039-3bd3d8a6fb20
 	go.temporal.io/sdk v1.9.0
 	go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193
 	go.uber.org/atomic v1.7.0
@@ -69,7 +69,7 @@ require (
 	golang.org/x/oauth2 v0.0.0-20210413134643-5e61552d6c78
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 	google.golang.org/api v0.45.0
-	google.golang.org/grpc v1.39.0
+	google.golang.org/grpc v1.40.0
 	google.golang.org/grpc/examples v0.0.0-20210426212906-52a707c0dafe
 	gopkg.in/check.v1 v1.0.0-20200902074654-038fdea0a05b // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1
