@@ -53,6 +53,7 @@ COPY --from=temporal-builder /temporal/temporal-sql-tool /usr/local/bin
 ##### Development configuration for Temporal with additional set of tools #####
 FROM temporal-auto-setup as temporal-develop
 
+# apk and setup-develop.sh requires root permissions.
 USER root
 # iproute2 contains tc, which can be used for traffic shaping in resiliancy testing. 
 ONBUILD RUN apk add iproute2
