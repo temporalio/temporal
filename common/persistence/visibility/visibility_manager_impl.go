@@ -200,29 +200,18 @@ func (v *visibilityManagerImpl) convertInternalListResponse(internalResp *Intern
 
 	resp := &ListWorkflowExecutionsResponse{}
 	resp.Executions = make([]*workflowpb.WorkflowExecutionInfo, len(internalResp.Executions))
-	saTypeMap, err := v.searchAttributesProvider.GetSearchAttributes(v.defaultVisibilityIndexName, false)
-	if err != nil {
-		v.logger.Error("Unable to read valid search attributes.", tag.Error(err))
-	}
 	for i, execution := range internalResp.Executions {
-		resp.Executions[i] = v.convertVisibilityWorkflowExecutionInfo(execution, saTypeMap)
+		resp.Executions[i] = v.convertVisibilityWorkflowExecutionInfo(execution)
 	}
 
 	resp.NextPageToken = internalResp.NextPageToken
 	return resp
 }
 
-func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution *VisibilityWorkflowExecutionInfo, saTypeMap searchattribute.NameTypeMap) *workflowpb.WorkflowExecutionInfo {
+func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution *VisibilityWorkflowExecutionInfo) *workflowpb.WorkflowExecutionInfo {
 	memo, err := v.serializer.DeserializeVisibilityMemo(execution.Memo)
 	if err != nil {
 		v.logger.Error("failed to deserialize memo",
-			tag.WorkflowID(execution.WorkflowID),
-			tag.WorkflowRunID(execution.RunID),
-			tag.Error(err))
-	}
-	searchAttributes, err := searchattribute.Encode(execution.SearchAttributes, &saTypeMap)
-	if err != nil {
-		v.logger.Error("failed to encode search attributes",
 			tag.WorkflowID(execution.WorkflowID),
 			tag.WorkflowRunID(execution.RunID),
 			tag.Error(err))
@@ -239,7 +228,7 @@ func (v *visibilityManagerImpl) convertVisibilityWorkflowExecutionInfo(execution
 		StartTime:            &execution.StartTime,
 		ExecutionTime:        &execution.ExecutionTime,
 		Memo:                 memo,
-		SearchAttributes:     searchAttributes,
+		SearchAttributes:     execution.SearchAttributes,
 		TaskQueue:            execution.TaskQueue,
 		Status:               execution.Status,
 		StateTransitionCount: execution.StateTransitionCount,
