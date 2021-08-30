@@ -82,6 +82,7 @@ var (
 	errSearchAttributeDoesntExistMessage              = "Search attribute %s doesn't exist."
 	errUnknownSearchAttributeTypeMessage              = "Unknown search attribute type: %v."
 	errUnableToGetSearchAttributesMessage             = "Unable to get search attributes: %v."
+	errUnableToMapSearchAttributeAliasesMessage       = "Unable to map search attribute aliases: %v."
 	errUnableToRemoveNonCustomSearchAttributesMessage = "Unable to remove non-custom search attributes: %v."
 	errUnableToSaveSearchAttributesMessage            = "Unable to save search attributes: %v."
 	errUnableToStartWorkflowMessage                   = "Unable to start %s workflow: %v."

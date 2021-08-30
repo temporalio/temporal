@@ -37,19 +37,25 @@ import (
 
 type (
 	nameInterceptor struct {
-		index                    string
-		searchAttributesProvider searchattribute.Provider
+		namespace               string
+		index                   string
+		searchAttributesTypeMap searchattribute.NameTypeMap
+		searchAttributesMapper  searchattribute.Mapper
 	}
 	valuesInterceptor struct{}
 )
 
 func newNameInterceptor(
+	namespace string,
 	index string,
-	searchAttributesProvider searchattribute.Provider,
+	saTypeMap searchattribute.NameTypeMap,
+	searchAttributesMapper searchattribute.Mapper,
 ) *nameInterceptor {
 	return &nameInterceptor{
-		index:                    index,
-		searchAttributesProvider: searchAttributesProvider,
+		namespace:               namespace,
+		index:                   index,
+		searchAttributesTypeMap: saTypeMap,
+		searchAttributesMapper:  searchAttributesMapper,
 	}
 }
 
@@ -58,23 +64,27 @@ func newValuesInterceptor() *valuesInterceptor {
 }
 
 func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string, error) {
-	searchAttributes, err := ni.searchAttributesProvider.GetSearchAttributes(ni.index, false)
-	if err != nil {
-		return "", fmt.Errorf("unable to read search attribute types: %v", err)
+	fieldName := name
+	if searchattribute.IsMappable(name) {
+		var err error
+		fieldName, err = ni.searchAttributesMapper.GetFieldName(name, ni.namespace)
+		if err != nil {
+			return "", err
+		}
 	}
 
-	if !searchAttributes.IsDefined(name) {
+	fieldType, err := ni.searchAttributesTypeMap.GetType(fieldName)
+	if err != nil {
 		return "", fmt.Errorf("invalid search attribute: %s", name)
 	}
 
 	if usage == query.FieldNameSorter {
-		fieldType, _ := searchAttributes.GetType(name)
 		if fieldType == enumspb.INDEXED_VALUE_TYPE_STRING {
 			return "", errors.New("unable to sort by field of String type, use field of type Keyword")
 		}
 	}
 
-	return name, nil
+	return fieldName, nil
 }
 
 func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]interface{}, error) {

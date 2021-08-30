@@ -85,6 +85,7 @@ type (
 		mockHistoryClient            *historyservicemock.MockHistoryServiceClient
 		mockClusterMetadata          *cluster.MockMetadata
 		mockSearchAttributesProvider *searchattribute.MockProvider
+		mockSearchAttributesMapper   *searchattribute.MockMapper
 		mockMatchingClient           *matchingservicemock.MockMatchingServiceClient
 
 		mockProducer           *persistence.MockNamespaceReplicationQueue
@@ -128,6 +129,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.mockHistoryClient = s.mockResource.HistoryClient
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
 	s.mockSearchAttributesProvider = s.mockResource.SearchAttributesProvider
+	s.mockSearchAttributesMapper = s.mockResource.SearchAttributesMapper
 	s.mockMetadataMgr = s.mockResource.MetadataMgr
 	s.mockExecutionManager = s.mockResource.ExecutionMgr
 	s.mockVisibilityMgr = s.mockResource.VisibilityMgr
@@ -1052,6 +1054,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 
 func (s *workflowHandlerSuite) TestGetHistory() {
 	namespaceID := uuid.New()
+	namespace := "namespace"
 	firstEventID := int64(100)
 	nextEventID := int64(102)
 	branchToken := []byte{1}
@@ -1093,12 +1096,14 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	}, nil)
 
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockSearchAttributesMapper.EXPECT().GetAlias("CustomKeywordField", namespace).Return("CustomKeywordAlias", nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	history, token, err := wh.getHistory(
 		metrics.NoopScope(metrics.Frontend),
 		namespaceID,
+		namespace,
 		we,
 		firstEventID,
 		nextEventID,
@@ -1112,7 +1117,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	s.Equal([]byte{}, token)
 
 	s.Equal([]byte("Keyword"),
-		history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["CustomKeywordField"].GetMetadata()["type"])
+		history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["CustomKeywordAlias"].GetMetadata()["type"])
 }
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidRequest() {

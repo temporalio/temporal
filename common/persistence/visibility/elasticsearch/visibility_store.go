@@ -62,10 +62,10 @@ type (
 		esClient                 esclient.Client
 		index                    string
 		searchAttributesProvider searchattribute.Provider
+		searchAttributesMapper   searchattribute.Mapper
 		config                   *config.VisibilityConfig
 		metricsClient            metrics.Client
 		processor                Processor
-		queryConverter           *query.Converter
 	}
 
 	visibilityPageToken struct {
@@ -91,6 +91,7 @@ func NewVisibilityStore(
 	esClient esclient.Client,
 	index string,
 	searchAttributesProvider searchattribute.Provider,
+	searchAttributesMapper searchattribute.Mapper,
 	processor Processor,
 	cfg *config.VisibilityConfig,
 	metricsClient metrics.Client,
@@ -100,13 +101,10 @@ func NewVisibilityStore(
 		esClient:                 esClient,
 		index:                    index,
 		searchAttributesProvider: searchAttributesProvider,
+		searchAttributesMapper:   searchAttributesMapper,
 		processor:                processor,
 		config:                   cfg,
 		metricsClient:            metricsClient,
-		queryConverter: query.NewConverter(
-			newNameInterceptor(index, searchAttributesProvider),
-			newValuesInterceptor(),
-		),
 	}
 }
 
@@ -242,7 +240,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutions(request *visibility.ListWor
 		return !rec.StartTime.Before(request.EarliestStartTime) && !rec.StartTime.After(request.LatestStartTime)
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, isRecordValid)
 }
 
 func (s *visibilityStore) ListClosedWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
@@ -265,7 +263,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutions(request *visibility.ListW
 		return !rec.CloseTime.Before(request.EarliestStartTime) && !rec.CloseTime.After(request.LatestStartTime)
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, isRecordValid)
 }
 
 func (s *visibilityStore) ListOpenWorkflowExecutionsByType(request *visibility.ListWorkflowExecutionsByTypeRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
@@ -290,7 +288,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByType(request *visibility.L
 		return !rec.StartTime.Before(request.EarliestStartTime) && !rec.StartTime.After(request.LatestStartTime)
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, isRecordValid)
 }
 
 func (s *visibilityStore) ListClosedWorkflowExecutionsByType(request *visibility.ListWorkflowExecutionsByTypeRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
@@ -314,7 +312,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByType(request *visibility
 		return !rec.CloseTime.Before(request.EarliestStartTime) && !rec.CloseTime.After(request.LatestStartTime)
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, isRecordValid)
 }
 
 func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(request *visibility.ListWorkflowExecutionsByWorkflowIDRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
@@ -339,7 +337,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(request *visibi
 		return !rec.StartTime.Before(request.EarliestStartTime) && !rec.StartTime.After(request.LatestStartTime)
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, isRecordValid)
 }
 
 func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(request *visibility.ListWorkflowExecutionsByWorkflowIDRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
@@ -363,7 +361,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(request *visi
 		return !rec.CloseTime.Before(request.EarliestStartTime) && !rec.CloseTime.After(request.LatestStartTime)
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, isRecordValid)
 }
 
 func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(request *visibility.ListClosedWorkflowExecutionsByStatusRequest) (*visibility.InternalListWorkflowExecutionsResponse, error) {
@@ -386,7 +384,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(request *visibili
 		return !rec.CloseTime.Before(request.EarliestStartTime) && !rec.CloseTime.After(request.LatestStartTime)
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, isRecordValid)
+	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, isRecordValid)
 }
 
 func (s *visibilityStore) ListWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.InternalListWorkflowExecutionsResponse, error) {
@@ -402,7 +400,7 @@ func (s *visibilityStore) ListWorkflowExecutions(request *visibility.ListWorkflo
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ListWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
 
-	return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, nil)
+	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, nil)
 }
 
 func (s *visibilityStore) ScanWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.InternalListWorkflowExecutionsResponse, error) {
@@ -439,7 +437,7 @@ func (s *visibilityStore) ScanWorkflowExecutions(request *visibility.ListWorkflo
 				return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to close point in time: %s", detailedErrorMessage(err)))
 			}
 		}
-		return s.getListWorkflowExecutionsResponse(searchResult, request.PageSize, nil)
+		return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, nil)
 	case client.ClientV6:
 		var (
 			searchResult  *elastic.SearchResult
@@ -473,7 +471,7 @@ func (s *visibilityStore) ScanWorkflowExecutions(request *visibility.ListWorkflo
 		} else if scrollErr != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(scrollErr)))
 		}
-		return s.getScrollWorkflowExecutionsResponse(searchResult.Hits, request.PageSize, searchResult.ScrollId, isLastPage)
+		return s.getScrollWorkflowExecutionsResponse(searchResult.Hits, request.Namespace, request.PageSize, searchResult.ScrollId, isLastPage)
 	default:
 		panic("esClient has unsupported type")
 	}
@@ -481,7 +479,16 @@ func (s *visibilityStore) ScanWorkflowExecutions(request *visibility.ListWorkflo
 
 func (s *visibilityStore) CountWorkflowExecutions(request *visibility.CountWorkflowExecutionsRequest) (*visibility.CountWorkflowExecutionsResponse, error) {
 
-	requestQuery, _, err := s.queryConverter.ConvertWhereOrderBy(request.Query)
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to read search attribute types: %v", err))
+	}
+
+	queryConverter := query.NewConverter(
+		newNameInterceptor(request.Namespace, s.index, saTypeMap, s.searchAttributesMapper),
+		newValuesInterceptor(),
+	)
+	requestQuery, _, err := queryConverter.ConvertWhereOrderBy(request.Query)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse query: %v", err))
 	}
@@ -568,7 +575,15 @@ func (s *visibilityStore) buildSearchParametersV2(
 		return nil, err
 	}
 
-	requestQuery, fieldSorts, err := s.queryConverter.ConvertWhereOrderBy(request.Query)
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to read search attribute types: %v", err))
+	}
+	queryConverter := query.NewConverter(
+		newNameInterceptor(request.Namespace, s.index, saTypeMap, s.searchAttributesMapper),
+		newValuesInterceptor(),
+	)
+	requestQuery, fieldSorts, err := queryConverter.ConvertWhereOrderBy(request.Query)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse query: %v", err))
 	}
@@ -623,6 +638,7 @@ func (s *visibilityStore) setDefaultFieldSort(fieldSorts []*elastic.FieldSort) [
 
 func (s *visibilityStore) getScrollWorkflowExecutionsResponse(
 	searchHits *elastic.SearchHits,
+	namespace string,
 	pageSize int,
 	scrollID string,
 	isLastPage bool,
@@ -636,7 +652,7 @@ func (s *visibilityStore) getScrollWorkflowExecutionsResponse(
 	response := &visibility.InternalListWorkflowExecutionsResponse{}
 	response.Executions = make([]*visibility.VisibilityWorkflowExecutionInfo, len(searchHits.Hits))
 	for i := 0; i < len(searchHits.Hits); i++ {
-		response.Executions[i], err = s.parseESDoc(searchHits.Hits[i], typeMap)
+		response.Executions[i], err = s.parseESDoc(searchHits.Hits[i], typeMap, namespace)
 		if err != nil {
 			return nil, err
 		}
@@ -656,6 +672,7 @@ func (s *visibilityStore) getScrollWorkflowExecutionsResponse(
 
 func (s *visibilityStore) getListWorkflowExecutionsResponse(
 	searchResult *elastic.SearchResult,
+	namespace string,
 	pageSize int,
 	isRecordValid func(rec *visibility.VisibilityWorkflowExecutionInfo) bool,
 ) (*visibility.InternalListWorkflowExecutionsResponse, error) {
@@ -670,7 +687,7 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(
 	}
 	var lastHitSort []interface{}
 	for _, hit := range searchResult.Hits.Hits {
-		workflowExecutionInfo, err := s.parseESDoc(hit, typeMap)
+		workflowExecutionInfo, err := s.parseESDoc(hit, typeMap, namespace)
 		if err != nil {
 			return nil, err
 		}
@@ -761,7 +778,7 @@ func (s *visibilityStore) generateESDoc(request *visibility.InternalVisibilityRe
 	return doc, nil
 }
 
-func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchattribute.NameTypeMap) (*visibility.VisibilityWorkflowExecutionInfo, error) {
+func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchattribute.NameTypeMap, namespace string) (*visibility.VisibilityWorkflowExecutionInfo, error) {
 	logParseError := func(fieldName string, fieldValue interface{}, err error, docID string) error {
 		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
 		return serviceerror.NewInternal(fmt.Sprintf("Unable to parse Elasticsearch document(%s) %q field value %q: %v", docID, fieldName, fieldValue, err))
@@ -844,7 +861,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 		case searchattribute.StateTransitionCount:
 			record.StateTransitionCount = fieldValueParsed.(int64)
 		default:
-			// All custom search attributes are handled here.
+			// All custom and predefined search attributes are handled here.
 			if customSearchAttributes == nil {
 				customSearchAttributes = map[string]interface{}{}
 			}
@@ -858,6 +875,10 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 		if err != nil {
 			s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to encode custom search attributes of Elasticsearch document(%s): %v", hit.Id, err))
+		}
+		err = searchattribute.ApplyAliases(s.searchAttributesMapper, record.SearchAttributes, namespace)
+		if err != nil {
+			return nil, err
 		}
 	}
 

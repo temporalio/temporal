@@ -55,6 +55,7 @@ import (
 	"go.temporal.io/server/common/ringpop"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
@@ -188,6 +189,10 @@ func (s *Server) Start() error {
 	esConfig, esClient, err := s.getESConfigClient(advancedVisibilityWritingMode)
 	if err != nil {
 		return err
+	}
+
+	if s.so.searchAttributesMapper == nil {
+		s.so.searchAttributesMapper = searchattribute.NewNoopMapper()
 	}
 
 	for _, svcName := range s.so.serviceNames {
@@ -380,6 +385,7 @@ func (s *Server) newBootstrapParams(
 	params.AudienceGetter = s.so.audienceGetter
 
 	params.PersistenceServiceResolver = s.so.persistenceServiceResolver
+	params.SearchAttributesMapper = s.so.searchAttributesMapper
 
 	return params, nil
 }

@@ -39,6 +39,7 @@ type (
 	// Validator is used to validate search attributes
 	Validator struct {
 		searchAttributesProvider          Provider
+		searchAttributesMapper            Mapper
 		searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 		searchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 		searchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -64,7 +65,7 @@ func NewValidator(
 	}
 }
 
-// Validate validate search attributes are valid for writing.
+// Validate search attributes are valid for writing.
 func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namespace string, indexName string) error {
 	if searchAttributes == nil {
 		return nil
@@ -75,17 +76,30 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("number of search attributes %d exceeds limit %d", lengthOfFields, v.searchAttributesNumberOfKeysLimit(namespace)))
 	}
 
-	typeMap, err := v.searchAttributesProvider.GetSearchAttributes(indexName, false)
+	saTypeMap, err := v.searchAttributesProvider.GetSearchAttributes(indexName, false)
 	if err != nil {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to get search attributes from cluster metadata: %v", err))
 	}
 
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
-		if _, err := typeMap.getType(saName, systemCategory); err == nil {
+		if _, saErr := saTypeMap.getType(saName, systemCategory); saErr == nil {
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s attribute can't be set in SearchAttributes", saName))
 		}
 
-		saType, err := typeMap.getType(saName, customCategory|predefinedCategory)
+		fieldName := saName
+		if IsMappable(saName) {
+			var err error
+			fieldName, err = v.searchAttributesMapper.GetFieldName(saName, namespace)
+			if err != nil {
+				return err
+			}
+			if fieldName != saName {
+				searchAttributes.GetIndexedFields()[fieldName] = searchAttributes.GetIndexedFields()[saName]
+				delete(searchAttributes.GetIndexedFields(), saName)
+			}
+		}
+
+		saType, err := saTypeMap.getType(saName, customCategory|predefinedCategory)
 		if err != nil {
 			if errors.Is(err, ErrInvalidName) {
 				return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is not a valid search attribute name", saName))

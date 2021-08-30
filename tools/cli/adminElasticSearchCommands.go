@@ -130,7 +130,7 @@ func AdminIndex(c *cli.Context) {
 	}
 
 	// TODO: build search attribute provider to get search attributes from command line args.
-	visibilityManager := elasticsearch.NewVisibilityManager(indexName, esClient, visibilityConfigForES, searchattribute.NewSystemProvider(), esProcessor, metrics.NewNoopMetricsClient(), logger)
+	visibilityManager := elasticsearch.NewVisibilityManager(indexName, esClient, visibilityConfigForES, searchattribute.NewSystemProvider(), searchattribute.NewNoopMapper(), esProcessor, metrics.NewNoopMetricsClient(), logger)
 
 	successLines := &atomic.Int32{}
 	wg := &sync.WaitGroup{}
