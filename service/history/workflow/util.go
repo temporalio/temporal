@@ -110,6 +110,7 @@ func TimeoutWorkflow(
 	mutableState MutableState,
 	eventBatchFirstEventID int64,
 	retryState enumspb.RetryState,
+	continuedRunID string,
 ) error {
 
 	if workflowTask, ok := mutableState.GetInFlightWorkflowTask(); ok {
@@ -125,6 +126,7 @@ func TimeoutWorkflow(
 	_, err := mutableState.AddTimeoutWorkflowEvent(
 		eventBatchFirstEventID,
 		retryState,
+		continuedRunID,
 	)
 	return err
 }

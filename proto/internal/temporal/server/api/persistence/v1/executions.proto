@@ -124,6 +124,8 @@ message WorkflowExecutionInfo {
     int64 last_first_event_txn_id = 58;
     int64 state_transition_count = 59;
     google.protobuf.Timestamp execution_time = 60 [(gogoproto.stdtime) = true];
+    // If continued-as-new, or retried, or cron, holds the new run id.
+    string new_execution_run_id = 61;
 }
 
 message ExecutionStats {
