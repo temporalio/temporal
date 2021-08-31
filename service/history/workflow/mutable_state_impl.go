@@ -2261,7 +2261,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionCompletedEvent(
 		return err
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
-	e.setNewExecutionRunID(event.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId())
+	e.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId()
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -2304,7 +2304,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionFailedEvent(
 		return err
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
-	e.setNewExecutionRunID(event.GetWorkflowExecutionFailedEventAttributes().GetNewExecutionRunId())
+	e.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionFailedEventAttributes().GetNewExecutionRunId()
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -2346,7 +2346,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionTimedoutEvent(
 		return err
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
-	e.setNewExecutionRunID(event.GetWorkflowExecutionTimedOutEventAttributes().GetNewExecutionRunId())
+	e.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionTimedOutEventAttributes().GetNewExecutionRunId()
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -2424,7 +2424,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionCanceledEvent(
 		return err
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
-	e.setNewExecutionRunID("")
+	e.executionInfo.NewExecutionRunId = ""
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -2946,7 +2946,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionTerminatedEvent(
 		return err
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
-	e.setNewExecutionRunID("")
+	e.executionInfo.NewExecutionRunId = ""
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -3096,7 +3096,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionContinuedAsNewEvent(
 		return err
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
-	e.setNewExecutionRunID(continueAsNewEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId())
+	e.executionInfo.NewExecutionRunId = continueAsNewEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 	e.ClearStickyness()
 	e.writeEventToCache(continueAsNewEvent)
 	return nil
@@ -4410,12 +4410,6 @@ func (_ *MutableStateImpl) unixNanoToTime(
 ) time.Time {
 
 	return time.Unix(0, timestampNanos).UTC()
-}
-
-func (e *MutableStateImpl) setNewExecutionRunID(newExecutionRunID string) {
-	e.executionInfo.NewExecutionRunId = newExecutionRunID
-	// Report to parent if there is no new execution, i.e. no more retries or cron or continue-as-new.
-	e.executionInfo.ReportCompletionToParent = newExecutionRunID == ""
 }
 
 func (e *MutableStateImpl) logInfo(msg string, tags ...tag.Tag) {
