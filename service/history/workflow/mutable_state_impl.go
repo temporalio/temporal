@@ -2424,6 +2424,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionCanceledEvent(
 		return err
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	e.setNewExecutionRunID("")
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -2945,6 +2946,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionTerminatedEvent(
 		return err
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
+	e.setNewExecutionRunID("")
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
