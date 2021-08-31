@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/payloads"
 )
 
 type (
@@ -72,4 +73,9 @@ func (s *integrationSuite) sendSignal(namespace string, execution *commonpb.Work
 	})
 
 	return err
+}
+
+func (s *integrationSuite) decodePayloadsString(ps *commonpb.Payloads) (r string) {
+	s.NoError(payloads.Decode(ps, &r))
+	return
 }
