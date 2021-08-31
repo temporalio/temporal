@@ -646,10 +646,7 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	s.NotEqual(definition.startedEvent.GetChildWorkflowExecutionStartedEventAttributes().WorkflowExecution.RunId,
 		completedAttributes.WorkflowExecution.RunId)
 	s.Equal(wtChild, completedAttributes.WorkflowType.Name)
-	var result string
-	err = payloads.Decode(completedAttributes.GetResult(), &result)
-	s.NoError(err)
-	s.Equal("Child Done", result)
+	s.Equal("Child Done", s.decodePayloadsString(completedAttributes.GetResult()))
 
 	s.Logger.Info("Parent Workflow Execution History: ")
 	s.printWorkflowHistory(s.namespace, &commonpb.WorkflowExecution{

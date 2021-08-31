@@ -256,7 +256,7 @@ func (s *integrationSuite) TestCronWorkflow_Failed() {
 	s.Logger.Info("Process first cron run which fails")
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("First cron run processed")
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	// Make sure the cron workflow start running at a proper time, in this case 3 seconds after the
 	// startWorkflowExecution request
@@ -267,27 +267,27 @@ func (s *integrationSuite) TestCronWorkflow_Failed() {
 	s.Logger.Info("Process second cron run which succeeds")
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("Second cron run processed")
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	s.Logger.Info("Process third cron run which fails")
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("Third cron run processed")
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	s.Logger.Info("Process fourth cron run which succeeds")
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("Fourth cron run processed")
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	s.Logger.Info("Process fifth cron run which fails")
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("Fifth cron run processed")
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	s.Logger.Info("Process sixth cron run which succeeds")
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("Sixth cron run processed")
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	s.Logger.Info("Terminate cron workflow")
 	_, terminateErr := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -707,7 +707,7 @@ func (s *integrationSuite) TestCronWorkflow_Success() {
 	s.Logger.Info("Process first cron run")
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("First cron run processed")
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	// Make sure the cron workflow start running at a proper time, in this case 3 seconds after the
 	// startWorkflowExecution request
@@ -718,7 +718,7 @@ func (s *integrationSuite) TestCronWorkflow_Success() {
 	s.Logger.Info("Process second cron run")
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("Second cron run processed")
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	describeWorkflowExecutionFunc := func(execution *commonpb.WorkflowExecution) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 		return s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
@@ -744,7 +744,7 @@ func (s *integrationSuite) TestCronWorkflow_Success() {
 	s.Logger.Info("Process fourth cron run")
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("Third cron run processed")
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	s.Logger.Info("Terminate cron workflow")
 	_, terminateErr := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{

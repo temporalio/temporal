@@ -231,10 +231,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(s.namespace, completedAttributes.Namespace)
 	s.Equal(childID, completedAttributes.WorkflowExecution.WorkflowId)
 	s.Equal(wtChild, completedAttributes.WorkflowType.Name)
-	var r string
-	err = payloads.Decode(completedAttributes.GetResult(), &r)
-	s.NoError(err)
-	s.Equal("Child Done", r)
+	s.Equal("Child Done", s.decodePayloadsString(completedAttributes.GetResult()))
 }
 
 func (s *integrationSuite) TestCronChildWorkflowExecution() {
@@ -598,10 +595,7 @@ func (s *integrationSuite) TestRetryChildWorkflowExecution() {
 	// Child result should be present in completion event
 	s.NotNil(completedEvent)
 	completedAttributes := completedEvent.GetChildWorkflowExecutionCompletedEventAttributes()
-	var r string
-	err = payloads.Decode(completedAttributes.GetResult(), &r)
-	s.NoError(err)
-	s.Equal("Child Done", r)
+	s.Equal("Child Done", s.decodePayloadsString(completedAttributes.GetResult()))
 }
 
 func (s *integrationSuite) TestRetryFailChildWorkflowExecution() {

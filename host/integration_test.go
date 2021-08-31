@@ -25,6 +25,8 @@
 package host
 
 import (
+	"bytes"
+	"encoding/binary"
 	"flag"
 	"testing"
 
@@ -77,5 +79,17 @@ func (s *integrationSuite) sendSignal(namespace string, execution *commonpb.Work
 
 func (s *integrationSuite) decodePayloadsString(ps *commonpb.Payloads) (r string) {
 	s.NoError(payloads.Decode(ps, &r))
+	return
+}
+
+func (s *integrationSuite) decodePayloadsInt(ps *commonpb.Payloads) (r int) {
+	s.NoError(payloads.Decode(ps, &r))
+	return
+}
+
+func (s *integrationSuite) decodePayloadsByteSliceInt32(ps *commonpb.Payloads) (r int32) {
+	var buf []byte
+	s.NoError(payloads.Decode(ps, &buf))
+	s.NoError(binary.Read(bytes.NewReader(buf), binary.LittleEndian, &r))
 	return
 }
