@@ -488,7 +488,7 @@ docker-admin-tools:
 	@printf $(COLOR) "Build docker image temporalio/admin-tools:$(DOCKER_IMAGE_TAG)..."
 	docker build . -t temporalio/admin-tools:$(DOCKER_IMAGE_TAG) --build-arg TARGET=admin-tools
 
-##### Auxilary #####
+##### Auxiliary #####
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
 	@go mod tidy
