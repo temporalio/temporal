@@ -238,13 +238,6 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 }
 
 func (s *integrationSuite) TestCronChildWorkflowExecution() {
-	s.T().Skip(`
-	    integration_test.go:2046:
-	        	Error Trace:	integration_test.go:2046
-	        	Error:      	Expected value not to be nil.
-	        	Test:       	TestIntegrationSuite/TestCronChildWorkflowExecution
-	`)
-
 	parentID := "integration-cron-child-workflow-test-parent"
 	childID := "integration-cron-child-workflow-test-child"
 	wtParent := "integration-cron-child-workflow-test-parent-type"
@@ -255,7 +248,6 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 
 	cronSchedule := "@every 3s"
 	targetBackoffDuration := time.Second * 3
-	backoffDurationTolerance := time.Second
 
 	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
 	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
@@ -275,6 +267,14 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 		Identity:            identity,
 	}
 
+	// Because of rounding in GetBackoffForNextSchedule, we'll tend to stay aligned to whatever
+	// phase we start in relative to second boundaries, but drift slightly later within the second
+	// over time. If we cross a second boundary, one of our intervals will end up being 2s instead
+	// of 3s. To avoid this, wait until we can start early in the second.
+	for time.Now().Nanosecond()/int(time.Millisecond) > 150 {
+		time.Sleep(50 * time.Millisecond)
+	}
+
 	startParentWorkflowTS := time.Now().UTC()
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
@@ -282,17 +282,16 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 
 	// workflow logic
 	childExecutionStarted := false
+	seenChildStarted := false
 	var terminatedEvent *historypb.HistoryEvent
-	var startChildWorkflowTS time.Time
 	// Parent workflow logic
 	wtHandlerParent := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		s.Logger.Info("Processing workflow task for ", tag.WorkflowID(execution.WorkflowId))
+		s.Logger.Info("Processing workflow task for", tag.WorkflowID(execution.WorkflowId))
 
 		if !childExecutionStarted {
 			s.Logger.Info("Starting child execution")
 			childExecutionStarted = true
-			startChildWorkflowTS = time.Now().UTC()
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
@@ -308,7 +307,9 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 			}}, nil
 		}
 		for _, event := range history.Events[previousStartedEventID:] {
-			if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED {
+			if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED {
+				seenChildStarted = true
+			} else if event.GetEventType() == enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED {
 				terminatedEvent = event
 				return []*commandpb.Command{{
 					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -325,7 +326,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	wtHandlerChild := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 
-		s.Logger.Info("Processing workflow task for Child ", tag.WorkflowID(execution.WorkflowId))
+		s.Logger.Info("Processing workflow task for Child", tag.WorkflowID(execution.WorkflowId))
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes:  &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{}}}}, nil
@@ -361,35 +362,16 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	_, err = pollerParent.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
+	s.True(seenChildStarted)
 
-	startFilter := &filterpb.StartTimeFilter{}
-	startFilter.EarliestTime = &startChildWorkflowTS
-	for i := 0; i < 2; i++ {
-		// Sleep some time before checking the open executions.
-		// This will not cost extra time as the polling for first workflow task will be blocked for 3 seconds.
-		time.Sleep(2 * time.Second)
-		startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
-		resp, err := s.engine.ListOpenWorkflowExecutions(NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-			Namespace:       s.namespace,
-			MaximumPageSize: 100,
-			StartTimeFilter: startFilter,
-			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_ExecutionFilter{ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-				WorkflowId: childID,
-			}},
-		})
-		s.NoError(err)
-		s.Equal(1, len(resp.GetExecutions()))
-
+	// Run through three executions of the child workflow
+	for i := 0; i < 3; i++ {
 		_, err = pollerChild.PollAndProcessWorkflowTask(false, false)
-		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err), tag.Counter(i))
 		s.NoError(err)
-
-		backoffDuration := time.Now().UTC().Sub(startChildWorkflowTS)
-		s.True(backoffDuration < targetBackoffDuration+backoffDurationTolerance)
-		startChildWorkflowTS = time.Now().UTC()
 	}
 
-	// terminate the childworkflow
+	// terminate the child workflow
 	_, terminateErr := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -404,10 +386,10 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	s.NoError(err)
 	s.NotNil(terminatedEvent)
 	terminatedAttributes := terminatedEvent.GetChildWorkflowExecutionTerminatedEventAttributes()
-	s.Empty(terminatedAttributes.Namespace)
 	s.Equal(childID, terminatedAttributes.WorkflowExecution.WorkflowId)
 	s.Equal(wtChild, terminatedAttributes.WorkflowType.Name)
 
+	startFilter := &filterpb.StartTimeFilter{}
 	startFilter.EarliestTime = &startParentWorkflowTS
 	startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
 	var closedExecutions []*workflowpb.WorkflowExecutionInfo
@@ -418,7 +400,7 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 			StartTimeFilter: startFilter,
 		})
 		s.NoError(err)
-		if len(resp.GetExecutions()) == 4 {
+		if len(resp.GetExecutions()) == 5 {
 			closedExecutions = resp.GetExecutions()
 			break
 		}
@@ -428,18 +410,19 @@ func (s *integrationSuite) TestCronChildWorkflowExecution() {
 	sort.Slice(closedExecutions, func(i, j int) bool {
 		return closedExecutions[i].GetStartTime().Before(timestamp.TimeValue(closedExecutions[j].GetStartTime()))
 	})
-	// The first parent is not the cron workflow, only verify child workflow with cron schedule
+	// Execution 0 is the parent, 1, 2, 3 are the child (cron) that completed, 4 is the child that was
+	// terminated. Even though it was terminated, ExecutionTime will be set correctly (in the future).
 	lastExecution := closedExecutions[1]
-	for i := 2; i != 4; i++ {
+	for i := 2; i < 5; i++ {
 		executionInfo := closedExecutions[i]
 		// Round up the time precision to seconds
 		expectedBackoff := executionInfo.GetExecutionTime().Sub(timestamp.TimeValue(lastExecution.GetExecutionTime()))
-		// The execution time calculate based on last execution close time
-		// However, the current execution time is based on the current start time
-		// This code is to remove the diff between current start time and last execution close time
+		// The execution time calculated based on last execution close time.
+		// However, the current execution time is based on the current start time.
+		// This code is to remove the diff between current start time and last execution close time.
 		// TODO: Remove this line once we unify the time source.
 		executionTimeDiff := executionInfo.GetStartTime().Sub(timestamp.TimeValue(lastExecution.GetCloseTime()))
-		// The backoff between any two executions should be multiplier of the target backoff duration which is 3 in this test
+		// The backoff between any two executions should be a multiplier of the target backoff duration which is 3 in this test
 		s.Equal(0, int(expectedBackoff.Seconds()-executionTimeDiff.Seconds())%int(targetBackoffDuration.Seconds()))
 		lastExecution = executionInfo
 	}
