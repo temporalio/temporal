@@ -14,7 +14,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.16
+          go-version: 1.17
       - name: Get build date
         id: date
         run: echo "::set-output name=date::$(date '+%F-%T')"
