@@ -1291,7 +1291,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Fire() {
 	s.False(running)
 }
 
-func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Retry() {
+func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Retry() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -1354,10 +1354,10 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Re
 
 	state, status := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetWorkflowStateStatus()
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, state)
-	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, status)
+	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, status)
 }
 
-func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Cron() {
+func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Cron() {
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -1415,7 +1415,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_ContinueAsNew_Cr
 
 	state, status := s.getMutableStateFromCache(s.namespaceID, execution.GetWorkflowId(), execution.GetRunId()).GetWorkflowStateStatus()
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, state)
-	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, status)
+	s.EqualValues(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, status)
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_WorkflowExpired() {

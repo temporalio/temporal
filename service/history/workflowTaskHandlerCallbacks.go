@@ -395,7 +395,7 @@ Update_History_Loop:
 		var (
 			wtFailedCause               *workflowTaskFailedCause
 			activityNotStartedCancelled bool
-			continueAsNewBuilder        workflow.MutableState
+			newStateBuilder             workflow.MutableState
 
 			hasUnhandledEvents bool
 		)
@@ -443,6 +443,7 @@ Update_History_Loop:
 				handler.namespaceCache,
 				handler.metricsClient,
 				handler.config,
+				handler.shard,
 			)
 
 			if err := workflowTaskHandler.handleCommands(
@@ -459,7 +460,7 @@ Update_History_Loop:
 			activityNotStartedCancelled = workflowTaskHandler.activityNotStartedCancelled
 			// continueAsNewTimerTasks is not used by workflowTaskHandlerCallbacks
 
-			continueAsNewBuilder = workflowTaskHandler.continueAsNewBuilder
+			newStateBuilder = workflowTaskHandler.newStateBuilder
 
 			hasUnhandledEvents = workflowTaskHandler.hasBufferedEvents
 		}
@@ -476,7 +477,7 @@ Update_History_Loop:
 				return nil, err
 			}
 			hasUnhandledEvents = true
-			continueAsNewBuilder = nil
+			newStateBuilder = nil
 		}
 
 		createNewWorkflowTask := msBuilder.IsWorkflowExecutionRunning() && (hasUnhandledEvents || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled)
@@ -518,21 +519,21 @@ Update_History_Loop:
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 		// the history and try the operation again.
 		var updateErr error
-		if continueAsNewBuilder != nil {
-			continueAsNewExecutionInfo := continueAsNewBuilder.GetExecutionInfo()
-			continueAsNewExecutionState := continueAsNewBuilder.GetExecutionState()
+		if newStateBuilder != nil {
+			newWorkflowExecutionInfo := newStateBuilder.GetExecutionInfo()
+			newWorkflowExecutionState := newStateBuilder.GetExecutionState()
 			updateErr = weContext.UpdateWorkflowExecutionWithNewAsActive(
 				handler.shard.GetTimeSource().Now(),
 				workflow.NewContext(
-					continueAsNewExecutionInfo.NamespaceId,
+					newWorkflowExecutionInfo.NamespaceId,
 					commonpb.WorkflowExecution{
-						WorkflowId: continueAsNewExecutionInfo.WorkflowId,
-						RunId:      continueAsNewExecutionState.RunId,
+						WorkflowId: newWorkflowExecutionInfo.WorkflowId,
+						RunId:      newWorkflowExecutionState.RunId,
 					},
 					handler.shard,
 					handler.logger,
 				),
-				continueAsNewBuilder,
+				newStateBuilder,
 			)
 		} else {
 			updateErr = weContext.UpdateWorkflowExecutionAsActive(handler.shard.GetTimeSource().Now())
