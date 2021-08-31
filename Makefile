@@ -124,6 +124,8 @@ update-mockgen:
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
 	@go install github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick@latest
+# This to download sources of gogo-protobuf which are required to build proto files.
+	@GO111MODULE=off go get github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
 update-tools: update-checkers update-mockgen update-proto-plugins
