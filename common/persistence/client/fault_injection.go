@@ -87,13 +87,6 @@ type (
 
 // from errors.go ConvertError
 var defaultErrors = []FaultWeight{
-	// adding random error here to verify resiliency for API bugs
-	{
-		errFactory: func(msg string) error {
-			return errors.New(fmt.Sprintf("FaultInjection poison pill: %s", msg))
-		},
-		weight: 1,
-	},
 	{
 		errFactory: func(msg string) error {
 			return serviceerror.NewInternal(msg)
