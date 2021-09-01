@@ -45,3 +45,10 @@ Then run base image. For example:
 ```bash
 docker run --rm -it --platform linux/arm64 temporalio/base-server:1.1.0 uname -m
 ```
+
+### FAQ
+1. If there is an error during build for docker-x like this:
+    ```text
+    error: failed to solve: process "/dev/.buildkit_qemu_emulator /bin/sh -c apk add --update --no-cache     ca-certificates     tzdata     bash     curl     vim     jq     mysql-client     postgresql-client     python2     && curl https://bootstrap.pypa.io/pip/2.7/get-pip.py | python     && pip install cqlsh" did not complete successfully: exit code: 1
+    ```
+    run `docker run --rm --privileged linuxkit/binfmt:v0.8` first.
