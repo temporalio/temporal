@@ -40,7 +40,6 @@ func newTallyUserScope(scope tally.Scope) UserScope {
 
 func (t tallyUserScope) IncCounter(counter string) {
 	t.AddCounter(counter, 1)
-	panic("implement me")
 }
 
 func (t tallyUserScope) AddCounter(counter string, delta int64) {
