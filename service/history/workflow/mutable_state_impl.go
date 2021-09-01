@@ -451,6 +451,12 @@ func (e *MutableStateImpl) UpdateCurrentVersion(
 
 	if state, _ := e.GetWorkflowStateStatus(); state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// do not update current version only when workflow is completed
+		// always set current version to last write version when workflow is completed
+		lastWriteVersion, err := e.GetLastWriteVersion()
+		if err != nil {
+			return err
+		}
+		e.currentVersion = lastWriteVersion
 		return nil
 	}
 
