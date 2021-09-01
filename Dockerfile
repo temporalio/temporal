@@ -21,6 +21,14 @@ WORKDIR /etc/temporal
 ENV TEMPORAL_HOME /etc/temporal
 ENV SERVICES "history:matching:frontend:worker"
 EXPOSE 6933 6934 6935 6939 7233 7234 7235 7239
+
+# TODO (alex): switch WORKDIR to /home/temporal and remove "mkdir" and "chown" calls.
+RUN addgroup -g 1000 temporal
+RUN adduser -u 1000 -G temporal -D temporal
+RUN mkdir /etc/temporal/config
+RUN chown -R temporal:temporal /etc/temporal/config
+
+USER temporal
 ENTRYPOINT ["./entrypoint.sh"]
 
 COPY config/dynamicconfig /etc/temporal/config/dynamicconfig
@@ -44,6 +52,9 @@ COPY --from=temporal-builder /temporal/temporal-sql-tool /usr/local/bin
 
 ##### Development configuration for Temporal with additional set of tools #####
 FROM temporal-auto-setup as temporal-develop
+
+# apk and setup-develop.sh requires root permissions.
+USER root
 # iproute2 contains tc, which can be used for traffic shaping in resiliancy testing. 
 ONBUILD RUN apk add iproute2
 
