@@ -77,7 +77,8 @@ func (o opentelemetryUserScope) RecordDistribution(id string, d int) {
 }
 
 func (o opentelemetryUserScope) UpdateGauge(gauge string, value float64) {
-	panic("implement me")
+	ctx := context.Background()
+	o.reporter.GetMeterMust().NewFloat64ValueRecorder(gauge).Record(ctx, value, o.labels...)
 }
 
 // Tagged provides new scope with added and/or overriden tags values.
