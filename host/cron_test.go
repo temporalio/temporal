@@ -353,16 +353,6 @@ func (s *integrationSuite) TestCronWorkflow_Failed() {
 }
 
 func (s *integrationSuite) TestCronWorkflow() {
-	s.T().Skip(`
-	    integration_test.go:1034:
-	        	Error Trace:	integration_test.go:1034
-	        	Error:      	Not equal:
-	        	            	expected: 0
-	        	            	actual  : 2
-	        	Test:       	TestIntegrationSuite/TestCronWorkflow
-	        	Messages:   	exected backof 2-0 should be multiplier of target backoff 3
-	`)
-
 	id := "integration-wf-cron-test"
 	wt := "integration-wf-cron-type"
 	tl := "integration-wf-cron-taskqueue"
@@ -381,6 +371,13 @@ func (s *integrationSuite) TestCronWorkflow() {
 		},
 	}
 
+	// can't do simply s.Equal because "type" is added
+	checkSearchAttrs := func(sa *commonpb.SearchAttributes) {
+		field := sa.IndexedFields["CustomKeywordField"]
+		s.Equal(searchAttr.IndexedFields["CustomKeywordField"].Data, field.Data)
+		s.Equal([]byte("Keyword"), field.Metadata["type"])
+	}
+
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
 		Namespace:           s.namespace,
@@ -396,6 +393,14 @@ func (s *integrationSuite) TestCronWorkflow() {
 		SearchAttributes:    searchAttr,
 	}
 
+	// Because of rounding in GetBackoffForNextSchedule, we'll tend to stay aligned to whatever
+	// phase we start in relative to second boundaries, but drift slightly later within the second
+	// over time. If we cross a second boundary, one of our intervals will end up being 2s instead
+	// of 3s. To avoid this, wait until we can start early in the second.
+	for time.Now().Nanosecond()/int(time.Millisecond) > 150 {
+		time.Sleep(50 * time.Millisecond)
+	}
+
 	startWorkflowTS := time.Now().UTC()
 	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
 	s.NoError(err0)
@@ -403,8 +408,6 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	var executions []*commonpb.WorkflowExecution
-
-	attemptCount := 1
 
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
@@ -434,8 +437,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 		}
 
 		executions = append(executions, execution)
-		attemptCount++
-		if attemptCount == 3 {
+		if len(executions) >= 3 {
 			return []*commandpb.Command{
 				{
 					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -484,7 +486,7 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.Equal(targetBackoffDuration, executionInfo.GetExecutionTime().Sub(timestamp.TimeValue(executionInfo.GetStartTime())))
 
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	// Make sure the cron workflow start running at a proper time, in this case 3 seconds after the
 	// startWorkflowExecution request
@@ -493,12 +495,12 @@ func (s *integrationSuite) TestCronWorkflow() {
 	s.True(backoffDuration < targetBackoffDuration+backoffDurationTolerance)
 
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
-	s.True(err == nil, err)
+	s.NoError(err)
 
-	s.Equal(4, attemptCount)
+	s.Equal(3, len(executions))
 
 	_, terminateErr := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: s.namespace,
@@ -507,42 +509,34 @@ func (s *integrationSuite) TestCronWorkflow() {
 		},
 	})
 	s.NoError(terminateErr)
-	events := s.getHistory(s.namespace, executions[0])
+
+	// first two should be failures
+	for i := 0; i < 2; i++ {
+		events := s.getHistory(s.namespace, executions[i])
+
+		startAttrs := events[0].GetWorkflowExecutionStartedEventAttributes()
+		s.Equal(memo, startAttrs.Memo)
+		checkSearchAttrs(startAttrs.SearchAttributes)
+
+		lastEvent := events[len(events)-1]
+		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, lastEvent.GetEventType())
+		failAttrs := lastEvent.GetWorkflowExecutionFailedEventAttributes()
+		s.Equal("cron-test-error", failAttrs.GetFailure().GetMessage())
+		s.Equal(executions[i+1].RunId, failAttrs.GetNewExecutionRunId())
+	}
+
+	// third should be completed
+	events := s.getHistory(s.namespace, executions[2])
+
+	startAttrs := events[0].GetWorkflowExecutionStartedEventAttributes()
+	s.Equal(memo, startAttrs.Memo)
+	checkSearchAttrs(startAttrs.SearchAttributes)
+
 	lastEvent := events[len(events)-1]
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, lastEvent.GetEventType())
-	attributes := lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
-	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, attributes.GetInitiator())
-	s.Equal("cron-test-error", attributes.GetFailure().GetMessage())
-	s.Nil(attributes.GetLastCompletionResult())
-	s.Equal(memo, attributes.Memo)
-	s.Equal(searchAttr, attributes.SearchAttributes)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
 
-	events = s.getHistory(s.namespace, executions[1])
-	lastEvent = events[len(events)-1]
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, lastEvent.GetEventType())
-	attributes = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
-	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, attributes.GetInitiator())
-	s.Equal("", attributes.GetFailure().GetMessage())
-
-	var r string
-	err = payloads.Decode(attributes.GetLastCompletionResult(), &r)
-	s.NoError(err)
-	s.Equal("cron-test-result", r)
-	s.Equal(memo, attributes.Memo)
-	s.Equal(searchAttr, attributes.SearchAttributes)
-
-	events = s.getHistory(s.namespace, executions[2])
-	lastEvent = events[len(events)-1]
-	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, lastEvent.GetEventType())
-	attributes = lastEvent.GetWorkflowExecutionContinuedAsNewEventAttributes()
-	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, attributes.GetInitiator())
-	s.Equal("cron-test-error", attributes.GetFailure().GetMessage())
-
-	err = payloads.Decode(attributes.GetLastCompletionResult(), &r)
-	s.NoError(err)
-	s.Equal("cron-test-result", r)
-	s.Equal(memo, attributes.Memo)
-	s.Equal(searchAttr, attributes.SearchAttributes)
+	completedAttrs := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
+	s.Equal("cron-test-result", s.decodePayloadsString(completedAttrs.Result))
 
 	startFilter.LatestTime = timestamp.TimePtr(time.Now().UTC())
 	var closedExecutions []*workflowpb.WorkflowExecutionInfo
@@ -578,19 +572,19 @@ func (s *integrationSuite) TestCronWorkflow() {
 		return closedExecutions[i].GetStartTime().Before(timestamp.TimeValue(closedExecutions[j].GetStartTime()))
 	})
 	lastExecution := closedExecutions[0]
-	for i := 1; i != 4; i++ {
+	for i := 1; i < 4; i++ {
 		executionInfo := closedExecutions[i]
 		expectedBackoff := executionInfo.GetExecutionTime().Sub(timestamp.TimeValue(lastExecution.GetExecutionTime()))
-		// The execution time calculate based on last execution close time
-		// However, the current execution time is based on the current start time
-		// This code is to remove the diff between current start time and last execution close time
+		// The execution time calculated based on last execution close time.
+		// However, the current execution time is based on the current start time.
+		// This code is to remove the diff between current start time and last execution close time.
 		// TODO: Remove this line once we unify the time source
 		executionTimeDiff := executionInfo.GetStartTime().Sub(timestamp.TimeValue(lastExecution.GetCloseTime()))
-		// The backoff between any two executions should be multiplier of the target backoff duration which is 3 in this test
+		// The backoff between any two executions should be a multiplier of the target backoff duration which is 3 in this test
 		s.Equal(
 			0,
 			int((expectedBackoff-executionTimeDiff).Round(time.Second).Seconds())%int(targetBackoffDuration.Seconds()),
-			"exected backoff %v-%v=%v should be multiplier of target backoff %v",
+			"expected backoff %v-%v=%v should be multiplier of target backoff %v",
 			expectedBackoff.Seconds(),
 			executionTimeDiff.Seconds(),
 			(expectedBackoff - executionTimeDiff).Round(time.Second).Seconds(),
