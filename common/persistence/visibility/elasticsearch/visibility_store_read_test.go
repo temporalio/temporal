@@ -461,7 +461,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		Index:       testIndex,
 		Query:       boolQuery,
 		SearchAfter: []interface{}{json.Number("1528358645123456789"), "qwe"},
-		PointInTime: elastic.NewPointInTime("pid", "1m"),
+		PointInTime: elastic.NewPointInTimeWithKeepAlive("pid", "1m"),
 		PageSize:    testPageSize,
 		Sorter: []elastic.Sorter{
 			elastic.NewFieldSort(searchattribute.StartTime).Desc(),

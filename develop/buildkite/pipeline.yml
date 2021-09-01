@@ -5,7 +5,7 @@ steps:
       docker: "*"
     command: "make ci-build"
     plugins:
-      - docker-compose#v3.1.0:
+      - docker-compose#v3.8.0:
           run: build
           config: ./develop/buildkite/docker-compose.yml
 
@@ -19,7 +19,7 @@ steps:
     artifact_paths:
       - ".coverage/*.out"
     plugins:
-      - docker-compose#v3.1.0:
+      - docker-compose#v3.8.0:
           run: unit-test
           config: ./develop/buildkite/docker-compose.yml
 
@@ -34,7 +34,7 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.1.0:
+      - docker-compose#v3.8.0:
           run: integration-test-cassandra
           config: ./develop/buildkite/docker-compose.yml
 
@@ -49,7 +49,7 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.1.0:
+      - docker-compose#v3.8.0:
           run: integration-test-cassandra
           config: ./develop/buildkite/docker-compose-es6.yml
 
@@ -64,7 +64,7 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.1.0:
+      - docker-compose#v3.8.0:
           run: integration-test-xdc-cassandra
           config: ./develop/buildkite/docker-compose.yml
 
@@ -79,7 +79,7 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.1.0:
+      - docker-compose#v3.8.0:
           run: integration-test-xdc-cassandra
           config: ./develop/buildkite/docker-compose.yml
 
@@ -94,7 +94,7 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.1.0:
+      - docker-compose#v3.8.0:
           run: integration-test-mysql
           config: ./develop/buildkite/docker-compose.yml
 
@@ -109,7 +109,7 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.1.0:
+      - docker-compose#v3.8.0:
           run: integration-test-xdc-mysql
           config: ./develop/buildkite/docker-compose.yml
 
@@ -124,7 +124,7 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.1.0:
+      - docker-compose#v3.8.0:
           run: integration-test-xdc-mysql
           config: ./develop/buildkite/docker-compose.yml
 
@@ -139,7 +139,7 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.1.0:
+      - docker-compose#v3.8.0:
           run: integration-test-postgresql
           config: ./develop/buildkite/docker-compose.yml
 
@@ -154,7 +154,7 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.1.0:
+      - docker-compose#v3.8.0:
           run: integration-test-xdc-postgresql
           config: ./develop/buildkite/docker-compose.yml
 
@@ -169,7 +169,7 @@ steps:
       automatic:
         limit: 1
     plugins:
-      - docker-compose#v3.1.0:
+      - docker-compose#v3.8.0:
           run: integration-test-xdc-postgresql
           config: ./develop/buildkite/docker-compose.yml
 
@@ -182,7 +182,7 @@ steps:
       automatic:
         limit: 2
     plugins:
-      - docker-compose#v3.1.0:
+      - docker-compose#v3.8.0:
           run: build
           config: ./develop/buildkite/docker-compose.yml
 
@@ -200,7 +200,7 @@ steps:
       automatic:
         limit: 2
     plugins:
-      - docker-compose#v3.1.0:
+      - docker-compose#v3.8.0:
           run: coverage-report
           config: ./develop/buildkite/docker-compose.yml
 

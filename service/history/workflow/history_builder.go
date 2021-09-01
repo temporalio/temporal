@@ -400,12 +400,14 @@ func (b *HistoryBuilder) AddActivityTaskTimedOutEvent(
 func (b *HistoryBuilder) AddCompletedWorkflowEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.CompleteWorkflowExecutionCommandAttributes,
+	newExecutionRunID string,
 ) *historypb.HistoryEvent {
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{
 		WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 			Result:                       command.Result,
+			NewExecutionRunId:            newExecutionRunID,
 		},
 	}
 
@@ -416,6 +418,7 @@ func (b *HistoryBuilder) AddFailWorkflowEvent(
 	workflowTaskCompletedEventID int64,
 	retryState enumspb.RetryState,
 	command *commandpb.FailWorkflowExecutionCommandAttributes,
+	newExecutionRunID string,
 ) *historypb.HistoryEvent {
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
@@ -423,6 +426,7 @@ func (b *HistoryBuilder) AddFailWorkflowEvent(
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 			Failure:                      command.Failure,
 			RetryState:                   retryState,
+			NewExecutionRunId:            newExecutionRunID,
 		},
 	}
 
@@ -431,11 +435,13 @@ func (b *HistoryBuilder) AddFailWorkflowEvent(
 
 func (b *HistoryBuilder) AddTimeoutWorkflowEvent(
 	retryState enumspb.RetryState,
+	newExecutionRunID string,
 ) *historypb.HistoryEvent {
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{
 		WorkflowExecutionTimedOutEventAttributes: &historypb.WorkflowExecutionTimedOutEventAttributes{
-			RetryState: retryState,
+			RetryState:        retryState,
+			NewExecutionRunId: newExecutionRunID,
 		},
 	}
 
@@ -475,14 +481,11 @@ func (b *HistoryBuilder) AddContinuedAsNewEvent(
 		WorkflowRunTimeout:           command.WorkflowRunTimeout,
 		WorkflowTaskTimeout:          command.WorkflowTaskTimeout,
 		BackoffStartInterval:         command.BackoffStartInterval,
-		Initiator:                    enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW,
+		Initiator:                    command.Initiator,
 		Failure:                      command.Failure,
 		LastCompletionResult:         command.LastCompletionResult,
 		Memo:                         command.Memo,
 		SearchAttributes:             command.SearchAttributes,
-	}
-	if len(command.CronSchedule) != 0 {
-		attributes.Initiator = enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE
 	}
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
 		WorkflowExecutionContinuedAsNewEventAttributes: attributes,

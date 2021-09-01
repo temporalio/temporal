@@ -165,7 +165,7 @@ func (c *workflowSizeChecker) failWorkflowIfPayloadSizeExceedsLimit(
 		Failure: failure.NewServerFailure(message, true),
 	}
 
-	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes); err != nil {
+	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes, ""); err != nil {
 		return false, err
 	}
 
@@ -199,7 +199,7 @@ func (c *workflowSizeChecker) failWorkflowIfMemoSizeExceedsLimit(
 		Failure: failure.NewServerFailure(message, true),
 	}
 
-	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes); err != nil {
+	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes, ""); err != nil {
 		return false, err
 	}
 
@@ -224,7 +224,7 @@ func (c *workflowSizeChecker) failWorkflowIfSearchAttributesSizeExceedsLimit(
 		Failure: failure.NewServerFailure(err.Error(), true),
 	}
 
-	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes); err != nil {
+	if _, err := c.mutableState.AddFailWorkflowEvent(c.completedID, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, attributes, ""); err != nil {
 		return false, err
 	}
 

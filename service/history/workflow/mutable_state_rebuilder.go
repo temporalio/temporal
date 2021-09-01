@@ -622,7 +622,6 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			err := b.mutableState.ReplicateWorkflowExecutionContinuedAsNewEvent(
 				firstEvent.GetEventId(),
-				namespaceID,
 				event,
 			)
 			if err != nil {

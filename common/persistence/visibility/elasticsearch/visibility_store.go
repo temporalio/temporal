@@ -420,7 +420,7 @@ func (s *visibilityStore) ScanWorkflowExecutions(request *visibility.ListWorkflo
 			if err != nil {
 				return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to create point in time: %s", detailedErrorMessage(err)))
 			}
-			p.PointInTime = elastic.NewPointInTime(pointInTimeID, pointInTimeKeepAliveInterval)
+			p.PointInTime = elastic.NewPointInTimeWithKeepAlive(pointInTimeID, pointInTimeKeepAliveInterval)
 		}
 
 		searchResult, err := esClient.Search(ctx, p)
@@ -591,7 +591,7 @@ func (s *visibilityStore) buildSearchParametersV2(
 			params.SearchAfter = token.SearchAfter
 		}
 		if token.PointInTimeID != "" {
-			params.PointInTime = elastic.NewPointInTime(token.PointInTimeID, pointInTimeKeepAliveInterval)
+			params.PointInTime = elastic.NewPointInTimeWithKeepAlive(token.PointInTimeID, pointInTimeKeepAliveInterval)
 		}
 	}
 

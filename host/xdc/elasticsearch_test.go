@@ -22,8 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// +build !race
-// +build esintegration
+//go:build !race && esintegration
+// +build !race,esintegration
 
 // to run locally, make sure Elasticsearch is running,
 // then run cmd `go test -v ./host/xdc -run TestESCrossDCTestSuite -tags esintegration`
