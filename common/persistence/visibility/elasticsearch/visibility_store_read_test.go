@@ -817,25 +817,28 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
 	// test for open
 	info := s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap)
 	s.NotNil(info)
-	s.Equal([]interface{}{"ver1", "ver2"}, info.SearchAttributes["TemporalChangeVersion"])
+	customSearchAttributes, err := searchattribute.Decode(info.SearchAttributes, &searchattribute.TestNameTypeMap)
+	s.NoError(err)
 
-	s.Equal("bfd5c907-f899-4baf-a7b2-2ab85e623ebd", info.SearchAttributes["CustomKeywordField"])
+	s.Equal([]string{"ver1", "ver2"}, customSearchAttributes["TemporalChangeVersion"])
 
-	s.Equal("text text", info.SearchAttributes["CustomStringField"])
+	s.Equal("bfd5c907-f899-4baf-a7b2-2ab85e623ebd", customSearchAttributes["CustomKeywordField"])
+
+	s.Equal("text text", customSearchAttributes["CustomStringField"])
 
 	date1, err := time.Parse(time.RFC3339Nano, "2014-08-28T03:15:00.000-07:00")
 	s.NoError(err)
 	date2, err := time.Parse(time.RFC3339Nano, "2016-04-21T05:00:00.000-07:00")
 	s.NoError(err)
-	s.Equal([]interface{}{date1, date2}, info.SearchAttributes["CustomDatetimeField"])
+	s.Equal([]time.Time{date1, date2}, customSearchAttributes["CustomDatetimeField"])
 
-	s.Equal([]interface{}{1234.1234, 5678.5678}, info.SearchAttributes["CustomDoubleField"])
+	s.Equal([]float64{1234.1234, 5678.5678}, customSearchAttributes["CustomDoubleField"])
 
-	s.Equal(true, info.SearchAttributes["CustomBoolField"])
+	s.Equal(true, customSearchAttributes["CustomBoolField"])
 
-	s.Equal([]interface{}{int64(111), int64(222)}, info.SearchAttributes["CustomIntField"])
+	s.Equal([]int64{int64(111), int64(222)}, customSearchAttributes["CustomIntField"])
 
-	_, ok := info.SearchAttributes["UnknownField"]
+	_, ok := customSearchAttributes["UnknownField"]
 	s.False(ok)
 }
 
