@@ -47,7 +47,7 @@ func NewVisibilityManager(
 	log log.Logger,
 ) visibility.VisibilityManager {
 
-	visStore := NewVisibilityStore(esClient, indexName, searchAttributesProvider, processor, cfg, log, metricsClient)
+	visStore := NewVisibilityStore(esClient, indexName, searchAttributesProvider, processor, cfg, metricsClient)
 	visManager := visibility.NewVisibilityManagerImpl(visStore, searchAttributesProvider, indexName, log)
 
 	if cfg != nil {
