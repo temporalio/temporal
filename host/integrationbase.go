@@ -41,10 +41,10 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
@@ -109,7 +109,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 
 	// this sleep is necessary because namespacev2 cache gets refreshed in the
 	// background only every namespaceCacheRefreshInterval period
-	time.Sleep(cache.NamespaceCacheRefreshInterval + time.Second)
+	time.Sleep(namespace.CacheRefreshInterval + time.Second)
 }
 
 func (s *IntegrationBase) setupLogger() {

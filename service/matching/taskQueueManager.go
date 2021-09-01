@@ -45,10 +45,10 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -124,7 +124,7 @@ type (
 		taskGC           *taskGC
 		taskAckManager   ackManager   // tracks ackLevel for delivered messages
 		matcher          *TaskMatcher // for matching a task producer with a poller
-		namespaceCache   cache.NamespaceCache
+		namespaceCache   namespace.Cache
 		logger           log.Logger
 		metricsClient    metrics.Client
 		namespaceValue   atomic.Value

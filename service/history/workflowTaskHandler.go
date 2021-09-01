@@ -38,11 +38,11 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
@@ -72,7 +72,7 @@ type (
 		searchAttributesMapper searchattribute.Mapper
 
 		logger         log.Logger
-		namespaceCache cache.NamespaceCache
+		namespaceCache namespace.Cache
 		metricsClient  metrics.Client
 		config         *configs.Config
 		shard          shard.Context
@@ -91,7 +91,7 @@ func newWorkflowTaskHandler(
 	attrValidator *commandAttrValidator,
 	sizeLimitChecker *workflowSizeChecker,
 	logger log.Logger,
-	namespaceCache cache.NamespaceCache,
+	namespaceCache namespace.Cache,
 	metricsClient metrics.Client,
 	config *configs.Config,
 	shard shard.Context,

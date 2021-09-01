@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/failure"
@@ -3417,7 +3416,7 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, namespaceI
 	return true
 }
 
-func (wh *WorkflowHandler) checkBadBinary(namespaceEntry *cache.NamespaceCacheEntry, binaryChecksum string) error {
+func (wh *WorkflowHandler) checkBadBinary(namespaceEntry *namespace.CacheEntry, binaryChecksum string) error {
 	if namespaceEntry.GetConfig().BadBinaries.Binaries != nil {
 		badBinaries := namespaceEntry.GetConfig().BadBinaries.Binaries
 		_, ok := badBinaries[binaryChecksum]

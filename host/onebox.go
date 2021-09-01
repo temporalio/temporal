@@ -43,7 +43,6 @@ import (
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -624,18 +623,18 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	service.Start()
 
 	clusterMetadata := cluster.NewTestClusterMetadata(c.clusterMetadataConfig)
-	var replicatorNamespaceCache cache.NamespaceCache
+	var replicatorNamespaceCache namespace.Cache
 	if c.workerConfig.EnableReplicator {
 		metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
-		replicatorNamespaceCache = cache.NewNamespaceCache(metadataManager, clusterMetadata, service.GetMetricsClient(), service.GetLogger())
+		replicatorNamespaceCache = namespace.NewNamespaceCache(metadataManager, clusterMetadata, service.GetMetricsClient(), service.GetLogger())
 		replicatorNamespaceCache.Start()
 		c.startWorkerReplicator(service, clusterMetadata)
 	}
 
-	var clientWorkerNamespaceCache cache.NamespaceCache
+	var clientWorkerNamespaceCache namespace.Cache
 	if c.workerConfig.EnableArchiver {
 		metadataProxyManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
-		clientWorkerNamespaceCache = cache.NewNamespaceCache(metadataProxyManager, clusterMetadata, service.GetMetricsClient(), service.GetLogger())
+		clientWorkerNamespaceCache = namespace.NewNamespaceCache(metadataProxyManager, clusterMetadata, service.GetMetricsClient(), service.GetLogger())
 		clientWorkerNamespaceCache.Start()
 		c.startWorkerClientWorker(params, service, clientWorkerNamespaceCache)
 	}
@@ -669,7 +668,7 @@ func (c *temporalImpl) startWorkerReplicator(service resource.Resource, clusterM
 	c.replicator.Start()
 }
 
-func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams, service resource.Resource, namespaceCache cache.NamespaceCache) {
+func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams, service resource.Resource, namespaceCache namespace.Cache) {
 	workerConfig := worker.NewConfig(params)
 	workerConfig.ArchiverConfig.ArchiverConcurrency = dynamicconfig.GetIntPropertyFn(10)
 

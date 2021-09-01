@@ -34,11 +34,11 @@ import (
 	"github.com/uber-go/tally"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -49,7 +49,7 @@ type (
 		suite.Suite
 
 		controller         *gomock.Controller
-		mockNamespaceCache *cache.MockNamespaceCache
+		mockNamespaceCache *namespace.MockCache
 
 		priorityAssigner   *taskPriorityAssignerImpl
 		testTaskProcessRPS int
@@ -65,7 +65,7 @@ func (s *taskPriorityAssignerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
+	s.mockNamespaceCache = namespace.NewMockCache(s.controller)
 
 	s.testTaskProcessRPS = 10
 	dc := dynamicconfig.NewNoopCollection()

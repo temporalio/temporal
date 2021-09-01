@@ -28,11 +28,11 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
@@ -47,7 +47,7 @@ type (
 		GetShardID() int32
 		GetService() resource.Resource
 		GetExecutionManager() persistence.ExecutionManager
-		GetNamespaceCache() cache.NamespaceCache
+		GetNamespaceCache() namespace.Cache
 		GetClusterMetadata() cluster.Metadata
 		GetConfig() *configs.Config
 		GetEventsCache() events.Cache

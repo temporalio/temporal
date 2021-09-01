@@ -33,10 +33,10 @@ import (
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -50,7 +50,7 @@ var (
 
 type (
 	TelemetryInterceptor struct {
-		namespaceCache cache.NamespaceCache
+		namespaceCache namespace.Cache
 		metricsClient  metrics.Client
 		scopes         map[string]int
 		logger         log.Logger
@@ -60,7 +60,7 @@ type (
 var _ grpc.UnaryServerInterceptor = (*TelemetryInterceptor)(nil).Intercept
 
 func NewTelemetryInterceptor(
-	namespaceCache cache.NamespaceCache,
+	namespaceCache namespace.Cache,
 	metricsClient metrics.Client,
 	scopes map[string]int,
 	logger log.Logger,

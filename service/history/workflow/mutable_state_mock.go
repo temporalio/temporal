@@ -44,8 +44,8 @@ import (
 	v17 "go.temporal.io/server/api/enums/v1"
 	v18 "go.temporal.io/server/api/historyservice/v1"
 	v19 "go.temporal.io/server/api/persistence/v1"
-	cache "go.temporal.io/server/common/cache"
 	definition "go.temporal.io/server/common/definition"
+	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
 )
 
@@ -1160,10 +1160,10 @@ func (mr *MockMutableStateMockRecorder) GetLastWriteVersion() *gomock.Call {
 }
 
 // GetNamespaceEntry mocks base method.
-func (m *MockMutableState) GetNamespaceEntry() *cache.NamespaceCacheEntry {
+func (m *MockMutableState) GetNamespaceEntry() *namespace.CacheEntry {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNamespaceEntry")
-	ret0, _ := ret[0].(*cache.NamespaceCacheEntry)
+	ret0, _ := ret[0].(*namespace.CacheEntry)
 	return ret0
 }
 
@@ -2266,7 +2266,7 @@ func (mr *MockMutableStateMockRecorder) SetUpdateCondition(arg0, arg1 interface{
 }
 
 // StartTransaction mocks base method.
-func (m *MockMutableState) StartTransaction(entry *cache.NamespaceCacheEntry) (bool, error) {
+func (m *MockMutableState) StartTransaction(entry *namespace.CacheEntry) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartTransaction", entry)
 	ret0, _ := ret[0].(bool)
@@ -2281,7 +2281,7 @@ func (mr *MockMutableStateMockRecorder) StartTransaction(entry interface{}) *gom
 }
 
 // StartTransactionSkipWorkflowTaskFail mocks base method.
-func (m *MockMutableState) StartTransactionSkipWorkflowTaskFail(entry *cache.NamespaceCacheEntry) error {
+func (m *MockMutableState) StartTransactionSkipWorkflowTaskFail(entry *namespace.CacheEntry) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartTransactionSkipWorkflowTaskFail", entry)
 	ret0, _ := ret[0].(error)

@@ -41,12 +41,12 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 )
@@ -69,7 +69,7 @@ type (
 
 		// other common resources
 
-		GetNamespaceCache() cache.NamespaceCache
+		GetNamespaceCache() namespace.Cache
 		GetTimeSource() clock.TimeSource
 		GetPayloadSerializer() serialization.Serializer
 		GetMetricsClient() metrics.Client

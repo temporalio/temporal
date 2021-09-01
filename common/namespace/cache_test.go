@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cache
+package namespace
 
 import (
 	"sync"
@@ -196,7 +196,7 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 	s.Equal(entry2, entryByID2)
 
 	allNamespaces := s.namespaceCache.GetAllNamespace()
-	s.Equal(map[string]*NamespaceCacheEntry{
+	s.Equal(map[string]*CacheEntry{
 		entry1.GetInfo().Id: entry1,
 		entry2.GetInfo().Id: entry2,
 	}, allNamespaces)
@@ -266,7 +266,7 @@ func (s *namespaceCacheSuite) TestRegisterCallback_CatchUp() {
 	s.Nil(s.namespaceCache.refreshNamespaces())
 
 	prepareCallbacckInvoked := false
-	var entriesNotification []*NamespaceCacheEntry
+	var entriesNotification []*CacheEntry
 	// we are not testing catching up, so make this really large
 	currentNamespaceNotificationVersion := int64(0)
 	s.namespaceCache.RegisterNamespaceChangeCallback(
@@ -275,7 +275,7 @@ func (s *namespaceCacheSuite) TestRegisterCallback_CatchUp() {
 		func() {
 			prepareCallbacckInvoked = true
 		},
-		func(prevNamespaces []*NamespaceCacheEntry, nextNamespaces []*NamespaceCacheEntry) {
+		func(prevNamespaces []*CacheEntry, nextNamespaces []*CacheEntry) {
 			s.Equal(len(prevNamespaces), len(nextNamespaces))
 			for index := range prevNamespaces {
 				s.Nil(prevNamespaces[index])
@@ -286,7 +286,7 @@ func (s *namespaceCacheSuite) TestRegisterCallback_CatchUp() {
 
 	// the order matters here, should be ordered by notification version
 	s.True(prepareCallbacckInvoked)
-	s.Equal([]*NamespaceCacheEntry{entry1, entry2}, entriesNotification)
+	s.Equal([]*CacheEntry{entry1, entry2}, entriesNotification)
 }
 
 func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
@@ -393,8 +393,8 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 	namespaceNotificationVersion++
 
 	prepareCallbacckInvoked := false
-	var entriesOld []*NamespaceCacheEntry
-	var entriesNew []*NamespaceCacheEntry
+	var entriesOld []*CacheEntry
+	var entriesNew []*CacheEntry
 	// we are not testing catching up, so make this really large
 	currentNamespaceNotificationVersion := int64(9999999)
 	s.namespaceCache.RegisterNamespaceChangeCallback(
@@ -403,7 +403,7 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 		func() {
 			prepareCallbacckInvoked = true
 		},
-		func(prevNamespaces []*NamespaceCacheEntry, nextNamespaces []*NamespaceCacheEntry) {
+		func(prevNamespaces []*CacheEntry, nextNamespaces []*CacheEntry) {
 			entriesOld = prevNamespaces
 			entriesNew = nextNamespaces
 		},
@@ -427,8 +427,8 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 	// making sure notifying from lower to higher version helps the shard to keep track the
 	// namespace change events
 	s.True(prepareCallbacckInvoked)
-	s.Equal([]*NamespaceCacheEntry{entry2Old, entry1Old}, entriesOld)
-	s.Equal([]*NamespaceCacheEntry{entry2New, entry1New}, entriesNew)
+	s.Equal([]*CacheEntry{entry2Old, entry1Old}, entriesOld)
+	s.Equal([]*CacheEntry{entry2New, entry1New}, entriesNew)
 }
 
 func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
@@ -483,7 +483,7 @@ func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess(
 			s.Equal(entryOld, entryNew)
 			waitGroup.Done()
 		case *serviceerror.NotFound:
-			time.Sleep(2 * NamespaceCacheMinRefreshInterval)
+			time.Sleep(2 * CacheMinRefreshInterval)
 			entryNew, err := s.namespaceCache.GetNamespaceByID(id)
 			s.NoError(err)
 			// make the config version the same so we can easily compare those
@@ -505,8 +505,8 @@ func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess(
 	waitGroup.Wait()
 }
 
-func (s *namespaceCacheSuite) buildEntryFromRecord(record *persistence.GetNamespaceResponse) *NamespaceCacheEntry {
-	newEntry := newNamespaceCacheEntry(s.clusterMetadata)
+func (s *namespaceCacheSuite) buildEntryFromRecord(record *persistence.GetNamespaceResponse) *CacheEntry {
+	newEntry := newCacheEntry(s.clusterMetadata)
 	newEntry.info = record.Namespace.Info
 	newEntry.config = record.Namespace.Config
 	newEntry.replicationConfig = &persistencespb.NamespaceReplicationConfig{
@@ -525,7 +525,7 @@ func (s *namespaceCacheSuite) buildEntryFromRecord(record *persistence.GetNamesp
 }
 
 func Test_GetRetentionDays(t *testing.T) {
-	d := &NamespaceCacheEntry{
+	d := &CacheEntry{
 		info: &persistencespb.NamespaceInfo{
 			Data: make(map[string]string),
 		},
@@ -564,7 +564,7 @@ func Test_GetRetentionDays(t *testing.T) {
 }
 
 func Test_IsSampledForLongerRetentionEnabled(t *testing.T) {
-	d := &NamespaceCacheEntry{
+	d := &CacheEntry{
 		info: &persistencespb.NamespaceInfo{
 			Data: make(map[string]string),
 		},
@@ -583,7 +583,7 @@ func Test_IsSampledForLongerRetentionEnabled(t *testing.T) {
 }
 
 func Test_IsSampledForLongerRetention(t *testing.T) {
-	d := &NamespaceCacheEntry{
+	d := &CacheEntry{
 		info: &persistencespb.NamespaceInfo{
 			Data: make(map[string]string),
 		},
@@ -616,7 +616,7 @@ func Test_NamespaceCacheEntry_GetNamespaceNotActiveErr(t *testing.T) {
 		cluster.TestCurrentClusterName,
 		cluster.TestAllClusterInfo,
 	)
-	namespaceEntry := NewGlobalNamespaceCacheEntryForTest(
+	namespaceEntry := NewGlobalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{

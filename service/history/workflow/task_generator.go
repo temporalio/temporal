@@ -35,9 +35,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -104,7 +104,7 @@ type (
 	}
 
 	TaskGeneratorImpl struct {
-		namespaceCache cache.NamespaceCache
+		namespaceCache namespace.Cache
 		logger         log.Logger
 
 		mutableState MutableState
@@ -116,7 +116,7 @@ const defaultWorkflowRetention time.Duration = 1 * 24 * time.Hour
 var _ TaskGenerator = (*TaskGeneratorImpl)(nil)
 
 func NewTaskGenerator(
-	namespaceCache cache.NamespaceCache,
+	namespaceCache namespace.Cache,
 	logger log.Logger,
 	mutableState MutableState,
 ) *TaskGeneratorImpl {

@@ -31,10 +31,10 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/configs"
 )
@@ -48,7 +48,7 @@ type (
 		sync.RWMutex
 
 		currentClusterName string
-		namespaceCache     cache.NamespaceCache
+		namespaceCache     namespace.Cache
 		config             *configs.Config
 		logger             log.Logger
 		scope              metrics.Scope
@@ -60,7 +60,7 @@ var _ taskPriorityAssigner = (*taskPriorityAssignerImpl)(nil)
 
 func newTaskPriorityAssigner(
 	currentClusterName string,
-	namespaceCache cache.NamespaceCache,
+	namespaceCache namespace.Cache,
 	logger log.Logger,
 	metricClient metrics.Client,
 	config *configs.Config,

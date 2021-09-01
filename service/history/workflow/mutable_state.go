@@ -41,8 +41,8 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -143,7 +143,7 @@ type (
 		GetChildExecutionInitiatedEvent(int64) (*historypb.HistoryEvent, error)
 		GetCompletionEvent() (*historypb.HistoryEvent, error)
 		GetWorkflowTaskInfo(int64) (*WorkflowTaskInfo, bool)
-		GetNamespaceEntry() *cache.NamespaceCacheEntry
+		GetNamespaceEntry() *namespace.CacheEntry
 		GetStartEvent() (*historypb.HistoryEvent, error)
 		GetFirstRunID() (string, error)
 		GetCurrentBranchToken() ([]byte, error)
@@ -241,8 +241,8 @@ type (
 		SetUpdateCondition(int64, int64)
 		GetUpdateCondition() (int64, int64)
 
-		StartTransaction(entry *cache.NamespaceCacheEntry) (bool, error)
-		StartTransactionSkipWorkflowTaskFail(entry *cache.NamespaceCacheEntry) error
+		StartTransaction(entry *namespace.CacheEntry) (bool, error)
+		StartTransactionSkipWorkflowTaskFail(entry *namespace.CacheEntry) error
 		CloseTransactionAsMutation(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
 		CloseTransactionAsSnapshot(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
 	}

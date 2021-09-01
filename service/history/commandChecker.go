@@ -39,12 +39,12 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
@@ -53,7 +53,7 @@ import (
 
 type (
 	commandAttrValidator struct {
-		namespaceCache                  cache.NamespaceCache
+		namespaceCache                  namespace.Cache
 		config                          *configs.Config
 		maxIDLengthLimit                int
 		searchAttributesValidator       *searchattribute.Validator
@@ -89,7 +89,7 @@ const (
 )
 
 func newCommandAttrValidator(
-	namespaceCache cache.NamespaceCache,
+	namespaceCache namespace.Cache,
 	config *configs.Config,
 	searchAttributesValidator *searchattribute.Validator,
 ) *commandAttrValidator {
@@ -772,8 +772,8 @@ func (v *commandAttrValidator) validateCrossNamespaceCall(
 }
 
 func (v *commandAttrValidator) createCrossNamespaceCallError(
-	namespaceEntry *cache.NamespaceCacheEntry,
-	targetNamespaceEntry *cache.NamespaceCacheEntry,
+	namespaceEntry *namespace.CacheEntry,
+	targetNamespaceEntry *namespace.CacheEntry,
 ) error {
 	return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to process cross namespace command between %v and %v", namespaceEntry.GetInfo().Name, targetNamespaceEntry.GetInfo().Name))
 }

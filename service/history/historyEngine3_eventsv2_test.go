@@ -44,11 +44,11 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	p "go.temporal.io/server/common/persistence"
@@ -70,7 +70,7 @@ type (
 		mockTxProcessor     *MocktransferQueueProcessor
 		mockTimerProcessor  *MocktimerQueueProcessor
 		mockEventsCache     *events.MockCache
-		mockNamespaceCache  *cache.MockNamespaceCache
+		mockNamespaceCache  *namespace.MockCache
 		mockClusterMetadata *cluster.MockMetadata
 
 		historyEngine    *historyEngineImpl
@@ -152,7 +152,7 @@ func (s *engine3Suite) TearDownTest() {
 }
 
 func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
-	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+	testNamespaceEntry := namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: tests.NamespaceID}, &persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "", nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
@@ -227,7 +227,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 }
 
 func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
-	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+	testNamespaceEntry := namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: tests.NamespaceID}, &persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "", nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
@@ -261,7 +261,7 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 }
 
 func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
-	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+	testNamespaceEntry := namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: tests.NamespaceID}, &persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "", nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
@@ -306,7 +306,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 }
 
 func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
-	testNamespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+	testNamespaceEntry := namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: tests.NamespaceID}, &persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "", nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()

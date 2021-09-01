@@ -59,11 +59,11 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -86,7 +86,7 @@ type (
 		mockShard            *shard.ContextTest
 		mockTxProcessor      *MocktransferQueueProcessor
 		mockTimerProcessor   *MocktimerQueueProcessor
-		mockNamespaceCache   *cache.MockNamespaceCache
+		mockNamespaceCache   *namespace.MockCache
 		mockMatchingClient   *matchingservicemock.MockMatchingServiceClient
 		mockHistoryClient    *historyservicemock.MockHistoryServiceClient
 		mockClusterMetadata  *cluster.MockMetadata

@@ -45,11 +45,11 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -72,14 +72,14 @@ type (
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
-		mockNamespaceCache       *cache.MockNamespaceCache
+		mockNamespaceCache       *namespace.MockCache
 		mockClusterMetadata      *cluster.MockMetadata
 		mockAdminClient          *adminservicemock.MockAdminServiceClient
 		mockNDCHistoryResender   *xdc.MockNDCHistoryResender
 
 		logger               log.Logger
 		namespaceID          string
-		namespaceEntry       *cache.NamespaceCacheEntry
+		namespaceEntry       *namespace.CacheEntry
 		version              int64
 		clusterName          string
 		now                  time.Time

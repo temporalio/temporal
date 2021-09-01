@@ -339,13 +339,11 @@ func initializeArchivalProvider(
 		Logger:           logger,
 		MetricsClient:    metricsClient,
 		ClusterMetadata:  clusterMetadata,
-		NamespaceCache:   nil, // not used
 	}
 	visibilityArchiverBootstrapContainer := &archiver.VisibilityBootstrapContainer{
 		Logger:          logger,
 		MetricsClient:   metricsClient,
 		ClusterMetadata: clusterMetadata,
-		NamespaceCache:  nil, // not used
 	}
 
 	err := archiverProvider.RegisterBootstrapContainer(
