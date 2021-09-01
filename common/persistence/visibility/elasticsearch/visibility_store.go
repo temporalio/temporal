@@ -420,7 +420,7 @@ func (s *visibilityStore) ScanWorkflowExecutions(request *visibility.ListWorkflo
 			if err != nil {
 				return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to create point in time: %s", detailedErrorMessage(err)))
 			}
-			p.PointInTime = elastic.NewPointInTime(pointInTimeID, pointInTimeKeepAliveInterval)
+			p.PointInTime = elastic.NewPointInTimeWithKeepAlive(pointInTimeID, pointInTimeKeepAliveInterval)
 		}
 
 		searchResult, err := esClient.Search(ctx, p)
@@ -591,7 +591,7 @@ func (s *visibilityStore) buildSearchParametersV2(
 			params.SearchAfter = token.SearchAfter
 		}
 		if token.PointInTimeID != "" {
-			params.PointInTime = elastic.NewPointInTime(token.PointInTimeID, pointInTimeKeepAliveInterval)
+			params.PointInTime = elastic.NewPointInTimeWithKeepAlive(token.PointInTimeID, pointInTimeKeepAliveInterval)
 		}
 	}
 
@@ -766,9 +766,12 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 		return nil
 	}
 
-	var isValidType bool
-	var memo []byte
-	var memoEncoding string
+	var (
+		isValidType            bool
+		memo                   []byte
+		memoEncoding           string
+		customSearchAttributes map[string]interface{}
+	)
 	record := &visibility.VisibilityWorkflowExecutionInfo{}
 	for fieldName, fieldValue := range sourceMap {
 		switch fieldName {
@@ -832,10 +835,19 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 			record.StateTransitionCount = fieldValueParsed.(int64)
 		default:
 			// All custom search attributes are handled here.
-			if record.SearchAttributes == nil {
-				record.SearchAttributes = map[string]interface{}{}
+			if customSearchAttributes == nil {
+				customSearchAttributes = map[string]interface{}{}
 			}
-			record.SearchAttributes[fieldName] = fieldValueParsed
+			customSearchAttributes[fieldName] = fieldValueParsed
+		}
+	}
+
+	if customSearchAttributes != nil {
+		var err error
+		record.SearchAttributes, err = searchattribute.Encode(customSearchAttributes, &saTypeMap)
+		if err != nil {
+			s.logger.Error("Unable to encode custom search attributes.", tag.Error(err), tag.ESDocID(hit.Id))
+			s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchInvalidSearchAttributeCount)
 		}
 	}
 

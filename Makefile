@@ -110,21 +110,23 @@ INTEG_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/commo
 ##### Tools #####
 update-checkers:
 	@printf $(COLOR) "Install/update check tools..."
-	@go install golang.org/x/tools/cmd/goimports
-	@go install golang.org/x/lint/golint
-	@go install honnef.co/go/tools/cmd/staticcheck@v0.1.3
+	@go install golang.org/x/lint/golint@latest # golint doesn't have releases.
+	@go install golang.org/x/tools/cmd/goimports@v0.1.5
+	@go install honnef.co/go/tools/cmd/staticcheck@v0.2.1
 	@go install github.com/kisielk/errcheck@v1.6.0
-	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.22.0
-	@go install github.com/bufbuild/buf/cmd/buf@v0.41.0
+	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.27.0
+	@go install github.com/bufbuild/buf/cmd/buf@v0.54.1
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
-	@go install github.com/golang/mock/mockgen@v1.5.0
+	@go install github.com/golang/mock/mockgen@v1.6.0
 
 update-proto-plugins:
 	@printf $(COLOR) "Install/update proto plugins..."
-	GO111MODULE=off go get github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
-	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.1.0
+	@go install github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick@latest
+# This to download sources of gogo-protobuf which are required to build proto files.
+	@GO111MODULE=off go get github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
+	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
 update-tools: update-checkers update-mockgen update-proto-plugins
 
@@ -488,7 +490,7 @@ docker-admin-tools:
 	@printf $(COLOR) "Build docker image temporalio/admin-tools:$(DOCKER_IMAGE_TAG)..."
 	docker build . -t temporalio/admin-tools:$(DOCKER_IMAGE_TAG) --build-arg TARGET=admin-tools
 
-##### Auxilary #####
+##### Auxiliary #####
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
 	@go mod tidy

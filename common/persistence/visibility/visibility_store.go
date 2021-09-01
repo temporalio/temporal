@@ -49,7 +49,7 @@ type (
 		StateTransitionCount int64
 		Memo                 *commonpb.DataBlob
 		TaskQueue            string
-		SearchAttributes     map[string]interface{}
+		SearchAttributes     *commonpb.SearchAttributes
 	}
 
 	// InternalListWorkflowExecutionsResponse is response from ListWorkflowExecutions

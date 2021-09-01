@@ -88,7 +88,7 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask() {
 
 	var request *matchingservice.AddWorkflowTaskRequest
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest) {
+		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
 			request = arg1
 		},
 	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
@@ -115,7 +115,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 
 	var request *matchingservice.AddActivityTaskRequest
 	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.AddActivityTaskRequest) {
+		func(arg0 context.Context, arg1 *matchingservice.AddActivityTaskRequest, arg2 ...interface{}) {
 			request = arg1
 		},
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil)
@@ -165,8 +165,8 @@ func (t *ForwarderTestSuite) TestForwardQueryTask() {
 	task := newInternalQueryTask("id1", &matchingservice.QueryWorkflowRequest{})
 	resp := &matchingservice.QueryWorkflowResponse{}
 	var request *matchingservice.QueryWorkflowRequest
-	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.QueryWorkflowRequest) {
+	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
 			request = arg1
 		},
 	).Return(resp, nil)
@@ -213,8 +213,8 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	resp := &matchingservice.PollWorkflowTaskQueueResponse{}
 
 	var request *matchingservice.PollWorkflowTaskQueueRequest
-	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest) {
+	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
 			request = arg1
 		},
 	).Return(resp, nil)
@@ -241,8 +241,8 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	resp := &matchingservice.PollActivityTaskQueueResponse{}
 
 	var request *matchingservice.PollActivityTaskQueueRequest
-	t.client.EXPECT().PollActivityTaskQueue(gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.PollActivityTaskQueueRequest) {
+	t.client.EXPECT().PollActivityTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollActivityTaskQueueRequest, arg2 ...interface{}) {
 			request = arg1
 		},
 	).Return(resp, nil)

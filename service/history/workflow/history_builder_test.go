@@ -387,6 +387,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionCompleted() {
 	event := s.historyBuilder.AddCompletedWorkflowEvent(
 		workflowTaskCompletionEventID,
 		attributes,
+		"",
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -414,6 +415,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionFailed() {
 		workflowTaskCompletionEventID,
 		retryState,
 		attributes,
+		"",
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -436,6 +438,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionTimeout() {
 	retryState := enumspb.RetryState(rand.Int31n(int32(len(enumspb.RetryState_name))))
 	event := s.historyBuilder.AddTimeoutWorkflowEvent(
 		retryState,
+		"",
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
