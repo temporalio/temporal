@@ -177,7 +177,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		}
 		indexName := options.ESConfig.GetVisibilityIndex()
 		esVisibilityStore := elasticsearch.NewVisibilityStore(
-			esClient, indexName, searchattribute.NewTestProvider(), esProcessor, visConfig, logger, &metrics.NoopMetricsClient{},
+			esClient, indexName, searchattribute.NewTestProvider(), esProcessor, visConfig, &metrics.NoopMetricsClient{},
 		)
 		esVisibilityMgr = visibility.NewVisibilityManagerImpl(esVisibilityStore, searchattribute.NewTestProvider(), indexName, logger)
 	}

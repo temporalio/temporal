@@ -44,8 +44,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/elasticsearch/query"
 
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute"
@@ -64,7 +62,6 @@ type (
 		esClient                 esclient.Client
 		index                    string
 		searchAttributesProvider searchattribute.Provider
-		logger                   log.Logger
 		config                   *config.VisibilityConfig
 		metricsClient            metrics.Client
 		processor                Processor
@@ -96,7 +93,6 @@ func NewVisibilityStore(
 	searchAttributesProvider searchattribute.Provider,
 	processor Processor,
 	cfg *config.VisibilityConfig,
-	logger log.Logger,
 	metricsClient metrics.Client,
 ) *visibilityStore {
 
@@ -105,7 +101,6 @@ func NewVisibilityStore(
 		index:                    index,
 		searchAttributesProvider: searchAttributesProvider,
 		processor:                processor,
-		logger:                   log.With(logger, tag.ComponentESVisibilityManager),
 		config:                   cfg,
 		metricsClient:            metricsClient,
 		queryConverter: query.NewConverter(
@@ -128,14 +123,20 @@ func (s *visibilityStore) GetName() string {
 
 func (s *visibilityStore) RecordWorkflowExecutionStarted(request *visibility.InternalRecordWorkflowExecutionStartedRequest) error {
 	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
-	doc := s.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
+	doc, err := s.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
+	if err != nil {
+		return err
+	}
 
 	return s.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
 }
 
 func (s *visibilityStore) RecordWorkflowExecutionClosed(request *visibility.InternalRecordWorkflowExecutionClosedRequest) error {
 	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
-	doc := s.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
+	doc, err := s.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
+	if err != nil {
+		return err
+	}
 
 	doc[searchattribute.CloseTime] = request.CloseTime
 	doc[searchattribute.ExecutionDuration] = request.CloseTime.Sub(request.ExecutionTime).Nanoseconds()
@@ -147,7 +148,10 @@ func (s *visibilityStore) RecordWorkflowExecutionClosed(request *visibility.Inte
 
 func (s *visibilityStore) UpsertWorkflowExecution(request *visibility.InternalUpsertWorkflowExecutionRequest) error {
 	visibilityTaskKey := getVisibilityTaskKey(request.ShardID, request.TaskID)
-	doc := s.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
+	doc, err := s.generateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
+	if err != nil {
+		return err
+	}
 
 	return s.addBulkIndexRequestAndWait(request.InternalVisibilityRequestBase, doc, visibilityTaskKey)
 }
@@ -626,14 +630,16 @@ func (s *visibilityStore) getScrollWorkflowExecutionsResponse(
 
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
-		s.logger.Error("Unable to read search attribute types.", tag.Error(err))
-		return nil, err
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
 
 	response := &visibility.InternalListWorkflowExecutionsResponse{}
 	response.Executions = make([]*visibility.VisibilityWorkflowExecutionInfo, len(searchHits.Hits))
 	for i := 0; i < len(searchHits.Hits); i++ {
-		response.Executions[i] = s.parseESDoc(searchHits.Hits[i], typeMap)
+		response.Executions[i], err = s.parseESDoc(searchHits.Hits[i], typeMap)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if len(searchHits.Hits) == pageSize && !isLastPage {
@@ -656,8 +662,7 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(
 
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
-		s.logger.Error("Unable to read search attribute types.", tag.Error(err))
-		return nil, err
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
 
 	response := &visibility.InternalListWorkflowExecutionsResponse{
@@ -665,7 +670,10 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(
 	}
 	var lastHitSort []interface{}
 	for _, hit := range searchResult.Hits.Hits {
-		workflowExecutionInfo := s.parseESDoc(hit, typeMap)
+		workflowExecutionInfo, err := s.parseESDoc(hit, typeMap)
+		if err != nil {
+			return nil, err
+		}
 		// ES6 uses "date" data type not "date_nanos". It truncates dates using milliseconds and might return extra rows.
 		// For example: 2021-06-12T00:21:43.159739259Z fits 2021-06-12T00:21:43.158Z...2021-06-12T00:21:43.159Z range lte/gte query.
 		// Therefore, these records need to be filtered out on the client side to support nanos precision.
@@ -717,7 +725,7 @@ func (s *visibilityStore) serializePageToken(token *visibilityPageToken) ([]byte
 	return data, nil
 }
 
-func (s *visibilityStore) generateESDoc(request *visibility.InternalVisibilityRequestBase, visibilityTaskKey string) map[string]interface{} {
+func (s *visibilityStore) generateESDoc(request *visibility.InternalVisibilityRequestBase, visibilityTaskKey string) (map[string]interface{}, error) {
 	doc := map[string]interface{}{
 		searchattribute.VisibilityTaskKey: visibilityTaskKey,
 		searchattribute.NamespaceID:       request.NamespaceID,
@@ -737,24 +745,24 @@ func (s *visibilityStore) generateESDoc(request *visibility.InternalVisibilityRe
 
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
-		s.logger.Error("Unable to read search attribute types.", tag.Error(err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
 
 	searchAttributes, err := searchattribute.Decode(request.SearchAttributes, &typeMap)
 	if err != nil {
-		s.logger.Error("Unable to decode search attributes.", tag.Error(err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
 	for saName, saValue := range searchAttributes {
 		doc[saName] = saValue
 	}
 
-	return doc
+	return doc, nil
 }
 
-func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchattribute.NameTypeMap) *visibility.VisibilityWorkflowExecutionInfo {
-	logParseError := func(fieldName string, fieldValue interface{}, err error, docID string) {
-		s.logger.Error("Unable to parse Elasticsearch document field.", tag.Name(fieldName), tag.Value(fieldValue), tag.Error(err), tag.ESDocID(docID))
-		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchInvalidSearchAttributeCount)
+func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchattribute.NameTypeMap) (*visibility.VisibilityWorkflowExecutionInfo, error) {
+	logParseError := func(fieldName string, fieldValue interface{}, err error, docID string) error {
+		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
+		return serviceerror.NewInternal(fmt.Sprintf("Unable to parse Elasticsearch document(%s) %q field value %q: %v", docID, fieldName, fieldValue, err))
 	}
 
 	var sourceMap map[string]interface{}
@@ -762,8 +770,8 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 	// Very important line. See finishParseJSONValue bellow.
 	d.UseNumber()
 	if err := d.Decode(&sourceMap); err != nil {
-		s.logger.Error("Unable to JSON unmarshal Elasticsearch SearchHit.Source.", tag.Error(err), tag.ESDocID(hit.Id))
-		return nil
+		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to unmarshal JSON from Elasticsearch document(%s): %v", hit.Id, err))
 	}
 
 	var (
@@ -783,16 +791,16 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 		case searchattribute.Memo:
 			var memoStr string
 			if memoStr, isValidType = fieldValue.(string); !isValidType {
-				logParseError(fieldName, fieldValue, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, fieldValue), hit.Id)
+				return nil, logParseError(fieldName, fieldValue, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, fieldValue), hit.Id)
 			}
 			var err error
 			if memo, err = base64.StdEncoding.DecodeString(memoStr); err != nil {
-				logParseError(fieldName, memoStr[:10], err, hit.Id)
+				return nil, logParseError(fieldName, memoStr[:10], err, hit.Id)
 			}
 			continue
 		case searchattribute.MemoEncoding:
 			if memoEncoding, isValidType = fieldValue.(string); !isValidType {
-				logParseError(fieldName, fieldValue, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, fieldValue), hit.Id)
+				return nil, logParseError(fieldName, fieldValue, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, fieldValue), hit.Id)
 			}
 			continue
 		}
@@ -800,16 +808,16 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 		fieldType, err := saTypeMap.GetType(fieldName)
 		if err != nil {
 			// Silently ignore ErrInvalidName because it indicates unknown field in Elasticsearch document.
-			if !errors.Is(err, searchattribute.ErrInvalidName) {
-				s.logger.Error("Unable to get type for Elasticsearch document field.", tag.Name(fieldName), tag.Error(err), tag.ESDocID(hit.Id))
+			if errors.Is(err, searchattribute.ErrInvalidName) {
+				continue
 			}
-			continue
+			s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to get type for Elasticsearch document(%s) field %q: %v", hit.Id, fieldName, err))
 		}
 
 		fieldValueParsed, err := finishParseJSONValue(fieldValue, fieldType)
 		if err != nil {
-			logParseError(fieldName, fieldValue, err, hit.Id)
-			continue
+			return nil, logParseError(fieldName, fieldValue, err, hit.Id)
 		}
 
 		switch fieldName {
@@ -846,19 +854,19 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 		var err error
 		record.SearchAttributes, err = searchattribute.Encode(customSearchAttributes, &saTypeMap)
 		if err != nil {
-			s.logger.Error("Unable to encode custom search attributes.", tag.Error(err), tag.ESDocID(hit.Id))
-			s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchInvalidSearchAttributeCount)
+			s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to encode custom search attributes of Elasticsearch document(%s): %v", hit.Id, err))
 		}
 	}
 
 	if memoEncoding != "" {
 		record.Memo = persistence.NewDataBlob(memo, memoEncoding)
 	} else if memo != nil {
-		s.logger.Error("Field is missing in Elasticsearch document.", tag.Name(searchattribute.MemoEncoding), tag.ESDocID(hit.Id))
-		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchInvalidSearchAttributeCount)
+		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
+		return nil, serviceerror.NewInternal(fmt.Sprintf("%q field is missing in Elasticsearch document(%s)", searchattribute.MemoEncoding, hit.Id))
 	}
 
-	return record
+	return record, nil
 }
 
 // finishParseJSONValue finishes JSON parsing after json.Decode.

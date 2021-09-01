@@ -1754,7 +1754,7 @@ const (
 	AddSearchAttributesWorkflowSuccessCount
 	AddSearchAttributesWorkflowFailuresCount
 
-	ElasticsearchInvalidSearchAttributeCount
+	ElasticsearchDocumentParseFailuresCount
 
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
@@ -2208,7 +2208,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceErrAuthorizeFailedPerTaskQueueCounter: {
 			metricName: "service_errors_authorize_failed_per_tl", metricRollupName: "service_errors_authorize_failed", metricType: Counter,
 		},
-		ElasticsearchInvalidSearchAttributeCount: {metricName: "elasticsearch_invalid_search_attribute_counter", metricType: Counter},
+		ElasticsearchDocumentParseFailuresCount: {metricName: "elasticsearch_document_parse_failures_counter", metricType: Counter},
 	},
 	History: {
 		TaskRequests: {metricName: "task_requests", metricType: Counter},
