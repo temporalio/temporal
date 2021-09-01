@@ -1,5 +1,6 @@
 ##### dockerize builder: built from source to support arm & x86 #####
-FROM golang:1.17-alpine AS dockerize-builder
+# alpine3.14 requires docker 20.10: https://gitlab.alpinelinux.org/alpine/aports/-/issues/12396
+FROM golang:1.17-alpine3.13 AS dockerize-builder
 
 RUN apk add --update --no-cache \
     git
@@ -13,7 +14,8 @@ RUN mkdir -p /xsrc && \
     rm -rf /xsrc
 
 ##### base-server target #####
-FROM alpine:3.14 AS base-server
+# alpine3.14 requires docker 20.10: https://gitlab.alpinelinux.org/alpine/aports/-/issues/12396
+FROM alpine:3.13 AS base-server
 
 RUN apk add --update --no-cache \
     ca-certificates \

@@ -1,4 +1,5 @@
-FROM alpine:3.14 AS base-admin-tools
+# alpine3.14 requires docker 20.10: https://gitlab.alpinelinux.org/alpine/aports/-/issues/12396
+FROM alpine:3.13 AS base-admin-tools
 
 RUN apk add --update --no-cache \
     ca-certificates \
