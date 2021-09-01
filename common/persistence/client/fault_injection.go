@@ -25,7 +25,6 @@
 package client
 
 import (
-	"errors"
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
