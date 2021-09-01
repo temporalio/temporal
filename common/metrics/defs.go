@@ -1755,6 +1755,7 @@ const (
 	AddSearchAttributesWorkflowFailuresCount
 
 	ElasticsearchDocumentParseFailuresCount
+	ElasticsearchDocumentGenerateFailuresCount
 
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
@@ -2208,7 +2209,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceErrAuthorizeFailedPerTaskQueueCounter: {
 			metricName: "service_errors_authorize_failed_per_tl", metricRollupName: "service_errors_authorize_failed", metricType: Counter,
 		},
-		ElasticsearchDocumentParseFailuresCount: {metricName: "elasticsearch_document_parse_failures_counter", metricType: Counter},
+		ElasticsearchDocumentParseFailuresCount:    {metricName: "elasticsearch_document_parse_failures_counter", metricType: Counter},
+		ElasticsearchDocumentGenerateFailuresCount: {metricName: "elasticsearch_document_generate_failures_counter", metricType: Counter},
 	},
 	History: {
 		TaskRequests: {metricName: "task_requests", metricType: Counter},
@@ -2387,7 +2389,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		MutableStateChecksumInvalidated:                   {metricName: "mutable_state_checksum_invalidated", metricType: Counter},
 
 		ElasticsearchBulkProcessorRequests:       {metricName: "elasticsearch_bulk_processor_requests"},
-		ElasticsearchBulkProcessorQueuedRequests: {metricName: "elasticsearch_bulk_processor_queued_requests"},
+		ElasticsearchBulkProcessorQueuedRequests: {metricName: "elasticsearch_bulk_processor_queued_requests", metricType: Timer},
 		ElasticsearchBulkProcessorRetries:        {metricName: "elasticsearch_bulk_processor_retries"},
 		ElasticsearchBulkProcessorFailures:       {metricName: "elasticsearch_bulk_processor_errors"},
 		ElasticsearchBulkProcessorCorruptedData:  {metricName: "elasticsearch_bulk_processor_corrupted_data"},
