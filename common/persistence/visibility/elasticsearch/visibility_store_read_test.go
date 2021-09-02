@@ -43,7 +43,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility"
 	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
@@ -116,7 +115,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClientV6 = esclient.NewMockClientV6(s.controller)
 	s.mockESClientV7 = esclient.NewMockClientV7(s.controller)
-	s.visibilityStore = NewVisibilityStore(s.mockESClientV7, testIndex, searchattribute.NewTestProvider(), s.mockProcessor, cfg, log.NewNoopLogger(), s.mockMetricsClient)
+	s.visibilityStore = NewVisibilityStore(s.mockESClientV7, testIndex, searchattribute.NewTestProvider(), s.mockProcessor, cfg, s.mockMetricsClient)
 }
 
 func (s *ESVisibilitySuite) TearDownTest() {
@@ -754,7 +753,8 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
           "WorkflowType": "TestWorkflowExecute"}`),
 	}
 	// test for open
-	info := s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap)
+	info, err := s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap)
+	s.NoError(err)
 	s.NotNil(info)
 	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", info.RunID)
@@ -779,7 +779,8 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
           "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
           "WorkflowType": "TestWorkflowExecute"}`),
 	}
-	info = s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap)
+	info, err = s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap)
+	s.NoError(err)
 	s.NotNil(info)
 	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
 	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", info.RunID)
@@ -799,7 +800,9 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 	searchHit = &elastic.SearchHit{
 		Source: []byte(`corrupted data`),
 	}
-	info = s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap)
+	s.mockMetricsClient.EXPECT().IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
+	info, err = s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap)
+	s.Error(err)
 	s.Nil(info)
 }
 
@@ -815,7 +818,8 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
           "UnknownField": "random"}`),
 	}
 	// test for open
-	info := s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap)
+	info, err := s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap)
+	s.NoError(err)
 	s.NotNil(info)
 	customSearchAttributes, err := searchattribute.Decode(info.SearchAttributes, &searchattribute.TestNameTypeMap)
 	s.NoError(err)
