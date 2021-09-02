@@ -197,7 +197,6 @@ func NewEngineWithShardContext(
 	)
 
 	historyEngImpl.searchAttributesValidator = searchattribute.NewValidator(
-		logger,
 		shard.GetService().GetSearchAttributesProvider(),
 		shard.GetService().GetSearchAttributesMapper(),
 		config.SearchAttributesNumberOfKeysLimit,
@@ -2626,11 +2625,9 @@ func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
 		return err
 	}
 	if err := e.searchAttributesValidator.Validate(request.SearchAttributes, namespace, e.config.DefaultVisibilityIndexName); err != nil {
-		e.logger.Warn("Search attributes are invalid.", tag.Error(err), tag.WorkflowNamespace(namespace))
 		return err
 	}
 	if err := e.searchAttributesValidator.ValidateSize(request.SearchAttributes, namespace); err != nil {
-		e.logger.Warn("Search attributes are invalid.", tag.Error(err), tag.WorkflowNamespace(namespace))
 		return err
 	}
 
