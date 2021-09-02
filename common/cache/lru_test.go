@@ -303,3 +303,20 @@ func TestIterator(t *testing.T) {
 	it.Close()
 	assert.Equal(t, expected, actual)
 }
+
+func TestZeroSizeCache(t *testing.T) {
+	cache := NewLRU(0)
+	_, err := cache.PutIfNotExist("A", t)
+	assert.NoError(t, err)
+	assert.Equal(t, nil, cache.Get("A"))
+	assert.Equal(t, 0, cache.Size())
+	it := cache.Iterator()
+	assert.False(t, it.HasNext())
+	it.Close()
+	cache.Release("A")
+	cache.Delete("A")
+	v, err := cache.PutIfNotExist("A", t)
+	assert.Equal(t, v, t)
+	assert.Nil(t, err)
+	assert.Equal(t, 0, cache.Size())
+}
