@@ -32,16 +32,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 )
 
 type (
 	// Validator is used to validate search attributes
 	Validator struct {
-		logger log.Logger
-
 		searchAttributesProvider          Provider
 		searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 		searchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -55,28 +51,17 @@ var (
 
 // NewValidator create Validator
 func NewValidator(
-	logger log.Logger,
 	searchAttributesProvider Provider,
 	searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesSizeOfValueLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesTotalSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 ) *Validator {
 	return &Validator{
-		logger:                            logger,
 		searchAttributesProvider:          searchAttributesProvider,
 		searchAttributesNumberOfKeysLimit: searchAttributesNumberOfKeysLimit,
 		searchAttributesSizeOfValueLimit:  searchAttributesSizeOfValueLimit,
 		searchAttributesTotalSizeLimit:    searchAttributesTotalSizeLimit,
 	}
-}
-
-// ValidateAndLog validate search attributes are valid for writing and not exceed limits
-func (v *Validator) ValidateAndLog(searchAttributes *commonpb.SearchAttributes, namespace string, indexName string) error {
-	err := v.Validate(searchAttributes, namespace, indexName)
-	if err != nil {
-		v.logger.Warn("Search attributes are invalid.", tag.Error(err), tag.WorkflowNamespace(namespace), tag.ESIndex(indexName))
-	}
-	return err
 }
 
 // Validate validate search attributes are valid for writing.

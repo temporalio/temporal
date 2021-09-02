@@ -31,7 +31,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
 )
 
@@ -49,7 +48,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	sizeOfValueLimit := 5
 	sizeOfTotalLimit := 20
 
-	saValidator := NewValidator(log.NewNoopLogger(),
+	saValidator := NewValidator(
 		NewTestProvider(),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
@@ -122,7 +121,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
 	sizeOfValueLimit := 5
 	sizeOfTotalLimit := 20
 
-	saValidator := NewValidator(log.NewNoopLogger(),
+	saValidator := NewValidator(
 		NewTestProvider(),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
