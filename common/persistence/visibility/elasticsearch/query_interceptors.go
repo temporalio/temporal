@@ -65,7 +65,7 @@ func newValuesInterceptor() *valuesInterceptor {
 
 func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string, error) {
 	fieldName := name
-	if searchattribute.IsMappable(name) {
+	if searchattribute.IsMappable(name) && ni.searchAttributesMapper != nil {
 		var err error
 		fieldName, err = ni.searchAttributesMapper.GetFieldName(name, ni.namespace)
 		if err != nil {

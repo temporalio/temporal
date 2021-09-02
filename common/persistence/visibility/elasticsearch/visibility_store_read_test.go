@@ -115,7 +115,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClientV6 = esclient.NewMockClientV6(s.controller)
 	s.mockESClientV7 = esclient.NewMockClientV7(s.controller)
-	s.visibilityStore = NewVisibilityStore(s.mockESClientV7, testIndex, searchattribute.NewTestProvider(), searchattribute.NewNoopMapper(), s.mockProcessor, cfg, s.mockMetricsClient)
+	s.visibilityStore = NewVisibilityStore(s.mockESClientV7, testIndex, searchattribute.NewTestProvider(), nil, s.mockProcessor, cfg, s.mockMetricsClient)
 }
 
 func (s *ESVisibilitySuite) TearDownTest() {

@@ -478,25 +478,9 @@ func (s *visibilityStore) ScanWorkflowExecutions(request *visibility.ListWorkflo
 }
 
 func (s *visibilityStore) CountWorkflowExecutions(request *visibility.CountWorkflowExecutionsRequest) (*visibility.CountWorkflowExecutionsResponse, error) {
-
-	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
+	boolQuery, _, err := s.convertQuery(request.Namespace, request.NamespaceID, request.Query)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to read search attribute types: %v", err))
-	}
-
-	queryConverter := query.NewConverter(
-		newNameInterceptor(request.Namespace, s.index, saTypeMap, s.searchAttributesMapper),
-		newValuesInterceptor(),
-	)
-	requestQuery, _, err := queryConverter.ConvertWhereOrderBy(request.Query)
-	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse query: %v", err))
-	}
-
-	// Create new bool query because request query might have only "should" (="or") queries.
-	boolQuery := elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID))
-	if requestQuery != nil {
-		boolQuery.Filter(requestQuery)
+		return nil, err
 	}
 
 	ctx := context.Background()
@@ -575,23 +559,9 @@ func (s *visibilityStore) buildSearchParametersV2(
 		return nil, err
 	}
 
-	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
+	boolQuery, fieldSorts, err := s.convertQuery(request.Namespace, request.NamespaceID, request.Query)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to read search attribute types: %v", err))
-	}
-	queryConverter := query.NewConverter(
-		newNameInterceptor(request.Namespace, s.index, saTypeMap, s.searchAttributesMapper),
-		newValuesInterceptor(),
-	)
-	requestQuery, fieldSorts, err := queryConverter.ConvertWhereOrderBy(request.Query)
-	if err != nil {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse query: %v", err))
-	}
-
-	// Create new bool query because request query might have only "should" (="or") queries.
-	boolQuery := elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID))
-	if requestQuery != nil {
-		boolQuery.Filter(requestQuery)
+		return nil, err
 	}
 
 	params := &esclient.SearchParameters{
@@ -615,6 +585,28 @@ func (s *visibilityStore) buildSearchParametersV2(
 	}
 
 	return params, nil
+}
+func (s *visibilityStore) convertQuery(namespace string, namespaceID string, requestQueryStr string) (*elastic.BoolQuery, []*elastic.FieldSort, error) {
+	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
+	if err != nil {
+		return nil, nil, serviceerror.NewInternal(fmt.Sprintf("Unable to read search attribute types: %v", err))
+	}
+	queryConverter := query.NewConverter(
+		newNameInterceptor(namespace, s.index, saTypeMap, s.searchAttributesMapper),
+		newValuesInterceptor(),
+	)
+	requestQuery, fieldSorts, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
+	if err != nil {
+		return nil, nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse query: %v", err))
+	}
+
+	// Create new bool query because request query might have only "should" (="or") queries.
+	namespaceFilterQuery := elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.NamespaceID, namespaceID))
+	if requestQuery != nil {
+		namespaceFilterQuery.Filter(requestQuery)
+	}
+
+	return namespaceFilterQuery, fieldSorts, nil
 }
 
 func (s *visibilityStore) setDefaultFieldSort(fieldSorts []*elastic.FieldSort) []elastic.Sorter {

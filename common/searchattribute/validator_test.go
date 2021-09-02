@@ -50,7 +50,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 
 	saValidator := NewValidator(
 		NewTestProvider(),
-		NewNoopMapper(),
+		nil,
 		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit))
@@ -124,7 +124,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
 
 	saValidator := NewValidator(
 		NewTestProvider(),
-		NewNoopMapper(),
+		nil,
 		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit))

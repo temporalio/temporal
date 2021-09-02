@@ -97,7 +97,7 @@ func (s *commandAttrValidatorSuite) SetupTest() {
 		config,
 		searchattribute.NewValidator(
 			searchattribute.NewTestProvider(),
-			searchattribute.NewNoopMapper(),
+			nil,
 			config.SearchAttributesNumberOfKeysLimit,
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit,

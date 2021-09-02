@@ -35,25 +35,11 @@ type (
 		GetAlias(fieldName string, namespace string) (string, error)
 		GetFieldName(alias string, namespace string) (string, error)
 	}
-
-	NoopMapper struct{}
 )
-
-func NewNoopMapper() *NoopMapper {
-	return &NoopMapper{}
-}
-
-func (m *NoopMapper) GetAlias(fieldName string, _ string) (string, error) {
-	return fieldName, nil
-}
-
-func (m *NoopMapper) GetFieldName(alias string, _ string) (string, error) {
-	return alias, nil
-}
 
 // ApplyAliases replaces field names with alias names for custom search attributes.
 func ApplyAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) error {
-	if len(searchAttributes.GetIndexedFields()) == 0 {
+	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
 		return nil
 	}
 
@@ -76,7 +62,7 @@ func ApplyAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, na
 }
 
 func SubstituteAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) error {
-	if len(searchAttributes.GetIndexedFields()) == 0 {
+	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
 		return nil
 	}
 
