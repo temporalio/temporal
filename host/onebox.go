@@ -392,6 +392,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		c.logger.Fatal("Failed to copy persistence config for frontend", tag.Error(err))
 	}
 	params.PersistenceServiceResolver = resolver.NewNoopResolver()
+	params.SearchAttributesMapper = searchattribute.NewNoopMapper()
 
 	if c.esConfig != nil {
 		esDataStoreName := "es-visibility"
@@ -470,6 +471,7 @@ func (c *temporalImpl) startHistory(
 			c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
 		}
 		params.PersistenceServiceResolver = resolver.NewNoopResolver()
+		params.SearchAttributesMapper = searchattribute.NewNoopMapper()
 
 		if c.esConfig != nil {
 			esDataStoreName := "es-visibility"
@@ -536,6 +538,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		c.logger.Fatal("Failed to copy persistence config for matching", tag.Error(err))
 	}
 	params.PersistenceServiceResolver = resolver.NewNoopResolver()
+	params.SearchAttributesMapper = searchattribute.NewNoopMapper()
 
 	matchingService, err := matching.NewService(params)
 	if err != nil {
@@ -579,6 +582,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		c.logger.Fatal("Failed to copy persistence config for worker", tag.Error(err))
 	}
 	params.PersistenceServiceResolver = resolver.NewNoopResolver()
+	params.SearchAttributesMapper = searchattribute.NewNoopMapper()
 
 	params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
 		HostPort:     c.FrontendGRPCAddress(),
