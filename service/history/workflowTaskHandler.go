@@ -794,7 +794,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		return err
 	}
 
-	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), parentNamespace); err != nil {
+	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), targetNamespace); err != nil {
 		handler.stopProcessing = true
 		return err
 	}
