@@ -524,7 +524,7 @@ func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
 		return serviceerror.NewInvalidArgument("IndexedFields is empty on command.")
 	}
 
-	return v.searchAttributesValidator.ValidateAndLog(attributes.GetSearchAttributes(), namespace, visibilityIndexName)
+	return v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace, visibilityIndexName)
 }
 
 func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
@@ -574,7 +574,7 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 		attributes.WorkflowTaskTimeout = timestamp.DurationPtr(timestamp.DurationValue(executionInfo.DefaultWorkflowTaskTimeout))
 	}
 
-	return v.searchAttributesValidator.ValidateAndLog(attributes.GetSearchAttributes(), namespace, visibilityIndexName)
+	return v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace, visibilityIndexName)
 }
 
 func (v *commandAttrValidator) validateStartChildExecutionAttributes(
@@ -638,7 +638,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return err
 	}
 
-	if err := v.searchAttributesValidator.ValidateAndLog(attributes.GetSearchAttributes(), targetNamespace, visibilityIndexName); err != nil {
+	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), targetNamespace, visibilityIndexName); err != nil {
 		return err
 	}
 
