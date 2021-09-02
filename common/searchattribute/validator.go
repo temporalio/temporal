@@ -29,6 +29,7 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/dynamicconfig"
@@ -84,35 +85,29 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 	}
 
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
-		if _, saErr := saTypeMap.getType(saName, systemCategory); saErr == nil {
+		if _, err = saTypeMap.getType(saName, systemCategory); err == nil {
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s attribute can't be set in SearchAttributes", saName))
 		}
 
 		fieldName := saName
 		if IsMappable(saName) {
-			var err error
 			fieldName, err = v.searchAttributesMapper.GetFieldName(saName, namespace)
 			if err != nil {
 				return err
 			}
-			if fieldName != saName {
-				searchAttributes.GetIndexedFields()[fieldName] = searchAttributes.GetIndexedFields()[saName]
-				delete(searchAttributes.GetIndexedFields(), saName)
-			}
 		}
 
-		saType, err := saTypeMap.getType(saName, customCategory|predefinedCategory)
-		if err != nil {
+		var saType enumspb.IndexedValueType
+		if saType, err = saTypeMap.getType(fieldName, customCategory|predefinedCategory); err != nil {
 			if errors.Is(err, ErrInvalidName) {
 				return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is not a valid search attribute name", saName))
 			}
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to get %s search attribute type: %v", saName, err))
 		}
 
-		_, err = DecodeValue(saPayload, saType)
-		if err != nil {
+		if _, err = DecodeValue(saPayload, saType); err != nil {
 			var invalidValue interface{}
-			if err := payload.Decode(saPayload, &invalidValue); err != nil {
+			if err = payload.Decode(saPayload, &invalidValue); err != nil {
 				invalidValue = fmt.Sprintf("value from <%s>", saPayload.String())
 			}
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("%v is not a valid value for search attribute %s of type %s", invalidValue, saName, saType))
