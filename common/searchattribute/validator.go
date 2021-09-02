@@ -53,12 +53,14 @@ var (
 // NewValidator create Validator
 func NewValidator(
 	searchAttributesProvider Provider,
+	searchAttributesMapper Mapper,
 	searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesSizeOfValueLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesTotalSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 ) *Validator {
 	return &Validator{
 		searchAttributesProvider:          searchAttributesProvider,
+		searchAttributesMapper:            searchAttributesMapper,
 		searchAttributesNumberOfKeysLimit: searchAttributesNumberOfKeysLimit,
 		searchAttributesSizeOfValueLimit:  searchAttributesSizeOfValueLimit,
 		searchAttributesTotalSizeLimit:    searchAttributesTotalSizeLimit,
