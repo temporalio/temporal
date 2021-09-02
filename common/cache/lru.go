@@ -221,6 +221,9 @@ func (c *lru) Delete(key interface{}) {
 
 // Release decrements the ref count of a pinned element.
 func (c *lru) Release(key interface{}) {
+	if !c.pin {
+		return
+	}
 	c.mut.Lock()
 	defer c.mut.Unlock()
 
