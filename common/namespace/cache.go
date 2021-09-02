@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination namespaceCache_mock.go
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination cache_mock.go
 
 package namespace
 
@@ -68,8 +68,6 @@ const (
 	namespaceCacheInitialSize = 10 * 1024
 	namespaceCacheMaxSize     = 64 * 1024
 	namespaceCacheTTL         = 0 // 0 means infinity
-	// CacheMinRefreshInterval is a minimun namespace cache refresh interval.
-	CacheMinRefreshInterval = 2 * time.Second
 	// CacheRefreshInterval namespace cache refresh interval
 	CacheRefreshInterval = 10 * time.Second
 	// CacheRefreshFailureRetryInterval is the wait time
@@ -106,6 +104,8 @@ type (
 		GetNamespaceName(id string) (string, error)
 		GetAllNamespace() map[string]*CacheEntry
 		GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64)
+		// Refresh forces an immediate refresh of the namespace cache and blocks until it's complete.
+		Refresh()
 	}
 
 	namespaceCache struct {
@@ -129,6 +129,7 @@ type (
 		callbackLock     sync.Mutex
 		prepareCallbacks map[int32]PrepareCallbackFn
 		callbacks        map[int32]CallbackFn
+		triggerRefreshCh chan chan struct{}
 	}
 
 	// CacheEntries CacheEntry slice
@@ -170,6 +171,7 @@ func NewNamespaceCache(
 		logger:           logger,
 		prepareCallbacks: make(map[int32]PrepareCallbackFn),
 		callbacks:        make(map[int32]CallbackFn),
+		triggerRefreshCh: make(chan chan struct{}, 1),
 	}
 	nscache.cacheNameToID.Store(newCache())
 	nscache.cacheByID.Store(newCache())
@@ -399,15 +401,28 @@ func (c *namespaceCache) GetNamespaceName(
 	return entry.info.Name, nil
 }
 
+func (c *namespaceCache) Refresh() {
+	replyCh := make(chan struct{})
+	c.triggerRefreshCh <- replyCh
+	<-replyCh
+}
+
 func (c *namespaceCache) refreshLoop() {
 	timer := time.NewTicker(CacheRefreshInterval)
 	defer timer.Stop()
+
+	// Put timer events on our channel so we can select on just one below.
+	go func() {
+		for range timer.C {
+			c.triggerRefreshCh <- nil
+		}
+	}()
 
 	for {
 		select {
 		case <-c.shutdownChan:
 			return
-		case <-timer.C:
+		case replyCh := <-c.triggerRefreshCh:
 			for err := c.refreshNamespaces(); err != nil; err = c.refreshNamespaces() {
 				select {
 				case <-c.shutdownChan:
@@ -416,6 +431,9 @@ func (c *namespaceCache) refreshLoop() {
 					c.logger.Error("Error refreshing namespace cache", tag.Error(err))
 					time.Sleep(CacheRefreshFailureRetryInterval)
 				}
+			}
+			if replyCh != nil {
+				replyCh <- struct{}{}
 			}
 		}
 	}
@@ -508,31 +526,6 @@ UpdateLoop:
 	// only update last refresh time when refresh succeeded
 	c.lastRefreshTime.Store(now)
 	return nil
-}
-
-func (c *namespaceCache) checkAndContinue(
-	name string,
-	id string,
-) (bool, error) {
-	now := c.timeSource.Now()
-	if now.Sub(c.lastRefreshTime.Load().(time.Time)) < CacheMinRefreshInterval {
-		return false, nil
-	}
-
-	c.checkLock.Lock()
-	defer c.checkLock.Unlock()
-
-	now = c.timeSource.Now()
-	if now.Sub(c.lastCheckTime) < CacheMinRefreshInterval {
-		return true, nil
-	}
-
-	c.lastCheckTime = now
-	_, err := c.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: name, ID: id})
-	if err != nil {
-		return false, err
-	}
-	return true, nil
 }
 
 func (c *namespaceCache) updateNameToIDCache(

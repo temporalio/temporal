@@ -440,3 +440,7 @@ func (h *Test) GetSearchAttributesManager() searchattribute.Manager {
 func (h *Test) GetSearchAttributesMapper() searchattribute.Mapper {
 	return h.SearchAttributesMapper
 }
+
+func (h *Test) RefreshNamespaceCache() {
+	h.NamespaceCache.Refresh()
+}
