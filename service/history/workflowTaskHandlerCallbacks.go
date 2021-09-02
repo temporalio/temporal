@@ -106,7 +106,7 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 			historyEngine.config,
 			historyEngine.searchAttributesValidator,
 		),
-		searchAttributesMapper: historyEngine.shard.GetService().GetSearchAttributesMapper(),
+		searchAttributesMapper: historyEngine.searchAttributesMapper,
 	}
 }
 

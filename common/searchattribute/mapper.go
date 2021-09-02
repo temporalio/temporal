@@ -61,6 +61,7 @@ func ApplyAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, na
 	return nil
 }
 
+// SubstituteAliases replaces aliases with actual field names for custom search attributes.
 func SubstituteAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) error {
 	if len(searchAttributes.GetIndexedFields()) == 0 || mapper == nil {
 		return nil
