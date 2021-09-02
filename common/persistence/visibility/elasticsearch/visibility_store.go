@@ -597,7 +597,12 @@ func (s *visibilityStore) convertQuery(namespace string, namespaceID string, req
 	)
 	requestQuery, fieldSorts, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
 	if err != nil {
-		return nil, nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse query: %v", err))
+		// Convert query.ConverterError to serviceerror.InvalidArgument and pass through all the rest.
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse query: %v", converterErr))
+		}
+		return nil, nil, err
 	}
 
 	// Create new bool query because request query might have only "should" (="or") queries.

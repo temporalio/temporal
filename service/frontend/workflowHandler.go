@@ -2839,7 +2839,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		searchattribute.ApplyTypeMap(response.GetWorkflowExecutionInfo().GetSearchAttributes(), saTypeMap)
 		err = searchattribute.ApplyAliases(wh.GetSearchAttributesMapper(), response.GetWorkflowExecutionInfo().GetSearchAttributes(), request.GetNamespace())
 		if err != nil {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToMapSearchAttributeAliasesMessage, err))
+			return nil, err
 		}
 	}
 
@@ -3120,7 +3120,7 @@ func (wh *WorkflowHandler) processSearchAttributes(events []*historypb.HistoryEv
 			searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
 			err = searchattribute.ApplyAliases(wh.GetSearchAttributesMapper(), searchAttributes, namespace)
 			if err != nil {
-				return serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToMapSearchAttributeAliasesMessage, err))
+				return err
 			}
 		}
 	}

@@ -32,6 +32,8 @@ import (
 
 type (
 	Mapper interface {
+		// error must be a serviceerror because it is returned to the API caller as is.
+
 		GetAlias(fieldName string, namespace string) (string, error)
 		GetFieldName(alias string, namespace string) (string, error)
 	}
