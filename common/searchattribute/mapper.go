@@ -74,3 +74,26 @@ func ApplyAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, na
 	searchAttributes.IndexedFields = newIndexedFields
 	return nil
 }
+
+func SubstituteAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, namespace string) error {
+	if len(searchAttributes.GetIndexedFields()) == 0 {
+		return nil
+	}
+
+	newIndexedFields := make(map[string]*commonpb.Payload, len(searchAttributes.GetIndexedFields()))
+	for saName, saPayload := range searchAttributes.GetIndexedFields() {
+		if !IsMappable(saName) {
+			newIndexedFields[saName] = saPayload
+			continue
+		}
+
+		fieldName, err := mapper.GetFieldName(saName, namespace)
+		if err != nil {
+			return err
+		}
+		newIndexedFields[fieldName] = saPayload
+	}
+
+	searchAttributes.IndexedFields = newIndexedFields
+	return nil
+}
