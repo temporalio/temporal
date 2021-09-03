@@ -82,7 +82,6 @@ type (
 var _ visibility.VisibilityStore = (*visibilityStore)(nil)
 
 var (
-	ErrInvalidDuration         = errors.New("invalid duration format")
 	errUnexpectedJSONFieldType = errors.New("unexpected JSON field type")
 )
 
@@ -597,7 +596,7 @@ func (s *visibilityStore) convertQuery(namespace string, namespaceID string, req
 	)
 	requestQuery, fieldSorts, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
 	if err != nil {
-		// Convert query.ConverterError to serviceerror.InvalidArgument and pass through all the rest.
+		// Convert query.ConverterError to serviceerror.InvalidArgument and pass through all other errors (which should be only mapper errors).
 		var converterErr *query.ConverterError
 		if errors.As(err, &converterErr) {
 			return nil, nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse query: %v", converterErr))
