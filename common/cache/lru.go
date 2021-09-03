@@ -161,6 +161,9 @@ func NewLRUWithInitialCapacity(initialCapacity, maxSize int) Cache {
 
 // Get retrieves the value stored under the given key
 func (c *lru) Get(key interface{}) interface{} {
+	if c.maxSize == 0 { //
+		return nil
+	}
 	c.mut.Lock()
 	defer c.mut.Unlock()
 
@@ -210,6 +213,9 @@ func (c *lru) PutIfNotExist(key interface{}, value interface{}) (interface{}, er
 
 // Delete deletes a key, value pair associated with a key
 func (c *lru) Delete(key interface{}) {
+	if c.maxSize == 0 {
+		return
+	}
 	c.mut.Lock()
 	defer c.mut.Unlock()
 
@@ -221,6 +227,9 @@ func (c *lru) Delete(key interface{}) {
 
 // Release decrements the ref count of a pinned element.
 func (c *lru) Release(key interface{}) {
+	if c.maxSize == 0 || !c.pin {
+		return
+	}
 	c.mut.Lock()
 	defer c.mut.Unlock()
 
@@ -241,8 +250,11 @@ func (c *lru) Size() int {
 }
 
 // Put puts a new value associated with a given key, returning the existing value (if present)
-// allowUpdate flag is used to control overwrite behavior if the value exists
+// allowUpdate flag is used to control overwrite behavior if the value exists.
 func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) (interface{}, error) {
+	if c.maxSize == 0 {
+		return nil, nil
+	}
 	c.mut.Lock()
 	defer c.mut.Unlock()
 
