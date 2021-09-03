@@ -178,16 +178,7 @@ func (s *integrationSuite) TestCronWorkflow_Failed() {
 					}}, nil
 			}
 
-			startedAttributes := startedEvent.GetWorkflowExecutionStartedEventAttributes()
-			if err := payloads.Decode(startedAttributes.GetLastCompletionResult(), &counter); err != nil {
-				return []*commandpb.Command{
-					{
-						CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
-						Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
-							Failure: failure.NewServerFailure("cannot decode last completion result", true),
-						}},
-					}}, nil
-			}
+			counter = s.decodePayloadsInt(startedEvent.GetWorkflowExecutionStartedEventAttributes().GetLastCompletionResult())
 		}
 
 		executions = append(executions, execution)
@@ -337,10 +328,7 @@ func (s *integrationSuite) TestCronWorkflow_Failed() {
 	lastEvent := events[len(events)-1]
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
 	attrs1 := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
-	var r int
-	err = payloads.Decode(attrs1.GetResult(), &r)
-	s.NoError(err)
-	s.Equal(3, r)
+	s.Equal(3, s.decodePayloadsInt(attrs1.GetResult()))
 
 	lastFailedExecution := closedExecutions[2]
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, lastFailedExecution.GetStatus())
@@ -411,7 +399,6 @@ func (s *integrationSuite) TestCronWorkflow() {
 
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		counter := 0
 		if previousStartedEventID == common.EmptyEventID {
 			startedEvent := history.Events[0]
 			if startedEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
@@ -424,16 +411,8 @@ func (s *integrationSuite) TestCronWorkflow() {
 					}}, nil
 			}
 
-			startedAttributes := startedEvent.GetWorkflowExecutionStartedEventAttributes()
-			if err := payloads.Decode(startedAttributes.GetLastCompletionResult(), &counter); err != nil {
-				return []*commandpb.Command{
-					{
-						CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
-						Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
-							Failure: failure.NewServerFailure("cannot decode last completion result", true),
-						}},
-					}}, nil
-			}
+			// Just check that it can be decoded
+			s.decodePayloadsInt(startedEvent.GetWorkflowExecutionStartedEventAttributes().GetLastCompletionResult())
 		}
 
 		executions = append(executions, execution)
@@ -643,16 +622,7 @@ func (s *integrationSuite) TestCronWorkflow_Success() {
 					}}, nil
 			}
 
-			startedAttributes := startedEvent.GetWorkflowExecutionStartedEventAttributes()
-			if err := payloads.Decode(startedAttributes.GetLastCompletionResult(), &counter); err != nil {
-				return []*commandpb.Command{
-					{
-						CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
-						Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
-							Failure: failure.NewServerFailure("cannot decode last completion result", true),
-						}},
-					}}, nil
-			}
+			counter = s.decodePayloadsInt(startedEvent.GetWorkflowExecutionStartedEventAttributes().GetLastCompletionResult())
 		}
 
 		executions = append(executions, execution)
@@ -794,10 +764,7 @@ func (s *integrationSuite) TestCronWorkflow_Success() {
 	lastEvent := events[len(events)-1]
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
 	attrs1 := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
-	var r int
-	err = payloads.Decode(attrs1.GetResult(), &r)
-	s.NoError(err)
-	s.Equal(3, r)
+	s.Equal(3, s.decodePayloadsInt(attrs1.GetResult()))
 
 	timedoutExecution := closedExecutions[2]
 	// When cron workflow timesout we continue as new to start the new run,
