@@ -1052,6 +1052,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 
 func (s *workflowHandlerSuite) TestGetHistory() {
 	namespaceID := uuid.New()
+	namespace := "namespace"
 	firstEventID := int64(100)
 	nextEventID := int64(102)
 	branchToken := []byte{1}
@@ -1099,6 +1100,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	history, token, err := wh.getHistory(
 		metrics.NoopScope(metrics.Frontend),
 		namespaceID,
+		namespace,
 		we,
 		firstEventID,
 		nextEventID,

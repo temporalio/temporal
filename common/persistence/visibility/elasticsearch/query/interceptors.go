@@ -44,7 +44,7 @@ const (
 	FieldNameSorter
 )
 
-func (n *nopFieldNameInterceptor) Name(name string, usage FieldNameUsage) (string, error) {
+func (n *nopFieldNameInterceptor) Name(name string, _ FieldNameUsage) (string, error) {
 	return name, nil
 }
 

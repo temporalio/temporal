@@ -29,6 +29,7 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/dynamicconfig"
@@ -79,7 +80,7 @@ func (v *Validator) ValidateAndLog(searchAttributes *commonpb.SearchAttributes, 
 	return err
 }
 
-// Validate validate search attributes are valid for writing.
+// Validate search attributes are valid for writing.
 func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namespace string, indexName string) error {
 	if searchAttributes == nil {
 		return nil
@@ -90,28 +91,29 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("number of search attributes %d exceeds limit %d", lengthOfFields, v.searchAttributesNumberOfKeysLimit(namespace)))
 	}
 
-	typeMap, err := v.searchAttributesProvider.GetSearchAttributes(indexName, false)
+	saTypeMap, err := v.searchAttributesProvider.GetSearchAttributes(indexName, false)
 	if err != nil {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to get search attributes from cluster metadata: %v", err))
 	}
 
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
-		if _, err := typeMap.getType(saName, systemCategory); err == nil {
+		if _, err = saTypeMap.getType(saName, systemCategory); err == nil {
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s attribute can't be set in SearchAttributes", saName))
 		}
 
-		saType, err := typeMap.getType(saName, customCategory|predefinedCategory)
-		if err != nil {
+		fieldName := saName
+
+		var saType enumspb.IndexedValueType
+		if saType, err = saTypeMap.getType(fieldName, customCategory|predefinedCategory); err != nil {
 			if errors.Is(err, ErrInvalidName) {
 				return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is not a valid search attribute name", saName))
 			}
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to get %s search attribute type: %v", saName, err))
 		}
 
-		_, err = DecodeValue(saPayload, saType)
-		if err != nil {
+		if _, err = DecodeValue(saPayload, saType); err != nil {
 			var invalidValue interface{}
-			if err := payload.Decode(saPayload, &invalidValue); err != nil {
+			if err = payload.Decode(saPayload, &invalidValue); err != nil {
 				invalidValue = fmt.Sprintf("value from <%s>", saPayload.String())
 			}
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("%v is not a valid value for search attribute %s of type %s", invalidValue, saName, saType))

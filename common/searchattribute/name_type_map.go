@@ -72,7 +72,7 @@ func (m NameTypeMap) Custom() map[string]enumspb.IndexedValueType {
 }
 
 func (m NameTypeMap) All() map[string]enumspb.IndexedValueType {
-	allSearchAttributes := make(map[string]enumspb.IndexedValueType, len(system)+len(m.customSearchAttributes)+len(reserved))
+	allSearchAttributes := make(map[string]enumspb.IndexedValueType, len(system)+len(m.customSearchAttributes)+len(predefined))
 	for saName, saType := range system {
 		allSearchAttributes[saName] = saType
 	}
