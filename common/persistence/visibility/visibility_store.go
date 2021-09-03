@@ -60,7 +60,7 @@ type (
 		NextPageToken []byte
 	}
 
-	// InternalRecordWorkflowExecutionStartedRequest request to RecordWorkflowExecutionStarted
+	// InternalVisibilityRequestBase is a base request to visibility APIs.
 	InternalVisibilityRequestBase struct {
 		NamespaceID          string
 		WorkflowID           string

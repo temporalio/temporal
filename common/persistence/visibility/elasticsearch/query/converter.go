@@ -103,7 +103,7 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (*elastic.BoolQuery, []
 	if sel.Where != nil {
 		q, err := c.convertWhere(sel.Where.Expr)
 		if err != nil {
-			return nil, nil, NewConverterError(fmt.Sprintf("unable to convert filter expression: %s", err))
+			return nil, nil, wrapConverterError("unable to convert filter expression", err)
 		}
 		// Result must be BoolQuery.
 		var isBoolQuery bool
@@ -116,7 +116,7 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (*elastic.BoolQuery, []
 	for _, orderByExpr := range sel.OrderBy {
 		colName, err := c.convertColName(orderByExpr.Expr, FieldNameSorter)
 		if err != nil {
-			return nil, nil, NewConverterError(fmt.Sprintf("unable to convert 'order by' column name: %s", err))
+			return nil, nil, wrapConverterError("unable to convert 'order by' column name", err)
 		}
 		fieldSort := elastic.NewFieldSort(colName)
 		if orderByExpr.Direction == sqlparser.DescScr {
@@ -216,7 +216,7 @@ func (c *Converter) convertOrExpr(expr *sqlparser.OrExpr) (elastic.Query, error)
 func (c *Converter) convertRangeCondExpr(expr *sqlparser.RangeCond) (elastic.Query, error) {
 	colName, err := c.convertColName(expr.Left, FieldNameFilter)
 	if err != nil {
-		return nil, NewConverterError(fmt.Sprintf("unable to convert left part of 'between' expression: %s", err))
+		return nil, wrapConverterError("unable to convert left part of 'between' expression", err)
 	}
 
 	fromValue, err := c.parseSqlValue(sqlparser.String(expr.From))
@@ -230,7 +230,7 @@ func (c *Converter) convertRangeCondExpr(expr *sqlparser.RangeCond) (elastic.Que
 
 	values, err := c.fvInterceptor.Values(colName, fromValue, toValue)
 	if err != nil {
-		return nil, NewConverterError(fmt.Sprintf("unable to convert values of 'between' expression: %s", err))
+		return nil, wrapConverterError("unable to convert values of 'between' expression", err)
 	}
 	fromValue = values[0]
 	toValue = values[1]
@@ -250,7 +250,7 @@ func (c *Converter) convertRangeCondExpr(expr *sqlparser.RangeCond) (elastic.Que
 func (c *Converter) convertIsExpr(expr *sqlparser.IsExpr) (elastic.Query, error) {
 	colName, err := c.convertColName(expr.Expr, FieldNameFilter)
 	if err != nil {
-		return nil, NewConverterError(fmt.Sprintf("unable to convert left part of 'is' expression: %s", err))
+		return nil, wrapConverterError("unable to convert left part of 'is' expression", err)
 	}
 
 	var query elastic.Query
@@ -269,12 +269,12 @@ func (c *Converter) convertIsExpr(expr *sqlparser.IsExpr) (elastic.Query, error)
 func (c *Converter) convertComparisonExpr(expr *sqlparser.ComparisonExpr) (elastic.Query, error) {
 	colName, err := c.convertColName(expr.Left, FieldNameFilter)
 	if err != nil {
-		return nil, NewConverterError(fmt.Sprintf("unable to convert left part of comparison expression: %s", err))
+		return nil, wrapConverterError("unable to convert left part of comparison expression", err)
 	}
 
 	colValue, err := c.convertComparisonExprValue(expr.Right)
 	if err != nil {
-		return nil, NewConverterError(fmt.Sprintf("unable to convert right part of comparison expression: %s", err))
+		return nil, wrapConverterError("unable to convert right part of comparison expression", err)
 	}
 
 	if expr.Operator == "like" || expr.Operator == "not like" {
@@ -292,7 +292,7 @@ func (c *Converter) convertComparisonExpr(expr *sqlparser.ComparisonExpr) (elast
 
 	colValues, err = c.fvInterceptor.Values(colName, colValues...)
 	if err != nil {
-		return nil, NewConverterError(fmt.Sprintf("unable to convert values of comparison expression: %s", err))
+		return nil, wrapConverterError("unable to convert values of comparison expression", err)
 	}
 
 	var query elastic.Query

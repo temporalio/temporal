@@ -247,7 +247,6 @@ func New(
 	}
 
 	saProvider := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
-
 	saManager := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
 
 	visibilityMgr, err := visibilityManagerInitializer(
