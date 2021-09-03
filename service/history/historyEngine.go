@@ -115,6 +115,7 @@ type (
 		rawMatchingClient         matchingservice.MatchingServiceClient
 		replicationDLQHandler     replicationDLQHandler
 		searchAttributesValidator *searchattribute.Validator
+		searchAttributesMapper    searchattribute.Mapper
 	}
 )
 
@@ -196,12 +197,14 @@ func NewEngineWithShardContext(
 	)
 
 	historyEngImpl.searchAttributesValidator = searchattribute.NewValidator(
-		logger,
 		shard.GetService().GetSearchAttributesProvider(),
+		shard.GetService().GetSearchAttributesMapper(),
 		config.SearchAttributesNumberOfKeysLimit,
 		config.SearchAttributesSizeOfValueLimit,
 		config.SearchAttributesTotalSizeLimit,
 	)
+
+	historyEngImpl.searchAttributesMapper = shard.GetService().GetSearchAttributesMapper()
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
 
@@ -463,6 +466,11 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	request := startRequest.StartRequest
 	e.overrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope)
 	err = e.validateStartWorkflowExecutionRequest(ctx, request, namespace, "StartWorkflowExecution")
+	if err != nil {
+		return nil, err
+	}
+
+	err = searchattribute.SubstituteAliases(e.searchAttributesMapper, request.GetSearchAttributes(), namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -1934,6 +1942,11 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, err
 	}
 
+	err = searchattribute.SubstituteAliases(e.searchAttributesMapper, request.GetSearchAttributes(), namespace)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := common.CheckEventBlobSizeLimit(
 		sRequest.GetSignalInput().Size(),
 		e.config.BlobSizeLimitWarn(namespace),
@@ -2613,11 +2626,9 @@ func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
 		return err
 	}
 	if err := e.searchAttributesValidator.Validate(request.SearchAttributes, namespace, e.config.DefaultVisibilityIndexName); err != nil {
-		e.logger.Warn("Search attributes are invalid.", tag.Error(err), tag.WorkflowNamespace(namespace))
 		return err
 	}
 	if err := e.searchAttributesValidator.ValidateSize(request.SearchAttributes, namespace); err != nil {
-		e.logger.Warn("Search attributes are invalid.", tag.Error(err), tag.WorkflowNamespace(namespace))
 		return err
 	}
 

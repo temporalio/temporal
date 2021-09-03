@@ -37,19 +37,25 @@ import (
 
 type (
 	nameInterceptor struct {
-		index                    string
-		searchAttributesProvider searchattribute.Provider
+		namespace               string
+		index                   string
+		searchAttributesTypeMap searchattribute.NameTypeMap
+		searchAttributesMapper  searchattribute.Mapper
 	}
 	valuesInterceptor struct{}
 )
 
 func newNameInterceptor(
+	namespace string,
 	index string,
-	searchAttributesProvider searchattribute.Provider,
+	saTypeMap searchattribute.NameTypeMap,
+	searchAttributesMapper searchattribute.Mapper,
 ) *nameInterceptor {
 	return &nameInterceptor{
-		index:                    index,
-		searchAttributesProvider: searchAttributesProvider,
+		namespace:               namespace,
+		index:                   index,
+		searchAttributesTypeMap: saTypeMap,
+		searchAttributesMapper:  searchAttributesMapper,
 	}
 }
 
@@ -58,23 +64,27 @@ func newValuesInterceptor() *valuesInterceptor {
 }
 
 func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string, error) {
-	searchAttributes, err := ni.searchAttributesProvider.GetSearchAttributes(ni.index, false)
-	if err != nil {
-		return "", fmt.Errorf("unable to read search attribute types: %v", err)
-	}
-
-	if !searchAttributes.IsDefined(name) {
-		return "", fmt.Errorf("invalid search attribute: %s", name)
-	}
-
-	if usage == query.FieldNameSorter {
-		fieldType, _ := searchAttributes.GetType(name)
-		if fieldType == enumspb.INDEXED_VALUE_TYPE_STRING {
-			return "", errors.New("unable to sort by field of String type, use field of type Keyword")
+	fieldName := name
+	if searchattribute.IsMappable(name) && ni.searchAttributesMapper != nil {
+		var err error
+		fieldName, err = ni.searchAttributesMapper.GetFieldName(name, ni.namespace)
+		if err != nil {
+			return "", err
 		}
 	}
 
-	return name, nil
+	fieldType, err := ni.searchAttributesTypeMap.GetType(fieldName)
+	if err != nil {
+		return "", query.NewConverterError(fmt.Sprintf("invalid search attribute: %s", name))
+	}
+
+	if usage == query.FieldNameSorter {
+		if fieldType == enumspb.INDEXED_VALUE_TYPE_STRING {
+			return "", query.NewConverterError(fmt.Sprintf("unable to sort by field of %s type, use field of type %s", enumspb.INDEXED_VALUE_TYPE_STRING.String(), enumspb.INDEXED_VALUE_TYPE_KEYWORD.String()))
+		}
+	}
+
+	return fieldName, nil
 }
 
 func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]interface{}, error) {
@@ -84,7 +94,7 @@ func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]inter
 		switch name {
 		case searchattribute.StartTime, searchattribute.CloseTime, searchattribute.ExecutionTime:
 			if nanos, isNumber := value.(int64); isNumber {
-				value = time.Unix(0, int64(nanos)).UTC().Format(time.RFC3339Nano)
+				value = time.Unix(0, nanos).UTC().Format(time.RFC3339Nano)
 			}
 		case searchattribute.ExecutionStatus:
 			if status, isNumber := value.(int64); isNumber {
@@ -100,8 +110,9 @@ func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]inter
 				} else {
 					// To support "hh:mm:ss" durations.
 					durationNanos, err := vi.parseHHMMSSDuration(durationStr)
-					if errors.Is(err, ErrInvalidDuration) {
-						return nil, err
+					var converterErr *query.ConverterError
+					if errors.As(err, &converterErr) {
+						return nil, converterErr
 					}
 					if err == nil {
 						value = durationNanos
@@ -120,16 +131,16 @@ func (vi *valuesInterceptor) parseHHMMSSDuration(d string) (int64, error) {
 	var hours, minutes, seconds, nanos int64
 	_, err := fmt.Sscanf(d, "%d:%d:%d", &hours, &minutes, &seconds)
 	if err != nil {
-		return 0, err
+		return 0, errors.New("value is not a duration")
 	}
 	if hours < 0 {
-		return 0, fmt.Errorf("%w: hours must be positive number", ErrInvalidDuration)
+		return 0, query.NewConverterError("invalid duration: hours must be positive number")
 	}
 	if minutes < 0 || minutes > 59 {
-		return 0, fmt.Errorf("%w: minutes must be from 0 to 59", ErrInvalidDuration)
+		return 0, query.NewConverterError("invalid duration: minutes must be from 0 to 59")
 	}
 	if seconds < 0 || seconds > 59 {
-		return 0, fmt.Errorf("%w: seconds must be from 0 to 59", ErrInvalidDuration)
+		return 0, query.NewConverterError("invalid duration: seconds must be from 0 to 59")
 	}
 
 	return hours*int64(time.Hour) + minutes*int64(time.Minute) + seconds*int64(time.Second) + nanos, nil

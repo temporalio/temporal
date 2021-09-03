@@ -64,6 +64,7 @@ type (
 		ClusterMetadata          *cluster.MockMetadata
 		SearchAttributesProvider *searchattribute.MockProvider
 		SearchAttributesManager  *searchattribute.MockManager
+		SearchAttributesMapper   *searchattribute.MockMapper
 
 		// other common resources
 
@@ -172,6 +173,7 @@ func NewTest(
 		ClusterMetadata:          cluster.NewMockMetadata(controller),
 		SearchAttributesProvider: searchattribute.NewMockProvider(controller),
 		SearchAttributesManager:  searchattribute.NewMockManager(controller),
+		SearchAttributesMapper:   searchattribute.NewMockMapper(controller),
 
 		// other common resources
 
@@ -433,4 +435,8 @@ func (h *Test) GetSearchAttributesProvider() searchattribute.Provider {
 
 func (h *Test) GetSearchAttributesManager() searchattribute.Manager {
 	return h.SearchAttributesManager
+}
+
+func (h *Test) GetSearchAttributesMapper() searchattribute.Mapper {
+	return h.SearchAttributesMapper
 }

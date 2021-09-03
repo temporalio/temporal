@@ -615,6 +615,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 				history, _, err = wh.getHistory(
 					wh.metricsScope(ctx),
 					namespaceID,
+					request.GetNamespace(),
 					*execution,
 					lastFirstEventID,
 					nextEventID,
@@ -661,6 +662,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 				history, continuationToken.PersistenceToken, err = wh.getHistory(
 					wh.metricsScope(ctx),
 					namespaceID,
+					request.GetNamespace(),
 					*execution,
 					continuationToken.FirstEventId,
 					continuationToken.NextEventId,
@@ -2829,11 +2831,17 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		return nil, err
 	}
 
-	searchAttributes, err := wh.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
-	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+	if response.GetWorkflowExecutionInfo().GetSearchAttributes() != nil {
+		saTypeMap, err := wh.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
+		if err != nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+		}
+		searchattribute.ApplyTypeMap(response.GetWorkflowExecutionInfo().GetSearchAttributes(), saTypeMap)
+		err = searchattribute.ApplyAliases(wh.GetSearchAttributesMapper(), response.GetWorkflowExecutionInfo().GetSearchAttributes(), request.GetNamespace())
+		if err != nil {
+			return nil, err
+		}
 	}
-	searchattribute.ApplyTypeMap(response.GetWorkflowExecutionInfo().GetSearchAttributes(), searchAttributes)
 
 	return &workflowservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig:       response.GetExecutionConfig(),
@@ -3015,6 +3023,7 @@ func (wh *WorkflowHandler) getRawHistory(
 func (wh *WorkflowHandler) getHistory(
 	scope metrics.Scope,
 	namespaceID string,
+	namespace string,
 	execution commonpb.WorkflowExecution,
 	firstEventID int64,
 	nextEventID int64,
@@ -3080,7 +3089,7 @@ func (wh *WorkflowHandler) getHistory(
 		historyEvents = append(historyEvents, transientWorkflowTaskInfo.ScheduledEvent, transientWorkflowTaskInfo.StartedEvent)
 	}
 
-	if err := wh.applySearchAttributesTypeMap(historyEvents); err != nil {
+	if err := wh.processSearchAttributes(historyEvents, namespace); err != nil {
 		return nil, nil, err
 	}
 
@@ -3090,7 +3099,7 @@ func (wh *WorkflowHandler) getHistory(
 	return executionHistory, nextPageToken, nil
 }
 
-func (wh *WorkflowHandler) applySearchAttributesTypeMap(events []*historypb.HistoryEvent) error {
+func (wh *WorkflowHandler) processSearchAttributes(events []*historypb.HistoryEvent, namespace string) error {
 	saTypeMap, err := wh.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
@@ -3109,6 +3118,10 @@ func (wh *WorkflowHandler) applySearchAttributesTypeMap(events []*historypb.Hist
 		}
 		if searchAttributes != nil {
 			searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
+			err = searchattribute.ApplyAliases(wh.GetSearchAttributesMapper(), searchAttributes, namespace)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -3196,10 +3209,11 @@ func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 		history, persistenceToken, err = wh.getHistory(
 			wh.metricsScope(ctx),
 			namespaceID,
+			namespace.GetInfo().GetName(),
 			*matchingResp.GetWorkflowExecution(),
 			firstEventID,
 			nextEventID,
-			int32(wh.config.HistoryMaxPageSize(namespace.GetInfo().Name)),
+			int32(wh.config.HistoryMaxPageSize(namespace.GetInfo().GetName())),
 			nil,
 			matchingResp.GetWorkflowTaskInfo(),
 			branchToken,

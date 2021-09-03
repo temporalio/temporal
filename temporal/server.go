@@ -380,6 +380,7 @@ func (s *Server) newBootstrapParams(
 	params.AudienceGetter = s.so.audienceGetter
 
 	params.PersistenceServiceResolver = s.so.persistenceServiceResolver
+	params.SearchAttributesMapper = s.so.searchAttributesMapper
 
 	return params, nil
 }
