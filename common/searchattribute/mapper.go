@@ -31,9 +31,10 @@ import (
 )
 
 type (
+	// Mapper interface allows overriding custom search attribute names with aliases per namespace.
+	// Create an instance of a Mapper interface and pass it to the temporal.NewServer using temporal.WithSearchAttributesMapper.
+	// Returned error must be from the serviceerror package.
 	Mapper interface {
-		// error must be a serviceerror because it is returned to the API caller as is.
-
 		GetAlias(fieldName string, namespace string) (string, error)
 		GetFieldName(alias string, namespace string) (string, error)
 	}
