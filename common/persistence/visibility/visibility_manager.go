@@ -87,7 +87,7 @@ type (
 	// ListWorkflowExecutionsRequestV2 is used to list executions in a namespace
 	ListWorkflowExecutionsRequestV2 struct {
 		NamespaceID string
-		Namespace   string // namespace name is not persisted, but used as config filter key
+		Namespace   string // namespace name is not persisted
 		PageSize    int    // Maximum number of workflow executions per page
 		// Token to continue reading next page of workflow executions.
 		// Pass in empty slice for first page.
@@ -106,7 +106,7 @@ type (
 	// CountWorkflowExecutionsRequest is request from CountWorkflowExecutions
 	CountWorkflowExecutionsRequest struct {
 		NamespaceID string
-		Namespace   string // namespace name is not persisted, but used as config filter key
+		Namespace   string // namespace name is not persisted
 		Query       string
 	}
 

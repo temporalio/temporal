@@ -45,12 +45,12 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -69,7 +69,7 @@ type (
 		mockShard           *shard.ContextTest
 		mockTxProcessor     *MocktransferQueueProcessor
 		mockTimerProcessor  *MocktimerQueueProcessor
-		mockNamespaceCache  *cache.MockNamespaceCache
+		mockNamespaceCache  *namespace.MockCache
 		mockMatchingClient  *matchingservicemock.MockMatchingServiceClient
 		mockClusterMetadata *cluster.MockMetadata
 
@@ -78,7 +78,7 @@ type (
 
 		logger                       log.Logger
 		namespaceID                  string
-		namespaceEntry               *cache.NamespaceCacheEntry
+		namespaceEntry               *namespace.CacheEntry
 		version                      int64
 		now                          time.Time
 		timeSource                   *clock.EventTimeSource

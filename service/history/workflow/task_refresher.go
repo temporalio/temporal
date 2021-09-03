@@ -33,9 +33,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
@@ -48,7 +48,7 @@ type (
 
 	TaskRefresherImpl struct {
 		config         *configs.Config
-		namespaceCache cache.NamespaceCache
+		namespaceCache namespace.Cache
 		eventsCache    events.Cache
 		logger         log.Logger
 	}
@@ -56,7 +56,7 @@ type (
 
 func NewTaskRefresher(
 	config *configs.Config,
-	namespaceCache cache.NamespaceCache,
+	namespaceCache namespace.Cache,
 	eventsCache events.Cache,
 	logger log.Logger,
 ) *TaskRefresherImpl {

@@ -34,11 +34,11 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/api/common/v1"
-	cache "go.temporal.io/server/common/cache"
 	clock "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
 	log "go.temporal.io/server/common/log"
 	metrics "go.temporal.io/server/common/metrics"
+	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
 	resource "go.temporal.io/server/common/resource"
 	configs "go.temporal.io/server/service/history/configs"
@@ -353,10 +353,10 @@ func (mr *MockContextMockRecorder) GetMetricsClient() *gomock.Call {
 }
 
 // GetNamespaceCache mocks base method.
-func (m *MockContext) GetNamespaceCache() cache.NamespaceCache {
+func (m *MockContext) GetNamespaceCache() namespace.Cache {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNamespaceCache")
-	ret0, _ := ret[0].(cache.NamespaceCache)
+	ret0, _ := ret[0].(namespace.Cache)
 	return ret0
 }
 

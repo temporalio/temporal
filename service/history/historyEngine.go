@@ -53,7 +53,6 @@ import (
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -61,6 +60,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -115,6 +115,7 @@ type (
 		rawMatchingClient         matchingservice.MatchingServiceClient
 		replicationDLQHandler     replicationDLQHandler
 		searchAttributesValidator *searchattribute.Validator
+		searchAttributesMapper    searchattribute.Mapper
 	}
 )
 
@@ -197,10 +198,13 @@ func NewEngineWithShardContext(
 
 	historyEngImpl.searchAttributesValidator = searchattribute.NewValidator(
 		shard.GetService().GetSearchAttributesProvider(),
+		shard.GetService().GetSearchAttributesMapper(),
 		config.SearchAttributesNumberOfKeysLimit,
 		config.SearchAttributesSizeOfValueLimit,
 		config.SearchAttributesTotalSizeLimit,
 	)
+
+	historyEngImpl.searchAttributesMapper = shard.GetService().GetSearchAttributesMapper()
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
 
@@ -347,7 +351,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 	//		failover min / max task levels calculated & updated to shard (using shard lock) -> failover start
 	// above 2 guarantees that failover start is after persistence of the task.
 
-	failoverPredicate := func(shardNotificationVersion int64, nextNamespace *cache.NamespaceCacheEntry, action func()) {
+	failoverPredicate := func(shardNotificationVersion int64, nextNamespace *namespace.CacheEntry, action func()) {
 		namespaceFailoverNotificationVersion := nextNamespace.GetFailoverNotificationVersion()
 		namespaceActiveCluster := nextNamespace.GetReplicationConfig().ActiveClusterName
 
@@ -366,7 +370,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 			e.txProcessor.LockTaskProcessing()
 			e.timerProcessor.LockTaskProcessing()
 		},
-		func(prevNamespaces []*cache.NamespaceCacheEntry, nextNamespaces []*cache.NamespaceCacheEntry) {
+		func(prevNamespaces []*namespace.CacheEntry, nextNamespaces []*namespace.CacheEntry) {
 			defer func() {
 				e.txProcessor.UnlockTaskPrrocessing()
 				e.timerProcessor.UnlockTaskProcessing()
@@ -408,7 +412,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 
 func createMutableState(
 	shard shard.Context,
-	namespaceEntry *cache.NamespaceCacheEntry,
+	namespaceEntry *namespace.CacheEntry,
 	runID string,
 ) (workflow.MutableState, error) {
 
@@ -462,6 +466,11 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	request := startRequest.StartRequest
 	e.overrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope)
 	err = e.validateStartWorkflowExecutionRequest(ctx, request, namespace, "StartWorkflowExecution")
+	if err != nil {
+		return nil, err
+	}
+
+	err = searchattribute.SubstituteAliases(e.searchAttributesMapper, request.GetSearchAttributes(), namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -1933,6 +1942,11 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, err
 	}
 
+	err = searchattribute.SubstituteAliases(e.searchAttributesMapper, request.GetSearchAttributes(), namespace)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := common.CheckEventBlobSizeLimit(
 		sRequest.GetSignalInput().Size(),
 		e.config.BlobSizeLimitWarn(namespace),
@@ -2699,7 +2713,7 @@ func validateNamespaceUUID(
 
 func (e *historyEngineImpl) getActiveNamespaceEntry(
 	namespaceUUID string,
-) (*cache.NamespaceCacheEntry, error) {
+) (*namespace.CacheEntry, error) {
 
 	return getActiveNamespaceEntryFromShard(e.shard, namespaceUUID)
 }
@@ -2707,7 +2721,7 @@ func (e *historyEngineImpl) getActiveNamespaceEntry(
 func getActiveNamespaceEntryFromShard(
 	shard shard.Context,
 	namespaceUUID string,
-) (*cache.NamespaceCacheEntry, error) {
+) (*namespace.CacheEntry, error) {
 
 	namespaceID, err := validateNamespaceUUID(namespaceUUID)
 	if err != nil {

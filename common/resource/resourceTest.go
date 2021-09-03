@@ -43,12 +43,12 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -64,10 +64,11 @@ type (
 		ClusterMetadata          *cluster.MockMetadata
 		SearchAttributesProvider *searchattribute.MockProvider
 		SearchAttributesManager  *searchattribute.MockManager
+		SearchAttributesMapper   *searchattribute.MockMapper
 
 		// other common resources
 
-		NamespaceCache    *cache.MockNamespaceCache
+		NamespaceCache    *namespace.MockCache
 		TimeSource        clock.TimeSource
 		PayloadSerializer serialization.Serializer
 		MetricsClient     metrics.Client
@@ -172,10 +173,11 @@ func NewTest(
 		ClusterMetadata:          cluster.NewMockMetadata(controller),
 		SearchAttributesProvider: searchattribute.NewMockProvider(controller),
 		SearchAttributesManager:  searchattribute.NewMockManager(controller),
+		SearchAttributesMapper:   searchattribute.NewMockMapper(controller),
 
 		// other common resources
 
-		NamespaceCache:    cache.NewMockNamespaceCache(controller),
+		NamespaceCache:    namespace.NewMockCache(controller),
 		TimeSource:        clock.NewRealTimeSource(),
 		PayloadSerializer: serialization.NewSerializer(),
 		MetricsClient:     metrics.NewClient(scope, serviceMetricsIndex),
@@ -258,7 +260,7 @@ func (s *Test) GetClusterMetadataManager() persistence.ClusterMetadataManager {
 // other common resources
 
 // GetNamespaceCache for testing
-func (s *Test) GetNamespaceCache() cache.NamespaceCache {
+func (s *Test) GetNamespaceCache() namespace.Cache {
 	return s.NamespaceCache
 }
 
@@ -433,4 +435,8 @@ func (h *Test) GetSearchAttributesProvider() searchattribute.Provider {
 
 func (h *Test) GetSearchAttributesManager() searchattribute.Manager {
 	return h.SearchAttributesManager
+}
+
+func (h *Test) GetSearchAttributesMapper() searchattribute.Mapper {
+	return h.SearchAttributesMapper
 }

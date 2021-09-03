@@ -35,10 +35,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -57,7 +57,7 @@ type (
 
 		controller          *gomock.Controller
 		mockClusterMetadata *cluster.MockMetadata
-		mockNamespaceCache  *cache.MockNamespaceCache
+		mockNamespaceCache  *namespace.MockCache
 
 		namespace              string
 		namespaceID            string
@@ -129,7 +129,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
-	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
+	s.mockNamespaceCache = namespace.NewMockCache(s.controller)
 
 	s.namespace = "some random namespace name"
 	s.namespaceID = "deadd0d0-c001-face-d00d-000000000000"
@@ -335,7 +335,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) setupLocalNamespace() {
-	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+	namespaceEntry := namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		cluster.TestCurrentClusterName,
@@ -347,7 +347,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupLocalNamespace() {
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalNamespaceWithOneReplicationCluster() {
-	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+	namespaceEntry := namespace.NewGlobalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{
@@ -370,7 +370,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalNamespaceWithT
 	if isRecordActive {
 		activeCluster = s.currentClusterName
 	}
-	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+	namespaceEntry := namespace.NewGlobalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{

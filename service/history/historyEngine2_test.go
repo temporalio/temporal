@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -42,10 +43,13 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
@@ -57,12 +61,12 @@ import (
 
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 )
@@ -77,7 +81,7 @@ type (
 		mockTxProcessor     *MocktransferQueueProcessor
 		mockTimerProcessor  *MocktimerQueueProcessor
 		mockEventsCache     *events.MockCache
-		mockNamespaceCache  *cache.MockNamespaceCache
+		mockNamespaceCache  *namespace.MockCache
 		mockClusterMetadata *cluster.MockMetadata
 
 		historyEngine    *historyEngineImpl
@@ -126,7 +130,7 @@ func (s *engine2Suite) SetupTest() {
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockEventsCache = s.mockShard.MockEventsCache
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: tests.NamespaceID}, &persistencespb.NamespaceConfig{}, "", nil,
 	), nil).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
@@ -139,20 +143,28 @@ func (s *engine2Suite) SetupTest() {
 
 	historyCache := workflow.NewCache(s.mockShard)
 	h := &historyEngineImpl{
-		currentClusterName: s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
-		shard:              s.mockShard,
-		clusterMetadata:    s.mockClusterMetadata,
-		executionManager:   s.mockExecutionMgr,
-		historyCache:       historyCache,
-		logger:             s.logger,
-		throttledLogger:    s.logger,
-		metricsClient:      metrics.NewClient(tally.NoopScope, metrics.History),
-		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
-		config:             s.config,
-		timeSource:         s.mockShard.GetTimeSource(),
-		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
-		txProcessor:        s.mockTxProcessor,
-		timerProcessor:     s.mockTimerProcessor,
+		currentClusterName:     s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
+		shard:                  s.mockShard,
+		clusterMetadata:        s.mockClusterMetadata,
+		executionManager:       s.mockExecutionMgr,
+		historyCache:           historyCache,
+		logger:                 s.logger,
+		throttledLogger:        s.logger,
+		metricsClient:          metrics.NewClient(tally.NoopScope, metrics.History),
+		tokenSerializer:        common.NewProtoTaskTokenSerializer(),
+		config:                 s.config,
+		timeSource:             s.mockShard.GetTimeSource(),
+		eventNotifier:          events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
+		txProcessor:            s.mockTxProcessor,
+		timerProcessor:         s.mockTimerProcessor,
+		searchAttributesMapper: s.mockShard.Resource.SearchAttributesMapper,
+		searchAttributesValidator: searchattribute.NewValidator(
+			searchattribute.NewTestProvider(),
+			s.mockShard.Resource.SearchAttributesMapper,
+			s.config.SearchAttributesNumberOfKeysLimit,
+			s.config.SearchAttributesSizeOfValueLimit,
+			s.config.SearchAttributesTotalSizeLimit,
+		),
 	}
 	s.mockShard.SetEngine(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
@@ -781,8 +793,11 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_NotFound() {
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
-func (s *engine2Suite) createExecutionStartedState(we commonpb.WorkflowExecution, tl, identity string,
-	startWorkflowTask bool) workflow.MutableState {
+func (s *engine2Suite) createExecutionStartedState(
+	we commonpb.WorkflowExecution, tl string,
+	identity string,
+	startWorkflowTask bool,
+) workflow.MutableState {
 	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache,
 		s.logger, we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
@@ -791,6 +806,13 @@ func (s *engine2Suite) createExecutionStartedState(we commonpb.WorkflowExecution
 		addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	}
 	_ = msBuilder.SetHistoryTree(we.GetRunId())
+	versionHistory, _ := versionhistory.GetCurrentVersionHistory(
+		msBuilder.GetExecutionInfo().VersionHistories,
+	)
+	_ = versionhistory.AddOrUpdateVersionHistoryItem(
+		versionHistory,
+		versionhistory.NewVersionHistoryItem(0, 0),
+	)
 
 	return msBuilder
 }
@@ -877,6 +899,41 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 			Identity:                 identity,
 			RequestId:                requestID,
 		},
+	})
+	s.Nil(err)
+	s.NotNil(resp.RunId)
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
+	namespaceID := tests.NamespaceID
+	workflowID := "workflowID"
+	workflowType := "workflowType"
+	taskQueue := "testTaskQueue"
+	identity := "testIdentity"
+
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any()).Return(&persistence.CreateWorkflowExecutionResponse{}, nil)
+	s.mockShard.Resource.SearchAttributesMapper.EXPECT().GetFieldName(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(alias string, namespace string) (string, error) {
+			return strings.TrimPrefix(alias, "AliasFor"), nil
+		}).Times(2)
+
+	requestID := uuid.New()
+	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.StartWorkflowExecutionRequest{
+		Attempt:     1,
+		NamespaceId: namespaceID,
+		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:                namespaceID,
+			WorkflowId:               workflowID,
+			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
+			WorkflowExecutionTimeout: timestamp.DurationPtr(20 * time.Second),
+			WorkflowRunTimeout:       timestamp.DurationPtr(1 * time.Second),
+			WorkflowTaskTimeout:      timestamp.DurationPtr(2 * time.Second),
+			Identity:                 identity,
+			RequestId:                requestID,
+			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+				"AliasForCustomKeywordField": payload.EncodeString("test"),
+			}}},
 	})
 	s.Nil(err)
 	s.NotNil(resp.RunId)

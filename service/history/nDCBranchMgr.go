@@ -33,9 +33,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	historyspb "go.temporal.io/server/api/history/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -59,7 +59,7 @@ type (
 
 	nDCBranchMgrImpl struct {
 		shard           shard.Context
-		namespaceCache  cache.NamespaceCache
+		namespaceCache  namespace.Cache
 		clusterMetadata cluster.Metadata
 		executionMgr    persistence.ExecutionManager
 

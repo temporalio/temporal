@@ -31,6 +31,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/namespace"
+
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 
@@ -50,7 +52,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -86,10 +87,11 @@ type (
 		clusterMetadata cluster.Metadata
 		saProvider      searchattribute.Provider
 		saManager       searchattribute.Manager
+		saMapper        searchattribute.Mapper
 
 		// other common resources
 
-		namespaceCache    cache.NamespaceCache
+		namespaceCache    namespace.Cache
 		timeSource        clock.TimeSource
 		payloadSerializer serialization.Serializer
 		metricsClient     metrics.Client
@@ -247,7 +249,6 @@ func New(
 	}
 
 	saProvider := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
-
 	saManager := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
 
 	visibilityMgr, err := visibilityManagerInitializer(
@@ -259,7 +260,7 @@ func New(
 		return nil, err
 	}
 
-	namespaceCache := cache.NewNamespaceCache(
+	namespaceCache := namespace.NewNamespaceCache(
 		persistenceBean.GetMetadataManager(),
 		clusterMetadata,
 		params.MetricsClient,
@@ -295,13 +296,11 @@ func New(
 		Logger:           logger,
 		MetricsClient:    params.MetricsClient,
 		ClusterMetadata:  clusterMetadata,
-		NamespaceCache:   namespaceCache,
 	}
 	visibilityArchiverBootstrapContainer := &archiver.VisibilityBootstrapContainer{
 		Logger:          logger,
 		MetricsClient:   params.MetricsClient,
 		ClusterMetadata: clusterMetadata,
-		NamespaceCache:  namespaceCache,
 	}
 	if err := params.ArchiverProvider.RegisterBootstrapContainer(
 		serviceName,
@@ -323,6 +322,7 @@ func New(
 		clusterMetadata: clusterMetadata,
 		saProvider:      saProvider,
 		saManager:       saManager,
+		saMapper:        params.SearchAttributesMapper,
 
 		// other common resources
 
@@ -453,7 +453,7 @@ func (h *Impl) GetClusterMetadata() cluster.Metadata {
 // other common resources
 
 // GetNamespaceCache return namespace cache
-func (h *Impl) GetNamespaceCache() cache.NamespaceCache {
+func (h *Impl) GetNamespaceCache() namespace.Cache {
 	return h.namespaceCache
 }
 
@@ -632,4 +632,8 @@ func (h *Impl) GetSearchAttributesProvider() searchattribute.Provider {
 
 func (h *Impl) GetSearchAttributesManager() searchattribute.Manager {
 	return h.saManager
+}
+
+func (h *Impl) GetSearchAttributesMapper() searchattribute.Mapper {
+	return h.saMapper
 }

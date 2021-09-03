@@ -33,9 +33,9 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
@@ -163,7 +163,7 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 	task *persistencespb.TimerTaskInfo,
 	workflowContext workflow.Context,
 	msBuilder workflow.MutableState,
-	namespaceCacheEntry *cache.NamespaceCacheEntry,
+	namespaceCacheEntry *namespace.CacheEntry,
 ) error {
 	branchToken, err := msBuilder.GetCurrentBranchToken()
 	if err != nil {

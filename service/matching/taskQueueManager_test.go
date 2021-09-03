@@ -42,9 +42,9 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -290,8 +290,8 @@ func createTestTaskQueueManagerWithConfig(
 ) (*taskQueueManagerImpl, error) {
 	logger := log.NewTestLogger()
 	tm := newTestTaskManager(logger)
-	mockNamespaceCache := cache.NewMockNamespaceCache(controller)
-	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(cache.CreateNamespaceCacheEntry("namespace"), nil).AnyTimes()
+	mockNamespaceCache := namespace.NewMockCache(controller)
+	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespace.CreateNamespaceCacheEntry("namespace"), nil).AnyTimes()
 	me := newMatchingEngine(
 		cfg, tm, nil, logger, mockNamespaceCache,
 	)

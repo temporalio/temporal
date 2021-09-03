@@ -57,13 +57,13 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -89,7 +89,7 @@ type (
 		mockTxProcessor              *MocktransferQueueProcessor
 		mockReplicationProcessor     *MockReplicatorQueueProcessor
 		mockTimerProcessor           *MocktimerQueueProcessor
-		mockNamespaceCache           *cache.MockNamespaceCache
+		mockNamespaceCache           *namespace.MockCache
 		mockMatchingClient           *matchingservicemock.MockMatchingServiceClient
 		mockHistoryClient            *historyservicemock.MockHistoryServiceClient
 		mockClusterMetadata          *cluster.MockMetadata
@@ -105,13 +105,13 @@ type (
 		logger                          log.Logger
 		namespaceID                     string
 		namespace                       string
-		namespaceEntry                  *cache.NamespaceCacheEntry
+		namespaceEntry                  *namespace.CacheEntry
 		targetNamespaceID               string
 		targetNamespace                 string
-		targetNamespaceEntry            *cache.NamespaceCacheEntry
+		targetNamespaceEntry            *namespace.CacheEntry
 		childNamespaceID                string
 		childNamespace                  string
-		childNamespaceEntry             *cache.NamespaceCacheEntry
+		childNamespaceEntry             *namespace.CacheEntry
 		version                         int64
 		now                             time.Time
 		timeSource                      *clock.EventTimeSource

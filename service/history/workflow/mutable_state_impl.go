@@ -48,7 +48,6 @@ import (
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
@@ -58,6 +57,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/migration"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -148,7 +148,7 @@ type (
 		dbRecordVersion int64
 		// namespace entry contains a snapshot of namespace
 		// NOTE: do not use the failover version inside, use currentVersion above
-		namespaceEntry *cache.NamespaceCacheEntry
+		namespaceEntry *namespace.CacheEntry
 		// record if a event has been applied to mutable state
 		// TODO: persist this to db
 		appliedEvents map[string]struct{}
@@ -184,7 +184,7 @@ func NewMutableState(
 	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
-	namespaceEntry *cache.NamespaceCacheEntry,
+	namespaceEntry *namespace.CacheEntry,
 	startTime time.Time,
 ) *MutableStateImpl {
 	s := &MutableStateImpl{
@@ -274,7 +274,7 @@ func newMutableStateBuilderFromDB(
 	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
-	namespaceEntry *cache.NamespaceCacheEntry,
+	namespaceEntry *namespace.CacheEntry,
 	dbRecord *persistencespb.WorkflowMutableState,
 	dbRecordVersion int64,
 ) (*MutableStateImpl, error) {
@@ -450,7 +450,12 @@ func (e *MutableStateImpl) UpdateCurrentVersion(
 ) error {
 
 	if state, _ := e.GetWorkflowStateStatus(); state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		// do not update current version only when workflow is completed
+		// always set current version to last write version when workflow is completed
+		lastWriteVersion, err := e.GetLastWriteVersion()
+		if err != nil {
+			return err
+		}
+		e.currentVersion = lastWriteVersion
 		return nil
 	}
 
@@ -553,7 +558,7 @@ func (e *MutableStateImpl) IsCurrentWorkflowGuaranteed() bool {
 	}
 }
 
-func (e *MutableStateImpl) GetNamespaceEntry() *cache.NamespaceCacheEntry {
+func (e *MutableStateImpl) GetNamespaceEntry() *namespace.CacheEntry {
 	return e.namespaceEntry
 }
 
@@ -3613,7 +3618,7 @@ func (e *MutableStateImpl) UpdateWorkflowStateStatus(
 }
 
 func (e *MutableStateImpl) StartTransaction(
-	namespaceEntry *cache.NamespaceCacheEntry,
+	namespaceEntry *namespace.CacheEntry,
 ) (bool, error) {
 
 	e.namespaceEntry = namespaceEntry
@@ -3632,7 +3637,7 @@ func (e *MutableStateImpl) StartTransaction(
 }
 
 func (e *MutableStateImpl) StartTransactionSkipWorkflowTaskFail(
-	namespaceEntry *cache.NamespaceCacheEntry,
+	namespaceEntry *namespace.CacheEntry,
 ) error {
 
 	e.namespaceEntry = namespaceEntry
@@ -4073,7 +4078,7 @@ func (e *MutableStateImpl) updateWithLastWriteEvent(
 }
 
 func (e *MutableStateImpl) canReplicateEvents() bool {
-	return e.namespaceEntry.GetReplicationPolicy() == cache.ReplicationPolicyMultiCluster
+	return e.namespaceEntry.GetReplicationPolicy() == namespace.ReplicationPolicyMultiCluster
 }
 
 // validateNoEventsAfterWorkflowFinish perform check on history event batch

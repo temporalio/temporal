@@ -43,12 +43,12 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -67,7 +67,7 @@ type (
 		mockShard           *shard.ContextTest
 		mockTxProcessor     *MocktransferQueueProcessor
 		mockTimerProcessor  *MocktimerQueueProcessor
-		mockNamespaceCache  *cache.MockNamespaceCache
+		mockNamespaceCache  *namespace.MockCache
 		mockClusterMetadata *cluster.MockMetadata
 		mockMutableState    *workflow.MockMutableState
 
@@ -594,7 +594,7 @@ func (s *activityReplicatorSuite) TestVersionHistory_Diverge_IncomingLarger() {
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
-	namespace := "some random namespace name"
+	namespaceName := "some random namespace name"
 	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
@@ -614,8 +614,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
-		cache.NewGlobalNamespaceCacheEntryForTest(
-			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace},
+		namespace.NewGlobalCacheEntryForTest(
+			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName},
 			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
@@ -634,7 +634,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
-	namespace := tests.Namespace
+	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
 	runID := uuid.New()
@@ -689,8 +689,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 	).AnyTimes()
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
-		cache.NewGlobalNamespaceCacheEntryForTest(
-			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace},
+		namespace.NewGlobalCacheEntryForTest(
+			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName},
 			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
@@ -709,7 +709,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_ActivityNotFound() {
-	namespace := tests.Namespace
+	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
 	runID := uuid.New()
@@ -765,8 +765,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityNotFound() {
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
-		cache.NewGlobalNamespaceCacheEntryForTest(
-			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace},
+		namespace.NewGlobalCacheEntryForTest(
+			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName},
 			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
@@ -785,7 +785,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityNotFound() {
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
-	namespace := tests.Namespace
+	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
 	runID := uuid.New()
@@ -856,8 +856,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 	).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
-		cache.NewGlobalNamespaceCacheEntryForTest(
-			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace},
+		namespace.NewGlobalCacheEntryForTest(
+			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName},
 			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,
@@ -876,7 +876,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 }
 
 func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
-	namespace := tests.Namespace
+	namespaceName := tests.Namespace
 	namespaceID := tests.NamespaceID
 	workflowID := tests.WorkflowID
 	runID := uuid.New()
@@ -947,8 +947,8 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 	).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
-		cache.NewGlobalNamespaceCacheEntryForTest(
-			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespace},
+		namespace.NewGlobalCacheEntryForTest(
+			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName},
 			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: cluster.TestCurrentClusterName,

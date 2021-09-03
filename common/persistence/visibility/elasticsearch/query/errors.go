@@ -24,6 +24,11 @@
 
 package query
 
+import (
+	"errors"
+	"fmt"
+)
+
 type (
 	ConverterError struct {
 		text string
@@ -42,4 +47,12 @@ func NewConverterError(text string) error {
 
 func (c *ConverterError) Error() string {
 	return c.text
+}
+
+func wrapConverterError(message string, err error) error {
+	var converterErr *ConverterError
+	if errors.As(err, &converterErr) {
+		return NewConverterError(fmt.Sprintf("%s: %v", message, converterErr))
+	}
+	return err
 }

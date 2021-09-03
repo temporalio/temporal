@@ -35,11 +35,11 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
@@ -323,7 +323,7 @@ func (t *taskProcessor) handleTaskError(
 	// TODO remove this error check special case
 	//  since the new task life cycle will not give up until task processed / verified
 	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
-		if t.timeSource.Now().Sub(task.startTime) > 2*cache.NamespaceCacheRefreshInterval {
+		if t.timeSource.Now().Sub(task.startTime) > 2*namespace.CacheRefreshInterval {
 			scope.IncCounter(metrics.TaskNotActiveCounter)
 			return nil
 		}

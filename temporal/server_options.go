@@ -36,6 +36,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -62,6 +63,7 @@ type (
 		dynamicConfigClient        dynamicconfig.Client
 		customDataStoreFactory     persistenceClient.AbstractDataStoreFactory
 		clientFactoryProvider      client.FactoryProvider
+		searchAttributesMapper     searchattribute.Mapper
 	}
 )
 

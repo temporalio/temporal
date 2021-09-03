@@ -30,9 +30,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 )
@@ -51,14 +51,14 @@ var (
 	WorkflowID        = "random-workflow-id"
 	RunID             = "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 
-	LocalNamespaceEntry = cache.NewLocalNamespaceCacheEntryForTest(
+	LocalNamespaceEntry = namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: NamespaceID, Name: Namespace},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		cluster.TestCurrentClusterName,
 		nil,
 	)
 
-	GlobalNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
+	GlobalNamespaceEntry = namespace.NewGlobalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: NamespaceID, Name: Namespace},
 		&persistencespb.NamespaceConfig{
 			Retention:               timestamp.DurationFromDays(1),
@@ -76,7 +76,7 @@ var (
 		nil,
 	)
 
-	GlobalParentNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
+	GlobalParentNamespaceEntry = namespace.NewGlobalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: ParentNamespaceID, Name: ParentNamespace},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{
@@ -90,7 +90,7 @@ var (
 		nil,
 	)
 
-	GlobalTargetNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
+	GlobalTargetNamespaceEntry = namespace.NewGlobalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: TargetNamespaceID, Name: TargetNamespace},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{
@@ -104,7 +104,7 @@ var (
 		nil,
 	)
 
-	GlobalChildNamespaceEntry = cache.NewGlobalNamespaceCacheEntryForTest(
+	GlobalChildNamespaceEntry = namespace.NewGlobalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: ChildNamespaceID, Name: ChildNamespace},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{

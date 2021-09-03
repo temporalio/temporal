@@ -34,15 +34,16 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/common/searchattribute"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -67,20 +68,21 @@ type (
 	}
 
 	workflowTaskHandlerCallbacksImpl struct {
-		currentClusterName   string
-		config               *configs.Config
-		shard                shard.Context
-		timeSource           clock.TimeSource
-		historyEngine        *historyEngineImpl
-		namespaceCache       cache.NamespaceCache
-		historyCache         *workflow.Cache
-		txProcessor          transferQueueProcessor
-		timerProcessor       timerQueueProcessor
-		tokenSerializer      common.TaskTokenSerializer
-		metricsClient        metrics.Client
-		logger               log.Logger
-		throttledLogger      log.Logger
-		commandAttrValidator *commandAttrValidator
+		currentClusterName     string
+		config                 *configs.Config
+		shard                  shard.Context
+		timeSource             clock.TimeSource
+		historyEngine          *historyEngineImpl
+		namespaceCache         namespace.Cache
+		historyCache           *workflow.Cache
+		txProcessor            transferQueueProcessor
+		timerProcessor         timerQueueProcessor
+		tokenSerializer        common.TaskTokenSerializer
+		metricsClient          metrics.Client
+		logger                 log.Logger
+		throttledLogger        log.Logger
+		commandAttrValidator   *commandAttrValidator
+		searchAttributesMapper searchattribute.Mapper
 	}
 )
 
@@ -104,6 +106,7 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 			historyEngine.config,
 			historyEngine.searchAttributesValidator,
 		),
+		searchAttributesMapper: historyEngine.searchAttributesMapper,
 	}
 }
 
@@ -444,6 +447,7 @@ Update_History_Loop:
 				handler.metricsClient,
 				handler.config,
 				handler.shard,
+				handler.searchAttributesMapper,
 			)
 
 			if err := workflowTaskHandler.handleCommands(
@@ -659,7 +663,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	return response, nil
 }
 
-func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder workflow.MutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *cache.NamespaceCacheEntry, workflowTaskHeartbeating bool) {
+func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder workflow.MutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *namespace.CacheEntry, workflowTaskHeartbeating bool) {
 	queryRegistry := msBuilder.GetQueryRegistry()
 	if !queryRegistry.HasBufferedQuery() {
 		return

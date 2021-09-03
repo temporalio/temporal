@@ -34,14 +34,15 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/searchattribute"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
@@ -66,11 +67,12 @@ type (
 		initiatedChildExecutionsInBatch map[string]struct{} // Set of initiated child executions in the workflow task
 
 		// validation
-		attrValidator    *commandAttrValidator
-		sizeLimitChecker *workflowSizeChecker
+		attrValidator          *commandAttrValidator
+		sizeLimitChecker       *workflowSizeChecker
+		searchAttributesMapper searchattribute.Mapper
 
 		logger         log.Logger
-		namespaceCache cache.NamespaceCache
+		namespaceCache namespace.Cache
 		metricsClient  metrics.Client
 		config         *configs.Config
 		shard          shard.Context
@@ -89,10 +91,11 @@ func newWorkflowTaskHandler(
 	attrValidator *commandAttrValidator,
 	sizeLimitChecker *workflowSizeChecker,
 	logger log.Logger,
-	namespaceCache cache.NamespaceCache,
+	namespaceCache namespace.Cache,
 	metricsClient metrics.Client,
 	config *configs.Config,
 	shard shard.Context,
+	searchAttributesMapper searchattribute.Mapper,
 ) *workflowTaskHandlerImpl {
 
 	return &workflowTaskHandlerImpl{
@@ -109,8 +112,9 @@ func newWorkflowTaskHandler(
 		initiatedChildExecutionsInBatch: make(map[string]struct{}),
 
 		// validation
-		attrValidator:    attrValidator,
-		sizeLimitChecker: sizeLimitChecker,
+		attrValidator:          attrValidator,
+		sizeLimitChecker:       sizeLimitChecker,
+		searchAttributesMapper: searchAttributesMapper,
 
 		logger:         logger,
 		namespaceCache: namespaceCache,
@@ -674,6 +678,11 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return err
 	}
 
+	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespace); err != nil {
+		handler.stopProcessing = true
+		return err
+	}
+
 	// If the workflow task has more than one completion event than just pick the first one
 	if !handler.mutableState.IsWorkflowExecutionRunning() {
 		handler.metricsClient.IncCounter(
@@ -781,6 +790,11 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION.String()),
 	)
 	if err != nil || failWorkflow {
+		handler.stopProcessing = true
+		return err
+	}
+
+	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), targetNamespace); err != nil {
 		handler.stopProcessing = true
 		return err
 	}
@@ -904,6 +918,11 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES.String()),
 	)
 	if err != nil || failWorkflow {
+		handler.stopProcessing = true
+		return err
+	}
+
+	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespace); err != nil {
 		handler.stopProcessing = true
 		return err
 	}

@@ -54,7 +54,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -81,10 +80,11 @@ type (
 
 		controller                   *gomock.Controller
 		mockResource                 *resource.Test
-		mockNamespaceCache           *cache.MockNamespaceCache
+		mockNamespaceCache           *namespace.MockCache
 		mockHistoryClient            *historyservicemock.MockHistoryServiceClient
 		mockClusterMetadata          *cluster.MockMetadata
 		mockSearchAttributesProvider *searchattribute.MockProvider
+		mockSearchAttributesMapper   *searchattribute.MockMapper
 		mockMatchingClient           *matchingservicemock.MockMatchingServiceClient
 
 		mockProducer           *persistence.MockNamespaceReplicationQueue
@@ -128,6 +128,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.mockHistoryClient = s.mockResource.HistoryClient
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
 	s.mockSearchAttributesProvider = s.mockResource.SearchAttributesProvider
+	s.mockSearchAttributesMapper = s.mockResource.SearchAttributesMapper
 	s.mockMetadataMgr = s.mockResource.MetadataMgr
 	s.mockExecutionManager = s.mockResource.ExecutionMgr
 	s.mockVisibilityMgr = s.mockResource.VisibilityMgr
@@ -964,7 +965,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_NamespaceCacheEntr
 }
 
 func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty() {
-	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+	namespaceEntry := namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
 		&persistencespb.NamespaceConfig{
 			HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
@@ -984,7 +985,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty()
 }
 
 func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
-	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+	namespaceEntry := namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
 		&persistencespb.NamespaceConfig{
 			HistoryArchivalState:    enumspb.ARCHIVAL_STATE_ENABLED,
@@ -1004,7 +1005,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
 }
 
 func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
-	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+	namespaceEntry := namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
 		&persistencespb.NamespaceConfig{
 			HistoryArchivalState:    enumspb.ARCHIVAL_STATE_ENABLED,
@@ -1052,6 +1053,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 
 func (s *workflowHandlerSuite) TestGetHistory() {
 	namespaceID := uuid.New()
+	namespace := "namespace"
 	firstEventID := int64(100)
 	nextEventID := int64(102)
 	branchToken := []byte{1}
@@ -1081,7 +1083,8 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 						SearchAttributes: &commonpb.SearchAttributes{
 							IndexedFields: map[string]*commonpb.Payload{
-								"CustomKeywordField": payload.EncodeString("random-keyword"),
+								"CustomKeywordField":    payload.EncodeString("random-keyword"),
+								"TemporalChangeVersion": payload.EncodeString("random-data"),
 							},
 						},
 					},
@@ -1093,12 +1096,14 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	}, nil)
 
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockSearchAttributesMapper.EXPECT().GetAlias("CustomKeywordField", namespace).Return("AliasOfCustomKeyword", nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	history, token, err := wh.getHistory(
 		metrics.NoopScope(metrics.Frontend),
 		namespaceID,
+		namespace,
 		we,
 		firstEventID,
 		nextEventID,
@@ -1111,8 +1116,8 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	s.NotNil(history)
 	s.Equal([]byte{}, token)
 
-	s.Equal([]byte("Keyword"),
-		history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["CustomKeywordField"].GetMetadata()["type"])
+	s.EqualValues("Keyword", history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["AliasOfCustomKeyword"].GetMetadata()["type"])
+	s.EqualValues(`"random-data"`, history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["TemporalChangeVersion"].GetData())
 }
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidRequest() {
@@ -1145,7 +1150,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_NamespaceCache
 }
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_NamespaceNotConfiguredForArchival() {
-	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(namespace.NewLocalCacheEntryForTest(
 		nil,
 		&persistencespb.NamespaceConfig{
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
@@ -1163,7 +1168,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_NamespaceNotCo
 }
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidURI() {
-	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
 		&persistencespb.NamespaceConfig{
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
@@ -1182,7 +1187,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidURI() {
 }
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Success() {
-	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
 		&persistencespb.NamespaceConfig{
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,
@@ -1461,11 +1466,11 @@ func (s *workflowHandlerSuite) newSerializedQueryTaskToken(namespaceId string) [
 	return token
 }
 
-func newNamespaceCacheEntry(namespaceName string) *cache.NamespaceCacheEntry {
+func newNamespaceCacheEntry(namespaceName string) *namespace.CacheEntry {
 	info := &persistencespb.NamespaceInfo{
 		Name: namespaceName,
 	}
-	return cache.NewLocalNamespaceCacheEntryForTest(info, nil, "", nil)
+	return namespace.NewLocalCacheEntryForTest(info, nil, "", nil)
 }
 
 func (s *workflowHandlerSuite) setupTokenNamespaceTest(tokenNamespace string, enforce bool) *WorkflowHandler {

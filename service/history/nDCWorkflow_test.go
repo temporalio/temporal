@@ -39,8 +39,8 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -51,7 +51,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockNamespaceCache  *cache.MockNamespaceCache
+		mockNamespaceCache  *namespace.MockCache
 		mockContext         *workflow.MockContext
 		mockMutableState    *workflow.MockMutableState
 		mockClusterMetadata *cluster.MockMetadata
@@ -71,7 +71,7 @@ func (s *nDCWorkflowSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
+	s.mockNamespaceCache = namespace.NewMockCache(s.controller)
 	s.mockContext = workflow.NewMockContext(s.controller)
 	s.mockMutableState = workflow.NewMockMutableState(s.controller)
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)

@@ -42,12 +42,13 @@ func NewVisibilityManager(
 	esClient esclient.Client,
 	cfg *config.VisibilityConfig,
 	searchAttributesProvider searchattribute.Provider,
+	searchAttributesMapper searchattribute.Mapper,
 	processor Processor,
 	metricsClient metrics.Client,
 	log log.Logger,
 ) visibility.VisibilityManager {
 
-	visStore := NewVisibilityStore(esClient, indexName, searchAttributesProvider, processor, cfg, metricsClient)
+	visStore := NewVisibilityStore(esClient, indexName, searchAttributesProvider, searchAttributesMapper, processor, cfg, metricsClient)
 	visManager := visibility.NewVisibilityManagerImpl(visStore, searchAttributesProvider, indexName, log)
 
 	if cfg != nil {
