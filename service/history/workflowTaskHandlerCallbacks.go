@@ -39,11 +39,11 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -73,7 +73,7 @@ type (
 		shard                  shard.Context
 		timeSource             clock.TimeSource
 		historyEngine          *historyEngineImpl
-		namespaceCache         cache.NamespaceCache
+		namespaceCache         namespace.Cache
 		historyCache           *workflow.Cache
 		txProcessor            transferQueueProcessor
 		timerProcessor         timerQueueProcessor
@@ -663,7 +663,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	return response, nil
 }
 
-func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder workflow.MutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *cache.NamespaceCacheEntry, workflowTaskHeartbeating bool) {
+func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder workflow.MutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *namespace.CacheEntry, workflowTaskHeartbeating bool) {
 	queryRegistry := msBuilder.GetQueryRegistry()
 	if !queryRegistry.HasBufferedQuery() {
 		return

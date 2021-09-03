@@ -36,12 +36,12 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
@@ -852,7 +852,7 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 }
 
 func (s *ContextImpl) allocateTaskIDsLocked(
-	namespaceEntry *cache.NamespaceCacheEntry,
+	namespaceEntry *namespace.CacheEntry,
 	workflowID string,
 	transferTasks []persistence.Task,
 	replicationTasks []persistence.Task,
@@ -903,7 +903,7 @@ func (s *ContextImpl) allocateTransferIDsLocked(
 // because Temporal Indexer assume timer taskID of deleteWorkflowExecution is larger than transfer taskID of closeWorkflowExecution
 // for a given workflow.
 func (s *ContextImpl) allocateTimerIDsLocked(
-	namespaceEntry *cache.NamespaceCacheEntry,
+	namespaceEntry *namespace.CacheEntry,
 	workflowID string,
 	timerTasks []persistence.Task,
 ) error {

@@ -34,8 +34,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/workflow"
@@ -54,7 +54,7 @@ type (
 	}
 
 	nDCWorkflowImpl struct {
-		namespaceCache  cache.NamespaceCache
+		namespaceCache  namespace.Cache
 		clusterMetadata cluster.Metadata
 
 		ctx          context.Context
@@ -66,7 +66,7 @@ type (
 
 func newNDCWorkflow(
 	ctx context.Context,
-	namespaceCache cache.NamespaceCache,
+	namespaceCache namespace.Cache,
 	clusterMetadata cluster.Metadata,
 	context workflow.Context,
 	mutableState workflow.MutableState,

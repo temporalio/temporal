@@ -41,11 +41,11 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -65,7 +65,7 @@ type (
 		mockShard           *shard.ContextTest
 		mockEventsCache     *events.MockCache
 		mockTaskRefresher   *workflow.MockTaskRefresher
-		mockNamespaceCache  *cache.MockNamespaceCache
+		mockNamespaceCache  *namespace.MockCache
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockExecutionManager *persistence.MockExecutionManager
@@ -309,7 +309,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		Size:          historySize2,
 	}, nil)
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(targetNamespaceID).Return(cache.NewGlobalNamespaceCacheEntryForTest(
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(targetNamespaceID).Return(namespace.NewGlobalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: targetNamespaceID, Name: targetNamespace},
 		&persistencespb.NamespaceConfig{},
 		&persistencespb.NamespaceReplicationConfig{

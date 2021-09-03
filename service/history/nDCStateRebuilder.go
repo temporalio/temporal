@@ -36,12 +36,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/events"
@@ -66,7 +66,7 @@ type (
 
 	nDCStateRebuilderImpl struct {
 		shard           shard.Context
-		namespaceCache  cache.NamespaceCache
+		namespaceCache  namespace.Cache
 		eventsCache     events.Cache
 		clusterMetadata cluster.Metadata
 		executionMgr    persistence.ExecutionManager
@@ -189,7 +189,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 }
 
 func (r *nDCStateRebuilderImpl) initializeBuilders(
-	namespaceEntry *cache.NamespaceCacheEntry,
+	namespaceEntry *namespace.CacheEntry,
 	now time.Time,
 ) (workflow.MutableState, workflow.MutableStateRebuilder) {
 	resetMutableStateBuilder := workflow.NewMutableState(

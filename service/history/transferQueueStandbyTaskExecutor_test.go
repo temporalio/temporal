@@ -49,10 +49,10 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -71,7 +71,7 @@ type (
 
 		controller             *gomock.Controller
 		mockShard              *shard.ContextTest
-		mockNamespaceCache     *cache.MockNamespaceCache
+		mockNamespaceCache     *namespace.MockCache
 		mockClusterMetadata    *cluster.MockMetadata
 		mockAdminClient        *adminservicemock.MockAdminServiceClient
 		mockNDCHistoryResender *xdc.MockNDCHistoryResender
@@ -84,7 +84,7 @@ type (
 
 		logger               log.Logger
 		namespaceID          string
-		namespaceEntry       *cache.NamespaceCacheEntry
+		namespaceEntry       *namespace.CacheEntry
 		version              int64
 		clusterName          string
 		now                  time.Time

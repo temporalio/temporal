@@ -42,9 +42,9 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 )
 
@@ -474,13 +474,13 @@ func (t *MatcherTestSuite) TestRemotePollForQuery() {
 	t.True(task.isStarted())
 }
 
-func (t *MatcherTestSuite) newNamespaceCache() cache.NamespaceCache {
-	entry := cache.NewLocalNamespaceCacheEntryForTest(
+func (t *MatcherTestSuite) newNamespaceCache() namespace.Cache {
+	entry := namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
 		&persistencespb.NamespaceConfig{},
 		"",
 		nil)
-	dc := cache.NewMockNamespaceCache(t.controller)
+	dc := namespace.NewMockCache(t.controller)
 	dc.EXPECT().GetNamespaceByID(gomock.Any()).Return(entry, nil).AnyTimes()
 	return dc
 }

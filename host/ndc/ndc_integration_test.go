@@ -63,9 +63,9 @@ import (
 	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/host"
@@ -1636,7 +1636,7 @@ func (s *nDCIntegrationTestSuite) registerNamespace() {
 	s.Require().NotNil(resp)
 	s.namespaceID = resp.GetNamespaceInfo().GetId()
 	// Wait for namespace cache to pick the change
-	time.Sleep(2 * cache.NamespaceCacheRefreshInterval)
+	time.Sleep(2 * namespace.CacheRefreshInterval)
 
 	s.logger.Info("Registered namespace", tag.WorkflowNamespace(s.namespace), tag.WorkflowNamespaceID(s.namespaceID))
 }

@@ -30,9 +30,8 @@ import (
 	"sync/atomic"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/namespace"
 	"google.golang.org/grpc"
-
-	"go.temporal.io/server/common/cache"
 )
 
 var (
@@ -41,7 +40,7 @@ var (
 
 type (
 	NamespaceCountLimitInterceptor struct {
-		namespaceCache cache.NamespaceCache
+		namespaceCache namespace.Cache
 
 		countFn func(namespace string) int
 		tokens  map[string]int
@@ -54,7 +53,7 @@ type (
 var _ grpc.UnaryServerInterceptor = (*NamespaceCountLimitInterceptor)(nil).Intercept
 
 func NewNamespaceCountLimitInterceptor(
-	namespaceCache cache.NamespaceCache,
+	namespaceCache namespace.Cache,
 	countFn func(namespace string) int,
 	tokens map[string]int,
 ) *NamespaceCountLimitInterceptor {

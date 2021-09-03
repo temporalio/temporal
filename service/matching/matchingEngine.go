@@ -46,11 +46,11 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -84,7 +84,7 @@ type (
 		taskQueues           map[taskQueueID]taskQueueManager // Convert to LRU cache
 		config               *Config
 		lockableQueryTaskMap lockableQueryTaskMap
-		namespaceCache       cache.NamespaceCache
+		namespaceCache       namespace.Cache
 		keyResolver          membership.ServiceResolver
 	}
 )
@@ -114,7 +114,7 @@ func NewEngine(taskManager persistence.TaskManager,
 	config *Config,
 	logger log.Logger,
 	metricsClient metrics.Client,
-	namespaceCache cache.NamespaceCache,
+	namespaceCache namespace.Cache,
 	resolver membership.ServiceResolver,
 ) Engine {
 

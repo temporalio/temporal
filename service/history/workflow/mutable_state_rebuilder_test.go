@@ -41,9 +41,9 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -61,7 +61,7 @@ type (
 		controller          *gomock.Controller
 		mockShard           *shard.ContextTest
 		mockEventsCache     *events.MockCache
-		mockNamespaceCache  *cache.MockNamespaceCache
+		mockNamespaceCache  *namespace.MockCache
 		mockTaskGenerator   *MockTaskGenerator
 		mockMutableState    *MockMutableState
 		mockClusterMetadata *cluster.MockMetadata

@@ -33,8 +33,8 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
@@ -52,8 +52,8 @@ type (
 		mockResource *resource.Test
 
 		namespaceID        string
-		mockNamespaceCache *cache.MockNamespaceCache
-		namespaceEntry     *cache.NamespaceCacheEntry
+		mockNamespaceCache *namespace.MockCache
+		namespaceEntry     *namespace.CacheEntry
 
 		mockClusterMetadata  *cluster.MockMetadata
 		mockExecutionManager *persistence.MockExecutionManager
@@ -86,7 +86,7 @@ func (s *contextSuite) SetupTest() {
 	s.mockResource = shardContext.Resource
 
 	s.namespaceID = "namespace-Id"
-	s.namespaceEntry = cache.NewLocalNamespaceCacheEntryForTest(&persistencespb.NamespaceInfo{Id: s.namespaceID}, &persistencespb.NamespaceConfig{}, "", nil)
+	s.namespaceEntry = namespace.NewLocalCacheEntryForTest(&persistencespb.NamespaceInfo{Id: s.namespaceID}, &persistencespb.NamespaceConfig{}, "", nil)
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata

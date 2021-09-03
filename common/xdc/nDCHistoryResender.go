@@ -37,11 +37,11 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc"
 )
 
@@ -70,7 +70,7 @@ type (
 
 	// NDCHistoryResenderImpl is the implementation of NDCHistoryResender
 	NDCHistoryResenderImpl struct {
-		namespaceCache       cache.NamespaceCache
+		namespaceCache       namespace.Cache
 		adminClient          adminservice.AdminServiceClient
 		historyReplicationFn nDCHistoryReplicationFn
 		serializer           serialization.Serializer
@@ -90,7 +90,7 @@ const (
 
 // NewNDCHistoryResender create a new NDCHistoryResenderImpl
 func NewNDCHistoryResender(
-	namespaceCache cache.NamespaceCache,
+	namespaceCache namespace.Cache,
 	adminClient adminservice.AdminServiceClient,
 	historyReplicationFn nDCHistoryReplicationFn,
 	serializer serialization.Serializer,

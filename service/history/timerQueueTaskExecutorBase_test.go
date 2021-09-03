@@ -38,8 +38,8 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/shard"
@@ -61,7 +61,7 @@ type (
 		mockExecutionManager         *persistence.MockExecutionManager
 		mockVisibilityManager        *visibility.MockVisibilityManager
 		mockArchivalClient           *archiver.MockClient
-		mockNamespaceCache           *cache.MockNamespaceCache
+		mockNamespaceCache           *namespace.MockCache
 		mockClusterMetadata          *cluster.MockMetadata
 		mockSearchAttributesProvider *searchattribute.MockProvider
 
@@ -187,7 +187,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchiva
 
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
 
-	namespaceCacheEntry := cache.NewNamespaceCacheEntryForTest(&persistencespb.NamespaceInfo{}, &persistencespb.NamespaceConfig{}, false, nil, 0, nil)
+	namespaceCacheEntry := namespace.NewNamespaceCacheEntryForTest(&persistencespb.NamespaceInfo{}, &persistencespb.NamespaceConfig{}, false, nil, 0, nil)
 	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceCacheEntry)
 	s.NoError(err)
@@ -206,7 +206,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_SendSignalErr() {
 		Return(nil, errors.New("failed to send signal"))
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
 
-	namespaceCacheEntry := cache.NewNamespaceCacheEntryForTest(&persistencespb.NamespaceInfo{}, &persistencespb.NamespaceConfig{}, false, nil, 0, nil)
+	namespaceCacheEntry := namespace.NewNamespaceCacheEntryForTest(&persistencespb.NamespaceInfo{}, &persistencespb.NamespaceConfig{}, false, nil, 0, nil)
 	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceCacheEntry)
 	s.Error(err)

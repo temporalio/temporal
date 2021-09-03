@@ -54,7 +54,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -81,7 +80,7 @@ type (
 
 		controller                   *gomock.Controller
 		mockResource                 *resource.Test
-		mockNamespaceCache           *cache.MockNamespaceCache
+		mockNamespaceCache           *namespace.MockCache
 		mockHistoryClient            *historyservicemock.MockHistoryServiceClient
 		mockClusterMetadata          *cluster.MockMetadata
 		mockSearchAttributesProvider *searchattribute.MockProvider
@@ -966,7 +965,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_NamespaceCacheEntr
 }
 
 func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty() {
-	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+	namespaceEntry := namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
 		&persistencespb.NamespaceConfig{
 			HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
@@ -986,7 +985,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty()
 }
 
 func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
-	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+	namespaceEntry := namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
 		&persistencespb.NamespaceConfig{
 			HistoryArchivalState:    enumspb.ARCHIVAL_STATE_ENABLED,
@@ -1006,7 +1005,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
 }
 
 func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
-	namespaceEntry := cache.NewLocalNamespaceCacheEntryForTest(
+	namespaceEntry := namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
 		&persistencespb.NamespaceConfig{
 			HistoryArchivalState:    enumspb.ARCHIVAL_STATE_ENABLED,
@@ -1151,7 +1150,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_NamespaceCache
 }
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_NamespaceNotConfiguredForArchival() {
-	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(namespace.NewLocalCacheEntryForTest(
 		nil,
 		&persistencespb.NamespaceConfig{
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
@@ -1169,7 +1168,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_NamespaceNotCo
 }
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidURI() {
-	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
 		&persistencespb.NamespaceConfig{
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
@@ -1188,7 +1187,7 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidURI() {
 }
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Success() {
-	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
+	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
 		&persistencespb.NamespaceConfig{
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,
@@ -1467,11 +1466,11 @@ func (s *workflowHandlerSuite) newSerializedQueryTaskToken(namespaceId string) [
 	return token
 }
 
-func newNamespaceCacheEntry(namespaceName string) *cache.NamespaceCacheEntry {
+func newNamespaceCacheEntry(namespaceName string) *namespace.CacheEntry {
 	info := &persistencespb.NamespaceInfo{
 		Name: namespaceName,
 	}
-	return cache.NewLocalNamespaceCacheEntryForTest(info, nil, "", nil)
+	return namespace.NewLocalCacheEntryForTest(info, nil, "", nil)
 }
 
 func (s *workflowHandlerSuite) setupTokenNamespaceTest(tokenNamespace string, enforce bool) *WorkflowHandler {

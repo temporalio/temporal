@@ -29,10 +29,9 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc"
-
-	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -45,7 +44,7 @@ var (
 
 type (
 	NamespaceRateLimitInterceptor struct {
-		namespaceCache cache.NamespaceCache
+		namespaceCache namespace.Cache
 		rateLimiter    quotas.RequestRateLimiter
 		tokens         map[string]int
 	}
@@ -54,7 +53,7 @@ type (
 var _ grpc.UnaryServerInterceptor = (*NamespaceRateLimitInterceptor)(nil).Intercept
 
 func NewNamespaceRateLimitInterceptor(
-	namespaceCache cache.NamespaceCache,
+	namespaceCache namespace.Cache,
 	rateLimiter quotas.RequestRateLimiter,
 	tokens map[string]int,
 ) *NamespaceRateLimitInterceptor {

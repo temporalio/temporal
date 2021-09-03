@@ -32,21 +32,20 @@ import (
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"google.golang.org/grpc"
-
-	"go.temporal.io/server/common/cache"
 )
 
 type (
 	NamespaceLogInterceptor struct {
-		namespaceCache cache.NamespaceCache
+		namespaceCache namespace.Cache
 		logger         log.Logger
 	}
 )
 
 var _ grpc.UnaryServerInterceptor = (*NamespaceLogInterceptor)(nil).Intercept
 
-func NewNamespaceLogInterceptor(namespaceCache cache.NamespaceCache, logger log.Logger) *NamespaceLogInterceptor {
+func NewNamespaceLogInterceptor(namespaceCache namespace.Cache, logger log.Logger) *NamespaceLogInterceptor {
 
 	return &NamespaceLogInterceptor{
 		namespaceCache: namespaceCache,

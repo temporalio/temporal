@@ -36,9 +36,9 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/shard"
@@ -60,7 +60,7 @@ type (
 	MutableStateRebuilderImpl struct {
 		shard           shard.Context
 		clusterMetadata cluster.Metadata
-		namespaceCache  cache.NamespaceCache
+		namespaceCache  namespace.Cache
 		logger          log.Logger
 
 		mutableState          MutableState

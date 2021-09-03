@@ -46,9 +46,9 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
@@ -60,7 +60,7 @@ type (
 
 		controller          *gomock.Controller
 		mockClusterMetadata *cluster.MockMetadata
-		mockNamespaceCache  *cache.MockNamespaceCache
+		mockNamespaceCache  *namespace.MockCache
 		mockAdminClient     *adminservicemock.MockAdminServiceClient
 		mockHistoryClient   *historyservicemock.MockHistoryServiceClient
 
@@ -93,14 +93,14 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
-	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
+	s.mockNamespaceCache = namespace.NewMockCache(s.controller)
 
 	s.logger = log.NewTestLogger()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 
 	s.namespaceID = uuid.New()
 	s.namespace = "some random namespace name"
-	namespaceEntry := cache.NewGlobalNamespaceCacheEntryForTest(
+	namespaceEntry := namespace.NewGlobalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{

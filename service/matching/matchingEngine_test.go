@@ -53,11 +53,11 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -71,7 +71,7 @@ type (
 		suite.Suite
 		controller         *gomock.Controller
 		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
-		mockNamespaceCache *cache.MockNamespaceCache
+		mockNamespaceCache *namespace.MockCache
 
 		matchingEngine *matchingEngineImpl
 		taskManager    *testTaskManager
@@ -104,8 +104,8 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.taskManager = newTestTaskManager(s.logger)
-	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(cache.CreateNamespaceCacheEntry(matchingTestNamespace), nil).AnyTimes()
+	s.mockNamespaceCache = namespace.NewMockCache(s.controller)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespace.CreateNamespaceCacheEntry(matchingTestNamespace), nil).AnyTimes()
 	s.handlerContext = newHandlerContext(
 		context.Background(),
 		matchingTestNamespace,
@@ -132,7 +132,7 @@ func (s *matchingEngineSuite) newMatchingEngine(
 
 func newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager, mockHistoryClient historyservice.HistoryServiceClient,
-	logger log.Logger, mockNamespaceCache cache.NamespaceCache,
+	logger log.Logger, mockNamespaceCache namespace.Cache,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
 		taskManager:     taskMgr,
