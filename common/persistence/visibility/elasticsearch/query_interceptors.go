@@ -37,19 +37,25 @@ import (
 
 type (
 	nameInterceptor struct {
+		namespace               string
 		index                   string
 		searchAttributesTypeMap searchattribute.NameTypeMap
+		searchAttributesMapper  searchattribute.Mapper
 	}
 	valuesInterceptor struct{}
 )
 
 func newNameInterceptor(
+	namespace string,
 	index string,
 	saTypeMap searchattribute.NameTypeMap,
+	searchAttributesMapper searchattribute.Mapper,
 ) *nameInterceptor {
 	return &nameInterceptor{
+		namespace:               namespace,
 		index:                   index,
 		searchAttributesTypeMap: saTypeMap,
+		searchAttributesMapper:  searchAttributesMapper,
 	}
 }
 
@@ -59,6 +65,13 @@ func newValuesInterceptor() *valuesInterceptor {
 
 func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string, error) {
 	fieldName := name
+	if searchattribute.IsMappable(name) && ni.searchAttributesMapper != nil {
+		var err error
+		fieldName, err = ni.searchAttributesMapper.GetFieldName(name, ni.namespace)
+		if err != nil {
+			return "", err
+		}
+	}
 
 	fieldType, err := ni.searchAttributesTypeMap.GetType(fieldName)
 	if err != nil {

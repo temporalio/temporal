@@ -50,6 +50,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 
 	saValidator := NewValidator(
 		NewTestProvider(),
+		nil,
 		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit))
@@ -58,7 +59,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	var attr *commonpb.SearchAttributes
 
 	err := saValidator.Validate(attr, namespace, "")
-	s.Nil(err)
+	s.NoError(err)
 
 	intPayload, err := payload.Encode(1)
 	s.NoError(err)
@@ -69,7 +70,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 		IndexedFields: fields,
 	}
 	err = saValidator.Validate(attr, namespace, "")
-	s.Nil(err)
+	s.NoError(err)
 
 	fields = map[string]*commonpb.Payload{
 		"CustomIntField":     intPayload,
@@ -116,6 +117,66 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	s.Equal("StartTime attribute can't be set in SearchAttributes", err.Error())
 }
 
+func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
+	numOfKeysLimit := 2
+	sizeOfValueLimit := 5
+	sizeOfTotalLimit := 20
+
+	saValidator := NewValidator(
+		NewTestProvider(),
+		&TestMapper{},
+		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
+		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
+		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit))
+
+	namespace := "test"
+	var attr *commonpb.SearchAttributes
+
+	err := saValidator.Validate(attr, namespace, "")
+	s.Nil(err)
+
+	intPayload, err := payload.Encode(1)
+	s.NoError(err)
+	fields := map[string]*commonpb.Payload{
+		"alias_of_CustomIntField": intPayload,
+	}
+	attr = &commonpb.SearchAttributes{
+		IndexedFields: fields,
+	}
+	err = saValidator.Validate(attr, namespace, "")
+	s.NoError(err)
+
+	err = saValidator.Validate(attr, "error", "")
+	s.Error(err)
+	s.EqualError(err, "mapper error")
+
+	fields = map[string]*commonpb.Payload{
+		"CustomIntField": intPayload,
+	}
+	attr = &commonpb.SearchAttributes{
+		IndexedFields: fields,
+	}
+	err = saValidator.Validate(attr, "namespace", "")
+	s.NoError(err)
+
+	fields = map[string]*commonpb.Payload{
+		"alias_of_InvalidKey": payload.EncodeString("1"),
+	}
+	attr.IndexedFields = fields
+	err = saValidator.Validate(attr, namespace, "")
+	s.Error(err)
+	s.Equal("alias_of_InvalidKey is not a valid search attribute name", err.Error())
+
+	fields = map[string]*commonpb.Payload{
+		"alias_of_CustomStringField": payload.EncodeString("1"),
+		"alias_of_CustomBoolField":   payload.EncodeString("123"),
+	}
+	attr.IndexedFields = fields
+	err = saValidator.Validate(attr, namespace, "")
+	s.Error(err)
+	s.Equal("123 is not a valid value for search attribute alias_of_CustomBoolField of type Bool", err.Error())
+}
+
 func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
 	numOfKeysLimit := 2
 	sizeOfValueLimit := 5
@@ -123,6 +184,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
 
 	saValidator := NewValidator(
 		NewTestProvider(),
+		nil,
 		dynamicconfig.GetIntPropertyFilteredByNamespace(numOfKeysLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit))

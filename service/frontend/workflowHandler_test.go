@@ -85,6 +85,7 @@ type (
 		mockHistoryClient            *historyservicemock.MockHistoryServiceClient
 		mockClusterMetadata          *cluster.MockMetadata
 		mockSearchAttributesProvider *searchattribute.MockProvider
+		mockSearchAttributesMapper   *searchattribute.MockMapper
 		mockMatchingClient           *matchingservicemock.MockMatchingServiceClient
 
 		mockProducer           *persistence.MockNamespaceReplicationQueue
@@ -128,6 +129,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.mockHistoryClient = s.mockResource.HistoryClient
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
 	s.mockSearchAttributesProvider = s.mockResource.SearchAttributesProvider
+	s.mockSearchAttributesMapper = s.mockResource.SearchAttributesMapper
 	s.mockMetadataMgr = s.mockResource.MetadataMgr
 	s.mockExecutionManager = s.mockResource.ExecutionMgr
 	s.mockVisibilityMgr = s.mockResource.VisibilityMgr
@@ -1082,7 +1084,8 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 						SearchAttributes: &commonpb.SearchAttributes{
 							IndexedFields: map[string]*commonpb.Payload{
-								"CustomKeywordField": payload.EncodeString("random-keyword"),
+								"CustomKeywordField":    payload.EncodeString("random-keyword"),
+								"TemporalChangeVersion": payload.EncodeString("random-data"),
 							},
 						},
 					},
@@ -1094,6 +1097,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	}, nil)
 
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockSearchAttributesMapper.EXPECT().GetAlias("CustomKeywordField", namespace).Return("AliasOfCustomKeyword", nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1113,8 +1117,8 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	s.NotNil(history)
 	s.Equal([]byte{}, token)
 
-	s.Equal([]byte("Keyword"),
-		history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["CustomKeywordField"].GetMetadata()["type"])
+	s.EqualValues("Keyword", history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["AliasOfCustomKeyword"].GetMetadata()["type"])
+	s.EqualValues(`"random-data"`, history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["TemporalChangeVersion"].GetData())
 }
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidRequest() {

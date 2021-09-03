@@ -62,6 +62,7 @@ type (
 		esClient                 esclient.Client
 		index                    string
 		searchAttributesProvider searchattribute.Provider
+		searchAttributesMapper   searchattribute.Mapper
 		config                   *config.VisibilityConfig
 		metricsClient            metrics.Client
 		processor                Processor
@@ -89,6 +90,7 @@ func NewVisibilityStore(
 	esClient esclient.Client,
 	index string,
 	searchAttributesProvider searchattribute.Provider,
+	searchAttributesMapper searchattribute.Mapper,
 	processor Processor,
 	cfg *config.VisibilityConfig,
 	metricsClient metrics.Client,
@@ -98,6 +100,7 @@ func NewVisibilityStore(
 		esClient:                 esClient,
 		index:                    index,
 		searchAttributesProvider: searchAttributesProvider,
+		searchAttributesMapper:   searchAttributesMapper,
 		processor:                processor,
 		config:                   cfg,
 		metricsClient:            metricsClient,
@@ -588,7 +591,7 @@ func (s *visibilityStore) convertQuery(namespace string, namespaceID string, req
 		return nil, nil, serviceerror.NewInternal(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
 	queryConverter := query.NewConverter(
-		newNameInterceptor(s.index, saTypeMap),
+		newNameInterceptor(namespace, s.index, saTypeMap, s.searchAttributesMapper),
 		newValuesInterceptor(),
 	)
 	requestQuery, fieldSorts, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
@@ -868,6 +871,10 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 		if err != nil {
 			s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to encode custom search attributes of Elasticsearch document(%s): %v", hit.Id, err))
+		}
+		err = searchattribute.ApplyAliases(s.searchAttributesMapper, record.SearchAttributes, namespace)
+		if err != nil {
+			return nil, err
 		}
 	}
 

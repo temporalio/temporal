@@ -237,7 +237,7 @@ func NewService(
 				VisibilityListMaxQPS: serviceConfig.ESVisibilityListMaxQPS,
 			}
 			visibilityFromES = elasticsearch.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
-				searchAttributesProvider, nil, params.MetricsClient, logger)
+				searchAttributesProvider, params.SearchAttributesMapper, nil, params.MetricsClient, logger)
 		}
 		return visibility.NewVisibilityManagerWrapper(
 			visibilityFromDB,

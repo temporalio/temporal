@@ -40,6 +40,7 @@ type (
 	// Validator is used to validate search attributes
 	Validator struct {
 		searchAttributesProvider          Provider
+		searchAttributesMapper            Mapper
 		searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 		searchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 		searchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -53,12 +54,14 @@ var (
 // NewValidator create Validator
 func NewValidator(
 	searchAttributesProvider Provider,
+	searchAttributesMapper Mapper,
 	searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesSizeOfValueLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesTotalSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 ) *Validator {
 	return &Validator{
 		searchAttributesProvider:          searchAttributesProvider,
+		searchAttributesMapper:            searchAttributesMapper,
 		searchAttributesNumberOfKeysLimit: searchAttributesNumberOfKeysLimit,
 		searchAttributesSizeOfValueLimit:  searchAttributesSizeOfValueLimit,
 		searchAttributesTotalSizeLimit:    searchAttributesTotalSizeLimit,
@@ -87,6 +90,12 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		}
 
 		fieldName := saName
+		if IsMappable(saName) && v.searchAttributesMapper != nil {
+			fieldName, err = v.searchAttributesMapper.GetFieldName(saName, namespace)
+			if err != nil {
+				return err
+			}
+		}
 
 		var saType enumspb.IndexedValueType
 		if saType, err = saTypeMap.getType(fieldName, customCategory|predefinedCategory); err != nil {
