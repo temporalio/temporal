@@ -46,6 +46,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
@@ -781,8 +782,11 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_NotFound() {
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
-func (s *engine2Suite) createExecutionStartedState(we commonpb.WorkflowExecution, tl, identity string,
-	startWorkflowTask bool) workflow.MutableState {
+func (s *engine2Suite) createExecutionStartedState(
+	we commonpb.WorkflowExecution, tl string,
+	identity string,
+	startWorkflowTask bool,
+) workflow.MutableState {
 	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache,
 		s.logger, we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
@@ -791,6 +795,13 @@ func (s *engine2Suite) createExecutionStartedState(we commonpb.WorkflowExecution
 		addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
 	}
 	_ = msBuilder.SetHistoryTree(we.GetRunId())
+	versionHistory, _ := versionhistory.GetCurrentVersionHistory(
+		msBuilder.GetExecutionInfo().VersionHistories,
+	)
+	_ = versionhistory.AddOrUpdateVersionHistoryItem(
+		versionHistory,
+		versionhistory.NewVersionHistoryItem(0, 0),
+	)
 
 	return msBuilder
 }
