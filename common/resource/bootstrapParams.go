@@ -40,6 +40,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -74,6 +75,7 @@ type (
 		ClaimMapper                  authorization.ClaimMapper
 		PersistenceServiceResolver   resolver.ServiceResolver
 		AudienceGetter               authorization.JWTAudienceMapper
+		SearchAttributesMapper       searchattribute.Mapper
 	}
 
 	// MembershipMonitorFactory provides a bootstrapped membership monitor

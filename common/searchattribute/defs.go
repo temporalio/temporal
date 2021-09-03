@@ -89,16 +89,27 @@ var (
 	}
 )
 
-// IsReserved return true if field name is system reserved and can't be used as custom search attribute name.
-func IsReserved(fieldName string) bool {
-	if _, ok := system[fieldName]; ok {
+// IsReserved returns true if name is system reserved and can't be used as custom search attribute name.
+func IsReserved(name string) bool {
+	if _, ok := system[name]; ok {
 		return true
 	}
-	if _, ok := predefined[fieldName]; ok {
+	if _, ok := predefined[name]; ok {
 		return true
 	}
-	if _, ok := reserved[fieldName]; ok {
+	if _, ok := reserved[name]; ok {
 		return true
 	}
-	return strings.HasPrefix(fieldName, ReservedPrefix)
+	return strings.HasPrefix(name, ReservedPrefix)
+}
+
+// IsMappable returns true if name can have be mapped tho the alias.
+func IsMappable(name string) bool {
+	if _, ok := system[name]; ok {
+		return false
+	}
+	if _, ok := predefined[name]; ok {
+		return false
+	}
+	return true
 }

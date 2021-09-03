@@ -35,6 +35,7 @@ import (
 	persistenceclient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -155,5 +156,12 @@ func WithCustomDataStoreFactory(customFactory persistenceclient.AbstractDataStor
 func WithClientFactoryProvider(clientFactoryProvider client.FactoryProvider) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.clientFactoryProvider = clientFactoryProvider
+	})
+}
+
+// Set custom search attributes mapper which converts search attributes aliases to field names and vice versa.
+func WithSearchAttributesMapper(m searchattribute.Mapper) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.searchAttributesMapper = m
 	})
 }
