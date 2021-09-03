@@ -115,6 +115,7 @@ type (
 		rawMatchingClient         matchingservice.MatchingServiceClient
 		replicationDLQHandler     replicationDLQHandler
 		searchAttributesValidator *searchattribute.Validator
+		searchAttributesMapper    searchattribute.Mapper
 	}
 )
 
@@ -198,10 +199,13 @@ func NewEngineWithShardContext(
 	historyEngImpl.searchAttributesValidator = searchattribute.NewValidator(
 		logger,
 		shard.GetService().GetSearchAttributesProvider(),
+		shard.GetService().GetSearchAttributesMapper(),
 		config.SearchAttributesNumberOfKeysLimit,
 		config.SearchAttributesSizeOfValueLimit,
 		config.SearchAttributesTotalSizeLimit,
 	)
+
+	historyEngImpl.searchAttributesMapper = shard.GetService().GetSearchAttributesMapper()
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
 
@@ -462,6 +466,11 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	request := startRequest.StartRequest
 	e.overrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope)
 	err = e.validateStartWorkflowExecutionRequest(ctx, request, namespace, "StartWorkflowExecution")
+	if err != nil {
+		return nil, err
+	}
+
+	err = searchattribute.SubstituteAliases(e.searchAttributesMapper, request.GetSearchAttributes(), namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -1929,6 +1938,11 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	request := startRequest.StartRequest
 	e.overrideStartWorkflowExecutionRequest(request, metrics.HistorySignalWithStartWorkflowExecutionScope)
 	err = e.validateStartWorkflowExecutionRequest(ctx, request, namespace, "SignalWithStartWorkflowExecution")
+	if err != nil {
+		return nil, err
+	}
+
+	err = searchattribute.SubstituteAliases(e.searchAttributesMapper, request.GetSearchAttributes(), namespace)
 	if err != nil {
 		return nil, err
 	}

@@ -44,6 +44,7 @@ type (
 		logger log.Logger
 
 		searchAttributesProvider          Provider
+		searchAttributesMapper            Mapper
 		searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 		searchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 		searchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -58,6 +59,7 @@ var (
 func NewValidator(
 	logger log.Logger,
 	searchAttributesProvider Provider,
+	searchAttributesMapper Mapper,
 	searchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesSizeOfValueLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	searchAttributesTotalSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
@@ -65,6 +67,7 @@ func NewValidator(
 	return &Validator{
 		logger:                            logger,
 		searchAttributesProvider:          searchAttributesProvider,
+		searchAttributesMapper:            searchAttributesMapper,
 		searchAttributesNumberOfKeysLimit: searchAttributesNumberOfKeysLimit,
 		searchAttributesSizeOfValueLimit:  searchAttributesSizeOfValueLimit,
 		searchAttributesTotalSizeLimit:    searchAttributesTotalSizeLimit,
@@ -102,6 +105,12 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		}
 
 		fieldName := saName
+		if IsMappable(saName) && v.searchAttributesMapper != nil {
+			fieldName, err = v.searchAttributesMapper.GetFieldName(saName, namespace)
+			if err != nil {
+				return err
+			}
+		}
 
 		var saType enumspb.IndexedValueType
 		if saType, err = saTypeMap.getType(fieldName, customCategory|predefinedCategory); err != nil {

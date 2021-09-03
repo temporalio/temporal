@@ -2837,6 +2837,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 			return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 		}
 		searchattribute.ApplyTypeMap(response.GetWorkflowExecutionInfo().GetSearchAttributes(), saTypeMap)
+		err = searchattribute.ApplyAliases(wh.GetSearchAttributesMapper(), response.GetWorkflowExecutionInfo().GetSearchAttributes(), request.GetNamespace())
 		if err != nil {
 			return nil, err
 		}
@@ -3117,6 +3118,10 @@ func (wh *WorkflowHandler) processSearchAttributes(events []*historypb.HistoryEv
 		}
 		if searchAttributes != nil {
 			searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
+			err = searchattribute.ApplyAliases(wh.GetSearchAttributesMapper(), searchAttributes, namespace)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

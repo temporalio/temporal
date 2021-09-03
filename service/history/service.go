@@ -116,7 +116,7 @@ func NewService(
 			visibilityConfigForES := &config.VisibilityConfig{
 				ESProcessorAckTimeout: serviceConfig.ESProcessorAckTimeout,
 			}
-			visibilityFromES = elasticsearch.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES, searchAttributesProvider, esProcessor, params.MetricsClient, logger)
+			visibilityFromES = elasticsearch.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES, searchAttributesProvider, params.SearchAttributesMapper, esProcessor, params.MetricsClient, logger)
 		}
 		return visibility.NewVisibilityManagerWrapper(
 			visibilityFromDB,

@@ -102,3 +102,14 @@ func IsReserved(name string) bool {
 	}
 	return strings.HasPrefix(name, ReservedPrefix)
 }
+
+// IsMappable returns true if name can have be mapped tho the alias.
+func IsMappable(name string) bool {
+	if _, ok := system[name]; ok {
+		return false
+	}
+	if _, ok := predefined[name]; ok {
+		return false
+	}
+	return true
+}

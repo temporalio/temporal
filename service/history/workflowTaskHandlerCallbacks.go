@@ -34,6 +34,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/common/searchattribute"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -67,20 +68,21 @@ type (
 	}
 
 	workflowTaskHandlerCallbacksImpl struct {
-		currentClusterName   string
-		config               *configs.Config
-		shard                shard.Context
-		timeSource           clock.TimeSource
-		historyEngine        *historyEngineImpl
-		namespaceCache       cache.NamespaceCache
-		historyCache         *workflow.Cache
-		txProcessor          transferQueueProcessor
-		timerProcessor       timerQueueProcessor
-		tokenSerializer      common.TaskTokenSerializer
-		metricsClient        metrics.Client
-		logger               log.Logger
-		throttledLogger      log.Logger
-		commandAttrValidator *commandAttrValidator
+		currentClusterName     string
+		config                 *configs.Config
+		shard                  shard.Context
+		timeSource             clock.TimeSource
+		historyEngine          *historyEngineImpl
+		namespaceCache         cache.NamespaceCache
+		historyCache           *workflow.Cache
+		txProcessor            transferQueueProcessor
+		timerProcessor         timerQueueProcessor
+		tokenSerializer        common.TaskTokenSerializer
+		metricsClient          metrics.Client
+		logger                 log.Logger
+		throttledLogger        log.Logger
+		commandAttrValidator   *commandAttrValidator
+		searchAttributesMapper searchattribute.Mapper
 	}
 )
 
@@ -104,6 +106,7 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 			historyEngine.config,
 			historyEngine.searchAttributesValidator,
 		),
+		searchAttributesMapper: historyEngine.searchAttributesMapper,
 	}
 }
 
@@ -443,6 +446,7 @@ Update_History_Loop:
 				handler.namespaceCache,
 				handler.metricsClient,
 				handler.config,
+				handler.searchAttributesMapper,
 			)
 
 			if err := workflowTaskHandler.handleCommands(

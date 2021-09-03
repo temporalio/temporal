@@ -65,6 +65,7 @@ type (
 		GetClusterMetadata() cluster.Metadata
 		GetSearchAttributesProvider() searchattribute.Provider
 		GetSearchAttributesManager() searchattribute.Manager
+		GetSearchAttributesMapper() searchattribute.Mapper
 
 		// other common resources
 

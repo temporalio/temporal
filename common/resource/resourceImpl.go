@@ -86,6 +86,7 @@ type (
 		clusterMetadata cluster.Metadata
 		saProvider      searchattribute.Provider
 		saManager       searchattribute.Manager
+		saMapper        searchattribute.Mapper
 
 		// other common resources
 
@@ -322,6 +323,7 @@ func New(
 		clusterMetadata: clusterMetadata,
 		saProvider:      saProvider,
 		saManager:       saManager,
+		saMapper:        params.SearchAttributesMapper,
 
 		// other common resources
 
@@ -631,4 +633,8 @@ func (h *Impl) GetSearchAttributesProvider() searchattribute.Provider {
 
 func (h *Impl) GetSearchAttributesManager() searchattribute.Manager {
 	return h.saManager
+}
+
+func (h *Impl) GetSearchAttributesMapper() searchattribute.Mapper {
+	return h.saMapper
 }
