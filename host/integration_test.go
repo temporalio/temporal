@@ -78,16 +78,19 @@ func (s *integrationSuite) sendSignal(namespace string, execution *commonpb.Work
 }
 
 func (s *integrationSuite) decodePayloadsString(ps *commonpb.Payloads) (r string) {
+	s.T().Helper()
 	s.NoError(payloads.Decode(ps, &r))
 	return
 }
 
 func (s *integrationSuite) decodePayloadsInt(ps *commonpb.Payloads) (r int) {
+	s.T().Helper()
 	s.NoError(payloads.Decode(ps, &r))
 	return
 }
 
 func (s *integrationSuite) decodePayloadsByteSliceInt32(ps *commonpb.Payloads) (r int32) {
+	s.T().Helper()
 	var buf []byte
 	s.NoError(payloads.Decode(ps, &buf))
 	s.NoError(binary.Read(bytes.NewReader(buf), binary.LittleEndian, &r))
