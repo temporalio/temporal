@@ -25,6 +25,7 @@
 package backoff
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -32,6 +33,10 @@ import (
 type (
 	// Operation to retry
 	Operation func() error
+
+	// OperationCtx plays the same role as Operation but for context-aware
+	// retryable functions.
+	OperationCtx func(context.Context) error
 
 	// IsRetryable handler can be used to exclude certain errors during retry
 	IsRetryable func(error) bool
@@ -92,15 +97,32 @@ func NewConcurrentRetrier(retryPolicy RetryPolicy) *ConcurrentRetrier {
 	return &ConcurrentRetrier{retrier: retrier}
 }
 
-// Retry function can be used to wrap any call with retry logic using the passed in policy
+// Retry function can be used to wrap any call with retry logic using the passed
+// in policy. A `nil` IsRetryable predicate will retry all errors. There is a
+// context-aware version of this function: RetryContext.
 func Retry(operation Operation, policy RetryPolicy, isRetryable IsRetryable) error {
+	ctxOp := func(context.Context) error { return operation() }
+	return RetryContext(context.Background(), ctxOp, policy, isRetryable)
+}
+
+// RetryContext is a context-aware version of Retry. Context
+// timeout/cancellation errors are never retried, regardless of IsRetryable.
+func RetryContext(
+	ctx context.Context,
+	operation OperationCtx,
+	policy RetryPolicy,
+	isRetryable IsRetryable,
+) error {
 	var err error
 	var next time.Duration
 
+	if isRetryable == nil {
+		isRetryable = func(error) bool { return true }
+	}
+
 	r := NewRetrier(policy, SystemClock)
-	for {
-		// operation completed successfully.  No need to retry.
-		if err = operation(); err == nil {
+	for ctx.Err() == nil {
+		if err = operation(ctx); err == nil {
 			return nil
 		}
 
@@ -108,13 +130,21 @@ func Retry(operation Operation, policy RetryPolicy, isRetryable IsRetryable) err
 			return err
 		}
 
-		// Check if the error is retryable
-		if isRetryable != nil && !isRetryable(err) {
+		// stop retrying if context has expired or the error
+		// is not retryable (err is known to be non-nil here)
+		if err == ctx.Err() || !isRetryable(err) {
 			return err
 		}
 
-		time.Sleep(next)
+		t := time.NewTimer(next)
+		select {
+		case <-t.C:
+		case <-ctx.Done():
+			t.Stop()
+			break
+		}
 	}
+	return ctx.Err()
 }
 
 // IgnoreErrors can be used as IsRetryable handler for Retry function to exclude certain errors from the retry list
