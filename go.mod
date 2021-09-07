@@ -83,7 +83,6 @@ require (
 	github.com/uber/tchannel-go v1.22.0
 	github.com/urfave/cli v1.22.5
 	github.com/urfave/cli/v2 v2.3.0
-	github.com/valyala/fastjson v1.6.3
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.opencensus.io v0.23.0 // indirect
 	go.opentelemetry.io/otel v0.15.0
