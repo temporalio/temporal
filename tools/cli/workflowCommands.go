@@ -218,7 +218,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	}
 
 	wo.Memo = unmarshalMemoFromCLI(c)
-	wo.SearchAttributes = unmarshalSearchAttributesFromCLI(c)
+	wo.SearchAttributes = unmarshalSearchAttrFromCLI(c)
 
 	startFn := func() {
 		tcCtx, cancel := newContext(c)
@@ -296,35 +296,41 @@ func formatInputsForDisplay(inputs []interface{}) string {
 	return fmt.Sprintf("[%s]", strings.Join(result, ","))
 }
 
-func unmarshalSearchAttributesFromCLI(c *cli.Context) map[string]interface{} {
-	// Search attributes flags were not passed => Search attributes are not provided.
-	if !c.IsSet(FlagSearchAttributesKey) && !c.IsSet(FlagSearchAttributesValue) {
+func unmarshalSearchAttrFromCLI(c *cli.Context) map[string]interface{} {
+	sanitize := func(val string) []string {
+		trimmedVal := strings.TrimSpace(val)
+		if len(trimmedVal) == 0 {
+			return nil
+		}
+		splitVal := strings.Split(trimmedVal, searchAttrInputSeparator)
+		result := make([]string, len(splitVal))
+		for i, v := range splitVal {
+			result[i] = strings.TrimSpace(v)
+		}
+		return result
+	}
+
+	searchAttrKeys := sanitize(c.String(FlagSearchAttributeKey))
+	if len(searchAttrKeys) == 0 {
+		return nil
+	}
+	rawSearchAttrVals := sanitize(c.String(FlagSearchAttributeValue))
+	if len(rawSearchAttrVals) == 0 {
 		return nil
 	}
 
-	if !c.IsSet(FlagSearchAttributesKey) {
-		ErrorAndExit(fmt.Sprintf("Search attribute keys must be provided using %s.", FlagSearchAttributesKey), nil)
+	if len(searchAttrKeys) != len(rawSearchAttrVals) {
+		ErrorAndExit(fmt.Sprintf("Uneven number of search attributes keys (%d): %v and values(%d): %v.", len(searchAttrKeys), searchAttrKeys, len(rawSearchAttrVals), rawSearchAttrVals), nil)
 	}
 
-	if !c.IsSet(FlagSearchAttributesValue) {
-		ErrorAndExit(fmt.Sprintf("Search attribute values must be provided using %s.", FlagSearchAttributesValue), nil)
-	}
+	fields := make(map[string]interface{}, len(searchAttrKeys))
 
-	saKeys := c.StringSlice(FlagSearchAttributesKey)
-	saValues := c.StringSlice(FlagSearchAttributesValue)
-
-	if len(saKeys) != len(saValues) {
-		ErrorAndExit(fmt.Sprintf("Number of search attributes keys %d and values %d are not equal.", len(saKeys), len(saValues)), nil)
-	}
-
-	fields := make(map[string]interface{}, len(saKeys))
-
-	for i, saValue := range saValues {
+	for i, v := range rawSearchAttrVals {
 		var j interface{}
-		if err := json.Unmarshal([]byte(saValue), &j); err != nil {
+		if err := json.Unmarshal([]byte(v), &j); err != nil {
 			ErrorAndExit("Search attribute JSON parse error.", err)
 		}
-		fields[saKeys[i]] = j
+		fields[searchAttrKeys[i]] = j
 	}
 
 	return fields
@@ -388,9 +394,9 @@ func getPrintableMemo(memo *commonpb.Memo) string {
 	return buf.String()
 }
 
-func getPrintableSearchAttributes(searchAttr *commonpb.SearchAttributes) string {
+func getPrintableSearchAttributes(searchAttributes *commonpb.SearchAttributes) string {
 	var buf bytes.Buffer
-	searchAttributesString, err := searchattribute.Stringify(searchAttr, nil)
+	searchAttributesString, err := searchattribute.Stringify(searchAttributes, nil)
 	if err != nil {
 		fmt.Printf("%s: unable to stringify search attribute: %v\n",
 			colorMagenta("Warning"),
