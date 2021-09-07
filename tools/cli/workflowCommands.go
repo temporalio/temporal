@@ -218,7 +218,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	}
 
 	wo.Memo = unmarshalMemoFromCLI(c)
-	wo.SearchAttributes = unmarshalSearchAttrFromCLI(c)
+	wo.SearchAttributes = unmarshalSearchAttributesFromCLI(c)
 
 	startFn := func() {
 		tcCtx, cancel := newContext(c)
@@ -296,21 +296,22 @@ func formatInputsForDisplay(inputs []interface{}) string {
 	return fmt.Sprintf("[%s]", strings.Join(result, ","))
 }
 
-func unmarshalSearchAttrFromCLI(c *cli.Context) map[string]interface{} {
-	if !c.IsSet(FlagSearchAttributesKey) && c.IsSet(FlagSearchAttributesValue) {
+func unmarshalSearchAttributesFromCLI(c *cli.Context) map[string]interface{} {
+	// Search attributes flags were not passed => Search attributes are not provided.
+	if !c.IsSet(FlagSearchAttributesKey) && !c.IsSet(FlagSearchAttributesValue) {
+		return nil
+	}
+
+	if !c.IsSet(FlagSearchAttributesKey) {
 		ErrorAndExit(fmt.Sprintf("Search attribute keys must be provided using %s.", FlagSearchAttributesKey), nil)
 	}
 
-	saKeys := c.StringSlice(FlagSearchAttributesKey)
-
-	var saValues []string
-	if c.IsSet(FlagSearchAttributesValue) {
-		saValues = c.StringSlice(FlagSearchAttributesValue)
-	} else if c.IsSet(FlagSearchAttributesKey) {
+	if !c.IsSet(FlagSearchAttributesValue) {
 		ErrorAndExit(fmt.Sprintf("Search attribute values must be provided using %s.", FlagSearchAttributesValue), nil)
-	} else {
-		return nil
 	}
+
+	saKeys := c.StringSlice(FlagSearchAttributesKey)
+	saValues := c.StringSlice(FlagSearchAttributesValue)
 
 	if len(saKeys) != len(saValues) {
 		ErrorAndExit(fmt.Sprintf("Number of search attributes keys %d and values %d are not equal.", len(saKeys), len(saValues)), nil)
@@ -330,15 +331,24 @@ func unmarshalSearchAttrFromCLI(c *cli.Context) map[string]interface{} {
 }
 
 func unmarshalMemoFromCLI(c *cli.Context) map[string]interface{} {
-	if !c.IsSet(FlagMemoKey) && (c.IsSet(FlagMemo) || c.IsSet(FlagMemoFile)) {
-		ErrorAndExit(fmt.Sprintf("Memo keys must be provided using %s.", FlagMemoKey), nil)
+	// Memo flags were not passed => Memo is not provided.
+	if !c.IsSet(FlagMemoKey) && !c.IsSet(FlagMemo) && !c.IsSet(FlagMemoFile) {
+		return nil
 	}
 
-	memoKeys := c.StringSlice(FlagMemoKey)
+	if !c.IsSet(FlagMemoKey) {
+		ErrorAndExit(fmt.Sprintf("Memo keys must be provided using %s.", FlagMemoKey), nil)
+	}
 
 	if c.IsSet(FlagMemo) && c.IsSet(FlagMemoFile) {
 		ErrorAndExit(fmt.Sprintf("Only one of %s or %s should be used.", FlagMemo, FlagMemoFile), nil)
 	}
+
+	if !c.IsSet(FlagMemo) && !c.IsSet(FlagMemoFile) {
+		ErrorAndExit(fmt.Sprintf("Memo values must be provided using %s or %s.", FlagMemo, FlagMemoFile), nil)
+	}
+
+	memoKeys := c.StringSlice(FlagMemoKey)
 
 	var memoValues []string
 	if c.IsSet(FlagMemoFile) {
@@ -352,10 +362,6 @@ func unmarshalMemoFromCLI(c *cli.Context) map[string]interface{} {
 		memoValues = strings.Split(string(data), "\n")
 	} else if c.IsSet(FlagMemo) {
 		memoValues = c.StringSlice(FlagMemo)
-	} else if c.IsSet(FlagMemoKey) {
-		ErrorAndExit(fmt.Sprintf("Memo values must be provided using %s or %s.", FlagMemo, FlagMemoFile), nil)
-	} else {
-		return nil
 	}
 
 	if len(memoKeys) != len(memoValues) {
@@ -375,14 +381,14 @@ func getPrintableMemo(memo *commonpb.Memo) string {
 		var memo string
 		err := payload.Decode(v, &memo)
 		if err != nil {
-			memo = "Memo has incorrect format"
+			memo = "Memo is not a string"
 		}
 		_, _ = fmt.Fprintf(buf, "%s=%s\n", k, memo)
 	}
 	return buf.String()
 }
 
-func getPrintableSearchAttr(searchAttr *commonpb.SearchAttributes) string {
+func getPrintableSearchAttributes(searchAttr *commonpb.SearchAttributes) string {
 	var buf bytes.Buffer
 	searchAttributesString, err := searchattribute.Stringify(searchAttr, nil)
 	if err != nil {
@@ -1107,7 +1113,7 @@ func appendWorkflowExecutionsToTable(
 			row = append(row, getPrintableMemo(e.Memo))
 		}
 		if printSearchAttr {
-			row = append(row, getPrintableSearchAttr(e.SearchAttributes))
+			row = append(row, getPrintableSearchAttributes(e.SearchAttributes))
 		}
 		table.Append(row)
 	}
@@ -1360,7 +1366,7 @@ func scanWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 				row = append(row, getPrintableMemo(e.Memo))
 			}
 			if printSearchAttr {
-				row = append(row, getPrintableSearchAttr(e.SearchAttributes))
+				row = append(row, getPrintableSearchAttributes(e.SearchAttributes))
 			}
 			table.Append(row)
 		}
