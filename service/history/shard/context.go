@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
@@ -47,6 +48,7 @@ type (
 		GetShardID() int32
 		GetService() resource.Resource
 		GetExecutionManager() persistence.ExecutionManager
+		GetVisibilityManager() visibility.VisibilityManager
 		GetNamespaceCache() namespace.Cache
 		GetClusterMetadata() cluster.Metadata
 		GetConfig() *configs.Config

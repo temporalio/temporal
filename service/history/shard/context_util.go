@@ -58,6 +58,7 @@ func NewTestContext(
 		shardInfo:                 shardInfo,
 		metricsClient:             resource.MetricsClient,
 		executionManager:          resource.ExecutionMgr,
+		visibilityManager:         resource.VisibilityMgr,
 		config:                    config,
 		logger:                    resource.GetLogger(),
 		throttledLogger:           resource.GetThrottledLogger(),
