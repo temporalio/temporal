@@ -18,8 +18,6 @@ RUN mkdir -p /xsrc && \
 FROM alpine:3.13 AS base-server
 
 RUN apk add --update --no-cache \
-    ca-certificates \
-    openssl \
     bash \
     curl \
     vim
