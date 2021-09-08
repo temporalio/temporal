@@ -122,6 +122,8 @@ type (
 const (
 	defaultScheduleToStartTimeout = 111
 )
+// todomigryz: saas-temporal/persistence integration point. Factory -> CustomDataFactory
+
 
 // NewTestBaseWithCassandra returns a persistence test base backed by cassandra datastore
 func NewTestBaseWithCassandra(options *TestBaseOptions) TestBase {

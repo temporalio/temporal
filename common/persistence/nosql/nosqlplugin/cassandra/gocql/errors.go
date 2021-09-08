@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 )
 
+// todomigryz: Persistence: Inject error here
 func ConvertError(
 	operation string,
 	err error,

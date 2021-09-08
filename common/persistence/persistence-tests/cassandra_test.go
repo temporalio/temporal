@@ -44,6 +44,9 @@ func TestCassandraMatchingPersistence(t *testing.T) {
 	suite.Run(t, s)
 }
 
+// todomigryz: integrationtests + resilience pipeline where we want to inject errors as well.
+// todomigryz: we also need a long-run suite with same injection.
+
 func TestCassandraMetadataPersistenceV2(t *testing.T) {
 	s := new(MetadataPersistenceSuiteV2)
 	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})

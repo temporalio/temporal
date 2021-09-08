@@ -2037,6 +2037,8 @@ func (d *cassandraPersistence) GetTaskQueue(request *p.InternalGetTaskQueueReque
 	}, nil
 }
 
+// todomigryz: % of calls failed, every N seconds.
+
 func (d *cassandraPersistence) ExtendLease(request *p.InternalExtendLeaseRequest) error {
 	query := d.session.Query(templateUpdateTaskQueueQuery,
 		request.RangeID+1,
