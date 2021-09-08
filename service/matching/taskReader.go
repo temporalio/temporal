@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/internal/goro"
 	"go.temporal.io/server/service/worker/scanner/taskqueue"
 )
 
@@ -49,29 +50,18 @@ type (
 		taskBuffer chan *persistencespb.AllocatedTaskInfo // tasks loaded from persistence
 		notifyC    chan struct{}                          // Used as signal to notify pump of new tasks
 		tlMgr      *taskQueueManagerImpl
-		// The cancel objects are to cancel the ratelimiter Wait in dispatchBufferedTasks. The ideal
-		// approach is to use request-scoped contexts and use a unique one for each call to Wait. However
-		// in order to cancel it on shutdown, we need a new goroutine for each call that would wait on
-		// the shutdown channel. To optimize on efficiency, we instead create one and tag it on the struct
-		// so the cancel can be called directly on shutdown.
-		cancelCtx    context.Context
-		cancelFunc   context.CancelFunc
-		shutdownChan chan struct{}
+		gorogrp    goro.Group
 	}
 )
 
 func newTaskReader(tlMgr *taskQueueManagerImpl) *taskReader {
-	ctx, cancel := context.WithCancel(context.Background())
 	return &taskReader{
-		status:     common.DaemonStatusInitialized,
-		tlMgr:      tlMgr,
-		cancelCtx:  ctx,
-		cancelFunc: cancel,
-		notifyC:    make(chan struct{}, 1),
+		status:  common.DaemonStatusInitialized,
+		tlMgr:   tlMgr,
+		notifyC: make(chan struct{}, 1),
 		// we always dequeue the head of the buffer and try to dispatch it to a poller
 		// so allocate one less than desired target buffer size
-		taskBuffer:   make(chan *persistencespb.AllocatedTaskInfo, tlMgr.config.GetTasksBatchSize()-1),
-		shutdownChan: make(chan struct{}),
+		taskBuffer: make(chan *persistencespb.AllocatedTaskInfo, tlMgr.config.GetTasksBatchSize()-1),
 	}
 }
 
@@ -85,8 +75,9 @@ func (tr *taskReader) Start() {
 	}
 
 	tr.Signal()
-	go tr.dispatchBufferedTasks()
-	go tr.getTasksPump()
+
+	tr.gorogrp.Go(tr.dispatchBufferedTasks)
+	tr.gorogrp.Go(tr.getTasksPump)
 }
 
 func (tr *taskReader) Stop() {
@@ -98,9 +89,7 @@ func (tr *taskReader) Stop() {
 		return
 	}
 
-	close(tr.shutdownChan)
-
-	tr.cancelFunc()
+	tr.gorogrp.Cancel()
 }
 
 func (tr *taskReader) Signal() {
@@ -111,7 +100,7 @@ func (tr *taskReader) Signal() {
 	}
 }
 
-func (tr *taskReader) dispatchBufferedTasks() {
+func (tr *taskReader) dispatchBufferedTasks(ctx context.Context) error {
 dispatchLoop:
 	for {
 		select {
@@ -121,13 +110,13 @@ dispatchLoop:
 			}
 			task := newInternalTask(taskInfo, tr.tlMgr.completeTask, enumsspb.TASK_SOURCE_DB_BACKLOG, "", false)
 			for {
-				err := tr.tlMgr.DispatchTask(tr.cancelCtx, task)
+				err := tr.tlMgr.DispatchTask(ctx, task)
 				if err == nil {
 					break
 				}
 				if err == context.Canceled {
 					tr.tlMgr.logger.Info("Taskqueue manager context is cancelled, shutting down")
-					break dispatchLoop
+					return err
 				}
 				// this should never happen unless there is a bug - don't drop the task
 				tr.scope().IncCounter(metrics.BufferThrottlePerTaskQueueCounter)
@@ -135,21 +124,22 @@ dispatchLoop:
 				time.Sleep(taskReaderOfferThrottleWait)
 			}
 
-		case <-tr.shutdownChan:
-			return
+		case <-ctx.Done():
+			return nil
 		}
 	}
+	return nil
 }
 
-func (tr *taskReader) getTasksPump() {
+func (tr *taskReader) getTasksPump(ctx context.Context) error {
 	updateAckTimer := time.NewTimer(tr.tlMgr.config.UpdateAckInterval())
 	defer updateAckTimer.Stop()
 
 Loop:
 	for {
 		select {
-		case <-tr.shutdownChan:
-			return
+		case <-ctx.Done():
+			return nil
 
 		case <-tr.notifyC:
 			tasks, readLevel, isReadBatchDone, err := tr.getTaskBatch()
@@ -167,8 +157,8 @@ Loop:
 				continue Loop
 			}
 
-			if !tr.addTasksToBuffer(tasks) {
-				return
+			if err := tr.addTasksToBuffer(ctx, tasks); err != nil {
+				return err
 			}
 			// There maybe more tasks. We yield now, but signal pump to check again later.
 			tr.Signal()
@@ -230,8 +220,9 @@ func (tr *taskReader) getTaskBatch() ([]*persistencespb.AllocatedTaskInfo, int64
 }
 
 func (tr *taskReader) addTasksToBuffer(
+	ctx context.Context,
 	tasks []*persistencespb.AllocatedTaskInfo,
-) bool {
+) error {
 	for _, t := range tasks {
 		if taskqueue.IsTaskExpired(t) {
 			tr.scope().IncCounter(metrics.ExpiredTasksPerTaskQueueCounter)
@@ -240,22 +231,23 @@ func (tr *taskReader) addTasksToBuffer(
 			tr.tlMgr.taskAckManager.setReadLevel(t.GetTaskId())
 			continue
 		}
-		if !tr.addSingleTaskToBuffer(t) {
-			return false // we are shutting down the task queue
+		if err := tr.addSingleTaskToBuffer(ctx, t); err != nil {
+			return err
 		}
 	}
-	return true
+	return nil
 }
 
 func (tr *taskReader) addSingleTaskToBuffer(
+	ctx context.Context,
 	task *persistencespb.AllocatedTaskInfo,
-) bool {
+) error {
 	tr.tlMgr.taskAckManager.addTask(task.GetTaskId())
 	select {
 	case tr.taskBuffer <- task:
-		return true
-	case <-tr.shutdownChan:
-		return false
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
