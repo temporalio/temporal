@@ -43,7 +43,6 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/pborman/uuid"
 	"github.com/urfave/cli"
-	"github.com/valyala/fastjson"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -269,7 +268,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 }
 
 func unmarshalInputsFromCLI(c *cli.Context) []interface{} {
-	jsonsRaw := readJSONInputs(c, jsonTypeInput)
+	jsonsRaw := readJSONInputs(c)
 
 	var result []interface{}
 	for _, jsonRaw := range jsonsRaw {
@@ -311,11 +310,11 @@ func unmarshalSearchAttrFromCLI(c *cli.Context) map[string]interface{} {
 		return result
 	}
 
-	searchAttrKeys := sanitize(c.String(FlagSearchAttributesKey))
+	searchAttrKeys := sanitize(c.String(FlagSearchAttributeKey))
 	if len(searchAttrKeys) == 0 {
 		return nil
 	}
-	rawSearchAttrVals := sanitize(c.String(FlagSearchAttributesVal))
+	rawSearchAttrVals := sanitize(c.String(FlagSearchAttributeValue))
 	if len(rawSearchAttrVals) == 0 {
 		return nil
 	}
@@ -338,34 +337,41 @@ func unmarshalSearchAttrFromCLI(c *cli.Context) map[string]interface{} {
 }
 
 func unmarshalMemoFromCLI(c *cli.Context) map[string]interface{} {
-	rawMemoKey := c.String(FlagMemoKey)
-	var memoKeys []string
-	if strings.TrimSpace(rawMemoKey) != "" {
-		memoKeys = strings.Split(rawMemoKey, " ")
-	}
-
-	jsonsRaw := readJSONInputs(c, jsonTypeMemo)
-	if len(jsonsRaw) == 0 {
+	// Memo flags were not passed => Memo is not provided.
+	if !c.IsSet(FlagMemoKey) && !c.IsSet(FlagMemo) && !c.IsSet(FlagMemoFile) {
 		return nil
 	}
-	rawMemoValue := string(jsonsRaw[0]) // StringFlag may contain up to one json
 
-	if err := validateJSONs(rawMemoValue); err != nil {
-		ErrorAndExit("Input is not valid JSON, or JSONs concatenated with spaces/newlines.", err)
+	if !c.IsSet(FlagMemoKey) {
+		ErrorAndExit(fmt.Sprintf("Memo keys must be provided using %s.", FlagMemoKey), nil)
 	}
 
-	var memoValues []interface{}
+	if c.IsSet(FlagMemo) && c.IsSet(FlagMemoFile) {
+		ErrorAndExit(fmt.Sprintf("Only one of %s or %s should be used.", FlagMemo, FlagMemoFile), nil)
+	}
 
-	var sc fastjson.Scanner
-	sc.Init(rawMemoValue)
-	for sc.Next() {
-		memoValues = append(memoValues, sc.Value())
+	if !c.IsSet(FlagMemo) && !c.IsSet(FlagMemoFile) {
+		ErrorAndExit(fmt.Sprintf("Memo values must be provided using %s or %s.", FlagMemo, FlagMemoFile), nil)
 	}
-	if err := sc.Error(); err != nil {
-		ErrorAndExit("Memo JSON parse error.", err)
+
+	memoKeys := c.StringSlice(FlagMemoKey)
+
+	var memoValues []string
+	if c.IsSet(FlagMemoFile) {
+		inputFile := c.String(FlagMemoFile)
+		// This method is purely used to parse input from the CLI. The input comes from a trusted user
+		// #nosec
+		data, err := os.ReadFile(inputFile)
+		if err != nil {
+			ErrorAndExit(fmt.Sprintf("Error reading memo file %s.", inputFile), err)
+		}
+		memoValues = strings.Split(string(data), "\n")
+	} else if c.IsSet(FlagMemo) {
+		memoValues = c.StringSlice(FlagMemo)
 	}
+
 	if len(memoKeys) != len(memoValues) {
-		ErrorAndExit("Number of memo keys and values are not equal.", nil)
+		ErrorAndExit(fmt.Sprintf("Number of memo keys %d and values %d are not equal.", len(memoKeys), len(memoValues)), nil)
 	}
 
 	fields := make(map[string]interface{}, len(memoKeys))
@@ -381,17 +387,16 @@ func getPrintableMemo(memo *commonpb.Memo) string {
 		var memo string
 		err := payload.Decode(v, &memo)
 		if err != nil {
-			ErrorAndExit("Memo has incorrect format.", err)
+			memo = "Memo is not a string"
 		}
-
 		_, _ = fmt.Fprintf(buf, "%s=%s\n", k, memo)
 	}
 	return buf.String()
 }
 
-func getPrintableSearchAttr(searchAttr *commonpb.SearchAttributes) string {
+func getPrintableSearchAttributes(searchAttributes *commonpb.SearchAttributes) string {
 	var buf bytes.Buffer
-	searchAttributesString, err := searchattribute.Stringify(searchAttr, nil)
+	searchAttributesString, err := searchattribute.Stringify(searchAttributes, nil)
 	if err != nil {
 		fmt.Printf("%s: unable to stringify search attribute: %v\n",
 			colorMagenta("Warning"),
@@ -1114,7 +1119,7 @@ func appendWorkflowExecutionsToTable(
 			row = append(row, getPrintableMemo(e.Memo))
 		}
 		if printSearchAttr {
-			row = append(row, getPrintableSearchAttr(e.SearchAttributes))
+			row = append(row, getPrintableSearchAttributes(e.SearchAttributes))
 		}
 		table.Append(row)
 	}
@@ -1367,7 +1372,7 @@ func scanWorkflow(c *cli.Context, table *tablewriter.Table, queryOpen bool) func
 				row = append(row, getPrintableMemo(e.Memo))
 			}
 			if printSearchAttr {
-				row = append(row, getPrintableSearchAttr(e.SearchAttributes))
+				row = append(row, getPrintableSearchAttributes(e.SearchAttributes))
 			}
 			table.Append(row)
 		}

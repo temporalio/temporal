@@ -47,7 +47,7 @@ func newVisibilityTaskNAckError(visibilityTaskKey string) error {
 }
 
 func (v *VisibilityTaskNAckError) Error() string {
-	return fmt.Sprintf("visibility task %s wasn't acknowledged", v.VisibilityTaskKey)
+	return fmt.Sprintf("visibility task %s received NACK", v.VisibilityTaskKey)
 }
 
 func newVisibilityTaskAckTimeoutError(visibilityTaskKey string, timeout time.Duration) error {
@@ -58,5 +58,5 @@ func newVisibilityTaskAckTimeoutError(visibilityTaskKey string, timeout time.Dur
 }
 
 func (v *VisibilityTaskAckTimeoutError) Error() string {
-	return fmt.Sprintf("visibility task %s acknowledge timedout after %v", v.VisibilityTaskKey, v.Timeout)
+	return fmt.Sprintf("visibility task %s timedout waiting for ACK after %v", v.VisibilityTaskKey, v.Timeout)
 }
