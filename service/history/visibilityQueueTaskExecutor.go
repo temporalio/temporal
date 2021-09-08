@@ -38,8 +38,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -448,17 +446,13 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 	task *persistencespb.VisibilityTaskInfo,
 ) (retError error) {
-	op := func() error {
-		request := &visibility.VisibilityDeleteWorkflowExecutionRequest{
-			NamespaceID: task.GetNamespaceId(),
-			WorkflowID:  task.GetWorkflowId(),
-			RunID:       task.GetRunId(),
-			TaskID:      task.GetTaskId(),
-		}
-		// TODO: expose GetVisibilityManager method on shardContext interface
-		return t.shard.GetService().GetVisibilityManager().DeleteWorkflowExecution(request) // delete from db
+	request := &visibility.VisibilityDeleteWorkflowExecutionRequest{
+		NamespaceID: task.GetNamespaceId(),
+		WorkflowID:  task.GetWorkflowId(),
+		RunID:       task.GetRunId(),
+		TaskID:      task.GetTaskId(),
 	}
-	return backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	return t.shard.GetVisibilityManager().DeleteWorkflowExecution(request)
 }
 
 func getWorkflowMemo(
