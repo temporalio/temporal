@@ -26,6 +26,7 @@ package goro_test
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"testing"
 	"time"
@@ -101,4 +102,21 @@ func TestGoroGoexit(t *testing.T) {
 		return nil
 	})
 	<-g.Done()
+}
+
+func ExampleHandle() {
+	h := goro.Go(context.Background(), func(ctx context.Context) error {
+		<-ctx.Done()
+		fmt.Println("shutting down")
+		return ctx.Err()
+	})
+	fmt.Println(h.Err())
+	h.Cancel()
+	<-h.Done()
+	fmt.Println(h.Err())
+
+	// Output:
+	// <nil>
+	// shutting down
+	// context canceled
 }
