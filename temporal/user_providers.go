@@ -144,7 +144,7 @@ func DefaultAudienceGetterProvider() authorization.JWTAudienceMapper {
 	return nil
 }
 
-func DefaultPersistenseServiceResolverProvider() resolver.ServiceResolver {
+func DefaultPersistenceServiceResolverProvider() resolver.ServiceResolver {
 	return resolver.NewNoopResolver()
 }
 

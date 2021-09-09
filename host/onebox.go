@@ -562,7 +562,6 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	svcCfg := config.Service{}
 
 	matchingService, err := matching.InitializeTestMatchingService(
-		common.MatchingServiceName,
 		c.logger,
 		params.DynamicConfigClient,
 		params.ServerMetricsReporter,

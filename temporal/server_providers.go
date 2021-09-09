@@ -63,7 +63,6 @@ func AdvancedVisibilityWritingModeProvider(cfg *config.Config, dc *dynamicconfig
 	return VisibilityWritingMode(advancedVisibilityWritingMode), nil
 }
 
-// todomigryz: verify if this needs custom type
 func AdvancedVisibilityStoreProvider(cfg *config.Config, visibilityWritingMode VisibilityWritingMode) (
 	config.DataStore,
 	error,
@@ -96,7 +95,6 @@ func ESClientProvider(
 	advancedVisibilityWritingMode VisibilityWritingMode,
 ) (esclient.Client, error) {
 
-	// todomigryz: this should be in start
 	err := verifyPersistenceCompatibleVersion(
 		cfg.Persistence,
 		persistenceServiceResolver,
@@ -179,7 +177,7 @@ func makeBootstrapParams(
 
 	serverReporter := metricReporters.serverReporter
 	sdkReporter := metricReporters.sdkReporter
-	// todomigryz: remove support of configuring metrics reporter per-service. Sync with Samar.
+	// todo: remove support of configuring metrics reporter per-service. Should be deprecated in 1.13 or 1.14
 	// todo: Replace this hack with actually using sdkReporter, Client or Scope.
 	if serverReporter == nil {
 		var err error
@@ -385,7 +383,7 @@ func ServicesProvider(
 func ServerProvider(
 	logger log.Logger,
 	cfg *config.Config,
-	requiredServices ServiceNamesList, // todomigryz: might use specific type name here, or wrap in provider
+	requiredServices ServiceNamesList,
 	services ServicesMap,
 	persistenceServiceResolver resolver.ServiceResolver,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
@@ -393,7 +391,6 @@ func ServerProvider(
 	dc *dynamicconfig.Collection,
 	interruptCh ServerInterruptCh,
 ) (*Server, error) {
-	// todomigryz: ultimately, we don't need serveropts here.
 	s, err := NewServer(
 		logger,
 		cfg,

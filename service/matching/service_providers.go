@@ -54,8 +54,6 @@ import (
 )
 
 type (
-	// todomigryz commented code
-	// ServiceName            string
 	MetricsReporter        metrics.Reporter
 	UserMetricsReporter    metrics.Reporter
 	UserSdkMetricsReporter metrics.Reporter
@@ -103,7 +101,7 @@ func MembershipFactoryInitializerProvider(
 		return ringpop.NewRingpopFactory(
 			membership,
 			rpcFactory.GetRingpopChannel(),
-			primitives.MatchingService, // todomigryz: also declared at common.MatchingServiceName
+			primitives.MatchingService, // todo: also declared at common.MatchingServiceName, should be unified further
 			servicePortMap,
 			logger,
 			persistenceBean.GetClusterMetadataManager(),
@@ -113,7 +111,6 @@ func MembershipFactoryInitializerProvider(
 	return result
 }
 
-// todomigryz: seem to be possible to combine with MFIProvider
 func MembershipFactoryProvider(
 	factoryInitializer resource.MembershipFactoryInitializerFunc,
 	taggedLogger TaggedLogger,

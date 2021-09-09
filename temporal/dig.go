@@ -25,89 +25,116 @@ package temporal
 import (
 	"github.com/urfave/cli/v2"
 	tlog "go.temporal.io/server/common/log"
-	"go.temporal.io/server/service/matching"
 	"go.uber.org/dig"
 )
 
-// var UserSet = wire.NewSet(
-// 	DefaultConfigProvider,
-// 	DefaultLogger,
-// 	wire.Bind(new(NamespaceLogger), new(tlog.Logger)),
-// 	DefaultDynamicConfigClientProvider,
-// 	DefaultAuthorizerProvider,
-// 	DefaultClaimMapper,
-// 	DefaultServiceNameListProvider,
-// 	DefaultDatastoreFactory,
-// 	DefaultMetricsReportersProvider,
-// 	DefaultTLSConfigProvider,
-// 	DefaultDynamicConfigCollectionProvider,
-// 	DefaultAudienceGetterProvider,
-// 	DefaultPersistenseServiceResolverProvider,
-// 	DefaultElasticSearchHttpClientProvider,
-// 	DefaultInterruptChProvider,
-// )
+const (
+	UserConfigProvider                     = "UserConfigProvider"
+	UserLoggerProvider                     = "UserLoggerProvider"
+	UserNamespaceLoggerProvider            = "UserNamespaceLoggerProvider"
+	UserDynamicConfigClientProvider        = "UserDynamicConfigClientProvider"
+	UserAuthorizerProvider                 = "UserAuthorizerProvider"
+	UserClaimMapperProvider                = "UserClaimMapperProvider"
+	UserServiceNameListProvider            = "UserServiceNameListProvider"
+	UserDatastoreFactoryProvider           = "UserDatastoreFactoryProvider"
+	UserMetricsReportersProvider           = "UserMetricsReportersProvider"
+	UserTLSConfigProvider                  = "UserTLSConfigProvider"
+	UserDynamicConfigCollectionProvider    = "UserDynamicConfigCollectionProvider"
+	UserAudienceGetterProvider             = "UserAudienceGetterProvider"
+	UserPersistenceServiceResolverProvider = "UserPersistenceServiceResolverProvider"
+	UserElasticSearchHttpClientProvider    = "UserElasticSearchHttpClientProvider"
+	UserInterruptChProvider                = "UserInterruptChProvider"
+)
 
-// var serverSet = wire.NewSet(
-// 	ServicesProvider,
-// 	ServerProvider,
-// 	AdvancedVisibilityStoreProvider,
-// 	ESClientProvider,
-// 	ESConfigProvider,
-// 	AdvancedVisibilityWritingModeProvider,
-// 	wire.Struct(new(ServicesProviderDeps), "*"), // we can use this to inject dependencies into sub-modules
-// )
+func InjectServerProviders(dc *dig.Container, c *cli.Context, customProviders map[string]interface{}) error {
+	for _, val := range customProviders {
+		if err := dc.Provide(val); err != nil {
+			return err
+		}
+	}
 
-func InjectServerProviders(dc *dig.Container, c *cli.Context) error {
 	if err := dc.Provide(func() *cli.Context { return c }); err != nil {
 		return err
 	}
-	if err := dc.Provide(DefaultConfigProvider); err != nil {
-		return err
-	}
-	if err := dc.Provide(DefaultLogger); err != nil {
-		return err
-	}
-	if err := dc.Provide(func(l tlog.Logger) NamespaceLogger { return l }); err != nil {
-		return err
-	}
-	if err := dc.Provide(DefaultDynamicConfigClientProvider); err != nil {
-		return err
-	}
-	if err := dc.Provide(DefaultAuthorizerProvider); err != nil {
-		return err
-	}
-	if err := dc.Provide(DefaultClaimMapper); err != nil {
-		return err
-	}
-	if err := dc.Provide(DefaultServiceNameListProvider); err != nil {
-		return err
-	}
-	if err := dc.Provide(DefaultDatastoreFactory); err != nil {
-		return err
-	}
-	if err := dc.Provide(DefaultMetricsReportersProvider); err != nil {
-		return err
-	}
-	if err := dc.Provide(DefaultTLSConfigProvider); err != nil {
-		return err
-	}
-	if err := dc.Provide(DefaultDynamicConfigCollectionProvider); err != nil {
-		return err
-	}
-	if err := dc.Provide(DefaultAudienceGetterProvider); err != nil {
-		return err
-	}
-	if err := dc.Provide(DefaultPersistenseServiceResolverProvider); err != nil {
-		return err
-	}
-	if err := dc.Provide(DefaultElasticSearchHttpClientProvider); err != nil {
-		return err
+
+	if _, ok := customProviders[UserConfigProvider]; !ok {
+		if err := dc.Provide(DefaultConfigProvider); err != nil {
+			return err
+		}
 	}
 
-	// todomigryz: we need to check for err on each dc.Provide
-	if err := dc.Provide(DefaultInterruptChProvider); err != nil {
-		return err
+	if _, ok := customProviders[UserLoggerProvider]; !ok {
+		if err := dc.Provide(DefaultLogger); err != nil {
+			return err
+		}
 	}
+	if _, ok := customProviders[UserNamespaceLoggerProvider]; !ok {
+		if err := dc.Provide(func(l tlog.Logger) NamespaceLogger { return l }); err != nil {
+			return err
+		}
+	}
+	if _, ok := customProviders[UserDynamicConfigClientProvider]; !ok {
+		if err := dc.Provide(DefaultDynamicConfigClientProvider); err != nil {
+			return err
+		}
+	}
+
+	if _, ok := customProviders[UserAuthorizerProvider]; !ok {
+		if err := dc.Provide(DefaultAuthorizerProvider); err != nil {
+			return err
+		}
+	}
+	if _, ok := customProviders[UserClaimMapperProvider]; !ok {
+		if err := dc.Provide(DefaultClaimMapper); err != nil {
+			return err
+		}
+	}
+	if _, ok := customProviders[UserServiceNameListProvider]; !ok {
+		if err := dc.Provide(DefaultServiceNameListProvider); err != nil {
+			return err
+		}
+	}
+	if _, ok := customProviders[UserDatastoreFactoryProvider]; !ok {
+		if err := dc.Provide(DefaultDatastoreFactory); err != nil {
+			return err
+		}
+	}
+	if _, ok := customProviders[UserMetricsReportersProvider]; !ok {
+		if err := dc.Provide(DefaultMetricsReportersProvider); err != nil {
+			return err
+		}
+	}
+	if _, ok := customProviders[UserTLSConfigProvider]; !ok {
+		if err := dc.Provide(DefaultTLSConfigProvider); err != nil {
+			return err
+		}
+	}
+	if _, ok := customProviders[UserDynamicConfigCollectionProvider]; !ok {
+		if err := dc.Provide(DefaultDynamicConfigCollectionProvider); err != nil {
+			return err
+		}
+	}
+	if _, ok := customProviders[UserAudienceGetterProvider]; !ok {
+		if err := dc.Provide(DefaultAudienceGetterProvider); err != nil {
+			return err
+		}
+	}
+	if _, ok := customProviders[UserPersistenceServiceResolverProvider]; !ok {
+		if err := dc.Provide(DefaultPersistenceServiceResolverProvider); err != nil {
+			return err
+		}
+	}
+	if _, ok := customProviders[UserElasticSearchHttpClientProvider]; !ok {
+		if err := dc.Provide(DefaultElasticSearchHttpClientProvider); err != nil {
+			return err
+		}
+	}
+	if _, ok := customProviders[UserInterruptChProvider]; !ok {
+		if err := dc.Provide(DefaultInterruptChProvider); err != nil {
+			return err
+		}
+	}
+
 	if err := dc.Provide(ServicesProvider); err != nil {
 		return err
 	}
@@ -126,8 +153,6 @@ func InjectServerProviders(dc *dig.Container, c *cli.Context) error {
 	if err := dc.Provide(AdvancedVisibilityWritingModeProvider); err != nil {
 		return err
 	}
-	if err := matching.InjectMatchingServiceProviders(dc); err != nil {
-		return err
-	}
+
 	return nil
 }

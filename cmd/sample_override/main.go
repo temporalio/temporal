@@ -113,7 +113,9 @@ func buildCLI() *cli.App {
 
 func run(c *cli.Context) error {
 	serverContainer := dig.New()
-	err := temporal.InjectServerProviders(serverContainer, c, make(map[string]interface{}))
+	var overrides = make(map[string]interface{})
+	overrides[temporal.UserLoggerProvider] = temporal.DefaultLogger
+	err := temporal.InjectServerProviders(serverContainer, c, overrides)
 
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("Unable to inject server providers. Error: %v", err), 1)
