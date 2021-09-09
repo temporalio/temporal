@@ -32,39 +32,62 @@ package temporal
 import (
 	"github.com/google/wire"
 	"github.com/urfave/cli/v2"
-	"go.temporal.io/server/common/log"
 )
 
 // Injectors from wire.go:
 
-func InitializeServer(c *cli.Context) (*Server, error) {
-	config, err := DefaultConfigProvider(c)
+func InitializeServer(opts ...ServerOption) (*Server, error) {
+	temporalServerOptions, err := DefaultServerOptionsProvider(opts...)
 	if err != nil {
 		return nil, err
 	}
-	logger := DefaultLoggerProvider(config)
-	serviceNamesList := DefaultServiceNameListProvider(logger, c)
-	authorizer, err := DefaultAuthorizerProvider(config)
+	config, err := DefaultConfigProvider(temporalServerOptions)
 	if err != nil {
 		return nil, err
 	}
-	claimMapper, err := DefaultClaimMapper(config, logger)
+	logger := DefaultLoggerProvider(config, temporalServerOptions)
+	serviceNamesList, err := DefaultServiceNameListProvider(logger, temporalServerOptions)
 	if err != nil {
 		return nil, err
 	}
-	client := DefaultDynamicConfigClientProvider(config, logger)
+	namespaceLogger := DefaultNamespaceLoggerProvider(config, temporalServerOptions, logger)
+	providerCommonParams := &ProviderCommonParams{
+		logger: logger,
+		cfg:    config,
+	}
+	authorizer, err := DefaultAuthorizerProvider(providerCommonParams, temporalServerOptions)
+	if err != nil {
+		return nil, err
+	}
+	claimMapper, err := DefaultClaimMapper(providerCommonParams, temporalServerOptions)
+	if err != nil {
+		return nil, err
+	}
+	client, err := DefaultDynamicConfigClientProvider(providerCommonParams, temporalServerOptions)
+	if err != nil {
+		return nil, err
+	}
 	collection := DefaultDynamicConfigCollectionProvider(client, logger)
-	abstractDataStoreFactory := DefaultDatastoreFactory()
-	metricsReporters, err := DefaultMetricsReportersProvider(config, logger)
+	abstractDataStoreFactory, err := DefaultDatastoreFactory(providerCommonParams, temporalServerOptions)
 	if err != nil {
 		return nil, err
 	}
-	tlsConfigProvider, err := DefaultTLSConfigProvider(config, logger, metricsReporters)
+	metricsReporters, err := DefaultMetricsReportersProvider(temporalServerOptions, config, logger)
 	if err != nil {
 		return nil, err
 	}
-	jwtAudienceMapper := DefaultAudienceGetterProvider()
-	serviceResolver := DefaultPersistenseServiceResolverProvider()
+	tlsConfigProvider, err := DefaultTLSConfigProvider(providerCommonParams, temporalServerOptions, metricsReporters)
+	if err != nil {
+		return nil, err
+	}
+	jwtAudienceMapper, err := DefaultAudienceGetterProvider(providerCommonParams, temporalServerOptions)
+	if err != nil {
+		return nil, err
+	}
+	serviceResolver, err := DefaultPersistenseServiceResolverProvider(providerCommonParams, temporalServerOptions)
+	if err != nil {
+		return nil, err
+	}
 	visibilityWritingMode, err := AdvancedVisibilityWritingModeProvider(config, collection)
 	if err != nil {
 		return nil, err
@@ -74,7 +97,7 @@ func InitializeServer(c *cli.Context) (*Server, error) {
 		return nil, err
 	}
 	elasticsearch := ESConfigProvider(dataStore)
-	esHttpClient, err := DefaultElasticSearchHttpClientProvider(elasticsearch)
+	esHttpClient, err := DefaultElasticSearchHttpClientProvider(providerCommonParams, temporalServerOptions, elasticsearch)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +109,7 @@ func InitializeServer(c *cli.Context) (*Server, error) {
 		cfg:                        config,
 		services:                   serviceNamesList,
 		logger:                     logger,
-		namespaceLogger:            logger,
+		namespaceLogger:            namespaceLogger,
 		authorizer:                 authorizer,
 		claimMapper:                claimMapper,
 		dynamicConfigClient:        client,
@@ -103,7 +126,7 @@ func InitializeServer(c *cli.Context) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	serverInterruptCh := DefaultInterruptChProvider()
+	serverInterruptCh := DefaultInterruptChProvider(temporalServerOptions)
 	server, err := ServerProvider(logger, config, serviceNamesList, v, serviceResolver, abstractDataStoreFactory, client, collection, serverInterruptCh)
 	if err != nil {
 		return nil, err
@@ -134,7 +157,7 @@ func InitializeDefaultUserProviderSet(c *cli.Context) wire.ProviderSet {
 var UserSet = wire.NewSet(
 	DefaultConfigProvider,
 	DefaultLoggerProvider,
-	wire.Bind(new(NamespaceLogger), new(log.Logger)),
+	DefaultNamespaceLoggerProvider,
 	DefaultDynamicConfigClientProvider,
 	DefaultAuthorizerProvider,
 	DefaultClaimMapper,
@@ -155,5 +178,5 @@ var serverSet = wire.NewSet(
 	AdvancedVisibilityStoreProvider,
 	ESClientProvider,
 	ESConfigProvider,
-	AdvancedVisibilityWritingModeProvider, wire.Struct(new(ServicesProviderDeps), "*"),
+	AdvancedVisibilityWritingModeProvider, wire.Struct(new(ServicesProviderDeps), "*"), wire.Struct(new(ProviderCommonParams), "*"),
 )

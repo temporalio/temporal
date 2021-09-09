@@ -26,7 +26,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/urfave/cli/v2"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -52,11 +51,12 @@ import (
 
 type VisibilityWritingMode string
 
-type ProviderCommonParams struct {
-	c      *cli.Context
-	logger log.Logger
-	cfg    *config.Config
+
+func DefaultServerOptionsProvider(opts ...ServerOption) (*serverOptions, error) {
+	options := newServerOptions(opts)
+	return options, nil
 }
+
 
 func AdvancedVisibilityWritingModeProvider(cfg *config.Config, dc *dynamicconfig.Collection) (
 	VisibilityWritingMode,

@@ -27,8 +27,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path"
-	"strings"
 
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/common/config"
@@ -113,27 +111,15 @@ func buildCLI() *cli.App {
 	return app
 }
 
+func MyLoggerProvider(cfg *config.Config) tlog.Logger {
+	panic("My logger provider haha")
+	// return tlog.NewZapLogger(tlog.BuildZapLogger(cfg.Log))
+}
+
+
 func run(c *cli.Context) error {
-	env := c.String("env")
-	zone := c.String("zone")
-	configDir := path.Join(c.String("root"), c.String("config"))
-	cfg, err := config.LoadConfig(env, configDir, zone)
-	if err != nil {
-		return fmt.Errorf("Unable to load configuration: %v.", err)
-	}
-	log := tlog.NewZapLogger(tlog.BuildZapLogger(cfg.Log))
-	services := c.StringSlice("service")
-	if c.IsSet("services") {
-		log.Warn("WARNING: --services flag is deprecated. Specify multiple --service flags instead.")
-		services = strings.Split(c.String("services"), ",")
-	}
-
-	s, err := temporal.InitializeServer(
-		temporal.ForServices(services),
-		temporal.WithConfig(cfg),
-		temporal.WithLoggerProvider(func(c *config.Config) tlog.Logger {return log}),
-	)
-
+	s, err := temporal.InitializeServer(c,
+		temporal.WithLoggerProvider(MyLoggerProvider))
 	if err != nil {
 		return cli.Exit(fmt.Sprintf("Unable to initialize server. Error: %v", err), 1)
 	}

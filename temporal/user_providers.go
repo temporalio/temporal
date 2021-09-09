@@ -23,16 +23,13 @@
 package temporal
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
-	"path"
-	"strings"
 
-	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	tlog "go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -52,88 +49,135 @@ type (
 	}
 	ServerInterruptCh <-chan interface{}
 
-	UserLoggerProvider                     func(c *cli.Context) log.Logger
-	UserNamespaceLoggerProvider            func(c *cli.Context) log.Logger
-	UserMetricsReporterProvider            func(cfg *config.Config, logger tlog.Logger) (*MetricsReporters, error)
-
-	UserAuthorizerProvider                 func(params ProviderCommonParams) authorization.Authorizer
-	UserTlsConfigProvider                  func(params ProviderCommonParams) encryption.TLSConfigProvider
-	UserClaimMapperProvider                func(params ProviderCommonParams) authorization.ClaimMapper
-	UserAudienceGetterProvider             func(params ProviderCommonParams) authorization.JWTAudienceMapper
-	UserPersistenceServiceResolverProvider func(params ProviderCommonParams) resolver.ServiceResolver
-	UserElasticseachHttpClientProvider     func(params ProviderCommonParams) *http.Client
-	UserDynamicConfigClientProvider        func(params ProviderCommonParams) dynamicconfig.Client
-	UserCustomDataStoreFactoryProvider     func(params ProviderCommonParams) persistenceClient.AbstractDataStoreFactory
-)
-
-func DefaultConfigProvider(c *cli.Context) (*config.Config, error) {
-	env := c.String("env")
-	zone := c.String("zone")
-	configDir := path.Join(c.String("root"), c.String("config"))
-	cfg, err := config.LoadConfig(env, configDir, zone)
-	if err != nil {
-		return nil, fmt.Errorf("Unable to load configuration: %v.", err)
+	ProviderCommonParams struct {
+		logger tlog.Logger
+		cfg    *config.Config
 	}
 
-	return cfg, err
+	UserLoggerProviderFunc                     func(c *config.Config) tlog.Logger
+	UserNamespaceLoggerProviderFunc            func(c *config.Config, logger tlog.Logger) NamespaceLogger
+	UserMetricsReportersProviderFunc            func(c *config.Config, log tlog.Logger) (*MetricsReporters, error)
+
+	UserAuthorizerProviderFuncParams struct {*ProviderCommonParams}
+	UserAuthorizerProviderFunc                 func(params UserAuthorizerProviderFuncParams) (authorization.Authorizer, error)
+
+	UserTlsConfigProviderFuncParams struct {
+		*ProviderCommonParams
+	}
+	UserTlsConfigProviderFunc                  func(params UserTlsConfigProviderFuncParams) (encryption.TLSConfigProvider, error)
+
+	UserClaimMapperProviderFuncParams struct {*ProviderCommonParams}
+	UserClaimMapperProviderFunc                func(params UserClaimMapperProviderFuncParams) (authorization.ClaimMapper, error)
+
+	UserAudienceGetterProviderFuncParams struct {*ProviderCommonParams}
+	UserAudienceGetterProviderFunc             func(params UserAudienceGetterProviderFuncParams) (authorization.JWTAudienceMapper, error)
+
+	UserPersistenceServiceResolverProviderFuncParams struct {*ProviderCommonParams}
+	UserPersistenceServiceResolverProviderFunc func(params UserPersistenceServiceResolverProviderFuncParams) (resolver.ServiceResolver, error)
+
+	UserElasticSeachHttpClientProviderFuncParams struct {
+		*ProviderCommonParams
+		esConfig *config.Elasticsearch
+	}
+	UserElasticSeachHttpClientProviderFunc func(params UserElasticSeachHttpClientProviderFuncParams) (*http.Client, error)
+
+	UserDynamicConfigClientProviderFuncParams struct {*ProviderCommonParams}
+	UserDynamicConfigClientProviderFunc        func(params UserDynamicConfigClientProviderFuncParams) (dynamicconfig.Client, error)
+
+	UserCustomDataStoreFactoryProviderFuncParams struct {*ProviderCommonParams}
+	UserCustomDataStoreFactoryProviderFunc     func(params UserCustomDataStoreFactoryProviderFuncParams) (persistenceClient.AbstractDataStoreFactory, error)
+)
+
+func ProviderCommonParamsProvider(logger tlog.Logger, cfg *config.Config) (*ProviderCommonParams, error) {
+	result := ProviderCommonParams{logger, cfg}
+	return &result, nil
 }
 
-func DefaultLoggerProvider(cfg *config.Config, options serverOptions) tlog.Logger {
-	if options.UserLoggerProvider != nil {
-		return options.UserLoggerProvider(cfg)
+func DefaultConfigProvider(opts *serverOptions) (*config.Config, error) {
+	if opts.config == nil {
+		return nil, errors.New("please, provide temporal.WithConfig")
+	}
+
+	return opts.config, nil
+}
+
+func DefaultLoggerProvider(cfg *config.Config, opts *serverOptions) tlog.Logger {
+	if opts.UserLoggerProvider != nil {
+		return opts.UserLoggerProvider(cfg)
 	}
 	return tlog.NewZapLogger(tlog.BuildZapLogger(cfg.Log))
 }
 
-func DefaultNamespaceLoggerProvider(cfg *config.Config, options serverOptions, logger tlog.Logger) NamespaceLogger {
-	if options.UserNamespaceLoggerProvider != nil {
-		return options.UserNamespaceLoggerProvider(cfg)
+func DefaultNamespaceLoggerProvider(cfg *config.Config, opts *serverOptions, logger tlog.Logger) NamespaceLogger {
+	if opts.UserNamespaceLoggerProvider != nil {
+		return opts.UserNamespaceLoggerProvider(cfg, logger)
 	}
 	return logger
 }
 
-func DefaultServiceNameListProvider(log tlog.Logger, c *cli.Context) ServiceNamesList {
-	services := c.StringSlice("service")
-	if c.IsSet("services") {
-		log.Warn("WARNING: --services flag is deprecated. Specify multiply --service flags instead.")
-		services = strings.Split(c.String("services"), ",")
+func DefaultServiceNameListProvider(log tlog.Logger, options *serverOptions) (ServiceNamesList, error) {
+	if options.serviceNames == nil {
+		return nil, errors.New("please, specify services to run via temporal.ForServices")
 	}
-	return services
+
+	return options.serviceNames, nil
 }
 
-func DefaultDynamicConfigClientProvider(cfg *config.Config, logger tlog.Logger) dynamicconfig.Client {
-	dynamicConfigClient, err := dynamicconfig.NewFileBasedClient(&cfg.DynamicConfigClient, logger, InterruptCh())
+func DefaultDynamicConfigClientProvider(pcp *ProviderCommonParams, opts *serverOptions) (dynamicconfig.Client, error) {
+	if opts.UserDynamicConfigClientProvider != nil {
+		return opts.UserDynamicConfigClientProvider(UserDynamicConfigClientProviderFuncParams{pcp})
+	}
+
+	dynamicConfigClient, err := dynamicconfig.NewFileBasedClient(&pcp.cfg.DynamicConfigClient, pcp.logger, InterruptCh())
 	if err != nil {
-		logger.Info(
+		pcp.logger.Info(
 			"Unable to create file based dynamic config client, use no-op config client instead.",
 			tag.Error(err),
 		)
 		dynamicConfigClient = dynamicconfig.NewNoopClient()
 	}
-	return dynamicConfigClient
+	return dynamicConfigClient, nil
 }
 
 func DefaultDynamicConfigCollectionProvider(client dynamicconfig.Client, logger tlog.Logger) *dynamicconfig.Collection {
 	return dynamicconfig.NewCollection(client, logger)
 }
 
-func DefaultAuthorizerProvider(cfg *config.Config) (authorization.Authorizer, error) {
+func DefaultAuthorizerProvider(pcp *ProviderCommonParams, opts *serverOptions) (authorization.Authorizer, error) {
+	if opts.UserAuthorizerProvider != nil {
+		return opts.UserAuthorizerProvider(UserAuthorizerProviderFuncParams{pcp})
+	}
+
 	authorizer, err := authorization.GetAuthorizerFromConfig(
-		&cfg.Global.Authorization,
+		&pcp.cfg.Global.Authorization,
 	)
 	return authorizer, err
 }
 
-func DefaultClaimMapper(cfg *config.Config, logger tlog.Logger) (authorization.ClaimMapper, error) {
-	claimMapper, err := authorization.GetClaimMapperFromConfig(&cfg.Global.Authorization, logger)
+func DefaultClaimMapper(pcp *ProviderCommonParams, opts *serverOptions) (authorization.ClaimMapper, error) {
+	if opts.UserClaimMapperProvider != nil {
+		return opts.UserClaimMapperProvider(UserClaimMapperProviderFuncParams{pcp})
+	}
+
+	claimMapper, err := authorization.GetClaimMapperFromConfig(&pcp.cfg.Global.Authorization, pcp.logger)
 	return claimMapper, err
 }
 
-func DefaultDatastoreFactory() persistenceClient.AbstractDataStoreFactory {
-	return nil
+func DefaultDatastoreFactory(pcp *ProviderCommonParams, opts *serverOptions) (persistenceClient.AbstractDataStoreFactory, error) {
+	if opts.UserCustomDataStoreFactoryProvider != nil {
+		return opts.UserCustomDataStoreFactoryProvider(UserCustomDataStoreFactoryProviderFuncParams{pcp})
+	}
+	return nil, nil
 }
 
-func DefaultMetricsReportersProvider(cfg *config.Config, logger tlog.Logger) (*MetricsReporters, error) {
+func DefaultMetricsReportersProvider(
+	opts *serverOptions,
+	cfg *config.Config,
+	logger tlog.Logger) (*MetricsReporters, error) {
+	if opts.UserMetricsReporterProvider != nil {
+		return opts.UserMetricsReporterProvider(cfg, logger)
+	}
+
 	result := &MetricsReporters{}
 	if cfg.Global.Metrics == nil {
 		return result, nil
@@ -149,16 +193,21 @@ func DefaultMetricsReportersProvider(cfg *config.Config, logger tlog.Logger) (*M
 }
 
 func DefaultTLSConfigProvider(
-	cfg *config.Config,
-	logger tlog.Logger,
+	pcp *ProviderCommonParams,
+	opts *serverOptions,
 	metricReporters *MetricsReporters,
 ) (encryption.TLSConfigProvider, error) {
+	if opts.UserTlsConfigProvider != nil {
+		return opts.UserTlsConfigProvider(UserTlsConfigProviderFuncParams{pcp})
+	}
+
+	logger := pcp.logger
 	scope, err := extractTallyScopeForSDK(metricReporters.sdkReporter)
 	if err != nil {
 		return nil, err
 	}
 	tlsConfigProvider, err := encryption.NewTLSConfigProviderFromConfig(
-		cfg.Global.TLS, scope, logger, nil,
+		pcp.cfg.Global.TLS, scope, logger, nil,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("TLS provider initialization error: %w", err)
@@ -166,15 +215,25 @@ func DefaultTLSConfigProvider(
 	return tlsConfigProvider, nil
 }
 
-func DefaultAudienceGetterProvider() authorization.JWTAudienceMapper {
-	return nil
+func DefaultAudienceGetterProvider(pcp *ProviderCommonParams, opts *serverOptions) (authorization.JWTAudienceMapper, error) {
+	if opts.UserAudienceGetterProvider != nil {
+		return opts.UserAudienceGetterProvider(UserAudienceGetterProviderFuncParams{pcp})
+	}
+	return nil, nil
 }
 
-func DefaultPersistenseServiceResolverProvider() resolver.ServiceResolver {
-	return resolver.NewNoopResolver()
+func DefaultPersistenseServiceResolverProvider(pcp *ProviderCommonParams, opts *serverOptions) (resolver.ServiceResolver, error) {
+	if opts.UserPersistenceServiceResolverProvider != nil {
+		return opts.UserPersistenceServiceResolverProvider(UserPersistenceServiceResolverProviderFuncParams{pcp})
+	}
+	return resolver.NewNoopResolver(), nil
 }
 
-func DefaultElasticSearchHttpClientProvider(esConfig *config.Elasticsearch) (ESHttpClient, error) {
+func DefaultElasticSearchHttpClientProvider(pcp *ProviderCommonParams, opts *serverOptions, esConfig *config.Elasticsearch) (ESHttpClient, error) {
+	if opts.UserElasticSeachHttpClientProvider != nil {
+		return opts.UserElasticSeachHttpClientProvider(UserElasticSeachHttpClientProviderFuncParams{pcp, esConfig})
+	}
+
 	if esConfig == nil {
 		return nil, nil
 	}
@@ -186,6 +245,10 @@ func DefaultElasticSearchHttpClientProvider(esConfig *config.Elasticsearch) (ESH
 	return elasticseachHttpClient, nil
 }
 
-func DefaultInterruptChProvider() ServerInterruptCh {
+func DefaultInterruptChProvider(opts *serverOptions) ServerInterruptCh {
+	if opts.interruptCh != nil {
+		return opts.interruptCh
+	}
+
 	return InterruptCh()
 }

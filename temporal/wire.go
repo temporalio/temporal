@@ -76,8 +76,9 @@ var serverSet = wire.NewSet(
 	wire.Struct(new(ProviderCommonParams), "*"), // we can use this to inject dependencies into sub-modules
 )
 
-func InitializeServer(c *cli.Context) (*Server, error) {
+func InitializeServer(opts ...ServerOption) (*Server, error) {
 	wire.Build(
+		DefaultServerOptionsProvider,
 		UserSet,
 		serverSet,
 	)

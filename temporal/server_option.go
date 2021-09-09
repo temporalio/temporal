@@ -148,3 +148,73 @@ func WithCustomDataStoreFactory(customFactory client.AbstractDataStoreFactory) S
 		s.customDataStoreFactory = customFactory
 	})
 }
+
+
+// TODO: deprecate methods above. Should use providers instead as they are more flexible.
+
+func WithLoggerProvider(userFunc UserLoggerProviderFunc) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.UserLoggerProvider = userFunc
+	})
+}
+
+func WithNamespaceLoggerProvider(userFunc UserNamespaceLoggerProviderFunc) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.UserNamespaceLoggerProvider = userFunc
+	})
+}
+
+func WithAuthorizerProvider(userFunc UserAuthorizerProviderFunc) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.UserAuthorizerProvider = userFunc
+	})
+}
+
+func WithTlsConfigProvider(userFunc UserTlsConfigProviderFunc) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+			s.UserTlsConfigProvider = userFunc
+		})
+}
+
+func WithClaimMapperProvider(userFunc UserClaimMapperProviderFunc) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.UserClaimMapperProvider = userFunc
+	})
+}
+
+func WithAudienceGetterProvider(userFunc UserAudienceGetterProviderFunc) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.UserAudienceGetterProvider = userFunc
+	})
+}
+
+func WithMetricsReporterProvider(userFunc UserMetricsReportersProviderFunc) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.UserMetricsReporterProvider = userFunc
+	})
+}
+
+func WithPersistenceServiceResolverProvider(userFunc UserPersistenceServiceResolverProviderFunc) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.UserPersistenceServiceResolverProvider = userFunc
+	})
+}
+
+func WithElasticseachHttpClientProvider(userFunc UserElasticSeachHttpClientProviderFunc) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.UserElasticSeachHttpClientProvider = userFunc
+	})
+}
+
+func WithDynamicConfigClientProvider(userFunc UserDynamicConfigClientProviderFunc) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.UserDynamicConfigClientProvider = userFunc
+	})
+}
+
+func WithCustomDataStoreFactoryProvider(userFunc UserCustomDataStoreFactoryProviderFunc) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.UserCustomDataStoreFactoryProvider = userFunc
+	})
+}
+
