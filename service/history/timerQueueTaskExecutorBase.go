@@ -137,10 +137,6 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflow(
 	msBuilder workflow.MutableState,
 ) error {
 
-	if err := t.deleteWorkflowVisibility(task); err != nil {
-		return err
-	}
-
 	if err := t.deleteCurrentWorkflowExecution(task); err != nil {
 		return err
 	}
@@ -150,6 +146,10 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflow(
 	}
 
 	if err := t.deleteWorkflowHistory(task, msBuilder); err != nil {
+		return err
+	}
+
+	if err := t.deleteWorkflowVisibility(task); err != nil {
 		return err
 	}
 
