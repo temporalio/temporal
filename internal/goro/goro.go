@@ -30,7 +30,8 @@ import (
 )
 
 type (
-	// Handle is a threadsafe and multi-stop safe handle to a running goroutine.
+	// Handle is a threadsafe and multi-stop safe handle to a single running
+	// goroutine.
 	Handle struct {
 		context context.Context
 		cancel  context.CancelFunc
