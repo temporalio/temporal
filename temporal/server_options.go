@@ -69,7 +69,7 @@ type (
 		UserTlsConfigProvider                  UserTlsConfigProviderFunc
 		UserClaimMapperProvider                UserClaimMapperProviderFunc
 		UserAudienceGetterProvider             UserAudienceGetterProviderFunc
-		UserMetricsReporterProvider            UserMetricsReportersProviderFunc
+		UserMetricsReportersProvider           UserMetricsReportersProviderFunc
 		UserPersistenceServiceResolverProvider UserPersistenceServiceResolverProviderFunc
 		UserElasticSeachHttpClientProvider     UserElasticSeachHttpClientProviderFunc
 		UserDynamicConfigClientProvider        UserDynamicConfigClientProviderFunc

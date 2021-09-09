@@ -77,8 +77,8 @@ package temporal
 //		stoppedCh         chan interface{}
 //		logger            log.Logger
 //		namespaceLogger   log.Logger
-//		serverReporter    metrics.Reporter
-//		sdkReporter       metrics.Reporter
+//		ServerReporter    metrics.Reporter
+//		SdkReporter       metrics.Reporter
 //	}
 //)
 //
@@ -177,14 +177,14 @@ package temporal
 //	// todo: Replace this with Client or Scope implementation.
 //	var globalMetricsScope tally.Scope = nil
 //
-//	s.serverReporter = nil
-//	s.sdkReporter = nil
+//	s.ServerReporter = nil
+//	s.SdkReporter = nil
 //	if s.so.config.Global.Metrics != nil {
-//		s.serverReporter, s.sdkReporter, err = s.so.config.Global.Metrics.InitMetricReporters(s.logger, s.so.metricsReporter)
+//		s.ServerReporter, s.SdkReporter, err = s.so.config.Global.Metrics.InitMetricReporters(s.logger, s.so.metricsReporter)
 //		if err != nil {
 //			return err
 //		}
-//		globalMetricsScope, err = extractTallyScopeForSDK(s.sdkReporter)
+//		globalMetricsScope, err = extractTallyScopeForSDK(s.SdkReporter)
 //		if err != nil {
 //			return err
 //		}
@@ -205,7 +205,7 @@ package temporal
 //
 //	for _, svcName := range s.so.serviceNames {
 //		// todomigryz: bootstrapParams should go away
-//		params, err := s.newBootstrapParams(svcName, dc, s.serverReporter, s.sdkReporter, esConfig, esClient)
+//		params, err := s.newBootstrapParams(svcName, dc, s.ServerReporter, s.SdkReporter, esConfig, esClient)
 //		if err != nil {
 //			return err
 //		}
@@ -267,12 +267,12 @@ package temporal
 //	}
 //	wg.Wait()
 //
-//	if s.sdkReporter != nil {
-//		s.sdkReporter.Stop(s.logger)
+//	if s.SdkReporter != nil {
+//		s.SdkReporter.Stop(s.logger)
 //	}
 //
-//	if s.serverReporter != nil {
-//		s.serverReporter.Stop(s.logger)
+//	if s.ServerReporter != nil {
+//		s.ServerReporter.Stop(s.logger)
 //	}
 //}
 //
@@ -280,8 +280,8 @@ package temporal
 //func (s *Server) newBootstrapParams(
 //	svcName string,
 //	dc *dynamicconfig.Collection,
-//	serverReporter metrics.Reporter,
-//	sdkReporter metrics.Reporter,
+//	ServerReporter metrics.Reporter,
+//	SdkReporter metrics.Reporter,
 //	esConfig *config.Elasticsearch,
 //	esClient esclient.Client,
 //) (*resource.BootstrapParams, error) {
@@ -322,27 +322,27 @@ package temporal
 //			)
 //		}
 //
-//	// todo: Replace this hack with actually using sdkReporter, Client or Scope.
-//	if serverReporter == nil {
+//	// todo: Replace this hack with actually using SdkReporter, Client or Scope.
+//	if ServerReporter == nil {
 //		var err error
-//		serverReporter, sdkReporter, err = svcCfg.Metrics.InitMetricReporters(s.logger, nil)
+//		ServerReporter, SdkReporter, err = svcCfg.Metrics.InitMetricReporters(s.logger, nil)
 //		if err != nil {
 //			return nil, fmt.Errorf(
 //				"unable to initialize per-service metric client. "+
 //					"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err)
 //		}
-//		params.ServerMetricsReporter = serverReporter
-//		params.SDKMetricsReporter = sdkReporter
+//		params.ServerMetricsReporter = ServerReporter
+//		params.SDKMetricsReporter = SdkReporter
 //	}
 //
-//	globalTallyScope, err := extractTallyScopeForSDK(sdkReporter)
+//	globalTallyScope, err := extractTallyScopeForSDK(SdkReporter)
 //	if err != nil {
 //		return nil, err
 //	}
 //	params.MetricsScope = globalTallyScope
 //
 //	serviceIdx := metrics.GetMetricsServiceIdx(svcName, s.logger)
-//	metricsClient, err := serverReporter.NewClient(s.logger, serviceIdx)
+//	metricsClient, err := ServerReporter.NewClient(s.logger, serviceIdx)
 //	if err != nil {
 //		return nil, fmt.Errorf("unable to initialize metrics client: %w", err)
 //	}
@@ -609,8 +609,8 @@ package temporal
 //	return nil
 //}
 //
-//func extractTallyScopeForSDK(sdkReporter metrics.Reporter) (tally.Scope, error) {
-//	if sdkTallyReporter, ok := sdkReporter.(*metrics.TallyReporter); ok {
+//func extractTallyScopeForSDK(SdkReporter metrics.Reporter) (tally.Scope, error) {
+//	if sdkTallyReporter, ok := SdkReporter.(*metrics.TallyReporter); ok {
 //		return sdkTallyReporter.GetScope(), nil
 //	} else {
 //		return nil, fmt.Errorf(

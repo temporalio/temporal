@@ -188,9 +188,9 @@ func WithAudienceGetterProvider(userFunc UserAudienceGetterProviderFunc) ServerO
 	})
 }
 
-func WithMetricsReporterProvider(userFunc UserMetricsReportersProviderFunc) ServerOption {
+func WithMetricsReportersProvider(userFunc UserMetricsReportersProviderFunc) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
-		s.UserMetricsReporterProvider = userFunc
+		s.UserMetricsReportersProvider = userFunc
 	})
 }
 

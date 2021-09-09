@@ -53,7 +53,7 @@ type (
 	}
 )
 
-func newOpentelemeteryReporter(
+func NewOpentelemeteryReporter(
 	logger log.Logger,
 	tags map[string]string,
 	prefix string,

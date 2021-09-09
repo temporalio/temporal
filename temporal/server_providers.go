@@ -183,10 +183,10 @@ func makeBootstrapParams(
 			)
 		}
 
-	serverReporter := metricReporters.serverReporter
-	sdkReporter := metricReporters.sdkReporter
+	serverReporter := metricReporters.ServerReporter
+	sdkReporter := metricReporters.SdkReporter
 	// todomigryz: remove support of configuring metrics reporter per-service. Sync with Samar.
-	// todo: Replace this hack with actually using sdkReporter, Client or Scope.
+	// todo: Replace this hack with actually using SdkReporter, Client or Scope.
 	if serverReporter == nil {
 		var err error
 		serverReporter, sdkReporter, err = svcCfg.Metrics.InitMetricReporters(logger, nil)
@@ -294,8 +294,8 @@ func ServicesProvider(
 				matching.ServiceName(svcName),
 				deps.logger,
 				deps.dynamicConfigClient,
-				deps.metricReporters.serverReporter,
-				deps.metricReporters.sdkReporter,
+				deps.metricReporters.ServerReporter,
+				deps.metricReporters.SdkReporter,
 				deps.cfg.Services[svcName],
 				deps.cfg.ClusterMetadata,
 				deps.tlsConfigProvider,

@@ -44,8 +44,8 @@ type (
 	NamespaceLogger  tlog.Logger
 	ESHttpClient     *http.Client
 	MetricsReporters struct {
-		serverReporter metrics.Reporter
-		sdkReporter    metrics.Reporter
+		ServerReporter metrics.Reporter
+		SdkReporter    metrics.Reporter
 	}
 	ServerInterruptCh <-chan interface{}
 
@@ -94,11 +94,18 @@ func ProviderCommonParamsProvider(logger tlog.Logger, cfg *config.Config) (*Prov
 }
 
 func DefaultConfigProvider(opts *serverOptions) (*config.Config, error) {
-	if opts.config == nil {
-		return nil, errors.New("please, provide temporal.WithConfig")
+	if opts.config != nil {
+		return opts.config, nil
 	}
 
-	return opts.config, nil
+	env := opts.env
+	zone := opts.zone
+	configDir := opts.configDir
+	cfg, err := config.LoadConfig(env, configDir, zone)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to load configuration: %v.", err)
+	}
+	return cfg, nil
 }
 
 func DefaultLoggerProvider(cfg *config.Config, opts *serverOptions) tlog.Logger {
@@ -174,8 +181,8 @@ func DefaultMetricsReportersProvider(
 	opts *serverOptions,
 	cfg *config.Config,
 	logger tlog.Logger) (*MetricsReporters, error) {
-	if opts.UserMetricsReporterProvider != nil {
-		return opts.UserMetricsReporterProvider(cfg, logger)
+	if opts.UserMetricsReportersProvider != nil {
+		return opts.UserMetricsReportersProvider(cfg, logger)
 	}
 
 	result := &MetricsReporters{}
@@ -184,7 +191,7 @@ func DefaultMetricsReportersProvider(
 	}
 
 	var err error
-	result.serverReporter, result.sdkReporter, err = cfg.Global.Metrics.InitMetricReporters(logger, nil)
+	result.ServerReporter, result.SdkReporter, err = cfg.Global.Metrics.InitMetricReporters(logger, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +209,7 @@ func DefaultTLSConfigProvider(
 	}
 
 	logger := pcp.logger
-	scope, err := extractTallyScopeForSDK(metricReporters.sdkReporter)
+	scope, err := extractTallyScopeForSDK(metricReporters.SdkReporter)
 	if err != nil {
 		return nil, err
 	}

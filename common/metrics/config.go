@@ -199,14 +199,14 @@ func (c *Config) InitMetricReporters(logger log.Logger, customReporter interface
 		}
 
 		scope := c.NewScope(logger)
-		reporter := newTallyReporter(scope)
+		reporter := NewTallyReporter(scope)
 		return reporter, reporter, nil
 	}
 
 	switch cReporter := customReporter.(type) {
 	case tally.BaseStatsReporter:
 		scope := c.NewCustomReporterScope(logger, cReporter)
-		reporter := newTallyReporter(scope)
+		reporter := NewTallyReporter(scope)
 		return reporter, reporter, nil
 	case Reporter:
 		return cReporter, cReporter, nil
@@ -236,7 +236,7 @@ func (c *Config) initReporterFromPrometheusConfig(logger log.Logger, config *Pro
 	case FrameworkTally:
 		return c.newTallyReporterByPrometheusConfig(logger, config), nil
 	case FrameworkOpentelemetry:
-		return newOpentelemeteryReporter(logger, c.Tags, c.Prefix, config)
+		return NewOpentelemeteryReporter(logger, c.Tags, c.Prefix, config)
 	default:
 		err := fmt.Errorf("unsupported framework type specified in config: %q", config.Framework)
 		logger.Error(err.Error())
@@ -247,7 +247,7 @@ func (c *Config) initReporterFromPrometheusConfig(logger log.Logger, config *Pro
 func (c *Config) newTallyReporterByPrometheusConfig(logger log.Logger, config *PrometheusConfig) Reporter {
 	tallyConfig := c.convertPrometheusConfigToTally(config)
 	tallyScope := c.newPrometheusScope(logger, tallyConfig)
-	return newTallyReporter(tallyScope)
+	return NewTallyReporter(tallyScope)
 }
 
 // NewScope builds a new tally scope for this metrics configuration

@@ -34,7 +34,7 @@ type TallyReporter struct {
 	scope tally.Scope
 }
 
-func newTallyReporter(scope tally.Scope) *TallyReporter {
+func NewTallyReporter(scope tally.Scope) *TallyReporter {
 	return &TallyReporter{scope: scope}
 }
 
