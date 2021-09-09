@@ -150,9 +150,9 @@ func (s *processorSuite) TestAdd() {
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
 	select {
 	case ack := <-ackCh1:
-		s.False(ack)
+		s.True(ack)
 	default:
-		s.Fail("1st (existing) request should be nacked due to duplicate key")
+		s.Fail("1st (existing) request should be acked due to duplicate key")
 	}
 
 	select {
@@ -212,13 +212,13 @@ func (s *processorSuite) TestAdd_ConcurrentAdd_Duplicates() {
 	for i := 0; i < duplicates; i++ {
 		select {
 		case ack := <-ackChs[i]:
-			s.False(ack)
+			s.True(ack)
 		default:
 			pendingRequestsCount++
 		}
 	}
 
-	s.Equal(1, pendingRequestsCount, "only one request should not be nacked")
+	s.Equal(1, pendingRequestsCount, "only one request should not be acked")
 	s.Equal(1, s.esProcessor.mapToAckChan.Len(), "only one request should be in the bulk")
 }
 

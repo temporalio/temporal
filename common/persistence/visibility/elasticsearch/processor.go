@@ -175,8 +175,8 @@ func (p *processorImpl) Add(request *esclient.BulkableRequest, visibilityTaskKey
 
 		p.logger.Warn("Adding duplicate ES request for visibility task key.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc))
 
-		// Nack existing visibility task.
-		ackChExisting.done(false, p.metricsClient)
+		// Ack existing visibility task as if it is processed successfully.
+		ackChExisting.done(true, p.metricsClient)
 
 		// Replace existing dictionary item with new item.
 		// Note: request won't be added to bulk processor.
