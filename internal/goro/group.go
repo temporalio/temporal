@@ -29,14 +29,13 @@ import (
 	"sync"
 )
 
-// Group manages a set of long-running goroutines as a unit. Group differs from
-// `errgroup.Group` in that it does not link the lifetimes of the spawned
-// goroutines and it is not expected that a client will call Wait() without
-// first calling Cancel(). If you're looking for a short-lived (e.g.
-// request-scoped) group of transient goroutines, you probably want
-// `errgroup.Group`. The expectation is that an instance of this type will be
-// held as a member field of an object that has standard Start()/Stop()
-// semantics (e.g. a `common.Daemon`). The zero-value of this type is valid.
+// Group manages a set of long-running goroutines. Goroutines are spawned
+// individually with Group.Go and after that interrupted and waited-on as a
+// single unit. The expected use-case for this type is as a member field of a
+// `common.Daemon` (or similar) type that spawns one or more goroutines in
+// its Start() function and then stops those same goroutines in its Stop()
+// function. The zero-value of this type is valid. A Group must not be copied
+// after first use.
 type Group struct {
 	initOnce sync.Once
 	ctx      context.Context
@@ -48,7 +47,8 @@ type Group struct {
 // All functions passed to Go on the same instance of Group will be given the
 // same `context.Context` object, which will be used to indicate cancellation.
 // If the supplied func does not abide by `ctx.Done()` of the provided
-// `context.Context` then `Wait()` on this `Group` will hang.
+// `context.Context` then `Wait()` on this `Group` will hang until all functions
+// exit on their own (possibly never).
 func (g *Group) Go(f func(ctx context.Context) error) {
 	g.initOnce.Do(g.init)
 	g.wg.Add(1)

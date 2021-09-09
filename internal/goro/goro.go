@@ -76,7 +76,7 @@ func (h *Handle) Cancel() {
 }
 
 // Error observes the error returned by the func passed to Go (if any). There is
-// nevery any error (i.e. this function returns nil) while the goroutine is
+// never any error (i.e. this function returns nil) while the goroutine is
 // running.
 func (h *Handle) Err() error {
 	v := h.err.Load()
