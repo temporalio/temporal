@@ -54,6 +54,8 @@ import (
 )
 
 type (
+	// todomigryz commented code
+	// ServiceName            string
 	MetricsReporter        metrics.Reporter
 	UserMetricsReporter    metrics.Reporter
 	UserSdkMetricsReporter metrics.Reporter
@@ -62,8 +64,9 @@ type (
 	ServicesConfigMap      map[string]config.Service
 
 	ServiceMetrics struct {
-		reporter        MetricsReporter
-		deprecatedTally tally.Scope
+		dig.Out
+		Reporter        MetricsReporter
+		DeprecatedTally tally.Scope
 	}
 )
 
@@ -203,8 +206,8 @@ func MetricsReporterProvider(
 			return ServiceMetrics{}, err
 		}
 		return ServiceMetrics{
-			reporter:        userReporter,
-			deprecatedTally: tallyScope,
+			Reporter:        userReporter,
+			DeprecatedTally: tallyScope,
 		}, nil
 	}
 
@@ -228,8 +231,8 @@ func MetricsReporterProvider(
 	}
 
 	return ServiceMetrics{
-		reporter:        serivceReporter,
-		deprecatedTally: tallyScope,
+		Reporter:        serivceReporter,
+		DeprecatedTally: tallyScope,
 	}, nil
 }
 

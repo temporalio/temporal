@@ -23,14 +23,21 @@
 package matching
 
 import (
-	"github.com/google/wire"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.uber.org/dig"
 )
 
 // todomigryz: svcName can be hardcoded here. We switch on svc name one layer above.
+
+
 // func InjectMatchingServiceProviders(
 // 	logger log.Logger,
 // 	dcClient dynamicconfig.Client,
@@ -62,12 +69,7 @@ func InjectMatchingServiceProviders(dc *dig.Container) error {
 	if err := dc.Provide(MetricsReporterProvider); err != nil {
 		return err
 	}
-	if err := dc.Provide(wire.FieldsOf(new(ServiceMetrics), "reporter")); err != nil {
-		return err
-	}
-	if err := dc.Provide(wire.FieldsOf(new(ServiceMetrics), "deprecatedTally")); err != nil {
-		return err
-	}
+
 	if err := dc.Provide(MetricsClientProvider); err != nil {
 		return err
 	}
@@ -129,6 +131,74 @@ func InjectMatchingServiceProviders(dc *dig.Container) error {
 	return nil
 }
 
+func InitializeMatchingService(
+	logger log.Logger,
+	dcClient dynamicconfig.Client,
+	metricsReporter UserMetricsReporter,
+	sdkMetricsReporter UserSdkMetricsReporter,
+	svcCfg config.Service,
+	clusterMetadata *config.ClusterMetadata,
+	tlsConfigProvider encryption.TLSConfigProvider,
+	services ServicesConfigMap,
+	membershipConfig *config.Membership,
+	persistenceConfig *config.Persistence,
+	persistenceServiceResolver resolver.ServiceResolver,
+	datastoreFactory persistenceClient.AbstractDataStoreFactory,
+) (*Service, error) {
+	dc := dig.New()
+
+	if err := dc.Provide(func() log.Logger {return logger}); err != nil {
+		return nil, err
+	}
+	if err := dc.Provide(func() dynamicconfig.Client {return dcClient}); err != nil {
+		return nil, err
+	}
+	if err := dc.Provide(func() UserMetricsReporter {return metricsReporter}); err != nil {
+		return nil, err
+	}
+	if err := dc.Provide(func() UserSdkMetricsReporter {return sdkMetricsReporter}); err != nil {
+		return nil, err
+	}
+	if err := dc.Provide(func() config.Service {return svcCfg}); err != nil {
+		return nil, err
+	}
+	if err := dc.Provide(func() *config.ClusterMetadata {return clusterMetadata}); err != nil {
+		return nil, err
+	}
+	if err := dc.Provide(func() encryption.TLSConfigProvider {return tlsConfigProvider}); err != nil {
+		return nil, err
+	}
+	if err := dc.Provide(func() ServicesConfigMap {return services}); err != nil {
+		return nil, err
+	}
+	if err := dc.Provide(func() *config.Membership {return membershipConfig}); err != nil {
+		return nil, err
+	}
+	if err := dc.Provide(func() *config.Persistence {return persistenceConfig}); err != nil {
+		return nil, err
+	}
+	if err := dc.Provide(func() resolver.ServiceResolver {return persistenceServiceResolver}); err != nil {
+		return nil, err
+	}
+	if err := dc.Provide(func() persistenceClient.AbstractDataStoreFactory {return datastoreFactory}); err != nil {
+		return nil, err
+	}
+
+	var err error
+	if err = InjectMatchingServiceProviders(dc); err != nil {
+		return nil, err
+	}
+
+	var result *Service
+
+	if err = dc.Invoke(func(svc *Service) error { result = svc; return nil }); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+
 // func InitializeTestMatchingService(
 // 	logger log.Logger,
 // 	dcClient dynamicconfig.Client,
@@ -151,8 +221,8 @@ func InjectMatchingServiceProviders(dc *dig.Container) error {
 // 		TaggedLoggerProvider,
 // 		ThrottledLoggerProvider,
 // 		MetricsReporterProvider,
-// 		wire.FieldsOf(new(ServiceMetrics), "reporter"),
-// 		wire.FieldsOf(new(ServiceMetrics), "deprecatedTally"),
+// 		wire.FieldsOf(new(ServiceMetrics), "Reporter"),
+// 		wire.FieldsOf(new(ServiceMetrics), "DeprecatedTally"),
 // 		MetricsClientProvider,
 // 		PersistenceBeanProvider,
 // 		ClusterMetadataProvider,

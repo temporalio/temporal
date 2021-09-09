@@ -312,7 +312,7 @@ func sliceContainsString(src []string, value string) bool {
 type ServicesMap map[string]common.Daemon
 func ServicesProvider(
 	deps ServicesProviderDeps,
-	matchingService *matching.Service,
+	// matchingService *matching.Service,
 ) (ServicesMap, error) {
 	result := make(map[string]common.Daemon)
 	for _, svcName := range deps.Services {
@@ -321,7 +321,25 @@ func ServicesProvider(
 		switch svcName {
 		// todo: All Services should follow this path or better be split into separate providers
 		case primitives.MatchingService:
-			result[svcName] = matchingService
+			svc, err = matching.InitializeMatchingService(
+				// matching.ServiceName(svcName),
+				deps.Logger,
+				deps.DynamicConfigClient,
+				deps.MetricReporters.serverReporter,
+				deps.MetricReporters.sdkReporter,
+				deps.Cfg.Services[svcName],
+				deps.Cfg.ClusterMetadata,
+				deps.TlsConfigProvider,
+				deps.Cfg.Services,
+				&deps.Cfg.Global.Membership,
+				&deps.Cfg.Persistence,
+				deps.PersistenceServiceResolver,
+				deps.CustomDatastoreFactory,
+			)
+			if err != nil {
+				return nil, err
+			}
+			result[svcName] = svc
 			continue
 		default:
 		}

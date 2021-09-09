@@ -23,39 +23,39 @@
 package temporal
 
 import (
-	"github.com/google/wire"
 	"github.com/urfave/cli/v2"
 	tlog "go.temporal.io/server/common/log"
+	"go.temporal.io/server/service/matching"
 	"go.uber.org/dig"
 )
 
-var UserSet = wire.NewSet(
-	DefaultConfigProvider,
-	DefaultLogger,
-	wire.Bind(new(NamespaceLogger), new(tlog.Logger)),
-	DefaultDynamicConfigClientProvider,
-	DefaultAuthorizerProvider,
-	DefaultClaimMapper,
-	DefaultServiceNameListProvider,
-	DefaultDatastoreFactory,
-	DefaultMetricsReportersProvider,
-	DefaultTLSConfigProvider,
-	DefaultDynamicConfigCollectionProvider,
-	DefaultAudienceGetterProvider,
-	DefaultPersistenseServiceResolverProvider,
-	DefaultElasticSearchHttpClientProvider,
-	DefaultInterruptChProvider,
-)
+// var UserSet = wire.NewSet(
+// 	DefaultConfigProvider,
+// 	DefaultLogger,
+// 	wire.Bind(new(NamespaceLogger), new(tlog.Logger)),
+// 	DefaultDynamicConfigClientProvider,
+// 	DefaultAuthorizerProvider,
+// 	DefaultClaimMapper,
+// 	DefaultServiceNameListProvider,
+// 	DefaultDatastoreFactory,
+// 	DefaultMetricsReportersProvider,
+// 	DefaultTLSConfigProvider,
+// 	DefaultDynamicConfigCollectionProvider,
+// 	DefaultAudienceGetterProvider,
+// 	DefaultPersistenseServiceResolverProvider,
+// 	DefaultElasticSearchHttpClientProvider,
+// 	DefaultInterruptChProvider,
+// )
 
-var serverSet = wire.NewSet(
-	ServicesProvider,
-	ServerProvider,
-	AdvancedVisibilityStoreProvider,
-	ESClientProvider,
-	ESConfigProvider,
-	AdvancedVisibilityWritingModeProvider,
-	wire.Struct(new(ServicesProviderDeps), "*"), // we can use this to inject dependencies into sub-modules
-)
+// var serverSet = wire.NewSet(
+// 	ServicesProvider,
+// 	ServerProvider,
+// 	AdvancedVisibilityStoreProvider,
+// 	ESClientProvider,
+// 	ESConfigProvider,
+// 	AdvancedVisibilityWritingModeProvider,
+// 	wire.Struct(new(ServicesProviderDeps), "*"), // we can use this to inject dependencies into sub-modules
+// )
 
 func InjectServerProviders(dc *dig.Container, c *cli.Context) error {
 	if err := dc.Provide(func() *cli.Context { return c }); err != nil {
@@ -126,8 +126,8 @@ func InjectServerProviders(dc *dig.Container, c *cli.Context) error {
 	if err := dc.Provide(AdvancedVisibilityWritingModeProvider); err != nil {
 		return err
 	}
-	// if err := dc.Provide(MatchingServiceProvider); err != nil {
-	// 	return err
-	// }
+	if err := matching.InjectMatchingServiceProviders(dc); err != nil {
+		return err
+	}
 	return nil
 }
