@@ -289,7 +289,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		continueAsNewCounter++
 		buf := new(bytes.Buffer)
-		s.Nil(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
+		s.NoError(binary.Write(buf, binary.LittleEndian, continueAsNewCounter))
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
@@ -319,8 +319,7 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 
 	s.False(workflowComplete)
 
-GetHistoryLoop:
-	for i := 0; i < 25; i++ {
+	for i := 0; i < 100; i++ {
 		s.Logger.Info(fmt.Sprintf("Running Iteration `%v` for Making ContinueAsNew Command", i))
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.namespace,
@@ -333,35 +332,40 @@ GetHistoryLoop:
 
 		firstEvent := h.Events[0]
 		lastEvent := h.Events[len(h.Events)-1]
-		if lastEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
-			if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW {
-				// Ensure that timeout is not caused by runTimeout
-				s.True(timestamp.TimeValue(lastEvent.EventTime).Sub(timestamp.TimeValue(firstEvent.EventTime)) < 5*time.Second)
-			}
 
-			// Only PollForWorkflowTask if the last event is WorkflowTaskScheduled
-			if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
-				s.Logger.Info(fmt.Sprintf("Execution not timed out yet. PollForWorkflowTask.  Last event is %v", lastEvent))
-				_, err := poller.PollAndProcessWorkflowTaskWithoutRetry(true, false)
-				s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
-				// Excluding ErrWorkflowCompleted because workflow might timeout while we are processing wtHandler.
-				if err != nil && err != matching.ErrNoTasks && err.Error() != consts.ErrWorkflowCompleted.Error() {
-					s.NoError(err)
-				}
-			}
+		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT {
+			s.Logger.Info("Workflow execution timedout.  Printing history for last run:")
+			common.PrettyPrintHistory(h, s.Logger)
 
-			time.Sleep(200 * time.Millisecond)
-			continue GetHistoryLoop
+			workflowComplete = true
+			break
 		}
 
-		s.Logger.Info("Workflow execution timedout.  Printing history for last run:")
-		common.PrettyPrintHistory(h, s.Logger)
+		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW {
+			// Ensure that timeout is not caused by runTimeout
+			s.True(timestamp.TimeValue(lastEvent.EventTime).Sub(timestamp.TimeValue(firstEvent.EventTime)) < 5*time.Second)
+		}
 
-		workflowComplete = true
-		break GetHistoryLoop
+		// Only PollForWorkflowTask if the last event is WorkflowTaskScheduled and we have at least 2 seconds left
+		// (to account for potential delay from queueing and matching task forwarding).
+		expiration := firstEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowExecutionExpirationTime()
+		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED &&
+			expiration.Sub(time.Now()) > 2*time.Second {
+			s.Logger.Info(fmt.Sprintf("Execution not timed out yet. PollForWorkflowTask.  Last event is %v", lastEvent))
+			_, err := poller.PollAndProcessWorkflowTaskWithoutRetry(false, false)
+			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+			// Excluding ErrWorkflowCompleted because workflow might timeout while we are processing wtHandler.
+			if err != nil && err != matching.ErrNoTasks && err.Error() != consts.ErrWorkflowCompleted.Error() {
+				s.NoError(err)
+			}
+		}
+
+		time.Sleep(200 * time.Millisecond)
 	}
+
 	s.True(workflowComplete)
-	s.True(continueAsNewCounter > 1)
+	s.Logger.Info(fmt.Sprintf("completed %v workflows", continueAsNewCounter))
+	s.True(continueAsNewCounter >= 3)
 }
 
 func (s *integrationSuite) TestWorkflowContinueAsNew_TaskID() {
