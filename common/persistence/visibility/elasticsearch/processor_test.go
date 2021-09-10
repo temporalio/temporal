@@ -134,6 +134,7 @@ func (s *processorSuite) TestAdd() {
 	visibilityTaskKey := "test-key"
 	s.Equal(0, s.esProcessor.mapToAckChan.Len())
 
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, gomock.Any())
 	s.mockBulkProcessor.EXPECT().Add(request)
 
 	ackCh1 := s.esProcessor.Add(request, visibilityTaskKey)
@@ -149,15 +150,15 @@ func (s *processorSuite) TestAdd() {
 	ackCh2 := s.esProcessor.Add(request, visibilityTaskKey)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
 	select {
-	case ack := <-ackCh1:
+	case ack := <-ackCh2:
 		s.True(ack)
 	default:
-		s.Fail("1st (existing) request should be acked due to duplicate key")
+		s.Fail("2nd (new) request should be acked due to duplicate key")
 	}
 
 	select {
-	case <-ackCh2:
-		s.Fail("2nd request shouldn't be acknowledged")
+	case <-ackCh1:
+		s.Fail("1st (existing) request shouldn't be acknowledged")
 	default:
 	}
 }
@@ -171,6 +172,7 @@ func (s *processorSuite) TestAdd_ConcurrentAdd() {
 	wg := sync.WaitGroup{}
 	wg.Add(parallelFactor)
 	s.mockBulkProcessor.EXPECT().Add(request).Times(docsCount)
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, gomock.Any()).Times(docsCount)
 	for i := 0; i < parallelFactor; i++ {
 		go func(i int) {
 			for j := 0; j < docsCount/parallelFactor; j++ {
@@ -196,6 +198,7 @@ func (s *processorSuite) TestAdd_ConcurrentAdd_Duplicates() {
 	key := "test-key"
 	duplicates := 100
 	ackChs := make([]<-chan bool, duplicates)
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, gomock.Any()).Times(1)
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any()).Times(duplicates - 1)
 
 	wg := sync.WaitGroup{}
@@ -349,7 +352,7 @@ func (s *processorSuite) TestBulkBeforeAction() {
 	s.mockMetricClient.EXPECT().AddCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequests, int64(1))
 	s.mockMetricClient.EXPECT().RecordDistribution(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorBulkSize, 1)
 	s.mockMetricClient.EXPECT().RecordDistribution(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorQueuedRequests, 0)
-	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitLatency, gomock.Any())
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitStartLatency, gomock.Any())
 
 	mapVal := newAckChan()
 	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
@@ -365,6 +368,7 @@ func (s *processorSuite) TestAckChan() {
 	s.esProcessor.sendToAckChan(key, true)
 
 	request := &esclient.BulkableRequest{}
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, gomock.Any())
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
 	s.mockBulkProcessor.EXPECT().Add(request)
 	ackCh := s.esProcessor.Add(request, key)
@@ -387,6 +391,7 @@ func (s *processorSuite) TestNackChan() {
 
 	request := &esclient.BulkableRequest{}
 	s.mockBulkProcessor.EXPECT().Add(request)
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, gomock.Any())
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
 	ackCh := s.esProcessor.Add(request, key)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
@@ -495,6 +500,7 @@ func (s *processorSuite) Test_End2End() {
 	wg := sync.WaitGroup{}
 	wg.Add(parallelFactor)
 	s.mockBulkProcessor.EXPECT().Add(request).Times(docsCount)
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, gomock.Any()).Times(docsCount)
 	for i := 0; i < parallelFactor; i++ {
 		go func(i int) {
 			for j := 0; j < docsCount/parallelFactor; j++ {
@@ -529,7 +535,7 @@ func (s *processorSuite) Test_End2End() {
 	s.mockMetricClient.EXPECT().AddCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequests, int64(docsCount))
 	s.mockMetricClient.EXPECT().RecordDistribution(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorQueuedRequests, 0)
 	s.mockMetricClient.EXPECT().RecordDistribution(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorBulkSize, docsCount)
-	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitLatency, gomock.Any()).Times(docsCount)
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitStartLatency, gomock.Any()).Times(docsCount)
 	s.esProcessor.bulkBeforeAction(0, bulkIndexRequests)
 
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any()).Times(docsCount)
