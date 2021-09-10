@@ -180,8 +180,8 @@ func (p *processorImpl) Add(request *esclient.BulkableRequest, visibilityTaskKey
 		return nil
 	})
 	if !isDup {
-		p.bulkProcessor.Add(request)
 		ackCh.add(p.metricsClient)
+		p.bulkProcessor.Add(request)
 	}
 	return ackCh.ackChInternal
 }
