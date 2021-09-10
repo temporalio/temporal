@@ -349,8 +349,8 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 		// Only PollForWorkflowTask if the last event is WorkflowTaskScheduled and we have at least 2 seconds left
 		// (to account for potential delay from queueing and matching task forwarding).
 		expiration := firstEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowExecutionExpirationTime()
-		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED &&
-			expiration.Sub(time.Now()) > 2*time.Second {
+		timeLeft := expiration.Sub(time.Now())
+		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED && timeLeft > 2*time.Second {
 			s.Logger.Info(fmt.Sprintf("Execution not timed out yet. PollForWorkflowTask.  Last event is %v", lastEvent))
 			_, err := poller.PollAndProcessWorkflowTaskWithoutRetry(false, false)
 			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
@@ -358,9 +358,10 @@ func (s *integrationSuite) TestContinueAsNewWorkflow_Timeout() {
 			if err != nil && err != matching.ErrNoTasks && err.Error() != consts.ErrWorkflowCompleted.Error() {
 				s.NoError(err)
 			}
+			time.Sleep(200 * time.Millisecond)
+		} else {
+			time.Sleep(timeLeft + 10*time.Millisecond)
 		}
-
-		time.Sleep(200 * time.Millisecond)
 	}
 
 	s.True(workflowComplete)
