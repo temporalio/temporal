@@ -107,9 +107,13 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 
 	s.Require().NoError(s.registerArchivalNamespace())
 
-	// this sleep is necessary because namespacev2 cache gets refreshed in the
-	// background only every namespaceCacheRefreshInterval period
-	time.Sleep(namespace.CacheRefreshInterval + time.Second)
+	if clusterConfig.FrontendAddress == "" {
+		// Poke all the in-process namespace caches to refresh without waiting for the usual refresh interval.
+		s.testCluster.RefreshNamespaceCache()
+	} else {
+		// Wait for one whole cycle of the namespace cache v2 refresh interval to be sure that our namespaces are loaded.
+		time.Sleep(namespace.CacheRefreshInterval + time.Second)
+	}
 }
 
 func (s *IntegrationBase) setupLogger() {
