@@ -414,7 +414,11 @@ func (c *namespaceCache) refreshLoop() {
 	// Put timer events on our channel so we can select on just one below.
 	go func() {
 		for range timer.C {
-			c.triggerRefreshCh <- nil
+			select {
+			case c.triggerRefreshCh <- nil:
+			default:
+			}
+
 		}
 	}()
 
