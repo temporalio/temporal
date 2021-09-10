@@ -168,7 +168,12 @@ func (p *processorImpl) hashFn(key interface{}) uint32 {
 func (p *processorImpl) Add(request *esclient.BulkableRequest, visibilityTaskKey string) <-chan bool {
 	ackCh := newAckChan()
 	_, isDup, _ := p.mapToAckChan.PutOrDo(visibilityTaskKey, ackCh, func(key interface{}, value interface{}) error {
-		p.logger.Warn("Skipping duplicate ES request for visibility task key.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc))
+		ackChExisting, ok := value.(*ackChan)
+		if !ok {
+			p.logger.Fatal(fmt.Sprintf("mapToAckChan has item of a wrong type %T (%T expected).", value, &ackChan{}), tag.Value(key))
+		}
+
+		p.logger.Warn("Skipping duplicate ES request for visibility task key.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc), tag.NewDurationTag("interval-between-duplicates", ackCh.createdAt.Sub(ackChExisting.createdAt)))
 
 		// Ack duplicate visibility task right away as if it is processed successfully.
 		ackCh.done(true, p.metricsClient)
