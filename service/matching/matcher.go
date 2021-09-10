@@ -306,7 +306,7 @@ func (tm *TaskMatcher) UpdateRatelimit(rps *float64) {
 	}
 
 	burst := int(rate)
-	if *rps > 0 && burst < 1 {
+	if 0 < rate && rate < 1 {
 		burst = 1
 	}
 
