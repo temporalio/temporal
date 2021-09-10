@@ -26,6 +26,7 @@ package matching
 
 import (
 	"context"
+	"math"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -304,11 +305,7 @@ func (tm *TaskMatcher) UpdateRatelimit(rps *float64) {
 		// divide the rate equally across all partitions
 		rate = rate / nPartitions
 	}
-
-	burst := int(rate)
-	if 0 < rate && rate < 1 {
-		burst = 1
-	}
+	burst := int(math.Ceil(rate))
 
 	minTaskThrottlingBurstSize := tm.config.MinTaskThrottlingBurstSize()
 	if burst < minTaskThrottlingBurstSize {
