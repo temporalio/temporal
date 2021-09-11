@@ -28,6 +28,7 @@ package searchattribute
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 )
 
 type (
@@ -55,6 +56,10 @@ func ApplyAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, na
 
 		aliasName, err := mapper.GetAlias(saName, namespace)
 		if err != nil {
+			if _, isInvalidArgument := err.(*serviceerror.InvalidArgument); isInvalidArgument {
+				// Silently ignore serviceerror.InvalidArgument because it indicates unmapped field (alias was deleted, for example).
+				continue
+			}
 			return err
 		}
 		newIndexedFields[aliasName] = saPayload
