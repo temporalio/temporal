@@ -35,7 +35,6 @@ import (
 	"math/rand"
 	"os"
 	"reflect"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -697,9 +696,8 @@ func ScanAllWorkflow(c *cli.Context) {
 		return
 	}
 
-	isQueryOpen := isQueryOpen(c.String(FlagListQuery))
-	table := createTableForListWorkflow(c, true, isQueryOpen)
-	prepareTable := scanWorkflow(c, table, isQueryOpen)
+	table := createTableForListWorkflow(c, true, true)
+	prepareTable := scanWorkflow(c, table, true)
 	var nextPageToken []byte
 	for {
 		nextPageToken, _ = prepareTable(nextPageToken)
@@ -708,11 +706,6 @@ func ScanAllWorkflow(c *cli.Context) {
 		}
 	}
 	table.Render()
-}
-
-func isQueryOpen(query string) bool {
-	var openWFPattern = regexp.MustCompile(`CloseTime[ ]*=[ ]*missing`)
-	return openWFPattern.MatchString(query)
 }
 
 // CountWorkflow count number of workflows
