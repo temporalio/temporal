@@ -1000,7 +1000,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
 
 	s.mockSearchAttributesMapper.EXPECT().GetAlias(gomock.Any(), testNamespace).DoAndReturn(
 		func(fieldName string, namespace string) (string, error) {
-			return "", serviceerror.NewInvalidArgument("error")
+			return "", serviceerror.NewInternal("error")
 		})
 	info, err = s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap, testNamespace)
 	s.Error(err)
