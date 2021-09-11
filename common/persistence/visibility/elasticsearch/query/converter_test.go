@@ -78,8 +78,6 @@ var supportedWhereCases = map[string]string{
 	"id not IN (1, 2,3)":                           `{"bool":{"must_not":{"terms":{"id":[1,2,3]}}}}`,
 	"id iS not null":                               `{"bool":{"filter":{"exists":{"field":"id"}}}}`,
 	"id is NULL":                                   `{"bool":{"must_not":{"exists":{"field":"id"}}}}`,
-	"id != missing":                                `{"bool":{"filter":{"exists":{"field":"id"}}}}`,
-	"id = missing":                                 `{"bool":{"must_not":{"exists":{"field":"id"}}}}`,
 	"value = '1'":                                  `{"bool":{"filter":{"match_phrase":{"value":{"query":"1"}}}}}`,
 	"value = 'true'":                               `{"bool":{"filter":{"match_phrase":{"value":{"query":"true"}}}}}`,
 	"value = 'True'":                               `{"bool":{"filter":{"match_phrase":{"value":{"query":"True"}}}}}`,
