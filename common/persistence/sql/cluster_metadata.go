@@ -66,13 +66,13 @@ func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveC
 		var lastVersion int64
 		if err != nil {
 			if err != sql.ErrNoRows {
-				return serviceerror.NewInternal(fmt.Sprintf("SaveClusterMetadata operation failed. Error %v", err))
+				return serviceerror.NewUnavailable(fmt.Sprintf("SaveClusterMetadata operation failed. Error %v", err))
 			}
 		} else {
 			lastVersion = oldClusterMetadata.Version
 		}
 		if request.Version != lastVersion {
-			return serviceerror.NewInternal(fmt.Sprintf("SaveClusterMetadata encountered version mismatch, expected %v but got %v.",
+			return serviceerror.NewUnavailable(fmt.Sprintf("SaveClusterMetadata encountered version mismatch, expected %v but got %v.",
 				request.Version, oldClusterMetadata.Version))
 		}
 		_, err = tx.SaveClusterMetadata(ctx, &sqlplugin.ClusterMetadataRow{
@@ -87,7 +87,7 @@ func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveC
 	})
 
 	if err != nil {
-		return false, serviceerror.NewInternal(err.Error())
+		return false, serviceerror.NewUnavailable(err.Error())
 	}
 	return true, nil
 }
@@ -99,7 +99,7 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembe
 	if len(request.NextPageToken) == 16 {
 		lastSeenHostId = request.NextPageToken
 	} else if len(request.NextPageToken) > 0 {
-		return nil, serviceerror.NewInternal("page token is corrupted.")
+		return nil, serviceerror.NewUnavailable("page token is corrupted.")
 	}
 
 	now := time.Now().UTC()

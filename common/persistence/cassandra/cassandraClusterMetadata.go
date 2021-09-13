@@ -133,7 +133,7 @@ func (m *cassandraClusterMetadata) SaveClusterMetadata(request *p.InternalSaveCl
 		return false, gocql.ConvertError("SaveClusterMetadata", err)
 	}
 	if !applied {
-		return false, serviceerror.NewInternal("SaveClusterMetadata operation encountered concurrent write.")
+		return false, serviceerror.NewUnavailable("SaveClusterMetadata operation encountered concurrent write.")
 	}
 	return true, nil
 }

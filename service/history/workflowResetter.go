@@ -276,7 +276,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	}
 
 	if resetMutableState.GetCurrentVersion() > resetWorkflowVersion {
-		return nil, serviceerror.NewInternal("workflowResetter encounter version mismatch.")
+		return nil, serviceerror.NewUnavailable("workflowResetter encounter version mismatch.")
 	}
 	if err := resetMutableState.UpdateCurrentVersion(
 		resetWorkflowVersion,
@@ -525,7 +525,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 		case common.TransientEventID:
 			// activity is started (with retry policy)
 			// should not encounter this case when rebuilding mutable state
-			return serviceerror.NewInternal("workflowResetter encounter transient activity")
+			return serviceerror.NewUnavailable("workflowResetter encounter transient activity")
 
 		default:
 			if _, err := mutableState.AddActivityTaskFailedEvent(

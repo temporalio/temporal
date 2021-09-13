@@ -730,9 +730,9 @@ func (m *executionManagerImpl) filterHistoryNodes(
 
 		switch {
 		case node.NodeID < lastNodeID:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("corrupted data, nodeID cannot decrease"))
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("corrupted data, nodeID cannot decrease"))
 		case node.NodeID == lastNodeID:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("corrupted data, same nodeID must have smaller txnID"))
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("corrupted data, same nodeID must have smaller txnID"))
 		default: // row.NodeID > lastNodeID:
 			// NOTE: when row.nodeID > lastNodeID, we expect the one with largest txnID comes first
 			lastTransactionID = node.TransactionID

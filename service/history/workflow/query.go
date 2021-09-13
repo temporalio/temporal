@@ -40,9 +40,9 @@ const (
 )
 
 var (
-	errTerminationStateInvalid = serviceerror.NewInternal("query termination state invalid")
-	errAlreadyInTerminalState  = serviceerror.NewInternal("query already in terminal state")
-	errQueryNotInTerminalState = serviceerror.NewInternal("query not in terminal state")
+	errTerminationStateInvalid = serviceerror.NewUnavailable("query termination state invalid")
+	errAlreadyInTerminalState  = serviceerror.NewUnavailable("query already in terminal state")
+	errQueryNotInTerminalState = serviceerror.NewUnavailable("query not in terminal state")
 )
 
 type (

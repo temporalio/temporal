@@ -120,7 +120,7 @@ type (
 	}
 )
 
-var errPanic = serviceerror.NewInternal("encounter panic")
+var errPanic = serviceerror.NewUnavailable("encounter panic")
 
 func newNDCHistoryReplicator(
 	shard shard.Context,
@@ -268,7 +268,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 		case nil:
 			// Sanity check to make only 3DC mutable state here
 			if mutableState.GetExecutionInfo().GetVersionHistories() == nil {
-				return serviceerror.NewInternal("The mutable state does not support 3DC.")
+				return serviceerror.NewUnavailable("The mutable state does not support 3DC.")
 			}
 
 			doContinue, branchIndex, err := r.applyNonStartEventsPrepareBranch(ctx, context, mutableState, task)

@@ -29,6 +29,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence"
 )
@@ -88,7 +89,7 @@ type (
 var defaultErrors = []FaultWeight{
 	{
 		errFactory: func(msg string) error {
-			return serviceerror.NewInternal(msg)
+			return serviceerror.NewUnavailable(msg)
 		},
 		weight: 1,
 	},

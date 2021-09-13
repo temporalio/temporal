@@ -128,7 +128,7 @@ func (m *sqlMetadataManagerV2) GetNamespace(
 
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("Namespace %s does not exist.", identity))
 		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("GetNamespace operation failed. Error %v", err))
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetNamespace operation failed. Error %v", err))
 		}
 	}
 
@@ -221,7 +221,7 @@ func (m *sqlMetadataManagerV2) GetMetadata() (*persistence.GetMetadataResponse, 
 	defer cancel()
 	row, err := m.Db.SelectFromNamespaceMetadata(ctx)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetMetadata operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetMetadata operation failed. Error: %v", err))
 	}
 	return &persistence.GetMetadataResponse{NotificationVersion: row.NotificationVersion}, nil
 }
@@ -242,7 +242,7 @@ func (m *sqlMetadataManagerV2) ListNamespaces(request *persistence.ListNamespace
 		if err == sql.ErrNoRows {
 			return &persistence.InternalListNamespacesResponse{}, nil
 		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListNamespaces operation failed. Failed to get namespace rows. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListNamespaces operation failed. Failed to get namespace rows. Error: %v", err))
 	}
 
 	var namespaces []*persistence.InternalGetNamespaceResponse
@@ -271,14 +271,14 @@ func updateMetadata(
 		NotificationVersion: oldNotificationVersion,
 	})
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("Failed to update namespace metadata. Error: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to update namespace metadata. Error: %v", err))
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("Could not verify whether namespace metadata update occurred. Error: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Could not verify whether namespace metadata update occurred. Error: %v", err))
 	} else if rowsAffected != 1 {
-		return serviceerror.NewInternal(fmt.Sprintf("Failed to update namespace metadata. <>1 rows affected. Error: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to update namespace metadata. <>1 rows affected. Error: %v", err))
 	}
 
 	return nil
@@ -290,7 +290,7 @@ func lockMetadata(
 ) (*sqlplugin.NamespaceMetadataRow, error) {
 	row, err := tx.LockNamespaceMetadata(ctx)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to lock namespace metadata. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Failed to lock namespace metadata. Error: %v", err))
 	}
 	return row, nil
 }

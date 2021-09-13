@@ -945,7 +945,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 		requestCurrentRunID = ""
 
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown mode: %v", request.Mode))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("unknown mode: %v", request.Mode))
 	}
 
 	if err := applyWorkflowSnapshotBatchAsNew(batch,
@@ -1016,7 +1016,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(
 
 	state, err := mutableStateFromRow(result)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
 	}
 
 	activityInfos := make(map[int64]*commonpb.DataBlob)
@@ -1128,7 +1128,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(
 			newRunID := newWorkflow.RunID
 
 			if namespaceID != newNamespaceID {
-				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another namespace"))
+				return serviceerror.NewUnavailable(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another namespace"))
 			}
 
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
@@ -1173,7 +1173,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(
 		}
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: unknown mode: %v", request.Mode))
+		return serviceerror.NewUnavailable(fmt.Sprintf("UpdateWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
 	if err := applyWorkflowMutationBatch(batch, shardID, &updateWorkflow); err != nil {
@@ -1275,7 +1275,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(
 			Status:          status,
 		})
 		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Error: %v", err))
+			return serviceerror.NewUnavailable(fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Error: %v", err))
 		}
 
 		if currentWorkflow != nil {
@@ -1319,7 +1319,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(
 		}
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode))
+		return serviceerror.NewUnavailable(fmt.Sprintf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
 	if err := applyWorkflowSnapshotBatchAsReset(batch, shardID, &resetWorkflow); err != nil {
@@ -1469,7 +1469,7 @@ func (d *cassandraPersistence) GetCurrentExecution(
 	lastWriteVersion := result["workflow_last_write_version"].(int64)
 	executionStateBlob, err := executionStateBlobFromRow(result)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err))
 	}
 
 	// TODO: fix blob ExecutionState in storage should not be a blob.
@@ -1566,7 +1566,7 @@ func (d *cassandraPersistence) AddTasks(
 				Msg:     fmt.Sprintf("Failed to add tasks.  Request RangeID: %v, Actual RangeID: %v", request.RangeID, previousRangeID),
 			}
 		} else {
-			return serviceerror.NewInternal("AddTasks operation failed: %v")
+			return serviceerror.NewUnavailable("AddTasks operation failed: %v")
 		}
 	}
 	return nil
@@ -2021,7 +2021,7 @@ func (d *cassandraPersistence) UpdateTaskQueue(
 	previous := make(map[string]interface{})
 	if request.TaskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY { // if task_queue is sticky, then update with TTL
 		if request.ExpiryTime == nil {
-			return nil, serviceerror.NewInternal("ExpiryTime cannot be nil for sticky task queue")
+			return nil, serviceerror.NewUnavailable("ExpiryTime cannot be nil for sticky task queue")
 		}
 		expiryTtl := convert.Int64Ceil(time.Until(timestamp.TimeValue(request.ExpiryTime)).Seconds())
 		batch := d.session.NewBatch(gocql.LoggedBatch)
@@ -2083,7 +2083,7 @@ func (d *cassandraPersistence) UpdateTaskQueue(
 func (d *cassandraPersistence) ListTaskQueue(
 	_ *p.ListTaskQueueRequest,
 ) (*p.InternalListTaskQueueResponse, error) {
-	return nil, serviceerror.NewInternal(fmt.Sprintf("unsupported operation"))
+	return nil, serviceerror.NewUnavailable(fmt.Sprintf("unsupported operation"))
 }
 
 func (d *cassandraPersistence) DeleteTaskQueue(
@@ -2188,7 +2188,7 @@ func (d *cassandraPersistence) GetTasks(
 	request *p.GetTasksRequest,
 ) (*p.InternalGetTasksResponse, error) {
 	if request.MaxReadLevel == nil {
-		return nil, serviceerror.NewInternal("getTasks: both readLevel and maxReadLevel MUST be specified for cassandra persistence")
+		return nil, serviceerror.NewUnavailable("getTasks: both readLevel and maxReadLevel MUST be specified for cassandra persistence")
 	}
 	if request.ReadLevel > *request.MaxReadLevel {
 		return &p.InternalGetTasksResponse{}, nil
@@ -2243,7 +2243,7 @@ PopulateTasks:
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTasks operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks operation failed. Error: %v", err))
 	}
 
 	return response, nil

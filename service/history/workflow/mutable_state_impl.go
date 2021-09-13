@@ -77,25 +77,25 @@ const (
 
 var (
 	// ErrWorkflowFinished indicates trying to mutate mutable state after workflow finished
-	ErrWorkflowFinished = serviceerror.NewInternal("invalid mutable state action: mutation after finish")
+	ErrWorkflowFinished = serviceerror.NewUnavailable("invalid mutable state action: mutation after finish")
 	// ErrMissingTimerInfo indicates missing timer info
-	ErrMissingTimerInfo = serviceerror.NewInternal("unable to get timer info")
+	ErrMissingTimerInfo = serviceerror.NewUnavailable("unable to get timer info")
 	// ErrMissingActivityInfo indicates missing activity info
-	ErrMissingActivityInfo = serviceerror.NewInternal("unable to get activity info")
+	ErrMissingActivityInfo = serviceerror.NewUnavailable("unable to get activity info")
 	// ErrMissingChildWorkflowInfo indicates missing child workflow info
-	ErrMissingChildWorkflowInfo = serviceerror.NewInternal("unable to get child workflow info")
+	ErrMissingChildWorkflowInfo = serviceerror.NewUnavailable("unable to get child workflow info")
 	// ErrMissingRequestCancelInfo indicates missing request cancel info
-	ErrMissingRequestCancelInfo = serviceerror.NewInternal("unable to get request cancel info")
+	ErrMissingRequestCancelInfo = serviceerror.NewUnavailable("unable to get request cancel info")
 	// ErrMissingSignalInfo indicates missing signal external
-	ErrMissingSignalInfo = serviceerror.NewInternal("unable to get signal info")
+	ErrMissingSignalInfo = serviceerror.NewUnavailable("unable to get signal info")
 	// ErrMissingWorkflowStartEvent indicates missing workflow start event
-	ErrMissingWorkflowStartEvent = serviceerror.NewInternal("unable to get workflow start event")
+	ErrMissingWorkflowStartEvent = serviceerror.NewUnavailable("unable to get workflow start event")
 	// ErrMissingWorkflowCompletionEvent indicates missing workflow completion event
-	ErrMissingWorkflowCompletionEvent = serviceerror.NewInternal("unable to get workflow completion event")
+	ErrMissingWorkflowCompletionEvent = serviceerror.NewUnavailable("unable to get workflow completion event")
 	// ErrMissingActivityScheduledEvent indicates missing workflow activity scheduled event
-	ErrMissingActivityScheduledEvent = serviceerror.NewInternal("unable to get activity scheduled event")
+	ErrMissingActivityScheduledEvent = serviceerror.NewUnavailable("unable to get activity scheduled event")
 	// ErrMissingChildWorkflowInitiatedEvent indicates missing child workflow initiated event
-	ErrMissingChildWorkflowInitiatedEvent = serviceerror.NewInternal("unable to get child workflow initiated event")
+	ErrMissingChildWorkflowInitiatedEvent = serviceerror.NewUnavailable("unable to get child workflow initiated event")
 )
 
 type (
@@ -3047,7 +3047,7 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 		command,
 		firstRunID,
 	); err != nil {
-		return nil, nil, serviceerror.NewInternal("Failed to add workflow execution started event.")
+		return nil, nil, serviceerror.NewUnavailable("Failed to add workflow execution started event.")
 	}
 
 	if err = e.ReplicateWorkflowExecutionContinuedAsNewEvent(
@@ -3752,7 +3752,7 @@ func (e *MutableStateImpl) CloseTransactionAsSnapshot(
 
 	if len(bufferEvents) > 0 {
 		// TODO do we need the functionality to generate snapshot with buffered events?
-		return nil, nil, serviceerror.NewInternal("cannot generate workflow snapshot with buffered events")
+		return nil, nil, serviceerror.NewUnavailable("cannot generate workflow snapshot with buffered events")
 	}
 
 	if len(workflowEventsSeq) > 0 {
@@ -3972,7 +3972,7 @@ func (e *MutableStateImpl) prepareEventsAndReplicationTasks(
 	)
 
 	if transactionPolicy == TransactionPolicyPassive && len(e.InsertReplicationTasks) > 0 {
-		return nil, nil, false, serviceerror.NewInternal("should not generate replication task when close transaction as passive")
+		return nil, nil, false, serviceerror.NewUnavailable("should not generate replication task when close transaction as passive")
 	}
 
 	return workflowEventsSeq, newBufferBatch, clearBuffer, nil
@@ -3997,7 +3997,7 @@ func (e *MutableStateImpl) eventsToReplicationTask(
 	currentCluster := e.clusterMetadata.GetCurrentClusterName()
 
 	if currentCluster != sourceCluster {
-		return nil, serviceerror.NewInternal("MutableStateImpl encounter contradicting version & transaction policy")
+		return nil, serviceerror.NewUnavailable("MutableStateImpl encounter contradicting version & transaction policy")
 	}
 
 	currentBranchToken, err := e.GetCurrentBranchToken()
@@ -4014,7 +4014,7 @@ func (e *MutableStateImpl) eventsToReplicationTask(
 	}
 
 	if e.executionInfo.GetVersionHistories() == nil {
-		return nil, serviceerror.NewInternal("should not generate replication task when missing replication state & version history")
+		return nil, serviceerror.NewUnavailable("should not generate replication task when missing replication state & version history")
 	}
 
 	return []persistence.Task{replicationTask}, nil
@@ -4164,7 +4164,7 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover(
 		return false, err
 	}
 	if lastWriteVersion != workflowTask.Version {
-		return false, serviceerror.NewInternal(fmt.Sprintf("MutableStateImpl encounter mismatch version, workflow task: %v, last write version %v", workflowTask.Version, lastWriteVersion))
+		return false, serviceerror.NewUnavailable(fmt.Sprintf("MutableStateImpl encounter mismatch version, workflow task: %v, last write version %v", workflowTask.Version, lastWriteVersion))
 	}
 
 	lastWriteSourceCluster := e.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
@@ -4184,7 +4184,7 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover(
 	if lastWriteSourceCluster != currentCluster && currentVersionCluster != currentCluster {
 		// do a sanity check on buffered events
 		if e.HasBufferedEvents() {
-			return false, serviceerror.NewInternal("MutableStateImpl encounter previous passive workflow with buffered events")
+			return false, serviceerror.NewUnavailable("MutableStateImpl encounter previous passive workflow with buffered events")
 		}
 		return false, nil
 	}
@@ -4196,7 +4196,7 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover(
 	if lastWriteSourceCluster != currentCluster && currentVersionCluster == currentCluster {
 		// do a sanity check on buffered events
 		if e.HasBufferedEvents() {
-			return false, serviceerror.NewInternal("MutableStateImpl encounter previous passive workflow with buffered events")
+			return false, serviceerror.NewUnavailable("MutableStateImpl encounter previous passive workflow with buffered events")
 		}
 		flushBufferVersion = currentVersion
 	}
@@ -4400,7 +4400,7 @@ func (e *MutableStateImpl) createInternalServerError(
 	actionTag tag.ZapTag,
 ) error {
 
-	return serviceerror.NewInternal(actionTag.Field().String + " operation failed")
+	return serviceerror.NewUnavailable(actionTag.Field().String + " operation failed")
 }
 
 func (e *MutableStateImpl) createCallerError(

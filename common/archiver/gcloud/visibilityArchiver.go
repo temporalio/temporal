@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/searchattribute"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
@@ -248,7 +249,7 @@ func (v *visibilityArchiver) query(
 
 		executionInfo, err := convertToExecutionInfo(record, saTypeMap)
 		if err != nil {
-			return nil, serviceerror.NewInternal(err.Error())
+			return nil, serviceerror.NewUnavailable(err.Error())
 		}
 		response.Executions = append(response.Executions, executionInfo)
 	}

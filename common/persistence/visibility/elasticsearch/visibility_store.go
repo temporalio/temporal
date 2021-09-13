@@ -38,6 +38,7 @@ import (
 	"github.com/olivere/elastic/v7"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
@@ -232,7 +233,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutions(request *visibility.ListWor
 	ctx := context.Background()
 	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListOpenWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	isRecordValid := func(rec *visibility.VisibilityWorkflowExecutionInfo) bool {
@@ -255,7 +256,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutions(request *visibility.ListW
 	ctx := context.Background()
 	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListClosedWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	isRecordValid := func(rec *visibility.VisibilityWorkflowExecutionInfo) bool {
@@ -280,7 +281,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByType(request *visibility.L
 	ctx := context.Background()
 	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByType failed. Error: %s", detailedErrorMessage(err)))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListOpenWorkflowExecutionsByType failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	isRecordValid := func(rec *visibility.VisibilityWorkflowExecutionInfo) bool {
@@ -304,7 +305,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByType(request *visibility
 	ctx := context.Background()
 	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByType failed. Error: %s", detailedErrorMessage(err)))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListClosedWorkflowExecutionsByType failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	isRecordValid := func(rec *visibility.VisibilityWorkflowExecutionInfo) bool {
@@ -329,7 +330,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(request *visibi
 	ctx := context.Background()
 	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListOpenWorkflowExecutionsByWorkflowID failed. Error: %s", detailedErrorMessage(err)))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListOpenWorkflowExecutionsByWorkflowID failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	isRecordValid := func(rec *visibility.VisibilityWorkflowExecutionInfo) bool {
@@ -353,7 +354,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(request *visi
 	ctx := context.Background()
 	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByWorkflowID failed. Error: %s", detailedErrorMessage(err)))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListClosedWorkflowExecutionsByWorkflowID failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	isRecordValid := func(rec *visibility.VisibilityWorkflowExecutionInfo) bool {
@@ -376,7 +377,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(request *visibili
 	ctx := context.Background()
 	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListClosedWorkflowExecutionsByStatus failed. Error: %s", detailedErrorMessage(err)))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListClosedWorkflowExecutionsByStatus failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	isRecordValid := func(rec *visibility.VisibilityWorkflowExecutionInfo) bool {
@@ -396,7 +397,7 @@ func (s *visibilityStore) ListWorkflowExecutions(request *visibility.ListWorkflo
 	ctx := context.Background()
 	searchResult, err := s.esClient.Search(ctx, p)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, nil)
@@ -419,21 +420,21 @@ func (s *visibilityStore) ScanWorkflowExecutions(request *visibility.ListWorkflo
 		if p.PointInTime == nil {
 			pointInTimeID, err := esClient.OpenPointInTime(ctx, s.index, pointInTimeKeepAliveInterval)
 			if err != nil {
-				return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to create point in time: %s", detailedErrorMessage(err)))
+				return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to create point in time: %s", detailedErrorMessage(err)))
 			}
 			p.PointInTime = elastic.NewPointInTimeWithKeepAlive(pointInTimeID, pointInTimeKeepAliveInterval)
 		}
 
 		searchResult, err := esClient.Search(ctx, p)
 		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 		}
 
 		if len(searchResult.Hits.Hits) < request.PageSize {
 			// It is the last page, close PIT.
 			_, err = esClient.ClosePointInTime(ctx, searchResult.PitId)
 			if err != nil {
-				return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to close point in time: %s", detailedErrorMessage(err)))
+				return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to close point in time: %s", detailedErrorMessage(err)))
 			}
 		}
 		return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, nil)
@@ -468,7 +469,7 @@ func (s *visibilityStore) ScanWorkflowExecutions(request *visibility.ListWorkflo
 			isLastPage = true
 			_ = scrollService.Clear(context.Background())
 		} else if scrollErr != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(scrollErr)))
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(scrollErr)))
 		}
 		return s.getScrollWorkflowExecutionsResponse(searchResult.Hits, request.Namespace, request.PageSize, searchResult.ScrollId, isLastPage)
 	default:
@@ -485,7 +486,7 @@ func (s *visibilityStore) CountWorkflowExecutions(request *visibility.CountWorkf
 	ctx := context.Background()
 	count, err := s.esClient.Count(ctx, s.index, boolQuery)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("CountWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("CountWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
 
 	response := &visibility.CountWorkflowExecutionsResponse{Count: count}
@@ -588,7 +589,7 @@ func (s *visibilityStore) buildSearchParametersV2(
 func (s *visibilityStore) convertQuery(namespace string, namespaceID string, requestQueryStr string) (*elastic.BoolQuery, []*elastic.FieldSort, error) {
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
-		return nil, nil, serviceerror.NewInternal(fmt.Sprintf("Unable to read search attribute types: %v", err))
+		return nil, nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
 	queryConverter := query.NewConverter(
 		newNameInterceptor(namespace, s.index, saTypeMap, s.searchAttributesMapper),
@@ -642,7 +643,7 @@ func (s *visibilityStore) getScrollWorkflowExecutionsResponse(
 
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to read search attribute types: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
 
 	response := &visibility.InternalListWorkflowExecutionsResponse{}
@@ -675,7 +676,7 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(
 
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to read search attribute types: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
 
 	response := &visibility.InternalListWorkflowExecutionsResponse{
@@ -759,13 +760,13 @@ func (s *visibilityStore) generateESDoc(request *visibility.InternalVisibilityRe
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
 		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentGenerateFailuresCount)
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to read search attribute types: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
 
 	searchAttributes, err := searchattribute.Decode(request.SearchAttributes, &typeMap)
 	if err != nil {
 		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentGenerateFailuresCount)
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to decode search attributes: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to decode search attributes: %v", err))
 	}
 	for saName, saValue := range searchAttributes {
 		doc[saName] = saValue
@@ -777,7 +778,7 @@ func (s *visibilityStore) generateESDoc(request *visibility.InternalVisibilityRe
 func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchattribute.NameTypeMap, namespace string) (*visibility.VisibilityWorkflowExecutionInfo, error) {
 	logParseError := func(fieldName string, fieldValue interface{}, err error, docID string) error {
 		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
-		return serviceerror.NewInternal(fmt.Sprintf("Unable to parse Elasticsearch document(%s) %q field value %q: %v", docID, fieldName, fieldValue, err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Unable to parse Elasticsearch document(%s) %q field value %q: %v", docID, fieldName, fieldValue, err))
 	}
 
 	var sourceMap map[string]interface{}
@@ -786,7 +787,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 	d.UseNumber()
 	if err := d.Decode(&sourceMap); err != nil {
 		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to unmarshal JSON from Elasticsearch document(%s): %v", hit.Id, err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to unmarshal JSON from Elasticsearch document(%s): %v", hit.Id, err))
 	}
 
 	var (
@@ -827,7 +828,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 				continue
 			}
 			s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to get type for Elasticsearch document(%s) field %q: %v", hit.Id, fieldName, err))
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to get type for Elasticsearch document(%s) field %q: %v", hit.Id, fieldName, err))
 		}
 
 		fieldValueParsed, err := finishParseJSONValue(fieldValue, fieldType)
@@ -870,7 +871,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 		record.SearchAttributes, err = searchattribute.Encode(customSearchAttributes, &saTypeMap)
 		if err != nil {
 			s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to encode custom search attributes of Elasticsearch document(%s): %v", hit.Id, err))
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to encode custom search attributes of Elasticsearch document(%s): %v", hit.Id, err))
 		}
 		err = searchattribute.ApplyAliases(s.searchAttributesMapper, record.SearchAttributes, namespace)
 		if err != nil {
@@ -882,7 +883,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 		record.Memo = persistence.NewDataBlob(memo, memoEncoding)
 	} else if memo != nil {
 		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
-		return nil, serviceerror.NewInternal(fmt.Sprintf("%q field is missing in Elasticsearch document(%s)", searchattribute.MemoEncoding, hit.Id))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("%q field is missing in Elasticsearch document(%s)", searchattribute.MemoEncoding, hit.Id))
 	}
 
 	return record, nil

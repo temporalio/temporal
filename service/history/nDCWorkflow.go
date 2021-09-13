@@ -175,7 +175,7 @@ func (r *nDCWorkflowImpl) suppressBy(
 		incomingLastWriteVersion,
 		incomingLastEventTaskID,
 	) {
-		return workflow.TransactionPolicyActive, serviceerror.NewInternal("nDCWorkflow cannot suppress workflow by older workflow")
+		return workflow.TransactionPolicyActive, serviceerror.NewUnavailable("nDCWorkflow cannot suppress workflow by older workflow")
 	}
 
 	// if workflow is in zombie or finished state, keep as is
@@ -211,7 +211,7 @@ func (r *nDCWorkflowImpl) flushBufferedEvents() error {
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 
 	if lastWriteCluster != currentCluster {
-		return serviceerror.NewInternal("nDCWorkflow encounter workflow with buffered events but last write not from current cluster")
+		return serviceerror.NewUnavailable("nDCWorkflow encounter workflow with buffered events but last write not from current cluster")
 	}
 
 	return r.failWorkflowTask(lastWriteVersion)

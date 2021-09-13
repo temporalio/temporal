@@ -194,7 +194,7 @@ func (v *visibilityArchiver) query(
 	dirPath := path.Join(URI.Path(), request.namespaceID)
 	exists, err := directoryExists(dirPath)
 	if err != nil {
-		return nil, serviceerror.NewInternal(err.Error())
+		return nil, serviceerror.NewUnavailable(err.Error())
 	}
 	if !exists {
 		return &archiver.QueryVisibilityResponse{}, nil
@@ -202,12 +202,12 @@ func (v *visibilityArchiver) query(
 
 	files, err := listFiles(dirPath)
 	if err != nil {
-		return nil, serviceerror.NewInternal(err.Error())
+		return nil, serviceerror.NewUnavailable(err.Error())
 	}
 
 	files, err = sortAndFilterFiles(files, token)
 	if err != nil {
-		return nil, serviceerror.NewInternal(err.Error())
+		return nil, serviceerror.NewUnavailable(err.Error())
 	}
 	if len(files) == 0 {
 		return &archiver.QueryVisibilityResponse{}, nil
@@ -217,12 +217,12 @@ func (v *visibilityArchiver) query(
 	for idx, file := range files {
 		encodedRecord, err := readFile(path.Join(dirPath, file))
 		if err != nil {
-			return nil, serviceerror.NewInternal(err.Error())
+			return nil, serviceerror.NewUnavailable(err.Error())
 		}
 
 		record, err := decodeVisibilityRecord(encodedRecord)
 		if err != nil {
-			return nil, serviceerror.NewInternal(err.Error())
+			return nil, serviceerror.NewUnavailable(err.Error())
 		}
 
 		if record.CloseTime.Before(request.parsedQuery.earliestCloseTime) {
@@ -232,7 +232,7 @@ func (v *visibilityArchiver) query(
 		if matchQuery(record, request.parsedQuery) {
 			executionInfo, err := convertToExecutionInfo(record, saTypeMap)
 			if err != nil {
-				return nil, serviceerror.NewInternal(err.Error())
+				return nil, serviceerror.NewUnavailable(err.Error())
 			}
 
 			response.Executions = append(response.Executions, executionInfo)
@@ -244,7 +244,7 @@ func (v *visibilityArchiver) query(
 					}
 					encodedToken, err := serializeToken(newToken)
 					if err != nil {
-						return nil, serviceerror.NewInternal(err.Error())
+						return nil, serviceerror.NewUnavailable(err.Error())
 					}
 					response.NextPageToken = encodedToken
 				}

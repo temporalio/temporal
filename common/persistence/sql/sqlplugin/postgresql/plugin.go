@@ -135,7 +135,7 @@ func (d *plugin) tryConnect(
 			errors = append(errors, err)
 		}
 	}
-	return nil, serviceerror.NewInternal(
+	return nil, serviceerror.NewUnavailable(
 		fmt.Sprintf("unable to connect to DB, tried default DB names: %v, errors: %v", strings.Join(defaultDatabaseNames, ","), errors),
 	)
 }
