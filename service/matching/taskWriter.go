@@ -201,7 +201,7 @@ func (w *taskWriter) appendTasks(
 		return resp, nil
 
 	case *persistence.ConditionFailedError:
-		w.tlMgr.signalFatalProblem(w.tlMgr.taskQueueID)
+		w.tlMgr.signalFatalProblem(w.tlMgr.taskQueueID, w.tlMgr.IncarnationID())
 		return nil, err
 
 	default:
@@ -219,7 +219,7 @@ func (w *taskWriter) taskWriterLoop(ctx context.Context) error {
 	err := w.initReadWriteState(ctx)
 	if err != nil {
 		if w.tlMgr.errShouldUnload(err) {
-			w.tlMgr.signalFatalProblem(w.tlMgr.taskQueueID)
+			w.tlMgr.signalFatalProblem(w.tlMgr.taskQueueID, w.tlMgr.IncarnationID())
 		}
 		return err
 	}
@@ -318,7 +318,7 @@ func (w *taskWriter) allocTaskIDBlock(ctx context.Context, prevBlockEnd int64) (
 	state, err := w.renewLeaseWithRetry(ctx, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		if w.tlMgr.errShouldUnload(err) {
-			w.tlMgr.signalFatalProblem(w.taskQueueID)
+			w.tlMgr.signalFatalProblem(w.taskQueueID, w.tlMgr.IncarnationID())
 			return taskIDBlock{}, errShutdown
 		}
 		return taskIDBlock{}, err

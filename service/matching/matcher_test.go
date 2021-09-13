@@ -32,7 +32,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
@@ -67,7 +67,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.controller = gomock.NewController(t.T())
 	t.client = matchingservicemock.NewMockMatchingServiceClient(t.controller)
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	t.taskQueue = newTestTaskQueueID(uuid.New(), taskQueuePartitionPrefix+"tl0/1", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	t.taskQueue = newTestTaskQueueID(uuid.NewString(), taskQueuePartitionPrefix+"tl0/1", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	tlCfg, err := newTaskQueueConfig(t.taskQueue, cfg, t.newNamespaceCache())
 	t.NoError(err)
 	tlCfg.forwarderConfig = forwarderConfig{
@@ -227,7 +227,7 @@ func (t *MatcherTestSuite) TestQueryLocalSyncMatch() {
 
 	<-pollStarted
 	time.Sleep(10 * time.Millisecond)
-	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	task := newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	resp, err := t.matcher.OfferQuery(ctx, task)
 	cancel()
@@ -266,7 +266,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 		},
 	).Return(&remotePollResp, remotePollErr).AnyTimes()
 
-	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	task := newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	var req *matchingservice.QueryWorkflowRequest
@@ -312,7 +312,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatchError() {
 		}
 	}()
 
-	task := newInternalQueryTask(uuid.New(), &matchingservice.QueryWorkflowRequest{})
+	task := newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
 	var req *matchingservice.QueryWorkflowRequest
@@ -491,9 +491,9 @@ func randomTaskInfo() *persistencespb.AllocatedTaskInfo {
 
 	return &persistencespb.AllocatedTaskInfo{
 		Data: &persistencespb.TaskInfo{
-			NamespaceId: uuid.New(),
-			WorkflowId:  uuid.New(),
-			RunId:       uuid.New(),
+			NamespaceId: uuid.NewString(),
+			WorkflowId:  uuid.NewString(),
+			RunId:       uuid.NewString(),
 			ScheduleId:  rand.Int63(),
 			CreateTime:  &rt1,
 			ExpiryTime:  &rt2,

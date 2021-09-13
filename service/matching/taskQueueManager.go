@@ -33,6 +33,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -59,16 +60,6 @@ const (
 
 	// Fake Task ID to wrap a task for syncmatch
 	syncMatchTaskId = -137
-)
-
-// fatalSignalBehavior indicates to functions that may inovke the
-// taskQueueManagerImpl.signalFatalProblem callback whether they should or
-// should not do that.
-type fatalSignalBehavior int
-
-const (
-	emitFatalSignal fatalSignalBehavior = iota + 1
-	suppressFatalSignal
 )
 
 type (
@@ -107,6 +98,10 @@ type (
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		// DescribeTaskQueue returns information about the target task queue
 		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
+		// Observe this object's incarnation identity. Many taskQueueManager
+		// objects can serve a given task queue over time; each is uniquely
+		// identified.
+		IncarnationID() uuid.UUID
 		String() string
 	}
 
@@ -139,7 +134,8 @@ type (
 		outstandingPollsLock sync.Mutex
 		outstandingPollsMap  map[string]context.CancelFunc
 		shutdownCh           chan struct{} // Delivers stop to the pump that populates taskBuffer
-		signalFatalProblem   func(id *taskQueueID)
+		signalFatalProblem   func(*taskQueueID, uuid.UUID)
+		incarnationID        uuid.UUID
 	}
 )
 
@@ -184,6 +180,7 @@ func newTaskQueueManager(
 		pollerHistory:       newPollerHistory(),
 		outstandingPollsMap: make(map[string]context.CancelFunc),
 		signalFatalProblem:  e.unloadTaskQueue,
+		incarnationID:       uuid.New(),
 	}
 
 	tlMgr.namespaceValue.Store("")
@@ -471,7 +468,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 				tag.Error(err),
 				tag.WorkflowTaskQueueName(c.taskQueueID.name),
 				tag.WorkflowTaskQueueType(c.taskQueueID.taskType))
-			c.signalFatalProblem(c.taskQueueID)
+			c.signalFatalProblem(c.taskQueueID, c.incarnationID)
 			return
 		}
 		c.taskReader.Signal()
@@ -599,4 +596,8 @@ func (c *taskQueueManagerImpl) tryInitNamespaceAndScope() {
 
 	c.metricScopeValue.Store(scope)
 	c.namespaceValue.Store(namespace)
+}
+
+func (c *taskQueueManagerImpl) IncarnationID() uuid.UUID {
+	return c.incarnationID
 }

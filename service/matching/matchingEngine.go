@@ -34,7 +34,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -508,7 +508,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	if err != nil {
 		return nil, err
 	}
-	taskID := uuid.New()
+	taskID := uuid.NewString()
 	resp, err := tlMgr.DispatchQueryTask(hCtx.Context, taskID, queryRequest)
 
 	// if get response or error it means that query task was handled by forwarding to another matching host
@@ -702,16 +702,19 @@ func (e *matchingEngineImpl) getTask(
 	return tlMgr.GetTask(ctx, maxDispatchPerSecond)
 }
 
-func (e *matchingEngineImpl) unloadTaskQueue(id *taskQueueID) {
+func (e *matchingEngineImpl) unloadTaskQueue(
+	id *taskQueueID,
+	incarnation uuid.UUID,
+) {
 	e.taskQueuesLock.Lock()
 	tlMgr, ok := e.taskQueues[*id]
-	if ok {
-		delete(e.taskQueues, *id)
+	if !ok || incarnation != tlMgr.IncarnationID() {
+		e.taskQueuesLock.Unlock()
+		return
 	}
+	delete(e.taskQueues, *id)
 	e.taskQueuesLock.Unlock()
-	if ok {
-		tlMgr.Stop()
-	}
+	tlMgr.Stop()
 }
 
 // Populate the workflow task response based on context and scheduled/started events.
@@ -855,7 +858,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		WorkflowExecution: task.workflowExecution(),
 		ScheduleId:        task.event.Data.GetScheduleId(),
 		TaskId:            task.event.GetTaskId(),
-		RequestId:         uuid.New(),
+		RequestId:         uuid.NewString(),
 		PollRequest:       pollReq,
 	}
 	var resp *historyservice.RecordWorkflowTaskStartedResponse
@@ -884,7 +887,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		WorkflowExecution: task.workflowExecution(),
 		ScheduleId:        task.event.Data.GetScheduleId(),
 		TaskId:            task.event.GetTaskId(),
-		RequestId:         uuid.New(),
+		RequestId:         uuid.NewString(),
 		PollRequest:       pollReq,
 	}
 	var resp *historyservice.RecordActivityTaskStartedResponse
