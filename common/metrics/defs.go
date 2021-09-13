@@ -84,6 +84,7 @@ const (
 	StatsTypeTagName   = "stats_type"
 	CacheTypeTagName   = "cache_type"
 	FailureTagName     = "failure"
+	TypeTagName        = "type"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -1778,6 +1779,7 @@ const (
 	TaskNoUserLatency
 	TaskNoUserQueueLatency
 	TaskRedispatchQueuePendingTasksTimer
+	TaskScheduleToStartLatency
 
 	TransferTaskMissingEventCounter
 
@@ -2229,6 +2231,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		TaskStandbyRetryCounter:  {metricName: "task_errors_standby_retry_counter", metricType: Counter},
 		TaskNotActiveCounter:     {metricName: "task_errors_not_active_counter", metricType: Counter},
 		TaskLimitExceededCounter: {metricName: "task_errors_limit_exceeded_counter", metricType: Counter},
+
+		TaskScheduleToStartLatency: {metricName: "task_schedule_to_start_latency", metricType: Timer},
 
 		TaskProcessingLatency:       {metricName: "task_latency_processing", metricType: Timer},               // per-attempt
 		TaskNoUserProcessingLatency: {metricName: "task_latency_processing_nouserlatency", metricType: Timer}, // per-attempt

@@ -52,6 +52,8 @@ type Tag interface {
 	Value() string
 }
 
+var StickyTaskQueueTag = TaskQueueTag("__sticky__")
+
 type (
 	namespaceTag struct {
 		value string
@@ -94,6 +96,10 @@ type (
 	}
 
 	failureTag struct {
+		value string
+	}
+
+	typeTag struct {
 		value string
 	}
 )
@@ -304,5 +310,23 @@ func (d failureTag) Key() string {
 
 // Value returns the value of the tag
 func (d failureTag) Value() string {
+	return d.value
+}
+
+func TaskTypeTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return typeTag{value}
+
+}
+
+// Key returns the key of the tag
+func (d typeTag) Key() string {
+	return TypeTagName
+}
+
+// Value returns the value of the tag
+func (d typeTag) Value() string {
 	return d.value
 }

@@ -185,11 +185,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			}
 
 			workflowTask, isRunning := mutableState.GetWorkflowTaskInfo(scheduleID)
+			metricsScope := handler.metricsClient.Scope(metrics.HistoryRecordWorkflowTaskStartedScope)
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduleID >= mutableState.GetNextEventID() {
-				handler.metricsClient.IncCounter(metrics.HistoryRecordWorkflowTaskStartedScope, metrics.StaleMutableStateCounter)
+				metricsScope.IncCounter(metrics.StaleMutableStateCounter)
 				// Reload workflow execution history
 				// ErrStaleState will trigger updateWorkflowExecution function to reload the mutable state
 				return nil, consts.ErrStaleState
@@ -227,6 +228,14 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				req.PollRequest.TaskQueue,
 				req.PollRequest.Identity,
 			)
+
+			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(*workflowTask.ScheduledTime)
+			namespaceName := namespaceEntry.GetInfo().GetName()
+			taskQueue := workflowTask.TaskQueue
+			metrics.GetPerTaskQueueScope(metricsScope, namespaceName, taskQueue.GetName(), taskQueue.GetKind()).
+				Tagged(metrics.TaskTypeTag("workflow")).
+				RecordTimer(metrics.TaskScheduleToStartLatency, workflowScheduleToStartLatency)
+
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history
 				return nil, serviceerror.NewInternal("Unable to add WorkflowTaskStarted event to history.")
