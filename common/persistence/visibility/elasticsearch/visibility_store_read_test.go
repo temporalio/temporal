@@ -561,19 +561,19 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match_phrase":{"WorkflowId":{"query":"wid"}}}}}]}}`, s.queryToJSON(qry))
 	s.Equal(`[{"StartTime":{"order":"desc"}}]`, s.sorterToJSON(srt))
 
-	query = `WorkflowId = 'wid' and CloseTime = missing`
+	query = `WorkflowId = 'wid' and CloseTime is null`
 	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":[{"match_phrase":{"WorkflowId":{"query":"wid"}}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}]}}]}}`, s.queryToJSON(qry))
 	s.Nil(srt)
 
-	query = `WorkflowId = 'wid' or CloseTime = missing`
+	query = `WorkflowId = 'wid' or CloseTime is null`
 	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"should":[{"match_phrase":{"WorkflowId":{"query":"wid"}}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}]}}]}}`, s.queryToJSON(qry))
 	s.Nil(srt)
 
-	query = `CloseTime = missing order by CloseTime desc`
+	query = `CloseTime is null order by CloseTime desc`
 	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}]}}`, s.queryToJSON(qry))
@@ -1000,7 +1000,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
 
 	s.mockSearchAttributesMapper.EXPECT().GetAlias(gomock.Any(), testNamespace).DoAndReturn(
 		func(fieldName string, namespace string) (string, error) {
-			return "", serviceerror.NewInvalidArgument("error")
+			return "", serviceerror.NewInternal("error")
 		})
 	info, err = s.visibilityStore.parseESDoc(searchHit, searchattribute.TestNameTypeMap, testNamespace)
 	s.Error(err)

@@ -483,7 +483,7 @@ func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess(
 			s.Equal(entryOld, entryNew)
 			waitGroup.Done()
 		case *serviceerror.NotFound:
-			time.Sleep(2 * CacheMinRefreshInterval)
+			time.Sleep(4 * time.Second)
 			entryNew, err := s.namespaceCache.GetNamespaceByID(id)
 			s.NoError(err)
 			// make the config version the same so we can easily compare those

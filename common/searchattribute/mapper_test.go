@@ -39,11 +39,14 @@ type (
 )
 
 func (t *TestMapper) GetAlias(fieldName string, namespace string) (string, error) {
+	if fieldName == "wrong_field" {
+		return "", serviceerror.NewInvalidArgument("unmapped field")
+	}
 	if namespace == "test" {
 		return "alias_of_" + fieldName, nil
 	}
 	if namespace == "error" {
-		return "", serviceerror.NewInvalidArgument("mapper error")
+		return "", serviceerror.NewInternal("mapper error")
 	}
 	return fieldName, nil
 }
@@ -53,7 +56,7 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 		return strings.TrimPrefix(alias, "alias_of_"), nil
 	}
 	if namespace == "error" {
-		return "", serviceerror.NewInvalidArgument("mapper error")
+		return "", serviceerror.NewInternal("mapper error")
 	}
 	return alias, nil
 }
@@ -61,13 +64,14 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 func Test_ApplyAliases(t *testing.T) {
 	sa := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"field1": {Data: []byte("data1")},
-			"field2": {Data: []byte("data2")},
+			"field1":      {Data: []byte("data1")},
+			"field2":      {Data: []byte("data2")},
+			"wrong_field": {Data: []byte("data23")},
 		},
 	}
 	err := ApplyAliases(&TestMapper{}, sa, "error")
 	assert.Error(t, err)
-	var invalidArgumentErr *serviceerror.InvalidArgument
+	var invalidArgumentErr *serviceerror.Internal
 	assert.ErrorAs(t, err, &invalidArgumentErr)
 
 	err = ApplyAliases(&TestMapper{}, sa, "namespace1")
@@ -92,7 +96,7 @@ func Test_SubstituteAliases(t *testing.T) {
 	}
 	err := SubstituteAliases(&TestMapper{}, sa, "error")
 	assert.Error(t, err)
-	var invalidArgumentErr *serviceerror.InvalidArgument
+	var invalidArgumentErr *serviceerror.Internal
 	assert.ErrorAs(t, err, &invalidArgumentErr)
 
 	err = SubstituteAliases(&TestMapper{}, sa, "namespace1")

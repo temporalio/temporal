@@ -42,8 +42,6 @@ type (
 		fnInterceptor FieldNameInterceptor
 		fvInterceptor FieldValuesInterceptor
 	}
-
-	missingCheck struct{}
 )
 
 func NewConverter(fnInterceptor FieldNameInterceptor, fvInterceptor FieldValuesInterceptor) *Converter {
@@ -306,19 +304,11 @@ func (c *Converter) convertComparisonExpr(expr *sqlparser.ComparisonExpr) (elast
 	case "<":
 		query = elastic.NewRangeQuery(colName).Lt(colValues[0])
 	case "=":
-		if _, isMissingCheck := colValues[0].(missingCheck); isMissingCheck {
-			query = elastic.NewBoolQuery().MustNot(elastic.NewExistsQuery(colName))
-		} else {
-			// Not elastic.NewTermQuery to support String custom search attributes.
-			query = elastic.NewMatchPhraseQuery(colName, colValues[0])
-		}
+		// Not elastic.NewTermQuery to support String custom search attributes.
+		query = elastic.NewMatchPhraseQuery(colName, colValues[0])
 	case "!=":
-		if _, isMissingCheck := colValues[0].(missingCheck); isMissingCheck {
-			query = elastic.NewExistsQuery(colName)
-		} else {
-			// Not elastic.NewTermQuery to support String custom search attributes.
-			query = elastic.NewBoolQuery().MustNot(elastic.NewMatchPhraseQuery(colName, colValues[0]))
-		}
+		// Not elastic.NewTermQuery to support String custom search attributes.
+		query = elastic.NewBoolQuery().MustNot(elastic.NewMatchPhraseQuery(colName, colValues[0]))
 	case "in":
 		query = elastic.NewTermsQuery(colName, colValues...)
 	case "not in":
@@ -359,9 +349,6 @@ func (c *Converter) convertComparisonExprValue(expr sqlparser.Expr) (interface{}
 	case *sqlparser.FuncExpr:
 		return nil, NewConverterError(fmt.Sprintf("%s: nested func", notSupportedErrMessage))
 	case *sqlparser.ColName:
-		if sqlparser.String(expr) == "missing" {
-			return missingCheck{}, nil
-		}
 		return nil, NewConverterError(fmt.Sprintf("%s: column name on the right side of comparison expression", notSupportedErrMessage))
 	default:
 		return nil, NewConverterError(fmt.Sprintf("%s: unexpected value type %T", invalidExpressionErrMessage, expr))

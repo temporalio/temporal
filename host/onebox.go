@@ -76,14 +76,15 @@ type Temporal interface {
 	GetFrontendClient() workflowservice.WorkflowServiceClient
 	GetHistoryClient() historyservice.HistoryServiceClient
 	GetExecutionManager() persistence.ExecutionManager
+	RefreshNamespaceCache()
 }
 
 type (
 	temporalImpl struct {
-		frontendService common.Daemon
-		matchingService common.Daemon
-		historyServices []common.Daemon
-		workerService   common.Daemon
+		frontendService resource.Resource
+		matchingService resource.Resource
+		historyServices []resource.Resource
+		workerService   resource.Resource
 
 		adminClient                      adminservice.AdminServiceClient
 		frontendClient                   workflowservice.WorkflowServiceClient
@@ -711,6 +712,17 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
 	}
 	if c.historyConfig.HistoryCountLimitError != 0 {
 		client.OverrideValue(dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
+	}
+}
+
+func (c *temporalImpl) RefreshNamespaceCache() {
+	c.frontendService.GetNamespaceCache().Refresh()
+	c.matchingService.GetNamespaceCache().Refresh()
+	for _, r := range c.historyServices {
+		r.GetNamespaceCache().Refresh()
+	}
+	if c.workerService != nil {
+		c.workerService.GetNamespaceCache().Refresh()
 	}
 }
 
