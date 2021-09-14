@@ -93,7 +93,7 @@ var (
 
 	errDeserializeTaskTokenMessage = "Error to deserialize task token. Error: %v."
 
-	errShuttingDown = serviceerror.NewInternal("Shutting down")
+	errShuttingDown = serviceerror.NewUnavailable("Shutting down")
 )
 
 // NewHandler creates a thrift handler for the history service
@@ -1434,9 +1434,9 @@ func (h *Handler) convertError(err error) error {
 		}
 		return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), "<unknown>")
 	case *persistence.WorkflowConditionFailedError:
-		return serviceerror.NewInternal(err.Msg)
+		return serviceerror.NewUnavailable(err.Msg)
 	case *persistence.CurrentWorkflowConditionFailedError:
-		return serviceerror.NewInternal(err.Msg)
+		return serviceerror.NewUnavailable(err.Msg)
 	case *persistence.TransactionSizeLimitError:
 		return serviceerror.NewInvalidArgument(err.Msg)
 	}

@@ -181,10 +181,10 @@ func (ti *TelemetryInterceptor) handleError(
 		scope.IncCounter(metrics.ServiceErrClientVersionNotSupportedCounter)
 	case *serviceerror.DataLoss:
 		scope.IncCounter(metrics.ServiceFailures)
-		ti.logger.Error("internal service error, data loss", append(logTags, tag.Error(err))...)
-	case *serviceerror.Internal:
+		ti.logger.Error("unavailable error, data loss", append(logTags, tag.Error(err))...)
+	case *serviceerror.Unavailable:
 		scope.IncCounter(metrics.ServiceFailures)
-		ti.logger.Error("internal service error", append(logTags, tag.Error(err))...)
+		ti.logger.Error("unavailable error", append(logTags, tag.Error(err))...)
 	default:
 		scope.IncCounter(metrics.ServiceFailures)
 		ti.logger.Error("uncategorized error", append(logTags, tag.Error(err))...)

@@ -73,7 +73,7 @@ func setStateStatus(
 			}
 
 		default:
-			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
+			return serviceerror.NewUnavailable(fmt.Sprintf("unknown workflow state: %v", state))
 		}
 	case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 		switch state {
@@ -96,7 +96,7 @@ func setStateStatus(
 			}
 
 		default:
-			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
+			return serviceerror.NewUnavailable(fmt.Sprintf("unknown workflow state: %v", state))
 		}
 	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 		switch state {
@@ -115,7 +115,7 @@ func setStateStatus(
 			return invalidStateTransitionErr(e.GetState(), state, status)
 
 		default:
-			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
+			return serviceerror.NewUnavailable(fmt.Sprintf("unknown workflow state: %v", state))
 		}
 	case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 		switch state {
@@ -140,10 +140,10 @@ func setStateStatus(
 			}
 
 		default:
-			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
+			return serviceerror.NewUnavailable(fmt.Sprintf("unknown workflow state: %v", state))
 		}
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
+		return serviceerror.NewUnavailable(fmt.Sprintf("unknown workflow state: %v", state))
 	}
 
 	e.State = state
@@ -156,5 +156,5 @@ func invalidStateTransitionErr(
 	targetState enumsspb.WorkflowExecutionState,
 	targetStatus enumspb.WorkflowExecutionStatus,
 ) error {
-	return serviceerror.NewInternal(fmt.Sprintf(invalidStateTransitionMsg, currentState, targetState, targetStatus))
+	return serviceerror.NewUnavailable(fmt.Sprintf(invalidStateTransitionMsg, currentState, targetState, targetStatus))
 }

@@ -34,6 +34,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+
 	"go.temporal.io/server/common/searchattribute"
 
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -229,7 +230,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history
-				return nil, serviceerror.NewInternal("Unable to add WorkflowTaskStarted event to history.")
+				return nil, serviceerror.NewUnavailable("Unable to add WorkflowTaskStarted event to history.")
 			}
 
 			resp, err = handler.createRecordWorkflowTaskStartedResponse(namespaceID, mutableState, workflowTask, req.PollRequest.GetIdentity())
@@ -379,19 +380,19 @@ Update_History_Loop:
 				scope.IncCounter(metrics.WorkflowTaskHeartbeatTimeoutCounter)
 				completedEvent, err = msBuilder.AddWorkflowTaskTimedOutEvent(currentWorkflowTask.ScheduleID, currentWorkflowTask.StartedID)
 				if err != nil {
-					return nil, serviceerror.NewInternal("Failed to add workflow task timeout event.")
+					return nil, serviceerror.NewUnavailable("Failed to add workflow task timeout event.")
 				}
 				msBuilder.ClearStickyness()
 			} else {
 				completedEvent, err = msBuilder.AddWorkflowTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
 				if err != nil {
-					return nil, serviceerror.NewInternal("Unable to add WorkflowTaskCompleted event to history.")
+					return nil, serviceerror.NewUnavailable("Unable to add WorkflowTaskCompleted event to history.")
 				}
 			}
 		} else {
 			completedEvent, err = msBuilder.AddWorkflowTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
 			if err != nil {
-				return nil, serviceerror.NewInternal("Unable to add WorkflowTaskCompleted event to history.")
+				return nil, serviceerror.NewUnavailable("Unable to add WorkflowTaskCompleted event to history.")
 			}
 		}
 
@@ -500,7 +501,7 @@ Update_History_Loop:
 				)
 			}
 			if err != nil {
-				return nil, serviceerror.NewInternal("Failed to add workflow task scheduled event.")
+				return nil, serviceerror.NewUnavailable("Failed to add workflow task scheduled event.")
 			}
 
 			newWorkflowTaskScheduledID = newWorkflowTask.ScheduleID

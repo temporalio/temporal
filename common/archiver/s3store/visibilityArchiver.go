@@ -33,6 +33,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/searchattribute"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
@@ -230,7 +231,7 @@ func (v *visibilityArchiver) query(
 	})
 	if err != nil {
 		if isRetryableError(err) {
-			return nil, serviceerror.NewInternal(err.Error())
+			return nil, serviceerror.NewUnavailable(err.Error())
 		}
 		return nil, serviceerror.NewInvalidArgument(err.Error())
 	}
@@ -245,16 +246,16 @@ func (v *visibilityArchiver) query(
 	for _, item := range results.Contents {
 		encodedRecord, err := download(ctx, v.s3cli, URI, *item.Key)
 		if err != nil {
-			return nil, serviceerror.NewInternal(err.Error())
+			return nil, serviceerror.NewUnavailable(err.Error())
 		}
 
 		record, err := decodeVisibilityRecord(encodedRecord)
 		if err != nil {
-			return nil, serviceerror.NewInternal(err.Error())
+			return nil, serviceerror.NewUnavailable(err.Error())
 		}
 		executionInfo, err := convertToExecutionInfo(record, saTypeMap)
 		if err != nil {
-			return nil, serviceerror.NewInternal(err.Error())
+			return nil, serviceerror.NewUnavailable(err.Error())
 		}
 		response.Executions = append(response.Executions, executionInfo)
 	}

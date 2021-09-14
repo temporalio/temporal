@@ -150,7 +150,7 @@ Loop:
 		if !ok {
 			errString := fmt.Sprintf("failed to find in user timer event ID: %v", timerSequenceID.EventID)
 			t.logger.Error(errString)
-			return serviceerror.NewInternal(errString)
+			return serviceerror.NewUnavailable(errString)
 		}
 
 		if expired := timerSequence.IsExpired(referenceTime, timerSequenceID); !expired {
@@ -470,7 +470,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		if scheduledEvent.GetActivityTaskScheduledEventAttributes().GetNamespace() != "" {
 			namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespace(scheduledEvent.GetActivityTaskScheduledEventAttributes().GetNamespace())
 			if err != nil {
-				return serviceerror.NewInternal("unable to re-schedule activity across namespace.")
+				return serviceerror.NewUnavailable("unable to re-schedule activity across namespace.")
 			}
 			targetNamespaceID = namespaceEntry.GetInfo().Id
 		}

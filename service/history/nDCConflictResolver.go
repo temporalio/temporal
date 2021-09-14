@@ -167,7 +167,7 @@ func (r *nDCConflictResolverImpl) rebuild(
 	}
 
 	if !rebuildVersionHistory.Equal(replayVersionHistory) {
-		return nil, serviceerror.NewInternal("nDCConflictResolver encounter mismatch version history after rebuild")
+		return nil, serviceerror.NewUnavailable("nDCConflictResolver encounter mismatch version history after rebuild")
 	}
 
 	// set the current branch index to target branch index

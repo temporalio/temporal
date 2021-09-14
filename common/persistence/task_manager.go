@@ -30,6 +30,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -63,7 +64,7 @@ func (m *taskManagerImpl) GetName() string {
 
 func (m *taskManagerImpl) LeaseTaskQueue(request *LeaseTaskQueueRequest) (*LeaseTaskQueueResponse, error) {
 	if len(request.TaskQueue) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue requires non empty task queue"))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("LeaseTaskQueue requires non empty task queue"))
 	}
 
 	taskQueue, err := m.taskStore.GetTaskQueue(&InternalGetTaskQueueRequest{
@@ -84,7 +85,7 @@ func (m *taskManagerImpl) LeaseTaskQueue(request *LeaseTaskQueueRequest) (*Lease
 		}
 		taskQueueInfo, err := m.serializer.TaskQueueInfoFromBlob(taskQueue.TaskQueueInfo)
 		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("LeaseTaskQueue operation failed during serialization. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("LeaseTaskQueue operation failed during serialization. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
 		}
 
 		taskQueueInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
@@ -212,7 +213,7 @@ func (m *taskManagerImpl) CreateTasks(request *CreateTasksRequest) (*CreateTasks
 	for i, task := range request.Tasks {
 		taskBlob, err := m.serializer.TaskInfoToBlob(task, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", err))
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateTasks operation failed during serialization. Error : %v", err))
 		}
 		tasks[i] = &InternalCreateTask{
 			TaskId:     task.GetTaskId(),
@@ -240,7 +241,7 @@ func (m *taskManagerImpl) GetTasks(request *GetTasksRequest) (*GetTasksResponse,
 	for i, taskBlob := range internalResp.Tasks {
 		task, err := m.serializer.TaskInfoFromBlob(taskBlob)
 		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTasks failed to deserialize task: %s", err.Error()))
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks failed to deserialize task: %s", err.Error()))
 		}
 		tasks[i] = task
 	}

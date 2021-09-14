@@ -101,7 +101,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 ) (MutableState, error) {
 
 	if len(history) == 0 {
-		return nil, serviceerror.NewInternal(ErrMessageHistorySizeZero)
+		return nil, serviceerror.NewUnavailable(ErrMessageHistorySizeZero)
 	}
 	firstEvent := history[0]
 	lastEvent := history[len(history)-1]

@@ -46,7 +46,7 @@ func (t *TestMapper) GetAlias(fieldName string, namespace string) (string, error
 		return "alias_of_" + fieldName, nil
 	}
 	if namespace == "error" {
-		return "", serviceerror.NewInternal("mapper error")
+		return "", serviceerror.NewUnavailable("mapper error")
 	}
 	return fieldName, nil
 }
@@ -56,7 +56,7 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 		return strings.TrimPrefix(alias, "alias_of_"), nil
 	}
 	if namespace == "error" {
-		return "", serviceerror.NewInternal("mapper error")
+		return "", serviceerror.NewUnavailable("mapper error")
 	}
 	return alias, nil
 }
@@ -71,8 +71,8 @@ func Test_ApplyAliases(t *testing.T) {
 	}
 	err := ApplyAliases(&TestMapper{}, sa, "error")
 	assert.Error(t, err)
-	var invalidArgumentErr *serviceerror.Internal
-	assert.ErrorAs(t, err, &invalidArgumentErr)
+	var unavailableErr *serviceerror.Unavailable
+	assert.ErrorAs(t, err, &unavailableErr)
 
 	err = ApplyAliases(&TestMapper{}, sa, "namespace1")
 	assert.NoError(t, err)
@@ -96,8 +96,8 @@ func Test_SubstituteAliases(t *testing.T) {
 	}
 	err := SubstituteAliases(&TestMapper{}, sa, "error")
 	assert.Error(t, err)
-	var invalidArgumentErr *serviceerror.Internal
-	assert.ErrorAs(t, err, &invalidArgumentErr)
+	var unavailablErr *serviceerror.Unavailable
+	assert.ErrorAs(t, err, &unavailablErr)
 
 	err = SubstituteAliases(&TestMapper{}, sa, "namespace1")
 	assert.NoError(t, err)

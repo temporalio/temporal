@@ -236,7 +236,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 	for _, invalidStatus := range invalidStatuses {
 		req.NewWorkflowSnapshot.ExecutionState.Status = invalidStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
-		s.IsType(&serviceerror.Internal{}, err)
+		s.IsType(&serviceerror.Unavailable{}, err)
 	}
 	req.NewWorkflowSnapshot.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err := s.ExecutionManager.CreateWorkflowExecution(req)
@@ -257,7 +257,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 	for _, invalidStatus := range invalidStatuses {
 		req.NewWorkflowSnapshot.ExecutionState.Status = invalidStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
-		s.IsType(&serviceerror.Internal{}, err)
+		s.IsType(&serviceerror.Unavailable{}, err)
 	}
 	req.NewWorkflowSnapshot.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
@@ -278,11 +278,11 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 	for _, invalidStatus := range invalidStatuses {
 		req.NewWorkflowSnapshot.ExecutionState.Status = invalidStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
-		s.IsType(&serviceerror.Internal{}, err)
+		s.IsType(&serviceerror.Unavailable{}, err)
 	}
 	req.NewWorkflowSnapshot.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
-	s.IsType(&serviceerror.Internal{}, err)
+	s.IsType(&serviceerror.Unavailable{}, err)
 
 	// for zombie workflow creation, we must use existing workflow ID which got created
 	// since we do not allow creation of zombie workflow without current record
@@ -297,7 +297,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 	for _, invalidStatus := range invalidStatuses {
 		req.NewWorkflowSnapshot.ExecutionState.Status = invalidStatus
 		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
-		s.IsType(&serviceerror.Internal{}, err)
+		s.IsType(&serviceerror.Unavailable{}, err)
 	}
 	req.NewWorkflowSnapshot.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
@@ -490,7 +490,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 			RangeID: s.ShardInfo.GetRangeId(),
 			Mode:    p.UpdateWorkflowModeUpdateCurrent,
 		})
-		s.IsType(&serviceerror.Internal{}, err)
+		s.IsType(&serviceerror.Unavailable{}, err)
 	}
 
 	updatedInfo = copyWorkflowExecutionInfo(state.ExecutionInfo)
@@ -508,7 +508,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 		RangeID: s.ShardInfo.GetRangeId(),
 		Mode:    p.UpdateWorkflowModeUpdateCurrent,
 	})
-	s.IsType(&serviceerror.Internal{}, err)
+	s.IsType(&serviceerror.Unavailable{}, err)
 
 	for _, status := range statuses {
 		updatedState.Status = status
@@ -583,7 +583,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 			RangeID: s.ShardInfo.GetRangeId(),
 			Mode:    p.UpdateWorkflowModeBypassCurrent,
 		})
-		s.IsType(&serviceerror.Internal{}, err)
+		s.IsType(&serviceerror.Unavailable{}, err)
 	}
 }
 

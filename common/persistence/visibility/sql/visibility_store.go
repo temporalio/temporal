@@ -32,6 +32,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
@@ -310,7 +311,7 @@ func (s *visibilityStore) DeleteWorkflowExecution(
 		RunID:       request.RunID,
 	})
 	if err != nil {
-		return serviceerror.NewInternal(err.Error())
+		return serviceerror.NewUnavailable(err.Error())
 	}
 	return nil
 }
@@ -378,7 +379,7 @@ func (s *visibilityStore) listWorkflowExecutions(
 	}
 	rows, err := selectOp(readLevel)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("%v operation failed. Select failed: %v", opName, err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("%v operation failed. Select failed: %v", opName, err))
 	}
 	if len(rows) == 0 {
 		return &visibility.InternalListWorkflowExecutionsResponse{}, nil
