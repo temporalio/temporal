@@ -29,7 +29,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"strings"
 	"testing"
@@ -1031,6 +1030,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV6() {
 			)
 			return testSearchResult, nil
 		})
+	mockESClientV6.EXPECT().CloseScroll(gomock.Any(), gomock.Any()).Return(nil)
 
 	request := &visibility.ListWorkflowExecutionsRequestV2{
 		NamespaceID: testNamespaceID,
@@ -1053,17 +1053,12 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV6() {
 	scrollID := "scrollID-1"
 	testSearchResult.ScrollId = scrollID
 	mockESClientV6.EXPECT().Scroll(gomock.Any(), scrollID, "1m").Return(testSearchResult, nil)
+	mockESClientV6.EXPECT().CloseScroll(gomock.Any(), gomock.Any()).Return(nil)
 
 	token := &visibilityPageToken{ScrollID: scrollID}
 	tokenBytes, err := s.visibilityStore.serializePageToken(token)
 	s.NoError(err)
 	request.NextPageToken = tokenBytes
-	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
-	s.NoError(err)
-
-	// test last page
-	mockESClientV6.EXPECT().Scroll(gomock.Any(), scrollID, "1m").Return(testSearchResult, io.EOF)
-	mockESClientV6.EXPECT().CloseScroll(gomock.Any(), scrollID).Return(nil)
 	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
 	s.NoError(err)
 
@@ -1093,6 +1088,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7_Scroll() {
 			)
 			return testSearchResult, nil
 		})
+	s.mockESClient.EXPECT().CloseScroll(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockESClient.EXPECT().IsPointInTimeSupported(gomock.Any()).Return(false).AnyTimes()
 
 	request := &visibility.ListWorkflowExecutionsRequestV2{
@@ -1116,17 +1112,12 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7_Scroll() {
 	scrollID := "scrollID-1"
 	testSearchResult.ScrollId = scrollID
 	s.mockESClient.EXPECT().Scroll(gomock.Any(), scrollID, "1m").Return(testSearchResult, nil)
+	s.mockESClient.EXPECT().CloseScroll(gomock.Any(), gomock.Any()).Return(nil)
 
 	token := &visibilityPageToken{ScrollID: scrollID}
 	tokenBytes, err := s.visibilityStore.serializePageToken(token)
 	s.NoError(err)
 	request.NextPageToken = tokenBytes
-	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
-	s.NoError(err)
-
-	// test last page
-	s.mockESClient.EXPECT().Scroll(gomock.Any(), scrollID, "1m").Return(testSearchResult, io.EOF)
-	s.mockESClient.EXPECT().CloseScroll(gomock.Any(), scrollID).Return(nil)
 	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
 	s.NoError(err)
 

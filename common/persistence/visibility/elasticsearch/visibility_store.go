@@ -456,7 +456,7 @@ func (s *visibilityStore) scanWorkflowExecutionsWithPit(ctx context.Context, req
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
 
-	if len(searchResult.Hits.Hits) < request.PageSize {
+	if searchResult.Hits != nil && len(searchResult.Hits.Hits) < request.PageSize {
 		// It is the last page, close PIT.
 		_, err = esClient.ClosePointInTime(ctx, searchResult.PitId)
 		if err != nil {
@@ -464,11 +464,7 @@ func (s *visibilityStore) scanWorkflowExecutionsWithPit(ctx context.Context, req
 		}
 	}
 
-	results, err := s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, nil)
-	if err != nil {
-		return nil, err
-	}
-	return results, nil
+	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, nil)
 }
 
 func (s *visibilityStore) scanWorkflowExecutionsWithScroll(ctx context.Context, request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.InternalListWorkflowExecutionsResponse, error) {
@@ -496,23 +492,19 @@ func (s *visibilityStore) scanWorkflowExecutionsWithScroll(ctx context.Context, 
 		searchResult, scrollErr = s.esClient.Scroll(ctx, token.ScrollID, scrollKeepAliveInterval)
 	}
 
-	if scrollErr == io.EOF {
-		// It is the last page, close scroll.
-		_ = s.esClient.CloseScroll(ctx, searchResult.ScrollId)
-	} else if scrollErr != nil {
+	if scrollErr != nil && scrollErr != io.EOF {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(scrollErr)))
 	}
 
-	results, err := s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, nil)
-	if err != nil {
-		return nil, err
+	if searchResult.Hits != nil && len(searchResult.Hits.Hits) < request.PageSize {
+		// It is the last page, close scroll.
+		err := s.esClient.CloseScroll(ctx, searchResult.ScrollId)
+		if err != nil {
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to close scroll: %s", detailedErrorMessage(err)))
+		}
 	}
 
-	if scrollErr == io.EOF {
-		// It is the last page, close scroll and clear token.
-		results.NextPageToken = nil
-	}
-	return results, nil
+	return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, nil)
 }
 
 func (s *visibilityStore) CountWorkflowExecutions(request *visibility.CountWorkflowExecutionsRequest) (*visibility.CountWorkflowExecutionsResponse, error) {
@@ -663,6 +655,10 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(
 	pageSize int,
 	isRecordValid func(rec *visibility.VisibilityWorkflowExecutionInfo) bool,
 ) (*visibility.InternalListWorkflowExecutionsResponse, error) {
+
+	if searchResult.Hits == nil || len(searchResult.Hits.Hits) == 0 {
+		return &visibility.InternalListWorkflowExecutionsResponse{}, nil
+	}
 
 	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
 	if err != nil {
@@ -948,8 +944,4 @@ func detailedErrorMessage(err error) string {
 		}
 	}
 	return sb.String()
-}
-
-func isPointInTimeAvailable() {
-
 }
