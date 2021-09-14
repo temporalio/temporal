@@ -140,29 +140,30 @@ func (c *clientV6) Search(ctx context.Context, p *SearchParameters) (*elastic.Se
 	return convertV6SearchResultToV7(searchResult), nil
 }
 
-func (c *clientV6) SearchWithDSL(ctx context.Context, index, query string) (*elastic.SearchResult, error) {
-	searchResult, err := c.esClient.Search(index).Source(query).Do(ctx)
-	return convertV6SearchResultToV7(searchResult), convertV6ErrorToV7(err)
-}
-
-func (c *clientV6) Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, ScrollService, error) {
-	scrollService := elastic6.NewScrollService(c.esClient)
-	result, err := scrollService.ScrollId(scrollID).Do(ctx)
-	return convertV6SearchResultToV7(result), scrollService, convertV6ErrorToV7(err)
-}
-
-func (c *clientV6) ScrollFirstPage(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, ScrollService, error) {
+func (c *clientV6) OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error) {
 	scrollService := elastic6.NewScrollService(c.esClient).
 		Index(p.Index).
 		Query(p.Query).
-		SortBy(convertV7SortersToV6(p.Sorter)...)
+		SortBy(convertV7SortersToV6(p.Sorter)...).
+		KeepAlive(keepAliveInterval)
 
 	if p.PageSize != 0 {
 		scrollService.Size(p.PageSize)
 	}
 
 	searchResult, err := scrollService.Do(ctx)
-	return convertV6SearchResultToV7(searchResult), scrollService, convertV6ErrorToV7(err)
+	return convertV6SearchResultToV7(searchResult), convertV6ErrorToV7(err)
+}
+
+func (c *clientV6) Scroll(ctx context.Context, scrollID string, keepAliveInterval string) (*elastic.SearchResult, error) {
+	scrollService := elastic6.NewScrollService(c.esClient)
+	result, err := scrollService.ScrollId(scrollID).KeepAlive(keepAliveInterval).Do(ctx)
+	return convertV6SearchResultToV7(result), convertV6ErrorToV7(err)
+}
+
+func (c *clientV6) CloseScroll(ctx context.Context, id string) error {
+	err := elastic6.NewScrollService(c.esClient).ScrollId(id).Clear(ctx)
+	return convertV6ErrorToV7(err)
 }
 
 func (c *clientV6) Count(ctx context.Context, index string, query elastic.Query) (int64, error) {
