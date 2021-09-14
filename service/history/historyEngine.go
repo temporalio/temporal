@@ -1261,10 +1261,12 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			requestID := request.GetRequestId()
 			ai, isRunning := mutableState.GetActivityInfo(scheduleID)
 
+			metricsScope := e.metricsClient.Scope(metrics.HistoryRecordActivityTaskStartedScope)
+
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduleID >= mutableState.GetNextEventID() {
-				e.metricsClient.IncCounter(metrics.HistoryRecordActivityTaskStartedScope, metrics.StaleMutableStateCounter)
+				metricsScope.IncCounter(metrics.StaleMutableStateCounter)
 				return nil, consts.ErrStaleState
 			}
 
@@ -1306,6 +1308,14 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			); err != nil {
 				return nil, err
 			}
+
+			scheduleToStartLatency := ai.GetStartedTime().Sub(*ai.GetScheduledTime())
+			namespaceName := namespaceEntry.GetInfo().GetName()
+			taskQueueName := ai.GetTaskQueue()
+
+			metrics.GetPerTaskQueueScope(metricsScope, namespaceName, taskQueueName, enumspb.TASK_QUEUE_KIND_NORMAL).
+				Tagged(metrics.TaskTypeTag("activity")).
+				RecordTimer(metrics.TaskScheduleToStartLatency, scheduleToStartLatency)
 
 			response.StartedTime = ai.StartedTime
 			response.Attempt = ai.Attempt

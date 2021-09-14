@@ -16,45 +16,31 @@
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package matching
+package metrics
 
-import (
-	"context"
+import enumspb "go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-)
-
-type handlerContext struct {
-	context.Context
-	scope  metrics.Scope
-	logger log.Logger
-}
-
-func newHandlerContext(
-	ctx context.Context,
-	namespace string,
-	taskQueue *taskqueuepb.TaskQueue,
-	metricsClient metrics.Client,
-	metricsScope int,
-	logger log.Logger,
-) *handlerContext {
-	return &handlerContext{
-		Context: ctx,
-		scope: metrics.GetPerTaskQueueScope(
-			metricsClient.Scope(metricsScope),
-			namespace,
-			taskQueue.GetName(),
-			taskQueue.GetKind(),
-		),
-		logger: logger,
+func GetPerTaskQueueScope(
+	baseScope Scope,
+	namespaceName string,
+	taskQueueName string,
+	taskQueueKind enumspb.TaskQueueKind,
+) Scope {
+	var metricTaskQueueName string
+	switch taskQueueKind {
+	case enumspb.TASK_QUEUE_KIND_NORMAL:
+		metricTaskQueueName = taskQueueName
+	case enumspb.TASK_QUEUE_KIND_STICKY:
+		metricTaskQueueName = "__sticky__"
+	default:
+		metricTaskQueueName = unknownValue
 	}
+
+	return baseScope.Tagged(NamespaceTag(namespaceName), TaskQueueTag(metricTaskQueueName))
 }
