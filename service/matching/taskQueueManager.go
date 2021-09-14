@@ -190,13 +190,13 @@ func newTaskQueueManager(
 	tlMgr.namespaceValue.Store("")
 	if tlMgr.metricScope() == nil { // namespace name lookup failed
 		// metric scope to use when namespace lookup fails
-		tlMgr.metricScopeValue.Store(newPerTaskQueueScope(
-			"",
-			tlMgr.taskQueueID.name,
-			tlMgr.taskQueueKind,
-			e.metricsClient,
-			metrics.MatchingTaskQueueMgrScope,
-		))
+		tlMgr.metricScopeValue.Store(
+			metrics.GetPerTaskQueueScope(
+				e.metricsClient.Scope(metrics.MatchingTaskQueueMgrScope),
+				"",
+				tlMgr.taskQueueID.name,
+				tlMgr.taskQueueKind,
+			))
 	}
 
 	tlMgr.liveness = newLiveness(clock.NewRealTimeSource(), taskQueueConfig.IdleTaskqueueCheckInterval(), tlMgr.Stop)
@@ -590,13 +590,7 @@ func (c *taskQueueManagerImpl) tryInitNamespaceAndScope() {
 
 	namespace = entry.GetInfo().Name
 
-	scope := newPerTaskQueueScope(
-		namespace,
-		c.taskQueueID.name,
-		c.taskQueueKind,
-		c.metricsClient,
-		metrics.MatchingTaskQueueMgrScope,
-	)
+	scope := metrics.GetPerTaskQueueScope(c.metricsClient.Scope(metrics.MatchingTaskQueueMgrScope), namespace, c.taskQueueID.name, c.taskQueueKind)
 
 	c.metricScopeValue.Store(scope)
 	c.namespaceValue.Store(namespace)
