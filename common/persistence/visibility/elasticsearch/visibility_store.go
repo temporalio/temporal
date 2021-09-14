@@ -55,6 +55,7 @@ const (
 
 	delimiter                    = "~"
 	pointInTimeKeepAliveInterval = "1m"
+	scrollKeepAliveInterval      = "1m"
 	defaultPageSize              = 1000
 )
 
@@ -73,9 +74,9 @@ type (
 		SearchAfter []interface{}
 
 		// For ScanWorkflowExecutions API.
-		// Deprecated. Remove after ES v6 support removal.
+		// For ES<7.10.0 and "oss" flavor.
 		ScrollID string
-		// Not supported in ES v6.
+		// For ES>=7.10.0 and "default" flavor.
 		PointInTimeID string
 	}
 )
@@ -388,10 +389,18 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(request *visibili
 }
 
 func (s *visibilityStore) ListWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.InternalListWorkflowExecutionsResponse, error) {
-
 	p, err := s.buildSearchParametersV2(request)
 	if err != nil {
 		return nil, err
+	}
+
+	token, err := s.deserializePageToken(request.NextPageToken)
+	if err != nil {
+		return nil, err
+	}
+
+	if token != nil && len(token.SearchAfter) > 0 {
+		p.SearchAfter = token.SearchAfter
 	}
 
 	ctx := context.Background()
@@ -404,77 +413,106 @@ func (s *visibilityStore) ListWorkflowExecutions(request *visibility.ListWorkflo
 }
 
 func (s *visibilityStore) ScanWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.InternalListWorkflowExecutionsResponse, error) {
-
 	ctx := context.Background()
-	switch esClient := s.esClient.(type) {
-	case client.ClientV7:
-		// Elasticsearch V7 uses "point in time" (PIT) instead of scroll to scan over all workflows without skipping them.
-		// https://www.elastic.co/guide/en/elasticsearch/reference/7.13/point-in-time-api.html
 
+	if esClientV7, isV7 := s.esClient.(client.ClientV7); isV7 {
+		// Elasticsearch 7.10+ can use "point in time" (PIT) instead of scroll to scan over all workflows without skipping or duplicating them.
+		// https://www.elastic.co/guide/en/elasticsearch/reference/7.10/point-in-time-api.html
+		if esClientV7.IsPointInTimeSupported(ctx) {
+			return s.scanWorkflowExecutionsWithPit(ctx, request, esClientV7)
+		}
+	}
+
+	return s.scanWorkflowExecutionsWithScroll(ctx, request)
+}
+
+func (s *visibilityStore) scanWorkflowExecutionsWithPit(ctx context.Context, request *visibility.ListWorkflowExecutionsRequestV2, esClient client.ClientV7) (*visibility.InternalListWorkflowExecutionsResponse, error) {
+	p, err := s.buildSearchParametersV2(request)
+	if err != nil {
+		return nil, err
+	}
+
+	// First call doesn't have token with PointInTimeID.
+	if len(request.NextPageToken) == 0 {
+		pitID, err := esClient.OpenPointInTime(ctx, s.index, pointInTimeKeepAliveInterval)
+		if err != nil {
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to create point in time: %s", detailedErrorMessage(err)))
+		}
+		p.PointInTime = elastic.NewPointInTimeWithKeepAlive(pitID, pointInTimeKeepAliveInterval)
+	} else {
+		token, err := s.deserializePageToken(request.NextPageToken)
+		if err != nil {
+			return nil, err
+		}
+		if token.PointInTimeID == "" {
+			return nil, serviceerror.NewInvalidArgument("pointInTimeId must present in pagination token")
+		}
+		p.SearchAfter = token.SearchAfter
+		p.PointInTime = elastic.NewPointInTimeWithKeepAlive(token.PointInTimeID, pointInTimeKeepAliveInterval)
+	}
+
+	searchResult, err := esClient.Search(ctx, p)
+	if err != nil {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
+	}
+
+	if len(searchResult.Hits.Hits) < request.PageSize {
+		// It is the last page, close PIT.
+		_, err = esClient.ClosePointInTime(ctx, searchResult.PitId)
+		if err != nil {
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to close point in time: %s", detailedErrorMessage(err)))
+		}
+	}
+
+	results, err := s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, nil)
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func (s *visibilityStore) scanWorkflowExecutionsWithScroll(ctx context.Context, request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.InternalListWorkflowExecutionsResponse, error) {
+	var (
+		searchResult *elastic.SearchResult
+		scrollErr    error
+	)
+
+	// First call doesn't have token with ScrollID.
+	if len(request.NextPageToken) == 0 {
+		// First page.
 		p, err := s.buildSearchParametersV2(request)
 		if err != nil {
 			return nil, err
 		}
-
-		// First call doesn't have token with PointInTimeID.
-		if p.PointInTime == nil {
-			pointInTimeID, err := esClient.OpenPointInTime(ctx, s.index, pointInTimeKeepAliveInterval)
-			if err != nil {
-				return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to create point in time: %s", detailedErrorMessage(err)))
-			}
-			p.PointInTime = elastic.NewPointInTimeWithKeepAlive(pointInTimeID, pointInTimeKeepAliveInterval)
-		}
-
-		searchResult, err := esClient.Search(ctx, p)
+		searchResult, scrollErr = s.esClient.OpenScroll(ctx, p, scrollKeepAliveInterval)
+	} else {
+		token, err := s.deserializePageToken(request.NextPageToken)
 		if err != nil {
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
+			return nil, err
 		}
-
-		if len(searchResult.Hits.Hits) < request.PageSize {
-			// It is the last page, close PIT.
-			_, err = esClient.ClosePointInTime(ctx, searchResult.PitId)
-			if err != nil {
-				return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to close point in time: %s", detailedErrorMessage(err)))
-			}
+		if token.ScrollID == "" {
+			return nil, serviceerror.NewInvalidArgument("scrollId must present in pagination token")
 		}
-		return s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, nil)
-	case client.ClientV6:
-		var (
-			searchResult  *elastic.SearchResult
-			scrollService esclient.ScrollService
-			scrollErr     error
-		)
-
-		// First call doesn't have token with ScrollID.
-		if len(request.NextPageToken) == 0 {
-			// First page.
-			p, err := s.buildSearchParametersV2(request)
-			if err != nil {
-				return nil, err
-			}
-			searchResult, scrollService, scrollErr = esClient.ScrollFirstPage(ctx, p)
-		} else {
-			token, err := s.deserializePageToken(request.NextPageToken)
-			if err != nil {
-				return nil, err
-			}
-			if token.ScrollID == "" {
-				return nil, serviceerror.NewInvalidArgument("scrollId must present in pagination token")
-			}
-			searchResult, scrollService, scrollErr = esClient.Scroll(ctx, token.ScrollID)
-		}
-
-		isLastPage := false
-		if scrollErr == io.EOF { // no more result
-			isLastPage = true
-			_ = scrollService.Clear(context.Background())
-		} else if scrollErr != nil {
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(scrollErr)))
-		}
-		return s.getScrollWorkflowExecutionsResponse(searchResult.Hits, request.Namespace, request.PageSize, searchResult.ScrollId, isLastPage)
-	default:
-		panic("esClient has unsupported type")
+		searchResult, scrollErr = s.esClient.Scroll(ctx, token.ScrollID, scrollKeepAliveInterval)
 	}
+
+	if scrollErr == io.EOF {
+		// It is the last page, close scroll.
+		_ = s.esClient.CloseScroll(ctx, searchResult.ScrollId)
+	} else if scrollErr != nil {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(scrollErr)))
+	}
+
+	results, err := s.getListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if scrollErr == io.EOF {
+		// It is the last page, close scroll and clear token.
+		results.NextPageToken = nil
+	}
+	return results, nil
 }
 
 func (s *visibilityStore) CountWorkflowExecutions(request *visibility.CountWorkflowExecutionsRequest) (*visibility.CountWorkflowExecutionsResponse, error) {
@@ -554,11 +592,6 @@ func (s *visibilityStore) buildSearchParametersV2(
 	request *visibility.ListWorkflowExecutionsRequestV2,
 ) (*client.SearchParameters, error) {
 
-	token, err := s.deserializePageToken(request.NextPageToken)
-	if err != nil {
-		return nil, err
-	}
-
 	boolQuery, fieldSorts, err := s.convertQuery(request.Namespace, request.NamespaceID, request.Query)
 	if err != nil {
 		return nil, err
@@ -573,15 +606,6 @@ func (s *visibilityStore) buildSearchParametersV2(
 
 	if request.PageSize == 0 {
 		params.PageSize = defaultPageSize
-	}
-
-	if token != nil {
-		if len(token.SearchAfter) > 0 {
-			params.SearchAfter = token.SearchAfter
-		}
-		if token.PointInTimeID != "" {
-			params.PointInTime = elastic.NewPointInTimeWithKeepAlive(token.PointInTimeID, pointInTimeKeepAliveInterval)
-		}
 	}
 
 	return params, nil
@@ -633,40 +657,6 @@ func (s *visibilityStore) setDefaultFieldSort(fieldSorts []*elastic.FieldSort) [
 	return res
 }
 
-func (s *visibilityStore) getScrollWorkflowExecutionsResponse(
-	searchHits *elastic.SearchHits,
-	namespace string,
-	pageSize int,
-	scrollID string,
-	isLastPage bool,
-) (*visibility.InternalListWorkflowExecutionsResponse, error) {
-
-	typeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
-	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
-	}
-
-	response := &visibility.InternalListWorkflowExecutionsResponse{}
-	response.Executions = make([]*visibility.VisibilityWorkflowExecutionInfo, len(searchHits.Hits))
-	for i := 0; i < len(searchHits.Hits); i++ {
-		response.Executions[i], err = s.parseESDoc(searchHits.Hits[i], typeMap, namespace)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if len(searchHits.Hits) == pageSize && !isLastPage {
-		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
-			ScrollID: scrollID,
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return response, nil
-}
-
 func (s *visibilityStore) getListWorkflowExecutionsResponse(
 	searchResult *elastic.SearchResult,
 	namespace string,
@@ -702,6 +692,7 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(
 		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
 			SearchAfter:   lastHitSort,
 			PointInTimeID: searchResult.PitId,
+			ScrollID:      searchResult.ScrollId,
 		})
 		if err != nil {
 			return nil, err
@@ -957,4 +948,8 @@ func detailedErrorMessage(err error) string {
 		}
 	}
 	return sb.String()
+}
+
+func isPointInTimeAvailable() {
+
 }
