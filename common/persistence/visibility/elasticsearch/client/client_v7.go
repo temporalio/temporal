@@ -29,7 +29,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/blang/semver/v4"
@@ -42,9 +42,11 @@ import (
 type (
 	// clientV7 implements Client
 	clientV7 struct {
-		esClient               *elastic.Client
-		url                    url.URL
-		isPointInTimeSupported atomic.Value
+		esClient *elastic.Client
+		url      url.URL
+
+		initIsPointInTimeSupported sync.Once
+		isPointInTimeSupported     bool
 	}
 )
 
@@ -182,12 +184,10 @@ func (c *clientV7) CloseScroll(ctx context.Context, id string) error {
 }
 
 func (c *clientV7) IsPointInTimeSupported(ctx context.Context) bool {
-	isPointInTimeSupported := c.isPointInTimeSupported.Load()
-	if isPointInTimeSupported == nil {
-		isPointInTimeSupported = c.queryPointInTimeSupported(ctx)
-		c.isPointInTimeSupported.Store(isPointInTimeSupported)
-	}
-	return isPointInTimeSupported.(bool)
+	c.initIsPointInTimeSupported.Do(func() {
+		c.isPointInTimeSupported = c.queryPointInTimeSupported(ctx)
+	})
+	return c.isPointInTimeSupported
 }
 
 func (c *clientV7) queryPointInTimeSupported(ctx context.Context) bool {
