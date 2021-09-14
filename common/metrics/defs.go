@@ -83,8 +83,8 @@ const (
 	ServiceRoleTagName = "service_role"
 	StatsTypeTagName   = "stats_type"
 	CacheTypeTagName   = "cache_type"
-	FailureTagName  = "failure"
-	TaskTypeTagName = "task_type"
+	FailureTagName     = "failure"
+	TaskTypeTagName    = "task_type"
 )
 
 // This package should hold all the metrics and tags for temporal
