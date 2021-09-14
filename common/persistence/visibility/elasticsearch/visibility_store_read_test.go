@@ -29,6 +29,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"strings"
 	"testing"
@@ -1062,6 +1063,12 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV6() {
 	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
 	s.NoError(err)
 
+	// test io.EOF error
+	mockESClientV6.EXPECT().Scroll(gomock.Any(), scrollID, "1m").Return(testSearchResult, io.EOF)
+	mockESClientV6.EXPECT().CloseScroll(gomock.Any(), gomock.Any()).Return(nil)
+	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
+	s.NoError(err)
+
 	// test unavailable error
 	mockESClientV6.EXPECT().Scroll(gomock.Any(), scrollID, "1m").Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
@@ -1118,6 +1125,12 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7_Scroll() {
 	tokenBytes, err := s.visibilityStore.serializePageToken(token)
 	s.NoError(err)
 	request.NextPageToken = tokenBytes
+	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
+	s.NoError(err)
+
+	// test io.EOF error
+	s.mockESClient.EXPECT().Scroll(gomock.Any(), scrollID, "1m").Return(testSearchResult, io.EOF)
+	s.mockESClient.EXPECT().CloseScroll(gomock.Any(), gomock.Any()).Return(nil)
 	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
 	s.NoError(err)
 

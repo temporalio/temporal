@@ -456,8 +456,8 @@ func (s *visibilityStore) scanWorkflowExecutionsWithPit(ctx context.Context, req
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
 
+	// Empty hits list indicate that this is a last page.
 	if searchResult.Hits != nil && len(searchResult.Hits.Hits) < request.PageSize {
-		// It is the last page, close PIT.
 		_, err = esClient.ClosePointInTime(ctx, searchResult.PitId)
 		if err != nil {
 			return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to close point in time: %s", detailedErrorMessage(err)))
@@ -496,8 +496,9 @@ func (s *visibilityStore) scanWorkflowExecutionsWithScroll(ctx context.Context, 
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ScanWorkflowExecutions failed. Error: %s", detailedErrorMessage(scrollErr)))
 	}
 
-	if searchResult.Hits != nil && len(searchResult.Hits.Hits) < request.PageSize {
-		// It is the last page, close scroll.
+	// Both io.IOF and empty hits list indicate that this is a last page.
+	if (searchResult.Hits != nil && len(searchResult.Hits.Hits) < request.PageSize) ||
+		scrollErr == io.EOF {
 		err := s.esClient.CloseScroll(ctx, searchResult.ScrollId)
 		if err != nil {
 			return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to close scroll: %s", detailedErrorMessage(err)))
