@@ -594,7 +594,7 @@ func createTransferTasks(
 			// No explicit property needs to be set
 
 		default:
-			return serviceerror.NewInternal(fmt.Sprintf("Unknow transfer type: %v", task.GetType()))
+			return serviceerror.NewUnavailable(fmt.Sprintf("Unknow transfer type: %v", task.GetType()))
 		}
 
 		transferTaskInfo := &persistencespb.TransferTaskInfo{
@@ -663,7 +663,7 @@ func createReplicationTasks(
 			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
 
 		default:
-			return serviceerror.NewInternal(fmt.Sprintf("Unknow replication type: %v", task.GetType()))
+			return serviceerror.NewUnavailable(fmt.Sprintf("Unknow replication type: %v", task.GetType()))
 		}
 
 		datablob, err := serialization.ReplicationTaskInfoToBlob(&persistencespb.ReplicationTaskInfo{
@@ -736,7 +736,7 @@ func createVisibilityTasks(
 			// noop
 
 		default:
-			return serviceerror.NewInternal(fmt.Sprintf("createVisibilityTasks failed. Unknow visibility type: %v", task.GetType()))
+			return serviceerror.NewUnavailable(fmt.Sprintf("createVisibilityTasks failed. Unknow visibility type: %v", task.GetType()))
 		}
 
 		batch.Query(templateCreateVisibilityTaskQuery,
@@ -798,7 +798,7 @@ func createTimerTasks(
 			// noop
 
 		default:
-			return serviceerror.NewInternal(fmt.Sprintf("Unknow timer type: %v", task.GetType()))
+			return serviceerror.NewUnavailable(fmt.Sprintf("Unknow timer type: %v", task.GetType()))
 		}
 
 		// Ignoring possible type cast errors.

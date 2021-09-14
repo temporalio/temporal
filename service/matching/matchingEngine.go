@@ -536,7 +536,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		case enumspb.QUERY_RESULT_TYPE_FAILED:
 			return nil, serviceerror.NewQueryFailed(workerResponse.GetCompletedRequest().GetErrorMessage())
 		default:
-			return nil, serviceerror.NewInternal("unknown query completed type")
+			return nil, serviceerror.NewUnavailable("unknown query completed type")
 		}
 	case <-hCtx.Done():
 		return nil, hCtx.Err()
@@ -702,16 +702,17 @@ func (e *matchingEngineImpl) getTask(
 	return tlMgr.GetTask(ctx, maxDispatchPerSecond)
 }
 
-func (e *matchingEngineImpl) unloadTaskQueue(id *taskQueueID) {
+func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
+	queueID := unloadTQM.QueueID()
 	e.taskQueuesLock.Lock()
-	tlMgr, ok := e.taskQueues[*id]
-	if ok {
-		delete(e.taskQueues, *id)
+	foundTQM, ok := e.taskQueues[*queueID]
+	if !ok || foundTQM != unloadTQM {
+		e.taskQueuesLock.Unlock()
+		return
 	}
+	delete(e.taskQueues, *queueID)
 	e.taskQueuesLock.Unlock()
-	if ok {
-		tlMgr.Stop()
-	}
+	foundTQM.Stop()
 }
 
 // Populate the workflow task response based on context and scheduled/started events.

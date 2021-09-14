@@ -73,7 +73,7 @@ var (
 	errFailureMustHaveApplicationFailureInfo              = serviceerror.NewInvalidArgument("Failure must have ApplicationFailureInfo.")
 	errStatusFilterMustBeNotRunning                       = serviceerror.NewInvalidArgument("StatusFilter must be specified and must be not Running.")
 	errTokenNamespaceMismatch                             = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
-	errShuttingDown                                       = serviceerror.NewInternal("Shutting down")
+	errShuttingDown                                       = serviceerror.NewUnavailable("Shutting down")
 
 	errPageSizeTooBigMessage = "PageSize is larger than allowed %d."
 

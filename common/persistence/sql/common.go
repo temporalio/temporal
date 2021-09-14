@@ -66,7 +66,7 @@ func (m *SqlStore) Close() {
 func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sqlplugin.Tx) error) error {
 	tx, err := m.Db.BeginTx(ctx)
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("%s failed. Failed to start transaction. Error: %v", operation, err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("%s failed. Failed to start transaction. Error: %v", operation, err))
 	}
 	err = f(tx)
 	if err != nil {
@@ -81,14 +81,14 @@ func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sq
 			*persistence.WorkflowConditionFailedError,
 			*serviceerror.NamespaceAlreadyExists,
 			*persistence.ShardOwnershipLostError,
-			*serviceerror.Internal:
+			*serviceerror.Unavailable:
 			return err
 		default:
-			return serviceerror.NewInternal(fmt.Sprintf("%v: %v", operation, err))
+			return serviceerror.NewUnavailable(fmt.Sprintf("%v: %v", operation, err))
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("%s operation failed. Failed to commit transaction. Error: %v", operation, err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("%s operation failed. Failed to commit transaction. Error: %v", operation, err))
 	}
 	return nil
 }
@@ -98,7 +98,7 @@ func gobSerialize(x interface{}) ([]byte, error) {
 	e := gob.NewEncoder(&b)
 	err := e.Encode(x)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Error in serialization: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Error in serialization: %v", err))
 	}
 	return b.Bytes(), nil
 }
@@ -109,7 +109,7 @@ func gobDeserialize(a []byte, x interface{}) error {
 	err := d.Decode(x)
 
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("Error in deserialization: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Error in deserialization: %v", err))
 	}
 	return nil
 }
@@ -135,5 +135,5 @@ func convertCommonErrors(
 		return serviceerror.NewNotFound(fmt.Sprintf("%v failed. Error: %v ", operation, err))
 	}
 
-	return serviceerror.NewInternal(fmt.Sprintf("%v operation failed. Error: %v", operation, err))
+	return serviceerror.NewUnavailable(fmt.Sprintf("%v operation failed. Error: %v", operation, err))
 }

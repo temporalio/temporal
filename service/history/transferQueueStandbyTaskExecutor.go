@@ -537,9 +537,9 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			0,
 		)
 	} else {
-		err = &serviceerror.Internal{
-			Message: "transferQueueStandbyProcessor encounter empty historyResendInfo",
-		}
+		err = serviceerror.NewUnavailable(
+			"transferQueueStandbyProcessor encounter empty historyResendInfo",
+		)
 	}
 
 	if err != nil {

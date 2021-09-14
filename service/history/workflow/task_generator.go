@@ -209,7 +209,7 @@ func (r *TaskGeneratorImpl) GenerateDelayedWorkflowTasks(
 	case enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW:
 		workflowBackoffType = enumsspb.WORKFLOW_BACKOFF_TYPE_CRON
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("unknown initiator: %v", startAttr.GetInitiator()))
+		return serviceerror.NewUnavailable(fmt.Sprintf("unknown initiator: %v", startAttr.GetInitiator()))
 	}
 
 	r.mutableState.AddTimerTasks(&persistence.WorkflowBackoffTimerTask{
@@ -247,7 +247,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		workflowTaskScheduleID,
 	)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduleID))
+		return serviceerror.NewUnavailable(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduleID))
 	}
 
 	r.mutableState.AddTransferTasks(&persistence.WorkflowTask{
@@ -285,7 +285,7 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 		workflowTaskScheduleID,
 	)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflowTaskInfo: %v", workflowTaskScheduleID))
+		return serviceerror.NewUnavailable(fmt.Sprintf("it could be a bug, cannot get pending workflowTaskInfo: %v", workflowTaskScheduleID))
 	}
 
 	startedTime := timestamp.TimeValue(workflowTask.StartedTime)
@@ -313,7 +313,7 @@ func (r *TaskGeneratorImpl) GenerateActivityTransferTasks(
 
 	activityInfo, ok := r.mutableState.GetActivityInfo(activityScheduleID)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduleID))
+		return serviceerror.NewUnavailable(fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduleID))
 	}
 
 	var targetNamespaceID string
@@ -349,7 +349,7 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(
 
 	ai, ok := r.mutableState.GetActivityInfo(activityScheduleID)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduleID))
+		return serviceerror.NewUnavailable(fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduleID))
 	}
 
 	r.mutableState.AddTimerTasks(&persistence.ActivityRetryTimerTask{
@@ -373,7 +373,7 @@ func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
 
 	childWorkflowInfo, ok := r.mutableState.GetChildExecutionInfo(childWorkflowScheduleID)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending child workflow: %v", childWorkflowScheduleID))
+		return serviceerror.NewUnavailable(fmt.Sprintf("it could be a bug, cannot get pending child workflow: %v", childWorkflowScheduleID))
 	}
 
 	targetNamespaceID, err := r.getTargetNamespaceID(childWorkflowTargetNamespace)
@@ -408,7 +408,7 @@ func (r *TaskGeneratorImpl) GenerateRequestCancelExternalTasks(
 
 	_, ok := r.mutableState.GetRequestCancelInfo(scheduleID)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending request cancel external workflow: %v", scheduleID))
+		return serviceerror.NewUnavailable(fmt.Sprintf("it could be a bug, cannot get pending request cancel external workflow: %v", scheduleID))
 	}
 
 	targetNamespaceID, err := r.getTargetNamespaceID(targetNamespace)
@@ -445,7 +445,7 @@ func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 
 	_, ok := r.mutableState.GetSignalInfo(scheduleID)
 	if !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending signal external workflow: %v", scheduleID))
+		return serviceerror.NewUnavailable(fmt.Sprintf("it could be a bug, cannot get pending signal external workflow: %v", scheduleID))
 	}
 
 	targetNamespaceID, err := r.getTargetNamespaceID(targetNamespace)

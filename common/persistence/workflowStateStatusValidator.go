@@ -68,7 +68,7 @@ func ValidateCreateWorkflowStateStatus(
 
 	// validate workflow state & status
 	if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED || status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		return serviceerror.NewInternal(fmt.Sprintf("Create workflow with invalid state: %v or status: %v", state, status))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Create workflow with invalid state: %v or status: %v", state, status))
 	}
 	return nil
 }
@@ -89,7 +89,7 @@ func ValidateUpdateWorkflowStateStatus(
 	// validate workflow state & status
 	if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or status: %v", state, status))
+			return serviceerror.NewUnavailable(fmt.Sprintf("Update workflow with invalid state: %v or status: %v", state, status))
 		}
 	} else {
 		// enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
@@ -99,7 +99,7 @@ func ValidateUpdateWorkflowStateStatus(
 		// enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
 		// enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT
 		if state != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-			return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or status: %v", state, status))
+			return serviceerror.NewUnavailable(fmt.Sprintf("Update workflow with invalid state: %v or status: %v", state, status))
 		}
 	}
 	return nil
@@ -111,7 +111,7 @@ func validateWorkflowState(
 ) error {
 
 	if _, ok := validWorkflowStates[state]; !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("Invalid workflow state: %v", state))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Invalid workflow state: %v", state))
 	}
 
 	return nil
@@ -123,7 +123,7 @@ func validateWorkflowStatus(
 ) error {
 
 	if _, ok := validWorkflowStatuses[status]; !ok {
-		return serviceerror.NewInternal(fmt.Sprintf("Invalid workflow status: %v", status))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Invalid workflow status: %v", status))
 	}
 
 	return nil

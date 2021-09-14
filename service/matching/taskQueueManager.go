@@ -108,6 +108,7 @@ type (
 		// DescribeTaskQueue returns information about the target task queue
 		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		String() string
+		QueueID() *taskQueueID
 	}
 
 	// Single task queue in memory state
@@ -139,7 +140,7 @@ type (
 		outstandingPollsLock sync.Mutex
 		outstandingPollsMap  map[string]context.CancelFunc
 		shutdownCh           chan struct{} // Delivers stop to the pump that populates taskBuffer
-		signalFatalProblem   func(id *taskQueueID)
+		signalFatalProblem   func(taskQueueManager)
 	}
 )
 
@@ -471,7 +472,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 				tag.Error(err),
 				tag.WorkflowTaskQueueName(c.taskQueueID.name),
 				tag.WorkflowTaskQueueType(c.taskQueueID.taskType))
-			c.signalFatalProblem(c.taskQueueID)
+			c.signalFatalProblem(c)
 			return
 		}
 		c.taskReader.Signal()
@@ -593,4 +594,8 @@ func (c *taskQueueManagerImpl) tryInitNamespaceAndScope() {
 
 	c.metricScopeValue.Store(scope)
 	c.namespaceValue.Store(namespace)
+}
+
+func (c *taskQueueManagerImpl) QueueID() *taskQueueID {
+	return c.taskQueueID
 }

@@ -502,7 +502,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		startRequest,
 	)
 	if err != nil {
-		return nil, serviceerror.NewInternal("Failed to add workflow execution started event.")
+		return nil, serviceerror.NewUnavailable("Failed to add workflow execution started event.")
 	}
 
 	// Generate first workflow task event if not child WF and no first workflow task backoff
@@ -525,7 +525,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		return nil, err
 	}
 	if len(newWorkflowEventsSeq) != 1 {
-		return nil, serviceerror.NewInternal("unable to create 1st event batch")
+		return nil, serviceerror.NewUnavailable("unable to create 1st event batch")
 	}
 
 	// create as brand new
@@ -1428,7 +1428,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 
 			if _, err := mutableState.AddActivityTaskCompletedEvent(scheduleID, ai.StartedId, request); err != nil {
 				// Unable to add ActivityTaskCompleted event to history
-				return nil, serviceerror.NewInternal("Unable to add ActivityTaskCompleted event to history.")
+				return nil, serviceerror.NewUnavailable("Unable to add ActivityTaskCompleted event to history.")
 			}
 			activityStartedTime = *ai.StartedTime
 			taskQueue = ai.TaskQueue
@@ -1516,7 +1516,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 				// no more retry, and we want to record the failure event
 				if _, err := mutableState.AddActivityTaskFailedEvent(scheduleID, ai.StartedId, failure, retryState, request.GetIdentity()); err != nil {
 					// Unable to add ActivityTaskFailed event to history
-					return nil, serviceerror.NewInternal("Unable to add ActivityTaskFailed event to history.")
+					return nil, serviceerror.NewUnavailable("Unable to add ActivityTaskFailed event to history.")
 				}
 				postActions.createWorkflowTask = true
 			}
@@ -1603,7 +1603,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 				request.Details,
 				request.Identity); err != nil {
 				// Unable to add ActivityTaskCanceled event to history
-				return nil, serviceerror.NewInternal("Unable to add ActivityTaskCanceled event to history.")
+				return nil, serviceerror.NewUnavailable("Unable to add ActivityTaskCanceled event to history.")
 			}
 
 			activityStartedTime = *ai.StartedTime
@@ -1769,7 +1769,7 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 			}
 
 			if _, err := mutableState.AddWorkflowExecutionCancelRequestedEvent(req); err != nil {
-				return nil, serviceerror.NewInternal("Unable to cancel workflow execution.")
+				return nil, serviceerror.NewUnavailable("Unable to cancel workflow execution.")
 			}
 
 			return updateWorkflowWithNewWorkflowTask, nil
@@ -1843,7 +1843,7 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 				request.GetSignalName(),
 				request.GetInput(),
 				request.GetIdentity()); err != nil {
-				return nil, serviceerror.NewInternal("Unable to signal workflow execution.")
+				return nil, serviceerror.NewUnavailable("Unable to signal workflow execution.")
 			}
 
 			return &updateWorkflowAction{
@@ -1912,14 +1912,14 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 				sRequest.GetSignalName(),
 				sRequest.GetSignalInput(),
 				sRequest.GetIdentity()); err != nil {
-				return nil, serviceerror.NewInternal("Unable to signal workflow execution.")
+				return nil, serviceerror.NewUnavailable("Unable to signal workflow execution.")
 			}
 
 			// Create a transfer task to schedule a workflow task
 			if !mutableState.HasPendingWorkflowTask() {
 				_, err := mutableState.AddWorkflowTaskScheduledEvent(false)
 				if err != nil {
-					return nil, serviceerror.NewInternal("Failed to add workflow task scheduled event.")
+					return nil, serviceerror.NewUnavailable("Failed to add workflow task scheduled event.")
 				}
 			}
 
@@ -2019,7 +2019,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		startRequest,
 	)
 	if err != nil {
-		return nil, serviceerror.NewInternal("Failed to add workflow execution started event.")
+		return nil, serviceerror.NewUnavailable("Failed to add workflow execution started event.")
 	}
 
 	// Add signal event
@@ -2027,7 +2027,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		sRequest.GetSignalName(),
 		sRequest.GetSignalInput(),
 		sRequest.GetIdentity()); err != nil {
-		return nil, serviceerror.NewInternal("Failed to add workflow execution signaled event.")
+		return nil, serviceerror.NewUnavailable("Failed to add workflow execution signaled event.")
 	}
 
 	if err = e.generateFirstWorkflowTask(
@@ -2049,7 +2049,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, err
 	}
 	if len(newWorkflowEventsSeq) != 1 {
-		return nil, serviceerror.NewInternal("unable to create 1st event batch")
+		return nil, serviceerror.NewUnavailable("unable to create 1st event batch")
 	}
 
 	createMode := persistence.CreateWorkflowModeBrandNew
@@ -2318,7 +2318,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	case enumspb.RESET_REAPPLY_TYPE_NONE:
 		// noop
 	default:
-		return nil, serviceerror.NewInternal("unknown reset type")
+		return nil, serviceerror.NewUnavailable("unknown reset type")
 	}
 
 	// also load the current run of the workflow, it can be different from the base runID
@@ -2488,7 +2488,7 @@ UpdateHistoryLoop:
 			if !mutableState.HasPendingWorkflowTask() {
 				_, err := mutableState.AddWorkflowTaskScheduledEvent(false)
 				if err != nil {
-					return serviceerror.NewInternal("Failed to add workflow task scheduled event.")
+					return serviceerror.NewUnavailable("Failed to add workflow task scheduled event.")
 				}
 			}
 		}
@@ -2836,7 +2836,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 		// previous workflow completed, proceed
 	default:
 		// persistence.WorkflowStateZombie or unknown type
-		return serviceerror.NewInternal(fmt.Sprintf("Failed to process workflow, workflow has invalid state: %v.", prevState))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to process workflow, workflow has invalid state: %v.", prevState))
 	}
 
 	switch wfIDReusePolicy {
@@ -2851,7 +2851,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 		msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: reject duplicate workflow Id."
 		return getWorkflowAlreadyStartedError(msg, prevStartRequestID, execution.GetWorkflowId(), prevRunID)
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("Failed to process start workflow reuse policy: %v.", wfIDReusePolicy))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to process start workflow reuse policy: %v.", wfIDReusePolicy))
 	}
 
 	return nil
@@ -3044,7 +3044,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 			)
 			if err != nil {
 				e.logger.Error("failed to re-apply stale events", tag.Error(err))
-				return nil, serviceerror.NewInternal("unable to re-apply stale events")
+				return nil, serviceerror.NewUnavailable("unable to re-apply stale events")
 			}
 			if len(reappliedEvents) == 0 {
 				return &updateWorkflowAction{
@@ -3247,7 +3247,7 @@ func (e *historyEngineImpl) loadWorkflow(
 		workflowContext.getReleaseFn()(nil)
 	}
 
-	return nil, serviceerror.NewInternal("unable to locate current workflow execution")
+	return nil, serviceerror.NewUnavailable("unable to locate current workflow execution")
 }
 
 func (e *historyEngineImpl) metricsScope(ctx context.Context) metrics.Scope {

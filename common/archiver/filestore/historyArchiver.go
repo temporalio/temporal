@@ -206,7 +206,7 @@ func (h *historyArchiver) Get(
 	dirPath := URI.Path()
 	exists, err := directoryExists(dirPath)
 	if err != nil {
-		return nil, serviceerror.NewInternal(err.Error())
+		return nil, serviceerror.NewUnavailable(err.Error())
 	}
 	if !exists {
 		return nil, serviceerror.NewInvalidArgument(archiver.ErrHistoryNotExist.Error())
@@ -226,7 +226,7 @@ func (h *historyArchiver) Get(
 	} else {
 		highestVersion, err := getHighestVersion(dirPath, request)
 		if err != nil {
-			return nil, serviceerror.NewInternal(err.Error())
+			return nil, serviceerror.NewUnavailable(err.Error())
 		}
 		token = &getHistoryToken{
 			CloseFailoverVersion: *highestVersion,
@@ -238,7 +238,7 @@ func (h *historyArchiver) Get(
 	filepath := path.Join(dirPath, filename)
 	exists, err = fileExists(filepath)
 	if err != nil {
-		return nil, serviceerror.NewInternal(err.Error())
+		return nil, serviceerror.NewUnavailable(err.Error())
 	}
 	if !exists {
 		return nil, serviceerror.NewNotFound(archiver.ErrHistoryNotExist.Error())
@@ -246,13 +246,13 @@ func (h *historyArchiver) Get(
 
 	encodedHistoryBatches, err := readFile(filepath)
 	if err != nil {
-		return nil, serviceerror.NewInternal(err.Error())
+		return nil, serviceerror.NewUnavailable(err.Error())
 	}
 
 	encoder := codec.NewJSONPBEncoder()
 	historyBatches, err := encoder.DecodeHistories(encodedHistoryBatches)
 	if err != nil {
-		return nil, serviceerror.NewInternal(err.Error())
+		return nil, serviceerror.NewUnavailable(err.Error())
 	}
 	historyBatches = historyBatches[token.NextBatchIdx:]
 
@@ -272,7 +272,7 @@ func (h *historyArchiver) Get(
 		token.NextBatchIdx += numOfBatches
 		nextToken, err := serializeToken(token)
 		if err != nil {
-			return nil, serviceerror.NewInternal(err.Error())
+			return nil, serviceerror.NewUnavailable(err.Error())
 		}
 		response.NextPageToken = nextToken
 	}

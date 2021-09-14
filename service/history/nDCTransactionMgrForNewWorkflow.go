@@ -163,7 +163,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 		return err
 	}
 	if len(targetWorkflowEventsSeq) != 1 {
-		return serviceerror.NewInternal("unable to create 1st event batch")
+		return serviceerror.NewUnavailable("unable to create 1st event batch")
 	}
 
 	// target workflow to be created as current
@@ -215,7 +215,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		return err
 	}
 	if targetWorkflowPolicy != workflow.TransactionPolicyPassive {
-		return serviceerror.NewInternal("nDCTransactionMgrForNewWorkflow createAsZombie encounter target workflow policy not being passive")
+		return serviceerror.NewUnavailable("nDCTransactionMgrForNewWorkflow createAsZombie encounter target workflow policy not being passive")
 	}
 
 	// release lock on current workflow, since current cluster maybe the active cluster
@@ -231,7 +231,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		return err
 	}
 	if len(targetWorkflowEventsSeq) != 1 {
-		return serviceerror.NewInternal("unable to create 1st event batch")
+		return serviceerror.NewUnavailable("unable to create 1st event batch")
 	}
 
 	if err := targetWorkflow.getContext().ReapplyEvents(
@@ -333,7 +333,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) executeTransaction(
 		)
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("nDCTransactionMgr: encounter unknown transaction type: %v", transactionPolicy))
+		return serviceerror.NewUnavailable(fmt.Sprintf("nDCTransactionMgr: encounter unknown transaction type: %v", transactionPolicy))
 	}
 }
 

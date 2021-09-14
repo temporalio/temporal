@@ -252,7 +252,7 @@ func SetupNewWorkflowForRetryOrCron(
 		firstRunID,
 	)
 	if err != nil {
-		return serviceerror.NewInternal("Failed to add workflow execution started event.")
+		return serviceerror.NewUnavailable("Failed to add workflow execution started event.")
 	}
 	if err = newMutableState.AddFirstWorkflowTaskScheduled(event); err != nil {
 		return err

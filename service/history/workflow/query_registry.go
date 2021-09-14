@@ -32,7 +32,7 @@ import (
 )
 
 var (
-	errQueryNotExists = serviceerror.NewInternal("query does not exist")
+	errQueryNotExists = serviceerror.NewUnavailable("query does not exist")
 )
 
 type (

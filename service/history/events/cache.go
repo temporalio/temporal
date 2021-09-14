@@ -66,7 +66,7 @@ type (
 )
 
 var (
-	errEventNotFoundInBatch = serviceerror.NewInternal("History event not found within expected batch")
+	errEventNotFoundInBatch = serviceerror.NewUnavailable("History event not found within expected batch")
 )
 
 var _ Cache = (*CacheImpl)(nil)

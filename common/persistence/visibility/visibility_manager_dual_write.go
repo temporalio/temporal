@@ -84,7 +84,7 @@ func (v *visibilityManagerWrapper) RecordWorkflowExecutionStarted(request *Recor
 		}
 		return v.visibilityManager.RecordWorkflowExecutionStarted(request)
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisWritingMode()))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisWritingMode()))
 	}
 }
 
@@ -100,7 +100,7 @@ func (v *visibilityManagerWrapper) RecordWorkflowExecutionClosed(request *Record
 		}
 		return v.visibilityManager.RecordWorkflowExecutionClosed(request)
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisWritingMode()))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisWritingMode()))
 	}
 }
 
@@ -118,7 +118,7 @@ func (v *visibilityManagerWrapper) UpsertWorkflowExecution(request *UpsertWorkfl
 		// no op on SQL/Cassandra persistence.
 		return v.visibilityManager.UpsertWorkflowExecution(request)
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisWritingMode()))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisWritingMode()))
 	}
 }
 
@@ -169,7 +169,7 @@ func (v *visibilityManagerWrapper) DeleteWorkflowExecution(request *VisibilityDe
 		}
 		return v.visibilityManager.DeleteWorkflowExecution(request)
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisWritingMode()))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisWritingMode()))
 	}
 }
 
