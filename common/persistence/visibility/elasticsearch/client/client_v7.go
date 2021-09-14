@@ -49,7 +49,7 @@ type (
 )
 
 const (
-	pointInTimeSupportedFlavor = "default" // the other flavor is "OSS".
+	pointInTimeSupportedFlavor = "default" // the other flavor is "oss".
 )
 
 var (
@@ -195,7 +195,7 @@ func (c *clientV7) queryPointInTimeSupported(ctx context.Context) bool {
 	if err != nil {
 		return false
 	}
-	if result.Version.BuildFlavor != pointInTimeSupportedFlavor {
+	if result == nil || result.Version.BuildFlavor != pointInTimeSupportedFlavor {
 		return false
 	}
 	esVersion, err := semver.ParseTolerant(result.Version.Number)
