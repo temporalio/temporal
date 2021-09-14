@@ -99,7 +99,7 @@ type (
 		value string
 	}
 
-	typeTag struct {
+	taskTypeTag struct {
 		value string
 	}
 )
@@ -317,16 +317,16 @@ func TaskTypeTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return typeTag{value}
+	return taskTypeTag{value}
 
 }
 
 // Key returns the key of the tag
-func (d typeTag) Key() string {
-	return TypeTagName
+func (d taskTypeTag) Key() string {
+	return TaskTypeTagName
 }
 
 // Value returns the value of the tag
-func (d typeTag) Value() string {
+func (d taskTypeTag) Value() string {
 	return d.value
 }
