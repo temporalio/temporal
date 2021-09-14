@@ -1067,7 +1067,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV6() {
 	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
 	s.NoError(err)
 
-	// test internal error
+	// test unavailable error
 	mockESClientV6.EXPECT().Scroll(gomock.Any(), scrollID, "1m").Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
 	s.Error(err)
@@ -1130,11 +1130,11 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7_Scroll() {
 	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
 	s.NoError(err)
 
-	// test internal error
+	// test unavailable error
 	s.mockESClient.EXPECT().Scroll(gomock.Any(), scrollID, "1m").Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
 	s.Error(err)
-	_, ok = err.(*serviceerror.Internal)
+	_, ok = err.(*serviceerror.Unavailable)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ScanWorkflowExecutions failed"))
 
@@ -1215,7 +1215,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7_PIT() {
 	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
 	s.NoError(err)
 
-	// test internal error
+	// test unavailable error
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
 	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
 	s.Error(err)
@@ -1245,7 +1245,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 	s.NoError(err)
 	s.Equal(int64(1), resp.Count)
 
-	// test internal error
+	// test unavailable error
 	s.mockESClient.EXPECT().Count(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
 		func(ctx context.Context, index string, query elastic.Query) (int64, error) {
 			s.Equal(
