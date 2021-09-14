@@ -41,13 +41,15 @@ const (
 )
 
 type (
-	// Client is a wrapper around ElasticSearch client library.
-	// It simplifies the interface and enables mocking. We intentionally let implementation details of the elastic library
-	// bleed through, as the main purpose is testability not abstraction.
+	// Client is a wrapper around Elasticsearch client library.
 	Client interface {
 		Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error)
 		Count(ctx context.Context, index string, query elastic.Query) (int64, error)
 		RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error)
+
+		OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error)
+		Scroll(ctx context.Context, scrollID string, keepAliveInterval string) (*elastic.SearchResult, error)
+		CloseScroll(ctx context.Context, id string) error
 
 		// TODO (alex): move this to some admin client (and join with IntegrationTestsClient)
 		PutMapping(ctx context.Context, index string, mapping map[string]enumspb.IndexedValueType) (bool, error)
@@ -58,17 +60,9 @@ type (
 	// Combine ClientV7 with Client interface after ES v6 support removal.
 	ClientV7 interface {
 		Client
+		IsPointInTimeSupported(ctx context.Context) bool
 		OpenPointInTime(ctx context.Context, index string, keepAliveInterval string) (string, error)
 		ClosePointInTime(ctx context.Context, id string) (bool, error)
-	}
-
-	// Deprecated. Remove after ES v6 support removal.
-	ClientV6 interface {
-		Client
-		// Deprecated. Remove after ES v6 support removal.
-		Scroll(ctx context.Context, scrollID string) (*elastic.SearchResult, ScrollService, error)
-		// Deprecated. Remove after ES v6 support removal.
-		ScrollFirstPage(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, ScrollService, error)
 	}
 
 	CLIClient interface {
@@ -87,18 +81,13 @@ type (
 		IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error)
 	}
 
-	// ScrollService is an interface for elastic.ScrollService.
-	// Deprecated. Remove after ES v6 support removal.
-	ScrollService interface {
-		Clear(ctx context.Context) error
-	}
-
 	// SearchParameters holds all required and optional parameters for executing a search.
 	SearchParameters struct {
-		Index       string
-		Query       elastic.Query
-		PageSize    int
-		Sorter      []elastic.Sorter
+		Index    string
+		Query    elastic.Query
+		PageSize int
+		Sorter   []elastic.Sorter
+
 		SearchAfter []interface{}
 		PointInTime *elastic.PointInTime
 	}
