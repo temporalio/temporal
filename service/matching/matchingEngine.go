@@ -217,10 +217,15 @@ func (e *matchingEngineImpl) updateTaskQueue(taskQueue *taskQueueID, mgr taskQue
 	e.taskQueues[*taskQueue] = mgr
 }
 
-func (e *matchingEngineImpl) removeTaskQueueManager(id *taskQueueID) {
+func (e *matchingEngineImpl) removeTaskQueueManager(delTQM taskQueueManager) {
+	queueID := delTQM.QueueID()
 	e.taskQueuesLock.Lock()
 	defer e.taskQueuesLock.Unlock()
-	delete(e.taskQueues, *id)
+	foundTQM, ok := e.taskQueues[*queueID]
+	if !ok || foundTQM != delTQM {
+		return
+	}
+	delete(e.taskQueues, *queueID)
 }
 
 // AddWorkflowTask either delivers task directly to waiting poller or save it into task queue persistence.
