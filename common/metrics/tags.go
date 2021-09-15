@@ -96,6 +96,10 @@ type (
 	failureTag struct {
 		value string
 	}
+
+	visibilityTypeTag struct {
+		value string
+	}
 )
 
 // NamespaceTag returns a new namespace tag. For timers, this also ensures that we
@@ -304,5 +308,30 @@ func (d failureTag) Key() string {
 
 // Value returns the value of the tag
 func (d failureTag) Value() string {
+	return d.value
+}
+
+func VisibilityTypeTag(value string) Tag {
+	if value == "" {
+		value = unknownValue
+	}
+	return visibilityTypeTag{value: value}
+}
+
+func StandardVisibilityTypeTag() Tag {
+	return visibilityTypeTag{value: standardVisibilityTagValue}
+}
+
+func AdvancedVisibilityTypeTag() Tag {
+	return visibilityTypeTag{value: advancedVisibilityTagValue}
+}
+
+// Key returns the key of the tag
+func (d visibilityTypeTag) Key() string {
+	return visibilityTypeTagName
+}
+
+// Value returns the value of the tag
+func (d visibilityTypeTag) Value() string {
 	return d.value
 }
