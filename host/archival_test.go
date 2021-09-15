@@ -319,13 +319,7 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespa
 		s.Equal(activityName, activityType.Name)
 		id, _ := strconv.Atoi(activityID)
 		s.Equal(int(expectedActivityID), id)
-		var b []byte
-		err := payloads.Decode(input, &b)
-		s.NoError(err)
-		buf := bytes.NewReader(b)
-		var in int32
-		binary.Read(buf, binary.LittleEndian, &in)
-		s.Equal(expectedActivityID, in)
+		s.Equal(expectedActivityID, s.decodePayloadsByteSliceInt32(input))
 		expectedActivityID++
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
