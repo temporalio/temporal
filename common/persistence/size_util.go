@@ -54,10 +54,10 @@ func sizeOfStringSet(
 func sizeOfInt64BlobMap(
 	kvBlob map[int64]*commonpb.DataBlob,
 ) int {
-	size := 0
+	// 8 == 64 bit / 8 bit per byte
+	size := 8 * len(kvBlob)
 	for _, blob := range kvBlob {
-		// 8 == 64 bit / 8 bit per byte
-		size += 8 + blob.Size()
+		size += blob.Size()
 	}
 	return size
 }
