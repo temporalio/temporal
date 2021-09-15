@@ -61,16 +61,6 @@ const (
 	syncMatchTaskId = -137
 )
 
-// fatalSignalBehavior indicates to functions that may inovke the
-// taskQueueManagerImpl.signalFatalProblem callback whether they should or
-// should not do that.
-type fatalSignalBehavior int
-
-const (
-	emitFatalSignal fatalSignalBehavior = iota + 1
-	suppressFatalSignal
-)
-
 type (
 	taskQueueManagerOpt func(*taskQueueManagerImpl)
 
@@ -118,7 +108,6 @@ type (
 		taskQueueKind    enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
 		config           *taskQueueConfig
 		db               *taskQueueDB
-		engine           *matchingEngineImpl
 		taskWriter       *taskWriter
 		taskReader       *taskReader // reads tasks from db and async matches it with poller
 		liveness         *liveness
@@ -173,7 +162,6 @@ func newTaskQueueManager(
 		status:              common.DaemonStatusInitialized,
 		namespaceCache:      e.namespaceCache,
 		metricsClient:       e.metricsClient,
-		engine:              e,
 		shutdownCh:          make(chan struct{}),
 		taskQueueID:         taskQueue,
 		taskQueueKind:       taskQueueKind,
@@ -218,13 +206,25 @@ func newTaskQueueManager(
 	return tlMgr, nil
 }
 
-func (c *taskQueueManagerImpl) errShouldUnload(err error) bool {
-	return err != nil && (errIndicatesForeignLessee(err) || !c.config.ResilientSyncMatch())
-}
-
-func errIndicatesForeignLessee(err error) bool {
+// signalIfFatal calls signalFatalProblem on this taskQueueManagerImpl instance
+// if and only if the supplied error represents a fatal condition, e.g. the
+// existence of another taskQueueManager newer lease. Returns true if the signal
+// is emitted, false otherwise.
+func (c *taskQueueManagerImpl) signalIfFatal(err error) bool {
+	if err == nil {
+		return false
+	}
+	foreignLessee := false
 	var condfail *persistence.ConditionFailedError
-	return errors.As(err, &condfail)
+	if errors.As(err, &condfail) {
+		c.metricScope().IncCounter(metrics.ConditionFailedErrorPerTaskQueueCounter)
+		foreignLessee = true
+	}
+	if foreignLessee || !c.config.ResilientSyncMatch() {
+		c.signalFatalProblem(c)
+		return true
+	}
+	return false
 }
 
 // Start reading pump for the given task queue.
@@ -301,11 +301,10 @@ func (c *taskQueueManagerImpl) AddTask(
 			return &persistence.CreateTasksResponse{}, errRemoteSyncMatchFailed
 		}
 
-		return c.taskWriter.appendTask(params.execution, params.taskInfo)
+		resp, err := c.taskWriter.appendTask(params.execution, params.taskInfo)
+		c.signalIfFatal(err)
+		return resp, err
 	})
-	if c.errShouldUnload(err) {
-		c.signalFatalProblem(c)
-	}
 	if err == nil {
 		c.taskReader.Signal()
 	}
@@ -513,10 +512,6 @@ func (c *taskQueueManagerImpl) executeWithRetry(
 		}
 		return common.IsPersistenceTransientError(err)
 	})
-
-	if _, ok := err.(*persistence.ConditionFailedError); ok {
-		c.metricScope().IncCounter(metrics.ConditionFailedErrorPerTaskQueueCounter)
-	}
 	return
 }
 

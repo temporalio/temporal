@@ -222,7 +222,6 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	// attempt to obtain more IDs. This specific error type indicates that
 	// another service instance has become the owner of the partition
 	leaseErr = &persistence.ConditionFailedError{Msg: "should kill the tqm"}
-	require.True(t, errIndicatesForeignLessee(leaseErr))
 
 	sync, err = tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
