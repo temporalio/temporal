@@ -92,7 +92,7 @@ func (r *nDCEventsReapplierImpl) reapplyEvents(
 
 	// sanity check workflow still running
 	if !msBuilder.IsWorkflowExecutionRunning() {
-		return nil, serviceerror.NewUnavailable("unable to reapply events to closed workflow.")
+		return nil, serviceerror.NewInternal("unable to reapply events to closed workflow.")
 	}
 
 	for _, event := range reappliedEvents {

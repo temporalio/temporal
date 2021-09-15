@@ -73,7 +73,7 @@ func ValidateCreateWorkflowModeState(
 		return nil
 
 	default:
-		return serviceerror.NewUnavailable(fmt.Sprintf("unknown mode: %v", mode))
+		return serviceerror.NewInternal(fmt.Sprintf("unknown mode: %v", mode))
 	}
 }
 
@@ -154,7 +154,7 @@ func ValidateUpdateWorkflowModeState(
 		return nil
 
 	default:
-		return serviceerror.NewUnavailable(fmt.Sprintf("unknown mode: %v", mode))
+		return serviceerror.NewInternal(fmt.Sprintf("unknown mode: %v", mode))
 	}
 }
 
@@ -277,7 +277,7 @@ func ValidateConflictResolveWorkflowModeState(
 
 		// precondition
 		if currentWorkflowMutation != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("Invalid workflow conflict resolve mode %v, encounter current workflow", mode))
+			return serviceerror.NewInternal(fmt.Sprintf("Invalid workflow conflict resolve mode %v, encounter current workflow", mode))
 		}
 
 		// case 1
@@ -308,7 +308,7 @@ func ValidateConflictResolveWorkflowModeState(
 		return nil
 
 	default:
-		return serviceerror.NewUnavailable(fmt.Sprintf("unknown mode: %v", mode))
+		return serviceerror.NewInternal(fmt.Sprintf("unknown mode: %v", mode))
 	}
 }
 
@@ -321,7 +321,7 @@ func checkWorkflowState(state enumsspb.WorkflowExecutionState) error {
 		enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED:
 		return nil
 	default:
-		return serviceerror.NewUnavailable(fmt.Sprintf("unknown workflow state: %v", state))
+		return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 	}
 }
 
@@ -329,7 +329,7 @@ func newInvalidCreateWorkflowMode(
 	mode CreateWorkflowMode,
 	workflowState enumsspb.WorkflowExecutionState,
 ) error {
-	return serviceerror.NewUnavailable(fmt.Sprintf(
+	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow create mode %v, state: %v",
 		mode,
 		workflowState,
@@ -341,7 +341,7 @@ func newInvalidUpdateWorkflowMode(
 	mode UpdateWorkflowMode,
 	currentWorkflowState enumsspb.WorkflowExecutionState,
 ) error {
-	return serviceerror.NewUnavailable(fmt.Sprintf(
+	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow update mode %v, state: %v",
 		mode,
 		currentWorkflowState,
@@ -354,7 +354,7 @@ func newInvalidUpdateWorkflowWithNewMode(
 	currentWorkflowState enumsspb.WorkflowExecutionState,
 	newWorkflowState enumsspb.WorkflowExecutionState,
 ) error {
-	return serviceerror.NewUnavailable(fmt.Sprintf(
+	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow update mode %v, current state: %v, new state: %v",
 		mode,
 		currentWorkflowState,
@@ -367,7 +367,7 @@ func newInvalidConflictResolveWorkflowMode(
 	mode ConflictResolveWorkflowMode,
 	resetWorkflowState enumsspb.WorkflowExecutionState,
 ) error {
-	return serviceerror.NewUnavailable(fmt.Sprintf(
+	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v",
 		mode,
 		resetWorkflowState,
@@ -380,7 +380,7 @@ func newInvalidConflictResolveWorkflowWithNewMode(
 	resetWorkflowState enumsspb.WorkflowExecutionState,
 	newWorkflowState enumsspb.WorkflowExecutionState,
 ) error {
-	return serviceerror.NewUnavailable(fmt.Sprintf(
+	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v, new state: %v",
 		mode,
 		resetWorkflowState,
@@ -394,7 +394,7 @@ func newInvalidConflictResolveWorkflowWithCurrentMode(
 	resetWorkflowState enumsspb.WorkflowExecutionState,
 	currentWorkflowState enumsspb.WorkflowExecutionState,
 ) error {
-	return serviceerror.NewUnavailable(fmt.Sprintf(
+	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v, current state: %v",
 		mode,
 		resetWorkflowState,
@@ -409,7 +409,7 @@ func newInvalidConflictResolveWorkflowWithCurrentWithNewMode(
 	newWorkflowState enumsspb.WorkflowExecutionState,
 	currentWorkflowState enumsspb.WorkflowExecutionState,
 ) error {
-	return serviceerror.NewUnavailable(fmt.Sprintf(
+	return serviceerror.NewInternal(fmt.Sprintf(
 		"Invalid workflow conflict resolve mode %v, reset state: %v, new state: %v, current state: %v",
 		mode,
 		resetWorkflowState,

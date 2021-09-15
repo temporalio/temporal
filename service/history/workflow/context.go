@@ -326,7 +326,7 @@ func (c *ContextImpl) LoadWorkflowExecutionForReplication(
 			return nil, err
 		}
 		if flushBeforeReady {
-			return nil, serviceerror.NewUnavailable("Context counter flushBeforeReady status after loading mutable state from DB")
+			return nil, serviceerror.NewInternal("Context counter flushBeforeReady status after loading mutable state from DB")
 		}
 	}
 	return c.MutableState, nil
@@ -397,7 +397,7 @@ func (c *ContextImpl) LoadWorkflowExecution() (MutableState, error) {
 		return nil, err
 	}
 	if flushBeforeReady {
-		return nil, serviceerror.NewUnavailable("Context counter flushBeforeReady status after loading mutable state from DB")
+		return nil, serviceerror.NewInternal("Context counter flushBeforeReady status after loading mutable state from DB")
 	}
 
 	return c.MutableState, nil
@@ -758,7 +758,7 @@ func (c *ContextImpl) mergeContinueAsNewReplicationTasks(
 	}
 
 	if newWorkflowSnapshot == nil || len(newWorkflowSnapshot.ReplicationTasks) != 1 {
-		return serviceerror.NewUnavailable("unable to find replication task from new workflow for continue as new replication")
+		return serviceerror.NewInternal("unable to find replication task from new workflow for continue as new replication")
 	}
 
 	// merge the new run first event batch replication task
@@ -775,7 +775,7 @@ func (c *ContextImpl) mergeContinueAsNewReplicationTasks(
 		}
 	}
 	if !taskUpdated {
-		return serviceerror.NewUnavailable("unable to find replication task from current workflow for continue as new replication")
+		return serviceerror.NewInternal("unable to find replication task from current workflow for continue as new replication")
 	}
 	return nil
 }
@@ -830,7 +830,7 @@ func (c *ContextImpl) ReapplyEvents(
 	for _, events := range eventBatches {
 		if events.NamespaceID != namespaceID ||
 			events.WorkflowID != workflowID {
-			return serviceerror.NewUnavailable("Context encounter mismatch namespaceID / workflowID in events reapplication.")
+			return serviceerror.NewInternal("Context encounter mismatch namespaceID / workflowID in events reapplication.")
 		}
 
 		for _, e := range events.Events {
@@ -884,7 +884,7 @@ func (c *ContextImpl) ReapplyEvents(
 	// Reapplication only happens in active cluster
 	sourceCluster := clientBean.GetRemoteAdminClient(activeCluster)
 	if sourceCluster == nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("cannot find cluster config %v to do reapply", activeCluster))
+		return serviceerror.NewInternal(fmt.Sprintf("cannot find cluster config %v to do reapply", activeCluster))
 	}
 	ctx2, cancel2 := rpc.NewContextWithTimeoutAndHeaders(defaultRemoteCallTimeout)
 	defer cancel2()

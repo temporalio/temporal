@@ -136,7 +136,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 			if !ok {
 				errString := fmt.Sprintf("failed to find in user timer event ID: %v", timerSequenceID.EventID)
 				t.logger.Error(errString)
-				return nil, serviceerror.NewUnavailable(errString)
+				return nil, serviceerror.NewInternal(errString)
 			}
 
 			if isExpired := timerSequence.IsExpired(
@@ -196,7 +196,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			if !ok {
 				errString := fmt.Sprintf("failed to find in memory activity timer: %v", timerSequenceID.EventID)
 				t.logger.Error(errString)
-				return nil, serviceerror.NewUnavailable(errString)
+				return nil, serviceerror.NewInternal(errString)
 			}
 
 			if isExpired := timerSequence.IsExpired(
@@ -504,7 +504,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			common.EmptyVersion,
 		)
 	} else {
-		err = serviceerror.NewUnavailable("timerQueueStandbyProcessor encounter empty historyResendInfo")
+		err = serviceerror.NewInternal("timerQueueStandbyProcessor encounter empty historyResendInfo")
 	}
 
 	if err != nil {
