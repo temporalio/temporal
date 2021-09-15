@@ -187,7 +187,7 @@ func (notifier *NotifierImpl) UnwatchHistoryEvent(
 
 	if !success {
 		// cannot find the subscribe ID, which means there is a bug
-		return serviceerror.NewUnavailable("Unable to unwatch on workflow execution.")
+		return serviceerror.NewInternal("Unable to unwatch on workflow execution.")
 	}
 
 	return nil

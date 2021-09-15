@@ -249,7 +249,7 @@ func (r *TaskRefresherImpl) refreshWorkflowTaskTasks(
 
 	workflowTask, ok := mutableState.GetPendingWorkflowTask()
 	if !ok {
-		return serviceerror.NewUnavailable("it could be a bug, cannot get pending workflow task")
+		return serviceerror.NewInternal("it could be a bug, cannot get pending workflow task")
 	}
 
 	// workflowTask already started
