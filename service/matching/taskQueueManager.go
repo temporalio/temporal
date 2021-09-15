@@ -199,7 +199,11 @@ func newTaskQueueManager(
 			))
 	}
 
-	tlMgr.liveness = newLiveness(clock.NewRealTimeSource(), taskQueueConfig.IdleTaskqueueCheckInterval(), tlMgr.Stop)
+	tlMgr.liveness = newLiveness(
+		clock.NewRealTimeSource(),
+		taskQueueConfig.IdleTaskqueueCheckInterval(),
+		func() { tlMgr.signalFatalProblem(tlMgr) },
+	)
 	tlMgr.taskWriter = newTaskWriter(tlMgr)
 	tlMgr.taskReader = newTaskReader(tlMgr)
 
@@ -256,7 +260,6 @@ func (c *taskQueueManagerImpl) Stop() {
 	c.liveness.Stop()
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
-	c.engine.removeTaskQueueManager(c)
 	c.logger.Info("", tag.LifeCycleStopped)
 }
 
@@ -300,6 +303,9 @@ func (c *taskQueueManagerImpl) AddTask(
 
 		return c.taskWriter.appendTask(params.execution, params.taskInfo)
 	})
+	if c.errShouldUnload(err) {
+		c.signalFatalProblem(c)
+	}
 	if err == nil {
 		c.taskReader.Signal()
 	}
@@ -489,7 +495,7 @@ func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
 	}
 }
 
-// Retry operation on transient error. On rangeID update by another process calls c.Stop().
+// Retry operation on transient error.
 func (c *taskQueueManagerImpl) executeWithRetry(
 	operation func() (interface{}, error)) (result interface{}, err error) {
 
@@ -510,8 +516,6 @@ func (c *taskQueueManagerImpl) executeWithRetry(
 
 	if _, ok := err.(*persistence.ConditionFailedError); ok {
 		c.metricScope().IncCounter(metrics.ConditionFailedErrorPerTaskQueueCounter)
-		c.logger.Debug("Stopping task queue due to persistence condition failure", tag.Error(err))
-		c.Stop()
 	}
 	return
 }
