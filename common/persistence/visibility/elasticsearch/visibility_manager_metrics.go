@@ -57,7 +57,7 @@ func (m *visibilityManagerMetrics) GetName() string {
 }
 
 func (m *visibilityManagerMetrics) RecordWorkflowExecutionStarted(request *visibility.RecordWorkflowExecutionStartedRequest) error {
-	scope := m.metricClient.Scope(metrics.PersistenceRecordWorkflowExecutionStartedScope, m.visibilityTypeMetricsTag)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceRecordWorkflowExecutionStartedScope, m.visibilityTypeMetricsTag)
 
 	scope.IncCounter(metrics.VisibilityPersistenceRequests)
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
@@ -70,7 +70,7 @@ func (m *visibilityManagerMetrics) RecordWorkflowExecutionStarted(request *visib
 }
 
 func (m *visibilityManagerMetrics) RecordWorkflowExecutionClosed(request *visibility.RecordWorkflowExecutionClosedRequest) error {
-	scope := m.metricClient.Scope(metrics.PersistenceRecordWorkflowExecutionClosedScope, m.visibilityTypeMetricsTag)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceRecordWorkflowExecutionClosedScope, m.visibilityTypeMetricsTag)
 
 	scope.IncCounter(metrics.VisibilityPersistenceRequests)
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
@@ -83,7 +83,7 @@ func (m *visibilityManagerMetrics) RecordWorkflowExecutionClosed(request *visibi
 }
 
 func (m *visibilityManagerMetrics) UpsertWorkflowExecution(request *visibility.UpsertWorkflowExecutionRequest) error {
-	scope := m.metricClient.Scope(metrics.PersistenceUpsertWorkflowExecutionScope, m.visibilityTypeMetricsTag)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceUpsertWorkflowExecutionScope, m.visibilityTypeMetricsTag)
 
 	scope.IncCounter(metrics.VisibilityPersistenceRequests)
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
@@ -96,7 +96,7 @@ func (m *visibilityManagerMetrics) UpsertWorkflowExecution(request *visibility.U
 }
 
 func (m *visibilityManagerMetrics) ListOpenWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequest) (*visibility.ListWorkflowExecutionsResponse, error) {
-	scope := m.metricClient.Scope(metrics.PersistenceListOpenWorkflowExecutionsScope, m.visibilityTypeMetricsTag)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceListOpenWorkflowExecutionsScope, m.visibilityTypeMetricsTag)
 
 	scope.IncCounter(metrics.VisibilityPersistenceRequests)
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
@@ -109,7 +109,7 @@ func (m *visibilityManagerMetrics) ListOpenWorkflowExecutions(request *visibilit
 }
 
 func (m *visibilityManagerMetrics) ListClosedWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequest) (*visibility.ListWorkflowExecutionsResponse, error) {
-	scope := m.metricClient.Scope(metrics.PersistenceListClosedWorkflowExecutionsScope, m.visibilityTypeMetricsTag)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceListClosedWorkflowExecutionsScope, m.visibilityTypeMetricsTag)
 
 	scope.IncCounter(metrics.VisibilityPersistenceRequests)
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
@@ -122,7 +122,7 @@ func (m *visibilityManagerMetrics) ListClosedWorkflowExecutions(request *visibil
 }
 
 func (m *visibilityManagerMetrics) ListOpenWorkflowExecutionsByType(request *visibility.ListWorkflowExecutionsByTypeRequest) (*visibility.ListWorkflowExecutionsResponse, error) {
-	scope := m.metricClient.Scope(metrics.PersistenceListOpenWorkflowExecutionsByTypeScope, m.visibilityTypeMetricsTag)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceListOpenWorkflowExecutionsByTypeScope, m.visibilityTypeMetricsTag)
 
 	scope.IncCounter(metrics.VisibilityPersistenceRequests)
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
@@ -135,7 +135,7 @@ func (m *visibilityManagerMetrics) ListOpenWorkflowExecutionsByType(request *vis
 }
 
 func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByType(request *visibility.ListWorkflowExecutionsByTypeRequest) (*visibility.ListWorkflowExecutionsResponse, error) {
-	scope := m.metricClient.Scope(metrics.PersistenceListClosedWorkflowExecutionsScope, m.visibilityTypeMetricsTag)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceListClosedWorkflowExecutionsScope, m.visibilityTypeMetricsTag)
 
 	scope.IncCounter(metrics.VisibilityPersistenceRequests)
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
@@ -148,7 +148,7 @@ func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByType(request *v
 }
 
 func (m *visibilityManagerMetrics) ListOpenWorkflowExecutionsByWorkflowID(request *visibility.ListWorkflowExecutionsByWorkflowIDRequest) (*visibility.ListWorkflowExecutionsResponse, error) {
-	scope := m.metricClient.Scope(metrics.PersistenceListOpenWorkflowExecutionsByWorkflowIDScope, m.visibilityTypeMetricsTag)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceListOpenWorkflowExecutionsByWorkflowIDScope, m.visibilityTypeMetricsTag)
 
 	scope.IncCounter(metrics.VisibilityPersistenceRequests)
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
@@ -161,7 +161,7 @@ func (m *visibilityManagerMetrics) ListOpenWorkflowExecutionsByWorkflowID(reques
 }
 
 func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByWorkflowID(request *visibility.ListWorkflowExecutionsByWorkflowIDRequest) (*visibility.ListWorkflowExecutionsResponse, error) {
-	scope := m.metricClient.Scope(metrics.PersistenceListClosedWorkflowExecutionsByWorkflowIDScope, m.visibilityTypeMetricsTag)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceListClosedWorkflowExecutionsByWorkflowIDScope, m.visibilityTypeMetricsTag)
 
 	scope.IncCounter(metrics.VisibilityPersistenceRequests)
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
@@ -174,7 +174,7 @@ func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByWorkflowID(requ
 }
 
 func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByStatus(request *visibility.ListClosedWorkflowExecutionsByStatusRequest) (*visibility.ListWorkflowExecutionsResponse, error) {
-	scope := m.metricClient.Scope(metrics.PersistenceListClosedWorkflowExecutionsByStatusScope, m.visibilityTypeMetricsTag)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceListClosedWorkflowExecutionsByStatusScope, m.visibilityTypeMetricsTag)
 
 	scope.IncCounter(metrics.VisibilityPersistenceRequests)
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
@@ -187,7 +187,7 @@ func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByStatus(request 
 }
 
 func (m *visibilityManagerMetrics) ListWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.ListWorkflowExecutionsResponse, error) {
-	scope := m.metricClient.Scope(metrics.PersistenceListWorkflowExecutionsScope, m.visibilityTypeMetricsTag)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceListWorkflowExecutionsScope, m.visibilityTypeMetricsTag)
 
 	scope.IncCounter(metrics.VisibilityPersistenceRequests)
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
@@ -200,7 +200,7 @@ func (m *visibilityManagerMetrics) ListWorkflowExecutions(request *visibility.Li
 }
 
 func (m *visibilityManagerMetrics) ScanWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.ListWorkflowExecutionsResponse, error) {
-	scope := m.metricClient.Scope(metrics.PersistenceScanWorkflowExecutionsScope, m.visibilityTypeMetricsTag)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceScanWorkflowExecutionsScope, m.visibilityTypeMetricsTag)
 
 	scope.IncCounter(metrics.VisibilityPersistenceRequests)
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
@@ -213,7 +213,7 @@ func (m *visibilityManagerMetrics) ScanWorkflowExecutions(request *visibility.Li
 }
 
 func (m *visibilityManagerMetrics) CountWorkflowExecutions(request *visibility.CountWorkflowExecutionsRequest) (*visibility.CountWorkflowExecutionsResponse, error) {
-	scope := m.metricClient.Scope(metrics.PersistenceCountWorkflowExecutionsScope, m.visibilityTypeMetricsTag)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceCountWorkflowExecutionsScope, m.visibilityTypeMetricsTag)
 
 	scope.IncCounter(metrics.VisibilityPersistenceRequests)
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
@@ -226,7 +226,7 @@ func (m *visibilityManagerMetrics) CountWorkflowExecutions(request *visibility.C
 }
 
 func (m *visibilityManagerMetrics) DeleteWorkflowExecution(request *visibility.VisibilityDeleteWorkflowExecutionRequest) error {
-	scope := m.metricClient.Scope(metrics.PersistenceVisibilityDeleteWorkflowExecutionScope, m.visibilityTypeMetricsTag)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceDeleteWorkflowExecutionScope, m.visibilityTypeMetricsTag)
 
 	scope.IncCounter(metrics.VisibilityPersistenceRequests)
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)

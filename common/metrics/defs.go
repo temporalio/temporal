@@ -252,34 +252,34 @@ const (
 	// PersistenceGetMetadataScope tracks DeleteNamespaceByName calls made by service to persistence layer
 	PersistenceGetMetadataScope
 
-	// PersistenceRecordWorkflowExecutionStartedScope tracks RecordWorkflowExecutionStarted calls made by service to persistence layer
-	PersistenceRecordWorkflowExecutionStartedScope
-	// PersistenceRecordWorkflowExecutionClosedScope tracks RecordWorkflowExecutionClosed calls made by service to persistence layer
-	PersistenceRecordWorkflowExecutionClosedScope
-	// PersistenceUpsertWorkflowExecutionScope tracks UpsertWorkflowExecution calls made by service to persistence layer
-	PersistenceUpsertWorkflowExecutionScope
-	// PersistenceListOpenWorkflowExecutionsScope tracks ListOpenWorkflowExecutions calls made by service to persistence layer
-	PersistenceListOpenWorkflowExecutionsScope
-	// PersistenceListClosedWorkflowExecutionsScope tracks ListClosedWorkflowExecutions calls made by service to persistence layer
-	PersistenceListClosedWorkflowExecutionsScope
-	// PersistenceListOpenWorkflowExecutionsByTypeScope tracks ListOpenWorkflowExecutionsByType calls made by service to persistence layer
-	PersistenceListOpenWorkflowExecutionsByTypeScope
-	// PersistenceListClosedWorkflowExecutionsByTypeScope tracks ListClosedWorkflowExecutionsByType calls made by service to persistence layer
-	PersistenceListClosedWorkflowExecutionsByTypeScope
-	// PersistenceListOpenWorkflowExecutionsByWorkflowIDScope tracks ListOpenWorkflowExecutionsByWorkflowID calls made by service to persistence layer
-	PersistenceListOpenWorkflowExecutionsByWorkflowIDScope
-	// PersistenceListClosedWorkflowExecutionsByWorkflowIDScope tracks ListClosedWorkflowExecutionsByWorkflowID calls made by service to persistence layer
-	PersistenceListClosedWorkflowExecutionsByWorkflowIDScope
-	// PersistenceListClosedWorkflowExecutionsByStatusScope tracks ListClosedWorkflowExecutionsByStatus calls made by service to persistence layer
-	PersistenceListClosedWorkflowExecutionsByStatusScope
-	// PersistenceVisibilityDeleteWorkflowExecutionScope is the metrics scope for persistence.VisibilityManager.DeleteWorkflowExecution
-	PersistenceVisibilityDeleteWorkflowExecutionScope
-	// PersistenceListWorkflowExecutionsScope tracks ListWorkflowExecutions calls made by service to persistence layer
-	PersistenceListWorkflowExecutionsScope
-	// PersistenceScanWorkflowExecutionsScope tracks ScanWorkflowExecutions calls made by service to persistence layer
-	PersistenceScanWorkflowExecutionsScope
-	// PersistenceCountWorkflowExecutionsScope tracks CountWorkflowExecutions calls made by service to persistence layer
-	PersistenceCountWorkflowExecutionsScope
+	// VisibilityPersistenceRecordWorkflowExecutionStartedScope tracks RecordWorkflowExecutionStarted calls made by service to visibility persistence layer
+	VisibilityPersistenceRecordWorkflowExecutionStartedScope
+	// VisibilityPersistenceRecordWorkflowExecutionClosedScope tracks RecordWorkflowExecutionClosed calls made by service to visibility persistence layer
+	VisibilityPersistenceRecordWorkflowExecutionClosedScope
+	// VisibilityPersistenceUpsertWorkflowExecutionScope tracks UpsertWorkflowExecution calls made by service to persistence visibility layer
+	VisibilityPersistenceUpsertWorkflowExecutionScope
+	// VisibilityPersistenceListOpenWorkflowExecutionsScope tracks ListOpenWorkflowExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceListOpenWorkflowExecutionsScope
+	// VisibilityPersistenceListClosedWorkflowExecutionsScope tracks ListClosedWorkflowExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceListClosedWorkflowExecutionsScope
+	// VisibilityPersistenceListOpenWorkflowExecutionsByTypeScope tracks ListOpenWorkflowExecutionsByType calls made by service to visibility persistence layer
+	VisibilityPersistenceListOpenWorkflowExecutionsByTypeScope
+	// VisibilityPersistenceListClosedWorkflowExecutionsByTypeScope tracks ListClosedWorkflowExecutionsByType calls made by service to visibility persistence layer
+	VisibilityPersistenceListClosedWorkflowExecutionsByTypeScope
+	// VisibilityPersistenceListOpenWorkflowExecutionsByWorkflowIDScope tracks ListOpenWorkflowExecutionsByWorkflowID calls made by service to visibility persistence layer
+	VisibilityPersistenceListOpenWorkflowExecutionsByWorkflowIDScope
+	// VisibilityPersistenceListClosedWorkflowExecutionsByWorkflowIDScope tracks ListClosedWorkflowExecutionsByWorkflowID calls made by service to visibility persistence layer
+	VisibilityPersistenceListClosedWorkflowExecutionsByWorkflowIDScope
+	// VisibilityPersistenceListClosedWorkflowExecutionsByStatusScope tracks ListClosedWorkflowExecutionsByStatus calls made by service to visibility persistence layer
+	VisibilityPersistenceListClosedWorkflowExecutionsByStatusScope
+	// VisibilityPersistenceDeleteWorkflowExecutionScope tracks DeleteWorkflowExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceDeleteWorkflowExecutionScope
+	// VisibilityPersistenceListWorkflowExecutionsScope tracks ListWorkflowExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceListWorkflowExecutionsScope
+	// VisibilityPersistenceScanWorkflowExecutionsScope tracks ScanWorkflowExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceScanWorkflowExecutionsScope
+	// VisibilityPersistenceCountWorkflowExecutionsScope tracks CountWorkflowExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceCountWorkflowExecutionsScope
 
 	// PersistenceEnqueueMessageScope tracks Enqueue calls made by service to persistence layer
 	PersistenceEnqueueMessageScope
@@ -1146,20 +1146,20 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceListNamespaceScope:                     {operation: "ListNamespace"},
 		PersistenceGetMetadataScope:                       {operation: "GetMetadata"},
 
-		PersistenceRecordWorkflowExecutionStartedScope:           {operation: "RecordWorkflowExecutionStarted", tags: map[string]string{visibilityTypeTagName: unknownValue}},
-		PersistenceRecordWorkflowExecutionClosedScope:            {operation: "RecordWorkflowExecutionClosed", tags: map[string]string{visibilityTypeTagName: unknownValue}},
-		PersistenceUpsertWorkflowExecutionScope:                  {operation: "UpsertWorkflowExecution", tags: map[string]string{visibilityTypeTagName: unknownValue}},
-		PersistenceListOpenWorkflowExecutionsScope:               {operation: "ListOpenWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
-		PersistenceListClosedWorkflowExecutionsScope:             {operation: "ListClosedWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
-		PersistenceListOpenWorkflowExecutionsByTypeScope:         {operation: "ListOpenWorkflowExecutionsByType", tags: map[string]string{visibilityTypeTagName: unknownValue}},
-		PersistenceListClosedWorkflowExecutionsByTypeScope:       {operation: "ListClosedWorkflowExecutionsByType", tags: map[string]string{visibilityTypeTagName: unknownValue}},
-		PersistenceListOpenWorkflowExecutionsByWorkflowIDScope:   {operation: "ListOpenWorkflowExecutionsByWorkflowID", tags: map[string]string{visibilityTypeTagName: unknownValue}},
-		PersistenceListClosedWorkflowExecutionsByWorkflowIDScope: {operation: "ListClosedWorkflowExecutionsByWorkflowID", tags: map[string]string{visibilityTypeTagName: unknownValue}},
-		PersistenceListClosedWorkflowExecutionsByStatusScope:     {operation: "ListClosedWorkflowExecutionsByStatus", tags: map[string]string{visibilityTypeTagName: unknownValue}},
-		PersistenceVisibilityDeleteWorkflowExecutionScope:        {operation: "VisibilityDeleteWorkflowExecution", tags: map[string]string{visibilityTypeTagName: unknownValue}},
-		PersistenceListWorkflowExecutionsScope:                   {operation: "ListWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
-		PersistenceScanWorkflowExecutionsScope:                   {operation: "ScanWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
-		PersistenceCountWorkflowExecutionsScope:                  {operation: "CountWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceRecordWorkflowExecutionStartedScope:           {operation: "RecordWorkflowExecutionStarted", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceRecordWorkflowExecutionClosedScope:            {operation: "RecordWorkflowExecutionClosed", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceUpsertWorkflowExecutionScope:                  {operation: "UpsertWorkflowExecution", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceListOpenWorkflowExecutionsScope:               {operation: "ListOpenWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceListClosedWorkflowExecutionsScope:             {operation: "ListClosedWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceListOpenWorkflowExecutionsByTypeScope:         {operation: "ListOpenWorkflowExecutionsByType", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceListClosedWorkflowExecutionsByTypeScope:       {operation: "ListClosedWorkflowExecutionsByType", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceListOpenWorkflowExecutionsByWorkflowIDScope:   {operation: "ListOpenWorkflowExecutionsByWorkflowID", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceListClosedWorkflowExecutionsByWorkflowIDScope: {operation: "ListClosedWorkflowExecutionsByWorkflowID", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceListClosedWorkflowExecutionsByStatusScope:     {operation: "ListClosedWorkflowExecutionsByStatus", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceDeleteWorkflowExecutionScope:                  {operation: "VisibilityDeleteWorkflowExecution", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceListWorkflowExecutionsScope:                   {operation: "ListWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceScanWorkflowExecutionsScope:                   {operation: "ScanWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceCountWorkflowExecutionsScope:                  {operation: "CountWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
 
 		PersistenceAppendHistoryNodesScope:         {operation: "AppendHistoryNodes"},
 		PersistenceDeleteHistoryNodesScope:         {operation: "DeleteHistoryNodes"},

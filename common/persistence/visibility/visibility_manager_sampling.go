@@ -107,7 +107,7 @@ func (p *visibilitySamplingClient) RecordWorkflowExecutionStarted(request *Recor
 		tag.WorkflowID(request.Execution.GetWorkflowId()),
 		tag.WorkflowRunID(request.Execution.GetRunId()),
 	)
-	p.metricClient.IncCounter(metrics.PersistenceRecordWorkflowExecutionStartedScope, metrics.PersistenceSampledCounter)
+	p.metricClient.IncCounter(metrics.VisibilityPersistenceRecordWorkflowExecutionStartedScope, metrics.PersistenceSampledCounter)
 	return nil
 }
 
@@ -126,7 +126,7 @@ func (p *visibilitySamplingClient) RecordWorkflowExecutionClosed(request *Record
 		tag.WorkflowID(request.Execution.GetWorkflowId()),
 		tag.WorkflowRunID(request.Execution.GetRunId()),
 	)
-	p.metricClient.IncCounter(metrics.PersistenceRecordWorkflowExecutionClosedScope, metrics.PersistenceSampledCounter)
+	p.metricClient.IncCounter(metrics.VisibilityPersistenceRecordWorkflowExecutionClosedScope, metrics.PersistenceSampledCounter)
 	return nil
 }
 
@@ -145,7 +145,7 @@ func (p *visibilitySamplingClient) UpsertWorkflowExecution(request *UpsertWorkfl
 		tag.WorkflowID(request.Execution.GetWorkflowId()),
 		tag.WorkflowRunID(request.Execution.GetRunId()),
 	)
-	p.metricClient.IncCounter(metrics.PersistenceUpsertWorkflowExecutionScope, metrics.PersistenceSampledCounter)
+	p.metricClient.IncCounter(metrics.VisibilityPersistenceUpsertWorkflowExecutionScope, metrics.PersistenceSampledCounter)
 	return nil
 }
 

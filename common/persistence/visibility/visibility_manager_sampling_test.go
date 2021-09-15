@@ -100,7 +100,7 @@ func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionStarted() {
 
 	// no remaining tokens
 	s.metricClient.EXPECT().IncCounter(
-		metrics.PersistenceRecordWorkflowExecutionStartedScope, metrics.PersistenceSampledCounter,
+		metrics.VisibilityPersistenceRecordWorkflowExecutionStartedScope, metrics.PersistenceSampledCounter,
 	)
 	s.NoError(s.client.RecordWorkflowExecutionStarted(request))
 }
@@ -132,12 +132,12 @@ func (s *VisibilitySamplingSuite) TestRecordWorkflowExecutionClosed() {
 
 	// no remaining tokens
 	s.metricClient.EXPECT().IncCounter(
-		metrics.PersistenceRecordWorkflowExecutionClosedScope, metrics.PersistenceSampledCounter,
+		metrics.VisibilityPersistenceRecordWorkflowExecutionClosedScope, metrics.PersistenceSampledCounter,
 	)
 	s.NoError(s.client.RecordWorkflowExecutionClosed(request))
 
 	s.metricClient.EXPECT().IncCounter(
-		metrics.PersistenceRecordWorkflowExecutionClosedScope, metrics.PersistenceSampledCounter,
+		metrics.VisibilityPersistenceRecordWorkflowExecutionClosedScope, metrics.PersistenceSampledCounter,
 	)
 	s.NoError(s.client.RecordWorkflowExecutionClosed(request2))
 }
