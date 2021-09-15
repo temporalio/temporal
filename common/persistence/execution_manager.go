@@ -314,18 +314,16 @@ func (m *executionManagerImpl) serializeWorkflowEventBatches(
 	shardID int32,
 	eventBatches []*WorkflowEvents,
 ) ([]*InternalAppendHistoryNodesRequest, int64, error) {
-	var workflowNewEvents []*InternalAppendHistoryNodesRequest
+	workflowNewEvents := make([]*InternalAppendHistoryNodesRequest, 0, len(eventBatches))
 	var historyDiff int64 = 0
 	for _, workflowEvents := range eventBatches {
 		newEvents, err := m.serializeWorkflowEvents(shardID, workflowEvents)
-		newEvents.ShardID = shardID
 		if err != nil {
 			return nil, 0, err
 		}
-		if newEvents != nil {
-			workflowNewEvents = append(workflowNewEvents, newEvents)
-			historyDiff += int64(len(newEvents.Node.Events.Data))
-		}
+		newEvents.ShardID = shardID
+		workflowNewEvents = append(workflowNewEvents, newEvents)
+		historyDiff += int64(len(newEvents.Node.Events.Data))
 	}
 	return workflowNewEvents, historyDiff, nil
 }
