@@ -42,19 +42,22 @@ type Config struct {
 	// TODO remove this dynamic flag in 1.14.x
 	EnableDBRecordVersion dynamicconfig.BoolPropertyFn
 
-	RPS                           dynamicconfig.IntPropertyFn
-	MaxIDLengthLimit              dynamicconfig.IntPropertyFn
-	PersistenceMaxQPS             dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS       dynamicconfig.IntPropertyFn
-	EnableVisibilitySampling      dynamicconfig.BoolPropertyFn
-	VisibilityOpenMaxQPS          dynamicconfig.IntPropertyFnWithNamespaceFilter
-	VisibilityClosedMaxQPS        dynamicconfig.IntPropertyFnWithNamespaceFilter
-	AdvancedVisibilityWritingMode dynamicconfig.StringPropertyFn
-	EmitShardDiffLog              dynamicconfig.BoolPropertyFn
-	MaxAutoResetPoints            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	ThrottledLogRPS               dynamicconfig.IntPropertyFn
-	EnableStickyQuery             dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ShutdownDrainDuration         dynamicconfig.DurationPropertyFn
+	RPS                     dynamicconfig.IntPropertyFn
+	MaxIDLengthLimit        dynamicconfig.IntPropertyFn
+	PersistenceMaxQPS       dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS dynamicconfig.IntPropertyFn
+
+	StandardVisibilityPersistenceMaxReadQPS  dynamicconfig.IntPropertyFn
+	StandardVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn
+	AdvancedVisibilityPersistenceMaxReadQPS  dynamicconfig.IntPropertyFn
+	AdvancedVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn
+	AdvancedVisibilityWritingMode            dynamicconfig.StringPropertyFn
+
+	EmitShardDiffLog      dynamicconfig.BoolPropertyFn
+	MaxAutoResetPoints    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ThrottledLogRPS       dynamicconfig.IntPropertyFn
+	EnableStickyQuery     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration dynamicconfig.DurationPropertyFn
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
@@ -273,17 +276,20 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		// TODO remove this dynamic flag in 1.14.x
 		EnableDBRecordVersion: dc.GetBoolProperty(dynamicconfig.EnableDBRecordVersion, true),
 
-		RPS:                                  dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
-		MaxIDLengthLimit:                     dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
-		PersistenceMaxQPS:                    dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 9000),
-		PersistenceGlobalMaxQPS:              dc.GetIntProperty(dynamicconfig.HistoryPersistenceGlobalMaxQPS, 0),
-		ShutdownDrainDuration:                dc.GetDurationProperty(dynamicconfig.HistoryShutdownDrainDuration, 0),
-		EnableVisibilitySampling:             dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
-		VisibilityOpenMaxQPS:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryVisibilityOpenMaxQPS, 300),
-		VisibilityClosedMaxQPS:               dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryVisibilityClosedMaxQPS, 300),
-		MaxAutoResetPoints:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, DefaultHistoryMaxAutoResetPoints),
-		DefaultWorkflowTaskTimeout:           dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
-		AdvancedVisibilityWritingMode:        dc.GetStringProperty(dynamicconfig.AdvancedVisibilityWritingMode, common.GetDefaultAdvancedVisibilityWritingMode(isAdvancedVisConfigExist)),
+		RPS:                        dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
+		MaxIDLengthLimit:           dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
+		PersistenceMaxQPS:          dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 9000),
+		PersistenceGlobalMaxQPS:    dc.GetIntProperty(dynamicconfig.HistoryPersistenceGlobalMaxQPS, 0),
+		ShutdownDrainDuration:      dc.GetDurationProperty(dynamicconfig.HistoryShutdownDrainDuration, 0),
+		MaxAutoResetPoints:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, DefaultHistoryMaxAutoResetPoints),
+		DefaultWorkflowTaskTimeout: dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
+
+		StandardVisibilityPersistenceMaxReadQPS:  dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
+		StandardVisibilityPersistenceMaxWriteQPS: dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000),
+		AdvancedVisibilityPersistenceMaxReadQPS:  dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxReadQPS, 9000),
+		AdvancedVisibilityPersistenceMaxWriteQPS: dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000),
+		AdvancedVisibilityWritingMode:            dc.GetStringProperty(dynamicconfig.AdvancedVisibilityWritingMode, common.GetDefaultAdvancedVisibilityWritingMode(isAdvancedVisConfigExist)),
+
 		EmitShardDiffLog:                     dc.GetBoolProperty(dynamicconfig.EmitShardDiffLog, false),
 		HistoryCacheInitialSize:              dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
 		HistoryCacheMaxSize:                  dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),

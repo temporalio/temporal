@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -49,9 +50,10 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/visibility"
-	"go.temporal.io/server/common/persistence/visibility/elasticsearch"
-	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/pprof"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -150,8 +152,15 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	testBase.Setup(nil)
 	setupShards(testBase, options.HistoryConfig.NumHistoryShards, logger)
 	archiverBase := newArchiverBase(options.EnableArchival, logger)
-	var esClient esclient.Client
-	var esVisibilityMgr visibility.VisibilityManager
+
+	pConfig := testBase.DefaultTestCluster.Config()
+	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
+
+	var (
+		esClient          esclient.Client
+		esProcessorConfig *elasticsearch.ProcessorConfig
+		indexName         string
+	)
 	advancedVisibilityWritingMode := dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOff)
 	if options.WorkerConfig.EnableIndexer {
 		advancedVisibilityWritingMode = dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOn)
@@ -161,33 +170,41 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			return nil, err
 		}
 
-		esProcessorConfig := &elasticsearch.ProcessorConfig{
+		esProcessorConfig = &elasticsearch.ProcessorConfig{
 			IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(32),
 			ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(1),
 			ESProcessorBulkActions:   dynamicconfig.GetIntPropertyFn(10),
 			ESProcessorBulkSize:      dynamicconfig.GetIntPropertyFn(2 << 20),
 			ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
+			ESProcessorAckTimeout:    dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
 		}
-		esProcessor := elasticsearch.NewProcessor(esProcessorConfig, esClient, logger, &metrics.NoopMetricsClient{})
-		esProcessor.Start()
 
-		visConfig := &config.VisibilityConfig{
-			VisibilityListMaxQPS:  dynamicconfig.GetIntPropertyFilteredByNamespace(2000),
-			ESProcessorAckTimeout: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
-		}
-		indexName := options.ESConfig.GetVisibilityIndex()
-		esVisibilityStore := elasticsearch.NewVisibilityStore(
-			esClient, indexName, searchattribute.NewTestProvider(), nil, esProcessor, visConfig, &metrics.NoopMetricsClient{},
-		)
-		esVisibilityMgr = visibility.NewVisibilityManagerImpl(esVisibilityStore, searchattribute.NewTestProvider(), indexName, logger)
+		indexName = options.ESConfig.GetVisibilityIndex()
 	}
-	visibilityMgr := visibility.NewVisibilityManagerWrapper(testBase.VisibilityMgr, esVisibilityMgr,
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(options.WorkerConfig.EnableIndexer), advancedVisibilityWritingMode)
 
-	pConfig := testBase.Config()
-	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
+	visibilityMgr, err := visibility.NewManager(
+		pConfig,
+		resolver.NewNoopResolver(),
+		indexName,
+		esClient,
+		esProcessorConfig,
+		searchattribute.NewTestProvider(),
+		nil,
+		dynamicconfig.GetIntPropertyFn(9000),
+		dynamicconfig.GetIntPropertyFn(9000),
+		dynamicconfig.GetIntPropertyFn(9000),
+		dynamicconfig.GetIntPropertyFn(9000),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(options.WorkerConfig.EnableIndexer),
+		advancedVisibilityWritingMode,
+		metrics.NewNoopMetricsClient(),
+		logger,
+	)
 
-	_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = testBase.ClusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			HistoryShardCount: options.HistoryConfig.NumHistoryShards,
 			ClusterName:       options.ClusterMetadata.CurrentClusterName,
