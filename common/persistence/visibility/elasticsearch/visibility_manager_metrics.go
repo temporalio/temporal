@@ -34,9 +34,10 @@ import (
 )
 
 type visibilityManagerMetrics struct {
-	metricClient metrics.Client
-	persistence  visibility.VisibilityManager
-	logger       log.Logger
+	metricClient             metrics.Client
+	persistence              visibility.VisibilityManager
+	logger                   log.Logger
+	visibilityTypeMetricsTag metrics.Tag
 }
 
 var _ visibility.VisibilityManager = (*visibilityManagerMetrics)(nil)
@@ -44,9 +45,10 @@ var _ visibility.VisibilityManager = (*visibilityManagerMetrics)(nil)
 // NewVisibilityManagerMetrics wrap visibility client with metrics
 func NewVisibilityManagerMetrics(persistence visibility.VisibilityManager, metricClient metrics.Client, logger log.Logger) visibility.VisibilityManager {
 	return &visibilityManagerMetrics{
-		persistence:  persistence,
-		metricClient: metricClient,
-		logger:       logger,
+		persistence:              persistence,
+		metricClient:             metricClient,
+		logger:                   logger,
+		visibilityTypeMetricsTag: metrics.AdvancedVisibilityTypeTag(),
 	}
 }
 
@@ -55,212 +57,201 @@ func (m *visibilityManagerMetrics) GetName() string {
 }
 
 func (m *visibilityManagerMetrics) RecordWorkflowExecutionStarted(request *visibility.RecordWorkflowExecutionStartedRequest) error {
-	m.metricClient.IncCounter(metrics.ElasticsearchRecordWorkflowExecutionStartedScope, metrics.ElasticsearchRequests)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceRecordWorkflowExecutionStartedScope, m.visibilityTypeMetricsTag)
 
-	sw := m.metricClient.StartTimer(metrics.ElasticsearchRecordWorkflowExecutionStartedScope, metrics.ElasticsearchLatency)
+	scope.IncCounter(metrics.VisibilityPersistenceRequests)
+	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
+	defer sw.Stop()
 	err := m.persistence.RecordWorkflowExecutionStarted(request)
-	sw.Stop()
 
-	if err != nil {
-		m.updateErrorMetric(metrics.ElasticsearchRecordWorkflowExecutionStartedScope, err)
-	}
+	m.updateErrorMetric(scope, err)
 
 	return err
 }
 
 func (m *visibilityManagerMetrics) RecordWorkflowExecutionClosed(request *visibility.RecordWorkflowExecutionClosedRequest) error {
-	m.metricClient.IncCounter(metrics.ElasticsearchRecordWorkflowExecutionClosedScope, metrics.ElasticsearchRequests)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceRecordWorkflowExecutionClosedScope, m.visibilityTypeMetricsTag)
 
-	sw := m.metricClient.StartTimer(metrics.ElasticsearchRecordWorkflowExecutionClosedScope, metrics.ElasticsearchLatency)
+	scope.IncCounter(metrics.VisibilityPersistenceRequests)
+	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
+	defer sw.Stop()
 	err := m.persistence.RecordWorkflowExecutionClosed(request)
-	sw.Stop()
 
-	if err != nil {
-		m.updateErrorMetric(metrics.ElasticsearchRecordWorkflowExecutionClosedScope, err)
-	}
+	m.updateErrorMetric(scope, err)
 
 	return err
 }
 
 func (m *visibilityManagerMetrics) UpsertWorkflowExecution(request *visibility.UpsertWorkflowExecutionRequest) error {
-	m.metricClient.IncCounter(metrics.ElasticsearchUpsertWorkflowExecutionScope, metrics.ElasticsearchRequests)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceUpsertWorkflowExecutionScope, m.visibilityTypeMetricsTag)
 
-	sw := m.metricClient.StartTimer(metrics.ElasticsearchUpsertWorkflowExecutionScope, metrics.ElasticsearchLatency)
+	scope.IncCounter(metrics.VisibilityPersistenceRequests)
+	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
+	defer sw.Stop()
 	err := m.persistence.UpsertWorkflowExecution(request)
-	sw.Stop()
 
-	if err != nil {
-		m.updateErrorMetric(metrics.ElasticsearchUpsertWorkflowExecutionScope, err)
-	}
+	m.updateErrorMetric(scope, err)
 
 	return err
 }
 
 func (m *visibilityManagerMetrics) ListOpenWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequest) (*visibility.ListWorkflowExecutionsResponse, error) {
-	m.metricClient.IncCounter(metrics.ElasticsearchListOpenWorkflowExecutionsScope, metrics.ElasticsearchRequests)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceListOpenWorkflowExecutionsScope, m.visibilityTypeMetricsTag)
 
-	sw := m.metricClient.StartTimer(metrics.ElasticsearchListOpenWorkflowExecutionsScope, metrics.ElasticsearchLatency)
+	scope.IncCounter(metrics.VisibilityPersistenceRequests)
+	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
+	defer sw.Stop()
 	response, err := m.persistence.ListOpenWorkflowExecutions(request)
-	sw.Stop()
 
-	if err != nil {
-		m.updateErrorMetric(metrics.ElasticsearchListOpenWorkflowExecutionsScope, err)
-	}
+	m.updateErrorMetric(scope, err)
 
 	return response, err
 }
 
 func (m *visibilityManagerMetrics) ListClosedWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequest) (*visibility.ListWorkflowExecutionsResponse, error) {
-	m.metricClient.IncCounter(metrics.ElasticsearchListClosedWorkflowExecutionsScope, metrics.ElasticsearchRequests)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceListClosedWorkflowExecutionsScope, m.visibilityTypeMetricsTag)
 
-	sw := m.metricClient.StartTimer(metrics.ElasticsearchListClosedWorkflowExecutionsScope, metrics.ElasticsearchLatency)
+	scope.IncCounter(metrics.VisibilityPersistenceRequests)
+	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
+	defer sw.Stop()
 	response, err := m.persistence.ListClosedWorkflowExecutions(request)
-	sw.Stop()
 
-	if err != nil {
-		m.updateErrorMetric(metrics.ElasticsearchListClosedWorkflowExecutionsScope, err)
-	}
+	m.updateErrorMetric(scope, err)
 
 	return response, err
 }
 
 func (m *visibilityManagerMetrics) ListOpenWorkflowExecutionsByType(request *visibility.ListWorkflowExecutionsByTypeRequest) (*visibility.ListWorkflowExecutionsResponse, error) {
-	m.metricClient.IncCounter(metrics.ElasticsearchListOpenWorkflowExecutionsByTypeScope, metrics.ElasticsearchRequests)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceListOpenWorkflowExecutionsByTypeScope, m.visibilityTypeMetricsTag)
 
-	sw := m.metricClient.StartTimer(metrics.ElasticsearchListOpenWorkflowExecutionsByTypeScope, metrics.ElasticsearchLatency)
+	scope.IncCounter(metrics.VisibilityPersistenceRequests)
+	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
+	defer sw.Stop()
 	response, err := m.persistence.ListOpenWorkflowExecutionsByType(request)
-	sw.Stop()
 
-	if err != nil {
-		m.updateErrorMetric(metrics.ElasticsearchListOpenWorkflowExecutionsByTypeScope, err)
-	}
+	m.updateErrorMetric(scope, err)
 
 	return response, err
 }
 
 func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByType(request *visibility.ListWorkflowExecutionsByTypeRequest) (*visibility.ListWorkflowExecutionsResponse, error) {
-	m.metricClient.IncCounter(metrics.ElasticsearchListClosedWorkflowExecutionsByTypeScope, metrics.ElasticsearchRequests)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceListClosedWorkflowExecutionsScope, m.visibilityTypeMetricsTag)
 
-	sw := m.metricClient.StartTimer(metrics.ElasticsearchListClosedWorkflowExecutionsByTypeScope, metrics.ElasticsearchLatency)
+	scope.IncCounter(metrics.VisibilityPersistenceRequests)
+	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
+	defer sw.Stop()
 	response, err := m.persistence.ListClosedWorkflowExecutionsByType(request)
-	sw.Stop()
 
-	if err != nil {
-		m.updateErrorMetric(metrics.ElasticsearchListClosedWorkflowExecutionsByTypeScope, err)
-	}
+	m.updateErrorMetric(scope, err)
 
 	return response, err
 }
 
 func (m *visibilityManagerMetrics) ListOpenWorkflowExecutionsByWorkflowID(request *visibility.ListWorkflowExecutionsByWorkflowIDRequest) (*visibility.ListWorkflowExecutionsResponse, error) {
-	m.metricClient.IncCounter(metrics.ElasticsearchListOpenWorkflowExecutionsByWorkflowIDScope, metrics.ElasticsearchRequests)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceListOpenWorkflowExecutionsByWorkflowIDScope, m.visibilityTypeMetricsTag)
 
-	sw := m.metricClient.StartTimer(metrics.ElasticsearchListOpenWorkflowExecutionsByWorkflowIDScope, metrics.ElasticsearchLatency)
+	scope.IncCounter(metrics.VisibilityPersistenceRequests)
+	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
+	defer sw.Stop()
 	response, err := m.persistence.ListOpenWorkflowExecutionsByWorkflowID(request)
-	sw.Stop()
 
-	if err != nil {
-		m.updateErrorMetric(metrics.ElasticsearchListOpenWorkflowExecutionsByWorkflowIDScope, err)
-	}
+	m.updateErrorMetric(scope, err)
 
 	return response, err
 }
 
 func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByWorkflowID(request *visibility.ListWorkflowExecutionsByWorkflowIDRequest) (*visibility.ListWorkflowExecutionsResponse, error) {
-	m.metricClient.IncCounter(metrics.ElasticsearchListClosedWorkflowExecutionsByWorkflowIDScope, metrics.ElasticsearchRequests)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceListClosedWorkflowExecutionsByWorkflowIDScope, m.visibilityTypeMetricsTag)
 
-	sw := m.metricClient.StartTimer(metrics.ElasticsearchListClosedWorkflowExecutionsByWorkflowIDScope, metrics.ElasticsearchLatency)
+	scope.IncCounter(metrics.VisibilityPersistenceRequests)
+	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
+	defer sw.Stop()
 	response, err := m.persistence.ListClosedWorkflowExecutionsByWorkflowID(request)
-	sw.Stop()
 
-	if err != nil {
-		m.updateErrorMetric(metrics.ElasticsearchListClosedWorkflowExecutionsByWorkflowIDScope, err)
-	}
+	m.updateErrorMetric(scope, err)
 
 	return response, err
 }
 
 func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByStatus(request *visibility.ListClosedWorkflowExecutionsByStatusRequest) (*visibility.ListWorkflowExecutionsResponse, error) {
-	m.metricClient.IncCounter(metrics.ElasticsearchListClosedWorkflowExecutionsByStatusScope, metrics.ElasticsearchRequests)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceListClosedWorkflowExecutionsByStatusScope, m.visibilityTypeMetricsTag)
 
-	sw := m.metricClient.StartTimer(metrics.ElasticsearchListClosedWorkflowExecutionsByStatusScope, metrics.ElasticsearchLatency)
+	scope.IncCounter(metrics.VisibilityPersistenceRequests)
+	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
+	defer sw.Stop()
 	response, err := m.persistence.ListClosedWorkflowExecutionsByStatus(request)
-	sw.Stop()
 
-	if err != nil {
-		m.updateErrorMetric(metrics.ElasticsearchListClosedWorkflowExecutionsByStatusScope, err)
-	}
+	m.updateErrorMetric(scope, err)
 
 	return response, err
 }
 
 func (m *visibilityManagerMetrics) ListWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.ListWorkflowExecutionsResponse, error) {
-	m.metricClient.IncCounter(metrics.ElasticsearchListWorkflowExecutionsScope, metrics.ElasticsearchRequests)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceListWorkflowExecutionsScope, m.visibilityTypeMetricsTag)
 
-	sw := m.metricClient.StartTimer(metrics.ElasticsearchListWorkflowExecutionsScope, metrics.ElasticsearchLatency)
+	scope.IncCounter(metrics.VisibilityPersistenceRequests)
+	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
+	defer sw.Stop()
 	response, err := m.persistence.ListWorkflowExecutions(request)
-	sw.Stop()
 
-	if err != nil {
-		m.updateErrorMetric(metrics.ElasticsearchListWorkflowExecutionsScope, err)
-	}
+	m.updateErrorMetric(scope, err)
 
 	return response, err
 }
 
 func (m *visibilityManagerMetrics) ScanWorkflowExecutions(request *visibility.ListWorkflowExecutionsRequestV2) (*visibility.ListWorkflowExecutionsResponse, error) {
-	m.metricClient.IncCounter(metrics.ElasticsearchScanWorkflowExecutionsScope, metrics.ElasticsearchRequests)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceScanWorkflowExecutionsScope, m.visibilityTypeMetricsTag)
 
-	sw := m.metricClient.StartTimer(metrics.ElasticsearchScanWorkflowExecutionsScope, metrics.ElasticsearchLatency)
+	scope.IncCounter(metrics.VisibilityPersistenceRequests)
+	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
+	defer sw.Stop()
 	response, err := m.persistence.ScanWorkflowExecutions(request)
-	sw.Stop()
 
-	if err != nil {
-		m.updateErrorMetric(metrics.ElasticsearchScanWorkflowExecutionsScope, err)
-	}
+	m.updateErrorMetric(scope, err)
 
 	return response, err
 }
 
 func (m *visibilityManagerMetrics) CountWorkflowExecutions(request *visibility.CountWorkflowExecutionsRequest) (*visibility.CountWorkflowExecutionsResponse, error) {
-	m.metricClient.IncCounter(metrics.ElasticsearchCountWorkflowExecutionsScope, metrics.ElasticsearchRequests)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceCountWorkflowExecutionsScope, m.visibilityTypeMetricsTag)
 
-	sw := m.metricClient.StartTimer(metrics.ElasticsearchCountWorkflowExecutionsScope, metrics.ElasticsearchLatency)
+	scope.IncCounter(metrics.VisibilityPersistenceRequests)
+	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
+	defer sw.Stop()
 	response, err := m.persistence.CountWorkflowExecutions(request)
-	sw.Stop()
 
-	if err != nil {
-		m.updateErrorMetric(metrics.ElasticsearchCountWorkflowExecutionsScope, err)
-	}
+	m.updateErrorMetric(scope, err)
 
 	return response, err
 }
 
 func (m *visibilityManagerMetrics) DeleteWorkflowExecution(request *visibility.VisibilityDeleteWorkflowExecutionRequest) error {
-	m.metricClient.IncCounter(metrics.ElasticsearchDeleteWorkflowExecutionsScope, metrics.ElasticsearchRequests)
+	scope := m.metricClient.Scope(metrics.VisibilityPersistenceDeleteWorkflowExecutionScope, m.visibilityTypeMetricsTag)
 
-	sw := m.metricClient.StartTimer(metrics.ElasticsearchDeleteWorkflowExecutionsScope, metrics.ElasticsearchLatency)
+	scope.IncCounter(metrics.VisibilityPersistenceRequests)
+	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
+	defer sw.Stop()
 	err := m.persistence.DeleteWorkflowExecution(request)
-	sw.Stop()
 
-	if err != nil {
-		m.updateErrorMetric(metrics.ElasticsearchDeleteWorkflowExecutionsScope, err)
-	}
+	m.updateErrorMetric(scope, err)
 
 	return err
 }
 
-func (m *visibilityManagerMetrics) updateErrorMetric(scope int, err error) {
+func (m *visibilityManagerMetrics) updateErrorMetric(scope metrics.Scope, err error) {
+	if err == nil {
+		return
+	}
 	switch err.(type) {
 	case *serviceerror.InvalidArgument:
-		m.metricClient.IncCounter(scope, metrics.ElasticsearchErrBadRequestCounter)
-		m.metricClient.IncCounter(scope, metrics.ElasticsearchFailures)
+		scope.IncCounter(metrics.VisibilityPersistenceInvalidArgument)
+		scope.IncCounter(metrics.VisibilityPersistenceFailures)
 	case *serviceerror.ResourceExhausted:
-		m.metricClient.IncCounter(scope, metrics.ElasticsearchErrBusyCounter)
-		m.metricClient.IncCounter(scope, metrics.ElasticsearchFailures)
+		scope.IncCounter(metrics.VisibilityPersistenceResourceExhausted)
+		scope.IncCounter(metrics.VisibilityPersistenceFailures)
 	default:
-		m.logger.Error("Operation failed with internal error.", tag.MetricScope(scope), tag.Error(err))
-		m.metricClient.IncCounter(scope, metrics.ElasticsearchFailures)
+		m.logger.Error("Operation failed with an error.", tag.Error(err))
+		scope.IncCounter(metrics.VisibilityPersistenceFailures)
 	}
 }
 
