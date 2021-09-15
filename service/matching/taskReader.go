@@ -143,9 +143,7 @@ Loop:
 
 		case <-tr.notifyC:
 			tasks, readLevel, isReadBatchDone, err := tr.getTaskBatch()
-			if tr.tlMgr.errShouldUnload(err) {
-				tr.tlMgr.signalFatalProblem(tr.tlMgr)
-			}
+			tr.tlMgr.signalIfFatal(err)
 			if err != nil {
 				tr.Signal() // re-enqueue the event
 				// TODO: Should we ever stop retrying on db errors?
@@ -168,9 +166,7 @@ Loop:
 
 		case <-updateAckTimer.C:
 			err := tr.persistAckLevel()
-			if tr.tlMgr.errShouldUnload(err) {
-				tr.tlMgr.signalFatalProblem(tr.tlMgr)
-			}
+			tr.tlMgr.signalIfFatal(err)
 			if err != nil {
 				tr.logger().Error("Persistent store operation failure",
 					tag.StoreOperationUpdateTaskQueue,
