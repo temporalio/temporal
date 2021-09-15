@@ -27,23 +27,23 @@ package persistence
 func statusOfInternalWorkflow(
 	state *InternalWorkflowMutableState,
 ) InternalWorkflowStatus {
-	executionInfoSize := sizeOfExecutionInfo(state.ExecutionInfo)
-	executionStateSize := sizeOfExecutionState(state.ExecutionState)
+	executionInfoSize := sizeOfBlob(state.ExecutionInfo)
+	executionStateSize := sizeOfBlob(state.ExecutionState)
 
 	activityInfoCount := len(state.ActivityInfos)
-	activityInfoSize := sizeOfActivityInfos(state.ActivityInfos)
+	activityInfoSize := sizeOfInt64BlobMap(state.ActivityInfos)
 
 	timerInfoCount := len(state.TimerInfos)
-	timerInfoSize := sizeOfTimerInfos(state.TimerInfos)
+	timerInfoSize := sizeOfStringBlobMap(state.TimerInfos)
 
 	childExecutionInfoCount := len(state.ChildExecutionInfos)
-	childExecutionInfoSize := sizeOfChildWorkflowInfos(state.ChildExecutionInfos)
+	childExecutionInfoSize := sizeOfInt64BlobMap(state.ChildExecutionInfos)
 
 	requestCancelInfoCount := len(state.RequestCancelInfos)
-	requestCancelInfoSize := sizeOfRequestCancelInfos(state.RequestCancelInfos)
+	requestCancelInfoSize := sizeOfInt64BlobMap(state.RequestCancelInfos)
 
 	signalInfoCount := len(state.SignalInfos)
-	signalInfoSize := sizeOfSignalInfos(state.SignalInfos)
+	signalInfoSize := sizeOfInt64BlobMap(state.SignalInfos)
 
 	signalRequestIDCount := len(state.SignalRequestedIDs)
 	signalRequestIDSize := sizeOfStringSlice(state.SignalRequestedIDs)
@@ -93,33 +93,33 @@ func statusOfInternalWorkflow(
 func statusOfInternalWorkflowMutation(
 	mutation *InternalWorkflowMutation,
 ) InternalWorkflowStatus {
-	executionInfoSize := sizeOfExecutionInfo(mutation.ExecutionInfo)
-	executionStateSize := sizeOfExecutionState(mutation.ExecutionStateBlob)
+	executionInfoSize := sizeOfBlob(mutation.ExecutionInfo)
+	executionStateSize := sizeOfBlob(mutation.ExecutionStateBlob)
 
 	activityInfoCount := len(mutation.UpsertActivityInfos)
 	activityInfoCount += len(mutation.DeleteActivityInfos)
-	activityInfoSize := sizeOfActivityInfos(mutation.UpsertActivityInfos)
-	activityInfoSize += sizeOfActivityInfoIDs(mutation.DeleteActivityInfos)
+	activityInfoSize := sizeOfInt64BlobMap(mutation.UpsertActivityInfos)
+	activityInfoSize += sizeOfInt64Set(mutation.DeleteActivityInfos)
 
 	timerInfoCount := len(mutation.UpsertTimerInfos)
 	timerInfoCount += len(mutation.DeleteTimerInfos)
-	timerInfoSize := sizeOfTimerInfos(mutation.UpsertTimerInfos)
-	timerInfoSize += sizeOfTimerInfoIDs(mutation.DeleteTimerInfos)
+	timerInfoSize := sizeOfStringBlobMap(mutation.UpsertTimerInfos)
+	timerInfoSize += sizeOfStringSet(mutation.DeleteTimerInfos)
 
 	childExecutionInfoCount := len(mutation.UpsertChildExecutionInfos)
 	childExecutionInfoCount += len(mutation.DeleteChildExecutionInfos)
-	childExecutionInfoSize := sizeOfChildWorkflowInfos(mutation.UpsertChildExecutionInfos)
-	childExecutionInfoSize += sizeOfChildWorkflowInfoIDs(mutation.DeleteChildExecutionInfos)
+	childExecutionInfoSize := sizeOfInt64BlobMap(mutation.UpsertChildExecutionInfos)
+	childExecutionInfoSize += sizeOfInt64Set(mutation.DeleteChildExecutionInfos)
 
 	requestCancelInfoCount := len(mutation.UpsertRequestCancelInfos)
 	requestCancelInfoCount += len(mutation.DeleteRequestCancelInfos)
-	requestCancelInfoSize := sizeOfRequestCancelInfos(mutation.UpsertRequestCancelInfos)
-	requestCancelInfoSize += sizeOfRequestCancelInfoIDs(mutation.DeleteRequestCancelInfos)
+	requestCancelInfoSize := sizeOfInt64BlobMap(mutation.UpsertRequestCancelInfos)
+	requestCancelInfoSize += sizeOfInt64Set(mutation.DeleteRequestCancelInfos)
 
 	signalInfoCount := len(mutation.UpsertSignalInfos)
 	signalInfoCount += len(mutation.DeleteSignalInfos)
-	signalInfoSize := sizeOfSignalInfos(mutation.UpsertSignalInfos)
-	signalInfoSize += sizeOfSignalInfoIDs(mutation.DeleteSignalInfos)
+	signalInfoSize := sizeOfInt64BlobMap(mutation.UpsertSignalInfos)
+	signalInfoSize += sizeOfInt64Set(mutation.DeleteSignalInfos)
 
 	signalRequestIDCount := len(mutation.UpsertSignalRequestedIDs)
 	signalRequestIDCount += len(mutation.DeleteSignalRequestedIDs)
@@ -178,23 +178,23 @@ func statusOfInternalWorkflowMutation(
 func statusOfInternalWorkflowSnapshot(
 	snapshot *InternalWorkflowSnapshot,
 ) InternalWorkflowStatus {
-	executionInfoSize := sizeOfExecutionInfo(snapshot.ExecutionInfo)
-	executionStateSize := sizeOfExecutionState(snapshot.ExecutionStateBlob)
+	executionInfoSize := sizeOfBlob(snapshot.ExecutionInfo)
+	executionStateSize := sizeOfBlob(snapshot.ExecutionStateBlob)
 
 	activityInfoCount := len(snapshot.ActivityInfos)
-	activityInfoSize := sizeOfActivityInfos(snapshot.ActivityInfos)
+	activityInfoSize := sizeOfInt64BlobMap(snapshot.ActivityInfos)
 
 	timerInfoCount := len(snapshot.TimerInfos)
-	timerInfoSize := sizeOfTimerInfos(snapshot.TimerInfos)
+	timerInfoSize := sizeOfStringBlobMap(snapshot.TimerInfos)
 
 	childExecutionInfoCount := len(snapshot.ChildExecutionInfos)
-	childExecutionInfoSize := sizeOfChildWorkflowInfos(snapshot.ChildExecutionInfos)
+	childExecutionInfoSize := sizeOfInt64BlobMap(snapshot.ChildExecutionInfos)
 
 	requestCancelInfoCount := len(snapshot.RequestCancelInfos)
-	requestCancelInfoSize := sizeOfRequestCancelInfos(snapshot.RequestCancelInfos)
+	requestCancelInfoSize := sizeOfInt64BlobMap(snapshot.RequestCancelInfos)
 
 	signalInfoCount := len(snapshot.SignalInfos)
-	signalInfoSize := sizeOfSignalInfos(snapshot.SignalInfos)
+	signalInfoSize := sizeOfInt64BlobMap(snapshot.SignalInfos)
 
 	signalRequestIDCount := len(snapshot.SignalRequestedIDs)
 	signalRequestIDSize := sizeOfStringSet(snapshot.SignalRequestedIDs)

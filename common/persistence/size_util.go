@@ -28,90 +28,10 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 )
 
-func sizeOfExecutionInfo(
-	executionInfo *commonpb.DataBlob,
+func sizeOfBlob(
+	blob *commonpb.DataBlob,
 ) int {
-	return executionInfo.Size()
-}
-
-func sizeOfExecutionState(
-	executionState *commonpb.DataBlob,
-) int {
-	return executionState.Size()
-}
-
-func sizeOfActivityInfoIDs(
-	activityInfoIDs map[int64]struct{},
-) int {
-	return sizeOfInt64Set(activityInfoIDs)
-}
-
-func sizeOfActivityInfos(
-	activityInfos map[int64]*commonpb.DataBlob,
-) int {
-	return sizeOfInt64BlobMap(activityInfos)
-}
-
-func sizeOfTimerInfoIDs(
-	timerInfoIDs map[string]struct{},
-) int {
-	size := 0
-	for id := range timerInfoIDs {
-		size += len(id)
-	}
-	return size
-}
-
-func sizeOfTimerInfos(
-	timerInfos map[string]*commonpb.DataBlob,
-) int {
-	size := 0
-	for id, blob := range timerInfos {
-		size += len(id) + blob.Size()
-	}
-	return size
-}
-
-func sizeOfChildWorkflowInfoIDs(
-	childWorkflowInfoIDs map[int64]struct{},
-) int {
-	return sizeOfInt64Set(childWorkflowInfoIDs)
-}
-
-func sizeOfChildWorkflowInfos(
-	childWorkflowInfos map[int64]*commonpb.DataBlob,
-) int {
-	return sizeOfInt64BlobMap(childWorkflowInfos)
-}
-
-func sizeOfRequestCancelInfoIDs(
-	requestCancelInfoIDs map[int64]struct{},
-) int {
-	return sizeOfInt64Set(requestCancelInfoIDs)
-}
-
-func sizeOfRequestCancelInfos(
-	requestCancelInfos map[int64]*commonpb.DataBlob,
-) int {
-	return sizeOfInt64BlobMap(requestCancelInfos)
-}
-
-func sizeOfSignalInfoIDs(
-	signalInfoIDs map[int64]struct{},
-) int {
-	return sizeOfInt64Set(signalInfoIDs)
-}
-
-func sizeOfSignalInfos(
-	signalInfos map[int64]*commonpb.DataBlob,
-) int {
-	return sizeOfInt64BlobMap(signalInfos)
-}
-
-func sizeOfSignalRequestIDs(
-	signalRequestIDs map[string]struct{},
-) int {
-	return sizeOfStringSet(signalRequestIDs)
+	return blob.Size()
 }
 
 func sizeOfInt64Set(
@@ -138,6 +58,17 @@ func sizeOfInt64BlobMap(
 	for _, blob := range kvBlob {
 		// 8 == 64 bit / 8 bit per byte
 		size += 8 + blob.Size()
+	}
+	return size
+}
+
+func sizeOfStringBlobMap(
+	kvBlob map[string]*commonpb.DataBlob,
+) int {
+	size := 0
+	for id, blob := range kvBlob {
+		// 8 == 64 bit / 8 bit per byte
+		size += len(id) + blob.Size()
 	}
 	return size
 }
