@@ -79,12 +79,13 @@ const (
 
 // Common tags for all services
 const (
-	OperationTagName   = "operation"
-	ServiceRoleTagName = "service_role"
-	StatsTypeTagName   = "stats_type"
-	CacheTypeTagName   = "cache_type"
-	FailureTagName     = "failure"
-	TaskTypeTagName    = "task_type"
+	OperationTagName      = "operation"
+	ServiceRoleTagName    = "service_role"
+	StatsTypeTagName      = "stats_type"
+	CacheTypeTagName      = "cache_type"
+	FailureTagName        = "failure"
+	TaskTypeTagName       = "task_type"
+	visibilityTypeTagName = "visibility_type"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -101,6 +102,9 @@ const (
 
 	MutableStateCacheTypeTagValue = "mutablestate"
 	EventsCacheTypeTagValue       = "events"
+
+	standardVisibilityTagValue = "standard_visibility"
+	advancedVisibilityTagValue = "advanced_visibility"
 )
 
 // Common service base metrics
@@ -247,34 +251,36 @@ const (
 	PersistenceListNamespaceScope
 	// PersistenceGetMetadataScope tracks DeleteNamespaceByName calls made by service to persistence layer
 	PersistenceGetMetadataScope
-	// PersistenceRecordWorkflowExecutionStartedScope tracks RecordWorkflowExecutionStarted calls made by service to persistence layer
-	PersistenceRecordWorkflowExecutionStartedScope
-	// PersistenceRecordWorkflowExecutionClosedScope tracks RecordWorkflowExecutionClosed calls made by service to persistence layer
-	PersistenceRecordWorkflowExecutionClosedScope
-	// PersistenceUpsertWorkflowExecutionScope tracks UpsertWorkflowExecution calls made by service to persistence layer
-	PersistenceUpsertWorkflowExecutionScope
-	// PersistenceListOpenWorkflowExecutionsScope tracks ListOpenWorkflowExecutions calls made by service to persistence layer
-	PersistenceListOpenWorkflowExecutionsScope
-	// PersistenceListClosedWorkflowExecutionsScope tracks ListClosedWorkflowExecutions calls made by service to persistence layer
-	PersistenceListClosedWorkflowExecutionsScope
-	// PersistenceListOpenWorkflowExecutionsByTypeScope tracks ListOpenWorkflowExecutionsByType calls made by service to persistence layer
-	PersistenceListOpenWorkflowExecutionsByTypeScope
-	// PersistenceListClosedWorkflowExecutionsByTypeScope tracks ListClosedWorkflowExecutionsByType calls made by service to persistence layer
-	PersistenceListClosedWorkflowExecutionsByTypeScope
-	// PersistenceListOpenWorkflowExecutionsByWorkflowIDScope tracks ListOpenWorkflowExecutionsByWorkflowID calls made by service to persistence layer
-	PersistenceListOpenWorkflowExecutionsByWorkflowIDScope
-	// PersistenceListClosedWorkflowExecutionsByWorkflowIDScope tracks ListClosedWorkflowExecutionsByWorkflowID calls made by service to persistence layer
-	PersistenceListClosedWorkflowExecutionsByWorkflowIDScope
-	// PersistenceListClosedWorkflowExecutionsByStatusScope tracks ListClosedWorkflowExecutionsByStatus calls made by service to persistence layer
-	PersistenceListClosedWorkflowExecutionsByStatusScope
-	// PersistenceVisibilityDeleteWorkflowExecutionScope is the metrics scope for persistence.VisibilityManager.DeleteWorkflowExecution
-	PersistenceVisibilityDeleteWorkflowExecutionScope
-	// PersistenceListWorkflowExecutionsScope tracks ListWorkflowExecutions calls made by service to persistence layer
-	PersistenceListWorkflowExecutionsScope
-	// PersistenceScanWorkflowExecutionsScope tracks ScanWorkflowExecutions calls made by service to persistence layer
-	PersistenceScanWorkflowExecutionsScope
-	// PersistenceCountWorkflowExecutionsScope tracks CountWorkflowExecutions calls made by service to persistence layer
-	PersistenceCountWorkflowExecutionsScope
+
+	// VisibilityPersistenceRecordWorkflowExecutionStartedScope tracks RecordWorkflowExecutionStarted calls made by service to visibility persistence layer
+	VisibilityPersistenceRecordWorkflowExecutionStartedScope
+	// VisibilityPersistenceRecordWorkflowExecutionClosedScope tracks RecordWorkflowExecutionClosed calls made by service to visibility persistence layer
+	VisibilityPersistenceRecordWorkflowExecutionClosedScope
+	// VisibilityPersistenceUpsertWorkflowExecutionScope tracks UpsertWorkflowExecution calls made by service to persistence visibility layer
+	VisibilityPersistenceUpsertWorkflowExecutionScope
+	// VisibilityPersistenceListOpenWorkflowExecutionsScope tracks ListOpenWorkflowExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceListOpenWorkflowExecutionsScope
+	// VisibilityPersistenceListClosedWorkflowExecutionsScope tracks ListClosedWorkflowExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceListClosedWorkflowExecutionsScope
+	// VisibilityPersistenceListOpenWorkflowExecutionsByTypeScope tracks ListOpenWorkflowExecutionsByType calls made by service to visibility persistence layer
+	VisibilityPersistenceListOpenWorkflowExecutionsByTypeScope
+	// VisibilityPersistenceListClosedWorkflowExecutionsByTypeScope tracks ListClosedWorkflowExecutionsByType calls made by service to visibility persistence layer
+	VisibilityPersistenceListClosedWorkflowExecutionsByTypeScope
+	// VisibilityPersistenceListOpenWorkflowExecutionsByWorkflowIDScope tracks ListOpenWorkflowExecutionsByWorkflowID calls made by service to visibility persistence layer
+	VisibilityPersistenceListOpenWorkflowExecutionsByWorkflowIDScope
+	// VisibilityPersistenceListClosedWorkflowExecutionsByWorkflowIDScope tracks ListClosedWorkflowExecutionsByWorkflowID calls made by service to visibility persistence layer
+	VisibilityPersistenceListClosedWorkflowExecutionsByWorkflowIDScope
+	// VisibilityPersistenceListClosedWorkflowExecutionsByStatusScope tracks ListClosedWorkflowExecutionsByStatus calls made by service to visibility persistence layer
+	VisibilityPersistenceListClosedWorkflowExecutionsByStatusScope
+	// VisibilityPersistenceDeleteWorkflowExecutionScope tracks DeleteWorkflowExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceDeleteWorkflowExecutionScope
+	// VisibilityPersistenceListWorkflowExecutionsScope tracks ListWorkflowExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceListWorkflowExecutionsScope
+	// VisibilityPersistenceScanWorkflowExecutionsScope tracks ScanWorkflowExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceScanWorkflowExecutionsScope
+	// VisibilityPersistenceCountWorkflowExecutionsScope tracks CountWorkflowExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceCountWorkflowExecutionsScope
+
 	// PersistenceEnqueueMessageScope tracks Enqueue calls made by service to persistence layer
 	PersistenceEnqueueMessageScope
 	// PersistenceEnqueueMessageToDLQScope tracks Enqueue DLQ calls made by service to persistence layer
@@ -625,35 +631,6 @@ const (
 
 	// ClusterMetadataArchivalConfigScope tracks ArchivalConfig calls to ClusterMetadata
 	ClusterMetadataArchivalConfigScope
-
-	// ElasticsearchRecordWorkflowExecutionStartedScope tracks RecordWorkflowExecutionStarted calls made by service to persistence layer
-	ElasticsearchRecordWorkflowExecutionStartedScope
-	// ElasticsearchRecordWorkflowExecutionClosedScope tracks RecordWorkflowExecutionClosed calls made by service to persistence layer
-	ElasticsearchRecordWorkflowExecutionClosedScope
-	// ElasticsearchUpsertWorkflowExecutionScope tracks UpsertWorkflowExecution calls made by service to persistence layer
-	ElasticsearchUpsertWorkflowExecutionScope
-	// ElasticsearchListOpenWorkflowExecutionsScope tracks ListOpenWorkflowExecutions calls made by service to persistence layer
-	ElasticsearchListOpenWorkflowExecutionsScope
-	// ElasticsearchListClosedWorkflowExecutionsScope tracks ListClosedWorkflowExecutions calls made by service to persistence layer
-	ElasticsearchListClosedWorkflowExecutionsScope
-	// ElasticsearchListOpenWorkflowExecutionsByTypeScope tracks ListOpenWorkflowExecutionsByType calls made by service to persistence layer
-	ElasticsearchListOpenWorkflowExecutionsByTypeScope
-	// ElasticsearchListClosedWorkflowExecutionsByTypeScope tracks ListClosedWorkflowExecutionsByType calls made by service to persistence layer
-	ElasticsearchListClosedWorkflowExecutionsByTypeScope
-	// ElasticsearchListOpenWorkflowExecutionsByWorkflowIDScope tracks ListOpenWorkflowExecutionsByWorkflowID calls made by service to persistence layer
-	ElasticsearchListOpenWorkflowExecutionsByWorkflowIDScope
-	// ElasticsearchListClosedWorkflowExecutionsByWorkflowIDScope tracks ListClosedWorkflowExecutionsByWorkflowID calls made by service to persistence layer
-	ElasticsearchListClosedWorkflowExecutionsByWorkflowIDScope
-	// ElasticsearchListClosedWorkflowExecutionsByStatusScope tracks ListClosedWorkflowExecutionsByStatus calls made by service to persistence layer
-	ElasticsearchListClosedWorkflowExecutionsByStatusScope
-	// ElasticsearchListWorkflowExecutionsScope tracks ListWorkflowExecutions calls made by service to persistence layer
-	ElasticsearchListWorkflowExecutionsScope
-	// ElasticsearchScanWorkflowExecutionsScope tracks ScanWorkflowExecutions calls made by service to persistence layer
-	ElasticsearchScanWorkflowExecutionsScope
-	// ElasticsearchCountWorkflowExecutionsScope tracks CountWorkflowExecutions calls made by service to persistence layer
-	ElasticsearchCountWorkflowExecutionsScope
-	// ElasticsearchDeleteWorkflowExecutionsScope tracks DeleteWorkflowExecution calls made by service to persistence layer
-	ElasticsearchDeleteWorkflowExecutionsScope
 
 	// ElasticsearchBulkProcessor is scope used by all metric emitted by Elasticsearch bulk processor
 	ElasticsearchBulkProcessor
@@ -1115,99 +1092,101 @@ const (
 var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	// common scope Names
 	Common: {
-		UnknownScope:                                             {operation: "Unknown"},
-		PersistenceCreateShardScope:                              {operation: "CreateShard"},
-		PersistenceGetShardScope:                                 {operation: "GetShard"},
-		PersistenceUpdateShardScope:                              {operation: "UpdateShard"},
-		PersistenceCreateWorkflowExecutionScope:                  {operation: "CreateWorkflowExecution"},
-		PersistenceGetWorkflowExecutionScope:                     {operation: "GetWorkflowExecution"},
-		PersistenceUpdateWorkflowExecutionScope:                  {operation: "UpdateWorkflowExecution"},
-		PersistenceConflictResolveWorkflowExecutionScope:         {operation: "ConflictResolveWorkflowExecution"},
-		PersistenceResetWorkflowExecutionScope:                   {operation: "ResetWorkflowExecution"},
-		PersistenceDeleteWorkflowExecutionScope:                  {operation: "DeleteWorkflowExecution"},
-		PersistenceDeleteCurrentWorkflowExecutionScope:           {operation: "DeleteCurrentWorkflowExecution"},
-		PersistenceGetCurrentExecutionScope:                      {operation: "GetCurrentExecution"},
-		PersistenceListConcreteExecutionsScope:                   {operation: "ListConcreteExecutions"},
-		PersistenceAddTasksScope:                                 {operation: "AddTasks"},
-		PersistenceGetTransferTaskScope:                          {operation: "GetTransferTask"},
-		PersistenceGetTransferTasksScope:                         {operation: "GetTransferTasks"},
-		PersistenceCompleteTransferTaskScope:                     {operation: "CompleteTransferTask"},
-		PersistenceRangeCompleteTransferTaskScope:                {operation: "RangeCompleteTransferTask"},
-		PersistenceGetVisibilityTaskScope:                        {operation: "GetVisibilityTask"},
-		PersistenceGetVisibilityTasksScope:                       {operation: "GetVisibilityTasks"},
-		PersistenceCompleteVisibilityTaskScope:                   {operation: "CompleteVisibilityTask"},
-		PersistenceRangeCompleteVisibilityTaskScope:              {operation: "RangeCompleteVisibilityTask"},
-		PersistenceGetReplicationTaskScope:                       {operation: "GetReplicationTask"},
-		PersistenceGetReplicationTasksScope:                      {operation: "GetReplicationTasks"},
-		PersistenceCompleteReplicationTaskScope:                  {operation: "CompleteReplicationTask"},
-		PersistenceRangeCompleteReplicationTaskScope:             {operation: "RangeCompleteReplicationTask"},
-		PersistencePutReplicationTaskToDLQScope:                  {operation: "PutReplicationTaskToDLQ"},
-		PersistenceGetReplicationTasksFromDLQScope:               {operation: "GetReplicationTasksFromDLQ"},
-		PersistenceDeleteReplicationTaskFromDLQScope:             {operation: "DeleteReplicationTaskFromDLQ"},
-		PersistenceRangeDeleteReplicationTaskFromDLQScope:        {operation: "RangeDeleteReplicationTaskFromDLQ"},
-		PersistenceGetTimerTaskScope:                             {operation: "GetTimerTask"},
-		PersistenceGetTimerIndexTasksScope:                       {operation: "GetTimerIndexTasks"},
-		PersistenceCompleteTimerTaskScope:                        {operation: "CompleteTimerTask"},
-		PersistenceRangeCompleteTimerTaskScope:                   {operation: "RangeCompleteTimerTask"},
-		PersistenceCreateTaskScope:                               {operation: "CreateTask"},
-		PersistenceGetTasksScope:                                 {operation: "GetTasks"},
-		PersistenceCompleteTaskScope:                             {operation: "CompleteTask"},
-		PersistenceCompleteTasksLessThanScope:                    {operation: "CompleteTasksLessThan"},
-		PersistenceLeaseTaskQueueScope:                           {operation: "LeaseTaskQueue"},
-		PersistenceUpdateTaskQueueScope:                          {operation: "UpdateTaskQueue"},
-		PersistenceListTaskQueueScope:                            {operation: "ListTaskQueue"},
-		PersistenceDeleteTaskQueueScope:                          {operation: "DeleteTaskQueue"},
-		PersistenceAppendHistoryEventsScope:                      {operation: "AppendHistoryEvents"},
-		PersistenceGetWorkflowExecutionHistoryScope:              {operation: "GetWorkflowExecutionHistory"},
-		PersistenceDeleteWorkflowExecutionHistoryScope:           {operation: "DeleteWorkflowExecutionHistory"},
-		PersistenceInitializeSystemNamespaceScope:                {operation: "InitializeSystemNamespace"},
-		PersistenceCreateNamespaceScope:                          {operation: "CreateNamespace"},
-		PersistenceGetNamespaceScope:                             {operation: "GetNamespace"},
-		PersistenceUpdateNamespaceScope:                          {operation: "UpdateNamespace"},
-		PersistenceDeleteNamespaceScope:                          {operation: "DeleteNamespace"},
-		PersistenceDeleteNamespaceByNameScope:                    {operation: "DeleteNamespaceByName"},
-		PersistenceListNamespaceScope:                            {operation: "ListNamespace"},
-		PersistenceGetMetadataScope:                              {operation: "GetMetadata"},
-		PersistenceRecordWorkflowExecutionStartedScope:           {operation: "RecordWorkflowExecutionStarted"},
-		PersistenceRecordWorkflowExecutionClosedScope:            {operation: "RecordWorkflowExecutionClosed"},
-		PersistenceUpsertWorkflowExecutionScope:                  {operation: "UpsertWorkflowExecution"},
-		PersistenceListOpenWorkflowExecutionsScope:               {operation: "ListOpenWorkflowExecutions"},
-		PersistenceListClosedWorkflowExecutionsScope:             {operation: "ListClosedWorkflowExecutions"},
-		PersistenceListOpenWorkflowExecutionsByTypeScope:         {operation: "ListOpenWorkflowExecutionsByType"},
-		PersistenceListClosedWorkflowExecutionsByTypeScope:       {operation: "ListClosedWorkflowExecutionsByType"},
-		PersistenceListOpenWorkflowExecutionsByWorkflowIDScope:   {operation: "ListOpenWorkflowExecutionsByWorkflowID"},
-		PersistenceListClosedWorkflowExecutionsByWorkflowIDScope: {operation: "ListClosedWorkflowExecutionsByWorkflowID"},
-		PersistenceListClosedWorkflowExecutionsByStatusScope:     {operation: "ListClosedWorkflowExecutionsByStatus"},
-		PersistenceVisibilityDeleteWorkflowExecutionScope:        {operation: "VisibilityDeleteWorkflowExecution"},
-		PersistenceListWorkflowExecutionsScope:                   {operation: "ListWorkflowExecutions"},
-		PersistenceScanWorkflowExecutionsScope:                   {operation: "ScanWorkflowExecutions"},
-		PersistenceCountWorkflowExecutionsScope:                  {operation: "CountWorkflowExecutions"},
-		PersistenceAppendHistoryNodesScope:                       {operation: "AppendHistoryNodes"},
-		PersistenceDeleteHistoryNodesScope:                       {operation: "DeleteHistoryNodes"},
-		PersistenceReadHistoryBranchScope:                        {operation: "ReadHistoryBranch"},
-		PersistenceForkHistoryBranchScope:                        {operation: "ForkHistoryBranch"},
-		PersistenceDeleteHistoryBranchScope:                      {operation: "DeleteHistoryBranch"},
-		PersistenceTrimHistoryBranchScope:                        {operation: "TrimHistoryBranch"},
-		PersistenceCompleteForkBranchScope:                       {operation: "CompleteForkBranch"},
-		PersistenceGetHistoryTreeScope:                           {operation: "GetHistoryTree"},
-		PersistenceGetAllHistoryTreeBranchesScope:                {operation: "GetAllHistoryTreeBranches"},
-		PersistenceEnqueueMessageScope:                           {operation: "EnqueueMessage"},
-		PersistenceEnqueueMessageToDLQScope:                      {operation: "EnqueueMessageToDLQ"},
-		PersistenceReadQueueMessagesScope:                        {operation: "ReadQueueMessages"},
-		PersistenceReadQueueMessagesFromDLQScope:                 {operation: "ReadQueueMessagesFromDLQ"},
-		PersistenceDeleteQueueMessagesScope:                      {operation: "DeleteQueueMessages"},
-		PersistenceDeleteQueueMessageFromDLQScope:                {operation: "DeleteQueueMessageFromDLQ"},
-		PersistenceRangeDeleteMessagesFromDLQScope:               {operation: "RangeDeleteMessagesFromDLQ"},
-		PersistenceUpdateAckLevelScope:                           {operation: "UpdateAckLevel"},
-		PersistenceGetAckLevelScope:                              {operation: "GetAckLevel"},
-		PersistenceUpdateDLQAckLevelScope:                        {operation: "UpdateDLQAckLevel"},
-		PersistenceGetDLQAckLevelScope:                           {operation: "GetDLQAckLevel"},
-		PersistenceNamespaceReplicationQueueScope:                {operation: "NamespaceReplicationQueue"},
-		PersistenceGetClusterMetadataScope:                       {operation: "GetClusterMetadata"},
-		PersistenceSaveClusterMetadataScope:                      {operation: "SaveClusterMetadata"},
-		PersistencePruneClusterMembershipScope:                   {operation: "PruneClusterMembership"},
-		PersistenceGetClusterMembersScope:                        {operation: "GetClusterMembership"},
-		PersistenceUpsertClusterMembershipScope:                  {operation: "UpsertClusterMembership"},
+		UnknownScope:                                      {operation: "Unknown"},
+		PersistenceCreateShardScope:                       {operation: "CreateShard"},
+		PersistenceGetShardScope:                          {operation: "GetShard"},
+		PersistenceUpdateShardScope:                       {operation: "UpdateShard"},
+		PersistenceCreateWorkflowExecutionScope:           {operation: "CreateWorkflowExecution"},
+		PersistenceGetWorkflowExecutionScope:              {operation: "GetWorkflowExecution"},
+		PersistenceUpdateWorkflowExecutionScope:           {operation: "UpdateWorkflowExecution"},
+		PersistenceConflictResolveWorkflowExecutionScope:  {operation: "ConflictResolveWorkflowExecution"},
+		PersistenceResetWorkflowExecutionScope:            {operation: "ResetWorkflowExecution"},
+		PersistenceDeleteWorkflowExecutionScope:           {operation: "DeleteWorkflowExecution"},
+		PersistenceDeleteCurrentWorkflowExecutionScope:    {operation: "DeleteCurrentWorkflowExecution"},
+		PersistenceGetCurrentExecutionScope:               {operation: "GetCurrentExecution"},
+		PersistenceListConcreteExecutionsScope:            {operation: "ListConcreteExecutions"},
+		PersistenceAddTasksScope:                          {operation: "AddTasks"},
+		PersistenceGetTransferTaskScope:                   {operation: "GetTransferTask"},
+		PersistenceGetTransferTasksScope:                  {operation: "GetTransferTasks"},
+		PersistenceCompleteTransferTaskScope:              {operation: "CompleteTransferTask"},
+		PersistenceRangeCompleteTransferTaskScope:         {operation: "RangeCompleteTransferTask"},
+		PersistenceGetVisibilityTaskScope:                 {operation: "GetVisibilityTask"},
+		PersistenceGetVisibilityTasksScope:                {operation: "GetVisibilityTasks"},
+		PersistenceCompleteVisibilityTaskScope:            {operation: "CompleteVisibilityTask"},
+		PersistenceRangeCompleteVisibilityTaskScope:       {operation: "RangeCompleteVisibilityTask"},
+		PersistenceGetReplicationTaskScope:                {operation: "GetReplicationTask"},
+		PersistenceGetReplicationTasksScope:               {operation: "GetReplicationTasks"},
+		PersistenceCompleteReplicationTaskScope:           {operation: "CompleteReplicationTask"},
+		PersistenceRangeCompleteReplicationTaskScope:      {operation: "RangeCompleteReplicationTask"},
+		PersistencePutReplicationTaskToDLQScope:           {operation: "PutReplicationTaskToDLQ"},
+		PersistenceGetReplicationTasksFromDLQScope:        {operation: "GetReplicationTasksFromDLQ"},
+		PersistenceDeleteReplicationTaskFromDLQScope:      {operation: "DeleteReplicationTaskFromDLQ"},
+		PersistenceRangeDeleteReplicationTaskFromDLQScope: {operation: "RangeDeleteReplicationTaskFromDLQ"},
+		PersistenceGetTimerTaskScope:                      {operation: "GetTimerTask"},
+		PersistenceGetTimerIndexTasksScope:                {operation: "GetTimerIndexTasks"},
+		PersistenceCompleteTimerTaskScope:                 {operation: "CompleteTimerTask"},
+		PersistenceRangeCompleteTimerTaskScope:            {operation: "RangeCompleteTimerTask"},
+		PersistenceCreateTaskScope:                        {operation: "CreateTask"},
+		PersistenceGetTasksScope:                          {operation: "GetTasks"},
+		PersistenceCompleteTaskScope:                      {operation: "CompleteTask"},
+		PersistenceCompleteTasksLessThanScope:             {operation: "CompleteTasksLessThan"},
+		PersistenceLeaseTaskQueueScope:                    {operation: "LeaseTaskQueue"},
+		PersistenceUpdateTaskQueueScope:                   {operation: "UpdateTaskQueue"},
+		PersistenceListTaskQueueScope:                     {operation: "ListTaskQueue"},
+		PersistenceDeleteTaskQueueScope:                   {operation: "DeleteTaskQueue"},
+		PersistenceAppendHistoryEventsScope:               {operation: "AppendHistoryEvents"},
+		PersistenceGetWorkflowExecutionHistoryScope:       {operation: "GetWorkflowExecutionHistory"},
+		PersistenceDeleteWorkflowExecutionHistoryScope:    {operation: "DeleteWorkflowExecutionHistory"},
+		PersistenceInitializeSystemNamespaceScope:         {operation: "InitializeSystemNamespace"},
+		PersistenceCreateNamespaceScope:                   {operation: "CreateNamespace"},
+		PersistenceGetNamespaceScope:                      {operation: "GetNamespace"},
+		PersistenceUpdateNamespaceScope:                   {operation: "UpdateNamespace"},
+		PersistenceDeleteNamespaceScope:                   {operation: "DeleteNamespace"},
+		PersistenceDeleteNamespaceByNameScope:             {operation: "DeleteNamespaceByName"},
+		PersistenceListNamespaceScope:                     {operation: "ListNamespace"},
+		PersistenceGetMetadataScope:                       {operation: "GetMetadata"},
+
+		VisibilityPersistenceRecordWorkflowExecutionStartedScope:           {operation: "RecordWorkflowExecutionStarted", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceRecordWorkflowExecutionClosedScope:            {operation: "RecordWorkflowExecutionClosed", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceUpsertWorkflowExecutionScope:                  {operation: "UpsertWorkflowExecution", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceListOpenWorkflowExecutionsScope:               {operation: "ListOpenWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceListClosedWorkflowExecutionsScope:             {operation: "ListClosedWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceListOpenWorkflowExecutionsByTypeScope:         {operation: "ListOpenWorkflowExecutionsByType", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceListClosedWorkflowExecutionsByTypeScope:       {operation: "ListClosedWorkflowExecutionsByType", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceListOpenWorkflowExecutionsByWorkflowIDScope:   {operation: "ListOpenWorkflowExecutionsByWorkflowID", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceListClosedWorkflowExecutionsByWorkflowIDScope: {operation: "ListClosedWorkflowExecutionsByWorkflowID", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceListClosedWorkflowExecutionsByStatusScope:     {operation: "ListClosedWorkflowExecutionsByStatus", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceDeleteWorkflowExecutionScope:                  {operation: "VisibilityDeleteWorkflowExecution", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceListWorkflowExecutionsScope:                   {operation: "ListWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceScanWorkflowExecutionsScope:                   {operation: "ScanWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+		VisibilityPersistenceCountWorkflowExecutionsScope:                  {operation: "CountWorkflowExecutions", tags: map[string]string{visibilityTypeTagName: unknownValue}},
+
+		PersistenceAppendHistoryNodesScope:         {operation: "AppendHistoryNodes"},
+		PersistenceDeleteHistoryNodesScope:         {operation: "DeleteHistoryNodes"},
+		PersistenceReadHistoryBranchScope:          {operation: "ReadHistoryBranch"},
+		PersistenceForkHistoryBranchScope:          {operation: "ForkHistoryBranch"},
+		PersistenceDeleteHistoryBranchScope:        {operation: "DeleteHistoryBranch"},
+		PersistenceTrimHistoryBranchScope:          {operation: "TrimHistoryBranch"},
+		PersistenceCompleteForkBranchScope:         {operation: "CompleteForkBranch"},
+		PersistenceGetHistoryTreeScope:             {operation: "GetHistoryTree"},
+		PersistenceGetAllHistoryTreeBranchesScope:  {operation: "GetAllHistoryTreeBranches"},
+		PersistenceEnqueueMessageScope:             {operation: "EnqueueMessage"},
+		PersistenceEnqueueMessageToDLQScope:        {operation: "EnqueueMessageToDLQ"},
+		PersistenceReadQueueMessagesScope:          {operation: "ReadQueueMessages"},
+		PersistenceReadQueueMessagesFromDLQScope:   {operation: "ReadQueueMessagesFromDLQ"},
+		PersistenceDeleteQueueMessagesScope:        {operation: "DeleteQueueMessages"},
+		PersistenceDeleteQueueMessageFromDLQScope:  {operation: "DeleteQueueMessageFromDLQ"},
+		PersistenceRangeDeleteMessagesFromDLQScope: {operation: "RangeDeleteMessagesFromDLQ"},
+		PersistenceUpdateAckLevelScope:             {operation: "UpdateAckLevel"},
+		PersistenceGetAckLevelScope:                {operation: "GetAckLevel"},
+		PersistenceUpdateDLQAckLevelScope:          {operation: "UpdateDLQAckLevel"},
+		PersistenceGetDLQAckLevelScope:             {operation: "GetDLQAckLevel"},
+		PersistenceNamespaceReplicationQueueScope:  {operation: "NamespaceReplicationQueue"},
+		PersistenceGetClusterMetadataScope:         {operation: "GetClusterMetadata"},
+		PersistenceSaveClusterMetadataScope:        {operation: "SaveClusterMetadata"},
+		PersistencePruneClusterMembershipScope:     {operation: "PruneClusterMembership"},
+		PersistenceGetClusterMembersScope:          {operation: "GetClusterMembership"},
+		PersistenceUpsertClusterMembershipScope:    {operation: "UpsertClusterMembership"},
 
 		ClusterMetadataArchivalConfigScope: {operation: "ArchivalConfig"},
 
@@ -1360,22 +1339,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryRereplicationByHistoryMetadataReplicationScope: {operation: "HistoryRereplicationByHistoryMetadataReplication"},
 		HistoryRereplicationByActivityReplicationScope:        {operation: "HistoryRereplicationByActivityReplication"},
 
-		ElasticsearchRecordWorkflowExecutionStartedScope:           {operation: "RecordWorkflowExecutionStarted"},
-		ElasticsearchRecordWorkflowExecutionClosedScope:            {operation: "RecordWorkflowExecutionClosed"},
-		ElasticsearchUpsertWorkflowExecutionScope:                  {operation: "UpsertWorkflowExecution"},
-		ElasticsearchListOpenWorkflowExecutionsScope:               {operation: "ListOpenWorkflowExecutions"},
-		ElasticsearchListClosedWorkflowExecutionsScope:             {operation: "ListClosedWorkflowExecutions"},
-		ElasticsearchListOpenWorkflowExecutionsByTypeScope:         {operation: "ListOpenWorkflowExecutionsByType"},
-		ElasticsearchListClosedWorkflowExecutionsByTypeScope:       {operation: "ListClosedWorkflowExecutionsByType"},
-		ElasticsearchListOpenWorkflowExecutionsByWorkflowIDScope:   {operation: "ListOpenWorkflowExecutionsByWorkflowID"},
-		ElasticsearchListClosedWorkflowExecutionsByWorkflowIDScope: {operation: "ListClosedWorkflowExecutionsByWorkflowID"},
-		ElasticsearchListClosedWorkflowExecutionsByStatusScope:     {operation: "ListClosedWorkflowExecutionsByStatus"},
-		ElasticsearchListWorkflowExecutionsScope:                   {operation: "ListWorkflowExecutions"},
-		ElasticsearchScanWorkflowExecutionsScope:                   {operation: "ScanWorkflowExecutions"},
-		ElasticsearchCountWorkflowExecutionsScope:                  {operation: "CountWorkflowExecutions"},
-		ElasticsearchDeleteWorkflowExecutionsScope:                 {operation: "DeleteWorkflowExecution"},
-		ElasticsearchBulkProcessor:                                 {operation: "ElasticsearchBulkProcessor"},
-		ElasticsearchVisibility:                                    {operation: "ElasticsearchVisibility"},
+		ElasticsearchBulkProcessor: {operation: "ElasticsearchBulkProcessor"},
+		ElasticsearchVisibility:    {operation: "ElasticsearchVisibility"},
 
 		SequentialTaskProcessingScope: {operation: "SequentialTaskProcessing"},
 		ParallelTaskProcessingScope:   {operation: "ParallelTaskProcessing"},
@@ -1673,11 +1638,14 @@ const (
 
 	ArchivalConfigFailures
 
-	ElasticsearchRequests
-	ElasticsearchFailures
-	ElasticsearchLatency
-	ElasticsearchErrBadRequestCounter
-	ElasticsearchErrBusyCounter
+	VisibilityPersistenceRequests
+	VisibilityPersistenceFailures
+	VisibilityPersistenceLatency
+	VisibilityPersistenceInvalidArgument
+	VisibilityPersistenceResourceExhausted
+	VisibilityPersistenceConditionFailed
+	VisibilityPersistenceTimeout
+	VisibilityPersistenceNotFound
 
 	SequentialTaskSubmitRequest
 	SequentialTaskSubmitRequestTaskQueueExist
@@ -2104,23 +2072,28 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		LockFailures:                                        {metricName: "lock_failures", metricType: Counter},
 		LockLatency:                                         {metricName: "lock_latency", metricType: Timer},
 		ArchivalConfigFailures:                              {metricName: "archivalconfig_failures", metricType: Counter},
-		ElasticsearchRequests:                               {metricName: "elasticsearch_requests", metricType: Counter},
-		ElasticsearchFailures:                               {metricName: "elasticsearch_errors", metricType: Counter},
-		ElasticsearchLatency:                                {metricName: "elasticsearch_latency", metricType: Timer},
-		ElasticsearchErrBadRequestCounter:                   {metricName: "elasticsearch_errors_bad_request", metricType: Counter},
-		ElasticsearchErrBusyCounter:                         {metricName: "elasticsearch_errors_busy", metricType: Counter},
-		SequentialTaskSubmitRequest:                         {metricName: "sequentialtask_submit_request", metricType: Counter},
-		SequentialTaskSubmitRequestTaskQueueExist:           {metricName: "sequentialtask_submit_request_taskqueue_exist", metricType: Counter},
-		SequentialTaskSubmitRequestTaskQueueMissing:         {metricName: "sequentialtask_submit_request_taskqueue_missing", metricType: Counter},
-		SequentialTaskSubmitLatency:                         {metricName: "sequentialtask_submit_latency", metricType: Timer},
-		SequentialTaskQueueSize:                             {metricName: "sequentialtask_queue_size", metricType: Timer},
-		SequentialTaskQueueProcessingLatency:                {metricName: "sequentialtask_queue_processing_latency", metricType: Timer},
-		SequentialTaskTaskProcessingLatency:                 {metricName: "sequentialtask_task_processing_latency", metricType: Timer},
-		ParallelTaskSubmitRequest:                           {metricName: "paralleltask_submit_request", metricType: Counter},
-		ParallelTaskSubmitLatency:                           {metricName: "paralleltask_submit_latency", metricType: Timer},
-		ParallelTaskTaskProcessingLatency:                   {metricName: "paralleltask_task_processing_latency", metricType: Timer},
-		PriorityTaskSubmitRequest:                           {metricName: "prioritytask_submit_request", metricType: Counter},
-		PriorityTaskSubmitLatency:                           {metricName: "prioritytask_submit_latency", metricType: Timer},
+
+		VisibilityPersistenceRequests:          {metricName: "visibility_persistence_requests", metricType: Counter},
+		VisibilityPersistenceFailures:          {metricName: "visibility_persistence_errors", metricType: Counter},
+		VisibilityPersistenceLatency:           {metricName: "visibility_persistence_latency", metricType: Timer},
+		VisibilityPersistenceInvalidArgument:   {metricName: "visibility_persistence_invalid_argument", metricType: Counter},
+		VisibilityPersistenceResourceExhausted: {metricName: "visibility_persistence_resource_exhausted", metricType: Counter},
+		VisibilityPersistenceConditionFailed:   {metricName: "visibility_persistence_condition_failed", metricType: Counter},
+		VisibilityPersistenceTimeout:           {metricName: "visibility_persistence_timeout", metricType: Counter},
+		VisibilityPersistenceNotFound:          {metricName: "visibility_persistence_not_found", metricType: Counter},
+
+		SequentialTaskSubmitRequest:                 {metricName: "sequentialtask_submit_request", metricType: Counter},
+		SequentialTaskSubmitRequestTaskQueueExist:   {metricName: "sequentialtask_submit_request_taskqueue_exist", metricType: Counter},
+		SequentialTaskSubmitRequestTaskQueueMissing: {metricName: "sequentialtask_submit_request_taskqueue_missing", metricType: Counter},
+		SequentialTaskSubmitLatency:                 {metricName: "sequentialtask_submit_latency", metricType: Timer},
+		SequentialTaskQueueSize:                     {metricName: "sequentialtask_queue_size", metricType: Timer},
+		SequentialTaskQueueProcessingLatency:        {metricName: "sequentialtask_queue_processing_latency", metricType: Timer},
+		SequentialTaskTaskProcessingLatency:         {metricName: "sequentialtask_task_processing_latency", metricType: Timer},
+		ParallelTaskSubmitRequest:                   {metricName: "paralleltask_submit_request", metricType: Counter},
+		ParallelTaskSubmitLatency:                   {metricName: "paralleltask_submit_latency", metricType: Timer},
+		ParallelTaskTaskProcessingLatency:           {metricName: "paralleltask_task_processing_latency", metricType: Timer},
+		PriorityTaskSubmitRequest:                   {metricName: "prioritytask_submit_request", metricType: Counter},
+		PriorityTaskSubmitLatency:                   {metricName: "prioritytask_submit_latency", metricType: Timer},
 
 		HistoryArchiverArchiveNonRetryableErrorCount:              {metricName: "history_archiver_archive_non_retryable_error", metricType: Counter},
 		HistoryArchiverArchiveTransientErrorCount:                 {metricName: "history_archiver_archive_transient_error", metricType: Counter},
