@@ -256,7 +256,6 @@ func (c *taskQueueManagerImpl) Stop() {
 	c.liveness.Stop()
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
-	c.engine.removeTaskQueueManager(c.taskQueueID)
 	c.logger.Info("", tag.LifeCycleStopped)
 }
 
