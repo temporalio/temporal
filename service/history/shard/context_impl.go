@@ -509,9 +509,9 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 
 func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
-) error {
+) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
 	if s.isStopped() {
-		return ErrShardClosed
+		return nil, ErrShardClosed
 	}
 
 	namespaceID := request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId
@@ -520,7 +520,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	// do not try to get namespace cache within shard lock
 	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	s.Lock()
@@ -537,7 +537,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 			request.CurrentWorkflowMutation.VisibilityTasks,
 			&transferMaxReadLevel,
 		); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if err := s.allocateTaskIDsLocked(
@@ -549,7 +549,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 		request.ResetWorkflowSnapshot.VisibilityTasks,
 		&transferMaxReadLevel,
 	); err != nil {
-		return err
+		return nil, err
 	}
 	if request.NewWorkflowSnapshot != nil {
 		if err := s.allocateTaskIDsLocked(
@@ -561,15 +561,18 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 			request.NewWorkflowSnapshot.VisibilityTasks,
 			&transferMaxReadLevel,
 		); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
 	currentRangeID := s.getRangeID()
 	request.RangeID = currentRangeID
-	err = s.executionManager.ConflictResolveWorkflowExecution(request)
-	return s.handleError(err)
+	resp, err := s.executionManager.ConflictResolveWorkflowExecution(request)
+	if err := s.handleError(err); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (s *ContextImpl) AddTasks(

@@ -399,11 +399,12 @@ func (mr *MockExecutionManagerMockRecorder) CompleteVisibilityTask(request inter
 }
 
 // ConflictResolveWorkflowExecution mocks base method.
-func (m *MockExecutionManager) ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) error {
+func (m *MockExecutionManager) ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) (*ConflictResolveWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConflictResolveWorkflowExecution", request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*ConflictResolveWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // ConflictResolveWorkflowExecution indicates an expected call of ConflictResolveWorkflowExecution.

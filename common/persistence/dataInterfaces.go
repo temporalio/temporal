@@ -506,12 +506,15 @@ type (
 
 		// workflow to be resetted
 		ResetWorkflowSnapshot WorkflowSnapshot
+		ResetWorkflowEvents   []*WorkflowEvents
 
 		// maybe new workflow
 		NewWorkflowSnapshot *WorkflowSnapshot
+		NewWorkflowEvents   []*WorkflowEvents
 
 		// current workflow
 		CurrentWorkflowMutation *WorkflowMutation
+		CurrentWorkflowEvents   []*WorkflowEvents
 	}
 
 	// ResetWorkflowExecutionRequest is used to reset workflow execution state for current run and create new run
@@ -1010,6 +1013,12 @@ type (
 		MutableStateUpdateSessionStats *MutableStateUpdateSessionStats
 	}
 
+	ConflictResolveWorkflowExecutionResponse struct {
+		ResetWorkflowHistorySizeDiff   int64
+		NewWorkflowHistorySizeDiff     int64
+		CurrentWorkflowHistorySizeDiff int64
+	}
+
 	// AppendHistoryNodesRequest is used to append a batch of history nodes
 	AppendHistoryNodesRequest struct {
 		// The shard to get history node data
@@ -1257,7 +1266,7 @@ type (
 		CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error)
-		ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) error
+		ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) (*ConflictResolveWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
 		DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)

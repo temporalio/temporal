@@ -1232,6 +1232,23 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(
 func (d *cassandraPersistence) ConflictResolveWorkflowExecution(
 	request *p.InternalConflictResolveWorkflowExecutionRequest,
 ) error {
+	// first append history events
+	for _, req := range request.ResetWorkflowEventsNewEvents {
+		if err := d.AppendHistoryNodes(req); err != nil {
+			return err
+		}
+	}
+	for _, req := range request.NewWorkflowEventsNewEvents {
+		if err := d.AppendHistoryNodes(req); err != nil {
+			return err
+		}
+	}
+	for _, req := range request.CurrentWorkflowEventsNewEvents {
+		if err := d.AppendHistoryNodes(req); err != nil {
+			return err
+		}
+	}
+
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 
 	currentWorkflow := request.CurrentWorkflowMutation

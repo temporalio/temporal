@@ -347,13 +347,15 @@ type (
 		Mode ConflictResolveWorkflowMode
 
 		// workflow to be resetted
-		ResetWorkflowSnapshot InternalWorkflowSnapshot
-
+		ResetWorkflowSnapshot        InternalWorkflowSnapshot
+		ResetWorkflowEventsNewEvents []*InternalAppendHistoryNodesRequest
 		// maybe new workflow
-		NewWorkflowSnapshot *InternalWorkflowSnapshot
+		NewWorkflowSnapshot        *InternalWorkflowSnapshot
+		NewWorkflowEventsNewEvents []*InternalAppendHistoryNodesRequest
 
 		// current workflow
-		CurrentWorkflowMutation *InternalWorkflowMutation
+		CurrentWorkflowMutation        *InternalWorkflowMutation
+		CurrentWorkflowEventsNewEvents []*InternalAppendHistoryNodesRequest
 	}
 
 	// InternalWorkflowMutation is used as generic workflow execution state mutation for Persistence Interface

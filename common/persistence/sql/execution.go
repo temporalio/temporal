@@ -481,6 +481,23 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 func (m *sqlExecutionStore) ConflictResolveWorkflowExecution(
 	request *p.InternalConflictResolveWorkflowExecutionRequest,
 ) error {
+	// first append history
+	for _, req := range request.ResetWorkflowEventsNewEvents {
+		if err := m.AppendHistoryNodes(req); err != nil {
+			return err
+		}
+	}
+	for _, req := range request.NewWorkflowEventsNewEvents {
+		if err := m.AppendHistoryNodes(req); err != nil {
+			return err
+		}
+	}
+	for _, req := range request.CurrentWorkflowEventsNewEvents {
+		if err := m.AppendHistoryNodes(req); err != nil {
+			return err
+		}
+	}
+
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	return m.txExecuteShardLocked(ctx,

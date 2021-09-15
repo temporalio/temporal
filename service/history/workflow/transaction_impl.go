@@ -92,50 +92,18 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
 ) (int64, int64, int64, error) {
-
-	resetHistorySizeDiff := int64(0)
-	newWorkflowHistorySizeDiff := int64(0)
-	currentWorkflowHistorySizeDiff := int64(0)
-
-	for _, workflowEvents := range resetWorkflowEventsSeq {
-		eventsSize, err := PersistWorkflowEvents(t.shard, workflowEvents)
-		if err != nil {
-			return 0, 0, 0, err
-		}
-		resetHistorySizeDiff += eventsSize
-	}
-	resetWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += resetHistorySizeDiff
-
-	if newWorkflowSnapshot != nil {
-		for _, workflowEvents := range newWorkflowEventsSeq {
-			eventsSize, err := PersistWorkflowEvents(t.shard, workflowEvents)
-			if err != nil {
-				return 0, 0, 0, err
-			}
-			newWorkflowHistorySizeDiff += eventsSize
-		}
-		newWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += newWorkflowHistorySizeDiff
-	}
-
-	if currentWorkflowMutation != nil {
-		for _, workflowEvents := range currentWorkflowEventsSeq {
-			eventsSize, err := PersistWorkflowEvents(t.shard, workflowEvents)
-			if err != nil {
-				return 0, 0, 0, err
-			}
-			currentWorkflowHistorySizeDiff += eventsSize
-		}
-		currentWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize += currentWorkflowHistorySizeDiff
-	}
-
-	if err := t.shard.ConflictResolveWorkflowExecution(&persistence.ConflictResolveWorkflowExecutionRequest{
+	resp, err := t.shard.ConflictResolveWorkflowExecution(&persistence.ConflictResolveWorkflowExecutionRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
 		Mode:                    conflictResolveMode,
 		ResetWorkflowSnapshot:   *resetWorkflowSnapshot,
+		ResetWorkflowEvents:     resetWorkflowEventsSeq,
 		NewWorkflowSnapshot:     newWorkflowSnapshot,
+		NewWorkflowEvents:       newWorkflowEventsSeq,
 		CurrentWorkflowMutation: currentWorkflowMutation,
-	}); err != nil {
+		CurrentWorkflowEvents:   currentWorkflowEventsSeq,
+	})
+	if err != nil {
 		return 0, 0, 0, err
 	}
 
@@ -153,7 +121,7 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 		t.logger.Error("unable to notify workflow mutation", tag.Error(err))
 	}
 
-	return resetHistorySizeDiff, newWorkflowHistorySizeDiff, currentWorkflowHistorySizeDiff, nil
+	return resp.ResetWorkflowHistorySizeDiff, resp.NewWorkflowHistorySizeDiff, resp.CurrentWorkflowHistorySizeDiff, nil
 }
 
 func (t *TransactionImpl) UpdateWorkflowExecution(
