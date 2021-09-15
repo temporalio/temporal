@@ -1399,7 +1399,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return err
 
 	default:
-		return serviceerror.NewUnavailable(
+		return serviceerror.NewInternal(
 			fmt.Sprintf("unknown parent close policy: %v", childInfo.ParentClosePolicy),
 		)
 	}

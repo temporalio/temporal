@@ -150,7 +150,7 @@ Loop:
 		if !ok {
 			errString := fmt.Sprintf("failed to find in user timer event ID: %v", timerSequenceID.EventID)
 			t.logger.Error(errString)
-			return serviceerror.NewUnavailable(errString)
+			return serviceerror.NewInternal(errString)
 		}
 
 		if expired := timerSequence.IsExpired(referenceTime, timerSequenceID); !expired {

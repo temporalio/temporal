@@ -481,7 +481,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 	}
 
 	if len(eventBatchBlobs) != 1 {
-		return nil, serviceerror.NewUnavailable("replicatorQueueProcessor encounter more than 1 NDC raw event batch")
+		return nil, serviceerror.NewInternal("replicatorQueueProcessor encounter more than 1 NDC raw event batch")
 	}
 
 	return eventBatchBlobs[0], nil
@@ -494,10 +494,6 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 ) ([]*historyspb.VersionHistoryItem, []byte, error) {
 
 	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
-	if versionHistories == nil {
-		return nil, nil, serviceerror.NewUnavailable("replicatorQueueProcessor encounter workflow without version histories")
-	}
-
 	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
 		versionHistories,
 		versionhistory.NewVersionHistoryItem(
