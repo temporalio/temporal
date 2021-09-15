@@ -378,7 +378,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 	// Always add workflow completed event to this one
 	_, err = handler.mutableState.AddCompletedWorkflowEvent(handler.workflowTaskCompletedID, attr, newExecutionRunID)
 	if err != nil {
-		return serviceerror.NewUnavailable("Unable to add complete workflow event.")
+		return err
 	}
 
 	// Check if this workflow has a cron schedule
