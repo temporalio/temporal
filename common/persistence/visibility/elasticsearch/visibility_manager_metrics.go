@@ -226,7 +226,7 @@ func (m *visibilityManagerMetrics) CountWorkflowExecutions(request *visibility.C
 }
 
 func (m *visibilityManagerMetrics) DeleteWorkflowExecution(request *visibility.VisibilityDeleteWorkflowExecutionRequest) error {
-	scope := m.metricClient.Scope(metrics.PersistenceDeleteWorkflowExecutionScope, m.visibilityTypeMetricsTag)
+	scope := m.metricClient.Scope(metrics.PersistenceVisibilityDeleteWorkflowExecutionScope, m.visibilityTypeMetricsTag)
 
 	scope.IncCounter(metrics.VisibilityPersistenceRequests)
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
