@@ -33,9 +33,9 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/consts"
@@ -204,7 +204,7 @@ func getStandbyPostActionFn(
 
 func refreshTasks(
 	adminClient adminservice.AdminServiceClient,
-	namespaceCache cache.NamespaceCache,
+	namespaceCache namespace.Cache,
 	namespaceID string,
 	workflowID string,
 	runID string,

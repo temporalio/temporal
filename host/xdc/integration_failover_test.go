@@ -55,11 +55,11 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/environment"
@@ -79,7 +79,7 @@ type (
 )
 
 const (
-	cacheRefreshInterval = cache.NamespaceCacheRefreshInterval + 5*time.Second
+	cacheRefreshInterval = namespace.CacheRefreshInterval + 5*time.Second
 )
 
 var (
@@ -215,10 +215,10 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 }
 
 func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
-	namespace := "test-simple-workflow-failover-" + common.GenerateRandomString(5)
+	namespaceName := "test-simple-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        namespace,
+		Namespace:                        namespaceName,
 		IsGlobalNamespace:                true,
 		Clusters:                         clusterReplicationConfig,
 		ActiveClusterName:                clusterName[0],
@@ -228,13 +228,13 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
-		Namespace: namespace,
+		Namespace: namespaceName,
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
 	// Wait for namespace cache to pick the change
-	time.Sleep(cache.NamespaceCacheRefreshInterval)
+	time.Sleep(namespace.CacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
 	resp2, err := client2.DescribeNamespace(host.NewContext(), descReq)
@@ -251,7 +251,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tq}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
-		Namespace:           namespace,
+		Namespace:           namespaceName,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -321,7 +321,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 
 	poller := host.TaskPoller{
 		Engine:              client1,
-		Namespace:           namespace,
+		Namespace:           namespaceName,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -333,7 +333,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 
 	poller2 := host.TaskPoller{
 		Engine:              client2,
-		Namespace:           namespace,
+		Namespace:           namespaceName,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -355,7 +355,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	queryResultCh := make(chan QueryResult)
 	queryWorkflowFn := func(client workflowservice.WorkflowServiceClient, queryType string) {
 		queryResp, err := client.QueryWorkflow(host.NewContext(), &workflowservice.QueryWorkflowRequest{
-			Namespace: namespace,
+			Namespace: namespaceName,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: id,
 				RunId:      we.RunId,
@@ -408,11 +408,11 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.NotNil(queryResult.Resp.QueryResult)
 	s.Equal("query-result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 
-	s.failover(namespace, clusterName[1], int64(2), client1)
+	s.failover(namespaceName, clusterName[1], int64(2), client1)
 
 	// check history matched
 	getHistoryReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: namespace,
+		Namespace: namespaceName,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      rid,
@@ -646,10 +646,10 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 }
 
 func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_WorkflowIDReusePolicy() {
-	namespace := "test-start-workflow-failover-ID-reuse-policy" + common.GenerateRandomString(5)
+	namespaceName := "test-start-workflow-failover-ID-reuse-policy" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        namespace,
+		Namespace:                        namespaceName,
 		IsGlobalNamespace:                true,
 		Clusters:                         clusterReplicationConfig,
 		ActiveClusterName:                clusterName[0],
@@ -659,13 +659,13 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	s.NoError(err)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
-		Namespace: namespace,
+		Namespace: namespaceName,
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
 	// Wait for namespace cache to pick the change
-	time.Sleep(cache.NamespaceCacheRefreshInterval)
+	time.Sleep(namespace.CacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
 	resp2, err := client2.DescribeNamespace(host.NewContext(), descReq)
@@ -682,7 +682,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:             uuid.New(),
-		Namespace:             namespace,
+		Namespace:             namespaceName,
 		WorkflowId:            id,
 		WorkflowType:          workflowType,
 		TaskQueue:             taskQueue,
@@ -712,7 +712,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 
 	poller := host.TaskPoller{
 		Engine:              client1,
-		Namespace:           namespace,
+		Namespace:           namespaceName,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -723,7 +723,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 
 	poller2 := host.TaskPoller{
 		Engine:              client2,
-		Namespace:           namespace,
+		Namespace:           namespaceName,
 		TaskQueue:           taskQueue,
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
@@ -738,7 +738,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	s.NoError(err)
 	s.Equal(1, workflowCompleteTimes)
 
-	s.failover(namespace, clusterName[1], int64(2), client1)
+	s.failover(namespaceName, clusterName[1], int64(2), client1)
 
 	// start the same workflow in cluster 2 is not allowed if policy is AllowDuplicateFailedOnly
 	startReq.RequestId = uuid.New()

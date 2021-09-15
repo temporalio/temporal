@@ -45,10 +45,10 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -108,6 +108,7 @@ type (
 		// DescribeTaskQueue returns information about the target task queue
 		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		String() string
+		QueueID() *taskQueueID
 	}
 
 	// Single task queue in memory state
@@ -124,7 +125,7 @@ type (
 		taskGC           *taskGC
 		taskAckManager   ackManager   // tracks ackLevel for delivered messages
 		matcher          *TaskMatcher // for matching a task producer with a poller
-		namespaceCache   cache.NamespaceCache
+		namespaceCache   namespace.Cache
 		logger           log.Logger
 		metricsClient    metrics.Client
 		namespaceValue   atomic.Value
@@ -139,7 +140,7 @@ type (
 		outstandingPollsLock sync.Mutex
 		outstandingPollsMap  map[string]context.CancelFunc
 		shutdownCh           chan struct{} // Delivers stop to the pump that populates taskBuffer
-		signalFatalProblem   func(id *taskQueueID)
+		signalFatalProblem   func(taskQueueManager)
 	}
 )
 
@@ -189,13 +190,13 @@ func newTaskQueueManager(
 	tlMgr.namespaceValue.Store("")
 	if tlMgr.metricScope() == nil { // namespace name lookup failed
 		// metric scope to use when namespace lookup fails
-		tlMgr.metricScopeValue.Store(newPerTaskQueueScope(
-			"",
-			tlMgr.taskQueueID.name,
-			tlMgr.taskQueueKind,
-			e.metricsClient,
-			metrics.MatchingTaskQueueMgrScope,
-		))
+		tlMgr.metricScopeValue.Store(
+			metrics.GetPerTaskQueueScope(
+				e.metricsClient.Scope(metrics.MatchingTaskQueueMgrScope),
+				"",
+				tlMgr.taskQueueID.name,
+				tlMgr.taskQueueKind,
+			))
 	}
 
 	tlMgr.liveness = newLiveness(clock.NewRealTimeSource(), taskQueueConfig.IdleTaskqueueCheckInterval(), tlMgr.Stop)
@@ -471,7 +472,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 				tag.Error(err),
 				tag.WorkflowTaskQueueName(c.taskQueueID.name),
 				tag.WorkflowTaskQueueType(c.taskQueueID.taskType))
-			c.signalFatalProblem(c.taskQueueID)
+			c.signalFatalProblem(c)
 			return
 		}
 		c.taskReader.Signal()
@@ -589,14 +590,12 @@ func (c *taskQueueManagerImpl) tryInitNamespaceAndScope() {
 
 	namespace = entry.GetInfo().Name
 
-	scope := newPerTaskQueueScope(
-		namespace,
-		c.taskQueueID.name,
-		c.taskQueueKind,
-		c.metricsClient,
-		metrics.MatchingTaskQueueMgrScope,
-	)
+	scope := metrics.GetPerTaskQueueScope(c.metricsClient.Scope(metrics.MatchingTaskQueueMgrScope), namespace, c.taskQueueID.name, c.taskQueueKind)
 
 	c.metricScopeValue.Store(scope)
 	c.namespaceValue.Store(namespace)
+}
+
+func (c *taskQueueManagerImpl) QueueID() *taskQueueID {
+	return c.taskQueueID
 }

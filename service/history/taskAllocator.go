@@ -29,9 +29,9 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -47,7 +47,7 @@ type (
 	taskAllocatorImpl struct {
 		currentClusterName string
 		shard              shard.Context
-		namespaceCache     cache.NamespaceCache
+		namespaceCache     namespace.Cache
 		logger             log.Logger
 
 		locker sync.RWMutex

@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -76,7 +75,6 @@ type (
 		Logger           log.Logger
 		MetricsClient    metrics.Client
 		ClusterMetadata  cluster.Metadata
-		NamespaceCache   cache.NamespaceCache
 	}
 
 	// HistoryArchiver is used to archive history and read archived history
@@ -102,7 +100,6 @@ type (
 		Logger          log.Logger
 		MetricsClient   metrics.Client
 		ClusterMetadata cluster.Metadata
-		NamespaceCache  cache.NamespaceCache
 	}
 
 	// QueryVisibilityRequest is the request to query archived visibility records

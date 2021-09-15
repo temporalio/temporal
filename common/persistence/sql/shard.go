@@ -78,7 +78,7 @@ func (m *sqlShardStore) CreateShard(
 	}
 
 	if _, err := m.Db.InsertIntoShards(ctx, row); err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("CreateShard operation failed. Failed to insert into shards table. Error: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("CreateShard operation failed. Failed to insert into shards table. Error: %v", err))
 	}
 
 	return nil
@@ -100,7 +100,7 @@ func (m *sqlShardStore) GetShard(
 	case sql.ErrNoRows:
 		return nil, serviceerror.NewNotFound(fmt.Sprintf("GetShard operation failed. Shard with ID %v not found. Error: %v", request.ShardID, err))
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetShard operation failed. Failed to get record. ShardId: %v. Error: %v", request.ShardID, err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetShard operation failed. Failed to get record. ShardId: %v. Error: %v", request.ShardID, err))
 	}
 }
 
@@ -158,9 +158,9 @@ func lockShard(
 		}
 		return nil
 	case sql.ErrNoRows:
-		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock shard with ID %v that does not exist.", shardID))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to lock shard with ID %v that does not exist.", shardID))
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock shard with ID: %v. Error: %v", shardID, err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to lock shard with ID: %v. Error: %v", shardID, err))
 	}
 }
 
@@ -184,8 +184,8 @@ func readLockShard(
 		}
 		return nil
 	case sql.ErrNoRows:
-		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock shard with ID %v that does not exist.", shardID))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to lock shard with ID %v that does not exist.", shardID))
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock shard with ID: %v. Error: %v", shardID, err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to lock shard with ID: %v. Error: %v", shardID, err))
 	}
 }

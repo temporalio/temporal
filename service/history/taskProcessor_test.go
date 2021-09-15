@@ -37,9 +37,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/consts"
@@ -235,7 +235,7 @@ func (s *taskProcessorSuite) TestHandleTaskError_NamespaceNotActiveError() {
 	err := serviceerror.NewNamespaceNotActive("", "", "")
 
 	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
-	taskInfo.startTime = time.Now().UTC().Add(-cache.NamespaceCacheRefreshInterval * time.Duration(3))
+	taskInfo.startTime = time.Now().UTC().Add(-namespace.CacheRefreshInterval * time.Duration(3))
 	s.Nil(s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 
 	taskInfo.startTime = time.Now().UTC()

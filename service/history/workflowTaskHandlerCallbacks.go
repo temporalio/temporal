@@ -34,16 +34,17 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+
 	"go.temporal.io/server/common/searchattribute"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -73,7 +74,7 @@ type (
 		shard                  shard.Context
 		timeSource             clock.TimeSource
 		historyEngine          *historyEngineImpl
-		namespaceCache         cache.NamespaceCache
+		namespaceCache         namespace.Cache
 		historyCache           *workflow.Cache
 		txProcessor            transferQueueProcessor
 		timerProcessor         timerQueueProcessor
@@ -185,11 +186,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			}
 
 			workflowTask, isRunning := mutableState.GetWorkflowTaskInfo(scheduleID)
+			metricsScope := handler.metricsClient.Scope(metrics.HistoryRecordWorkflowTaskStartedScope)
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduleID >= mutableState.GetNextEventID() {
-				handler.metricsClient.IncCounter(metrics.HistoryRecordWorkflowTaskStartedScope, metrics.StaleMutableStateCounter)
+				metricsScope.IncCounter(metrics.StaleMutableStateCounter)
 				// Reload workflow execution history
 				// ErrStaleState will trigger updateWorkflowExecution function to reload the mutable state
 				return nil, consts.ErrStaleState
@@ -227,9 +229,17 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				req.PollRequest.TaskQueue,
 				req.PollRequest.Identity,
 			)
+
+			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(*workflowTask.ScheduledTime)
+			namespaceName := namespaceEntry.GetInfo().GetName()
+			taskQueue := workflowTask.TaskQueue
+			metrics.GetPerTaskQueueScope(metricsScope, namespaceName, taskQueue.GetName(), taskQueue.GetKind()).
+				Tagged(metrics.TaskTypeTag("workflow")).
+				RecordTimer(metrics.TaskScheduleToStartLatency, workflowScheduleToStartLatency)
+
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history
-				return nil, serviceerror.NewInternal("Unable to add WorkflowTaskStarted event to history.")
+				return nil, serviceerror.NewUnavailable("Unable to add WorkflowTaskStarted event to history.")
 			}
 
 			resp, err = handler.createRecordWorkflowTaskStartedResponse(namespaceID, mutableState, workflowTask, req.PollRequest.GetIdentity())
@@ -379,19 +389,19 @@ Update_History_Loop:
 				scope.IncCounter(metrics.WorkflowTaskHeartbeatTimeoutCounter)
 				completedEvent, err = msBuilder.AddWorkflowTaskTimedOutEvent(currentWorkflowTask.ScheduleID, currentWorkflowTask.StartedID)
 				if err != nil {
-					return nil, serviceerror.NewInternal("Failed to add workflow task timeout event.")
+					return nil, serviceerror.NewUnavailable("Failed to add workflow task timeout event.")
 				}
 				msBuilder.ClearStickyness()
 			} else {
 				completedEvent, err = msBuilder.AddWorkflowTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
 				if err != nil {
-					return nil, serviceerror.NewInternal("Unable to add WorkflowTaskCompleted event to history.")
+					return nil, serviceerror.NewUnavailable("Unable to add WorkflowTaskCompleted event to history.")
 				}
 			}
 		} else {
 			completedEvent, err = msBuilder.AddWorkflowTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
 			if err != nil {
-				return nil, serviceerror.NewInternal("Unable to add WorkflowTaskCompleted event to history.")
+				return nil, serviceerror.NewUnavailable("Unable to add WorkflowTaskCompleted event to history.")
 			}
 		}
 
@@ -500,7 +510,7 @@ Update_History_Loop:
 				)
 			}
 			if err != nil {
-				return nil, serviceerror.NewInternal("Failed to add workflow task scheduled event.")
+				return nil, serviceerror.NewUnavailable("Failed to add workflow task scheduled event.")
 			}
 
 			newWorkflowTaskScheduledID = newWorkflowTask.ScheduleID
@@ -663,7 +673,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	return response, nil
 }
 
-func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder workflow.MutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *cache.NamespaceCacheEntry, workflowTaskHeartbeating bool) {
+func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder workflow.MutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *namespace.CacheEntry, workflowTaskHeartbeating bool) {
 	queryRegistry := msBuilder.GetQueryRegistry()
 	if !queryRegistry.HasBufferedQuery() {
 		return

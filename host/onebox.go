@@ -43,7 +43,6 @@ import (
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -77,14 +76,15 @@ type Temporal interface {
 	GetFrontendClient() workflowservice.WorkflowServiceClient
 	GetHistoryClient() historyservice.HistoryServiceClient
 	GetExecutionManager() persistence.ExecutionManager
+	RefreshNamespaceCache()
 }
 
 type (
 	temporalImpl struct {
-		frontendService common.Daemon
-		matchingService common.Daemon
-		historyServices []common.Daemon
-		workerService   common.Daemon
+		frontendService resource.Resource
+		matchingService resource.Resource
+		historyServices []resource.Resource
+		workerService   resource.Resource
 
 		adminClient                      adminservice.AdminServiceClient
 		frontendClient                   workflowservice.WorkflowServiceClient
@@ -624,18 +624,18 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	service.Start()
 
 	clusterMetadata := cluster.NewTestClusterMetadata(c.clusterMetadataConfig)
-	var replicatorNamespaceCache cache.NamespaceCache
+	var replicatorNamespaceCache namespace.Cache
 	if c.workerConfig.EnableReplicator {
 		metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
-		replicatorNamespaceCache = cache.NewNamespaceCache(metadataManager, clusterMetadata, service.GetMetricsClient(), service.GetLogger())
+		replicatorNamespaceCache = namespace.NewNamespaceCache(metadataManager, clusterMetadata, service.GetMetricsClient(), service.GetLogger())
 		replicatorNamespaceCache.Start()
 		c.startWorkerReplicator(service, clusterMetadata)
 	}
 
-	var clientWorkerNamespaceCache cache.NamespaceCache
+	var clientWorkerNamespaceCache namespace.Cache
 	if c.workerConfig.EnableArchiver {
 		metadataProxyManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
-		clientWorkerNamespaceCache = cache.NewNamespaceCache(metadataProxyManager, clusterMetadata, service.GetMetricsClient(), service.GetLogger())
+		clientWorkerNamespaceCache = namespace.NewNamespaceCache(metadataProxyManager, clusterMetadata, service.GetMetricsClient(), service.GetLogger())
 		clientWorkerNamespaceCache.Start()
 		c.startWorkerClientWorker(params, service, clientWorkerNamespaceCache)
 	}
@@ -669,7 +669,7 @@ func (c *temporalImpl) startWorkerReplicator(service resource.Resource, clusterM
 	c.replicator.Start()
 }
 
-func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams, service resource.Resource, namespaceCache cache.NamespaceCache) {
+func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams, service resource.Resource, namespaceCache namespace.Cache) {
 	workerConfig := worker.NewConfig(params)
 	workerConfig.ArchiverConfig.ArchiverConcurrency = dynamicconfig.GetIntPropertyFn(10)
 
@@ -712,6 +712,17 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
 	}
 	if c.historyConfig.HistoryCountLimitError != 0 {
 		client.OverrideValue(dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
+	}
+}
+
+func (c *temporalImpl) RefreshNamespaceCache() {
+	c.frontendService.GetNamespaceCache().Refresh()
+	c.matchingService.GetNamespaceCache().Refresh()
+	for _, r := range c.historyServices {
+		r.GetNamespaceCache().Refresh()
+	}
+	if c.workerService != nil {
+		c.workerService.GetNamespaceCache().Refresh()
 	}
 }
 

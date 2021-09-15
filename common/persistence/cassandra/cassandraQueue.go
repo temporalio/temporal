@@ -31,6 +31,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
@@ -173,7 +174,7 @@ func (q *cassandraQueue) ReadMessages(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadMessages operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ReadMessages operation failed. Error: %v", err))
 	}
 
 	return result, nil
@@ -206,7 +207,7 @@ func (q *cassandraQueue) ReadMessagesFromDLQ(
 	newPageToken := make([]byte, len(nextPageToken))
 	copy(newPageToken, nextPageToken)
 	if err := iter.Close(); err != nil {
-		return nil, nil, serviceerror.NewInternal(fmt.Sprintf("ReadMessagesFromDLQ operation failed. Error: %v", err))
+		return nil, nil, serviceerror.NewUnavailable(fmt.Sprintf("ReadMessagesFromDLQ operation failed. Error: %v", err))
 	}
 
 	return result, newPageToken, nil
@@ -218,7 +219,7 @@ func (q *cassandraQueue) DeleteMessagesBefore(
 
 	query := q.session.Query(templateDeleteMessagesBeforeQuery, q.queueType, messageID)
 	if err := query.Exec(); err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("DeleteMessagesBefore operation failed. Error %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("DeleteMessagesBefore operation failed. Error %v", err))
 	}
 	return nil
 }
@@ -230,7 +231,7 @@ func (q *cassandraQueue) DeleteMessageFromDLQ(
 	// Use negative queue type as the dlq type
 	query := q.session.Query(templateDeleteMessageQuery, q.getDLQTypeFromQueueType(), messageID)
 	if err := query.Exec(); err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("DeleteMessageFromDLQ operation failed. Error %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("DeleteMessageFromDLQ operation failed. Error %v", err))
 	}
 
 	return nil
@@ -244,7 +245,7 @@ func (q *cassandraQueue) RangeDeleteMessagesFromDLQ(
 	// Use negative queue type as the dlq type
 	query := q.session.Query(templateDeleteMessagesQuery, q.getDLQTypeFromQueueType(), firstMessageID, lastMessageID)
 	if err := query.Exec(); err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("RangeDeleteMessagesFromDLQ operation failed. Error %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("RangeDeleteMessagesFromDLQ operation failed. Error %v", err))
 	}
 
 	return nil

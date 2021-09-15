@@ -156,5 +156,10 @@ func invalidStateTransitionErr(
 	targetState enumsspb.WorkflowExecutionState,
 	targetStatus enumspb.WorkflowExecutionStatus,
 ) error {
-	return serviceerror.NewInternal(fmt.Sprintf(invalidStateTransitionMsg, currentState, targetState, targetStatus))
+	return serviceerror.NewInternal(fmt.Sprintf(
+		invalidStateTransitionMsg,
+		currentState,
+		targetState,
+		targetStatus,
+	))
 }

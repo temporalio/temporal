@@ -42,11 +42,11 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -592,8 +592,8 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	return newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent
 }
 
-func (s *mutableStateSuite) newNamespaceCacheEntry() *cache.NamespaceCacheEntry {
-	return cache.NewNamespaceCacheEntryForTest(
+func (s *mutableStateSuite) newNamespaceCacheEntry() *namespace.CacheEntry {
+	return namespace.NewNamespaceCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: "mutableStateTest"},
 		&persistencespb.NamespaceConfig{},
 		true,

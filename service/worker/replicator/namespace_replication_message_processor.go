@@ -191,9 +191,9 @@ func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 
 	namespaceAttribute := task.GetNamespaceTaskAttributes()
 	if namespaceAttribute == nil {
-		return &serviceerror.Internal{
-			Message: "Namespace replication task does not set namespace task attribute",
-		}
+		return serviceerror.NewUnavailable(
+			"Namespace replication task does not set namespace task attribute",
+		)
 	}
 	p.metricsClient.Scope(
 		metrics.NamespaceReplicationTaskScope,

@@ -207,7 +207,7 @@ func CreateReplicationServiceBusyRetryPolicy() backoff.RetryPolicy {
 // IsPersistenceTransientError checks if the error is a transient persistence error
 func IsPersistenceTransientError(err error) bool {
 	switch err.(type) {
-	case *serviceerror.Internal,
+	case *serviceerror.Unavailable,
 		*serviceerror.ResourceExhausted:
 		return true
 	}
@@ -564,7 +564,7 @@ func CheckEventBlobSizeLimit(
 
 	if actualSize > warnLimit {
 		if logger != nil {
-			logger.Warn("Blob size exceeds limit.",
+			logger.Warn("Blob data size exceeds the warning limit.",
 				tag.WorkflowNamespaceID(namespaceID),
 				tag.WorkflowID(workflowID),
 				tag.WorkflowRunID(runID),

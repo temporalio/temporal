@@ -46,11 +46,11 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -84,7 +84,7 @@ type (
 		taskQueues           map[taskQueueID]taskQueueManager // Convert to LRU cache
 		config               *Config
 		lockableQueryTaskMap lockableQueryTaskMap
-		namespaceCache       cache.NamespaceCache
+		namespaceCache       namespace.Cache
 		keyResolver          membership.ServiceResolver
 	}
 )
@@ -114,7 +114,7 @@ func NewEngine(taskManager persistence.TaskManager,
 	config *Config,
 	logger log.Logger,
 	metricsClient metrics.Client,
-	namespaceCache cache.NamespaceCache,
+	namespaceCache namespace.Cache,
 	resolver membership.ServiceResolver,
 ) Engine {
 
@@ -536,7 +536,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		case enumspb.QUERY_RESULT_TYPE_FAILED:
 			return nil, serviceerror.NewQueryFailed(workerResponse.GetCompletedRequest().GetErrorMessage())
 		default:
-			return nil, serviceerror.NewInternal("unknown query completed type")
+			return nil, serviceerror.NewUnavailable("unknown query completed type")
 		}
 	case <-hCtx.Done():
 		return nil, hCtx.Err()
@@ -702,16 +702,17 @@ func (e *matchingEngineImpl) getTask(
 	return tlMgr.GetTask(ctx, maxDispatchPerSecond)
 }
 
-func (e *matchingEngineImpl) unloadTaskQueue(id *taskQueueID) {
+func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
+	queueID := unloadTQM.QueueID()
 	e.taskQueuesLock.Lock()
-	tlMgr, ok := e.taskQueues[*id]
-	if ok {
-		delete(e.taskQueues, *id)
+	foundTQM, ok := e.taskQueues[*queueID]
+	if !ok || foundTQM != unloadTQM {
+		e.taskQueuesLock.Unlock()
+		return
 	}
+	delete(e.taskQueues, *queueID)
 	e.taskQueuesLock.Unlock()
-	if ok {
-		tlMgr.Stop()
-	}
+	foundTQM.Stop()
 }
 
 // Populate the workflow task response based on context and scheduled/started events.

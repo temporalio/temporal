@@ -36,11 +36,11 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/task"
 	"go.temporal.io/server/service/history/consts"
@@ -162,7 +162,7 @@ func (s *queueTaskSuite) TestHandleErr_ErrNamespaceNotActive() {
 
 	err := &serviceerror.NamespaceNotActive{}
 
-	queueTaskBase.submitTime = time.Now().UTC().Add(-cache.NamespaceCacheRefreshInterval * time.Duration(2))
+	queueTaskBase.submitTime = time.Now().UTC().Add(-namespace.CacheRefreshInterval * time.Duration(2))
 	s.NoError(queueTaskBase.HandleErr(err))
 
 	queueTaskBase.submitTime = time.Now().UTC()

@@ -48,7 +48,6 @@ import (
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
@@ -58,6 +57,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/migration"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -77,25 +77,25 @@ const (
 
 var (
 	// ErrWorkflowFinished indicates trying to mutate mutable state after workflow finished
-	ErrWorkflowFinished = serviceerror.NewInternal("invalid mutable state action: mutation after finish")
+	ErrWorkflowFinished = serviceerror.NewUnavailable("invalid mutable state action: mutation after finish")
 	// ErrMissingTimerInfo indicates missing timer info
-	ErrMissingTimerInfo = serviceerror.NewInternal("unable to get timer info")
+	ErrMissingTimerInfo = serviceerror.NewUnavailable("unable to get timer info")
 	// ErrMissingActivityInfo indicates missing activity info
-	ErrMissingActivityInfo = serviceerror.NewInternal("unable to get activity info")
+	ErrMissingActivityInfo = serviceerror.NewUnavailable("unable to get activity info")
 	// ErrMissingChildWorkflowInfo indicates missing child workflow info
-	ErrMissingChildWorkflowInfo = serviceerror.NewInternal("unable to get child workflow info")
+	ErrMissingChildWorkflowInfo = serviceerror.NewUnavailable("unable to get child workflow info")
 	// ErrMissingRequestCancelInfo indicates missing request cancel info
-	ErrMissingRequestCancelInfo = serviceerror.NewInternal("unable to get request cancel info")
+	ErrMissingRequestCancelInfo = serviceerror.NewUnavailable("unable to get request cancel info")
 	// ErrMissingSignalInfo indicates missing signal external
-	ErrMissingSignalInfo = serviceerror.NewInternal("unable to get signal info")
+	ErrMissingSignalInfo = serviceerror.NewUnavailable("unable to get signal info")
 	// ErrMissingWorkflowStartEvent indicates missing workflow start event
-	ErrMissingWorkflowStartEvent = serviceerror.NewInternal("unable to get workflow start event")
+	ErrMissingWorkflowStartEvent = serviceerror.NewUnavailable("unable to get workflow start event")
 	// ErrMissingWorkflowCompletionEvent indicates missing workflow completion event
-	ErrMissingWorkflowCompletionEvent = serviceerror.NewInternal("unable to get workflow completion event")
+	ErrMissingWorkflowCompletionEvent = serviceerror.NewUnavailable("unable to get workflow completion event")
 	// ErrMissingActivityScheduledEvent indicates missing workflow activity scheduled event
-	ErrMissingActivityScheduledEvent = serviceerror.NewInternal("unable to get activity scheduled event")
+	ErrMissingActivityScheduledEvent = serviceerror.NewUnavailable("unable to get activity scheduled event")
 	// ErrMissingChildWorkflowInitiatedEvent indicates missing child workflow initiated event
-	ErrMissingChildWorkflowInitiatedEvent = serviceerror.NewInternal("unable to get child workflow initiated event")
+	ErrMissingChildWorkflowInitiatedEvent = serviceerror.NewUnavailable("unable to get child workflow initiated event")
 )
 
 type (
@@ -148,7 +148,7 @@ type (
 		dbRecordVersion int64
 		// namespace entry contains a snapshot of namespace
 		// NOTE: do not use the failover version inside, use currentVersion above
-		namespaceEntry *cache.NamespaceCacheEntry
+		namespaceEntry *namespace.CacheEntry
 		// record if a event has been applied to mutable state
 		// TODO: persist this to db
 		appliedEvents map[string]struct{}
@@ -184,7 +184,7 @@ func NewMutableState(
 	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
-	namespaceEntry *cache.NamespaceCacheEntry,
+	namespaceEntry *namespace.CacheEntry,
 	startTime time.Time,
 ) *MutableStateImpl {
 	s := &MutableStateImpl{
@@ -274,7 +274,7 @@ func newMutableStateBuilderFromDB(
 	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
-	namespaceEntry *cache.NamespaceCacheEntry,
+	namespaceEntry *namespace.CacheEntry,
 	dbRecord *persistencespb.WorkflowMutableState,
 	dbRecordVersion int64,
 ) (*MutableStateImpl, error) {
@@ -558,7 +558,7 @@ func (e *MutableStateImpl) IsCurrentWorkflowGuaranteed() bool {
 	}
 }
 
-func (e *MutableStateImpl) GetNamespaceEntry() *cache.NamespaceCacheEntry {
+func (e *MutableStateImpl) GetNamespaceEntry() *namespace.CacheEntry {
 	return e.namespaceEntry
 }
 
@@ -3047,7 +3047,7 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 		command,
 		firstRunID,
 	); err != nil {
-		return nil, nil, serviceerror.NewInternal("Failed to add workflow execution started event.")
+		return nil, nil, serviceerror.NewUnavailable("Failed to add workflow execution started event.")
 	}
 
 	if err = e.ReplicateWorkflowExecutionContinuedAsNewEvent(
@@ -3618,7 +3618,7 @@ func (e *MutableStateImpl) UpdateWorkflowStateStatus(
 }
 
 func (e *MutableStateImpl) StartTransaction(
-	namespaceEntry *cache.NamespaceCacheEntry,
+	namespaceEntry *namespace.CacheEntry,
 ) (bool, error) {
 
 	e.namespaceEntry = namespaceEntry
@@ -3637,7 +3637,7 @@ func (e *MutableStateImpl) StartTransaction(
 }
 
 func (e *MutableStateImpl) StartTransactionSkipWorkflowTaskFail(
-	namespaceEntry *cache.NamespaceCacheEntry,
+	namespaceEntry *namespace.CacheEntry,
 ) error {
 
 	e.namespaceEntry = namespaceEntry
@@ -4078,7 +4078,7 @@ func (e *MutableStateImpl) updateWithLastWriteEvent(
 }
 
 func (e *MutableStateImpl) canReplicateEvents() bool {
-	return e.namespaceEntry.GetReplicationPolicy() == cache.ReplicationPolicyMultiCluster
+	return e.namespaceEntry.GetReplicationPolicy() == namespace.ReplicationPolicyMultiCluster
 }
 
 // validateNoEventsAfterWorkflowFinish perform check on history event batch
@@ -4400,7 +4400,7 @@ func (e *MutableStateImpl) createInternalServerError(
 	actionTag tag.ZapTag,
 ) error {
 
-	return serviceerror.NewInternal(actionTag.Field().String + " operation failed")
+	return serviceerror.NewUnavailable(actionTag.Field().String + " operation failed")
 }
 
 func (e *MutableStateImpl) createCallerError(

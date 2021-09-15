@@ -37,11 +37,11 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -67,7 +67,7 @@ type (
 	) workflow.MutableStateRebuilder
 
 	mutableStateProvider func(
-		namespaceEntry *cache.NamespaceCacheEntry,
+		namespaceEntry *namespace.CacheEntry,
 		startTime time.Time,
 		logger log.Logger,
 	) workflow.MutableState
@@ -106,7 +106,7 @@ type (
 		executionMgr      persistence.ExecutionManager
 		historySerializer serialization.Serializer
 		metricsClient     metrics.Client
-		namespaceCache    cache.NamespaceCache
+		namespaceCache    namespace.Cache
 		historyCache      *workflow.Cache
 		eventsReapplier   nDCEventsReapplier
 		transactionMgr    nDCTransactionMgr
@@ -181,7 +181,7 @@ func newNDCHistoryReplicator(
 			)
 		},
 		newMutableState: func(
-			namespaceEntry *cache.NamespaceCacheEntry,
+			namespaceEntry *namespace.CacheEntry,
 			startTime time.Time,
 			logger log.Logger,
 		) workflow.MutableState {

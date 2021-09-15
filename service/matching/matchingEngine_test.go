@@ -53,11 +53,11 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -71,7 +71,7 @@ type (
 		suite.Suite
 		controller         *gomock.Controller
 		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
-		mockNamespaceCache *cache.MockNamespaceCache
+		mockNamespaceCache *namespace.MockCache
 
 		matchingEngine *matchingEngineImpl
 		taskManager    *testTaskManager
@@ -104,8 +104,8 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.taskManager = newTestTaskManager(s.logger)
-	s.mockNamespaceCache = cache.NewMockNamespaceCache(s.controller)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(cache.CreateNamespaceCacheEntry(matchingTestNamespace), nil).AnyTimes()
+	s.mockNamespaceCache = namespace.NewMockCache(s.controller)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespace.CreateNamespaceCacheEntry(matchingTestNamespace), nil).AnyTimes()
 	s.handlerContext = newHandlerContext(
 		context.Background(),
 		matchingTestNamespace,
@@ -132,7 +132,7 @@ func (s *matchingEngineSuite) newMatchingEngine(
 
 func newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager, mockHistoryClient historyservice.HistoryServiceClient,
-	logger log.Logger, mockNamespaceCache cache.NamespaceCache,
+	logger log.Logger, mockNamespaceCache namespace.Cache,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
 		taskManager:     taskMgr,
@@ -251,6 +251,42 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueuesEmptyResultWithShortCont
 	callContext, cancel := context.WithTimeout(context.Background(), shortContextTimeout)
 	defer cancel()
 	s.PollForTasksEmptyResultTest(callContext, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+}
+
+func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
+	queueID := newTestTaskQueueID(
+		uuid.New(),
+		"makeToast",
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	tqm, err := s.matchingEngine.getTaskQueueManager(
+		queueID,
+		enumspb.TASK_QUEUE_KIND_NORMAL)
+	s.Require().NoError(err)
+
+	tqm2, err := newTaskQueueManager(
+		s.matchingEngine,
+		queueID, // same queueID as above
+		enumspb.TASK_QUEUE_KIND_NORMAL,
+		s.matchingEngine.config)
+	s.Require().NoError(err)
+
+	// try to unload a different tqm instance with the same taskqueue ID
+	s.matchingEngine.unloadTaskQueue(tqm2)
+
+	got, err := s.matchingEngine.getTaskQueueManager(
+		queueID, enumspb.TASK_QUEUE_KIND_NORMAL)
+	s.Require().NoError(err)
+	s.Require().Same(tqm, got,
+		"Unload call with non-matching taskQueueManager should not cause unload")
+
+	// this time unload the right tqm
+	s.matchingEngine.unloadTaskQueue(tqm)
+
+	got, err = s.matchingEngine.getTaskQueueManager(
+		queueID, enumspb.TASK_QUEUE_KIND_NORMAL)
+	s.Require().NoError(err)
+	s.Require().NotSame(tqm, got,
+		"Unload call with matching incarnation should have caused unload")
 }
 
 func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {

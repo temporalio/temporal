@@ -25,7 +25,7 @@
 package interceptor
 
 import (
-	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/namespace"
 )
 
 // gRPC method request must implement either NamespaceNameGetter or NamespaceIDGetter
@@ -41,7 +41,7 @@ type (
 )
 
 func GetNamespace(
-	namespaceCache cache.NamespaceCache,
+	namespaceCache namespace.Cache,
 	req interface{},
 ) string {
 	switch request := req.(type) {

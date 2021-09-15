@@ -40,9 +40,9 @@ import (
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/shard"
@@ -66,7 +66,7 @@ type (
 		mockExecutionMgr *persistence.MockExecutionManager
 
 		logger         log.Logger
-		namespaceEntry *cache.NamespaceCacheEntry
+		namespaceEntry *namespace.CacheEntry
 
 		transactionMgr *nDCTransactionMgrImpl
 	}

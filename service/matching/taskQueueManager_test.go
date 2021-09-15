@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"math"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -42,9 +41,9 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -57,27 +56,22 @@ func TestDeliverBufferTasks(t *testing.T) {
 
 	tests := []func(tlm *taskQueueManagerImpl){
 		func(tlm *taskQueueManagerImpl) { close(tlm.taskReader.taskBuffer) },
-		func(tlm *taskQueueManagerImpl) { close(tlm.taskReader.shutdownChan) },
+		func(tlm *taskQueueManagerImpl) { tlm.taskReader.gorogrp.Cancel() },
 		func(tlm *taskQueueManagerImpl) {
 			rps := 0.1
 			tlm.matcher.UpdateRatelimit(&rps)
 			tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{}
 			err := tlm.matcher.rateLimiter.Wait(context.Background()) // consume the token
 			assert.NoError(t, err)
-			tlm.taskReader.cancelFunc()
+			tlm.taskReader.gorogrp.Cancel()
 		},
 	}
 	for _, test := range tests {
 		tlm := mustCreateTestTaskQueueManager(t, controller)
-		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			tlm.taskReader.dispatchBufferedTasks()
-		}()
+		tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 		test(tlm)
 		// dispatchBufferedTasks should stop after invocation of the test function
-		wg.Wait()
+		tlm.taskReader.gorogrp.Wait()
 	}
 }
 
@@ -87,15 +81,10 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 
 	tlm := mustCreateTestTaskQueueManager(t, controller)
 	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{}
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		tlm.taskReader.dispatchBufferedTasks()
-		wg.Done()
-	}()
+	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 	time.Sleep(100 * time.Millisecond) // let go routine run first and block on tasksForPoll
-	tlm.taskReader.cancelFunc()
-	wg.Wait()
+	tlm.taskReader.gorogrp.Cancel()
+	tlm.taskReader.gorogrp.Wait()
 }
 
 func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
@@ -128,12 +117,12 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 		},
 	}
 
-	require.True(t, tlm.taskReader.addTasksToBuffer(tasks))
+	require.NoError(t, tlm.taskReader.addTasksToBuffer(context.TODO(), tasks))
 	require.Equal(t, int64(0), tlm.taskAckManager.getAckLevel())
 	require.Equal(t, int64(12), tlm.taskAckManager.getReadLevel())
 
 	// Now add a mix of valid and expired tasks
-	require.True(t, tlm.taskReader.addTasksToBuffer([]*persistencespb.AllocatedTaskInfo{
+	require.NoError(t, tlm.taskReader.addTasksToBuffer(context.TODO(), []*persistencespb.AllocatedTaskInfo{
 		{
 			Data: &persistencespb.TaskInfo{
 				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
@@ -290,8 +279,8 @@ func createTestTaskQueueManagerWithConfig(
 ) (*taskQueueManagerImpl, error) {
 	logger := log.NewTestLogger()
 	tm := newTestTaskManager(logger)
-	mockNamespaceCache := cache.NewMockNamespaceCache(controller)
-	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(cache.CreateNamespaceCacheEntry("namespace"), nil).AnyTimes()
+	mockNamespaceCache := namespace.NewMockCache(controller)
+	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespace.CreateNamespaceCacheEntry("namespace"), nil).AnyTimes()
 	me := newMatchingEngine(
 		cfg, tm, nil, logger, mockNamespaceCache,
 	)
@@ -375,11 +364,6 @@ func TestDescribeTaskQueue(t *testing.T) {
 	require.Zero(t, taskQueueStatus.GetBacklogCountHint())
 }
 
-func tlMgrStartWithoutNotifyEvent(tlm *taskQueueManagerImpl) {
-	go tlm.taskReader.dispatchBufferedTasks()
-	go tlm.taskReader.getTasksPump()
-}
-
 func TestCheckIdleTaskQueue(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
@@ -390,7 +374,6 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	// Idle
 	tlm := mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg)
 	tlm.Start()
-	tlMgrStartWithoutNotifyEvent(tlm)
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 
@@ -399,7 +382,6 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	tlm.Start()
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity("test-poll"), nil)
 	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
-	tlMgrStartWithoutNotifyEvent(tlm)
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 	tlm.Stop()
@@ -409,7 +391,6 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg)
 	tlm.Start()
 	require.Equal(t, 0, len(tlm.GetAllPollerInfo()))
-	tlMgrStartWithoutNotifyEvent(tlm)
 	tlm.taskReader.Signal()
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))

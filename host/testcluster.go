@@ -336,3 +336,7 @@ func (tc *TestCluster) GetHistoryClient() HistoryClient {
 func (tc *TestCluster) GetExecutionManager() persistence.ExecutionManager {
 	return tc.host.GetExecutionManager()
 }
+
+func (tc *TestCluster) RefreshNamespaceCache() {
+	tc.host.RefreshNamespaceCache()
+}

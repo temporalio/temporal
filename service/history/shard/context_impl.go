@@ -32,16 +32,17 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/persistence/visibility"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
@@ -57,17 +58,18 @@ type (
 	ContextImpl struct {
 		resource.Resource
 
-		status           int32
-		shardItem        *historyShardsItem
-		shardID          int32
-		executionManager persistence.ExecutionManager
-		metricsClient    metrics.Client
-		EventsCache      events.Cache
-		closeCallback    func(int32, *historyShardsItem)
-		config           *configs.Config
-		logger           log.Logger
-		throttledLogger  log.Logger
-		engine           Engine
+		status            int32
+		shardItem         *historyShardsItem
+		shardID           int32
+		executionManager  persistence.ExecutionManager
+		visibilityManager visibility.VisibilityManager
+		metricsClient     metrics.Client
+		EventsCache       events.Cache
+		closeCallback     func(int32, *historyShardsItem)
+		config            *configs.Config
+		logger            log.Logger
+		throttledLogger   log.Logger
+		engine            Engine
 
 		rwLock                    sync.RWMutex
 		lastUpdated               time.Time
@@ -106,6 +108,10 @@ func (s *ContextImpl) GetService() resource.Resource {
 
 func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
 	return s.executionManager
+}
+
+func (s *ContextImpl) GetVisibilityManager() visibility.VisibilityManager {
+	return s.visibilityManager
 }
 
 func (s *ContextImpl) GetEngine() Engine {
@@ -852,7 +858,7 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 }
 
 func (s *ContextImpl) allocateTaskIDsLocked(
-	namespaceEntry *cache.NamespaceCacheEntry,
+	namespaceEntry *namespace.CacheEntry,
 	workflowID string,
 	transferTasks []persistence.Task,
 	replicationTasks []persistence.Task,
@@ -903,7 +909,7 @@ func (s *ContextImpl) allocateTransferIDsLocked(
 // because Temporal Indexer assume timer taskID of deleteWorkflowExecution is larger than transfer taskID of closeWorkflowExecution
 // for a given workflow.
 func (s *ContextImpl) allocateTimerIDsLocked(
-	namespaceEntry *cache.NamespaceCacheEntry,
+	namespaceEntry *namespace.CacheEntry,
 	workflowID string,
 	timerTasks []persistence.Task,
 ) error {
@@ -1103,9 +1109,7 @@ func acquireShard(
 	}
 
 	executionMgr := shardItem.GetExecutionManager()
-	if err != nil {
-		return nil, err
-	}
+	visibilityMgr := shardItem.GetVisibilityManager()
 
 	shardContext := &ContextImpl{
 		Resource: shardItem.Resource,
@@ -1114,6 +1118,7 @@ func acquireShard(
 		shardItem:                      shardItem,
 		shardID:                        shardItem.shardID,
 		executionManager:               executionMgr,
+		visibilityManager:              visibilityMgr,
 		metricsClient:                  shardItem.GetMetricsClient(),
 		shardInfo:                      updatedShardInfo,
 		closeCallback:                  closeCallback,

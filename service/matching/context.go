@@ -27,8 +27,6 @@ package matching
 import (
 	"context"
 
-	enumspb "go.temporal.io/api/enums/v1"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 
@@ -41,8 +39,6 @@ type handlerContext struct {
 	logger log.Logger
 }
 
-var stickyTaskQueueMetricTag = metrics.TaskQueueTag("__sticky__")
-
 func newHandlerContext(
 	ctx context.Context,
 	namespace string,
@@ -53,34 +49,12 @@ func newHandlerContext(
 ) *handlerContext {
 	return &handlerContext{
 		Context: ctx,
-		scope: newPerTaskQueueScope(
+		scope: metrics.GetPerTaskQueueScope(
+			metricsClient.Scope(metricsScope),
 			namespace,
 			taskQueue.GetName(),
 			taskQueue.GetKind(),
-			metricsClient,
-			metricsScope,
 		),
 		logger: logger,
 	}
-}
-
-func newPerTaskQueueScope(
-	namespace string,
-	taskQueueName string,
-	taskQueueKind enumspb.TaskQueueKind,
-	client metrics.Client,
-	scopeIdx int,
-) metrics.Scope {
-	namespaceTag := metrics.NamespaceUnknownTag()
-	taskQueueTag := metrics.TaskQueueUnknownTag()
-	if namespace != "" {
-		namespaceTag = metrics.NamespaceTag(namespace)
-	}
-	if taskQueueName != "" && taskQueueKind != enumspb.TASK_QUEUE_KIND_STICKY {
-		taskQueueTag = metrics.TaskQueueTag(taskQueueName)
-	}
-	if taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
-		taskQueueTag = stickyTaskQueueMetricTag
-	}
-	return client.Scope(scopeIdx, namespaceTag, taskQueueTag)
 }

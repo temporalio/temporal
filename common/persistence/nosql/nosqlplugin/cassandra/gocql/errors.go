@@ -55,9 +55,9 @@ func ConvertError(
 		if v.Code() == 0x1001 {
 			return serviceerror.NewResourceExhausted(fmt.Sprintf("operation %v encounter %v", operation, err.Error()))
 		}
-		return serviceerror.NewInternal(fmt.Sprintf("operation %v encounter %v", operation, err.Error()))
+		return serviceerror.NewUnavailable(fmt.Sprintf("operation %v encounter %v", operation, err.Error()))
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("operation %v encounter %v", operation, err.Error()))
+		return serviceerror.NewUnavailable(fmt.Sprintf("operation %v encounter %v", operation, err.Error()))
 	}
 }
 

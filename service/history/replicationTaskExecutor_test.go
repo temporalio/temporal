@@ -43,9 +43,9 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -67,7 +67,7 @@ type (
 		mockEngine         *shard.MockEngine
 		config             *configs.Config
 		historyClient      *historyservicemock.MockHistoryServiceClient
-		mockNamespaceCache *cache.MockNamespaceCache
+		mockNamespaceCache *namespace.MockCache
 		mockClientBean     *client.MockBean
 		adminClient        *adminservicemock.MockAdminServiceClient
 		clusterMetadata    *cluster.MockMetadata
@@ -140,7 +140,7 @@ func (s *replicationTaskExecutorSuite) TestFilterTask_Apply() {
 	namespaceID := uuid.New()
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
-		Return(cache.NewGlobalNamespaceCacheEntryForTest(
+		Return(namespace.NewGlobalCacheEntryForTest(
 			nil,
 			nil,
 			&persistencespb.NamespaceReplicationConfig{Clusters: []string{
@@ -159,7 +159,7 @@ func (s *replicationTaskExecutorSuite) TestFilterTask_NotApply() {
 	namespaceID := uuid.New()
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
-		Return(cache.NewGlobalNamespaceCacheEntryForTest(
+		Return(namespace.NewGlobalCacheEntryForTest(
 			nil,
 			nil,
 			&persistencespb.NamespaceReplicationConfig{Clusters: []string{cluster.TestAlternativeClusterName}},

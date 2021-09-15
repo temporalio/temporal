@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/failure"
@@ -2072,7 +2071,7 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 	case enumspb.RESET_REAPPLY_TYPE_NONE:
 		// noop
 	default:
-		return nil, serviceerror.NewInternal("unknown reset type")
+		return nil, serviceerror.NewUnavailable("unknown reset type")
 	}
 
 	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
@@ -2458,7 +2457,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 
 	searchAttributes, err := wh.Resource.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 
 	archiverResponse, err := visibilityArchiver.Query(
@@ -2592,7 +2591,7 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 
 	searchAttributes, err := wh.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 	resp := &workflowservice.GetSearchAttributesResponse{
 		Keys: searchAttributes.All(),
@@ -2834,7 +2833,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 	if response.GetWorkflowExecutionInfo().GetSearchAttributes() != nil {
 		saTypeMap, err := wh.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
 		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 		}
 		searchattribute.ApplyTypeMap(response.GetWorkflowExecutionInfo().GetSearchAttributes(), saTypeMap)
 		err = searchattribute.ApplyAliases(wh.GetSearchAttributesMapper(), response.GetWorkflowExecutionInfo().GetSearchAttributes(), request.GetNamespace())
@@ -3102,7 +3101,7 @@ func (wh *WorkflowHandler) getHistory(
 func (wh *WorkflowHandler) processSearchAttributes(events []*historypb.HistoryEvent, namespace string) error {
 	saTypeMap, err := wh.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 	for _, event := range events {
 		var searchAttributes *commonpb.SearchAttributes
@@ -3417,7 +3416,7 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, namespaceI
 	return true
 }
 
-func (wh *WorkflowHandler) checkBadBinary(namespaceEntry *cache.NamespaceCacheEntry, binaryChecksum string) error {
+func (wh *WorkflowHandler) checkBadBinary(namespaceEntry *namespace.CacheEntry, binaryChecksum string) error {
 	if namespaceEntry.GetConfig().BadBinaries.Binaries != nil {
 		badBinaries := namespaceEntry.GetConfig().BadBinaries.Binaries
 		_, ok := badBinaries[binaryChecksum]

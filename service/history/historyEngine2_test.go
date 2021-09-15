@@ -61,12 +61,12 @@ import (
 
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 )
@@ -81,7 +81,7 @@ type (
 		mockTxProcessor     *MocktransferQueueProcessor
 		mockTimerProcessor  *MocktimerQueueProcessor
 		mockEventsCache     *events.MockCache
-		mockNamespaceCache  *cache.MockNamespaceCache
+		mockNamespaceCache  *namespace.MockCache
 		mockClusterMetadata *cluster.MockMetadata
 
 		historyEngine    *historyEngineImpl
@@ -130,7 +130,7 @@ func (s *engine2Suite) SetupTest() {
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockEventsCache = s.mockShard.MockEventsCache
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(cache.NewLocalNamespaceCacheEntryForTest(
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: tests.NamespaceID}, &persistencespb.NamespaceConfig{}, "", nil,
 	), nil).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()

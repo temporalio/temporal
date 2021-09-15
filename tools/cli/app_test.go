@@ -515,7 +515,7 @@ func (s *cliAppSuite) TestCountWorkflow() {
 	s.sdkClient.AssertExpectations(s.T())
 
 	s.sdkClient.On("CountWorkflow", mock.Anything, mock.Anything).Return(&workflowservice.CountWorkflowExecutionsResponse{}, nil).Once()
-	err = s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "count", "-q", "'CloseTime = missing'"})
+	err = s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "count", "-q", "'CloseTime is null'"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }
@@ -523,7 +523,7 @@ func (s *cliAppSuite) TestCountWorkflow() {
 func (s *cliAppSuite) TestCountWorkflowDeadlineExceeded() {
 	s.sdkClient.On("CountWorkflow", mock.Anything, mock.Anything).Return(nil, context.DeadlineExceeded).Once()
 	s.sdkClient.On("CountWorkflow", mock.Anything, mock.Anything).Return(&workflowservice.CountWorkflowExecutionsResponse{}, nil).Once()
-	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "count", "-q", "'CloseTime = missing'"})
+	err := s.app.Run([]string{"", "--ns", cliTestNamespace, "workflow", "count", "-q", "'CloseTime is null'"})
 	s.Nil(err)
 	s.sdkClient.AssertExpectations(s.T())
 }

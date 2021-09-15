@@ -33,13 +33,13 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/task"
@@ -328,7 +328,7 @@ func (t *queueTaskBase) HandleErr(
 	//  since the new task life cycle will not give up until task processed / verified
 	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
 		submitTimeDiff := t.timeSource.Now().Sub(t.submitTime)
-		if submitTimeDiff >= 2*cache.NamespaceCacheRefreshInterval {
+		if submitTimeDiff >= 2*namespace.CacheRefreshInterval {
 			t.scope.IncCounter(metrics.TaskNotActiveCounter)
 			return nil
 		}

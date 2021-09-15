@@ -32,9 +32,9 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/namespace"
 )
 
 const (
@@ -70,7 +70,7 @@ type (
 	SelectedAPIsForwardingRedirectionPolicy struct {
 		currentClusterName string
 		config             *Config
-		namespaceCache     cache.NamespaceCache
+		namespaceCache     namespace.Cache
 	}
 )
 
@@ -86,7 +86,7 @@ var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}
 
 // RedirectionPolicyGenerator generate corresponding redirection policy
 func RedirectionPolicyGenerator(clusterMetadata cluster.Metadata, config *Config,
-	namespaceCache cache.NamespaceCache, policy config.DCRedirectionPolicy) DCRedirectionPolicy {
+	namespaceCache namespace.Cache, policy config.DCRedirectionPolicy) DCRedirectionPolicy {
 	switch policy.Policy {
 	case DCRedirectionPolicyDefault:
 		// default policy, noop
@@ -119,7 +119,7 @@ func (policy *NoopRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, 
 }
 
 // NewSelectedAPIsForwardingPolicy creates a forwarding policy for selected APIs based on namespace
-func NewSelectedAPIsForwardingPolicy(currentClusterName string, config *Config, namespaceCache cache.NamespaceCache) *SelectedAPIsForwardingRedirectionPolicy {
+func NewSelectedAPIsForwardingPolicy(currentClusterName string, config *Config, namespaceCache namespace.Cache) *SelectedAPIsForwardingRedirectionPolicy {
 	return &SelectedAPIsForwardingRedirectionPolicy{
 		currentClusterName: currentClusterName,
 		config:             config,
@@ -145,7 +145,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceRedirect(ctx
 	return policy.withRedirect(ctx, namespaceEntry, apiName, call)
 }
 
-func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(ctx context.Context, namespaceEntry *cache.NamespaceCacheEntry, apiName string, call func(string) error) error {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(ctx context.Context, namespaceEntry *namespace.CacheEntry, apiName string, call func(string) error) error {
 	targetDC, enableNamespaceNotActiveForwarding := policy.getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx, namespaceEntry, apiName)
 
 	err := call(targetDC)
@@ -165,7 +165,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) isNamespaceNotActiveError
 	return namespaceNotActiveErr.ActiveCluster, true
 }
 
-func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx context.Context, namespaceEntry *cache.NamespaceCacheEntry, apiName string) (string, bool) {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx context.Context, namespaceEntry *namespace.CacheEntry, apiName string) (string, bool) {
 	if !namespaceEntry.IsGlobalNamespace() {
 		return policy.currentClusterName, false
 	}

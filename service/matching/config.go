@@ -28,8 +28,8 @@ import (
 	"time"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 )
 
 type (
@@ -139,7 +139,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 	}
 }
 
-func newTaskQueueConfig(id *taskQueueID, config *Config, namespaceCache cache.NamespaceCache) (*taskQueueConfig, error) {
+func newTaskQueueConfig(id *taskQueueID, config *Config, namespaceCache namespace.Cache) (*taskQueueConfig, error) {
 	namespaceEntry, err := namespaceCache.GetNamespaceByID(id.namespaceID)
 	if err != nil {
 		return nil, err

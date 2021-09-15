@@ -84,6 +84,7 @@ const (
 	StatsTypeTagName   = "stats_type"
 	CacheTypeTagName   = "cache_type"
 	FailureTagName     = "failure"
+	TaskTypeTagName    = "task_type"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -1778,6 +1779,7 @@ const (
 	TaskNoUserLatency
 	TaskNoUserQueueLatency
 	TaskRedispatchQueuePendingTasksTimer
+	TaskScheduleToStartLatency
 
 	TransferTaskMissingEventCounter
 
@@ -1940,10 +1942,14 @@ const (
 	ElasticsearchBulkProcessorRetries
 	ElasticsearchBulkProcessorFailures
 	ElasticsearchBulkProcessorCorruptedData
+
 	ElasticsearchBulkProcessorRequestLatency
 	ElasticsearchBulkProcessorCommitLatency
-	ElasticsearchBulkProcessorWaitLatency
+	ElasticsearchBulkProcessorWaitAddLatency
+	ElasticsearchBulkProcessorWaitStartLatency
+
 	ElasticsearchBulkProcessorBulkSize
+
 	ElasticsearchBulkProcessorDeadlock
 
 	NumHistoryMetrics
@@ -2226,6 +2232,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		TaskNotActiveCounter:     {metricName: "task_errors_not_active_counter", metricType: Counter},
 		TaskLimitExceededCounter: {metricName: "task_errors_limit_exceeded_counter", metricType: Counter},
 
+		TaskScheduleToStartLatency: {metricName: "task_schedule_to_start_latency", metricType: Timer},
+
 		TaskProcessingLatency:       {metricName: "task_latency_processing", metricType: Timer},               // per-attempt
 		TaskNoUserProcessingLatency: {metricName: "task_latency_processing_nouserlatency", metricType: Timer}, // per-attempt
 
@@ -2388,16 +2396,17 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		MutableStateChecksumMismatch:                      {metricName: "mutable_state_checksum_mismatch", metricType: Counter},
 		MutableStateChecksumInvalidated:                   {metricName: "mutable_state_checksum_invalidated", metricType: Counter},
 
-		ElasticsearchBulkProcessorRequests:       {metricName: "elasticsearch_bulk_processor_requests"},
-		ElasticsearchBulkProcessorQueuedRequests: {metricName: "elasticsearch_bulk_processor_queued_requests", metricType: Timer},
-		ElasticsearchBulkProcessorRetries:        {metricName: "elasticsearch_bulk_processor_retries"},
-		ElasticsearchBulkProcessorFailures:       {metricName: "elasticsearch_bulk_processor_errors"},
-		ElasticsearchBulkProcessorCorruptedData:  {metricName: "elasticsearch_bulk_processor_corrupted_data"},
-		ElasticsearchBulkProcessorRequestLatency: {metricName: "elasticsearch_bulk_processor_request_latency", metricType: Timer},
-		ElasticsearchBulkProcessorCommitLatency:  {metricName: "elasticsearch_bulk_processor_commit_latency", metricType: Timer},
-		ElasticsearchBulkProcessorWaitLatency:    {metricName: "elasticsearch_bulk_processor_wait_latency", metricType: Timer},
-		ElasticsearchBulkProcessorBulkSize:       {metricName: "elasticsearch_bulk_processor_bulk_size", metricType: Timer},
-		ElasticsearchBulkProcessorDeadlock:       {metricName: "elasticsearch_bulk_processor_deadlock"},
+		ElasticsearchBulkProcessorRequests:         {metricName: "elasticsearch_bulk_processor_requests"},
+		ElasticsearchBulkProcessorQueuedRequests:   {metricName: "elasticsearch_bulk_processor_queued_requests", metricType: Timer},
+		ElasticsearchBulkProcessorRetries:          {metricName: "elasticsearch_bulk_processor_retries"},
+		ElasticsearchBulkProcessorFailures:         {metricName: "elasticsearch_bulk_processor_errors"},
+		ElasticsearchBulkProcessorCorruptedData:    {metricName: "elasticsearch_bulk_processor_corrupted_data"},
+		ElasticsearchBulkProcessorRequestLatency:   {metricName: "elasticsearch_bulk_processor_request_latency", metricType: Timer},
+		ElasticsearchBulkProcessorCommitLatency:    {metricName: "elasticsearch_bulk_processor_commit_latency", metricType: Timer},
+		ElasticsearchBulkProcessorWaitAddLatency:   {metricName: "elasticsearch_bulk_processor_wait_add_latency", metricType: Timer},
+		ElasticsearchBulkProcessorWaitStartLatency: {metricName: "elasticsearch_bulk_processor_wait_start_latency", metricType: Timer},
+		ElasticsearchBulkProcessorBulkSize:         {metricName: "elasticsearch_bulk_processor_bulk_size", metricType: Timer},
+		ElasticsearchBulkProcessorDeadlock:         {metricName: "elasticsearch_bulk_processor_deadlock"},
 	},
 	Matching: {
 		PollSuccessPerTaskQueueCounter:            {metricName: "poll_success_per_tl", metricRollupName: "poll_success"},
