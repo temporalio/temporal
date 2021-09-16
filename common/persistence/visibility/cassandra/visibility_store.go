@@ -277,9 +277,9 @@ func (v *visibilityStore) ListOpenWorkflowExecutions(
 		wfexecution, has = readOpenWorkflowExecutionRecord(iter)
 	}
 
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError("ListOpenWorkflowExecutions", err)
 	}
@@ -306,9 +306,9 @@ func (v *visibilityStore) ListOpenWorkflowExecutionsByType(
 		wfexecution, has = readOpenWorkflowExecutionRecord(iter)
 	}
 
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError("ListOpenWorkflowExecutionsByType", err)
 	}
@@ -335,9 +335,9 @@ func (v *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 		wfexecution, has = readOpenWorkflowExecutionRecord(iter)
 	}
 
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError("ListOpenWorkflowExecutionsByWorkflowID", err)
 	}
@@ -363,9 +363,9 @@ func (v *visibilityStore) ListClosedWorkflowExecutions(
 		wfexecution, has = readClosedWorkflowExecutionRecord(iter)
 	}
 
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError("ListClosedWorkflowExecutions", err)
 	}
@@ -392,9 +392,9 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByType(
 		wfexecution, has = readClosedWorkflowExecutionRecord(iter)
 	}
 
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError("ListClosedWorkflowExecutionsByType", err)
 	}
@@ -421,9 +421,9 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 		wfexecution, has = readClosedWorkflowExecutionRecord(iter)
 	}
 
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError("ListClosedWorkflowExecutionsByWorkflowID", err)
 	}
@@ -450,9 +450,9 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 		wfexecution, has = readClosedWorkflowExecutionRecord(iter)
 	}
 
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError("ListClosedWorkflowExecutionsByStatus", err)
 	}

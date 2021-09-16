@@ -1959,7 +1959,6 @@ const (
 const (
 	ReplicatorMessages = iota + NumMatchingMetrics
 	ReplicatorFailures
-	ReplicatorMessagesDropped
 	ReplicatorLatency
 	ReplicatorDLQFailures
 	ArchiverNonRetryableErrorCount
@@ -2412,7 +2411,6 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 	Worker: {
 		ReplicatorMessages:                            {metricName: "replicator_messages"},
 		ReplicatorFailures:                            {metricName: "replicator_errors"},
-		ReplicatorMessagesDropped:                     {metricName: "replicator_messages_dropped"},
 		ReplicatorLatency:                             {metricName: "replicator_latency"},
 		ReplicatorDLQFailures:                         {metricName: "replicator_dlq_enqueue_fails", metricType: Counter},
 		ArchiverNonRetryableErrorCount:                {metricName: "archiver_non_retryable_error"},
