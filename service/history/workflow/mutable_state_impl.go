@@ -77,25 +77,25 @@ const (
 
 var (
 	// ErrWorkflowFinished indicates trying to mutate mutable state after workflow finished
-	ErrWorkflowFinished = serviceerror.NewUnavailable("invalid mutable state action: mutation after finish")
+	ErrWorkflowFinished = serviceerror.NewInternal("invalid mutable state action: mutation after finish")
 	// ErrMissingTimerInfo indicates missing timer info
-	ErrMissingTimerInfo = serviceerror.NewUnavailable("unable to get timer info")
+	ErrMissingTimerInfo = serviceerror.NewInternal("unable to get timer info")
 	// ErrMissingActivityInfo indicates missing activity info
-	ErrMissingActivityInfo = serviceerror.NewUnavailable("unable to get activity info")
+	ErrMissingActivityInfo = serviceerror.NewInternal("unable to get activity info")
 	// ErrMissingChildWorkflowInfo indicates missing child workflow info
-	ErrMissingChildWorkflowInfo = serviceerror.NewUnavailable("unable to get child workflow info")
+	ErrMissingChildWorkflowInfo = serviceerror.NewInternal("unable to get child workflow info")
 	// ErrMissingRequestCancelInfo indicates missing request cancel info
-	ErrMissingRequestCancelInfo = serviceerror.NewUnavailable("unable to get request cancel info")
+	ErrMissingRequestCancelInfo = serviceerror.NewInternal("unable to get request cancel info")
 	// ErrMissingSignalInfo indicates missing signal external
-	ErrMissingSignalInfo = serviceerror.NewUnavailable("unable to get signal info")
+	ErrMissingSignalInfo = serviceerror.NewInternal("unable to get signal info")
 	// ErrMissingWorkflowStartEvent indicates missing workflow start event
-	ErrMissingWorkflowStartEvent = serviceerror.NewUnavailable("unable to get workflow start event")
+	ErrMissingWorkflowStartEvent = serviceerror.NewInternal("unable to get workflow start event")
 	// ErrMissingWorkflowCompletionEvent indicates missing workflow completion event
-	ErrMissingWorkflowCompletionEvent = serviceerror.NewUnavailable("unable to get workflow completion event")
+	ErrMissingWorkflowCompletionEvent = serviceerror.NewInternal("unable to get workflow completion event")
 	// ErrMissingActivityScheduledEvent indicates missing workflow activity scheduled event
-	ErrMissingActivityScheduledEvent = serviceerror.NewUnavailable("unable to get activity scheduled event")
+	ErrMissingActivityScheduledEvent = serviceerror.NewInternal("unable to get activity scheduled event")
 	// ErrMissingChildWorkflowInitiatedEvent indicates missing child workflow initiated event
-	ErrMissingChildWorkflowInitiatedEvent = serviceerror.NewUnavailable("unable to get child workflow initiated event")
+	ErrMissingChildWorkflowInitiatedEvent = serviceerror.NewInternal("unable to get child workflow initiated event")
 )
 
 type (
@@ -3047,7 +3047,7 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 		command,
 		firstRunID,
 	); err != nil {
-		return nil, nil, serviceerror.NewUnavailable("Failed to add workflow execution started event.")
+		return nil, nil, err
 	}
 
 	if err = e.ReplicateWorkflowExecutionContinuedAsNewEvent(
@@ -4400,7 +4400,7 @@ func (e *MutableStateImpl) createInternalServerError(
 	actionTag tag.ZapTag,
 ) error {
 
-	return serviceerror.NewUnavailable(actionTag.Field().String + " operation failed")
+	return serviceerror.NewInternal(actionTag.Field().String + " operation failed")
 }
 
 func (e *MutableStateImpl) createCallerError(
