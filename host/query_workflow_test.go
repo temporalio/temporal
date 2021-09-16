@@ -188,10 +188,7 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 	s.NoError(queryResult.Err)
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
-	var queryResultString string
-	err = payloads.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
-	s.NoError(err)
-	s.Equal("query-result", queryResultString)
+	s.Equal("query-result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 
 	go queryWorkflowFn("invalid-query-type")
 	for {
@@ -350,10 +347,7 @@ func (s *integrationSuite) TestQueryWorkflow_StickyTimeout() {
 	s.NoError(queryResult.Err)
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
-	var queryResultString string
-	err = payloads.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
-	s.NoError(err)
-	s.Equal("query-result", queryResultString)
+	s.Equal("query-result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 }
 
 func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
@@ -490,10 +484,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
 	s.Nil(queryResult.Resp.QueryRejected)
-	var queryResultString string
-	err = payloads.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
-	s.NoError(err)
-	s.Equal("query-result", queryResultString)
+	s.Equal("query-result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 
 	go queryWorkflowFn("invalid-query-type", enumspb.QUERY_REJECT_CONDITION_NONE)
 	for {
@@ -530,9 +521,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
 	s.Nil(queryResult.Resp.QueryRejected)
-	err = payloads.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
-	s.NoError(err)
-	s.Equal("query-result", queryResultString)
+	s.Equal("query-result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 
 	rejectCondition := enumspb.QUERY_REJECT_CONDITION_NOT_OPEN
 	go queryWorkflowFn(queryType, rejectCondition)
@@ -559,9 +548,7 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
 	s.Nil(queryResult.Resp.QueryRejected)
-	err = payloads.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
-	s.NoError(err)
-	s.Equal("query-result", queryResultString)
+	s.Equal("query-result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 }
 
 func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
@@ -742,10 +729,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
 	s.Nil(queryResult.Resp.QueryRejected)
-	var queryResultString string
-	err = payloads.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
-	s.NoError(err)
-	s.Equal("consistent query result", queryResultString)
+	s.Equal("consistent query result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 }
 
 func (s *integrationSuite) TestQueryWorkflow_Consistent_Timeout() {
@@ -1083,10 +1067,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_BlockedByStarted_NonStic
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
 	s.Nil(queryResult.Resp.QueryRejected)
-	var queryResultString string
-	err = payloads.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
-	s.NoError(err)
-	s.Equal("query-result", queryResultString)
+	s.Equal("query-result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 }
 
 func (s *integrationSuite) TestQueryWorkflow_Consistent_NewWorkflowTask_Sticky() {
@@ -1301,10 +1282,7 @@ func (s *integrationSuite) TestQueryWorkflow_Consistent_NewWorkflowTask_Sticky()
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
 	s.Nil(queryResult.Resp.QueryRejected)
-	var queryResultString string
-	err = payloads.Decode(queryResult.Resp.GetQueryResult(), &queryResultString)
-	s.NoError(err)
-	s.Equal("consistent query result", queryResultString)
+	s.Equal("consistent query result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 }
 
 func (s *integrationSuite) TestQueryWorkflow_BeforeFirstWorkflowTask() {
