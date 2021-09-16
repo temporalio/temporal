@@ -178,16 +178,7 @@ func (s *integrationSuite) TestCronWorkflow_Failed() {
 					}}, nil
 			}
 
-			startedAttributes := startedEvent.GetWorkflowExecutionStartedEventAttributes()
-			if err := payloads.Decode(startedAttributes.GetLastCompletionResult(), &counter); err != nil {
-				return []*commandpb.Command{
-					{
-						CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
-						Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
-							Failure: failure.NewServerFailure("cannot decode last completion result", true),
-						}},
-					}}, nil
-			}
+			counter = s.decodePayloadsInt(startedEvent.GetWorkflowExecutionStartedEventAttributes().GetLastCompletionResult())
 		}
 
 		executions = append(executions, execution)
@@ -256,7 +247,7 @@ func (s *integrationSuite) TestCronWorkflow_Failed() {
 	s.Logger.Info("Process first cron run which fails")
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("First cron run processed")
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	// Make sure the cron workflow start running at a proper time, in this case 3 seconds after the
 	// startWorkflowExecution request
@@ -267,27 +258,27 @@ func (s *integrationSuite) TestCronWorkflow_Failed() {
 	s.Logger.Info("Process second cron run which succeeds")
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("Second cron run processed")
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	s.Logger.Info("Process third cron run which fails")
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("Third cron run processed")
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	s.Logger.Info("Process fourth cron run which succeeds")
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("Fourth cron run processed")
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	s.Logger.Info("Process fifth cron run which fails")
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("Fifth cron run processed")
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	s.Logger.Info("Process sixth cron run which succeeds")
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("Sixth cron run processed")
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	s.Logger.Info("Terminate cron workflow")
 	_, terminateErr := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -337,10 +328,7 @@ func (s *integrationSuite) TestCronWorkflow_Failed() {
 	lastEvent := events[len(events)-1]
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
 	attrs1 := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
-	var r int
-	err = payloads.Decode(attrs1.GetResult(), &r)
-	s.NoError(err)
-	s.Equal(3, r)
+	s.Equal(3, s.decodePayloadsInt(attrs1.GetResult()))
 
 	lastFailedExecution := closedExecutions[2]
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, lastFailedExecution.GetStatus())
@@ -411,7 +399,6 @@ func (s *integrationSuite) TestCronWorkflow() {
 
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		counter := 0
 		if previousStartedEventID == common.EmptyEventID {
 			startedEvent := history.Events[0]
 			if startedEvent.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
@@ -424,16 +411,8 @@ func (s *integrationSuite) TestCronWorkflow() {
 					}}, nil
 			}
 
-			startedAttributes := startedEvent.GetWorkflowExecutionStartedEventAttributes()
-			if err := payloads.Decode(startedAttributes.GetLastCompletionResult(), &counter); err != nil {
-				return []*commandpb.Command{
-					{
-						CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
-						Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
-							Failure: failure.NewServerFailure("cannot decode last completion result", true),
-						}},
-					}}, nil
-			}
+			// Just check that it can be decoded
+			s.decodePayloadsInt(startedEvent.GetWorkflowExecutionStartedEventAttributes().GetLastCompletionResult())
 		}
 
 		executions = append(executions, execution)
@@ -643,16 +622,7 @@ func (s *integrationSuite) TestCronWorkflow_Success() {
 					}}, nil
 			}
 
-			startedAttributes := startedEvent.GetWorkflowExecutionStartedEventAttributes()
-			if err := payloads.Decode(startedAttributes.GetLastCompletionResult(), &counter); err != nil {
-				return []*commandpb.Command{
-					{
-						CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
-						Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
-							Failure: failure.NewServerFailure("cannot decode last completion result", true),
-						}},
-					}}, nil
-			}
+			counter = s.decodePayloadsInt(startedEvent.GetWorkflowExecutionStartedEventAttributes().GetLastCompletionResult())
 		}
 
 		executions = append(executions, execution)
@@ -707,7 +677,7 @@ func (s *integrationSuite) TestCronWorkflow_Success() {
 	s.Logger.Info("Process first cron run")
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
 	s.Logger.Info("First cron run processed")
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	// Make sure the cron workflow start running at a proper time, in this case 3 seconds after the
 	// startWorkflowExecution request
@@ -718,7 +688,7 @@ func (s *integrationSuite) TestCronWorkflow_Success() {
 	s.Logger.Info("Process second cron run")
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("Second cron run processed")
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	describeWorkflowExecutionFunc := func(execution *commonpb.WorkflowExecution) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 		return s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
@@ -744,7 +714,7 @@ func (s *integrationSuite) TestCronWorkflow_Success() {
 	s.Logger.Info("Process fourth cron run")
 	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.Logger.Info("Third cron run processed")
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	s.Logger.Info("Terminate cron workflow")
 	_, terminateErr := s.engine.TerminateWorkflowExecution(NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -794,10 +764,7 @@ func (s *integrationSuite) TestCronWorkflow_Success() {
 	lastEvent := events[len(events)-1]
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
 	attrs1 := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
-	var r int
-	err = payloads.Decode(attrs1.GetResult(), &r)
-	s.NoError(err)
-	s.Equal(3, r)
+	s.Equal(3, s.decodePayloadsInt(attrs1.GetResult()))
 
 	timedoutExecution := closedExecutions[2]
 	// When cron workflow timesout we continue as new to start the new run,

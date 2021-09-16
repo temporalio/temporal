@@ -135,10 +135,7 @@ func (s *integrationSuite) TestExternalRequestCancelWorkflowExecution() {
 
 	lastEvent := history.Events[len(history.Events)-1]
 	cancelledEventAttributes := lastEvent.GetWorkflowExecutionCanceledEventAttributes()
-	var details string
-	err = payloads.Decode(cancelledEventAttributes.GetDetails(), &details)
-	s.NoError(err)
-	s.Equal("Cancelled", details)
+	s.Equal("Cancelled", s.decodePayloadsString(cancelledEventAttributes.GetDetails()))
 }
 
 func (s *integrationSuite) TestRequestCancelWorkflowCommandExecution_TargetRunning() {
