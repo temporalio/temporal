@@ -1602,8 +1602,6 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	s.Nil(err)
 	s.True(0 < len(tasks) && len(tasks) <= rangeSize)
 	s.True(isReadBatchDone)
-
-	tlMgr.engine.removeTaskQueueManager(tlMgr.taskQueueID)
 }
 
 func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
