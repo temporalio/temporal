@@ -246,18 +246,18 @@ func (p *executionPersistenceClient) UpdateWorkflowExecution(request *UpdateWork
 	return resp, err
 }
 
-func (p *executionPersistenceClient) ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) error {
+func (p *executionPersistenceClient) ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) (*ConflictResolveWorkflowExecutionResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceConflictResolveWorkflowExecutionScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceConflictResolveWorkflowExecutionScope, metrics.PersistenceLatency)
-	err := p.persistence.ConflictResolveWorkflowExecution(request)
+	response, err := p.persistence.ConflictResolveWorkflowExecution(request)
 	sw.Stop()
 
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceConflictResolveWorkflowExecutionScope, err)
 	}
 
-	return err
+	return response, err
 }
 
 func (p *executionPersistenceClient) DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error {

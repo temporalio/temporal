@@ -203,13 +203,13 @@ func (p *executionRateLimitedPersistenceClient) UpdateWorkflowExecution(request 
 	return resp, err
 }
 
-func (p *executionRateLimitedPersistenceClient) ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) error {
+func (p *executionRateLimitedPersistenceClient) ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) (*ConflictResolveWorkflowExecutionResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
+		return nil, ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.ConflictResolveWorkflowExecution(request)
-	return err
+	response, err := p.persistence.ConflictResolveWorkflowExecution(request)
+	return response, err
 }
 
 func (p *executionRateLimitedPersistenceClient) DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error {
