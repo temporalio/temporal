@@ -128,7 +128,6 @@ type (
 		// prevent tasks being dispatched to zombie pollers.
 		outstandingPollsLock sync.Mutex
 		outstandingPollsMap  map[string]context.CancelFunc
-		shutdownCh           chan struct{} // Delivers stop to the pump that populates taskBuffer
 		signalFatalProblem   func(taskQueueManager)
 	}
 )
@@ -162,7 +161,6 @@ func newTaskQueueManager(
 		status:              common.DaemonStatusInitialized,
 		namespaceCache:      e.namespaceCache,
 		metricsClient:       e.metricsClient,
-		shutdownCh:          make(chan struct{}),
 		taskQueueID:         taskQueue,
 		taskQueueKind:       taskQueueKind,
 		logger:              log.With(e.logger, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType)),
@@ -254,7 +252,6 @@ func (c *taskQueueManagerImpl) Stop() {
 		return
 	}
 	c.logger.Info("", tag.LifeCycleStopping)
-	close(c.shutdownCh)
 	_ = c.db.UpdateState(c.taskAckManager.getAckLevel())
 	c.taskGC.RunNow(c.taskAckManager.getAckLevel())
 	c.liveness.Stop()
