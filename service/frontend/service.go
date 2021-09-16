@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
 	visibilityclient "go.temporal.io/server/common/persistence/visibility/client"
 	"go.temporal.io/server/common/persistence/visibility/elasticsearch"
@@ -187,10 +186,11 @@ type Service struct {
 	status int32
 	config *Config
 
-	handler        Handler
-	adminHandler   *AdminHandler
-	versionChecker *VersionChecker
-	server         *grpc.Server
+	handler           Handler
+	adminHandler      *AdminHandler
+	versionChecker    *VersionChecker
+	visibilityManager visibility.VisibilityManager
+	server            *grpc.Server
 
 	serverMetricsReporter metrics.Reporter
 	sdkMetricsReporter    metrics.Reporter
@@ -213,47 +213,12 @@ func NewService(
 		EnableSampling:       serviceConfig.EnableVisibilitySampling,
 	}
 
-	visibilityManagerInitializer := func(
-		persistenceBean persistenceClient.Bean,
-		searchAttributesProvider searchattribute.Provider,
-		logger log.Logger,
-	) (visibility.VisibilityManager, error) {
-		visibilityFromDB, err := visibilityclient.NewVisibilityManager(
-			params.PersistenceConfig,
-			serviceConfig.PersistenceMaxQPS,
-			params.MetricsClient,
-			params.PersistenceServiceResolver,
-			params.Logger,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		var visibilityFromES visibility.VisibilityManager
-		if params.ESConfig != nil {
-			visibilityIndexName := params.ESConfig.GetVisibilityIndex()
-			visibilityConfigForES := &config.VisibilityConfig{
-				MaxQPS:               serviceConfig.PersistenceMaxQPS,
-				VisibilityListMaxQPS: serviceConfig.ESVisibilityListMaxQPS,
-			}
-			visibilityFromES = elasticsearch.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
-				searchAttributesProvider, params.SearchAttributesMapper, nil, params.MetricsClient, logger)
-		}
-		return visibility.NewVisibilityManagerWrapper(
-			visibilityFromDB,
-			visibilityFromES,
-			serviceConfig.EnableReadVisibilityFromES,
-			dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOff), // frontend visibility never write
-		), nil
-	}
-
 	serviceResource, err := resource.New(
 		params,
 		common.FrontendServiceName,
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
 		serviceConfig.ThrottledLogRPS,
-		visibilityManagerInitializer,
 	)
 	if err != nil {
 		return nil, err
@@ -339,18 +304,64 @@ func NewService(
 		),
 	)
 
-	wfHandler := NewWorkflowHandler(serviceResource, serviceConfig, namespaceReplicationQueue)
+	visibilityMgr, err := visibilityManagerInitializer(
+		params,
+		serviceConfig,
+		serviceResource.GetSearchAttributesProvider(),
+		params.Logger,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	wfHandler := NewWorkflowHandler(serviceResource, serviceConfig, namespaceReplicationQueue, visibilityMgr)
 	handler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy)
 
 	return &Service{
-		Resource:       serviceResource,
-		status:         common.DaemonStatusInitialized,
-		config:         serviceConfig,
-		server:         grpc.NewServer(grpcServerOptions...),
-		handler:        handler,
-		adminHandler:   NewAdminHandler(serviceResource, params, serviceConfig),
-		versionChecker: NewVersionChecker(serviceConfig, params.MetricsClient, serviceResource.GetClusterMetadataManager()),
+		Resource:          serviceResource,
+		status:            common.DaemonStatusInitialized,
+		config:            serviceConfig,
+		server:            grpc.NewServer(grpcServerOptions...),
+		handler:           handler,
+		adminHandler:      NewAdminHandler(serviceResource, params, serviceConfig),
+		versionChecker:    NewVersionChecker(serviceConfig, params.MetricsClient, serviceResource.GetClusterMetadataManager()),
+		visibilityManager: visibilityMgr,
 	}, nil
+}
+
+func visibilityManagerInitializer(
+	params *resource.BootstrapParams,
+	serviceConfig *Config,
+	searchAttributesProvider searchattribute.Provider,
+	logger log.Logger,
+) (visibility.VisibilityManager, error) {
+	visibilityFromDB, err := visibilityclient.NewVisibilityManager(
+		params.PersistenceConfig,
+		serviceConfig.PersistenceMaxQPS,
+		params.MetricsClient,
+		params.PersistenceServiceResolver,
+		params.Logger,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var visibilityFromES visibility.VisibilityManager
+	if params.ESConfig != nil {
+		visibilityIndexName := params.ESConfig.GetVisibilityIndex()
+		visibilityConfigForES := &config.VisibilityConfig{
+			MaxQPS:               serviceConfig.PersistenceMaxQPS,
+			VisibilityListMaxQPS: serviceConfig.ESVisibilityListMaxQPS,
+		}
+		visibilityFromES = elasticsearch.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
+			searchAttributesProvider, params.SearchAttributesMapper, nil, params.MetricsClient, logger)
+	}
+	return visibility.NewVisibilityManagerWrapper(
+		visibilityFromDB,
+		visibilityFromES,
+		serviceConfig.EnableReadVisibilityFromES,
+		dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOff), // frontend visibility never write
+	), nil
 }
 
 // Start starts the service
@@ -407,6 +418,7 @@ func (s *Service) Stop() {
 
 	s.adminHandler.Stop()
 	s.versionChecker.Stop()
+	s.visibilityManager.Close()
 
 	logger.Info("ShutdownHandler: Draining traffic")
 	time.Sleep(requestDrainTime)

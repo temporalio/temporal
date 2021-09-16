@@ -52,7 +52,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/persistence/visibility"
 	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -99,7 +98,6 @@ type (
 		MetadataMgr               *persistence.MockMetadataManager
 		ClusterMetadataMgr        *persistence.MockClusterMetadataManager
 		TaskMgr                   *persistence.MockTaskManager
-		VisibilityMgr             *visibility.MockVisibilityManager
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		ShardMgr                  *persistence.MockShardManager
 		ExecutionMgr              *persistence.MockExecutionManager
@@ -142,7 +140,6 @@ func NewTest(
 
 	metadataMgr := persistence.NewMockMetadataManager(controller)
 	taskMgr := persistence.NewMockTaskManager(controller)
-	visibilityMgr := visibility.NewMockVisibilityManager(controller)
 	shardMgr := persistence.NewMockShardManager(controller)
 	executionMgr := persistence.NewMockExecutionManager(controller)
 	namespaceReplicationQueue := persistence.NewMockNamespaceReplicationQueue(controller)
@@ -208,7 +205,6 @@ func NewTest(
 		MetadataMgr:               metadataMgr,
 		ClusterMetadataMgr:        clusterMetadataManager,
 		TaskMgr:                   taskMgr,
-		VisibilityMgr:             visibilityMgr,
 		NamespaceReplicationQueue: namespaceReplicationQueue,
 		ShardMgr:                  shardMgr,
 		ExecutionMgr:              executionMgr,
@@ -384,11 +380,6 @@ func (s *Test) GetMetadataManager() persistence.MetadataManager {
 // GetTaskManager for testing
 func (s *Test) GetTaskManager() persistence.TaskManager {
 	return s.TaskMgr
-}
-
-// GetVisibilityManager for testing
-func (s *Test) GetVisibilityManager() visibility.VisibilityManager {
-	return s.VisibilityMgr
 }
 
 // GetNamespaceReplicationQueue for testing

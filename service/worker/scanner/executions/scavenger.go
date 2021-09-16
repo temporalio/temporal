@@ -166,6 +166,9 @@ func (s *Scavenger) run() {
 }
 
 func (s *Scavenger) awaitExecutor() {
+	// gauge value persists, so we want to reset it to 0
+	defer s.metrics.UpdateGauge(metrics.ExecutionsScavengerScope, metrics.ExecutionsOutstandingCount, float64(0))
+
 	outstanding := s.executor.TaskCount()
 	for outstanding > 0 {
 		select {

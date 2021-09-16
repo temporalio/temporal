@@ -40,7 +40,6 @@ import (
 	metrics "go.temporal.io/server/common/metrics"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
-	visibility "go.temporal.io/server/common/persistence/visibility"
 	resource "go.temporal.io/server/common/resource"
 	configs "go.temporal.io/server/service/history/configs"
 	events "go.temporal.io/server/service/history/events"
@@ -99,11 +98,12 @@ func (mr *MockContextMockRecorder) AppendHistoryEvents(request, namespaceID, exe
 }
 
 // ConflictResolveWorkflowExecution mocks base method.
-func (m *MockContext) ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) error {
+func (m *MockContext) ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ConflictResolveWorkflowExecution", request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*persistence.ConflictResolveWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // ConflictResolveWorkflowExecution indicates an expected call of ConflictResolveWorkflowExecution.
@@ -561,20 +561,6 @@ func (m *MockContext) GetVisibilityAckLevel() int64 {
 func (mr *MockContextMockRecorder) GetVisibilityAckLevel() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityAckLevel", reflect.TypeOf((*MockContext)(nil).GetVisibilityAckLevel))
-}
-
-// GetVisibilityManager mocks base method.
-func (m *MockContext) GetVisibilityManager() visibility.VisibilityManager {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVisibilityManager")
-	ret0, _ := ret[0].(visibility.VisibilityManager)
-	return ret0
-}
-
-// GetVisibilityManager indicates an expected call of GetVisibilityManager.
-func (mr *MockContextMockRecorder) GetVisibilityManager() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityManager", reflect.TypeOf((*MockContext)(nil).GetVisibilityManager))
 }
 
 // PreviousShardOwnerWasDifferent mocks base method.

@@ -134,6 +134,11 @@ func (s *integrationClustersTestSuite) TearDownSuite() {
 	s.cluster2.TearDownCluster()
 }
 
+func (s *integrationClustersTestSuite) decodePayloadsString(ps *commonpb.Payloads) (r string) {
+	s.NoError(payloads.Decode(ps, &r))
+	return
+}
+
 func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 	namespace := "test-namespace-for-fail-over-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
@@ -379,10 +384,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.NoError(queryResult.Err)
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
-	var queryResultString string
-	err = payloads.Decode(queryResult.Resp.QueryResult, &queryResultString)
-	s.NoError(err)
-	s.Equal("query-result", queryResultString)
+	s.Equal("query-result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 
 	// Wait a while so the events are replicated.
 	time.Sleep(5 * time.Second)
@@ -404,9 +406,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.NoError(queryResult.Err)
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
-	err = payloads.Decode(queryResult.Resp.QueryResult, &queryResultString)
-	s.NoError(err)
-	s.Equal("query-result", queryResultString)
+	s.Equal("query-result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 
 	s.failover(namespaceName, clusterName[1], int64(2), client1)
 
@@ -449,9 +449,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.NoError(queryResult.Err)
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
-	err = payloads.Decode(queryResult.Resp.QueryResult, &queryResultString)
-	s.NoError(err)
-	s.Equal("query-result", queryResultString)
+	s.Equal("query-result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 
 	// call QueryWorkflow in separate goroutinue (because it is blocking). That will generate a query task
 	go queryWorkflowFn(client2, queryType)
@@ -470,9 +468,7 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.NoError(queryResult.Err)
 	s.NotNil(queryResult.Resp)
 	s.NotNil(queryResult.Resp.QueryResult)
-	err = payloads.Decode(queryResult.Resp.QueryResult, &queryResultString)
-	s.NoError(err)
-	s.Equal("query-result", queryResultString)
+	s.Equal("query-result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 
 	// make process in cluster 2
 	err = poller2.PollAndProcessActivityTask(false)

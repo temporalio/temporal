@@ -33,15 +33,11 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/batcher"
@@ -91,13 +87,6 @@ func NewService(
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
 		serviceConfig.ThrottledLogRPS,
-		func(
-			persistenceBean persistenceClient.Bean,
-			searchAttributesProvider searchattribute.Provider,
-			logger log.Logger,
-		) (visibility.VisibilityManager, error) {
-			return nil, nil
-		},
 	)
 	if err != nil {
 		return nil, err

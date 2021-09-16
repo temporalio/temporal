@@ -32,8 +32,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/persistence/visibility"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -58,18 +56,17 @@ type (
 	ContextImpl struct {
 		resource.Resource
 
-		status            int32
-		shardItem         *historyShardsItem
-		shardID           int32
-		executionManager  persistence.ExecutionManager
-		visibilityManager visibility.VisibilityManager
-		metricsClient     metrics.Client
-		EventsCache       events.Cache
-		closeCallback     func(int32, *historyShardsItem)
-		config            *configs.Config
-		logger            log.Logger
-		throttledLogger   log.Logger
-		engine            Engine
+		status           int32
+		shardItem        *historyShardsItem
+		shardID          int32
+		executionManager persistence.ExecutionManager
+		metricsClient    metrics.Client
+		EventsCache      events.Cache
+		closeCallback    func(int32, *historyShardsItem)
+		config           *configs.Config
+		logger           log.Logger
+		throttledLogger  log.Logger
+		engine           Engine
 
 		rwLock                    sync.RWMutex
 		lastUpdated               time.Time
@@ -108,10 +105,6 @@ func (s *ContextImpl) GetService() resource.Resource {
 
 func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
 	return s.executionManager
-}
-
-func (s *ContextImpl) GetVisibilityManager() visibility.VisibilityManager {
-	return s.visibilityManager
 }
 
 func (s *ContextImpl) GetEngine() Engine {
@@ -509,9 +502,9 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 
 func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
-) error {
+) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
 	if s.isStopped() {
-		return ErrShardClosed
+		return nil, ErrShardClosed
 	}
 
 	namespaceID := request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId
@@ -520,7 +513,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	// do not try to get namespace cache within shard lock
 	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	s.Lock()
@@ -537,7 +530,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 			request.CurrentWorkflowMutation.VisibilityTasks,
 			&transferMaxReadLevel,
 		); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if err := s.allocateTaskIDsLocked(
@@ -549,7 +542,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 		request.ResetWorkflowSnapshot.VisibilityTasks,
 		&transferMaxReadLevel,
 	); err != nil {
-		return err
+		return nil, err
 	}
 	if request.NewWorkflowSnapshot != nil {
 		if err := s.allocateTaskIDsLocked(
@@ -561,15 +554,18 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 			request.NewWorkflowSnapshot.VisibilityTasks,
 			&transferMaxReadLevel,
 		); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
 	currentRangeID := s.getRangeID()
 	request.RangeID = currentRangeID
-	err = s.executionManager.ConflictResolveWorkflowExecution(request)
-	return s.handleError(err)
+	resp, err := s.executionManager.ConflictResolveWorkflowExecution(request)
+	if err := s.handleError(err); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (s *ContextImpl) AddTasks(
@@ -1109,7 +1105,6 @@ func acquireShard(
 	}
 
 	executionMgr := shardItem.GetExecutionManager()
-	visibilityMgr := shardItem.GetVisibilityManager()
 
 	shardContext := &ContextImpl{
 		Resource: shardItem.Resource,
@@ -1118,7 +1113,6 @@ func acquireShard(
 		shardItem:                      shardItem,
 		shardID:                        shardItem.shardID,
 		executionManager:               executionMgr,
-		visibilityManager:              visibilityMgr,
 		metricsClient:                  shardItem.GetMetricsClient(),
 		shardInfo:                      updatedShardInfo,
 		closeCallback:                  closeCallback,
