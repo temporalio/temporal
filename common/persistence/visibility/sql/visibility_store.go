@@ -153,7 +153,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutions(
 	return s.listWorkflowExecutions(
 		"ListOpenWorkflowExecutions",
 		request.NextPageToken,
-		request.EarliestStartTime,
+		request.PageSize,
 		request.LatestStartTime,
 		false,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
@@ -175,7 +175,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutions(
 	defer cancel()
 	return s.listWorkflowExecutions("ListClosedWorkflowExecutions",
 		request.NextPageToken,
-		request.EarliestStartTime,
+		request.PageSize,
 		request.LatestStartTime,
 		true,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
@@ -196,7 +196,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByType(
 	defer cancel()
 	return s.listWorkflowExecutions("ListOpenWorkflowExecutionsByType",
 		request.NextPageToken,
-		request.EarliestStartTime,
+		request.PageSize,
 		request.LatestStartTime,
 		false,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
@@ -219,7 +219,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByType(
 	defer cancel()
 	return s.listWorkflowExecutions("ListClosedWorkflowExecutionsByType",
 		request.NextPageToken,
-		request.EarliestStartTime,
+		request.PageSize,
 		request.LatestStartTime,
 		true,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
@@ -241,7 +241,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 	defer cancel()
 	return s.listWorkflowExecutions("ListOpenWorkflowExecutionsByWorkflowID",
 		request.NextPageToken,
-		request.EarliestStartTime,
+		request.PageSize,
 		request.LatestStartTime,
 		false,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
@@ -264,7 +264,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 	defer cancel()
 	return s.listWorkflowExecutions("ListClosedWorkflowExecutionsByWorkflowID",
 		request.NextPageToken,
-		request.EarliestStartTime,
+		request.PageSize,
 		request.LatestStartTime,
 		true,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
@@ -286,7 +286,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 	defer cancel()
 	return s.listWorkflowExecutions("ListClosedWorkflowExecutionsByStatus",
 		request.NextPageToken,
-		request.EarliestStartTime,
+		request.PageSize,
 		request.LatestStartTime,
 		true,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
@@ -362,7 +362,7 @@ func (s *visibilityStore) rowToInfo(
 func (s *visibilityStore) listWorkflowExecutions(
 	opName string,
 	pageToken []byte,
-	earliestTime time.Time,
+	pageSize int,
 	latestTime time.Time,
 	closeQuery bool,
 	selectOp func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error),
@@ -389,14 +389,14 @@ func (s *visibilityStore) listWorkflowExecutions(
 	for i, row := range rows {
 		infos[i] = s.rowToInfo(&row)
 	}
-	var nextPageToken []byte
-	lastRow := rows[len(rows)-1]
-	lastTime := lastRow.StartTime
-	if closeQuery {
-		lastTime = *lastRow.CloseTime
-	}
 
-	if lastTime.After(earliestTime) {
+	var nextPageToken []byte
+	if len(rows) == pageSize {
+		lastRow := rows[len(rows)-1]
+		lastTime := lastRow.StartTime
+		if closeQuery {
+			lastTime = *lastRow.CloseTime
+		}
 		nextPageToken, err = s.serializePageToken(&visibilityPageToken{
 			Time:  lastTime,
 			RunID: lastRow.RunID,

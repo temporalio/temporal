@@ -298,9 +298,9 @@ func (m *cassandraMetadataPersistenceV2) ListNamespaces(request *p.ListNamespace
 		}
 	}
 
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 	if err := iter.Close(); err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListNamespaces operation failed. Error: %v", err))
 	}

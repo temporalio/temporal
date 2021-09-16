@@ -165,7 +165,10 @@ func (h *cassandraPersistence) ReadHistoryBranch(
 	query := h.session.Query(queryString, treeID, branchID, request.MinNodeID, request.MaxNodeID)
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
-	pagingToken := iter.PageState()
+	var pagingToken []byte
+	if len(iter.PageState()) > 0 {
+		pagingToken = iter.PageState()
+	}
 
 	nodes := make([]p.InternalHistoryNode, 0, request.PageSize)
 	message := make(map[string]interface{})
@@ -293,7 +296,10 @@ func (h *cassandraPersistence) GetAllHistoryTreeBranches(
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
-	pagingToken := iter.PageState()
+	var pagingToken []byte
+	if len(iter.PageState()) > 0 {
+		pagingToken = iter.PageState()
+	}
 
 	branches := make([]p.InternalHistoryBranchDetail, 0, request.PageSize)
 	treeUUID := ""
