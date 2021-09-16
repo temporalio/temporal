@@ -128,7 +128,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	s.mockShard.Resource.TimeSource = s.timeSource
 
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
-	s.mockVisibilityMgr = s.mockShard.Resource.VisibilityMgr
+	s.mockVisibilityMgr = visibility.NewMockVisibilityManager(s.controller)
 
 	mockNamespaceCache := s.mockShard.Resource.NamespaceCache
 	mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
@@ -165,6 +165,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	s.visibilityQueueTaskExecutor = newVisibilityQueueTaskExecutor(
 		s.mockShard,
 		h,
+		s.mockVisibilityMgr,
 		s.logger,
 		s.mockShard.GetMetricsClient(),
 		config,

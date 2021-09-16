@@ -31,7 +31,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -59,7 +58,7 @@ type (
 
 func newTransferQueueStandbyTaskExecutor(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	historyEngine *historyEngineImpl,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
 	metricsClient metrics.Client,
@@ -69,7 +68,7 @@ func newTransferQueueStandbyTaskExecutor(
 	return &transferQueueStandbyTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
 			shard,
-			historyService,
+			historyEngine,
 			logger,
 			metricsClient,
 			config,
