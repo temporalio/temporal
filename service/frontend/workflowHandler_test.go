@@ -131,7 +131,7 @@ func (s *workflowHandlerSuite) SetupTest() {
 	s.mockSearchAttributesMapper = s.mockResource.SearchAttributesMapper
 	s.mockMetadataMgr = s.mockResource.MetadataMgr
 	s.mockExecutionManager = s.mockResource.ExecutionMgr
-	s.mockVisibilityMgr = s.mockResource.VisibilityMgr
+	s.mockVisibilityMgr = visibility.NewMockVisibilityManager(s.controller)
 	s.mockArchivalMetadata = s.mockResource.ArchivalMetadata
 	s.mockArchiverProvider = s.mockResource.ArchiverProvider
 	s.mockMatchingClient = s.mockResource.MatchingClient
@@ -151,7 +151,7 @@ func (s *workflowHandlerSuite) TearDownTest() {
 }
 
 func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
-	return NewWorkflowHandler(s.mockResource, config, s.mockProducer).(*WorkflowHandler)
+	return NewWorkflowHandler(s.mockResource, config, s.mockProducer, s.mockVisibilityMgr)
 }
 
 func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {

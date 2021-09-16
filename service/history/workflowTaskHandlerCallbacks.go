@@ -229,6 +229,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				req.PollRequest.TaskQueue,
 				req.PollRequest.Identity,
 			)
+			if err != nil {
+				// Unable to add WorkflowTaskStarted event to history
+				return nil, err
+			}
 
 			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(*workflowTask.ScheduledTime)
 			namespaceName := namespaceEntry.GetInfo().GetName()
@@ -236,11 +240,6 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			metrics.GetPerTaskQueueScope(metricsScope, namespaceName, taskQueue.GetName(), taskQueue.GetKind()).
 				Tagged(metrics.TaskTypeTag("workflow")).
 				RecordTimer(metrics.TaskScheduleToStartLatency, workflowScheduleToStartLatency)
-
-			if err != nil {
-				// Unable to add WorkflowTaskStarted event to history
-				return nil, serviceerror.NewUnavailable("Unable to add WorkflowTaskStarted event to history.")
-			}
 
 			resp, err = handler.createRecordWorkflowTaskStartedResponse(namespaceID, mutableState, workflowTask, req.PollRequest.GetIdentity())
 			if err != nil {
@@ -389,19 +388,19 @@ Update_History_Loop:
 				scope.IncCounter(metrics.WorkflowTaskHeartbeatTimeoutCounter)
 				completedEvent, err = msBuilder.AddWorkflowTaskTimedOutEvent(currentWorkflowTask.ScheduleID, currentWorkflowTask.StartedID)
 				if err != nil {
-					return nil, serviceerror.NewUnavailable("Failed to add workflow task timeout event.")
+					return nil, err
 				}
 				msBuilder.ClearStickyness()
 			} else {
 				completedEvent, err = msBuilder.AddWorkflowTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
 				if err != nil {
-					return nil, serviceerror.NewUnavailable("Unable to add WorkflowTaskCompleted event to history.")
+					return nil, err
 				}
 			}
 		} else {
 			completedEvent, err = msBuilder.AddWorkflowTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
 			if err != nil {
-				return nil, serviceerror.NewUnavailable("Unable to add WorkflowTaskCompleted event to history.")
+				return nil, err
 			}
 		}
 
@@ -510,7 +509,7 @@ Update_History_Loop:
 				)
 			}
 			if err != nil {
-				return nil, serviceerror.NewUnavailable("Failed to add workflow task scheduled event.")
+				return nil, err
 			}
 
 			newWorkflowTaskScheduledID = newWorkflowTask.ScheduleID
