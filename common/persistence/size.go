@@ -26,7 +26,12 @@ package persistence
 
 func statusOfInternalWorkflow(
 	state *InternalWorkflowMutableState,
-) InternalWorkflowStatus {
+	historySize int64,
+) *MutableStateStatus {
+	if state == nil {
+		return nil
+	}
+
 	executionInfoSize := sizeOfBlob(state.ExecutionInfo)
 	executionStateSize := sizeOfBlob(state.ExecutionState)
 
@@ -61,8 +66,11 @@ func statusOfInternalWorkflow(
 	totalSize += signalRequestIDSize
 	totalSize += bufferedEventsSize
 
-	return InternalWorkflowStatus{
-		TotalSize: totalSize,
+	historySizeDiff := int(historySize)
+
+	return &MutableStateStatus{
+		TotalSize:       totalSize,
+		HistorySizeDiff: historySizeDiff,
 
 		ExecutionInfoSize:  executionInfoSize,
 		ExecutionStateSize: executionStateSize,
@@ -92,7 +100,12 @@ func statusOfInternalWorkflow(
 
 func statusOfInternalWorkflowMutation(
 	mutation *InternalWorkflowMutation,
-) InternalWorkflowStatus {
+	historySize int64,
+) *MutableStateStatus {
+	if mutation == nil {
+		return nil
+	}
+
 	executionInfoSize := sizeOfBlob(mutation.ExecutionInfo)
 	executionStateSize := sizeOfBlob(mutation.ExecutionStateBlob)
 
@@ -146,8 +159,11 @@ func statusOfInternalWorkflowMutation(
 	totalSize += signalRequestIDSize
 	totalSize += bufferedEventsSize
 
-	return InternalWorkflowStatus{
-		TotalSize: totalSize,
+	historySizeDiff := int(historySize)
+
+	return &MutableStateStatus{
+		TotalSize:       totalSize,
+		HistorySizeDiff: historySizeDiff,
 
 		ExecutionInfoSize:  executionInfoSize,
 		ExecutionStateSize: executionStateSize,
@@ -177,7 +193,12 @@ func statusOfInternalWorkflowMutation(
 
 func statusOfInternalWorkflowSnapshot(
 	snapshot *InternalWorkflowSnapshot,
-) InternalWorkflowStatus {
+	historySize int64,
+) *MutableStateStatus {
+	if snapshot == nil {
+		return nil
+	}
+
 	executionInfoSize := sizeOfBlob(snapshot.ExecutionInfo)
 	executionStateSize := sizeOfBlob(snapshot.ExecutionStateBlob)
 
@@ -212,8 +233,11 @@ func statusOfInternalWorkflowSnapshot(
 	totalSize += signalRequestIDSize
 	totalSize += bufferedEventsSize
 
-	return InternalWorkflowStatus{
-		TotalSize: totalSize,
+	historySizeDiff := int(historySize)
+
+	return &MutableStateStatus{
+		TotalSize:       totalSize,
+		HistorySizeDiff: historySizeDiff,
 
 		ExecutionInfoSize:  executionInfoSize,
 		ExecutionStateSize: executionStateSize,
