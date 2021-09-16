@@ -31,8 +31,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/common/persistence/visibility"
-
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/workflow"
 
@@ -59,7 +57,6 @@ type (
 		mockMutableState             *workflow.MockMutableState
 
 		mockExecutionManager         *persistence.MockExecutionManager
-		mockVisibilityManager        *visibility.MockVisibilityManager
 		mockArchivalClient           *archiver.MockClient
 		mockNamespaceCache           *namespace.MockCache
 		mockClusterMetadata          *cluster.MockMetadata
@@ -104,7 +101,6 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 	s.mockShard.SetEngine(s.mockEngine)
 
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
-	s.mockVisibilityManager = s.mockShard.Resource.VisibilityMgr
 	s.mockArchivalClient = archiver.NewMockClient(s.controller)
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
@@ -116,7 +112,6 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 		shard:           s.mockShard,
 		logger:          logger,
 		metricsClient:   s.mockShard.GetMetricsClient(),
-		visibilityMgr:   s.mockVisibilityManager,
 		archivalClient:  s.mockArchivalClient,
 		clusterMetadata: s.mockClusterMetadata,
 	}

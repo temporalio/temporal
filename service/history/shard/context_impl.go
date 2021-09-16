@@ -32,8 +32,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/persistence/visibility"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -58,18 +56,17 @@ type (
 	ContextImpl struct {
 		resource.Resource
 
-		status            int32
-		shardItem         *historyShardsItem
-		shardID           int32
-		executionManager  persistence.ExecutionManager
-		visibilityManager visibility.VisibilityManager
-		metricsClient     metrics.Client
-		EventsCache       events.Cache
-		closeCallback     func(int32, *historyShardsItem)
-		config            *configs.Config
-		logger            log.Logger
-		throttledLogger   log.Logger
-		engine            Engine
+		status           int32
+		shardItem        *historyShardsItem
+		shardID          int32
+		executionManager persistence.ExecutionManager
+		metricsClient    metrics.Client
+		EventsCache      events.Cache
+		closeCallback    func(int32, *historyShardsItem)
+		config           *configs.Config
+		logger           log.Logger
+		throttledLogger  log.Logger
+		engine           Engine
 
 		rwLock                    sync.RWMutex
 		lastUpdated               time.Time
@@ -108,10 +105,6 @@ func (s *ContextImpl) GetService() resource.Resource {
 
 func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
 	return s.executionManager
-}
-
-func (s *ContextImpl) GetVisibilityManager() visibility.VisibilityManager {
-	return s.visibilityManager
 }
 
 func (s *ContextImpl) GetEngine() Engine {
@@ -1112,7 +1105,6 @@ func acquireShard(
 	}
 
 	executionMgr := shardItem.GetExecutionManager()
-	visibilityMgr := shardItem.GetVisibilityManager()
 
 	shardContext := &ContextImpl{
 		Resource: shardItem.Resource,
@@ -1121,7 +1113,6 @@ func acquireShard(
 		shardItem:                      shardItem,
 		shardID:                        shardItem.shardID,
 		executionManager:               executionMgr,
-		visibilityManager:              visibilityMgr,
 		metricsClient:                  shardItem.GetMetricsClient(),
 		shardInfo:                      updatedShardInfo,
 		closeCallback:                  closeCallback,

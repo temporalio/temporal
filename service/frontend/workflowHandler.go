@@ -93,6 +93,7 @@ type (
 		versionChecker                  headers.VersionChecker
 		namespaceHandler                namespace.Handler
 		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
+		visibilityMrg                   visibility.VisibilityManager
 	}
 
 	// HealthStatus is an enum that refers to the rpc handler health status
@@ -108,7 +109,8 @@ func NewWorkflowHandler(
 	resource resource.Resource,
 	config *Config,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
-) Handler {
+	visibilityMrg visibility.VisibilityManager,
+) *WorkflowHandler {
 
 	handler := &WorkflowHandler{
 		Resource:        resource,
@@ -127,6 +129,7 @@ func NewWorkflowHandler(
 			resource.GetArchiverProvider(),
 		),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
+		visibilityMrg:                   visibilityMrg,
 	}
 
 	return handler
@@ -2195,7 +2198,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		if wh.config.DisableListVisibilityByFilter(namespace) {
 			err = errNoPermission
 		} else {
-			persistenceResp, err = wh.GetVisibilityManager().ListOpenWorkflowExecutionsByWorkflowID(
+			persistenceResp, err = wh.visibilityMrg.ListOpenWorkflowExecutionsByWorkflowID(
 				&visibility.ListWorkflowExecutionsByWorkflowIDRequest{
 					ListWorkflowExecutionsRequest: baseReq,
 					WorkflowID:                    request.GetExecutionFilter().GetWorkflowId(),
@@ -2207,7 +2210,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		if wh.config.DisableListVisibilityByFilter(namespace) {
 			err = errNoPermission
 		} else {
-			persistenceResp, err = wh.GetVisibilityManager().ListOpenWorkflowExecutionsByType(&visibility.ListWorkflowExecutionsByTypeRequest{
+			persistenceResp, err = wh.visibilityMrg.ListOpenWorkflowExecutionsByType(&visibility.ListWorkflowExecutionsByTypeRequest{
 				ListWorkflowExecutionsRequest: baseReq,
 				WorkflowTypeName:              request.GetTypeFilter().GetName(),
 			})
@@ -2215,7 +2218,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		wh.GetLogger().Debug("List open workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByType)
 	} else {
-		persistenceResp, err = wh.GetVisibilityManager().ListOpenWorkflowExecutions(baseReq)
+		persistenceResp, err = wh.visibilityMrg.ListOpenWorkflowExecutions(baseReq)
 	}
 
 	if err != nil {
@@ -2292,7 +2295,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		if wh.config.DisableListVisibilityByFilter(namespace) {
 			err = errNoPermission
 		} else {
-			persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByWorkflowID(
+			persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutionsByWorkflowID(
 				&visibility.ListWorkflowExecutionsByWorkflowIDRequest{
 					ListWorkflowExecutionsRequest: baseReq,
 					WorkflowID:                    request.GetExecutionFilter().GetWorkflowId(),
@@ -2304,7 +2307,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		if wh.config.DisableListVisibilityByFilter(namespace) {
 			err = errNoPermission
 		} else {
-			persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByType(&visibility.ListWorkflowExecutionsByTypeRequest{
+			persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutionsByType(&visibility.ListWorkflowExecutionsByTypeRequest{
 				ListWorkflowExecutionsRequest: baseReq,
 				WorkflowTypeName:              request.GetTypeFilter().GetName(),
 			})
@@ -2318,7 +2321,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 			if request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED || request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				err = errStatusFilterMustBeNotRunning
 			} else {
-				persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByStatus(&visibility.ListClosedWorkflowExecutionsByStatusRequest{
+				persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutionsByStatus(&visibility.ListClosedWorkflowExecutionsByStatusRequest{
 					ListWorkflowExecutionsRequest: baseReq,
 					Status:                        request.GetStatusFilter().GetStatus(),
 				})
@@ -2327,7 +2330,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		wh.GetLogger().Debug("List closed workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByStatus)
 	} else {
-		persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutions(baseReq)
+		persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutions(baseReq)
 	}
 
 	if err != nil {
@@ -2381,7 +2384,7 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 		NextPageToken: request.NextPageToken,
 		Query:         request.GetQuery(),
 	}
-	persistenceResp, err := wh.GetVisibilityManager().ListWorkflowExecutions(req)
+	persistenceResp, err := wh.visibilityMrg.ListWorkflowExecutions(req)
 	if err != nil {
 		return nil, err
 	}
@@ -2523,7 +2526,7 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 		NextPageToken: request.NextPageToken,
 		Query:         request.GetQuery(),
 	}
-	persistenceResp, err := wh.GetVisibilityManager().ScanWorkflowExecutions(req)
+	persistenceResp, err := wh.visibilityMrg.ScanWorkflowExecutions(req)
 	if err != nil {
 		return nil, err
 	}
@@ -2566,7 +2569,7 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 		Namespace:   namespace,
 		Query:       request.GetQuery(),
 	}
-	persistenceResp, err := wh.GetVisibilityManager().CountWorkflowExecutions(req)
+	persistenceResp, err := wh.visibilityMrg.CountWorkflowExecutions(req)
 	if err != nil {
 		return nil, err
 	}

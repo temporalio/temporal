@@ -69,6 +69,7 @@ var (
 func newVisibilityQueueTaskExecutor(
 	shard shard.Context,
 	historyService *historyEngineImpl,
+	visibilityMgr visibility.VisibilityManager,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *configs.Config,
@@ -80,7 +81,7 @@ func newVisibilityQueueTaskExecutor(
 		logger:         logger,
 		metricsClient:  metricsClient,
 		matchingClient: shard.GetService().GetMatchingClient(),
-		visibilityMgr:  shard.GetService().GetVisibilityManager(),
+		visibilityMgr:  visibilityMgr,
 		config:         config,
 		historyClient:  shard.GetService().GetHistoryClient(),
 		parentClosePolicyClient: parentclosepolicy.NewClient(
@@ -452,7 +453,7 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		RunID:       task.GetRunId(),
 		TaskID:      task.GetTaskId(),
 	}
-	return t.shard.GetVisibilityManager().DeleteWorkflowExecution(request)
+	return t.visibilityMgr.DeleteWorkflowExecution(request)
 }
 
 func getWorkflowMemo(

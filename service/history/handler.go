@@ -31,6 +31,7 @@ import (
 	"sync/atomic"
 
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
@@ -70,6 +71,7 @@ type (
 		eventNotifier           events.Notifier
 		replicationTaskFetchers ReplicationTaskFetchers
 		queueTaskProcessor      queueTaskProcessor
+		visibilityMrg           visibility.VisibilityManager
 	}
 )
 
@@ -100,12 +102,14 @@ var (
 func NewHandler(
 	resource resource.Resource,
 	config *configs.Config,
+	visibilityMrg visibility.VisibilityManager,
 ) *Handler {
 	handler := &Handler{
 		Resource:        resource,
 		status:          common.DaemonStatusInitialized,
 		config:          config,
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
+		visibilityMrg:   visibilityMrg,
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -216,7 +220,7 @@ func (h *Handler) CreateEngine(
 ) shard.Engine {
 	return NewEngineWithShardContext(
 		shardContext,
-		h.GetVisibilityManager(),
+		h.visibilityMrg,
 		h.GetMatchingClient(),
 		h.GetHistoryClient(),
 		h.GetSDKClient(),

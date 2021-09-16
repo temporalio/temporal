@@ -95,7 +95,6 @@ type (
 		mockClusterMetadata          *cluster.MockMetadata
 		mockSearchAttributesProvider *searchattribute.MockProvider
 
-		mockVisibilityMgr           *visibility.MockVisibilityManager
 		mockExecutionMgr            *persistence.MockExecutionManager
 		mockArchivalClient          *warchiver.MockClient
 		mockArchivalMetadata        *archiver.MockArchivalMetadata
@@ -184,7 +183,6 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockMatchingClient = s.mockShard.Resource.MatchingClient
 	s.mockHistoryClient = s.mockShard.Resource.HistoryClient
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
-	s.mockVisibilityMgr = s.mockShard.Resource.VisibilityMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockSearchAttributesProvider = s.mockShard.Resource.SearchAttributesProvider
 	s.mockArchivalMetadata = s.mockShard.Resource.ArchivalMetadata

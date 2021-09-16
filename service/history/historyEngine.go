@@ -91,7 +91,6 @@ type (
 		workflowTaskHandler       workflowTaskHandlerCallbacks
 		clusterMetadata           cluster.Metadata
 		executionManager          persistence.ExecutionManager
-		visibilityMgr             visibility.VisibilityManager
 		txProcessor               transferQueueProcessor
 		timerProcessor            timerQueueProcessor
 		visibilityProcessor       visibilityQueueProcessor
@@ -144,7 +143,6 @@ func NewEngineWithShardContext(
 		clusterMetadata:    shard.GetClusterMetadata(),
 		timeSource:         shard.GetTimeSource(),
 		executionManager:   executionManager,
-		visibilityMgr:      visibilityMgr,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		historyCache:       historyCache,
 		logger:             log.With(logger, tag.ComponentHistoryEngine),
@@ -166,7 +164,7 @@ func NewEngineWithShardContext(
 		queueTaskProcessor: queueTaskProcessor,
 	}
 
-	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
+	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, matching, historyClient, queueTaskProcessor, logger)
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, queueTaskProcessor, logger)
 	historyEngImpl.visibilityProcessor = newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
 	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
