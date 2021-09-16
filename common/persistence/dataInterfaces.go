@@ -438,7 +438,7 @@ type (
 
 	// CreateWorkflowExecutionResponse is the response to CreateWorkflowExecutionRequest
 	CreateWorkflowExecutionResponse struct {
-		NewMutableStateStats MutableStateStatus
+		NewMutableStateStats MutableStateStatistics
 	}
 
 	// GetWorkflowExecutionRequest is used to retrieve the info of a workflow execution
@@ -452,7 +452,7 @@ type (
 	GetWorkflowExecutionResponse struct {
 		State             *persistencespb.WorkflowMutableState
 		DBRecordVersion   int64
-		MutableStateStats MutableStateStatus
+		MutableStateStats MutableStateStatistics
 	}
 
 	// GetCurrentExecutionRequest is used to retrieve the current RunId for an execution
@@ -499,8 +499,8 @@ type (
 
 	// UpdateWorkflowExecutionResponse is response for UpdateWorkflowExecutionRequest
 	UpdateWorkflowExecutionResponse struct {
-		UpdateMutableStateStats MutableStateStatus
-		NewMutableStateStats    *MutableStateStatus
+		UpdateMutableStateStats MutableStateStatistics
+		NewMutableStateStats    *MutableStateStatistics
 	}
 
 	// ConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for a single run
@@ -524,9 +524,9 @@ type (
 	}
 
 	ConflictResolveWorkflowExecutionResponse struct {
-		ResetMutableStateStats   MutableStateStatus
-		NewMutableStateStats     *MutableStateStatus
-		CurrentMutableStateStats *MutableStateStatus
+		ResetMutableStateStats   MutableStateStatistics
+		NewMutableStateStats     *MutableStateStatistics
+		CurrentMutableStateStats *MutableStateStatistics
 	}
 
 	// WorkflowEvents is used as generic workflow history events transaction container
@@ -948,8 +948,8 @@ type (
 		NotificationVersion int64
 	}
 
-	// MutableStateStatus is the size stats for MutableState
-	MutableStateStatus struct {
+	// MutableStateStatistics is the size stats for MutableState
+	MutableStateStatistics struct {
 		TotalSize       int
 		HistorySizeDiff int
 

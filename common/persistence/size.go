@@ -27,7 +27,7 @@ package persistence
 func statusOfInternalWorkflow(
 	state *InternalWorkflowMutableState,
 	historySize int64,
-) *MutableStateStatus {
+) *MutableStateStatistics {
 	if state == nil {
 		return nil
 	}
@@ -68,7 +68,7 @@ func statusOfInternalWorkflow(
 
 	historySizeDiff := int(historySize)
 
-	return &MutableStateStatus{
+	return &MutableStateStatistics{
 		TotalSize:       totalSize,
 		HistorySizeDiff: historySizeDiff,
 
@@ -101,7 +101,7 @@ func statusOfInternalWorkflow(
 func statusOfInternalWorkflowMutation(
 	mutation *InternalWorkflowMutation,
 	historySize int64,
-) *MutableStateStatus {
+) *MutableStateStatistics {
 	if mutation == nil {
 		return nil
 	}
@@ -161,7 +161,7 @@ func statusOfInternalWorkflowMutation(
 
 	historySizeDiff := int(historySize)
 
-	return &MutableStateStatus{
+	return &MutableStateStatistics{
 		TotalSize:       totalSize,
 		HistorySizeDiff: historySizeDiff,
 
@@ -194,7 +194,7 @@ func statusOfInternalWorkflowMutation(
 func statusOfInternalWorkflowSnapshot(
 	snapshot *InternalWorkflowSnapshot,
 	historySize int64,
-) *MutableStateStatus {
+) *MutableStateStatistics {
 	if snapshot == nil {
 		return nil
 	}
@@ -235,7 +235,7 @@ func statusOfInternalWorkflowSnapshot(
 
 	historySizeDiff := int(historySize)
 
-	return &MutableStateStatus{
+	return &MutableStateStatistics{
 		TotalSize:       totalSize,
 		HistorySizeDiff: historySizeDiff,
 

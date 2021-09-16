@@ -50,7 +50,7 @@ func emitMutableStateStatus(
 	metricsClient metrics.Client,
 	scope int,
 	namespace string,
-	stats *persistence.MutableStateStatus,
+	stats *persistence.MutableStateStatistics,
 ) {
 	if stats == nil {
 		return
