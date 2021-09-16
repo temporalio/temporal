@@ -342,7 +342,7 @@ func (s *integrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	}
 
 	_, err = poller.PollAndProcessWorkflowTask(true, false)
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	s.True(workflowComplete)
 	s.Equal(3, activityExecutedCount)
@@ -506,7 +506,7 @@ func (s *integrationSuite) TestActivityRetry() {
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	err = poller.PollAndProcessActivityTask(false)
 	s.True(err == nil || err == matching.ErrNoTasks, err)
@@ -654,7 +654,7 @@ func (s *integrationSuite) TestActivityRetry_Infinite() {
 	}
 
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
-	s.True(err == nil, err)
+	s.NoError(err)
 
 	for i := 0; i <= activityExecutedLimit; i++ {
 		err = poller.PollAndProcessActivityTask(false)
@@ -942,9 +942,7 @@ func (s *integrationSuite) TestActivityTimeouts() {
 		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
 		s.Equal(activityName, activityType.GetName())
-		var timeoutType string
-		err := payloads.Decode(input, &timeoutType)
-		s.NoError(err)
+		timeoutType := s.decodePayloadsString(input)
 		switch timeoutType {
 		case "ScheduleToStart":
 			s.Fail("Activity A not expected to be started")
@@ -1097,9 +1095,7 @@ func (s *integrationSuite) TestActivityHeartbeatTimeouts() {
 					case enumspb.TIMEOUT_TYPE_HEARTBEAT:
 						activitiesTimedout++
 						scheduleID := timeoutEvent.GetScheduledEventId()
-						var details string
-						err := payloads.Decode(timeoutEvent.GetFailure().GetTimeoutFailureInfo().GetLastHeartbeatDetails(), &details)
-						s.NoError(err)
+						details := s.decodePayloadsString(timeoutEvent.GetFailure().GetTimeoutFailureInfo().GetLastHeartbeatDetails())
 						lastHeartbeat, _ := strconv.Atoi(details)
 						lastHeartbeatMap[scheduleID] = lastHeartbeat
 					default:

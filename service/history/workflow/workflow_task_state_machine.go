@@ -134,7 +134,7 @@ func (m *workflowTaskStateMachine) ReplicateWorkflowTaskStartedEvent(
 	if workflowTask == nil {
 		workflowTask, ok = m.GetWorkflowTaskInfo(scheduleID)
 		if !ok {
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("unable to find workflow task: %v", scheduleID))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("unable to find workflow task: %v", scheduleID))
 		}
 		// setting workflow task attempt to 1 for workflow task replication
 		// this mainly handles transient workflow task completion

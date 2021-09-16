@@ -150,7 +150,7 @@ Loop:
 		if !ok {
 			errString := fmt.Sprintf("failed to find in user timer event ID: %v", timerSequenceID.EventID)
 			t.logger.Error(errString)
-			return serviceerror.NewUnavailable(errString)
+			return serviceerror.NewInternal(errString)
 		}
 
 		if expired := timerSequence.IsExpired(referenceTime, timerSequenceID); !expired {
@@ -455,27 +455,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		return err
 	}
 
-	targetNamespaceID := namespaceID
-	if activityInfo.NamespaceId != "" {
-		targetNamespaceID = activityInfo.NamespaceId
-	} else {
-		// TODO remove this block after Mar, 1th, 2020
-		//  previously, NamespaceID in activity info is not used, so need to get
-		//  schedule event from DB checking whether activity to be scheduled
-		//  belongs to this namespace
-		scheduledEvent, err := mutableState.GetActivityScheduledEvent(scheduledID)
-		if err != nil {
-			return err
-		}
-		if scheduledEvent.GetActivityTaskScheduledEventAttributes().GetNamespace() != "" {
-			namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespace(scheduledEvent.GetActivityTaskScheduledEventAttributes().GetNamespace())
-			if err != nil {
-				return serviceerror.NewUnavailable("unable to re-schedule activity across namespace.")
-			}
-			targetNamespaceID = namespaceEntry.GetInfo().Id
-		}
-	}
-
+	targetNamespaceID := activityInfo.NamespaceId
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: activityInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
