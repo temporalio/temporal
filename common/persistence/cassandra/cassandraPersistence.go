@@ -1529,9 +1529,9 @@ func (d *cassandraPersistence) ListConcreteExecutions(
 		}
 		result = make(map[string]interface{})
 	}
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 	return response, nil
 }
 
@@ -1647,9 +1647,9 @@ func (d *cassandraPersistence) GetTransferTasks(
 
 		response.Tasks = append(response.Tasks, t)
 	}
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError("GetTransferTasks", err)
@@ -1716,9 +1716,9 @@ func (d *cassandraPersistence) GetVisibilityTasks(
 
 		response.Tasks = append(response.Tasks, t)
 	}
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError("GetVisibilityTasks", err)
@@ -1794,9 +1794,9 @@ func (d *cassandraPersistence) populateGetReplicationTasksResponse(
 
 		response.Tasks = append(response.Tasks, t)
 	}
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError(operation, err)
@@ -2361,9 +2361,9 @@ func (d *cassandraPersistence) GetTimerIndexTasks(
 
 		response.Timers = append(response.Timers, t)
 	}
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError("GetTimerIndexTasks", err)
