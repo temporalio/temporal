@@ -120,7 +120,6 @@ type (
 		// persistence clients
 
 		persistenceBean persistenceClient.Bean
-		visibilityMgr   visibility.VisibilityManager
 
 		// loggers
 
@@ -148,7 +147,6 @@ func New(
 	persistenceMaxQPS dynamicconfig.IntPropertyFn,
 	persistenceGlobalMaxQPS dynamicconfig.IntPropertyFn,
 	throttledLoggerMaxRPS dynamicconfig.IntPropertyFn,
-	visibilityManagerInitializer VisibilityManagerInitializer,
 ) (impl *Impl, retError error) {
 
 	logger := log.With(params.Logger, tag.Service(serviceName))
@@ -251,15 +249,6 @@ func New(
 	saProvider := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
 	saManager := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
 
-	visibilityMgr, err := visibilityManagerInitializer(
-		persistenceBean,
-		saProvider,
-		logger,
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	namespaceCache := namespace.NewNamespaceCache(
 		persistenceBean.GetMetadataManager(),
 		clusterMetadata,
@@ -355,7 +344,6 @@ func New(
 		// persistence clients
 
 		persistenceBean: persistenceBean,
-		visibilityMgr:   visibilityMgr,
 
 		// loggers
 
@@ -425,9 +413,6 @@ func (h *Impl) Stop() {
 	h.ringpopChannel.Close()
 	h.runtimeMetricsReporter.Stop()
 	h.persistenceBean.Close()
-	if h.visibilityMgr != nil {
-		h.visibilityMgr.Close()
-	}
 }
 
 // GetServiceName return service name
@@ -582,11 +567,6 @@ func (h *Impl) GetClusterMetadataManager() persistence.ClusterMetadataManager {
 // GetTaskManager return task manager
 func (h *Impl) GetTaskManager() persistence.TaskManager {
 	return h.persistenceBean.GetTaskManager()
-}
-
-// GetVisibilityManager return visibility manager
-func (h *Impl) GetVisibilityManager() visibility.VisibilityManager {
-	return h.visibilityMgr
 }
 
 // GetNamespaceReplicationQueue return namespace replication queue

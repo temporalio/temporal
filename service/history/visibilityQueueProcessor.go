@@ -69,13 +69,8 @@ type (
 		taskExecutor             queueTaskExecutor
 
 		// from transferQueueProcessorImpl
-		config             *configs.Config
-		historyService     *historyEngineImpl
-		visibilityMgr      visibility.VisibilityManager
-		matchingClient     matchingservice.MatchingServiceClient
-		historyClient      historyservice.HistoryServiceClient
-		ackLevel           int64
-		queueTaskProcessor queueTaskProcessor
+		config   *configs.Config
+		ackLevel int64
 
 		isStarted    int32
 		isStopped    int32
@@ -85,7 +80,7 @@ type (
 
 func newVisibilityQueueProcessor(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	historyEngine *historyEngineImpl,
 	visibilityMgr visibility.VisibilityManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
@@ -133,23 +128,19 @@ func newVisibilityQueueProcessor(
 		visibilityQueueShutdown:  visibilityQueueShutdown,
 		visibilityTaskFilter:     visibilityTaskFilter,
 		logger:                   logger,
-		metricsClient:            historyService.metricsClient,
+		metricsClient:            historyEngine.metricsClient,
 		taskExecutor: newVisibilityQueueTaskExecutor(
 			shard,
-			historyService,
+			historyEngine,
+			visibilityMgr,
 			logger,
-			historyService.metricsClient,
+			historyEngine.metricsClient,
 			config,
 		),
 
-		config:             config,
-		historyService:     historyService,
-		visibilityMgr:      visibilityMgr,
-		matchingClient:     matchingClient,
-		historyClient:      historyClient,
-		ackLevel:           shard.GetVisibilityAckLevel(),
-		shutdownChan:       make(chan struct{}),
-		queueTaskProcessor: queueTaskProcessor,
+		config:       config,
+		ackLevel:     shard.GetVisibilityAckLevel(),
+		shutdownChan: make(chan struct{}),
 
 		queueAckMgr:        nil, // is set bellow
 		queueProcessorBase: nil, // is set bellow
@@ -170,7 +161,7 @@ func newVisibilityQueueProcessor(
 		return newVisibilityQueueTask(
 			shard,
 			taskInfo,
-			historyService.metricsClient.Scope(
+			historyEngine.metricsClient.Scope(
 				getVisibilityTaskMetricsScope(taskInfo.GetTaskType()),
 			),
 			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
@@ -191,7 +182,7 @@ func newVisibilityQueueProcessor(
 		queueTaskProcessor,
 		queueAckMgr,
 		redispatchQueue,
-		historyService.historyCache,
+		historyEngine.historyCache,
 		visibilityQueueTaskInitializer,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.VisibilityQueueProcessorScope),

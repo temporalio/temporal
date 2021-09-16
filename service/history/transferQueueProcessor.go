@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -69,7 +68,6 @@ type (
 		config                   *configs.Config
 		metricsClient            metrics.Client
 		historyService           *historyEngineImpl
-		visibilityMgr            visibility.VisibilityManager
 		matchingClient           matchingservice.MatchingServiceClient
 		historyClient            historyservice.HistoryServiceClient
 		ackLevel                 int64
@@ -86,7 +84,6 @@ type (
 func newTransferQueueProcessor(
 	shard shard.Context,
 	historyService *historyEngineImpl,
-	visibilityMgr visibility.VisibilityManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	queueTaskProcessor queueTaskProcessor,
@@ -118,7 +115,6 @@ func newTransferQueueProcessor(
 				clusterName,
 				shard,
 				historyService,
-				visibilityMgr,
 				matchingClient,
 				taskAllocator,
 				nDCHistoryResender,
@@ -136,7 +132,6 @@ func newTransferQueueProcessor(
 		config:                   config,
 		metricsClient:            historyService.metricsClient,
 		historyService:           historyService,
-		visibilityMgr:            visibilityMgr,
 		matchingClient:           matchingClient,
 		historyClient:            historyClient,
 		ackLevel:                 shard.GetTransferAckLevel(),
@@ -146,7 +141,6 @@ func newTransferQueueProcessor(
 		activeTaskProcessor: newTransferQueueActiveProcessor(
 			shard,
 			historyService,
-			visibilityMgr,
 			matchingClient,
 			historyClient,
 			taskAllocator,
@@ -235,7 +229,6 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 	updateShardAckLevel, failoverTaskProcessor := newTransferQueueFailoverProcessor(
 		t.shard,
 		t.historyService,
-		t.visibilityMgr,
 		t.matchingClient,
 		t.historyClient,
 		namespaceIDs,

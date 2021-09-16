@@ -31,8 +31,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/server/common/persistence/visibility"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	m "go.temporal.io/server/api/matchingservice/v1"
@@ -60,7 +58,6 @@ type (
 		logger                   log.Logger
 		metricsClient            metrics.Client
 		matchingClient           matchingservice.MatchingServiceClient
-		visibilityMgr            visibility.VisibilityManager
 		config                   *configs.Config
 		searchAttributesProvider searchattribute.Provider
 	}
@@ -80,7 +77,6 @@ func newTransferQueueTaskExecutorBase(
 		logger:                   logger,
 		metricsClient:            metricsClient,
 		matchingClient:           shard.GetService().GetMatchingClient(),
-		visibilityMgr:            shard.GetService().GetVisibilityManager(),
 		config:                   config,
 		searchAttributesProvider: shard.GetService().GetSearchAttributesProvider(),
 	}

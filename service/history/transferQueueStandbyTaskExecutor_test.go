@@ -37,8 +37,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/persistence/visibility"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -77,7 +75,6 @@ type (
 		mockNDCHistoryResender *xdc.MockNDCHistoryResender
 		mockMatchingClient     *matchingservicemock.MockMatchingServiceClient
 
-		mockVisibilityMgr    *visibility.MockVisibilityManager
 		mockExecutionMgr     *persistence.MockExecutionManager
 		mockArchivalMetadata *archiver.MockArchivalMetadata
 		mockArchiverProvider *provider.MockArchiverProvider
@@ -145,7 +142,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 
 	s.mockMatchingClient = s.mockShard.Resource.MatchingClient
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
-	s.mockVisibilityMgr = s.mockShard.Resource.VisibilityMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockArchivalMetadata = s.mockShard.Resource.ArchivalMetadata
 	s.mockArchiverProvider = s.mockShard.Resource.ArchiverProvider

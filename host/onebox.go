@@ -54,12 +54,10 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
-	visibilityclient "go.temporal.io/server/common/persistence/visibility/client"
 	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
@@ -598,24 +596,6 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		dynamicconfig.GetIntPropertyFn(5000),
 		dynamicconfig.GetIntPropertyFn(5000),
 		dynamicconfig.GetIntPropertyFn(10000),
-		func(
-			persistenceBean persistenceClient.Bean,
-			searchAttributesProvider searchattribute.Provider,
-			logger log.Logger,
-		) (visibility.VisibilityManager, error) {
-			visibilityFromDB, err := visibilityclient.NewVisibilityManager(
-				params.PersistenceConfig,
-				dynamicconfig.GetIntPropertyFn(5000),
-				params.MetricsClient,
-				params.PersistenceServiceResolver,
-				params.Logger,
-			)
-			if err != nil {
-				return nil, err
-			}
-
-			return visibilityFromDB, nil
-		},
 	)
 	if err != nil {
 		params.Logger.Fatal("unable to create worker service", tag.Error(err))

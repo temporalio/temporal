@@ -28,8 +28,6 @@ import (
 	"context"
 
 	"github.com/pborman/uuid"
-	"go.temporal.io/server/common/persistence/visibility"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -58,8 +56,7 @@ type (
 
 func newTransferQueueActiveProcessor(
 	shard shard.Context,
-	historyService *historyEngineImpl,
-	visibilityMgr visibility.VisibilityManager,
+	historyEngine *historyEngineImpl,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	taskAllocator taskAllocator,
@@ -107,13 +104,13 @@ func newTransferQueueActiveProcessor(
 		currentClusterName: currentClusterName,
 		shard:              shard,
 		logger:             logger,
-		metricsClient:      historyService.metricsClient,
+		metricsClient:      historyEngine.metricsClient,
 		transferTaskFilter: transferTaskFilter,
 		taskExecutor: newTransferQueueActiveTaskExecutor(
 			shard,
-			historyService,
+			historyEngine,
 			logger,
-			historyService.metricsClient,
+			historyEngine.metricsClient,
 			config,
 		),
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
@@ -140,7 +137,7 @@ func newTransferQueueActiveProcessor(
 		return newTransferQueueTask(
 			shard,
 			taskInfo,
-			historyService.metricsClient.Scope(
+			historyEngine.metricsClient.Scope(
 				getTransferTaskMetricsScope(taskInfo.GetTaskType(), true),
 			),
 			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
@@ -161,7 +158,7 @@ func newTransferQueueActiveProcessor(
 		queueTaskProcessor,
 		queueAckMgr,
 		redispatchQueue,
-		historyService.historyCache,
+		historyEngine.historyCache,
 		transferQueueTaskInitializer,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
@@ -174,8 +171,7 @@ func newTransferQueueActiveProcessor(
 
 func newTransferQueueFailoverProcessor(
 	shard shard.Context,
-	historyService *historyEngineImpl,
-	visibilityMgr visibility.VisibilityManager,
+	historyEngine *historyEngineImpl,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	namespaceIDs map[string]struct{},
@@ -243,13 +239,13 @@ func newTransferQueueFailoverProcessor(
 		currentClusterName: currentClusterName,
 		shard:              shard,
 		logger:             logger,
-		metricsClient:      historyService.metricsClient,
+		metricsClient:      historyEngine.metricsClient,
 		transferTaskFilter: transferTaskFilter,
 		taskExecutor: newTransferQueueActiveTaskExecutor(
 			shard,
-			historyService,
+			historyEngine,
 			logger,
-			historyService.metricsClient,
+			historyEngine.metricsClient,
 			config,
 		),
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
@@ -276,7 +272,7 @@ func newTransferQueueFailoverProcessor(
 		return newTransferQueueTask(
 			shard,
 			taskInfo,
-			historyService.metricsClient.Scope(
+			historyEngine.metricsClient.Scope(
 				getTransferTaskMetricsScope(taskInfo.GetTaskType(), true),
 			),
 			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
@@ -297,7 +293,7 @@ func newTransferQueueFailoverProcessor(
 		queueTaskProcessor,
 		queueAckMgr,
 		redispatchQueue,
-		historyService.historyCache,
+		historyEngine.historyCache,
 		transferQueueTaskInitializer,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
