@@ -296,22 +296,13 @@ func createWorkflowExecutionWithRetry(
 	)
 	switch err.(type) {
 	case nil:
-		// TODO @wxing1292
-		//  temporarily move the emission of per update mutable state metrics
-		//  to here, long term story, this emission of metrics should have a
-		//  dedicated layer
-		if namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(
+		emitMutationMetrics(
+			shard,
 			request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
-		); err == nil {
-			metricsClient := shard.GetMetricsClient()
-			namespaceName := namespaceEntry.GetInfo().Name
-			emitMutableStateStatus(
-				metricsClient,
-				metrics.SessionSizeStatsScope,
-				namespaceName,
+			[]*persistence.MutableStateStatistics{
 				&resp.NewMutableStateStats,
-			)
-		}
+			},
+		)
 		return resp, nil
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,
@@ -351,34 +342,15 @@ func conflictResolveWorkflowExecutionWithRetry(
 	)
 	switch err.(type) {
 	case nil:
-		// TODO @wxing1292
-		//  temporarily move the emission of per update mutable state metrics
-		//  to here, long term story, this emission of metrics should have a
-		//  dedicated layer
-		if namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(
+		emitMutationMetrics(
+			shard,
 			request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId,
-		); err == nil {
-			metricsClient := shard.GetMetricsClient()
-			namespaceName := namespaceEntry.GetInfo().Name
-			emitMutableStateStatus(
-				metricsClient,
-				metrics.SessionSizeStatsScope,
-				namespaceName,
+			[]*persistence.MutableStateStatistics{
 				&resp.ResetMutableStateStats,
-			)
-			emitMutableStateStatus(
-				metricsClient,
-				metrics.SessionSizeStatsScope,
-				namespaceName,
 				resp.NewMutableStateStats,
-			)
-			emitMutableStateStatus(
-				metricsClient,
-				metrics.SessionSizeStatsScope,
-				namespaceName,
 				resp.CurrentMutableStateStats,
-			)
-		}
+			},
+		)
 		return resp, nil
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,
@@ -419,22 +391,13 @@ func getWorkflowExecutionWithRetry(
 	)
 	switch err.(type) {
 	case nil:
-		// TODO @wxing1292
-		//  temporarily move the emission of per update mutable state metrics
-		//  to here, long term story, this emission of metrics should have a
-		//  dedicated layer
-		if namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(
+		emitGetMetrics(
+			shard,
 			resp.State.ExecutionInfo.NamespaceId,
-		); err == nil {
-			metricsClient := shard.GetMetricsClient()
-			namespaceName := namespaceEntry.GetInfo().Name
-			emitMutableStateStatus(
-				metricsClient,
-				metrics.ExecutionSizeStatsScope,
-				namespaceName,
+			[]*persistence.MutableStateStatistics{
 				&resp.MutableStateStats,
-			)
-		}
+			},
+		)
 		return resp, nil
 	case *serviceerror.NotFound:
 		// it is possible that workflow does not exists
@@ -470,28 +433,14 @@ func updateWorkflowExecutionWithRetry(
 	)
 	switch err.(type) {
 	case nil:
-		// TODO @wxing1292
-		//  temporarily move the emission of per update mutable state metrics
-		//  to here, long term story, this emission of metrics should have a
-		//  dedicated layer
-		if namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(
+		emitMutationMetrics(
+			shard,
 			request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId,
-		); err == nil {
-			metricsClient := shard.GetMetricsClient()
-			namespaceName := namespaceEntry.GetInfo().Name
-			emitMutableStateStatus(
-				metricsClient,
-				metrics.SessionSizeStatsScope,
-				namespaceName,
+			[]*persistence.MutableStateStatistics{
 				&resp.UpdateMutableStateStats,
-			)
-			emitMutableStateStatus(
-				metricsClient,
-				metrics.SessionSizeStatsScope,
-				namespaceName,
 				resp.NewMutableStateStats,
-			)
-		}
+			},
+		)
 		return resp, nil
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,
@@ -642,4 +591,50 @@ func NotifyNewHistoryMutationEvent(
 		workflowStatus,
 	))
 	return nil
+}
+
+func emitMutationMetrics(
+	shard shard.Context,
+	namespaceID string,
+	stats []*persistence.MutableStateStatistics,
+) {
+	namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(
+		namespaceID,
+	)
+	if err != nil {
+		return
+	}
+
+	metricsClient := shard.GetMetricsClient()
+	namespaceName := namespaceEntry.GetInfo().Name
+	for _, stat := range stats {
+		emitMutableStateStatus(
+			metricsClient.Scope(metrics.SessionSizeStatsScope, metrics.NamespaceTag(namespaceName)),
+			metricsClient.Scope(metrics.SessionCountStatsScope, metrics.NamespaceTag(namespaceName)),
+			stat,
+		)
+	}
+}
+
+func emitGetMetrics(
+	shard shard.Context,
+	namespaceID string,
+	stats []*persistence.MutableStateStatistics,
+) {
+	namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(
+		namespaceID,
+	)
+	if err != nil {
+		return
+	}
+
+	metricsClient := shard.GetMetricsClient()
+	namespaceName := namespaceEntry.GetInfo().Name
+	for _, stat := range stats {
+		emitMutableStateStatus(
+			metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.NamespaceTag(namespaceName)),
+			metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.NamespaceTag(namespaceName)),
+			stat,
+		)
+	}
 }

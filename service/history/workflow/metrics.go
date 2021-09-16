@@ -47,17 +47,13 @@ func emitWorkflowHistoryStats(
 }
 
 func emitMutableStateStatus(
-	metricsClient metrics.Client,
-	scope int,
-	namespace string,
+	sizeScope metrics.Scope,
+	countScope metrics.Scope,
 	stats *persistence.MutableStateStatistics,
 ) {
 	if stats == nil {
 		return
 	}
-
-	sizeScope := metricsClient.Scope(scope, metrics.NamespaceTag(namespace))
-	countScope := metricsClient.Scope(scope, metrics.NamespaceTag(namespace))
 
 	sizeScope.RecordDistribution(metrics.MutableStateSize, stats.TotalSize)
 	sizeScope.RecordDistribution(metrics.ExecutionInfoSize, stats.ExecutionInfoSize)
