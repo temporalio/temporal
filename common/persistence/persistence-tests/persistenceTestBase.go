@@ -921,28 +921,6 @@ func (s *TestBase) UpdateAllMutableState(updatedMutableState *persistencespb.Wor
 	return err
 }
 
-// ConflictResolveWorkflowExecution is  utility method to reset mutable state
-func (s *TestBase) ConflictResolveWorkflowExecution(prevRunID string, prevLastWriteVersion int64, prevState enumsspb.WorkflowExecutionState,
-	info *persistencespb.WorkflowExecutionInfo, state *persistencespb.WorkflowExecutionState, nextEventID int64,
-	activityInfos []*persistencespb.ActivityInfo, timerInfos []*persistencespb.TimerInfo, childExecutionInfos []*persistencespb.ChildExecutionInfo,
-	requestCancelInfos []*persistencespb.RequestCancelInfo, signalInfos []*persistencespb.SignalInfo, ids []string) error {
-	return s.ExecutionManager.ConflictResolveWorkflowExecution(&persistence.ConflictResolveWorkflowExecutionRequest{
-		ShardID: s.ShardInfo.GetShardId(),
-		RangeID: s.ShardInfo.GetRangeId(),
-		ResetWorkflowSnapshot: persistence.WorkflowSnapshot{
-			ExecutionInfo:       info,
-			Condition:           nextEventID,
-			ActivityInfos:       convertActivityInfos(activityInfos),
-			TimerInfos:          convertTimerInfos(timerInfos),
-			ChildExecutionInfos: convertChildExecutionInfos(childExecutionInfos),
-			RequestCancelInfos:  convertRequestCancelInfos(requestCancelInfos),
-			SignalInfos:         convertSignalInfos(signalInfos),
-			SignalRequestedIDs:  convert.StringSliceToSet(ids),
-			Checksum:            testWorkflowChecksum,
-		},
-	})
-}
-
 // DeleteWorkflowExecution is a utility method to delete a workflow execution
 func (s *TestBase) DeleteWorkflowExecution(info *persistencespb.WorkflowExecutionInfo, state *persistencespb.WorkflowExecutionState) error {
 	return s.ExecutionManager.DeleteWorkflowExecution(&persistence.DeleteWorkflowExecutionRequest{
