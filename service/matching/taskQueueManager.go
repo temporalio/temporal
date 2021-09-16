@@ -237,9 +237,11 @@ func (c *taskQueueManagerImpl) Start() {
 	) {
 		return
 	}
+	c.logger.Info("", tag.LifeCycleStarting)
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
+	c.logger.Info("", tag.LifeCycleStarted)
 }
 
 // Stop pump that fills up taskBuffer from persistence.
@@ -251,12 +253,10 @@ func (c *taskQueueManagerImpl) Stop() {
 	) {
 		return
 	}
-
+	c.logger.Info("", tag.LifeCycleStopping)
 	close(c.shutdownCh)
-
 	_ = c.db.UpdateState(c.taskAckManager.getAckLevel())
 	c.taskGC.RunNow(c.taskAckManager.getAckLevel())
-
 	c.liveness.Stop()
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
