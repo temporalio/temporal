@@ -46,68 +46,37 @@ func emitWorkflowHistoryStats(
 	countScope.RecordDistribution(metrics.HistoryCount, historyCount)
 }
 
-func emitWorkflowExecutionStats(
-	metricsClient metrics.Client,
-	namespace string,
-	stats *persistence.MutableStateStats,
-	executionInfoHistorySize int64,
+func emitMutableStateStatus(
+	sizeScope metrics.Scope,
+	countScope metrics.Scope,
+	stats *persistence.MutableStateStatistics,
 ) {
-
 	if stats == nil {
 		return
 	}
 
-	sizeScope := metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.NamespaceTag(namespace))
-	countScope := metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.NamespaceTag(namespace))
-
-	sizeScope.RecordDistribution(metrics.HistorySize, int(executionInfoHistorySize))
-	sizeScope.RecordDistribution(metrics.MutableStateSize, stats.MutableStateSize)
-	sizeScope.RecordDistribution(metrics.ExecutionInfoSize, stats.MutableStateSize)
-	sizeScope.RecordDistribution(metrics.ActivityInfoSize, stats.ActivityInfoSize)
-	sizeScope.RecordDistribution(metrics.TimerInfoSize, stats.TimerInfoSize)
-	sizeScope.RecordDistribution(metrics.ChildInfoSize, stats.ChildInfoSize)
-	sizeScope.RecordDistribution(metrics.SignalInfoSize, stats.SignalInfoSize)
-	sizeScope.RecordDistribution(metrics.BufferedEventsSize, stats.BufferedEventsSize)
-
-	countScope.RecordDistribution(metrics.ActivityInfoCount, stats.ActivityInfoCount)
-	countScope.RecordDistribution(metrics.TimerInfoCount, stats.TimerInfoCount)
-	countScope.RecordDistribution(metrics.ChildInfoCount, stats.ChildInfoCount)
-	countScope.RecordDistribution(metrics.SignalInfoCount, stats.SignalInfoCount)
-	countScope.RecordDistribution(metrics.RequestCancelInfoCount, stats.RequestCancelInfoCount)
-	countScope.RecordDistribution(metrics.BufferedEventsCount, stats.BufferedEventsCount)
-}
-
-func emitSessionUpdateStats(
-	metricsClient metrics.Client,
-	namespace string,
-	stats *persistence.MutableStateUpdateSessionStats,
-) {
-
-	if stats == nil {
-		return
-	}
-
-	sizeScope := metricsClient.Scope(metrics.SessionSizeStatsScope, metrics.NamespaceTag(namespace))
-	countScope := metricsClient.Scope(metrics.SessionCountStatsScope, metrics.NamespaceTag(namespace))
-
-	sizeScope.RecordDistribution(metrics.MutableStateSize, stats.MutableStateSize)
+	sizeScope.RecordDistribution(metrics.MutableStateSize, stats.TotalSize)
 	sizeScope.RecordDistribution(metrics.ExecutionInfoSize, stats.ExecutionInfoSize)
-	sizeScope.RecordDistribution(metrics.ActivityInfoSize, stats.ActivityInfoSize)
-	sizeScope.RecordDistribution(metrics.TimerInfoSize, stats.TimerInfoSize)
-	sizeScope.RecordDistribution(metrics.ChildInfoSize, stats.ChildInfoSize)
-	sizeScope.RecordDistribution(metrics.SignalInfoSize, stats.SignalInfoSize)
-	sizeScope.RecordDistribution(metrics.BufferedEventsSize, stats.BufferedEventsSize)
+	sizeScope.RecordDistribution(metrics.ExecutionStateSize, stats.ExecutionStateSize)
+	sizeScope.RecordDistribution(metrics.HistorySize, stats.HistorySizeDiff)
 
+	sizeScope.RecordDistribution(metrics.ActivityInfoSize, stats.ActivityInfoSize)
 	countScope.RecordDistribution(metrics.ActivityInfoCount, stats.ActivityInfoCount)
+
+	sizeScope.RecordDistribution(metrics.TimerInfoSize, stats.TimerInfoSize)
 	countScope.RecordDistribution(metrics.TimerInfoCount, stats.TimerInfoCount)
+
+	sizeScope.RecordDistribution(metrics.ChildInfoSize, stats.ChildInfoSize)
 	countScope.RecordDistribution(metrics.ChildInfoCount, stats.ChildInfoCount)
-	countScope.RecordDistribution(metrics.SignalInfoCount, stats.SignalInfoCount)
+
+	countScope.RecordDistribution(metrics.RequestCancelInfoSize, stats.RequestCancelInfoSize)
 	countScope.RecordDistribution(metrics.RequestCancelInfoCount, stats.RequestCancelInfoCount)
-	countScope.RecordDistribution(metrics.DeleteActivityInfoCount, stats.DeleteActivityInfoCount)
-	countScope.RecordDistribution(metrics.DeleteTimerInfoCount, stats.DeleteTimerInfoCount)
-	countScope.RecordDistribution(metrics.DeleteChildInfoCount, stats.DeleteChildInfoCount)
-	countScope.RecordDistribution(metrics.DeleteSignalInfoCount, stats.DeleteSignalInfoCount)
-	countScope.RecordDistribution(metrics.DeleteRequestCancelInfoCount, stats.DeleteRequestCancelInfoCount)
+
+	sizeScope.RecordDistribution(metrics.SignalInfoSize, stats.SignalInfoSize)
+	countScope.RecordDistribution(metrics.SignalInfoCount, stats.SignalInfoCount)
+
+	sizeScope.RecordDistribution(metrics.BufferedEventsSize, stats.BufferedEventsSize)
+	sizeScope.RecordDistribution(metrics.BufferedEventsCount, stats.BufferedEventsCount)
 }
 
 func emitWorkflowCompletionStats(

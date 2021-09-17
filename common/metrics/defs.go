@@ -1835,9 +1835,11 @@ const (
 	WorkflowContextCleared
 	MutableStateSize
 	ExecutionInfoSize
+	ExecutionStateSize
 	ActivityInfoSize
 	TimerInfoSize
 	ChildInfoSize
+	RequestCancelInfoSize
 	SignalInfoSize
 	BufferedEventsSize
 	ActivityInfoCount
@@ -1846,11 +1848,6 @@ const (
 	SignalInfoCount
 	RequestCancelInfoCount
 	BufferedEventsCount
-	DeleteActivityInfoCount
-	DeleteTimerInfoCount
-	DeleteChildInfoCount
-	DeleteSignalInfoCount
-	DeleteRequestCancelInfoCount
 	WorkflowRetryBackoffTimerCount
 	WorkflowCronBackoffTimerCount
 	WorkflowCleanupDeleteCount
@@ -2298,9 +2295,11 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		WorkflowContextCleared:                            {metricName: "workflow_context_cleared", metricType: Counter},
 		MutableStateSize:                                  {metricName: "mutable_state_size", metricType: Timer},
 		ExecutionInfoSize:                                 {metricName: "execution_info_size", metricType: Timer},
+		ExecutionStateSize:                                {metricName: "execution_state_size", metricType: Timer},
 		ActivityInfoSize:                                  {metricName: "activity_info_size", metricType: Timer},
 		TimerInfoSize:                                     {metricName: "timer_info_size", metricType: Timer},
 		ChildInfoSize:                                     {metricName: "child_info_size", metricType: Timer},
+		RequestCancelInfoSize:                             {metricName: "request_cancel_info_size", metricType: Timer},
 		SignalInfoSize:                                    {metricName: "signal_info_size", metricType: Timer},
 		BufferedEventsSize:                                {metricName: "buffered_events_size", metricType: Timer},
 		ActivityInfoCount:                                 {metricName: "activity_info_count", metricType: Timer},
@@ -2309,11 +2308,6 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		SignalInfoCount:                                   {metricName: "signal_info_count", metricType: Timer},
 		RequestCancelInfoCount:                            {metricName: "request_cancel_info_count", metricType: Timer},
 		BufferedEventsCount:                               {metricName: "buffered_events_count", metricType: Timer},
-		DeleteActivityInfoCount:                           {metricName: "delete_activity_info", metricType: Timer},
-		DeleteTimerInfoCount:                              {metricName: "delete_timer_info", metricType: Timer},
-		DeleteChildInfoCount:                              {metricName: "delete_child_info", metricType: Timer},
-		DeleteSignalInfoCount:                             {metricName: "delete_signal_info", metricType: Timer},
-		DeleteRequestCancelInfoCount:                      {metricName: "delete_request_cancel_info", metricType: Timer},
 		WorkflowRetryBackoffTimerCount:                    {metricName: "workflow_retry_backoff_timer", metricType: Counter},
 		WorkflowCronBackoffTimerCount:                     {metricName: "workflow_cron_backoff_timer", metricType: Counter},
 		WorkflowCleanupDeleteCount:                        {metricName: "workflow_cleanup_delete", metricType: Counter},

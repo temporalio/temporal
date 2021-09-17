@@ -768,7 +768,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 				},
 				UpdateWorkflowEvents: []*persistence.WorkflowEvents{},
 			}, input)
-			return &persistence.UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: &persistence.MutableStateUpdateSessionStats{}}, nil
+			return tests.UpdateWorkflowExecutionResponse, nil
 		})
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)

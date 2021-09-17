@@ -40,6 +40,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+
 	"go.temporal.io/server/common/persistence/visibility"
 	visibilityclient "go.temporal.io/server/common/persistence/visibility/client"
 
@@ -471,21 +472,6 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 	})
 
 	return response, err
-}
-
-// GetWorkflowExecutionInfoWithStats is a utility method to retrieve execution info with size stats
-func (s *TestBase) GetWorkflowExecutionInfoWithStats(namespaceID string, workflowExecution commonpb.WorkflowExecution) (
-	*persistence.MutableStateStats, *persistencespb.WorkflowMutableState, error) {
-	response, err := s.ExecutionManager.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
-		ShardID:     s.ShardInfo.GetShardId(),
-		NamespaceID: namespaceID,
-		Execution:   workflowExecution,
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return response.MutableStateStats, response.State, nil
 }
 
 // GetWorkflowExecutionInfo is a utility method to retrieve execution info
