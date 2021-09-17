@@ -1031,7 +1031,6 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskScheduled() {
 		Version:                 event.GetVersion(),
 		ScheduleId:              event.GetEventId(),
 		ScheduledEventBatchId:   event.GetEventId(),
-		ScheduledEvent:          event,
 		ScheduledTime:           event.GetEventTime(),
 		StartedId:               common.EmptyEventID,
 		StartedTime:             timestamp.TimePtr(time.Time{}),

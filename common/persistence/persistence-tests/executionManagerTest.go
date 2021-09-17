@@ -41,7 +41,6 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
@@ -2426,13 +2425,11 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 		Version:                     7789,
 		ScheduleId:                  1,
 		ScheduledEventBatchId:       1,
-		ScheduledEvent:              &historypb.HistoryEvent{EventId: 1},
 		ScheduledTime:               &currentTime,
 		ActivityId:                  uuid.New(),
 		RequestId:                   uuid.New(),
 		LastHeartbeatDetails:        payloads.EncodeString(uuid.New()),
 		StartedId:                   2,
-		StartedEvent:                &historypb.HistoryEvent{EventId: 2},
 		StartedTime:                 &currentTime,
 		ScheduleToCloseTimeout:      timestamp.DurationFromSeconds(1),
 		ScheduleToStartTimeout:      timestamp.DurationFromSeconds(2),
@@ -2470,13 +2467,11 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	s.Equal(int64(7789), ai.Version)
 	s.Equal(int64(1), ai.ScheduleId)
 	s.Equal(int64(1), ai.ScheduledEventBatchId)
-	s.Equal(int64(1), ai.ScheduledEvent.EventId)
 	s.EqualTimes(currentTime, *ai.ScheduledTime)
 	s.Equal(activityInfos[0].ActivityId, ai.ActivityId)
 	s.Equal(activityInfos[0].RequestId, ai.RequestId)
 	s.Equal(activityInfos[0].LastHeartbeatDetails, ai.LastHeartbeatDetails)
 	s.Equal(int64(2), ai.StartedId)
-	s.Equal(int64(2), ai.StartedEvent.EventId)
 	s.EqualTimes(currentTime, *ai.StartedTime)
 	s.EqualValues(*timestamp.DurationFromSeconds(1), *ai.ScheduleToCloseTimeout)
 	s.EqualValues(*timestamp.DurationFromSeconds(2), *ai.ScheduleToStartTimeout)
@@ -2594,9 +2589,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateChildExecutions() {
 	childExecutionInfos := []*persistencespb.ChildExecutionInfo{{
 		Version:           1234,
 		InitiatedId:       1,
-		InitiatedEvent:    &historypb.HistoryEvent{EventId: 1},
 		StartedId:         2,
-		StartedEvent:      &historypb.HistoryEvent{EventId: 2},
 		CreateRequestId:   createRequestID,
 		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_TERMINATE,
 	}}
@@ -2613,9 +2606,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateChildExecutions() {
 	s.Equal(int64(1234), ci.Version)
 	s.Equal(int64(1), ci.InitiatedId)
 	s.Equal(enumspb.PARENT_CLOSE_POLICY_TERMINATE, ci.ParentClosePolicy)
-	s.Equal(int64(1), ci.InitiatedEvent.EventId)
 	s.Equal(int64(2), ci.StartedId)
-	s.Equal(int64(2), ci.StartedEvent.EventId)
 	s.Equal(createRequestID, ci.CreateRequestId)
 
 	err2 = s.DeleteChildExecutionsState(updatedInfo, updatedState, int64(5), int64(5), int64(1))
@@ -3195,7 +3186,6 @@ func copyWorkflowExecutionInfo(sourceInfo *persistencespb.WorkflowExecutionInfo)
 		ParentWorkflowId:           sourceInfo.ParentWorkflowId,
 		ParentRunId:                sourceInfo.ParentRunId,
 		InitiatedId:                sourceInfo.InitiatedId,
-		CompletionEvent:            sourceInfo.CompletionEvent,
 		TaskQueue:                  sourceInfo.TaskQueue,
 		WorkflowTypeName:           sourceInfo.WorkflowTypeName,
 		WorkflowRunTimeout:         sourceInfo.WorkflowRunTimeout,
