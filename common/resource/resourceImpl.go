@@ -118,8 +118,8 @@ type (
 		clientBean        client.Bean
 
 		// persistence clients
-
-		persistenceBean persistenceClient.Bean
+		persistenceBean           persistenceClient.Bean
+		persistenceFaultInjection *persistenceClient.FaultInjectionDataStoreFactory
 
 		// loggers
 
@@ -163,7 +163,7 @@ func New(
 
 	ringpopChannel := params.RPCFactory.GetRingpopChannel()
 
-	persistenceBean, err := persistenceClient.NewBeanFromFactory(persistenceClient.NewFactory(
+	factory := persistenceClient.NewFactoryImpl(
 		&params.PersistenceConfig,
 		params.PersistenceServiceResolver,
 		func(...dynamicconfig.FilterOption) int {
@@ -183,7 +183,9 @@ func New(
 		params.ClusterMetadataConfig.CurrentClusterName,
 		params.MetricsClient,
 		logger,
-	))
+	)
+
+	persistenceBean, err := persistenceClient.NewBeanFromFactory(factory)
 	if err != nil {
 		return nil, err
 	}
@@ -344,6 +346,8 @@ func New(
 		// persistence clients
 
 		persistenceBean: persistenceBean,
+		persistenceFaultInjection: factory.FaultInjection(),
+
 
 		// loggers
 
@@ -616,4 +620,8 @@ func (h *Impl) GetSearchAttributesManager() searchattribute.Manager {
 
 func (h *Impl) GetSearchAttributesMapper() searchattribute.Mapper {
 	return h.saMapper
+}
+
+func (h *Impl) GetFaultInjection() *persistenceClient.FaultInjectionDataStoreFactory {
+	return h.persistenceFaultInjection
 }

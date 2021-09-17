@@ -55,6 +55,7 @@ type (
 		executionManager          persistence.ExecutionManager
 
 		factory Factory
+		faultInjection *FaultInjectionDataStoreFactory
 
 		sync.RWMutex
 	}

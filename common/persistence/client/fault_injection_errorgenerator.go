@@ -45,6 +45,7 @@ type (
 		Generate() error
 		UpdateRate(rate float64)
 		UpdateWeights(weights []FaultWeight)
+		Rate() float64
 	}
 
 	FaultWeight struct {
@@ -61,6 +62,8 @@ type (
 
 	NoopErrorGenerator struct{}
 )
+
+func (p *NoopErrorGenerator) Rate() float64 {return 0}
 
 func (p *NoopErrorGenerator) UpdateRate(rate float64) {}
 
@@ -92,12 +95,16 @@ func calculateErrorRates(rate float64, weights []FaultWeight) []FaultMetadata {
 	return faultMeta
 }
 
+func (p *DefaultErrorGenerator) Rate() float64 {
+	return p.rate
+}
+
 func (p *DefaultErrorGenerator) UpdateRate(rate float64) {
 	if rate > 1 {
 		rate = 1
 	}
 
-	if rate <= 0 {
+	if rate < 0 {
 		rate = 0
 	}
 

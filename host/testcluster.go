@@ -56,7 +56,7 @@ type (
 	TestCluster struct {
 		testBase     persistencetests.TestBase
 		archiverBase *ArchiverBase
-		host         Temporal
+		host         *temporalImpl
 	}
 
 	// ArchiverBase is a base struct for archiver provider being used in integration tests
@@ -81,7 +81,7 @@ type (
 		ESConfig        *config.Elasticsearch
 		WorkerConfig    *WorkerConfig
 		MockAdminClient map[string]adminservice.AdminServiceClient
-		FaultInjection  config.FaultInjection
+		FaultInjection  config.FaultInjection `yaml:"faultinjection"`
 	}
 
 	// WorkerConfig is the config for enabling/disabling Temporal worker
@@ -140,6 +140,8 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 
 	if TestFlags.PersistenceFaultInjectionRate > 0 {
 		options.Persistence.FaultInjection = &config.FaultInjection{Rate: TestFlags.PersistenceFaultInjectionRate}
+	} else if options.Persistence.FaultInjection == nil {
+		options.Persistence.FaultInjection = &config.FaultInjection{Rate: 0}
 	}
 
 	testBase := persistencetests.NewTestBase(&options.Persistence)
@@ -281,8 +283,22 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 	}
 }
 
+func (tc *TestCluster) DisableFaultInjection() {
+	tc.testBase.FaultInjection.UpdateRate(0)
+	tc.host.matchingService.GetFaultInjection().UpdateRate(0)
+	tc.host.frontendService.GetFaultInjection().UpdateRate(0)
+	if tc.host.workerService != nil {
+		tc.host.workerService.GetFaultInjection().UpdateRate(0)
+	}
+
+	for _, s := range tc.host.historyServices {
+		s.GetFaultInjection().UpdateRate(0)
+	}
+}
+
 // TearDownCluster tears down the test cluster
 func (tc *TestCluster) TearDownCluster() {
+	tc.DisableFaultInjection()
 	tc.host.Stop()
 	tc.host = nil
 	tc.testBase.TearDownWorkflowStore()

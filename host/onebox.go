@@ -150,7 +150,7 @@ type (
 )
 
 // NewTemporal returns an instance that hosts full temporal in one process
-func NewTemporal(params *TemporalParams) Temporal {
+func NewTemporal(params *TemporalParams) *temporalImpl {
 	return &temporalImpl{
 		logger:                           params.Logger,
 		clusterMetadataConfig:            params.ClusterMetadataConfig,
