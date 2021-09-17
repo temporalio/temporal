@@ -86,7 +86,7 @@ func (f *Factory) NewShardStore() (p.ShardStore, error) {
 	return newShardPersistence(f.session, f.clusterName, f.logger)
 }
 
-// NewMetadataStore returns a metadata store that understands only v2
+// NewMetadataStore returns a metadata store
 func (f *Factory) NewMetadataStore() (p.MetadataStore, error) {
 	return newMetadataPersistence(f.session, f.clusterName, f.logger)
 }
@@ -96,7 +96,7 @@ func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
 	return newClusterMetadataInstance(f.session, f.logger)
 }
 
-// NewExecutionStore returns an ExecutionStore for a given shardID
+// NewExecutionStore returns a new ExecutionStore.
 func (f *Factory) NewExecutionStore() (p.ExecutionStore, error) {
 	return NewExecutionStore(f.session, f.logger), nil
 }

@@ -69,7 +69,7 @@ type (
 		NewShardStore() (p.ShardStore, error)
 		// NewMetadataStore returns a new metadata store
 		NewMetadataStore() (p.MetadataStore, error)
-		// NewExecutionStore returns a execution store
+		// NewExecutionStore returns a new execution store
 		NewExecutionStore() (p.ExecutionStore, error)
 		NewQueue(queueType p.QueueType) (p.Queue, error)
 		// NewClusterMetadataStore returns a new metadata store
@@ -227,7 +227,7 @@ func (f *factoryImpl) NewClusterMetadataManager() (p.ClusterMetadataManager, err
 	return result, nil
 }
 
-// NewExecutionManager returns a new execution manager for a given shardID
+// NewExecutionManager returns a new execution manager
 func (f *factoryImpl) NewExecutionManager() (p.ExecutionManager, error) {
 
 	ds := f.datastores[storeTypeExecution]
