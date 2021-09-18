@@ -52,39 +52,43 @@ var (
 		ClientNameCLI:     "<2.0.0",
 		ClientNameServer:  "<2.0.0",
 	}
+
+	// Clients that support following next execution run id for other workflow completion events.
+	NewRetryClients = map[string]string{
+		ClientNameGoSDK:   ">=1.10.0",
+		ClientNameJavaSDK: ">=1.4.0",
+		ClientNameServer:  ">=1.13.0",
+	}
 )
 
 type (
 	// VersionChecker is used to check client/server compatibility and client's capabilities
 	VersionChecker interface {
 		ClientSupported(ctx context.Context, enableClientVersionCheck bool) error
+		ClientSupportsNewRetryEvents(ctx context.Context) bool
 	}
 
 	versionChecker struct {
 		supportedClients      map[string]string
 		supportedClientsRange map[string]semver.Range
+		newRetryClientsRange  map[string]semver.Range
 		serverVersion         semver.Version
 	}
 )
 
 // NewDefaultVersionChecker constructs a new VersionChecker using default versions from const.
 func NewDefaultVersionChecker() *versionChecker {
-	return NewVersionChecker(SupportedClients, ServerVersion)
+	return NewVersionChecker(SupportedClients, NewRetryClients, ServerVersion)
 }
 
 // NewVersionChecker constructs a new VersionChecker
-func NewVersionChecker(supportedClients map[string]string, serverVersion string) *versionChecker {
-	vc := &versionChecker{
+func NewVersionChecker(supportedClients, newRetryClients map[string]string, serverVersion string) *versionChecker {
+	return &versionChecker{
 		serverVersion:         semver.MustParse(serverVersion),
 		supportedClients:      supportedClients,
-		supportedClientsRange: make(map[string]semver.Range, len(supportedClients)),
+		supportedClientsRange: mustParseRanges(supportedClients),
+		newRetryClientsRange:  mustParseRanges(newRetryClients),
 	}
-
-	for c, r := range supportedClients {
-		vc.supportedClientsRange[c] = semver.MustParseRange(r)
-	}
-
-	return vc
 }
 
 // ClientSupported returns an error if client is unsupported, nil otherwise.
@@ -123,4 +127,32 @@ func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersi
 	}
 
 	return nil
+}
+
+// ClientSupportsNewRetryEvents returns true if the client SDK version supports
+// following next execution run id for completed/failed/timedout workflow completion events.
+func (vc *versionChecker) ClientSupportsNewRetryEvents(ctx context.Context) bool {
+	headers := GetValues(ctx, ClientNameHeaderName, ClientVersionHeaderName)
+	clientName := headers[0]
+	clientVersion := headers[1]
+
+	supportedRange, ok := vc.newRetryClientsRange[clientName]
+	if !ok {
+		return false
+	}
+	clientVersionParsed, err := semver.Parse(clientVersion)
+	if err != nil {
+		// If we got here, we must have parsed the version in ClientSupported.
+		// If we can't parse it now just assume it's old.
+		return false
+	}
+	return supportedRange(clientVersionParsed)
+}
+
+func mustParseRanges(ranges map[string]string) map[string]semver.Range {
+	out := make(map[string]semver.Range, len(ranges))
+	for c, r := range ranges {
+		out[c] = semver.MustParseRange(r)
+	}
+	return out
 }
