@@ -98,7 +98,7 @@ UNIT_COVER_PROFILE         := $(COVER_ROOT)/unit_coverprofile.out
 INTEG_COVER_PROFILE        := $(COVER_ROOT)/integ_$(PERSISTENCE_DRIVER)_coverprofile.out
 INTEG_XDC_COVER_PROFILE    := $(COVER_ROOT)/integ_xdc_$(PERSISTENCE_DRIVER)_coverprofile.out
 INTEG_NDC_COVER_PROFILE    := $(COVER_ROOT)/integ_ndc_$(PERSISTENCE_DRIVER)_coverprofile.out
-SUMMARY_COVER_PROFILE      := $(COVER_ROOT)/summary_coverprofile.out
+SUMMARY_COVER_PROFILE      := $(COVER_ROOT)/summary.out
 
 # Need the following option to have integration tests count towards coverage. godoc below:
 # -coverpkg pkg1,pkg2,pkg3
@@ -327,13 +327,14 @@ integration-test-ndc-coverage: $(COVER_ROOT)
 	@printf $(COLOR) "Run integration test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
 	@go test $(INTEG_TEST_NDC_ROOT) -timeout=$(TEST_TIMEOUT) -race $(TEST_TAG) -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER) $(INTEG_TEST_COVERPKG) -coverprofile=$(INTEG_NDC_COVER_PROFILE)
 
+.PHONY: $(SUMMARY_COVER_PROFILE)
 $(SUMMARY_COVER_PROFILE): $(COVER_ROOT)
 	@printf $(COLOR) "Combine coverage reports to $(SUMMARY_COVER_PROFILE)..."
 	@rm -f $(SUMMARY_COVER_PROFILE)
 	@echo "mode: atomic" > $(SUMMARY_COVER_PROFILE)
 	$(foreach COVER_PROFILE,$(wildcard $(COVER_ROOT)/*_coverprofile.out),\
 		@printf "Add %s...\n" $(COVER_PROFILE); \
-		cat $(COVER_PROFILE) | grep -v -e "^mode: \w\+" | grep -v -E "[Mm]ocks?" >> $(SUMMARY_COVER_PROFILE) \
+		grep -q -v -e "[Mm]ocks\?.go" -e "^mode: \w\+" $(COVER_PROFILE) >> $(SUMMARY_COVER_PROFILE) || true \
 	$(NEWLINE))
 
 coverage-report: $(SUMMARY_COVER_PROFILE)
@@ -343,7 +344,7 @@ coverage-report: $(SUMMARY_COVER_PROFILE)
 ci-coverage-report: $(SUMMARY_COVER_PROFILE) coverage-report
 	@printf $(COLOR) "Generate Coveralls report from $(SUMMARY_COVER_PROFILE)..."
 	go install github.com/mattn/goveralls@v0.0.7
-	@goveralls -coverprofile=$(SUMMARY_COVER_PROFILE) -service=buildkite || (printf $(RED) "Generating report for Coveralls (goveralls) failed."; exit 1)
+	@goveralls -coverprofile=$(SUMMARY_COVER_PROFILE) -service=buildkite || true
 
 ##### Schema #####
 install-schema: temporal-cassandra-tool
