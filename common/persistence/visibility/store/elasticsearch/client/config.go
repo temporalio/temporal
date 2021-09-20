@@ -88,7 +88,7 @@ func (cfg *Config) GetVisibilityIndex() string {
 
 func (cfg *Config) Validate(storeName string) error {
 	if cfg == nil {
-		return fmt.Errorf("persistence config: advanced visibility datastore %q: must provide config for \"elasticsearch\" store", storeName)
+		return fmt.Errorf("persistence config: advanced visibility datastore %q: must provide config for \"elasticsearch\"", storeName)
 	}
 
 	if len(cfg.Indices) < 1 {
@@ -96,7 +96,7 @@ func (cfg *Config) Validate(storeName string) error {
 
 	}
 	if cfg.Indices[VisibilityAppName] == "" {
-		return fmt.Errorf("persistence config: advanced visibility datastore %q: missing %q key", storeName, VisibilityAppName)
+		return fmt.Errorf("persistence config: advanced visibility datastore %q indices configuration: missing %q key", storeName, VisibilityAppName)
 	}
 	return nil
 }
