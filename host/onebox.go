@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 
 	"google.golang.org/grpc"
@@ -96,7 +95,6 @@ type (
 		clusterMetadataMgr               persistence.ClusterMetadataManager
 		shardMgr                         persistence.ShardManager
 		taskMgr                          persistence.TaskManager
-		visibilityMgr                    manager.VisibilityManager
 		executionManager                 persistence.ExecutionManager
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		shutdownCh                       chan struct{}
@@ -131,7 +129,6 @@ type (
 		ShardMgr                         persistence.ShardManager
 		ExecutionManager                 persistence.ExecutionManager
 		TaskMgr                          persistence.TaskManager
-		VisibilityMgr                    manager.VisibilityManager
 		NamespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		Logger                           log.Logger
 		ClusterNo                        int
@@ -160,7 +157,6 @@ func NewTemporal(params *TemporalParams) Temporal {
 		persistenceConfig:                params.PersistenceConfig,
 		metadataMgr:                      params.MetadataMgr,
 		clusterMetadataMgr:               params.ClusterMetadataManager,
-		visibilityMgr:                    params.VisibilityMgr,
 		shardMgr:                         params.ShardMgr,
 		taskMgr:                          params.TaskMgr,
 		executionManager:                 params.ExecutionManager,

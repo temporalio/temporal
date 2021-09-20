@@ -28,13 +28,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"time"
 
 	"github.com/pborman/uuid"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/provider"
@@ -43,17 +41,13 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/visibility"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/pprof"
-	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -157,54 +151,17 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
 
 	var (
-		esClient          esclient.Client
-		esProcessorConfig *elasticsearch.ProcessorConfig
-		indexName         string
+		esClient esclient.Client
 	)
-	advancedVisibilityWritingMode := dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOff)
 	if options.WorkerConfig.EnableIndexer {
-		advancedVisibilityWritingMode = dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOn)
 		var err error
 		esClient, err = esclient.NewClient(options.ESConfig, nil, logger)
 		if err != nil {
 			return nil, err
 		}
-
-		esProcessorConfig = &elasticsearch.ProcessorConfig{
-			IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(32),
-			ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(1),
-			ESProcessorBulkActions:   dynamicconfig.GetIntPropertyFn(10),
-			ESProcessorBulkSize:      dynamicconfig.GetIntPropertyFn(2 << 20),
-			ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
-			ESProcessorAckTimeout:    dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
-		}
-
-		indexName = options.ESConfig.GetVisibilityIndex()
 	}
 
-	visibilityMgr, err := visibility.NewManager(
-		pConfig,
-		resolver.NewNoopResolver(),
-		indexName,
-		esClient,
-		esProcessorConfig,
-		searchattribute.NewTestProvider(),
-		nil,
-		dynamicconfig.GetIntPropertyFn(9000),
-		dynamicconfig.GetIntPropertyFn(9000),
-		dynamicconfig.GetIntPropertyFn(9000),
-		dynamicconfig.GetIntPropertyFn(9000),
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(options.WorkerConfig.EnableIndexer),
-		advancedVisibilityWritingMode,
-		metrics.NewNoopMetricsClient(),
-		logger,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = testBase.ClusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+	_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			HistoryShardCount: options.HistoryConfig.NumHistoryShards,
 			ClusterName:       options.ClusterMetadata.CurrentClusterName,
@@ -233,7 +190,6 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		ExecutionManager:                 testBase.ExecutionManager,
 		NamespaceReplicationQueue:        testBase.NamespaceReplicationQueue,
 		TaskMgr:                          testBase.TaskMgr,
-		VisibilityMgr:                    visibilityMgr,
 		Logger:                           logger,
 		ClusterNo:                        options.ClusterNo,
 		ESConfig:                         options.ESConfig,
