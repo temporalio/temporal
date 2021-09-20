@@ -32,14 +32,13 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/namespace"
-
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -71,7 +70,7 @@ type (
 		persistenceBean persistenceClient.Bean,
 		searchAttributesProvider searchattribute.Provider,
 		logger log.Logger,
-	) (visibility.VisibilityManager, error)
+	) (manager.VisibilityManager, error)
 
 	// Impl contains all common resources shared across frontend / matching / history / worker
 	Impl struct {

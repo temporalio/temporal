@@ -68,9 +68,13 @@ var Keys = map[Key]string{
 	EnableDBRecordVersion: "system.enableDBRecordVersion",
 
 	// system settings
-	EnableVisibilitySampling:               "system.enableVisibilitySampling",
-	AdvancedVisibilityWritingMode:          "system.advancedVisibilityWritingMode",
-	EnableReadVisibilityFromES:             "system.enableReadVisibilityFromES",
+	StandardVisibilityPersistenceMaxReadQPS:  "system.standardVisibilityPersistenceMaxReadQPS",
+	StandardVisibilityPersistenceMaxWriteQPS: "system.standardVisibilityPersistenceMaxWriteQPS",
+	AdvancedVisibilityPersistenceMaxReadQPS:  "system.advancedVisibilityPersistenceMaxReadQPS",
+	AdvancedVisibilityPersistenceMaxWriteQPS: "system.advancedVisibilityPersistenceMaxWriteQPS",
+	AdvancedVisibilityWritingMode:            "system.advancedVisibilityWritingMode",
+	EnableReadVisibilityFromES:               "system.enableReadVisibilityFromES",
+
 	HistoryArchivalState:                   "system.historyArchivalState",
 	EnableReadFromHistoryArchival:          "system.enableReadFromHistoryArchival",
 	VisibilityArchivalState:                "system.visibilityArchivalState",
@@ -100,8 +104,6 @@ var Keys = map[Key]string{
 	FrontendPersistenceMaxQPS:             "frontend.persistenceMaxQPS",
 	FrontendPersistenceGlobalMaxQPS:       "frontend.persistenceGlobalMaxQPS",
 	FrontendVisibilityMaxPageSize:         "frontend.visibilityMaxPageSize",
-	FrontendVisibilityListMaxQPS:          "frontend.visibilityListMaxQPS",
-	FrontendESVisibilityListMaxQPS:        "frontend.esVisibilityListMaxQPS",
 	FrontendMaxBadBinaries:                "frontend.maxBadBinaries",
 	FrontendESIndexMaxResultWindow:        "frontend.esIndexMaxResultWindow",
 	FrontendHistoryMaxPageSize:            "frontend.historyMaxPageSize",
@@ -158,8 +160,6 @@ var Keys = map[Key]string{
 	HistoryRPS:                                           "history.rps",
 	HistoryPersistenceMaxQPS:                             "history.persistenceMaxQPS",
 	HistoryPersistenceGlobalMaxQPS:                       "history.persistenceGlobalMaxQPS",
-	HistoryVisibilityOpenMaxQPS:                          "history.historyVisibilityOpenMaxQPS",
-	HistoryVisibilityClosedMaxQPS:                        "history.historyVisibilityClosedMaxQPS",
 	HistoryLongPollExpirationInterval:                    "history.longPollExpirationInterval",
 	HistoryCacheInitialSize:                              "history.cacheInitialSize",
 	HistoryMaxAutoResetPoints:                            "history.historyMaxAutoResetPoints",
@@ -361,16 +361,23 @@ const (
 	// EnableDBRecordVersion is key for enable db version
 	EnableDBRecordVersion
 
-	// EnableVisibilitySampling is key for enable visibility sampling
-	EnableVisibilitySampling
+	// StandardVisibilityPersistenceMaxReadQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for read.
+	StandardVisibilityPersistenceMaxReadQPS
+	// StandardVisibilityPersistenceMaxWriteQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for write.
+	StandardVisibilityPersistenceMaxWriteQPS
+	// AdvancedVisibilityPersistenceMaxReadQPS is the max QPC system host can query advanced visibility DB (Elasticsearch) for read.
+	AdvancedVisibilityPersistenceMaxReadQPS
+	// AdvancedVisibilityPersistenceMaxWriteQPS is the max QPC system host can query advanced visibility DB (Elasticsearch) for write.
+	AdvancedVisibilityPersistenceMaxWriteQPS
 	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility
 	AdvancedVisibilityWritingMode
-	// EmitShardDiffLog whether emit the shard diff log
-	EmitShardDiffLog
 	// EnableReadVisibilityFromES is key for enable read from elastic search
 	EnableReadVisibilityFromES
 	// DisableListVisibilityByFilter is config to disable list open/close workflow using filter
 	DisableListVisibilityByFilter
+
+	// EmitShardDiffLog whether emit the shard diff log
+	EmitShardDiffLog
 	// HistoryArchivalState is key for the state of history archival
 	HistoryArchivalState
 	// EnableReadFromHistoryArchival is key for enabling reading history from archival store
@@ -419,14 +426,12 @@ const (
 	FrontendPersistenceMaxQPS
 	// FrontendPersistenceGlobalMaxQPS is the max qps frontend cluster can query DB
 	FrontendPersistenceGlobalMaxQPS
+
 	// FrontendVisibilityMaxPageSize is default max size for ListWorkflowExecutions in one page
 	FrontendVisibilityMaxPageSize
-	// FrontendVisibilityListMaxQPS is max qps frontend can list open/close workflows
-	FrontendVisibilityListMaxQPS
-	// FrontendESVisibilityListMaxQPS is max qps frontend can list open/close workflows from ElasticSearch
-	FrontendESVisibilityListMaxQPS
 	// FrontendESIndexMaxResultWindow is ElasticSearch index setting max_result_window
 	FrontendESIndexMaxResultWindow
+
 	// FrontendHistoryMaxPageSize is default max size for GetWorkflowExecutionHistory in one page
 	FrontendHistoryMaxPageSize
 	// FrontendRPS is workflow rate limit per second
@@ -546,10 +551,6 @@ const (
 	HistoryPersistenceMaxQPS
 	// HistoryPersistenceGlobalMaxQPS is the max qps history cluster can query DB
 	HistoryPersistenceGlobalMaxQPS
-	// HistoryVisibilityOpenMaxQPS is max qps one history host can write visibility open_executions
-	HistoryVisibilityOpenMaxQPS
-	// HistoryVisibilityClosedMaxQPS is max qps one history host can write visibility closed_executions
-	HistoryVisibilityClosedMaxQPS
 	// HistoryLongPollExpirationInterval is the long poll expiration interval in the history service
 	HistoryLongPollExpirationInterval
 	// HistoryCacheInitialSize is initial size of history cache

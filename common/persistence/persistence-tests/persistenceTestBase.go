@@ -41,9 +41,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
-	"go.temporal.io/server/common/persistence/visibility"
-	visibilityclient "go.temporal.io/server/common/persistence/visibility/client"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -97,7 +94,6 @@ type (
 		TaskMgr                   persistence.TaskManager
 		ClusterMetadataManager    persistence.ClusterMetadataManager
 		MetadataManager           persistence.MetadataManager
-		VisibilityMgr             visibility.VisibilityManager
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		ShardInfo                 *persistencespb.ShardInfo
 		TaskIDGenerator           TransferTaskIDGenerator
@@ -106,8 +102,7 @@ type (
 		ReadLevel                 int64
 		ReplicationReadLevel      int64
 		DefaultTestCluster        PersistenceTestCluster
-		VisibilityTestCluster     PersistenceTestCluster
-		logger                    log.Logger
+		Logger                    log.Logger
 	}
 
 	// PersistenceTestCluster exposes management operations on a database
@@ -182,22 +177,9 @@ func NewTestBase(options *TestBaseOptions) TestBase {
 
 func NewTestBaseForCluster(testCluster PersistenceTestCluster, logger log.Logger) TestBase {
 	return TestBase{
-		DefaultTestCluster:    testCluster,
-		VisibilityTestCluster: testCluster,
-		logger:                logger,
+		DefaultTestCluster: testCluster,
+		Logger:             logger,
 	}
-}
-
-// Config returns the persistence configuration for this test
-func (s *TestBase) Config() config.Persistence {
-	cfg := s.DefaultTestCluster.Config()
-	if s.DefaultTestCluster == s.VisibilityTestCluster {
-		return cfg
-	}
-	vCfg := s.VisibilityTestCluster.Config()
-	cfg.VisibilityStore = "visibility_ " + vCfg.VisibilityStore
-	cfg.DataStores[cfg.VisibilityStore] = vCfg.DataStores[vCfg.VisibilityStore]
-	return cfg
 }
 
 // Setup sets up the test base, must be called as part of SetupSuite
@@ -211,14 +193,11 @@ func (s *TestBase) Setup(clusterMetadataConfig *config.ClusterMetadata) {
 	clusterName := clusterMetadataConfig.CurrentClusterName
 
 	s.DefaultTestCluster.SetupTestDatabase()
-	if s.VisibilityTestCluster != s.DefaultTestCluster {
-		s.VisibilityTestCluster.SetupTestDatabase()
-	}
 
 	cfg := s.DefaultTestCluster.Config()
 	scope := tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
-	metricsClient := metrics.NewClient(scope, metrics.GetMetricsServiceIdx(common.HistoryServiceName, s.logger))
-	factory := client.NewFactory(&cfg, resolver.NewNoopResolver(), nil, s.AbstractDataStoreFactory, clusterName, metricsClient, s.logger)
+	metricsClient := metrics.NewClient(scope, metrics.GetMetricsServiceIdx(common.HistoryServiceName, s.Logger))
+	factory := client.NewFactory(&cfg, resolver.NewNoopResolver(), nil, s.AbstractDataStoreFactory, clusterName, metricsClient, s.Logger)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
@@ -239,19 +218,6 @@ func (s *TestBase) Setup(clusterMetadataConfig *config.ClusterMetadata) {
 	s.fatalOnError("NewExecutionManager", err)
 
 	s.Factory = factory
-
-	// SQL currently doesn't have support for visibility manager
-	vCfg := s.VisibilityTestCluster.Config()
-	s.VisibilityMgr, err = visibilityclient.NewVisibilityManager(
-		vCfg,
-		nil,
-		nil,
-		resolver.NewNoopResolver(),
-		s.logger,
-	)
-	if err != nil {
-		s.fatalOnError("NewVisibilityManager", err)
-	}
 
 	s.ReadLevel = 0
 	s.ReplicationReadLevel = 0
@@ -276,7 +242,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *config.ClusterMetadata) {
 
 func (s *TestBase) fatalOnError(msg string, err error) {
 	if err != nil {
-		s.logger.Fatal(msg, tag.Error(err))
+		s.Logger.Fatal(msg, tag.Error(err))
 	}
 }
 
@@ -1265,13 +1231,6 @@ func (s *TestBase) TearDownWorkflowStore() {
 	s.ExecutionManager.Close()
 	s.NamespaceReplicationQueue.Stop()
 	s.Factory.Close()
-
-	// TODO VisibilityMgr/Store is created with a separated code path, this is incorrect and may cause leaking connection
-	// And Postgres requires all connection to be closed before dropping a database
-	// https://github.com/uber/cadence/issues/2854
-	// Remove the below line after the issue is fix
-	s.VisibilityMgr.Close()
-
 	s.DefaultTestCluster.TearDownTestDatabase()
 }
 
@@ -1299,39 +1258,39 @@ func (s *TestBase) ClearTasks() {
 
 // ClearTransferQueue completes all tasks in transfer queue
 func (s *TestBase) ClearTransferQueue() {
-	s.logger.Info("Clearing transfer tasks", tag.ShardRangeID(s.ShardInfo.GetRangeId()), tag.ReadLevel(s.GetTransferReadLevel()))
+	s.Logger.Info("Clearing transfer tasks", tag.ShardRangeID(s.ShardInfo.GetRangeId()), tag.ReadLevel(s.GetTransferReadLevel()))
 	tasks, err := s.GetTransferTasks(100, true)
 	if err != nil {
-		s.logger.Fatal("Error during cleanup", tag.Error(err))
+		s.Logger.Fatal("Error during cleanup", tag.Error(err))
 	}
 
 	counter := 0
 	for _, t := range tasks {
-		s.logger.Info("Deleting transfer task with ID", tag.TaskID(t.GetTaskId()))
+		s.Logger.Info("Deleting transfer task with ID", tag.TaskID(t.GetTaskId()))
 		s.NoError(s.CompleteTransferTask(t.GetTaskId()))
 		counter++
 	}
 
-	s.logger.Info("Deleted transfer tasks.", tag.Counter(counter))
+	s.Logger.Info("Deleted transfer tasks.", tag.Counter(counter))
 	atomic.StoreInt64(&s.ReadLevel, 0)
 }
 
 // ClearReplicationQueue completes all tasks in replication queue
 func (s *TestBase) ClearReplicationQueue() {
-	s.logger.Info("Clearing replication tasks", tag.ShardRangeID(s.ShardInfo.GetRangeId()), tag.ReadLevel(s.GetReplicationReadLevel()))
+	s.Logger.Info("Clearing replication tasks", tag.ShardRangeID(s.ShardInfo.GetRangeId()), tag.ReadLevel(s.GetReplicationReadLevel()))
 	tasks, err := s.GetReplicationTasks(100, true)
 	if err != nil {
-		s.logger.Fatal("Error during cleanup", tag.Error(err))
+		s.Logger.Fatal("Error during cleanup", tag.Error(err))
 	}
 
 	counter := 0
 	for _, t := range tasks {
-		s.logger.Info("Deleting replication task with ID", tag.TaskID(t.GetTaskId()))
+		s.Logger.Info("Deleting replication task with ID", tag.TaskID(t.GetTaskId()))
 		s.NoError(s.CompleteReplicationTask(t.GetTaskId()))
 		counter++
 	}
 
-	s.logger.Info("Deleted replication tasks.", tag.Counter(counter))
+	s.Logger.Info("Deleted replication tasks.", tag.Counter(counter))
 	atomic.StoreInt64(&s.ReplicationReadLevel, 0)
 }
 
@@ -1353,7 +1312,7 @@ func (s *TestBase) validateTimeRange(t time.Time, expectedDuration time.Duration
 	currentTime := time.Now().UTC()
 	diff := time.Duration(currentTime.UnixNano() - t.UnixNano())
 	if diff > expectedDuration {
-		s.logger.Info("Check Current time, Application time, Differenrce", tag.Timestamp(t), tag.CursorTimestamp(currentTime), tag.Number(int64(diff)))
+		s.Logger.Info("Check Current time, Application time, Differenrce", tag.Timestamp(t), tag.CursorTimestamp(currentTime), tag.Number(int64(diff)))
 		return false
 	}
 	return true

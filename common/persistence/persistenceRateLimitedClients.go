@@ -27,6 +27,7 @@ package persistence
 import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
 )
@@ -34,8 +35,6 @@ import (
 var (
 	// ErrPersistenceLimitExceeded is the error indicating QPS limit reached.
 	ErrPersistenceLimitExceeded = serviceerror.NewResourceExhausted("Persistence Max QPS Reached.")
-	// ErrPersistenceLimitExceededForList is the error indicating QPS limit reached for list visibility.
-	ErrPersistenceLimitExceededForList = serviceerror.NewResourceExhausted("Persistence Max QPS Reached for List Operations.")
 )
 
 type (

@@ -31,7 +31,7 @@ import (
 	"sync/atomic"
 
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
@@ -71,7 +71,7 @@ type (
 		eventNotifier           events.Notifier
 		replicationTaskFetchers ReplicationTaskFetchers
 		queueTaskProcessor      queueTaskProcessor
-		visibilityMrg           visibility.VisibilityManager
+		visibilityMrg           manager.VisibilityManager
 	}
 )
 
@@ -102,7 +102,7 @@ var (
 func NewHandler(
 	resource resource.Resource,
 	config *configs.Config,
-	visibilityMrg visibility.VisibilityManager,
+	visibilityMrg manager.VisibilityManager,
 ) *Handler {
 	handler := &Handler{
 		Resource:        resource,
