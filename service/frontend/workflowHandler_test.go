@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -43,10 +44,14 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -1118,6 +1123,142 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 
 	s.EqualValues("Keyword", history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["AliasOfCustomKeyword"].GetMetadata()["type"])
 	s.EqualValues(`"random-data"`, history.Events[1].GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["TemporalChangeVersion"].GetData())
+}
+
+func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
+	namespaceID := uuid.New()
+	namespace := "namespace"
+	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
+	newRunID := uuid.New()
+
+	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace:              namespace,
+		Execution:              &we,
+		MaximumPageSize:        10,
+		NextPageToken:          nil,
+		WaitNewEvent:           true,
+		HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
+		SkipArchival:           true,
+	}
+
+	// set up mocks to simulate a failed workflow with a retry policy. the failure event is id 5.
+	branchToken := []byte{1, 2, 3}
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, we.WorkflowId, numHistoryShards)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace).Return(namespaceID, nil).AnyTimes()
+	s.mockHistoryClient.EXPECT().PollMutableState(gomock.Any(), &historyservice.PollMutableStateRequest{
+		NamespaceId:         namespaceID,
+		Execution:           &we,
+		ExpectedNextEventId: common.EndEventID,
+		CurrentBranchToken:  nil,
+	}).Return(&historyservice.PollMutableStateResponse{
+		Execution:           &we,
+		WorkflowType:        &commonpb.WorkflowType{Name: "mytype"},
+		NextEventId:         6,
+		LastFirstEventId:    5,
+		CurrentBranchToken:  branchToken,
+		VersionHistories:    nil,
+		WorkflowState:       enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		WorkflowStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		LastFirstEventTxnId: 100,
+	}, nil).Times(2)
+
+	// GetWorkflowExecutionHistory will request the last event
+	s.mockExecutionManager.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    5,
+		MaxEventID:    6,
+		PageSize:      10,
+		NextPageToken: nil,
+		ShardID:       shardID,
+	}).Return(&persistence.ReadHistoryBranchResponse{
+		HistoryEvents: []*historypb.HistoryEvent{
+			{
+				EventId:   int64(5),
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
+					WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
+						Failure:                      &failurepb.Failure{Message: "this workflow failed"},
+						RetryState:                   enumspb.RETRY_STATE_IN_PROGRESS,
+						WorkflowTaskCompletedEventId: 4,
+						NewExecutionRunId:            newRunID,
+					},
+				},
+			},
+		},
+		NextPageToken: []byte{},
+		Size:          1,
+	}, nil).Times(2)
+
+	// then it may request the first event to try to reconstruct a continued-as-new event
+	s.mockExecutionManager.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    1,
+		MaxEventID:    2,
+		PageSize:      1,
+		NextPageToken: nil,
+		ShardID:       shardID,
+	}).Return(&persistence.ReadHistoryBranchResponse{
+		HistoryEvents: []*historypb.HistoryEvent{
+			{
+				EventId:   common.FirstEventID,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+						WorkflowType:         &commonpb.WorkflowType{Name: "mytype"},
+						TaskQueue:            &taskqueuepb.TaskQueue{Name: "tq"},
+						Input:                payloads.EncodeString("input"),
+						WorkflowRunTimeout:   timestamp.DurationPtr(1 * time.Hour),
+						WorkflowTaskTimeout:  timestamp.DurationPtr(10 * time.Second),
+						LastCompletionResult: payloads.EncodeString("last result"),
+						Header:               nil,
+						Memo:                 nil,
+						SearchAttributes:     nil,
+					},
+				},
+			},
+		},
+		NextPageToken: []byte{},
+		Size:          1,
+	}, nil).Times(1)
+
+	s.mockExecutionManager.EXPECT().TrimHistoryBranch(gomock.Any()).Return(nil, nil).AnyTimes()
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
+
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	oldGoSDKVersion := "1.9.1"
+	newGoSDKVersion := "1.10.1"
+
+	// new sdk: should see failed event
+	ctx := headers.SetVersionsForTests(context.Background(), newGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions)
+	resp, err := wh.GetWorkflowExecutionHistory(ctx, req)
+	s.NoError(err)
+	s.False(resp.Archived)
+	event := resp.History.Events[0]
+	s.Equal(int64(5), event.EventId)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, event.EventType)
+	attrs := event.GetWorkflowExecutionFailedEventAttributes()
+	s.Equal("this workflow failed", attrs.Failure.Message)
+	s.Equal(newRunID, attrs.NewExecutionRunId)
+	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, attrs.RetryState)
+
+	// old sdk: should see continued-as-new event
+	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
+	// See comment in workflowHandler.go:GetWorkflowExecutionHistory
+	ctx = headers.SetVersionsForTests(context.Background(), oldGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions)
+	resp, err = wh.GetWorkflowExecutionHistory(ctx, req)
+	s.NoError(err)
+	s.False(resp.Archived)
+	event = resp.History.Events[0]
+	s.Equal(int64(5), event.EventId)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, event.EventType)
+	attrs2 := event.GetWorkflowExecutionContinuedAsNewEventAttributes()
+	s.Equal(newRunID, attrs2.NewExecutionRunId)
+	s.Equal("this workflow failed", attrs2.Failure.Message)
+	var inp string
+	s.NoError(payloads.Decode(attrs2.Input, &inp))
+	s.Equal("input", inp)
 }
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidRequest() {

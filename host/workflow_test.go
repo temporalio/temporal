@@ -43,9 +43,11 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/service/matching"
 )
 
@@ -650,6 +652,54 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		}
 		expectedExecutionTime := dweResponse.WorkflowExecutionInfo.GetStartTime().Add(backoff)
 		s.Equal(expectedExecutionTime, timestamp.TimeValue(dweResponse.WorkflowExecutionInfo.GetExecutionTime()))
+	}
+
+	// Check run id links
+	for i := 0; i < maximumAttempts; i++ {
+		events := s.getHistory(s.namespace, executions[i])
+		// backwards
+		startEvent := events[0]
+		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, startEvent.GetEventType())
+		attrs := startEvent.GetWorkflowExecutionStartedEventAttributes()
+		if i == 0 {
+			s.Equal("", attrs.ContinuedExecutionRunId)
+		} else {
+			s.Equal(executions[i-1].RunId, attrs.ContinuedExecutionRunId)
+		}
+		// forwards
+		if i == maximumAttempts-1 {
+			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, events[len(events)-1].GetEventType())
+			attrs := events[len(events)-1].GetWorkflowExecutionCompletedEventAttributes()
+			s.Equal("", attrs.NewExecutionRunId)
+		} else {
+			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, events[len(events)-1].GetEventType())
+			attrs := events[len(events)-1].GetWorkflowExecutionFailedEventAttributes()
+			s.Equal(executions[i+1].RunId, attrs.NewExecutionRunId)
+		}
+
+		// Test get history from old SDKs
+		// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
+		// See comment in workflowHandler.go:GetWorkflowExecutionHistory
+		ctx, _ := rpc.NewContextWithTimeout(90 * time.Second)
+		oldSDKCtx := headers.SetVersionsForTests(ctx, "1.3.1", headers.ClientNameJavaSDK, headers.SupportedServerVersions)
+		resp, err := s.engine.GetWorkflowExecutionHistory(oldSDKCtx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace:              s.namespace,
+			Execution:              executions[i],
+			MaximumPageSize:        5,
+			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
+		})
+		s.NoError(err)
+		events = resp.History.Events
+		s.Equal(1, len(events))
+		if i == maximumAttempts-1 {
+			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, events[0].GetEventType())
+			attrs := events[0].GetWorkflowExecutionCompletedEventAttributes()
+			s.Equal("", attrs.NewExecutionRunId)
+		} else {
+			s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, events[0].GetEventType())
+			attrs := events[0].GetWorkflowExecutionContinuedAsNewEventAttributes()
+			s.Equal(executions[i+1].RunId, attrs.NewExecutionRunId)
+		}
 	}
 }
 
