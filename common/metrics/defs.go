@@ -1645,6 +1645,8 @@ const (
 	VisibilityPersistenceConditionFailed
 	VisibilityPersistenceTimeout
 	VisibilityPersistenceNotFound
+	VisibilityPersistenceInternal
+	VisibilityPersistenceUnavailable
 
 	SequentialTaskSubmitRequest
 	SequentialTaskSubmitRequestTaskQueueExist
@@ -2075,6 +2077,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		VisibilityPersistenceConditionFailed:   {metricName: "visibility_persistence_condition_failed", metricType: Counter},
 		VisibilityPersistenceTimeout:           {metricName: "visibility_persistence_timeout", metricType: Counter},
 		VisibilityPersistenceNotFound:          {metricName: "visibility_persistence_not_found", metricType: Counter},
+		VisibilityPersistenceInternal:          {metricName: "visibility_persistence_internal", metricType: Counter},
+		VisibilityPersistenceUnavailable:       {metricName: "visibility_persistence_unavailable", metricType: Counter},
 
 		SequentialTaskSubmitRequest:                 {metricName: "sequentialtask_submit_request", metricType: Counter},
 		SequentialTaskSubmitRequestTaskQueueExist:   {metricName: "sequentialtask_submit_request_taskqueue_exist", metricType: Counter},

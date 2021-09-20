@@ -272,7 +272,7 @@ func (v *visibilityStore) ListOpenWorkflowExecutions(
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &store.InternalListWorkflowExecutionsResponse{}
-	response.Executions = make([]*store.VisibilityWorkflowExecutionInfo, 0, request.PageSize)
+	response.Executions = make([]*store.InternalWorkflowExecutionInfo, 0, request.PageSize)
 	wfexecution, has := readOpenWorkflowExecutionRecord(iter)
 	for has {
 		response.Executions = append(response.Executions, wfexecution)
@@ -301,7 +301,7 @@ func (v *visibilityStore) ListOpenWorkflowExecutionsByType(
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &store.InternalListWorkflowExecutionsResponse{}
-	response.Executions = make([]*store.VisibilityWorkflowExecutionInfo, 0, request.PageSize)
+	response.Executions = make([]*store.InternalWorkflowExecutionInfo, 0, request.PageSize)
 	wfexecution, has := readOpenWorkflowExecutionRecord(iter)
 	for has {
 		response.Executions = append(response.Executions, wfexecution)
@@ -330,7 +330,7 @@ func (v *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &store.InternalListWorkflowExecutionsResponse{}
-	response.Executions = make([]*store.VisibilityWorkflowExecutionInfo, 0, request.PageSize)
+	response.Executions = make([]*store.InternalWorkflowExecutionInfo, 0, request.PageSize)
 	wfexecution, has := readOpenWorkflowExecutionRecord(iter)
 	for has {
 		response.Executions = append(response.Executions, wfexecution)
@@ -358,7 +358,7 @@ func (v *visibilityStore) ListClosedWorkflowExecutions(
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &store.InternalListWorkflowExecutionsResponse{}
-	response.Executions = make([]*store.VisibilityWorkflowExecutionInfo, 0, request.PageSize)
+	response.Executions = make([]*store.InternalWorkflowExecutionInfo, 0, request.PageSize)
 	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
 	for has {
 		response.Executions = append(response.Executions, wfexecution)
@@ -387,7 +387,7 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByType(
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &store.InternalListWorkflowExecutionsResponse{}
-	response.Executions = make([]*store.VisibilityWorkflowExecutionInfo, 0, request.PageSize)
+	response.Executions = make([]*store.InternalWorkflowExecutionInfo, 0, request.PageSize)
 	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
 	for has {
 		response.Executions = append(response.Executions, wfexecution)
@@ -416,7 +416,7 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &store.InternalListWorkflowExecutionsResponse{}
-	response.Executions = make([]*store.VisibilityWorkflowExecutionInfo, 0, request.PageSize)
+	response.Executions = make([]*store.InternalWorkflowExecutionInfo, 0, request.PageSize)
 	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
 	for has {
 		response.Executions = append(response.Executions, wfexecution)
@@ -445,7 +445,7 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &store.InternalListWorkflowExecutionsResponse{}
-	response.Executions = make([]*store.VisibilityWorkflowExecutionInfo, 0, request.PageSize)
+	response.Executions = make([]*store.InternalWorkflowExecutionInfo, 0, request.PageSize)
 	wfexecution, has := readClosedWorkflowExecutionRecord(iter)
 	for has {
 		response.Executions = append(response.Executions, wfexecution)
@@ -478,7 +478,7 @@ func (v *visibilityStore) CountWorkflowExecutions(_ *manager.CountWorkflowExecut
 	return nil, store.OperationNotSupportedErr
 }
 
-func readOpenWorkflowExecutionRecord(iter gocql.Iter) (*store.VisibilityWorkflowExecutionInfo, bool) {
+func readOpenWorkflowExecutionRecord(iter gocql.Iter) (*store.InternalWorkflowExecutionInfo, bool) {
 	var workflowID string
 	var runID string
 	var typeName string
@@ -488,7 +488,7 @@ func readOpenWorkflowExecutionRecord(iter gocql.Iter) (*store.VisibilityWorkflow
 	var encoding string
 	var taskQueue string
 	if iter.Scan(&workflowID, &runID, &startTime, &executionTime, &typeName, &memo, &encoding, &taskQueue) {
-		record := &store.VisibilityWorkflowExecutionInfo{
+		record := &store.InternalWorkflowExecutionInfo{
 			WorkflowID:    workflowID,
 			RunID:         runID,
 			TypeName:      typeName,
@@ -503,7 +503,7 @@ func readOpenWorkflowExecutionRecord(iter gocql.Iter) (*store.VisibilityWorkflow
 	return nil, false
 }
 
-func readClosedWorkflowExecutionRecord(iter gocql.Iter) (*store.VisibilityWorkflowExecutionInfo, bool) {
+func readClosedWorkflowExecutionRecord(iter gocql.Iter) (*store.InternalWorkflowExecutionInfo, bool) {
 	var workflowID string
 	var runID string
 	var typeName string
@@ -516,7 +516,7 @@ func readClosedWorkflowExecutionRecord(iter gocql.Iter) (*store.VisibilityWorkfl
 	var encoding string
 	var taskQueue string
 	if iter.Scan(&workflowID, &runID, &startTime, &executionTime, &closeTime, &typeName, &status, &historyLength, &memo, &encoding, &taskQueue) {
-		record := &store.VisibilityWorkflowExecutionInfo{
+		record := &store.InternalWorkflowExecutionInfo{
 			WorkflowID:    workflowID,
 			RunID:         runID,
 			TypeName:      typeName,

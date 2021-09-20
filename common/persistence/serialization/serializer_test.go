@@ -30,20 +30,15 @@ import (
 	"testing"
 	"time"
 
-	v14 "go.temporal.io/server/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	namespacepb "go.temporal.io/api/namespace/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -97,44 +92,15 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 	history0 := &historypb.History{Events: []*historypb.HistoryEvent{event0, event0}}
 
-	memoFields := map[string]*commonpb.Payload{
-		"TestField": payload.EncodeString("Test binary"),
-	}
-	memo0 := &commonpb.Memo{Fields: memoFields}
-
-	resetPoints0 := &workflowpb.ResetPoints{
-		Points: []*workflowpb.ResetPointInfo{
-			{
-				BinaryChecksum:               "bad-binary-cs",
-				RunId:                        "test-run-id",
-				FirstWorkflowTaskCompletedId: 123,
-				CreateTime:                   timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
-				Resettable:                   true,
-				ExpireTime:                   timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
-			},
-		},
-	}
-
-	badBinaries0 := &namespacepb.BadBinaries{
-		Binaries: map[string]*namespacepb.BadBinaryInfo{
-			"bad-binary-cs": {
-				CreateTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
-				Operator:   "test-operattor",
-				Reason:     "test-reason",
-			},
-		},
-	}
-
 	visibilityTaskInfo0 := &persistencespb.VisibilityTaskInfo{
 		NamespaceId:    "test-namespace-id",
 		WorkflowId:     "test-workflow-id",
 		RunId:          "test-run-id",
-		TaskType:       v14.TASK_TYPE_VISIBILITY_START_EXECUTION,
+		TaskType:       enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION,
 		Version:        0,
 		TaskId:         123,
 		VisibilityTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
 	}
-
 	for i := 0; i < concurrency; i++ {
 
 		go func() {
@@ -172,21 +138,6 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			s.Nil(err)
 			s.NotNil(dsProto)
 
-			_, err = serializer.SerializeVisibilityMemo(memo0, enumspb.ENCODING_TYPE_UNSPECIFIED)
-			s.NotNil(err)
-			_, ok = err.(*UnknownEncodingTypeError)
-			s.True(ok)
-
-			// serialize visibility memo
-
-			nilMemo, err := serializer.SerializeVisibilityMemo(nil, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.Nil(nilMemo)
-
-			mProto, err := serializer.SerializeVisibilityMemo(memo0, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.NotNil(mProto)
-
 			// deserialize event
 
 			dNilEvent, err := serializer.DeserializeEvent(nilEvent)
@@ -207,74 +158,6 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			history2 := &historypb.History{Events: events}
 			s.Nil(err)
 			s.True(reflect.DeepEqual(history0, history2))
-
-			// deserialize visibility memo
-
-			dNilMemo, err := serializer.DeserializeVisibilityMemo(nilMemo)
-			s.Nil(err)
-			s.Equal(&commonpb.Memo{}, dNilMemo)
-
-			memo2, err := serializer.DeserializeVisibilityMemo(mProto)
-			s.Nil(err)
-			s.True(reflect.DeepEqual(memo0, memo2))
-
-			// serialize reset points
-
-			nilResetPoints, err := serializer.SerializeResetPoints(nil, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.NotNil(nilResetPoints)
-
-			_, err = serializer.SerializeResetPoints(resetPoints0, enumspb.ENCODING_TYPE_UNSPECIFIED)
-			s.NotNil(err)
-			_, ok = err.(*UnknownEncodingTypeError)
-			s.True(ok)
-
-			resetPointsProto, err := serializer.SerializeResetPoints(resetPoints0, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.NotNil(resetPointsProto)
-
-			// deserialize reset points
-
-			dNilResetPoints1, err := serializer.DeserializeResetPoints(nil)
-			s.Nil(err)
-			s.Equal(&workflowpb.ResetPoints{}, dNilResetPoints1)
-
-			dNilResetPoints2, err := serializer.DeserializeResetPoints(nilResetPoints)
-			s.Nil(err)
-			s.Equal(&workflowpb.ResetPoints{}, dNilResetPoints2)
-
-			resetPoints2, err := serializer.DeserializeResetPoints(resetPointsProto)
-			s.Nil(err)
-			s.True(reflect.DeepEqual(resetPoints2, resetPoints0))
-
-			// serialize bad binaries
-
-			nilBadBinaries, err := serializer.SerializeBadBinaries(nil, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.NotNil(nilBadBinaries)
-
-			_, err = serializer.SerializeBadBinaries(badBinaries0, enumspb.ENCODING_TYPE_UNSPECIFIED)
-			s.NotNil(err)
-			_, ok = err.(*UnknownEncodingTypeError)
-			s.True(ok)
-
-			badBinariesProto, err := serializer.SerializeBadBinaries(badBinaries0, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.NotNil(badBinariesProto)
-
-			// deserialize bad binaries
-
-			dNilBadBinaries1, err := serializer.DeserializeBadBinaries(nil)
-			s.Nil(err)
-			s.Equal(&namespacepb.BadBinaries{}, dNilBadBinaries1)
-
-			dNilBadBinaries2, err := serializer.DeserializeBadBinaries(nilBadBinaries)
-			s.Nil(err)
-			s.Equal(&namespacepb.BadBinaries{}, dNilBadBinaries2)
-
-			badBinaries2, err := serializer.DeserializeBadBinaries(badBinariesProto)
-			s.Nil(err)
-			s.True(reflect.DeepEqual(badBinaries2, badBinaries0))
 
 			// VisibilityTaskInfo
 			nilVisibilityTaskInfo, err := serializer.VisibilityTaskInfoToBlob(nil, enumspb.ENCODING_TYPE_PROTO3)
