@@ -78,7 +78,7 @@ type (
 		ClusterMetadata config.ClusterMetadata
 		Persistence     persistencetests.TestBaseOptions
 		HistoryConfig   *HistoryConfig
-		ESConfig        *config.Elasticsearch
+		ESConfig        *esclient.Config
 		WorkerConfig    *WorkerConfig
 		MockAdminClient map[string]adminservice.AdminServiceClient
 		FaultInjection  config.FaultInjection `yaml:"faultinjection"`

@@ -106,7 +106,7 @@ type (
 		archiverMetadata                 carchiver.ArchivalMetadata
 		archiverProvider                 provider.ArchiverProvider
 		historyConfig                    *HistoryConfig
-		esConfig                         *config.Elasticsearch
+		esConfig                         *esclient.Config
 		esClient                         esclient.Client
 		workerConfig                     *WorkerConfig
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
@@ -137,7 +137,7 @@ type (
 		ArchiverProvider                 provider.ArchiverProvider
 		EnableReadHistoryFromArchival    bool
 		HistoryConfig                    *HistoryConfig
-		ESConfig                         *config.Elasticsearch
+		ESConfig                         *esclient.Config
 		ESClient                         esclient.Client
 		WorkerConfig                     *WorkerConfig
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
@@ -394,7 +394,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		esDataStoreName := "es-visibility"
 		params.PersistenceConfig.AdvancedVisibilityStore = esDataStoreName
 		params.PersistenceConfig.DataStores[esDataStoreName] = config.DataStore{
-			ElasticSearch: c.esConfig,
+			Elasticsearch: c.esConfig,
 		}
 	}
 
@@ -472,7 +472,7 @@ func (c *temporalImpl) startHistory(
 			esDataStoreName := "es-visibility"
 			params.PersistenceConfig.AdvancedVisibilityStore = esDataStoreName
 			params.PersistenceConfig.DataStores[esDataStoreName] = config.DataStore{
-				ElasticSearch: c.esConfig,
+				Elasticsearch: c.esConfig,
 			}
 		}
 

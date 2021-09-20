@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
@@ -152,7 +153,7 @@ func (r *TaskRefresherImpl) RefreshTasks(
 		return err
 	}
 
-	if r.config.AdvancedVisibilityWritingMode() != common.AdvancedVisibilityWritingModeOff {
+	if r.config.AdvancedVisibilityWritingMode() != visibility.AdvancedVisibilityWritingModeOff {
 		if err := r.refreshTasksForWorkflowSearchAttr(
 			now,
 			mutableState,

@@ -22,44 +22,21 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
+package visibility
 
-import (
-	"fmt"
-	"net/http"
-
-	"go.temporal.io/server/common/log"
+const (
+	// AdvancedVisibilityWritingModeOff means do not write to advanced visibility store
+	AdvancedVisibilityWritingModeOff = "off"
+	// AdvancedVisibilityWritingModeOn means only write to advanced visibility store
+	AdvancedVisibilityWritingModeOn = "on"
+	// AdvancedVisibilityWritingModeDual means write to both normal visibility and advanced visibility store
+	AdvancedVisibilityWritingModeDual = "dual"
 )
 
-func NewClient(config *Config, httpClient *http.Client, logger log.Logger) (Client, error) {
-	switch config.Version {
-	case "v6":
-		return newClientV6(config, httpClient, logger)
-	case "v7", "":
-		return newClientV7(config, httpClient, logger)
-	default:
-		return nil, fmt.Errorf("not supported Elasticsearch version: %v", config.Version)
+// DefaultAdvancedVisibilityWritingMode returns default advancedVisibilityWritingMode based on whether related config exists in static config file.
+func DefaultAdvancedVisibilityWritingMode(advancedVisibilityConfigExist bool) string {
+	if advancedVisibilityConfigExist {
+		return AdvancedVisibilityWritingModeOn
 	}
-}
-
-func NewCLIClient(url string, version string) (CLIClient, error) {
-	switch version {
-	case "v6":
-		return newSimpleClientV6(url)
-	case "v7", "":
-		return newSimpleClientV7(url)
-	default:
-		return nil, fmt.Errorf("not supported Elasticsearch version: %v", version)
-	}
-}
-
-func NewIntegrationTestsClient(url string, version string) (IntegrationTestsClient, error) {
-	switch version {
-	case "v6":
-		return newSimpleClientV6(url)
-	case "v7":
-		return newSimpleClientV7(url)
-	default:
-		return nil, fmt.Errorf("not supported Elasticsearch version: %v", version)
-	}
+	return AdvancedVisibilityWritingModeOff
 }

@@ -34,11 +34,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	elasticaws "github.com/olivere/elastic/aws/v4"
-
-	"go.temporal.io/server/common/config"
 )
 
-func NewAwsHttpClient(config config.ESAWSRequestSigningConfig) (*http.Client, error) {
+func NewAwsHttpClient(config ESAWSRequestSigningConfig) (*http.Client, error) {
 	if !config.Enabled {
 		return nil, nil
 	}

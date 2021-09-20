@@ -25,7 +25,6 @@
 package temporal
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -131,9 +130,7 @@ func (s *Server) Start() error {
 	}
 	dc := dynamicconfig.NewCollection(s.so.dynamicConfigClient, s.logger)
 
-	advancedVisibilityWritingMode := dc.GetStringProperty(dynamicconfig.AdvancedVisibilityWritingMode, common.GetDefaultAdvancedVisibilityWritingMode(s.so.config.Persistence.IsAdvancedVisibilityConfigExist()))()
-
-	err = verifyPersistenceCompatibleVersion(s.so.config.Persistence, s.so.persistenceServiceResolver, advancedVisibilityWritingMode != common.AdvancedVisibilityWritingModeOn)
+	err = verifyPersistenceCompatibleVersion(s.so.config.Persistence, s.so.persistenceServiceResolver)
 	if err != nil {
 		return err
 	}
@@ -186,7 +183,7 @@ func (s *Server) Start() error {
 		}
 	}
 
-	esConfig, esClient, err := s.getESConfigClient(advancedVisibilityWritingMode)
+	esConfig, esClient, err := s.getESConfigAndClient()
 	if err != nil {
 		return err
 	}
@@ -274,7 +271,7 @@ func (s *Server) newBootstrapParams(
 	dc *dynamicconfig.Collection,
 	serverReporter metrics.Reporter,
 	sdkReporter metrics.Reporter,
-	esConfig *config.Elasticsearch,
+	esConfig *esclient.Config,
 	esClient esclient.Client,
 ) (*resource.BootstrapParams, error) {
 	params := &resource.BootstrapParams{
@@ -390,44 +387,39 @@ func (s *Server) newBootstrapParams(
 	return params, nil
 }
 
-func (s *Server) getESConfigClient(advancedVisibilityWritingMode string) (*config.Elasticsearch, esclient.Client, error) {
-	if advancedVisibilityWritingMode == common.AdvancedVisibilityWritingModeOff {
+func (s *Server) getESConfigAndClient() (*esclient.Config, esclient.Client, error) {
+	if !s.so.config.Persistence.AdvancedVisibilityConfigExist() {
 		return nil, nil, nil
 	}
 
 	advancedVisibilityStore, ok := s.so.config.Persistence.DataStores[s.so.config.Persistence.AdvancedVisibilityStore]
 	if !ok {
-		return nil, nil, fmt.Errorf("unable to find advanced visibility store in config for %q key", s.so.config.Persistence.AdvancedVisibilityStore)
-	}
-
-	indexName := advancedVisibilityStore.ElasticSearch.GetVisibilityIndex()
-	if len(indexName) == 0 {
-		return nil, nil, errors.New("visibility index in missing in Elasticsearch config")
+		return nil, nil, nil
 	}
 
 	if s.so.elasticsearchHttpClient == nil {
 		var err error
-		s.so.elasticsearchHttpClient, err = esclient.NewAwsHttpClient(advancedVisibilityStore.ElasticSearch.AWSRequestSigning)
+		s.so.elasticsearchHttpClient, err = esclient.NewAwsHttpClient(advancedVisibilityStore.Elasticsearch.AWSRequestSigning)
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
 		}
 	}
 
-	esClient, err := esclient.NewClient(advancedVisibilityStore.ElasticSearch, s.so.elasticsearchHttpClient, s.logger)
+	esClient, err := esclient.NewClient(advancedVisibilityStore.Elasticsearch, s.so.elasticsearchHttpClient, s.logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to create Elasticsearch client: %w", err)
 	}
 
-	return advancedVisibilityStore.ElasticSearch, esClient, nil
+	return advancedVisibilityStore.Elasticsearch, esClient, nil
 }
 
-func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceServiceResolver resolver.ServiceResolver, checkVisibility bool) error {
+func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceServiceResolver resolver.ServiceResolver) error {
 	// cassandra schema version validation
-	if err := cassandra.VerifyCompatibleVersion(config, persistenceServiceResolver, checkVisibility); err != nil {
+	if err := cassandra.VerifyCompatibleVersion(config, persistenceServiceResolver); err != nil {
 		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
 	}
 	// sql schema version validation
-	if err := sql.VerifyCompatibleVersion(config, persistenceServiceResolver, checkVisibility); err != nil {
+	if err := sql.VerifyCompatibleVersion(config, persistenceServiceResolver); err != nil {
 		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
 	}
 	return nil
