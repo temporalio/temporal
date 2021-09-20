@@ -42,7 +42,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/consts"
@@ -1862,7 +1862,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createRecordWorkflowExecutionStar
 	task *persistencespb.TransferTaskInfo,
 	mutableState workflow.MutableState,
 	backoffSeconds time.Duration,
-) *visibility.RecordWorkflowExecutionStartedRequest {
+) *manager.RecordWorkflowExecutionStartedRequest {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
 		RunId:      task.GetRunId(),
@@ -1870,8 +1870,8 @@ func (s *transferQueueActiveTaskExecutorSuite) createRecordWorkflowExecutionStar
 	executionInfo := mutableState.GetExecutionInfo()
 	executionTimestamp := timestamp.TimeValue(startEvent.GetEventTime()).Add(backoffSeconds)
 
-	return &visibility.RecordWorkflowExecutionStartedRequest{
-		VisibilityRequestBase: &visibility.VisibilityRequestBase{
+	return &manager.RecordWorkflowExecutionStartedRequest{
+		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			Namespace:            namespace,
 			NamespaceID:          task.GetNamespaceId(),
 			Execution:            *execution,
@@ -1995,7 +1995,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createUpsertWorkflowSearchAttribu
 	startEvent *historypb.HistoryEvent,
 	task *persistencespb.TransferTaskInfo,
 	mutableState workflow.MutableState,
-) *visibility.UpsertWorkflowExecutionRequest {
+) *manager.UpsertWorkflowExecutionRequest {
 
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowId(),
@@ -2003,8 +2003,8 @@ func (s *transferQueueActiveTaskExecutorSuite) createUpsertWorkflowSearchAttribu
 	}
 	executionInfo := mutableState.GetExecutionInfo()
 
-	return &visibility.UpsertWorkflowExecutionRequest{
-		VisibilityRequestBase: &visibility.VisibilityRequestBase{
+	return &manager.UpsertWorkflowExecutionRequest{
+		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			Namespace:        namespace,
 			NamespaceID:      task.GetNamespaceId(),
 			Execution:        *execution,

@@ -41,8 +41,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-
-	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -121,7 +120,7 @@ type (
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(
 	shard shard.Context,
-	visibilityMgr visibility.VisibilityManager,
+	visibilityMgr manager.VisibilityManager,
 	matching matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	publicClient sdkclient.Client,

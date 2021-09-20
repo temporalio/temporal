@@ -93,9 +93,6 @@ func (s *TestCluster) Config() config.Persistence {
 			"test": {Cassandra: &cfg, FaultInjection: s.faultInjection},
 		},
 		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
-		VisibilityConfig: &config.VisibilityConfig{
-			EnableSampling: dynamicconfig.GetBoolPropertyFn(false),
-		},
 	}
 }
 
