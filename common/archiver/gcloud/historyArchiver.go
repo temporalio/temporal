@@ -235,18 +235,16 @@ outer:
 
 		filename := constructHistoryFilenameMultipart(request.NamespaceID, request.WorkflowID, request.RunID, token.CloseFailoverVersion, token.CurrentPart)
 		encodedHistoryBatches, err := h.gcloudStorage.Get(ctx, URI, filename)
-
 		if err != nil {
 			return nil, serviceerror.NewUnavailable(err.Error())
 		}
-
 		if encodedHistoryBatches == nil {
-			return nil, serviceerror.NewUnavailable("Fail retrieving history file: " + URI.String() + "/" + filename)
+			return nil, serviceerror.NewInternal("Fail retrieving history file: " + URI.String() + "/" + filename)
 		}
 
 		batches, err := encoder.DecodeHistories(encodedHistoryBatches)
 		if err != nil {
-			return nil, serviceerror.NewUnavailable(err.Error())
+			return nil, serviceerror.NewInternal(err.Error())
 		}
 		// trim the batches in the beginning based on token.BatchIdxOffset
 		batches = batches[token.BatchIdxOffset:]
@@ -275,7 +273,7 @@ outer:
 	if token.CurrentPart <= token.HighestPart {
 		nextToken, err := serializeToken(token)
 		if err != nil {
-			return nil, serviceerror.NewUnavailable(err.Error())
+			return nil, serviceerror.NewInternal(err.Error())
 		}
 		response.NextPageToken = nextToken
 	}
