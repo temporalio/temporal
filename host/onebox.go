@@ -37,6 +37,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/persistence/visibility"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 
 	"google.golang.org/grpc"
@@ -689,7 +690,7 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
 	client.OverrideValue(dynamicconfig.ReplicationTaskProcessorStartWait, time.Nanosecond)
 
 	if c.workerConfig.EnableIndexer {
-		client.OverrideValue(dynamicconfig.AdvancedVisibilityWritingMode, common.AdvancedVisibilityWritingModeDual)
+		client.OverrideValue(dynamicconfig.AdvancedVisibilityWritingMode, visibility.AdvancedVisibilityWritingModeDual)
 	}
 	if c.historyConfig.HistoryCountLimitWarn != 0 {
 		client.OverrideValue(dynamicconfig.HistoryCountLimitWarn, c.historyConfig.HistoryCountLimitWarn)
