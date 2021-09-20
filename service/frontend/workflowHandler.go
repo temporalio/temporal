@@ -2074,7 +2074,7 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 	case enumspb.RESET_REAPPLY_TYPE_NONE:
 		// noop
 	default:
-		return nil, serviceerror.NewUnavailable("unknown reset type")
+		return nil, serviceerror.NewInternal("unknown reset type")
 	}
 
 	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
