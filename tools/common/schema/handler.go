@@ -60,6 +60,7 @@ func newUpdateConfig(cli *cli.Context) (*UpdateConfig, error) {
 	config := new(UpdateConfig)
 	config.SchemaDir = cli.String(CLIOptSchemaDir)
 	config.TargetVersion = cli.String(CLIOptTargetVersion)
+	config.Logger = log.NewCLILogger()
 
 	if err := validateUpdateConfig(config); err != nil {
 		return nil, err
@@ -97,6 +98,9 @@ func validateSetupConfig(config *SetupConfig) error {
 		}
 		config.InitialVersion = ver
 	}
+	if config.Logger == nil {
+		return NewConfigError("missing logger")
+	}
 	return nil
 }
 
@@ -110,6 +114,9 @@ func validateUpdateConfig(config *UpdateConfig) error {
 			return NewConfigError("invalid " + flag(CLIOptTargetVersion) + " argument:" + err.Error())
 		}
 		config.TargetVersion = ver
+	}
+	if config.Logger == nil {
+		return NewConfigError("missing logger")
 	}
 	return nil
 }
