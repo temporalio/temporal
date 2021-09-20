@@ -33,6 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	sdkclient "go.temporal.io/sdk/client"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -47,7 +48,7 @@ import (
 	"go.temporal.io/server/common/persistence/cassandra"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/sql"
-	"go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
@@ -269,7 +270,7 @@ func (s *Server) newBootstrapParams(
 	serverReporter metrics.Reporter,
 	sdkReporter metrics.Reporter,
 	esConfig *config.Elasticsearch,
-	esClient client.Client,
+	esClient esclient.Client,
 ) (*resource.BootstrapParams, error) {
 
 	params := &resource.BootstrapParams{
@@ -385,7 +386,7 @@ func (s *Server) newBootstrapParams(
 	return params, nil
 }
 
-func (s *Server) getESConfigClient(advancedVisibilityWritingMode string) (*config.Elasticsearch, client.Client, error) {
+func (s *Server) getESConfigClient(advancedVisibilityWritingMode string) (*config.Elasticsearch, esclient.Client, error) {
 	if advancedVisibilityWritingMode == common.AdvancedVisibilityWritingModeOff {
 		return nil, nil, nil
 	}
@@ -402,13 +403,13 @@ func (s *Server) getESConfigClient(advancedVisibilityWritingMode string) (*confi
 
 	if s.so.elasticsearchHttpClient == nil {
 		var err error
-		s.so.elasticsearchHttpClient, err = client.NewAwsHttpClient(advancedVisibilityStore.ElasticSearch.AWSRequestSigning)
+		s.so.elasticsearchHttpClient, err = esclient.NewAwsHttpClient(advancedVisibilityStore.ElasticSearch.AWSRequestSigning)
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
 		}
 	}
 
-	esClient, err := client.NewClient(advancedVisibilityStore.ElasticSearch, s.so.elasticsearchHttpClient, s.logger)
+	esClient, err := esclient.NewClient(advancedVisibilityStore.ElasticSearch, s.so.elasticsearchHttpClient, s.logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to create Elasticsearch client: %w", err)
 	}

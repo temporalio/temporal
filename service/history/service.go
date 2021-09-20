@@ -28,25 +28,22 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/masker"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/migration"
 	"go.temporal.io/server/common/persistence/visibility"
-	visibilityclient "go.temporal.io/server/common/persistence/visibility/client"
-	"go.temporal.io/server/common/persistence/visibility/elasticsearch"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 )
 
@@ -56,7 +53,7 @@ type Service struct {
 
 	status            int32
 	handler           *Handler
-	visibilityManager visibility.VisibilityManager
+	visibilityManager manager.VisibilityManager
 	config            *configs.Config
 
 	server *grpc.Server
@@ -74,12 +71,6 @@ func NewService(
 		params.PersistenceConfig.IsAdvancedVisibilityConfigExist(),
 		params.ESConfig.GetVisibilityIndex(),
 	)
-
-	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityOpenMaxQPS:   serviceConfig.VisibilityOpenMaxQPS,
-		VisibilityClosedMaxQPS: serviceConfig.VisibilityClosedMaxQPS,
-		EnableSampling:         serviceConfig.EnableVisibilitySampling,
-	}
 
 	serviceResource, err := resource.New(
 		params,
@@ -118,12 +109,33 @@ func NewService(
 		),
 	)
 
-	visibilityMgr, err := visibilityManagerInitializer(
-		params,
-		serviceConfig,
+	esProcessorConfig := &elasticsearch.ProcessorConfig{
+		IndexerConcurrency:       serviceConfig.IndexerConcurrency,
+		ESProcessorNumOfWorkers:  serviceConfig.ESProcessorNumOfWorkers,
+		ESProcessorBulkActions:   serviceConfig.ESProcessorBulkActions,
+		ESProcessorBulkSize:      serviceConfig.ESProcessorBulkSize,
+		ESProcessorFlushInterval: serviceConfig.ESProcessorFlushInterval,
+		ESProcessorAckTimeout:    serviceConfig.ESProcessorAckTimeout,
+	}
+
+	visibilityMgr, err := visibility.NewManager(
+		params.PersistenceConfig,
+		params.PersistenceServiceResolver,
+		params.ESConfig.GetVisibilityIndex(),
+		params.ESClient,
+		esProcessorConfig,
 		serviceResource.GetSearchAttributesProvider(),
-		logger,
+		params.SearchAttributesMapper,
+		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,
+		serviceConfig.StandardVisibilityPersistenceMaxWriteQPS,
+		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,
+		serviceConfig.AdvancedVisibilityPersistenceMaxWriteQPS,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // history visibility never read
+		serviceConfig.AdvancedVisibilityWritingMode,
+		params.MetricsClient,
+		params.Logger,
 	)
+
 	if err != nil {
 		return nil, err
 	}
@@ -136,52 +148,6 @@ func NewService(
 		visibilityManager: visibilityMgr,
 		config:            serviceConfig,
 	}, nil
-}
-
-func visibilityManagerInitializer(
-	params *resource.BootstrapParams,
-	serviceConfig *configs.Config,
-	searchAttributesProvider searchattribute.Provider,
-	logger log.Logger,
-) (visibility.VisibilityManager, error) {
-	visibilityFromDB, err := visibilityclient.NewVisibilityManager(
-		params.PersistenceConfig,
-		serviceConfig.PersistenceMaxQPS,
-		params.MetricsClient,
-		params.PersistenceServiceResolver,
-		params.Logger,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	var visibilityFromES visibility.VisibilityManager
-	if params.ESConfig != nil {
-		logger.Info("Elasticsearch config", tag.ESConfig(masker.MaskStruct(params.ESConfig, masker.DefaultFieldNames)))
-		visibilityIndexName := params.ESConfig.GetVisibilityIndex()
-
-		esProcessorConfig := &elasticsearch.ProcessorConfig{
-			IndexerConcurrency:       serviceConfig.IndexerConcurrency,
-			ESProcessorNumOfWorkers:  serviceConfig.ESProcessorNumOfWorkers,
-			ESProcessorBulkActions:   serviceConfig.ESProcessorBulkActions,
-			ESProcessorBulkSize:      serviceConfig.ESProcessorBulkSize,
-			ESProcessorFlushInterval: serviceConfig.ESProcessorFlushInterval,
-		}
-
-		esProcessor := elasticsearch.NewProcessor(esProcessorConfig, params.ESClient, logger, params.MetricsClient)
-		esProcessor.Start()
-
-		visibilityConfigForES := &config.VisibilityConfig{
-			ESProcessorAckTimeout: serviceConfig.ESProcessorAckTimeout,
-		}
-		visibilityFromES = elasticsearch.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES, searchAttributesProvider, params.SearchAttributesMapper, esProcessor, params.MetricsClient, logger)
-	}
-	return visibility.NewVisibilityManagerWrapper(
-		visibilityFromDB,
-		visibilityFromES,
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // history visibility never read
-		serviceConfig.AdvancedVisibilityWritingMode,
-	), nil
 }
 
 // Start starts the service

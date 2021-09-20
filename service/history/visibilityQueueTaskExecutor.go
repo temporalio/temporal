@@ -32,7 +32,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -55,7 +55,7 @@ type (
 		logger                  log.Logger
 		metricsClient           metrics.Client
 		matchingClient          matchingservice.MatchingServiceClient
-		visibilityMgr           visibility.VisibilityManager
+		visibilityMgr           manager.VisibilityManager
 		config                  *configs.Config
 		historyClient           historyservice.HistoryServiceClient
 		parentClosePolicyClient parentclosepolicy.Client
@@ -69,7 +69,7 @@ var (
 func newVisibilityQueueTaskExecutor(
 	shard shard.Context,
 	historyService *historyEngineImpl,
-	visibilityMgr visibility.VisibilityManager,
+	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *configs.Config,
@@ -239,8 +239,8 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 		return nil
 	}
 
-	request := &visibility.RecordWorkflowExecutionStartedRequest{
-		VisibilityRequestBase: &visibility.VisibilityRequestBase{
+	request := &manager.RecordWorkflowExecutionStartedRequest{
+		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID: namespaceID,
 			Namespace:   namespaceEntry.GetInfo().Name,
 			Execution: commonpb.WorkflowExecution{
@@ -281,8 +281,8 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 		return err
 	}
 
-	request := &visibility.UpsertWorkflowExecutionRequest{
-		VisibilityRequestBase: &visibility.VisibilityRequestBase{
+	request := &manager.UpsertWorkflowExecutionRequest{
+		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID: namespaceID,
 			Namespace:   namespaceEntry.GetInfo().Name,
 			Execution: commonpb.WorkflowExecution{
@@ -417,8 +417,8 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 	}
 
 	if recordWorkflowClose {
-		return t.visibilityMgr.RecordWorkflowExecutionClosed(&visibility.RecordWorkflowExecutionClosedRequest{
-			VisibilityRequestBase: &visibility.VisibilityRequestBase{
+		return t.visibilityMgr.RecordWorkflowExecutionClosed(&manager.RecordWorkflowExecutionClosedRequest{
+			VisibilityRequestBase: &manager.VisibilityRequestBase{
 				NamespaceID: namespaceID,
 				Namespace:   namespaceEntry.GetInfo().Name,
 				Execution: commonpb.WorkflowExecution{
@@ -447,7 +447,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 	task *persistencespb.VisibilityTaskInfo,
 ) (retError error) {
-	request := &visibility.VisibilityDeleteWorkflowExecutionRequest{
+	request := &manager.VisibilityDeleteWorkflowExecutionRequest{
 		NamespaceID: task.GetNamespaceId(),
 		WorkflowID:  task.GetWorkflowId(),
 		RunID:       task.GetRunId(),

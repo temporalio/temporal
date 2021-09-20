@@ -35,6 +35,9 @@ import (
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -53,8 +56,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/visibility"
-	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
@@ -94,7 +95,6 @@ type (
 		clusterMetadataMgr               persistence.ClusterMetadataManager
 		shardMgr                         persistence.ShardManager
 		taskMgr                          persistence.TaskManager
-		visibilityMgr                    visibility.VisibilityManager
 		executionManager                 persistence.ExecutionManager
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		shutdownCh                       chan struct{}
@@ -129,7 +129,6 @@ type (
 		ShardMgr                         persistence.ShardManager
 		ExecutionManager                 persistence.ExecutionManager
 		TaskMgr                          persistence.TaskManager
-		VisibilityMgr                    visibility.VisibilityManager
 		NamespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		Logger                           log.Logger
 		ClusterNo                        int
@@ -158,7 +157,6 @@ func NewTemporal(params *TemporalParams) Temporal {
 		persistenceConfig:                params.PersistenceConfig,
 		metadataMgr:                      params.MetadataMgr,
 		clusterMetadataMgr:               params.ClusterMetadataManager,
-		visibilityMgr:                    params.VisibilityMgr,
 		shardMgr:                         params.ShardMgr,
 		taskMgr:                          params.TaskMgr,
 		executionManager:                 params.ExecutionManager,

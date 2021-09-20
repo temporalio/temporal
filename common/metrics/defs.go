@@ -1611,7 +1611,6 @@ const (
 	PersistenceErrEntityNotExistsCounter
 	PersistenceErrNamespaceAlreadyExistsCounter
 	PersistenceErrBadRequestCounter
-	PersistenceSampledCounter
 
 	ClientRequests
 	ClientFailures
@@ -2049,7 +2048,6 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		PersistenceErrEntityNotExistsCounter:                {metricName: "persistence_errors_entity_not_exists", metricType: Counter},
 		PersistenceErrNamespaceAlreadyExistsCounter:         {metricName: "persistence_errors_namespace_already_exists", metricType: Counter},
 		PersistenceErrBadRequestCounter:                     {metricName: "persistence_errors_bad_request", metricType: Counter},
-		PersistenceSampledCounter:                           {metricName: "persistence_sampled", metricType: Counter},
 		ClientRequests:                                      {metricName: "client_requests", metricType: Counter},
 		ClientFailures:                                      {metricName: "client_errors", metricType: Counter},
 		ClientLatency:                                       {metricName: "client_latency", metricType: Timer},
