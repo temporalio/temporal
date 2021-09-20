@@ -173,7 +173,7 @@ steps:
           run: integration-test-xdc-postgresql
           config: ./develop/buildkite/docker-compose.yml
 
-  - label: ":golang: fossa"
+  - label: ":tiger2: fossa"
     agents:
       queue: "default"
       docker: "*"
@@ -188,14 +188,14 @@ steps:
 
   - wait
 
-  - label: ":golang: coverage-report"
+  - label: ":coverage: coverage-report"
     agents:
       queue: "default"
       docker: "*"
     command: "./develop/buildkite/scripts/coverage-report.sh"
     artifact_paths:
-      - ".coverage/summary_coverprofile.out"
-      - ".coverage/summary_coverprofile.out.html"
+      - ".coverage/summary.out"
+      - ".coverage/summary.out.html"
     retry:
       automatic:
         limit: 2
