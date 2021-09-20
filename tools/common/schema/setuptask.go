@@ -51,7 +51,8 @@ func newSetupSchemaTask(db DB, config *SetupConfig) *SetupTask {
 // Run executes the task
 func (task *SetupTask) Run() error {
 	config := task.config
-	config.Logger.Info("Starting schema setup", tag.NewAnyTag("config", config))
+	logger := config.Logger
+	logger.Info("Starting schema setup", tag.NewAnyTag("config", config))
 
 	if config.Overwrite {
 		err := task.db.DropAllTables()
@@ -61,7 +62,7 @@ func (task *SetupTask) Run() error {
 	}
 
 	if !config.DisableVersioning {
-		config.Logger.Debug("Setting up version tables")
+		logger.Debug("Setting up version tables")
 		if err := task.db.CreateSchemaVersionTables(); err != nil {
 			return err
 		}
@@ -77,14 +78,14 @@ func (task *SetupTask) Run() error {
 			return err
 		}
 
-		config.Logger.Debug("----- Creating types and tables -----")
+		logger.Debug("----- Creating types and tables -----")
 		for _, stmt := range stmts {
-			config.Logger.Debug(rmspaceRegex.ReplaceAllString(stmt, " "))
+			logger.Debug(rmspaceRegex.ReplaceAllString(stmt, " "))
 			if err := task.db.Exec(stmt); err != nil {
 				return err
 			}
 		}
-		config.Logger.Debug("----- Done -----")
+		logger.Debug("----- Done -----")
 	}
 
 	if !config.DisableVersioning {
@@ -95,7 +96,7 @@ func (task *SetupTask) Run() error {
 
 		currVerParsed, err := semver.ParseTolerant(currVer)
 		if err != nil {
-			config.Logger.Fatal("Unable to parse current version",
+			logger.Fatal("Unable to parse current version",
 				tag.NewStringTag("current version", currVer),
 				tag.Error(err),
 			)
@@ -103,21 +104,21 @@ func (task *SetupTask) Run() error {
 
 		initialVersionParsed, err := semver.ParseTolerant(config.InitialVersion)
 		if err != nil {
-			config.Logger.Fatal("Unable to parse initial version",
+			logger.Fatal("Unable to parse initial version",
 				tag.NewStringTag("initial version", config.InitialVersion),
 				tag.Error(err),
 			)
 		}
 
 		if currVerParsed.GT(initialVersionParsed) {
-			config.Logger.Debug(fmt.Sprintf("Current database schema version %v is greater than initial schema version %v. Skip version upgrade", currVer, config.InitialVersion))
+			logger.Debug(fmt.Sprintf("Current database schema version %v is greater than initial schema version %v. Skip version upgrade", currVer, config.InitialVersion))
 		} else {
-			config.Logger.Debug(fmt.Sprintf("Setting initial schema version to %v", config.InitialVersion))
+			logger.Debug(fmt.Sprintf("Setting initial schema version to %v", config.InitialVersion))
 			err := task.db.UpdateSchemaVersion(config.InitialVersion, config.InitialVersion)
 			if err != nil {
 				return err
 			}
-			config.Logger.Debug("Updating schema update log")
+			logger.Debug("Updating schema update log")
 			err = task.db.WriteSchemaUpdateLog("0", config.InitialVersion, "", "initial version")
 			if err != nil {
 				return err
@@ -125,7 +126,7 @@ func (task *SetupTask) Run() error {
 		}
 	}
 
-	config.Logger.Info("Schema setup complete")
+	logger.Info("Schema setup complete")
 
 	return nil
 }

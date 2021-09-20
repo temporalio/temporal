@@ -44,6 +44,7 @@ type (
 		TargetVersion string
 		SchemaDir     string
 		IsDryRun      bool
+		Logger        log.Logger
 	}
 	// SetupConfig holds the config
 	// params need by the SetupTask
