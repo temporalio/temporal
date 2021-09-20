@@ -27,6 +27,8 @@ package schema
 import (
 	"fmt"
 	"regexp"
+
+	"go.temporal.io/server/common/log"
 )
 
 type (
@@ -50,6 +52,7 @@ type (
 		InitialVersion    string
 		Overwrite         bool // overwrite previous data
 		DisableVersioning bool // do not use schema versioning
+		Logger            log.Logger
 	}
 
 	// DB is the database interface that's required to be implemented

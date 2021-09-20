@@ -26,6 +26,8 @@ package schema
 
 import (
 	"github.com/urfave/cli"
+
+	"go.temporal.io/server/common/log"
 )
 
 // SetupFromConfig sets up schema tables based on the given config
@@ -71,6 +73,7 @@ func newSetupConfig(cli *cli.Context) (*SetupConfig, error) {
 	config.InitialVersion = cli.String(CLIOptVersion)
 	config.DisableVersioning = cli.Bool(CLIOptDisableVersioning)
 	config.Overwrite = cli.Bool(CLIOptOverwrite)
+	config.Logger = log.NewCLILogger()
 
 	if err := validateSetupConfig(config); err != nil {
 		return nil, err
