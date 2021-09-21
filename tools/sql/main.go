@@ -30,6 +30,7 @@ import (
 
 	"github.com/urfave/cli"
 
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/tools/common/schema"
 )
 
@@ -42,9 +43,9 @@ func RunTool(args []string) error {
 }
 
 // root handler for all cli commands
-func cliHandler(c *cli.Context, handler func(c *cli.Context) error) {
+func cliHandler(c *cli.Context, handler func(c *cli.Context, logger log.Logger) error, logger log.Logger) {
 	quiet := c.GlobalBool(schema.CLIOptQuiet)
-	err := handler(c)
+	err := handler(c, logger)
 	if err != nil && !quiet {
 		os.Exit(1)
 	}
@@ -57,6 +58,8 @@ func BuildCLIOptions() *cli.App {
 	app.Name = "temporal-sql-tool"
 	app.Usage = "Command line tool for temporal sql operations"
 	app.Version = "0.0.1"
+
+	logger := log.NewCLILogger()
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -161,7 +164,7 @@ func BuildCLIOptions() *cli.App {
 				},
 			},
 			Action: func(c *cli.Context) {
-				cliHandler(c, setupSchema)
+				cliHandler(c, setupSchema, logger)
 			},
 		},
 		{
@@ -179,7 +182,7 @@ func BuildCLIOptions() *cli.App {
 				},
 			},
 			Action: func(c *cli.Context) {
-				cliHandler(c, updateSchema)
+				cliHandler(c, updateSchema, logger)
 			},
 		},
 		{
@@ -193,7 +196,7 @@ func BuildCLIOptions() *cli.App {
 				},
 			},
 			Action: func(c *cli.Context) {
-				cliHandler(c, createDatabase)
+				cliHandler(c, createDatabase, logger)
 			},
 		},
 		{
@@ -222,7 +225,7 @@ func BuildCLIOptions() *cli.App {
 					}
 				}
 				if drop {
-					cliHandler(c, dropDatabase)
+					cliHandler(c, dropDatabase, logger)
 				}
 			},
 		},

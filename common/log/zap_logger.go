@@ -25,6 +25,7 @@
 package log
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -61,9 +62,7 @@ func NewTestLogger() *zapLogger {
 
 // NewCLILogger returns a logger at debug level and log into STDERR for logging from within CLI tools
 func NewCLILogger() *zapLogger {
-	return NewZapLogger(BuildZapLogger(Config{
-		Level: "debug",
-	}))
+	return NewZapLogger(buildCLIZapLogger())
 }
 
 // NewZapLogger returns a new zap based logger from zap.Logger
@@ -206,6 +205,37 @@ func buildZapLogger(cfg Config, disableCaller bool) *zap.Logger {
 		OutputPaths:      []string{outputPath},
 		ErrorOutputPaths: []string{outputPath},
 		DisableCaller:    disableCaller,
+	}
+	logger, _ := config.Build()
+	return logger
+}
+
+func buildCLIZapLogger() *zap.Logger {
+	encodeConfig := zapcore.EncoderConfig{
+		TimeKey:        "ts",
+		LevelKey:       "level",
+		NameKey:        "logger",
+		CallerKey:      zapcore.OmitKey, // we use our own caller
+		FunctionKey:    zapcore.OmitKey,
+		MessageKey:     "msg",
+		StacktraceKey:  "stacktrace",
+		LineEnding:     zapcore.DefaultLineEnding,
+		EncodeLevel:    zapcore.CapitalColorLevelEncoder,
+		EncodeTime:     zapcore.ISO8601TimeEncoder,
+		EncodeDuration: zapcore.SecondsDurationEncoder,
+		EncodeCaller:   nil,
+	}
+
+	config := zap.Config{
+		Level:             zap.NewAtomicLevelAt(zap.DebugLevel),
+		Development:       false,
+		DisableStacktrace: os.Getenv("TEMPORAL_CLI_SHOW_STACKS") == "",
+		Sampling:          nil,
+		Encoding:          "console",
+		EncoderConfig:     encodeConfig,
+		OutputPaths:       []string{"stderr"},
+		ErrorOutputPaths:  []string{"stderr"},
+		DisableCaller:     true,
 	}
 	logger, _ := config.Build()
 	return logger

@@ -29,7 +29,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/server/common/log"
 )
 
 type (
@@ -52,7 +51,6 @@ func (s *HandlerTestSuite) TestValidateSetupConfig() {
 	config := new(SetupConfig)
 	s.assertValidateSetupFails(config)
 
-	config.Logger = log.NewNoopLogger()
 	s.assertValidateSetupFails(config)
 
 	config.InitialVersion = "0.1"
@@ -91,7 +89,6 @@ func (s *HandlerTestSuite) TestValidateUpdateConfig() {
 	config := new(UpdateConfig)
 	s.assertValidateUpdateFails(config)
 
-	config.Logger = log.NewNoopLogger()
 	s.assertValidateUpdateFails(config)
 
 	config.SchemaDir = "/tmp"
