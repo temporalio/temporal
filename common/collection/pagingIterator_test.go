@@ -26,8 +26,6 @@ package collection
 
 import (
 	"errors"
-	"log"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -45,10 +43,6 @@ func TestPagingIteratorSuite(t *testing.T) {
 }
 
 func (s *pagingIteratorSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
-
 }
 
 func (s *pagingIteratorSuite) TearDownSuite() {
