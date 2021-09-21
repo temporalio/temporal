@@ -142,7 +142,7 @@ func (m *managerImpl) refreshCache(saCache cache, now time.Time) (cache, error) 
 	}
 
 	saCache = cache{
-		searchAttributes: BuildIndexNameTypeMap(clusterMetadata.GetIndexSearchAttributes()),
+		searchAttributes: buildIndexNameTypeMap(clusterMetadata.GetIndexSearchAttributes()),
 		expireOn:         now.Add(cacheRefreshInterval),
 		dbVersion:        clusterMetadata.Version,
 	}
