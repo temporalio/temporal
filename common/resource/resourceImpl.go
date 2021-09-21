@@ -345,9 +345,8 @@ func New(
 
 		// persistence clients
 
-		persistenceBean: persistenceBean,
+		persistenceBean:           persistenceBean,
 		persistenceFaultInjection: factory.FaultInjection(),
-
 
 		// loggers
 

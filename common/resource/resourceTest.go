@@ -440,4 +440,3 @@ func (h *Test) RefreshNamespaceCache() {
 func (h *Test) GetFaultInjection() *persistenceClient.FaultInjectionDataStoreFactory {
 	return nil
 }
-

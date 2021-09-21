@@ -78,9 +78,9 @@ type (
 		DBUsername      string
 		DBPassword      string
 		DBHost          string
-		DBPort          int    `yaml:"-"`
-		StoreType       string `yaml:"-"`
-		SchemaDir       string `yaml:"-"`
+		DBPort          int                    `yaml:"-"`
+		StoreType       string                 `yaml:"-"`
+		SchemaDir       string                 `yaml:"-"`
 		FaultInjection  *config.FaultInjection `yaml:"faultinjection"`
 	}
 

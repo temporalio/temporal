@@ -63,7 +63,7 @@ type (
 	NoopErrorGenerator struct{}
 )
 
-func (p *NoopErrorGenerator) Rate() float64 {return 0}
+func (p *NoopErrorGenerator) Rate() float64 { return 0 }
 
 func (p *NoopErrorGenerator) UpdateRate(rate float64) {}
 
