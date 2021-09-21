@@ -192,7 +192,7 @@ func (m *sqlExecutionStore) GetTimerIndexTasks(
 	pageToken := &timerTaskPageToken{TaskID: math.MinInt64, Timestamp: request.MinTimestamp}
 	if len(request.NextPageToken) > 0 {
 		if err := pageToken.deserialize(request.NextPageToken); err != nil {
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("error deserializing timerTaskPageToken: %v", err))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("error deserializing timerTaskPageToken: %v", err))
 		}
 	}
 
@@ -220,7 +220,7 @@ func (m *sqlExecutionStore) GetTimerIndexTasks(
 	if len(resp.Timers) > request.BatchSize {
 		goVisibilityTimestamp := resp.Timers[request.BatchSize].VisibilityTime
 		if goVisibilityTimestamp == nil {
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTimerTasks: time for page token is nil - TaskId '%v'", resp.Timers[request.BatchSize].TaskId))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTasks: time for page token is nil - TaskId '%v'", resp.Timers[request.BatchSize].TaskId))
 		}
 
 		pageToken = &timerTaskPageToken{
@@ -230,7 +230,7 @@ func (m *sqlExecutionStore) GetTimerIndexTasks(
 		resp.Timers = resp.Timers[:request.BatchSize]
 		nextToken, err := pageToken.serialize()
 		if err != nil {
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTimerTasks: error serializing page token: %v", err))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTasks: error serializing page token: %v", err))
 		}
 		resp.NextPageToken = nextToken
 	}

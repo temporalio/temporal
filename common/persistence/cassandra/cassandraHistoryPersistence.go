@@ -148,12 +148,12 @@ func (h *cassandraPersistence) ReadHistoryBranch(
 
 	treeID, err := primitives.ValidateUUID(request.TreeID)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ReadHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
 	}
 
 	branchID, err := primitives.ValidateUUID(request.BranchID)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ReadHistoryBranch - Gocql BranchId UUID cast failed. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch - Gocql BranchId UUID cast failed. Error: %v", err))
 	}
 
 	var queryString string
@@ -240,12 +240,12 @@ func (h *cassandraPersistence) ForkHistoryBranch(
 
 	cqlTreeID, err := primitives.ValidateUUID(forkB.TreeId)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("ForkHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
+		return serviceerror.NewInternal(fmt.Sprintf("ForkHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
 	}
 
 	cqlNewBranchID, err := primitives.ValidateUUID(request.NewBranchID)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("ForkHistoryBranch - Gocql NewBranchID UUID cast failed. Error: %v", err))
+		return serviceerror.NewInternal(fmt.Sprintf("ForkHistoryBranch - Gocql NewBranchID UUID cast failed. Error: %v", err))
 	}
 	query := h.session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.EncodingType.String())
 	err = query.Exec()
@@ -341,7 +341,7 @@ func (h *cassandraPersistence) GetHistoryTree(
 
 	treeID, err := primitives.ValidateUUID(request.TreeID)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ReadHistoryBranch. Gocql TreeId UUID cast failed. Error: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch. Gocql TreeId UUID cast failed. Error: %v", err))
 	}
 	query := h.session.Query(v2templateReadAllBranches, treeID)
 

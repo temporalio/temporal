@@ -76,7 +76,7 @@ func (m *sqlTaskManager) CreateTaskQueue(request *persistence.InternalCreateTask
 	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
-		return serviceerror.NewUnavailable(err.Error())
+		return serviceerror.NewInternal(err.Error())
 	}
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
 
@@ -99,7 +99,7 @@ func (m *sqlTaskManager) GetTaskQueue(request *persistence.InternalGetTaskQueueR
 	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(err.Error())
+		return nil, serviceerror.NewInternal(err.Error())
 	}
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
 	rows, err := m.Db.SelectFromTaskQueues(ctx, sqlplugin.TaskQueuesFilter{
@@ -137,7 +137,7 @@ func (m *sqlTaskManager) ExtendLease(
 	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
-		return serviceerror.NewUnavailable(err.Error())
+		return serviceerror.NewInternal(err.Error())
 	}
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
 
@@ -183,7 +183,7 @@ func (m *sqlTaskManager) UpdateTaskQueue(
 	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(err.Error())
+		return nil, serviceerror.NewInternal(err.Error())
 	}
 
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
@@ -226,7 +226,7 @@ func (m *sqlTaskManager) ListTaskQueue(request *persistence.ListTaskQueueRequest
 	pageToken := taskQueuePageToken{MinTaskQueueId: minTaskQueueId}
 	if request.PageToken != nil {
 		if err := gobDeserialize(request.PageToken, &pageToken); err != nil {
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("error deserializing page token: %v", err))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("error deserializing page token: %v", err))
 		}
 	}
 	var err error

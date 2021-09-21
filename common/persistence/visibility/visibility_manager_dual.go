@@ -174,7 +174,7 @@ func (v *visibilityManagerDual) writeManagers() ([]manager.VisibilityManager, er
 	case common.AdvancedVisibilityWritingModeDual:
 		return []manager.VisibilityManager{v.stdVisibilityManager, v.advVisibilityManager}, nil
 	default:
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisibilityWritingMode()))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisibilityWritingMode()))
 	}
 }
 

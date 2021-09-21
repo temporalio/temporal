@@ -89,7 +89,7 @@ func (pdb *db) SelectFromNamespace(
 	switch {
 	case filter.ID != nil || filter.Name != nil:
 		if filter.ID != nil && filter.Name != nil {
-			return nil, serviceerror.NewUnavailable("only ID or name filter can be specified for selection")
+			return nil, serviceerror.NewInternal("only ID or name filter can be specified for selection")
 		}
 		return pdb.selectFromNamespace(ctx, filter)
 	case filter.PageSize != nil && *filter.PageSize > 0:

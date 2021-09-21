@@ -98,7 +98,7 @@ func gobSerialize(x interface{}) ([]byte, error) {
 	e := gob.NewEncoder(&b)
 	err := e.Encode(x)
 	if err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("Error in serialization: %v", err))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Error in serialization: %v", err))
 	}
 	return b.Bytes(), nil
 }
@@ -107,9 +107,8 @@ func gobDeserialize(a []byte, x interface{}) error {
 	b := bytes.NewBuffer(a)
 	d := gob.NewDecoder(b)
 	err := d.Decode(x)
-
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("Error in deserialization: %v", err))
+		return serviceerror.NewInternal(fmt.Sprintf("Error in deserialization: %v", err))
 	}
 	return nil
 }

@@ -57,12 +57,12 @@ func applyWorkflowMutationTx(
 
 	namespaceIDBytes, err := primitives.ParseUUID(namespaceID)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("uuid parse failed. Error: %v", err))
+		return serviceerror.NewInternal(fmt.Sprintf("uuid parse failed. Error: %v", err))
 	}
 
 	runIDBytes, err := primitives.ParseUUID(runID)
 	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("uuid parse failed. Error: %v", err))
+		return serviceerror.NewInternal(fmt.Sprintf("uuid parse failed. Error: %v", err))
 	}
 
 	// TODO Remove me if UPDATE holds the lock to the end of a transaction
