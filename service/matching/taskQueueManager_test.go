@@ -164,9 +164,7 @@ func makeTestBlocAlloc(f func() (taskQueueState, error)) taskQueueManagerOpt {
 }
 
 func TestSyncMatchLeasingUnavailable(t *testing.T) {
-	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	cfg.ResilientSyncMatch = func(...dynamicconfig.FilterOption) bool { return true }
-	tqm := mustCreateTestTaskQueueManagerWithConfig(t, gomock.NewController(t), cfg,
+	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t),
 		makeTestBlocAlloc(func() (taskQueueState, error) {
 			// any error other than ConditionFailedError indicates an
 			// availability problem at a lower layer so the TQM should NOT
@@ -197,12 +195,11 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 }
 
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
-	cc := dynamicconfig.NewMutableEphemeralClient(
-		dynamicconfig.Set(dynamicconfig.ResilientSyncMatch, true))
+	cc := dynamicconfig.NewMutableEphemeralClient()
 	cfg := NewConfig(dynamicconfig.NewCollection(cc, log.NewTestLogger()))
 	cfg.RangeSize = 1 // TaskID block size
 	var leaseErr error = nil
-	tqm := mustCreateTestTaskQueueManagerWithConfig(t, gomock.NewController(t), cfg,
+	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t),
 		makeTestBlocAlloc(func() (taskQueueState, error) {
 			return taskQueueState{rangeID: 1}, leaseErr
 		}))
@@ -229,25 +226,6 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 		source:    enumsspb.TASK_SOURCE_HISTORY,
 	})
 	require.False(t, sync)
-	require.ErrorIs(t, err, errShutdown)
-}
-
-func TestAnyErrorCausesUnloadWhenResilientSyncMatchDisabled(t *testing.T) {
-	cc := dynamicconfig.NewMutableEphemeralClient(
-		dynamicconfig.Set(dynamicconfig.ResilientSyncMatch, true))
-	cfg := NewConfig(dynamicconfig.NewCollection(cc, log.NewTestLogger()))
-	tqm := mustCreateTestTaskQueueManagerWithConfig(t, gomock.NewController(t), cfg,
-		makeTestBlocAlloc(func() (taskQueueState, error) {
-			return taskQueueState{}, errors.New("any error will do")
-		}))
-	tqm.Start()
-	defer tqm.Stop()
-	_, err := tqm.AddTask(context.TODO(), addTaskParams{
-		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{},
-		source:    enumsspb.TASK_SOURCE_HISTORY,
-	})
-	require.Error(t, err)
 }
 
 func mustCreateTestTaskQueueManager(

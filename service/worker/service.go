@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/batcher"
@@ -227,7 +228,7 @@ func (s *Service) startAddSearchAttributes() {
 	addSearchAttributesService := addsearchattributes.New(
 		s.sdkClient,
 		s.esClient,
-		persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), s.GetClusterMetadataManager()),
+		searchattribute.NewManager(clock.NewRealTimeSource(), s.GetClusterMetadataManager()),
 		s.GetMetricsClient(),
 		s.GetLogger(),
 	)

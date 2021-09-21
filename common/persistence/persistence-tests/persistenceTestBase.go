@@ -206,7 +206,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *config.ClusterMetadata) {
 	s.fatalOnError("NewClusterMetadataManager", err)
 
 	s.ClusterMetadata = cluster.NewTestClusterMetadata(clusterMetadataConfig)
-	s.SearchAttributesManager = persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), s.ClusterMetadataManager)
+	s.SearchAttributesManager = searchattribute.NewManager(clock.NewRealTimeSource(), s.ClusterMetadataManager)
 
 	s.MetadataManager, err = factory.NewMetadataManager()
 	s.fatalOnError("NewMetadataManager", err)
