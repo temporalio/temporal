@@ -54,7 +54,6 @@ type (
 		ForwarderMaxOutstandingTasks dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		ForwarderMaxRatePerSecond    dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
 		ForwarderMaxChildrenPerNode  dynamicconfig.IntPropertyFnWithTaskQueueInfoFilters
-		ResilientSyncMatch           dynamicconfig.BoolPropertyFn
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithTaskQueueInfoFilters
@@ -100,10 +99,6 @@ type (
 		AdminNamespaceToPartitionDispatchRate func() float64
 		// partition qps = AdminNamespaceTaskQueueToPartitionDispatchRate(namespace, task_queue)
 		AdminNamespaceTaskQueueToPartitionDispatchRate func() float64
-
-		// ResilientSyncMatch enables or disables sync-matching while
-		// persistence is unavailable
-		ResilientSyncMatch func() bool
 	}
 )
 
@@ -131,7 +126,6 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 		ForwarderMaxOutstandingTasks:    dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxOutstandingTasks, 1),
 		ForwarderMaxRatePerSecond:       dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxRatePerSecond, 10),
 		ForwarderMaxChildrenPerNode:     dc.GetIntPropertyFilteredByTaskQueueInfo(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 20),
-		ResilientSyncMatch:              dc.GetBoolProperty(dynamicconfig.ResilientSyncMatch, false),
 		ShutdownDrainDuration:           dc.GetDurationProperty(dynamicconfig.MatchingShutdownDrainDuration, 0),
 
 		AdminNamespaceToPartitionDispatchRate:          dc.GetFloatPropertyFilteredByNamespace(dynamicconfig.AdminMatchingNamespaceToPartitionDispatchRate, 10000),
@@ -209,9 +203,6 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespaceCache namespac
 			ForwarderMaxChildrenPerNode: func() int {
 				return common.MaxInt(1, config.ForwarderMaxChildrenPerNode(namespace, taskQueueName, taskType))
 			},
-		},
-		ResilientSyncMatch: func() bool {
-			return config.ResilientSyncMatch()
 		},
 	}, nil
 }
