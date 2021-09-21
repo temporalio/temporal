@@ -33,9 +33,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"sort"
 	"strings"
+
+	"go.temporal.io/server/common/log/tag"
 )
 
 type (
@@ -90,8 +91,9 @@ func newUpdateSchemaTask(db DB, config *UpdateConfig) *UpdateTask {
 // Run executes the task
 func (task *UpdateTask) Run() error {
 	config := task.config
+	logger := config.Logger
 
-	log.Printf("UpdateSchemeTask started, config=%+v\n", config)
+	logger.Info("UpdateSchemeTask started", tag.NewAnyTag("config", config))
 
 	if config.IsDryRun {
 		if err := task.setupDryrunDatabase(); err != nil {
@@ -114,15 +116,15 @@ func (task *UpdateTask) Run() error {
 		return err
 	}
 
-	log.Printf("UpdateSchemeTask done\n")
+	logger.Info("UpdateSchemeTask done")
 
 	return nil
 }
 
 func (task *UpdateTask) executeUpdates(currVer string, updates []changeSet) error {
-
+	logger := task.config.Logger
 	if len(updates) == 0 {
-		log.Printf("found zero updates from current version %v", currVer)
+		logger.Debug(fmt.Sprintf("found zero updates from current version %v", currVer))
 		return nil
 	}
 
@@ -137,7 +139,7 @@ func (task *UpdateTask) executeUpdates(currVer string, updates []changeSet) erro
 			return err
 		}
 
-		log.Printf("Schema updated from %v to %v\n", currVer, cs.version)
+		logger.Debug(fmt.Sprintf("Schema updated from %v to %v", currVer, cs.version))
 		currVer = cs.version
 	}
 
@@ -145,15 +147,16 @@ func (task *UpdateTask) executeUpdates(currVer string, updates []changeSet) erro
 }
 
 func (task *UpdateTask) execStmts(ver string, stmts []string) error {
-	log.Printf("---- Executing updates for version %v ----\n", ver)
+	logger := task.config.Logger
+	logger.Debug(fmt.Sprintf("---- Executing updates for version %v ----", ver))
 	for _, stmt := range stmts {
-		log.Println(rmspaceRegex.ReplaceAllString(stmt, " "))
+		logger.Debug(rmspaceRegex.ReplaceAllString(stmt, " "))
 		e := task.db.Exec(stmt)
 		if e != nil {
 			return fmt.Errorf("error executing statement:%v", e)
 		}
 	}
-	log.Printf("---- Done ----\n")
+	logger.Debug("---- Done ----")
 	return nil
 }
 
