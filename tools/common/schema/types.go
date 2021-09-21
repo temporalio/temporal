@@ -27,8 +27,6 @@ package schema
 import (
 	"fmt"
 	"regexp"
-
-	"go.temporal.io/server/common/log"
 )
 
 type (
@@ -44,7 +42,6 @@ type (
 		TargetVersion string
 		SchemaDir     string
 		IsDryRun      bool
-		Logger        log.Logger
 	}
 	// SetupConfig holds the config
 	// params need by the SetupTask
@@ -53,7 +50,6 @@ type (
 		InitialVersion    string
 		Overwrite         bool // overwrite previous data
 		DisableVersioning bool // do not use schema versioning
-		Logger            log.Logger
 	}
 
 	// DB is the database interface that's required to be implemented

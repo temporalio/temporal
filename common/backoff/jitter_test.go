@@ -25,8 +25,6 @@
 package backoff
 
 import (
-	"log"
-	"os"
 	"testing"
 	"time"
 
@@ -45,9 +43,6 @@ func TestJitterSuite(t *testing.T) {
 }
 
 func (s *jitterSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 }
 
 func (s *jitterSuite) TestJitInt64() {

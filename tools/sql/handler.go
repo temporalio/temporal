@@ -26,7 +26,6 @@ package sql
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"net/url"
 
@@ -34,59 +33,69 @@ import (
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/tools/common/schema"
 )
 
 // setupSchema executes the setupSchemaTask
 // using the given command line arguments
 // as input
-func setupSchema(cli *cli.Context) error {
+func setupSchema(cli *cli.Context, logger log.Logger) error {
 	cfg, err := parseConnectConfig(cli)
 	if err != nil {
-		return handleErr(schema.NewConfigError(err.Error()))
+		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
+		return err
 	}
 	conn, err := NewConnection(cfg)
 	if err != nil {
-		return handleErr(err)
+		logger.Error("Unable to connect to SQL database.", tag.Error(err))
+		return err
 	}
 	defer conn.Close()
-	if err := schema.Setup(cli, conn); err != nil {
-		return handleErr(err)
+	if err := schema.Setup(cli, conn, logger); err != nil {
+		logger.Error("Unable to setup SQL schema.", tag.Error(err))
+		return err
 	}
 	return nil
 }
 
 // updateSchema executes the updateSchemaTask
 // using the given command lien args as input
-func updateSchema(cli *cli.Context) error {
+func updateSchema(cli *cli.Context, logger log.Logger) error {
 	cfg, err := parseConnectConfig(cli)
 	if err != nil {
-		return handleErr(schema.NewConfigError(err.Error()))
+		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
+		return err
 	}
 	conn, err := NewConnection(cfg)
 	if err != nil {
-		return handleErr(err)
+		logger.Error("Unable to connect to SQL database.", tag.Error(err))
 	}
 	defer conn.Close()
-	if err := schema.Update(cli, conn); err != nil {
-		return handleErr(err)
+	if err := schema.Update(cli, conn, logger); err != nil {
+		logger.Error("Unable to update SQL schema.", tag.Error(err))
+		return err
 	}
 	return nil
 }
 
 // createDatabase creates a sql database
-func createDatabase(cli *cli.Context) error {
+func createDatabase(cli *cli.Context, logger log.Logger) error {
 	cfg, err := parseConnectConfig(cli)
 	if err != nil {
-		return handleErr(schema.NewConfigError(err.Error()))
+		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
+		return err
 	}
 	database := cli.String(schema.CLIOptDatabase)
 	if database == "" {
-		return handleErr(schema.NewConfigError("missing " + flag(schema.CLIOptDatabase) + " argument "))
+		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError("missing "+flag(schema.CLIOptDatabase)+" argument ")))
+		return err
 	}
 	err = DoCreateDatabase(cfg, database)
 	if err != nil {
-		return handleErr(fmt.Errorf("error creating database:%v", err))
+		logger.Error("Unable to create SQL database.", tag.Error(err))
+		return err
 	}
 	return nil
 }
@@ -102,18 +111,20 @@ func DoCreateDatabase(cfg *config.SQL, name string) error {
 }
 
 // dropDatabase drops a sql database
-func dropDatabase(cli *cli.Context) error {
+func dropDatabase(cli *cli.Context, logger log.Logger) error {
 	cfg, err := parseConnectConfig(cli)
 	if err != nil {
-		return handleErr(schema.NewConfigError(err.Error()))
+		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
+		return err
 	}
 	database := cli.String(schema.CLIOptDatabase)
 	if database == "" {
-		return handleErr(schema.NewConfigError("missing " + flag(schema.CLIOptDatabase) + " argument "))
+		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError("missing "+flag(schema.CLIOptDatabase)+" argument ")))
+		return err
 	}
 	err = DoDropDatabase(cfg, database)
 	if err != nil {
-		return handleErr(fmt.Errorf("error creating database:%v", err))
+		logger.Error("Unable to drop SQL database.", tag.Error(err))
 	}
 	return nil
 }
@@ -197,13 +208,4 @@ func ValidateConnectConfig(cfg *config.SQL) error {
 
 func flag(opt string) string {
 	return "(-" + opt + ")"
-}
-
-func handleErr(err error) error {
-	log.Println(err)
-	return err
-}
-
-func logErr(err error) {
-	log.Println(err)
 }

@@ -26,14 +26,11 @@ package persistencetests
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"math/rand"
-	"os"
 	"reflect"
 	"sync"
 	"sync/atomic"
-	"testing"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -73,9 +70,6 @@ var testWorkflowChecksum = &persistencespb.Checksum{
 
 // SetupSuite implementation
 func (s *ExecutionManagerSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 }
 
 // TearDownSuite implementation
@@ -1028,7 +1022,6 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 
 	task1, err1 := s.CreateWorkflowExecution(namespaceID, workflowExecution, "queue1", "wType1", timestamp.DurationFromSeconds(20), timestamp.DurationFromSeconds(14), 3, 0, 2, nil)
 	s.Error(err1, "Expected workflow creation to fail.")
-	log.Printf("Unable to start workflow execution: %v", err1)
 	startedErr, ok := err1.(*p.CurrentWorkflowConditionFailedError)
 	s.True(ok, fmt.Sprintf("Expected CurrentWorkflowConditionFailedError, but actual is %v", err1))
 	s.Equal(workflowExecution.GetRunId(), startedErr.RunID, startedErr.Msg)
@@ -1077,7 +1070,6 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 
 	s.Error(err2, "Expected workflow creation to fail.")
 	s.Nil(response)
-	log.Printf("Unable to start workflow execution: %v", err2)
 	s.IsType(&p.ShardOwnershipLostError{}, err2)
 }
 
@@ -1262,8 +1254,6 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.True(len(info0.Memo) == 0)
 	s.assertChecksumsEqual(testWorkflowChecksum, state0.Checksum)
 
-	log.Printf("Workflow execution last updated: %v", info0.LastUpdateTime)
-
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
 	updatedInfo.LastFirstEventId = int64(3)
@@ -1339,14 +1329,11 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(memoVal, memoVal1)
 	s.assertChecksumsEqual(testWorkflowChecksum, state1.Checksum)
 
-	log.Printf("Workflow execution last updated: %v", info1.LastUpdateTime)
-
 	failedUpdateInfo := copyWorkflowExecutionInfo(updatedInfo)
 	failedUpdateState := copyWorkflowExecutionState(updatedState)
 	err4 := s.UpdateWorkflowExecution(failedUpdateInfo, failedUpdateState, state0.NextEventId, []int64{int64(5)}, nil, int64(3), nil, nil, nil, nil, nil)
 	s.Error(err4, "expected non nil error.")
 	s.IsType(&p.WorkflowConditionFailedError{}, err4)
-	log.Printf("Conditional update failed with error: %v", err4)
 
 	state2, err4 := s.GetWorkflowMutableState(namespaceID, workflowExecution)
 	s.NoError(err4)
@@ -1388,12 +1375,10 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.True(ok)
 	s.Equal(memoVal, memoVal2)
 	s.assertChecksumsEqual(testWorkflowChecksum, state2.Checksum)
-	log.Printf("Workflow execution last updated: %v", info2.LastUpdateTime)
 
 	err5 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, failedUpdateState, state0.NextEventId, []int64{int64(5)}, nil, int64(12345), int64(5), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	s.Error(err5, "expected non nil error.")
 	s.IsType(&p.ShardOwnershipLostError{}, err5)
-	log.Printf("Conditional update failed with error: %v", err5)
 
 	state3, err6 := s.GetWorkflowMutableState(namespaceID, workflowExecution)
 	s.NoError(err6)
@@ -1436,13 +1421,10 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(memoVal, memoVal3)
 	s.assertChecksumsEqual(testWorkflowChecksum, state3.Checksum)
 
-	log.Printf("Workflow execution last updated: %v", info3.LastUpdateTime)
-
 	// update with incorrect rangeID and condition(next_event_id)
 	err7 := s.UpdateWorkflowExecutionWithRangeID(failedUpdateInfo, failedUpdateState, state0.NextEventId, []int64{int64(5)}, nil, int64(12345), int64(3), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	s.Error(err7, "expected non nil error.")
 	s.IsType(&p.ShardOwnershipLostError{}, err7)
-	log.Printf("Conditional update failed with error: %v", err7)
 
 	state4, err8 := s.GetWorkflowMutableState(namespaceID, workflowExecution)
 	s.NoError(err8)
@@ -1483,7 +1465,6 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.Equal(memoVal, memoVal4)
 	s.assertChecksumsEqual(testWorkflowChecksum, state4.Checksum)
 
-	log.Printf("Workflow execution last updated: %v", info4.LastUpdateTime)
 }
 
 // TestDeleteWorkflow test
@@ -1516,8 +1497,6 @@ func (s *ExecutionManagerSuite) TestDeleteWorkflow() {
 	s.Equal(int64(2), info0.WorkflowTaskScheduleId)
 	s.Equal(common.EmptyEventID, info0.WorkflowTaskStartedId)
 	s.EqualValues(1, int64(info0.WorkflowTaskTimeout.Seconds()))
-
-	log.Printf("Workflow execution last updated: %v", info0.LastUpdateTime)
 
 	err4 := s.DeleteWorkflowExecution(info0, state0.ExecutionState)
 	s.NoError(err4)
@@ -2460,7 +2439,7 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateActivities() {
 	s.NoError(err1)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(1, len(state.ActivityInfos))
-	log.Printf("%+v", state.ActivityInfos)
+
 	ai, ok := state.ActivityInfos[1]
 	s.True(ok)
 	s.NotNil(ai)

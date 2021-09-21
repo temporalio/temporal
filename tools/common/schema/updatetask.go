@@ -36,6 +36,7 @@ import (
 	"sort"
 	"strings"
 
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
 
@@ -45,6 +46,7 @@ type (
 	UpdateTask struct {
 		db     DB
 		config *UpdateConfig
+		logger log.Logger
 	}
 
 	// manifest is a value type that represents
@@ -81,19 +83,19 @@ var (
 )
 
 // NewUpdateSchemaTask returns a new instance of UpdateTask
-func newUpdateSchemaTask(db DB, config *UpdateConfig) *UpdateTask {
+func newUpdateSchemaTask(db DB, config *UpdateConfig, logger log.Logger) *UpdateTask {
 	return &UpdateTask{
 		db:     db,
 		config: config,
+		logger: logger,
 	}
 }
 
 // Run executes the task
 func (task *UpdateTask) Run() error {
 	config := task.config
-	logger := config.Logger
 
-	logger.Info("UpdateSchemeTask started", tag.NewAnyTag("config", config))
+	task.logger.Info("UpdateSchemeTask started", tag.NewAnyTag("config", config))
 
 	if config.IsDryRun {
 		if err := task.setupDryrunDatabase(); err != nil {
@@ -116,15 +118,14 @@ func (task *UpdateTask) Run() error {
 		return err
 	}
 
-	logger.Info("UpdateSchemeTask done")
+	task.logger.Info("UpdateSchemeTask done")
 
 	return nil
 }
 
 func (task *UpdateTask) executeUpdates(currVer string, updates []changeSet) error {
-	logger := task.config.Logger
 	if len(updates) == 0 {
-		logger.Debug(fmt.Sprintf("found zero updates from current version %v", currVer))
+		task.logger.Debug(fmt.Sprintf("found zero updates from current version %v", currVer))
 		return nil
 	}
 
@@ -139,7 +140,7 @@ func (task *UpdateTask) executeUpdates(currVer string, updates []changeSet) erro
 			return err
 		}
 
-		logger.Debug(fmt.Sprintf("Schema updated from %v to %v", currVer, cs.version))
+		task.logger.Debug(fmt.Sprintf("Schema updated from %v to %v", currVer, cs.version))
 		currVer = cs.version
 	}
 
@@ -147,16 +148,15 @@ func (task *UpdateTask) executeUpdates(currVer string, updates []changeSet) erro
 }
 
 func (task *UpdateTask) execStmts(ver string, stmts []string) error {
-	logger := task.config.Logger
-	logger.Debug(fmt.Sprintf("---- Executing updates for version %v ----", ver))
+	task.logger.Debug(fmt.Sprintf("---- Executing updates for version %v ----", ver))
 	for _, stmt := range stmts {
-		logger.Debug(rmspaceRegex.ReplaceAllString(stmt, " "))
+		task.logger.Debug(rmspaceRegex.ReplaceAllString(stmt, " "))
 		e := task.db.Exec(stmt)
 		if e != nil {
 			return fmt.Errorf("error executing statement:%v", e)
 		}
 	}
-	logger.Debug("---- Done ----")
+	task.logger.Debug("---- Done ----")
 	return nil
 }
 
@@ -259,12 +259,10 @@ func validateCQLStmts(stmts []string) error {
 func readManifest(dirPath string) (*manifest, error) {
 
 	filePath := dirPath + "/" + manifestFileName
-	jsonStr, err := ioutil.ReadFile(filePath)
+	jsonBlob, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}
-
-	jsonBlob := []byte(jsonStr)
 
 	var manifest manifest
 	err = json.Unmarshal(jsonBlob, &manifest)
@@ -385,7 +383,7 @@ func (task *UpdateTask) setupDryrunDatabase() error {
 		Overwrite:      true,
 		InitialVersion: "0.0",
 	}
-	setupTask := newSetupSchemaTask(task.db, setupConfig)
+	setupTask := newSetupSchemaTask(task.db, setupConfig, task.logger)
 	return setupTask.Run()
 }
 

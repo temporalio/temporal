@@ -25,12 +25,11 @@
 package cassandra
 
 import (
-	"fmt"
-	"log"
-
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tools/common/schema"
 )
@@ -46,92 +45,106 @@ type SetupSchemaConfig struct {
 // setupSchema executes the setupSchemaTask
 // using the given command line arguments
 // as input
-func setupSchema(cli *cli.Context) error {
+func setupSchema(cli *cli.Context, logger log.Logger) error {
 	config, err := newCQLClientConfig(cli)
 	if err != nil {
-		return handleErr(schema.NewConfigError(err.Error()))
+		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
+		return err
 	}
-	client, err := newCQLClient(config)
+	client, err := newCQLClient(config, logger)
 	if err != nil {
-		return handleErr(err)
+		logger.Error("Unable to establish CQL session.", tag.Error(err))
+		return err
 	}
 	defer client.Close()
-	if err := schema.Setup(cli, client); err != nil {
-		return handleErr(err)
+	if err := schema.Setup(cli, client, logger); err != nil {
+		logger.Error("Unable to setup CQL schema.", tag.Error(err))
+		return err
 	}
 	return nil
 }
 
 // updateSchema executes the updateSchemaTask
 // using the given command lien args as input
-func updateSchema(cli *cli.Context) error {
+func updateSchema(cli *cli.Context, logger log.Logger) error {
 	config, err := newCQLClientConfig(cli)
 	if err != nil {
-		return handleErr(schema.NewConfigError(err.Error()))
+		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
+		return err
 	}
-	client, err := newCQLClient(config)
+	client, err := newCQLClient(config, logger)
 	if err != nil {
-		return handleErr(err)
+		logger.Error("Unable to establish CQL session.", tag.Error(err))
+		return err
 	}
 	defer client.Close()
-	if err := schema.Update(cli, client); err != nil {
-		return handleErr(err)
+	if err := schema.Update(cli, client, logger); err != nil {
+		logger.Error("Unable to update CQL schema.", tag.Error(err))
+		return err
 	}
 	return nil
 }
 
-func createKeyspace(cli *cli.Context) error {
+func createKeyspace(cli *cli.Context, logger log.Logger) error {
 	config, err := newCQLClientConfig(cli)
 	if err != nil {
-		return handleErr(schema.NewConfigError(err.Error()))
+		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
+		return err
 	}
 	keyspace := cli.String(schema.CLIOptKeyspace)
 	if keyspace == "" {
-		return handleErr(schema.NewConfigError("missing " + flag(schema.CLIOptKeyspace) + " argument "))
+		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError("missing "+flag(schema.CLIOptKeyspace)+" argument ")))
+		return err
 	}
-	err = doCreateKeyspace(*config, keyspace)
+	err = doCreateKeyspace(config, keyspace, logger)
 	if err != nil {
-		return handleErr(fmt.Errorf("error creating keyspace:%+v", err))
+		logger.Error("Unable to create keyspace.", tag.Error(err))
+		return err
 	}
 	return nil
 }
 
-func dropKeyspace(cli *cli.Context) error {
+func dropKeyspace(cli *cli.Context, logger log.Logger) error {
 	config, err := newCQLClientConfig(cli)
 	if err != nil {
-		return handleErr(schema.NewConfigError(err.Error()))
+		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
+		return err
 	}
 	keyspace := cli.String(schema.CLIOptKeyspace)
 	if keyspace == "" {
-		return handleErr(schema.NewConfigError("missing " + flag(schema.CLIOptKeyspace) + " argument "))
+		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError("missing "+flag(schema.CLIOptKeyspace)+" argument ")))
+		return err
 	}
-	err = doDropKeyspace(*config, keyspace)
+	err = doDropKeyspace(config, keyspace, logger)
 	if err != nil {
-		return handleErr(fmt.Errorf("error dropping keyspace:%+v", err))
+		logger.Error("Unable to drop keyspace.", tag.Error(err))
+		return err
 	}
 	return nil
 }
 
-func validateHealth(cli *cli.Context) error {
+func validateHealth(cli *cli.Context, logger log.Logger) error {
 	config, err := newCQLClientConfig(cli)
 	if err != nil {
-		return handleErr(schema.NewConfigError(err.Error()))
+		logger.Error("Unable to read config.", tag.Error(schema.NewConfigError(err.Error())))
+		return err
 	}
 
 	config.Keyspace = systemKeyspace
 
-	client, err := newCQLClient(config)
+	client, err := newCQLClient(config, logger)
 	if err != nil {
-		return handleErr(fmt.Errorf("unable to establish CQL session:%+v", err))
+		logger.Error("Unable to establish CQL session.", tag.Error(err))
+		return err
 	}
 
 	defer client.Close()
 	return nil
 }
 
-func doCreateKeyspace(cfg CQLClientConfig, name string) error {
+func doCreateKeyspace(cfg *CQLClientConfig, name string, logger log.Logger) error {
 	cfg.Keyspace = systemKeyspace
-	client, err := newCQLClient(&cfg)
+	client, err := newCQLClient(cfg, logger)
 	if err != nil {
 		return err
 	}
@@ -139,9 +152,9 @@ func doCreateKeyspace(cfg CQLClientConfig, name string) error {
 	return client.createKeyspace(name)
 }
 
-func doDropKeyspace(cfg CQLClientConfig, name string) error {
+func doDropKeyspace(cfg *CQLClientConfig, name string, logger log.Logger) error {
 	cfg.Keyspace = systemKeyspace
-	client, err := newCQLClient(&cfg)
+	client, err := newCQLClient(cfg, logger)
 	if err != nil {
 		return err
 	}
@@ -154,15 +167,16 @@ func doDropKeyspace(cfg CQLClientConfig, name string) error {
 }
 
 func newCQLClientConfig(cli *cli.Context) (*CQLClientConfig, error) {
-	config := new(CQLClientConfig)
-	config.Hosts = cli.GlobalString(schema.CLIOptEndpoint)
-	config.Port = cli.GlobalInt(schema.CLIOptPort)
-	config.User = cli.GlobalString(schema.CLIOptUser)
-	config.Password = cli.GlobalString(schema.CLIOptPassword)
-	config.Timeout = cli.GlobalInt(schema.CLIOptTimeout)
-	config.Keyspace = cli.GlobalString(schema.CLIOptKeyspace)
-	config.numReplicas = cli.Int(schema.CLIOptReplicationFactor)
-	config.Datacenter = cli.String(schema.CLIOptDatacenter)
+	config := &CQLClientConfig{
+		Hosts:       cli.GlobalString(schema.CLIOptEndpoint),
+		Port:        cli.GlobalInt(schema.CLIOptPort),
+		User:        cli.GlobalString(schema.CLIOptUser),
+		Password:    cli.GlobalString(schema.CLIOptPassword),
+		Timeout:     cli.GlobalInt(schema.CLIOptTimeout),
+		Keyspace:    cli.GlobalString(schema.CLIOptKeyspace),
+		numReplicas: cli.Int(schema.CLIOptReplicationFactor),
+		Datacenter:  cli.String(schema.CLIOptDatacenter),
+	}
 
 	if cli.GlobalBool(schema.CLIFlagEnableTLS) {
 		config.TLS = &auth.TLS{
@@ -200,13 +214,4 @@ func validateCQLClientConfig(config *CQLClientConfig) error {
 
 func flag(opt string) string {
 	return "(-" + opt + ")"
-}
-
-func handleErr(err error) error {
-	log.Println(err)
-	return err
-}
-
-func logErr(err error) {
-	log.Println(err)
 }

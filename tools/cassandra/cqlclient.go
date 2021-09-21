@@ -28,12 +28,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
-	tlog "go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/tools/common/schema"
@@ -46,6 +46,7 @@ type (
 		keyspace   string
 		timeout    time.Duration
 		session    gocql.Session
+		logger     log.Logger
 	}
 	// CQLClientConfig contains the configuration for cql client
 	CQLClientConfig struct {
@@ -101,19 +102,19 @@ const (
 var _ schema.DB = (*cqlClient)(nil)
 
 // newCQLClient returns a new instance of CQLClient
-func newCQLClient(cfg *CQLClientConfig) (*cqlClient, error) {
+func newCQLClient(cfg *CQLClientConfig, logger log.Logger) (*cqlClient, error) {
 	var err error
 
 	cassandraConfig := cfg.toCassandraConfig()
 	cassandraConfig.ConnectTimeout = time.Duration(cfg.Timeout) * time.Second
 
-	log.Println("validating connection to cassandra cluster")
-	session, err := gocql.NewSession(*cassandraConfig, resolver.NewNoopResolver(), tlog.NewNoopLogger())
+	logger.Info("Validating connection to cassandra cluster.")
+	session, err := gocql.NewSession(*cassandraConfig, resolver.NewNoopResolver(), logger)
 	if err != nil {
-		log.Printf("connection validation failed: %+v\r\n", err)
+		logger.Error("Connection validation failed.", tag.Error(err))
 		return nil, err
 	}
-	log.Println("connection validation succeeded")
+	logger.Info("Connection validation succeeded.")
 
 	return &cqlClient{
 		keyspace:   cfg.Keyspace,
@@ -121,6 +122,7 @@ func newCQLClient(cfg *CQLClientConfig) (*cqlClient, error) {
 		datacenter: cfg.Datacenter,
 		timeout:    time.Duration(cfg.Timeout) * time.Second,
 		session:    session,
+		logger:     logger,
 	}, nil
 }
 
@@ -149,10 +151,10 @@ func (client *cqlClient) DropDatabase(name string) error {
 // createKeyspace creates a cassandra Keyspace if it doesn't exist
 func (client *cqlClient) createKeyspace(name string) error {
 	if client.datacenter != "" {
-		log.Printf("Creating Keyspace %v using NetworkTopologyStrategy in Datacenter %v with RF=%v\n", name, client.datacenter, client.nReplicas)
+		client.logger.Info(fmt.Sprintf("Creating Keyspace %v using NetworkTopologyStrategy in Datacenter %v with RF=%v.", name, client.datacenter, client.nReplicas))
 		return client.Exec(fmt.Sprintf(createKeyspaceNetworkTopologyCQL, name, client.datacenter, client.nReplicas))
 	}
-	log.Printf("Creating Keyspace %v using SimpleStrategy with RF=%v\n", name, client.nReplicas)
+	client.logger.Info(fmt.Sprintf("Creating Keyspace %v using SimpleStrategy with RF=%v.", name, client.nReplicas))
 	return client.Exec(fmt.Sprintf(createKeyspaceCQL, name, client.nReplicas))
 }
 
@@ -268,11 +270,11 @@ func (client *cqlClient) dropAllTablesTypes() error {
 	if err != nil {
 		return err
 	}
-	log.Printf("Dropping following tables: %v\n", tables)
+	client.logger.Info(fmt.Sprintf("Dropping following tables: %v.", tables))
 	for _, table := range tables {
 		err1 := client.dropTable(table)
 		if err1 != nil {
-			log.Printf("Error dropping table %v, err=%v\n", table, err1)
+			client.logger.Error(fmt.Sprintf("Error dropping table %v.", table), tag.Error(err1))
 		}
 	}
 
@@ -280,14 +282,14 @@ func (client *cqlClient) dropAllTablesTypes() error {
 	if err != nil {
 		return err
 	}
-	log.Printf("Dropping following types: %v\n", types)
+	client.logger.Info(fmt.Sprintf("Dropping following types: %v.", types))
 	numOfTypes := len(types)
 	for i := 0; i < numOfTypes && len(types) > 0; i++ {
 		var erroredTypes []string
 		for _, t := range types {
 			err = client.dropType(t)
 			if err != nil {
-				log.Printf("Error dropping type %v, err=%v\n", t, err)
+				client.logger.Error(fmt.Sprintf("Error dropping type %v.", t), tag.Error(err))
 				erroredTypes = append(erroredTypes, t)
 			}
 		}
