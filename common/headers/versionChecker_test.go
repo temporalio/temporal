@@ -50,11 +50,13 @@ func (s *VersionCheckerSuite) SetupTest() {
 
 func (s *VersionCheckerSuite) TestClientSupported() {
 	serverVersion := "22.8.78"
+	myFeature := "my-new-feature-flag"
 
 	testCases := []struct {
 		callContext              context.Context
 		enableClientVersionCheck bool
 		expectErr                bool
+		supportsMyFeature        bool
 	}{
 		{
 			enableClientVersionCheck: false,
@@ -89,6 +91,7 @@ func (s *VersionCheckerSuite) TestClientSupported() {
 			callContext:              s.constructCallContext("3.0.1", ClientNameGoSDK, ""),
 			enableClientVersionCheck: true,
 			expectErr:                true,
+			supportsMyFeature:        true,
 		},
 		{
 			callContext:              s.constructCallContext("2.4.5", ClientNameGoSDK, ""),
@@ -117,10 +120,17 @@ func (s *VersionCheckerSuite) TestClientSupported() {
 		},
 	}
 
+	supportedClients := map[string]string{
+		ClientNameGoSDK: "<3.0.0",
+	}
+	supportedClientFeatures := map[string]map[string]string{
+		myFeature: {
+			ClientNameGoSDK: ">=2.5.0",
+		},
+	}
+	versionChecker := NewVersionChecker(supportedClients, supportedClientFeatures, serverVersion)
+
 	for caseIndex, tc := range testCases {
-		versionChecker := NewVersionChecker(map[string]string{
-			ClientNameGoSDK: "<3.0.0",
-		}, serverVersion)
 		err := versionChecker.ClientSupported(tc.callContext, tc.enableClientVersionCheck)
 		if tc.expectErr {
 			s.Errorf(err, "Case #%d", caseIndex)
@@ -131,6 +141,14 @@ func (s *VersionCheckerSuite) TestClientSupported() {
 			}
 		} else {
 			s.NoErrorf(err, "Case #%d", caseIndex)
+		}
+
+		if tc.callContext != nil {
+			supportsUnknownFeature := versionChecker.ClientSupportsFeature(tc.callContext, "unknown-feature")
+			s.False(supportsUnknownFeature, "unknown feature should always return false")
+
+			supportsMyFeature := versionChecker.ClientSupportsFeature(tc.callContext, myFeature)
+			s.Equal(tc.supportsMyFeature, supportsMyFeature)
 		}
 	}
 }

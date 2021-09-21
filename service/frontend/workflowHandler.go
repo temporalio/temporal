@@ -710,7 +710,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
 	// Revisit this once we have an SDK deprecation policy.
 	if isCloseEventOnly &&
-		!wh.versionChecker.ClientSupportsNewRetryEvents(ctx) &&
+		!wh.versionChecker.ClientSupportsFeature(ctx, headers.FeatureFollowsNextRunID) &&
 		len(history.Events) > 0 {
 		lastEvent := history.Events[len(history.Events)-1]
 		fakeEvent, err := wh.makeFakeContinuedAsNewEvent(

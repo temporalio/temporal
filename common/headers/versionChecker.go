@@ -43,6 +43,10 @@ const (
 
 	// SupportedServerVersions is used by CLI and inter role communication.
 	SupportedServerVersions = ">=1.0.0 <2.0.0"
+
+	// FeatureFollowsNextRunID means that the client supports following next execution run id for
+	// completed/failed/timedout completion events when getting the final result of a workflow.
+	FeatureFollowsNextRunID = "follows-next-run-id"
 )
 
 var (
@@ -52,12 +56,12 @@ var (
 		ClientNameCLI:     "<2.0.0",
 		ClientNameServer:  "<2.0.0",
 	}
-
-	// Clients that support following next execution run id for other workflow completion events.
-	NewRetryClients = map[string]string{
-		ClientNameGoSDK:   ">=1.10.0",
-		ClientNameJavaSDK: ">=1.4.0",
-		ClientNameServer:  ">=1.13.0",
+	SupportedClientFeatures = map[string]map[string]string{
+		FeatureFollowsNextRunID: {
+			ClientNameGoSDK:   ">=1.10.0",
+			ClientNameJavaSDK: ">=1.4.0",
+			ClientNameServer:  ">=1.13.0",
+		},
 	}
 )
 
@@ -65,29 +69,29 @@ type (
 	// VersionChecker is used to check client/server compatibility and client's capabilities
 	VersionChecker interface {
 		ClientSupported(ctx context.Context, enableClientVersionCheck bool) error
-		ClientSupportsNewRetryEvents(ctx context.Context) bool
+		ClientSupportsFeature(ctx context.Context, feature string) bool
 	}
 
 	versionChecker struct {
-		supportedClients      map[string]string
-		supportedClientsRange map[string]semver.Range
-		newRetryClientsRange  map[string]semver.Range
-		serverVersion         semver.Version
+		supportedClients             map[string]string
+		supportedClientsRange        map[string]semver.Range
+		supportedClientFeaturesRange map[string]map[string]semver.Range
+		serverVersion                semver.Version
 	}
 )
 
 // NewDefaultVersionChecker constructs a new VersionChecker using default versions from const.
 func NewDefaultVersionChecker() *versionChecker {
-	return NewVersionChecker(SupportedClients, NewRetryClients, ServerVersion)
+	return NewVersionChecker(SupportedClients, SupportedClientFeatures, ServerVersion)
 }
 
 // NewVersionChecker constructs a new VersionChecker
-func NewVersionChecker(supportedClients, newRetryClients map[string]string, serverVersion string) *versionChecker {
+func NewVersionChecker(supportedClients map[string]string, supportedClientFeatures map[string]map[string]string, serverVersion string) *versionChecker {
 	return &versionChecker{
-		serverVersion:         semver.MustParse(serverVersion),
-		supportedClients:      supportedClients,
-		supportedClientsRange: mustParseRanges(supportedClients),
-		newRetryClientsRange:  mustParseRanges(newRetryClients),
+		serverVersion:                semver.MustParse(serverVersion),
+		supportedClients:             supportedClients,
+		supportedClientsRange:        mustParseRanges(supportedClients),
+		supportedClientFeaturesRange: mustParseRangesMap(supportedClientFeatures),
 	}
 }
 
@@ -129,20 +133,26 @@ func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersi
 	return nil
 }
 
-// ClientSupportsNewRetryEvents returns true if the client SDK version supports
-// following next execution run id for completed/failed/timedout workflow completion events.
-func (vc *versionChecker) ClientSupportsNewRetryEvents(ctx context.Context) bool {
+// ClientSupportsFeature returns true if the client has supplied version headers, and the version is
+// known to support the given feature (which should be one of the Feature... constants above). If
+// the feature is unknown, it will return false.
+func (vc *versionChecker) ClientSupportsFeature(ctx context.Context, feature string) bool {
 	headers := GetValues(ctx, ClientNameHeaderName, ClientVersionHeaderName)
 	clientName := headers[0]
 	clientVersion := headers[1]
 
-	supportedRange, ok := vc.newRetryClientsRange[clientName]
+	ranges, ok := vc.supportedClientFeaturesRange[feature]
+	if !ok {
+		return false
+	}
+
+	supportedRange, ok := ranges[clientName]
 	if !ok {
 		return false
 	}
 	clientVersionParsed, err := semver.Parse(clientVersion)
 	if err != nil {
-		// If we got here, we must have parsed the version in ClientSupported.
+		// If we got here, we should have parsed the version in ClientSupported.
 		// If we can't parse it now just assume it's old.
 		return false
 	}
@@ -153,6 +163,14 @@ func mustParseRanges(ranges map[string]string) map[string]semver.Range {
 	out := make(map[string]semver.Range, len(ranges))
 	for c, r := range ranges {
 		out[c] = semver.MustParseRange(r)
+	}
+	return out
+}
+
+func mustParseRangesMap(rangesMap map[string]map[string]string) map[string]map[string]semver.Range {
+	out := make(map[string]map[string]semver.Range, len(rangesMap))
+	for f, r := range rangesMap {
+		out[f] = mustParseRanges(r)
 	}
 	return out
 }
