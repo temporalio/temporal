@@ -25,6 +25,7 @@
 package log
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -226,14 +227,15 @@ func buildCLIZapLogger() *zap.Logger {
 	}
 
 	config := zap.Config{
-		Level:            zap.NewAtomicLevelAt(zap.DebugLevel),
-		Development:      false,
-		Sampling:         nil,
-		Encoding:         "console",
-		EncoderConfig:    encodeConfig,
-		OutputPaths:      []string{"stderr"},
-		ErrorOutputPaths: []string{"stderr"},
-		DisableCaller:    true,
+		Level:             zap.NewAtomicLevelAt(zap.DebugLevel),
+		Development:       false,
+		DisableStacktrace: os.Getenv("TEMPORAL_CLI_SHOW_STACKS") == "",
+		Sampling:          nil,
+		Encoding:          "console",
+		EncoderConfig:     encodeConfig,
+		OutputPaths:       []string{"stderr"},
+		ErrorOutputPaths:  []string{"stderr"},
+		DisableCaller:     true,
 	}
 	logger, _ := config.Build()
 	return logger
