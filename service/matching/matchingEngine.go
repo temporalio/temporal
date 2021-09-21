@@ -541,7 +541,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		case enumspb.QUERY_RESULT_TYPE_FAILED:
 			return nil, serviceerror.NewQueryFailed(workerResponse.GetCompletedRequest().GetErrorMessage())
 		default:
-			return nil, serviceerror.NewUnavailable("unknown query completed type")
+			return nil, serviceerror.NewInternal("unknown query completed type")
 		}
 	case <-hCtx.Done():
 		return nil, hCtx.Err()

@@ -309,14 +309,14 @@ func (h *historyArchiver) Get(
 			case *serviceerror.InvalidArgument, *serviceerror.Unavailable, *serviceerror.NotFound:
 				return nil, err
 			default:
-				return nil, serviceerror.NewUnavailable(err.Error())
+				return nil, serviceerror.NewInternal(err.Error())
 			}
 		}
 
 		historyBlob := archiverspb.HistoryBlob{}
 		err = encoder.Decode(encodedRecord, &historyBlob)
 		if err != nil {
-			return nil, serviceerror.NewUnavailable(err.Error())
+			return nil, serviceerror.NewInternal(err.Error())
 		}
 
 		for _, batch := range historyBlob.Body {
@@ -333,7 +333,7 @@ func (h *historyArchiver) Get(
 	if isTruncated {
 		nextToken, err := serializeToken(token)
 		if err != nil {
-			return nil, serviceerror.NewUnavailable(err.Error())
+			return nil, serviceerror.NewInternal(err.Error())
 		}
 		response.NextPageToken = nextToken
 	}

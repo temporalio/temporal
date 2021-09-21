@@ -334,7 +334,7 @@ $(SUMMARY_COVER_PROFILE): $(COVER_ROOT)
 	@echo "mode: atomic" > $(SUMMARY_COVER_PROFILE)
 	$(foreach COVER_PROFILE,$(wildcard $(COVER_ROOT)/*_coverprofile.out),\
 		@printf "Add %s...\n" $(COVER_PROFILE); \
-		grep -q -v -e "[Mm]ocks\?.go" -e "^mode: \w\+" $(COVER_PROFILE) >> $(SUMMARY_COVER_PROFILE) || true \
+		grep -v -e "[Mm]ocks\?.go" -e "^mode: \w\+" $(COVER_PROFILE) >> $(SUMMARY_COVER_PROFILE) || true \
 	$(NEWLINE))
 
 coverage-report: $(SUMMARY_COVER_PROFILE)
