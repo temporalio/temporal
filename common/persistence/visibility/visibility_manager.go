@@ -484,7 +484,7 @@ func (p *visibilityManager) deserializeMemo(data *commonpb.DataBlob) (*commonpb.
 	var ()
 	switch data.EncodingType {
 	case enumspb.ENCODING_TYPE_PROTO3:
-		var memo *commonpb.Memo
+		memo := &commonpb.Memo{}
 		err := proto.Unmarshal(data.Data, memo)
 		if err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to deserialize memo from data blob: %v", err))
