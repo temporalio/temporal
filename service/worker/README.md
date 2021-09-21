@@ -13,30 +13,30 @@ can be applied to local Temporal cluster.
 ### Quickstart for localhost development
 
 1. Start Temporal development server for active zone:
-```
-./temporal-server --zone active start
-```
+    ```
+    ./temporal-server --zone active start
+    ```
 
-2. Start Temporal development server for standby(passive) zone:
-```
-./temporal-server --zone standby start
-```
+1. Start Temporal development server for standby(passive) zone:
+    ```
+    ./temporal-server --zone standby start
+    ```
 
-3. Create global namespaces
-```
-tctl --ns sample namespace register --gd true --ac active --cl active standby
-```
+1. Create global namespaces
+    ```
+    tctl --ns sample namespace register --gd true --ac active --cl active standby
+    ```
 
-4. Failover between zones:
+1. Failover between zones:
 
-Failover to standby:
-```
-tctl --ns sample namespace update --ac standby
-```
-Failback to active:
-```
-tctl --ns sample namespace update --ac active
-```
+    Failover to standby:
+    ```
+    tctl --ns sample namespace update --ac standby
+    ```
+    Failback to active:
+    ```
+    tctl --ns sample namespace update --ac active
+    ```
 
 ## Archiver
 
