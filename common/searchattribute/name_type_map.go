@@ -28,6 +28,7 @@ import (
 	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
@@ -46,7 +47,7 @@ const (
 	customCategory
 )
 
-func BuildIndexNameTypeMap(indexSearchAttributes map[string]*persistencespb.IndexSearchAttributes) map[string]NameTypeMap {
+func buildIndexNameTypeMap(indexSearchAttributes map[string]*persistencespb.IndexSearchAttributes) map[string]NameTypeMap {
 	indexNameTypeMap := make(map[string]NameTypeMap, len(indexSearchAttributes))
 	for indexName, customSearchAttributes := range indexSearchAttributes {
 		indexNameTypeMap[indexName] = NameTypeMap{
