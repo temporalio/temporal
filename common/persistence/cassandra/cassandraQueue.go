@@ -203,14 +203,15 @@ func (q *cassandraQueue) ReadMessagesFromDLQ(
 		message = make(map[string]interface{})
 	}
 
-	nextPageToken := iter.PageState()
-	newPageToken := make([]byte, len(nextPageToken))
-	copy(newPageToken, nextPageToken)
+	var nextPageToken []byte
+	if len(iter.PageState()) > 0 {
+		nextPageToken = iter.PageState()
+	}
 	if err := iter.Close(); err != nil {
 		return nil, nil, serviceerror.NewUnavailable(fmt.Sprintf("ReadMessagesFromDLQ operation failed. Error: %v", err))
 	}
 
-	return result, newPageToken, nil
+	return result, nextPageToken, nil
 }
 
 func (q *cassandraQueue) DeleteMessagesBefore(

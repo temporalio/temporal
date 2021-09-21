@@ -399,31 +399,6 @@ type (
 		Checksum *commonpb.DataBlob
 	}
 
-	InternalWorkflowStatus struct {
-		TotalSize int
-
-		// Breakdown of size into more granular stats
-		ExecutionInfoSize  int
-		ExecutionStateSize int
-
-		ActivityInfoSize      int
-		TimerInfoSize         int
-		ChildInfoSize         int
-		RequestCancelInfoSize int
-		SignalInfoSize        int
-		SignalRequestIDSize   int
-		BufferedEventsSize    int
-
-		// Item count for various information captured within mutable state
-		ActivityInfoCount      int
-		TimerInfoCount         int
-		ChildInfoCount         int
-		RequestCancelInfoCount int
-		SignalInfoCount        int
-		SignalRequestIDCount   int
-		BufferedEventsCount    int
-	}
-
 	// InternalWorkflowSnapshot is used as generic workflow execution state snapshot for Persistence Interface
 	InternalWorkflowSnapshot struct {
 		// TODO: properly set this on call sites

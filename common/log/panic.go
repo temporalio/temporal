@@ -50,6 +50,6 @@ func CapturePanic(logger Logger, retError *error) {
 
 		logger.Error("Panic is captured", tag.SysStackTrace(st), tag.Error(err))
 
-		*retError = serviceerror.NewUnavailable(err.Error())
+		*retError = serviceerror.NewInternal(err.Error())
 	}
 }

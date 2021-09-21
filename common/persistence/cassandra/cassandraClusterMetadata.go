@@ -199,19 +199,17 @@ func (m *cassandraClusterMetadata) GetClusterMembers(request *p.GetClusterMember
 		clusterMembers = append(clusterMembers, &member)
 	}
 
-	pagingToken := iter.PageState()
-	var pagingTokenCopy []byte
+	var pagingToken []byte
 	// contract of this API expect nil as pagination token instead of empty byte array
-	if len(pagingToken) > 0 {
-		pagingTokenCopy = make([]byte, len(pagingToken))
-		copy(pagingTokenCopy, pagingToken)
+	if len(iter.PageState()) > 0 {
+		pagingToken = iter.PageState()
 	}
 
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError("GetClusterMembers", err)
 	}
 
-	return &p.GetClusterMembersResponse{ActiveMembers: clusterMembers, NextPageToken: pagingTokenCopy}, nil
+	return &p.GetClusterMembersResponse{ActiveMembers: clusterMembers, NextPageToken: pagingToken}, nil
 }
 
 func (m *cassandraClusterMetadata) UpsertClusterMembership(request *p.UpsertClusterMembershipRequest) error {

@@ -135,7 +135,7 @@ func (d *dlqMessageHandlerImpl) Merge(
 	for _, message := range messages {
 		namespaceTask := message.GetNamespaceTaskAttributes()
 		if namespaceTask == nil {
-			return nil, serviceerror.NewUnavailable("Encounter non namespace replication task in namespace replication queue.")
+			return nil, serviceerror.NewInternal("Encounter non namespace replication task in namespace replication queue.")
 		}
 
 		if err := d.replicationHandler.Execute(

@@ -51,11 +51,11 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -138,6 +138,7 @@ func (s *elasticsearchIntegrationSuite) TestListOpenWorkflow() {
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
 			openExecution = resp.GetExecutions()[0]
+			s.Nil(resp.NextPageToken)
 			break
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond)
@@ -469,7 +470,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_MaxWindowSize() {
 	resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
 	s.NoError(err)
 	s.True(len(resp.GetExecutions()) == 0)
-	s.True(len(resp.GetNextPageToken()) == 0)
+	s.Nil(resp.GetNextPageToken())
 }
 
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrderBy() {
@@ -715,6 +716,7 @@ func (s *elasticsearchIntegrationSuite) testHelperForReadOnce(expectedRunID stri
 			s.NoError(err)
 			if len(scanResponse.GetExecutions()) == 1 {
 				openExecution = scanResponse.GetExecutions()[0]
+				s.Nil(scanResponse.NextPageToken)
 				break
 			}
 		} else {
@@ -722,6 +724,7 @@ func (s *elasticsearchIntegrationSuite) testHelperForReadOnce(expectedRunID stri
 			s.NoError(err)
 			if len(listResponse.GetExecutions()) == 1 {
 				openExecution = listResponse.GetExecutions()[0]
+				s.Nil(listResponse.NextPageToken)
 				break
 			}
 		}
@@ -1025,6 +1028,7 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 		resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
+			s.Nil(resp.NextPageToken)
 			execution := resp.GetExecutions()[0]
 			retrievedSearchAttr := execution.SearchAttributes
 			if retrievedSearchAttr != nil && len(retrievedSearchAttr.GetIndexedFields()) == 4 {

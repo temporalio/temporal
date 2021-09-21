@@ -29,7 +29,8 @@ import (
 	"io/ioutil"
 
 	"github.com/stretchr/testify/suite"
-	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
+
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 )
 
 // CreateESClient create ElasticSearch client for test

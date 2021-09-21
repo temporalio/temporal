@@ -38,16 +38,17 @@ import (
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
-	"go.temporal.io/server/common/config"
+	"go.uber.org/atomic"
+
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility"
-	"go.temporal.io/server/common/persistence/visibility/elasticsearch"
-	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/searchattribute"
-	"go.uber.org/atomic"
 )
 
 const (
@@ -118,19 +119,24 @@ func AdminIndex(c *cli.Context) {
 		ESProcessorBulkActions:   dc.GetIntPropertyFn(numOfBatches),
 		ESProcessorBulkSize:      dc.GetIntPropertyFn(2 << 20),
 		ESProcessorFlushInterval: dc.GetDurationPropertyFn(1 * time.Second),
+		ESProcessorAckTimeout:    dc.GetDurationPropertyFn(1 * time.Minute),
 	}
 
-	logger := log.NewCLILogger()
+	esVisibilityManager, err := visibility.NewAdvancedManager(
+		indexName,
+		esClient,
+		esProcessorConfig,
+		searchattribute.NewSystemProvider(), // TODO: build search attribute provider to get search attributes from command line args.
+		nil,
+		dc.GetIntPropertyFn(1000),
+		dc.GetIntPropertyFn(1000),
+		metrics.NewNoopMetricsClient(),
+		log.NewCLILogger())
 
-	esProcessor := elasticsearch.NewProcessor(esProcessorConfig, esClient, logger, metrics.NewNoopMetricsClient())
-	esProcessor.Start()
-
-	visibilityConfigForES := &config.VisibilityConfig{
-		ESProcessorAckTimeout: dc.GetDurationPropertyFn(1 * time.Minute),
+	if err != nil {
+		ErrorAndExit("Unable to create visibility manager.", err)
+		return
 	}
-
-	// TODO: build search attribute provider to get search attributes from command line args.
-	visibilityManager := elasticsearch.NewVisibilityManager(indexName, esClient, visibilityConfigForES, searchattribute.NewSystemProvider(), nil, esProcessor, metrics.NewNoopMetricsClient(), logger)
 
 	successLines := &atomic.Int32{}
 	wg := &sync.WaitGroup{}
@@ -138,7 +144,7 @@ func AdminIndex(c *cli.Context) {
 	for i := 0; i < numOfBatches; i++ {
 		go func(batchNum int) {
 			for line := batchNum; line < len(messages); line += numOfBatches {
-				err1 := visibilityManager.RecordWorkflowExecutionClosed(messages[line])
+				err1 := esVisibilityManager.RecordWorkflowExecutionClosed(messages[line])
 				if err1 != nil {
 					fmt.Printf("Unable to save row at line %d: %v", line, err1)
 				} else {
@@ -150,7 +156,7 @@ func AdminIndex(c *cli.Context) {
 	}
 
 	wg.Wait()
-	visibilityManager.Close()
+	esVisibilityManager.Close()
 	fmt.Println("ES processor stopped.", successLines, "lines were saved successfully")
 }
 
@@ -209,7 +215,7 @@ func AdminDelete(c *cli.Context) {
 	}
 }
 
-func parseIndexerMessage(fileName string) (messages []*visibility.RecordWorkflowExecutionClosedRequest, err error) {
+func parseIndexerMessage(fileName string) (messages []*manager.RecordWorkflowExecutionClosedRequest, err error) {
 	file, err := os.Open(fileName)
 	if err != nil {
 		return nil, err
@@ -226,7 +232,7 @@ func parseIndexerMessage(fileName string) (messages []*visibility.RecordWorkflow
 			continue
 		}
 
-		msg := &visibility.RecordWorkflowExecutionClosedRequest{}
+		msg := &manager.RecordWorkflowExecutionClosedRequest{}
 		err := json.Unmarshal([]byte(line), msg)
 		if err != nil {
 			fmt.Printf("line %v cannot be deserialized to RecordWorkflowExecutionClosedRequest: %v.\n", idx, line)

@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/archiver"
@@ -56,7 +56,7 @@ type (
 		status    int32
 		stopC     chan struct{}
 		sdkClient sdkclient.Client
-		esClient  client.Client
+		esClient  esclient.Client
 		config    *Config
 	}
 

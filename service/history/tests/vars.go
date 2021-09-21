@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 )
@@ -117,6 +118,19 @@ var (
 		Version,
 		nil,
 	)
+
+	CreateWorkflowExecutionResponse = &persistence.CreateWorkflowExecutionResponse{
+		NewMutableStateStats: persistence.MutableStateStatistics{},
+	}
+
+	GetWorkflowExecutionResponse = &persistence.GetWorkflowExecutionResponse{
+		MutableStateStats: persistence.MutableStateStatistics{},
+	}
+
+	UpdateWorkflowExecutionResponse = &persistence.UpdateWorkflowExecutionResponse{
+		UpdateMutableStateStats: persistence.MutableStateStatistics{},
+		NewMutableStateStats:    nil,
+	}
 )
 
 func NewDynamicConfig() *configs.Config {

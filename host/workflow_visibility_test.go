@@ -145,6 +145,7 @@ func (s *integrationSuite) TestVisibility() {
 		closedCount = len(resp.Executions)
 		if closedCount == 1 {
 			historyLength = resp.Executions[0].HistoryLength
+			s.Nil(resp.NextPageToken)
 			break
 		}
 		s.Logger.Info("Closed WorkflowExecution is not yet visible")
@@ -162,6 +163,7 @@ func (s *integrationSuite) TestVisibility() {
 		s.NoError(err4)
 		openCount = len(resp.Executions)
 		if openCount == 1 {
+			s.Nil(resp.NextPageToken)
 			break
 		}
 		s.Logger.Info("Open WorkflowExecution is not yet visible")

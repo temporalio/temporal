@@ -72,13 +72,6 @@ func TestPostgreSQLExecutionManagerWithEventsV2(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestPostgreSQLVisibilityPersistenceSuite(t *testing.T) {
-	s := new(VisibilityPersistenceSuite)
-	s.TestBase = NewTestBaseWithSQL(GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup(nil)
-	suite.Run(t, s)
-}
-
 func TestPostgreSQLClusterMetadataPersistence(t *testing.T) {
 	s := new(ClusterMetadataManagerSuite)
 	s.TestBase = NewTestBaseWithSQL(GetPostgreSQLTestClusterOption())

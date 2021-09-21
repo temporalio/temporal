@@ -26,12 +26,12 @@ package cli
 
 import (
 	"strings"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/uber-go/tally"
 	"github.com/urfave/cli"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/common/config"
 
 	"go.temporal.io/server/common"
@@ -276,11 +276,6 @@ func initializePersistenceFactory(
 ) client.Factory {
 
 	pConfig := serviceConfig.Persistence
-	pConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityListMaxQPS:  dynamicconfig.GetIntPropertyFilteredByNamespace(dependencyMaxQPS),
-		EnableSampling:        dynamicconfig.GetBoolPropertyFn(false), // not used by namespace operation
-		ESProcessorAckTimeout: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
-	}
 	pFactory := client.NewFactory(
 		&pConfig,
 		resolver.NewNoopResolver(),

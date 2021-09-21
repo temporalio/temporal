@@ -286,14 +286,6 @@ func (c *ContextImpl) LoadWorkflowExecutionForReplication(
 				HistorySize: response.State.ExecutionInfo.GetHistorySize(),
 			}
 		}
-
-		// finally emit execution and session stats
-		emitWorkflowExecutionStats(
-			c.metricsClient,
-			c.GetNamespace(),
-			response.MutableStateStats,
-			c.GetHistorySize(),
-		)
 	}
 
 	lastWriteVersion, err := c.MutableState.GetLastWriteVersion()
@@ -368,14 +360,6 @@ func (c *ContextImpl) LoadWorkflowExecution() (MutableState, error) {
 				HistorySize: response.State.ExecutionInfo.GetHistorySize(),
 			}
 		}
-
-		// finally emit execution and session stats
-		emitWorkflowExecutionStats(
-			c.metricsClient,
-			c.GetNamespace(),
-			response.MutableStateStats,
-			c.GetHistorySize(),
-		)
 	}
 
 	flushBeforeReady, err := c.MutableState.StartTransaction(namespaceEntry)
@@ -443,7 +427,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	c.SetHistorySize(resp.HistorySize)
+	c.SetHistorySize(int64(resp.NewMutableStateStats.HistorySizeDiff))
 
 	NotifyWorkflowSnapshotTasks(c.engine, newWorkflow)
 	emitStateTransitionCount(c.metricsClient, newMutableState)
