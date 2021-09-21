@@ -46,7 +46,7 @@ type SetupSchemaTestBase struct {
 	suite.Suite
 	*require.Assertions
 	rand       *rand.Rand
-	Log        log.Logger
+	Logger     log.Logger
 	DBName     string
 	db         DB
 	pluginName string
@@ -55,12 +55,12 @@ type SetupSchemaTestBase struct {
 // SetupSuiteBase sets up the test suite
 func (tb *SetupSchemaTestBase) SetupSuiteBase(db DB, pluginName string) {
 	tb.Assertions = require.New(tb.T()) // Have to define our overridden assertions in the test setup. If we did it earlier, tb.T() will return nil
-	tb.Log = log.NewTestLogger()
+	tb.Logger = log.NewTestLogger()
 	tb.rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	tb.DBName = fmt.Sprintf("setup_test_%v", tb.rand.Int63())
 	err := db.CreateDatabase(tb.DBName)
 	if err != nil {
-		tb.Log.Fatal("error creating database, ", tag.Error(err))
+		tb.Logger.Fatal("error creating database, ", tag.Error(err))
 	}
 	tb.db = db
 	tb.pluginName = pluginName

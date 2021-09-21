@@ -30,6 +30,7 @@ import (
 
 	"github.com/urfave/cli"
 
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/tools/common/schema"
 )
@@ -40,22 +41,10 @@ func RunTool(args []string) error {
 	return app.Run(args)
 }
 
-// SetupSchema setups the cassandra schema
-func SetupSchema(config *SetupSchemaConfig) error {
-	if err := validateCQLClientConfig(&config.CQLClientConfig); err != nil {
-		return err
-	}
-	db, err := newCQLClient(&config.CQLClientConfig)
-	if err != nil {
-		return err
-	}
-	return schema.SetupFromConfig(&config.SetupConfig, db)
-}
-
 // root handler for all cli commands
-func cliHandler(c *cli.Context, handler func(c *cli.Context) error) {
+func cliHandler(c *cli.Context, handler func(c *cli.Context, logger log.Logger) error, logger log.Logger) {
 	quiet := c.GlobalBool(schema.CLIOptQuiet)
-	err := handler(c)
+	err := handler(c, logger)
 	if err != nil && !quiet {
 		os.Exit(1)
 	}
@@ -67,6 +56,7 @@ func buildCLIOptions() *cli.App {
 	app.Name = "temporal-cassandra-tool"
 	app.Usage = "Command line tool for temporal cassandra operations"
 	app.Version = "0.0.1"
+	logger := log.NewCLILogger()
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -173,7 +163,7 @@ func buildCLIOptions() *cli.App {
 				},
 			},
 			Action: func(c *cli.Context) {
-				cliHandler(c, setupSchema)
+				cliHandler(c, setupSchema, logger)
 			},
 		},
 		{
@@ -191,7 +181,7 @@ func buildCLIOptions() *cli.App {
 				},
 			},
 			Action: func(c *cli.Context) {
-				cliHandler(c, updateSchema)
+				cliHandler(c, updateSchema, logger)
 			},
 		},
 		{
@@ -215,7 +205,7 @@ func buildCLIOptions() *cli.App {
 				},
 			},
 			Action: func(c *cli.Context) {
-				cliHandler(c, createKeyspace)
+				cliHandler(c, createKeyspace, logger)
 			},
 		},
 		{
@@ -254,7 +244,7 @@ func buildCLIOptions() *cli.App {
 					}
 				}
 				if drop {
-					cliHandler(c, dropKeyspace)
+					cliHandler(c, dropKeyspace, logger)
 				}
 			},
 		},
@@ -263,7 +253,7 @@ func buildCLIOptions() *cli.App {
 			Aliases: []string{"vh"},
 			Usage:   "validates health of cassandra by attempting to establish CQL session to system keyspace",
 			Action: func(c *cli.Context) {
-				cliHandler(c, validateHealth)
+				cliHandler(c, validateHealth, logger)
 			},
 		},
 	}
