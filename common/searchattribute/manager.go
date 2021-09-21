@@ -38,11 +38,11 @@ import (
 )
 
 const (
-	searchAttributeCacheRefreshInterval = 60 * time.Second
+	cacheRefreshInterval = 60 * time.Second
 )
 
 type (
-	ManagerImpl struct {
+	managerImpl struct {
 		timeSource             clock.TimeSource
 		clusterMetadataManager persistence.ClusterMetadataManager
 
@@ -50,7 +50,7 @@ type (
 		cache            atomic.Value
 	}
 
-	searchAttributesCache struct {
+	cache struct {
 		// indexName -> NameTypeMap
 		searchAttributes map[string]NameTypeMap
 		dbVersion        int64
@@ -58,21 +58,21 @@ type (
 	}
 )
 
-var _ Manager = (*ManagerImpl)(nil)
+var _ Manager = (*managerImpl)(nil)
 
 func NewManager(
 	timeSource clock.TimeSource,
 	clusterMetadataManager persistence.ClusterMetadataManager,
-) *ManagerImpl {
+) *managerImpl {
 
 	var saCache atomic.Value
-	saCache.Store(searchAttributesCache{
+	saCache.Store(cache{
 		searchAttributes: map[string]NameTypeMap{},
 		dbVersion:        0,
 		lastRefresh:      time.Time{},
 	})
 
-	return &ManagerImpl{
+	return &managerImpl{
 		timeSource:             timeSource,
 		cache:                  saCache,
 		clusterMetadataManager: clusterMetadataManager,
@@ -81,17 +81,17 @@ func NewManager(
 
 // GetSearchAttributes returns all search attributes (including system and build-in) for specified index.
 // indexName can be an empty string when Elasticsearch is not configured.
-func (m *ManagerImpl) GetSearchAttributes(
+func (m *managerImpl) GetSearchAttributes(
 	indexName string,
 	forceRefreshCache bool,
 ) (NameTypeMap, error) {
 
 	now := m.timeSource.Now()
-	saCache := m.cache.Load().(searchAttributesCache)
+	saCache := m.cache.Load().(cache)
 
 	if m.needRefreshCache(saCache, forceRefreshCache, now) {
 		m.cacheUpdateMutex.Lock()
-		saCache = m.cache.Load().(searchAttributesCache)
+		saCache = m.cache.Load().(cache)
 		if m.needRefreshCache(saCache, forceRefreshCache, now) {
 			var err error
 			saCache, err = m.refreshCache(saCache, now)
@@ -111,11 +111,11 @@ func (m *ManagerImpl) GetSearchAttributes(
 	return indexSearchAttributes, nil
 }
 
-func (m *ManagerImpl) needRefreshCache(saCache searchAttributesCache, forceRefreshCache bool, now time.Time) bool {
-	return forceRefreshCache || saCache.lastRefresh.Add(searchAttributeCacheRefreshInterval).Before(now)
+func (m *managerImpl) needRefreshCache(saCache cache, forceRefreshCache bool, now time.Time) bool {
+	return forceRefreshCache || saCache.lastRefresh.Add(cacheRefreshInterval).Before(now)
 }
 
-func (m *ManagerImpl) refreshCache(saCache searchAttributesCache, now time.Time) (searchAttributesCache, error) {
+func (m *managerImpl) refreshCache(saCache cache, now time.Time) (cache, error) {
 	clusterMetadata, err := m.clusterMetadataManager.GetClusterMetadata()
 	if err != nil {
 		if _, isNotFoundErr := err.(*serviceerror.NotFound); !isNotFoundErr {
@@ -131,7 +131,7 @@ func (m *ManagerImpl) refreshCache(saCache searchAttributesCache, now time.Time)
 		return saCache, nil
 	}
 
-	saCache = searchAttributesCache{
+	saCache = cache{
 		searchAttributes: BuildIndexNameTypeMap(clusterMetadata.GetIndexSearchAttributes()),
 		lastRefresh:      now,
 		dbVersion:        clusterMetadata.Version,
@@ -142,7 +142,7 @@ func (m *ManagerImpl) refreshCache(saCache searchAttributesCache, now time.Time)
 
 // SaveSearchAttributes saves search attributes to cluster metadata.
 // indexName can be an empty string when Elasticsearch is not configured.
-func (m *ManagerImpl) SaveSearchAttributes(
+func (m *managerImpl) SaveSearchAttributes(
 	indexName string,
 	newCustomSearchAttributes map[string]enumspb.IndexedValueType,
 ) error {
@@ -162,7 +162,7 @@ func (m *ManagerImpl) SaveSearchAttributes(
 		Version:         clusterMetadataResponse.Version,
 	})
 	// Flush local cache, even if there was an error, which is most likely version mismatch (=stale cache).
-	m.cache.Store(searchAttributesCache{})
+	m.cache.Store(cache{})
 
 	return err
 }

@@ -52,7 +52,7 @@ type (
 		logger                     log.Logger
 		timeSource                 *clock.EventTimeSource
 		mockClusterMetadataManager *persistence.MockClusterMetadataManager
-		manager                    *ManagerImpl
+		manager                    *managerImpl
 	}
 )
 
@@ -132,7 +132,7 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache() {
 				s.Equal(enumspb.INDEXED_VALUE_TYPE_KEYWORD, t)
 				if i%500 == 0 && goroutine == 5 {
 					// This moves time two times.
-					s.timeSource.Update(s.timeSource.Now().Add(searchAttributeCacheRefreshInterval).Add(time.Second))
+					s.timeSource.Update(s.timeSource.Now().Add(cacheRefreshInterval).Add(time.Second))
 				}
 			}
 		}(goroutine)
