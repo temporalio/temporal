@@ -212,13 +212,9 @@ func (c *taskQueueManagerImpl) signalIfFatal(err error) bool {
 	if err == nil {
 		return false
 	}
-	foreignLessee := false
 	var condfail *persistence.ConditionFailedError
 	if errors.As(err, &condfail) {
 		c.metricScope().IncCounter(metrics.ConditionFailedErrorPerTaskQueueCounter)
-		foreignLessee = true
-	}
-	if foreignLessee || !c.config.ResilientSyncMatch() {
 		c.signalFatalProblem(c)
 		return true
 	}
