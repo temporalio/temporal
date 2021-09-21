@@ -394,7 +394,7 @@ func (s *Server) getESConfigAndClient() (*esclient.Config, esclient.Client, erro
 
 	advancedVisibilityStore, ok := s.so.config.Persistence.DataStores[s.so.config.Persistence.AdvancedVisibilityStore]
 	if !ok {
-		return nil, nil, nil
+		return nil, nil, fmt.Errorf("persistence config: advanced visibility datastore %q: missing config", s.so.config.Persistence.AdvancedVisibilityStore)
 	}
 
 	if s.so.elasticsearchHttpClient == nil {

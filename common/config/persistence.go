@@ -82,11 +82,11 @@ func (c *Persistence) AdvancedVisibilityConfigExist() bool {
 }
 
 func (c *Persistence) validateAdvancedVisibility() error {
-	if c.VisibilityStore == "" && c.AdvancedVisibilityStore == "" {
+	if !c.StandardVisibilityConfigExist() && !c.AdvancedVisibilityConfigExist() {
 		return errors.New("persistence config: one of visibilityStore or advancedVisibilityStore must be specified")
 	}
 
-	if c.AdvancedVisibilityStore == "" {
+	if !c.AdvancedVisibilityConfigExist() {
 		return nil
 	}
 
