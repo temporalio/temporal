@@ -945,7 +945,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 		requestCurrentRunID = ""
 
 	default:
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("unknown mode: %v", request.Mode))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
 	if err := applyWorkflowSnapshotBatchAsNew(batch,
@@ -1128,7 +1128,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(
 			newRunID := newWorkflow.RunID
 
 			if namespaceID != newNamespaceID {
-				return serviceerror.NewUnavailable(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another namespace"))
+				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another namespace"))
 			}
 
 			batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
@@ -1173,7 +1173,7 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(
 		}
 
 	default:
-		return serviceerror.NewUnavailable(fmt.Sprintf("UpdateWorkflowExecution: unknown mode: %v", request.Mode))
+		return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
 	if err := applyWorkflowMutationBatch(batch, shardID, &updateWorkflow); err != nil {
@@ -1336,7 +1336,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(
 		}
 
 	default:
-		return serviceerror.NewUnavailable(fmt.Sprintf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode))
+		return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
 	if err := applyWorkflowSnapshotBatchAsReset(batch, shardID, &resetWorkflow); err != nil {
@@ -2038,7 +2038,7 @@ func (d *cassandraPersistence) UpdateTaskQueue(
 	previous := make(map[string]interface{})
 	if request.TaskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY { // if task_queue is sticky, then update with TTL
 		if request.ExpiryTime == nil {
-			return nil, serviceerror.NewUnavailable("ExpiryTime cannot be nil for sticky task queue")
+			return nil, serviceerror.NewInternal("ExpiryTime cannot be nil for sticky task queue")
 		}
 		expiryTtl := convert.Int64Ceil(time.Until(timestamp.TimeValue(request.ExpiryTime)).Seconds())
 		batch := d.session.NewBatch(gocql.LoggedBatch)
@@ -2205,7 +2205,7 @@ func (d *cassandraPersistence) GetTasks(
 	request *p.GetTasksRequest,
 ) (*p.InternalGetTasksResponse, error) {
 	if request.MaxReadLevel == nil {
-		return nil, serviceerror.NewUnavailable("getTasks: both readLevel and maxReadLevel MUST be specified for cassandra persistence")
+		return nil, serviceerror.NewInternal("getTasks: both readLevel and maxReadLevel MUST be specified for cassandra persistence")
 	}
 	if request.ReadLevel > *request.MaxReadLevel {
 		return &p.InternalGetTasksResponse{}, nil
