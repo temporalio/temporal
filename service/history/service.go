@@ -28,9 +28,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.uber.org/fx"
-
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -38,6 +36,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/migration"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
 )

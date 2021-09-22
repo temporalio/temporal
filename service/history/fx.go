@@ -25,6 +25,9 @@
 package history
 
 import (
+	"go.uber.org/fx"
+	"google.golang.org/grpc"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -34,12 +37,11 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/configs"
-	"go.uber.org/fx"
-	"google.golang.org/grpc"
 )
 
 var Module = fx.Options(
@@ -59,7 +61,7 @@ func ParamsExpandProvider(params *resource.BootstrapParams) (
 	log.Logger,
 	dynamicconfig.Client,
 	config.Persistence,
-	*config.Elasticsearch,
+	*esclient.Config,
 	common.RPCFactory,
 ) {
 	return params.Logger,
@@ -72,11 +74,11 @@ func ParamsExpandProvider(params *resource.BootstrapParams) (
 func ConfigProvider(
 	dc *dynamicconfig.Collection,
 	persistenceConfig config.Persistence,
-	esConfig *config.Elasticsearch,
+	esConfig *esclient.Config,
 ) *configs.Config {
 	return configs.NewConfig(dc,
 		persistenceConfig.NumHistoryShards,
-		persistenceConfig.IsAdvancedVisibilityConfigExist(),
+		persistenceConfig.AdvancedVisibilityConfigExist(),
 		esConfig.GetVisibilityIndex())
 }
 
@@ -100,7 +102,6 @@ func TelemetryInterceptorProvider(
 		metrics.HistoryAPIMetricsScopes(),
 		logger,
 	)
-
 }
 
 func RateLimitInterceptorProvider(
