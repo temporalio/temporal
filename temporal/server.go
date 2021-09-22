@@ -25,6 +25,7 @@
 package temporal
 
 import (
+	ctx "context"
 	"fmt"
 	"sync"
 	"time"
@@ -32,6 +33,8 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.uber.org/fx"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -58,7 +61,6 @@ import (
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
-	"go.uber.org/fx"
 )
 
 const (
@@ -70,6 +72,7 @@ type (
 	Server struct {
 		so                *serverOptions
 		services          map[string]common.Daemon
+		serviceApps       map[string]*fx.App
 		serviceStoppedChs map[string]chan struct{}
 		stoppedCh         chan interface{}
 		logger            log.Logger
@@ -94,6 +97,7 @@ func NewServer(opts ...ServerOption) *Server {
 	s := &Server{
 		so:                newServerOptions(opts),
 		services:          make(map[string]common.Daemon),
+		serviceApps:       make(map[string]*fx.App),
 		serviceStoppedChs: make(map[string]chan struct{}),
 	}
 	return s
@@ -194,18 +198,32 @@ func (s *Server) Start() error {
 			return err
 		}
 
+		s.serviceStoppedChs[svcName] = make(chan struct{})
+
 		var svc common.Daemon
 		switch svcName {
 		case primitives.FrontendService:
 			svc, err = frontend.NewService(params)
 		case primitives.HistoryService:
-			var historySvc *history.Service
+			// todo: generalize this custom case logic as other services onboard fx
 			histApp := fx.New(
-				fx.Supply(params),
-				history.Module,
-				fx.Populate(&historySvc))
+				fx.Supply(
+					params,
+					s.serviceStoppedChs[svcName],
+				),
+				history.Module)
 			err = histApp.Err()
-			svc = historySvc
+			if err != nil {
+				close(s.serviceStoppedChs[svcName])
+				return fmt.Errorf("unable to construct service %q: %w", svcName, err)
+			}
+			s.serviceApps[svcName] = histApp
+			err = histApp.Start(ctx.Background())
+			if err != nil {
+				close(s.serviceStoppedChs[svcName])
+				return fmt.Errorf("unable to start service %q: %w", svcName, err)
+			}
+			continue
 		case primitives.MatchingService:
 			svc, err = matching.NewService(params)
 		case primitives.WorkerService:
@@ -214,11 +232,11 @@ func (s *Server) Start() error {
 			return fmt.Errorf("unknown service %q", svcName)
 		}
 		if err != nil {
+			close(s.serviceStoppedChs[svcName])
 			return fmt.Errorf("unable to start service %q: %w", svcName, err)
 		}
 
 		s.services[svcName] = svc
-		s.serviceStoppedChs[svcName] = make(chan struct{})
 
 		go func(svc common.Daemon, svcStoppedCh chan<- struct{}) {
 			// Start is blocked until Stop() is called.
@@ -240,7 +258,7 @@ func (s *Server) Start() error {
 // Stop stops the server.
 func (s *Server) Stop() {
 	var wg sync.WaitGroup
-	wg.Add(len(s.services))
+	wg.Add(len(s.services) + len(s.serviceApps))
 	close(s.stoppedCh)
 
 	for svcName, svc := range s.services {
@@ -253,6 +271,23 @@ func (s *Server) Stop() {
 			}
 			wg.Done()
 		}(svc, svcName, s.serviceStoppedChs[svcName])
+	}
+
+	for svcName, svcApp := range s.serviceApps {
+		go func(svc *fx.App, svcName string, svcStoppedCh <-chan struct{}) {
+			err := svc.Stop(ctx.Background())
+			if err != nil {
+				s.logger.Error("Failed to stop service", tag.Service(svcName), tag.Error(err))
+			}
+
+			// verify "Start" goroutine returned
+			select {
+			case <-svcStoppedCh:
+			case <-time.After(time.Minute):
+				s.logger.Error("Timed out (1 minute) waiting for service to stop.", tag.Service(svcName))
+			}
+			wg.Done()
+		}(svcApp, svcName, s.serviceStoppedChs[svcName])
 	}
 	wg.Wait()
 

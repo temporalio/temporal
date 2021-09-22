@@ -57,6 +57,7 @@ type (
 		NewNamespaceReplicationQueue() (p.NamespaceReplicationQueue, error)
 		// NewClusterMetadataManager returns a new manager for cluster specific metadata
 		NewClusterMetadataManager() (p.ClusterMetadataManager, error)
+		FaultInjection() *FaultInjectionDataStoreFactory
 	}
 	// DataStoreFactory is a low level interface to be implemented by a datastore
 	// Examples of datastores are cassandra, mysql etc
