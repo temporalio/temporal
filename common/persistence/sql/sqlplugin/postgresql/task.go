@@ -187,18 +187,18 @@ func (pdb *db) SelectFromTaskQueues(
 	switch {
 	case filter.TaskQueueID != nil:
 		if filter.RangeHashLessThanEqualTo != 0 || filter.RangeHashGreaterThanEqualTo != 0 {
-			return nil, serviceerror.NewUnavailable("shardID range not supported for specific selection")
+			return nil, serviceerror.NewInternal("shardID range not supported for specific selection")
 		}
 		return pdb.selectFromTaskQueues(ctx, filter)
 	case filter.RangeHashLessThanEqualTo != 0 && filter.PageSize != nil:
 		if filter.RangeHashLessThanEqualTo < filter.RangeHashGreaterThanEqualTo {
-			return nil, serviceerror.NewUnavailable("range of hashes bound is invalid")
+			return nil, serviceerror.NewInternal("range of hashes bound is invalid")
 		}
 		return pdb.rangeSelectFromTaskQueues(ctx, filter)
 	case filter.TaskQueueIDGreaterThan != nil && filter.PageSize != nil:
 		return pdb.rangeSelectFromTaskQueues(ctx, filter)
 	default:
-		return nil, serviceerror.NewUnavailable("invalid set of query filter params")
+		return nil, serviceerror.NewInternal("invalid set of query filter params")
 	}
 }
 

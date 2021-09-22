@@ -35,6 +35,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -105,7 +106,7 @@ func (s *VersionTestSuite) createKeyspace(keyspace string) func() {
 		Timeout:     defaultTimeout,
 		numReplicas: 1,
 	}
-	client, err := newCQLClient(cfg)
+	client, err := newCQLClient(cfg, log.NewNoopLogger())
 	s.NoError(err)
 
 	err = client.createKeyspace(keyspace)

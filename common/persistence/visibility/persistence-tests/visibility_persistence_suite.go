@@ -34,6 +34,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
@@ -74,7 +75,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 
 	if err != nil {
 		// s.NoError doesn't work here.
-		s.Logger.Fatal("Unable to create visibility manager")
+		s.Logger.Fatal("Unable to create visibility manager", tag.Error(err))
 	}
 }
 

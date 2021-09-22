@@ -153,7 +153,6 @@ var Keys = map[Key]string{
 	MatchingForwarderMaxOutstandingTasks:    "matching.forwarderMaxOutstandingTasks",
 	MatchingForwarderMaxRatePerSecond:       "matching.forwarderMaxRatePerSecond",
 	MatchingForwarderMaxChildrenPerNode:     "matching.forwarderMaxChildrenPerNode",
-	ResilientSyncMatch:                      "matching.resilientSyncMatch",
 	MatchingShutdownDrainDuration:           "matching.shutdownDrainDuration",
 
 	// history settings
@@ -538,8 +537,6 @@ const (
 	MatchingForwarderMaxRatePerSecond
 	// MatchingForwarderMaxChildrenPerNode is the max number of children per node in the task queue partition tree
 	MatchingForwarderMaxChildrenPerNode
-	// ResilientSyncMatch enables or disables sync-matching while queue persistence is unavailable
-	ResilientSyncMatch
 	// MatchingShutdownDrainDuration is the duration of traffic drain during shutdown
 	MatchingShutdownDrainDuration
 

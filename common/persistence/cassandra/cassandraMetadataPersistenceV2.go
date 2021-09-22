@@ -154,15 +154,10 @@ func (m *cassandraMetadataPersistenceV2) CreateNamespaceInV2Table(request *p.Int
 
 	previous := make(map[string]interface{})
 	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
-	defer func() {
-		if iter != nil {
-			iter.Close()
-		}
-	}()
-
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
 	}
+	defer func() { _ = iter.Close() }()
 
 	if !applied {
 		// Namespace already exist.  Delete orphan namespace record before returning back to user
@@ -194,15 +189,11 @@ func (m *cassandraMetadataPersistenceV2) UpdateNamespace(request *p.InternalUpda
 
 	previous := make(map[string]interface{})
 	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
-	defer func() {
-		if iter != nil {
-			iter.Close()
-		}
-	}()
-
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("UpdateNamespace operation failed. Error: %v", err))
 	}
+	defer func() { _ = iter.Close() }()
+
 	if !applied {
 		return serviceerror.NewUnavailable(fmt.Sprintf("UpdateNamespace operation failed because of conditional failure."))
 	}

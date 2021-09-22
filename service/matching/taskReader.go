@@ -143,6 +143,7 @@ Loop:
 
 		case <-tr.notifyC:
 			tasks, readLevel, isReadBatchDone, err := tr.getTaskBatch()
+			tr.tlMgr.signalIfFatal(err)
 			if err != nil {
 				tr.Signal() // re-enqueue the event
 				// TODO: Should we ever stop retrying on db errors?
@@ -165,15 +166,11 @@ Loop:
 
 		case <-updateAckTimer.C:
 			err := tr.persistAckLevel()
+			tr.tlMgr.signalIfFatal(err)
 			if err != nil {
-				if _, ok := err.(*persistence.ConditionFailedError); ok {
-					// This indicates the task queue may have moved to another host.
-					tr.tlMgr.Stop()
-				} else {
-					tr.logger().Error("Persistent store operation failure",
-						tag.StoreOperationUpdateTaskQueue,
-						tag.Error(err))
-				}
+				tr.logger().Error("Persistent store operation failure",
+					tag.StoreOperationUpdateTaskQueue,
+					tag.Error(err))
 				// keep going as saving ack is not critical
 			}
 			tr.Signal() // periodically signal pump to check persistence for tasks

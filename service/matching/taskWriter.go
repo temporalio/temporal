@@ -196,31 +196,22 @@ func (w *taskWriter) appendTasks(
 ) (*persistence.CreateTasksResponse, error) {
 
 	resp, err := w.tlMgr.db.CreateTasks(tasks)
-	switch err.(type) {
-	case nil:
-		return resp, nil
-
-	case *persistence.ConditionFailedError:
-		w.tlMgr.signalFatalProblem(w.tlMgr)
-		return nil, err
-
-	default:
+	if err != nil {
+		w.tlMgr.signalIfFatal(err)
 		w.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCreateTask,
 			tag.Error(err),
 			tag.WorkflowTaskQueueName(w.taskQueueID.name),
-			tag.WorkflowTaskQueueType(w.taskQueueID.taskType),
-		)
+			tag.WorkflowTaskQueueType(w.taskQueueID.taskType))
 		return nil, err
 	}
+	return resp, nil
 }
 
 func (w *taskWriter) taskWriterLoop(ctx context.Context) error {
 	err := w.initReadWriteState(ctx)
 	if err != nil {
-		if w.tlMgr.errShouldUnload(err) {
-			w.tlMgr.signalFatalProblem(w.tlMgr)
-		}
+		w.tlMgr.signalIfFatal(err)
 		return err
 	}
 writerLoop:
@@ -317,8 +308,7 @@ func (w *taskWriter) allocTaskIDBlock(ctx context.Context, prevBlockEnd int64) (
 	}
 	state, err := w.renewLeaseWithRetry(ctx, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
-		if w.tlMgr.errShouldUnload(err) {
-			w.tlMgr.signalFatalProblem(w.tlMgr)
+		if w.tlMgr.signalIfFatal(err) {
 			return taskIDBlock{}, errShutdown
 		}
 		return taskIDBlock{}, err

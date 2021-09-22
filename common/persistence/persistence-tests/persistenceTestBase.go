@@ -78,10 +78,10 @@ type (
 		DBUsername      string
 		DBPassword      string
 		DBHost          string
-		DBPort          int    `yaml:"-"`
-		StoreType       string `yaml:"-"`
-		SchemaDir       string `yaml:"-"`
-		FaultInjection  *config.FaultInjection
+		DBPort          int                    `yaml:"-"`
+		StoreType       string                 `yaml:"-"`
+		SchemaDir       string                 `yaml:"-"`
+		FaultInjection  *config.FaultInjection `yaml:"faultinjection"`
 	}
 
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
@@ -89,6 +89,7 @@ type (
 		suite.Suite
 		ShardMgr                  persistence.ShardManager
 		AbstractDataStoreFactory  client.AbstractDataStoreFactory
+		FaultInjection            *client.FaultInjectionDataStoreFactory
 		Factory                   client.Factory
 		ExecutionManager          persistence.ExecutionManager
 		TaskMgr                   persistence.TaskManager
@@ -197,7 +198,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *config.ClusterMetadata) {
 	cfg := s.DefaultTestCluster.Config()
 	scope := tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
 	metricsClient := metrics.NewClient(scope, metrics.GetMetricsServiceIdx(common.HistoryServiceName, s.Logger))
-	factory := client.NewFactory(&cfg, resolver.NewNoopResolver(), nil, s.AbstractDataStoreFactory, clusterName, metricsClient, s.Logger)
+	factory := client.NewFactoryImpl(&cfg, resolver.NewNoopResolver(), nil, s.AbstractDataStoreFactory, clusterName, metricsClient, s.Logger)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
@@ -206,7 +207,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *config.ClusterMetadata) {
 	s.fatalOnError("NewClusterMetadataManager", err)
 
 	s.ClusterMetadata = cluster.NewTestClusterMetadata(clusterMetadataConfig)
-	s.SearchAttributesManager = persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), s.ClusterMetadataManager)
+	s.SearchAttributesManager = searchattribute.NewManager(clock.NewRealTimeSource(), s.ClusterMetadataManager)
 
 	s.MetadataManager, err = factory.NewMetadataManager()
 	s.fatalOnError("NewMetadataManager", err)
@@ -218,6 +219,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *config.ClusterMetadata) {
 	s.fatalOnError("NewExecutionManager", err)
 
 	s.Factory = factory
+	s.FaultInjection = factory.FaultInjection()
 
 	s.ReadLevel = 0
 	s.ReplicationReadLevel = 0

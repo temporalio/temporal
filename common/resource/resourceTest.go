@@ -436,3 +436,7 @@ func (h *Test) GetSearchAttributesMapper() searchattribute.Mapper {
 func (h *Test) RefreshNamespaceCache() {
 	h.NamespaceCache.Refresh()
 }
+
+func (h *Test) GetFaultInjection() *persistenceClient.FaultInjectionDataStoreFactory {
+	return nil
+}

@@ -852,6 +852,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDispatch() {
+	s.T().Skip("Racy - times out ~50% of the time running locally with --race")
 	// Set a short long poll expiration so we don't have to wait too long for 0 throttling cases
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(20 * time.Millisecond)
 	dispatchLimitFn := func(wc int, tc int64) float64 {

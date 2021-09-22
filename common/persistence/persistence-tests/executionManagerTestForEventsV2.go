@@ -25,8 +25,6 @@
 package persistencetests
 
 import (
-	"log"
-	"os"
 	"runtime/debug"
 	"testing"
 	"time"
@@ -66,9 +64,6 @@ func failOnPanic(t *testing.T) {
 // SetupSuite implementation
 func (s *ExecutionManagerSuiteForEventsV2) SetupSuite() {
 	defer failOnPanic(s.T())
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 }
 
 // TearDownSuite implementation

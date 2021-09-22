@@ -27,7 +27,7 @@ package config
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
+	stdlog "log"
 	"os"
 
 	"gopkg.in/validator.v2"
@@ -80,7 +80,7 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 	}
 
 	// TODO: remove log dependency.
-	log.Printf("Loading config; env=%v,zone=%v,configDir=%v\n", env, zone, configDir)
+	stdlog.Printf("Loading config; env=%v,zone=%v,configDir=%v\n", env, zone, configDir)
 
 	files, err := getConfigFiles(env, configDir, zone)
 	if err != nil {
@@ -88,7 +88,7 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 	}
 
 	// TODO: remove log dependency.
-	log.Printf("Loading config files=%v\n", files)
+	stdlog.Printf("Loading config files=%v\n", files)
 
 	for _, f := range files {
 		// This is tagged nosec because the file names being read are for config files that are not user supplied

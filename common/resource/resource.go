@@ -103,6 +103,7 @@ type (
 		GetShardManager() persistence.ShardManager
 		GetExecutionManager() persistence.ExecutionManager
 		GetPersistenceBean() persistenceClient.Bean
+		GetFaultInjection() *persistenceClient.FaultInjectionDataStoreFactory
 
 		// loggers
 

@@ -228,7 +228,7 @@ func (q *sqlQueue) ReadMessagesFromDLQ(
 	if pageToken != nil && len(pageToken) != 0 {
 		lastReadMessageID, err := deserializePageToken(pageToken)
 		if err != nil {
-			return nil, nil, serviceerror.NewUnavailable(fmt.Sprintf("invalid next page token %v", pageToken))
+			return nil, nil, serviceerror.NewInternal(fmt.Sprintf("invalid next page token %v", pageToken))
 		}
 		firstMessageID = lastReadMessageID
 	}

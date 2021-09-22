@@ -26,7 +26,7 @@ package persistence
 
 func statusOfInternalWorkflow(
 	state *InternalWorkflowMutableState,
-	historySize int64,
+	historyStatistics *HistoryStatistics,
 ) *MutableStateStatistics {
 	if state == nil {
 		return nil
@@ -66,11 +66,9 @@ func statusOfInternalWorkflow(
 	totalSize += signalRequestIDSize
 	totalSize += bufferedEventsSize
 
-	historySizeDiff := int(historySize)
-
 	return &MutableStateStatistics{
-		TotalSize:       totalSize,
-		HistorySizeDiff: historySizeDiff,
+		TotalSize:         totalSize,
+		HistoryStatistics: historyStatistics,
 
 		ExecutionInfoSize:  executionInfoSize,
 		ExecutionStateSize: executionStateSize,
@@ -100,7 +98,7 @@ func statusOfInternalWorkflow(
 
 func statusOfInternalWorkflowMutation(
 	mutation *InternalWorkflowMutation,
-	historySize int64,
+	historyStatistics *HistoryStatistics,
 ) *MutableStateStatistics {
 	if mutation == nil {
 		return nil
@@ -159,11 +157,9 @@ func statusOfInternalWorkflowMutation(
 	totalSize += signalRequestIDSize
 	totalSize += bufferedEventsSize
 
-	historySizeDiff := int(historySize)
-
 	return &MutableStateStatistics{
-		TotalSize:       totalSize,
-		HistorySizeDiff: historySizeDiff,
+		TotalSize:         totalSize,
+		HistoryStatistics: historyStatistics,
 
 		ExecutionInfoSize:  executionInfoSize,
 		ExecutionStateSize: executionStateSize,
@@ -193,7 +189,7 @@ func statusOfInternalWorkflowMutation(
 
 func statusOfInternalWorkflowSnapshot(
 	snapshot *InternalWorkflowSnapshot,
-	historySize int64,
+	historyStatistics *HistoryStatistics,
 ) *MutableStateStatistics {
 	if snapshot == nil {
 		return nil
@@ -233,11 +229,9 @@ func statusOfInternalWorkflowSnapshot(
 	totalSize += signalRequestIDSize
 	totalSize += bufferedEventsSize
 
-	historySizeDiff := int(historySize)
-
 	return &MutableStateStatistics{
-		TotalSize:       totalSize,
-		HistorySizeDiff: historySizeDiff,
+		TotalSize:         totalSize,
+		HistoryStatistics: historyStatistics,
 
 		ExecutionInfoSize:  executionInfoSize,
 		ExecutionStateSize: executionStateSize,
