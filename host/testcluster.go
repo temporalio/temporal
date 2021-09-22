@@ -294,7 +294,9 @@ func (tc *TestCluster) DisableFaultInjection() {
 		tc.host.frontendService.GetFaultInjection().UpdateRate(0)
 	}
 	if tc.host.workerService != nil {
-		tc.host.workerService.GetFaultInjection().UpdateRate(0)
+		if tc.host.workerService.GetFaultInjection() != nil {
+			tc.host.workerService.GetFaultInjection().UpdateRate(0)
+		}
 	}
 
 	for _, s := range tc.host.historyServices {
