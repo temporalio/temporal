@@ -310,6 +310,19 @@ func (s *Server) newBootstrapParams(
 			)
 		}
 
+	// todo: Replace this hack with actually using sdkReporter, Client or Scope.
+	if serverReporter == nil {
+		var err error
+		serverReporter, sdkReporter, err = svcCfg.Metrics.InitMetricReporters(s.logger, nil)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"unable to initialize per-service metric client. "+
+					"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err)
+		}
+		params.ServerMetricsReporter = serverReporter
+		params.SDKMetricsReporter = sdkReporter
+	}
+
 	globalTallyScope, err := s.extractTallyScopeForSDK(sdkReporter)
 	if err != nil {
 		return nil, err
