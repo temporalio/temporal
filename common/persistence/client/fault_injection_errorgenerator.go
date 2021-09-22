@@ -170,4 +170,3 @@ func (p *NoopErrorGenerator) Rate() float64 { return 0 }
 func (p *NoopErrorGenerator) UpdateRate(rate float64) {}
 
 func (p *NoopErrorGenerator) UpdateWeights(weights []FaultWeight) {}
-
