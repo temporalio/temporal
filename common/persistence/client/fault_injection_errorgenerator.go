@@ -63,12 +63,6 @@ type (
 	NoopErrorGenerator struct{}
 )
 
-func (p *NoopErrorGenerator) Rate() float64 { return 0 }
-
-func (p *NoopErrorGenerator) UpdateRate(rate float64) {}
-
-func (p *NoopErrorGenerator) UpdateWeights(weights []FaultWeight) {}
-
 func calculateErrorRates(rate float64, weights []FaultWeight) []FaultMetadata {
 	totalCount := 0.0
 	for _, w := range weights {
@@ -135,12 +129,12 @@ func NewDefaultErrorGenerator(rate float64, errorWeights []FaultWeight) *Default
 }
 
 func (p *DefaultErrorGenerator) Generate() error {
+	p.Lock()
+	defer p.Unlock()
+
 	if p.rate <= 0 {
 		return nil
 	}
-
-	p.Lock()
-	defer p.Unlock()
 
 	if roll := p.r.Float64(); roll < p.rate {
 		var result error
@@ -168,3 +162,10 @@ func NewNoopErrorGenerator() *NoopErrorGenerator {
 func (p *NoopErrorGenerator) Generate() error {
 	return nil
 }
+
+func (p *NoopErrorGenerator) Rate() float64 { return 0 }
+
+func (p *NoopErrorGenerator) UpdateRate(rate float64) {}
+
+func (p *NoopErrorGenerator) UpdateWeights(weights []FaultWeight) {}
+
