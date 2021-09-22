@@ -427,7 +427,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	c.SetHistorySize(int64(resp.NewMutableStateStats.HistorySizeDiff))
+	c.SetHistorySize(int64(resp.NewMutableStateStats.HistoryStatistics.SizeDiff))
 
 	NotifyWorkflowSnapshotTasks(c.engine, newWorkflow)
 	emitStateTransitionCount(c.metricsClient, newMutableState)

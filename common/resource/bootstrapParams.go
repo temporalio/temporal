@@ -62,6 +62,8 @@ type (
 		PersistenceConfig            config.Persistence
 		ClusterMetadataConfig        *config.ClusterMetadata
 		ReplicatorConfig             config.Replicator
+		ServerMetricsReporter        metrics.Reporter
+		SDKMetricsReporter           metrics.Reporter
 		MetricsClient                metrics.Client
 		ESClient                     esclient.Client
 		ESConfig                     *config.Elasticsearch
