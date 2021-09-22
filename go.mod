@@ -92,7 +92,7 @@ require (
 	go.temporal.io/sdk v1.10.0
 	go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193
 	go.uber.org/atomic v1.9.0
-	go.uber.org/fx v1.14.2 // indirect
+	go.uber.org/fx v1.14.2
 	go.uber.org/multierr v1.7.0
 	go.uber.org/zap v1.19.0
 	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5 // indirect
@@ -114,3 +114,5 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 )
+
+require go.uber.org/dig v1.12.0 // indirect
