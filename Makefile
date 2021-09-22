@@ -491,6 +491,11 @@ docker-admin-tools:
 	@printf $(COLOR) "Build docker image temporalio/admin-tools:$(DOCKER_IMAGE_TAG)..."
 	docker build . -t temporalio/admin-tools:$(DOCKER_IMAGE_TAG) --build-arg TARGET=admin-tools
 
+##### Grafana #####
+update-dashboards:
+	@printf $(COLOR) "Update dashboards submodule from remote..."
+	git submodule update --force --remote develop/docker-compose/grafana/provisioning/temporalio-dashboards
+
 ##### Auxiliary #####
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
