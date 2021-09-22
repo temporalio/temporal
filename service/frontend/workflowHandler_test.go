@@ -1231,7 +1231,7 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 	newGoSDKVersion := "1.10.1"
 
 	// new sdk: should see failed event
-	ctx := headers.SetVersionsForTests(context.Background(), newGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions)
+	ctx := headers.SetVersionsForTests(context.Background(), newGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, headers.AllFeatures)
 	resp, err := wh.GetWorkflowExecutionHistory(ctx, req)
 	s.NoError(err)
 	s.False(resp.Archived)
@@ -1246,7 +1246,7 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 	// old sdk: should see continued-as-new event
 	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
 	// See comment in workflowHandler.go:GetWorkflowExecutionHistory
-	ctx = headers.SetVersionsForTests(context.Background(), oldGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions)
+	ctx = headers.SetVersionsForTests(context.Background(), oldGoSDKVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, "")
 	resp, err = wh.GetWorkflowExecutionHistory(ctx, req)
 	s.NoError(err)
 	s.False(resp.Archived)

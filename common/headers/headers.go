@@ -34,19 +34,24 @@ const (
 	ClientNameHeaderName              = "client-name"
 	ClientVersionHeaderName           = "client-version"
 	SupportedServerVersionsHeaderName = "supported-server-versions"
+	SupportedFeaturesHeaderName       = "supported-features"
+	SupportedFeaturesHeaderDelim      = ","
 )
 
 var (
-	versionHeaders = metadata.New(map[string]string{
+	internalVersionHeaders = metadata.New(map[string]string{
 		ClientNameHeaderName:              ClientNameServer,
 		ClientVersionHeaderName:           ServerVersion,
 		SupportedServerVersionsHeaderName: SupportedServerVersions,
+		SupportedFeaturesHeaderName:       AllFeatures,
 	})
 
 	cliVersionHeaders = metadata.New(map[string]string{
 		ClientNameHeaderName:              ClientNameCLI,
 		ClientVersionHeaderName:           CLIVersion,
 		SupportedServerVersionsHeaderName: SupportedServerVersions,
+		// TODO: This should include SupportedFeaturesHeaderName with a value that's taken
+		// from the Go SDK (since the cli uses the Go SDK for most operations).
 	})
 )
 
@@ -94,7 +99,7 @@ func PropagateVersions(ctx context.Context) context.Context {
 
 // SetVersions sets headers for internal communications.
 func SetVersions(ctx context.Context) context.Context {
-	return metadata.NewOutgoingContext(ctx, versionHeaders)
+	return metadata.NewOutgoingContext(ctx, internalVersionHeaders)
 }
 
 // SetCLIVersions sets headers for CLI requests.
@@ -104,11 +109,12 @@ func SetCLIVersions(ctx context.Context) context.Context {
 
 // SetVersionsForTests sets headers as they would be received from the client.
 // Must be used in tests only.
-func SetVersionsForTests(ctx context.Context, clientVersion, clientName, supportedServerVersions string) context.Context {
+func SetVersionsForTests(ctx context.Context, clientVersion, clientName, supportedServerVersions, supportedFeatures string) context.Context {
 	return metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
 		ClientNameHeaderName:              clientName,
 		ClientVersionHeaderName:           clientVersion,
 		SupportedServerVersionsHeaderName: supportedServerVersions,
+		SupportedFeaturesHeaderName:       supportedFeatures,
 	}))
 }
 

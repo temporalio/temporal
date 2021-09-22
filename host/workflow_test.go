@@ -681,7 +681,7 @@ func (s *integrationSuite) TestWorkflowRetry() {
 		// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
 		// See comment in workflowHandler.go:GetWorkflowExecutionHistory
 		ctx, _ := rpc.NewContextWithTimeout(90 * time.Second)
-		oldSDKCtx := headers.SetVersionsForTests(ctx, "1.3.1", headers.ClientNameJavaSDK, headers.SupportedServerVersions)
+		oldSDKCtx := headers.SetVersionsForTests(ctx, "1.3.1", headers.ClientNameJavaSDK, headers.SupportedServerVersions, "")
 		resp, err := s.engine.GetWorkflowExecutionHistory(oldSDKCtx, &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace:              s.namespace,
 			Execution:              executions[i],

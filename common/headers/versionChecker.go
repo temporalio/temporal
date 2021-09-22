@@ -27,6 +27,7 @@ package headers
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/blang/semver/v4"
 	"go.temporal.io/api/serviceerror"
@@ -50,18 +51,18 @@ const (
 )
 
 var (
+	// AllFeatures contains all known features. This list is used as the value of the supported
+	// features header for internal server requests. There is an assumption that if a feature is
+	// defined, then the server itself supports it.
+	AllFeatures = strings.Join([]string{
+		FeatureFollowsNextRunID,
+	}, SupportedFeaturesHeaderDelim)
+
 	SupportedClients = map[string]string{
 		ClientNameGoSDK:   "<2.0.0",
 		ClientNameJavaSDK: "<2.0.0",
 		ClientNameCLI:     "<2.0.0",
 		ClientNameServer:  "<2.0.0",
-	}
-	SupportedClientFeatures = map[string]map[string]string{
-		FeatureFollowsNextRunID: {
-			ClientNameGoSDK:   ">=1.10.0",
-			ClientNameJavaSDK: ">=1.4.0",
-			ClientNameServer:  ">=1.13.0",
-		},
 	}
 )
 
@@ -73,25 +74,23 @@ type (
 	}
 
 	versionChecker struct {
-		supportedClients             map[string]string
-		supportedClientsRange        map[string]semver.Range
-		supportedClientFeaturesRange map[string]map[string]semver.Range
-		serverVersion                semver.Version
+		supportedClients      map[string]string
+		supportedClientsRange map[string]semver.Range
+		serverVersion         semver.Version
 	}
 )
 
 // NewDefaultVersionChecker constructs a new VersionChecker using default versions from const.
 func NewDefaultVersionChecker() *versionChecker {
-	return NewVersionChecker(SupportedClients, SupportedClientFeatures, ServerVersion)
+	return NewVersionChecker(SupportedClients, ServerVersion)
 }
 
 // NewVersionChecker constructs a new VersionChecker
-func NewVersionChecker(supportedClients map[string]string, supportedClientFeatures map[string]map[string]string, serverVersion string) *versionChecker {
+func NewVersionChecker(supportedClients map[string]string, serverVersion string) *versionChecker {
 	return &versionChecker{
-		serverVersion:                semver.MustParse(serverVersion),
-		supportedClients:             supportedClients,
-		supportedClientsRange:        mustParseRanges(supportedClients),
-		supportedClientFeaturesRange: mustParseRangesMap(supportedClientFeatures),
+		serverVersion:         semver.MustParse(serverVersion),
+		supportedClients:      supportedClients,
+		supportedClientsRange: mustParseRanges(supportedClients),
 	}
 }
 
@@ -133,44 +132,23 @@ func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersi
 	return nil
 }
 
-// ClientSupportsFeature returns true if the client has supplied version headers, and the version is
-// known to support the given feature (which should be one of the Feature... constants above). If
-// the feature is unknown, it will return false.
+// ClientSupportsFeature returns true if the client reports support for the
+// given feature (which should be one of the Feature... constants above).
 func (vc *versionChecker) ClientSupportsFeature(ctx context.Context, feature string) bool {
-	headers := GetValues(ctx, ClientNameHeaderName, ClientVersionHeaderName)
-	clientName := headers[0]
-	clientVersion := headers[1]
-
-	ranges, ok := vc.supportedClientFeaturesRange[feature]
-	if !ok {
-		return false
+	headers := GetValues(ctx, SupportedFeaturesHeaderName)
+	clientFeatures := strings.Split(headers[0], SupportedFeaturesHeaderDelim)
+	for _, clientFeature := range clientFeatures {
+		if clientFeature == feature {
+			return true
+		}
 	}
-
-	supportedRange, ok := ranges[clientName]
-	if !ok {
-		return false
-	}
-	clientVersionParsed, err := semver.Parse(clientVersion)
-	if err != nil {
-		// If we got here, we should have parsed the version in ClientSupported.
-		// If we can't parse it now just assume it's old.
-		return false
-	}
-	return supportedRange(clientVersionParsed)
+	return false
 }
 
 func mustParseRanges(ranges map[string]string) map[string]semver.Range {
 	out := make(map[string]semver.Range, len(ranges))
 	for c, r := range ranges {
 		out[c] = semver.MustParseRange(r)
-	}
-	return out
-}
-
-func mustParseRangesMap(rangesMap map[string]map[string]string) map[string]map[string]semver.Range {
-	out := make(map[string]map[string]semver.Range, len(rangesMap))
-	for f, r := range rangesMap {
-		out[f] = mustParseRanges(r)
 	}
 	return out
 }
