@@ -62,8 +62,8 @@ type (
 		CountWorkflowExecutions(request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error)
 	}
 
-	// VisibilityWorkflowExecutionInfo is visibility info for internal response
-	VisibilityWorkflowExecutionInfo struct {
+	// InternalWorkflowExecutionInfo is visibility info for internal response
+	InternalWorkflowExecutionInfo struct {
 		WorkflowID           string
 		RunID                string
 		TypeName             string
@@ -80,7 +80,7 @@ type (
 
 	// InternalListWorkflowExecutionsResponse is response from ListWorkflowExecutions
 	InternalListWorkflowExecutionsResponse struct {
-		Executions []*VisibilityWorkflowExecutionInfo
+		Executions []*InternalWorkflowExecutionInfo
 		// Token to read next page if there are more workflow executions beyond page size.
 		// Use this to set NextPageToken on ListWorkflowExecutionsRequest to read the next page.
 		NextPageToken []byte

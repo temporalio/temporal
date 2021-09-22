@@ -236,7 +236,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutions(request *manager.ListWorkfl
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListOpenWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
 
-	isRecordValid := func(rec *store.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *store.InternalWorkflowExecutionInfo) bool {
 		return !rec.StartTime.Before(request.EarliestStartTime) && !rec.StartTime.After(request.LatestStartTime)
 	}
 
@@ -259,7 +259,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutions(request *manager.ListWork
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListClosedWorkflowExecutions failed. Error: %s", detailedErrorMessage(err)))
 	}
 
-	isRecordValid := func(rec *store.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *store.InternalWorkflowExecutionInfo) bool {
 		return !rec.CloseTime.Before(request.EarliestStartTime) && !rec.CloseTime.After(request.LatestStartTime)
 	}
 
@@ -284,7 +284,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByType(request *manager.List
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListOpenWorkflowExecutionsByType failed. Error: %s", detailedErrorMessage(err)))
 	}
 
-	isRecordValid := func(rec *store.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *store.InternalWorkflowExecutionInfo) bool {
 		return !rec.StartTime.Before(request.EarliestStartTime) && !rec.StartTime.After(request.LatestStartTime)
 	}
 
@@ -308,7 +308,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByType(request *manager.Li
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListClosedWorkflowExecutionsByType failed. Error: %s", detailedErrorMessage(err)))
 	}
 
-	isRecordValid := func(rec *store.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *store.InternalWorkflowExecutionInfo) bool {
 		return !rec.CloseTime.Before(request.EarliestStartTime) && !rec.CloseTime.After(request.LatestStartTime)
 	}
 
@@ -333,7 +333,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(request *manage
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListOpenWorkflowExecutionsByWorkflowID failed. Error: %s", detailedErrorMessage(err)))
 	}
 
-	isRecordValid := func(rec *store.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *store.InternalWorkflowExecutionInfo) bool {
 		return !rec.StartTime.Before(request.EarliestStartTime) && !rec.StartTime.After(request.LatestStartTime)
 	}
 
@@ -357,7 +357,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(request *mana
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListClosedWorkflowExecutionsByWorkflowID failed. Error: %s", detailedErrorMessage(err)))
 	}
 
-	isRecordValid := func(rec *store.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *store.InternalWorkflowExecutionInfo) bool {
 		return !rec.CloseTime.Before(request.EarliestStartTime) && !rec.CloseTime.After(request.LatestStartTime)
 	}
 
@@ -380,7 +380,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(request *manager.
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListClosedWorkflowExecutionsByStatus failed. Error: %s", detailedErrorMessage(err)))
 	}
 
-	isRecordValid := func(rec *store.VisibilityWorkflowExecutionInfo) bool {
+	isRecordValid := func(rec *store.InternalWorkflowExecutionInfo) bool {
 		return !rec.CloseTime.Before(request.EarliestStartTime) && !rec.CloseTime.After(request.LatestStartTime)
 	}
 
@@ -653,7 +653,7 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(
 	searchResult *elastic.SearchResult,
 	namespace string,
 	pageSize int,
-	isRecordValid func(rec *store.VisibilityWorkflowExecutionInfo) bool,
+	isRecordValid func(rec *store.InternalWorkflowExecutionInfo) bool,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
 
 	if searchResult.Hits == nil || len(searchResult.Hits.Hits) == 0 {
@@ -666,7 +666,7 @@ func (s *visibilityStore) getListWorkflowExecutionsResponse(
 	}
 
 	response := &store.InternalListWorkflowExecutionsResponse{
-		Executions: make([]*store.VisibilityWorkflowExecutionInfo, 0, len(searchResult.Hits.Hits)),
+		Executions: make([]*store.InternalWorkflowExecutionInfo, 0, len(searchResult.Hits.Hits)),
 	}
 	var lastHitSort []interface{}
 	for _, hit := range searchResult.Hits.Hits {
@@ -762,7 +762,7 @@ func (s *visibilityStore) generateESDoc(request *store.InternalVisibilityRequest
 	return doc, nil
 }
 
-func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchattribute.NameTypeMap, namespace string) (*store.VisibilityWorkflowExecutionInfo, error) {
+func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchattribute.NameTypeMap, namespace string) (*store.InternalWorkflowExecutionInfo, error) {
 	logParseError := func(fieldName string, fieldValue interface{}, err error, docID string) error {
 		s.metricsClient.IncCounter(metrics.ElasticsearchVisibility, metrics.ElasticsearchDocumentParseFailuresCount)
 		return serviceerror.NewUnavailable(fmt.Sprintf("Unable to parse Elasticsearch document(%s) %q field value %q: %v", docID, fieldName, fieldValue, err))
@@ -783,7 +783,7 @@ func (s *visibilityStore) parseESDoc(hit *elastic.SearchHit, saTypeMap searchatt
 		memoEncoding           string
 		customSearchAttributes map[string]interface{}
 	)
-	record := &store.VisibilityWorkflowExecutionInfo{}
+	record := &store.InternalWorkflowExecutionInfo{}
 	for fieldName, fieldValue := range sourceMap {
 		switch fieldName {
 		case searchattribute.NamespaceID,
