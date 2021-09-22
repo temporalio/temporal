@@ -283,32 +283,30 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 	}
 }
 
-func (tc *TestCluster) DisableFaultInjection() {
+func (tc *TestCluster) SetFaultInjectionRate(rate float64) {
 	if tc.testBase.FaultInjection != nil {
-		tc.testBase.FaultInjection.UpdateRate(0)
+		tc.testBase.FaultInjection.UpdateRate(rate)
 	}
 	if tc.host.matchingService.GetFaultInjection() != nil {
-		tc.host.matchingService.GetFaultInjection().UpdateRate(0)
+		tc.host.matchingService.GetFaultInjection().UpdateRate(rate)
 	}
 	if tc.host.frontendService.GetFaultInjection() != nil {
-		tc.host.frontendService.GetFaultInjection().UpdateRate(0)
+		tc.host.frontendService.GetFaultInjection().UpdateRate(rate)
 	}
-	if tc.host.workerService != nil {
-		if tc.host.workerService.GetFaultInjection() != nil {
-			tc.host.workerService.GetFaultInjection().UpdateRate(0)
-		}
+	if tc.host.workerService != nil && tc.host.workerService.GetFaultInjection() != nil {
+		tc.host.workerService.GetFaultInjection().UpdateRate(rate)
 	}
 
 	for _, s := range tc.host.historyServices {
 		if s.GetFaultInjection() != nil {
-			s.GetFaultInjection().UpdateRate(0)
+			s.GetFaultInjection().UpdateRate(rate)
 		}
 	}
 }
 
 // TearDownCluster tears down the test cluster
 func (tc *TestCluster) TearDownCluster() {
-	tc.DisableFaultInjection()
+	tc.SetFaultInjectionRate(0)
 	tc.host.Stop()
 	tc.host = nil
 	tc.testBase.TearDownWorkflowStore()
