@@ -950,8 +950,8 @@ type (
 
 	// MutableStateStatistics is the size stats for MutableState
 	MutableStateStatistics struct {
-		TotalSize       int
-		HistorySizeDiff int
+		TotalSize         int
+		HistoryStatistics *HistoryStatistics
 
 		// Breakdown of size into more granular stats
 		ExecutionInfoSize  int
@@ -973,6 +973,11 @@ type (
 		SignalInfoCount        int
 		SignalRequestIDCount   int
 		BufferedEventsCount    int
+	}
+
+	HistoryStatistics struct {
+		SizeDiff  int
+		CountDiff int
 	}
 
 	// AppendHistoryNodesRequest is used to append a batch of history nodes
