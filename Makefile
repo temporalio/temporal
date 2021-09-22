@@ -494,7 +494,7 @@ docker-admin-tools:
 ##### Grafana #####
 update-dashboards:
 	@printf $(COLOR) "Update dashboards submodule from remote..."
-	git submodule update --force --remote develop/docker-compose/grafana/provisioning/temporalio-dashboards
+	git submodule update --force --init --remote develop/docker-compose/grafana/provisioning/temporalio-dashboards
 
 ##### Auxiliary #####
 gomodtidy:
