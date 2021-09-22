@@ -151,15 +151,36 @@ func (d *RPCFactory) GetRingpopChannel() *tchannel.Channel {
 		ringpopServiceName := fmt.Sprintf("%v-ringpop", d.serviceName)
 		ringpopHostAddress := net.JoinHostPort(getListenIP(d.config, d.logger).String(), convert.IntToString(d.config.MembershipPort))
 
-		var err error
-		d.ringpopChannel, err = tchannel.NewChannel(ringpopServiceName, nil)
+		clientTLSConfig, err := d.GetInternodeClientTlsConfig()
+		if err != nil {
+			d.logger.Fatal("Failed to get internode TLS client config", tag.Error(err))
+		}
+		opts := &tchannel.ChannelOptions{}
+		if clientTLSConfig != nil {
+			opts.Dialer = (&tls.Dialer{Config: clientTLSConfig}).DialContext
+		}
+		d.ringpopChannel, err = tchannel.NewChannel(ringpopServiceName, opts)
 		if err != nil {
 			d.logger.Fatal("Failed to create ringpop TChannel", tag.Error(err))
 		}
 
-		err = d.ringpopChannel.ListenAndServe(ringpopHostAddress)
+		serverTLSConfig, err := d.tlsFactory.GetInternodeServerConfig()
 		if err != nil {
-			d.logger.Fatal("Failed to start ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))
+			d.logger.Fatal("Failed to get internode TLS server config", tag.Error(err))
+		}
+		if serverTLSConfig != nil {
+			tlsListener, err := tls.Listen("tcp", ringpopHostAddress, serverTLSConfig)
+			if err != nil {
+				d.logger.Fatal("Failed to start ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))
+			}
+
+			if err := d.ringpopChannel.Serve(tlsListener); err != nil {
+				d.logger.Fatal("Failed to serve ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))
+			}
+		} else {
+			if err = d.ringpopChannel.ListenAndServe(ringpopHostAddress); err != nil {
+				d.logger.Fatal("Failed to start ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))
+			}
 		}
 	}
 
