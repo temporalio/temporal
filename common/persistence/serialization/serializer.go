@@ -33,8 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	namespacepb "go.temporal.io/api/namespace/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -45,27 +44,12 @@ type (
 	// Serializer is used by persistence to serialize/deserialize objects
 	// It will only be used inside persistence, so that serialize/deserialize is transparent for application
 	Serializer interface {
-		// serialize/deserialize history events
 		SerializeEvents(batch []*historypb.HistoryEvent, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		DeserializeEvents(data *commonpb.DataBlob) ([]*historypb.HistoryEvent, error)
 
-		// serialize/deserialize a single history event
 		SerializeEvent(event *historypb.HistoryEvent, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		DeserializeEvent(data *commonpb.DataBlob) (*historypb.HistoryEvent, error)
 
-		// serialize/deserialize visibility memo fields
-		SerializeVisibilityMemo(memo *commonpb.Memo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		DeserializeVisibilityMemo(data *commonpb.DataBlob) (*commonpb.Memo, error)
-
-		// serialize/deserialize reset points
-		SerializeResetPoints(event *workflowpb.ResetPoints, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		DeserializeResetPoints(data *commonpb.DataBlob) (*workflowpb.ResetPoints, error)
-
-		// serialize/deserialize bad binaries
-		SerializeBadBinaries(event *namespacepb.BadBinaries, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		DeserializeBadBinaries(data *commonpb.DataBlob) (*namespacepb.BadBinaries, error)
-
-		// serialize/deserialize mutable cluster metadata
 		SerializeClusterMetadata(icm *persistencespb.ClusterMetadata, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		DeserializeClusterMetadata(data *commonpb.DataBlob) (*persistencespb.ClusterMetadata, error)
 
@@ -210,107 +194,6 @@ func (t *serializerImpl) DeserializeEvent(data *commonpb.DataBlob) (*historypb.H
 	}
 
 	return event, err
-}
-
-func (t *serializerImpl) SerializeResetPoints(rp *workflowpb.ResetPoints, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	if rp == nil {
-		rp = &workflowpb.ResetPoints{}
-	}
-	return t.serialize(rp, encodingType)
-}
-
-func (t *serializerImpl) DeserializeResetPoints(data *commonpb.DataBlob) (*workflowpb.ResetPoints, error) {
-	if data == nil {
-		return &workflowpb.ResetPoints{}, nil
-	}
-	if len(data.Data) == 0 {
-		return &workflowpb.ResetPoints{}, nil
-	}
-
-	memo := &workflowpb.ResetPoints{}
-	var err error
-	switch data.EncodingType {
-	case enumspb.ENCODING_TYPE_PROTO3:
-		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
-		// Client API currently specifies encodingType on requests which span multiple of these objects
-		err = memo.Unmarshal(data.Data)
-	default:
-		return nil, NewDeserializationError("DeserializeResetPoints invalid encoding")
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return memo, err
-}
-
-func (t *serializerImpl) SerializeBadBinaries(bb *namespacepb.BadBinaries, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	if bb == nil {
-		bb = &namespacepb.BadBinaries{}
-	}
-	return t.serialize(bb, encodingType)
-}
-
-func (t *serializerImpl) DeserializeBadBinaries(data *commonpb.DataBlob) (*namespacepb.BadBinaries, error) {
-	if data == nil {
-		return &namespacepb.BadBinaries{}, nil
-	}
-	if len(data.Data) == 0 {
-		return &namespacepb.BadBinaries{}, nil
-	}
-
-	memo := &namespacepb.BadBinaries{}
-	var err error
-	switch data.EncodingType {
-	case enumspb.ENCODING_TYPE_PROTO3:
-		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
-		// Client API currently specifies encodingType on requests which span multiple of these objects
-		err = memo.Unmarshal(data.Data)
-	default:
-		return nil, NewDeserializationError("DeserializeBadBinaries invalid encoding")
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return memo, err
-}
-
-func (t *serializerImpl) SerializeVisibilityMemo(memo *commonpb.Memo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	if memo == nil {
-		// Return nil here to be consistent with Event
-		// This check is not duplicate as check in following serialize
-		return nil, nil
-	}
-	return t.serialize(memo, encodingType)
-}
-
-func (t *serializerImpl) DeserializeVisibilityMemo(data *commonpb.DataBlob) (*commonpb.Memo, error) {
-	if data == nil {
-		return &commonpb.Memo{}, nil
-	}
-	if len(data.Data) == 0 {
-		return &commonpb.Memo{}, nil
-	}
-
-	memo := &commonpb.Memo{}
-	var err error
-	switch data.EncodingType {
-	case enumspb.ENCODING_TYPE_PROTO3:
-		// Thrift == Proto for this object so that we can maintain test behavior until thrift is gone
-		// Client API currently specifies encodingType on requests which span multiple of these objects
-		err = memo.Unmarshal(data.Data)
-	default:
-		return nil, NewDeserializationError("DeserializeVisibilityMemo invalid encoding")
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return memo, err
 }
 
 func (t *serializerImpl) SerializeClusterMetadata(cm *persistencespb.ClusterMetadata, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {

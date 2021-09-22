@@ -33,7 +33,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	sdkclient "go.temporal.io/sdk/client"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -60,6 +59,7 @@ import (
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
+	"go.uber.org/fx"
 )
 
 const (
@@ -202,7 +202,13 @@ func (s *Server) Start() error {
 		case primitives.FrontendService:
 			svc, err = frontend.NewService(params)
 		case primitives.HistoryService:
-			svc, err = history.NewService(params)
+			var historySvc *history.Service
+			histApp := fx.New(
+				fx.Supply(params),
+				history.Module,
+				fx.Populate(&historySvc))
+			err = histApp.Err()
+			svc = historySvc
 		case primitives.MatchingService:
 			svc, err = matching.NewService(params)
 		case primitives.WorkerService:
@@ -222,7 +228,6 @@ func (s *Server) Start() error {
 			svc.Start()
 			close(svcStoppedCh)
 		}(svc, s.serviceStoppedChs[svcName])
-
 	}
 
 	if s.so.blockingStart {
@@ -272,7 +277,6 @@ func (s *Server) newBootstrapParams(
 	esConfig *config.Elasticsearch,
 	esClient esclient.Client,
 ) (*resource.BootstrapParams, error) {
-
 	params := &resource.BootstrapParams{
 		Name:                     svcName,
 		Logger:                   s.logger,
@@ -309,6 +313,19 @@ func (s *Server) newBootstrapParams(
 				persistenceBean.GetClusterMetadataManager(),
 			)
 		}
+
+	// todo: Replace this hack with actually using sdkReporter, Client or Scope.
+	if serverReporter == nil {
+		var err error
+		serverReporter, sdkReporter, err = svcCfg.Metrics.InitMetricReporters(s.logger, nil)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"unable to initialize per-service metric client. "+
+					"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err)
+		}
+		params.ServerMetricsReporter = serverReporter
+		params.SDKMetricsReporter = sdkReporter
+	}
 
 	globalTallyScope, err := s.extractTallyScopeForSDK(sdkReporter)
 	if err != nil {

@@ -58,7 +58,6 @@ func emitMutableStateStatus(
 	sizeScope.RecordDistribution(metrics.MutableStateSize, stats.TotalSize)
 	sizeScope.RecordDistribution(metrics.ExecutionInfoSize, stats.ExecutionInfoSize)
 	sizeScope.RecordDistribution(metrics.ExecutionStateSize, stats.ExecutionStateSize)
-	sizeScope.RecordDistribution(metrics.HistorySize, stats.HistorySizeDiff)
 
 	sizeScope.RecordDistribution(metrics.ActivityInfoSize, stats.ActivityInfoSize)
 	countScope.RecordDistribution(metrics.ActivityInfoCount, stats.ActivityInfoCount)
@@ -77,6 +76,11 @@ func emitMutableStateStatus(
 
 	sizeScope.RecordDistribution(metrics.BufferedEventsSize, stats.BufferedEventsSize)
 	sizeScope.RecordDistribution(metrics.BufferedEventsCount, stats.BufferedEventsCount)
+
+	if stats.HistoryStatistics != nil {
+		sizeScope.RecordDistribution(metrics.HistorySize, stats.HistoryStatistics.SizeDiff)
+		sizeScope.RecordDistribution(metrics.HistoryCount, stats.HistoryStatistics.CountDiff)
+	}
 }
 
 func emitWorkflowCompletionStats(

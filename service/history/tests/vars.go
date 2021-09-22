@@ -120,7 +120,9 @@ var (
 	)
 
 	CreateWorkflowExecutionResponse = &persistence.CreateWorkflowExecutionResponse{
-		NewMutableStateStats: persistence.MutableStateStatistics{},
+		NewMutableStateStats: persistence.MutableStateStatistics{
+			HistoryStatistics: &persistence.HistoryStatistics{},
+		},
 	}
 
 	GetWorkflowExecutionResponse = &persistence.GetWorkflowExecutionResponse{
@@ -128,8 +130,10 @@ var (
 	}
 
 	UpdateWorkflowExecutionResponse = &persistence.UpdateWorkflowExecutionResponse{
-		UpdateMutableStateStats: persistence.MutableStateStatistics{},
-		NewMutableStateStats:    nil,
+		UpdateMutableStateStats: persistence.MutableStateStatistics{
+			HistoryStatistics: &persistence.HistoryStatistics{},
+		},
+		NewMutableStateStats: nil,
 	}
 )
 
