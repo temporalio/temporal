@@ -38,7 +38,8 @@ import (
 )
 
 const (
-	cacheRefreshInterval = 60 * time.Second
+	cacheRefreshInterval              = 60 * time.Second
+	cacheRefreshIfUnavailableInterval = 20 * time.Second
 )
 
 type (
@@ -47,14 +48,14 @@ type (
 		clusterMetadataManager persistence.ClusterMetadataManager
 
 		cacheUpdateMutex sync.Mutex
-		cache            atomic.Value
+		cache            atomic.Value // of type cache
 	}
 
 	cache struct {
 		// indexName -> NameTypeMap
 		searchAttributes map[string]NameTypeMap
 		dbVersion        int64
-		lastRefresh      time.Time
+		expireOn         time.Time
 	}
 )
 
@@ -69,7 +70,7 @@ func NewManager(
 	saCache.Store(cache{
 		searchAttributes: map[string]NameTypeMap{},
 		dbVersion:        0,
-		lastRefresh:      time.Time{},
+		expireOn:         time.Time{},
 	})
 
 	return &managerImpl{
@@ -112,28 +113,37 @@ func (m *managerImpl) GetSearchAttributes(
 }
 
 func (m *managerImpl) needRefreshCache(saCache cache, forceRefreshCache bool, now time.Time) bool {
-	return forceRefreshCache || saCache.lastRefresh.Add(cacheRefreshInterval).Before(now)
+	return forceRefreshCache || saCache.expireOn.Before(now)
 }
 
 func (m *managerImpl) refreshCache(saCache cache, now time.Time) (cache, error) {
 	clusterMetadata, err := m.clusterMetadataManager.GetClusterMetadata()
 	if err != nil {
-		if _, isNotFoundErr := err.(*serviceerror.NotFound); !isNotFoundErr {
+		switch err.(type) {
+		case *serviceerror.NotFound:
+			// NotFound means cluster metadata was never persisted and custom search attributes are not defined.
+			// Ignore the error.
+			saCache.expireOn = now.Add(cacheRefreshInterval)
+		case *serviceerror.Unavailable:
+			// If persistence is Unavailable, ignore the error and use existing cache for cacheRefreshIfUnavailableInterval.
+			saCache.expireOn = now.Add(cacheRefreshIfUnavailableInterval)
+		default:
 			return saCache, err
 		}
+		m.cache.Store(saCache)
+		return saCache, nil
 	}
 
-	// clusterMetadata == nil means cluster metadata was never persisted and search attributes are not defined.
 	// clusterMetadata.Version <= saCache.dbVersion means DB is not changed.
-	if clusterMetadata == nil || clusterMetadata.Version <= saCache.dbVersion {
-		saCache.lastRefresh = now
+	if clusterMetadata.Version <= saCache.dbVersion {
+		saCache.expireOn = now.Add(cacheRefreshInterval)
 		m.cache.Store(saCache)
 		return saCache, nil
 	}
 
 	saCache = cache{
-		searchAttributes: BuildIndexNameTypeMap(clusterMetadata.GetIndexSearchAttributes()),
-		lastRefresh:      now,
+		searchAttributes: buildIndexNameTypeMap(clusterMetadata.GetIndexSearchAttributes()),
+		expireOn:         now.Add(cacheRefreshInterval),
 		dbVersion:        clusterMetadata.Version,
 	}
 	m.cache.Store(saCache)

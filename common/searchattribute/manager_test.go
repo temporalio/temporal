@@ -96,6 +96,7 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache() {
 		Version: 1,
 	}, nil)
 	// Second call, no changes in DB (version is the same)
+	s.timeSource.Update(time.Date(2020, 8, 22, 1, 0, 10, 0, time.UTC))
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(&persistence.GetClusterMetadataResponse{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
@@ -107,6 +108,7 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache() {
 		Version: 1,
 	}, nil)
 	// Third call, DB changed
+	s.timeSource.Update(time.Date(2020, 8, 22, 1, 0, 20, 0, time.UTC))
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(&persistence.GetClusterMetadataResponse{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
@@ -161,6 +163,38 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_NotFoundErro
 	searchAttributes, err = s.manager.GetSearchAttributes("index-name", false)
 	s.NoError(err)
 	s.Len(searchAttributes.Custom(), 0)
+}
+
+func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_UnavailableError() {
+	s.timeSource.Update(time.Date(2020, 8, 22, 1, 0, 0, 0, time.UTC))
+
+	// First call populates cache.
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(&persistence.GetClusterMetadataResponse{
+		ClusterMetadata: persistencespb.ClusterMetadata{
+			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
+				"index-name": {
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"OrderId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					}}},
+		},
+		Version: 1,
+	}, nil)
+	searchAttributes, err := s.manager.GetSearchAttributes("index-name", false)
+	s.NoError(err)
+	s.Len(searchAttributes.Custom(), 1)
+
+	// Expire cache.
+	s.timeSource.Update(time.Date(2020, 8, 22, 2, 0, 0, 0, time.UTC))
+
+	// Second call, cache is expired, DB is down, but cache data is returned.
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata().Return(nil, serviceerror.NewUnavailable("db is down"))
+	searchAttributes, err = s.manager.GetSearchAttributes("index-name", false)
+	s.NoError(err)
+	s.Len(searchAttributes.Custom(), 1)
+
+	// Next cache refresh in cacheRefreshIfUnavailableInterval.
+	c := s.manager.cache.Load().(cache)
+	s.Equal(time.Date(2020, 8, 22, 2, 0, 20, 0, time.UTC), c.expireOn)
 }
 
 func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_EmptyIndex() {

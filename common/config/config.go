@@ -67,8 +67,6 @@ type (
 	Service struct {
 		// RPC is the rpc configuration
 		RPC RPC `yaml:"rpc"`
-		// Deprecated. Use Metrics in global section instead.
-		Metrics metrics.Config `yaml:"metrics"`
 	}
 
 	// PProf contains the config items for the pprof utility
