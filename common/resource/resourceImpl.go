@@ -31,13 +31,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/visibility/manager"
-
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute"
