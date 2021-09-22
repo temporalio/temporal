@@ -35,6 +35,7 @@ import (
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.uber.org/fx"
 
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 
@@ -475,9 +476,14 @@ func (c *temporalImpl) startHistory(
 			}
 		}
 
-		historyService, err := history.NewService(params)
+		var historyService *history.Service
+		app := fx.New(
+			fx.Supply(params),
+			history.Module,
+			fx.Populate(&historyService))
+		err = app.Err()
 		if err != nil {
-			params.Logger.Fatal("unable to start history service", tag.Error(err))
+			params.Logger.Fatal("unable to construct history service", tag.Error(err))
 		}
 
 		if c.mockAdminClient != nil {
