@@ -34,6 +34,7 @@ import (
 	"github.com/uber-go/tally"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
+	"golang.org/x/net/context"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -218,7 +219,9 @@ func (s *Server) Start() error {
 				return fmt.Errorf("unable to construct service %q: %w", svcName, err)
 			}
 			s.serviceApps[svcName] = histApp
-			err = histApp.Start(ctx.Background())
+			timeoutCtx, cancelFunc := context.WithTimeout(ctx.Background(), time.Duration(15) * time.Second)
+			err = histApp.Start(timeoutCtx)
+			cancelFunc()
 			if err != nil {
 				close(s.serviceStoppedChs[svcName])
 				return fmt.Errorf("unable to start service %q: %w", svcName, err)
