@@ -42,7 +42,7 @@ import (
 
 const (
 	// PluginName is the name of the plugin
-	PluginName = "sqlite3"
+	PluginName = "sqlite"
 )
 
 type plugin struct{}

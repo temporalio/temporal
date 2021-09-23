@@ -30,7 +30,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-
 	"go.temporal.io/server/common/config"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql"
@@ -438,7 +437,7 @@ func NewSQLiteConfig() *config.SQL {
 			"mode":  "memory",
 			"cache": "shared",
 		},
-		PluginName:   "sqlite3",
+		PluginName:   "sqlite",
 		DatabaseName: testSQLiteDatabaseNamePrefix + shuffle.String(testSQLiteDatabaseNameSuffix),
 	}
 }
