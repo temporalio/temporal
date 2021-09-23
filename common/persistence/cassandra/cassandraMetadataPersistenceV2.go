@@ -124,7 +124,7 @@ func (m *cassandraMetadataPersistenceV2) CreateNamespace(request *p.InternalCrea
 	query := m.session.Query(templateCreateNamespaceQuery, request.ID, request.Name)
 	applied, err := query.MapScanCAS(make(map[string]interface{}))
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
 	}
 	if !applied {
 		return nil, serviceerror.NewNamespaceAlreadyExists("CreateNamespace operation failed because of uuid collision.")
@@ -154,15 +154,10 @@ func (m *cassandraMetadataPersistenceV2) CreateNamespaceInV2Table(request *p.Int
 
 	previous := make(map[string]interface{})
 	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
-	defer func() {
-		if iter != nil {
-			iter.Close()
-		}
-	}()
-
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err))
 	}
+	defer func() { _ = iter.Close() }()
 
 	if !applied {
 		// Namespace already exist.  Delete orphan namespace record before returning back to user
@@ -194,17 +189,13 @@ func (m *cassandraMetadataPersistenceV2) UpdateNamespace(request *p.InternalUpda
 
 	previous := make(map[string]interface{})
 	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
-	defer func() {
-		if iter != nil {
-			iter.Close()
-		}
-	}()
-
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("UpdateNamespace operation failed. Error: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("UpdateNamespace operation failed. Error: %v", err))
 	}
+	defer func() { _ = iter.Close() }()
+
 	if !applied {
-		return serviceerror.NewInternal(fmt.Sprintf("UpdateNamespace operation failed because of conditional failure."))
+		return serviceerror.NewUnavailable(fmt.Sprintf("UpdateNamespace operation failed because of conditional failure."))
 	}
 
 	return nil
@@ -232,7 +223,7 @@ func (m *cassandraMetadataPersistenceV2) GetNamespace(request *p.GetNamespaceReq
 			}
 			return serviceerror.NewNotFound(fmt.Sprintf("Namespace %s does not exist.", identity))
 		}
-		return serviceerror.NewInternal(fmt.Sprintf("GetNamespace operation failed. Error %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("GetNamespace operation failed. Error %v", err))
 	}
 
 	namespace := request.Name
@@ -298,11 +289,11 @@ func (m *cassandraMetadataPersistenceV2) ListNamespaces(request *p.ListNamespace
 		}
 	}
 
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ListNamespaces operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListNamespaces operation failed. Error: %v", err))
 	}
 
 	return response, nil
@@ -375,12 +366,12 @@ func (m *cassandraMetadataPersistenceV2) updateMetadataBatch(
 func (m *cassandraMetadataPersistenceV2) deleteNamespace(name string, ID []byte) error {
 	query := m.session.Query(templateDeleteNamespaceByNameQueryV2, constNamespacePartition, name)
 	if err := query.Exec(); err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("DeleteNamespaceByName operation failed. Error %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("DeleteNamespaceByName operation failed. Error %v", err))
 	}
 
 	query = m.session.Query(templateDeleteNamespaceQuery, ID)
 	if err := query.Exec(); err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("DeleteNamespace operation failed. Error %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("DeleteNamespace operation failed. Error %v", err))
 	}
 
 	return nil

@@ -494,10 +494,6 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 ) ([]*historyspb.VersionHistoryItem, []byte, error) {
 
 	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
-	if versionHistories == nil {
-		return nil, nil, serviceerror.NewInternal("replicatorQueueProcessor encounter workflow without version histories")
-	}
-
 	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
 		versionHistories,
 		versionhistory.NewVersionHistoryItem(

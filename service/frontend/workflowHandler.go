@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -56,7 +57,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -93,6 +93,7 @@ type (
 		versionChecker                  headers.VersionChecker
 		namespaceHandler                namespace.Handler
 		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
+		visibilityMrg                   manager.VisibilityManager
 	}
 
 	// HealthStatus is an enum that refers to the rpc handler health status
@@ -108,7 +109,8 @@ func NewWorkflowHandler(
 	resource resource.Resource,
 	config *Config,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
-) Handler {
+	visibilityMrg manager.VisibilityManager,
+) *WorkflowHandler {
 
 	handler := &WorkflowHandler{
 		Resource:        resource,
@@ -127,6 +129,7 @@ func NewWorkflowHandler(
 			resource.GetArchiverProvider(),
 		),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
+		visibilityMrg:                   visibilityMrg,
 	}
 
 	return handler
@@ -2181,7 +2184,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		return nil, err
 	}
 
-	baseReq := &visibility.ListWorkflowExecutionsRequest{
+	baseReq := &manager.ListWorkflowExecutionsRequest{
 		NamespaceID:       namespaceID,
 		Namespace:         namespace,
 		PageSize:          int(request.GetMaximumPageSize()),
@@ -2190,13 +2193,13 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()),
 	}
 
-	var persistenceResp *visibility.ListWorkflowExecutionsResponse
+	var persistenceResp *manager.ListWorkflowExecutionsResponse
 	if request.GetExecutionFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespace) {
 			err = errNoPermission
 		} else {
-			persistenceResp, err = wh.GetVisibilityManager().ListOpenWorkflowExecutionsByWorkflowID(
-				&visibility.ListWorkflowExecutionsByWorkflowIDRequest{
+			persistenceResp, err = wh.visibilityMrg.ListOpenWorkflowExecutionsByWorkflowID(
+				&manager.ListWorkflowExecutionsByWorkflowIDRequest{
 					ListWorkflowExecutionsRequest: baseReq,
 					WorkflowID:                    request.GetExecutionFilter().GetWorkflowId(),
 				})
@@ -2207,7 +2210,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		if wh.config.DisableListVisibilityByFilter(namespace) {
 			err = errNoPermission
 		} else {
-			persistenceResp, err = wh.GetVisibilityManager().ListOpenWorkflowExecutionsByType(&visibility.ListWorkflowExecutionsByTypeRequest{
+			persistenceResp, err = wh.visibilityMrg.ListOpenWorkflowExecutionsByType(&manager.ListWorkflowExecutionsByTypeRequest{
 				ListWorkflowExecutionsRequest: baseReq,
 				WorkflowTypeName:              request.GetTypeFilter().GetName(),
 			})
@@ -2215,7 +2218,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		wh.GetLogger().Debug("List open workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByType)
 	} else {
-		persistenceResp, err = wh.GetVisibilityManager().ListOpenWorkflowExecutions(baseReq)
+		persistenceResp, err = wh.visibilityMrg.ListOpenWorkflowExecutions(baseReq)
 	}
 
 	if err != nil {
@@ -2278,7 +2281,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		return nil, err
 	}
 
-	baseReq := &visibility.ListWorkflowExecutionsRequest{
+	baseReq := &manager.ListWorkflowExecutionsRequest{
 		NamespaceID:       namespaceID,
 		Namespace:         namespace,
 		PageSize:          int(request.GetMaximumPageSize()),
@@ -2287,13 +2290,13 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		LatestStartTime:   timestamp.TimeValue(request.StartTimeFilter.GetLatestTime()),
 	}
 
-	var persistenceResp *visibility.ListWorkflowExecutionsResponse
+	var persistenceResp *manager.ListWorkflowExecutionsResponse
 	if request.GetExecutionFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespace) {
 			err = errNoPermission
 		} else {
-			persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByWorkflowID(
-				&visibility.ListWorkflowExecutionsByWorkflowIDRequest{
+			persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutionsByWorkflowID(
+				&manager.ListWorkflowExecutionsByWorkflowIDRequest{
 					ListWorkflowExecutionsRequest: baseReq,
 					WorkflowID:                    request.GetExecutionFilter().GetWorkflowId(),
 				})
@@ -2304,7 +2307,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		if wh.config.DisableListVisibilityByFilter(namespace) {
 			err = errNoPermission
 		} else {
-			persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByType(&visibility.ListWorkflowExecutionsByTypeRequest{
+			persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutionsByType(&manager.ListWorkflowExecutionsByTypeRequest{
 				ListWorkflowExecutionsRequest: baseReq,
 				WorkflowTypeName:              request.GetTypeFilter().GetName(),
 			})
@@ -2318,7 +2321,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 			if request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED || request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				err = errStatusFilterMustBeNotRunning
 			} else {
-				persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutionsByStatus(&visibility.ListClosedWorkflowExecutionsByStatusRequest{
+				persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutionsByStatus(&manager.ListClosedWorkflowExecutionsByStatusRequest{
 					ListWorkflowExecutionsRequest: baseReq,
 					Status:                        request.GetStatusFilter().GetStatus(),
 				})
@@ -2327,7 +2330,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		wh.GetLogger().Debug("List closed workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByStatus)
 	} else {
-		persistenceResp, err = wh.GetVisibilityManager().ListClosedWorkflowExecutions(baseReq)
+		persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutions(baseReq)
 	}
 
 	if err != nil {
@@ -2374,14 +2377,14 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 		return nil, err
 	}
 
-	req := &visibility.ListWorkflowExecutionsRequestV2{
+	req := &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   namespaceID,
 		Namespace:     namespace,
 		PageSize:      int(request.GetPageSize()),
 		NextPageToken: request.NextPageToken,
 		Query:         request.GetQuery(),
 	}
-	persistenceResp, err := wh.GetVisibilityManager().ListWorkflowExecutions(req)
+	persistenceResp, err := wh.visibilityMrg.ListWorkflowExecutions(req)
 	if err != nil {
 		return nil, err
 	}
@@ -2457,7 +2460,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 
 	searchAttributes, err := wh.Resource.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 
 	archiverResponse, err := visibilityArchiver.Query(
@@ -2516,14 +2519,14 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 		return nil, err
 	}
 
-	req := &visibility.ListWorkflowExecutionsRequestV2{
+	req := &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   namespaceID,
 		Namespace:     namespace,
 		PageSize:      int(request.GetPageSize()),
 		NextPageToken: request.NextPageToken,
 		Query:         request.GetQuery(),
 	}
-	persistenceResp, err := wh.GetVisibilityManager().ScanWorkflowExecutions(req)
+	persistenceResp, err := wh.visibilityMrg.ScanWorkflowExecutions(req)
 	if err != nil {
 		return nil, err
 	}
@@ -2561,12 +2564,12 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 		return nil, err
 	}
 
-	req := &visibility.CountWorkflowExecutionsRequest{
+	req := &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: namespaceID,
 		Namespace:   namespace,
 		Query:       request.GetQuery(),
 	}
-	persistenceResp, err := wh.GetVisibilityManager().CountWorkflowExecutions(req)
+	persistenceResp, err := wh.visibilityMrg.CountWorkflowExecutions(req)
 	if err != nil {
 		return nil, err
 	}
@@ -2591,7 +2594,7 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 
 	searchAttributes, err := wh.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 	resp := &workflowservice.GetSearchAttributesResponse{
 		Keys: searchAttributes.All(),
@@ -2833,7 +2836,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 	if response.GetWorkflowExecutionInfo().GetSearchAttributes() != nil {
 		saTypeMap, err := wh.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
 		if err != nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 		}
 		searchattribute.ApplyTypeMap(response.GetWorkflowExecutionInfo().GetSearchAttributes(), saTypeMap)
 		err = searchattribute.ApplyAliases(wh.GetSearchAttributesMapper(), response.GetWorkflowExecutionInfo().GetSearchAttributes(), request.GetNamespace())
@@ -3101,7 +3104,7 @@ func (wh *WorkflowHandler) getHistory(
 func (wh *WorkflowHandler) processSearchAttributes(events []*historypb.HistoryEvent, namespace string) error {
 	saTypeMap, err := wh.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
+		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
 	}
 	for _, event := range events {
 		var searchAttributes *commonpb.SearchAttributes

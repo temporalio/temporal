@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/client"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -45,7 +46,6 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -55,7 +55,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/xdc"
@@ -74,7 +74,7 @@ type (
 		status int32
 
 		numberOfHistoryShards int32
-		ESConfig              *config.Elasticsearch
+		ESConfig              *esclient.Config
 		ESClient              esclient.Client
 		config                *Config
 		namespaceDLQHandler   namespace.DLQMessageHandler
@@ -168,7 +168,7 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 
 	currentSearchAttributes, err := adh.Resource.GetSearchAttributesProvider().GetSearchAttributes(indexName, true)
 	if err != nil {
-		return nil, adh.error(serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err)), scope)
+		return nil, adh.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err)), scope)
 	}
 
 	for saName, saType := range request.GetSearchAttributes() {
@@ -200,14 +200,14 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 		wfParams,
 	)
 	if err != nil {
-		return nil, adh.error(serviceerror.NewInternal(fmt.Sprintf(errUnableToStartWorkflowMessage, addsearchattributes.WorkflowName, err)), scope)
+		return nil, adh.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToStartWorkflowMessage, addsearchattributes.WorkflowName, err)), scope)
 	}
 
 	// Wait for workflow to complete.
 	err = run.Get(ctx, nil)
 	if err != nil {
 		scope.IncCounter(metrics.AddSearchAttributesWorkflowFailuresCount)
-		return nil, adh.error(serviceerror.NewInternal(fmt.Sprintf(errWorkflowReturnedErrorMessage, addsearchattributes.WorkflowName, err)), scope)
+		return nil, adh.error(serviceerror.NewUnavailable(fmt.Sprintf(errWorkflowReturnedErrorMessage, addsearchattributes.WorkflowName, err)), scope)
 	}
 	scope.IncCounter(metrics.AddSearchAttributesWorkflowSuccessCount)
 
@@ -237,7 +237,7 @@ func (adh *AdminHandler) RemoveSearchAttributes(ctx context.Context, request *ad
 
 	currentSearchAttributes, err := adh.Resource.GetSearchAttributesProvider().GetSearchAttributes(indexName, true)
 	if err != nil {
-		return nil, adh.error(serviceerror.NewInternal(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err)), scope)
+		return nil, adh.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err)), scope)
 	}
 
 	newCustomSearchAttributes := map[string]enumspb.IndexedValueType{}
@@ -257,7 +257,7 @@ func (adh *AdminHandler) RemoveSearchAttributes(ctx context.Context, request *ad
 
 	err = adh.Resource.GetSearchAttributesManager().SaveSearchAttributes(indexName, newCustomSearchAttributes)
 	if err != nil {
-		return nil, adh.error(serviceerror.NewInternal(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err)), scope)
+		return nil, adh.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err)), scope)
 	}
 
 	return &adminservice.RemoveSearchAttributesResponse{}, nil
@@ -293,7 +293,7 @@ func (adh *AdminHandler) getSearchAttributes(ctx context.Context, indexName stri
 	if err != nil {
 		// NotFound can happen when no search attributes were added and the workflow has never been executed.
 		if _, notFound := err.(*serviceerror.NotFound); !notFound {
-			lastErr = serviceerror.NewInternal(fmt.Sprintf("unable to get %s workflow state: %v", addsearchattributes.WorkflowName, err))
+			lastErr = serviceerror.NewUnavailable(fmt.Sprintf("unable to get %s workflow state: %v", addsearchattributes.WorkflowName, err))
 			adh.GetLogger().Error("getSearchAttributes error", tag.Error(lastErr))
 		}
 	} else {
@@ -304,14 +304,14 @@ func (adh *AdminHandler) getSearchAttributes(ctx context.Context, indexName stri
 	if adh.ESClient != nil {
 		esMapping, err = adh.ESClient.GetMapping(ctx, indexName)
 		if err != nil {
-			lastErr = serviceerror.NewInternal(fmt.Sprintf("unable to get mapping from Elasticsearch: %v", err))
+			lastErr = serviceerror.NewUnavailable(fmt.Sprintf("unable to get mapping from Elasticsearch: %v", err))
 			adh.GetLogger().Error("getSearchAttributes error", tag.Error(lastErr))
 		}
 	}
 
 	searchAttributes, err := adh.Resource.GetSearchAttributesProvider().GetSearchAttributes(indexName, true)
 	if err != nil {
-		lastErr = serviceerror.NewInternal(fmt.Sprintf("unable to read custom search attributes: %v", err))
+		lastErr = serviceerror.NewUnavailable(fmt.Sprintf("unable to read custom search attributes: %v", err))
 		adh.GetLogger().Error("getSearchAttributes error", tag.Error(lastErr))
 	}
 
@@ -1159,8 +1159,8 @@ func (adh *AdminHandler) startRequestProfile(scope int) (metrics.Scope, metrics.
 
 func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 	switch err.(type) {
-	case *serviceerror.Internal:
-		adh.GetLogger().Error("Internal service error", tag.Error(err))
+	case *serviceerror.Unavailable:
+		adh.GetLogger().Error("unavailable error", tag.Error(err))
 		scope.IncCounter(metrics.ServiceFailures)
 		return err
 	case *serviceerror.InvalidArgument:

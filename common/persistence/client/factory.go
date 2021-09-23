@@ -69,7 +69,7 @@ type (
 		NewShardStore() (p.ShardStore, error)
 		// NewMetadataStore returns a new metadata store
 		NewMetadataStore() (p.MetadataStore, error)
-		// NewExecutionStore returns a execution store
+		// NewExecutionStore returns a new execution store
 		NewExecutionStore() (p.ExecutionStore, error)
 		NewQueue(queueType p.QueueType) (p.Queue, error)
 		// NewClusterMetadataStore returns a new metadata store
@@ -96,6 +96,7 @@ type (
 		sync.RWMutex
 		config                   *config.Persistence
 		abstractDataStoreFactory AbstractDataStoreFactory
+		faultInjection           *FaultInjectionDataStoreFactory
 		metricsClient            metrics.Client
 		logger                   log.Logger
 		datastores               map[storeType]Datastore
@@ -141,6 +142,19 @@ func NewFactory(
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) Factory {
+	return NewFactoryImpl(cfg, r, persistenceMaxQPS, abstractDataStoreFactory, clusterName, metricsClient, logger)
+}
+
+// Initializes and returns FactoryImpl
+func NewFactoryImpl(
+	cfg *config.Persistence,
+	r resolver.ServiceResolver,
+	persistenceMaxQPS dynamicconfig.IntPropertyFn,
+	abstractDataStoreFactory AbstractDataStoreFactory,
+	clusterName string,
+	metricsClient metrics.Client,
+	logger log.Logger,
+) *factoryImpl {
 	factory := &factoryImpl{
 		config:                   cfg,
 		abstractDataStoreFactory: abstractDataStoreFactory,
@@ -227,7 +241,7 @@ func (f *factoryImpl) NewClusterMetadataManager() (p.ClusterMetadataManager, err
 	return result, nil
 }
 
-// NewExecutionManager returns a new execution manager for a given shardID
+// NewExecutionManager returns a new execution manager
 func (f *factoryImpl) NewExecutionManager() (p.ExecutionManager, error) {
 
 	ds := f.datastores[storeTypeExecution]
@@ -300,7 +314,8 @@ func (f *factoryImpl) init(
 	}
 
 	if defaultCfg.FaultInjection != nil {
-		defaultDataStore.factory = NewFaultInjectionDatastoreFactory(defaultCfg.FaultInjection, defaultDataStore.factory)
+		f.faultInjection = NewFaultInjectionDatastoreFactory(defaultCfg.FaultInjection, defaultDataStore.factory)
+		defaultDataStore.factory = f.faultInjection
 	}
 
 	for _, sType := range storeTypes {
@@ -322,4 +337,8 @@ func buildRateLimiters(
 		}
 	}
 	return result
+}
+
+func (f *factoryImpl) FaultInjection() *FaultInjectionDataStoreFactory {
+	return f.faultInjection
 }

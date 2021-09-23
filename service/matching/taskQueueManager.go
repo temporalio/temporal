@@ -61,16 +61,6 @@ const (
 	syncMatchTaskId = -137
 )
 
-// fatalSignalBehavior indicates to functions that may inovke the
-// taskQueueManagerImpl.signalFatalProblem callback whether they should or
-// should not do that.
-type fatalSignalBehavior int
-
-const (
-	emitFatalSignal fatalSignalBehavior = iota + 1
-	suppressFatalSignal
-)
-
 type (
 	taskQueueManagerOpt func(*taskQueueManagerImpl)
 
@@ -108,6 +98,7 @@ type (
 		// DescribeTaskQueue returns information about the target task queue
 		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		String() string
+		QueueID() *taskQueueID
 	}
 
 	// Single task queue in memory state
@@ -117,7 +108,6 @@ type (
 		taskQueueKind    enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
 		config           *taskQueueConfig
 		db               *taskQueueDB
-		engine           *matchingEngineImpl
 		taskWriter       *taskWriter
 		taskReader       *taskReader // reads tasks from db and async matches it with poller
 		liveness         *liveness
@@ -138,8 +128,7 @@ type (
 		// prevent tasks being dispatched to zombie pollers.
 		outstandingPollsLock sync.Mutex
 		outstandingPollsMap  map[string]context.CancelFunc
-		shutdownCh           chan struct{} // Delivers stop to the pump that populates taskBuffer
-		signalFatalProblem   func(id *taskQueueID)
+		signalFatalProblem   func(taskQueueManager)
 	}
 )
 
@@ -172,8 +161,6 @@ func newTaskQueueManager(
 		status:              common.DaemonStatusInitialized,
 		namespaceCache:      e.namespaceCache,
 		metricsClient:       e.metricsClient,
-		engine:              e,
-		shutdownCh:          make(chan struct{}),
 		taskQueueID:         taskQueue,
 		taskQueueKind:       taskQueueKind,
 		logger:              log.With(e.logger, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType)),
@@ -189,16 +176,20 @@ func newTaskQueueManager(
 	tlMgr.namespaceValue.Store("")
 	if tlMgr.metricScope() == nil { // namespace name lookup failed
 		// metric scope to use when namespace lookup fails
-		tlMgr.metricScopeValue.Store(newPerTaskQueueScope(
-			"",
-			tlMgr.taskQueueID.name,
-			tlMgr.taskQueueKind,
-			e.metricsClient,
-			metrics.MatchingTaskQueueMgrScope,
-		))
+		tlMgr.metricScopeValue.Store(
+			metrics.GetPerTaskQueueScope(
+				e.metricsClient.Scope(metrics.MatchingTaskQueueMgrScope),
+				"",
+				tlMgr.taskQueueID.name,
+				tlMgr.taskQueueKind,
+			))
 	}
 
-	tlMgr.liveness = newLiveness(clock.NewRealTimeSource(), taskQueueConfig.IdleTaskqueueCheckInterval(), tlMgr.Stop)
+	tlMgr.liveness = newLiveness(
+		clock.NewRealTimeSource(),
+		taskQueueConfig.IdleTaskqueueCheckInterval(),
+		func() { tlMgr.signalFatalProblem(tlMgr) },
+	)
 	tlMgr.taskWriter = newTaskWriter(tlMgr)
 	tlMgr.taskReader = newTaskReader(tlMgr)
 
@@ -213,13 +204,21 @@ func newTaskQueueManager(
 	return tlMgr, nil
 }
 
-func (c *taskQueueManagerImpl) errShouldUnload(err error) bool {
-	return err != nil && (errIndicatesForeignLessee(err) || !c.config.ResilientSyncMatch())
-}
-
-func errIndicatesForeignLessee(err error) bool {
+// signalIfFatal calls signalFatalProblem on this taskQueueManagerImpl instance
+// if and only if the supplied error represents a fatal condition, e.g. the
+// existence of another taskQueueManager newer lease. Returns true if the signal
+// is emitted, false otherwise.
+func (c *taskQueueManagerImpl) signalIfFatal(err error) bool {
+	if err == nil {
+		return false
+	}
 	var condfail *persistence.ConditionFailedError
-	return errors.As(err, &condfail)
+	if errors.As(err, &condfail) {
+		c.metricScope().IncCounter(metrics.ConditionFailedErrorPerTaskQueueCounter)
+		c.signalFatalProblem(c)
+		return true
+	}
+	return false
 }
 
 // Start reading pump for the given task queue.
@@ -232,9 +231,11 @@ func (c *taskQueueManagerImpl) Start() {
 	) {
 		return
 	}
+	c.logger.Info("", tag.LifeCycleStarting)
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
+	c.logger.Info("", tag.LifeCycleStarted)
 }
 
 // Stop pump that fills up taskBuffer from persistence.
@@ -246,16 +247,12 @@ func (c *taskQueueManagerImpl) Stop() {
 	) {
 		return
 	}
-
-	close(c.shutdownCh)
-
+	c.logger.Info("", tag.LifeCycleStopping)
 	_ = c.db.UpdateState(c.taskAckManager.getAckLevel())
 	c.taskGC.RunNow(c.taskAckManager.getAckLevel())
-
 	c.liveness.Stop()
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
-	c.engine.removeTaskQueueManager(c.taskQueueID)
 	c.logger.Info("", tag.LifeCycleStopped)
 }
 
@@ -297,7 +294,9 @@ func (c *taskQueueManagerImpl) AddTask(
 			return &persistence.CreateTasksResponse{}, errRemoteSyncMatchFailed
 		}
 
-		return c.taskWriter.appendTask(params.execution, params.taskInfo)
+		resp, err := c.taskWriter.appendTask(params.execution, params.taskInfo)
+		c.signalIfFatal(err)
+		return resp, err
 	})
 	if err == nil {
 		c.taskReader.Signal()
@@ -471,7 +470,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 				tag.Error(err),
 				tag.WorkflowTaskQueueName(c.taskQueueID.name),
 				tag.WorkflowTaskQueueType(c.taskQueueID.taskType))
-			c.signalFatalProblem(c.taskQueueID)
+			c.signalFatalProblem(c)
 			return
 		}
 		c.taskReader.Signal()
@@ -488,7 +487,7 @@ func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
 	}
 }
 
-// Retry operation on transient error. On rangeID update by another process calls c.Stop().
+// Retry operation on transient error.
 func (c *taskQueueManagerImpl) executeWithRetry(
 	operation func() (interface{}, error)) (result interface{}, err error) {
 
@@ -506,12 +505,6 @@ func (c *taskQueueManagerImpl) executeWithRetry(
 		}
 		return common.IsPersistenceTransientError(err)
 	})
-
-	if _, ok := err.(*persistence.ConditionFailedError); ok {
-		c.metricScope().IncCounter(metrics.ConditionFailedErrorPerTaskQueueCounter)
-		c.logger.Debug("Stopping task queue due to persistence condition failure", tag.Error(err))
-		c.Stop()
-	}
 	return
 }
 
@@ -589,14 +582,12 @@ func (c *taskQueueManagerImpl) tryInitNamespaceAndScope() {
 
 	namespace = entry.GetInfo().Name
 
-	scope := newPerTaskQueueScope(
-		namespace,
-		c.taskQueueID.name,
-		c.taskQueueKind,
-		c.metricsClient,
-		metrics.MatchingTaskQueueMgrScope,
-	)
+	scope := metrics.GetPerTaskQueueScope(c.metricsClient.Scope(metrics.MatchingTaskQueueMgrScope), namespace, c.taskQueueID.name, c.taskQueueKind)
 
 	c.metricScopeValue.Store(scope)
 	c.namespaceValue.Store(namespace)
+}
+
+func (c *taskQueueManagerImpl) QueueID() *taskQueueID {
+	return c.taskQueueID
 }

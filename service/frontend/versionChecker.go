@@ -159,7 +159,7 @@ func (vc *VersionChecker) saveVersionInfo(resp *check.VersionCheckResponse) erro
 		return err
 	}
 	if !saved {
-		return serviceerror.NewInternal("version info update hasn't been applied")
+		return serviceerror.NewUnavailable("version info update hasn't been applied")
 	}
 	return nil
 }

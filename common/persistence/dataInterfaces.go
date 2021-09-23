@@ -438,7 +438,7 @@ type (
 
 	// CreateWorkflowExecutionResponse is the response to CreateWorkflowExecutionRequest
 	CreateWorkflowExecutionResponse struct {
-		HistorySize int64
+		NewMutableStateStats MutableStateStatistics
 	}
 
 	// GetWorkflowExecutionRequest is used to retrieve the info of a workflow execution
@@ -452,7 +452,7 @@ type (
 	GetWorkflowExecutionResponse struct {
 		State             *persistencespb.WorkflowMutableState
 		DBRecordVersion   int64
-		MutableStateStats *MutableStateStats
+		MutableStateStats MutableStateStatistics
 	}
 
 	// GetCurrentExecutionRequest is used to retrieve the current RunId for an execution
@@ -497,6 +497,12 @@ type (
 		NewWorkflowEvents      []*WorkflowEvents
 	}
 
+	// UpdateWorkflowExecutionResponse is response for UpdateWorkflowExecutionRequest
+	UpdateWorkflowExecutionResponse struct {
+		UpdateMutableStateStats MutableStateStatistics
+		NewMutableStateStats    *MutableStateStatistics
+	}
+
 	// ConflictResolveWorkflowExecutionRequest is used to reset workflow execution state for a single run
 	ConflictResolveWorkflowExecutionRequest struct {
 		ShardID int32
@@ -506,31 +512,21 @@ type (
 
 		// workflow to be resetted
 		ResetWorkflowSnapshot WorkflowSnapshot
+		ResetWorkflowEvents   []*WorkflowEvents
 
 		// maybe new workflow
 		NewWorkflowSnapshot *WorkflowSnapshot
+		NewWorkflowEvents   []*WorkflowEvents
 
 		// current workflow
 		CurrentWorkflowMutation *WorkflowMutation
+		CurrentWorkflowEvents   []*WorkflowEvents
 	}
 
-	// ResetWorkflowExecutionRequest is used to reset workflow execution state for current run and create new run
-	ResetWorkflowExecutionRequest struct {
-		RangeID int64
-
-		// for base run (we need to make sure the baseRun hasn't been deleted after forking)
-		BaseRunID          string
-		BaseRunNextEventID int64
-
-		// for current workflow record
-		CurrentRunID          string
-		CurrentRunNextEventID int64
-
-		// for current mutable state
-		CurrentWorkflowMutation *WorkflowMutation
-
-		// For new mutable state
-		NewWorkflowSnapshot WorkflowSnapshot
+	ConflictResolveWorkflowExecutionResponse struct {
+		ResetMutableStateStats   MutableStateStatistics
+		NewMutableStateStats     *MutableStateStatistics
+		CurrentMutableStateStats *MutableStateStatistics
 	}
 
 	// WorkflowEvents is used as generic workflow history events transaction container
@@ -952,62 +948,36 @@ type (
 		NotificationVersion int64
 	}
 
-	// MutableStateStats is the size stats for MutableState
-	MutableStateStats struct {
-		// Total size of mutable state
-		MutableStateSize int
+	// MutableStateStatistics is the size stats for MutableState
+	MutableStateStatistics struct {
+		TotalSize         int
+		HistoryStatistics *HistoryStatistics
 
 		// Breakdown of size into more granular stats
 		ExecutionInfoSize  int
-		ActivityInfoSize   int
-		TimerInfoSize      int
-		ChildInfoSize      int
-		SignalInfoSize     int
-		BufferedEventsSize int
+		ExecutionStateSize int
+
+		ActivityInfoSize      int
+		TimerInfoSize         int
+		ChildInfoSize         int
+		RequestCancelInfoSize int
+		SignalInfoSize        int
+		SignalRequestIDSize   int
+		BufferedEventsSize    int
 
 		// Item count for various information captured within mutable state
 		ActivityInfoCount      int
 		TimerInfoCount         int
 		ChildInfoCount         int
-		SignalInfoCount        int
 		RequestCancelInfoCount int
+		SignalInfoCount        int
+		SignalRequestIDCount   int
 		BufferedEventsCount    int
 	}
 
-	// MutableStateUpdateSessionStats is size stats for mutableState updating session
-	MutableStateUpdateSessionStats struct {
-		MutableStateSize int // Total size of mutable state update
-
-		// Breakdown of mutable state size update for more granular stats
-		ExecutionInfoSize  int
-		ActivityInfoSize   int
-		TimerInfoSize      int
-		ChildInfoSize      int
-		SignalInfoSize     int
-		BufferedEventsSize int
-
-		// Item counts in this session update
-		ActivityInfoCount      int
-		TimerInfoCount         int
-		ChildInfoCount         int
-		SignalInfoCount        int
-		RequestCancelInfoCount int
-
-		// Deleted item counts in this session update
-		DeleteActivityInfoCount      int
-		DeleteTimerInfoCount         int
-		DeleteChildInfoCount         int
-		DeleteSignalInfoCount        int
-		DeleteRequestCancelInfoCount int
-
-		// History size diff
-		UpdateWorkflowHistorySizeDiff int64
-		NewWorkflowHistorySizeDiff    int64
-	}
-
-	// UpdateWorkflowExecutionResponse is response for UpdateWorkflowExecutionRequest
-	UpdateWorkflowExecutionResponse struct {
-		MutableStateUpdateSessionStats *MutableStateUpdateSessionStats
+	HistoryStatistics struct {
+		SizeDiff  int
+		CountDiff int
 	}
 
 	// AppendHistoryNodesRequest is used to append a batch of history nodes
@@ -1257,7 +1227,7 @@ type (
 		CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error)
-		ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) error
+		ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) (*ConflictResolveWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
 		DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)

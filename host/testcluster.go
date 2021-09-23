@@ -28,12 +28,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"time"
 
 	"github.com/pborman/uuid"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/provider"
@@ -42,15 +41,12 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/visibility"
-	"go.temporal.io/server/common/persistence/visibility/elasticsearch"
-	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -60,7 +56,7 @@ type (
 	TestCluster struct {
 		testBase     persistencetests.TestBase
 		archiverBase *ArchiverBase
-		host         Temporal
+		host         *temporalImpl
 	}
 
 	// ArchiverBase is a base struct for archiver provider being used in integration tests
@@ -82,10 +78,10 @@ type (
 		ClusterMetadata config.ClusterMetadata
 		Persistence     persistencetests.TestBaseOptions
 		HistoryConfig   *HistoryConfig
-		ESConfig        *config.Elasticsearch
+		ESConfig        *esclient.Config
 		WorkerConfig    *WorkerConfig
 		MockAdminClient map[string]adminservice.AdminServiceClient
-		FaultInjection  config.FaultInjection
+		FaultInjection  config.FaultInjection `yaml:"faultinjection"`
 	}
 
 	// WorkerConfig is the config for enabling/disabling Temporal worker
@@ -144,48 +140,28 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 
 	if TestFlags.PersistenceFaultInjectionRate > 0 {
 		options.Persistence.FaultInjection = &config.FaultInjection{Rate: TestFlags.PersistenceFaultInjectionRate}
+	} else if options.Persistence.FaultInjection == nil {
+		options.Persistence.FaultInjection = &config.FaultInjection{Rate: 0}
 	}
 
 	testBase := persistencetests.NewTestBase(&options.Persistence)
 	testBase.Setup(nil)
 	setupShards(testBase, options.HistoryConfig.NumHistoryShards, logger)
 	archiverBase := newArchiverBase(options.EnableArchival, logger)
-	var esClient esclient.Client
-	var esVisibilityMgr visibility.VisibilityManager
-	advancedVisibilityWritingMode := dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOff)
+
+	pConfig := testBase.DefaultTestCluster.Config()
+	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
+
+	var (
+		esClient esclient.Client
+	)
 	if options.WorkerConfig.EnableIndexer {
-		advancedVisibilityWritingMode = dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOn)
 		var err error
 		esClient, err = esclient.NewClient(options.ESConfig, nil, logger)
 		if err != nil {
 			return nil, err
 		}
-
-		esProcessorConfig := &elasticsearch.ProcessorConfig{
-			IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(32),
-			ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(1),
-			ESProcessorBulkActions:   dynamicconfig.GetIntPropertyFn(10),
-			ESProcessorBulkSize:      dynamicconfig.GetIntPropertyFn(2 << 20),
-			ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
-		}
-		esProcessor := elasticsearch.NewProcessor(esProcessorConfig, esClient, logger, &metrics.NoopMetricsClient{})
-		esProcessor.Start()
-
-		visConfig := &config.VisibilityConfig{
-			VisibilityListMaxQPS:  dynamicconfig.GetIntPropertyFilteredByNamespace(2000),
-			ESProcessorAckTimeout: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
-		}
-		indexName := options.ESConfig.GetVisibilityIndex()
-		esVisibilityStore := elasticsearch.NewVisibilityStore(
-			esClient, indexName, searchattribute.NewTestProvider(), nil, esProcessor, visConfig, &metrics.NoopMetricsClient{},
-		)
-		esVisibilityMgr = visibility.NewVisibilityManagerImpl(esVisibilityStore, searchattribute.NewTestProvider(), indexName, logger)
 	}
-	visibilityMgr := visibility.NewVisibilityManagerWrapper(testBase.VisibilityMgr, esVisibilityMgr,
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(options.WorkerConfig.EnableIndexer), advancedVisibilityWritingMode)
-
-	pConfig := testBase.Config()
-	pConfig.NumHistoryShards = options.HistoryConfig.NumHistoryShards
 
 	_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
@@ -216,7 +192,6 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		ExecutionManager:                 testBase.ExecutionManager,
 		NamespaceReplicationQueue:        testBase.NamespaceReplicationQueue,
 		TaskMgr:                          testBase.TaskMgr,
-		VisibilityMgr:                    visibilityMgr,
 		Logger:                           logger,
 		ClusterNo:                        options.ClusterNo,
 		ESConfig:                         options.ESConfig,
@@ -308,8 +283,30 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 	}
 }
 
+func (tc *TestCluster) SetFaultInjectionRate(rate float64) {
+	if tc.testBase.FaultInjection != nil {
+		tc.testBase.FaultInjection.UpdateRate(rate)
+	}
+	if tc.host.matchingService.GetFaultInjection() != nil {
+		tc.host.matchingService.GetFaultInjection().UpdateRate(rate)
+	}
+	if tc.host.frontendService.GetFaultInjection() != nil {
+		tc.host.frontendService.GetFaultInjection().UpdateRate(rate)
+	}
+	if tc.host.workerService != nil && tc.host.workerService.GetFaultInjection() != nil {
+		tc.host.workerService.GetFaultInjection().UpdateRate(rate)
+	}
+
+	for _, s := range tc.host.historyServices {
+		if s.GetFaultInjection() != nil {
+			s.GetFaultInjection().UpdateRate(rate)
+		}
+	}
+}
+
 // TearDownCluster tears down the test cluster
 func (tc *TestCluster) TearDownCluster() {
+	tc.SetFaultInjectionRate(0)
 	tc.host.Stop()
 	tc.host = nil
 	tc.testBase.TearDownWorkflowStore()
@@ -335,4 +332,8 @@ func (tc *TestCluster) GetHistoryClient() HistoryClient {
 // GetExecutionManager returns an execution manager factory from the test cluster
 func (tc *TestCluster) GetExecutionManager() persistence.ExecutionManager {
 	return tc.host.GetExecutionManager()
+}
+
+func (tc *TestCluster) RefreshNamespaceCache() {
+	tc.host.RefreshNamespaceCache()
 }

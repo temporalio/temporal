@@ -155,7 +155,7 @@ func (notifier *NotifierImpl) WatchHistoryEvent(
 
 		if _, ok := subscribers[subscriberID]; ok {
 			// UUID collision
-			return serviceerror.NewInternal("Unable to watch on workflow execution.")
+			return serviceerror.NewUnavailable("Unable to watch on workflow execution.")
 		}
 		subscribers[subscriberID] = channel
 		return nil

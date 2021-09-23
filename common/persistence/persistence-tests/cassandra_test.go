@@ -58,13 +58,6 @@ func TestCassandraShardPersistence(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestCassandraVisibilityPersistence(t *testing.T) {
-	s := new(VisibilityPersistenceSuite)
-	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})
-	s.TestBase.Setup(nil)
-	suite.Run(t, s)
-}
-
 func TestCassandraExecutionManager(t *testing.T) {
 	s := new(ExecutionManagerSuite)
 	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})

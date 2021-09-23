@@ -31,15 +31,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/common/namespace"
-
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/persistence/visibility"
-
 	"github.com/uber-go/tally"
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -71,7 +70,7 @@ type (
 		persistenceBean persistenceClient.Bean,
 		searchAttributesProvider searchattribute.Provider,
 		logger log.Logger,
-	) (visibility.VisibilityManager, error)
+	) (manager.VisibilityManager, error)
 
 	// Impl contains all common resources shared across frontend / matching / history / worker
 	Impl struct {
@@ -118,9 +117,8 @@ type (
 		clientBean        client.Bean
 
 		// persistence clients
-
-		persistenceBean persistenceClient.Bean
-		visibilityMgr   visibility.VisibilityManager
+		persistenceBean           persistenceClient.Bean
+		persistenceFaultInjection *persistenceClient.FaultInjectionDataStoreFactory
 
 		// loggers
 
@@ -148,7 +146,6 @@ func New(
 	persistenceMaxQPS dynamicconfig.IntPropertyFn,
 	persistenceGlobalMaxQPS dynamicconfig.IntPropertyFn,
 	throttledLoggerMaxRPS dynamicconfig.IntPropertyFn,
-	visibilityManagerInitializer VisibilityManagerInitializer,
 ) (impl *Impl, retError error) {
 
 	logger := log.With(params.Logger, tag.Service(serviceName))
@@ -165,7 +162,7 @@ func New(
 
 	ringpopChannel := params.RPCFactory.GetRingpopChannel()
 
-	persistenceBean, err := persistenceClient.NewBeanFromFactory(persistenceClient.NewFactory(
+	factory := persistenceClient.NewFactoryImpl(
 		&params.PersistenceConfig,
 		params.PersistenceServiceResolver,
 		func(...dynamicconfig.FilterOption) int {
@@ -185,7 +182,9 @@ func New(
 		params.ClusterMetadataConfig.CurrentClusterName,
 		params.MetricsClient,
 		logger,
-	))
+	)
+
+	persistenceBean, err := persistenceClient.NewBeanFromFactory(factory)
 	if err != nil {
 		return nil, err
 	}
@@ -248,17 +247,8 @@ func New(
 		return nil, err
 	}
 
-	saProvider := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
-	saManager := persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
-
-	visibilityMgr, err := visibilityManagerInitializer(
-		persistenceBean,
-		saProvider,
-		logger,
-	)
-	if err != nil {
-		return nil, err
-	}
+	saProvider := searchattribute.NewManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
+	saManager := searchattribute.NewManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
 
 	namespaceCache := namespace.NewNamespaceCache(
 		persistenceBean.GetMetadataManager(),
@@ -354,8 +344,8 @@ func New(
 
 		// persistence clients
 
-		persistenceBean: persistenceBean,
-		visibilityMgr:   visibilityMgr,
+		persistenceBean:           persistenceBean,
+		persistenceFaultInjection: factory.FaultInjection(),
 
 		// loggers
 
@@ -425,9 +415,6 @@ func (h *Impl) Stop() {
 	h.ringpopChannel.Close()
 	h.runtimeMetricsReporter.Stop()
 	h.persistenceBean.Close()
-	if h.visibilityMgr != nil {
-		h.visibilityMgr.Close()
-	}
 }
 
 // GetServiceName return service name
@@ -584,11 +571,6 @@ func (h *Impl) GetTaskManager() persistence.TaskManager {
 	return h.persistenceBean.GetTaskManager()
 }
 
-// GetVisibilityManager return visibility manager
-func (h *Impl) GetVisibilityManager() visibility.VisibilityManager {
-	return h.visibilityMgr
-}
-
 // GetNamespaceReplicationQueue return namespace replication queue
 func (h *Impl) GetNamespaceReplicationQueue() persistence.NamespaceReplicationQueue {
 	return h.persistenceBean.GetNamespaceReplicationQueue()
@@ -636,4 +618,8 @@ func (h *Impl) GetSearchAttributesManager() searchattribute.Manager {
 
 func (h *Impl) GetSearchAttributesMapper() searchattribute.Mapper {
 	return h.saMapper
+}
+
+func (h *Impl) GetFaultInjection() *persistenceClient.FaultInjectionDataStoreFactory {
+	return h.persistenceFaultInjection
 }

@@ -28,21 +28,20 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/persistence/visibility"
 )
 
 var (
 	// Override values for dynamic configs
 	staticOverrides = map[dynamicconfig.Key]interface{}{
 		dynamicconfig.FrontendRPS:                                   3000,
-		dynamicconfig.FrontendVisibilityListMaxQPS:                  100,
 		dynamicconfig.FrontendESIndexMaxResultWindow:                defaultTestValueOfESIndexMaxResultWindow,
 		dynamicconfig.MatchingNumTaskqueueWritePartitions:           3,
 		dynamicconfig.MatchingNumTaskqueueReadPartitions:            3,
 		dynamicconfig.TimerProcessorHistoryArchivalSizeLimit:        5 * 1024,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryMaxAttempts: 1,
-		dynamicconfig.AdvancedVisibilityWritingMode:                 common.AdvancedVisibilityWritingModeOff,
+		dynamicconfig.AdvancedVisibilityWritingMode:                 visibility.AdvancedVisibilityWritingModeOff,
 		dynamicconfig.WorkflowTaskHeartbeatTimeout:                  5 * time.Second,
 		dynamicconfig.ReplicationTaskFetcherAggregationInterval:     200 * time.Millisecond,
 		dynamicconfig.ReplicationTaskFetcherErrorRetryWait:          50 * time.Millisecond,

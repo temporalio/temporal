@@ -1,6 +1,6 @@
 ARG TARGET=server
 ARG BASE_BUILDER_IMAGE=temporalio/base-builder:1.4.0
-ARG BASE_SERVER_IMAGE=temporalio/base-server:1.2.0
+ARG BASE_SERVER_IMAGE=temporalio/base-server:1.3.0
 ARG BASE_ADMIN_TOOLS_IMAGE=temporalio/base-admin-tools:1.2.0
 ARG GOPROXY
 

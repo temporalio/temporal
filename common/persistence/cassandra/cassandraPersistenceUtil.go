@@ -736,7 +736,7 @@ func createVisibilityTasks(
 			// noop
 
 		default:
-			return serviceerror.NewInternal(fmt.Sprintf("createVisibilityTasks failed. Unknow visibility type: %v", task.GetType()))
+			return serviceerror.NewInternal(fmt.Sprintf("Unknow visibility type: %v", task.GetType()))
 		}
 
 		batch.Query(templateCreateVisibilityTaskQuery,

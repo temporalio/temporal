@@ -35,6 +35,11 @@ import (
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.uber.org/fx"
+
+	"go.temporal.io/server/common/persistence/visibility"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -53,13 +58,9 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/visibility"
-	visibilityclient "go.temporal.io/server/common/persistence/visibility/client"
-	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
@@ -76,14 +77,15 @@ type Temporal interface {
 	GetFrontendClient() workflowservice.WorkflowServiceClient
 	GetHistoryClient() historyservice.HistoryServiceClient
 	GetExecutionManager() persistence.ExecutionManager
+	RefreshNamespaceCache()
 }
 
 type (
 	temporalImpl struct {
-		frontendService common.Daemon
-		matchingService common.Daemon
-		historyServices []common.Daemon
-		workerService   common.Daemon
+		frontendService resource.Resource
+		matchingService resource.Resource
+		historyServices []resource.Resource
+		workerService   resource.Resource
 
 		adminClient                      adminservice.AdminServiceClient
 		frontendClient                   workflowservice.WorkflowServiceClient
@@ -95,7 +97,6 @@ type (
 		clusterMetadataMgr               persistence.ClusterMetadataManager
 		shardMgr                         persistence.ShardManager
 		taskMgr                          persistence.TaskManager
-		visibilityMgr                    visibility.VisibilityManager
 		executionManager                 persistence.ExecutionManager
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		shutdownCh                       chan struct{}
@@ -106,7 +107,7 @@ type (
 		archiverMetadata                 carchiver.ArchivalMetadata
 		archiverProvider                 provider.ArchiverProvider
 		historyConfig                    *HistoryConfig
-		esConfig                         *config.Elasticsearch
+		esConfig                         *esclient.Config
 		esClient                         esclient.Client
 		workerConfig                     *WorkerConfig
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
@@ -130,7 +131,6 @@ type (
 		ShardMgr                         persistence.ShardManager
 		ExecutionManager                 persistence.ExecutionManager
 		TaskMgr                          persistence.TaskManager
-		VisibilityMgr                    visibility.VisibilityManager
 		NamespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		Logger                           log.Logger
 		ClusterNo                        int
@@ -138,7 +138,7 @@ type (
 		ArchiverProvider                 provider.ArchiverProvider
 		EnableReadHistoryFromArchival    bool
 		HistoryConfig                    *HistoryConfig
-		ESConfig                         *config.Elasticsearch
+		ESConfig                         *esclient.Config
 		ESClient                         esclient.Client
 		WorkerConfig                     *WorkerConfig
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
@@ -152,14 +152,13 @@ type (
 )
 
 // NewTemporal returns an instance that hosts full temporal in one process
-func NewTemporal(params *TemporalParams) Temporal {
+func NewTemporal(params *TemporalParams) *temporalImpl {
 	return &temporalImpl{
 		logger:                           params.Logger,
 		clusterMetadataConfig:            params.ClusterMetadataConfig,
 		persistenceConfig:                params.PersistenceConfig,
 		metadataMgr:                      params.MetadataMgr,
 		clusterMetadataMgr:               params.ClusterMetadataManager,
-		visibilityMgr:                    params.VisibilityMgr,
 		shardMgr:                         params.ShardMgr,
 		taskMgr:                          params.TaskMgr,
 		executionManager:                 params.ExecutionManager,
@@ -396,7 +395,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		esDataStoreName := "es-visibility"
 		params.PersistenceConfig.AdvancedVisibilityStore = esDataStoreName
 		params.PersistenceConfig.DataStores[esDataStoreName] = config.DataStore{
-			ElasticSearch: c.esConfig,
+			Elasticsearch: c.esConfig,
 		}
 	}
 
@@ -474,13 +473,18 @@ func (c *temporalImpl) startHistory(
 			esDataStoreName := "es-visibility"
 			params.PersistenceConfig.AdvancedVisibilityStore = esDataStoreName
 			params.PersistenceConfig.DataStores[esDataStoreName] = config.DataStore{
-				ElasticSearch: c.esConfig,
+				Elasticsearch: c.esConfig,
 			}
 		}
 
-		historyService, err := history.NewService(params)
+		var historyService *history.Service
+		app := fx.New(
+			fx.Supply(params),
+			history.Module,
+			fx.Populate(&historyService))
+		err = app.Err()
 		if err != nil {
-			params.Logger.Fatal("unable to start history service", tag.Error(err))
+			params.Logger.Fatal("unable to construct history service", tag.Error(err))
 		}
 
 		if c.mockAdminClient != nil {
@@ -597,24 +601,6 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		dynamicconfig.GetIntPropertyFn(5000),
 		dynamicconfig.GetIntPropertyFn(5000),
 		dynamicconfig.GetIntPropertyFn(10000),
-		func(
-			persistenceBean persistenceClient.Bean,
-			searchAttributesProvider searchattribute.Provider,
-			logger log.Logger,
-		) (visibility.VisibilityManager, error) {
-			visibilityFromDB, err := visibilityclient.NewVisibilityManager(
-				params.PersistenceConfig,
-				dynamicconfig.GetIntPropertyFn(5000),
-				params.MetricsClient,
-				params.PersistenceServiceResolver,
-				params.Logger,
-			)
-			if err != nil {
-				return nil, err
-			}
-
-			return visibilityFromDB, nil
-		},
 	)
 	if err != nil {
 		params.Logger.Fatal("unable to create worker service", tag.Error(err))
@@ -704,13 +690,24 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
 	client.OverrideValue(dynamicconfig.ReplicationTaskProcessorStartWait, time.Nanosecond)
 
 	if c.workerConfig.EnableIndexer {
-		client.OverrideValue(dynamicconfig.AdvancedVisibilityWritingMode, common.AdvancedVisibilityWritingModeDual)
+		client.OverrideValue(dynamicconfig.AdvancedVisibilityWritingMode, visibility.AdvancedVisibilityWritingModeDual)
 	}
 	if c.historyConfig.HistoryCountLimitWarn != 0 {
 		client.OverrideValue(dynamicconfig.HistoryCountLimitWarn, c.historyConfig.HistoryCountLimitWarn)
 	}
 	if c.historyConfig.HistoryCountLimitError != 0 {
 		client.OverrideValue(dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
+	}
+}
+
+func (c *temporalImpl) RefreshNamespaceCache() {
+	c.frontendService.GetNamespaceCache().Refresh()
+	c.matchingService.GetNamespaceCache().Refresh()
+	for _, r := range c.historyServices {
+		r.GetNamespaceCache().Refresh()
+	}
+	if c.workerService != nil {
+		c.workerService.GetNamespaceCache().Refresh()
 	}
 }
 

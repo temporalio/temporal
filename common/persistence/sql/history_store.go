@@ -31,6 +31,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
@@ -76,7 +77,7 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 			if m.Db.IsDupEntryError(err) {
 				return &p.ConditionFailedError{Msg: fmt.Sprintf("AppendHistoryNodes: row already exist: %v", err)}
 			}
-			return serviceerror.NewInternal(fmt.Sprintf("AppendHistoryNodes: %v", err))
+			return serviceerror.NewUnavailable(fmt.Sprintf("AppendHistoryNodes: %v", err))
 		}
 		return nil
 	}
@@ -153,7 +154,7 @@ func (m *sqlExecutionStore) DeleteHistoryNodes(
 
 	_, err = m.Db.DeleteFromHistoryNode(ctx, nodeRow)
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("DeleteHistoryNodes: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("DeleteHistoryNodes: %v", err))
 	}
 	return nil
 }

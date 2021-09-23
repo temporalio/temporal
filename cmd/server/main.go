@@ -26,7 +26,7 @@ package main
 
 import (
 	"fmt"
-	"log"
+	stdlog "log"
 	"os"
 	"path"
 	"strings"
@@ -37,7 +37,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
-	tlog "go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"      // needed to load mysql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
@@ -120,7 +120,7 @@ func buildCLI() *cli.App {
 
 				// For backward compatibility to support old flag format (i.e. `--services=frontend,history,matching`).
 				if c.IsSet("services") {
-					log.Println("WARNING: --services flag is deprecated. Specify multiply --service flags instead.")
+					stdlog.Println("WARNING: --services flag is deprecated. Specify multiply --service flags instead.")
 					services = strings.Split(c.String("services"), ",")
 				}
 
@@ -129,7 +129,7 @@ func buildCLI() *cli.App {
 					return cli.Exit(fmt.Sprintf("Unable to load configuration: %v.", err), 1)
 				}
 
-				logger := tlog.NewZapLogger(tlog.BuildZapLogger(cfg.Log))
+				logger := log.NewZapLogger(log.BuildZapLogger(cfg.Log))
 
 				dynamicConfigClient, err := dynamicconfig.NewFileBasedClient(&cfg.DynamicConfigClient, logger, temporal.InterruptCh())
 				if err != nil {

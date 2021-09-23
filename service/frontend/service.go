@@ -31,45 +31,44 @@ import (
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/reflection"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
-	visibilityclient "go.temporal.io/server/common/persistence/visibility/client"
-	"go.temporal.io/server/common/persistence/visibility/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/frontend/configs"
-	"google.golang.org/grpc"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/keepalive"
-	"google.golang.org/grpc/reflection"
 )
 
 // Config represents configuration for frontend service
 type Config struct {
-	NumHistoryShards             int32
-	ESIndexName                  string
-	PersistenceMaxQPS            dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS      dynamicconfig.IntPropertyFn
-	VisibilityMaxPageSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnableVisibilitySampling     dynamicconfig.BoolPropertyFn
-	VisibilityListMaxQPS         dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnableReadVisibilityFromES   dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ESVisibilityListMaxQPS       dynamicconfig.IntPropertyFnWithNamespaceFilter
-	ESIndexMaxResultWindow       dynamicconfig.IntPropertyFn
+	NumHistoryShards        int32
+	ESIndexName             string
+	PersistenceMaxQPS       dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS dynamicconfig.IntPropertyFn
+
+	StandardVisibilityPersistenceMaxReadQPS  dynamicconfig.IntPropertyFn
+	StandardVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn
+	AdvancedVisibilityPersistenceMaxReadQPS  dynamicconfig.IntPropertyFn
+	AdvancedVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn
+	VisibilityMaxPageSize                    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableReadVisibilityFromES               dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ESIndexMaxResultWindow                   dynamicconfig.IntPropertyFn
+
 	HistoryMaxPageSize           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RPS                          dynamicconfig.IntPropertyFn
 	MaxNamespaceRPSPerInstance   dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -136,16 +135,19 @@ type Config struct {
 // NewConfig returns new service config with default values
 func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName string, enableReadFromES bool) *Config {
 	return &Config{
-		NumHistoryShards:                       numHistoryShards,
-		ESIndexName:                            esIndexName,
-		PersistenceMaxQPS:                      dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
-		PersistenceGlobalMaxQPS:                dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
-		VisibilityMaxPageSize:                  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
-		EnableVisibilitySampling:               dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
-		VisibilityListMaxQPS:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendVisibilityListMaxQPS, 30),
-		EnableReadVisibilityFromES:             dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, enableReadFromES),
-		ESVisibilityListMaxQPS:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendESVisibilityListMaxQPS, 10),
-		ESIndexMaxResultWindow:                 dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
+		NumHistoryShards:        numHistoryShards,
+		ESIndexName:             esIndexName,
+		PersistenceMaxQPS:       dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
+		PersistenceGlobalMaxQPS: dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
+
+		StandardVisibilityPersistenceMaxReadQPS:  dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
+		StandardVisibilityPersistenceMaxWriteQPS: dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000),
+		AdvancedVisibilityPersistenceMaxReadQPS:  dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxReadQPS, 9000),
+		AdvancedVisibilityPersistenceMaxWriteQPS: dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000),
+		VisibilityMaxPageSize:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
+		EnableReadVisibilityFromES:               dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, enableReadFromES),
+		ESIndexMaxResultWindow:                   dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
+
 		HistoryMaxPageSize:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                                    dc.GetIntProperty(dynamicconfig.FrontendRPS, 2400),
 		MaxNamespaceRPSPerInstance:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
@@ -187,10 +189,11 @@ type Service struct {
 	status int32
 	config *Config
 
-	handler        Handler
-	adminHandler   *AdminHandler
-	versionChecker *VersionChecker
-	server         *grpc.Server
+	handler           Handler
+	adminHandler      *AdminHandler
+	versionChecker    *VersionChecker
+	visibilityManager manager.VisibilityManager
+	server            *grpc.Server
 
 	serverMetricsReporter metrics.Reporter
 	sdkMetricsReporter    metrics.Reporter
@@ -208,52 +211,12 @@ func NewService(
 		params.ESConfig.GetVisibilityIndex(),
 		isAdvancedVisExistInConfig)
 
-	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityListMaxQPS: serviceConfig.VisibilityListMaxQPS,
-		EnableSampling:       serviceConfig.EnableVisibilitySampling,
-	}
-
-	visibilityManagerInitializer := func(
-		persistenceBean persistenceClient.Bean,
-		searchAttributesProvider searchattribute.Provider,
-		logger log.Logger,
-	) (visibility.VisibilityManager, error) {
-		visibilityFromDB, err := visibilityclient.NewVisibilityManager(
-			params.PersistenceConfig,
-			serviceConfig.PersistenceMaxQPS,
-			params.MetricsClient,
-			params.PersistenceServiceResolver,
-			params.Logger,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		var visibilityFromES visibility.VisibilityManager
-		if params.ESConfig != nil {
-			visibilityIndexName := params.ESConfig.GetVisibilityIndex()
-			visibilityConfigForES := &config.VisibilityConfig{
-				MaxQPS:               serviceConfig.PersistenceMaxQPS,
-				VisibilityListMaxQPS: serviceConfig.ESVisibilityListMaxQPS,
-			}
-			visibilityFromES = elasticsearch.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES,
-				searchAttributesProvider, params.SearchAttributesMapper, nil, params.MetricsClient, logger)
-		}
-		return visibility.NewVisibilityManagerWrapper(
-			visibilityFromDB,
-			visibilityFromES,
-			serviceConfig.EnableReadVisibilityFromES,
-			dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOff), // frontend visibility never write
-		), nil
-	}
-
 	serviceResource, err := resource.New(
 		params,
 		common.FrontendServiceName,
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
 		serviceConfig.ThrottledLogRPS,
-		visibilityManagerInitializer,
 	)
 	if err != nil {
 		return nil, err
@@ -339,17 +302,40 @@ func NewService(
 		),
 	)
 
-	wfHandler := NewWorkflowHandler(serviceResource, serviceConfig, namespaceReplicationQueue)
+	visibilityMgr, err := visibility.NewManager(
+		params.PersistenceConfig,
+		params.PersistenceServiceResolver,
+		params.ESConfig.GetVisibilityIndex(),
+		params.ESClient,
+		nil, // frontend visibility never write
+		serviceResource.GetSearchAttributesProvider(),
+		params.SearchAttributesMapper,
+		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,
+		serviceConfig.StandardVisibilityPersistenceMaxWriteQPS,
+		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,
+		serviceConfig.AdvancedVisibilityPersistenceMaxWriteQPS,
+		serviceConfig.EnableReadVisibilityFromES,
+		dynamicconfig.GetStringPropertyFn(visibility.AdvancedVisibilityWritingModeOff), // frontend visibility never write
+		params.MetricsClient,
+		params.Logger,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	wfHandler := NewWorkflowHandler(serviceResource, serviceConfig, namespaceReplicationQueue, visibilityMgr)
 	handler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy)
 
 	return &Service{
-		Resource:       serviceResource,
-		status:         common.DaemonStatusInitialized,
-		config:         serviceConfig,
-		server:         grpc.NewServer(grpcServerOptions...),
-		handler:        handler,
-		adminHandler:   NewAdminHandler(serviceResource, params, serviceConfig),
-		versionChecker: NewVersionChecker(serviceConfig, params.MetricsClient, serviceResource.GetClusterMetadataManager()),
+		Resource:          serviceResource,
+		status:            common.DaemonStatusInitialized,
+		config:            serviceConfig,
+		server:            grpc.NewServer(grpcServerOptions...),
+		handler:           handler,
+		adminHandler:      NewAdminHandler(serviceResource, params, serviceConfig),
+		versionChecker:    NewVersionChecker(serviceConfig, params.MetricsClient, serviceResource.GetClusterMetadataManager()),
+		visibilityManager: visibilityMgr,
 	}, nil
 }
 
@@ -407,6 +393,7 @@ func (s *Service) Stop() {
 
 	s.adminHandler.Stop()
 	s.versionChecker.Stop()
+	s.visibilityManager.Close()
 
 	logger.Info("ShutdownHandler: Draining traffic")
 	time.Sleep(requestDrainTime)

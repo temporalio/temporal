@@ -28,149 +28,49 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/masker"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/migration"
-	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/visibility"
-	visibilityclient "go.temporal.io/server/common/persistence/visibility/client"
-	"go.temporal.io/server/common/persistence/visibility/elasticsearch"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/rpc"
-	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 )
 
 // Service represents the history service
-type Service struct {
-	resource.Resource
+type (
+	Service struct {
+		resource.Resource
 
-	status  int32
-	handler *Handler
-	config  *configs.Config
+		self *fx.App
 
-	server *grpc.Server
-}
+		status            int32
+		handler           *Handler
+		visibilityManager manager.VisibilityManager
+		config            *configs.Config
 
-// NewService builds a new history service
+		server *grpc.Server
+	}
+)
+
 func NewService(
-	params *resource.BootstrapParams,
-) (*Service, error) {
-	logger := params.Logger
-
-	serviceConfig := configs.NewConfig(
-		dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger),
-		params.PersistenceConfig.NumHistoryShards,
-		params.PersistenceConfig.IsAdvancedVisibilityConfigExist(),
-		params.ESConfig.GetVisibilityIndex(),
-	)
-
-	params.PersistenceConfig.VisibilityConfig = &config.VisibilityConfig{
-		VisibilityOpenMaxQPS:   serviceConfig.VisibilityOpenMaxQPS,
-		VisibilityClosedMaxQPS: serviceConfig.VisibilityClosedMaxQPS,
-		EnableSampling:         serviceConfig.EnableVisibilitySampling,
-	}
-
-	visibilityManagerInitializer := func(
-		persistenceBean persistenceClient.Bean,
-		searchAttributesProvider searchattribute.Provider,
-		logger log.Logger,
-	) (visibility.VisibilityManager, error) {
-		visibilityFromDB, err := visibilityclient.NewVisibilityManager(
-			params.PersistenceConfig,
-			serviceConfig.PersistenceMaxQPS,
-			params.MetricsClient,
-			params.PersistenceServiceResolver,
-			params.Logger,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		var visibilityFromES visibility.VisibilityManager
-		if params.ESConfig != nil {
-			logger.Info("Elasticsearch config", tag.ESConfig(masker.MaskStruct(params.ESConfig, masker.DefaultFieldNames)))
-			visibilityIndexName := params.ESConfig.GetVisibilityIndex()
-
-			esProcessorConfig := &elasticsearch.ProcessorConfig{
-				IndexerConcurrency:       serviceConfig.IndexerConcurrency,
-				ESProcessorNumOfWorkers:  serviceConfig.ESProcessorNumOfWorkers,
-				ESProcessorBulkActions:   serviceConfig.ESProcessorBulkActions,
-				ESProcessorBulkSize:      serviceConfig.ESProcessorBulkSize,
-				ESProcessorFlushInterval: serviceConfig.ESProcessorFlushInterval,
-			}
-
-			esProcessor := elasticsearch.NewProcessor(esProcessorConfig, params.ESClient, logger, params.MetricsClient)
-			esProcessor.Start()
-
-			visibilityConfigForES := &config.VisibilityConfig{
-				ESProcessorAckTimeout: serviceConfig.ESProcessorAckTimeout,
-			}
-			visibilityFromES = elasticsearch.NewVisibilityManager(visibilityIndexName, params.ESClient, visibilityConfigForES, searchAttributesProvider, params.SearchAttributesMapper, esProcessor, params.MetricsClient, logger)
-		}
-		return visibility.NewVisibilityManagerWrapper(
-			visibilityFromDB,
-			visibilityFromES,
-			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // history visibility never read
-			serviceConfig.AdvancedVisibilityWritingMode,
-		), nil
-	}
-
-	serviceResource, err := resource.New(
-		params,
-		common.HistoryServiceName,
-		serviceConfig.PersistenceMaxQPS,
-		serviceConfig.PersistenceGlobalMaxQPS,
-		serviceConfig.ThrottledLogRPS,
-		visibilityManagerInitializer,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	metricsInterceptor := interceptor.NewTelemetryInterceptor(
-		serviceResource.GetNamespaceCache(),
-		serviceResource.GetMetricsClient(),
-		metrics.HistoryAPIMetricsScopes(),
-		logger,
-	)
-	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
-		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
-		map[string]int{},
-	)
-
-	grpcServerOptions, err := params.RPCFactory.GetInternodeGRPCServerOptions()
-	if err != nil {
-		logger.Fatal("creating gRPC server options failed", tag.Error(err))
-	}
-	grpcServerOptions = append(
-		grpcServerOptions,
-		grpc.ChainUnaryInterceptor(
-			rpc.ServiceErrorInterceptor,
-			metrics.NewServerMetricsContextInjectorInterceptor(),
-			metrics.NewServerMetricsTrailerPropagatorInterceptor(logger),
-			metricsInterceptor.Intercept,
-			rateLimiterInterceptor.Intercept,
-		),
-	)
-
+	serviceResource resource.Resource,
+	grpcServerOptions []grpc.ServerOption,
+	serviceConfig *configs.Config,
+	visibilityMgr manager.VisibilityManager,
+) *Service {
 	return &Service{
-		Resource: serviceResource,
-		status:   common.DaemonStatusInitialized,
-		server:   grpc.NewServer(grpcServerOptions...),
-		handler:  NewHandler(serviceResource, serviceConfig),
-		config:   serviceConfig,
-	}, nil
+		Resource:          serviceResource,
+		status:            common.DaemonStatusInitialized,
+		server:            grpc.NewServer(grpcServerOptions...),
+		handler:           NewHandler(serviceResource, serviceConfig, visibilityMgr),
+		visibilityManager: visibilityMgr,
+		config:            serviceConfig,
+	}
 }
 
 // Start starts the service
@@ -241,6 +141,7 @@ func (s *Service) Stop() {
 	s.server.Stop()
 
 	s.handler.Stop()
+	s.visibilityManager.Close()
 	s.Resource.Stop()
 
 	logger.Info("history stopped")

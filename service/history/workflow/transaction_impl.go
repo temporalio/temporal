@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/consts"
@@ -80,7 +81,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 		t.logger.Error("unable to notify workflow creation", tag.Error(err))
 	}
 
-	return resp.HistorySize, nil
+	return int64(resp.NewMutableStateStats.HistoryStatistics.SizeDiff), nil
 }
 
 func (t *TransactionImpl) ConflictResolveWorkflowExecution(
@@ -93,49 +94,18 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
 ) (int64, int64, int64, error) {
 
-	resetHistorySizeDiff := int64(0)
-	newWorkflowHistorySizeDiff := int64(0)
-	currentWorkflowHistorySizeDiff := int64(0)
-
-	for _, workflowEvents := range resetWorkflowEventsSeq {
-		eventsSize, err := PersistWorkflowEvents(t.shard, workflowEvents)
-		if err != nil {
-			return 0, 0, 0, err
-		}
-		resetHistorySizeDiff += eventsSize
-	}
-	resetWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += resetHistorySizeDiff
-
-	if newWorkflowSnapshot != nil {
-		for _, workflowEvents := range newWorkflowEventsSeq {
-			eventsSize, err := PersistWorkflowEvents(t.shard, workflowEvents)
-			if err != nil {
-				return 0, 0, 0, err
-			}
-			newWorkflowHistorySizeDiff += eventsSize
-		}
-		newWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += newWorkflowHistorySizeDiff
-	}
-
-	if currentWorkflowMutation != nil {
-		for _, workflowEvents := range currentWorkflowEventsSeq {
-			eventsSize, err := PersistWorkflowEvents(t.shard, workflowEvents)
-			if err != nil {
-				return 0, 0, 0, err
-			}
-			currentWorkflowHistorySizeDiff += eventsSize
-		}
-		currentWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize += currentWorkflowHistorySizeDiff
-	}
-
-	if err := t.shard.ConflictResolveWorkflowExecution(&persistence.ConflictResolveWorkflowExecutionRequest{
+	resp, err := conflictResolveWorkflowExecutionWithRetry(t.shard, &persistence.ConflictResolveWorkflowExecutionRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
 		Mode:                    conflictResolveMode,
 		ResetWorkflowSnapshot:   *resetWorkflowSnapshot,
+		ResetWorkflowEvents:     resetWorkflowEventsSeq,
 		NewWorkflowSnapshot:     newWorkflowSnapshot,
+		NewWorkflowEvents:       newWorkflowEventsSeq,
 		CurrentWorkflowMutation: currentWorkflowMutation,
-	}); err != nil {
+		CurrentWorkflowEvents:   currentWorkflowEventsSeq,
+	})
+	if err != nil {
 		return 0, 0, 0, err
 	}
 
@@ -152,8 +122,16 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 	if err := NotifyNewHistoryMutationEvent(engine, currentWorkflowMutation); err != nil {
 		t.logger.Error("unable to notify workflow mutation", tag.Error(err))
 	}
-
-	return resetHistorySizeDiff, newWorkflowHistorySizeDiff, currentWorkflowHistorySizeDiff, nil
+	resetHistorySizeDiff := int64(resp.ResetMutableStateStats.HistoryStatistics.SizeDiff)
+	newHistorySizeDiff := int64(0)
+	if resp.NewMutableStateStats != nil {
+		newHistorySizeDiff = int64(resp.NewMutableStateStats.HistoryStatistics.SizeDiff)
+	}
+	currentHistorySizeDiff := int64(0)
+	if resp.CurrentMutableStateStats != nil {
+		currentHistorySizeDiff = int64(resp.CurrentMutableStateStats.HistoryStatistics.SizeDiff)
+	}
+	return resetHistorySizeDiff, newHistorySizeDiff, currentHistorySizeDiff, nil
 }
 
 func (t *TransactionImpl) UpdateWorkflowExecution(
@@ -186,8 +164,12 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	if err := NotifyNewHistorySnapshotEvent(engine, newWorkflowSnapshot); err != nil {
 		t.logger.Error("unable to notify workflow creation", tag.Error(err))
 	}
-	stats := resp.MutableStateUpdateSessionStats
-	return stats.UpdateWorkflowHistorySizeDiff, stats.NewWorkflowHistorySizeDiff, nil
+	updateHistorySizeDiff := int64(resp.UpdateMutableStateStats.HistoryStatistics.SizeDiff)
+	newHistorySizeDiff := int64(0)
+	if resp.NewMutableStateStats != nil {
+		newHistorySizeDiff = int64(resp.NewMutableStateStats.HistoryStatistics.SizeDiff)
+	}
+	return updateHistorySizeDiff, newHistorySizeDiff, nil
 }
 
 func PersistWorkflowEvents(
@@ -314,6 +296,13 @@ func createWorkflowExecutionWithRetry(
 	)
 	switch err.(type) {
 	case nil:
+		emitMutationMetrics(
+			shard,
+			request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
+			[]*persistence.MutableStateStatistics{
+				&resp.NewMutableStateStats,
+			},
+		)
 		return resp, nil
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,
@@ -328,6 +317,54 @@ func createWorkflowExecutionWithRetry(
 			tag.WorkflowID(request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId),
 			tag.WorkflowRunID(request.NewWorkflowSnapshot.ExecutionState.RunId),
 			tag.StoreOperationCreateWorkflowExecution,
+			tag.Error(err),
+		)
+		return nil, err
+	}
+}
+
+func conflictResolveWorkflowExecutionWithRetry(
+	shard shard.Context,
+	request *persistence.ConflictResolveWorkflowExecutionRequest,
+) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
+
+	var resp *persistence.ConflictResolveWorkflowExecutionResponse
+	op := func() error {
+		var err error
+		resp, err = shard.ConflictResolveWorkflowExecution(request)
+		return err
+	}
+
+	err := backoff.Retry(
+		op,
+		PersistenceOperationRetryPolicy,
+		common.IsPersistenceTransientError,
+	)
+	switch err.(type) {
+	case nil:
+		emitMutationMetrics(
+			shard,
+			request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId,
+			[]*persistence.MutableStateStatistics{
+				&resp.ResetMutableStateStats,
+				resp.NewMutableStateStats,
+				resp.CurrentMutableStateStats,
+			},
+		)
+		return resp, nil
+	case *persistence.CurrentWorkflowConditionFailedError,
+		*persistence.WorkflowConditionFailedError,
+		*persistence.ConditionFailedError:
+		// it is possible that workflow already exists and caller need to apply
+		// workflow ID reuse policy
+		return nil, err
+	default:
+		shard.GetLogger().Error(
+			"Persistent store operation Failure",
+			tag.WorkflowNamespaceID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId),
+			tag.WorkflowID(request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId),
+			tag.WorkflowRunID(request.ResetWorkflowSnapshot.ExecutionState.RunId),
+			tag.StoreOperationConflictResolveWorkflowExecution,
 			tag.Error(err),
 		)
 		return nil, err
@@ -354,6 +391,13 @@ func getWorkflowExecutionWithRetry(
 	)
 	switch err.(type) {
 	case nil:
+		emitGetMetrics(
+			shard,
+			resp.State.ExecutionInfo.NamespaceId,
+			[]*persistence.MutableStateStatistics{
+				&resp.MutableStateStats,
+			},
+		)
 		return resp, nil
 	case *serviceerror.NotFound:
 		// it is possible that workflow does not exists
@@ -389,19 +433,14 @@ func updateWorkflowExecutionWithRetry(
 	)
 	switch err.(type) {
 	case nil:
-		// TODO @wxing1292
-		//  temporarily move the emission of per update mutable state metrics
-		//  to here, long term story, this emission of metrics should have a
-		//  dedicated layer
-		if namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(
+		emitMutationMetrics(
+			shard,
 			request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId,
-		); err == nil {
-			emitSessionUpdateStats(
-				shard.GetMetricsClient(),
-				namespaceEntry.GetInfo().Name,
-				resp.MutableStateUpdateSessionStats,
-			)
-		}
+			[]*persistence.MutableStateStatistics{
+				&resp.UpdateMutableStateStats,
+				resp.NewMutableStateStats,
+			},
+		)
 		return resp, nil
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,
@@ -552,4 +591,50 @@ func NotifyNewHistoryMutationEvent(
 		workflowStatus,
 	))
 	return nil
+}
+
+func emitMutationMetrics(
+	shard shard.Context,
+	namespaceID string,
+	stats []*persistence.MutableStateStatistics,
+) {
+	namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(
+		namespaceID,
+	)
+	if err != nil {
+		return
+	}
+
+	metricsClient := shard.GetMetricsClient()
+	namespaceName := namespaceEntry.GetInfo().Name
+	for _, stat := range stats {
+		emitMutableStateStatus(
+			metricsClient.Scope(metrics.SessionSizeStatsScope, metrics.NamespaceTag(namespaceName)),
+			metricsClient.Scope(metrics.SessionCountStatsScope, metrics.NamespaceTag(namespaceName)),
+			stat,
+		)
+	}
+}
+
+func emitGetMetrics(
+	shard shard.Context,
+	namespaceID string,
+	stats []*persistence.MutableStateStatistics,
+) {
+	namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(
+		namespaceID,
+	)
+	if err != nil {
+		return
+	}
+
+	metricsClient := shard.GetMetricsClient()
+	namespaceName := namespaceEntry.GetInfo().Name
+	for _, stat := range stats {
+		emitMutableStateStatus(
+			metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.NamespaceTag(namespaceName)),
+			metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.NamespaceTag(namespaceName)),
+			stat,
+		)
+	}
 }

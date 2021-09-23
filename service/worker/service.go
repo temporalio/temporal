@@ -33,13 +33,10 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/visibility"
-	"go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/worker/addsearchattributes"
@@ -60,7 +57,7 @@ type (
 		status    int32
 		stopC     chan struct{}
 		sdkClient sdkclient.Client
-		esClient  client.Client
+		esClient  esclient.Client
 		config    *Config
 	}
 
@@ -91,13 +88,6 @@ func NewService(
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
 		serviceConfig.ThrottledLogRPS,
-		func(
-			persistenceBean persistenceClient.Bean,
-			searchAttributesProvider searchattribute.Provider,
-			logger log.Logger,
-		) (visibility.VisibilityManager, error) {
-			return nil, nil
-		},
 	)
 	if err != nil {
 		return nil, err
@@ -238,7 +228,7 @@ func (s *Service) startAddSearchAttributes() {
 	addSearchAttributesService := addsearchattributes.New(
 		s.sdkClient,
 		s.esClient,
-		persistence.NewSearchAttributesManager(clock.NewRealTimeSource(), s.GetClusterMetadataManager()),
+		searchattribute.NewManager(clock.NewRealTimeSource(), s.GetClusterMetadataManager()),
 		s.GetMetricsClient(),
 		s.GetLogger(),
 	)

@@ -31,6 +31,7 @@ import (
 	"sync/atomic"
 
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
@@ -70,6 +71,7 @@ type (
 		eventNotifier           events.Notifier
 		replicationTaskFetchers ReplicationTaskFetchers
 		queueTaskProcessor      queueTaskProcessor
+		visibilityMrg           manager.VisibilityManager
 	}
 )
 
@@ -93,19 +95,21 @@ var (
 
 	errDeserializeTaskTokenMessage = "Error to deserialize task token. Error: %v."
 
-	errShuttingDown = serviceerror.NewInternal("Shutting down")
+	errShuttingDown = serviceerror.NewUnavailable("Shutting down")
 )
 
 // NewHandler creates a thrift handler for the history service
 func NewHandler(
 	resource resource.Resource,
 	config *configs.Config,
+	visibilityMrg manager.VisibilityManager,
 ) *Handler {
 	handler := &Handler{
 		Resource:        resource,
 		status:          common.DaemonStatusInitialized,
 		config:          config,
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
+		visibilityMrg:   visibilityMrg,
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -216,7 +220,7 @@ func (h *Handler) CreateEngine(
 ) shard.Engine {
 	return NewEngineWithShardContext(
 		shardContext,
-		h.GetVisibilityManager(),
+		h.visibilityMrg,
 		h.GetMatchingClient(),
 		h.GetHistoryClient(),
 		h.GetSDKClient(),
@@ -1434,9 +1438,9 @@ func (h *Handler) convertError(err error) error {
 		}
 		return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), "<unknown>")
 	case *persistence.WorkflowConditionFailedError:
-		return serviceerror.NewInternal(err.Msg)
+		return serviceerror.NewUnavailable(err.Msg)
 	case *persistence.CurrentWorkflowConditionFailedError:
-		return serviceerror.NewInternal(err.Msg)
+		return serviceerror.NewUnavailable(err.Msg)
 	case *persistence.TransactionSizeLimitError:
 		return serviceerror.NewInvalidArgument(err.Msg)
 	}

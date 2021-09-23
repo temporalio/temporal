@@ -253,6 +253,42 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueuesEmptyResultWithShortCont
 	s.PollForTasksEmptyResultTest(callContext, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 }
 
+func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
+	queueID := newTestTaskQueueID(
+		uuid.New(),
+		"makeToast",
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	tqm, err := s.matchingEngine.getTaskQueueManager(
+		queueID,
+		enumspb.TASK_QUEUE_KIND_NORMAL)
+	s.Require().NoError(err)
+
+	tqm2, err := newTaskQueueManager(
+		s.matchingEngine,
+		queueID, // same queueID as above
+		enumspb.TASK_QUEUE_KIND_NORMAL,
+		s.matchingEngine.config)
+	s.Require().NoError(err)
+
+	// try to unload a different tqm instance with the same taskqueue ID
+	s.matchingEngine.unloadTaskQueue(tqm2)
+
+	got, err := s.matchingEngine.getTaskQueueManager(
+		queueID, enumspb.TASK_QUEUE_KIND_NORMAL)
+	s.Require().NoError(err)
+	s.Require().Same(tqm, got,
+		"Unload call with non-matching taskQueueManager should not cause unload")
+
+	// this time unload the right tqm
+	s.matchingEngine.unloadTaskQueue(tqm)
+
+	got, err = s.matchingEngine.getTaskQueueManager(
+		queueID, enumspb.TASK_QUEUE_KIND_NORMAL)
+	s.Require().NoError(err)
+	s.Require().NotSame(tqm, got,
+		"Unload call with matching incarnation should have caused unload")
+}
+
 func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 	namespaceID := uuid.NewRandom().String()
 	tl := "makeToast"
@@ -816,6 +852,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDispatch() {
+	s.T().Skip("Racy - times out ~50% of the time running locally with --race")
 	// Set a short long poll expiration so we don't have to wait too long for 0 throttling cases
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueueInfo(20 * time.Millisecond)
 	dispatchLimitFn := func(wc int, tc int64) float64 {
@@ -1566,8 +1603,6 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	s.Nil(err)
 	s.True(0 < len(tasks) && len(tasks) <= rangeSize)
 	s.True(isReadBatchDone)
-
-	tlMgr.engine.removeTaskQueueManager(tlMgr.taskQueueID)
 }
 
 func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {

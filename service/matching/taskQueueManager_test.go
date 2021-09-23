@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"math"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -57,27 +56,22 @@ func TestDeliverBufferTasks(t *testing.T) {
 
 	tests := []func(tlm *taskQueueManagerImpl){
 		func(tlm *taskQueueManagerImpl) { close(tlm.taskReader.taskBuffer) },
-		func(tlm *taskQueueManagerImpl) { close(tlm.taskReader.shutdownChan) },
+		func(tlm *taskQueueManagerImpl) { tlm.taskReader.gorogrp.Cancel() },
 		func(tlm *taskQueueManagerImpl) {
 			rps := 0.1
 			tlm.matcher.UpdateRatelimit(&rps)
 			tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{}
 			err := tlm.matcher.rateLimiter.Wait(context.Background()) // consume the token
 			assert.NoError(t, err)
-			tlm.taskReader.cancelFunc()
+			tlm.taskReader.gorogrp.Cancel()
 		},
 	}
 	for _, test := range tests {
 		tlm := mustCreateTestTaskQueueManager(t, controller)
-		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			tlm.taskReader.dispatchBufferedTasks()
-		}()
+		tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 		test(tlm)
 		// dispatchBufferedTasks should stop after invocation of the test function
-		wg.Wait()
+		tlm.taskReader.gorogrp.Wait()
 	}
 }
 
@@ -87,15 +81,10 @@ func TestDeliverBufferTasks_NoPollers(t *testing.T) {
 
 	tlm := mustCreateTestTaskQueueManager(t, controller)
 	tlm.taskReader.taskBuffer <- &persistencespb.AllocatedTaskInfo{}
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		tlm.taskReader.dispatchBufferedTasks()
-		wg.Done()
-	}()
+	tlm.taskReader.gorogrp.Go(tlm.taskReader.dispatchBufferedTasks)
 	time.Sleep(100 * time.Millisecond) // let go routine run first and block on tasksForPoll
-	tlm.taskReader.cancelFunc()
-	wg.Wait()
+	tlm.taskReader.gorogrp.Cancel()
+	tlm.taskReader.gorogrp.Wait()
 }
 
 func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
@@ -128,12 +117,12 @@ func TestReadLevelForAllExpiredTasksInBatch(t *testing.T) {
 		},
 	}
 
-	require.True(t, tlm.taskReader.addTasksToBuffer(tasks))
+	require.NoError(t, tlm.taskReader.addTasksToBuffer(context.TODO(), tasks))
 	require.Equal(t, int64(0), tlm.taskAckManager.getAckLevel())
 	require.Equal(t, int64(12), tlm.taskAckManager.getReadLevel())
 
 	// Now add a mix of valid and expired tasks
-	require.True(t, tlm.taskReader.addTasksToBuffer([]*persistencespb.AllocatedTaskInfo{
+	require.NoError(t, tlm.taskReader.addTasksToBuffer(context.TODO(), []*persistencespb.AllocatedTaskInfo{
 		{
 			Data: &persistencespb.TaskInfo{
 				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
@@ -175,9 +164,7 @@ func makeTestBlocAlloc(f func() (taskQueueState, error)) taskQueueManagerOpt {
 }
 
 func TestSyncMatchLeasingUnavailable(t *testing.T) {
-	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	cfg.ResilientSyncMatch = func(...dynamicconfig.FilterOption) bool { return true }
-	tqm := mustCreateTestTaskQueueManagerWithConfig(t, gomock.NewController(t), cfg,
+	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t),
 		makeTestBlocAlloc(func() (taskQueueState, error) {
 			// any error other than ConditionFailedError indicates an
 			// availability problem at a lower layer so the TQM should NOT
@@ -208,12 +195,11 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 }
 
 func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
-	cc := dynamicconfig.NewMutableEphemeralClient(
-		dynamicconfig.Set(dynamicconfig.ResilientSyncMatch, true))
+	cc := dynamicconfig.NewMutableEphemeralClient()
 	cfg := NewConfig(dynamicconfig.NewCollection(cc, log.NewTestLogger()))
 	cfg.RangeSize = 1 // TaskID block size
 	var leaseErr error = nil
-	tqm := mustCreateTestTaskQueueManagerWithConfig(t, gomock.NewController(t), cfg,
+	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t),
 		makeTestBlocAlloc(func() (taskQueueState, error) {
 			return taskQueueState{rangeID: 1}, leaseErr
 		}))
@@ -233,7 +219,6 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 	// attempt to obtain more IDs. This specific error type indicates that
 	// another service instance has become the owner of the partition
 	leaseErr = &persistence.ConditionFailedError{Msg: "should kill the tqm"}
-	require.True(t, errIndicatesForeignLessee(leaseErr))
 
 	sync, err = tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
@@ -241,25 +226,6 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 		source:    enumsspb.TASK_SOURCE_HISTORY,
 	})
 	require.False(t, sync)
-	require.ErrorIs(t, err, errShutdown)
-}
-
-func TestAnyErrorCausesUnloadWhenResilientSyncMatchDisabled(t *testing.T) {
-	cc := dynamicconfig.NewMutableEphemeralClient(
-		dynamicconfig.Set(dynamicconfig.ResilientSyncMatch, true))
-	cfg := NewConfig(dynamicconfig.NewCollection(cc, log.NewTestLogger()))
-	tqm := mustCreateTestTaskQueueManagerWithConfig(t, gomock.NewController(t), cfg,
-		makeTestBlocAlloc(func() (taskQueueState, error) {
-			return taskQueueState{}, errors.New("any error will do")
-		}))
-	tqm.Start()
-	defer tqm.Stop()
-	_, err := tqm.AddTask(context.TODO(), addTaskParams{
-		execution: &commonpb.WorkflowExecution{},
-		taskInfo:  &persistencespb.TaskInfo{},
-		source:    enumsspb.TASK_SOURCE_HISTORY,
-	})
-	require.Error(t, err)
 }
 
 func mustCreateTestTaskQueueManager(
@@ -375,11 +341,6 @@ func TestDescribeTaskQueue(t *testing.T) {
 	require.Zero(t, taskQueueStatus.GetBacklogCountHint())
 }
 
-func tlMgrStartWithoutNotifyEvent(tlm *taskQueueManagerImpl) {
-	go tlm.taskReader.dispatchBufferedTasks()
-	go tlm.taskReader.getTasksPump()
-}
-
 func TestCheckIdleTaskQueue(t *testing.T) {
 	controller := gomock.NewController(t)
 	defer controller.Finish()
@@ -390,7 +351,6 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	// Idle
 	tlm := mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg)
 	tlm.Start()
-	tlMgrStartWithoutNotifyEvent(tlm)
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 
@@ -399,7 +359,6 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	tlm.Start()
 	tlm.pollerHistory.updatePollerInfo(pollerIdentity("test-poll"), nil)
 	require.Equal(t, 1, len(tlm.GetAllPollerInfo()))
-	tlMgrStartWithoutNotifyEvent(tlm)
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))
 	tlm.Stop()
@@ -409,7 +368,6 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	tlm = mustCreateTestTaskQueueManagerWithConfig(t, controller, cfg)
 	tlm.Start()
 	require.Equal(t, 0, len(tlm.GetAllPollerInfo()))
-	tlMgrStartWithoutNotifyEvent(tlm)
 	tlm.taskReader.Signal()
 	time.Sleep(1 * time.Second)
 	require.Equal(t, common.DaemonStatusStarted, atomic.LoadInt32(&tlm.status))

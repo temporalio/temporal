@@ -35,6 +35,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -87,7 +88,7 @@ func (m *sqlTaskManager) CreateTaskQueue(request *persistence.InternalCreateTask
 		DataEncoding: request.TaskQueueInfo.EncodingType.String(),
 	}
 	if _, err := m.Db.InsertIntoTaskQueues(ctx, &row); err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("CreateTaskQueue operation failed. Failed to make task queue %v of type %v. Error: %v", request.TaskQueue, request.TaskType, err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("CreateTaskQueue operation failed. Failed to make task queue %v of type %v. Error: %v", request.TaskQueue, request.TaskType, err))
 	}
 
 	return nil
@@ -109,7 +110,7 @@ func (m *sqlTaskManager) GetTaskQueue(request *persistence.InternalGetTaskQueueR
 	switch err {
 	case nil:
 		if len(rows) != 1 {
-			return nil, serviceerror.NewInternal(
+			return nil, serviceerror.NewUnavailable(
 				fmt.Sprintf("GetTaskQueue operation failed. Expect exactly one result row, but got %d for task queue %v of type %v",
 					len(rows), request.TaskQueue, request.TaskType))
 		}
@@ -123,7 +124,7 @@ func (m *sqlTaskManager) GetTaskQueue(request *persistence.InternalGetTaskQueueR
 			fmt.Sprintf("GetTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v",
 				request.TaskQueue, request.TaskType, err))
 	default:
-		return nil, serviceerror.NewInternal(
+		return nil, serviceerror.NewUnavailable(
 			fmt.Sprintf("GetTaskQueue operation failed. Failed to check if task queue %v of type %v existed. Error: %v",
 				request.TaskQueue, request.TaskType, err))
 	}
@@ -265,7 +266,7 @@ func (m *sqlTaskManager) ListTaskQueue(request *persistence.ListTaskQueueRequest
 
 		rows, err = m.Db.SelectFromTaskQueues(ctx, filter)
 		if err != nil {
-			return nil, serviceerror.NewInternal(err.Error())
+			return nil, serviceerror.NewUnavailable(err.Error())
 		}
 
 		if len(rows) > 0 {
@@ -313,7 +314,7 @@ func (m *sqlTaskManager) ListTaskQueue(request *persistence.ListTaskQueueRequest
 	}
 
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("error serializing nextPageToken:%v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("error serializing nextPageToken:%v", err))
 	}
 
 	resp.NextPageToken = nextPageToken
@@ -356,7 +357,7 @@ func (m *sqlTaskManager) DeleteTaskQueue(
 	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.TaskQueue.NamespaceID)
 	if err != nil {
-		return serviceerror.NewInternal(err.Error())
+		return serviceerror.NewUnavailable(err.Error())
 	}
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue.Name, request.TaskQueue.TaskType)
 	result, err := m.Db.DeleteFromTaskQueues(ctx, sqlplugin.TaskQueuesFilter{
@@ -365,14 +366,14 @@ func (m *sqlTaskManager) DeleteTaskQueue(
 		RangeID:     &request.RangeID,
 	})
 	if err != nil {
-		return serviceerror.NewInternal(err.Error())
+		return serviceerror.NewUnavailable(err.Error())
 	}
 	nRows, err := result.RowsAffected()
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("rowsAffected returned error:%v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("rowsAffected returned error:%v", err))
 	}
 	if nRows != 1 {
-		return serviceerror.NewInternal(fmt.Sprintf("delete failed: %v rows affected instead of 1", nRows))
+		return serviceerror.NewUnavailable(fmt.Sprintf("delete failed: %v rows affected instead of 1", nRows))
 	}
 	return nil
 }
@@ -384,7 +385,7 @@ func (m *sqlTaskManager) CreateTasks(
 
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
-		return nil, serviceerror.NewInternal(err.Error())
+		return nil, serviceerror.NewUnavailable(err.Error())
 	}
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
 
@@ -425,7 +426,7 @@ func (m *sqlTaskManager) GetTasks(
 	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
-		return nil, serviceerror.NewInternal(err.Error())
+		return nil, serviceerror.NewUnavailable(err.Error())
 	}
 
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
@@ -437,7 +438,7 @@ func (m *sqlTaskManager) GetTasks(
 		PageSize:    &request.BatchSize,
 	})
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTasks operation failed. Failed to get rows. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks operation failed. Failed to get rows. Error: %v", err))
 	}
 
 	var tasks = make([]*commonpb.DataBlob, len(rows))
@@ -455,7 +456,7 @@ func (m *sqlTaskManager) CompleteTask(
 	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.TaskQueue.NamespaceID)
 	if err != nil {
-		return serviceerror.NewInternal(err.Error())
+		return serviceerror.NewUnavailable(err.Error())
 	}
 
 	taskID := request.TaskID
@@ -465,7 +466,7 @@ func (m *sqlTaskManager) CompleteTask(
 		TaskQueueID: tqId,
 		TaskID:      &taskID})
 	if err != nil && err != sql.ErrNoRows {
-		return serviceerror.NewInternal(err.Error())
+		return serviceerror.NewUnavailable(err.Error())
 	}
 	return nil
 }
@@ -477,7 +478,7 @@ func (m *sqlTaskManager) CompleteTasksLessThan(
 	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
-		return 0, serviceerror.NewInternal(err.Error())
+		return 0, serviceerror.NewUnavailable(err.Error())
 	}
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueueName, request.TaskType)
 	result, err := m.Db.DeleteFromTasks(ctx, sqlplugin.TasksFilter{
@@ -487,11 +488,11 @@ func (m *sqlTaskManager) CompleteTasksLessThan(
 		Limit:                &request.Limit,
 	})
 	if err != nil {
-		return 0, serviceerror.NewInternal(err.Error())
+		return 0, serviceerror.NewUnavailable(err.Error())
 	}
 	nRows, err := result.RowsAffected()
 	if err != nil {
-		return 0, serviceerror.NewInternal(fmt.Sprintf("rowsAffected returned error: %v", err))
+		return 0, serviceerror.NewUnavailable(fmt.Sprintf("rowsAffected returned error: %v", err))
 	}
 	return int(nRows), nil
 }
@@ -551,6 +552,6 @@ func lockTaskQueue(
 		return &persistence.ConditionFailedError{Msg: "Task queue does not exists"}
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("Failed to lock task queue. Error: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to lock task queue. Error: %v", err))
 	}
 }

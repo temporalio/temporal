@@ -30,9 +30,8 @@ import (
 	"strings"
 	"time"
 
-	"go.temporal.io/server/common/config"
-
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -77,7 +76,7 @@ func NewTestCluster(keyspace, username, password, host string, port int, schemaD
 		Hosts:          host,
 		Port:           port,
 		MaxConns:       2,
-		ConnectTimeout: 600 * time.Millisecond,
+		ConnectTimeout: 30 * time.Second,
 		Keyspace:       keyspace,
 	}
 	result.faultInjection = faultInjection
@@ -94,9 +93,6 @@ func (s *TestCluster) Config() config.Persistence {
 			"test": {Cassandra: &cfg, FaultInjection: s.faultInjection},
 		},
 		TransactionSizeLimit: dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
-		VisibilityConfig: &config.VisibilityConfig{
-			EnableSampling: dynamicconfig.GetBoolPropertyFn(false),
-		},
 	}
 }
 
@@ -151,6 +147,7 @@ func (s *TestCluster) CreateSession(
 					Consistency: "ONE",
 				},
 			},
+			ConnectTimeout: s.cfg.ConnectTimeout,
 		},
 		resolver.NewNoopResolver(),
 		log.NewNoopLogger(),

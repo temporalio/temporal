@@ -117,7 +117,7 @@ func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
 	return newClusterMetadataPersistence(conn, f.logger)
 }
 
-// NewExecutionStore returns a ExecutionStore for a given shardID
+// NewExecutionStore returns a new ExecutionStore
 func (f *Factory) NewExecutionStore() (p.ExecutionStore, error) {
 	conn, err := f.mainDBConn.Get()
 	if err != nil {

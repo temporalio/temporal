@@ -105,7 +105,7 @@ type (
 
 		CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error)
-		ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) error
+		ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) (*persistence.ConflictResolveWorkflowExecutionResponse, error)
 		AddTasks(request *persistence.AddTasksRequest) error
 		AppendHistoryEvents(request *persistence.AppendHistoryNodesRequest, namespaceID string, execution commonpb.WorkflowExecution) (int, error)
 	}

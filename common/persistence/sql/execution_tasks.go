@@ -78,11 +78,11 @@ func (m *sqlExecutionStore) GetTransferTask(
 		if err == sql.ErrNoRows {
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetTransferTask operation failed. Task with ID %v not found. Error: %v", request.TaskID, err))
 		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTransferTask operation failed. Failed to get record. TaskId: %v. Error: %v", request.TaskID, err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTransferTask operation failed. Failed to get record. TaskId: %v. Error: %v", request.TaskID, err))
 	}
 
 	if len(rows) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTransferTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTransferTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
 	}
 
 	transferRow := rows[0]
@@ -108,7 +108,7 @@ func (m *sqlExecutionStore) GetTransferTasks(
 	})
 	if err != nil {
 		if err != sql.ErrNoRows {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTransferTasks operation failed. Select failed. Error: %v", err))
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTransferTasks operation failed. Select failed. Error: %v", err))
 		}
 	}
 	resp := &p.GetTransferTasksResponse{Tasks: make([]*persistencespb.TransferTaskInfo, len(rows))}
@@ -132,7 +132,7 @@ func (m *sqlExecutionStore) CompleteTransferTask(
 		ShardID: request.ShardID,
 		TaskID:  request.TaskID,
 	}); err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("CompleteTransferTask operation failed. Error: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("CompleteTransferTask operation failed. Error: %v", err))
 	}
 	return nil
 }
@@ -147,7 +147,7 @@ func (m *sqlExecutionStore) RangeCompleteTransferTask(
 		MinTaskID: request.ExclusiveBeginTaskID,
 		MaxTaskID: request.InclusiveEndTaskID,
 	}); err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteTransferTask operation failed. Error: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("RangeCompleteTransferTask operation failed. Error: %v", err))
 	}
 	return nil
 }
@@ -166,11 +166,11 @@ func (m *sqlExecutionStore) GetTimerTask(
 		if err == sql.ErrNoRows {
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetTimerTask operation failed. Task with ID %v not found. Error: %v", request.TaskID, err))
 		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTask operation failed. Failed to get record. TaskId: %v. Error: %v", request.TaskID, err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTimerTask operation failed. Failed to get record. TaskId: %v. Error: %v", request.TaskID, err))
 	}
 
 	if len(rows) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTimerTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
 	}
 
 	timerRow := rows[0]
@@ -205,7 +205,7 @@ func (m *sqlExecutionStore) GetTimerIndexTasks(
 	})
 
 	if err != nil && err != sql.ErrNoRows {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTasks operation failed. Select failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTimerTasks operation failed. Select failed. Error: %v", err))
 	}
 
 	resp := &p.GetTimerIndexTasksResponse{Timers: make([]*persistencespb.TimerTaskInfo, len(rows))}
@@ -248,7 +248,7 @@ func (m *sqlExecutionStore) CompleteTimerTask(
 		VisibilityTimestamp: request.VisibilityTimestamp,
 		TaskID:              request.TaskID,
 	}); err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("CompleteTimerTask operation failed. Error: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("CompleteTimerTask operation failed. Error: %v", err))
 	}
 	return nil
 }
@@ -265,7 +265,7 @@ func (m *sqlExecutionStore) RangeCompleteTimerTask(
 		MinVisibilityTimestamp: start,
 		MaxVisibilityTimestamp: end,
 	}); err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("CompleteTimerTask operation failed. Error: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("CompleteTimerTask operation failed. Error: %v", err))
 	}
 	return nil
 }
@@ -283,11 +283,11 @@ func (m *sqlExecutionStore) GetReplicationTask(
 		if err == sql.ErrNoRows {
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetReplicationTask operation failed. Task with ID %v not found. Error: %v", request.TaskID, err))
 		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetReplicationTask operation failed. Failed to get record. TaskId: %v. Error: %v", request.TaskID, err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetReplicationTask operation failed. Failed to get record. TaskId: %v. Error: %v", request.TaskID, err))
 	}
 
 	if len(rows) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetReplicationTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetReplicationTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
 	}
 
 	replicationRow := rows[0]
@@ -324,7 +324,7 @@ func (m *sqlExecutionStore) GetReplicationTasks(
 	case sql.ErrNoRows:
 		return &p.GetReplicationTasksResponse{}, nil
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetReplicationTasks operation failed. Select failed: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetReplicationTasks operation failed. Select failed: %v", err))
 	}
 }
 
@@ -408,7 +408,7 @@ func (m *sqlExecutionStore) CompleteReplicationTask(
 		ShardID: request.ShardID,
 		TaskID:  request.TaskID,
 	}); err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("CompleteReplicationTask operation failed. Error: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("CompleteReplicationTask operation failed. Error: %v", err))
 	}
 	return nil
 }
@@ -423,7 +423,7 @@ func (m *sqlExecutionStore) RangeCompleteReplicationTask(
 		MinTaskID: 0,
 		MaxTaskID: request.InclusiveEndTaskID,
 	}); err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteReplicationTask operation failed. Error: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("RangeCompleteReplicationTask operation failed. Error: %v", err))
 	}
 	return nil
 }
@@ -451,7 +451,7 @@ func (m *sqlExecutionStore) PutReplicationTaskToDLQ(
 	// Tasks are immutable. So it's fine if we already persisted it before.
 	// This can happen when tasks are retried (ack and cleanup can have lag on source side).
 	if err != nil && !m.Db.IsDupEntryError(err) {
-		return serviceerror.NewInternal(fmt.Sprintf("Failed to create replication tasks. Error: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to create replication tasks. Error: %v", err))
 	}
 
 	return nil
@@ -481,7 +481,7 @@ func (m *sqlExecutionStore) GetReplicationTasksFromDLQ(
 	case sql.ErrNoRows:
 		return &p.GetReplicationTasksResponse{}, nil
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetReplicationTasks operation failed. Select failed: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetReplicationTasks operation failed. Select failed: %v", err))
 	}
 }
 
@@ -529,11 +529,11 @@ func (m *sqlExecutionStore) GetVisibilityTask(
 		if err == sql.ErrNoRows {
 			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetVisibilityTask operation failed. Task with ID %v not found. Error: %v", request.TaskID, err))
 		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetVisibilityTask operation failed. Failed to get record. TaskId: %v. Error: %v", request.TaskID, err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetVisibilityTask operation failed. Failed to get record. TaskId: %v. Error: %v", request.TaskID, err))
 	}
 
 	if len(rows) == 0 {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetVisibilityTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetVisibilityTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
 	}
 
 	visibilityRow := rows[0]
@@ -559,7 +559,7 @@ func (m *sqlExecutionStore) GetVisibilityTasks(
 	})
 	if err != nil {
 		if err != sql.ErrNoRows {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("GetVisibilityTasks operation failed. Select failed. Error: %v", err))
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetVisibilityTasks operation failed. Select failed. Error: %v", err))
 		}
 	}
 	resp := &p.GetVisibilityTasksResponse{Tasks: make([]*persistencespb.VisibilityTaskInfo, len(rows))}
@@ -583,7 +583,7 @@ func (m *sqlExecutionStore) CompleteVisibilityTask(
 		ShardID: request.ShardID,
 		TaskID:  request.TaskID,
 	}); err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("CompleteVisibilityTask operation failed. Error: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("CompleteVisibilityTask operation failed. Error: %v", err))
 	}
 	return nil
 }
@@ -598,7 +598,7 @@ func (m *sqlExecutionStore) RangeCompleteVisibilityTask(
 		MinTaskID: request.ExclusiveBeginTaskID,
 		MaxTaskID: request.InclusiveEndTaskID,
 	}); err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("RangeCompleteVisibilityTask operation failed. Error: %v", err))
+		return serviceerror.NewUnavailable(fmt.Sprintf("RangeCompleteVisibilityTask operation failed. Error: %v", err))
 	}
 	return nil
 }

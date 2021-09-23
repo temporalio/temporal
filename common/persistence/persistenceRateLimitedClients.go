@@ -27,6 +27,7 @@ package persistence
 import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
 )
@@ -34,8 +35,6 @@ import (
 var (
 	// ErrPersistenceLimitExceeded is the error indicating QPS limit reached.
 	ErrPersistenceLimitExceeded = serviceerror.NewResourceExhausted("Persistence Max QPS Reached.")
-	// ErrPersistenceLimitExceededForList is the error indicating QPS limit reached for list visibility.
-	ErrPersistenceLimitExceededForList = serviceerror.NewResourceExhausted("Persistence Max QPS Reached for List Operations.")
 )
 
 type (
@@ -203,13 +202,13 @@ func (p *executionRateLimitedPersistenceClient) UpdateWorkflowExecution(request 
 	return resp, err
 }
 
-func (p *executionRateLimitedPersistenceClient) ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) error {
+func (p *executionRateLimitedPersistenceClient) ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) (*ConflictResolveWorkflowExecutionResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
+		return nil, ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.ConflictResolveWorkflowExecution(request)
-	return err
+	response, err := p.persistence.ConflictResolveWorkflowExecution(request)
+	return response, err
 }
 
 func (p *executionRateLimitedPersistenceClient) DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error {

@@ -41,8 +41,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-
-	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -91,7 +90,6 @@ type (
 		workflowTaskHandler       workflowTaskHandlerCallbacks
 		clusterMetadata           cluster.Metadata
 		executionManager          persistence.ExecutionManager
-		visibilityMgr             visibility.VisibilityManager
 		txProcessor               transferQueueProcessor
 		timerProcessor            timerQueueProcessor
 		visibilityProcessor       visibilityQueueProcessor
@@ -122,7 +120,7 @@ type (
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(
 	shard shard.Context,
-	visibilityMgr visibility.VisibilityManager,
+	visibilityMgr manager.VisibilityManager,
 	matching matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	publicClient sdkclient.Client,
@@ -144,7 +142,6 @@ func NewEngineWithShardContext(
 		clusterMetadata:    shard.GetClusterMetadata(),
 		timeSource:         shard.GetTimeSource(),
 		executionManager:   executionManager,
-		visibilityMgr:      visibilityMgr,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		historyCache:       historyCache,
 		logger:             log.With(logger, tag.ComponentHistoryEngine),
@@ -166,7 +163,7 @@ func NewEngineWithShardContext(
 		queueTaskProcessor: queueTaskProcessor,
 	}
 
-	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
+	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, matching, historyClient, queueTaskProcessor, logger)
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, queueTaskProcessor, logger)
 	historyEngImpl.visibilityProcessor = newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, queueTaskProcessor, logger)
 	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
@@ -502,7 +499,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		startRequest,
 	)
 	if err != nil {
-		return nil, serviceerror.NewInternal("Failed to add workflow execution started event.")
+		return nil, err
 	}
 
 	// Generate first workflow task event if not child WF and no first workflow task backoff
@@ -1261,10 +1258,12 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			requestID := request.GetRequestId()
 			ai, isRunning := mutableState.GetActivityInfo(scheduleID)
 
+			metricsScope := e.metricsClient.Scope(metrics.HistoryRecordActivityTaskStartedScope)
+
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduleID >= mutableState.GetNextEventID() {
-				e.metricsClient.IncCounter(metrics.HistoryRecordActivityTaskStartedScope, metrics.StaleMutableStateCounter)
+				metricsScope.IncCounter(metrics.StaleMutableStateCounter)
 				return nil, consts.ErrStaleState
 			}
 
@@ -1306,6 +1305,14 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			); err != nil {
 				return nil, err
 			}
+
+			scheduleToStartLatency := ai.GetStartedTime().Sub(*ai.GetScheduledTime())
+			namespaceName := namespaceEntry.GetInfo().GetName()
+			taskQueueName := ai.GetTaskQueue()
+
+			metrics.GetPerTaskQueueScope(metricsScope, namespaceName, taskQueueName, enumspb.TASK_QUEUE_KIND_NORMAL).
+				Tagged(metrics.TaskTypeTag("activity")).
+				RecordTimer(metrics.TaskScheduleToStartLatency, scheduleToStartLatency)
 
 			response.StartedTime = ai.StartedTime
 			response.Attempt = ai.Attempt
@@ -1418,7 +1425,7 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 
 			if _, err := mutableState.AddActivityTaskCompletedEvent(scheduleID, ai.StartedId, request); err != nil {
 				// Unable to add ActivityTaskCompleted event to history
-				return nil, serviceerror.NewInternal("Unable to add ActivityTaskCompleted event to history.")
+				return nil, err
 			}
 			activityStartedTime = *ai.StartedTime
 			taskQueue = ai.TaskQueue
@@ -1506,7 +1513,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 				// no more retry, and we want to record the failure event
 				if _, err := mutableState.AddActivityTaskFailedEvent(scheduleID, ai.StartedId, failure, retryState, request.GetIdentity()); err != nil {
 					// Unable to add ActivityTaskFailed event to history
-					return nil, serviceerror.NewInternal("Unable to add ActivityTaskFailed event to history.")
+					return nil, err
 				}
 				postActions.createWorkflowTask = true
 			}
@@ -1593,7 +1600,7 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 				request.Details,
 				request.Identity); err != nil {
 				// Unable to add ActivityTaskCanceled event to history
-				return nil, serviceerror.NewInternal("Unable to add ActivityTaskCanceled event to history.")
+				return nil, err
 			}
 
 			activityStartedTime = *ai.StartedTime
@@ -1759,7 +1766,7 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 			}
 
 			if _, err := mutableState.AddWorkflowExecutionCancelRequestedEvent(req); err != nil {
-				return nil, serviceerror.NewInternal("Unable to cancel workflow execution.")
+				return nil, err
 			}
 
 			return updateWorkflowWithNewWorkflowTask, nil
@@ -1833,7 +1840,7 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 				request.GetSignalName(),
 				request.GetInput(),
 				request.GetIdentity()); err != nil {
-				return nil, serviceerror.NewInternal("Unable to signal workflow execution.")
+				return nil, err
 			}
 
 			return &updateWorkflowAction{
@@ -1902,14 +1909,14 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 				sRequest.GetSignalName(),
 				sRequest.GetSignalInput(),
 				sRequest.GetIdentity()); err != nil {
-				return nil, serviceerror.NewInternal("Unable to signal workflow execution.")
+				return nil, err
 			}
 
 			// Create a transfer task to schedule a workflow task
 			if !mutableState.HasPendingWorkflowTask() {
 				_, err := mutableState.AddWorkflowTaskScheduledEvent(false)
 				if err != nil {
-					return nil, serviceerror.NewInternal("Failed to add workflow task scheduled event.")
+					return nil, err
 				}
 			}
 
@@ -2009,7 +2016,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		startRequest,
 	)
 	if err != nil {
-		return nil, serviceerror.NewInternal("Failed to add workflow execution started event.")
+		return nil, err
 	}
 
 	// Add signal event
@@ -2017,7 +2024,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		sRequest.GetSignalName(),
 		sRequest.GetSignalInput(),
 		sRequest.GetIdentity()); err != nil {
-		return nil, serviceerror.NewInternal("Failed to add workflow execution signaled event.")
+		return nil, err
 	}
 
 	if err = e.generateFirstWorkflowTask(
@@ -2476,9 +2483,10 @@ UpdateHistoryLoop:
 		if postActions.createWorkflowTask {
 			// Create a transfer task to schedule a workflow task
 			if !mutableState.HasPendingWorkflowTask() {
-				_, err := mutableState.AddWorkflowTaskScheduledEvent(false)
-				if err != nil {
-					return serviceerror.NewInternal("Failed to add workflow task scheduled event.")
+				if _, err := mutableState.AddWorkflowTaskScheduledEvent(
+					false,
+				); err != nil {
+					return err
 				}
 			}
 		}
@@ -3034,7 +3042,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 			)
 			if err != nil {
 				e.logger.Error("failed to re-apply stale events", tag.Error(err))
-				return nil, serviceerror.NewInternal("unable to re-apply stale events")
+				return nil, err
 			}
 			if len(reappliedEvents) == 0 {
 				return &updateWorkflowAction{
@@ -3237,7 +3245,7 @@ func (e *historyEngineImpl) loadWorkflow(
 		workflowContext.getReleaseFn()(nil)
 	}
 
-	return nil, serviceerror.NewInternal("unable to locate current workflow execution")
+	return nil, serviceerror.NewUnavailable("unable to locate current workflow execution")
 }
 
 func (e *historyEngineImpl) metricsScope(ctx context.Context) metrics.Scope {

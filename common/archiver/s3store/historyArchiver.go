@@ -303,20 +303,20 @@ func (h *historyArchiver) Get(
 		encodedRecord, err := download(ctx, h.s3cli, URI, key)
 		if err != nil {
 			if isRetryableError(err) {
-				return nil, &serviceerror.Internal{Message: err.Error()}
+				return nil, serviceerror.NewUnavailable(err.Error())
 			}
 			switch err.(type) {
-			case *serviceerror.InvalidArgument, *serviceerror.Internal, *serviceerror.NotFound:
+			case *serviceerror.InvalidArgument, *serviceerror.Unavailable, *serviceerror.NotFound:
 				return nil, err
 			default:
-				return nil, &serviceerror.Internal{Message: err.Error()}
+				return nil, serviceerror.NewInternal(err.Error())
 			}
 		}
 
 		historyBlob := archiverspb.HistoryBlob{}
 		err = encoder.Decode(encodedRecord, &historyBlob)
 		if err != nil {
-			return nil, &serviceerror.Internal{Message: err.Error()}
+			return nil, serviceerror.NewInternal(err.Error())
 		}
 
 		for _, batch := range historyBlob.Body {

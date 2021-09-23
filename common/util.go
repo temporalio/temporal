@@ -30,7 +30,6 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -207,7 +206,7 @@ func CreateReplicationServiceBusyRetryPolicy() backoff.RetryPolicy {
 // IsPersistenceTransientError checks if the error is a transient persistence error
 func IsPersistenceTransientError(err error) bool {
 	switch err.(type) {
-	case *serviceerror.Internal,
+	case *serviceerror.Unavailable,
 		*serviceerror.ResourceExhausted:
 		return true
 	}
@@ -564,7 +563,7 @@ func CheckEventBlobSizeLimit(
 
 	if actualSize > warnLimit {
 		if logger != nil {
-			logger.Warn("Blob size exceeds limit.",
+			logger.Warn("Blob data size exceeds the warning limit.",
 				tag.WorkflowNamespaceID(namespaceID),
 				tag.WorkflowID(workflowID),
 				tag.WorkflowRunID(runID),
@@ -621,22 +620,6 @@ func ValidateLongPollContextTimeoutIsSet(
 		return deadline, err
 	}
 	return deadline, nil
-}
-
-// IsJustOrderByClause return true is query start with order by
-func IsJustOrderByClause(clause string) bool {
-	whereClause := strings.TrimSpace(clause)
-	whereClause = strings.ToLower(whereClause)
-	return strings.HasPrefix(whereClause, "order by")
-}
-
-// GetDefaultAdvancedVisibilityWritingMode get default advancedVisibilityWritingMode based on
-// whether related config exists in static config file.
-func GetDefaultAdvancedVisibilityWritingMode(isAdvancedVisConfigExist bool) string {
-	if isAdvancedVisConfigExist {
-		return AdvancedVisibilityWritingModeOn
-	}
-	return AdvancedVisibilityWritingModeOff
 }
 
 func GetPayloadsMapSize(data map[string]*commonpb.Payloads) int {

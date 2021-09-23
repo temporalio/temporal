@@ -41,11 +41,11 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/environment"
@@ -107,9 +107,13 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 
 	s.Require().NoError(s.registerArchivalNamespace())
 
-	// this sleep is necessary because namespacev2 cache gets refreshed in the
-	// background only every namespaceCacheRefreshInterval period
-	time.Sleep(namespace.CacheRefreshInterval + time.Second)
+	if clusterConfig.FrontendAddress == "" {
+		// Poke all the in-process namespace caches to refresh without waiting for the usual refresh interval.
+		s.testCluster.RefreshNamespaceCache()
+	} else {
+		// Wait for one whole cycle of the namespace cache v2 refresh interval to be sure that our namespaces are loaded.
+		time.Sleep(namespace.CacheRefreshInterval + time.Second)
+	}
 }
 
 func (s *IntegrationBase) setupLogger() {
@@ -138,7 +142,7 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 
 	options.FrontendAddress = TestFlags.FrontendAddr
 	if options.ESConfig != nil {
-		options.ESConfig.Indices[config.VisibilityAppName] += uuid.New()
+		options.ESConfig.Indices[client.VisibilityAppName] += uuid.New()
 	}
 	return &options, nil
 }

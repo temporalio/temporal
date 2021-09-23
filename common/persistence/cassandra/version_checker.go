@@ -41,13 +41,12 @@ import (
 func VerifyCompatibleVersion(
 	cfg config.Persistence,
 	r resolver.ServiceResolver,
-	checkVisibility bool,
 ) error {
 
 	if err := checkMainKeyspace(cfg, r); err != nil {
 		return err
 	}
-	if checkVisibility {
+	if cfg.StandardVisibilityConfigExist() {
 		return checkVisibilityKeyspace(cfg, r)
 	}
 	return nil

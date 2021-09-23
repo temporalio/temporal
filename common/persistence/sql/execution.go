@@ -262,7 +262,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 	case sql.ErrNoRows:
 		return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow executionsRow not found.  WorkflowId: %v, RunId: %v", request.Execution.GetWorkflowId(), request.Execution.GetRunId()))
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed. Error: %v", err))
 	}
 
 	state := &p.InternalWorkflowMutableState{
@@ -281,7 +281,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		runID,
 	)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get activity info. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get activity info. Error: %v", err))
 	}
 
 	state.TimerInfos, err = getTimerInfoMap(ctx,
@@ -292,7 +292,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		runID,
 	)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get timer info. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get timer info. Error: %v", err))
 	}
 
 	state.ChildExecutionInfos, err = getChildExecutionInfoMap(ctx,
@@ -303,7 +303,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		runID,
 	)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get child executionsRow info. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get child executionsRow info. Error: %v", err))
 	}
 
 	state.RequestCancelInfos, err = getRequestCancelInfoMap(ctx,
@@ -314,7 +314,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		runID,
 	)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get request cancel info. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get request cancel info. Error: %v", err))
 	}
 
 	state.SignalInfos, err = getSignalInfoMap(ctx,
@@ -325,7 +325,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		runID,
 	)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get signal info. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get signal info. Error: %v", err))
 	}
 
 	state.BufferedEvents, err = getBufferedEvents(ctx,
@@ -336,7 +336,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		runID,
 	)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get buffered events. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get buffered events. Error: %v", err))
 	}
 
 	state.SignalRequestedIDs, err = getSignalsRequested(ctx,
@@ -347,7 +347,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		runID,
 	)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution: failed to get signals requested. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed to get signals requested. Error: %v", err))
 	}
 
 	return &p.InternalGetWorkflowExecutionResponse{
@@ -416,7 +416,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 			newRunID := primitives.MustParseUUID(newWorkflow.ExecutionState.RunId)
 
 			if !bytes.Equal(namespaceID, newNamespaceID) {
-				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another namespace"))
+				return serviceerror.NewUnavailable(fmt.Sprintf("UpdateWorkflowExecution: cannot continue as new to another namespace"))
 			}
 
 			if err := assertRunIDAndUpdateCurrentExecution(ctx,
@@ -432,7 +432,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 				newWorkflow.StartVersion,
 				lastWriteVersion,
 			); err != nil {
-				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: failed to continue as new current execution. Error: %v", err))
+				return serviceerror.NewUnavailable(fmt.Sprintf("UpdateWorkflowExecution: failed to continue as new current execution. Error: %v", err))
 			}
 		} else {
 			lastWriteVersion := updateWorkflow.LastWriteVersion
@@ -450,12 +450,12 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 				updateWorkflow.StartVersion,
 				lastWriteVersion,
 			); err != nil {
-				return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: failed to update current execution. Error: %v", err))
+				return serviceerror.NewUnavailable(fmt.Sprintf("UpdateWorkflowExecution: failed to update current execution. Error: %v", err))
 			}
 		}
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("UpdateWorkflowExecution: unknown mode: %v", request.Mode))
+		return serviceerror.NewUnavailable(fmt.Sprintf("UpdateWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
 	if err := applyWorkflowMutationTx(ctx,
@@ -481,6 +481,23 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 func (m *sqlExecutionStore) ConflictResolveWorkflowExecution(
 	request *p.InternalConflictResolveWorkflowExecutionRequest,
 ) error {
+	// first append history
+	for _, req := range request.CurrentWorkflowEventsNewEvents {
+		if err := m.AppendHistoryNodes(req); err != nil {
+			return err
+		}
+	}
+	for _, req := range request.ResetWorkflowEventsNewEvents {
+		if err := m.AppendHistoryNodes(req); err != nil {
+			return err
+		}
+	}
+	for _, req := range request.NewWorkflowEventsNewEvents {
+		if err := m.AppendHistoryNodes(req); err != nil {
+			return err
+		}
+	}
+
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	return m.txExecuteShardLocked(ctx,
@@ -549,7 +566,7 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 				startVersion,
 				lastWriteVersion,
 			); err != nil {
-				return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
+				return serviceerror.NewUnavailable(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
 			}
 		} else {
 			// reset workflow is current
@@ -568,12 +585,12 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 				startVersion,
 				lastWriteVersion,
 			); err != nil {
-				return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
+				return serviceerror.NewUnavailable(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
 			}
 		}
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode))
+		return serviceerror.NewUnavailable(fmt.Sprintf("ConflictResolveWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
 	if err := applyWorkflowSnapshotTxAsReset(ctx,
@@ -656,7 +673,7 @@ func (m *sqlExecutionStore) GetCurrentExecution(
 		if err == sql.ErrNoRows {
 			return nil, serviceerror.NewNotFound(err.Error())
 		}
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err))
 	}
 
 	return &p.InternalGetCurrentExecutionResponse{

@@ -34,6 +34,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+
 	"go.temporal.io/server/common/searchattribute"
 
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -185,11 +186,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			}
 
 			workflowTask, isRunning := mutableState.GetWorkflowTaskInfo(scheduleID)
+			metricsScope := handler.metricsClient.Scope(metrics.HistoryRecordWorkflowTaskStartedScope)
 
 			// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 			// some extreme cassandra failure cases.
 			if !isRunning && scheduleID >= mutableState.GetNextEventID() {
-				handler.metricsClient.IncCounter(metrics.HistoryRecordWorkflowTaskStartedScope, metrics.StaleMutableStateCounter)
+				metricsScope.IncCounter(metrics.StaleMutableStateCounter)
 				// Reload workflow execution history
 				// ErrStaleState will trigger updateWorkflowExecution function to reload the mutable state
 				return nil, consts.ErrStaleState
@@ -229,8 +231,15 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history
-				return nil, serviceerror.NewInternal("Unable to add WorkflowTaskStarted event to history.")
+				return nil, err
 			}
+
+			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(*workflowTask.ScheduledTime)
+			namespaceName := namespaceEntry.GetInfo().GetName()
+			taskQueue := workflowTask.TaskQueue
+			metrics.GetPerTaskQueueScope(metricsScope, namespaceName, taskQueue.GetName(), taskQueue.GetKind()).
+				Tagged(metrics.TaskTypeTag("workflow")).
+				RecordTimer(metrics.TaskScheduleToStartLatency, workflowScheduleToStartLatency)
 
 			resp, err = handler.createRecordWorkflowTaskStartedResponse(namespaceID, mutableState, workflowTask, req.PollRequest.GetIdentity())
 			if err != nil {
@@ -379,19 +388,19 @@ Update_History_Loop:
 				scope.IncCounter(metrics.WorkflowTaskHeartbeatTimeoutCounter)
 				completedEvent, err = msBuilder.AddWorkflowTaskTimedOutEvent(currentWorkflowTask.ScheduleID, currentWorkflowTask.StartedID)
 				if err != nil {
-					return nil, serviceerror.NewInternal("Failed to add workflow task timeout event.")
+					return nil, err
 				}
 				msBuilder.ClearStickyness()
 			} else {
 				completedEvent, err = msBuilder.AddWorkflowTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
 				if err != nil {
-					return nil, serviceerror.NewInternal("Unable to add WorkflowTaskCompleted event to history.")
+					return nil, err
 				}
 			}
 		} else {
 			completedEvent, err = msBuilder.AddWorkflowTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
 			if err != nil {
-				return nil, serviceerror.NewInternal("Unable to add WorkflowTaskCompleted event to history.")
+				return nil, err
 			}
 		}
 
@@ -500,7 +509,7 @@ Update_History_Loop:
 				)
 			}
 			if err != nil {
-				return nil, serviceerror.NewInternal("Failed to add workflow task scheduled event.")
+				return nil, err
 			}
 
 			newWorkflowTaskScheduledID = newWorkflowTask.ScheduleID

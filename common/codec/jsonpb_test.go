@@ -26,8 +26,6 @@ package codec
 
 import (
 	"fmt"
-	"log"
-	"os"
 	"testing"
 	"time"
 
@@ -71,9 +69,6 @@ func TestJSONPBEncoderSuite(t *testing.T) {
 }
 
 func (s *jsonpbEncoderSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
 	s.encoder = NewJSONPBEncoder()
 }
 

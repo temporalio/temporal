@@ -32,14 +32,12 @@ import (
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -57,7 +55,7 @@ type (
 		logger                  log.Logger
 		metricsClient           metrics.Client
 		matchingClient          matchingservice.MatchingServiceClient
-		visibilityMgr           visibility.VisibilityManager
+		visibilityMgr           manager.VisibilityManager
 		config                  *configs.Config
 		historyClient           historyservice.HistoryServiceClient
 		parentClosePolicyClient parentclosepolicy.Client
@@ -71,6 +69,7 @@ var (
 func newVisibilityQueueTaskExecutor(
 	shard shard.Context,
 	historyService *historyEngineImpl,
+	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *configs.Config,
@@ -82,7 +81,7 @@ func newVisibilityQueueTaskExecutor(
 		logger:         logger,
 		metricsClient:  metricsClient,
 		matchingClient: shard.GetService().GetMatchingClient(),
-		visibilityMgr:  shard.GetService().GetVisibilityManager(),
+		visibilityMgr:  visibilityMgr,
 		config:         config,
 		historyClient:  shard.GetService().GetHistoryClient(),
 		parentClosePolicyClient: parentclosepolicy.NewClient(
@@ -240,8 +239,8 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 		return nil
 	}
 
-	request := &visibility.RecordWorkflowExecutionStartedRequest{
-		VisibilityRequestBase: &visibility.VisibilityRequestBase{
+	request := &manager.RecordWorkflowExecutionStartedRequest{
+		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID: namespaceID,
 			Namespace:   namespaceEntry.GetInfo().Name,
 			Execution: commonpb.WorkflowExecution{
@@ -282,8 +281,8 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 		return err
 	}
 
-	request := &visibility.UpsertWorkflowExecutionRequest{
-		VisibilityRequestBase: &visibility.VisibilityRequestBase{
+	request := &manager.UpsertWorkflowExecutionRequest{
+		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID: namespaceID,
 			Namespace:   namespaceEntry.GetInfo().Name,
 			Execution: commonpb.WorkflowExecution{
@@ -418,8 +417,8 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 	}
 
 	if recordWorkflowClose {
-		return t.visibilityMgr.RecordWorkflowExecutionClosed(&visibility.RecordWorkflowExecutionClosedRequest{
-			VisibilityRequestBase: &visibility.VisibilityRequestBase{
+		return t.visibilityMgr.RecordWorkflowExecutionClosed(&manager.RecordWorkflowExecutionClosedRequest{
+			VisibilityRequestBase: &manager.VisibilityRequestBase{
 				NamespaceID: namespaceID,
 				Namespace:   namespaceEntry.GetInfo().Name,
 				Execution: commonpb.WorkflowExecution{
@@ -448,17 +447,13 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 	task *persistencespb.VisibilityTaskInfo,
 ) (retError error) {
-	op := func() error {
-		request := &visibility.VisibilityDeleteWorkflowExecutionRequest{
-			NamespaceID: task.GetNamespaceId(),
-			WorkflowID:  task.GetWorkflowId(),
-			RunID:       task.GetRunId(),
-			TaskID:      task.GetTaskId(),
-		}
-		// TODO: expose GetVisibilityManager method on shardContext interface
-		return t.shard.GetService().GetVisibilityManager().DeleteWorkflowExecution(request) // delete from db
+	request := &manager.VisibilityDeleteWorkflowExecutionRequest{
+		NamespaceID: task.GetNamespaceId(),
+		WorkflowID:  task.GetWorkflowId(),
+		RunID:       task.GetRunId(),
+		TaskID:      task.GetTaskId(),
 	}
-	return backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	return t.visibilityMgr.DeleteWorkflowExecution(request)
 }
 
 func getWorkflowMemo(

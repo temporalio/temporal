@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/workflowservicemock/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkmocks "go.temporal.io/sdk/mocks"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -52,8 +53,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/persistence/visibility"
-	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -99,7 +99,6 @@ type (
 		MetadataMgr               *persistence.MockMetadataManager
 		ClusterMetadataMgr        *persistence.MockClusterMetadataManager
 		TaskMgr                   *persistence.MockTaskManager
-		VisibilityMgr             *visibility.MockVisibilityManager
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		ShardMgr                  *persistence.MockShardManager
 		ExecutionMgr              *persistence.MockExecutionManager
@@ -142,7 +141,6 @@ func NewTest(
 
 	metadataMgr := persistence.NewMockMetadataManager(controller)
 	taskMgr := persistence.NewMockTaskManager(controller)
-	visibilityMgr := visibility.NewMockVisibilityManager(controller)
 	shardMgr := persistence.NewMockShardManager(controller)
 	executionMgr := persistence.NewMockExecutionManager(controller)
 	namespaceReplicationQueue := persistence.NewMockNamespaceReplicationQueue(controller)
@@ -208,7 +206,6 @@ func NewTest(
 		MetadataMgr:               metadataMgr,
 		ClusterMetadataMgr:        clusterMetadataManager,
 		TaskMgr:                   taskMgr,
-		VisibilityMgr:             visibilityMgr,
 		NamespaceReplicationQueue: namespaceReplicationQueue,
 		ShardMgr:                  shardMgr,
 		ExecutionMgr:              executionMgr,
@@ -386,11 +383,6 @@ func (s *Test) GetTaskManager() persistence.TaskManager {
 	return s.TaskMgr
 }
 
-// GetVisibilityManager for testing
-func (s *Test) GetVisibilityManager() visibility.VisibilityManager {
-	return s.VisibilityMgr
-}
-
 // GetNamespaceReplicationQueue for testing
 func (s *Test) GetNamespaceReplicationQueue() persistence.NamespaceReplicationQueue {
 	// user should implement this method for test
@@ -439,4 +431,12 @@ func (h *Test) GetSearchAttributesManager() searchattribute.Manager {
 
 func (h *Test) GetSearchAttributesMapper() searchattribute.Mapper {
 	return h.SearchAttributesMapper
+}
+
+func (h *Test) RefreshNamespaceCache() {
+	h.NamespaceCache.Refresh()
+}
+
+func (h *Test) GetFaultInjection() *persistenceClient.FaultInjectionDataStoreFactory {
+	return nil
 }

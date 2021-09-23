@@ -51,6 +51,8 @@ func (s *HandlerTestSuite) TestValidateSetupConfig() {
 	config := new(SetupConfig)
 	s.assertValidateSetupFails(config)
 
+	s.assertValidateSetupFails(config)
+
 	config.InitialVersion = "0.1"
 	config.DisableVersioning = true
 	config.SchemaFilePath = ""
@@ -85,6 +87,8 @@ func (s *HandlerTestSuite) TestValidateSetupConfig() {
 func (s *HandlerTestSuite) TestValidateUpdateConfig() {
 
 	config := new(UpdateConfig)
+	s.assertValidateUpdateFails(config)
+
 	s.assertValidateUpdateFails(config)
 
 	config.SchemaDir = "/tmp"

@@ -29,6 +29,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -45,7 +46,6 @@ type (
 		serializer            serialization.Serializer
 		persistence           ExecutionStore
 		logger                log.Logger
-		statsComputer         statsComputer
 		pagingTokenSerializer *jsonHistoryTokenSerializer
 		transactionSizeLimit  dynamicconfig.IntPropertyFn
 	}
@@ -64,7 +64,6 @@ func NewExecutionManager(
 		serializer:            serialization.NewSerializer(),
 		persistence:           persistence,
 		logger:                logger,
-		statsComputer:         statsComputer{},
 		pagingTokenSerializer: newJSONHistoryTokenSerializer(),
 		transactionSizeLimit:  transactionSizeLimit,
 	}
@@ -75,6 +74,7 @@ func (m *executionManagerImpl) GetName() string {
 }
 
 // The below three APIs are related to serialization/deserialization
+
 func (m *executionManagerImpl) GetWorkflowExecution(
 	request *GetWorkflowExecutionRequest,
 ) (*GetWorkflowExecutionResponse, error) {
@@ -90,7 +90,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	newResponse := &GetWorkflowExecutionResponse{
 		State:             state,
 		DBRecordVersion:   response.DBRecordVersion,
-		MutableStateStats: m.statsComputer.computeMutableStateStats(state),
+		MutableStateStats: *statusOfInternalWorkflow(response.State, nil),
 	}
 	return newResponse, nil
 }
@@ -120,34 +120,18 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	request *UpdateWorkflowExecutionRequest,
 ) (*UpdateWorkflowExecutionResponse, error) {
 
-	var updateWorkflowNewEvents []*InternalAppendHistoryNodesRequest
-	var newWorkflowNewEvents []*InternalAppendHistoryNodesRequest
-	var updateWorkflowHistoryDiff, newWorkflowHistoryDiff int64 = 0, 0
-	for _, workflowEvents := range request.UpdateWorkflowEvents {
-		newEvents, err := m.serializeWorkflowEvents(request.ShardID, workflowEvents)
-		newEvents.ShardID = request.ShardID
-		if err != nil {
-			return nil, err
-		}
-		if newEvents != nil {
-			updateWorkflowNewEvents = append(updateWorkflowNewEvents, newEvents)
-			updateWorkflowHistoryDiff += int64(len(newEvents.Node.Events.Data))
-		}
+	updateWorkflowNewEvents, updateWorkflowHistoryDiff, err := m.serializeWorkflowEventBatches(request.ShardID, request.UpdateWorkflowEvents)
+	if err != nil {
+		return nil, err
 	}
-	request.UpdateWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize += updateWorkflowHistoryDiff
+	request.UpdateWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize += int64(updateWorkflowHistoryDiff.SizeDiff)
 
-	for _, workflowEvents := range request.NewWorkflowEvents {
-		newEvents, err := m.serializeWorkflowEvents(request.ShardID, workflowEvents)
-		if err != nil {
-			return nil, err
-		}
-		if newEvents != nil {
-			newWorkflowNewEvents = append(newWorkflowNewEvents, newEvents)
-			newWorkflowHistoryDiff += int64(len(newEvents.Node.Events.Data))
-		}
+	newWorkflowNewEvents, newWorkflowHistoryDiff, err := m.serializeWorkflowEventBatches(request.ShardID, request.NewWorkflowEvents)
+	if err != nil {
+		return nil, err
 	}
 	if request.NewWorkflowSnapshot != nil {
-		request.NewWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += newWorkflowHistoryDiff
+		request.NewWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(newWorkflowHistoryDiff.SizeDiff)
 	}
 
 	mutation := request.UpdateWorkflowMutation
@@ -193,15 +177,43 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 	if err := m.persistence.UpdateWorkflowExecution(newRequest); err != nil {
 		return nil, err
 	}
-	msuss := m.statsComputer.computeMutableStateUpdateStats(request)
-	msuss.UpdateWorkflowHistorySizeDiff = updateWorkflowHistoryDiff
-	msuss.NewWorkflowHistorySizeDiff = newWorkflowHistoryDiff
-	return &UpdateWorkflowExecutionResponse{MutableStateUpdateSessionStats: msuss}, nil
+	return &UpdateWorkflowExecutionResponse{
+		UpdateMutableStateStats: *statusOfInternalWorkflowMutation(
+			&newRequest.UpdateWorkflowMutation,
+			updateWorkflowHistoryDiff,
+		),
+		NewMutableStateStats: statusOfInternalWorkflowSnapshot(
+			newRequest.NewWorkflowSnapshot,
+			newWorkflowHistoryDiff,
+		),
+	}, nil
 }
 
 func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	request *ConflictResolveWorkflowExecutionRequest,
-) error {
+) (*ConflictResolveWorkflowExecutionResponse, error) {
+
+	resetWorkflowEventsNewEvents, resetWorkflowHistoryDiff, err := m.serializeWorkflowEventBatches(request.ShardID, request.ResetWorkflowEvents)
+	if err != nil {
+		return nil, err
+	}
+	request.ResetWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(resetWorkflowHistoryDiff.SizeDiff)
+
+	newWorkflowEventsNewEvents, newWorkflowHistoryDiff, err := m.serializeWorkflowEventBatches(request.ShardID, request.NewWorkflowEvents)
+	if err != nil {
+		return nil, err
+	}
+	if request.NewWorkflowSnapshot != nil {
+		request.NewWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(newWorkflowHistoryDiff.SizeDiff)
+	}
+
+	currentWorkflowEventsNewEvents, currentWorkflowHistoryDiff, err := m.serializeWorkflowEventBatches(request.ShardID, request.CurrentWorkflowEvents)
+	if err != nil {
+		return nil, err
+	}
+	if request.CurrentWorkflowMutation != nil {
+		request.CurrentWorkflowMutation.ExecutionInfo.ExecutionStats.HistorySize += int64(currentWorkflowHistoryDiff.SizeDiff)
+	}
 
 	if err := ValidateConflictResolveWorkflowModeState(
 		request.Mode,
@@ -209,25 +221,25 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		request.NewWorkflowSnapshot,
 		request.CurrentWorkflowMutation,
 	); err != nil {
-		return err
+		return nil, err
 	}
 
 	serializedResetWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.ResetWorkflowSnapshot)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var serializedCurrentWorkflowMutation *InternalWorkflowMutation
 	if request.CurrentWorkflowMutation != nil {
 		serializedCurrentWorkflowMutation, err = m.SerializeWorkflowMutation(request.CurrentWorkflowMutation)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 	var serializedNewWorkflowMutation *InternalWorkflowSnapshot
 	if request.NewWorkflowSnapshot != nil {
 		serializedNewWorkflowMutation, err = m.SerializeWorkflowSnapshot(request.NewWorkflowSnapshot)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -237,32 +249,45 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 
 		Mode: request.Mode,
 
-		ResetWorkflowSnapshot: *serializedResetWorkflowSnapshot,
+		ResetWorkflowSnapshot:        *serializedResetWorkflowSnapshot,
+		ResetWorkflowEventsNewEvents: resetWorkflowEventsNewEvents,
 
-		NewWorkflowSnapshot: serializedNewWorkflowMutation,
+		NewWorkflowSnapshot:        serializedNewWorkflowMutation,
+		NewWorkflowEventsNewEvents: newWorkflowEventsNewEvents,
 
-		CurrentWorkflowMutation: serializedCurrentWorkflowMutation,
+		CurrentWorkflowMutation:        serializedCurrentWorkflowMutation,
+		CurrentWorkflowEventsNewEvents: currentWorkflowEventsNewEvents,
 	}
-	return m.persistence.ConflictResolveWorkflowExecution(newRequest)
+
+	err = m.persistence.ConflictResolveWorkflowExecution(newRequest)
+	if err != nil {
+		return nil, err
+	}
+	return &ConflictResolveWorkflowExecutionResponse{
+		ResetMutableStateStats: *statusOfInternalWorkflowSnapshot(
+			&newRequest.ResetWorkflowSnapshot,
+			resetWorkflowHistoryDiff,
+		),
+		NewMutableStateStats: statusOfInternalWorkflowSnapshot(
+			newRequest.NewWorkflowSnapshot,
+			newWorkflowHistoryDiff,
+		),
+		CurrentMutableStateStats: statusOfInternalWorkflowMutation(
+			newRequest.CurrentWorkflowMutation,
+			currentWorkflowHistoryDiff,
+		),
+	}, nil
 }
 
 func (m *executionManagerImpl) CreateWorkflowExecution(
 	request *CreateWorkflowExecutionRequest,
 ) (*CreateWorkflowExecutionResponse, error) {
 
-	var newWorkflowNewEvents []*InternalAppendHistoryNodesRequest
-	var newHistoryDiff int64 = 0
-	for _, workflowEvents := range request.NewWorkflowEvents {
-		newEvents, err := m.serializeWorkflowEvents(request.ShardID, workflowEvents)
-		newEvents.ShardID = request.ShardID
-		if err != nil {
-			return nil, err
-		}
-		// newEvents cannot be nil or empty for new WorkflowExecution
-		newWorkflowNewEvents = append(newWorkflowNewEvents, newEvents)
-		newHistoryDiff += int64(len(newEvents.Node.Events.Data))
+	newWorkflowNewEvents, newHistoryDiff, err := m.serializeWorkflowEventBatches(request.ShardID, request.NewWorkflowEvents)
+	if err != nil {
+		return nil, err
 	}
-	request.NewWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += newHistoryDiff
+	request.NewWorkflowSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(newHistoryDiff.SizeDiff)
 
 	snapshot := request.NewWorkflowSnapshot
 	if err := ValidateCreateWorkflowModeState(
@@ -297,7 +322,35 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 	if _, err := m.persistence.CreateWorkflowExecution(newRequest); err != nil {
 		return nil, err
 	}
-	return &CreateWorkflowExecutionResponse{HistorySize: newHistoryDiff}, nil
+	return &CreateWorkflowExecutionResponse{
+		NewMutableStateStats: *statusOfInternalWorkflowSnapshot(
+			serializedNewWorkflowSnapshot,
+			newHistoryDiff,
+		),
+	}, nil
+}
+
+func (m *executionManagerImpl) serializeWorkflowEventBatches(
+	shardID int32,
+	eventBatches []*WorkflowEvents,
+) ([]*InternalAppendHistoryNodesRequest, *HistoryStatistics, error) {
+	var historyStatistics HistoryStatistics
+	if len(eventBatches) == 0 {
+		return nil, &historyStatistics, nil
+	}
+
+	workflowNewEvents := make([]*InternalAppendHistoryNodesRequest, 0, len(eventBatches))
+	for _, workflowEvents := range eventBatches {
+		newEvents, err := m.serializeWorkflowEvents(shardID, workflowEvents)
+		if err != nil {
+			return nil, nil, err
+		}
+		newEvents.ShardID = shardID
+		workflowNewEvents = append(workflowNewEvents, newEvents)
+		historyStatistics.SizeDiff += len(newEvents.Node.Events.Data)
+		historyStatistics.CountDiff += len(workflowEvents.Events)
+	}
+	return workflowNewEvents, &historyStatistics, nil
 }
 
 func (m *executionManagerImpl) serializeWorkflowEvents(

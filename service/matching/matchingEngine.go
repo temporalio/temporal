@@ -203,10 +203,8 @@ func (e *matchingEngineImpl) getTaskQueueManager(taskQueue *taskQueueID, taskQue
 	if err != nil {
 		return nil, err
 	}
-	e.logger.Info("", tag.LifeCycleStarting, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType))
 	mgr.Start()
 	e.taskQueues[*taskQueue] = mgr
-	e.logger.Info("", tag.LifeCycleStarted, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType))
 	return mgr, nil
 }
 
@@ -215,12 +213,6 @@ func (e *matchingEngineImpl) updateTaskQueue(taskQueue *taskQueueID, mgr taskQue
 	e.taskQueuesLock.Lock()
 	defer e.taskQueuesLock.Unlock()
 	e.taskQueues[*taskQueue] = mgr
-}
-
-func (e *matchingEngineImpl) removeTaskQueueManager(id *taskQueueID) {
-	e.taskQueuesLock.Lock()
-	defer e.taskQueuesLock.Unlock()
-	delete(e.taskQueues, *id)
 }
 
 // AddWorkflowTask either delivers task directly to waiting poller or save it into task queue persistence.
@@ -702,16 +694,17 @@ func (e *matchingEngineImpl) getTask(
 	return tlMgr.GetTask(ctx, maxDispatchPerSecond)
 }
 
-func (e *matchingEngineImpl) unloadTaskQueue(id *taskQueueID) {
+func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
+	queueID := unloadTQM.QueueID()
 	e.taskQueuesLock.Lock()
-	tlMgr, ok := e.taskQueues[*id]
-	if ok {
-		delete(e.taskQueues, *id)
+	foundTQM, ok := e.taskQueues[*queueID]
+	if !ok || foundTQM != unloadTQM {
+		e.taskQueuesLock.Unlock()
+		return
 	}
+	delete(e.taskQueues, *queueID)
 	e.taskQueuesLock.Unlock()
-	if ok {
-		tlMgr.Stop()
-	}
+	foundTQM.Stop()
 }
 
 // Populate the workflow task response based on context and scheduled/started events.

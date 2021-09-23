@@ -25,6 +25,7 @@
 package matching
 
 import (
+	"context"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -39,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/internal/goro"
 )
 
 type (
@@ -68,7 +70,7 @@ type (
 		taskIDBlock  taskIDBlock
 		maxReadLevel int64
 		logger       log.Logger
-		shutdownChan chan struct{}
+		writeLoop    *goro.Handle
 		idAlloc      idBlockAllocator
 	}
 )
@@ -90,7 +92,6 @@ func newTaskWriter(
 		taskIDBlock:  noTaskIDs,
 		maxReadLevel: noTaskIDs.start - 1,
 		logger:       tlMgr.logger,
-		shutdownChan: make(chan struct{}),
 		idAlloc:      tlMgr.db,
 	}
 }
@@ -103,7 +104,7 @@ func (w *taskWriter) Start() {
 	) {
 		return
 	}
-	go w.taskWriterLoop()
+	w.writeLoop = goro.Go(context.Background(), w.taskWriterLoop)
 }
 
 // Stop stops the taskWriter
@@ -115,28 +116,24 @@ func (w *taskWriter) Stop() {
 	) {
 		return
 	}
-	close(w.shutdownChan)
+	w.writeLoop.Cancel()
 }
 
-func (w *taskWriter) initReadWriteState() {
+func (w *taskWriter) initReadWriteState(ctx context.Context) error {
 	retryForever := backoff.NewExponentialRetryPolicy(1 * time.Second)
 	retryForever.SetMaximumInterval(10 * time.Second)
 	retryForever.SetExpirationInterval(backoff.NoInterval)
 
 	state, err := w.renewLeaseWithRetry(
-		retryForever, common.IsPersistenceTransientError)
+		ctx, retryForever, common.IsPersistenceTransientError)
 	if err != nil {
-		// because we're retrying transient storage errors forever,
-		// anything else that comes out of here is fatal
-		close(w.shutdownChan)
-		atomic.StoreInt32(&w.status, common.DaemonStatusStopped)
-		w.tlMgr.signalFatalProblem(w.tlMgr.taskQueueID)
-		return
+		return err
 	}
 	w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
 	atomic.StoreInt64(&w.maxReadLevel, w.taskIDBlock.start-1)
 	w.tlMgr.taskAckManager.setAckLevel(state.ackLevel)
 	w.tlMgr.taskReader.Signal()
+	return nil
 }
 
 func (w *taskWriter) appendTask(
@@ -145,7 +142,7 @@ func (w *taskWriter) appendTask(
 ) (*persistence.CreateTasksResponse, error) {
 
 	select {
-	case <-w.shutdownChan:
+	case <-w.writeLoop.Done():
 		return nil, errShutdown
 	default:
 		// noop
@@ -163,7 +160,7 @@ func (w *taskWriter) appendTask(
 		select {
 		case r := <-ch:
 			return r.persistenceResponse, r.err
-		case <-w.shutdownChan:
+		case <-w.writeLoop.Done():
 			// if we are shutting down, this request will never make
 			// it to cassandra, just bail out and fail this request
 			return nil, errShutdown
@@ -177,12 +174,12 @@ func (w *taskWriter) GetMaxReadLevel() int64 {
 	return atomic.LoadInt64(&w.maxReadLevel)
 }
 
-func (w *taskWriter) allocTaskIDs(count int) ([]int64, error) {
+func (w *taskWriter) allocTaskIDs(ctx context.Context, count int) ([]int64, error) {
 	result := make([]int64, count)
 	for i := 0; i < count; i++ {
 		if w.taskIDBlock.start > w.taskIDBlock.end {
 			// we ran out of current allocation block
-			newBlock, err := w.allocTaskIDBlock(w.taskIDBlock.end)
+			newBlock, err := w.allocTaskIDBlock(ctx, w.taskIDBlock.end)
 			if err != nil {
 				return nil, err
 			}
@@ -199,27 +196,24 @@ func (w *taskWriter) appendTasks(
 ) (*persistence.CreateTasksResponse, error) {
 
 	resp, err := w.tlMgr.db.CreateTasks(tasks)
-	switch err.(type) {
-	case nil:
-		return resp, nil
-
-	case *persistence.ConditionFailedError:
-		w.tlMgr.Stop()
-		return nil, err
-
-	default:
+	if err != nil {
+		w.tlMgr.signalIfFatal(err)
 		w.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCreateTask,
 			tag.Error(err),
 			tag.WorkflowTaskQueueName(w.taskQueueID.name),
-			tag.WorkflowTaskQueueType(w.taskQueueID.taskType),
-		)
+			tag.WorkflowTaskQueueType(w.taskQueueID.taskType))
 		return nil, err
 	}
+	return resp, nil
 }
 
-func (w *taskWriter) taskWriterLoop() {
-	w.initReadWriteState()
+func (w *taskWriter) taskWriterLoop(ctx context.Context) error {
+	err := w.initReadWriteState(ctx)
+	if err != nil {
+		w.tlMgr.signalIfFatal(err)
+		return err
+	}
 writerLoop:
 	for {
 		select {
@@ -231,7 +225,7 @@ writerLoop:
 
 			maxReadLevel := int64(0)
 
-			taskIDs, err := w.allocTaskIDs(batchSize)
+			taskIDs, err := w.allocTaskIDs(ctx, batchSize)
 			if err != nil {
 				w.sendWriteResponse(reqs, nil, err)
 				continue writerLoop
@@ -253,8 +247,8 @@ writerLoop:
 				atomic.StoreInt64(&w.maxReadLevel, maxReadLevel)
 			}
 
-		case <-w.shutdownChan:
-			return
+		case <-ctx.Done():
+			return ctx.Err()
 		}
 	}
 }
@@ -288,16 +282,17 @@ func (w *taskWriter) sendWriteResponse(
 }
 
 func (w *taskWriter) renewLeaseWithRetry(
+	ctx context.Context,
 	retryPolicy backoff.RetryPolicy,
 	retryErrors backoff.IsRetryable,
 ) (taskQueueState, error) {
 	var newState taskQueueState
-	op := func() (err error) {
+	op := func(context.Context) (err error) {
 		newState, err = w.idAlloc.RenewLease()
 		return
 	}
 	w.tlMgr.metricScope().IncCounter(metrics.LeaseRequestPerTaskQueueCounter)
-	err := backoff.Retry(op, retryPolicy, retryErrors)
+	err := backoff.RetryContext(ctx, op, retryPolicy, retryErrors)
 	if err != nil {
 		w.tlMgr.metricScope().IncCounter(metrics.LeaseFailurePerTaskQueueCounter)
 		return newState, err
@@ -305,16 +300,16 @@ func (w *taskWriter) renewLeaseWithRetry(
 	return newState, nil
 }
 
-func (w *taskWriter) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock, error) {
+func (w *taskWriter) allocTaskIDBlock(ctx context.Context, prevBlockEnd int64) (taskIDBlock, error) {
 	currBlock := rangeIDToTaskIDBlock(w.idAlloc.RangeID(), w.config.RangeSize)
 	if currBlock.end != prevBlockEnd {
 		return taskIDBlock{},
 			fmt.Errorf("allocTaskIDBlock: invalid state: prevBlockEnd:%v != currTaskIDBlock:%+v", prevBlockEnd, currBlock)
 	}
-	state, err := w.renewLeaseWithRetry(persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	state, err := w.renewLeaseWithRetry(ctx, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
-		if w.tlMgr.errShouldUnload(err) {
-			w.tlMgr.signalFatalProblem(w.taskQueueID)
+		if w.tlMgr.signalIfFatal(err) {
+			return taskIDBlock{}, errShutdown
 		}
 		return taskIDBlock{}, err
 	}

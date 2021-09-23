@@ -38,7 +38,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -69,7 +68,7 @@ type (
 
 func newTransferQueueActiveTaskExecutor(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	historyEngine *historyEngineImpl,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *configs.Config,
@@ -77,7 +76,7 @@ func newTransferQueueActiveTaskExecutor(
 	return &transferQueueActiveTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
 			shard,
-			historyService,
+			historyEngine,
 			logger,
 			metricsClient,
 			config,
@@ -86,7 +85,7 @@ func newTransferQueueActiveTaskExecutor(
 		parentClosePolicyClient: parentclosepolicy.NewClient(
 			shard.GetMetricsClient(),
 			shard.GetLogger(),
-			historyService.publicClient,
+			historyEngine.publicClient,
 			config.NumParentClosePolicySystemWorkflows(),
 		),
 	}
@@ -1399,9 +1398,9 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return err
 
 	default:
-		return &serviceerror.Internal{
-			Message: fmt.Sprintf("unknown parent close policy: %v", childInfo.ParentClosePolicy),
-		}
+		return serviceerror.NewInternal(
+			fmt.Sprintf("unknown parent close policy: %v", childInfo.ParentClosePolicy),
+		)
 	}
 }
 

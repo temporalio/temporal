@@ -30,6 +30,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -164,7 +165,10 @@ func (h *cassandraPersistence) ReadHistoryBranch(
 	query := h.session.Query(queryString, treeID, branchID, request.MinNodeID, request.MaxNodeID)
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
-	pagingToken := iter.PageState()
+	var pagingToken []byte
+	if len(iter.PageState()) > 0 {
+		pagingToken = iter.PageState()
+	}
 
 	nodes := make([]p.InternalHistoryNode, 0, request.PageSize)
 	message := make(map[string]interface{})
@@ -174,7 +178,7 @@ func (h *cassandraPersistence) ReadHistoryBranch(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch. Close operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ReadHistoryBranch. Close operation failed. Error: %v", err))
 	}
 
 	return &p.InternalReadHistoryBranchResponse{
@@ -292,7 +296,10 @@ func (h *cassandraPersistence) GetAllHistoryTreeBranches(
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
-	pagingToken := iter.PageState()
+	var pagingToken []byte
+	if len(iter.PageState()) > 0 {
+		pagingToken = iter.PageState()
+	}
 
 	branches := make([]p.InternalHistoryBranchDetail, 0, request.PageSize)
 	treeUUID := ""
@@ -316,7 +323,7 @@ func (h *cassandraPersistence) GetAllHistoryTreeBranches(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetAllHistoryTreeBranches. Close operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetAllHistoryTreeBranches. Close operation failed. Error: %v", err))
 	}
 
 	response := &p.InternalGetAllHistoryTreeBranchesResponse{

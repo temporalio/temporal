@@ -28,9 +28,9 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/task"
 )
 
@@ -42,19 +42,22 @@ type Config struct {
 	// TODO remove this dynamic flag in 1.14.x
 	EnableDBRecordVersion dynamicconfig.BoolPropertyFn
 
-	RPS                           dynamicconfig.IntPropertyFn
-	MaxIDLengthLimit              dynamicconfig.IntPropertyFn
-	PersistenceMaxQPS             dynamicconfig.IntPropertyFn
-	PersistenceGlobalMaxQPS       dynamicconfig.IntPropertyFn
-	EnableVisibilitySampling      dynamicconfig.BoolPropertyFn
-	VisibilityOpenMaxQPS          dynamicconfig.IntPropertyFnWithNamespaceFilter
-	VisibilityClosedMaxQPS        dynamicconfig.IntPropertyFnWithNamespaceFilter
-	AdvancedVisibilityWritingMode dynamicconfig.StringPropertyFn
-	EmitShardDiffLog              dynamicconfig.BoolPropertyFn
-	MaxAutoResetPoints            dynamicconfig.IntPropertyFnWithNamespaceFilter
-	ThrottledLogRPS               dynamicconfig.IntPropertyFn
-	EnableStickyQuery             dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ShutdownDrainDuration         dynamicconfig.DurationPropertyFn
+	RPS                     dynamicconfig.IntPropertyFn
+	MaxIDLengthLimit        dynamicconfig.IntPropertyFn
+	PersistenceMaxQPS       dynamicconfig.IntPropertyFn
+	PersistenceGlobalMaxQPS dynamicconfig.IntPropertyFn
+
+	StandardVisibilityPersistenceMaxReadQPS  dynamicconfig.IntPropertyFn
+	StandardVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn
+	AdvancedVisibilityPersistenceMaxReadQPS  dynamicconfig.IntPropertyFn
+	AdvancedVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn
+	AdvancedVisibilityWritingMode            dynamicconfig.StringPropertyFn
+
+	EmitShardDiffLog      dynamicconfig.BoolPropertyFn
+	MaxAutoResetPoints    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	ThrottledLogRPS       dynamicconfig.IntPropertyFn
+	EnableStickyQuery     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration dynamicconfig.DurationPropertyFn
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
@@ -250,7 +253,6 @@ type Config struct {
 	SearchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	ESVisibilityListMaxQPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	IndexerConcurrency                dynamicconfig.IntPropertyFn
 	ESProcessorNumOfWorkers           dynamicconfig.IntPropertyFn
 	ESProcessorBulkActions            dynamicconfig.IntPropertyFn // max number of requests in bulk
@@ -266,7 +268,7 @@ const (
 )
 
 // NewConfig returns new service config with default values
-func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVisConfigExist bool, defaultVisibilityIndex string) *Config {
+func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVisibilityConfigExist bool, defaultVisibilityIndex string) *Config {
 	cfg := &Config{
 		NumberOfShards:             numberOfShards,
 		DefaultVisibilityIndexName: defaultVisibilityIndex,
@@ -274,17 +276,20 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		// TODO remove this dynamic flag in 1.14.x
 		EnableDBRecordVersion: dc.GetBoolProperty(dynamicconfig.EnableDBRecordVersion, true),
 
-		RPS:                                  dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
-		MaxIDLengthLimit:                     dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
-		PersistenceMaxQPS:                    dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 9000),
-		PersistenceGlobalMaxQPS:              dc.GetIntProperty(dynamicconfig.HistoryPersistenceGlobalMaxQPS, 0),
-		ShutdownDrainDuration:                dc.GetDurationProperty(dynamicconfig.HistoryShutdownDrainDuration, 0),
-		EnableVisibilitySampling:             dc.GetBoolProperty(dynamicconfig.EnableVisibilitySampling, true),
-		VisibilityOpenMaxQPS:                 dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryVisibilityOpenMaxQPS, 300),
-		VisibilityClosedMaxQPS:               dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryVisibilityClosedMaxQPS, 300),
-		MaxAutoResetPoints:                   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, DefaultHistoryMaxAutoResetPoints),
-		DefaultWorkflowTaskTimeout:           dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
-		AdvancedVisibilityWritingMode:        dc.GetStringProperty(dynamicconfig.AdvancedVisibilityWritingMode, common.GetDefaultAdvancedVisibilityWritingMode(isAdvancedVisConfigExist)),
+		RPS:                        dc.GetIntProperty(dynamicconfig.HistoryRPS, 3000),
+		MaxIDLengthLimit:           dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
+		PersistenceMaxQPS:          dc.GetIntProperty(dynamicconfig.HistoryPersistenceMaxQPS, 9000),
+		PersistenceGlobalMaxQPS:    dc.GetIntProperty(dynamicconfig.HistoryPersistenceGlobalMaxQPS, 0),
+		ShutdownDrainDuration:      dc.GetDurationProperty(dynamicconfig.HistoryShutdownDrainDuration, 0),
+		MaxAutoResetPoints:         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.HistoryMaxAutoResetPoints, DefaultHistoryMaxAutoResetPoints),
+		DefaultWorkflowTaskTimeout: dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.DefaultWorkflowTaskTimeout, common.DefaultWorkflowTaskTimeout),
+
+		StandardVisibilityPersistenceMaxReadQPS:  dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
+		StandardVisibilityPersistenceMaxWriteQPS: dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000),
+		AdvancedVisibilityPersistenceMaxReadQPS:  dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxReadQPS, 9000),
+		AdvancedVisibilityPersistenceMaxWriteQPS: dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000),
+		AdvancedVisibilityWritingMode:            dc.GetStringProperty(dynamicconfig.AdvancedVisibilityWritingMode, visibility.DefaultAdvancedVisibilityWritingMode(isAdvancedVisibilityConfigExist)),
+
 		EmitShardDiffLog:                     dc.GetBoolProperty(dynamicconfig.EmitShardDiffLog, false),
 		HistoryCacheInitialSize:              dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),
 		HistoryCacheMaxSize:                  dc.GetIntProperty(dynamicconfig.HistoryCacheMaxSize, 512),
@@ -440,7 +445,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		SearchAttributesNumberOfKeysLimit: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
 		SearchAttributesSizeOfValueLimit:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
 		SearchAttributesTotalSizeLimit:    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesTotalSizeLimit, 40*1024),
-		ESVisibilityListMaxQPS:            dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendESVisibilityListMaxQPS, 10),
 		IndexerConcurrency:                dc.GetIntProperty(dynamicconfig.WorkerIndexerConcurrency, 100),
 		ESProcessorNumOfWorkers:           dc.GetIntProperty(dynamicconfig.WorkerESProcessorNumOfWorkers, 1),
 		// Should be not greater than NumberOfShards(512)/NumberOfHistoryNodes(4) * VisibilityTaskWorkerCount(10) divided by workflow distribution factor (2 at least).

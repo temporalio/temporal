@@ -26,32 +26,26 @@ package schema
 
 import (
 	"github.com/urfave/cli"
+
+	"go.temporal.io/server/common/log"
 )
 
-// SetupFromConfig sets up schema tables based on the given config
-func SetupFromConfig(config *SetupConfig, db DB) error {
-	if err := validateSetupConfig(config); err != nil {
-		return err
-	}
-	return newSetupSchemaTask(db, config).Run()
-}
-
 // Setup sets up schema tables
-func Setup(cli *cli.Context, db DB) error {
+func Setup(cli *cli.Context, db DB, logger log.Logger) error {
 	cfg, err := newSetupConfig(cli)
 	if err != nil {
 		return err
 	}
-	return newSetupSchemaTask(db, cfg).Run()
+	return newSetupSchemaTask(db, cfg, logger).Run()
 }
 
 // Update updates the schema for the specified database
-func Update(cli *cli.Context, db DB) error {
+func Update(cli *cli.Context, db DB, logger log.Logger) error {
 	cfg, err := newUpdateConfig(cli)
 	if err != nil {
 		return err
 	}
-	return newUpdateSchemaTask(db, cfg).Run()
+	return newUpdateSchemaTask(db, cfg, logger).Run()
 }
 
 func newUpdateConfig(cli *cli.Context) (*UpdateConfig, error) {

@@ -215,7 +215,7 @@ func (h *historyArchiver) Get(ctx context.Context, URI archiver.URI, request *ar
 	} else {
 		highestVersion, historyhighestPart, historyCurrentPart, err := h.getHighestVersion(ctx, URI, request)
 		if err != nil {
-			return nil, serviceerror.NewInternal(err.Error())
+			return nil, serviceerror.NewUnavailable(err.Error())
 		}
 		token = &getHistoryToken{
 			CloseFailoverVersion: *highestVersion,
@@ -235,11 +235,9 @@ outer:
 
 		filename := constructHistoryFilenameMultipart(request.NamespaceID, request.WorkflowID, request.RunID, token.CloseFailoverVersion, token.CurrentPart)
 		encodedHistoryBatches, err := h.gcloudStorage.Get(ctx, URI, filename)
-
 		if err != nil {
-			return nil, serviceerror.NewInternal(err.Error())
+			return nil, serviceerror.NewUnavailable(err.Error())
 		}
-
 		if encodedHistoryBatches == nil {
 			return nil, serviceerror.NewInternal("Fail retrieving history file: " + URI.String() + "/" + filename)
 		}

@@ -945,7 +945,7 @@ func (d *cassandraPersistence) CreateWorkflowExecution(
 		requestCurrentRunID = ""
 
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown mode: %v", request.Mode))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("CreateWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
 	if err := applyWorkflowSnapshotBatchAsNew(batch,
@@ -1016,7 +1016,7 @@ func (d *cassandraPersistence) GetWorkflowExecution(
 
 	state, err := mutableStateFromRow(result)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution operation failed. Error: %v", err))
 	}
 
 	activityInfos := make(map[int64]*commonpb.DataBlob)
@@ -1232,6 +1232,23 @@ func (d *cassandraPersistence) UpdateWorkflowExecution(
 func (d *cassandraPersistence) ConflictResolveWorkflowExecution(
 	request *p.InternalConflictResolveWorkflowExecutionRequest,
 ) error {
+	// first append history events
+	for _, req := range request.CurrentWorkflowEventsNewEvents {
+		if err := d.AppendHistoryNodes(req); err != nil {
+			return err
+		}
+	}
+	for _, req := range request.ResetWorkflowEventsNewEvents {
+		if err := d.AppendHistoryNodes(req); err != nil {
+			return err
+		}
+	}
+	for _, req := range request.NewWorkflowEventsNewEvents {
+		if err := d.AppendHistoryNodes(req); err != nil {
+			return err
+		}
+	}
+
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 
 	currentWorkflow := request.CurrentWorkflowMutation
@@ -1275,7 +1292,7 @@ func (d *cassandraPersistence) ConflictResolveWorkflowExecution(
 			Status:          status,
 		})
 		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Error: %v", err))
+			return serviceerror.NewUnavailable(fmt.Sprintf("ConflictResolveWorkflowExecution operation failed. Error: %v", err))
 		}
 
 		if currentWorkflow != nil {
@@ -1469,7 +1486,7 @@ func (d *cassandraPersistence) GetCurrentExecution(
 	lastWriteVersion := result["workflow_last_write_version"].(int64)
 	executionStateBlob, err := executionStateBlobFromRow(result)
 	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err))
 	}
 
 	// TODO: fix blob ExecutionState in storage should not be a blob.
@@ -1512,9 +1529,9 @@ func (d *cassandraPersistence) ListConcreteExecutions(
 		}
 		result = make(map[string]interface{})
 	}
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 	return response, nil
 }
 
@@ -1566,7 +1583,7 @@ func (d *cassandraPersistence) AddTasks(
 				Msg:     fmt.Sprintf("Failed to add tasks.  Request RangeID: %v, Actual RangeID: %v", request.RangeID, previousRangeID),
 			}
 		} else {
-			return serviceerror.NewInternal("AddTasks operation failed: %v")
+			return serviceerror.NewUnavailable("AddTasks operation failed: %v")
 		}
 	}
 	return nil
@@ -1630,9 +1647,9 @@ func (d *cassandraPersistence) GetTransferTasks(
 
 		response.Tasks = append(response.Tasks, t)
 	}
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError("GetTransferTasks", err)
@@ -1699,9 +1716,9 @@ func (d *cassandraPersistence) GetVisibilityTasks(
 
 		response.Tasks = append(response.Tasks, t)
 	}
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError("GetVisibilityTasks", err)
@@ -1777,9 +1794,9 @@ func (d *cassandraPersistence) populateGetReplicationTasksResponse(
 
 		response.Tasks = append(response.Tasks, t)
 	}
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError(operation, err)
@@ -2083,7 +2100,7 @@ func (d *cassandraPersistence) UpdateTaskQueue(
 func (d *cassandraPersistence) ListTaskQueue(
 	_ *p.ListTaskQueueRequest,
 ) (*p.InternalListTaskQueueResponse, error) {
-	return nil, serviceerror.NewInternal(fmt.Sprintf("unsupported operation"))
+	return nil, serviceerror.NewUnavailable(fmt.Sprintf("unsupported operation"))
 }
 
 func (d *cassandraPersistence) DeleteTaskQueue(
@@ -2243,7 +2260,7 @@ PopulateTasks:
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("GetTasks operation failed. Error: %v", err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks operation failed. Error: %v", err))
 	}
 
 	return response, nil
@@ -2344,9 +2361,9 @@ func (d *cassandraPersistence) GetTimerIndexTasks(
 
 		response.Timers = append(response.Timers, t)
 	}
-	nextPageToken := iter.PageState()
-	response.NextPageToken = make([]byte, len(nextPageToken))
-	copy(response.NextPageToken, nextPageToken)
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
 
 	if err := iter.Close(); err != nil {
 		return nil, gocql.ConvertError("GetTimerIndexTasks", err)

@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -58,8 +57,7 @@ type (
 func newTransferQueueStandbyProcessor(
 	clusterName string,
 	shard shard.Context,
-	historyService *historyEngineImpl,
-	visibilityMgr visibility.VisibilityManager,
+	historyEngine *historyEngineImpl,
 	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
 	nDCHistoryResender xdc.NDCHistoryResender,
@@ -108,13 +106,13 @@ func newTransferQueueStandbyProcessor(
 		config:             shard.GetConfig(),
 		transferTaskFilter: transferTaskFilter,
 		logger:             logger,
-		metricsClient:      historyService.metricsClient,
+		metricsClient:      historyEngine.metricsClient,
 		taskExecutor: newTransferQueueStandbyTaskExecutor(
 			shard,
-			historyService,
+			historyEngine,
 			nDCHistoryResender,
 			logger,
-			historyService.metricsClient,
+			historyEngine.metricsClient,
 			clusterName,
 			config,
 		),
@@ -142,7 +140,7 @@ func newTransferQueueStandbyProcessor(
 		return newTransferQueueTask(
 			shard,
 			taskInfo,
-			historyService.metricsClient.Scope(
+			historyEngine.metricsClient.Scope(
 				getTransferTaskMetricsScope(taskInfo.GetTaskType(), false),
 			),
 			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
@@ -163,7 +161,7 @@ func newTransferQueueStandbyProcessor(
 		queueTaskProcessor,
 		queueAckMgr,
 		redispatchQueue,
-		historyService.historyCache,
+		historyEngine.historyCache,
 		transferQueueTaskInitializer,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TransferStandbyQueueProcessorScope),

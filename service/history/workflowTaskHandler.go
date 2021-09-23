@@ -34,6 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/searchattribute"
 
 	"go.temporal.io/server/common"
@@ -200,7 +201,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	if attr.GetNamespace() != "" {
 		targetNamespaceEntry, err := handler.namespaceCache.GetNamespace(attr.GetNamespace())
 		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("Unable to schedule activity across namespace %v.", attr.GetNamespace()))
+			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to schedule activity across namespace %v.", attr.GetNamespace()))
 		}
 		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
 	}
@@ -377,7 +378,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 	// Always add workflow completed event to this one
 	_, err = handler.mutableState.AddCompletedWorkflowEvent(handler.workflowTaskCompletedID, attr, newExecutionRunID)
 	if err != nil {
-		return serviceerror.NewInternal("Unable to add complete workflow event.")
+		return err
 	}
 
 	// Check if this workflow has a cron schedule
@@ -560,7 +561,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkfl
 	if attr.GetNamespace() != "" {
 		targetNamespaceEntry, err := handler.namespaceCache.GetNamespace(attr.GetNamespace())
 		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("Unable to cancel workflow across namespace: %v.", attr.GetNamespace()))
+			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to cancel workflow across namespace: %v.", attr.GetNamespace()))
 		}
 		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
 	}
@@ -739,7 +740,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	if attr.GetNamespace() != "" {
 		targetNamespaceEntry, err := handler.namespaceCache.GetNamespace(attr.GetNamespace())
 		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("Unable to schedule child execution across namespace %v.", attr.GetNamespace()))
+			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to schedule child execution across namespace %v.", attr.GetNamespace()))
 		}
 		targetNamespace = targetNamespaceEntry.GetInfo().Name
 		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
@@ -834,7 +835,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 	if attr.GetNamespace() != "" {
 		targetNamespaceEntry, err := handler.namespaceCache.GetNamespace(attr.GetNamespace())
 		if err != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("Unable to signal workflow across namespace: %v.", attr.GetNamespace()))
+			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to signal workflow across namespace: %v.", attr.GetNamespace()))
 		}
 		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
 	}
@@ -883,7 +884,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	namespaceID := executionInfo.NamespaceId
 	namespaceEntry, err := handler.namespaceCache.GetNamespaceByID(namespaceID)
 	if err != nil {
-		return serviceerror.NewInternal(fmt.Sprintf("Unable to get namespace for namespaceID: %v.", namespaceID))
+		return serviceerror.NewUnavailable(fmt.Sprintf("Unable to get namespace for namespaceID: %v.", namespaceID))
 	}
 	namespace := namespaceEntry.GetInfo().Name
 

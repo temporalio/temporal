@@ -27,6 +27,7 @@ package resource
 import (
 	"github.com/uber-go/tally"
 	sdkclient "go.temporal.io/sdk/client"
+
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -38,7 +39,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -65,7 +66,7 @@ type (
 		SDKMetricsReporter           metrics.Reporter
 		MetricsClient                metrics.Client
 		ESClient                     esclient.Client
-		ESConfig                     *config.Elasticsearch
+		ESConfig                     *esclient.Config
 		DynamicConfigClient          dynamicconfig.Client
 		DCRedirectionPolicy          config.DCRedirectionPolicy
 		SdkClient                    sdkclient.Client

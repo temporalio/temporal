@@ -40,11 +40,14 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc"
 )
@@ -79,9 +82,17 @@ func (s *clientIntegrationSuite) SetupSuite() {
 	if TestFlags.FrontendAddr != "" {
 		s.hostPort = TestFlags.FrontendAddr
 	}
+}
 
-	var err error
-	s.sdkClient, err = sdkclient.NewClient(sdkclient.Options{
+func (s *clientIntegrationSuite) TearDownSuite() {
+	s.tearDownSuite()
+}
+
+func (s *clientIntegrationSuite) SetupTest() {
+	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
+	s.Assertions = require.New(s.T())
+
+	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
 		HostPort:  s.hostPort,
 		Namespace: s.namespace,
 		ConnectionOptions: sdkclient.ConnectionOptions{
@@ -91,28 +102,31 @@ func (s *clientIntegrationSuite) SetupSuite() {
 	if err != nil {
 		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
 	}
-
-	s.taskQueue = "client-integration-test-taskqueue"
+	s.sdkClient = sdkClient
+	s.taskQueue = s.randomizeStr("tq")
 	s.worker = worker.New(s.sdkClient, s.taskQueue, worker.Options{})
 
-	s.worker.RegisterWorkflow(testDataConverterWorkflow)
-	s.worker.RegisterWorkflow(testParentWorkflow)
-	s.worker.RegisterActivity(testActivity)
-	s.worker.RegisterWorkflow(testChildWorkflow)
+	workflowFn := func(ctx workflow.Context) error {
+		s.Logger.Fatal("Should not reach here")
+		return nil
+	}
+	activityFn := func(ctx context.Context) error {
+		s.Logger.Fatal("Should not reach here")
+		return nil
+	}
+
+	// register dummy workflow and activity, otherwise worker won't start.
+	s.worker.RegisterWorkflow(workflowFn)
+	s.worker.RegisterActivity(activityFn)
 
 	if err := s.worker.Start(); err != nil {
 		s.Logger.Fatal("Error when start worker", tag.Error(err))
 	}
 }
 
-func (s *clientIntegrationSuite) TearDownSuite() {
+func (s *clientIntegrationSuite) TearDownTest() {
+	s.worker.Stop()
 	s.sdkClient.Close()
-	s.tearDownSuite()
-}
-
-func (s *clientIntegrationSuite) SetupTest() {
-	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
-	s.Assertions = require.New(s.T())
 }
 
 // testDataConverter implements encoded.DataConverter using gob
@@ -282,6 +296,8 @@ func (s *clientIntegrationSuite) TestClientDataConverter() {
 	}
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
 	defer cancel()
+	s.worker.RegisterWorkflow(testDataConverterWorkflow)
+	s.worker.RegisterActivity(testActivity)
 	we, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	if err != nil {
 		s.Logger.Fatal("Start workflow with err", tag.Error(err))
@@ -316,6 +332,9 @@ func (s *clientIntegrationSuite) TestClientDataConverter_Failed() {
 	}
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
 	defer cancel()
+
+	s.worker.RegisterWorkflow(testDataConverterWorkflow)
+	s.worker.RegisterActivity(testActivity)
 	we, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	if err != nil {
 		s.Logger.Fatal("Start workflow with err", tag.Error(err))
@@ -421,6 +440,9 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 	}
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(time.Minute)
 	defer cancel()
+	s.worker.RegisterWorkflow(testParentWorkflow)
+	s.worker.RegisterWorkflow(testChildWorkflow)
+
 	we, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, testParentWorkflow)
 	if err != nil {
 		s.Logger.Fatal("Start workflow with err", tag.Error(err))
@@ -437,4 +459,138 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 	d := dc.(*testDataConverter)
 	s.Equal(3, d.NumOfCallToPayloads)
 	s.Equal(2, d.NumOfCallFromPayloads)
+}
+
+func (s *clientIntegrationSuite) Test_ActivityTimeouts() {
+	activityFn := func(ctx context.Context) error {
+		info := activity.GetInfo(ctx)
+		if info.ActivityID == "Heartbeat" {
+			go func() {
+				for i := 0; i < 4; i++ {
+					activity.RecordHeartbeat(ctx, i)
+					time.Sleep(500 * time.Millisecond)
+				}
+			}()
+		}
+
+		time.Sleep(5 * time.Second)
+		return nil
+	}
+
+	var err1, err2, err3, err4 error
+	workflowFn := func(ctx workflow.Context) error {
+		noRetryPolicy := &temporal.RetryPolicy{
+			MaximumAttempts: 1, // disable retry
+		}
+		ctx1 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:             "ScheduleToStart",
+			ScheduleToStartTimeout: 2 * time.Second,
+			StartToCloseTimeout:    2 * time.Second,
+			TaskQueue:              "NoWorkerTaskQueue",
+			RetryPolicy:            noRetryPolicy,
+		})
+		f1 := workflow.ExecuteActivity(ctx1, activityFn)
+
+		ctx2 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:             "StartToClose",
+			ScheduleToStartTimeout: 2 * time.Second,
+			StartToCloseTimeout:    2 * time.Second,
+			RetryPolicy:            noRetryPolicy,
+		})
+		f2 := workflow.ExecuteActivity(ctx2, activityFn)
+
+		ctx3 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:             "ScheduleToClose",
+			ScheduleToCloseTimeout: 2 * time.Second,
+			StartToCloseTimeout:    3 * time.Second,
+			RetryPolicy:            noRetryPolicy,
+		})
+		f3 := workflow.ExecuteActivity(ctx3, activityFn)
+
+		ctx4 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:          "Heartbeat",
+			StartToCloseTimeout: 10 * time.Second,
+			HeartbeatTimeout:    2 * time.Second,
+			RetryPolicy:         noRetryPolicy,
+		})
+		f4 := workflow.ExecuteActivity(ctx4, activityFn)
+
+		err1 = f1.Get(ctx1, nil)
+		err2 = f2.Get(ctx2, nil)
+		err3 = f3.Get(ctx3, nil)
+		err4 = f4.Get(ctx4, nil)
+
+		return nil
+	}
+
+	s.worker.RegisterActivity(activityFn)
+	s.worker.RegisterWorkflow(workflowFn)
+
+	id := "integration-test-activity-timeouts"
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:                 id,
+		TaskQueue:          s.taskQueue,
+		WorkflowRunTimeout: 20 * time.Second,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	if err != nil {
+		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
+	}
+
+	s.NotNil(workflowRun)
+	s.True(workflowRun.GetRunID() != "")
+	err = workflowRun.Get(ctx, nil)
+	s.NoError(err)
+
+	// verify activity timeout type
+	s.Error(err1)
+	activityErr, ok := err1.(*temporal.ActivityError)
+	s.True(ok)
+	s.Equal("ScheduleToStart", activityErr.ActivityID())
+	timeoutErr, ok := activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, timeoutErr.TimeoutType())
+
+	s.Error(err2)
+	activityErr, ok = err2.(*temporal.ActivityError)
+	s.True(ok)
+	s.Equal("StartToClose", activityErr.ActivityID())
+	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutErr.TimeoutType())
+
+	s.Error(err3)
+	activityErr, ok = err3.(*temporal.ActivityError)
+	s.True(ok)
+	s.Equal("ScheduleToClose", activityErr.ActivityID())
+	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
+
+	s.Error(err4)
+	activityErr, ok = err4.(*temporal.ActivityError)
+	s.True(ok)
+	s.Equal("Heartbeat", activityErr.ActivityID())
+	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, timeoutErr.TimeoutType())
+	s.True(timeoutErr.HasLastHeartbeatDetails())
+	var v int
+	s.NoError(timeoutErr.LastHeartbeatDetails(&v))
+	s.Equal(3, v)
+
+	//s.printHistory(id, workflowRun.GetRunID())
+}
+
+func (s *clientIntegrationSuite) printHistory(workflowID string, runID string) {
+	iter := s.sdkClient.GetWorkflowHistory(context.Background(), workflowID, runID, false, 0)
+	history := &historypb.History{}
+	for iter.HasNext() {
+		event, err := iter.Next()
+		s.NoError(err)
+		history.Events = append(history.Events, event)
+	}
+	common.PrettyPrintHistory(history, s.Logger)
 }

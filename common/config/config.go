@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/masker"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 )
 
 type (
@@ -222,8 +223,6 @@ type (
 		NumHistoryShards int32 `yaml:"numHistoryShards" validate:"nonzero"`
 		// DataStores contains the configuration for all datastores
 		DataStores map[string]DataStore `yaml:"datastores"`
-		// VisibilityConfig is config for visibility sampling
-		VisibilityConfig *VisibilityConfig `yaml:"-" json:"-"`
 		// TransactionSizeLimit is the largest allowed transaction size
 		TransactionSizeLimit dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
 	}
@@ -239,28 +238,11 @@ type (
 		// Custom contains the config for custom datastore implementation
 		CustomDataStoreConfig *CustomDatastoreConfig `yaml:"customDatastore"`
 		// ElasticSearch contains the config for a ElasticSearch datastore
-		ElasticSearch *Elasticsearch `yaml:"elasticsearch"`
+		Elasticsearch *client.Config `yaml:"elasticsearch"`
 	}
 
 	FaultInjection struct {
 		Rate float64 `yaml:"rate"`
-	}
-
-	// VisibilityConfig is config for visibility sampling
-	VisibilityConfig struct {
-		// EnableSampling for visibility
-		EnableSampling dynamicconfig.BoolPropertyFn `yaml:"-" json:"-"`
-		// VisibilityOpenMaxQPS max QPS for record open workflows
-		VisibilityOpenMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter `yaml:"-" json:"-"`
-		// VisibilityClosedMaxQPS max QPS for record closed workflows
-		VisibilityClosedMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter `yaml:"-" json:"-"`
-		// VisibilityListMaxQPS max QPS for list workflow
-		VisibilityListMaxQPS dynamicconfig.IntPropertyFnWithNamespaceFilter `yaml:"-" json:"-"`
-		// MaxQPS is overall max QPS
-		MaxQPS dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
-		// ESProcessorAckTimeout is the timeout that store will wait to get ack signal from ES processor.
-		// Should be at least ESProcessorFlushInterval+<time to process request>.
-		ESProcessorAckTimeout dynamicconfig.DurationPropertyFn `yaml:"-" json:"-"`
 	}
 
 	// Cassandra contains configuration to connect to Cassandra cluster
