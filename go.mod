@@ -25,7 +25,6 @@ require (
 	github.com/jonboulle/clockwork v0.2.2
 	github.com/lib/pq v1.10.3
 	github.com/m3db/prometheus_client_golang v0.8.1
-	github.com/mattn/go-sqlite3 v1.14.8
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic v6.2.37+incompatible
 	github.com/olivere/elastic/v7 v7.0.29
