@@ -35,7 +35,7 @@ import (
 
 const (
 	// below are templates for history_node table
-	addHistoryNodesQuery = `INSERT INTO history_node (` +
+	replaceHistoryNodesQuery = `REPLACE INTO history_node (` +
 		`shard_id, tree_id, branch_id, node_id, prev_txn_id, txn_id, data, data_encoding) ` +
 		`VALUES (:shard_id, :tree_id, :branch_id, :node_id, :prev_txn_id, :txn_id, :data, :data_encoding) `
 
@@ -52,10 +52,9 @@ const (
 	deleteHistoryNodesQuery = `DELETE FROM history_node WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND node_id >= ? `
 
 	// below are templates for history_tree table
-	addHistoryTreeQuery = `INSERT INTO history_tree (` +
+	addHistoryTreeQuery = `REPLACE INTO history_tree (` +
 		`shard_id, tree_id, branch_id, data, data_encoding) ` +
-		`VALUES (:shard_id, :tree_id, :branch_id, :data, :data_encoding) ` +
-		`ON CONFLICT(shard_id, tree_id, branch_id) DO UPDATE SET data=data, data_encoding=data_encoding`
+		`VALUES (:shard_id, :tree_id, :branch_id, :data, :data_encoding) `
 
 	getHistoryTreeQuery = `SELECT branch_id, data, data_encoding FROM history_tree WHERE shard_id = ? AND tree_id = ? `
 
@@ -72,7 +71,7 @@ func (mdb *db) InsertIntoHistoryNode(
 	// NOTE: txn_id is *= -1 within DB
 	row.TxnID = -row.TxnID
 	return mdb.conn.NamedExecContext(ctx,
-		addHistoryNodesQuery,
+		replaceHistoryNodesQuery,
 		row,
 	)
 }

@@ -62,7 +62,7 @@ CREATE TABLE buffered_events (
 	namespace_id BINARY(16) NOT NULL,
 	workflow_id VARCHAR(255) NOT NULL,
 	run_id BINARY(16) NOT NULL,
-	id BIGINT AUTO_INCREMENT NOT NULL UNIQUE,
+	id BIGINT AUTO_INCREMENT UNIQUE,
 	--
 	data MEDIUMBLOB NOT NULL,
 	data_encoding VARCHAR(16) NOT NULL,
@@ -241,9 +241,10 @@ CREATE TABLE queue (
 );
 
 CREATE TABLE queue_metadata (
-	queue_type	INT NOT NULL,
-	data	MEDIUMBLOB, -- TODO(jlegrone): add back NOT NULL constraint
-	data_encoding  VARCHAR(16) NOT NULL,
+	queue_type	  INT NOT NULL,
+	data	      MEDIUMBLOB NOT NULL,
+	data_encoding VARCHAR(16) NOT NULL,
+	version       BIGINT NOT NULL,
 	PRIMARY KEY(queue_type)
 );
 

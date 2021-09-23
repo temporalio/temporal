@@ -87,8 +87,9 @@ task_queue_id = :task_queue_id
 		`WHERE range_hash = ? AND task_queue_id = ? AND task_id = ?`
 
 	rangeDeleteTaskQry = `DELETE FROM tasks ` +
-		`WHERE range_hash = ? AND task_queue_id = ? AND task_id <= ? ` +
-		`ORDER BY task_queue_id,task_id LIMIT ?`
+		`WHERE range_hash = ? AND task_queue_id = ? AND task_id IN (SELECT task_id FROM
+		 tasks WHERE range_hash = ? AND task_queue_id = ? AND task_id <= ? ` +
+		`ORDER BY task_queue_id,task_id LIMIT ? ) `
 )
 
 // InsertIntoTasks inserts one or more rows into tasks table
@@ -145,6 +146,8 @@ func (mdb *db) DeleteFromTasks(
 		}
 		return mdb.conn.ExecContext(ctx,
 			rangeDeleteTaskQry,
+			filter.RangeHash,
+			filter.TaskQueueID,
 			filter.RangeHash,
 			filter.TaskQueueID,
 			*filter.TaskIDLessThanEquals,

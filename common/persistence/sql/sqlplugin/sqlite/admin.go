@@ -56,10 +56,6 @@ const (
 		`old_version VARCHAR(64), ` +
 		`PRIMARY KEY (version_partition, year, month, update_time));`
 
-	createDatabaseQuery = "CREATE DATABASE IF NOT EXISTS %v CHARACTER SET UTF8"
-
-	dropDatabaseQuery = "DROP DATABASE IF EXISTS %v"
-
 	listTablesQuery = "SELECT name FROM sqlite_master WHERE type='table'"
 
 	dropTableQuery = "DROP TABLE %v"
@@ -125,10 +121,12 @@ func (mdb *db) DropAllTables(database string) error {
 
 // CreateDatabase creates a database if it doesn't exist
 func (mdb *db) CreateDatabase(name string) error {
-	return mdb.Exec(fmt.Sprintf(createDatabaseQuery, name))
+	// SQLite does not need to create database
+	return nil
 }
 
 // DropDatabase drops a database
 func (mdb *db) DropDatabase(name string) error {
-	return mdb.Exec(fmt.Sprintf(dropDatabaseQuery, name))
+	// // SQLite does not need to drop database
+	return nil
 }

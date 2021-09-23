@@ -33,7 +33,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite/schema"
+	sqliteschema "go.temporal.io/server/schema/sqlite"
 )
 
 // db represents a logical connection to sqlite database
@@ -108,18 +108,18 @@ func (mdb *db) PluginName() string {
 func (mdb *db) ExpectedVersion() string {
 	switch mdb.dbKind {
 	case sqlplugin.DbKindMain:
-		return schema.Version
+		return sqliteschema.Version
 	case sqlplugin.DbKindVisibility:
-		return schema.VisibilityVersion
+		return sqliteschema.VisibilityVersion
 	default:
 		panic(fmt.Sprintf("unknown db kind %v", mdb.dbKind))
 	}
 }
 
 // VerifyVersion verify schema version is up to date
-// TODO(jlegrone): implement this
 func (mdb *db) VerifyVersion() error {
 	return nil
+	// TODO(jlegrone): implement this
 	// expectedVersion := mdb.ExpectedVersion()
 	// return schema.VerifyCompatibleVersion(mdb, mdb.dbName, expectedVersion)
 }

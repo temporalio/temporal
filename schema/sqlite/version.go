@@ -1,5 +1,7 @@
 // The MIT License
 //
+// Copyright (c) 2021 Datadog, Inc.
+//
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
 // Copyright (c) 2020 Uber Technologies, Inc.
@@ -22,17 +24,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package main
+package schema
 
-import (
-	"os"
+// Version is the SQLite database release version
+const Version = "0.1"
 
-	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"      // needed to load mysql plugin
-	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
-	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"     // needed to load sqlite plugin
-	"go.temporal.io/server/tools/sql"
-)
-
-func main() {
-	sql.RunTool(os.Args) //nolint:errcheck
-}
+// VisibilityVersion is the SQLite visibility database release version
+const VisibilityVersion = "0.1"

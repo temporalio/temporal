@@ -48,11 +48,9 @@ const (
 	writeLockGetClusterMetadataQry = getClusterMetadataQry
 
 	// ****** CLUSTER_MEMBERSHIP TABLE ******
-	templateUpsertActiveClusterMembership = `INSERT INTO
+	templateUpsertActiveClusterMembership = `REPLACE INTO
 cluster_membership (membership_partition, host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry)
-VALUES(?, ?, ?, ?, ?, ?, ?, ?) 
-ON CONFLICT(membership_partition, host_id) DO UPDATE SET
-session_start=session_start, last_heartbeat=last_heartbeat, record_expiry=record_expiry`
+VALUES(?, ?, ?, ?, ?, ?, ?, ?) `
 
 	templatePruneStaleClusterMembership = `DELETE FROM
 cluster_membership 

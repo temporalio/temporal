@@ -53,11 +53,10 @@ run_id = ?`
 	// So that this query can be used with BindNamed
 	// %[5]v should be the name of the key associated with the map
 	// e.g. for ActivityInfo it is "schedule_id"
-	setKeyInMapQryTemplate = `INSERT INTO %[1]v
+	setKeyInMapQryTemplate = `REPLACE INTO %[1]v
 (shard_id, namespace_id, workflow_id, run_id, %[5]v, %[2]v)
 VALUES
-(:shard_id, :namespace_id, :workflow_id, :run_id, :%[5]v, %[3]v) 
-ON CONFLICT(shard_id, namespace_id, workflow_id, run_id, schedule_id) DO UPDATE SET %[5]v=%[5]v, %[4]v;`
+(:shard_id, :namespace_id, :workflow_id, :run_id, :%[5]v, %[3]v);`
 
 	// %[2]v is the name of the key
 	deleteKeyInMapQryTemplate = `DELETE FROM %[1]v
@@ -556,12 +555,11 @@ workflow_id = ? AND
 run_id = ?
 `
 
-	createSignalsRequestedSetQry = `INSERT INTO signals_requested_sets
+	replaceSignalsRequestedSetQry = `REPLACE INTO signals_requested_sets
 (shard_id, namespace_id, workflow_id, run_id, signal_id) VALUES
-(:shard_id, :namespace_id, :workflow_id, :run_id, :signal_id)
-ON CONFLICT(shard_id, namespace_id, workflow_id, run_id) DO UPDATE SET signal_id = signal_id`
+(:shard_id, :namespace_id, :workflow_id, :run_id, :signal_id)`
 
-	deleteSignalsRequestedSetQry = `DELETE FROM signals_requested_sets
+	deleteSignalsRequestedSetQry = `DELETE FROM signals_requested_sets 
 WHERE 
 shard_id = ? AND
 namespace_id = ? AND
@@ -569,20 +567,21 @@ workflow_id = ? AND
 run_id = ? AND
 signal_id IN ( ? )`
 
-	getSignalsRequestedSetQry = `SELECT signal_id FROM signals_requested_sets WHERE
+	getSignalsRequestedSetQry = `SELECT signal_id FROM signals_requested_sets
+WHERE 
 shard_id = ? AND
 namespace_id = ? AND
 workflow_id = ? AND
 run_id = ?`
 )
 
-// InsertIntoSignalsRequestedSets inserts one or more rows into signals_requested_sets table
+// ReplaceIntoSignalsRequestedSets inserts one or more rows into signals_requested_sets table
 func (mdb *db) ReplaceIntoSignalsRequestedSets(
 	ctx context.Context,
 	rows []sqlplugin.SignalsRequestedSetsRow,
 ) (sql.Result, error) {
 	return mdb.conn.NamedExecContext(ctx,
-		createSignalsRequestedSetQry,
+		replaceSignalsRequestedSetQry,
 		rows,
 	)
 

@@ -39,14 +39,11 @@ const (
 	templateCreateWorkflowExecutionStarted = `INSERT INTO executions_visibility (` +
 		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
-		`ON CONFLICT(namespace_id, run_id) DO UPDATE SET ` +
-		`run_id=run_id`
+		`ON CONFLICT (namespace_id, run_id) DO NOTHING`
 
-	templateCreateWorkflowExecutionClosed = `INSERT INTO executions_visibility (` +
+	templateCreateWorkflowExecutionClosed = `REPLACE INTO executions_visibility (` +
 		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
-		`ON CONFLICT(namespace_id, run_id) DO UPDATE SET workflow_id = workflow_id, start_time = start_time, execution_time = execution_time, workflow_type_name = workflow_type_name, ` +
-		`close_time = close_time, status = status, history_length = history_length, memo = memo, encoding = encoding`
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) `
 
 	// RunID condition is needed for correct pagination
 	templateConditions = ` AND namespace_id = ?
