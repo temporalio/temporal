@@ -26,6 +26,7 @@ package rpc
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -60,6 +61,10 @@ type localStoreRPCSuite struct {
 	insecureRPCFactory                      *TestFactory
 	internodeMutualTLSRPCFactory            *TestFactory
 	internodeServerTLSRPCFactory            *TestFactory
+	ringpopMutualTLSRPCFactoryA             *TestFactory
+	ringpopMutualTLSRPCFactoryB             *TestFactory
+	ringpopServerTLSRPCFactoryA             *TestFactory
+	ringpopServerTLSRPCFactoryB             *TestFactory
 	internodeAltMutualTLSRPCFactory         *TestFactory
 	frontendMutualTLSRPCFactory             *TestFactory
 	frontendServerTLSRPCFactory             *TestFactory
@@ -262,6 +267,7 @@ func mutualGroupTLSFromChain(chain CertChain) config.GroupTLS {
 
 func (s *localStoreRPCSuite) SetupTest() {
 	s.setupInternode()
+	s.setupInternodeRingpop()
 	s.setupFrontend()
 }
 
@@ -395,6 +401,44 @@ func (s *localStoreRPCSuite) setupInternode() {
 	s.internodeServerTLSRPCFactory = i(internodeServerTLSFactory)
 	s.internodeAltMutualTLSRPCFactory = i(internodeMutualAltTLSFactory)
 	s.internodeMutualTLSRPCRefreshFactory = i(internodeMutualTLSRefreshFactory)
+}
+
+func (s *localStoreRPCSuite) setupInternodeRingpop() {
+	ringpopServerTLS := &config.Global{
+		Membership: s.membershipConfig,
+		TLS: config.RootTLS{
+			Internode: s.internodeConfigServerTLS,
+		},
+	}
+
+	ringpopMutualTLS := &config.Global{
+		Membership: s.membershipConfig,
+		TLS: config.RootTLS{
+			Internode: s.internodeConfigMutualTLS,
+		},
+	}
+
+	rpcCfgA := &config.RPC{GRPCPort: 0, MembershipPort: 7600, BindOnIP: localhostIPv4}
+	rpcCfgB := &config.RPC{GRPCPort: 0, MembershipPort: 7601, BindOnIP: localhostIPv4}
+
+	provider, err := encryption.NewTLSConfigProviderFromConfig(ringpopMutualTLS.TLS, nil, s.logger, nil)
+	s.NoError(err)
+	ringpopMutualTLSFactoryA := rpc.NewFactory(rpcCfgA, "tester-A", s.logger, provider)
+	s.NotNil(ringpopMutualTLSFactoryA)
+	ringpopMutualTLSFactoryB := rpc.NewFactory(rpcCfgB, "tester-B", s.logger, provider)
+	s.NotNil(ringpopMutualTLSFactoryB)
+
+	provider, err = encryption.NewTLSConfigProviderFromConfig(ringpopServerTLS.TLS, nil, s.logger, nil)
+	s.NoError(err)
+	ringpopServerTLSFactoryA := rpc.NewFactory(rpcCfgA, "tester-A", s.logger, provider)
+	s.NotNil(ringpopServerTLSFactoryA)
+	ringpopServerTLSFactoryB := rpc.NewFactory(rpcCfgB, "tester-B", s.logger, provider)
+	s.NotNil(ringpopServerTLSFactoryB)
+
+	s.ringpopMutualTLSRPCFactoryA = i(ringpopMutualTLSFactoryA)
+	s.ringpopMutualTLSRPCFactoryB = i(ringpopMutualTLSFactoryB)
+	s.ringpopServerTLSRPCFactoryA = i(ringpopServerTLSFactoryA)
+	s.ringpopServerTLSRPCFactoryB = i(ringpopServerTLSFactoryB)
 }
 
 func (s *localStoreRPCSuite) GenerateTestChain(tempDir string, commonName string) CertChain {
@@ -688,4 +732,47 @@ func (s *localStoreRPCSuite) validateTLSInfo(tlsInfo *credentials.TLSInfo, err e
 	s.NotNil(tlsInfo.State.PeerCertificates)
 	sn := (*tlsInfo.State.PeerCertificates[0].SerialNumber).Int64()
 	s.Equal(serialNumber, sn)
+}
+
+func (s *localStoreRPCSuite) TestRingpopMutualTLS() {
+	runRingpopTLSTest(s.Suite, s.logger, s.ringpopMutualTLSRPCFactoryA, s.ringpopMutualTLSRPCFactoryB, false)
+}
+
+func (s *localStoreRPCSuite) TestRingpopServerTLS() {
+	runRingpopTLSTest(s.Suite, s.logger, s.ringpopServerTLSRPCFactoryA, s.ringpopServerTLSRPCFactoryB, false)
+}
+
+func (s *localStoreRPCSuite) TestRingpopInvalidTLS() {
+	runRingpopTLSTest(s.Suite, s.logger, s.insecureRPCFactory, s.ringpopServerTLSRPCFactoryB, true)
+}
+
+func runRingpopTLSTest(s suite.Suite, logger log.Logger, serverA *TestFactory, serverB *TestFactory, expectError bool) {
+	// Start two ringpop nodes
+	chA := serverA.GetRingpopChannel()
+	chB := serverB.GetRingpopChannel()
+	defer chA.Close()
+	defer chB.Close()
+
+	// Ping A through B to make sure B's dialer uses TLS to communicate with A
+	hostPortA := chA.PeerInfo().HostPort
+	err := chB.Ping(context.Background(), hostPortA)
+	if expectError {
+		s.Error(err)
+	} else {
+		s.NoError(err)
+	}
+
+	// Confirm that A's listener is actually using TLS
+	clientTLSConfig, err := serverB.GetInternodeClientTlsConfig()
+	s.NoError(err)
+
+	conn, err := tls.Dial("tcp", hostPortA, clientTLSConfig)
+	if conn != nil {
+		conn.Close()
+	}
+	if expectError {
+		s.Error(err)
+	} else {
+		s.NoError(err)
+	}
 }
