@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
@@ -1662,7 +1663,7 @@ func (e *MutableStateImpl) addBinaryCheckSumIfNotExists(
 		exeInfo.SearchAttributes = make(map[string]*commonpb.Payload, 1)
 	}
 	exeInfo.SearchAttributes[searchattribute.BinaryChecksums] = checksumsPayload
-	if e.shard.GetConfig().AdvancedVisibilityWritingMode() != common.AdvancedVisibilityWritingModeOff {
+	if e.shard.GetConfig().AdvancedVisibilityWritingMode() != visibility.AdvancedVisibilityWritingModeOff {
 		return e.taskGenerator.GenerateWorkflowSearchAttrTasks(timestamp.TimeValue(event.GetEventTime()))
 	}
 	return nil

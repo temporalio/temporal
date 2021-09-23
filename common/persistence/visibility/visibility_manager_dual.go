@@ -29,7 +29,6 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
@@ -167,11 +166,11 @@ func (v *visibilityManagerDual) CountWorkflowExecutions(request *manager.CountWo
 
 func (v *visibilityManagerDual) writeManagers() ([]manager.VisibilityManager, error) {
 	switch v.advancedVisibilityWritingMode() {
-	case common.AdvancedVisibilityWritingModeOff:
+	case AdvancedVisibilityWritingModeOff:
 		return []manager.VisibilityManager{v.stdVisibilityManager}, nil
-	case common.AdvancedVisibilityWritingModeOn:
+	case AdvancedVisibilityWritingModeOn:
 		return []manager.VisibilityManager{v.advVisibilityManager}, nil
-	case common.AdvancedVisibilityWritingModeDual:
+	case AdvancedVisibilityWritingModeDual:
 		return []manager.VisibilityManager{v.stdVisibilityManager, v.advVisibilityManager}, nil
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown advanced visibility writing mode: %s", v.advancedVisibilityWritingMode()))

@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkmocks "go.temporal.io/sdk/mocks"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -50,6 +51,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -452,7 +454,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 	}
 
 	// Configure Elasticsearch: add advanced visibility store config with index name.
-	handler.ESConfig = &config.Elasticsearch{
+	handler.ESConfig = &client.Config{
 		Indices: map[string]string{
 			"visibility": "random-index-name",
 		},
@@ -544,7 +546,7 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes() {
 	s.NotNil(resp)
 
 	// Configure Elasticsearch: add advanced visibility store config with index name.
-	handler.ESConfig = &config.Elasticsearch{
+	handler.ESConfig = &client.Config{
 		Indices: map[string]string{
 			"visibility": "random-index-name",
 		},
@@ -636,7 +638,7 @@ func (s *adminHandlerSuite) Test_RemoveSearchAttributes() {
 	}
 
 	// Configure Elasticsearch: add advanced visibility store config with index name.
-	handler.ESConfig = &config.Elasticsearch{
+	handler.ESConfig = &client.Config{
 		Indices: map[string]string{
 			"visibility": "random-index-name",
 		},

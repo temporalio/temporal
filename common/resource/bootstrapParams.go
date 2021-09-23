@@ -66,7 +66,7 @@ type (
 		SDKMetricsReporter           metrics.Reporter
 		MetricsClient                metrics.Client
 		ESClient                     esclient.Client
-		ESConfig                     *config.Elasticsearch
+		ESConfig                     *esclient.Config
 		DynamicConfigClient          dynamicconfig.Client
 		DCRedirectionPolicy          config.DCRedirectionPolicy
 		SdkClient                    sdkclient.Client

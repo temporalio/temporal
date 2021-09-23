@@ -35,13 +35,12 @@ import (
 func VerifyCompatibleVersion(
 	cfg config.Persistence,
 	r resolver.ServiceResolver,
-	checkVisibility bool,
 ) error {
 
 	if err := checkMainDatabase(cfg, r); err != nil {
 		return err
 	}
-	if checkVisibility {
+	if cfg.StandardVisibilityConfigExist() {
 		return checkVisibilityDatabase(cfg, r)
 	}
 	return nil

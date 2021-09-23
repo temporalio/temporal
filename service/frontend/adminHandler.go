@@ -46,7 +46,6 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -75,7 +74,7 @@ type (
 		status int32
 
 		numberOfHistoryShards int32
-		ESConfig              *config.Elasticsearch
+		ESConfig              *esclient.Config
 		ESClient              esclient.Client
 		config                *Config
 		namespaceDLQHandler   namespace.DLQMessageHandler

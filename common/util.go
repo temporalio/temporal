@@ -30,7 +30,6 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -621,22 +620,6 @@ func ValidateLongPollContextTimeoutIsSet(
 		return deadline, err
 	}
 	return deadline, nil
-}
-
-// IsJustOrderByClause return true is query start with order by
-func IsJustOrderByClause(clause string) bool {
-	whereClause := strings.TrimSpace(clause)
-	whereClause = strings.ToLower(whereClause)
-	return strings.HasPrefix(whereClause, "order by")
-}
-
-// GetDefaultAdvancedVisibilityWritingMode get default advancedVisibilityWritingMode based on
-// whether related config exists in static config file.
-func GetDefaultAdvancedVisibilityWritingMode(isAdvancedVisConfigExist bool) string {
-	if isAdvancedVisConfigExist {
-		return AdvancedVisibilityWritingModeOn
-	}
-	return AdvancedVisibilityWritingModeOff
 }
 
 func GetPayloadsMapSize(data map[string]*commonpb.Payloads) int {
