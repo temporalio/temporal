@@ -27,7 +27,6 @@
 package sqlite
 
 import (
-	_ "embed"
 	"fmt"
 	"net/url"
 	"strings"
@@ -82,7 +81,7 @@ func (p *plugin) CreateAdminDB(
 	return db, nil
 }
 
-// CreateDBConnection creates a returns a reference to a logical connection to the
+// createDBConnection creates a returns a reference to a logical connection to the
 // underlying SQL database. The returned object is to tied to a single
 // SQL database and the object can be used to perform CRUD operations on
 // the tables in the database
@@ -90,7 +89,11 @@ func (p *plugin) createDBConnection(
 	cfg *config.SQL,
 	_ resolver.ServiceResolver,
 ) (*sqlx.DB, error) {
-	db, err := sqlx.Connect(PluginName, buildDSN(cfg))
+	dsn, err := buildDSN(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("error building DSN: %w", err)
+	}
+	db, err := sqlx.Connect(goSqlDriverName, dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -112,55 +115,35 @@ func (p *plugin) createDBConnection(
 	return db, nil
 }
 
-func buildDSN(
-	cfg *config.SQL,
-) string {
+func buildDSN(cfg *config.SQL) (string, error) {
 	if cfg.ConnectAttributes == nil {
 		cfg.ConnectAttributes = make(map[string]string)
 	}
-	attrs := buildDSNAttr(cfg).Encode()
+	vals, err := buildDSNAttr(cfg)
+	if err != nil {
+		return "", err
+	}
 	dsn := fmt.Sprintf(
 		"file:%s?%v",
 		cfg.DatabaseName,
-		attrs,
+		vals.Encode(),
 	)
-	return dsn
+	return dsn, nil
 }
 
-func buildDSNAttr(cfg *config.SQL) url.Values {
+func buildDSNAttr(cfg *config.SQL) (url.Values, error) {
 	parameters := url.Values{}
 	for k, v := range cfg.ConnectAttributes {
 		key := strings.TrimSpace(k)
 		value := strings.TrimSpace(v)
 		if parameters.Get(key) != "" {
-			panic(fmt.Sprintf("duplicate connection attr: %v:%v, %v:%v",
+			return nil, fmt.Errorf("duplicate connection attr: %v:%v, %v:%v",
 				key,
 				parameters.Get(key),
 				key, value,
-			))
+			)
 		}
 		parameters.Set(key, value)
 	}
-	return parameters
+	return parameters, nil
 }
-
-//
-//func (p *plugin) verifyAndOverrideMode(
-//	mode string,
-//) (string, error) {
-//	runeMap := map[rune]struct{}{}
-//	for _, runeValue := range mode {
-//		runeMap[runeValue] = struct{}{}
-//	}
-//
-//	// allow read & write, but not create
-//	runeMap['r'] = struct{}{}
-//	runeMap['w'] = struct{}{}
-//	delete(runeMap, 'c')
-//
-//	runeSlice := make([]rune, 0, len(runeMap))
-//	for runeValue := range runeMap {
-//		runeSlice = append(runeSlice, runeValue)
-//	}
-//	return string(runeSlice), nil
-//}
