@@ -47,7 +47,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 
@@ -1190,38 +1189,6 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 		Size:          1,
 	}, nil).Times(2)
 
-	// then it may request the first event to try to reconstruct a continued-as-new event
-	s.mockExecutionManager.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
-		BranchToken:   branchToken,
-		MinEventID:    1,
-		MaxEventID:    2,
-		PageSize:      1,
-		NextPageToken: nil,
-		ShardID:       shardID,
-	}).Return(&persistence.ReadHistoryBranchResponse{
-		HistoryEvents: []*historypb.HistoryEvent{
-			{
-				EventId:   common.FirstEventID,
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
-					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-						WorkflowType:         &commonpb.WorkflowType{Name: "mytype"},
-						TaskQueue:            &taskqueuepb.TaskQueue{Name: "tq"},
-						Input:                payloads.EncodeString("input"),
-						WorkflowRunTimeout:   timestamp.DurationPtr(1 * time.Hour),
-						WorkflowTaskTimeout:  timestamp.DurationPtr(10 * time.Second),
-						LastCompletionResult: payloads.EncodeString("last result"),
-						Header:               nil,
-						Memo:                 nil,
-						SearchAttributes:     nil,
-					},
-				},
-			},
-		},
-		NextPageToken: []byte{},
-		Size:          1,
-	}, nil).Times(1)
-
 	s.mockExecutionManager.EXPECT().TrimHistoryBranch(gomock.Any()).Return(nil, nil).AnyTimes()
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 
@@ -1256,9 +1223,6 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 	attrs2 := event.GetWorkflowExecutionContinuedAsNewEventAttributes()
 	s.Equal(newRunID, attrs2.NewExecutionRunId)
 	s.Equal("this workflow failed", attrs2.Failure.Message)
-	var inp string
-	s.NoError(payloads.Decode(attrs2.Input, &inp))
-	s.Equal("input", inp)
 }
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidRequest() {
