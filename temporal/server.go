@@ -219,7 +219,7 @@ func (s *Server) Start() error {
 				return fmt.Errorf("unable to construct service %q: %w", svcName, err)
 			}
 			s.serviceApps[svcName] = histApp
-			timeoutCtx, cancelFunc := context.WithTimeout(ctx.Background(), time.Duration(15) * time.Second)
+			timeoutCtx, cancelFunc := context.WithTimeout(ctx.Background(), time.Duration(15)*time.Second)
 			err = histApp.Start(timeoutCtx)
 			cancelFunc()
 			if err != nil {
