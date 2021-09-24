@@ -329,6 +329,8 @@ var Keys = map[Key]string{
 	TaskQueueScannerEnabled:             "worker.taskQueueScannerEnabled",
 	HistoryScannerEnabled:               "worker.historyScannerEnabled",
 	ExecutionsScannerEnabled:            "worker.executionsScannerEnabled",
+
+	EnableRingpopTLS: "system.enableRingpopTLS",
 }
 
 const (
@@ -890,6 +892,8 @@ const (
 
 	// StandbyTaskReReplicationContextTimeout is the context timeout for standby task re-replication
 	StandbyTaskReReplicationContextTimeout
+
+	EnableRingpopTLS
 
 	// lastKeyForTest must be the last one in this const group for testing purpose
 	lastKeyForTest

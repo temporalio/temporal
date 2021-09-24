@@ -36,6 +36,7 @@ import (
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc/encryption"
@@ -46,6 +47,7 @@ type RPCFactory struct {
 	config      *config.RPC
 	serviceName string
 	logger      log.Logger
+	dc          *dynamicconfig.Collection
 
 	sync.Mutex
 	grpcListener   net.Listener
@@ -55,13 +57,14 @@ type RPCFactory struct {
 
 // NewFactory builds a new RPCFactory
 // conforming to the underlying configuration
-func NewFactory(cfg *config.RPC, sName string, logger log.Logger, tlsProvider encryption.TLSConfigProvider) *RPCFactory {
-	return newFactory(cfg, sName, logger, tlsProvider)
-}
-
-func newFactory(cfg *config.RPC, sName string, logger log.Logger, tlsProvider encryption.TLSConfigProvider) *RPCFactory {
-	factory := &RPCFactory{config: cfg, serviceName: sName, logger: logger, tlsFactory: tlsProvider}
-	return factory
+func NewFactory(cfg *config.RPC, sName string, logger log.Logger, tlsProvider encryption.TLSConfigProvider, dc *dynamicconfig.Collection) *RPCFactory {
+	return &RPCFactory{
+		config:      cfg,
+		serviceName: sName,
+		logger:      logger,
+		dc:          dc,
+		tlsFactory:  tlsProvider,
+	}
 }
 
 func (d *RPCFactory) GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error) {
@@ -130,6 +133,7 @@ func (d *RPCFactory) GetGRPCListener() net.Listener {
 
 		if err != nil {
 			d.logger.Fatal("Failed to start gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
+			return nil
 		}
 
 		d.logger.Info("Created gRPC listener", tag.Service(d.serviceName), tag.Address(hostAddress))
@@ -150,37 +154,52 @@ func (d *RPCFactory) GetRingpopChannel() *tchannel.Channel {
 	if d.ringpopChannel == nil {
 		ringpopServiceName := fmt.Sprintf("%v-ringpop", d.serviceName)
 		ringpopHostAddress := net.JoinHostPort(getListenIP(d.config, d.logger).String(), convert.IntToString(d.config.MembershipPort))
+		enableTLS := d.dc.GetBoolProperty(dynamicconfig.EnableRingpopTLS, false)()
 
-		clientTLSConfig, err := d.GetInternodeClientTlsConfig()
-		if err != nil {
-			d.logger.Fatal("Failed to get internode TLS client config", tag.Error(err))
-		}
 		opts := &tchannel.ChannelOptions{}
-		if clientTLSConfig != nil {
-			opts.Dialer = (&tls.Dialer{Config: clientTLSConfig}).DialContext
+		if enableTLS {
+			clientTLSConfig, err := d.GetInternodeClientTlsConfig()
+			if err != nil {
+				d.logger.Fatal("Failed to get internode TLS client config", tag.Error(err))
+				return nil
+			}
+			if clientTLSConfig != nil {
+				opts.Dialer = (&tls.Dialer{Config: clientTLSConfig}).DialContext
+			}
 		}
+		var err error
+
 		d.ringpopChannel, err = tchannel.NewChannel(ringpopServiceName, opts)
 		if err != nil {
 			d.logger.Fatal("Failed to create ringpop TChannel", tag.Error(err))
+			return nil
 		}
 
-		serverTLSConfig, err := d.tlsFactory.GetInternodeServerConfig()
-		if err != nil {
-			d.logger.Fatal("Failed to get internode TLS server config", tag.Error(err))
-		}
-		if serverTLSConfig != nil {
-			tlsListener, err := tls.Listen("tcp", ringpopHostAddress, serverTLSConfig)
+		var listener net.Listener
+		if enableTLS {
+			serverTLSConfig, err := d.tlsFactory.GetInternodeServerConfig()
 			if err != nil {
-				d.logger.Fatal("Failed to start ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))
+				d.logger.Fatal("Failed to get internode TLS server config", tag.Error(err))
+				return nil
 			}
+			if serverTLSConfig != nil {
+				listener, err = tls.Listen("tcp", ringpopHostAddress, serverTLSConfig)
+				if err != nil {
+					d.logger.Fatal("Failed to start ringpop TLS listener", tag.Error(err), tag.Address(ringpopHostAddress))
+					return nil
+				}
+			}
+		}
+		if listener == nil {
+			if listener, err = net.Listen("tcp", ringpopHostAddress); err != nil {
+				d.logger.Fatal("Failed to start ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))
+				return nil
+			}
+		}
 
-			if err := d.ringpopChannel.Serve(tlsListener); err != nil {
-				d.logger.Fatal("Failed to serve ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))
-			}
-		} else {
-			if err = d.ringpopChannel.ListenAndServe(ringpopHostAddress); err != nil {
-				d.logger.Fatal("Failed to start ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))
-			}
+		if err := d.ringpopChannel.Serve(listener); err != nil {
+			d.logger.Fatal("Failed to serve ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))
+			return nil
 		}
 	}
 
@@ -194,6 +213,7 @@ func (d *RPCFactory) getTLSFactory() encryption.TLSConfigProvider {
 func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 	if cfg.BindOnLocalHost && len(cfg.BindOnIP) > 0 {
 		logger.Fatal("ListenIP failed, bindOnLocalHost and bindOnIP are mutually exclusive")
+		return nil
 	}
 
 	if cfg.BindOnLocalHost {
@@ -206,10 +226,12 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 			return ip
 		}
 		logger.Fatal("ListenIP failed, unable to parse bindOnIP value", tag.Address(cfg.BindOnIP))
+		return nil
 	}
 	ip, err := config.ListenIP()
 	if err != nil {
 		logger.Fatal("ListenIP failed", tag.Error(err))
+		return nil
 	}
 	return ip
 }
@@ -221,7 +243,8 @@ func (d *RPCFactory) CreateFrontendGRPCConnection(hostName string) *grpc.ClientC
 	if d.tlsFactory != nil {
 		tlsClientConfig, err = d.tlsFactory.GetFrontendClientConfig()
 		if err != nil {
-			d.logger.Fatal("Failed to create tls config for grpc connection", tag.Error(err))
+			d.logger.Fatal("Failed to create tls config for gRPC connection", tag.Error(err))
+			return nil
 		}
 	}
 
@@ -235,7 +258,8 @@ func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.Client
 	if d.tlsFactory != nil {
 		tlsClientConfig, err = d.tlsFactory.GetInternodeClientConfig()
 		if err != nil {
-			d.logger.Fatal("Failed to create tls config for grpc connection", tag.Error(err))
+			d.logger.Fatal("Failed to create tls config for gRPC connection", tag.Error(err))
+			return nil
 		}
 	}
 
@@ -246,6 +270,7 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config) *grpc.Cl
 	connection, err := Dial(hostName, tlsClientConfig, d.logger)
 	if err != nil {
 		d.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
+		return nil
 	}
 
 	return connection

@@ -331,7 +331,7 @@ func (s *Server) newBootstrapParams(
 	}
 
 	svcCfg := s.so.config.Services[svcName]
-	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, s.logger, s.so.tlsConfigProvider)
+	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, s.logger, s.so.tlsConfigProvider, dc)
 	params.RPCFactory = rpcFactory
 
 	// Ringpop uses a different port to register handlers, this map is needed to resolve
