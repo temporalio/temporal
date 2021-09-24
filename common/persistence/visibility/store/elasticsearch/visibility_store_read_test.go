@@ -379,24 +379,6 @@ func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 	}, p)
 	request = createTestRequest() // revert
 
-	// test for default page size
-	request.PageSize = 0
-	rangeQuery = elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
-	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery).Filter(rangeQuery)
-	p, err = s.visibilityStore.buildSearchParameters(request, elastic.NewBoolQuery(), true)
-	s.NoError(err)
-	s.Equal(&client.SearchParameters{
-		Index:       testIndex,
-		Query:       boolQuery,
-		SearchAfter: nil,
-		PageSize:    1000,
-		Sorter: []elastic.Sorter{
-			elastic.NewFieldSort(searchattribute.StartTime).Desc(),
-			elastic.NewFieldSort(searchattribute.RunID).Desc(),
-		},
-	}, p)
-	request = createTestRequest() // revert
-
 	// test for nil token
 	rangeQuery = elastic.NewRangeQuery(searchattribute.StartTime).Gte(request.EarliestStartTime).Lte(request.LatestStartTime)
 	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery).Filter(rangeQuery)
@@ -460,24 +442,6 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		},
 	}, p)
 	request.Query = ""
-
-	// test for default page size
-	request.PageSize = 0
-	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery)
-	p, err = s.visibilityStore.buildSearchParametersV2(request)
-	s.NoError(err)
-	s.Equal(&client.SearchParameters{
-		Index:       testIndex,
-		Query:       boolQuery,
-		SearchAfter: nil,
-		PointInTime: nil,
-		PageSize:    1000,
-		Sorter: []elastic.Sorter{
-			elastic.NewFieldSort(searchattribute.StartTime).Desc(),
-			elastic.NewFieldSort(searchattribute.RunID).Desc(),
-		},
-	}, p)
-	request.PageSize = testPageSize
 
 	// test for wrong query
 	request.Query = "invalid query"
