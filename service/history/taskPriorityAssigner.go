@@ -128,7 +128,7 @@ func (a *taskPriorityAssignerImpl) getNamespaceInfo(
 		return "", true, nil
 	}
 
-	if namespaceEntry.IsGlobalNamespace() && a.currentClusterName != namespaceEntry.GetReplicationConfig().ActiveClusterName {
+	if namespaceEntry.IsGlobalNamespace() && a.currentClusterName != namespaceEntry.ActiveClusterName() {
 		return namespaceEntry.GetInfo().Name, false, nil
 	}
 	return namespaceEntry.GetInfo().Name, true, nil
