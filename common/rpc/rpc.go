@@ -133,6 +133,7 @@ func (d *RPCFactory) GetGRPCListener() net.Listener {
 
 		if err != nil {
 			d.logger.Fatal("Failed to start gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
+			return nil
 		}
 
 		d.logger.Info("Created gRPC listener", tag.Service(d.serviceName), tag.Address(hostAddress))
@@ -160,6 +161,7 @@ func (d *RPCFactory) GetRingpopChannel() *tchannel.Channel {
 			clientTLSConfig, err := d.GetInternodeClientTlsConfig()
 			if err != nil {
 				d.logger.Fatal("Failed to get internode TLS client config", tag.Error(err))
+				return nil
 			}
 			if clientTLSConfig != nil {
 				opts.Dialer = (&tls.Dialer{Config: clientTLSConfig}).DialContext
@@ -211,6 +213,7 @@ func (d *RPCFactory) getTLSFactory() encryption.TLSConfigProvider {
 func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 	if cfg.BindOnLocalHost && len(cfg.BindOnIP) > 0 {
 		logger.Fatal("ListenIP failed, bindOnLocalHost and bindOnIP are mutually exclusive")
+		return nil
 	}
 
 	if cfg.BindOnLocalHost {
@@ -223,10 +226,12 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 			return ip
 		}
 		logger.Fatal("ListenIP failed, unable to parse bindOnIP value", tag.Address(cfg.BindOnIP))
+		return nil
 	}
 	ip, err := config.ListenIP()
 	if err != nil {
 		logger.Fatal("ListenIP failed", tag.Error(err))
+		return nil
 	}
 	return ip
 }
@@ -238,7 +243,8 @@ func (d *RPCFactory) CreateFrontendGRPCConnection(hostName string) *grpc.ClientC
 	if d.tlsFactory != nil {
 		tlsClientConfig, err = d.tlsFactory.GetFrontendClientConfig()
 		if err != nil {
-			d.logger.Fatal("Failed to create tls config for grpc connection", tag.Error(err))
+			d.logger.Fatal("Failed to create tls config for gRPC connection", tag.Error(err))
+			return nil
 		}
 	}
 
@@ -252,7 +258,8 @@ func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.Client
 	if d.tlsFactory != nil {
 		tlsClientConfig, err = d.tlsFactory.GetInternodeClientConfig()
 		if err != nil {
-			d.logger.Fatal("Failed to create tls config for grpc connection", tag.Error(err))
+			d.logger.Fatal("Failed to create tls config for gRPC connection", tag.Error(err))
+			return nil
 		}
 	}
 
@@ -263,6 +270,7 @@ func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config) *grpc.Cl
 	connection, err := Dial(hostName, tlsClientConfig, d.logger)
 	if err != nil {
 		d.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
+		return nil
 	}
 
 	return connection
