@@ -55,7 +55,6 @@ const (
 	delimiter                    = "~"
 	pointInTimeKeepAliveInterval = "1m"
 	scrollKeepAliveInterval      = "1m"
-	defaultPageSize              = 1000
 )
 
 type (
@@ -564,10 +563,6 @@ func (s *visibilityStore) buildSearchParameters(
 		params.SearchAfter = token.SearchAfter
 	}
 
-	if request.PageSize == 0 {
-		params.PageSize = defaultPageSize
-	}
-
 	if overStartTime {
 		params.Sorter = append(params.Sorter, elastic.NewFieldSort(searchattribute.StartTime).Desc())
 	} else {
@@ -594,10 +589,6 @@ func (s *visibilityStore) buildSearchParametersV2(
 		Query:    boolQuery,
 		PageSize: request.PageSize,
 		Sorter:   s.setDefaultFieldSort(fieldSorts),
-	}
-
-	if request.PageSize == 0 {
-		params.PageSize = defaultPageSize
 	}
 
 	return params, nil
