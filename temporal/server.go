@@ -25,7 +25,7 @@
 package temporal
 
 import (
-	ctx "context"
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -34,7 +34,6 @@ import (
 	"github.com/uber-go/tally"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
-	"golang.org/x/net/context"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -221,7 +220,7 @@ func (s *Server) Start() error {
 				return fmt.Errorf("unable to construct service %q: %w", svcName, err)
 			}
 			s.serviceApps[svcName] = histApp
-			timeoutCtx, cancelFunc := context.WithTimeout(ctx.Background(), serviceStartTimeout)
+			timeoutCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStartTimeout)
 			err = histApp.Start(timeoutCtx)
 			cancelFunc()
 			if err != nil {
@@ -280,7 +279,7 @@ func (s *Server) Stop() {
 
 	for svcName, svcApp := range s.serviceApps {
 		go func(svc *fx.App, svcName string, svcStoppedCh <-chan struct{}) {
-			stopCtx, cancelFunc := ctx.WithTimeout(ctx.Background(), serviceStopTimeout)
+			stopCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStopTimeout)
 			err := svc.Stop(stopCtx)
 			cancelFunc()
 			if err != nil {
