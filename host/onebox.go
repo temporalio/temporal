@@ -480,8 +480,10 @@ func (c *temporalImpl) startHistory(
 		stoppedCh := make(chan struct{})
 		var historyService *history.Service
 		app := fx.New(
-			fx.Supply(params,
-				stoppedCh),
+			fx.Supply(
+				params,
+				stoppedCh,
+				),
 			history.Module,
 			fx.Populate(&historyService))
 		err = app.Err()

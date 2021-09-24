@@ -84,9 +84,9 @@ var Module = fx.Options(
 	fx.Provide(ClusterNameProvider),
 	fx.Provide(MetricsClientProvider),
 	persistenceClient.FactoryModule,
-	fx.Provide(SAProviderProvider),
-	fx.Provide(SAManagerProvider),
-	fx.Provide(SAMapperProvider),
+	fx.Provide(SearchAttributeProviderProvider),
+	fx.Provide(SearchAttributeManagerProvider),
+	fx.Provide(SearchAttributeMapperProvider),
 	fx.Provide(MetadataManagerProvider),
 	fx.Provide(NamespaceCacheProvider),
 	fx.Provide(serialization.NewSerializer),
@@ -198,21 +198,21 @@ func ClusterMetadataManagerProvider(factory persistenceClient.Factory) (persiste
 	return factory.NewClusterMetadataManager()
 }
 
-func SAProviderProvider(
+func SearchAttributeProviderProvider(
 	timeSource clock.TimeSource,
 	cmMgr persistence.ClusterMetadataManager,
 ) searchattribute.Provider {
 	return searchattribute.NewManager(timeSource, cmMgr)
 }
 
-func SAManagerProvider(
+func SearchAttributeManagerProvider(
 	timeSource clock.TimeSource,
 	cmMgr persistence.ClusterMetadataManager,
 ) searchattribute.Manager {
 	return searchattribute.NewManager(timeSource, cmMgr)
 }
 
-func SAMapperProvider(params *BootstrapParams) searchattribute.Mapper {
+func SearchAttributeMapperProvider(params *BootstrapParams) searchattribute.Mapper {
 	return params.SearchAttributesMapper
 }
 

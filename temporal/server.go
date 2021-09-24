@@ -66,6 +66,8 @@ import (
 
 const (
 	mismatchLogMessage = "Supplied configuration key/value mismatches persisted cluster metadata. Continuing with the persisted value as this value cannot be changed once initialized."
+	serviceStartTimeout = time.Duration(15)*time.Second
+	serviceStopTimeout = time.Duration(60)*time.Second
 )
 
 type (
@@ -219,7 +221,7 @@ func (s *Server) Start() error {
 				return fmt.Errorf("unable to construct service %q: %w", svcName, err)
 			}
 			s.serviceApps[svcName] = histApp
-			timeoutCtx, cancelFunc := context.WithTimeout(ctx.Background(), time.Duration(15)*time.Second)
+			timeoutCtx, cancelFunc := context.WithTimeout(ctx.Background(), serviceStartTimeout)
 			err = histApp.Start(timeoutCtx)
 			cancelFunc()
 			if err != nil {
@@ -278,7 +280,9 @@ func (s *Server) Stop() {
 
 	for svcName, svcApp := range s.serviceApps {
 		go func(svc *fx.App, svcName string, svcStoppedCh <-chan struct{}) {
-			err := svc.Stop(ctx.Background())
+			stopCtx, cancelFunc := ctx.WithTimeout(ctx.Background(), serviceStopTimeout)
+			err := svc.Stop(stopCtx)
+			cancelFunc()
 			if err != nil {
 				s.logger.Error("Failed to stop service", tag.Service(svcName), tag.Error(err))
 			}
