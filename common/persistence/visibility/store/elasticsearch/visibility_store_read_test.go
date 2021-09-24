@@ -975,6 +975,44 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 	s.True(strings.HasPrefix(err.Error(), "unable to parse query"))
 }
 
+func (s *ESVisibilitySuite) TestListWorkflowExecutions_Error() {
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, p *client.SearchParameters) (*elastic.SearchResult, error) {
+			return nil, &elastic.Error{
+				Status: 400,
+				Details: &elastic.ErrorDetails{
+					Reason: "error reason",
+				},
+			}
+		})
+
+	request := &manager.ListWorkflowExecutionsRequestV2{
+		NamespaceID: testNamespaceID,
+		Namespace:   testNamespace,
+		PageSize:    10,
+		Query:       `ExecutionStatus = "Terminated"`,
+	}
+	_, err := s.visibilityStore.ListWorkflowExecutions(request)
+	s.Error(err)
+	var internalErr *serviceerror.Internal
+	s.ErrorAs(err, &internalErr)
+	s.Equal("ListWorkflowExecutions failed: elastic: Error 400 (Bad Request): error reason [type=]", internalErr.Message)
+
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, p *client.SearchParameters) (*elastic.SearchResult, error) {
+			return nil, &elastic.Error{
+				Status: 500,
+				Details: &elastic.ErrorDetails{
+					Reason: "error reason",
+				},
+			}
+		})
+	_, err = s.visibilityStore.ListWorkflowExecutions(request)
+	var unavailableErr *serviceerror.Unavailable
+	s.ErrorAs(err, &unavailableErr)
+	s.Equal("ListWorkflowExecutions failed: elastic: Error 500 (Internal Server Error): error reason [type=]", unavailableErr.Message)
+}
+
 func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV6() {
 	// Set v6 client for test.
 	mockESClientV6 := client.NewMockClient(s.controller)
