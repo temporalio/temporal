@@ -34,19 +34,32 @@ const (
 	ClientNameHeaderName              = "client-name"
 	ClientVersionHeaderName           = "client-version"
 	SupportedServerVersionsHeaderName = "supported-server-versions"
+	SupportedFeaturesHeaderName       = "supported-features"
+	SupportedFeaturesHeaderDelim      = ","
 )
 
 var (
-	versionHeaders = metadata.New(map[string]string{
+	// propagateHeaders are the headers to propagate from the frontend to other services.
+	propagateHeaders = []string{
+		ClientNameHeaderName,
+		ClientVersionHeaderName,
+		SupportedServerVersionsHeaderName,
+		SupportedFeaturesHeaderName,
+	}
+
+	internalVersionHeaders = metadata.New(map[string]string{
 		ClientNameHeaderName:              ClientNameServer,
 		ClientVersionHeaderName:           ServerVersion,
 		SupportedServerVersionsHeaderName: SupportedServerVersions,
+		SupportedFeaturesHeaderName:       AllFeatures,
 	})
 
 	cliVersionHeaders = metadata.New(map[string]string{
 		ClientNameHeaderName:              ClientNameCLI,
 		ClientVersionHeaderName:           CLIVersion,
 		SupportedServerVersionsHeaderName: SupportedServerVersions,
+		// TODO: This should include SupportedFeaturesHeaderName with a value that's taken
+		// from the Go SDK (since the cli uses the Go SDK for most operations).
 	})
 )
 
@@ -64,14 +77,14 @@ func GetValues(ctx context.Context, headerNames ...string) []string {
 	return headerValues
 }
 
-// PropagateVersions propagates version headers from incoming context to outgoing context.
+// Propagate propagates version headers from incoming context to outgoing context.
 // It copies all version headers to outgoing context only if they are exist in incoming context
 // and doesn't exist in outgoing context already.
-func PropagateVersions(ctx context.Context) context.Context {
+func Propagate(ctx context.Context) context.Context {
 	if mdIncoming, ok := metadata.FromIncomingContext(ctx); ok {
 		var headersToAppend []string
 		mdOutgoing, mdOutgoingExist := metadata.FromOutgoingContext(ctx)
-		for _, headerName := range []string{ClientNameHeaderName, ClientVersionHeaderName, SupportedServerVersionsHeaderName} {
+		for _, headerName := range propagateHeaders {
 			if incomingValue := mdIncoming.Get(headerName); len(incomingValue) > 0 {
 				if mdOutgoingExist {
 					if outgoingValue := mdOutgoing.Get(headerName); len(outgoingValue) > 0 {
@@ -94,7 +107,7 @@ func PropagateVersions(ctx context.Context) context.Context {
 
 // SetVersions sets headers for internal communications.
 func SetVersions(ctx context.Context) context.Context {
-	return metadata.NewOutgoingContext(ctx, versionHeaders)
+	return metadata.NewOutgoingContext(ctx, internalVersionHeaders)
 }
 
 // SetCLIVersions sets headers for CLI requests.
@@ -104,11 +117,12 @@ func SetCLIVersions(ctx context.Context) context.Context {
 
 // SetVersionsForTests sets headers as they would be received from the client.
 // Must be used in tests only.
-func SetVersionsForTests(ctx context.Context, clientVersion, clientName, supportedServerVersions string) context.Context {
+func SetVersionsForTests(ctx context.Context, clientVersion, clientName, supportedServerVersions, supportedFeatures string) context.Context {
 	return metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
 		ClientNameHeaderName:              clientName,
 		ClientVersionHeaderName:           clientVersion,
 		SupportedServerVersionsHeaderName: supportedServerVersions,
+		SupportedFeaturesHeaderName:       supportedFeatures,
 	}))
 }
 
