@@ -128,16 +128,59 @@ func newWorkflowTaskHandler(
 func (handler *workflowTaskHandlerImpl) handleCommands(
 	commands []*commandpb.Command,
 ) error {
-
-	for _, command := range commands {
-
+	for _, command := range filterCommandsAfterClose(commands) {
 		err := handler.handleCommand(command)
 		if err != nil || handler.stopProcessing {
 			return err
 		}
 	}
-
 	return nil
+}
+
+func filterCommandsAfterClose(commands []*commandpb.Command) []*commandpb.Command {
+	closeCommand := -1
+	for i, c := range commands {
+		if isCloseCommand(c) {
+			closeCommand = i
+			break
+		}
+	}
+
+	if closeCommand == -1 {
+		// no filter if there is no close command
+		return commands
+	}
+
+	// ignore any commands after close command, it should never happen unless SDK bug.
+	commands = commands[0 : closeCommand+1]
+
+	var filteredCommands []*commandpb.Command
+	// Ignore any commands that require further processing while workflow is running.
+	// Only 2 commands allowed: RecordMarker/UpsertSearchAttributes.
+	//   RecordMarker does not require further processing.
+	//   UpsertSearchAttributes does not require workflow to be running.
+	for _, c := range commands {
+		if c.GetCommandType() == enumspb.COMMAND_TYPE_RECORD_MARKER ||
+			c.GetCommandType() == enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES {
+			filteredCommands = append(filteredCommands, c)
+		}
+	}
+	// add close command at the end
+	filteredCommands = append(filteredCommands, commands[closeCommand])
+
+	return filteredCommands
+}
+
+func isCloseCommand(command *commandpb.Command) bool {
+	switch command.GetCommandType() {
+	case
+		enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+		enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+		enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION,
+		enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION:
+		return true
+	}
+	return false
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommand(command *commandpb.Command) error {
