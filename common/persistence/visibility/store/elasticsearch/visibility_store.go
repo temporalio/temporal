@@ -55,6 +55,8 @@ const (
 	delimiter                    = "~"
 	pointInTimeKeepAliveInterval = "1m"
 	scrollKeepAliveInterval      = "1m"
+
+	readTimeout = 16 * time.Second
 )
 
 type (
@@ -105,6 +107,11 @@ func NewVisibilityStore(
 		processorAckTimeout:      processorAckTimeout,
 		metricsClient:            metricsClient,
 	}
+}
+
+func newReadContext() context.Context {
+	ctx, _ := context.WithTimeout(context.Background(), readTimeout)
+	return ctx
 }
 
 func (s *visibilityStore) Close() {
@@ -229,8 +236,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutions(request *manager.ListWorkfl
 		return nil, err
 	}
 
-	ctx := context.Background()
-	searchResult, err := s.esClient.Search(ctx, p)
+	searchResult, err := s.esClient.Search(newReadContext(), p)
 	if err != nil {
 		return nil, convertElasticsearchClientError("ListOpenWorkflowExecutions failed", err)
 	}
@@ -252,8 +258,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutions(request *manager.ListWork
 		return nil, err
 	}
 
-	ctx := context.Background()
-	searchResult, err := s.esClient.Search(ctx, p)
+	searchResult, err := s.esClient.Search(newReadContext(), p)
 	if err != nil {
 		return nil, convertElasticsearchClientError("ListClosedWorkflowExecutions failed", err)
 	}
@@ -277,8 +282,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByType(request *manager.List
 		return nil, err
 	}
 
-	ctx := context.Background()
-	searchResult, err := s.esClient.Search(ctx, p)
+	searchResult, err := s.esClient.Search(newReadContext(), p)
 	if err != nil {
 		return nil, convertElasticsearchClientError("ListOpenWorkflowExecutionsByType failed", err)
 	}
@@ -301,8 +305,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByType(request *manager.Li
 		return nil, err
 	}
 
-	ctx := context.Background()
-	searchResult, err := s.esClient.Search(ctx, p)
+	searchResult, err := s.esClient.Search(newReadContext(), p)
 	if err != nil {
 		return nil, convertElasticsearchClientError("ListClosedWorkflowExecutionsByType failed", err)
 	}
@@ -326,8 +329,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(request *manage
 		return nil, err
 	}
 
-	ctx := context.Background()
-	searchResult, err := s.esClient.Search(ctx, p)
+	searchResult, err := s.esClient.Search(newReadContext(), p)
 	if err != nil {
 		return nil, convertElasticsearchClientError("ListOpenWorkflowExecutionsByWorkflowID failed", err)
 	}
@@ -350,8 +352,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(request *mana
 		return nil, err
 	}
 
-	ctx := context.Background()
-	searchResult, err := s.esClient.Search(ctx, p)
+	searchResult, err := s.esClient.Search(newReadContext(), p)
 	if err != nil {
 		return nil, convertElasticsearchClientError("ListClosedWorkflowExecutionsByWorkflowID failed", err)
 	}
@@ -373,8 +374,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(request *manager.
 		return nil, err
 	}
 
-	ctx := context.Background()
-	searchResult, err := s.esClient.Search(ctx, p)
+	searchResult, err := s.esClient.Search(newReadContext(), p)
 	if err != nil {
 		return nil, convertElasticsearchClientError("ListClosedWorkflowExecutionsByStatus failed", err)
 	}
@@ -401,8 +401,7 @@ func (s *visibilityStore) ListWorkflowExecutions(request *manager.ListWorkflowEx
 		p.SearchAfter = token.SearchAfter
 	}
 
-	ctx := context.Background()
-	searchResult, err := s.esClient.Search(ctx, p)
+	searchResult, err := s.esClient.Search(newReadContext(), p)
 	if err != nil {
 		return nil, convertElasticsearchClientError("ListWorkflowExecutions failed", err)
 	}
@@ -411,7 +410,7 @@ func (s *visibilityStore) ListWorkflowExecutions(request *manager.ListWorkflowEx
 }
 
 func (s *visibilityStore) ScanWorkflowExecutions(request *manager.ListWorkflowExecutionsRequestV2) (*store.InternalListWorkflowExecutionsResponse, error) {
-	ctx := context.Background()
+	ctx := newReadContext()
 
 	if esClientV7, isV7 := s.esClient.(client.ClientV7); isV7 {
 		// Elasticsearch 7.10+ can use "point in time" (PIT) instead of scroll to scan over all workflows without skipping or duplicating them.
@@ -512,8 +511,7 @@ func (s *visibilityStore) CountWorkflowExecutions(request *manager.CountWorkflow
 		return nil, err
 	}
 
-	ctx := context.Background()
-	count, err := s.esClient.Count(ctx, s.index, boolQuery)
+	count, err := s.esClient.Count(newReadContext(), s.index, boolQuery)
 	if err != nil {
 		return nil, convertElasticsearchClientError("CountWorkflowExecutions failed", err)
 	}
