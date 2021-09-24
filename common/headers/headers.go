@@ -39,6 +39,14 @@ const (
 )
 
 var (
+	// propagateHeaders are the headers to propagate from the frontend to other services.
+	propagateHeaders = []string{
+		ClientNameHeaderName,
+		ClientVersionHeaderName,
+		SupportedServerVersionsHeaderName,
+		SupportedFeaturesHeaderName,
+	}
+
 	internalVersionHeaders = metadata.New(map[string]string{
 		ClientNameHeaderName:              ClientNameServer,
 		ClientVersionHeaderName:           ServerVersion,
@@ -69,14 +77,14 @@ func GetValues(ctx context.Context, headerNames ...string) []string {
 	return headerValues
 }
 
-// PropagateVersions propagates version headers from incoming context to outgoing context.
+// PropagateHeaders propagates version headers from incoming context to outgoing context.
 // It copies all version headers to outgoing context only if they are exist in incoming context
 // and doesn't exist in outgoing context already.
-func PropagateVersions(ctx context.Context) context.Context {
+func PropagateHeaders(ctx context.Context) context.Context {
 	if mdIncoming, ok := metadata.FromIncomingContext(ctx); ok {
 		var headersToAppend []string
 		mdOutgoing, mdOutgoingExist := metadata.FromOutgoingContext(ctx)
-		for _, headerName := range []string{ClientNameHeaderName, ClientVersionHeaderName, SupportedServerVersionsHeaderName} {
+		for _, headerName := range propagateHeaders {
 			if incomingValue := mdIncoming.Get(headerName); len(incomingValue) > 0 {
 				if mdOutgoingExist {
 					if outgoingValue := mdOutgoing.Get(headerName); len(outgoingValue) > 0 {

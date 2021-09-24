@@ -118,7 +118,7 @@ func versionHeadersInterceptor(
 	invoker grpc.UnaryInvoker,
 	opts ...grpc.CallOption,
 ) error {
-	ctx = headers.PropagateVersions(ctx)
+	ctx = headers.PropagateHeaders(ctx)
 	return invoker(ctx, method, req, reply, cc, opts...)
 }
 

@@ -54,9 +54,10 @@ func (s *HeadersSuite) TestPropagateHeaders_CreateNewOutgoingContext() {
 		ClientVersionHeaderName:           "22.08.78",
 		SupportedServerVersionsHeaderName: ">21.04.16",
 		ClientNameHeaderName:              "28.08.14",
+		SupportedFeaturesHeaderName:       "my-feature",
 	}))
 
-	ctx = PropagateVersions(ctx)
+	ctx = PropagateHeaders(ctx)
 
 	md, ok := metadata.FromOutgoingContext(ctx)
 	s.True(ok)
@@ -64,6 +65,25 @@ func (s *HeadersSuite) TestPropagateHeaders_CreateNewOutgoingContext() {
 	s.Equal("22.08.78", md.Get(ClientVersionHeaderName)[0])
 	s.Equal(">21.04.16", md.Get(SupportedServerVersionsHeaderName)[0])
 	s.Equal("28.08.14", md.Get(ClientNameHeaderName)[0])
+	s.Equal("my-feature", md.Get(SupportedFeaturesHeaderName)[0])
+}
+
+func (s *HeadersSuite) TestPropagateHeaders_CreateNewOutgoingContext_SomeMissing() {
+	ctx := context.Background()
+	ctx = metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
+		ClientVersionHeaderName: "22.08.78",
+		ClientNameHeaderName:    "28.08.14",
+	}))
+
+	ctx = PropagateHeaders(ctx)
+
+	md, ok := metadata.FromOutgoingContext(ctx)
+	s.True(ok)
+
+	s.Equal("22.08.78", md.Get(ClientVersionHeaderName)[0])
+	s.Equal(0, len(md.Get(SupportedServerVersionsHeaderName)))
+	s.Equal("28.08.14", md.Get(ClientNameHeaderName)[0])
+	s.Equal(0, len(md.Get(SupportedFeaturesHeaderName)))
 }
 
 func (s *HeadersSuite) TestPropagateHeaders_UpdateExistingEmptyOutgoingContext() {
@@ -72,11 +92,12 @@ func (s *HeadersSuite) TestPropagateHeaders_UpdateExistingEmptyOutgoingContext()
 		ClientVersionHeaderName:           "22.08.78",
 		SupportedServerVersionsHeaderName: "<21.04.16",
 		ClientNameHeaderName:              "28.08.14",
+		SupportedFeaturesHeaderName:       "my-feature",
 	}))
 
 	ctx = metadata.NewOutgoingContext(ctx, metadata.MD{})
 
-	ctx = PropagateVersions(ctx)
+	ctx = PropagateHeaders(ctx)
 
 	md, ok := metadata.FromOutgoingContext(ctx)
 	s.True(ok)
@@ -84,13 +105,15 @@ func (s *HeadersSuite) TestPropagateHeaders_UpdateExistingEmptyOutgoingContext()
 	s.Equal("22.08.78", md.Get(ClientVersionHeaderName)[0])
 	s.Equal("<21.04.16", md.Get(SupportedServerVersionsHeaderName)[0])
 	s.Equal("28.08.14", md.Get(ClientNameHeaderName)[0])
+	s.Equal("my-feature", md.Get(SupportedFeaturesHeaderName)[0])
 }
 
 func (s *HeadersSuite) TestPropagateHeaders_UpdateExistingNonEmptyOutgoingContext() {
 	ctx := context.Background()
 	ctx = metadata.NewIncomingContext(ctx, metadata.New(map[string]string{
-		ClientVersionHeaderName:           "07.08.78",  // Must be ignored
-		SupportedServerVersionsHeaderName: "<07.04.16", // Must be ignored
+		ClientVersionHeaderName:           "07.08.78",   // Must be ignored
+		SupportedServerVersionsHeaderName: "<07.04.16",  // Must be ignored
+		SupportedFeaturesHeaderName:       "my-feature", // Passed through
 	}))
 
 	ctx = metadata.NewOutgoingContext(ctx, metadata.New(map[string]string{
@@ -99,7 +122,7 @@ func (s *HeadersSuite) TestPropagateHeaders_UpdateExistingNonEmptyOutgoingContex
 		ClientNameHeaderName:              "28.08.14",
 	}))
 
-	ctx = PropagateVersions(ctx)
+	ctx = PropagateHeaders(ctx)
 
 	md, ok := metadata.FromOutgoingContext(ctx)
 	s.True(ok)
@@ -107,6 +130,7 @@ func (s *HeadersSuite) TestPropagateHeaders_UpdateExistingNonEmptyOutgoingContex
 	s.Equal("22.08.78", md.Get(ClientVersionHeaderName)[0])
 	s.Equal("<21.04.16", md.Get(SupportedServerVersionsHeaderName)[0])
 	s.Equal("28.08.14", md.Get(ClientNameHeaderName)[0])
+	s.Equal("my-feature", md.Get(SupportedFeaturesHeaderName)[0])
 }
 
 func (s *HeadersSuite) TestPropagateHeaders_EmptyIncomingContext() {
@@ -118,7 +142,7 @@ func (s *HeadersSuite) TestPropagateHeaders_EmptyIncomingContext() {
 		ClientNameHeaderName:              "28.08.14",
 	}))
 
-	ctx = PropagateVersions(ctx)
+	ctx = PropagateHeaders(ctx)
 
 	md, ok := metadata.FromOutgoingContext(ctx)
 	s.True(ok)
