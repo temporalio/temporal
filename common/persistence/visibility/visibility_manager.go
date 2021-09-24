@@ -25,8 +25,10 @@
 package visibility
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -37,7 +39,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/quotas"
@@ -51,8 +52,6 @@ type (
 	//  - call underlying store (standard or advanced),
 	//  - convert response.
 	visibilityManager struct {
-		// TODO: only for memo. change interface type
-		serializer               serialization.Serializer
 		store                    store.VisibilityStore
 		readRateLimiter          quotas.RateLimiter
 		writeRateLimiter         quotas.RateLimiter
@@ -87,7 +86,6 @@ func newVisibilityManager(
 	)
 
 	return &visibilityManager{
-		serializer:               serialization.NewSerializer(),
 		store:                    store,
 		readRateLimiter:          readRateLimiter,
 		writeRateLimiter:         writeRateLimiter,
@@ -110,8 +108,12 @@ func (p *visibilityManager) RecordWorkflowExecutionStarted(request *manager.Reco
 		return persistence.ErrPersistenceLimitExceeded
 	}
 
+	requestBase, err := p.newInternalVisibilityRequestBase(request.VisibilityRequestBase)
+	if err != nil {
+		return err
+	}
 	req := &store.InternalRecordWorkflowExecutionStartedRequest{
-		InternalVisibilityRequestBase: p.newInternalVisibilityRequestBase(request.VisibilityRequestBase),
+		InternalVisibilityRequestBase: requestBase,
 	}
 
 	scope := p.metricClient.Scope(metrics.VisibilityPersistenceRecordWorkflowExecutionStartedScope, p.visibilityTypeMetricsTag)
@@ -119,11 +121,12 @@ func (p *visibilityManager) RecordWorkflowExecutionStarted(request *manager.Reco
 	scope.IncCounter(metrics.VisibilityPersistenceRequests)
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
 	defer sw.Stop()
-	err := p.store.RecordWorkflowExecutionStarted(req)
-
-	p.updateErrorMetric(scope, err)
-
-	return err
+	err = p.store.RecordWorkflowExecutionStarted(req)
+	if err != nil {
+		p.updateErrorMetric(scope, err)
+		return err
+	}
+	return nil
 }
 
 func (p *visibilityManager) RecordWorkflowExecutionClosed(request *manager.RecordWorkflowExecutionClosedRequest) error {
@@ -131,8 +134,12 @@ func (p *visibilityManager) RecordWorkflowExecutionClosed(request *manager.Recor
 		return persistence.ErrPersistenceLimitExceeded
 	}
 
+	requestBase, err := p.newInternalVisibilityRequestBase(request.VisibilityRequestBase)
+	if err != nil {
+		return err
+	}
 	req := &store.InternalRecordWorkflowExecutionClosedRequest{
-		InternalVisibilityRequestBase: p.newInternalVisibilityRequestBase(request.VisibilityRequestBase),
+		InternalVisibilityRequestBase: requestBase,
 		CloseTime:                     request.CloseTime,
 		HistoryLength:                 request.HistoryLength,
 		Retention:                     request.Retention,
@@ -142,30 +149,36 @@ func (p *visibilityManager) RecordWorkflowExecutionClosed(request *manager.Recor
 	scope.IncCounter(metrics.VisibilityPersistenceRequests)
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
 	defer sw.Stop()
-	err := p.store.RecordWorkflowExecutionClosed(req)
-
-	p.updateErrorMetric(scope, err)
-
-	return err
+	err = p.store.RecordWorkflowExecutionClosed(req)
+	if err != nil {
+		p.updateErrorMetric(scope, err)
+		return err
+	}
+	return nil
 }
 
 func (p *visibilityManager) UpsertWorkflowExecution(request *manager.UpsertWorkflowExecutionRequest) error {
 	if ok := p.writeRateLimiter.Allow(); !ok {
 		return persistence.ErrPersistenceLimitExceeded
 	}
+	requestBase, err := p.newInternalVisibilityRequestBase(request.VisibilityRequestBase)
+	if err != nil {
+		return err
+	}
 	req := &store.InternalUpsertWorkflowExecutionRequest{
-		InternalVisibilityRequestBase: p.newInternalVisibilityRequestBase(request.VisibilityRequestBase),
+		InternalVisibilityRequestBase: requestBase,
 	}
 	scope := p.metricClient.Scope(metrics.VisibilityPersistenceUpsertWorkflowExecutionScope, p.visibilityTypeMetricsTag)
 
 	scope.IncCounter(metrics.VisibilityPersistenceRequests)
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
 	defer sw.Stop()
-	err := p.store.UpsertWorkflowExecution(req)
-
-	p.updateErrorMetric(scope, err)
-
-	return err
+	err = p.store.UpsertWorkflowExecution(req)
+	if err != nil {
+		p.updateErrorMetric(scope, err)
+		return err
+	}
+	return nil
 }
 
 func (p *visibilityManager) DeleteWorkflowExecution(request *manager.VisibilityDeleteWorkflowExecutionRequest) error {
@@ -178,10 +191,11 @@ func (p *visibilityManager) DeleteWorkflowExecution(request *manager.VisibilityD
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
 	defer sw.Stop()
 	err := p.store.DeleteWorkflowExecution(request)
-
-	p.updateErrorMetric(scope, err)
-
-	return err
+	if err != nil {
+		p.updateErrorMetric(scope, err)
+		return err
+	}
+	return nil
 }
 
 func (p *visibilityManager) ListOpenWorkflowExecutions(request *manager.ListWorkflowExecutionsRequest) (*manager.ListWorkflowExecutionsResponse, error) {
@@ -195,10 +209,12 @@ func (p *visibilityManager) ListOpenWorkflowExecutions(request *manager.ListWork
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
 	defer sw.Stop()
 	response, err := p.store.ListOpenWorkflowExecutions(request)
+	if err != nil {
+		p.updateErrorMetric(scope, err)
+		return nil, err
+	}
 
-	p.updateErrorMetric(scope, err)
-
-	return p.convertInternalListResponse(response), err
+	return p.convertInternalListResponse(response, scope)
 }
 
 func (p *visibilityManager) ListClosedWorkflowExecutions(request *manager.ListWorkflowExecutionsRequest) (*manager.ListWorkflowExecutionsResponse, error) {
@@ -212,10 +228,12 @@ func (p *visibilityManager) ListClosedWorkflowExecutions(request *manager.ListWo
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
 	defer sw.Stop()
 	response, err := p.store.ListClosedWorkflowExecutions(request)
+	if err != nil {
+		p.updateErrorMetric(scope, err)
+		return nil, err
+	}
 
-	p.updateErrorMetric(scope, err)
-
-	return p.convertInternalListResponse(response), err
+	return p.convertInternalListResponse(response, scope)
 }
 
 func (p *visibilityManager) ListOpenWorkflowExecutionsByType(request *manager.ListWorkflowExecutionsByTypeRequest) (*manager.ListWorkflowExecutionsResponse, error) {
@@ -229,10 +247,12 @@ func (p *visibilityManager) ListOpenWorkflowExecutionsByType(request *manager.Li
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
 	defer sw.Stop()
 	response, err := p.store.ListOpenWorkflowExecutionsByType(request)
+	if err != nil {
+		p.updateErrorMetric(scope, err)
+		return nil, err
+	}
 
-	p.updateErrorMetric(scope, err)
-
-	return p.convertInternalListResponse(response), err
+	return p.convertInternalListResponse(response, scope)
 }
 
 func (p *visibilityManager) ListClosedWorkflowExecutionsByType(request *manager.ListWorkflowExecutionsByTypeRequest) (*manager.ListWorkflowExecutionsResponse, error) {
@@ -246,10 +266,12 @@ func (p *visibilityManager) ListClosedWorkflowExecutionsByType(request *manager.
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
 	defer sw.Stop()
 	response, err := p.store.ListClosedWorkflowExecutionsByType(request)
+	if err != nil {
+		p.updateErrorMetric(scope, err)
+		return nil, err
+	}
 
-	p.updateErrorMetric(scope, err)
-
-	return p.convertInternalListResponse(response), err
+	return p.convertInternalListResponse(response, scope)
 }
 
 func (p *visibilityManager) ListOpenWorkflowExecutionsByWorkflowID(request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*manager.ListWorkflowExecutionsResponse, error) {
@@ -263,10 +285,12 @@ func (p *visibilityManager) ListOpenWorkflowExecutionsByWorkflowID(request *mana
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
 	defer sw.Stop()
 	response, err := p.store.ListOpenWorkflowExecutionsByWorkflowID(request)
+	if err != nil {
+		p.updateErrorMetric(scope, err)
+		return nil, err
+	}
 
-	p.updateErrorMetric(scope, err)
-
-	return p.convertInternalListResponse(response), err
+	return p.convertInternalListResponse(response, scope)
 }
 
 func (p *visibilityManager) ListClosedWorkflowExecutionsByWorkflowID(request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*manager.ListWorkflowExecutionsResponse, error) {
@@ -280,10 +304,12 @@ func (p *visibilityManager) ListClosedWorkflowExecutionsByWorkflowID(request *ma
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
 	defer sw.Stop()
 	response, err := p.store.ListClosedWorkflowExecutionsByWorkflowID(request)
+	if err != nil {
+		p.updateErrorMetric(scope, err)
+		return nil, err
+	}
 
-	p.updateErrorMetric(scope, err)
-
-	return p.convertInternalListResponse(response), err
+	return p.convertInternalListResponse(response, scope)
 }
 
 func (p *visibilityManager) ListClosedWorkflowExecutionsByStatus(request *manager.ListClosedWorkflowExecutionsByStatusRequest) (*manager.ListWorkflowExecutionsResponse, error) {
@@ -297,10 +323,12 @@ func (p *visibilityManager) ListClosedWorkflowExecutionsByStatus(request *manage
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
 	defer sw.Stop()
 	response, err := p.store.ListClosedWorkflowExecutionsByStatus(request)
+	if err != nil {
+		p.updateErrorMetric(scope, err)
+		return nil, err
+	}
 
-	p.updateErrorMetric(scope, err)
-
-	return p.convertInternalListResponse(response), err
+	return p.convertInternalListResponse(response, scope)
 }
 
 func (p *visibilityManager) ListWorkflowExecutions(request *manager.ListWorkflowExecutionsRequestV2) (*manager.ListWorkflowExecutionsResponse, error) {
@@ -314,10 +342,12 @@ func (p *visibilityManager) ListWorkflowExecutions(request *manager.ListWorkflow
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
 	defer sw.Stop()
 	response, err := p.store.ListWorkflowExecutions(request)
+	if err != nil {
+		p.updateErrorMetric(scope, err)
+		return nil, err
+	}
 
-	p.updateErrorMetric(scope, err)
-
-	return p.convertInternalListResponse(response), err
+	return p.convertInternalListResponse(response, scope)
 }
 
 func (p *visibilityManager) ScanWorkflowExecutions(request *manager.ListWorkflowExecutionsRequestV2) (*manager.ListWorkflowExecutionsResponse, error) {
@@ -331,10 +361,12 @@ func (p *visibilityManager) ScanWorkflowExecutions(request *manager.ListWorkflow
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
 	defer sw.Stop()
 	response, err := p.store.ScanWorkflowExecutions(request)
+	if err != nil {
+		p.updateErrorMetric(scope, err)
+		return nil, err
+	}
 
-	p.updateErrorMetric(scope, err)
-
-	return p.convertInternalListResponse(response), err
+	return p.convertInternalListResponse(response, scope)
 }
 
 func (p *visibilityManager) CountWorkflowExecutions(request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error) {
@@ -348,13 +380,23 @@ func (p *visibilityManager) CountWorkflowExecutions(request *manager.CountWorkfl
 	sw := scope.StartTimer(metrics.VisibilityPersistenceLatency)
 	defer sw.Stop()
 	response, err := p.store.CountWorkflowExecutions(request)
-
-	p.updateErrorMetric(scope, err)
+	if err != nil {
+		p.updateErrorMetric(scope, err)
+		return nil, err
+	}
 
 	return response, err
 }
 
-func (p *visibilityManager) newInternalVisibilityRequestBase(request *manager.VisibilityRequestBase) *store.InternalVisibilityRequestBase {
+func (p *visibilityManager) newInternalVisibilityRequestBase(request *manager.VisibilityRequestBase) (*store.InternalVisibilityRequestBase, error) {
+	if request == nil {
+		return nil, nil
+	}
+	memoBlob, err := p.serializeMemo(request.Memo)
+	if err != nil {
+		return nil, err
+	}
+
 	return &store.InternalVisibilityRequestBase{
 		NamespaceID:          request.NamespaceID,
 		WorkflowID:           request.Execution.GetWorkflowId(),
@@ -363,91 +405,113 @@ func (p *visibilityManager) newInternalVisibilityRequestBase(request *manager.Vi
 		StartTime:            request.StartTime,
 		Status:               request.Status,
 		ExecutionTime:        request.ExecutionTime,
-		StateTransitionCount: request.StateTransitionCount, TaskID: request.TaskID,
-		ShardID:          request.ShardID,
-		TaskQueue:        request.TaskQueue,
-		Memo:             p.serializeMemo(request.Memo, request.NamespaceID, request.Execution.GetWorkflowId(), request.Execution.GetRunId()),
-		SearchAttributes: request.SearchAttributes,
-	}
+		StateTransitionCount: request.StateTransitionCount,
+		TaskID:               request.TaskID,
+		ShardID:              request.ShardID,
+		TaskQueue:            request.TaskQueue,
+		Memo:                 memoBlob,
+		SearchAttributes:     request.SearchAttributes,
+	}, nil
 }
 
-func (p *visibilityManager) convertInternalListResponse(internalResp *store.InternalListWorkflowExecutionsResponse) *manager.ListWorkflowExecutionsResponse {
-	if internalResp == nil {
-		return nil
+func (p *visibilityManager) convertInternalListResponse(internalResponse *store.InternalListWorkflowExecutionsResponse, scope metrics.Scope) (*manager.ListWorkflowExecutionsResponse, error) {
+	if internalResponse == nil {
+		return nil, nil
 	}
 
 	resp := &manager.ListWorkflowExecutionsResponse{}
-	resp.Executions = make([]*workflowpb.WorkflowExecutionInfo, len(internalResp.Executions))
-	for i, execution := range internalResp.Executions {
-		resp.Executions[i] = p.convertVisibilityWorkflowExecutionInfo(execution)
+	resp.Executions = make([]*workflowpb.WorkflowExecutionInfo, len(internalResponse.Executions))
+	for i, execution := range internalResponse.Executions {
+		var err error
+		resp.Executions[i], err = p.convertInternalWorkflowExecutionInfo(execution)
+		if err != nil {
+			p.updateErrorMetric(scope, err)
+			return nil, err
+		}
 	}
 
-	resp.NextPageToken = internalResp.NextPageToken
-	return resp
+	resp.NextPageToken = internalResponse.NextPageToken
+	return resp, nil
 }
 
-func (p *visibilityManager) convertVisibilityWorkflowExecutionInfo(execution *store.VisibilityWorkflowExecutionInfo) *workflowpb.WorkflowExecutionInfo {
-	memo, err := p.serializer.DeserializeVisibilityMemo(execution.Memo)
+func (p *visibilityManager) convertInternalWorkflowExecutionInfo(internalExecution *store.InternalWorkflowExecutionInfo) (*workflowpb.WorkflowExecutionInfo, error) {
+	if internalExecution == nil {
+		return nil, nil
+	}
+	memo, err := p.deserializeMemo(internalExecution.Memo)
 	if err != nil {
-		p.logger.Error("failed to deserialize memo",
-			tag.WorkflowID(execution.WorkflowID),
-			tag.WorkflowRunID(execution.RunID),
-			tag.Error(err))
+		return nil, err
 	}
 
-	convertedExecution := &workflowpb.WorkflowExecutionInfo{
+	executionInfo := &workflowpb.WorkflowExecutionInfo{
 		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: execution.WorkflowID,
-			RunId:      execution.RunID,
+			WorkflowId: internalExecution.WorkflowID,
+			RunId:      internalExecution.RunID,
 		},
 		Type: &commonpb.WorkflowType{
-			Name: execution.TypeName,
+			Name: internalExecution.TypeName,
 		},
-		StartTime:            &execution.StartTime,
-		ExecutionTime:        &execution.ExecutionTime,
+		StartTime:            &internalExecution.StartTime,
+		ExecutionTime:        &internalExecution.ExecutionTime,
 		Memo:                 memo,
-		SearchAttributes:     execution.SearchAttributes,
-		TaskQueue:            execution.TaskQueue,
-		Status:               execution.Status,
-		StateTransitionCount: execution.StateTransitionCount,
+		SearchAttributes:     internalExecution.SearchAttributes,
+		TaskQueue:            internalExecution.TaskQueue,
+		Status:               internalExecution.Status,
+		StateTransitionCount: internalExecution.StateTransitionCount,
 	}
 
 	// for close records
-	if execution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		convertedExecution.CloseTime = &execution.CloseTime
-		convertedExecution.HistoryLength = execution.HistoryLength
+	if internalExecution.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		executionInfo.CloseTime = &internalExecution.CloseTime
+		executionInfo.HistoryLength = internalExecution.HistoryLength
 	}
 
 	// Workflows created before 1.11 have ExecutionTime set to Unix epoch zero time (1/1/1970) for non-cron/non-retry case.
 	// Use StartTime as ExecutionTime for this case (if there was a backoff it must be set).
 	// Remove this "if" block when ExecutionTime field has actual correct value (added 6/9/21).
 	// Affects only non-advanced visibility.
-	if !convertedExecution.ExecutionTime.After(time.Unix(0, 0)) {
-		convertedExecution.ExecutionTime = convertedExecution.StartTime
+	if !executionInfo.ExecutionTime.After(time.Unix(0, 0)) {
+		executionInfo.ExecutionTime = executionInfo.StartTime
 	}
 
-	return convertedExecution
+	return executionInfo, nil
+}
+func (p *visibilityManager) deserializeMemo(data *commonpb.DataBlob) (*commonpb.Memo, error) {
+	if data == nil || len(data.Data) == 0 {
+		return &commonpb.Memo{}, nil
+	}
+
+	var ()
+	switch data.EncodingType {
+	case enumspb.ENCODING_TYPE_PROTO3:
+		memo := &commonpb.Memo{}
+		err := proto.Unmarshal(data.Data, memo)
+		if err != nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to deserialize memo from data blob: %v", err))
+		}
+		return memo, nil
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Invalid memo encoding in database: %s", data.GetEncodingType().String()))
+	}
 }
 
-func (p *visibilityManager) serializeMemo(visibilityMemo *commonpb.Memo, namespaceID, wID, rID string) *commonpb.DataBlob {
-	memo, err := p.serializer.SerializeVisibilityMemo(visibilityMemo, MemoEncoding)
-	if err != nil {
-		p.logger.Error("Unable to encode visibility memo",
-			tag.WorkflowNamespaceID(namespaceID),
-			tag.WorkflowID(wID),
-			tag.WorkflowRunID(rID),
-			tag.Error(err))
-	}
+func (p *visibilityManager) serializeMemo(memo *commonpb.Memo) (*commonpb.DataBlob, error) {
 	if memo == nil {
-		return &commonpb.DataBlob{}
+		memo = &commonpb.Memo{}
 	}
-	return memo
+
+	data, err := proto.Marshal(memo)
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unable to serialize memo to data blob: %v", err))
+	}
+
+	return &commonpb.DataBlob{
+		Data:         data,
+		EncodingType: MemoEncoding,
+	}, nil
 }
 
 func (p *visibilityManager) updateErrorMetric(scope metrics.Scope, err error) {
-	if err == nil {
-		return
-	}
 	switch err.(type) {
 	case *serviceerror.InvalidArgument:
 		scope.IncCounter(metrics.VisibilityPersistenceInvalidArgument)
@@ -457,6 +521,12 @@ func (p *visibilityManager) updateErrorMetric(scope metrics.Scope, err error) {
 		scope.IncCounter(metrics.VisibilityPersistenceFailures)
 	case *serviceerror.ResourceExhausted:
 		scope.IncCounter(metrics.VisibilityPersistenceResourceExhausted)
+		scope.IncCounter(metrics.VisibilityPersistenceFailures)
+	case *serviceerror.Internal:
+		scope.IncCounter(metrics.VisibilityPersistenceInternal)
+		scope.IncCounter(metrics.VisibilityPersistenceFailures)
+	case *serviceerror.Unavailable:
+		scope.IncCounter(metrics.VisibilityPersistenceUnavailable)
 		scope.IncCounter(metrics.VisibilityPersistenceFailures)
 	case *persistence.ConditionFailedError:
 		scope.IncCounter(metrics.VisibilityPersistenceConditionFailed)

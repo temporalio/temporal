@@ -337,11 +337,11 @@ func (s *visibilityStore) CountWorkflowExecutions(
 
 func (s *visibilityStore) rowToInfo(
 	row *sqlplugin.VisibilityRow,
-) *store.VisibilityWorkflowExecutionInfo {
+) *store.InternalWorkflowExecutionInfo {
 	if row.ExecutionTime.UnixNano() == 0 {
 		row.ExecutionTime = row.StartTime
 	}
-	info := &store.VisibilityWorkflowExecutionInfo{
+	info := &store.InternalWorkflowExecutionInfo{
 		WorkflowID:    row.WorkflowID,
 		RunID:         row.RunID,
 		TypeName:      row.WorkflowTypeName,
@@ -386,7 +386,7 @@ func (s *visibilityStore) listWorkflowExecutions(
 		return &store.InternalListWorkflowExecutionsResponse{}, nil
 	}
 
-	var infos = make([]*store.VisibilityWorkflowExecutionInfo, len(rows))
+	var infos = make([]*store.InternalWorkflowExecutionInfo, len(rows))
 	for i, row := range rows {
 		infos[i] = s.rowToInfo(&row)
 	}

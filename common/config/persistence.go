@@ -71,17 +71,22 @@ func (c *Persistence) Validate() error {
 	return nil
 }
 
-// IsAdvancedVisibilityConfigExist returns whether user specified advancedVisibilityStore in config
-func (c *Persistence) IsAdvancedVisibilityConfigExist() bool {
+// StandardVisibilityConfigExist returns whether user specified visibilityStore in config
+func (c *Persistence) StandardVisibilityConfigExist() bool {
+	return c.VisibilityStore != ""
+}
+
+// AdvancedVisibilityConfigExist returns whether user specified advancedVisibilityStore in config
+func (c *Persistence) AdvancedVisibilityConfigExist() bool {
 	return c.AdvancedVisibilityStore != ""
 }
 
 func (c *Persistence) validateAdvancedVisibility() error {
-	if c.VisibilityStore == "" && c.AdvancedVisibilityStore == "" {
+	if !c.StandardVisibilityConfigExist() && !c.AdvancedVisibilityConfigExist() {
 		return errors.New("persistence config: one of visibilityStore or advancedVisibilityStore must be specified")
 	}
 
-	if c.AdvancedVisibilityStore == "" {
+	if !c.AdvancedVisibilityConfigExist() {
 		return nil
 	}
 
@@ -90,11 +95,7 @@ func (c *Persistence) validateAdvancedVisibility() error {
 		return fmt.Errorf("persistence config: advanced visibility datastore %q: missing config", c.AdvancedVisibilityStore)
 	}
 
-	if advancedVisibilityDataStore.ElasticSearch == nil {
-		return fmt.Errorf("persistence config: advanced visibility datastore %q: must provide config for elasticsearch store", c.AdvancedVisibilityStore)
-	}
-
-	if err := advancedVisibilityDataStore.ElasticSearch.validate(c.AdvancedVisibilityStore); err != nil {
+	if err := advancedVisibilityDataStore.Elasticsearch.Validate(c.AdvancedVisibilityStore); err != nil {
 		return err
 	}
 

@@ -50,37 +50,31 @@ type (
 
 	FaultInjectionShardStore struct {
 		baseShardStore persistence.ShardStore
-		config         *config.FaultInjection
 		ErrorGenerator ErrorGenerator
 	}
 
 	FaultInjectionTaskStore struct {
 		baseTaskStore  persistence.TaskStore
-		config         *config.FaultInjection
 		ErrorGenerator ErrorGenerator
 	}
 
 	FaultInjectionMetadataStore struct {
 		baseMetadataStore persistence.MetadataStore
-		config            *config.FaultInjection
 		ErrorGenerator    ErrorGenerator
 	}
 
 	FaultInjectionClusterMetadataStore struct {
 		baseCMStore    persistence.ClusterMetadataStore
-		config         *config.FaultInjection
 		ErrorGenerator ErrorGenerator
 	}
 
 	FaultInjectionExecutionStore struct {
 		baseExecutionStore persistence.ExecutionStore
-		config             *config.FaultInjection
 		ErrorGenerator     ErrorGenerator
 	}
 
 	FaultInjectionQueue struct {
 		baseQueue      persistence.Queue
-		config         *config.FaultInjection
 		ErrorGenerator ErrorGenerator
 	}
 )
@@ -107,8 +101,8 @@ var defaultErrors = []FaultWeight{
 	},
 }
 
-func newErrorGenerator(config *config.FaultInjection, errorWeights []FaultWeight) ErrorGenerator {
-	return NewDefaultErrorGenerator(config.Rate, errorWeights)
+func newErrorGenerator(rate float64, errorWeights []FaultWeight) ErrorGenerator {
+	return NewDefaultErrorGenerator(rate, errorWeights)
 }
 
 func NewFaultInjectionDatastoreFactory(
@@ -116,9 +110,8 @@ func NewFaultInjectionDatastoreFactory(
 	baseFactory DataStoreFactory,
 ) *FaultInjectionDataStoreFactory {
 	errorGenerator := newErrorGenerator(
-		config,
+		config.Rate,
 		[]FaultWeight{
-			// from sqldb see NewShardStore
 			{
 				errFactory: func(data string) error { return fmt.Errorf("FaultInjectionDataStoreFactory: %s", data) },
 				weight:     1,
@@ -152,7 +145,7 @@ func (d *FaultInjectionDataStoreFactory) NewTaskStore() (persistence.TaskStore, 
 		if err != nil {
 			return nil, err
 		}
-		d.TaskStore, err = NewFaultInjectionTaskStore(d.config, baseFactory)
+		d.TaskStore, err = NewFaultInjectionTaskStore(d.ErrorGenerator.Rate(), baseFactory)
 		if err != nil {
 			return nil, err
 		}
@@ -166,7 +159,7 @@ func (d *FaultInjectionDataStoreFactory) NewShardStore() (persistence.ShardStore
 		if err != nil {
 			return nil, err
 		}
-		d.ShardStore, err = NewFaultInjectionShardStore(d.config, baseFactory)
+		d.ShardStore, err = NewFaultInjectionShardStore(d.ErrorGenerator.Rate(), baseFactory)
 		if err != nil {
 			return nil, err
 		}
@@ -180,7 +173,7 @@ func (d *FaultInjectionDataStoreFactory) NewMetadataStore() (persistence.Metadat
 		if err != nil {
 			return nil, err
 		}
-		d.MetadataStore, err = NewFaultInjectionMetadataStore(d.config, baseStore)
+		d.MetadataStore, err = NewFaultInjectionMetadataStore(d.ErrorGenerator.Rate(), baseStore)
 		if err != nil {
 			return nil, err
 		}
@@ -194,7 +187,7 @@ func (d *FaultInjectionDataStoreFactory) NewExecutionStore() (persistence.Execut
 		if err != nil {
 			return nil, err
 		}
-		d.ExecutionStore, err = NewFaultInjectionExecutionStore(d.config, baseStore)
+		d.ExecutionStore, err = NewFaultInjectionExecutionStore(d.ErrorGenerator.Rate(), baseStore)
 		if err != nil {
 			return nil, err
 		}
@@ -209,7 +202,7 @@ func (d *FaultInjectionDataStoreFactory) NewQueue(queueType persistence.QueueTyp
 		if err != nil {
 			return baseQueue, err
 		}
-		d.Queue, err = NewFaultInjectionQueue(d.config, baseQueue)
+		d.Queue, err = NewFaultInjectionQueue(d.ErrorGenerator.Rate(), baseQueue)
 		if err != nil {
 			return nil, err
 		}
@@ -224,7 +217,7 @@ func (d *FaultInjectionDataStoreFactory) NewClusterMetadataStore() (persistence.
 		if err != nil {
 			return nil, err
 		}
-		d.ClusterMDStore, err = NewFaultInjectionClusterMetadataStore(d.config, baseStore)
+		d.ClusterMDStore, err = NewFaultInjectionClusterMetadataStore(d.ErrorGenerator.Rate(), baseStore)
 		if err != nil {
 			return nil, err
 		}
@@ -233,8 +226,8 @@ func (d *FaultInjectionDataStoreFactory) NewClusterMetadataStore() (persistence.
 	return d.ClusterMDStore, nil
 }
 
-func NewFaultInjectionQueue(config *config.FaultInjection, baseQueue persistence.Queue) (*FaultInjectionQueue, error) {
-	errorGenerator := newErrorGenerator(config,
+func NewFaultInjectionQueue(rate float64, baseQueue persistence.Queue) (*FaultInjectionQueue, error) {
+	errorGenerator := newErrorGenerator(rate,
 		append(defaultErrors,
 			FaultWeight{
 				errFactory: func(msg string) error {
@@ -250,7 +243,6 @@ func NewFaultInjectionQueue(config *config.FaultInjection, baseQueue persistence
 
 	return &FaultInjectionQueue{
 		baseQueue:      baseQueue,
-		config:         config,
 		ErrorGenerator: errorGenerator,
 	}, nil
 }
@@ -353,12 +345,12 @@ func (q *FaultInjectionQueue) UpdateRate(rate float64) {
 	q.ErrorGenerator.UpdateRate(rate)
 }
 
-func NewFaultInjectionExecutionStore(config *config.FaultInjection, executionStore persistence.ExecutionStore) (
+func NewFaultInjectionExecutionStore(rate float64, executionStore persistence.ExecutionStore) (
 	*FaultInjectionExecutionStore,
 	error,
 ) {
 	errorGenerator := newErrorGenerator(
-		config,
+		rate,
 		append(
 			defaultErrors,
 			FaultWeight{
@@ -374,7 +366,6 @@ func NewFaultInjectionExecutionStore(config *config.FaultInjection, executionSto
 	)
 	return &FaultInjectionExecutionStore{
 		baseExecutionStore: executionStore,
-		config:             config,
 		ErrorGenerator:     errorGenerator,
 	}, nil
 }
@@ -691,14 +682,13 @@ func (e *FaultInjectionExecutionStore) UpdateRate(rate float64) {
 	e.ErrorGenerator.UpdateRate(rate)
 }
 
-func NewFaultInjectionClusterMetadataStore(config *config.FaultInjection, baseStore persistence.ClusterMetadataStore) (
+func NewFaultInjectionClusterMetadataStore(rate float64, baseStore persistence.ClusterMetadataStore) (
 	*FaultInjectionClusterMetadataStore,
 	error,
 ) {
-	errorGenerator := newErrorGenerator(config, defaultErrors)
+	errorGenerator := newErrorGenerator(rate, defaultErrors)
 	return &FaultInjectionClusterMetadataStore{
 		baseCMStore:    baseStore,
-		config:         config,
 		ErrorGenerator: errorGenerator,
 	}, nil
 }
@@ -760,13 +750,12 @@ func (c *FaultInjectionClusterMetadataStore) UpdateRate(rate float64) {
 }
 
 func NewFaultInjectionMetadataStore(
-	config *config.FaultInjection,
+	rate float64,
 	metadataStore persistence.MetadataStore,
 ) (*FaultInjectionMetadataStore, error) {
-	errorGenerator := newErrorGenerator(config, defaultErrors)
+	errorGenerator := newErrorGenerator(rate, defaultErrors)
 	return &FaultInjectionMetadataStore{
 		baseMetadataStore: metadataStore,
-		config:            config,
 		ErrorGenerator:    errorGenerator,
 	}, nil
 }
@@ -842,14 +831,13 @@ func (m *FaultInjectionMetadataStore) UpdateRate(rate float64) {
 }
 
 func NewFaultInjectionTaskStore(
-	config *config.FaultInjection,
+	rate float64,
 	baseTaskStore persistence.TaskStore,
 ) (*FaultInjectionTaskStore, error) {
-	errorGenerator := newErrorGenerator(config, defaultErrors)
+	errorGenerator := newErrorGenerator(rate, defaultErrors)
 
 	return &FaultInjectionTaskStore{
 		baseTaskStore:  baseTaskStore,
-		config:         config,
 		ErrorGenerator: errorGenerator,
 	}, nil
 }
@@ -876,7 +864,6 @@ func (t *FaultInjectionTaskStore) GetTaskQueue(request *persistence.InternalGetT
 	if err := t.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	// todomigryz newPersistedTypeMismatchError
 	return t.baseTaskStore.GetTaskQueue(request)
 }
 
@@ -956,7 +943,7 @@ func (t *FaultInjectionTaskStore) UpdateRate(rate float64) {
 }
 
 func NewFaultInjectionShardStore(
-	config *config.FaultInjection,
+	rate float64,
 	baseShardStore persistence.ShardStore,
 ) (*FaultInjectionShardStore, error) {
 	errorWeights := append(
@@ -971,10 +958,9 @@ func NewFaultInjectionShardStore(
 			weight: 1,
 		},
 	)
-	errorGenerator := newErrorGenerator(config, errorWeights)
+	errorGenerator := newErrorGenerator(rate, errorWeights)
 	return &FaultInjectionShardStore{
 		baseShardStore: baseShardStore,
-		config:         config,
 		ErrorGenerator: errorGenerator,
 	}, nil
 }

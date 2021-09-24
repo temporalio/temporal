@@ -28,118 +28,41 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
-
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/migration"
-	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/rpc"
-	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/configs"
 )
 
 // Service represents the history service
-type Service struct {
-	resource.Resource
+type (
+	Service struct {
+		resource.Resource
 
-	status            int32
-	handler           *Handler
-	visibilityManager manager.VisibilityManager
-	config            *configs.Config
+		self *fx.App
 
-	server *grpc.Server
-}
+		status            int32
+		handler           *Handler
+		visibilityManager manager.VisibilityManager
+		config            *configs.Config
 
-// NewService builds a new history service
+		server *grpc.Server
+	}
+)
+
 func NewService(
-	params *resource.BootstrapParams,
-) (*Service, error) {
-	logger := params.Logger
-
-	serviceConfig := configs.NewConfig(
-		dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger),
-		params.PersistenceConfig.NumHistoryShards,
-		params.PersistenceConfig.IsAdvancedVisibilityConfigExist(),
-		params.ESConfig.GetVisibilityIndex(),
-	)
-
-	serviceResource, err := resource.New(
-		params,
-		common.HistoryServiceName,
-		serviceConfig.PersistenceMaxQPS,
-		serviceConfig.PersistenceGlobalMaxQPS,
-		serviceConfig.ThrottledLogRPS,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	metricsInterceptor := interceptor.NewTelemetryInterceptor(
-		serviceResource.GetNamespaceCache(),
-		serviceResource.GetMetricsClient(),
-		metrics.HistoryAPIMetricsScopes(),
-		logger,
-	)
-	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
-		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
-		map[string]int{},
-	)
-
-	grpcServerOptions, err := params.RPCFactory.GetInternodeGRPCServerOptions()
-	if err != nil {
-		logger.Fatal("creating gRPC server options failed", tag.Error(err))
-	}
-	grpcServerOptions = append(
-		grpcServerOptions,
-		grpc.ChainUnaryInterceptor(
-			rpc.ServiceErrorInterceptor,
-			metrics.NewServerMetricsContextInjectorInterceptor(),
-			metrics.NewServerMetricsTrailerPropagatorInterceptor(logger),
-			metricsInterceptor.Intercept,
-			rateLimiterInterceptor.Intercept,
-		),
-	)
-
-	esProcessorConfig := &elasticsearch.ProcessorConfig{
-		IndexerConcurrency:       serviceConfig.IndexerConcurrency,
-		ESProcessorNumOfWorkers:  serviceConfig.ESProcessorNumOfWorkers,
-		ESProcessorBulkActions:   serviceConfig.ESProcessorBulkActions,
-		ESProcessorBulkSize:      serviceConfig.ESProcessorBulkSize,
-		ESProcessorFlushInterval: serviceConfig.ESProcessorFlushInterval,
-		ESProcessorAckTimeout:    serviceConfig.ESProcessorAckTimeout,
-	}
-
-	visibilityMgr, err := visibility.NewManager(
-		params.PersistenceConfig,
-		params.PersistenceServiceResolver,
-		params.ESConfig.GetVisibilityIndex(),
-		params.ESClient,
-		esProcessorConfig,
-		serviceResource.GetSearchAttributesProvider(),
-		params.SearchAttributesMapper,
-		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,
-		serviceConfig.StandardVisibilityPersistenceMaxWriteQPS,
-		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,
-		serviceConfig.AdvancedVisibilityPersistenceMaxWriteQPS,
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // history visibility never read
-		serviceConfig.AdvancedVisibilityWritingMode,
-		params.MetricsClient,
-		params.Logger,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
+	serviceResource resource.Resource,
+	grpcServerOptions []grpc.ServerOption,
+	serviceConfig *configs.Config,
+	visibilityMgr manager.VisibilityManager,
+) *Service {
 	return &Service{
 		Resource:          serviceResource,
 		status:            common.DaemonStatusInitialized,
@@ -147,7 +70,7 @@ func NewService(
 		handler:           NewHandler(serviceResource, serviceConfig, visibilityMgr),
 		visibilityManager: visibilityMgr,
 		config:            serviceConfig,
-	}, nil
+	}
 }
 
 // Start starts the service

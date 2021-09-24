@@ -99,7 +99,7 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembe
 	if len(request.NextPageToken) == 16 {
 		lastSeenHostId = request.NextPageToken
 	} else if len(request.NextPageToken) > 0 {
-		return nil, serviceerror.NewUnavailable("page token is corrupted.")
+		return nil, serviceerror.NewInternal("page token is corrupted.")
 	}
 
 	now := time.Now().UTC()

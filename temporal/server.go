@@ -25,7 +25,7 @@
 package temporal
 
 import (
-	"errors"
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -33,6 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.uber.org/fx"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -63,7 +64,9 @@ import (
 )
 
 const (
-	mismatchLogMessage = "Supplied configuration key/value mismatches persisted cluster metadata. Continuing with the persisted value as this value cannot be changed once initialized."
+	mismatchLogMessage  = "Supplied configuration key/value mismatches persisted cluster metadata. Continuing with the persisted value as this value cannot be changed once initialized."
+	serviceStartTimeout = time.Duration(15) * time.Second
+	serviceStopTimeout  = time.Duration(60) * time.Second
 )
 
 type (
@@ -71,6 +74,7 @@ type (
 	Server struct {
 		so                *serverOptions
 		services          map[string]common.Daemon
+		serviceApps       map[string]*fx.App
 		serviceStoppedChs map[string]chan struct{}
 		stoppedCh         chan interface{}
 		logger            log.Logger
@@ -95,6 +99,7 @@ func NewServer(opts ...ServerOption) *Server {
 	s := &Server{
 		so:                newServerOptions(opts),
 		services:          make(map[string]common.Daemon),
+		serviceApps:       make(map[string]*fx.App),
 		serviceStoppedChs: make(map[string]chan struct{}),
 	}
 	return s
@@ -131,9 +136,7 @@ func (s *Server) Start() error {
 	}
 	dc := dynamicconfig.NewCollection(s.so.dynamicConfigClient, s.logger)
 
-	advancedVisibilityWritingMode := dc.GetStringProperty(dynamicconfig.AdvancedVisibilityWritingMode, common.GetDefaultAdvancedVisibilityWritingMode(s.so.config.Persistence.IsAdvancedVisibilityConfigExist()))()
-
-	err = verifyPersistenceCompatibleVersion(s.so.config.Persistence, s.so.persistenceServiceResolver, advancedVisibilityWritingMode != common.AdvancedVisibilityWritingModeOn)
+	err = verifyPersistenceCompatibleVersion(s.so.config.Persistence, s.so.persistenceServiceResolver)
 	if err != nil {
 		return err
 	}
@@ -186,7 +189,7 @@ func (s *Server) Start() error {
 		}
 	}
 
-	esConfig, esClient, err := s.getESConfigClient(advancedVisibilityWritingMode)
+	esConfig, esClient, err := s.getESConfigAndClient()
 	if err != nil {
 		return err
 	}
@@ -197,12 +200,34 @@ func (s *Server) Start() error {
 			return err
 		}
 
+		s.serviceStoppedChs[svcName] = make(chan struct{})
+
 		var svc common.Daemon
 		switch svcName {
 		case primitives.FrontendService:
 			svc, err = frontend.NewService(params)
 		case primitives.HistoryService:
-			svc, err = history.NewService(params)
+			// todo: generalize this custom case logic as other services onboard fx
+			histApp := fx.New(
+				fx.Supply(
+					params,
+					s.serviceStoppedChs[svcName],
+				),
+				history.Module)
+			err = histApp.Err()
+			if err != nil {
+				close(s.serviceStoppedChs[svcName])
+				return fmt.Errorf("unable to construct service %q: %w", svcName, err)
+			}
+			s.serviceApps[svcName] = histApp
+			timeoutCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStartTimeout)
+			err = histApp.Start(timeoutCtx)
+			cancelFunc()
+			if err != nil {
+				close(s.serviceStoppedChs[svcName])
+				return fmt.Errorf("unable to start service %q: %w", svcName, err)
+			}
+			continue
 		case primitives.MatchingService:
 			svc, err = matching.NewService(params)
 		case primitives.WorkerService:
@@ -211,18 +236,17 @@ func (s *Server) Start() error {
 			return fmt.Errorf("unknown service %q", svcName)
 		}
 		if err != nil {
+			close(s.serviceStoppedChs[svcName])
 			return fmt.Errorf("unable to start service %q: %w", svcName, err)
 		}
 
 		s.services[svcName] = svc
-		s.serviceStoppedChs[svcName] = make(chan struct{})
 
 		go func(svc common.Daemon, svcStoppedCh chan<- struct{}) {
 			// Start is blocked until Stop() is called.
 			svc.Start()
 			close(svcStoppedCh)
 		}(svc, s.serviceStoppedChs[svcName])
-
 	}
 
 	if s.so.blockingStart {
@@ -238,7 +262,7 @@ func (s *Server) Start() error {
 // Stop stops the server.
 func (s *Server) Stop() {
 	var wg sync.WaitGroup
-	wg.Add(len(s.services))
+	wg.Add(len(s.services) + len(s.serviceApps))
 	close(s.stoppedCh)
 
 	for svcName, svc := range s.services {
@@ -251,6 +275,25 @@ func (s *Server) Stop() {
 			}
 			wg.Done()
 		}(svc, svcName, s.serviceStoppedChs[svcName])
+	}
+
+	for svcName, svcApp := range s.serviceApps {
+		go func(svc *fx.App, svcName string, svcStoppedCh <-chan struct{}) {
+			stopCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStopTimeout)
+			err := svc.Stop(stopCtx)
+			cancelFunc()
+			if err != nil {
+				s.logger.Error("Failed to stop service", tag.Service(svcName), tag.Error(err))
+			}
+
+			// verify "Start" goroutine returned
+			select {
+			case <-svcStoppedCh:
+			case <-time.After(time.Minute):
+				s.logger.Error("Timed out (1 minute) waiting for service to stop.", tag.Service(svcName))
+			}
+			wg.Done()
+		}(svcApp, svcName, s.serviceStoppedChs[svcName])
 	}
 	wg.Wait()
 
@@ -269,10 +312,9 @@ func (s *Server) newBootstrapParams(
 	dc *dynamicconfig.Collection,
 	serverReporter metrics.Reporter,
 	sdkReporter metrics.Reporter,
-	esConfig *config.Elasticsearch,
+	esConfig *esclient.Config,
 	esClient esclient.Client,
 ) (*resource.BootstrapParams, error) {
-
 	params := &resource.BootstrapParams{
 		Name:                     svcName,
 		Logger:                   s.logger,
@@ -288,7 +330,7 @@ func (s *Server) newBootstrapParams(
 	}
 
 	svcCfg := s.so.config.Services[svcName]
-	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, s.logger, s.so.tlsConfigProvider)
+	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, s.logger, s.so.tlsConfigProvider, dc)
 	params.RPCFactory = rpcFactory
 
 	// Ringpop uses a different port to register handlers, this map is needed to resolve
@@ -386,44 +428,39 @@ func (s *Server) newBootstrapParams(
 	return params, nil
 }
 
-func (s *Server) getESConfigClient(advancedVisibilityWritingMode string) (*config.Elasticsearch, esclient.Client, error) {
-	if advancedVisibilityWritingMode == common.AdvancedVisibilityWritingModeOff {
+func (s *Server) getESConfigAndClient() (*esclient.Config, esclient.Client, error) {
+	if !s.so.config.Persistence.AdvancedVisibilityConfigExist() {
 		return nil, nil, nil
 	}
 
 	advancedVisibilityStore, ok := s.so.config.Persistence.DataStores[s.so.config.Persistence.AdvancedVisibilityStore]
 	if !ok {
-		return nil, nil, fmt.Errorf("unable to find advanced visibility store in config for %q key", s.so.config.Persistence.AdvancedVisibilityStore)
-	}
-
-	indexName := advancedVisibilityStore.ElasticSearch.GetVisibilityIndex()
-	if len(indexName) == 0 {
-		return nil, nil, errors.New("visibility index in missing in Elasticsearch config")
+		return nil, nil, fmt.Errorf("persistence config: advanced visibility datastore %q: missing config", s.so.config.Persistence.AdvancedVisibilityStore)
 	}
 
 	if s.so.elasticsearchHttpClient == nil {
 		var err error
-		s.so.elasticsearchHttpClient, err = esclient.NewAwsHttpClient(advancedVisibilityStore.ElasticSearch.AWSRequestSigning)
+		s.so.elasticsearchHttpClient, err = esclient.NewAwsHttpClient(advancedVisibilityStore.Elasticsearch.AWSRequestSigning)
 		if err != nil {
 			return nil, nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
 		}
 	}
 
-	esClient, err := esclient.NewClient(advancedVisibilityStore.ElasticSearch, s.so.elasticsearchHttpClient, s.logger)
+	esClient, err := esclient.NewClient(advancedVisibilityStore.Elasticsearch, s.so.elasticsearchHttpClient, s.logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to create Elasticsearch client: %w", err)
 	}
 
-	return advancedVisibilityStore.ElasticSearch, esClient, nil
+	return advancedVisibilityStore.Elasticsearch, esClient, nil
 }
 
-func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceServiceResolver resolver.ServiceResolver, checkVisibility bool) error {
+func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceServiceResolver resolver.ServiceResolver) error {
 	// cassandra schema version validation
-	if err := cassandra.VerifyCompatibleVersion(config, persistenceServiceResolver, checkVisibility); err != nil {
+	if err := cassandra.VerifyCompatibleVersion(config, persistenceServiceResolver); err != nil {
 		return fmt.Errorf("cassandra schema version compatibility check failed: %w", err)
 	}
 	// sql schema version validation
-	if err := sql.VerifyCompatibleVersion(config, persistenceServiceResolver, checkVisibility); err != nil {
+	if err := sql.VerifyCompatibleVersion(config, persistenceServiceResolver); err != nil {
 		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
 	}
 	return nil

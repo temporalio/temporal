@@ -81,7 +81,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 		t.logger.Error("unable to notify workflow creation", tag.Error(err))
 	}
 
-	return int64(resp.NewMutableStateStats.HistorySizeDiff), nil
+	return int64(resp.NewMutableStateStats.HistoryStatistics.SizeDiff), nil
 }
 
 func (t *TransactionImpl) ConflictResolveWorkflowExecution(
@@ -122,14 +122,14 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 	if err := NotifyNewHistoryMutationEvent(engine, currentWorkflowMutation); err != nil {
 		t.logger.Error("unable to notify workflow mutation", tag.Error(err))
 	}
-	resetHistorySizeDiff := int64(resp.ResetMutableStateStats.HistorySizeDiff)
+	resetHistorySizeDiff := int64(resp.ResetMutableStateStats.HistoryStatistics.SizeDiff)
 	newHistorySizeDiff := int64(0)
 	if resp.NewMutableStateStats != nil {
-		newHistorySizeDiff = int64(resp.NewMutableStateStats.HistorySizeDiff)
+		newHistorySizeDiff = int64(resp.NewMutableStateStats.HistoryStatistics.SizeDiff)
 	}
 	currentHistorySizeDiff := int64(0)
 	if resp.CurrentMutableStateStats != nil {
-		currentHistorySizeDiff = int64(resp.CurrentMutableStateStats.HistorySizeDiff)
+		currentHistorySizeDiff = int64(resp.CurrentMutableStateStats.HistoryStatistics.SizeDiff)
 	}
 	return resetHistorySizeDiff, newHistorySizeDiff, currentHistorySizeDiff, nil
 }
@@ -164,10 +164,10 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	if err := NotifyNewHistorySnapshotEvent(engine, newWorkflowSnapshot); err != nil {
 		t.logger.Error("unable to notify workflow creation", tag.Error(err))
 	}
-	updateHistorySizeDiff := int64(resp.UpdateMutableStateStats.HistorySizeDiff)
+	updateHistorySizeDiff := int64(resp.UpdateMutableStateStats.HistoryStatistics.SizeDiff)
 	newHistorySizeDiff := int64(0)
 	if resp.NewMutableStateStats != nil {
-		newHistorySizeDiff = int64(resp.NewMutableStateStats.HistorySizeDiff)
+		newHistorySizeDiff = int64(resp.NewMutableStateStats.HistoryStatistics.SizeDiff)
 	}
 	return updateHistorySizeDiff, newHistorySizeDiff, nil
 }

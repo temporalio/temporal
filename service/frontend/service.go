@@ -315,7 +315,7 @@ func NewService(
 		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,
 		serviceConfig.AdvancedVisibilityPersistenceMaxWriteQPS,
 		serviceConfig.EnableReadVisibilityFromES,
-		dynamicconfig.GetStringPropertyFn(common.AdvancedVisibilityWritingModeOff), // frontend visibility never write
+		dynamicconfig.GetStringPropertyFn(visibility.AdvancedVisibilityWritingModeOff), // frontend visibility never write
 		params.MetricsClient,
 		params.Logger,
 	)

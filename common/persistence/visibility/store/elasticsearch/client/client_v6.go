@@ -35,7 +35,6 @@ import (
 	"github.com/olivere/elastic/v7"
 	enumspb "go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 )
 
@@ -49,7 +48,7 @@ type (
 var _ Client = (*clientV6)(nil)
 
 // newClientV6 create a ES client
-func newClientV6(cfg *config.Elasticsearch, httpClient *http.Client, logger log.Logger) (*clientV6, error) {
+func newClientV6(cfg *Config, httpClient *http.Client, logger log.Logger) (*clientV6, error) {
 	options := []elastic6.ClientOptionFunc{
 		elastic6.SetURL(cfg.URL.String()),
 		elastic6.SetBasicAuth(cfg.Username, cfg.Password),

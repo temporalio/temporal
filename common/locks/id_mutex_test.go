@@ -25,12 +25,10 @@
 package locks
 
 import (
-	"log"
-	"os"
 	"sync"
 	"testing"
 
-	farm "github.com/dgryski/go-farm"
+	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -137,10 +135,6 @@ func TestIDMutexSuite(t *testing.T) {
 }
 
 func (s *idMutexSuite) SetupSuite() {
-	if testing.Verbose() {
-		log.SetOutput(os.Stdout)
-	}
-
 }
 
 func (s *idMutexSuite) TearDownSuite() {

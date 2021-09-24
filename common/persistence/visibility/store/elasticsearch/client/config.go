@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package config
+package client
 
 import (
 	"fmt"
@@ -37,7 +37,7 @@ const (
 
 // Config for connecting to Elasticsearch
 type (
-	Elasticsearch struct {
+	Config struct {
 		Version                      string                    `yaml:"version"`
 		URL                          url.URL                   `yaml:"url"` //nolint:govet
 		Username                     string                    `yaml:"username"`
@@ -78,7 +78,7 @@ type (
 )
 
 // GetVisibilityIndex return visibility index name from Elasticsearch config or empty string if it is not defined.
-func (cfg *Elasticsearch) GetVisibilityIndex() string {
+func (cfg *Config) GetVisibilityIndex() string {
 	if cfg == nil {
 		// Empty string is be used as default index name when Elasticsearch is not configured.
 		return ""
@@ -86,13 +86,17 @@ func (cfg *Elasticsearch) GetVisibilityIndex() string {
 	return cfg.Indices[VisibilityAppName]
 }
 
-func (cfg *Elasticsearch) validate(storeName string) error {
+func (cfg *Config) Validate(storeName string) error {
+	if cfg == nil {
+		return fmt.Errorf("persistence config: advanced visibility datastore %q: must provide config for \"elasticsearch\"", storeName)
+	}
+
 	if len(cfg.Indices) < 1 {
 		return fmt.Errorf("persistence config: advanced visibility datastore %q: missing indices", storeName)
 
 	}
 	if cfg.Indices[VisibilityAppName] == "" {
-		return fmt.Errorf("persistence config: advanced visibility datastore %q: missing %q key", storeName, VisibilityAppName)
+		return fmt.Errorf("persistence config: advanced visibility datastore %q indices configuration: missing %q key", storeName, VisibilityAppName)
 	}
 	return nil
 }

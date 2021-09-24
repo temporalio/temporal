@@ -96,7 +96,7 @@ func reverselyLinkNode(
 	node, ok := transactionIDToNode[transactionID]
 	// sanity check node ID <-> transaction ID being unique
 	if !ok || node.nodeID != tailNodeID {
-		return nil, serviceerror.NewUnavailable(
+		return nil, serviceerror.NewInternal(
 			fmt.Sprintf("unable to find or verify the tail history node, node ID: %v, transaction ID: %v",
 				tailNodeID,
 				tailTransactionID,
@@ -108,7 +108,7 @@ func reverselyLinkNode(
 	nodes = append(nodes, node)
 	for node.nodeID > common.FirstEventID {
 		if prevNode, ok := transactionIDToNode[node.prevTransactionID]; !ok {
-			return nil, serviceerror.NewUnavailable(
+			return nil, serviceerror.NewInternal(
 				fmt.Sprintf("unable to back trace history node, node ID: %v, transaction ID: %v, prev transaction ID: %v",
 					node.nodeID,
 					node.transactionID,
@@ -125,7 +125,7 @@ func reverselyLinkNode(
 	// node.nodeID == common.FirstEventID
 	// node.prevTransactionID == 0
 	if node.nodeID != common.FirstEventID || node.prevTransactionID != 0 {
-		return nil, serviceerror.NewUnavailable(
+		return nil, serviceerror.NewInternal(
 			fmt.Sprintf("unable to back trace history node, node ID: %v, transaction ID: %v, prev transaction ID: %v",
 				node.nodeID,
 				node.transactionID,

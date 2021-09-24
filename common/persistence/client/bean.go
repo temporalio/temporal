@@ -54,7 +54,8 @@ type (
 		shardManager              persistence.ShardManager
 		executionManager          persistence.ExecutionManager
 
-		factory Factory
+		factory        Factory
+		faultInjection *FaultInjectionDataStoreFactory
 
 		sync.RWMutex
 	}

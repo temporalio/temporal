@@ -203,10 +203,8 @@ func (e *matchingEngineImpl) getTaskQueueManager(taskQueue *taskQueueID, taskQue
 	if err != nil {
 		return nil, err
 	}
-	e.logger.Info("", tag.LifeCycleStarting, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType))
 	mgr.Start()
 	e.taskQueues[*taskQueue] = mgr
-	e.logger.Info("", tag.LifeCycleStarted, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType))
 	return mgr, nil
 }
 
@@ -215,17 +213,6 @@ func (e *matchingEngineImpl) updateTaskQueue(taskQueue *taskQueueID, mgr taskQue
 	e.taskQueuesLock.Lock()
 	defer e.taskQueuesLock.Unlock()
 	e.taskQueues[*taskQueue] = mgr
-}
-
-func (e *matchingEngineImpl) removeTaskQueueManager(delTQM taskQueueManager) {
-	queueID := delTQM.QueueID()
-	e.taskQueuesLock.Lock()
-	defer e.taskQueuesLock.Unlock()
-	foundTQM, ok := e.taskQueues[*queueID]
-	if !ok || foundTQM != delTQM {
-		return
-	}
-	delete(e.taskQueues, *queueID)
 }
 
 // AddWorkflowTask either delivers task directly to waiting poller or save it into task queue persistence.

@@ -213,7 +213,7 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 		}
 
 	default:
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("CreteWorkflowExecution: unknown mode: %v", request.Mode))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("CreteWorkflowExecution: unknown mode: %v", request.Mode))
 	}
 
 	if err := createOrUpdateCurrentExecution(ctx,

@@ -25,41 +25,43 @@
 package client
 
 import (
-	"fmt"
-	"net/http"
+	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/resolver"
 )
 
-func NewClient(config *Config, httpClient *http.Client, logger log.Logger) (Client, error) {
-	switch config.Version {
-	case "v6":
-		return newClientV6(config, httpClient, logger)
-	case "v7", "":
-		return newClientV7(config, httpClient, logger)
-	default:
-		return nil, fmt.Errorf("not supported Elasticsearch version: %v", config.Version)
-	}
+type (
+	PersistenceMaxQps dynamicconfig.IntPropertyFn
+	ClusterName       string
+)
+
+var FactoryModule = fx.Options(
+	fx.Provide(NewFactoryImplProvider),
+	fx.Provide(BindFactory),
+)
+
+func BindFactory(f *factoryImpl) Factory {
+	return f
 }
 
-func NewCLIClient(url string, version string) (CLIClient, error) {
-	switch version {
-	case "v6":
-		return newSimpleClientV6(url)
-	case "v7", "":
-		return newSimpleClientV7(url)
-	default:
-		return nil, fmt.Errorf("not supported Elasticsearch version: %v", version)
-	}
-}
-
-func NewIntegrationTestsClient(url string, version string) (IntegrationTestsClient, error) {
-	switch version {
-	case "v6":
-		return newSimpleClientV6(url)
-	case "v7":
-		return newSimpleClientV7(url)
-	default:
-		return nil, fmt.Errorf("not supported Elasticsearch version: %v", version)
-	}
+func NewFactoryImplProvider(
+	cfg *config.Persistence,
+	r resolver.ServiceResolver,
+	persistenceMaxQPS PersistenceMaxQps,
+	abstractDataStoreFactory AbstractDataStoreFactory,
+	clusterName ClusterName,
+	metricsClient metrics.Client,
+	logger log.Logger,
+) *factoryImpl {
+	return NewFactoryImpl(cfg,
+		r,
+		dynamicconfig.IntPropertyFn(persistenceMaxQPS),
+		abstractDataStoreFactory,
+		string(clusterName),
+		metricsClient,
+		logger)
 }

@@ -35,7 +35,9 @@ import (
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/persistence/visibility"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 
 	"google.golang.org/grpc"
@@ -105,7 +107,7 @@ type (
 		archiverMetadata                 carchiver.ArchivalMetadata
 		archiverProvider                 provider.ArchiverProvider
 		historyConfig                    *HistoryConfig
-		esConfig                         *config.Elasticsearch
+		esConfig                         *esclient.Config
 		esClient                         esclient.Client
 		workerConfig                     *WorkerConfig
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
@@ -136,7 +138,7 @@ type (
 		ArchiverProvider                 provider.ArchiverProvider
 		EnableReadHistoryFromArchival    bool
 		HistoryConfig                    *HistoryConfig
-		ESConfig                         *config.Elasticsearch
+		ESConfig                         *esclient.Config
 		ESClient                         esclient.Client
 		WorkerConfig                     *WorkerConfig
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
@@ -150,7 +152,7 @@ type (
 )
 
 // NewTemporal returns an instance that hosts full temporal in one process
-func NewTemporal(params *TemporalParams) Temporal {
+func NewTemporal(params *TemporalParams) *temporalImpl {
 	return &temporalImpl{
 		logger:                           params.Logger,
 		clusterMetadataConfig:            params.ClusterMetadataConfig,
@@ -393,7 +395,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		esDataStoreName := "es-visibility"
 		params.PersistenceConfig.AdvancedVisibilityStore = esDataStoreName
 		params.PersistenceConfig.DataStores[esDataStoreName] = config.DataStore{
-			ElasticSearch: c.esConfig,
+			Elasticsearch: c.esConfig,
 		}
 	}
 
@@ -471,13 +473,22 @@ func (c *temporalImpl) startHistory(
 			esDataStoreName := "es-visibility"
 			params.PersistenceConfig.AdvancedVisibilityStore = esDataStoreName
 			params.PersistenceConfig.DataStores[esDataStoreName] = config.DataStore{
-				ElasticSearch: c.esConfig,
+				Elasticsearch: c.esConfig,
 			}
 		}
 
-		historyService, err := history.NewService(params)
+		stoppedCh := make(chan struct{})
+		var historyService *history.Service
+		app := fx.New(
+			fx.Supply(
+				params,
+				stoppedCh,
+			),
+			history.Module,
+			fx.Populate(&historyService))
+		err = app.Err()
 		if err != nil {
-			params.Logger.Fatal("unable to start history service", tag.Error(err))
+			params.Logger.Fatal("unable to construct history service", tag.Error(err))
 		}
 
 		if c.mockAdminClient != nil {
@@ -683,7 +694,7 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
 	client.OverrideValue(dynamicconfig.ReplicationTaskProcessorStartWait, time.Nanosecond)
 
 	if c.workerConfig.EnableIndexer {
-		client.OverrideValue(dynamicconfig.AdvancedVisibilityWritingMode, common.AdvancedVisibilityWritingModeDual)
+		client.OverrideValue(dynamicconfig.AdvancedVisibilityWritingMode, visibility.AdvancedVisibilityWritingModeDual)
 	}
 	if c.historyConfig.HistoryCountLimitWarn != 0 {
 		client.OverrideValue(dynamicconfig.HistoryCountLimitWarn, c.historyConfig.HistoryCountLimitWarn)
