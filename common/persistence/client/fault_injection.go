@@ -83,19 +83,19 @@ type (
 var defaultErrors = []FaultWeight{
 	{
 		errFactory: func(msg string) error {
-			return serviceerror.NewUnavailable(msg)
+			return serviceerror.NewUnavailable(fmt.Sprintf("%s, error: serviceerror.NewUnavailable", msg))
 		},
 		weight: 1,
 	},
 	{
 		errFactory: func(msg string) error {
-			return &persistence.TimeoutError{Msg: msg}
+			return &persistence.TimeoutError{Msg: fmt.Sprintf("%s, error: persistence.TimeoutError", msg)}
 		},
 		weight: 1,
 	},
 	{
 		errFactory: func(msg string) error {
-			return serviceerror.NewResourceExhausted(msg)
+			return serviceerror.NewResourceExhausted(fmt.Sprintf("%s, error: serviceerror.NewResourceExhausted", msg))
 		},
 		weight: 1,
 	},
