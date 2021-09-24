@@ -32,6 +32,8 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/uber-go/tally"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.uber.org/fx"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -58,7 +60,6 @@ import (
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
-	"go.uber.org/fx"
 )
 
 const (
@@ -289,7 +290,7 @@ func (s *Server) newBootstrapParams(
 	}
 
 	svcCfg := s.so.config.Services[svcName]
-	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, s.logger, s.so.tlsConfigProvider)
+	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, s.logger, s.so.tlsConfigProvider, dc)
 	params.RPCFactory = rpcFactory
 
 	// Ringpop uses a different port to register handlers, this map is needed to resolve
