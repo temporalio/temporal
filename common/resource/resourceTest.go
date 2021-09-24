@@ -320,11 +320,6 @@ func (s *Test) GetSDKClient() sdkclient.Client {
 	return s.SDKClient
 }
 
-// GetFrontendRawClient for testing
-func (s *Test) GetFrontendRawClient() workflowservice.WorkflowServiceClient {
-	return s.FrontendClient
-}
-
 // GetFrontendClient for testing
 func (s *Test) GetFrontendClient() workflowservice.WorkflowServiceClient {
 	return s.FrontendClient

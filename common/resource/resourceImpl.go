@@ -35,6 +35,7 @@ import (
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 
@@ -501,11 +502,6 @@ func (h *Impl) GetWorkerServiceResolver() membership.ServiceResolver {
 // GetSDKClient return sdk client
 func (h *Impl) GetSDKClient() sdkclient.Client {
 	return h.sdkClient
-}
-
-// GetFrontendRawClient return frontend client without retry policy
-func (h *Impl) GetFrontendRawClient() workflowservice.WorkflowServiceClient {
-	return h.frontendRawClient
 }
 
 // GetFrontendClient return frontend client with retry policy

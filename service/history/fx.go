@@ -25,6 +25,8 @@
 package history
 
 import (
+	"context"
+
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 
@@ -48,13 +50,14 @@ var Module = fx.Options(
 	fx.Provide(ParamsExpandProvider), // BootstrapParams should be deprecated
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
-	fx.Provide(ResourceProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(ESProcessorConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
+	resource.Module,
 	fx.Provide(NewService),
+	fx.Invoke(ServiceLifetimeHooks),
 )
 
 func ParamsExpandProvider(params *resource.BootstrapParams) (
@@ -82,7 +85,9 @@ func ConfigProvider(
 		esConfig.GetVisibilityIndex())
 }
 
-func ResourceProvider(params *resource.BootstrapParams, serviceConfig *configs.Config) (resource.Resource, error) {
+func ResourceProvider(
+	params *resource.BootstrapParams,
+	serviceConfig *configs.Config) (resource.Resource, error) {
 	return resource.New(
 		params,
 		common.HistoryServiceName,
@@ -173,4 +178,38 @@ func VisibilityManagerProvider(
 		params.MetricsClient,
 		params.Logger,
 	)
+}
+
+func ServiceProvider(
+	serviceResource resource.Resource,
+	grpcServerOptions []grpc.ServerOption,
+	serviceConfig *configs.Config,
+	visibilityMgr manager.VisibilityManager,
+) *Service {
+	return NewService(serviceResource, grpcServerOptions, serviceConfig, visibilityMgr)
+}
+
+func ServiceLifetimeHooks(
+	lc fx.Lifecycle,
+	svcStoppedCh chan struct{},
+	svc *Service,
+) {
+	lc.Append(
+		fx.Hook{
+			OnStart: func(context.Context) error {
+				go func(svc common.Daemon, svcStoppedCh chan<- struct{}) {
+					// Start is blocked until Stop() is called.
+					svc.Start()
+					close(svcStoppedCh)
+				}(svc, svcStoppedCh)
+
+				return nil
+			},
+			OnStop: func(ctx context.Context) error {
+				svc.Stop()
+				return nil
+			},
+		},
+	)
+
 }
