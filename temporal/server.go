@@ -65,9 +65,9 @@ import (
 )
 
 const (
-	mismatchLogMessage = "Supplied configuration key/value mismatches persisted cluster metadata. Continuing with the persisted value as this value cannot be changed once initialized."
-	serviceStartTimeout = time.Duration(15)*time.Second
-	serviceStopTimeout = time.Duration(60)*time.Second
+	mismatchLogMessage  = "Supplied configuration key/value mismatches persisted cluster metadata. Continuing with the persisted value as this value cannot be changed once initialized."
+	serviceStartTimeout = time.Duration(15) * time.Second
+	serviceStopTimeout  = time.Duration(60) * time.Second
 )
 
 type (

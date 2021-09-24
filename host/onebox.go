@@ -483,7 +483,7 @@ func (c *temporalImpl) startHistory(
 			fx.Supply(
 				params,
 				stoppedCh,
-				),
+			),
 			history.Module,
 			fx.Populate(&historyService))
 		err = app.Err()
