@@ -25,7 +25,7 @@
 package workflow
 
 import (
-	ctx "context"
+	"context"
 	"errors"
 	"sync"
 	"testing"
@@ -98,37 +98,37 @@ func (s *historyCacheSuite) TestHistoryCacheBasic() {
 		RunId:      uuid.New(),
 	}
 	mockMS1 := NewMockMutableState(s.controller)
-	context, release, err := s.cache.GetOrCreateWorkflowExecution(
-		ctx.Background(),
+	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
 		namespaceID,
 		execution1,
 		CallerTypeAPI,
 	)
 	s.Nil(err)
-	context.(*ContextImpl).MutableState = mockMS1
+	ctx.(*ContextImpl).MutableState = mockMS1
 	release(nil)
-	context, release, err = s.cache.GetOrCreateWorkflowExecution(
-		ctx.Background(),
+	ctx, release, err = s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
 		namespaceID,
 		execution1,
 		CallerTypeAPI,
 	)
 	s.Nil(err)
-	s.Equal(mockMS1, context.(*ContextImpl).MutableState)
+	s.Equal(mockMS1, ctx.(*ContextImpl).MutableState)
 	release(nil)
 
 	execution2 := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
 	}
-	context, release, err = s.cache.GetOrCreateWorkflowExecution(
-		ctx.Background(),
+	ctx, release, err = s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
 		namespaceID,
 		execution2,
 		CallerTypeAPI,
 	)
 	s.Nil(err)
-	s.NotEqual(mockMS1, context.(*ContextImpl).MutableState)
+	s.NotEqual(mockMS1, ctx.(*ContextImpl).MutableState)
 	release(nil)
 }
 
@@ -141,8 +141,8 @@ func (s *historyCacheSuite) TestHistoryCachePinning() {
 		RunId:      uuid.New(),
 	}
 
-	context, release, err := s.cache.GetOrCreateWorkflowExecution(
-		ctx.Background(),
+	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
 		namespaceID,
 		we,
 		CallerTypeAPI,
@@ -156,7 +156,7 @@ func (s *historyCacheSuite) TestHistoryCachePinning() {
 
 	// Cache is full because context is pinned, should get an error now
 	_, _, err2 := s.cache.GetOrCreateWorkflowExecution(
-		ctx.Background(),
+		context.Background(),
 		namespaceID,
 		we2,
 		CallerTypeAPI,
@@ -167,7 +167,7 @@ func (s *historyCacheSuite) TestHistoryCachePinning() {
 	release(err2)
 
 	_, release2, err3 := s.cache.GetOrCreateWorkflowExecution(
-		ctx.Background(),
+		context.Background(),
 		namespaceID,
 		we2,
 		CallerTypeAPI,
@@ -177,13 +177,13 @@ func (s *historyCacheSuite) TestHistoryCachePinning() {
 
 	// Old context should be evicted.
 	newContext, release, err4 := s.cache.GetOrCreateWorkflowExecution(
-		ctx.Background(),
+		context.Background(),
 		namespaceID,
 		we,
 		CallerTypeAPI,
 	)
 	s.Nil(err4)
-	s.False(context == newContext)
+	s.False(ctx == newContext)
 	release(err4)
 }
 
@@ -196,8 +196,8 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 		RunId:      uuid.New(),
 	}
 
-	context, release, err := s.cache.GetOrCreateWorkflowExecution(
-		ctx.Background(),
+	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
 		namespaceID,
 		we,
 		CallerTypeAPI,
@@ -205,31 +205,31 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 	s.Nil(err)
 	// since we are just testing whether the release function will clear the cache
 	// all we need is a fake MutableState
-	context.(*ContextImpl).MutableState = NewMockMutableState(s.controller)
+	ctx.(*ContextImpl).MutableState = NewMockMutableState(s.controller)
 	release(nil)
 
 	// since last time, the release function receive a nil error
 	// the ms builder will not be cleared
-	context, release, err = s.cache.GetOrCreateWorkflowExecution(
-		ctx.Background(),
+	ctx, release, err = s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
 		namespaceID,
 		we,
 		CallerTypeAPI,
 	)
 	s.Nil(err)
-	s.NotNil(context.(*ContextImpl).MutableState)
+	s.NotNil(ctx.(*ContextImpl).MutableState)
 	release(errors.New("some random error message"))
 
 	// since last time, the release function receive a non-nil error
 	// the ms builder will be cleared
-	context, release, err = s.cache.GetOrCreateWorkflowExecution(
-		ctx.Background(),
+	ctx, release, err = s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
 		namespaceID,
 		we,
 		CallerTypeAPI,
 	)
 	s.Nil(err)
-	s.Nil(context.(*ContextImpl).MutableState)
+	s.Nil(ctx.(*ContextImpl).MutableState)
 	release(nil)
 }
 
@@ -247,18 +247,18 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess() {
 	stopChan := make(chan struct{})
 	testFn := func() {
 		<-stopChan
-		context, release, err := s.cache.GetOrCreateWorkflowExecution(
-			ctx.Background(),
+		ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
+			context.Background(),
 			namespaceID,
 			we,
 			CallerTypeAPI,
 		)
 		s.Nil(err)
 		// since each time the builder is reset to nil
-		s.Nil(context.(*ContextImpl).MutableState)
+		s.Nil(ctx.(*ContextImpl).MutableState)
 		// since we are just testing whether the release function will clear the cache
 		// all we need is a fake MutableState
-		context.(*ContextImpl).MutableState = NewMockMutableState(s.controller)
+		ctx.(*ContextImpl).MutableState = NewMockMutableState(s.controller)
 		release(errors.New("some random error message"))
 		waitGroup.Done()
 	}
@@ -270,8 +270,8 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess() {
 	close(stopChan)
 	waitGroup.Wait()
 
-	context, release, err := s.cache.GetOrCreateWorkflowExecution(
-		ctx.Background(),
+	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
 		namespaceID,
 		we,
 		CallerTypeAPI,
@@ -279,6 +279,6 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess() {
 	s.Nil(err)
 	// since we are just testing whether the release function will clear the cache
 	// all we need is a fake MutableState
-	s.Nil(context.(*ContextImpl).MutableState)
+	s.Nil(ctx.(*ContextImpl).MutableState)
 	release(nil)
 }
