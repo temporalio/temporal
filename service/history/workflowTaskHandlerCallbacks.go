@@ -424,7 +424,7 @@ Update_History_Loop:
 		}
 
 		binChecksum := request.GetBinaryChecksum()
-		if _, ok := namespaceEntry.GetConfig().GetBadBinaries().GetBinaries()[binChecksum]; ok {
+		if err := namespaceEntry.VerifyBinaryChecksum(binChecksum); err != nil {
 			wtFailedCause = NewWorkflowTaskFailedCause(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY, serviceerror.NewInvalidArgument(fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum)))
 		} else {
 			namespace := namespaceEntry.GetInfo().Name

@@ -167,7 +167,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	stickyTl := "stickyTaskQueue"
 	identity := "testIdentity"
 
-	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache,
+	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache, tests.LocalNamespaceEntry,
 		log.NewTestLogger(), we.GetRunId())
 	executionInfo := msBuilder.GetExecutionInfo()
 	executionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
@@ -286,7 +286,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 		},
 	}
 
-	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache,
+	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache, tests.LocalNamespaceEntry,
 		log.NewTestLogger(), runID)
 	ms := workflow.TestCloneToProto(msBuilder)
 	gwmsResponse := &p.GetWorkflowExecutionResponse{State: ms}

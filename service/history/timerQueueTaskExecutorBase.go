@@ -119,7 +119,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		return err
 	}
 	clusterConfiguredForHistoryArchival := t.shard.GetService().GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
-	namespaceConfiguredForHistoryArchival := namespaceCacheEntry.GetConfig().HistoryArchivalState == enumspb.ARCHIVAL_STATE_ENABLED
+	namespaceConfiguredForHistoryArchival := namespaceCacheEntry.HistoryArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED
 	archiveHistory := clusterConfiguredForHistoryArchival && namespaceConfiguredForHistoryArchival
 
 	// TODO: @ycyang once archival backfill is in place cluster:paused && namespace:enabled should be a nop rather than a delete
@@ -183,7 +183,7 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 			Namespace:            namespaceCacheEntry.GetInfo().Name,
 			ShardID:              t.shard.GetShardID(),
 			Targets:              []archiver.ArchivalTarget{archiver.ArchiveTargetHistory},
-			HistoryURI:           namespaceCacheEntry.GetConfig().HistoryArchivalUri,
+			HistoryURI:           namespaceCacheEntry.HistoryArchivalState().URI,
 			NextEventID:          msBuilder.GetNextEventID(),
 			BranchToken:          branchToken,
 			CloseFailoverVersion: closeFailoverVersion,

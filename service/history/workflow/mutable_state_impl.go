@@ -4305,7 +4305,7 @@ func (e *MutableStateImpl) closeTransactionHandleWorkflowReset(
 	}
 	if _, pt := FindAutoResetPoint(
 		e.timeSource,
-		namespaceEntry.GetConfig().BadBinaries,
+		namespaceEntry.VerifyBinaryChecksum,
 		e.GetExecutionInfo().AutoResetPoints,
 	); pt != nil {
 		if err := e.taskGenerator.GenerateWorkflowResetTasks(
