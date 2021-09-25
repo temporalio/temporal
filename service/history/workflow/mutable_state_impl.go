@@ -1778,7 +1778,7 @@ func (e *MutableStateImpl) AddActivityTaskScheduledEvent(
 		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction)
-		return nil, nil, e.createCallerError(opTag, "ActivityID: " + command.GetActivityId())
+		return nil, nil, e.createCallerError(opTag, "ActivityID: "+command.GetActivityId())
 	}
 
 	event := e.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command)
@@ -2773,7 +2773,7 @@ func (e *MutableStateImpl) AddTimerStartedEvent(
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowTimerID(timerID))
-		return nil, nil, e.createCallerError(opTag, "TimerID: " + command.GetTimerId())
+		return nil, nil, e.createCallerError(opTag, "TimerID: "+command.GetTimerId())
 	}
 
 	event := e.hBuilder.AddTimerStartedEvent(workflowTaskCompletedEventID, command)
@@ -2870,7 +2870,7 @@ func (e *MutableStateImpl) AddTimerCanceledEvent(
 				tag.WorkflowEventID(e.GetNextEventID()),
 				tag.ErrorTypeInvalidHistoryAction,
 				tag.WorkflowTimerID(timerID))
-			return nil, e.createCallerError(opTag, "TimerID: " + command.GetTimerId())
+			return nil, e.createCallerError(opTag, "TimerID: "+command.GetTimerId())
 		}
 		timerStartedID = timerFiredEvent.GetTimerFiredEventAttributes().GetStartedEventId()
 	} else {
