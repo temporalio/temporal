@@ -22,15 +22,42 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package namespacetest
+package namespace
 
 import (
-	"go.temporal.io/server/common/namespace"
+	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/server/common/persistence"
 )
 
-func SetActiveCluster(name string) namespace.EntryMutation {
-	return func(ns *persistence.GetNamespaceResponse) {
-		ns.Namespace.ReplicationConfig.ActiveClusterName = name
-	}
+type entryMutationFunc func(*persistence.GetNamespaceResponse)
+
+func (f entryMutationFunc) apply(ns *persistence.GetNamespaceResponse) {
+	f(ns)
+}
+
+// WithActiveCluster assigns the active cluster to a CacheEntry during a Clone
+// operation
+func WithActiveCluster(name string) EntryMutation {
+	return entryMutationFunc(
+		func(ns *persistence.GetNamespaceResponse) {
+			ns.Namespace.ReplicationConfig.ActiveClusterName = name
+		})
+}
+
+// WithBadBinary adds a bad binary checksum to a CacheEntry during a Clone
+// operation
+func WithBadBinary(chksum string) EntryMutation {
+	return entryMutationFunc(
+		func(ns *persistence.GetNamespaceResponse) {
+			ns.Namespace.Config.BadBinaries.Binaries[chksum] =
+				&namespacepb.BadBinaryInfo{}
+		})
+}
+
+// WithID assigns the ID to a CacheEntry during a Clone operation
+func WithID(id string) EntryMutation {
+	return entryMutationFunc(
+		func(ns *persistence.GetNamespaceResponse) {
+			ns.Namespace.Info.Id = id
+		})
 }

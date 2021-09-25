@@ -35,6 +35,41 @@ import (
 	persistence "go.temporal.io/server/common/persistence"
 )
 
+// MockEntryMutation is a mock of EntryMutation interface.
+type MockEntryMutation struct {
+	ctrl     *gomock.Controller
+	recorder *MockEntryMutationMockRecorder
+}
+
+// MockEntryMutationMockRecorder is the mock recorder for MockEntryMutation.
+type MockEntryMutationMockRecorder struct {
+	mock *MockEntryMutation
+}
+
+// NewMockEntryMutation creates a new mock instance.
+func NewMockEntryMutation(ctrl *gomock.Controller) *MockEntryMutation {
+	mock := &MockEntryMutation{ctrl: ctrl}
+	mock.recorder = &MockEntryMutationMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockEntryMutation) EXPECT() *MockEntryMutationMockRecorder {
+	return m.recorder
+}
+
+// apply mocks base method.
+func (m *MockEntryMutation) apply(arg0 *persistence.GetNamespaceResponse) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "apply", arg0)
+}
+
+// apply indicates an expected call of apply.
+func (mr *MockEntryMutationMockRecorder) apply(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "apply", reflect.TypeOf((*MockEntryMutation)(nil).apply), arg0)
+}
+
 // MockClusterInfo is a mock of ClusterInfo interface.
 type MockClusterInfo struct {
 	ctrl     *gomock.Controller

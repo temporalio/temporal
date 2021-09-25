@@ -80,6 +80,11 @@ const (
 )
 
 type (
+	// EntryMutation changes a CacheEntry "in-flight" during a Clone operation.
+	EntryMutation interface {
+		apply(*persistence.GetNamespaceResponse)
+	}
+
 	ClusterInfo interface {
 		IsGlobalNamespaceEnabled() bool
 		GetCurrentClusterName() string
@@ -599,9 +604,7 @@ func FromPersistentState(
 	}
 }
 
-type EntryMutation func(*persistence.GetNamespaceResponse)
-
-func (entry *CacheEntry) CloneWith(ms ...EntryMutation) *CacheEntry {
+func (entry *CacheEntry) Clone(ms ...EntryMutation) *CacheEntry {
 	newEntry := entry.duplicate()
 	r := persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
@@ -616,7 +619,7 @@ func (entry *CacheEntry) CloneWith(ms ...EntryMutation) *CacheEntry {
 		NotificationVersion: newEntry.notificationVersion,
 	}
 	for _, m := range ms {
-		m(&r)
+		m.apply(&r)
 	}
 	return FromPersistentState(entry.thisCluster, &r)
 }
@@ -634,14 +637,14 @@ func (entry *CacheEntry) duplicate() *CacheEntry {
 		result.config.BadBinaries = &namespacepb.BadBinaries{
 			Binaries: make(map[string]*namespacepb.BadBinaryInfo, 0),
 		}
-	}
-	if result.config.BadBinaries.Binaries == nil {
+	} else if result.config.BadBinaries.Binaries == nil {
 		result.config.BadBinaries.Binaries = make(map[string]*namespacepb.BadBinaryInfo, 0)
 	}
 
 	result.replicationConfig = proto.Clone(entry.replicationConfig).(*persistencespb.NamespaceReplicationConfig)
 	result.configVersion = entry.configVersion
 	result.failoverVersion = entry.failoverVersion
+
 	result.isGlobalNamespace = entry.isGlobalNamespace
 	result.failoverNotificationVersion = entry.failoverNotificationVersion
 	result.notificationVersion = entry.notificationVersion

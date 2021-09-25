@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/namespace/namespacetest"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -96,8 +95,8 @@ func (s *taskPriorityAssignerSuite) TestGetNamespaceInfo_Success_Active() {
 }
 
 func (s *taskPriorityAssignerSuite) TestGetNamespaceInfo_Success_Passive() {
-	entry := tests.GlobalNamespaceEntry.CloneWith(
-		namespacetest.SetActiveCluster(cluster.TestAlternativeClusterName))
+	entry := tests.GlobalNamespaceEntry.Clone(
+		namespace.WithActiveCluster(cluster.TestAlternativeClusterName))
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(entry, nil)
 
 	namespace, isActive, err := s.priorityAssigner.getNamespaceInfo(tests.NamespaceID)
@@ -149,8 +148,8 @@ func (s *taskPriorityAssignerSuite) TestAssign_ReplicationTask() {
 }
 
 func (s *taskPriorityAssignerSuite) TestAssign_StandbyTask() {
-	entry := tests.GlobalChildNamespaceEntry.CloneWith(
-		namespacetest.SetActiveCluster(cluster.TestAlternativeClusterName))
+	entry := tests.GlobalChildNamespaceEntry.Clone(
+		namespace.WithActiveCluster(cluster.TestAlternativeClusterName))
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(entry, nil)
 
 	mockTask := NewMockqueueTask(s.controller)
