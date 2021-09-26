@@ -691,9 +691,14 @@ func (entry *CacheEntry) VerifyBinaryChecksum(cksum string) error {
 	return nil
 }
 
-// GetInfo return the namespace info
-func (entry *CacheEntry) GetInfo() *persistencespb.NamespaceInfo {
-	return entry.info
+// ID observes this namespace's permanent unique identifier in string form.
+func (entry *CacheEntry) ID() string {
+	return entry.info.Id
+}
+
+// Name observes this namespace's configured name.
+func (entry *CacheEntry) Name() string {
+	return entry.info.Name
 }
 
 // ActiveClusterName observes the name of the cluster that is currently active

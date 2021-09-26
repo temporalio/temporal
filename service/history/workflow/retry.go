@@ -208,7 +208,7 @@ func SetupNewWorkflowForRetryOrCron(
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.New(),
-		Namespace:                newMutableState.GetNamespaceEntry().GetInfo().Name,
+		Namespace:                newMutableState.GetNamespaceEntry().Name(),
 		WorkflowId:               newExecution.WorkflowId,
 		TaskQueue:                tq,
 		WorkflowType:             wType,
@@ -229,7 +229,7 @@ func SetupNewWorkflowForRetryOrCron(
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:              newMutableState.GetNamespaceEntry().GetInfo().Id,
+		NamespaceId:              newMutableState.GetNamespaceEntry().ID(),
 		StartRequest:             createRequest,
 		ParentExecutionInfo:      parentInfo,
 		LastCompletionResult:     lastCompletionResult,

@@ -242,7 +242,7 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 	request := &manager.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID: namespaceID,
-			Namespace:   namespaceEntry.GetInfo().Name,
+			Namespace:   namespaceEntry.Name(),
 			Execution: commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -284,7 +284,7 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 	request := &manager.UpsertWorkflowExecutionRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID: namespaceID,
-			Namespace:   namespaceEntry.GetInfo().Name,
+			Namespace:   namespaceEntry.Name(),
 			Execution: commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -420,7 +420,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 		return t.visibilityMgr.RecordWorkflowExecutionClosed(&manager.RecordWorkflowExecutionClosedRequest{
 			VisibilityRequestBase: &manager.VisibilityRequestBase{
 				NamespaceID: namespaceID,
-				Namespace:   namespaceEntry.GetInfo().Name,
+				Namespace:   namespaceEntry.Name(),
 				Execution: commonpb.WorkflowExecution{
 					WorkflowId: workflowID,
 					RunId:      runID,

@@ -192,7 +192,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	_, err = t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
 		ArchiveRequest: &archiver.ArchiveRequest{
 			NamespaceID:      namespaceID,
-			Namespace:        namespaceEntry.GetInfo().Name,
+			Namespace:        namespaceEntry.Name(),
 			WorkflowID:       workflowID,
 			RunID:            runID,
 			WorkflowTypeName: workflowTypeName,

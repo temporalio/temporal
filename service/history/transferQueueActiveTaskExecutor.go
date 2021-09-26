@@ -302,7 +302,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
 	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
 	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
-	namespace := mutableState.GetNamespaceEntry().GetInfo().Name
+	namespace := mutableState.GetNamespaceEntry().Name()
 	children := copyChildWorkflowInfos(mutableState.GetPendingChildExecutionInfos())
 
 	// NOTE: do not access anything related mutable state after this lock release
@@ -399,7 +399,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 	if err != nil {
 		return err
 	}
-	targetNamespace := targetNamespaceEntry.GetInfo().Name
+	targetNamespace := targetNamespaceEntry.Name()
 
 	// handle workflow cancel itself
 	if task.GetNamespaceId() == task.GetTargetNamespaceId() && task.GetWorkflowId() == task.GetTargetWorkflowId() {
@@ -493,7 +493,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	if err != nil {
 		return err
 	}
-	targetNamespace := targetNamespaceEntry.GetInfo().Name
+	targetNamespace := targetNamespaceEntry.Name()
 
 	// handle workflow signal itself
 	if task.GetNamespaceId() == task.GetTargetNamespaceId() && task.GetWorkflowId() == task.GetTargetWorkflowId() {
@@ -603,7 +603,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		// it is possible that the namespace got deleted. Use namespaceID instead as this is only needed for the history event
 		namespace = task.GetNamespaceId()
 	} else {
-		namespace = namespaceEntry.GetInfo().Name
+		namespace = namespaceEntry.Name()
 	}
 
 	// Get target namespace name
@@ -615,7 +615,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		// it is possible that the namespace got deleted. Use namespaceID instead as this is only needed for the history event
 		targetNamespace = task.GetNamespaceId()
 	} else {
-		targetNamespace = namespaceEntry.GetInfo().Name
+		targetNamespace = namespaceEntry.Name()
 	}
 
 	initiatedEventID := task.GetScheduleId()
@@ -756,7 +756,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	if err != nil {
 		return err
 	}
-	logger = log.With(logger, tag.WorkflowNamespace(namespaceEntry.GetInfo().Name))
+	logger = log.With(logger, tag.WorkflowNamespace(namespaceEntry.Name()))
 
 	reason, resetPoint := workflow.FindAutoResetPoint(t.shard.GetTimeSource(), namespaceEntry.VerifyBinaryChecksum, executionInfo.AutoResetPoints)
 	if resetPoint == nil {
@@ -805,7 +805,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 
 	if err := t.resetWorkflow(
 		task,
-		namespaceEntry.GetInfo().Name,
+		namespaceEntry.Name(),
 		reason,
 		resetPoint,
 		baseContext,

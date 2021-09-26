@@ -181,7 +181,7 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 			NamespaceID:          task.GetNamespaceId(),
 			WorkflowID:           task.GetWorkflowId(),
 			RunID:                task.GetRunId(),
-			Namespace:            namespaceCacheEntry.GetInfo().Name,
+			Namespace:            namespaceCacheEntry.Name(),
 			ShardID:              t.shard.GetShardID(),
 			Targets:              []archiver.ArchivalTarget{archiver.ArchiveTargetHistory},
 			HistoryURI:           namespaceCacheEntry.HistoryArchivalState().URI,

@@ -218,7 +218,7 @@ func refreshTasks(
 	defer cancel()
 
 	_, err = adminClient.RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: namespaceEntry.GetInfo().Name,
+		Namespace: namespaceEntry.Name(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,

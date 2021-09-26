@@ -695,7 +695,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: s.namespaceEntry.GetInfo().Name,
+		Namespace: s.namespaceEntry.Name(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: transferTask.GetWorkflowId(),
 			RunId:      transferTask.GetRunId(),
@@ -850,7 +850,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: s.namespaceEntry.GetInfo().Name,
+		Namespace: s.namespaceEntry.Name(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: transferTask.GetWorkflowId(),
 			RunId:      transferTask.GetRunId(),
@@ -1005,7 +1005,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: s.namespaceEntry.GetInfo().Name,
+		Namespace: s.namespaceEntry.Name(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: transferTask.GetWorkflowId(),
 			RunId:      transferTask.GetRunId(),
