@@ -155,8 +155,8 @@ type (
 		triggerRefreshCh chan chan struct{}
 	}
 
-	// CacheEntries CacheEntry slice
-	CacheEntries []*CacheEntry
+	// cacheEntries CacheEntry slice
+	cacheEntries []*CacheEntry
 
 	// CacheEntry contains the info and config for a namespace
 	CacheEntry struct {
@@ -208,14 +208,6 @@ func newCache() cache.Cache {
 	opts.InitialCapacity = namespaceCacheInitialSize
 	opts.TTL = namespaceCacheTTL
 	return cache.New(namespaceCacheMaxSize, opts)
-}
-
-func newCacheEntry(thisCluster ClusterInfo) *CacheEntry {
-
-	return &CacheEntry{
-		thisCluster: thisCluster,
-		initialized: false,
-	}
 }
 
 func (c *namespaceCache) GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64) {
@@ -279,7 +271,7 @@ func (c *namespaceCache) RegisterNamespaceChangeCallback(
 	c.callbackLock.Unlock()
 
 	// this section is trying to make the shard catch up with namespace changes
-	namespaces := CacheEntries{}
+	namespaces := cacheEntries{}
 	for _, namespace := range c.GetAllNamespace() {
 		namespaces = append(namespaces, namespace)
 	}
@@ -425,7 +417,7 @@ func (c *namespaceCache) refreshNamespacesLocked() error {
 
 	var token []byte
 	request := &persistence.ListNamespacesRequest{PageSize: namespaceCacheRefreshPageSize}
-	var namespaces CacheEntries
+	var namespaces cacheEntries
 	continuePage := true
 
 	for continuePage {
@@ -508,7 +500,7 @@ func (c *namespaceCache) updateIDToNamespaceCache(
 	record *CacheEntry,
 ) (*CacheEntry, *CacheEntry, error) {
 
-	elem, err := cacheByID.PutIfNotExist(id, newCacheEntry(c.thisCluster))
+	elem, err := cacheByID.PutIfNotExist(id, &CacheEntry{thisCluster: c.thisCluster})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -633,7 +625,7 @@ func (entry *CacheEntry) Clone(ms ...EntryMutation) *CacheEntry {
 
 func (entry *CacheEntry) duplicate() *CacheEntry {
 	// this is a deep copy
-	result := newCacheEntry(entry.thisCluster)
+	result := &CacheEntry{thisCluster: entry.thisCluster}
 	result.info = proto.Clone(entry.info).(*persistencespb.NamespaceInfo)
 	if result.info.Data == nil {
 		result.info.Data = make(map[string]string)
@@ -774,17 +766,17 @@ func (entry *CacheEntry) GetNamespaceNotActiveErr() error {
 }
 
 // Len return length
-func (t CacheEntries) Len() int {
+func (t cacheEntries) Len() int {
 	return len(t)
 }
 
 // Swap implements sort.Interface.
-func (t CacheEntries) Swap(i, j int) {
+func (t cacheEntries) Swap(i, j int) {
 	t[i], t[j] = t[j], t[i]
 }
 
 // Less implements sort.Interface
-func (t CacheEntries) Less(i, j int) bool {
+func (t cacheEntries) Less(i, j int) bool {
 	return t[i].notificationVersion < t[j].notificationVersion
 }
 

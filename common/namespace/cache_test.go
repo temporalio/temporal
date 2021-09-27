@@ -506,22 +506,7 @@ func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess(
 }
 
 func (s *namespaceCacheSuite) buildEntryFromRecord(record *persistence.GetNamespaceResponse) *CacheEntry {
-	newEntry := newCacheEntry(s.clusterMetadata)
-	newEntry.info = record.Namespace.Info
-	newEntry.config = record.Namespace.Config
-	newEntry.replicationConfig = &persistencespb.NamespaceReplicationConfig{
-		ActiveClusterName: record.Namespace.ReplicationConfig.ActiveClusterName,
-	}
-	for _, c := range record.Namespace.ReplicationConfig.Clusters {
-		newEntry.replicationConfig.Clusters = append(newEntry.replicationConfig.Clusters, c)
-	}
-	newEntry.configVersion = record.Namespace.ConfigVersion
-	newEntry.failoverVersion = record.Namespace.FailoverVersion
-	newEntry.isGlobalNamespace = record.IsGlobalNamespace
-	newEntry.failoverNotificationVersion = record.Namespace.FailoverNotificationVersion
-	newEntry.notificationVersion = record.NotificationVersion
-	newEntry.initialized = true
-	return newEntry
+	return FromPersistentState(s.clusterMetadata, record)
 }
 
 func Test_GetRetentionDays(t *testing.T) {
