@@ -146,8 +146,6 @@ type (
 		// coroutine is doing namespace refreshment
 		refreshLock     sync.Mutex
 		lastRefreshTime atomic.Value
-		checkLock       sync.Mutex
-		lastCheckTime   time.Time
 
 		callbackLock     sync.Mutex
 		prepareCallbacks map[int32]PrepareCallbackFn
