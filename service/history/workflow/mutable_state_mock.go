@@ -29,10 +29,10 @@
 package workflow
 
 import (
-	"reflect"
-	"time"
+	reflect "reflect"
+	time "time"
 
-	"github.com/golang/mock/gomock"
+	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/api/command/v1"
 	v10 "go.temporal.io/api/common/v1"
 	v11 "go.temporal.io/api/enums/v1"
@@ -41,14 +41,13 @@ import (
 	v14 "go.temporal.io/api/taskqueue/v1"
 	v15 "go.temporal.io/api/workflow/v1"
 	v16 "go.temporal.io/api/workflowservice/v1"
-
 	v17 "go.temporal.io/server/api/enums/v1"
 	v18 "go.temporal.io/server/api/historyservice/v1"
 	v19 "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/tasks"
+	definition "go.temporal.io/server/common/definition"
+	namespace "go.temporal.io/server/common/namespace"
+	persistence "go.temporal.io/server/common/persistence"
+	tasks "go.temporal.io/server/common/tasks"
 )
 
 // MockMutableState is a mock of MutableState interface.

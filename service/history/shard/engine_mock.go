@@ -29,17 +29,16 @@
 package shard
 
 import (
-	"context"
-	"reflect"
+	context "context"
+	reflect "reflect"
 
-	"github.com/golang/mock/gomock"
-	"go.temporal.io/api/common/v1"
-	"go.temporal.io/api/history/v1"
-
-	"go.temporal.io/server/api/historyservice/v1"
+	gomock "github.com/golang/mock/gomock"
+	common "go.temporal.io/api/common/v1"
+	history "go.temporal.io/api/history/v1"
+	historyservice "go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/service/history/events"
+	tasks "go.temporal.io/server/common/tasks"
+	events "go.temporal.io/server/service/history/events"
 )
 
 // MockEngine is a mock of Engine interface.

@@ -29,18 +29,17 @@
 package history
 
 import (
-	"context"
-	"reflect"
-	"time"
+	context "context"
+	reflect "reflect"
+	time "time"
 
-	"github.com/golang/mock/gomock"
-
-	"go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	gomock "github.com/golang/mock/gomock"
+	enums "go.temporal.io/server/api/enums/v1"
+	persistence "go.temporal.io/server/api/persistence/v1"
 	repication "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/task"
-	"go.temporal.io/server/common/tasks"
-	"go.temporal.io/server/service/history/shard"
+	task "go.temporal.io/server/common/task"
+	tasks "go.temporal.io/server/common/tasks"
+	shard "go.temporal.io/server/service/history/shard"
 )
 
 // MockqueueProcessor is a mock of queueProcessor interface.
