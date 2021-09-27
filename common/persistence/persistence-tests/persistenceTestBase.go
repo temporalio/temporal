@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -312,7 +313,7 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 			},
 			NextEventID: nextEventID,
 			TransferTasks: []persistence.Task{
-				&persistence.WorkflowTask{
+				&definition.WorkflowTask{
 					TaskID:              s.GetNextSequenceNumber(),
 					NamespaceID:         namespaceID,
 					TaskQueue:           taskQueue,
@@ -343,7 +344,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 	transferTasks := []persistence.Task{}
 	for _, workflowTaskScheduleID := range workflowTaskScheduleIDs {
 		transferTasks = append(transferTasks,
-			&persistence.WorkflowTask{
+			&definition.WorkflowTask{
 				TaskID:      s.GetNextSequenceNumber(),
 				NamespaceID: namespaceID,
 				TaskQueue:   taskQueue,
@@ -353,7 +354,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 
 	for _, activityScheduleID := range activityScheduleIDs {
 		transferTasks = append(transferTasks,
-			&persistence.ActivityTask{
+			&definition.ActivityTask{
 				TaskID:      s.GetNextSequenceNumber(),
 				NamespaceID: namespaceID,
 				TaskQueue:   taskQueue,
@@ -427,7 +428,7 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 			},
 			NextEventID: nextEventID,
 			TransferTasks: []persistence.Task{
-				&persistence.WorkflowTask{
+				&definition.WorkflowTask{
 					TaskID:      s.GetNextSequenceNumber(),
 					NamespaceID: namespaceID,
 					TaskQueue:   taskQueue,
@@ -475,7 +476,7 @@ func (s *TestBase) GetCurrentWorkflowRunID(namespaceID, workflowID string) (stri
 func (s *TestBase) ContinueAsNewExecution(updatedInfo *persistencespb.WorkflowExecutionInfo, updatedState *persistencespb.WorkflowExecutionState, updatedNextEventID int64, condition int64,
 	newExecution commonpb.WorkflowExecution, nextEventID, workflowTaskScheduleID int64,
 	prevResetPoints *workflowpb.ResetPoints) error {
-	newworkflowTask := &persistence.WorkflowTask{
+	newworkflowTask := &definition.WorkflowTask{
 		TaskID:      s.GetNextSequenceNumber(),
 		NamespaceID: updatedInfo.NamespaceId,
 		TaskQueue:   updatedInfo.TaskQueue,
@@ -547,7 +548,7 @@ func (s *TestBase) UpdateWorkflowExecution(updatedInfo *persistencespb.WorkflowE
 func (s *TestBase) UpdateWorkflowExecutionAndFinish(updatedInfo *persistencespb.WorkflowExecutionInfo,
 	updatedState *persistencespb.WorkflowExecutionState, nextEventID int64, condition int64) error {
 	var transferTasks []persistence.Task
-	transferTasks = append(transferTasks, &persistence.CloseExecutionTask{TaskID: s.GetNextSequenceNumber()})
+	transferTasks = append(transferTasks, &definition.CloseExecutionTask{TaskID: s.GetNextSequenceNumber()})
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&persistence.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardInfo.GetShardId(),
 		RangeID: s.ShardInfo.GetRangeId(),
@@ -683,16 +684,16 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *persisten
 	var replicationTasks []persistence.Task
 	for _, task := range txTasks {
 		switch t := task.(type) {
-		case *persistence.WorkflowTask, *persistence.ActivityTask, *persistence.CloseExecutionTask, *persistence.CancelExecutionTask, *persistence.StartChildExecutionTask, *persistence.SignalExecutionTask:
+		case *definition.WorkflowTask, *definition.ActivityTask, *definition.CloseExecutionTask, *definition.CancelExecutionTask, *definition.StartChildExecutionTask, *definition.SignalExecutionTask:
 			transferTasks = append(transferTasks, t)
-		case *persistence.HistoryReplicationTask, *persistence.SyncActivityTask:
+		case *definition.HistoryReplicationTask, *definition.SyncActivityTask:
 			replicationTasks = append(replicationTasks, t)
 		default:
 			panic("Unknown transfer task type.")
 		}
 	}
 	for _, workflowTaskScheduleID := range workflowTaskScheduleIDs {
-		transferTasks = append(transferTasks, &persistence.WorkflowTask{
+		transferTasks = append(transferTasks, &definition.WorkflowTask{
 			TaskID:      s.GetNextSequenceNumber(),
 			NamespaceID: updatedInfo.NamespaceId,
 			TaskQueue:   updatedInfo.TaskQueue,
@@ -700,7 +701,7 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *persisten
 	}
 
 	for _, activityScheduleID := range activityScheduleIDs {
-		transferTasks = append(transferTasks, &persistence.ActivityTask{
+		transferTasks = append(transferTasks, &definition.ActivityTask{
 			TaskID:      s.GetNextSequenceNumber(),
 			NamespaceID: updatedInfo.NamespaceId,
 			TaskQueue:   updatedInfo.TaskQueue,

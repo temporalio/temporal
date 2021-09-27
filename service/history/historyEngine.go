@@ -41,6 +41,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+
 	"go.temporal.io/server/common/persistence/visibility/manager"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -395,8 +396,8 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 				now := e.shard.GetTimeSource().Now()
 				// the fake tasks will not be actually used, we just need to make sure
 				// its length > 0 and has correct timestamp, to trigger a db scan
-				fakeWorkflowTask := []persistence.Task{&persistence.WorkflowTask{}}
-				fakeWorkflowTaskTimeoutTask := []persistence.Task{&persistence.WorkflowTaskTimeoutTask{VisibilityTimestamp: now}}
+				fakeWorkflowTask := []persistence.Task{&definition.WorkflowTask{}}
+				fakeWorkflowTaskTimeoutTask := []persistence.Task{&definition.WorkflowTaskTimeoutTask{VisibilityTimestamp: now}}
 				e.txProcessor.NotifyNewTask(e.currentClusterName, fakeWorkflowTask)
 				e.timerProcessor.NotifyNewTimers(e.currentClusterName, fakeWorkflowTaskTimeoutTask)
 			}

@@ -28,6 +28,7 @@ import (
 	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -42,7 +43,7 @@ func convertSyncActivityInfos(
 	for item := range inputs {
 		activityInfo, ok := activityInfos[item]
 		if ok {
-			outputs = append(outputs, &persistence.SyncActivityTask{
+			outputs = append(outputs, &definition.SyncActivityTask{
 				Version:     activityInfo.Version,
 				ScheduledID: activityInfo.ScheduleId,
 			})

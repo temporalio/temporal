@@ -4006,7 +4006,7 @@ func (e *MutableStateImpl) eventsToReplicationTask(
 		return nil, err
 	}
 
-	replicationTask := &persistence.HistoryReplicationTask{
+	replicationTask := &definition.HistoryReplicationTask{
 		FirstEventID:      firstEvent.GetEventId(),
 		NextEventID:       lastEvent.GetEventId() + 1,
 		Version:           firstEvent.GetVersion(),

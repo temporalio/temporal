@@ -35,6 +35,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/definition"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -559,35 +560,35 @@ func createTransferTasks(
 
 		switch task.GetType() {
 		case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
-			targetNamespaceID = task.(*p.ActivityTask).NamespaceID
-			taskQueue = task.(*p.ActivityTask).TaskQueue
-			scheduleID = task.(*p.ActivityTask).ScheduleID
+			targetNamespaceID = task.(*definition.ActivityTask).NamespaceID
+			taskQueue = task.(*definition.ActivityTask).TaskQueue
+			scheduleID = task.(*definition.ActivityTask).ScheduleID
 
 		case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
-			targetNamespaceID = task.(*p.WorkflowTask).NamespaceID
-			taskQueue = task.(*p.WorkflowTask).TaskQueue
-			scheduleID = task.(*p.WorkflowTask).ScheduleID
+			targetNamespaceID = task.(*definition.WorkflowTask).NamespaceID
+			taskQueue = task.(*definition.WorkflowTask).TaskQueue
+			scheduleID = task.(*definition.WorkflowTask).ScheduleID
 
 		case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
-			targetNamespaceID = task.(*p.CancelExecutionTask).TargetNamespaceID
-			targetWorkflowID = task.(*p.CancelExecutionTask).TargetWorkflowID
-			targetRunID = task.(*p.CancelExecutionTask).TargetRunID
+			targetNamespaceID = task.(*definition.CancelExecutionTask).TargetNamespaceID
+			targetWorkflowID = task.(*definition.CancelExecutionTask).TargetWorkflowID
+			targetRunID = task.(*definition.CancelExecutionTask).TargetRunID
 
-			targetChildWorkflowOnly = task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
-			scheduleID = task.(*p.CancelExecutionTask).InitiatedID
+			targetChildWorkflowOnly = task.(*definition.CancelExecutionTask).TargetChildWorkflowOnly
+			scheduleID = task.(*definition.CancelExecutionTask).InitiatedID
 
 		case enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
-			targetNamespaceID = task.(*p.SignalExecutionTask).TargetNamespaceID
-			targetWorkflowID = task.(*p.SignalExecutionTask).TargetWorkflowID
-			targetRunID = task.(*p.SignalExecutionTask).TargetRunID
+			targetNamespaceID = task.(*definition.SignalExecutionTask).TargetNamespaceID
+			targetWorkflowID = task.(*definition.SignalExecutionTask).TargetWorkflowID
+			targetRunID = task.(*definition.SignalExecutionTask).TargetRunID
 
-			targetChildWorkflowOnly = task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
-			scheduleID = task.(*p.SignalExecutionTask).InitiatedID
+			targetChildWorkflowOnly = task.(*definition.SignalExecutionTask).TargetChildWorkflowOnly
+			scheduleID = task.(*definition.SignalExecutionTask).InitiatedID
 
 		case enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
-			targetNamespaceID = task.(*p.StartChildExecutionTask).TargetNamespaceID
-			targetWorkflowID = task.(*p.StartChildExecutionTask).TargetWorkflowID
-			scheduleID = task.(*p.StartChildExecutionTask).InitiatedID
+			targetNamespaceID = task.(*definition.StartChildExecutionTask).TargetNamespaceID
+			targetWorkflowID = task.(*definition.StartChildExecutionTask).TargetWorkflowID
+			scheduleID = task.(*definition.StartChildExecutionTask).InitiatedID
 
 		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 			enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
@@ -651,7 +652,7 @@ func createReplicationTasks(
 
 		switch task.GetType() {
 		case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
-			histTask := task.(*p.HistoryReplicationTask)
+			histTask := task.(*definition.HistoryReplicationTask)
 			branchToken = histTask.BranchToken
 			newRunBranchToken = histTask.NewRunBranchToken
 			firstEventID = histTask.FirstEventID
@@ -660,7 +661,7 @@ func createReplicationTasks(
 
 		case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
 			version = task.GetVersion()
-			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
+			activityScheduleID = task.(*definition.SyncActivityTask).ScheduledID
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknow replication type: %v", task.GetType()))
@@ -771,30 +772,30 @@ func createTimerTasks(
 		workflowBackoffType := enumsspb.WORKFLOW_BACKOFF_TYPE_UNSPECIFIED
 
 		switch t := task.(type) {
-		case *p.WorkflowTaskTimeoutTask:
+		case *definition.WorkflowTaskTimeoutTask:
 			eventID = t.EventID
 			timeoutType = t.TimeoutType
 			attempt = t.ScheduleAttempt
 
-		case *p.ActivityTimeoutTask:
+		case *definition.ActivityTimeoutTask:
 			eventID = t.EventID
 			timeoutType = t.TimeoutType
 			attempt = t.Attempt
 
-		case *p.UserTimerTask:
+		case *definition.UserTimerTask:
 			eventID = t.EventID
 
-		case *p.ActivityRetryTimerTask:
+		case *definition.ActivityRetryTimerTask:
 			eventID = t.EventID
 			attempt = t.Attempt
 
-		case *p.WorkflowBackoffTimerTask:
+		case *definition.WorkflowBackoffTimerTask:
 			workflowBackoffType = t.WorkflowBackoffType
 
-		case *p.WorkflowTimeoutTask:
+		case *definition.WorkflowTimeoutTask:
 			// noop
 
-		case *p.DeleteHistoryEventTask:
+		case *definition.DeleteHistoryEventTask:
 			// noop
 
 		default:

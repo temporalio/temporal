@@ -34,6 +34,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -112,10 +113,10 @@ func (s *contextSuite) TestAddTasks_Success() {
 		VisibilityTime:  timestamp.TimeNowPtrUtc(),
 	}
 
-	transferTasks := []persistence.Task{&persistence.ActivityTask{}}              // Just for testing purpose. In the real code ActivityTask can't be passed to shardContext.AddTasks.
-	timerTasks := []persistence.Task{&persistence.ActivityRetryTimerTask{}}       // Just for testing purpose. In the real code ActivityRetryTimerTask can't be passed to shardContext.AddTasks.
-	replicationTasks := []persistence.Task{&persistence.HistoryReplicationTask{}} // Just for testing purpose. In the real code HistoryReplicationTask can't be passed to shardContext.AddTasks.
-	visibilityTasks := []persistence.Task{&persistence.DeleteExecutionVisibilityTask{}}
+	transferTasks := []persistence.Task{&definition.ActivityTask{}}              // Just for testing purpose. In the real code ActivityTask can't be passed to shardContext.AddTasks.
+	timerTasks := []persistence.Task{&definition.ActivityRetryTimerTask{}}       // Just for testing purpose. In the real code ActivityRetryTimerTask can't be passed to shardContext.AddTasks.
+	replicationTasks := []persistence.Task{&definition.HistoryReplicationTask{}} // Just for testing purpose. In the real code HistoryReplicationTask can't be passed to shardContext.AddTasks.
+	visibilityTasks := []persistence.Task{&definition.DeleteExecutionVisibilityTask{}}
 
 	addTasksRequest := &persistence.AddTasksRequest{
 		ShardID:     s.shardContext.GetShardID(),

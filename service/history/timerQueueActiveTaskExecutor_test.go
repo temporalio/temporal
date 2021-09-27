@@ -231,7 +231,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Fire() {
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	protoTaskTime := task.(*persistence.UserTimerTask).GetVisibilityTime()
+	protoTaskTime := task.(*definition.UserTimerTask).GetVisibilityTime()
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
@@ -304,7 +304,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Noop() {
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	protoTaskTime := task.(*persistence.UserTimerTask).GetVisibilityTime()
+	protoTaskTime := task.(*definition.UserTimerTask).GetVisibilityTime()
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
@@ -384,7 +384,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	protoTaskTime := task.(*persistence.ActivityTimeoutTask).GetVisibilityTime()
+	protoTaskTime := task.(*definition.ActivityTimeoutTask).GetVisibilityTime()
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
@@ -466,7 +466,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	protoTaskTime := task.(*persistence.ActivityTimeoutTask).GetVisibilityTime()
+	protoTaskTime := task.(*definition.ActivityTimeoutTask).GetVisibilityTime()
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
@@ -556,7 +556,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	protoTaskTime := task.(*persistence.ActivityTimeoutTask).GetVisibilityTime()
+	protoTaskTime := task.(*definition.ActivityTimeoutTask).GetVisibilityTime()
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
@@ -647,7 +647,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	protoTaskTime := task.(*persistence.ActivityTimeoutTask).GetVisibilityTime()
+	protoTaskTime := task.(*definition.ActivityTimeoutTask).GetVisibilityTime()
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
@@ -736,7 +736,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	protoTaskTime := task.(*persistence.ActivityTimeoutTask).GetVisibilityTime()
+	protoTaskTime := task.(*definition.ActivityTimeoutTask).GetVisibilityTime()
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
@@ -826,7 +826,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, task.(*persistence.ActivityTimeoutTask).TimeoutType)
+	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, task.(*definition.ActivityTimeoutTask).TimeoutType)
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
