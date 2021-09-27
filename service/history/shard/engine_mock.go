@@ -35,9 +35,10 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	common "go.temporal.io/api/common/v1"
 	history "go.temporal.io/api/history/v1"
+
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
-	persistence "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/definition"
 	events "go.temporal.io/server/service/history/events"
 )
 
@@ -182,7 +183,7 @@ func (mr *MockEngineMockRecorder) NotifyNewHistoryEvent(event interface{}) *gomo
 }
 
 // NotifyNewReplicationTasks mocks base method.
-func (m *MockEngine) NotifyNewReplicationTasks(tasks []persistence.Task) {
+func (m *MockEngine) NotifyNewReplicationTasks(tasks []definition.Task) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "NotifyNewReplicationTasks", tasks)
 }
@@ -194,7 +195,7 @@ func (mr *MockEngineMockRecorder) NotifyNewReplicationTasks(tasks interface{}) *
 }
 
 // NotifyNewTimerTasks mocks base method.
-func (m *MockEngine) NotifyNewTimerTasks(tasks []persistence.Task) {
+func (m *MockEngine) NotifyNewTimerTasks(tasks []definition.Task) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "NotifyNewTimerTasks", tasks)
 }
@@ -206,7 +207,7 @@ func (mr *MockEngineMockRecorder) NotifyNewTimerTasks(tasks interface{}) *gomock
 }
 
 // NotifyNewTransferTasks mocks base method.
-func (m *MockEngine) NotifyNewTransferTasks(tasks []persistence.Task) {
+func (m *MockEngine) NotifyNewTransferTasks(tasks []definition.Task) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "NotifyNewTransferTasks", tasks)
 }
@@ -218,7 +219,7 @@ func (mr *MockEngineMockRecorder) NotifyNewTransferTasks(tasks interface{}) *gom
 }
 
 // NotifyNewVisibilityTasks mocks base method.
-func (m *MockEngine) NotifyNewVisibilityTasks(tasks []persistence.Task) {
+func (m *MockEngine) NotifyNewVisibilityTasks(tasks []definition.Task) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "NotifyNewVisibilityTasks", tasks)
 }

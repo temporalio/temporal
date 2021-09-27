@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -105,7 +106,7 @@ func newReplicatorQueueProcessor(
 }
 
 func (p *replicatorQueueProcessorImpl) NotifyNewTasks(
-	tasks []persistence.Task,
+	tasks []definition.Task,
 ) {
 
 	if len(tasks) == 0 {

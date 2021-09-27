@@ -113,10 +113,10 @@ func (s *contextSuite) TestAddTasks_Success() {
 		VisibilityTime:  timestamp.TimeNowPtrUtc(),
 	}
 
-	transferTasks := []persistence.Task{&definition.ActivityTask{}}              // Just for testing purpose. In the real code ActivityTask can't be passed to shardContext.AddTasks.
-	timerTasks := []persistence.Task{&definition.ActivityRetryTimerTask{}}       // Just for testing purpose. In the real code ActivityRetryTimerTask can't be passed to shardContext.AddTasks.
-	replicationTasks := []persistence.Task{&definition.HistoryReplicationTask{}} // Just for testing purpose. In the real code HistoryReplicationTask can't be passed to shardContext.AddTasks.
-	visibilityTasks := []persistence.Task{&definition.DeleteExecutionVisibilityTask{}}
+	transferTasks := []definition.Task{&definition.ActivityTask{}}              // Just for testing purpose. In the real code ActivityTask can't be passed to shardContext.AddTasks.
+	timerTasks := []definition.Task{&definition.ActivityRetryTimerTask{}}       // Just for testing purpose. In the real code ActivityRetryTimerTask can't be passed to shardContext.AddTasks.
+	replicationTasks := []definition.Task{&definition.HistoryReplicationTask{}} // Just for testing purpose. In the real code HistoryReplicationTask can't be passed to shardContext.AddTasks.
+	visibilityTasks := []definition.Task{&definition.DeleteExecutionVisibilityTask{}}
 
 	addTasksRequest := &persistence.AddTasksRequest{
 		ShardID:     s.shardContext.GetShardID(),

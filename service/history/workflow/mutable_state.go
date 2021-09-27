@@ -57,7 +57,7 @@ func (policy TransactionPolicy) Ptr() *TransactionPolicy {
 	return &policy
 }
 
-var emptyTasks = []persistence.Task{}
+var emptyTasks = []definition.Task{}
 
 type (
 	// TODO: This should be part of persistence layer
@@ -235,9 +235,9 @@ type (
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
 		UpdateWorkflowStateStatus(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) error
 
-		AddTransferTasks(transferTasks ...persistence.Task)
-		AddTimerTasks(timerTasks ...persistence.Task)
-		AddVisibilityTasks(visibilityTasks ...persistence.Task)
+		AddTransferTasks(transferTasks ...definition.Task)
+		AddTimerTasks(timerTasks ...definition.Task)
+		AddVisibilityTasks(visibilityTasks ...definition.Task)
 		SetUpdateCondition(int64, int64)
 		GetUpdateCondition() (int64, int64)
 

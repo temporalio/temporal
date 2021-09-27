@@ -125,7 +125,7 @@ func (s *replicatorQueueProcessorSuite) TearDownTest() {
 func (s *replicatorQueueProcessorSuite) TestNotifyNewTasks_NotInitialized() {
 	s.replicatorQueueProcessor.maxTaskID = nil
 
-	s.replicatorQueueProcessor.NotifyNewTasks([]persistence.Task{
+	s.replicatorQueueProcessor.NotifyNewTasks([]definition.Task{
 		&definition.HistoryReplicationTask{TaskID: 456},
 		&definition.HistoryReplicationTask{TaskID: 123},
 	})
@@ -136,12 +136,12 @@ func (s *replicatorQueueProcessorSuite) TestNotifyNewTasks_NotInitialized() {
 func (s *replicatorQueueProcessorSuite) TestNotifyNewTasks_Initialized() {
 	s.replicatorQueueProcessor.maxTaskID = convert.Int64Ptr(123)
 
-	s.replicatorQueueProcessor.NotifyNewTasks([]persistence.Task{
+	s.replicatorQueueProcessor.NotifyNewTasks([]definition.Task{
 		&definition.HistoryReplicationTask{TaskID: 100},
 	})
 	s.Equal(*s.replicatorQueueProcessor.maxTaskID, int64(123))
 
-	s.replicatorQueueProcessor.NotifyNewTasks([]persistence.Task{
+	s.replicatorQueueProcessor.NotifyNewTasks([]definition.Task{
 		&definition.HistoryReplicationTask{TaskID: 234},
 	})
 	s.Equal(*s.replicatorQueueProcessor.maxTaskID, int64(234))

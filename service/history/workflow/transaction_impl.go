@@ -30,6 +30,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -494,10 +495,10 @@ func NotifyWorkflowMutationTasks(
 
 func notifyTasks(
 	engine shard.Engine,
-	transferTasks []persistence.Task,
-	timerTasks []persistence.Task,
-	replicationTasks []persistence.Task,
-	visibilityTasks []persistence.Task,
+	transferTasks []definition.Task,
+	timerTasks []definition.Task,
+	replicationTasks []definition.Task,
+	visibilityTasks []definition.Task,
 ) {
 	engine.NotifyNewTransferTasks(transferTasks)
 	engine.NotifyNewTimerTasks(timerTasks)

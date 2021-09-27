@@ -39,6 +39,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 )
@@ -192,17 +193,6 @@ type (
 		*persistencespb.ReplicationTaskInfo
 	}
 
-	// Task is the generic interface for workflow tasks
-	Task interface {
-		GetType() enumsspb.TaskType
-		GetVersion() int64
-		SetVersion(version int64)
-		GetTaskID() int64
-		SetTaskID(id int64)
-		GetVisibilityTime() time.Time
-		SetVisibilityTime(timestamp time.Time)
-	}
-
 	// TaskQueueKey is the struct used to identity TaskQueues
 	TaskQueueKey struct {
 		NamespaceID string
@@ -240,10 +230,10 @@ type (
 		WorkflowID  string
 		RunID       string
 
-		TransferTasks    []Task
-		TimerTasks       []Task
-		ReplicationTasks []Task
-		VisibilityTasks  []Task
+		TransferTasks    []definition.Task
+		TimerTasks       []definition.Task
+		ReplicationTasks []definition.Task
+		VisibilityTasks  []definition.Task
 	}
 
 	// CreateWorkflowExecutionRequest is used to write a new workflow execution
@@ -386,10 +376,10 @@ type (
 		NewBufferedEvents         []*historypb.HistoryEvent
 		ClearBufferedEvents       bool
 
-		TransferTasks    []Task
-		ReplicationTasks []Task
-		TimerTasks       []Task
-		VisibilityTasks  []Task
+		TransferTasks    []definition.Task
+		ReplicationTasks []definition.Task
+		TimerTasks       []definition.Task
+		VisibilityTasks  []definition.Task
 
 		// TODO deprecate Condition in favor of DBRecordVersion
 		Condition       int64
@@ -411,10 +401,10 @@ type (
 		SignalInfos         map[int64]*persistencespb.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
 
-		TransferTasks    []Task
-		ReplicationTasks []Task
-		TimerTasks       []Task
-		VisibilityTasks  []Task
+		TransferTasks    []definition.Task
+		ReplicationTasks []definition.Task
+		TimerTasks       []definition.Task
+		VisibilityTasks  []definition.Task
 
 		// TODO deprecate Condition in favor of DBRecordVersion
 		Condition       int64

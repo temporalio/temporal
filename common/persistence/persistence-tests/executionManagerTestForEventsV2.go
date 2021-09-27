@@ -132,7 +132,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 				State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
-			TransferTasks: []p.Task{
+			TransferTasks: []definition.Task{
 				&definition.WorkflowTask{
 					TaskID:              s.GetNextSequenceNumber(),
 					NamespaceID:         namespaceID,
@@ -233,7 +233,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 				Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
 			NextEventID: common.EmptyEventID,
-			TransferTasks: []p.Task{
+			TransferTasks: []definition.Task{
 				&definition.WorkflowTask{
 					TaskID:              s.GetNextSequenceNumber(),
 					NamespaceID:         namespaceID,
@@ -328,7 +328,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 			ExecutionInfo:       updatedInfo,
 			ExecutionState:      updatedState,
 			NextEventID:         int64(5),
-			TransferTasks:       []p.Task{newworkflowTask},
+			TransferTasks:       []definition.Task{newworkflowTask},
 			TimerTasks:          nil,
 			Condition:           state0.NextEventId,
 			UpsertActivityInfos: nil,
