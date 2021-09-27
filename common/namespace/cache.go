@@ -125,7 +125,6 @@ type (
 		GetNamespaceByID(id string) (*CacheEntry, error)
 		GetNamespaceID(name string) (string, error)
 		GetNamespaceName(id string) (string, error)
-		GetAllNamespace() map[string]*CacheEntry
 		GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64)
 		// Refresh forces an immediate refresh of the namespace cache and blocks until it's complete.
 		Refresh()
@@ -235,7 +234,7 @@ func (c *namespaceCache) Stop() {
 	close(c.shutdownChan)
 }
 
-func (c *namespaceCache) GetAllNamespace() map[string]*CacheEntry {
+func (c *namespaceCache) getAllNamespace() map[string]*CacheEntry {
 	result := make(map[string]*CacheEntry)
 	ite := c.cacheByID.Load().(cache.Cache).Iterator()
 	defer ite.Close()
@@ -270,7 +269,7 @@ func (c *namespaceCache) RegisterNamespaceChangeCallback(
 
 	// this section is trying to make the shard catch up with namespace changes
 	namespaces := cacheEntries{}
-	for _, namespace := range c.GetAllNamespace() {
+	for _, namespace := range c.getAllNamespace() {
 		namespaces = append(namespaces, namespace)
 	}
 	// we mush notify the change in a ordered fashion
@@ -442,7 +441,7 @@ func (c *namespaceCache) refreshNamespacesLocked() error {
 	// make a copy of the existing namespace cache, so we can calculate diff and do compare and swap
 	newCacheNameToID := newCache()
 	newCacheByID := newCache()
-	for _, namespace := range c.GetAllNamespace() {
+	for _, namespace := range c.getAllNamespace() {
 		newCacheNameToID.Put(namespace.info.Name, namespace.info.Id)
 		newCacheByID.Put(namespace.info.Id, namespace)
 	}
