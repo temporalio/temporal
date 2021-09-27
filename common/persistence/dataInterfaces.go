@@ -39,9 +39,9 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/tasks"
 )
 
 // CreateWorkflowMode workflow creation mode
@@ -230,10 +230,10 @@ type (
 		WorkflowID  string
 		RunID       string
 
-		TransferTasks    []definition.Task
-		TimerTasks       []definition.Task
-		ReplicationTasks []definition.Task
-		VisibilityTasks  []definition.Task
+		TransferTasks    []tasks.Task
+		TimerTasks       []tasks.Task
+		ReplicationTasks []tasks.Task
+		VisibilityTasks  []tasks.Task
 	}
 
 	// CreateWorkflowExecutionRequest is used to write a new workflow execution
@@ -376,10 +376,10 @@ type (
 		NewBufferedEvents         []*historypb.HistoryEvent
 		ClearBufferedEvents       bool
 
-		TransferTasks    []definition.Task
-		ReplicationTasks []definition.Task
-		TimerTasks       []definition.Task
-		VisibilityTasks  []definition.Task
+		TransferTasks    []tasks.Task
+		ReplicationTasks []tasks.Task
+		TimerTasks       []tasks.Task
+		VisibilityTasks  []tasks.Task
 
 		// TODO deprecate Condition in favor of DBRecordVersion
 		Condition       int64
@@ -401,10 +401,10 @@ type (
 		SignalInfos         map[int64]*persistencespb.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
 
-		TransferTasks    []definition.Task
-		ReplicationTasks []definition.Task
-		TimerTasks       []definition.Task
-		VisibilityTasks  []definition.Task
+		TransferTasks    []tasks.Task
+		ReplicationTasks []tasks.Task
+		TimerTasks       []tasks.Task
+		VisibilityTasks  []tasks.Task
 
 		// TODO deprecate Condition in favor of DBRecordVersion
 		Condition       int64

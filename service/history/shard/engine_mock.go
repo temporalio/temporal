@@ -29,17 +29,17 @@
 package shard
 
 import (
-	context "context"
-	reflect "reflect"
+	"context"
+	"reflect"
 
-	gomock "github.com/golang/mock/gomock"
-	common "go.temporal.io/api/common/v1"
-	history "go.temporal.io/api/history/v1"
+	"github.com/golang/mock/gomock"
+	"go.temporal.io/api/common/v1"
+	"go.temporal.io/api/history/v1"
 
-	historyservice "go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/definition"
-	events "go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/events"
 )
 
 // MockEngine is a mock of Engine interface.
@@ -183,7 +183,7 @@ func (mr *MockEngineMockRecorder) NotifyNewHistoryEvent(event interface{}) *gomo
 }
 
 // NotifyNewReplicationTasks mocks base method.
-func (m *MockEngine) NotifyNewReplicationTasks(tasks []definition.Task) {
+func (m *MockEngine) NotifyNewReplicationTasks(tasks []tasks.Task) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "NotifyNewReplicationTasks", tasks)
 }
@@ -195,7 +195,7 @@ func (mr *MockEngineMockRecorder) NotifyNewReplicationTasks(tasks interface{}) *
 }
 
 // NotifyNewTimerTasks mocks base method.
-func (m *MockEngine) NotifyNewTimerTasks(tasks []definition.Task) {
+func (m *MockEngine) NotifyNewTimerTasks(tasks []tasks.Task) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "NotifyNewTimerTasks", tasks)
 }
@@ -207,7 +207,7 @@ func (mr *MockEngineMockRecorder) NotifyNewTimerTasks(tasks interface{}) *gomock
 }
 
 // NotifyNewTransferTasks mocks base method.
-func (m *MockEngine) NotifyNewTransferTasks(tasks []definition.Task) {
+func (m *MockEngine) NotifyNewTransferTasks(tasks []tasks.Task) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "NotifyNewTransferTasks", tasks)
 }
@@ -219,7 +219,7 @@ func (mr *MockEngineMockRecorder) NotifyNewTransferTasks(tasks interface{}) *gom
 }
 
 // NotifyNewVisibilityTasks mocks base method.
-func (m *MockEngine) NotifyNewVisibilityTasks(tasks []definition.Task) {
+func (m *MockEngine) NotifyNewVisibilityTasks(tasks []tasks.Task) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "NotifyNewVisibilityTasks", tasks)
 }

@@ -35,12 +35,12 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -48,7 +48,7 @@ import (
 type (
 	visibilityQueueProcessor interface {
 		common.Daemon
-		NotifyNewTask(visibilityTasks []definition.Task)
+		NotifyNewTask(visibilityTasks []tasks.Task)
 	}
 
 	updateVisibilityAckLevel func(ackLevel int64) error
@@ -214,7 +214,7 @@ func (t *visibilityQueueProcessorImpl) Stop() {
 // NotifyNewTask - Notify the processor about the new visibility task arrival.
 // This should be called each time new visibility task arrives, otherwise tasks maybe delayed.
 func (t *visibilityQueueProcessorImpl) NotifyNewTask(
-	visibilityTasks []definition.Task,
+	visibilityTasks []tasks.Task,
 ) {
 	if len(visibilityTasks) != 0 {
 		t.notifyNewTask()

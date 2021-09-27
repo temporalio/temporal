@@ -33,11 +33,11 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -283,7 +283,7 @@ func (t *timerQueueActiveProcessorImpl) getReadLevel() timerKey {
 // NotifyNewTimers - Notify the processor about the new active timer events arrival.
 // This should be called each time new timer events arrives, otherwise timers maybe fired unexpected.
 func (t *timerQueueActiveProcessorImpl) notifyNewTimers(
-	timerTasks []definition.Task,
+	timerTasks []tasks.Task,
 ) {
 	t.timerQueueProcessorBase.notifyNewTimers(timerTasks)
 }

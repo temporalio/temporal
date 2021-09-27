@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package definition
+package tasks
 
 import (
 	"time"
@@ -31,42 +31,37 @@ import (
 )
 
 type (
-	SignalExecutionTask struct {
-		VisibilityTimestamp     time.Time
-		TaskID                  int64
-		TargetNamespaceID       string
-		TargetWorkflowID        string
-		TargetRunID             string
-		TargetChildWorkflowOnly bool
-		InitiatedID             int64
-		Version                 int64
+	DeleteExecutionVisibilityTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		Version             int64
 	}
 )
 
-func (u *SignalExecutionTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION
+func (t *DeleteExecutionVisibilityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION
 }
 
-func (u *SignalExecutionTask) GetVersion() int64 {
-	return u.Version
+func (t *DeleteExecutionVisibilityTask) GetVersion() int64 {
+	return t.Version
 }
 
-func (u *SignalExecutionTask) SetVersion(version int64) {
-	u.Version = version
+func (t *DeleteExecutionVisibilityTask) SetVersion(version int64) {
+	t.Version = version
 }
 
-func (u *SignalExecutionTask) GetTaskID() int64 {
-	return u.TaskID
+func (t *DeleteExecutionVisibilityTask) GetTaskID() int64 {
+	return t.TaskID
 }
 
-func (u *SignalExecutionTask) SetTaskID(id int64) {
-	u.TaskID = id
+func (t *DeleteExecutionVisibilityTask) SetTaskID(id int64) {
+	t.TaskID = id
 }
 
-func (u *SignalExecutionTask) GetVisibilityTime() time.Time {
-	return u.VisibilityTimestamp
+func (t *DeleteExecutionVisibilityTask) GetVisibilityTime() time.Time {
+	return t.VisibilityTimestamp
 }
 
-func (u *SignalExecutionTask) SetVisibilityTime(timestamp time.Time) {
-	u.VisibilityTimestamp = timestamp
+func (t *DeleteExecutionVisibilityTask) SetVisibilityTime(timestamp time.Time) {
+	t.VisibilityTimestamp = timestamp
 }

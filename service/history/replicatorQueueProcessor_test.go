@@ -43,13 +43,13 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -125,9 +125,9 @@ func (s *replicatorQueueProcessorSuite) TearDownTest() {
 func (s *replicatorQueueProcessorSuite) TestNotifyNewTasks_NotInitialized() {
 	s.replicatorQueueProcessor.maxTaskID = nil
 
-	s.replicatorQueueProcessor.NotifyNewTasks([]definition.Task{
-		&definition.HistoryReplicationTask{TaskID: 456},
-		&definition.HistoryReplicationTask{TaskID: 123},
+	s.replicatorQueueProcessor.NotifyNewTasks([]tasks.Task{
+		&tasks.HistoryReplicationTask{TaskID: 456},
+		&tasks.HistoryReplicationTask{TaskID: 123},
 	})
 
 	s.Equal(*s.replicatorQueueProcessor.maxTaskID, int64(456))
@@ -136,13 +136,13 @@ func (s *replicatorQueueProcessorSuite) TestNotifyNewTasks_NotInitialized() {
 func (s *replicatorQueueProcessorSuite) TestNotifyNewTasks_Initialized() {
 	s.replicatorQueueProcessor.maxTaskID = convert.Int64Ptr(123)
 
-	s.replicatorQueueProcessor.NotifyNewTasks([]definition.Task{
-		&definition.HistoryReplicationTask{TaskID: 100},
+	s.replicatorQueueProcessor.NotifyNewTasks([]tasks.Task{
+		&tasks.HistoryReplicationTask{TaskID: 100},
 	})
 	s.Equal(*s.replicatorQueueProcessor.maxTaskID, int64(123))
 
-	s.replicatorQueueProcessor.NotifyNewTasks([]definition.Task{
-		&definition.HistoryReplicationTask{TaskID: 234},
+	s.replicatorQueueProcessor.NotifyNewTasks([]tasks.Task{
+		&tasks.HistoryReplicationTask{TaskID: 234},
 	})
 	s.Equal(*s.replicatorQueueProcessor.maxTaskID, int64(234))
 }

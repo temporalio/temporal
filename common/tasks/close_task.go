@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package definition
+package tasks
 
 import (
 	"time"
@@ -31,38 +31,37 @@ import (
 )
 
 type (
-	UserTimerTask struct {
+	CloseExecutionTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		EventID             int64
 		Version             int64
 	}
 )
 
-func (u *UserTimerTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_USER_TIMER
+func (a *CloseExecutionTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION
 }
 
-func (u *UserTimerTask) GetVersion() int64 {
-	return u.Version
+func (a *CloseExecutionTask) GetVersion() int64 {
+	return a.Version
 }
 
-func (u *UserTimerTask) SetVersion(version int64) {
-	u.Version = version
+func (a *CloseExecutionTask) SetVersion(version int64) {
+	a.Version = version
 }
 
-func (u *UserTimerTask) GetTaskID() int64 {
-	return u.TaskID
+func (a *CloseExecutionTask) GetTaskID() int64 {
+	return a.TaskID
 }
 
-func (u *UserTimerTask) SetTaskID(id int64) {
-	u.TaskID = id
+func (a *CloseExecutionTask) SetTaskID(id int64) {
+	a.TaskID = id
 }
 
-func (u *UserTimerTask) GetVisibilityTime() time.Time {
-	return u.VisibilityTimestamp
+func (a *CloseExecutionTask) GetVisibilityTime() time.Time {
+	return a.VisibilityTimestamp
 }
 
-func (u *UserTimerTask) SetVisibilityTime(t time.Time) {
-	u.VisibilityTimestamp = t
+func (a *CloseExecutionTask) SetVisibilityTime(timestamp time.Time) {
+	a.VisibilityTimestamp = timestamp
 }

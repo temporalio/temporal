@@ -38,10 +38,10 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/tasks"
 )
 
 type (
@@ -132,8 +132,8 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 				State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
-			TransferTasks: []definition.Task{
-				&definition.WorkflowTask{
+			TransferTasks: []tasks.Task{
+				&tasks.WorkflowTask{
 					TaskID:              s.GetNextSequenceNumber(),
 					NamespaceID:         namespaceID,
 					TaskQueue:           "taskQueue",
@@ -233,8 +233,8 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 				Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
 			NextEventID: common.EmptyEventID,
-			TransferTasks: []definition.Task{
-				&definition.WorkflowTask{
+			TransferTasks: []tasks.Task{
+				&tasks.WorkflowTask{
 					TaskID:              s.GetNextSequenceNumber(),
 					NamespaceID:         namespaceID,
 					TaskQueue:           "taskQueue",
@@ -315,7 +315,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 		RunId:      "64c7e15a-3fd7-4182-9c6f-6f25a4fa2614",
 	}
 
-	newworkflowTask := &definition.WorkflowTask{
+	newworkflowTask := &tasks.WorkflowTask{
 		TaskID:      s.GetNextSequenceNumber(),
 		NamespaceID: updatedInfo.NamespaceId,
 		TaskQueue:   updatedInfo.TaskQueue,
@@ -328,7 +328,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 			ExecutionInfo:       updatedInfo,
 			ExecutionState:      updatedState,
 			NextEventID:         int64(5),
-			TransferTasks:       []definition.Task{newworkflowTask},
+			TransferTasks:       []tasks.Task{newworkflowTask},
 			TimerTasks:          nil,
 			Condition:           state0.NextEventId,
 			UpsertActivityInfos: nil,

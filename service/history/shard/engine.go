@@ -35,7 +35,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/events"
 )
 
@@ -79,9 +79,9 @@ type (
 		RefreshWorkflowTasks(ctx context.Context, namespaceUUID string, execution commonpb.WorkflowExecution) error
 
 		NotifyNewHistoryEvent(event *events.Notification)
-		NotifyNewTransferTasks(tasks []definition.Task)
-		NotifyNewTimerTasks(tasks []definition.Task)
-		NotifyNewVisibilityTasks(tasks []definition.Task)
-		NotifyNewReplicationTasks(tasks []definition.Task)
+		NotifyNewTransferTasks(tasks []tasks.Task)
+		NotifyNewTimerTasks(tasks []tasks.Task)
+		NotifyNewVisibilityTasks(tasks []tasks.Task)
+		NotifyNewReplicationTasks(tasks []tasks.Task)
 	}
 )

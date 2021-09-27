@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package definition
+package tasks
 
 import (
 	"time"
@@ -31,37 +31,14 @@ import (
 )
 
 type (
-	DeleteExecutionVisibilityTask struct {
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		Version             int64
+	// Task is the generic task interface
+	Task interface {
+		GetType() enumsspb.TaskType
+		GetVersion() int64
+		SetVersion(version int64)
+		GetTaskID() int64
+		SetTaskID(id int64)
+		GetVisibilityTime() time.Time
+		SetVisibilityTime(timestamp time.Time)
 	}
 )
-
-func (t *DeleteExecutionVisibilityTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION
-}
-
-func (t *DeleteExecutionVisibilityTask) GetVersion() int64 {
-	return t.Version
-}
-
-func (t *DeleteExecutionVisibilityTask) SetVersion(version int64) {
-	t.Version = version
-}
-
-func (t *DeleteExecutionVisibilityTask) GetTaskID() int64 {
-	return t.TaskID
-}
-
-func (t *DeleteExecutionVisibilityTask) SetTaskID(id int64) {
-	t.TaskID = id
-}
-
-func (t *DeleteExecutionVisibilityTask) GetVisibilityTime() time.Time {
-	return t.VisibilityTimestamp
-}
-
-func (t *DeleteExecutionVisibilityTask) SetVisibilityTime(timestamp time.Time) {
-	t.VisibilityTimestamp = timestamp
-}

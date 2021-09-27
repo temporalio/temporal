@@ -47,13 +47,13 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -238,7 +238,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	protoTaskTime := task.(*definition.UserTimerTask).GetVisibilityTime()
+	protoTaskTime := task.(*tasks.UserTimerTask).GetVisibilityTime()
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
@@ -321,7 +321,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Success
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	protoTaskTime := task.(*definition.UserTimerTask).GetVisibilityTime()
+	protoTaskTime := task.(*tasks.UserTimerTask).GetVisibilityTime()
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
@@ -392,7 +392,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Multipl
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	protoTaskTime := task.(*definition.UserTimerTask).GetVisibilityTime()
+	protoTaskTime := task.(*tasks.UserTimerTask).GetVisibilityTime()
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
@@ -463,7 +463,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	protoTaskTime := task.(*definition.ActivityTimeoutTask).GetVisibilityTime()
+	protoTaskTime := task.(*tasks.ActivityTimeoutTask).GetVisibilityTime()
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
@@ -555,7 +555,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Success(
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	protoTaskTime := task.(*definition.ActivityTimeoutTask).GetVisibilityTime()
+	protoTaskTime := task.(*tasks.ActivityTimeoutTask).GetVisibilityTime()
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,
@@ -629,7 +629,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Heartbea
 	s.NoError(err)
 	s.True(modified)
 	task := mutableState.InsertTimerTasks[0]
-	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, task.(*definition.ActivityTimeoutTask).TimeoutType)
+	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, task.(*tasks.ActivityTimeoutTask).TimeoutType)
 	s.NoError(err)
 	timerTask := &persistencespb.TimerTaskInfo{
 		ScheduleAttempt: 1,

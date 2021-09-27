@@ -29,18 +29,18 @@
 package history
 
 import (
-	context "context"
-	reflect "reflect"
-	time "time"
+	"context"
+	"reflect"
+	"time"
 
-	gomock "github.com/golang/mock/gomock"
+	"github.com/golang/mock/gomock"
 
-	enums "go.temporal.io/server/api/enums/v1"
-	persistence "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/persistence/v1"
 	repication "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/definition"
-	task "go.temporal.io/server/common/task"
-	shard "go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/common/task"
+	"go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/shard"
 )
 
 // MockqueueProcessor is a mock of queueProcessor interface.
@@ -1021,7 +1021,7 @@ func (mr *MocktimerProcessorMockRecorder) getTaskFilter() *gomock.Call {
 }
 
 // notifyNewTimers mocks base method.
-func (m *MocktimerProcessor) notifyNewTimers(timerTask []definition.Task) {
+func (m *MocktimerProcessor) notifyNewTimers(timerTask []tasks.Task) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "notifyNewTimers", timerTask)
 }

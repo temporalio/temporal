@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package definition
+package tasks
 
 import (
 	"time"
@@ -31,40 +31,40 @@ import (
 )
 
 type (
-	StartChildExecutionTask struct {
+	ActivityTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		TargetNamespaceID   string
-		TargetWorkflowID    string
-		InitiatedID         int64
+		NamespaceID         string
+		TaskQueue           string
+		ScheduleID          int64
 		Version             int64
 	}
 )
 
-func (u *StartChildExecutionTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION
+func (a *ActivityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK
 }
 
-func (u *StartChildExecutionTask) GetVersion() int64 {
-	return u.Version
+func (a *ActivityTask) GetVersion() int64 {
+	return a.Version
 }
 
-func (u *StartChildExecutionTask) SetVersion(version int64) {
-	u.Version = version
+func (a *ActivityTask) SetVersion(version int64) {
+	a.Version = version
 }
 
-func (u *StartChildExecutionTask) GetTaskID() int64 {
-	return u.TaskID
+func (a *ActivityTask) GetTaskID() int64 {
+	return a.TaskID
 }
 
-func (u *StartChildExecutionTask) SetTaskID(id int64) {
-	u.TaskID = id
+func (a *ActivityTask) SetTaskID(id int64) {
+	a.TaskID = id
 }
 
-func (u *StartChildExecutionTask) GetVisibilityTime() time.Time {
-	return u.VisibilityTimestamp
+func (a *ActivityTask) GetVisibilityTime() time.Time {
+	return a.VisibilityTimestamp
 }
 
-func (u *StartChildExecutionTask) SetVisibilityTime(timestamp time.Time) {
-	u.VisibilityTimestamp = timestamp
+func (a *ActivityTask) SetVisibilityTime(timestamp time.Time) {
+	a.VisibilityTimestamp = timestamp
 }

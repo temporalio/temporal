@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package definition
+package tasks
 
 import (
 	"time"
@@ -31,38 +31,38 @@ import (
 )
 
 type (
-	WorkflowBackoffTimerTask struct {
+	UserTimerTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
+		EventID             int64
 		Version             int64
-		WorkflowBackoffType enumsspb.WorkflowBackoffType
 	}
 )
 
-func (r *WorkflowBackoffTimerTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER
+func (u *UserTimerTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_USER_TIMER
 }
 
-func (r *WorkflowBackoffTimerTask) GetVersion() int64 {
-	return r.Version
+func (u *UserTimerTask) GetVersion() int64 {
+	return u.Version
 }
 
-func (r *WorkflowBackoffTimerTask) SetVersion(version int64) {
-	r.Version = version
+func (u *UserTimerTask) SetVersion(version int64) {
+	u.Version = version
 }
 
-func (r *WorkflowBackoffTimerTask) GetTaskID() int64 {
-	return r.TaskID
+func (u *UserTimerTask) GetTaskID() int64 {
+	return u.TaskID
 }
 
-func (r *WorkflowBackoffTimerTask) SetTaskID(id int64) {
-	r.TaskID = id
+func (u *UserTimerTask) SetTaskID(id int64) {
+	u.TaskID = id
 }
 
-func (r *WorkflowBackoffTimerTask) GetVisibilityTime() time.Time {
-	return r.VisibilityTimestamp
+func (u *UserTimerTask) GetVisibilityTime() time.Time {
+	return u.VisibilityTimestamp
 }
 
-func (r *WorkflowBackoffTimerTask) SetVisibilityTime(t time.Time) {
-	r.VisibilityTimestamp = t
+func (u *UserTimerTask) SetVisibilityTime(t time.Time) {
+	u.VisibilityTimestamp = t
 }

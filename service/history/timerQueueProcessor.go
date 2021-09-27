@@ -37,11 +37,11 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -55,7 +55,7 @@ type (
 	timerQueueProcessor interface {
 		common.Daemon
 		FailoverNamespace(namespaceIDs map[string]struct{})
-		NotifyNewTimers(clusterName string, timerTask []definition.Task)
+		NotifyNewTimers(clusterName string, timerTask []tasks.Task)
 		LockTaskProcessing()
 		UnlockTaskProcessing()
 	}
@@ -184,7 +184,7 @@ func (t *timerQueueProcessorImpl) Stop() {
 // This should be called each time new timer arrives, otherwise timers maybe fired unexpected.
 func (t *timerQueueProcessorImpl) NotifyNewTimers(
 	clusterName string,
-	timerTasks []definition.Task,
+	timerTasks []tasks.Task,
 ) {
 
 	if clusterName == t.currentClusterName {

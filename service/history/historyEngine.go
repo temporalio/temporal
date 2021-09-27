@@ -43,6 +43,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/tasks"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -396,8 +397,8 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 				now := e.shard.GetTimeSource().Now()
 				// the fake tasks will not be actually used, we just need to make sure
 				// its length > 0 and has correct timestamp, to trigger a db scan
-				fakeWorkflowTask := []definition.Task{&definition.WorkflowTask{}}
-				fakeWorkflowTaskTimeoutTask := []definition.Task{&definition.WorkflowTaskTimeoutTask{VisibilityTimestamp: now}}
+				fakeWorkflowTask := []tasks.Task{&tasks.WorkflowTask{}}
+				fakeWorkflowTaskTimeoutTask := []tasks.Task{&tasks.WorkflowTaskTimeoutTask{VisibilityTimestamp: now}}
 				e.txProcessor.NotifyNewTask(e.currentClusterName, fakeWorkflowTask)
 				e.timerProcessor.NotifyNewTimers(e.currentClusterName, fakeWorkflowTaskTimeoutTask)
 			}
@@ -2262,8 +2263,8 @@ func (e *historyEngineImpl) SyncShardStatus(
 	// 2. notify the timer gate in the timer queue standby processor
 	// 3, notify the transfer (essentially a no op, just put it here so it looks symmetric)
 	e.shard.SetCurrentTime(clusterName, now)
-	e.txProcessor.NotifyNewTask(clusterName, []definition.Task{})
-	e.timerProcessor.NotifyNewTimers(clusterName, []definition.Task{})
+	e.txProcessor.NotifyNewTask(clusterName, []tasks.Task{})
+	e.timerProcessor.NotifyNewTimers(clusterName, []tasks.Task{})
 	return nil
 }
 
@@ -2549,7 +2550,7 @@ func (e *historyEngineImpl) NotifyNewHistoryEvent(
 }
 
 func (e *historyEngineImpl) NotifyNewTransferTasks(
-	tasks []definition.Task,
+	tasks []tasks.Task,
 ) {
 
 	if len(tasks) > 0 {
@@ -2560,7 +2561,7 @@ func (e *historyEngineImpl) NotifyNewTransferTasks(
 }
 
 func (e *historyEngineImpl) NotifyNewTimerTasks(
-	tasks []definition.Task,
+	tasks []tasks.Task,
 ) {
 
 	if len(tasks) > 0 {
@@ -2571,7 +2572,7 @@ func (e *historyEngineImpl) NotifyNewTimerTasks(
 }
 
 func (e *historyEngineImpl) NotifyNewReplicationTasks(
-	tasks []definition.Task,
+	tasks []tasks.Task,
 ) {
 
 	if len(tasks) > 0 && e.replicatorProcessor != nil {
@@ -2580,7 +2581,7 @@ func (e *historyEngineImpl) NotifyNewReplicationTasks(
 }
 
 func (e *historyEngineImpl) NotifyNewVisibilityTasks(
-	tasks []definition.Task,
+	tasks []tasks.Task,
 ) {
 
 	if len(tasks) > 0 && e.visibilityProcessor != nil {

@@ -22,51 +22,51 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package definition
+package tasks
 
 import (
 	"time"
-
-	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 type (
-	WorkflowTaskTimeoutTask struct {
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		EventID             int64
-		ScheduleAttempt     int32
-		TimeoutType         enumspb.TimeoutType
-		Version             int64
+	SignalExecutionTask struct {
+		VisibilityTimestamp     time.Time
+		TaskID                  int64
+		TargetNamespaceID       string
+		TargetWorkflowID        string
+		TargetRunID             string
+		TargetChildWorkflowOnly bool
+		InitiatedID             int64
+		Version                 int64
 	}
 )
 
-func (d *WorkflowTaskTimeoutTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT
+func (u *SignalExecutionTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION
 }
 
-func (d *WorkflowTaskTimeoutTask) GetVersion() int64 {
-	return d.Version
+func (u *SignalExecutionTask) GetVersion() int64 {
+	return u.Version
 }
 
-func (d *WorkflowTaskTimeoutTask) SetVersion(version int64) {
-	d.Version = version
+func (u *SignalExecutionTask) SetVersion(version int64) {
+	u.Version = version
 }
 
-func (d *WorkflowTaskTimeoutTask) GetTaskID() int64 {
-	return d.TaskID
+func (u *SignalExecutionTask) GetTaskID() int64 {
+	return u.TaskID
 }
 
-func (d *WorkflowTaskTimeoutTask) SetTaskID(id int64) {
-	d.TaskID = id
+func (u *SignalExecutionTask) SetTaskID(id int64) {
+	u.TaskID = id
 }
 
-func (d *WorkflowTaskTimeoutTask) GetVisibilityTime() time.Time {
-	return d.VisibilityTimestamp
+func (u *SignalExecutionTask) GetVisibilityTime() time.Time {
+	return u.VisibilityTimestamp
 }
 
-func (d *WorkflowTaskTimeoutTask) SetVisibilityTime(t time.Time) {
-	d.VisibilityTimestamp = t
+func (u *SignalExecutionTask) SetVisibilityTime(timestamp time.Time) {
+	u.VisibilityTimestamp = timestamp
 }

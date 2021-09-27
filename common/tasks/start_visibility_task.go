@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package definition
+package tasks
 
 import (
 	"time"
@@ -31,37 +31,37 @@ import (
 )
 
 type (
-	WorkflowTimeoutTask struct {
+	StartExecutionVisibilityTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
 	}
 )
 
-func (u *WorkflowTimeoutTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT
+func (t *StartExecutionVisibilityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION
 }
 
-func (u *WorkflowTimeoutTask) GetVersion() int64 {
-	return u.Version
+func (t *StartExecutionVisibilityTask) GetVersion() int64 {
+	return t.Version
 }
 
-func (u *WorkflowTimeoutTask) SetVersion(version int64) {
-	u.Version = version
+func (t *StartExecutionVisibilityTask) SetVersion(version int64) {
+	t.Version = version
 }
 
-func (u *WorkflowTimeoutTask) GetTaskID() int64 {
-	return u.TaskID
+func (t *StartExecutionVisibilityTask) GetTaskID() int64 {
+	return t.TaskID
 }
 
-func (u *WorkflowTimeoutTask) SetTaskID(id int64) {
-	u.TaskID = id
+func (t *StartExecutionVisibilityTask) SetTaskID(id int64) {
+	t.TaskID = id
 }
 
-func (u *WorkflowTimeoutTask) GetVisibilityTime() time.Time {
-	return u.VisibilityTimestamp
+func (t *StartExecutionVisibilityTask) GetVisibilityTime() time.Time {
+	return t.VisibilityTimestamp
 }
 
-func (u *WorkflowTimeoutTask) SetVisibilityTime(t time.Time) {
-	u.VisibilityTimestamp = t
+func (t *StartExecutionVisibilityTask) SetVisibilityTime(timestamp time.Time) {
+	t.VisibilityTimestamp = timestamp
 }

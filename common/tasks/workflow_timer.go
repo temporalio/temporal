@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package definition
+package tasks
 
 import (
 	"time"
@@ -31,40 +31,37 @@ import (
 )
 
 type (
-	ActivityTask struct {
+	WorkflowTimeoutTask struct {
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		NamespaceID         string
-		TaskQueue           string
-		ScheduleID          int64
 		Version             int64
 	}
 )
 
-func (a *ActivityTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK
+func (u *WorkflowTimeoutTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT
 }
 
-func (a *ActivityTask) GetVersion() int64 {
-	return a.Version
+func (u *WorkflowTimeoutTask) GetVersion() int64 {
+	return u.Version
 }
 
-func (a *ActivityTask) SetVersion(version int64) {
-	a.Version = version
+func (u *WorkflowTimeoutTask) SetVersion(version int64) {
+	u.Version = version
 }
 
-func (a *ActivityTask) GetTaskID() int64 {
-	return a.TaskID
+func (u *WorkflowTimeoutTask) GetTaskID() int64 {
+	return u.TaskID
 }
 
-func (a *ActivityTask) SetTaskID(id int64) {
-	a.TaskID = id
+func (u *WorkflowTimeoutTask) SetTaskID(id int64) {
+	u.TaskID = id
 }
 
-func (a *ActivityTask) GetVisibilityTime() time.Time {
-	return a.VisibilityTimestamp
+func (u *WorkflowTimeoutTask) GetVisibilityTime() time.Time {
+	return u.VisibilityTimestamp
 }
 
-func (a *ActivityTask) SetVisibilityTime(timestamp time.Time) {
-	a.VisibilityTimestamp = timestamp
+func (u *WorkflowTimeoutTask) SetVisibilityTime(t time.Time) {
+	u.VisibilityTimestamp = t
 }

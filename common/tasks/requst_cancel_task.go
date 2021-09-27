@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package definition
+package tasks
 
 import (
 	"time"
@@ -31,40 +31,42 @@ import (
 )
 
 type (
-	WorkflowTask struct {
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		NamespaceID         string
-		TaskQueue           string
-		ScheduleID          int64
-		Version             int64
+	CancelExecutionTask struct {
+		VisibilityTimestamp     time.Time
+		TaskID                  int64
+		TargetNamespaceID       string
+		TargetWorkflowID        string
+		TargetRunID             string
+		TargetChildWorkflowOnly bool
+		InitiatedID             int64
+		Version                 int64
 	}
 )
 
-func (d *WorkflowTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK
+func (u *CancelExecutionTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION
 }
 
-func (d *WorkflowTask) GetVersion() int64 {
-	return d.Version
+func (u *CancelExecutionTask) GetVersion() int64 {
+	return u.Version
 }
 
-func (d *WorkflowTask) SetVersion(version int64) {
-	d.Version = version
+func (u *CancelExecutionTask) SetVersion(version int64) {
+	u.Version = version
 }
 
-func (d *WorkflowTask) GetTaskID() int64 {
-	return d.TaskID
+func (u *CancelExecutionTask) GetTaskID() int64 {
+	return u.TaskID
 }
 
-func (d *WorkflowTask) SetTaskID(id int64) {
-	d.TaskID = id
+func (u *CancelExecutionTask) SetTaskID(id int64) {
+	u.TaskID = id
 }
 
-func (d *WorkflowTask) GetVisibilityTime() time.Time {
-	return d.VisibilityTimestamp
+func (u *CancelExecutionTask) GetVisibilityTime() time.Time {
+	return u.VisibilityTimestamp
 }
 
-func (d *WorkflowTask) SetVisibilityTime(timestamp time.Time) {
-	d.VisibilityTimestamp = timestamp
+func (u *CancelExecutionTask) SetVisibilityTime(timestamp time.Time) {
+	u.VisibilityTimestamp = timestamp
 }

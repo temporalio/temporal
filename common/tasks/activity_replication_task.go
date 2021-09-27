@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package definition
+package tasks
 
 import (
 	"time"
@@ -31,14 +31,38 @@ import (
 )
 
 type (
-	// Task is the generic task interface
-	Task interface {
-		GetType() enumsspb.TaskType
-		GetVersion() int64
-		SetVersion(version int64)
-		GetTaskID() int64
-		SetTaskID(id int64)
-		GetVisibilityTime() time.Time
-		SetVisibilityTime(timestamp time.Time)
+	SyncActivityTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		Version             int64
+		ScheduledID         int64
 	}
 )
+
+func (a *SyncActivityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY
+}
+
+func (a *SyncActivityTask) GetVersion() int64 {
+	return a.Version
+}
+
+func (a *SyncActivityTask) SetVersion(version int64) {
+	a.Version = version
+}
+
+func (a *SyncActivityTask) GetTaskID() int64 {
+	return a.TaskID
+}
+
+func (a *SyncActivityTask) SetTaskID(id int64) {
+	a.TaskID = id
+}
+
+func (a *SyncActivityTask) GetVisibilityTime() time.Time {
+	return a.VisibilityTimestamp
+}
+
+func (a *SyncActivityTask) SetVisibilityTime(timestamp time.Time) {
+	a.VisibilityTimestamp = timestamp
+}

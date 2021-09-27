@@ -30,10 +30,10 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/shard"
 )
@@ -186,7 +186,7 @@ func (t *timerQueueStandbyProcessorImpl) getReadLevel() timerKey {
 // NotifyNewTimers - Notify the processor about the new standby timer events arrival.
 // This should be called each time new timer events arrives, otherwise timers maybe fired unexpected.
 func (t *timerQueueStandbyProcessorImpl) notifyNewTimers(
-	timerTasks []definition.Task,
+	timerTasks []tasks.Task,
 ) {
 
 	t.timerQueueProcessorBase.notifyNewTimers(timerTasks)
