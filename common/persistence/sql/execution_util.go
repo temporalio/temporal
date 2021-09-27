@@ -547,10 +547,10 @@ func applyTasks(
 	namespaceID string,
 	workflowID string,
 	runID string,
-	transferTasks []p.Task,
-	timerTasks []p.Task,
-	replicationTasks []p.Task,
-	visibilityTasks []p.Task,
+	transferTasks []definition.Task,
+	timerTasks []definition.Task,
+	replicationTasks []definition.Task,
+	visibilityTasks []definition.Task,
 ) error {
 
 	if err := createTransferTasks(ctx,
@@ -761,7 +761,7 @@ func lockExecution(
 func createTransferTasks(
 	ctx context.Context,
 	tx sqlplugin.Tx,
-	transferTasks []p.Task,
+	transferTasks []definition.Task,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -859,7 +859,7 @@ func createTransferTasks(
 func createReplicationTasks(
 	ctx context.Context,
 	tx sqlplugin.Tx,
-	replicationTasks []p.Task,
+	replicationTasks []definition.Task,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -936,7 +936,7 @@ func createReplicationTasks(
 func createTimerTasks(
 	ctx context.Context,
 	tx sqlplugin.Tx,
-	timerTasks []p.Task,
+	timerTasks []definition.Task,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -1020,7 +1020,7 @@ func createTimerTasks(
 func createVisibilityTasks(
 	ctx context.Context,
 	tx sqlplugin.Tx,
-	visibilityTasks []p.Task,
+	visibilityTasks []definition.Task,
 	shardID int32,
 	namespaceID string,
 	workflowID string,

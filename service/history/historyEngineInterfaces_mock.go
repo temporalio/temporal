@@ -34,10 +34,11 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
+
 	enums "go.temporal.io/server/api/enums/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	repication "go.temporal.io/server/api/replication/v1"
-	persistence0 "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/definition"
 	task "go.temporal.io/server/common/task"
 	shard "go.temporal.io/server/service/history/shard"
 )
@@ -1020,7 +1021,7 @@ func (mr *MocktimerProcessorMockRecorder) getTaskFilter() *gomock.Call {
 }
 
 // notifyNewTimers mocks base method.
-func (m *MocktimerProcessor) notifyNewTimers(timerTask []persistence0.Task) {
+func (m *MocktimerProcessor) notifyNewTimers(timerTask []definition.Task) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "notifyNewTimers", timerTask)
 }

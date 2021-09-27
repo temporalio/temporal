@@ -32,11 +32,13 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -856,10 +858,10 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 func (s *ContextImpl) allocateTaskIDsLocked(
 	namespaceEntry *namespace.CacheEntry,
 	workflowID string,
-	transferTasks []persistence.Task,
-	replicationTasks []persistence.Task,
-	timerTasks []persistence.Task,
-	visibilityTasks []persistence.Task,
+	transferTasks []definition.Task,
+	replicationTasks []definition.Task,
+	timerTasks []definition.Task,
+	visibilityTasks []definition.Task,
 	transferMaxReadLevel *int64,
 ) error {
 
@@ -885,7 +887,7 @@ func (s *ContextImpl) allocateTaskIDsLocked(
 }
 
 func (s *ContextImpl) allocateTransferIDsLocked(
-	tasks []persistence.Task,
+	tasks []definition.Task,
 	transferMaxReadLevel *int64,
 ) error {
 
@@ -907,7 +909,7 @@ func (s *ContextImpl) allocateTransferIDsLocked(
 func (s *ContextImpl) allocateTimerIDsLocked(
 	namespaceEntry *namespace.CacheEntry,
 	workflowID string,
-	timerTasks []persistence.Task,
+	timerTasks []definition.Task,
 ) error {
 
 	// assign IDs for the timer tasks. They need to be assigned under shard lock.

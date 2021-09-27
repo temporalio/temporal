@@ -488,10 +488,10 @@ func applyTasks(
 	namespaceID string,
 	workflowID string,
 	runID string,
-	transferTasks []p.Task,
-	timerTasks []p.Task,
-	replicationTasks []p.Task,
-	visibilityTasks []p.Task,
+	transferTasks []definition.Task,
+	timerTasks []definition.Task,
+	replicationTasks []definition.Task,
+	visibilityTasks []definition.Task,
 ) error {
 
 	if err := createTransferTasks(
@@ -543,7 +543,7 @@ func applyTasks(
 
 func createTransferTasks(
 	batch gocql.Batch,
-	transferTasks []p.Task,
+	transferTasks []definition.Task,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -635,7 +635,7 @@ func createTransferTasks(
 
 func createReplicationTasks(
 	batch gocql.Batch,
-	replicationTasks []p.Task,
+	replicationTasks []definition.Task,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -702,7 +702,7 @@ func createReplicationTasks(
 
 func createVisibilityTasks(
 	batch gocql.Batch,
-	visibilityTasks []p.Task,
+	visibilityTasks []definition.Task,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -757,7 +757,7 @@ func createVisibilityTasks(
 
 func createTimerTasks(
 	batch gocql.Batch,
-	timerTasks []p.Task,
+	timerTasks []definition.Task,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
