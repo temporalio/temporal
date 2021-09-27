@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/tasks"
 )
 
 type TransactionPolicy int
@@ -57,7 +58,7 @@ func (policy TransactionPolicy) Ptr() *TransactionPolicy {
 	return &policy
 }
 
-var emptyTasks = []persistence.Task{}
+var emptyTasks = []tasks.Task{}
 
 type (
 	// TODO: This should be part of persistence layer
@@ -235,9 +236,9 @@ type (
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
 		UpdateWorkflowStateStatus(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) error
 
-		AddTransferTasks(transferTasks ...persistence.Task)
-		AddTimerTasks(timerTasks ...persistence.Task)
-		AddVisibilityTasks(visibilityTasks ...persistence.Task)
+		AddTransferTasks(transferTasks ...tasks.Task)
+		AddTimerTasks(timerTasks ...tasks.Task)
+		AddVisibilityTasks(visibilityTasks ...tasks.Task)
 		SetUpdateCondition(int64, int64)
 		GetUpdateCondition() (int64, int64)
 

@@ -22,52 +22,51 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package workflow
+package tasks
 
 import (
 	"time"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/tasks"
+	enumspb "go.temporal.io/api/enums/v1"
+
+	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
-// NOTE: do not use make(type, len(input))
-// since this will assume initial length being len(inputs)
-// always use make(type, 0, len(input))
-func convertSyncActivityInfos(
-	activityInfos map[int64]*persistencespb.ActivityInfo,
-	inputs map[int64]struct{},
-) []tasks.Task {
-	outputs := make([]tasks.Task, 0, len(inputs))
-	for item := range inputs {
-		activityInfo, ok := activityInfos[item]
-		if ok {
-			outputs = append(outputs, &tasks.SyncActivityTask{
-				Version:     activityInfo.Version,
-				ScheduledID: activityInfo.ScheduleId,
-			})
-		}
+type (
+	WorkflowTaskTimeoutTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		EventID             int64
+		ScheduleAttempt     int32
+		TimeoutType         enumspb.TimeoutType
+		Version             int64
 	}
-	return outputs
+)
+
+func (d *WorkflowTaskTimeoutTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT
 }
 
-func setTaskInfo(
-	version int64,
-	timestamp time.Time,
-	transferTasks []tasks.Task,
-	timerTasks []tasks.Task,
-	visibilityTasks []tasks.Task,
-) {
-	// set both the task version, as well as the Timestamp on the transfer tasks
-	for _, task := range transferTasks {
-		task.SetVersion(version)
-		task.SetVisibilityTime(timestamp)
-	}
-	for _, task := range timerTasks {
-		task.SetVersion(version)
-	}
-	for _, task := range visibilityTasks {
-		task.SetVersion(version)
-		task.SetVisibilityTime(timestamp)
-	}
+func (d *WorkflowTaskTimeoutTask) GetVersion() int64 {
+	return d.Version
+}
+
+func (d *WorkflowTaskTimeoutTask) SetVersion(version int64) {
+	d.Version = version
+}
+
+func (d *WorkflowTaskTimeoutTask) GetTaskID() int64 {
+	return d.TaskID
+}
+
+func (d *WorkflowTaskTimeoutTask) SetTaskID(id int64) {
+	d.TaskID = id
+}
+
+func (d *WorkflowTaskTimeoutTask) GetVisibilityTime() time.Time {
+	return d.VisibilityTimestamp
+}
+
+func (d *WorkflowTaskTimeoutTask) SetVisibilityTime(t time.Time) {
+	d.VisibilityTimestamp = t
 }

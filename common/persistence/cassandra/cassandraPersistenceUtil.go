@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/tasks"
 )
 
 func applyWorkflowMutationBatch(
@@ -487,10 +488,10 @@ func applyTasks(
 	namespaceID string,
 	workflowID string,
 	runID string,
-	transferTasks []p.Task,
-	timerTasks []p.Task,
-	replicationTasks []p.Task,
-	visibilityTasks []p.Task,
+	transferTasks []tasks.Task,
+	timerTasks []tasks.Task,
+	replicationTasks []tasks.Task,
+	visibilityTasks []tasks.Task,
 ) error {
 
 	if err := createTransferTasks(
@@ -542,7 +543,7 @@ func applyTasks(
 
 func createTransferTasks(
 	batch gocql.Batch,
-	transferTasks []p.Task,
+	transferTasks []tasks.Task,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -559,35 +560,35 @@ func createTransferTasks(
 
 		switch task.GetType() {
 		case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
-			targetNamespaceID = task.(*p.ActivityTask).NamespaceID
-			taskQueue = task.(*p.ActivityTask).TaskQueue
-			scheduleID = task.(*p.ActivityTask).ScheduleID
+			targetNamespaceID = task.(*tasks.ActivityTask).NamespaceID
+			taskQueue = task.(*tasks.ActivityTask).TaskQueue
+			scheduleID = task.(*tasks.ActivityTask).ScheduleID
 
 		case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
-			targetNamespaceID = task.(*p.WorkflowTask).NamespaceID
-			taskQueue = task.(*p.WorkflowTask).TaskQueue
-			scheduleID = task.(*p.WorkflowTask).ScheduleID
+			targetNamespaceID = task.(*tasks.WorkflowTask).NamespaceID
+			taskQueue = task.(*tasks.WorkflowTask).TaskQueue
+			scheduleID = task.(*tasks.WorkflowTask).ScheduleID
 
 		case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
-			targetNamespaceID = task.(*p.CancelExecutionTask).TargetNamespaceID
-			targetWorkflowID = task.(*p.CancelExecutionTask).TargetWorkflowID
-			targetRunID = task.(*p.CancelExecutionTask).TargetRunID
+			targetNamespaceID = task.(*tasks.CancelExecutionTask).TargetNamespaceID
+			targetWorkflowID = task.(*tasks.CancelExecutionTask).TargetWorkflowID
+			targetRunID = task.(*tasks.CancelExecutionTask).TargetRunID
 
-			targetChildWorkflowOnly = task.(*p.CancelExecutionTask).TargetChildWorkflowOnly
-			scheduleID = task.(*p.CancelExecutionTask).InitiatedID
+			targetChildWorkflowOnly = task.(*tasks.CancelExecutionTask).TargetChildWorkflowOnly
+			scheduleID = task.(*tasks.CancelExecutionTask).InitiatedID
 
 		case enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
-			targetNamespaceID = task.(*p.SignalExecutionTask).TargetNamespaceID
-			targetWorkflowID = task.(*p.SignalExecutionTask).TargetWorkflowID
-			targetRunID = task.(*p.SignalExecutionTask).TargetRunID
+			targetNamespaceID = task.(*tasks.SignalExecutionTask).TargetNamespaceID
+			targetWorkflowID = task.(*tasks.SignalExecutionTask).TargetWorkflowID
+			targetRunID = task.(*tasks.SignalExecutionTask).TargetRunID
 
-			targetChildWorkflowOnly = task.(*p.SignalExecutionTask).TargetChildWorkflowOnly
-			scheduleID = task.(*p.SignalExecutionTask).InitiatedID
+			targetChildWorkflowOnly = task.(*tasks.SignalExecutionTask).TargetChildWorkflowOnly
+			scheduleID = task.(*tasks.SignalExecutionTask).InitiatedID
 
 		case enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
-			targetNamespaceID = task.(*p.StartChildExecutionTask).TargetNamespaceID
-			targetWorkflowID = task.(*p.StartChildExecutionTask).TargetWorkflowID
-			scheduleID = task.(*p.StartChildExecutionTask).InitiatedID
+			targetNamespaceID = task.(*tasks.StartChildExecutionTask).TargetNamespaceID
+			targetWorkflowID = task.(*tasks.StartChildExecutionTask).TargetWorkflowID
+			scheduleID = task.(*tasks.StartChildExecutionTask).InitiatedID
 
 		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
 			enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
@@ -634,7 +635,7 @@ func createTransferTasks(
 
 func createReplicationTasks(
 	batch gocql.Batch,
-	replicationTasks []p.Task,
+	replicationTasks []tasks.Task,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -651,7 +652,7 @@ func createReplicationTasks(
 
 		switch task.GetType() {
 		case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
-			histTask := task.(*p.HistoryReplicationTask)
+			histTask := task.(*tasks.HistoryReplicationTask)
 			branchToken = histTask.BranchToken
 			newRunBranchToken = histTask.NewRunBranchToken
 			firstEventID = histTask.FirstEventID
@@ -660,7 +661,7 @@ func createReplicationTasks(
 
 		case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
 			version = task.GetVersion()
-			activityScheduleID = task.(*p.SyncActivityTask).ScheduledID
+			activityScheduleID = task.(*tasks.SyncActivityTask).ScheduledID
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("Unknow replication type: %v", task.GetType()))
@@ -701,7 +702,7 @@ func createReplicationTasks(
 
 func createVisibilityTasks(
 	batch gocql.Batch,
-	visibilityTasks []p.Task,
+	visibilityTasks []tasks.Task,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -756,7 +757,7 @@ func createVisibilityTasks(
 
 func createTimerTasks(
 	batch gocql.Batch,
-	timerTasks []p.Task,
+	timerTasks []tasks.Task,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -771,30 +772,30 @@ func createTimerTasks(
 		workflowBackoffType := enumsspb.WORKFLOW_BACKOFF_TYPE_UNSPECIFIED
 
 		switch t := task.(type) {
-		case *p.WorkflowTaskTimeoutTask:
+		case *tasks.WorkflowTaskTimeoutTask:
 			eventID = t.EventID
 			timeoutType = t.TimeoutType
 			attempt = t.ScheduleAttempt
 
-		case *p.ActivityTimeoutTask:
+		case *tasks.ActivityTimeoutTask:
 			eventID = t.EventID
 			timeoutType = t.TimeoutType
 			attempt = t.Attempt
 
-		case *p.UserTimerTask:
+		case *tasks.UserTimerTask:
 			eventID = t.EventID
 
-		case *p.ActivityRetryTimerTask:
+		case *tasks.ActivityRetryTimerTask:
 			eventID = t.EventID
 			attempt = t.Attempt
 
-		case *p.WorkflowBackoffTimerTask:
+		case *tasks.WorkflowBackoffTimerTask:
 			workflowBackoffType = t.WorkflowBackoffType
 
-		case *p.WorkflowTimeoutTask:
+		case *tasks.WorkflowTimeoutTask:
 			// noop
 
-		case *p.DeleteHistoryEventTask:
+		case *tasks.DeleteHistoryEventTask:
 			// noop
 
 		default:

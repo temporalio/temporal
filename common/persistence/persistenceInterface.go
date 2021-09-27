@@ -34,6 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/tasks"
 )
 
 const (
@@ -389,10 +390,10 @@ type (
 		NewBufferedEvents         *commonpb.DataBlob
 		ClearBufferedEvents       bool
 
-		TransferTasks    []Task
-		TimerTasks       []Task
-		ReplicationTasks []Task
-		VisibilityTasks  []Task
+		TransferTasks    []tasks.Task
+		TimerTasks       []tasks.Task
+		ReplicationTasks []tasks.Task
+		VisibilityTasks  []tasks.Task
 
 		Condition int64
 
@@ -421,10 +422,10 @@ type (
 		SignalInfos         map[int64]*commonpb.DataBlob
 		SignalRequestedIDs  map[string]struct{}
 
-		TransferTasks    []Task
-		TimerTasks       []Task
-		ReplicationTasks []Task
-		VisibilityTasks  []Task
+		TransferTasks    []tasks.Task
+		TimerTasks       []tasks.Task
+		ReplicationTasks []tasks.Task
+		VisibilityTasks  []tasks.Task
 
 		Condition int64
 

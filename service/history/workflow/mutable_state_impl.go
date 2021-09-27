@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -154,10 +155,10 @@ type (
 		// TODO: persist this to db
 		appliedEvents map[string]struct{}
 
-		InsertTransferTasks    []persistence.Task
-		InsertTimerTasks       []persistence.Task
-		InsertReplicationTasks []persistence.Task
-		InsertVisibilityTasks  []persistence.Task
+		InsertTransferTasks    []tasks.Task
+		InsertTimerTasks       []tasks.Task
+		InsertReplicationTasks []tasks.Task
+		InsertVisibilityTasks  []tasks.Task
 
 		// do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
@@ -3569,7 +3570,7 @@ func (e *MutableStateImpl) RetryActivity(
 
 // AddTransferTasks append transfer tasks
 func (e *MutableStateImpl) AddTransferTasks(
-	transferTasks ...persistence.Task,
+	transferTasks ...tasks.Task,
 ) {
 
 	e.InsertTransferTasks = append(e.InsertTransferTasks, transferTasks...)
@@ -3579,7 +3580,7 @@ func (e *MutableStateImpl) AddTransferTasks(
 
 // AddTimerTasks append timer tasks
 func (e *MutableStateImpl) AddTimerTasks(
-	timerTasks ...persistence.Task,
+	timerTasks ...tasks.Task,
 ) {
 
 	e.InsertTimerTasks = append(e.InsertTimerTasks, timerTasks...)
@@ -3587,7 +3588,7 @@ func (e *MutableStateImpl) AddTimerTasks(
 
 // AddVisibilityTasks append visibility tasks
 func (e *MutableStateImpl) AddVisibilityTasks(
-	visibilityTasks ...persistence.Task,
+	visibilityTasks ...tasks.Task,
 ) {
 
 	e.InsertVisibilityTasks = append(e.InsertVisibilityTasks, visibilityTasks...)
@@ -3982,7 +3983,7 @@ func (e *MutableStateImpl) prepareEventsAndReplicationTasks(
 func (e *MutableStateImpl) eventsToReplicationTask(
 	transactionPolicy TransactionPolicy,
 	events []*historypb.HistoryEvent,
-) ([]persistence.Task, error) {
+) ([]tasks.Task, error) {
 
 	if transactionPolicy == TransactionPolicyPassive ||
 		!e.canReplicateEvents() ||
@@ -4006,7 +4007,7 @@ func (e *MutableStateImpl) eventsToReplicationTask(
 		return nil, err
 	}
 
-	replicationTask := &persistence.HistoryReplicationTask{
+	replicationTask := &tasks.HistoryReplicationTask{
 		FirstEventID:      firstEvent.GetEventId(),
 		NextEventID:       lastEvent.GetEventId() + 1,
 		Version:           firstEvent.GetVersion(),
@@ -4018,12 +4019,12 @@ func (e *MutableStateImpl) eventsToReplicationTask(
 		return nil, serviceerror.NewInternal("should not generate replication task when missing replication state & version history")
 	}
 
-	return []persistence.Task{replicationTask}, nil
+	return []tasks.Task{replicationTask}, nil
 }
 
 func (e *MutableStateImpl) syncActivityToReplicationTask(
 	transactionPolicy TransactionPolicy,
-) []persistence.Task {
+) []tasks.Task {
 
 	if transactionPolicy == TransactionPolicyPassive ||
 		!e.canReplicateEvents() {

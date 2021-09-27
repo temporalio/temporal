@@ -47,6 +47,7 @@ import (
 	definition "go.temporal.io/server/common/definition"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
+	tasks "go.temporal.io/server/common/tasks"
 )
 
 // MockMutableState is a mock of MutableState interface.
@@ -541,7 +542,7 @@ func (mr *MockMutableStateMockRecorder) AddTimerStartedEvent(arg0, arg1 interfac
 }
 
 // AddTimerTasks mocks base method.
-func (m *MockMutableState) AddTimerTasks(timerTasks ...persistence.Task) {
+func (m *MockMutableState) AddTimerTasks(timerTasks ...tasks.Task) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{}
 	for _, a := range timerTasks {
@@ -557,7 +558,7 @@ func (mr *MockMutableStateMockRecorder) AddTimerTasks(timerTasks ...interface{})
 }
 
 // AddTransferTasks mocks base method.
-func (m *MockMutableState) AddTransferTasks(transferTasks ...persistence.Task) {
+func (m *MockMutableState) AddTransferTasks(transferTasks ...tasks.Task) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{}
 	for _, a := range transferTasks {
@@ -588,7 +589,7 @@ func (mr *MockMutableStateMockRecorder) AddUpsertWorkflowSearchAttributesEvent(a
 }
 
 // AddVisibilityTasks mocks base method.
-func (m *MockMutableState) AddVisibilityTasks(visibilityTasks ...persistence.Task) {
+func (m *MockMutableState) AddVisibilityTasks(visibilityTasks ...tasks.Task) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{}
 	for _, a := range visibilityTasks {

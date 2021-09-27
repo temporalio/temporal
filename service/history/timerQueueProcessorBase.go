@@ -33,6 +33,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -206,7 +207,7 @@ RetryProcessor:
 // NotifyNewTimers - Notify the processor about the new timer events arrival.
 // This should be called each time new timer events arrives, otherwise timers maybe fired unexpected.
 func (t *timerQueueProcessorBase) notifyNewTimers(
-	timerTasks []persistence.Task,
+	timerTasks []tasks.Task,
 ) {
 
 	if len(timerTasks) == 0 {

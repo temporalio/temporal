@@ -22,52 +22,47 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package workflow
+package tasks
 
 import (
 	"time"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/tasks"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
-// NOTE: do not use make(type, len(input))
-// since this will assume initial length being len(inputs)
-// always use make(type, 0, len(input))
-func convertSyncActivityInfos(
-	activityInfos map[int64]*persistencespb.ActivityInfo,
-	inputs map[int64]struct{},
-) []tasks.Task {
-	outputs := make([]tasks.Task, 0, len(inputs))
-	for item := range inputs {
-		activityInfo, ok := activityInfos[item]
-		if ok {
-			outputs = append(outputs, &tasks.SyncActivityTask{
-				Version:     activityInfo.Version,
-				ScheduledID: activityInfo.ScheduleId,
-			})
-		}
+type (
+	SyncActivityTask struct {
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		Version             int64
+		ScheduledID         int64
 	}
-	return outputs
+)
+
+func (a *SyncActivityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY
 }
 
-func setTaskInfo(
-	version int64,
-	timestamp time.Time,
-	transferTasks []tasks.Task,
-	timerTasks []tasks.Task,
-	visibilityTasks []tasks.Task,
-) {
-	// set both the task version, as well as the Timestamp on the transfer tasks
-	for _, task := range transferTasks {
-		task.SetVersion(version)
-		task.SetVisibilityTime(timestamp)
-	}
-	for _, task := range timerTasks {
-		task.SetVersion(version)
-	}
-	for _, task := range visibilityTasks {
-		task.SetVersion(version)
-		task.SetVisibilityTime(timestamp)
-	}
+func (a *SyncActivityTask) GetVersion() int64 {
+	return a.Version
+}
+
+func (a *SyncActivityTask) SetVersion(version int64) {
+	a.Version = version
+}
+
+func (a *SyncActivityTask) GetTaskID() int64 {
+	return a.TaskID
+}
+
+func (a *SyncActivityTask) SetTaskID(id int64) {
+	a.TaskID = id
+}
+
+func (a *SyncActivityTask) GetVisibilityTime() time.Time {
+	return a.VisibilityTimestamp
+}
+
+func (a *SyncActivityTask) SetVisibilityTime(timestamp time.Time) {
+	a.VisibilityTimestamp = timestamp
 }
