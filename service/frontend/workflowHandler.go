@@ -482,12 +482,14 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		}
 	}
 
-	// this function return the following 5 things,
-	// 1. the workflow run ID
-	// 2. the last first event ID (the event ID of the last batch of events in the history)
-	// 3. the next event ID
-	// 4. whether the workflow is closed
-	// 5. error if any
+	// this function returns the following 7 things,
+	// 1. the current branch token (to use to retrieve history events)
+	// 2. the workflow run ID
+	// 3. the last first event ID (the event ID of the last batch of events in the history)
+	// 4. the last first event transaction id
+	// 5. the next event ID
+	// 6. whether the workflow is running
+	// 7. error if any
 	queryHistory := func(
 		namespaceUUID string,
 		execution *commonpb.WorkflowExecution,
@@ -692,6 +694,33 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	if err != nil {
 		return nil, err
 	}
+
+	// Backwards-compatibility fix for retry events after #1866: older SDKs don't know how to "follow"
+	// subsequent runs linked in WorkflowExecutionFailed or TimedOut events, so they'll get the wrong result
+	// when trying to "get" the result of a workflow run. (This applies to cron runs also but "get" on a cron
+	// workflow isn't really sensible.)
+	//
+	// To handle this in a backwards-compatible way, we'll pretend the completion event is actually
+	// ContinuedAsNew, if it's Failed or TimedOut. We want to do this only when the client is looking for a
+	// completion event, and not when it's getting the history to display for other purposes. The best signal
+	// for that purpose is `isCloseEventOnly`. (We can't use `isLongPoll` also because in some cases, older
+	// versions of the Java SDK don't set that flag.)
+	//
+	// TODO: We can remove this once we no longer support SDK versions prior to around September 2021.
+	// Revisit this once we have an SDK deprecation policy.
+	if isCloseEventOnly &&
+		!wh.versionChecker.ClientSupportsFeature(ctx, headers.FeatureFollowsNextRunID) &&
+		len(history.Events) > 0 {
+		lastEvent := history.Events[len(history.Events)-1]
+		fakeEvent, err := wh.makeFakeContinuedAsNewEvent(ctx, lastEvent)
+		if err != nil {
+			return nil, err
+		}
+		if fakeEvent != nil {
+			history.Events[len(history.Events)-1] = fakeEvent
+		}
+	}
+
 	return &workflowservice.GetWorkflowExecutionHistoryResponse{
 		History:       history,
 		RawHistory:    historyBlob,
@@ -3501,4 +3530,57 @@ func (wh *WorkflowHandler) checkNamespaceMatch(requestNamespace string, tokenNam
 
 func (wh *WorkflowHandler) metricsScope(ctx context.Context) metrics.Scope {
 	return interceptor.MetricsScope(ctx, wh.GetLogger())
+}
+
+func (wh *WorkflowHandler) makeFakeContinuedAsNewEvent(
+	ctx context.Context,
+	lastEvent *historypb.HistoryEvent,
+) (*historypb.HistoryEvent, error) {
+	switch lastEvent.EventType {
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
+		if lastEvent.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId() == "" {
+			return nil, nil
+		}
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
+		if lastEvent.GetWorkflowExecutionFailedEventAttributes().GetNewExecutionRunId() == "" {
+			return nil, nil
+		}
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
+		if lastEvent.GetWorkflowExecutionTimedOutEventAttributes().GetNewExecutionRunId() == "" {
+			return nil, nil
+		}
+	default:
+		return nil, nil
+	}
+
+	// We need to replace the last event with a continued-as-new event that has at least the
+	// NewExecutionRunId field. We don't actually need any other fields, since that's the only one
+	// the client looks at in this case, but copy the last result or failure from the real completed
+	// event just so it's clear what the result was.
+	newAttrs := &historypb.WorkflowExecutionContinuedAsNewEventAttributes{}
+	switch lastEvent.EventType {
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
+		attrs := lastEvent.GetWorkflowExecutionCompletedEventAttributes()
+		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
+		newAttrs.LastCompletionResult = attrs.Result
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
+		attrs := lastEvent.GetWorkflowExecutionFailedEventAttributes()
+		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
+		newAttrs.Failure = attrs.Failure
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
+		attrs := lastEvent.GetWorkflowExecutionTimedOutEventAttributes()
+		newAttrs.NewExecutionRunId = attrs.NewExecutionRunId
+		newAttrs.Failure = failure.NewTimeoutFailure("workflow timeout", enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+	}
+
+	return &historypb.HistoryEvent{
+		EventId:   lastEvent.EventId,
+		EventTime: lastEvent.EventTime,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
+		Version:   lastEvent.Version,
+		TaskId:    lastEvent.TaskId,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
+			WorkflowExecutionContinuedAsNewEventAttributes: newAttrs,
+		},
+	}, nil
 }

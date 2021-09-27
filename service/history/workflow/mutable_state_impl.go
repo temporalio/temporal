@@ -73,7 +73,7 @@ const (
 	emptyUUID = "emptyUuid"
 
 	mutableStateInvalidHistoryActionMsg         = "invalid history builder state for action"
-	mutableStateInvalidHistoryActionMsgTemplate = mutableStateInvalidHistoryActionMsg + ": %v"
+	mutableStateInvalidHistoryActionMsgTemplate = mutableStateInvalidHistoryActionMsg + ": %v, %v"
 )
 
 var (
@@ -1778,7 +1778,7 @@ func (e *MutableStateImpl) AddActivityTaskScheduledEvent(
 		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction)
-		return nil, nil, e.createCallerError(opTag)
+		return nil, nil, e.createCallerError(opTag, "ActivityID: "+command.GetActivityId())
 	}
 
 	event := e.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command)
@@ -2119,7 +2119,7 @@ func (e *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 				tag.Bool(ok),
 				tag.WorkflowScheduleID(scheduleID))
 
-			return nil, nil, e.createCallerError(opTag)
+			return nil, nil, e.createCallerError(opTag, fmt.Sprintf("ScheduledID: %d", scheduleID))
 		}
 	}
 
@@ -2131,7 +2131,7 @@ func (e *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 			tag.Bool(ok),
 			tag.WorkflowScheduleID(scheduleID))
 
-		return nil, nil, e.createCallerError(opTag)
+		return nil, nil, e.createCallerError(opTag, fmt.Sprintf("ScheduledID: %d", scheduleID))
 	}
 
 	// At this point we know this is a valid activity cancellation request
@@ -2773,7 +2773,7 @@ func (e *MutableStateImpl) AddTimerStartedEvent(
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowTimerID(timerID))
-		return nil, nil, e.createCallerError(opTag)
+		return nil, nil, e.createCallerError(opTag, "TimerID: "+command.GetTimerId())
 	}
 
 	event := e.hBuilder.AddTimerStartedEvent(workflowTaskCompletedEventID, command)
@@ -2870,7 +2870,7 @@ func (e *MutableStateImpl) AddTimerCanceledEvent(
 				tag.WorkflowEventID(e.GetNextEventID()),
 				tag.ErrorTypeInvalidHistoryAction,
 				tag.WorkflowTimerID(timerID))
-			return nil, e.createCallerError(opTag)
+			return nil, e.createCallerError(opTag, "TimerID: "+command.GetTimerId())
 		}
 		timerStartedID = timerFiredEvent.GetTimerFiredEventAttributes().GetStartedEventId()
 	} else {
@@ -4406,9 +4406,10 @@ func (e *MutableStateImpl) createInternalServerError(
 
 func (e *MutableStateImpl) createCallerError(
 	actionTag tag.ZapTag,
+	details string,
 ) error {
-
-	return serviceerror.NewInvalidArgument(fmt.Sprintf(mutableStateInvalidHistoryActionMsgTemplate, actionTag.Field().String))
+	msg := fmt.Sprintf(mutableStateInvalidHistoryActionMsgTemplate, actionTag.Field().String, details)
+	return serviceerror.NewInvalidArgument(msg)
 }
 
 func (_ *MutableStateImpl) unixNanoToTime(

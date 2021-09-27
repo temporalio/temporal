@@ -3704,7 +3704,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_NotSchedule
 	})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Equal("BadRequestCancelActivityAttributes: invalid history builder state for action: add-activitytask-cancel-requested-event", err.Error())
+	s.Equal("BadRequestCancelActivityAttributes: invalid history builder state for action: add-activitytask-cancel-requested-event, ScheduledID: 99", err.Error())
 	s.NotNil(updatedWorkflowMutation)
 	s.Equal(int64(5), updatedWorkflowMutation.NextEventID)
 	s.Equal(common.EmptyEventID, updatedWorkflowMutation.ExecutionInfo.LastWorkflowTaskStartId)
@@ -4342,7 +4342,7 @@ func (s *engineSuite) TestStarTimer_DuplicateTimerID() {
 	})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Equal("StartTimerDuplicateId: invalid history builder state for action: add-timer-started-event", err.Error())
+	s.Equal("StartTimerDuplicateId: invalid history builder state for action: add-timer-started-event, TimerID: t1", err.Error())
 
 	s.True(workflowTaskFailedEvent)
 
@@ -4466,7 +4466,7 @@ func (s *engineSuite) TestCancelTimer_RespondWorkflowTaskCompleted_NoStartTimer(
 	})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Equal("BadCancelTimerAttributes: invalid history builder state for action: add-timer-canceled-event", err.Error())
+	s.Equal("BadCancelTimerAttributes: invalid history builder state for action: add-timer-canceled-event, TimerID: t1", err.Error())
 
 	s.NotNil(updatedWorkflowMutation)
 	s.Equal(int64(5), updatedWorkflowMutation.NextEventID)

@@ -29,6 +29,7 @@ import (
 
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute"
 
@@ -84,7 +85,6 @@ type (
 		// internal services clients
 
 		GetSDKClient() sdkclient.Client
-		GetFrontendRawClient() workflowservice.WorkflowServiceClient
 		GetFrontendClient() workflowservice.WorkflowServiceClient
 		GetMatchingRawClient() matchingservice.MatchingServiceClient
 		GetMatchingClient() matchingservice.MatchingServiceClient
