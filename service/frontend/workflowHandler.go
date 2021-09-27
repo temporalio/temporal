@@ -2948,6 +2948,8 @@ func (wh *WorkflowHandler) GetClusterInfo(_ context.Context, _ *workflowservice.
 		VersionInfo:       metadata.VersionInfo,
 		ClusterName:       metadata.ClusterName,
 		HistoryShardCount: metadata.HistoryShardCount,
+		PersistenceStore:  wh.GetExecutionManager().GetName(),
+		VisibilityStore:   wh.visibilityMrg.GetName(),
 	}, nil
 }
 
