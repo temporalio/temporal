@@ -88,7 +88,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	attr.IndexedFields = fields
 	err = saValidator.Validate(attr, namespace, "")
 	s.Error(err)
-	s.Equal("InvalidKey is not a valid search attribute name", err.Error())
+	s.Equal("search attribute InvalidKey is not defined", err.Error())
 
 	fields = map[string]*commonpb.Payload{
 		"CustomStringField": payload.EncodeString("1"),
@@ -165,7 +165,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 	attr.IndexedFields = fields
 	err = saValidator.Validate(attr, namespace, "")
 	s.Error(err)
-	s.Equal("alias_of_InvalidKey is not a valid search attribute name", err.Error())
+	s.Equal("search attribute alias_of_InvalidKey is not defined", err.Error())
 
 	fields = map[string]*commonpb.Payload{
 		"alias_of_CustomStringField": payload.EncodeString("1"),

@@ -1133,7 +1133,7 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 	_, err := poller.PollAndProcessWorkflowTask(false, false)
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Equal("BadSearchAttributes: INVALIDKEY is not a valid search attribute name", err.Error())
+	s.Equal("BadSearchAttributes: search attribute INVALIDKEY is not defined", err.Error())
 
 	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace: s.namespace,
