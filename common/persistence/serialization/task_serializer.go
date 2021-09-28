@@ -80,7 +80,7 @@ func (s *TaskSerializer) SerializeTransferTasks(
 		case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 			transferTask = s.transferResetTaskToProto(task.(*tasks.ResetWorkflowTask))
 		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknow transfer type: %v", task.GetType()))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown transfer task type: %v", task.GetType()))
 		}
 
 		blob, err := TransferTaskInfoToBlob(transferTask)
@@ -118,7 +118,7 @@ func (s *TaskSerializer) DeserializeTransferTasks(
 		case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 			task = s.transferResetTaskFromProto(transferTask)
 		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknow transfer type: %v", transferTask.TaskType))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown transfer task type: %v", transferTask.TaskType))
 		}
 
 		taskSlice[index] = task
@@ -148,7 +148,7 @@ func (s *TaskSerializer) SerializeTimerTasks(
 		case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT:
 			timerTask = s.timerWorkflowCleanupTaskToProto(task.(*tasks.DeleteHistoryEventTask))
 		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknow timer type: %v", task.GetType()))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown timer task type: %v", task.GetType()))
 		}
 
 		blob, err := TimerTaskInfoToBlob(timerTask)
@@ -186,7 +186,7 @@ func (s *TaskSerializer) DeserializeTimerTasks(
 		case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT:
 			timer = s.timerWorkflowCleanupTaskFromProto(timerTask)
 		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknow timer type: %v", timerTask.TaskType))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown timer task type: %v", timerTask.TaskType))
 		}
 
 		taskSlice[index] = timer
@@ -210,7 +210,7 @@ func (s *TaskSerializer) SerializeVisibilityTasks(
 		case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
 			visibilityTask = s.visibilityDeleteTaskToProto(task.(*tasks.DeleteExecutionVisibilityTask))
 		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknow visibility type: %v", task.GetType()))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown visibilit task type: %v", task.GetType()))
 		}
 
 		blob, err := VisibilityTaskInfoToBlob(visibilityTask)
@@ -242,7 +242,7 @@ func (s *TaskSerializer) DeserializeVisibilityTasks(
 		case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
 			visibility = s.visibilityDeleteTaskFromProto(visibilityTask)
 		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknow visibility type: %v", visibilityTask.TaskType))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown visibility task type: %v", visibilityTask.TaskType))
 		}
 
 		taskSlice[index] = visibility
@@ -262,7 +262,7 @@ func (s *TaskSerializer) SerializeReplicationTasks(
 		case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
 			replicationTask = s.replicationHistoryTaskToProto(task.(*tasks.HistoryReplicationTask))
 		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknow visibility type: %v", task.GetType()))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown repication task type: %v", task.GetType()))
 		}
 
 		blob, err := ReplicationTaskInfoToBlob(replicationTask)
@@ -290,7 +290,7 @@ func (s *TaskSerializer) DeserializeReplicationTasks(
 		case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
 			replication = s.replicationHistoryTaskFromProto(replicationTask)
 		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknow replication type: %v", replicationTask.TaskType))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", replicationTask.TaskType))
 		}
 
 		taskSlice[index] = replication
