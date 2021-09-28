@@ -634,7 +634,7 @@ func (m *MockExecutionStore) EXPECT() *MockExecutionStoreMockRecorder {
 }
 
 // AddTasks mocks base method.
-func (m *MockExecutionStore) AddTasks(request *persistence.AddTasksRequest) error {
+func (m *MockExecutionStore) AddTasks(request *persistence.InternalAddTasksRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddTasks", request)
 	ret0, _ := ret[0].(error)

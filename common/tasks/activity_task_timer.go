@@ -28,8 +28,6 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 type (
@@ -43,8 +41,11 @@ type (
 	}
 )
 
-func (a *ActivityTimeoutTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT
+func (a *ActivityTimeoutTask) GetKey() Key {
+	return Key{
+		FireTime: a.VisibilityTimestamp,
+		TaskID:   a.TaskID,
+	}
 }
 
 func (a *ActivityTimeoutTask) GetVersion() int64 {

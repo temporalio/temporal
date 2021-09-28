@@ -26,8 +26,6 @@ package tasks
 
 import (
 	"time"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 type (
@@ -39,8 +37,11 @@ type (
 	}
 )
 
-func (u *UserTimerTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_USER_TIMER
+func (u *UserTimerTask) GetKey() Key {
+	return Key{
+		FireTime: u.VisibilityTimestamp,
+		TaskID:   u.TaskID,
+	}
 }
 
 func (u *UserTimerTask) GetVersion() int64 {

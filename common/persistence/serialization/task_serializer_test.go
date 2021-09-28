@@ -32,6 +32,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -90,11 +91,7 @@ func (s *taskSerializerSuite) TestTransferWorkflowTask() {
 		Version:             rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeTransferTasks([]tasks.Task{workflowTask})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeTransferTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{workflowTask}, taskSlice)
+	s.assertEqualTransferTasks(workflowTask)
 }
 
 func (s *taskSerializerSuite) TestTransferActivityTask() {
@@ -107,11 +104,7 @@ func (s *taskSerializerSuite) TestTransferActivityTask() {
 		Version:             rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeTransferTasks([]tasks.Task{activityTask})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeTransferTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{activityTask}, taskSlice)
+	s.assertEqualTransferTasks(activityTask)
 }
 
 func (s *taskSerializerSuite) TestTransferRequestCancelTask() {
@@ -126,11 +119,7 @@ func (s *taskSerializerSuite) TestTransferRequestCancelTask() {
 		Version:                 rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeTransferTasks([]tasks.Task{requestCancelTask})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeTransferTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{requestCancelTask}, taskSlice)
+	s.assertEqualTransferTasks(requestCancelTask)
 }
 
 func (s *taskSerializerSuite) TestTransferSignalTask() {
@@ -145,11 +134,7 @@ func (s *taskSerializerSuite) TestTransferSignalTask() {
 		Version:                 rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeTransferTasks([]tasks.Task{signalTask})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeTransferTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{signalTask}, taskSlice)
+	s.assertEqualTransferTasks(signalTask)
 }
 
 func (s *taskSerializerSuite) TestTransferChildWorkflowTask() {
@@ -162,11 +147,7 @@ func (s *taskSerializerSuite) TestTransferChildWorkflowTask() {
 		Version:             rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeTransferTasks([]tasks.Task{childWorkflowTask})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeTransferTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{childWorkflowTask}, taskSlice)
+	s.assertEqualTransferTasks(childWorkflowTask)
 }
 
 func (s *taskSerializerSuite) TestTransferCloseTask() {
@@ -176,11 +157,7 @@ func (s *taskSerializerSuite) TestTransferCloseTask() {
 		Version:             rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeTransferTasks([]tasks.Task{closeTask})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeTransferTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{closeTask}, taskSlice)
+	s.assertEqualTransferTasks(closeTask)
 }
 
 func (s *taskSerializerSuite) TestTransferResetTask() {
@@ -190,11 +167,7 @@ func (s *taskSerializerSuite) TestTransferResetTask() {
 		Version:             rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeTransferTasks([]tasks.Task{resetTask})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeTransferTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{resetTask}, taskSlice)
+	s.assertEqualTransferTasks(resetTask)
 }
 
 func (s *taskSerializerSuite) TestTimerWorkflowTask() {
@@ -207,11 +180,7 @@ func (s *taskSerializerSuite) TestTimerWorkflowTask() {
 		Version:             rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeTimerTasks([]tasks.Task{workflowTaskTimer})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeTimerTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{workflowTaskTimer}, taskSlice)
+	s.assertEqualTimerTasks(workflowTaskTimer)
 }
 
 func (s *taskSerializerSuite) TestTimerWorkflowDelayTask() {
@@ -222,11 +191,7 @@ func (s *taskSerializerSuite) TestTimerWorkflowDelayTask() {
 		Version:             rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeTimerTasks([]tasks.Task{workflowDelayTimer})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeTimerTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{workflowDelayTimer}, taskSlice)
+	s.assertEqualTimerTasks(workflowDelayTimer)
 }
 
 func (s *taskSerializerSuite) TestTimerActivityTask() {
@@ -239,11 +204,7 @@ func (s *taskSerializerSuite) TestTimerActivityTask() {
 		Version:             rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeTimerTasks([]tasks.Task{activityTaskTimer})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeTimerTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{activityTaskTimer}, taskSlice)
+	s.assertEqualTimerTasks(activityTaskTimer)
 }
 
 func (s *taskSerializerSuite) TestTimerActivityRetryTask() {
@@ -255,11 +216,7 @@ func (s *taskSerializerSuite) TestTimerActivityRetryTask() {
 		Version:             rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeTimerTasks([]tasks.Task{activityRetryTimer})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeTimerTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{activityRetryTimer}, taskSlice)
+	s.assertEqualTimerTasks(activityRetryTimer)
 }
 
 func (s *taskSerializerSuite) TestTimerUserTask() {
@@ -270,11 +227,7 @@ func (s *taskSerializerSuite) TestTimerUserTask() {
 		Version:             rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeTimerTasks([]tasks.Task{userTimer})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeTimerTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{userTimer}, taskSlice)
+	s.assertEqualTimerTasks(userTimer)
 }
 
 func (s *taskSerializerSuite) TestTimerWorkflowRun() {
@@ -284,11 +237,7 @@ func (s *taskSerializerSuite) TestTimerWorkflowRun() {
 		Version:             rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeTimerTasks([]tasks.Task{workflowTimer})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeTimerTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{workflowTimer}, taskSlice)
+	s.assertEqualTimerTasks(workflowTimer)
 }
 
 func (s *taskSerializerSuite) TestTimerWorkflowCleanupTask() {
@@ -298,11 +247,7 @@ func (s *taskSerializerSuite) TestTimerWorkflowCleanupTask() {
 		Version:             rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeTimerTasks([]tasks.Task{workflowCleanupTimer})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeTimerTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{workflowCleanupTimer}, taskSlice)
+	s.assertEqualTimerTasks(workflowCleanupTimer)
 }
 
 func (s *taskSerializerSuite) TestVisibilityStartTask() {
@@ -312,11 +257,7 @@ func (s *taskSerializerSuite) TestVisibilityStartTask() {
 		Version:             rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeVisibilityTasks([]tasks.Task{visibilityStart})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeVisibilityTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{visibilityStart}, taskSlice)
+	s.assertEqualVisibilityTasks(visibilityStart)
 }
 
 func (s *taskSerializerSuite) TestVisibilityUpsertTask() {
@@ -326,11 +267,7 @@ func (s *taskSerializerSuite) TestVisibilityUpsertTask() {
 		Version:             rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeVisibilityTasks([]tasks.Task{visibilityUpsert})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeVisibilityTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{visibilityUpsert}, taskSlice)
+	s.assertEqualVisibilityTasks(visibilityUpsert)
 }
 
 func (s *taskSerializerSuite) TestVisibilityCloseTask() {
@@ -340,11 +277,7 @@ func (s *taskSerializerSuite) TestVisibilityCloseTask() {
 		Version:             rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeVisibilityTasks([]tasks.Task{visibilityClose})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeVisibilityTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{visibilityClose}, taskSlice)
+	s.assertEqualVisibilityTasks(visibilityClose)
 }
 
 func (s *taskSerializerSuite) TestVisibilityDeleteTask() {
@@ -354,11 +287,7 @@ func (s *taskSerializerSuite) TestVisibilityDeleteTask() {
 		Version:             rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeVisibilityTasks([]tasks.Task{visibilityDelete})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeVisibilityTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{visibilityDelete}, taskSlice)
+	s.assertEqualVisibilityTasks(visibilityDelete)
 }
 
 func (s *taskSerializerSuite) TestReplicateActivityTask() {
@@ -369,11 +298,7 @@ func (s *taskSerializerSuite) TestReplicateActivityTask() {
 		ScheduledID:         rand.Int63(),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeReplicationTasks([]tasks.Task{replicateActivityTask})
-	s.NoError(err)
-	taskSlice, err := s.taskSerializer.DeserializeReplicationTasks(blobSlice)
-	s.NoError(err)
-	s.Equal([]tasks.Task{replicateActivityTask}, taskSlice)
+	s.assertEqualReplicationTasks(replicateActivityTask)
 }
 
 func (s *taskSerializerSuite) TestReplicateHistoryTask() {
@@ -387,9 +312,49 @@ func (s *taskSerializerSuite) TestReplicateHistoryTask() {
 		NewRunBranchToken:   shuffle.Bytes([]byte("random new branch token")),
 	}
 
-	blobSlice, err := s.taskSerializer.SerializeReplicationTasks([]tasks.Task{replicateHistoryTask})
+	s.assertEqualReplicationTasks(replicateHistoryTask)
+}
+
+func (s *taskSerializerSuite) assertEqualTransferTasks(
+	task tasks.Task,
+) {
+	blobMap, err := s.taskSerializer.SerializeTransferTasks([]tasks.Task{task})
 	s.NoError(err)
+	blobSlice := []commonpb.DataBlob{blobMap[task.GetKey()]}
+	taskSlice, err := s.taskSerializer.DeserializeTransferTasks(blobSlice)
+	s.NoError(err)
+	s.Equal([]tasks.Task{task}, taskSlice)
+}
+
+func (s *taskSerializerSuite) assertEqualTimerTasks(
+	task tasks.Task,
+) {
+	blobMap, err := s.taskSerializer.SerializeTimerTasks([]tasks.Task{task})
+	s.NoError(err)
+	blobSlice := []commonpb.DataBlob{blobMap[task.GetKey()]}
+	taskSlice, err := s.taskSerializer.DeserializeTimerTasks(blobSlice)
+	s.NoError(err)
+	s.Equal([]tasks.Task{task}, taskSlice)
+}
+
+func (s *taskSerializerSuite) assertEqualVisibilityTasks(
+	task tasks.Task,
+) {
+	blobMap, err := s.taskSerializer.SerializeVisibilityTasks([]tasks.Task{task})
+	s.NoError(err)
+	blobSlice := []commonpb.DataBlob{blobMap[task.GetKey()]}
+	taskSlice, err := s.taskSerializer.DeserializeVisibilityTasks(blobSlice)
+	s.NoError(err)
+	s.Equal([]tasks.Task{task}, taskSlice)
+}
+
+func (s *taskSerializerSuite) assertEqualReplicationTasks(
+	task tasks.Task,
+) {
+	blobMap, err := s.taskSerializer.SerializeReplicationTasks([]tasks.Task{task})
+	s.NoError(err)
+	blobSlice := []commonpb.DataBlob{blobMap[task.GetKey()]}
 	taskSlice, err := s.taskSerializer.DeserializeReplicationTasks(blobSlice)
 	s.NoError(err)
-	s.Equal([]tasks.Task{replicateHistoryTask}, taskSlice)
+	s.Equal([]tasks.Task{task}, taskSlice)
 }

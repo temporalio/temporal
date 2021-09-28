@@ -25,20 +25,13 @@
 package cassandra
 
 import (
-	"fmt"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tasks"
 )
 
@@ -156,9 +149,6 @@ func applyWorkflowMutationBatch(
 	return applyTasks(
 		batch,
 		shardID,
-		namespaceID,
-		workflowID,
-		runID,
 		workflowMutation.TransferTasks,
 		workflowMutation.TimerTasks,
 		workflowMutation.ReplicationTasks,
@@ -272,9 +262,6 @@ func applyWorkflowSnapshotBatchAsReset(
 	return applyTasks(
 		batch,
 		shardID,
-		namespaceID,
-		workflowID,
-		runID,
 		workflowSnapshot.TransferTasks,
 		workflowSnapshot.TimerTasks,
 		workflowSnapshot.ReplicationTasks,
@@ -373,9 +360,6 @@ func applyWorkflowSnapshotBatchAsNew(
 	return applyTasks(
 		batch,
 		shardID,
-		namespaceID,
-		workflowID,
-		runID,
 		workflowSnapshot.TransferTasks,
 		workflowSnapshot.TimerTasks,
 		workflowSnapshot.ReplicationTasks,
@@ -485,22 +469,16 @@ func updateExecution(
 func applyTasks(
 	batch gocql.Batch,
 	shardID int32,
-	namespaceID string,
-	workflowID string,
-	runID string,
-	transferTasks []tasks.Task,
-	timerTasks []tasks.Task,
-	replicationTasks []tasks.Task,
-	visibilityTasks []tasks.Task,
+	transferTasks map[tasks.Key]commonpb.DataBlob,
+	timerTasks map[tasks.Key]commonpb.DataBlob,
+	replicationTasks map[tasks.Key]commonpb.DataBlob,
+	visibilityTasks map[tasks.Key]commonpb.DataBlob,
 ) error {
 
 	if err := createTransferTasks(
 		batch,
 		transferTasks,
 		shardID,
-		namespaceID,
-		workflowID,
-		runID,
 	); err != nil {
 		return err
 	}
@@ -509,9 +487,6 @@ func applyTasks(
 		batch,
 		timerTasks,
 		shardID,
-		namespaceID,
-		workflowID,
-		runID,
 	); err != nil {
 		return err
 	}
@@ -520,9 +495,6 @@ func applyTasks(
 		batch,
 		replicationTasks,
 		shardID,
-		namespaceID,
-		workflowID,
-		runID,
 	); err != nil {
 		return err
 	}
@@ -531,9 +503,6 @@ func applyTasks(
 		batch,
 		visibilityTasks,
 		shardID,
-		namespaceID,
-		workflowID,
-		runID,
 	); err != nil {
 		return err
 	}
@@ -543,298 +512,85 @@ func applyTasks(
 
 func createTransferTasks(
 	batch gocql.Batch,
-	transferTasks []tasks.Task,
+	transferTasks map[tasks.Key]commonpb.DataBlob,
 	shardID int32,
-	namespaceID string,
-	workflowID string,
-	runID string,
 ) error {
-
-	targetNamespaceID := namespaceID
-	for _, task := range transferTasks {
-		var taskQueue string
-		var scheduleID int64
-		targetWorkflowID := p.TransferTaskTransferTargetWorkflowID
-		targetRunID := ""
-		targetChildWorkflowOnly := false
-
-		switch task.GetType() {
-		case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
-			targetNamespaceID = task.(*tasks.ActivityTask).NamespaceID
-			taskQueue = task.(*tasks.ActivityTask).TaskQueue
-			scheduleID = task.(*tasks.ActivityTask).ScheduleID
-
-		case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
-			targetNamespaceID = task.(*tasks.WorkflowTask).NamespaceID
-			taskQueue = task.(*tasks.WorkflowTask).TaskQueue
-			scheduleID = task.(*tasks.WorkflowTask).ScheduleID
-
-		case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
-			targetNamespaceID = task.(*tasks.CancelExecutionTask).TargetNamespaceID
-			targetWorkflowID = task.(*tasks.CancelExecutionTask).TargetWorkflowID
-			targetRunID = task.(*tasks.CancelExecutionTask).TargetRunID
-
-			targetChildWorkflowOnly = task.(*tasks.CancelExecutionTask).TargetChildWorkflowOnly
-			scheduleID = task.(*tasks.CancelExecutionTask).InitiatedID
-
-		case enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
-			targetNamespaceID = task.(*tasks.SignalExecutionTask).TargetNamespaceID
-			targetWorkflowID = task.(*tasks.SignalExecutionTask).TargetWorkflowID
-			targetRunID = task.(*tasks.SignalExecutionTask).TargetRunID
-
-			targetChildWorkflowOnly = task.(*tasks.SignalExecutionTask).TargetChildWorkflowOnly
-			scheduleID = task.(*tasks.SignalExecutionTask).InitiatedID
-
-		case enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
-			targetNamespaceID = task.(*tasks.StartChildExecutionTask).TargetNamespaceID
-			targetWorkflowID = task.(*tasks.StartChildExecutionTask).TargetWorkflowID
-			scheduleID = task.(*tasks.StartChildExecutionTask).InitiatedID
-
-		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
-			enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
-			// No explicit property needs to be set
-
-		default:
-			return serviceerror.NewInternal(fmt.Sprintf("Unknow transfer type: %v", task.GetType()))
-		}
-
-		transferTaskInfo := &persistencespb.TransferTaskInfo{
-			NamespaceId:             namespaceID,
-			WorkflowId:              workflowID,
-			RunId:                   runID,
-			TaskType:                task.GetType(),
-			TargetNamespaceId:       targetNamespaceID,
-			TargetWorkflowId:        targetWorkflowID,
-			TargetRunId:             targetRunID,
-			TaskQueue:               taskQueue,
-			TargetChildWorkflowOnly: targetChildWorkflowOnly,
-			ScheduleId:              scheduleID,
-			Version:                 task.GetVersion(),
-			TaskId:                  task.GetTaskID(),
-			VisibilityTime:          timestamp.TimePtr(task.GetVisibilityTime()),
-		}
-
-		dataBlob, err := serialization.TransferTaskInfoToBlob(transferTaskInfo)
-		if err != nil {
-			return err
-		}
+	for key, blob := range transferTasks {
 		batch.Query(templateCreateTransferTaskQuery,
 			shardID,
 			rowTypeTransferTask,
 			rowTypeTransferNamespaceID,
 			rowTypeTransferWorkflowID,
 			rowTypeTransferRunID,
-			dataBlob.Data,
-			dataBlob.EncodingType.String(),
+			blob.Data,
+			blob.EncodingType.String(),
 			defaultVisibilityTimestamp,
-			task.GetTaskID())
+			key.TaskID,
+		)
 	}
-
-	return nil
-}
-
-func createReplicationTasks(
-	batch gocql.Batch,
-	replicationTasks []tasks.Task,
-	shardID int32,
-	namespaceID string,
-	workflowID string,
-	runID string,
-) error {
-
-	for _, task := range replicationTasks {
-		// Replication task specific information
-		firstEventID := common.EmptyEventID
-		nextEventID := common.EmptyEventID
-		version := common.EmptyVersion // nolint:ineffassign
-		activityScheduleID := common.EmptyEventID
-		var branchToken, newRunBranchToken []byte
-
-		switch task.GetType() {
-		case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
-			histTask := task.(*tasks.HistoryReplicationTask)
-			branchToken = histTask.BranchToken
-			newRunBranchToken = histTask.NewRunBranchToken
-			firstEventID = histTask.FirstEventID
-			nextEventID = histTask.NextEventID
-			version = task.GetVersion()
-
-		case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
-			version = task.GetVersion()
-			activityScheduleID = task.(*tasks.SyncActivityTask).ScheduledID
-
-		default:
-			return serviceerror.NewInternal(fmt.Sprintf("Unknow replication type: %v", task.GetType()))
-		}
-
-		datablob, err := serialization.ReplicationTaskInfoToBlob(&persistencespb.ReplicationTaskInfo{
-			NamespaceId:       namespaceID,
-			WorkflowId:        workflowID,
-			RunId:             runID,
-			TaskId:            task.GetTaskID(),
-			TaskType:          task.GetType(),
-			Version:           version,
-			FirstEventId:      firstEventID,
-			NextEventId:       nextEventID,
-			ScheduledId:       activityScheduleID,
-			BranchToken:       branchToken,
-			NewRunBranchToken: newRunBranchToken,
-		})
-
-		if err != nil {
-			return err
-		}
-
-		batch.Query(templateCreateReplicationTaskQuery,
-			shardID,
-			rowTypeReplicationTask,
-			rowTypeReplicationNamespaceID,
-			rowTypeReplicationWorkflowID,
-			rowTypeReplicationRunID,
-			datablob.Data,
-			datablob.EncodingType.String(),
-			defaultVisibilityTimestamp,
-			task.GetTaskID())
-	}
-
-	return nil
-}
-
-func createVisibilityTasks(
-	batch gocql.Batch,
-	visibilityTasks []tasks.Task,
-	shardID int32,
-	namespaceID string,
-	workflowID string,
-	runID string,
-) error {
-
-	for _, task := range visibilityTasks {
-		datablob, err := serialization.VisibilityTaskInfoToBlob(&persistencespb.VisibilityTaskInfo{
-			NamespaceId:    namespaceID,
-			WorkflowId:     workflowID,
-			RunId:          runID,
-			TaskId:         task.GetTaskID(),
-			TaskType:       task.GetType(),
-			Version:        task.GetVersion(),
-			VisibilityTime: timestamp.TimePtr(task.GetVisibilityTime()),
-		})
-		if err != nil {
-			return err
-		}
-
-		switch task.GetType() {
-		case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION:
-			// noop
-
-		case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION:
-			// noop
-
-		case enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION:
-			// noop
-
-		case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
-			// noop
-
-		default:
-			return serviceerror.NewInternal(fmt.Sprintf("Unknow visibility type: %v", task.GetType()))
-		}
-
-		batch.Query(templateCreateVisibilityTaskQuery,
-			shardID,
-			rowTypeVisibilityTask,
-			rowTypeVisibilityTaskNamespaceID,
-			rowTypeVisibilityTaskWorkflowID,
-			rowTypeVisibilityTaskRunID,
-			datablob.Data,
-			datablob.EncodingType.String(),
-			defaultVisibilityTimestamp,
-			task.GetTaskID())
-	}
-
 	return nil
 }
 
 func createTimerTasks(
 	batch gocql.Batch,
-	timerTasks []tasks.Task,
+	timerTasks map[tasks.Key]commonpb.DataBlob,
 	shardID int32,
-	namespaceID string,
-	workflowID string,
-	runID string,
 ) error {
-
-	for _, task := range timerTasks {
-		eventID := int64(0)
-		attempt := int32(1)
-
-		timeoutType := enumspb.TIMEOUT_TYPE_UNSPECIFIED
-		workflowBackoffType := enumsspb.WORKFLOW_BACKOFF_TYPE_UNSPECIFIED
-
-		switch t := task.(type) {
-		case *tasks.WorkflowTaskTimeoutTask:
-			eventID = t.EventID
-			timeoutType = t.TimeoutType
-			attempt = t.ScheduleAttempt
-
-		case *tasks.ActivityTimeoutTask:
-			eventID = t.EventID
-			timeoutType = t.TimeoutType
-			attempt = t.Attempt
-
-		case *tasks.UserTimerTask:
-			eventID = t.EventID
-
-		case *tasks.ActivityRetryTimerTask:
-			eventID = t.EventID
-			attempt = t.Attempt
-
-		case *tasks.WorkflowBackoffTimerTask:
-			workflowBackoffType = t.WorkflowBackoffType
-
-		case *tasks.WorkflowTimeoutTask:
-			// noop
-
-		case *tasks.DeleteHistoryEventTask:
-			// noop
-
-		default:
-			return serviceerror.NewInternal(fmt.Sprintf("Unknow timer type: %v", task.GetType()))
-		}
-
-		// Ignoring possible type cast errors.
-		goTs := task.GetVisibilityTime()
-		dbTs := p.UnixMilliseconds(goTs)
-
-		datablob, err := serialization.TimerTaskInfoToBlob(&persistencespb.TimerTaskInfo{
-			NamespaceId:         namespaceID,
-			WorkflowId:          workflowID,
-			RunId:               runID,
-			TaskType:            task.GetType(),
-			TimeoutType:         timeoutType,
-			WorkflowBackoffType: workflowBackoffType,
-			Version:             task.GetVersion(),
-			ScheduleAttempt:     attempt,
-			EventId:             eventID,
-			TaskId:              task.GetTaskID(),
-			VisibilityTime:      &goTs,
-		})
-		if err != nil {
-			return err
-		}
-
+	for key, blob := range timerTasks {
 		batch.Query(templateCreateTimerTaskQuery,
 			shardID,
 			rowTypeTimerTask,
 			rowTypeTimerNamespaceID,
 			rowTypeTimerWorkflowID,
 			rowTypeTimerRunID,
-			datablob.Data,
-			datablob.EncodingType.String(),
-			dbTs,
-			task.GetTaskID())
+			blob.Data,
+			blob.EncodingType.String(),
+			p.UnixMilliseconds(key.FireTime),
+			key.TaskID,
+		)
 	}
+	return nil
+}
 
+func createReplicationTasks(
+	batch gocql.Batch,
+	replicationTasks map[tasks.Key]commonpb.DataBlob,
+	shardID int32,
+) error {
+	for key, blob := range replicationTasks {
+		batch.Query(templateCreateReplicationTaskQuery,
+			shardID,
+			rowTypeReplicationTask,
+			rowTypeReplicationNamespaceID,
+			rowTypeReplicationWorkflowID,
+			rowTypeReplicationRunID,
+			blob.Data,
+			blob.EncodingType.String(),
+			defaultVisibilityTimestamp,
+			key.TaskID,
+		)
+	}
+	return nil
+}
+
+func createVisibilityTasks(
+	batch gocql.Batch,
+	visibilityTasks map[tasks.Key]commonpb.DataBlob,
+	shardID int32,
+) error {
+	for key, blob := range visibilityTasks {
+		batch.Query(templateCreateVisibilityTaskQuery,
+			shardID,
+			rowTypeVisibilityTask,
+			rowTypeVisibilityTaskNamespaceID,
+			rowTypeVisibilityTaskWorkflowID,
+			rowTypeVisibilityTaskRunID,
+			blob.Data,
+			blob.EncodingType.String(),
+			defaultVisibilityTimestamp,
+			key.TaskID,
+		)
+	}
 	return nil
 }
 
@@ -883,7 +639,6 @@ func deleteBufferedEvents(
 	workflowID string,
 	runID string,
 ) {
-
 	batch.Query(templateDeleteBufferedEventsQuery,
 		shardID,
 		rowTypeExecution,
@@ -891,8 +646,8 @@ func deleteBufferedEvents(
 		workflowID,
 		runID,
 		defaultVisibilityTimestamp,
-		rowTypeExecutionTaskID)
-
+		rowTypeExecutionTaskID,
+	)
 }
 
 func resetActivityInfos(

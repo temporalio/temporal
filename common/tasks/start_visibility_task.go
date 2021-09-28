@@ -26,8 +26,6 @@ package tasks
 
 import (
 	"time"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 type (
@@ -38,8 +36,11 @@ type (
 	}
 )
 
-func (t *StartExecutionVisibilityTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION
+func (t *StartExecutionVisibilityTask) GetKey() Key {
+	return Key{
+		FireTime: t.VisibilityTimestamp,
+		TaskID:   t.TaskID,
+	}
 }
 
 func (t *StartExecutionVisibilityTask) GetVersion() int64 {

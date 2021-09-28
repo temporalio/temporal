@@ -26,8 +26,6 @@ package tasks
 
 import (
 	"time"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 type (
@@ -38,8 +36,11 @@ type (
 	}
 )
 
-func (t *DeleteExecutionVisibilityTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION
+func (t *DeleteExecutionVisibilityTask) GetKey() Key {
+	return Key{
+		FireTime: t.VisibilityTimestamp,
+		TaskID:   t.TaskID,
+	}
 }
 
 func (t *DeleteExecutionVisibilityTask) GetVersion() int64 {

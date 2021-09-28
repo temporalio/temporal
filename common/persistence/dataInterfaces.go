@@ -106,10 +106,6 @@ const UnknownNumRowsAffected = -1
 const (
 	// InitialFailoverNotificationVersion is the initial failover version for a namespace
 	InitialFailoverNotificationVersion int64 = 0
-
-	// TransferTaskTransferTargetWorkflowID is the the dummy workflow ID for transfer tasks of types
-	// that do not have a target workflow
-	TransferTaskTransferTargetWorkflowID = "20000000-0000-f000-f000-000000000001"
 )
 
 const numItemsInGarbageInfo = 3

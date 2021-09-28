@@ -382,6 +382,29 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 ) (*InternalWorkflowMutation, error) {
 
 	var err error
+
+	taskSerializer := serialization.NewTaskSerializer(
+		input.ExecutionInfo.GetNamespaceId(),
+		input.ExecutionInfo.GetWorkflowId(),
+		input.ExecutionState.GetRunId(),
+	)
+	transferTasks, err := taskSerializer.SerializeTransferTasks(input.TransferTasks)
+	if err != nil {
+		return nil, err
+	}
+	timerTasks, err := taskSerializer.SerializeTimerTasks(input.TimerTasks)
+	if err != nil {
+		return nil, err
+	}
+	replicationTasks, err := taskSerializer.SerializeReplicationTasks(input.ReplicationTasks)
+	if err != nil {
+		return nil, err
+	}
+	visibilityTasks, err := taskSerializer.SerializeVisibilityTasks(input.VisibilityTasks)
+	if err != nil {
+		return nil, err
+	}
+
 	result := &InternalWorkflowMutation{
 		NamespaceID: input.ExecutionInfo.GetNamespaceId(),
 		WorkflowID:  input.ExecutionInfo.GetWorkflowId(),
@@ -405,10 +428,10 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 		UpsertSignalRequestedIDs: input.UpsertSignalRequestedIDs,
 		ClearBufferedEvents:      input.ClearBufferedEvents,
 
-		TransferTasks:    input.TransferTasks,
-		ReplicationTasks: input.ReplicationTasks,
-		TimerTasks:       input.TimerTasks,
-		VisibilityTasks:  input.VisibilityTasks,
+		TransferTasks:    transferTasks,
+		TimerTasks:       timerTasks,
+		ReplicationTasks: replicationTasks,
+		VisibilityTasks:  visibilityTasks,
 
 		Condition:       input.Condition,
 		DBRecordVersion: input.DBRecordVersion,
@@ -484,6 +507,29 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 ) (*InternalWorkflowSnapshot, error) {
 
 	var err error
+
+	taskSerializer := serialization.NewTaskSerializer(
+		input.ExecutionInfo.GetNamespaceId(),
+		input.ExecutionInfo.GetWorkflowId(),
+		input.ExecutionState.GetRunId(),
+	)
+	transferTasks, err := taskSerializer.SerializeTransferTasks(input.TransferTasks)
+	if err != nil {
+		return nil, err
+	}
+	timerTasks, err := taskSerializer.SerializeTimerTasks(input.TimerTasks)
+	if err != nil {
+		return nil, err
+	}
+	replicationTasks, err := taskSerializer.SerializeReplicationTasks(input.ReplicationTasks)
+	if err != nil {
+		return nil, err
+	}
+	visibilityTasks, err := taskSerializer.SerializeVisibilityTasks(input.VisibilityTasks)
+	if err != nil {
+		return nil, err
+	}
+
 	result := &InternalWorkflowSnapshot{
 		NamespaceID: input.ExecutionInfo.GetNamespaceId(),
 		WorkflowID:  input.ExecutionInfo.GetWorkflowId(),
@@ -497,10 +543,11 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 
 		ExecutionState:     input.ExecutionState,
 		SignalRequestedIDs: input.SignalRequestedIDs,
-		TransferTasks:      input.TransferTasks,
-		ReplicationTasks:   input.ReplicationTasks,
-		TimerTasks:         input.TimerTasks,
-		VisibilityTasks:    input.VisibilityTasks,
+
+		TransferTasks:    transferTasks,
+		TimerTasks:       timerTasks,
+		ReplicationTasks: replicationTasks,
+		VisibilityTasks:  visibilityTasks,
 
 		Condition:       input.Condition,
 		DBRecordVersion: input.DBRecordVersion,
@@ -616,9 +663,44 @@ func (m *executionManagerImpl) ListConcreteExecutions(
 }
 
 func (m *executionManagerImpl) AddTasks(
-	request *AddTasksRequest,
+	input *AddTasksRequest,
 ) error {
-	return m.persistence.AddTasks(request)
+
+	taskSerializer := serialization.NewTaskSerializer(
+		input.NamespaceID,
+		input.WorkflowID,
+		input.RunID,
+	)
+	transferTasks, err := taskSerializer.SerializeTransferTasks(input.TransferTasks)
+	if err != nil {
+		return err
+	}
+	timerTasks, err := taskSerializer.SerializeTimerTasks(input.TimerTasks)
+	if err != nil {
+		return err
+	}
+	replicationTasks, err := taskSerializer.SerializeReplicationTasks(input.ReplicationTasks)
+	if err != nil {
+		return err
+	}
+	visibilityTasks, err := taskSerializer.SerializeVisibilityTasks(input.VisibilityTasks)
+	if err != nil {
+		return err
+	}
+
+	return m.persistence.AddTasks(&InternalAddTasksRequest{
+		ShardID: input.ShardID,
+		RangeID: input.RangeID,
+
+		NamespaceID: input.NamespaceID,
+		WorkflowID:  input.WorkflowID,
+		RunID:       input.RunID,
+
+		TransferTasks:    transferTasks,
+		TimerTasks:       timerTasks,
+		ReplicationTasks: replicationTasks,
+		VisibilityTasks:  visibilityTasks,
+	})
 }
 
 // Transfer task related methods
