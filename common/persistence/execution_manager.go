@@ -44,6 +44,7 @@ type (
 	// executionManagerImpl implements ExecutionManager based on ExecutionStore, statsComputer and Serializer
 	executionManagerImpl struct {
 		serializer            serialization.Serializer
+		taskSerializer        *serialization.TaskSerializer
 		persistence           ExecutionStore
 		logger                log.Logger
 		pagingTokenSerializer *jsonHistoryTokenSerializer
@@ -62,6 +63,7 @@ func NewExecutionManager(
 
 	return &executionManagerImpl{
 		serializer:            serialization.NewSerializer(),
+		taskSerializer:        serialization.NewTaskSerializer(),
 		persistence:           persistence,
 		logger:                logger,
 		pagingTokenSerializer: newJSONHistoryTokenSerializer(),
@@ -383,24 +385,19 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 
 	var err error
 
-	taskSerializer := serialization.NewTaskSerializer(
-		input.ExecutionInfo.GetNamespaceId(),
-		input.ExecutionInfo.GetWorkflowId(),
-		input.ExecutionState.GetRunId(),
-	)
-	transferTasks, err := taskSerializer.SerializeTransferTasks(input.TransferTasks)
+	transferTasks, err := m.taskSerializer.SerializeTransferTasks(input.TransferTasks)
 	if err != nil {
 		return nil, err
 	}
-	timerTasks, err := taskSerializer.SerializeTimerTasks(input.TimerTasks)
+	timerTasks, err := m.taskSerializer.SerializeTimerTasks(input.TimerTasks)
 	if err != nil {
 		return nil, err
 	}
-	replicationTasks, err := taskSerializer.SerializeReplicationTasks(input.ReplicationTasks)
+	replicationTasks, err := m.taskSerializer.SerializeReplicationTasks(input.ReplicationTasks)
 	if err != nil {
 		return nil, err
 	}
-	visibilityTasks, err := taskSerializer.SerializeVisibilityTasks(input.VisibilityTasks)
+	visibilityTasks, err := m.taskSerializer.SerializeVisibilityTasks(input.VisibilityTasks)
 	if err != nil {
 		return nil, err
 	}
@@ -508,24 +505,19 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 
 	var err error
 
-	taskSerializer := serialization.NewTaskSerializer(
-		input.ExecutionInfo.GetNamespaceId(),
-		input.ExecutionInfo.GetWorkflowId(),
-		input.ExecutionState.GetRunId(),
-	)
-	transferTasks, err := taskSerializer.SerializeTransferTasks(input.TransferTasks)
+	transferTasks, err := m.taskSerializer.SerializeTransferTasks(input.TransferTasks)
 	if err != nil {
 		return nil, err
 	}
-	timerTasks, err := taskSerializer.SerializeTimerTasks(input.TimerTasks)
+	timerTasks, err := m.taskSerializer.SerializeTimerTasks(input.TimerTasks)
 	if err != nil {
 		return nil, err
 	}
-	replicationTasks, err := taskSerializer.SerializeReplicationTasks(input.ReplicationTasks)
+	replicationTasks, err := m.taskSerializer.SerializeReplicationTasks(input.ReplicationTasks)
 	if err != nil {
 		return nil, err
 	}
-	visibilityTasks, err := taskSerializer.SerializeVisibilityTasks(input.VisibilityTasks)
+	visibilityTasks, err := m.taskSerializer.SerializeVisibilityTasks(input.VisibilityTasks)
 	if err != nil {
 		return nil, err
 	}
@@ -666,24 +658,19 @@ func (m *executionManagerImpl) AddTasks(
 	input *AddTasksRequest,
 ) error {
 
-	taskSerializer := serialization.NewTaskSerializer(
-		input.NamespaceID,
-		input.WorkflowID,
-		input.RunID,
-	)
-	transferTasks, err := taskSerializer.SerializeTransferTasks(input.TransferTasks)
+	transferTasks, err := m.taskSerializer.SerializeTransferTasks(input.TransferTasks)
 	if err != nil {
 		return err
 	}
-	timerTasks, err := taskSerializer.SerializeTimerTasks(input.TimerTasks)
+	timerTasks, err := m.taskSerializer.SerializeTimerTasks(input.TimerTasks)
 	if err != nil {
 		return err
 	}
-	replicationTasks, err := taskSerializer.SerializeReplicationTasks(input.ReplicationTasks)
+	replicationTasks, err := m.taskSerializer.SerializeReplicationTasks(input.ReplicationTasks)
 	if err != nil {
 		return err
 	}
-	visibilityTasks, err := taskSerializer.SerializeVisibilityTasks(input.VisibilityTasks)
+	visibilityTasks, err := m.taskSerializer.SerializeVisibilityTasks(input.VisibilityTasks)
 	if err != nil {
 		return err
 	}

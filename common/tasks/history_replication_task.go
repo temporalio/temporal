@@ -26,10 +26,13 @@ package tasks
 
 import (
 	"time"
+
+	"go.temporal.io/server/common/definition"
 )
 
 type (
 	HistoryReplicationTask struct {
+		definition.WorkflowIdentifier
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		FirstEventID        int64
@@ -39,6 +42,10 @@ type (
 		NewRunBranchToken   []byte
 	}
 )
+
+func (a *HistoryReplicationTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
+	return a.WorkflowIdentifier
+}
 
 func (a *HistoryReplicationTask) GetKey() Key {
 	return Key{
