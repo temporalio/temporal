@@ -209,63 +209,63 @@ CREATE TABLE signals_requested_sets (
 
 -- history eventsV2: history_node stores history event data
 CREATE TABLE history_node (
-	shard_id	INT NOT NULL,
-	tree_id	BINARY(16) NOT NULL,
-	branch_id	BINARY(16) NOT NULL,
-	node_id	BIGINT NOT NULL,
-	txn_id	BIGINT NOT NULL,
+	shard_id INT NOT NULL,
+	tree_id BINARY(16) NOT NULL,
+	branch_id BINARY(16) NOT NULL,
+	node_id BIGINT NOT NULL,
+	txn_id BIGINT NOT NULL,
 	--
-	prev_txn_id	BIGINT NOT NULL DEFAULT 0,
-	data	MEDIUMBLOB NOT NULL,
-	data_encoding  VARCHAR(16) NOT NULL,
+	prev_txn_id BIGINT NOT NULL DEFAULT 0,
+	data MEDIUMBLOB NOT NULL,
+	data_encoding VARCHAR(16) NOT NULL,
 	PRIMARY KEY (shard_id, tree_id, branch_id, node_id, txn_id)
 );
 
 -- history eventsV2: history_tree stores branch metadata
 CREATE TABLE history_tree (
-	shard_id	INT NOT NULL,
-	tree_id	BINARY(16) NOT NULL,
-	branch_id	BINARY(16) NOT NULL,
+	shard_id INT NOT NULL,
+	tree_id BINARY(16) NOT NULL,
+	branch_id BINARY(16) NOT NULL,
 	--
-	data	MEDIUMBLOB NOT NULL,
-	data_encoding  VARCHAR(16) NOT NULL,
+	data MEDIUMBLOB NOT NULL,
+	data_encoding VARCHAR(16) NOT NULL,
 	PRIMARY KEY (shard_id, tree_id, branch_id)
 );
 
 CREATE TABLE queue (
-	queue_type	INT NOT NULL,
-	message_id	BIGINT NOT NULL,
-	message_payload   MEDIUMBLOB NOT NULL,
-	message_encoding  VARCHAR(16) NOT NULL,
+	queue_type INT NOT NULL,
+	message_id BIGINT NOT NULL,
+	message_payload MEDIUMBLOB NOT NULL,
+	message_encoding VARCHAR(16) NOT NULL,
 	PRIMARY KEY(queue_type, message_id)
 );
 
 CREATE TABLE queue_metadata (
-	queue_type	  INT NOT NULL,
-	data	      MEDIUMBLOB NOT NULL,
+	queue_type INT NOT NULL,
+	data MEDIUMBLOB NOT NULL,
 	data_encoding VARCHAR(16) NOT NULL,
-	version       BIGINT NOT NULL,
+	version BIGINT NOT NULL,
 	PRIMARY KEY(queue_type)
 );
 
 CREATE TABLE cluster_metadata (
-	metadata_partition	INT NOT NULL,
-	data	MEDIUMBLOB NOT NULL,
-	data_encoding	VARCHAR(16) NOT NULL,
-	version	BIGINT NOT NULL,
+	metadata_partition INT NOT NULL,
+	data MEDIUMBLOB NOT NULL,
+	data_encoding VARCHAR(16) NOT NULL,
+	version BIGINT NOT NULL,
 	PRIMARY KEY(metadata_partition)
 );
 
 CREATE TABLE cluster_membership
 (
 	membership_partition INT NOT NULL,
-	host_id	BINARY(16) NOT NULL,
-	rpc_address	VARCHAR(128) NOT NULL,
-	rpc_port	SMALLINT NOT NULL,
-	role	TINYINT NOT NULL,
-	session_start	TIMESTAMP DEFAULT '1970-01-01 00:00:01',
-	last_heartbeat	TIMESTAMP DEFAULT '1970-01-01 00:00:01',
-	record_expiry	TIMESTAMP DEFAULT '1970-01-01 00:00:01',
+	host_id BINARY(16) NOT NULL,
+	rpc_address VARCHAR(128) NOT NULL,
+	rpc_port SMALLINT NOT NULL,
+	role TINYINT NOT NULL,
+	session_start TIMESTAMP DEFAULT '1970-01-01 00:00:01',
+	last_heartbeat TIMESTAMP DEFAULT '1970-01-01 00:00:01',
+	record_expiry TIMESTAMP DEFAULT '1970-01-01 00:00:01',
 --	INDEX (role, host_id),
 --	INDEX (role, last_heartbeat),
 --	INDEX (rpc_address, role),
