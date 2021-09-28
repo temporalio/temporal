@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -105,7 +106,7 @@ func newReplicatorQueueProcessor(
 }
 
 func (p *replicatorQueueProcessorImpl) NotifyNewTasks(
-	tasks []persistence.Task,
+	tasks []tasks.Task,
 ) {
 
 	if len(tasks) == 0 {

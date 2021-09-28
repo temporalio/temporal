@@ -100,7 +100,7 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		var saType enumspb.IndexedValueType
 		if saType, err = saTypeMap.getType(fieldName, customCategory|predefinedCategory); err != nil {
 			if errors.Is(err, ErrInvalidName) {
-				return serviceerror.NewInvalidArgument(fmt.Sprintf("%s is not a valid search attribute name", saName))
+				return serviceerror.NewInvalidArgument(fmt.Sprintf("search attribute %s is not defined", saName))
 			}
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to get %s search attribute type: %v", saName, err))
 		}

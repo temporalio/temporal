@@ -32,7 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	persistence "go.temporal.io/server/common/persistence"
+	tasks "go.temporal.io/server/common/tasks"
 )
 
 // MocktransferQueueProcessor is a mock of transferQueueProcessor interface.
@@ -83,7 +83,7 @@ func (mr *MocktransferQueueProcessorMockRecorder) LockTaskProcessing() *gomock.C
 }
 
 // NotifyNewTask mocks base method.
-func (m *MocktransferQueueProcessor) NotifyNewTask(clusterName string, transferTasks []persistence.Task) {
+func (m *MocktransferQueueProcessor) NotifyNewTask(clusterName string, transferTasks []tasks.Task) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "NotifyNewTask", clusterName, transferTasks)
 }

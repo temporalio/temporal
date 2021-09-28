@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -53,7 +54,7 @@ type (
 	transferQueueProcessor interface {
 		common.Daemon
 		FailoverNamespace(namespaceIDs map[string]struct{})
-		NotifyNewTask(clusterName string, transferTasks []persistence.Task)
+		NotifyNewTask(clusterName string, transferTasks []tasks.Task)
 		LockTaskProcessing()
 		UnlockTaskPrrocessing()
 	}
@@ -182,7 +183,7 @@ func (t *transferQueueProcessorImpl) Stop() {
 // This should be called each time new transfer task arrives, otherwise tasks maybe delayed.
 func (t *transferQueueProcessorImpl) NotifyNewTask(
 	clusterName string,
-	transferTasks []persistence.Task,
+	transferTasks []tasks.Task,
 ) {
 
 	if clusterName == t.currentClusterName {

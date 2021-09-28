@@ -1784,7 +1784,6 @@ const (
 	ScheduleToStartTimeoutCounter
 	StartToCloseTimeoutCounter
 	ScheduleToCloseTimeoutCounter
-	NewTimerCounter
 	NewTimerNotifyCounter
 	AcquireShardsCounter
 	AcquireShardsLatency
@@ -2245,7 +2244,6 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ScheduleToStartTimeoutCounter:                     {metricName: "schedule_to_start_timeout", metricType: Counter},
 		StartToCloseTimeoutCounter:                        {metricName: "start_to_close_timeout", metricType: Counter},
 		ScheduleToCloseTimeoutCounter:                     {metricName: "schedule_to_close_timeout", metricType: Counter},
-		NewTimerCounter:                                   {metricName: "new_timer", metricType: Counter},
 		NewTimerNotifyCounter:                             {metricName: "new_timer_notifications", metricType: Counter},
 		AcquireShardsCounter:                              {metricName: "acquire_shards_count", metricType: Counter},
 		AcquireShardsLatency:                              {metricName: "acquire_shards_latency", metricType: Timer},

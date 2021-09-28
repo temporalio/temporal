@@ -28,7 +28,7 @@ import (
 	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/tasks"
 )
 
 // NOTE: do not use make(type, len(input))
@@ -37,12 +37,12 @@ import (
 func convertSyncActivityInfos(
 	activityInfos map[int64]*persistencespb.ActivityInfo,
 	inputs map[int64]struct{},
-) []persistence.Task {
-	outputs := make([]persistence.Task, 0, len(inputs))
+) []tasks.Task {
+	outputs := make([]tasks.Task, 0, len(inputs))
 	for item := range inputs {
 		activityInfo, ok := activityInfos[item]
 		if ok {
-			outputs = append(outputs, &persistence.SyncActivityTask{
+			outputs = append(outputs, &tasks.SyncActivityTask{
 				Version:     activityInfo.Version,
 				ScheduledID: activityInfo.ScheduleId,
 			})
@@ -54,9 +54,9 @@ func convertSyncActivityInfos(
 func setTaskInfo(
 	version int64,
 	timestamp time.Time,
-	transferTasks []persistence.Task,
-	timerTasks []persistence.Task,
-	visibilityTasks []persistence.Task,
+	transferTasks []tasks.Task,
+	timerTasks []tasks.Task,
+	visibilityTasks []tasks.Task,
 ) {
 	// set both the task version, as well as the Timestamp on the transfer tasks
 	for _, task := range transferTasks {

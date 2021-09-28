@@ -27,6 +27,7 @@ package headers
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/blang/semver/v4"
 	"go.temporal.io/api/serviceerror"
@@ -43,9 +44,20 @@ const (
 
 	// SupportedServerVersions is used by CLI and inter role communication.
 	SupportedServerVersions = ">=1.0.0 <2.0.0"
+
+	// FeatureFollowsNextRunID means that the client supports following next execution run id for
+	// completed/failed/timedout completion events when getting the final result of a workflow.
+	FeatureFollowsNextRunID = "follows-next-run-id"
 )
 
 var (
+	// AllFeatures contains all known features. This list is used as the value of the supported
+	// features header for internal server requests. There is an assumption that if a feature is
+	// defined, then the server itself supports it.
+	AllFeatures = strings.Join([]string{
+		FeatureFollowsNextRunID,
+	}, SupportedFeaturesHeaderDelim)
+
 	SupportedClients = map[string]string{
 		ClientNameGoSDK:   "<2.0.0",
 		ClientNameJavaSDK: "<2.0.0",
@@ -58,6 +70,7 @@ type (
 	// VersionChecker is used to check client/server compatibility and client's capabilities
 	VersionChecker interface {
 		ClientSupported(ctx context.Context, enableClientVersionCheck bool) error
+		ClientSupportsFeature(ctx context.Context, feature string) bool
 	}
 
 	versionChecker struct {
@@ -74,17 +87,11 @@ func NewDefaultVersionChecker() *versionChecker {
 
 // NewVersionChecker constructs a new VersionChecker
 func NewVersionChecker(supportedClients map[string]string, serverVersion string) *versionChecker {
-	vc := &versionChecker{
+	return &versionChecker{
 		serverVersion:         semver.MustParse(serverVersion),
 		supportedClients:      supportedClients,
-		supportedClientsRange: make(map[string]semver.Range, len(supportedClients)),
+		supportedClientsRange: mustParseRanges(supportedClients),
 	}
-
-	for c, r := range supportedClients {
-		vc.supportedClientsRange[c] = semver.MustParseRange(r)
-	}
-
-	return vc
 }
 
 // ClientSupported returns an error if client is unsupported, nil otherwise.
@@ -123,4 +130,25 @@ func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersi
 	}
 
 	return nil
+}
+
+// ClientSupportsFeature returns true if the client reports support for the
+// given feature (which should be one of the Feature... constants above).
+func (vc *versionChecker) ClientSupportsFeature(ctx context.Context, feature string) bool {
+	headers := GetValues(ctx, SupportedFeaturesHeaderName)
+	clientFeatures := strings.Split(headers[0], SupportedFeaturesHeaderDelim)
+	for _, clientFeature := range clientFeatures {
+		if clientFeature == feature {
+			return true
+		}
+	}
+	return false
+}
+
+func mustParseRanges(ranges map[string]string) map[string]semver.Range {
+	out := make(map[string]semver.Range, len(ranges))
+	for c, r := range ranges {
+		out[c] = semver.MustParseRange(r)
+	}
+	return out
 }

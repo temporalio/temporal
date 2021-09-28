@@ -63,6 +63,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -73,7 +74,7 @@ const (
 	emptyUUID = "emptyUuid"
 
 	mutableStateInvalidHistoryActionMsg         = "invalid history builder state for action"
-	mutableStateInvalidHistoryActionMsgTemplate = mutableStateInvalidHistoryActionMsg + ": %v"
+	mutableStateInvalidHistoryActionMsgTemplate = mutableStateInvalidHistoryActionMsg + ": %v, %v"
 )
 
 var (
@@ -154,10 +155,10 @@ type (
 		// TODO: persist this to db
 		appliedEvents map[string]struct{}
 
-		InsertTransferTasks    []persistence.Task
-		InsertTimerTasks       []persistence.Task
-		InsertReplicationTasks []persistence.Task
-		InsertVisibilityTasks  []persistence.Task
+		InsertTransferTasks    []tasks.Task
+		InsertTimerTasks       []tasks.Task
+		InsertReplicationTasks []tasks.Task
+		InsertVisibilityTasks  []tasks.Task
 
 		// do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
@@ -1778,7 +1779,7 @@ func (e *MutableStateImpl) AddActivityTaskScheduledEvent(
 		e.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction)
-		return nil, nil, e.createCallerError(opTag)
+		return nil, nil, e.createCallerError(opTag, "ActivityID: "+command.GetActivityId())
 	}
 
 	event := e.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command)
@@ -2119,7 +2120,7 @@ func (e *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 				tag.Bool(ok),
 				tag.WorkflowScheduleID(scheduleID))
 
-			return nil, nil, e.createCallerError(opTag)
+			return nil, nil, e.createCallerError(opTag, fmt.Sprintf("ScheduledID: %d", scheduleID))
 		}
 	}
 
@@ -2131,7 +2132,7 @@ func (e *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 			tag.Bool(ok),
 			tag.WorkflowScheduleID(scheduleID))
 
-		return nil, nil, e.createCallerError(opTag)
+		return nil, nil, e.createCallerError(opTag, fmt.Sprintf("ScheduledID: %d", scheduleID))
 	}
 
 	// At this point we know this is a valid activity cancellation request
@@ -2773,7 +2774,7 @@ func (e *MutableStateImpl) AddTimerStartedEvent(
 			tag.WorkflowEventID(e.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowTimerID(timerID))
-		return nil, nil, e.createCallerError(opTag)
+		return nil, nil, e.createCallerError(opTag, "TimerID: "+command.GetTimerId())
 	}
 
 	event := e.hBuilder.AddTimerStartedEvent(workflowTaskCompletedEventID, command)
@@ -2870,7 +2871,7 @@ func (e *MutableStateImpl) AddTimerCanceledEvent(
 				tag.WorkflowEventID(e.GetNextEventID()),
 				tag.ErrorTypeInvalidHistoryAction,
 				tag.WorkflowTimerID(timerID))
-			return nil, e.createCallerError(opTag)
+			return nil, e.createCallerError(opTag, "TimerID: "+command.GetTimerId())
 		}
 		timerStartedID = timerFiredEvent.GetTimerFiredEventAttributes().GetStartedEventId()
 	} else {
@@ -3569,7 +3570,7 @@ func (e *MutableStateImpl) RetryActivity(
 
 // AddTransferTasks append transfer tasks
 func (e *MutableStateImpl) AddTransferTasks(
-	transferTasks ...persistence.Task,
+	transferTasks ...tasks.Task,
 ) {
 
 	e.InsertTransferTasks = append(e.InsertTransferTasks, transferTasks...)
@@ -3579,7 +3580,7 @@ func (e *MutableStateImpl) AddTransferTasks(
 
 // AddTimerTasks append timer tasks
 func (e *MutableStateImpl) AddTimerTasks(
-	timerTasks ...persistence.Task,
+	timerTasks ...tasks.Task,
 ) {
 
 	e.InsertTimerTasks = append(e.InsertTimerTasks, timerTasks...)
@@ -3587,7 +3588,7 @@ func (e *MutableStateImpl) AddTimerTasks(
 
 // AddVisibilityTasks append visibility tasks
 func (e *MutableStateImpl) AddVisibilityTasks(
-	visibilityTasks ...persistence.Task,
+	visibilityTasks ...tasks.Task,
 ) {
 
 	e.InsertVisibilityTasks = append(e.InsertVisibilityTasks, visibilityTasks...)
@@ -3982,7 +3983,7 @@ func (e *MutableStateImpl) prepareEventsAndReplicationTasks(
 func (e *MutableStateImpl) eventsToReplicationTask(
 	transactionPolicy TransactionPolicy,
 	events []*historypb.HistoryEvent,
-) ([]persistence.Task, error) {
+) ([]tasks.Task, error) {
 
 	if transactionPolicy == TransactionPolicyPassive ||
 		!e.canReplicateEvents() ||
@@ -4006,7 +4007,7 @@ func (e *MutableStateImpl) eventsToReplicationTask(
 		return nil, err
 	}
 
-	replicationTask := &persistence.HistoryReplicationTask{
+	replicationTask := &tasks.HistoryReplicationTask{
 		FirstEventID:      firstEvent.GetEventId(),
 		NextEventID:       lastEvent.GetEventId() + 1,
 		Version:           firstEvent.GetVersion(),
@@ -4018,12 +4019,12 @@ func (e *MutableStateImpl) eventsToReplicationTask(
 		return nil, serviceerror.NewInternal("should not generate replication task when missing replication state & version history")
 	}
 
-	return []persistence.Task{replicationTask}, nil
+	return []tasks.Task{replicationTask}, nil
 }
 
 func (e *MutableStateImpl) syncActivityToReplicationTask(
 	transactionPolicy TransactionPolicy,
-) []persistence.Task {
+) []tasks.Task {
 
 	if transactionPolicy == TransactionPolicyPassive ||
 		!e.canReplicateEvents() {
@@ -4406,9 +4407,10 @@ func (e *MutableStateImpl) createInternalServerError(
 
 func (e *MutableStateImpl) createCallerError(
 	actionTag tag.ZapTag,
+	details string,
 ) error {
-
-	return serviceerror.NewInvalidArgument(fmt.Sprintf(mutableStateInvalidHistoryActionMsgTemplate, actionTag.Field().String))
+	msg := fmt.Sprintf(mutableStateInvalidHistoryActionMsgTemplate, actionTag.Field().String, details)
+	return serviceerror.NewInvalidArgument(msg)
 }
 
 func (_ *MutableStateImpl) unixNanoToTime(

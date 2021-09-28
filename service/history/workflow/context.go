@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -747,13 +748,13 @@ func (c *ContextImpl) mergeContinueAsNewReplicationTasks(
 
 	// merge the new run first event batch replication task
 	// to current event batch replication task
-	newRunTask := newWorkflowSnapshot.ReplicationTasks[0].(*persistence.HistoryReplicationTask)
+	newRunTask := newWorkflowSnapshot.ReplicationTasks[0].(*tasks.HistoryReplicationTask)
 	newWorkflowSnapshot.ReplicationTasks = nil
 
 	newRunBranchToken := newRunTask.BranchToken
 	taskUpdated := false
 	for _, replicationTask := range currentWorkflowMutation.ReplicationTasks {
-		if task, ok := replicationTask.(*persistence.HistoryReplicationTask); ok {
+		if task, ok := replicationTask.(*tasks.HistoryReplicationTask); ok {
 			taskUpdated = true
 			task.NewRunBranchToken = newRunBranchToken
 		}

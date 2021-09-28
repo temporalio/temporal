@@ -37,8 +37,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/tasks"
 )
 
 const (
@@ -136,7 +136,7 @@ func (t *timerSequenceImpl) CreateNextUserTimer() (bool, error) {
 	if err := t.mutableState.UpdateUserTimer(timerInfo); err != nil {
 		return false, err
 	}
-	t.mutableState.AddTimerTasks(&persistence.UserTimerTask{
+	t.mutableState.AddTimerTasks(&tasks.UserTimerTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: firstTimerTask.Timestamp,
 		EventID:             firstTimerTask.EventID,
@@ -182,7 +182,7 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	t.mutableState.AddTimerTasks(&persistence.ActivityTimeoutTask{
+	t.mutableState.AddTimerTasks(&tasks.ActivityTimeoutTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: firstTimerTask.Timestamp,
 		TimeoutType:         firstTimerTask.TimerType,

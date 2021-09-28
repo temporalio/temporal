@@ -446,7 +446,7 @@ func (e *FaultInjectionExecutionStore) ListConcreteExecutions(request *persisten
 	return e.baseExecutionStore.ListConcreteExecutions(request)
 }
 
-func (e *FaultInjectionExecutionStore) AddTasks(request *persistence.AddTasksRequest) error {
+func (e *FaultInjectionExecutionStore) AddTasks(request *persistence.InternalAddTasksRequest) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err
 	}

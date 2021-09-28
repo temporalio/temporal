@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/tasks"
 )
 
 type (
@@ -1055,8 +1056,8 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 				Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
 			NextEventID: int64(3),
-			TransferTasks: []p.Task{
-				&p.WorkflowTask{
+			TransferTasks: []tasks.Task{
+				&tasks.WorkflowTask{
 					TaskID:      s.GetNextSequenceNumber(),
 					NamespaceID: namespaceID,
 					TaskQueue:   "queue1",
@@ -1840,7 +1841,7 @@ func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 	targetWorkflowID := "target-workflow-cancellation-id-1"
 	targetRunID := "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 	targetChildWorkflowOnly := false
-	transferTasks := []p.Task{&p.CancelExecutionTask{
+	transferTasks := []tasks.Task{&tasks.CancelExecutionTask{
 		TaskID:                  s.GetNextSequenceNumber(),
 		TargetNamespaceID:       targetNamespaceID,
 		TargetWorkflowID:        targetWorkflowID,
@@ -1867,7 +1868,7 @@ func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 	targetWorkflowID = "target-workflow-cancellation-id-2"
 	targetRunID = ""
 	targetChildWorkflowOnly = true
-	transferTasks = []p.Task{&p.CancelExecutionTask{
+	transferTasks = []tasks.Task{&tasks.CancelExecutionTask{
 		TaskID:                  s.GetNextSequenceNumber(),
 		TargetNamespaceID:       targetNamespaceID,
 		TargetWorkflowID:        targetWorkflowID,
@@ -1940,7 +1941,7 @@ func (s *ExecutionManagerSuite) TestSignalTransferTaskTasks() {
 	targetWorkflowID := "target-workflow-signal-id-1"
 	targetRunID := "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 	targetChildWorkflowOnly := false
-	transferTasks := []p.Task{&p.SignalExecutionTask{
+	transferTasks := []tasks.Task{&tasks.SignalExecutionTask{
 		TaskID:                  s.GetNextSequenceNumber(),
 		TargetNamespaceID:       targetNamespaceID,
 		TargetWorkflowID:        targetWorkflowID,
@@ -1967,7 +1968,7 @@ func (s *ExecutionManagerSuite) TestSignalTransferTaskTasks() {
 	targetWorkflowID = "target-workflow-signal-id-2"
 	targetRunID = ""
 	targetChildWorkflowOnly = true
-	transferTasks = []p.Task{&p.SignalExecutionTask{
+	transferTasks = []tasks.Task{&tasks.SignalExecutionTask{
 		TaskID:                  s.GetNextSequenceNumber(),
 		TargetNamespaceID:       targetNamespaceID,
 		TargetWorkflowID:        targetWorkflowID,
@@ -2022,20 +2023,20 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 	updatedInfo1 := copyWorkflowExecutionInfo(info1)
 	updatedState1 := copyWorkflowExecutionState(state1.ExecutionState)
 
-	replicationTasks := []p.Task{
-		&p.HistoryReplicationTask{
+	replicationTasks := []tasks.Task{
+		&tasks.HistoryReplicationTask{
 			TaskID:       s.GetNextSequenceNumber(),
 			FirstEventID: int64(1),
 			NextEventID:  int64(3),
 			Version:      123,
 		},
-		&p.HistoryReplicationTask{
+		&tasks.HistoryReplicationTask{
 			TaskID:       s.GetNextSequenceNumber(),
 			FirstEventID: int64(1),
 			NextEventID:  int64(3),
 			Version:      456,
 		},
-		&p.SyncActivityTask{
+		&tasks.SyncActivityTask{
 			TaskID:      s.GetNextSequenceNumber(),
 			Version:     789,
 			ScheduledID: 99,
@@ -2050,18 +2051,15 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 
 	for index := range replicationTasks {
 		s.Equal(replicationTasks[index].GetTaskID(), respTasks[index].GetTaskId())
-		s.Equal(replicationTasks[index].GetType(), respTasks[index].GetTaskType())
 		s.Equal(replicationTasks[index].GetVersion(), respTasks[index].GetVersion())
-		switch replicationTasks[index].GetType() {
-		case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
-			expected := replicationTasks[index].(*p.HistoryReplicationTask)
+		switch expected := replicationTasks[index].(type) {
+		case *tasks.HistoryReplicationTask:
 			s.Equal(expected.FirstEventID, respTasks[index].GetFirstEventId())
 			s.Equal(expected.NextEventID, respTasks[index].GetNextEventId())
 			s.Equal(expected.BranchToken, respTasks[index].BranchToken)
 			s.Equal(expected.NewRunBranchToken, respTasks[index].NewRunBranchToken)
 
-		case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
-			expected := replicationTasks[index].(*p.SyncActivityTask)
+		case *tasks.SyncActivityTask:
 			s.Equal(expected.ScheduledID, respTasks[index].GetScheduledId())
 		}
 		err = s.CompleteReplicationTask(respTasks[index].GetTaskId())
@@ -2089,10 +2087,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 	task1 := tasks1[0]
 	taskType := enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK
 	scheduleId := int64(2)
-	targetWorkflowId := p.TransferTaskTransferTargetWorkflowID
-	targetRunId := ""
 	s.validateTransferTaskHighLevel(task1, taskType, namespaceID, workflowExecution)
-	s.validateTransferTaskTargetInfo(task1, task1.GetTargetNamespaceId(), targetWorkflowId, targetRunId)
 	s.Equal(taskqueue, task1.TaskQueue)
 	s.Equal(scheduleId, task1.GetScheduleId())
 	err3 := s.CompleteTransferTask(task1.GetTaskId())
@@ -2112,13 +2107,13 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 	targetRunID := uuid.New()
 	currentTransferID := s.GetTransferReadLevel()
 	now := time.Now().UTC()
-	tasks := []p.Task{
-		&p.ActivityTask{now, currentTransferID + 10001, namespaceID, taskqueue, scheduleID, 111},
-		&p.WorkflowTask{now, currentTransferID + 10002, namespaceID, taskqueue, scheduleID, 222},
-		&p.CloseExecutionTask{now, currentTransferID + 10003, 333},
-		&p.CancelExecutionTask{now, currentTransferID + 10004, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 444},
-		&p.SignalExecutionTask{now, currentTransferID + 10005, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 555},
-		&p.StartChildExecutionTask{now, currentTransferID + 10006, targetNamespaceID, targetWorkflowID, scheduleID, 666},
+	tasks := []tasks.Task{
+		&tasks.ActivityTask{now, currentTransferID + 10001, namespaceID, taskqueue, scheduleID, 111},
+		&tasks.WorkflowTask{now, currentTransferID + 10002, namespaceID, taskqueue, scheduleID, 222},
+		&tasks.CloseExecutionTask{now, currentTransferID + 10003, 333},
+		&tasks.CancelExecutionTask{now, currentTransferID + 10004, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 444},
+		&tasks.SignalExecutionTask{now, currentTransferID + 10005, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 555},
+		&tasks.StartChildExecutionTask{now, currentTransferID + 10006, targetNamespaceID, targetWorkflowID, scheduleID, 666},
 	}
 	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, updatedState, int64(6), int64(3), tasks)
 	s.NoError(err2)
@@ -2186,7 +2181,6 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	s.Equal(1, len(tasks1), "Expected 1 workflow task.")
 	task1 := tasks1[0]
 	s.validateTransferTaskHighLevel(task1, enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK, namespaceID, workflowExecution)
-	s.validateTransferTaskTargetInfo(task1, task1.GetNamespaceId(), p.TransferTaskTransferTargetWorkflowID, "")
 	s.Equal(taskqueue, task1.TaskQueue)
 	s.Equal(int64(2), task1.GetScheduleId())
 
@@ -2207,13 +2201,13 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	targetRunID := uuid.New()
 	currentTransferID := s.GetTransferReadLevel()
 	now := time.Now().UTC()
-	tasks := []p.Task{
-		&p.ActivityTask{now, currentTransferID + 10001, namespaceID, taskqueue, scheduleID, 111},
-		&p.WorkflowTask{now, currentTransferID + 10002, namespaceID, taskqueue, scheduleID, 222},
-		&p.CloseExecutionTask{now, currentTransferID + 10003, 333},
-		&p.CancelExecutionTask{now, currentTransferID + 10004, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 444},
-		&p.SignalExecutionTask{now, currentTransferID + 10005, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 555},
-		&p.StartChildExecutionTask{now, currentTransferID + 10006, targetNamespaceID, targetWorkflowID, scheduleID, 666},
+	tasks := []tasks.Task{
+		&tasks.ActivityTask{now, currentTransferID + 10001, namespaceID, taskqueue, scheduleID, 111},
+		&tasks.WorkflowTask{now, currentTransferID + 10002, namespaceID, taskqueue, scheduleID, 222},
+		&tasks.CloseExecutionTask{now, currentTransferID + 10003, 333},
+		&tasks.CancelExecutionTask{now, currentTransferID + 10004, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 444},
+		&tasks.SignalExecutionTask{now, currentTransferID + 10005, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 555},
+		&tasks.StartChildExecutionTask{now, currentTransferID + 10006, targetNamespaceID, targetWorkflowID, scheduleID, 666},
 	}
 	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, updatedState, int64(6), int64(3), tasks)
 	s.NoError(err2)
@@ -2262,7 +2256,7 @@ func (s *ExecutionManagerSuite) TestTimerTasksComplete() {
 	}
 
 	now := time.Now().UTC()
-	initialTasks := []p.Task{&p.WorkflowTaskTimeoutTask{now.Add(1 * time.Second), 1, 2, 3, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 11}}
+	initialTasks := []tasks.Task{&tasks.WorkflowTaskTimeoutTask{now.Add(1 * time.Second), 1, 2, 3, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 11}}
 
 	task0, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, "taskQueue", "wType", timestamp.DurationFromSeconds(20), timestamp.DurationFromSeconds(13), 3, 0, 2, initialTasks)
 	s.NoError(err0)
@@ -2276,11 +2270,11 @@ func (s *ExecutionManagerSuite) TestTimerTasksComplete() {
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
 	updatedInfo.LastWorkflowTaskStartId = int64(2)
-	tasks := []p.Task{
-		&p.WorkflowTimeoutTask{now.Add(2 * time.Second), 2, 12},
-		&p.DeleteHistoryEventTask{now.Add(2 * time.Second), 3, 13},
-		&p.ActivityTimeoutTask{now.Add(3 * time.Second), 4, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 7, 0, 14},
-		&p.UserTimerTask{now.Add(3 * time.Second), 5, 7, 15},
+	tasks := []tasks.Task{
+		&tasks.WorkflowTimeoutTask{now.Add(2 * time.Second), 2, 12},
+		&tasks.DeleteHistoryEventTask{now.Add(2 * time.Second), 3, 13},
+		&tasks.ActivityTimeoutTask{now.Add(3 * time.Second), 4, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 7, 0, 14},
+		&tasks.UserTimerTask{now.Add(3 * time.Second), 5, 7, 15},
 	}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedState, int64(5), []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil)
 	s.NoError(err2)
@@ -2330,12 +2324,12 @@ func (s *ExecutionManagerSuite) TestTimerTasksRangeComplete() {
 	updatedInfo := copyWorkflowExecutionInfo(info0)
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
 	updatedInfo.LastWorkflowTaskStartId = int64(2)
-	tasks := []p.Task{
-		&p.WorkflowTaskTimeoutTask{time.Now().UTC(), 1, 2, 3, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 11},
-		&p.WorkflowTimeoutTask{time.Now().UTC(), 2, 12},
-		&p.DeleteHistoryEventTask{time.Now().UTC(), 3, 13},
-		&p.ActivityTimeoutTask{time.Now().UTC(), 4, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 7, 0, 14},
-		&p.UserTimerTask{time.Now().UTC(), 5, 7, 15},
+	tasks := []tasks.Task{
+		&tasks.WorkflowTaskTimeoutTask{time.Now().UTC(), 1, 2, 3, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 11},
+		&tasks.WorkflowTimeoutTask{time.Now().UTC(), 2, 12},
+		&tasks.DeleteHistoryEventTask{time.Now().UTC(), 3, 13},
+		&tasks.ActivityTimeoutTask{time.Now().UTC(), 4, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 7, 0, 14},
+		&tasks.UserTimerTask{time.Now().UTC(), 5, 7, 15},
 	}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedState, int64(5), []int64{int64(4)}, nil, int64(3), tasks, nil, nil, nil, nil)
 	s.NoError(err2)
@@ -2860,7 +2854,7 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 	updatedInfo1 := copyWorkflowExecutionInfo(info1)
 	updatedState1 := copyWorkflowExecutionState(state1.ExecutionState)
 
-	replicationTasks := []p.Task{&p.HistoryReplicationTask{
+	replicationTasks := []tasks.Task{&tasks.HistoryReplicationTask{
 		TaskID:       s.GetNextSequenceNumber(),
 		FirstEventID: int64(1),
 		NextEventID:  int64(3),
@@ -2914,14 +2908,14 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 	updatedInfo1 := copyWorkflowExecutionInfo(info1)
 	updatedState1 := copyWorkflowExecutionState(state1.ExecutionState)
 
-	replicationTasks := []p.Task{
-		&p.HistoryReplicationTask{
+	replicationTasks := []tasks.Task{
+		&tasks.HistoryReplicationTask{
 			TaskID:       s.GetNextSequenceNumber(),
 			FirstEventID: int64(1),
 			NextEventID:  int64(3),
 			Version:      int64(9),
 		},
-		&p.HistoryReplicationTask{
+		&tasks.HistoryReplicationTask{
 			TaskID:       s.GetNextSequenceNumber(),
 			FirstEventID: int64(4),
 			NextEventID:  int64(5),

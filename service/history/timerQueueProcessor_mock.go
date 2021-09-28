@@ -32,7 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	persistence "go.temporal.io/server/common/persistence"
+	tasks "go.temporal.io/server/common/tasks"
 )
 
 // MocktimerQueueProcessor is a mock of timerQueueProcessor interface.
@@ -83,7 +83,7 @@ func (mr *MocktimerQueueProcessorMockRecorder) LockTaskProcessing() *gomock.Call
 }
 
 // NotifyNewTimers mocks base method.
-func (m *MocktimerQueueProcessor) NotifyNewTimers(clusterName string, timerTask []persistence.Task) {
+func (m *MocktimerQueueProcessor) NotifyNewTimers(clusterName string, timerTask []tasks.Task) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "NotifyNewTimers", clusterName, timerTask)
 }
