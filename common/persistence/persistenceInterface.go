@@ -120,7 +120,7 @@ type (
 		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*InternalListConcreteExecutionsResponse, error)
 
 		// Tasks related APIs
-		AddTasks(request *AddTasksRequest) error
+		AddTasks(request *InternalAddTasksRequest) error
 
 		// transfer tasks
 		GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error)
@@ -285,6 +285,7 @@ type (
 		Items         []*InternalListTaskQueueItem
 		NextPageToken []byte
 	}
+
 	InternalListTaskQueueItem struct {
 		TaskQueue *commonpb.DataBlob // serialized PersistedTaskQueueInfo
 		RangeID   int64
@@ -360,6 +361,21 @@ type (
 		CurrentWorkflowEventsNewEvents []*InternalAppendHistoryNodesRequest
 	}
 
+	// InternalAddTasksRequest is used to write new tasks
+	InternalAddTasksRequest struct {
+		ShardID int32
+		RangeID int64
+
+		NamespaceID string
+		WorkflowID  string
+		RunID       string
+
+		TransferTasks    map[tasks.Key]commonpb.DataBlob
+		TimerTasks       map[tasks.Key]commonpb.DataBlob
+		ReplicationTasks map[tasks.Key]commonpb.DataBlob
+		VisibilityTasks  map[tasks.Key]commonpb.DataBlob
+	}
+
 	// InternalWorkflowMutation is used as generic workflow execution state mutation for Persistence Interface
 	InternalWorkflowMutation struct {
 		// TODO: properly set this on call sites
@@ -390,10 +406,10 @@ type (
 		NewBufferedEvents         *commonpb.DataBlob
 		ClearBufferedEvents       bool
 
-		TransferTasks    []tasks.Task
-		TimerTasks       []tasks.Task
-		ReplicationTasks []tasks.Task
-		VisibilityTasks  []tasks.Task
+		TransferTasks    map[tasks.Key]commonpb.DataBlob
+		TimerTasks       map[tasks.Key]commonpb.DataBlob
+		ReplicationTasks map[tasks.Key]commonpb.DataBlob
+		VisibilityTasks  map[tasks.Key]commonpb.DataBlob
 
 		Condition int64
 
@@ -422,10 +438,10 @@ type (
 		SignalInfos         map[int64]*commonpb.DataBlob
 		SignalRequestedIDs  map[string]struct{}
 
-		TransferTasks    []tasks.Task
-		TimerTasks       []tasks.Task
-		ReplicationTasks []tasks.Task
-		VisibilityTasks  []tasks.Task
+		TransferTasks    map[tasks.Key]commonpb.DataBlob
+		TimerTasks       map[tasks.Key]commonpb.DataBlob
+		ReplicationTasks map[tasks.Key]commonpb.DataBlob
+		VisibilityTasks  map[tasks.Key]commonpb.DataBlob
 
 		Condition int64
 

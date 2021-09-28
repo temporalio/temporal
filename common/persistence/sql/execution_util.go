@@ -36,12 +36,10 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tasks"
 )
 
@@ -101,9 +99,6 @@ func applyWorkflowMutationTx(
 	if err := applyTasks(ctx,
 		tx,
 		shardID,
-		namespaceID,
-		workflowID,
-		runID,
 		workflowMutation.TransferTasks,
 		workflowMutation.TimerTasks,
 		workflowMutation.ReplicationTasks,
@@ -263,9 +258,6 @@ func applyWorkflowSnapshotTxAsReset(
 	if err := applyTasks(ctx,
 		tx,
 		shardID,
-		namespaceID,
-		workflowID,
-		runID,
 		workflowSnapshot.TransferTasks,
 		workflowSnapshot.TimerTasks,
 		workflowSnapshot.ReplicationTasks,
@@ -454,9 +446,6 @@ func (m *sqlExecutionStore) applyWorkflowSnapshotTxAsNew(
 	if err := applyTasks(ctx,
 		tx,
 		shardID,
-		namespaceID,
-		workflowID,
-		runID,
 		workflowSnapshot.TransferTasks,
 		workflowSnapshot.TimerTasks,
 		workflowSnapshot.ReplicationTasks,
@@ -544,52 +533,41 @@ func applyTasks(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
-	namespaceID string,
-	workflowID string,
-	runID string,
-	transferTasks []tasks.Task,
-	timerTasks []tasks.Task,
-	replicationTasks []tasks.Task,
-	visibilityTasks []tasks.Task,
+	transferTasks map[tasks.Key]commonpb.DataBlob,
+	timerTasks map[tasks.Key]commonpb.DataBlob,
+	replicationTasks map[tasks.Key]commonpb.DataBlob,
+	visibilityTasks map[tasks.Key]commonpb.DataBlob,
 ) error {
 
 	if err := createTransferTasks(ctx,
 		tx,
-		transferTasks,
 		shardID,
-		namespaceID,
-		workflowID,
-		runID); err != nil {
+		transferTasks,
+	); err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("applyTasks failed. Failed to create transfer tasks. Error: %v", err))
 	}
 
 	if err := createReplicationTasks(ctx,
 		tx,
-		replicationTasks,
 		shardID,
-		namespaceID,
-		workflowID,
-		runID); err != nil {
+		replicationTasks,
+	); err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("applyTasks failed. Failed to create replication tasks. Error: %v", err))
 	}
 
 	if err := createTimerTasks(ctx,
 		tx,
-		timerTasks,
 		shardID,
-		namespaceID,
-		workflowID,
-		runID); err != nil {
+		timerTasks,
+	); err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("applyTasks failed. Failed to create timer tasks. Error: %v", err))
 	}
 
 	if err := createVisibilityTasks(ctx,
 		tx,
-		visibilityTasks,
 		shardID,
-		namespaceID,
-		workflowID,
-		runID); err != nil {
+		visibilityTasks,
+	); err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("applyTasks failed. Failed to create timer tasks. Error: %v", err))
 	}
 
@@ -761,83 +739,22 @@ func lockExecution(
 func createTransferTasks(
 	ctx context.Context,
 	tx sqlplugin.Tx,
-	transferTasks []tasks.Task,
 	shardID int32,
-	namespaceID string,
-	workflowID string,
-	runID string,
+	transferTasks map[tasks.Key]commonpb.DataBlob,
 ) error {
 
 	if len(transferTasks) == 0 {
 		return nil
 	}
 
-	transferTasksRows := make([]sqlplugin.TransferTasksRow, len(transferTasks))
-	for i, task := range transferTasks {
-		info := &persistencespb.TransferTaskInfo{
-			NamespaceId:       namespaceID,
-			WorkflowId:        workflowID,
-			RunId:             runID,
-			TargetNamespaceId: namespaceID,
-			TargetWorkflowId:  p.TransferTaskTransferTargetWorkflowID,
-			ScheduleId:        0,
-			TaskId:            task.GetTaskID(),
-			TaskType:          task.GetType(),
-			Version:           task.GetVersion(),
-			VisibilityTime:    timestamp.TimePtr(task.GetVisibilityTime().UTC()),
-		}
-
-		switch task.GetType() {
-		case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
-			info.TargetNamespaceId = task.(*tasks.ActivityTask).NamespaceID
-			info.TaskQueue = task.(*tasks.ActivityTask).TaskQueue
-			info.ScheduleId = task.(*tasks.ActivityTask).ScheduleID
-
-		case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
-			info.TargetNamespaceId = task.(*tasks.WorkflowTask).NamespaceID
-			info.TaskQueue = task.(*tasks.WorkflowTask).TaskQueue
-			info.ScheduleId = task.(*tasks.WorkflowTask).ScheduleID
-
-		case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
-			info.TargetNamespaceId = task.(*tasks.CancelExecutionTask).TargetNamespaceID
-			info.TargetWorkflowId = task.(*tasks.CancelExecutionTask).TargetWorkflowID
-			if task.(*tasks.CancelExecutionTask).TargetRunID != "" {
-				info.TargetRunId = task.(*tasks.CancelExecutionTask).TargetRunID
-			}
-			info.TargetChildWorkflowOnly = task.(*tasks.CancelExecutionTask).TargetChildWorkflowOnly
-			info.ScheduleId = task.(*tasks.CancelExecutionTask).InitiatedID
-
-		case enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
-			info.TargetNamespaceId = task.(*tasks.SignalExecutionTask).TargetNamespaceID
-			info.TargetWorkflowId = task.(*tasks.SignalExecutionTask).TargetWorkflowID
-			if task.(*tasks.SignalExecutionTask).TargetRunID != "" {
-				info.TargetRunId = task.(*tasks.SignalExecutionTask).TargetRunID
-			}
-			info.TargetChildWorkflowOnly = task.(*tasks.SignalExecutionTask).TargetChildWorkflowOnly
-			info.ScheduleId = task.(*tasks.SignalExecutionTask).InitiatedID
-
-		case enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
-			info.TargetNamespaceId = task.(*tasks.StartChildExecutionTask).TargetNamespaceID
-			info.TargetWorkflowId = task.(*tasks.StartChildExecutionTask).TargetWorkflowID
-			info.ScheduleId = task.(*tasks.StartChildExecutionTask).InitiatedID
-
-		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
-			enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
-			// No explicit property needs to be set
-
-		default:
-			return serviceerror.NewUnavailable(fmt.Sprintf("createTransferTasks failed. Unknow transfer type: %v", task.GetType()))
-		}
-
-		blob, err := serialization.TransferTaskInfoToBlob(info)
-		if err != nil {
-			return err
-		}
-
-		transferTasksRows[i].ShardID = shardID
-		transferTasksRows[i].TaskID = task.GetTaskID()
-		transferTasksRows[i].Data = blob.Data
-		transferTasksRows[i].DataEncoding = blob.EncodingType.String()
+	transferTasksRows := make([]sqlplugin.TransferTasksRow, 0, len(transferTasks))
+	for key, blob := range transferTasks {
+		transferTasksRows = append(transferTasksRows, sqlplugin.TransferTasksRow{
+			ShardID:      shardID,
+			TaskID:       key.TaskID,
+			Data:         blob.Data,
+			DataEncoding: blob.EncodingType.String(),
+		})
 	}
 
 	result, err := tx.InsertIntoTransferTasks(ctx, transferTasksRows)
@@ -856,65 +773,62 @@ func createTransferTasks(
 	return nil
 }
 
+func createTimerTasks(
+	ctx context.Context,
+	tx sqlplugin.Tx,
+	shardID int32,
+	timerTasks map[tasks.Key]commonpb.DataBlob,
+) error {
+
+	if len(timerTasks) == 0 {
+		return nil
+	}
+
+	timerTasksRows := make([]sqlplugin.TimerTasksRow, 0, len(timerTasks))
+	for key, blob := range timerTasks {
+		timerTasksRows = append(timerTasksRows, sqlplugin.TimerTasksRow{
+			ShardID:             shardID,
+			VisibilityTimestamp: key.FireTime,
+			TaskID:              key.TaskID,
+			Data:                blob.Data,
+			DataEncoding:        blob.EncodingType.String(),
+		})
+	}
+
+	result, err := tx.InsertIntoTimerTasks(ctx, timerTasksRows)
+	if err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("createTimerTasks failed. Error: %v", err))
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("createTimerTasks failed. Could not verify number of rows inserted. Error: %v", err))
+	}
+
+	if int(rowsAffected) != len(timerTasks) {
+		return serviceerror.NewUnavailable(fmt.Sprintf("createTimerTasks failed. Inserted %v instead of %v rows into timer_tasks. Error: %v", rowsAffected, len(timerTasks), err))
+	}
+	return nil
+}
+
 func createReplicationTasks(
 	ctx context.Context,
 	tx sqlplugin.Tx,
-	replicationTasks []tasks.Task,
 	shardID int32,
-	namespaceID string,
-	workflowID string,
-	runID string,
+	replicationTasks map[tasks.Key]commonpb.DataBlob,
 ) error {
 
 	if len(replicationTasks) == 0 {
 		return nil
 	}
 
-	replicationTasksRows := make([]sqlplugin.ReplicationTasksRow, len(replicationTasks))
-	for i, task := range replicationTasks {
-		info := &persistencespb.ReplicationTaskInfo{
-			TaskId:            task.GetTaskID(),
-			NamespaceId:       namespaceID,
-			WorkflowId:        workflowID,
-			RunId:             runID,
-			TaskType:          task.GetType(),
-			FirstEventId:      common.EmptyEventID,
-			NextEventId:       common.EmptyEventID,
-			Version:           common.EmptyVersion,
-			ScheduledId:       common.EmptyEventID,
-			BranchToken:       nil,
-			NewRunBranchToken: nil,
-		}
-
-		switch task.GetType() {
-		case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
-			historyReplicationTask, ok := task.(*tasks.HistoryReplicationTask)
-			if !ok {
-				return serviceerror.NewUnavailable(fmt.Sprintf("createReplicationTasks failed. Failed to cast %v to HistoryReplicationTask", task))
-			}
-			info.FirstEventId = historyReplicationTask.FirstEventID
-			info.NextEventId = historyReplicationTask.NextEventID
-			info.Version = task.GetVersion()
-			info.BranchToken = historyReplicationTask.BranchToken
-			info.NewRunBranchToken = historyReplicationTask.NewRunBranchToken
-
-		case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
-			info.Version = task.GetVersion()
-			info.ScheduledId = task.(*tasks.SyncActivityTask).ScheduledID
-
-		default:
-			return serviceerror.NewUnavailable(fmt.Sprintf("Unknown replication task: %v", task.GetType()))
-		}
-
-		blob, err := serialization.ReplicationTaskInfoToBlob(info)
-		if err != nil {
-			return err
-		}
-
-		replicationTasksRows[i].ShardID = shardID
-		replicationTasksRows[i].TaskID = task.GetTaskID()
-		replicationTasksRows[i].Data = blob.Data
-		replicationTasksRows[i].DataEncoding = blob.EncodingType.String()
+	replicationTasksRows := make([]sqlplugin.ReplicationTasksRow, 0, len(replicationTasks))
+	for key, blob := range replicationTasks {
+		replicationTasksRows = append(replicationTasksRows, sqlplugin.ReplicationTasksRow{
+			ShardID:      shardID,
+			TaskID:       key.TaskID,
+			Data:         blob.Data,
+			DataEncoding: blob.EncodingType.String(),
+		})
 	}
 
 	result, err := tx.InsertIntoReplicationTasks(ctx, replicationTasksRows)
@@ -933,142 +847,25 @@ func createReplicationTasks(
 	return nil
 }
 
-func createTimerTasks(
-	ctx context.Context,
-	tx sqlplugin.Tx,
-	timerTasks []tasks.Task,
-	shardID int32,
-	namespaceID string,
-	workflowID string,
-	runID string,
-) error {
-
-	if len(timerTasks) == 0 {
-		return nil
-	}
-
-	timerTasksRows := make([]sqlplugin.TimerTasksRow, len(timerTasks))
-	for i, task := range timerTasks {
-		info := &persistencespb.TimerTaskInfo{
-			NamespaceId:    namespaceID,
-			WorkflowId:     workflowID,
-			RunId:          runID,
-			Version:        task.GetVersion(),
-			TaskType:       task.GetType(),
-			TaskId:         task.GetTaskID(),
-			VisibilityTime: timestamp.TimePtr(task.GetVisibilityTime().UTC()),
-		}
-
-		switch t := task.(type) {
-		case *tasks.WorkflowTaskTimeoutTask:
-			info.EventId = t.EventID
-			info.TimeoutType = t.TimeoutType
-			info.ScheduleAttempt = t.ScheduleAttempt
-
-		case *tasks.ActivityTimeoutTask:
-			info.EventId = t.EventID
-			info.TimeoutType = t.TimeoutType
-			info.ScheduleAttempt = t.Attempt
-
-		case *tasks.UserTimerTask:
-			info.EventId = t.EventID
-
-		case *tasks.ActivityRetryTimerTask:
-			info.EventId = t.EventID
-			info.ScheduleAttempt = t.Attempt
-
-		case *tasks.WorkflowBackoffTimerTask:
-			info.WorkflowBackoffType = t.WorkflowBackoffType
-
-		case *tasks.WorkflowTimeoutTask:
-			// noop
-
-		case *tasks.DeleteHistoryEventTask:
-			// noop
-
-		default:
-			return serviceerror.NewUnavailable(fmt.Sprintf("createTimerTasks failed. Unknown timer task: %v", task.GetType()))
-		}
-
-		blob, err := serialization.TimerTaskInfoToBlob(info)
-		if err != nil {
-			return err
-		}
-
-		timerTasksRows[i].ShardID = shardID
-		timerTasksRows[i].VisibilityTimestamp = *info.VisibilityTime
-		timerTasksRows[i].TaskID = task.GetTaskID()
-		timerTasksRows[i].Data = blob.Data
-		timerTasksRows[i].DataEncoding = blob.EncodingType.String()
-	}
-
-	result, err := tx.InsertIntoTimerTasks(ctx, timerTasksRows)
-	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("createTimerTasks failed. Error: %v", err))
-	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("createTimerTasks failed. Could not verify number of rows inserted. Error: %v", err))
-	}
-
-	if int(rowsAffected) != len(timerTasks) {
-		return serviceerror.NewUnavailable(fmt.Sprintf("createTimerTasks failed. Inserted %v instead of %v rows into timer_tasks. Error: %v", rowsAffected, len(timerTasks), err))
-	}
-	return nil
-}
-
 func createVisibilityTasks(
 	ctx context.Context,
 	tx sqlplugin.Tx,
-	visibilityTasks []tasks.Task,
 	shardID int32,
-	namespaceID string,
-	workflowID string,
-	runID string,
+	visibilityTasks map[tasks.Key]commonpb.DataBlob,
 ) error {
 
 	if len(visibilityTasks) == 0 {
 		return nil
 	}
 
-	visibilityTasksRows := make([]sqlplugin.VisibilityTasksRow, len(visibilityTasks))
-	for i, task := range visibilityTasks {
-		info := &persistencespb.VisibilityTaskInfo{
-			NamespaceId:    namespaceID,
-			WorkflowId:     workflowID,
-			RunId:          runID,
-			TaskId:         task.GetTaskID(),
-			TaskType:       task.GetType(),
-			Version:        task.GetVersion(),
-			VisibilityTime: timestamp.TimePtr(task.GetVisibilityTime().UTC()),
-		}
-
-		switch task.GetType() {
-		case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION:
-			// noop
-
-		case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION:
-			// noop
-
-		case enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION:
-			// noop
-
-		case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
-			// noop
-
-		default:
-			return serviceerror.NewUnavailable(fmt.Sprintf("createVisibilityTasks failed. Unknow visibility type: %v", task.GetType()))
-		}
-
-		blob, err := serialization.VisibilityTaskInfoToBlob(info)
-		if err != nil {
-			return err
-		}
-
-		visibilityTasksRows[i].ShardID = shardID
-		visibilityTasksRows[i].TaskID = task.GetTaskID()
-		visibilityTasksRows[i].Data = blob.Data
-		visibilityTasksRows[i].DataEncoding = blob.EncodingType.String()
+	visibilityTasksRows := make([]sqlplugin.VisibilityTasksRow, 0, len(visibilityTasks))
+	for key, blob := range visibilityTasks {
+		visibilityTasksRows = append(visibilityTasksRows, sqlplugin.VisibilityTasksRow{
+			ShardID:      shardID,
+			TaskID:       key.TaskID,
+			Data:         blob.Data,
+			DataEncoding: blob.EncodingType.String(),
+		})
 	}
 
 	result, err := tx.InsertIntoVisibilityTasks(ctx, visibilityTasksRows)

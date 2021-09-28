@@ -39,8 +39,11 @@ type (
 	}
 )
 
-func (r *WorkflowBackoffTimerTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER
+func (r *WorkflowBackoffTimerTask) GetKey() Key {
+	return Key{
+		FireTime: r.VisibilityTimestamp,
+		TaskID:   r.TaskID,
+	}
 }
 
 func (r *WorkflowBackoffTimerTask) GetVersion() int64 {

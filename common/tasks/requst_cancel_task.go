@@ -26,8 +26,6 @@ package tasks
 
 import (
 	"time"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 type (
@@ -43,8 +41,11 @@ type (
 	}
 )
 
-func (u *CancelExecutionTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION
+func (u *CancelExecutionTask) GetKey() Key {
+	return Key{
+		FireTime: u.VisibilityTimestamp,
+		TaskID:   u.TaskID,
+	}
 }
 
 func (u *CancelExecutionTask) GetVersion() int64 {

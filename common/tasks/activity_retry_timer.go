@@ -26,8 +26,6 @@ package tasks
 
 import (
 	"time"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 type (
@@ -40,9 +38,11 @@ type (
 	}
 )
 
-// GetType returns the type of the retry timer task
-func (r *ActivityRetryTimerTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER
+func (r *ActivityRetryTimerTask) GetKey() Key {
+	return Key{
+		FireTime: r.VisibilityTimestamp,
+		TaskID:   r.TaskID,
+	}
 }
 
 func (r *ActivityRetryTimerTask) GetVersion() int64 {

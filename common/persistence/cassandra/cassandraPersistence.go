@@ -1536,16 +1536,13 @@ func (d *cassandraPersistence) ListConcreteExecutions(
 }
 
 func (d *cassandraPersistence) AddTasks(
-	request *p.AddTasksRequest,
+	request *p.InternalAddTasksRequest,
 ) error {
 	batch := d.session.NewBatch(gocql.LoggedBatch)
 
 	if err := applyTasks(
 		batch,
 		request.ShardID,
-		request.NamespaceID,
-		request.WorkflowID,
-		request.RunID,
 		request.TransferTasks,
 		request.TimerTasks,
 		request.ReplicationTasks,

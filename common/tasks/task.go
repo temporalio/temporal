@@ -26,14 +26,19 @@ package tasks
 
 import (
 	"time"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 type (
+	Key struct {
+		// FireTime is the scheduled time of the task
+		FireTime time.Time
+		// TaskID is the ID of the task
+		TaskID int64
+	}
+
 	// Task is the generic task interface
 	Task interface {
-		GetType() enumsspb.TaskType
+		GetKey() Key
 		GetVersion() int64
 		SetVersion(version int64)
 		GetTaskID() int64

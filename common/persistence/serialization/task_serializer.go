@@ -60,9 +60,9 @@ func NewTaskSerializer(
 
 func (s *TaskSerializer) SerializeTransferTasks(
 	taskSlice []tasks.Task,
-) ([]commonpb.DataBlob, error) {
-	blobSlice := make([]commonpb.DataBlob, len(taskSlice))
-	for index, task := range taskSlice {
+) (map[tasks.Key]commonpb.DataBlob, error) {
+	blobSlice := make(map[tasks.Key]commonpb.DataBlob, len(taskSlice))
+	for _, task := range taskSlice {
 		var transferTask *persistencespb.TransferTaskInfo
 		switch task := task.(type) {
 		case *tasks.WorkflowTask:
@@ -80,14 +80,14 @@ func (s *TaskSerializer) SerializeTransferTasks(
 		case *tasks.ResetWorkflowTask:
 			transferTask = s.transferResetTaskToProto(task)
 		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown transfer task type: %v", task.GetType()))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown transfer task type: %v", task))
 		}
 
 		blob, err := TransferTaskInfoToBlob(transferTask)
 		if err != nil {
 			return nil, err
 		}
-		blobSlice[index] = blob
+		blobSlice[task.GetKey()] = blob
 	}
 	return blobSlice, nil
 }
@@ -128,9 +128,9 @@ func (s *TaskSerializer) DeserializeTransferTasks(
 
 func (s *TaskSerializer) SerializeTimerTasks(
 	taskSlice []tasks.Task,
-) ([]commonpb.DataBlob, error) {
-	blobSlice := make([]commonpb.DataBlob, len(taskSlice))
-	for index, task := range taskSlice {
+) (map[tasks.Key]commonpb.DataBlob, error) {
+	blobSlice := make(map[tasks.Key]commonpb.DataBlob, len(taskSlice))
+	for _, task := range taskSlice {
 		var timerTask *persistencespb.TimerTaskInfo
 		switch task := task.(type) {
 		case *tasks.WorkflowTaskTimeoutTask:
@@ -148,14 +148,14 @@ func (s *TaskSerializer) SerializeTimerTasks(
 		case *tasks.DeleteHistoryEventTask:
 			timerTask = s.timerWorkflowCleanupTaskToProto(task)
 		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown timer task type: %v", task.GetType()))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown timer task type: %v", task))
 		}
 
 		blob, err := TimerTaskInfoToBlob(timerTask)
 		if err != nil {
 			return nil, err
 		}
-		blobSlice[index] = blob
+		blobSlice[task.GetKey()] = blob
 	}
 	return blobSlice, nil
 }
@@ -196,9 +196,9 @@ func (s *TaskSerializer) DeserializeTimerTasks(
 
 func (s *TaskSerializer) SerializeVisibilityTasks(
 	taskSlice []tasks.Task,
-) ([]commonpb.DataBlob, error) {
-	blobSlice := make([]commonpb.DataBlob, len(taskSlice))
-	for index, task := range taskSlice {
+) (map[tasks.Key]commonpb.DataBlob, error) {
+	blobSlice := make(map[tasks.Key]commonpb.DataBlob, len(taskSlice))
+	for _, task := range taskSlice {
 		var visibilityTask *persistencespb.VisibilityTaskInfo
 		switch task := task.(type) {
 		case *tasks.StartExecutionVisibilityTask:
@@ -210,14 +210,14 @@ func (s *TaskSerializer) SerializeVisibilityTasks(
 		case *tasks.DeleteExecutionVisibilityTask:
 			visibilityTask = s.visibilityDeleteTaskToProto(task)
 		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown visibilit task type: %v", task.GetType()))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown visibilit task type: %v", task))
 		}
 
 		blob, err := VisibilityTaskInfoToBlob(visibilityTask)
 		if err != nil {
 			return nil, err
 		}
-		blobSlice[index] = blob
+		blobSlice[task.GetKey()] = blob
 	}
 	return blobSlice, nil
 }
@@ -252,9 +252,9 @@ func (s *TaskSerializer) DeserializeVisibilityTasks(
 
 func (s *TaskSerializer) SerializeReplicationTasks(
 	taskSlice []tasks.Task,
-) ([]commonpb.DataBlob, error) {
-	blobSlice := make([]commonpb.DataBlob, len(taskSlice))
-	for index, task := range taskSlice {
+) (map[tasks.Key]commonpb.DataBlob, error) {
+	blobSlice := make(map[tasks.Key]commonpb.DataBlob, len(taskSlice))
+	for _, task := range taskSlice {
 		var replicationTask *persistencespb.ReplicationTaskInfo
 		switch task := task.(type) {
 		case *tasks.SyncActivityTask:
@@ -262,14 +262,14 @@ func (s *TaskSerializer) SerializeReplicationTasks(
 		case *tasks.HistoryReplicationTask:
 			replicationTask = s.replicationHistoryTaskToProto(task)
 		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown repication task type: %v", task.GetType()))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown repication task type: %v", task))
 		}
 
 		blob, err := ReplicationTaskInfoToBlob(replicationTask)
 		if err != nil {
 			return nil, err
 		}
-		blobSlice[index] = blob
+		blobSlice[task.GetKey()] = blob
 	}
 	return blobSlice, nil
 }

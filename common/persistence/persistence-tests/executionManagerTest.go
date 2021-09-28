@@ -2051,18 +2051,15 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 
 	for index := range replicationTasks {
 		s.Equal(replicationTasks[index].GetTaskID(), respTasks[index].GetTaskId())
-		s.Equal(replicationTasks[index].GetType(), respTasks[index].GetTaskType())
 		s.Equal(replicationTasks[index].GetVersion(), respTasks[index].GetVersion())
-		switch replicationTasks[index].GetType() {
-		case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
-			expected := replicationTasks[index].(*tasks.HistoryReplicationTask)
+		switch expected := replicationTasks[index].(type) {
+		case *tasks.HistoryReplicationTask:
 			s.Equal(expected.FirstEventID, respTasks[index].GetFirstEventId())
 			s.Equal(expected.NextEventID, respTasks[index].GetNextEventId())
 			s.Equal(expected.BranchToken, respTasks[index].BranchToken)
 			s.Equal(expected.NewRunBranchToken, respTasks[index].NewRunBranchToken)
 
-		case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
-			expected := replicationTasks[index].(*tasks.SyncActivityTask)
+		case *tasks.SyncActivityTask:
 			s.Equal(expected.ScheduledID, respTasks[index].GetScheduledId())
 		}
 		err = s.CompleteReplicationTask(respTasks[index].GetTaskId())
@@ -2090,10 +2087,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 	task1 := tasks1[0]
 	taskType := enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK
 	scheduleId := int64(2)
-	targetWorkflowId := p.TransferTaskTransferTargetWorkflowID
-	targetRunId := ""
 	s.validateTransferTaskHighLevel(task1, taskType, namespaceID, workflowExecution)
-	s.validateTransferTaskTargetInfo(task1, task1.GetTargetNamespaceId(), targetWorkflowId, targetRunId)
 	s.Equal(taskqueue, task1.TaskQueue)
 	s.Equal(scheduleId, task1.GetScheduleId())
 	err3 := s.CompleteTransferTask(task1.GetTaskId())
@@ -2187,7 +2181,6 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	s.Equal(1, len(tasks1), "Expected 1 workflow task.")
 	task1 := tasks1[0]
 	s.validateTransferTaskHighLevel(task1, enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK, namespaceID, workflowExecution)
-	s.validateTransferTaskTargetInfo(task1, task1.GetNamespaceId(), p.TransferTaskTransferTargetWorkflowID, "")
 	s.Equal(taskqueue, task1.TaskQueue)
 	s.Equal(int64(2), task1.GetScheduleId())
 

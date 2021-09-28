@@ -42,7 +42,7 @@ import (
 )
 
 func (m *sqlExecutionStore) AddTasks(
-	request *p.AddTasksRequest,
+	request *p.InternalAddTasksRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
@@ -54,12 +54,9 @@ func (m *sqlExecutionStore) AddTasks(
 			return applyTasks(ctx,
 				tx,
 				request.ShardID,
-				request.NamespaceID,
-				request.WorkflowID,
-				request.RunID,
 				request.TransferTasks,
-				request.ReplicationTasks,
 				request.TimerTasks,
+				request.ReplicationTasks,
 				request.VisibilityTasks,
 			)
 		})
