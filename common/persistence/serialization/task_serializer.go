@@ -64,21 +64,21 @@ func (s *TaskSerializer) SerializeTransferTasks(
 	blobSlice := make([]commonpb.DataBlob, len(taskSlice))
 	for index, task := range taskSlice {
 		var transferTask *persistencespb.TransferTaskInfo
-		switch task.GetType() {
-		case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
-			transferTask = s.transferWorkflowTaskToProto(task.(*tasks.WorkflowTask))
-		case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
-			transferTask = s.transferActivityTaskToProto(task.(*tasks.ActivityTask))
-		case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
-			transferTask = s.transferRequestCancelTaskToProto(task.(*tasks.CancelExecutionTask))
-		case enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
-			transferTask = s.transferSignalTaskToProto(task.(*tasks.SignalExecutionTask))
-		case enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
-			transferTask = s.transferChildWorkflowTaskToProto(task.(*tasks.StartChildExecutionTask))
-		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
-			transferTask = s.transferCloseTaskToProto(task.(*tasks.CloseExecutionTask))
-		case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
-			transferTask = s.transferResetTaskToProto(task.(*tasks.ResetWorkflowTask))
+		switch task := task.(type) {
+		case *tasks.WorkflowTask:
+			transferTask = s.transferWorkflowTaskToProto(task)
+		case *tasks.ActivityTask:
+			transferTask = s.transferActivityTaskToProto(task)
+		case *tasks.CancelExecutionTask:
+			transferTask = s.transferRequestCancelTaskToProto(task)
+		case *tasks.SignalExecutionTask:
+			transferTask = s.transferSignalTaskToProto(task)
+		case *tasks.StartChildExecutionTask:
+			transferTask = s.transferChildWorkflowTaskToProto(task)
+		case *tasks.CloseExecutionTask:
+			transferTask = s.transferCloseTaskToProto(task)
+		case *tasks.ResetWorkflowTask:
+			transferTask = s.transferResetTaskToProto(task)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown transfer task type: %v", task.GetType()))
 		}
@@ -132,21 +132,21 @@ func (s *TaskSerializer) SerializeTimerTasks(
 	blobSlice := make([]commonpb.DataBlob, len(taskSlice))
 	for index, task := range taskSlice {
 		var timerTask *persistencespb.TimerTaskInfo
-		switch task.GetType() {
-		case enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
-			timerTask = s.timerWorkflowTaskToProto(task.(*tasks.WorkflowTaskTimeoutTask))
-		case enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
-			timerTask = s.timerWorkflowDelayTaskToProto(task.(*tasks.WorkflowBackoffTimerTask))
-		case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT:
-			timerTask = s.timerActivityTaskToProto(task.(*tasks.ActivityTimeoutTask))
-		case enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
-			timerTask = s.timerActivityRetryTaskToProto(task.(*tasks.ActivityRetryTimerTask))
-		case enumsspb.TASK_TYPE_USER_TIMER:
-			timerTask = s.timerUserTaskToProto(task.(*tasks.UserTimerTask))
-		case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
-			timerTask = s.timerWorkflowRunToProto(task.(*tasks.WorkflowTimeoutTask))
-		case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT:
-			timerTask = s.timerWorkflowCleanupTaskToProto(task.(*tasks.DeleteHistoryEventTask))
+		switch task := task.(type) {
+		case *tasks.WorkflowTaskTimeoutTask:
+			timerTask = s.timerWorkflowTaskToProto(task)
+		case *tasks.WorkflowBackoffTimerTask:
+			timerTask = s.timerWorkflowDelayTaskToProto(task)
+		case *tasks.ActivityTimeoutTask:
+			timerTask = s.timerActivityTaskToProto(task)
+		case *tasks.ActivityRetryTimerTask:
+			timerTask = s.timerActivityRetryTaskToProto(task)
+		case *tasks.UserTimerTask:
+			timerTask = s.timerUserTaskToProto(task)
+		case *tasks.WorkflowTimeoutTask:
+			timerTask = s.timerWorkflowRunToProto(task)
+		case *tasks.DeleteHistoryEventTask:
+			timerTask = s.timerWorkflowCleanupTaskToProto(task)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown timer task type: %v", task.GetType()))
 		}
@@ -200,15 +200,15 @@ func (s *TaskSerializer) SerializeVisibilityTasks(
 	blobSlice := make([]commonpb.DataBlob, len(taskSlice))
 	for index, task := range taskSlice {
 		var visibilityTask *persistencespb.VisibilityTaskInfo
-		switch task.GetType() {
-		case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION:
-			visibilityTask = s.visibilityStartTaskToProto(task.(*tasks.StartExecutionVisibilityTask))
-		case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION:
-			visibilityTask = s.visibilityUpsertTaskToProto(task.(*tasks.UpsertExecutionVisibilityTask))
-		case enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION:
-			visibilityTask = s.visibilityCloseTaskToProto(task.(*tasks.CloseExecutionVisibilityTask))
-		case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
-			visibilityTask = s.visibilityDeleteTaskToProto(task.(*tasks.DeleteExecutionVisibilityTask))
+		switch task := task.(type) {
+		case *tasks.StartExecutionVisibilityTask:
+			visibilityTask = s.visibilityStartTaskToProto(task)
+		case *tasks.UpsertExecutionVisibilityTask:
+			visibilityTask = s.visibilityUpsertTaskToProto(task)
+		case *tasks.CloseExecutionVisibilityTask:
+			visibilityTask = s.visibilityCloseTaskToProto(task)
+		case *tasks.DeleteExecutionVisibilityTask:
+			visibilityTask = s.visibilityDeleteTaskToProto(task)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown visibilit task type: %v", task.GetType()))
 		}
@@ -256,11 +256,11 @@ func (s *TaskSerializer) SerializeReplicationTasks(
 	blobSlice := make([]commonpb.DataBlob, len(taskSlice))
 	for index, task := range taskSlice {
 		var replicationTask *persistencespb.ReplicationTaskInfo
-		switch task.GetType() {
-		case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
-			replicationTask = s.replicationActivityTaskToProto(task.(*tasks.SyncActivityTask))
-		case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
-			replicationTask = s.replicationHistoryTaskToProto(task.(*tasks.HistoryReplicationTask))
+		switch task := task.(type) {
+		case *tasks.SyncActivityTask:
+			replicationTask = s.replicationActivityTaskToProto(task)
+		case *tasks.HistoryReplicationTask:
+			replicationTask = s.replicationHistoryTaskToProto(task)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown repication task type: %v", task.GetType()))
 		}
