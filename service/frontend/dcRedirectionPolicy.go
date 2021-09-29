@@ -170,7 +170,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 		return policy.currentClusterName, false
 	}
 
-	if len(namespaceEntry.GetReplicationConfig().Clusters) == 1 {
+	if len(namespaceEntry.ClusterNames()) == 1 {
 		// do not do dc redirection if namespace is only targeting at 1 dc (effectively local namespace)
 		return policy.currentClusterName, false
 	}
@@ -186,5 +186,5 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 		return policy.currentClusterName, false
 	}
 
-	return namespaceEntry.GetReplicationConfig().ActiveClusterName, true
+	return namespaceEntry.ActiveClusterName(), true
 }
