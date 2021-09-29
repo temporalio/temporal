@@ -251,7 +251,7 @@ func (e *replicationTaskExecutorImpl) filterTask(
 
 	shouldProcessTask := false
 FilterLoop:
-	for _, targetCluster := range namespaceEntry.GetReplicationConfig().Clusters {
+	for _, targetCluster := range namespaceEntry.ClusterNames() {
 		if e.currentCluster == targetCluster {
 			shouldProcessTask = true
 			break FilterLoop

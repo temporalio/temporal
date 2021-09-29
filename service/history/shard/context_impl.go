@@ -920,7 +920,7 @@ func (s *ContextImpl) allocateTimerIDsLocked(
 			// cannot use version to determine the corresponding cluster for timer task
 			// this is because during failover, timer task should be created as active
 			// or otherwise, failover + active processing logic may not pick up the task.
-			currentCluster = namespaceEntry.GetReplicationConfig().ActiveClusterName
+			currentCluster = namespaceEntry.ActiveClusterName()
 		}
 		readCursorTS := s.timerMaxReadLevelMap[currentCluster]
 		if ts.Before(readCursorTS) {

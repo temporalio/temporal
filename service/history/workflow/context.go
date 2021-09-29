@@ -847,7 +847,7 @@ func (c *ContextImpl) ReapplyEvents(
 	ctx, cancel := context.WithTimeout(context.Background(), defaultRemoteCallTimeout)
 	defer cancel()
 
-	activeCluster := namespaceEntry.GetReplicationConfig().ActiveClusterName
+	activeCluster := namespaceEntry.ActiveClusterName()
 	if activeCluster == c.shard.GetClusterMetadata().GetCurrentClusterName() {
 		return c.shard.GetEngine().ReapplyEvents(
 			ctx,

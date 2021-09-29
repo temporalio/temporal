@@ -352,7 +352,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 
 	failoverPredicate := func(shardNotificationVersion int64, nextNamespace *namespace.CacheEntry, action func()) {
 		namespaceFailoverNotificationVersion := nextNamespace.GetFailoverNotificationVersion()
-		namespaceActiveCluster := nextNamespace.GetReplicationConfig().ActiveClusterName
+		namespaceActiveCluster := nextNamespace.ActiveClusterName()
 
 		if nextNamespace.IsGlobalNamespace() &&
 			namespaceFailoverNotificationVersion >= shardNotificationVersion &&
