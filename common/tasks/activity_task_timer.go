@@ -28,10 +28,13 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+
+	"go.temporal.io/server/common/definition"
 )
 
 type (
 	ActivityTimeoutTask struct {
+		definition.WorkflowIdentifier
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		TimeoutType         enumspb.TimeoutType
@@ -40,6 +43,10 @@ type (
 		Version             int64
 	}
 )
+
+func (a *ActivityTimeoutTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
+	return a.WorkflowIdentifier
+}
 
 func (a *ActivityTimeoutTask) GetKey() Key {
 	return Key{

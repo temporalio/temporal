@@ -26,15 +26,22 @@ package tasks
 
 import (
 	"time"
+
+	"go.temporal.io/server/common/definition"
 )
 
 type (
 	WorkflowTimeoutTask struct {
+		definition.WorkflowIdentifier
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
 	}
 )
+
+func (u *WorkflowTimeoutTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
+	return u.WorkflowIdentifier
+}
 
 func (u *WorkflowTimeoutTask) GetKey() Key {
 	return Key{
