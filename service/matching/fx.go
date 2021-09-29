@@ -22,12 +22,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package matching
 
 import (
 	"context"
 
 	"go.uber.org/fx"
+	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
@@ -35,32 +36,24 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/visibility"
-	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 var Module = fx.Options(
-	resource.Module,
-	workflow.Module,
 	fx.Provide(ParamsExpandProvider), // BootstrapParams should be deprecated
 	fx.Provide(dynamicconfig.NewCollection),
-	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
+	fx.Provide(NewConfig),
+	fx.Provide(PersistenceMaxQpsProvider),
+	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(service.GrpcServerOptionsProvider),
-	fx.Provide(ESProcessorConfigProvider),
-	fx.Provide(VisibilityManagerProvider),
-	fx.Provide(ThrottledLoggerRpsFnProvider),
-	fx.Provide(PersistenceMaxQpsProvider),
 	resource.Module,
-	fx.Provide(NewService),
+	fx.Provide(ServiceProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
@@ -78,21 +71,6 @@ func ParamsExpandProvider(params *resource.BootstrapParams) (
 		params.RPCFactory
 }
 
-func ConfigProvider(
-	dc *dynamicconfig.Collection,
-	persistenceConfig config.Persistence,
-	esConfig *esclient.Config,
-) *configs.Config {
-	return configs.NewConfig(dc,
-		persistenceConfig.NumHistoryShards,
-		persistenceConfig.AdvancedVisibilityConfigExist(),
-		esConfig.GetVisibilityIndex())
-}
-
-func ThrottledLoggerRpsFnProvider(serviceConfig *configs.Config) resource.ThrottledLoggerRpsFn {
-	return func() float64 { return float64(serviceConfig.ThrottledLogRPS()) }
-}
-
 func TelemetryInterceptorProvider(
 	logger log.Logger,
 	resource resource.Resource,
@@ -100,13 +78,17 @@ func TelemetryInterceptorProvider(
 	return interceptor.NewTelemetryInterceptor(
 		resource.GetNamespaceCache(),
 		resource.GetMetricsClient(),
-		metrics.HistoryAPIMetricsScopes(),
+		metrics.MatchingAPIMetricsScopes(),
 		logger,
 	)
 }
 
+func ThrottledLoggerRpsFnProvider(serviceConfig *Config) resource.ThrottledLoggerRpsFn {
+	return func() float64 { return float64(serviceConfig.ThrottledLogRPS()) }
+}
+
 func RateLimitInterceptorProvider(
-	serviceConfig *configs.Config,
+	serviceConfig *Config,
 ) *interceptor.RateLimitInterceptor {
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
@@ -114,48 +96,26 @@ func RateLimitInterceptorProvider(
 	)
 }
 
-func ESProcessorConfigProvider(
-	serviceConfig *configs.Config,
-) *elasticsearch.ProcessorConfig {
-	return &elasticsearch.ProcessorConfig{
-		IndexerConcurrency:       serviceConfig.IndexerConcurrency,
-		ESProcessorNumOfWorkers:  serviceConfig.ESProcessorNumOfWorkers,
-		ESProcessorBulkActions:   serviceConfig.ESProcessorBulkActions,
-		ESProcessorBulkSize:      serviceConfig.ESProcessorBulkSize,
-		ESProcessorFlushInterval: serviceConfig.ESProcessorFlushInterval,
-		ESProcessorAckTimeout:    serviceConfig.ESProcessorAckTimeout,
-	}
-}
-
+// This function is the same between services but uses different config sources.
+// if-case comes from resourceImpl.New.
 func PersistenceMaxQpsProvider(
-	serviceConfig *configs.Config,
+	serviceConfig *Config,
 ) persistenceClient.PersistenceMaxQps {
 	return service.PersistenceMaxQpsFn(serviceConfig.PersistenceMaxQPS, serviceConfig.PersistenceGlobalMaxQPS)
 }
 
-func VisibilityManagerProvider(
-	params *resource.BootstrapParams,
-	esProcessorConfig *elasticsearch.ProcessorConfig,
+func ServiceProvider(
 	serviceResource resource.Resource,
-	serviceConfig *configs.Config,
-) (manager.VisibilityManager, error) {
-	return visibility.NewManager(
-		params.PersistenceConfig,
-		params.PersistenceServiceResolver,
-		params.ESConfig.GetVisibilityIndex(),
-		params.ESClient,
-		esProcessorConfig,
-		serviceResource.GetSearchAttributesProvider(),
-		params.SearchAttributesMapper,
-		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,
-		serviceConfig.StandardVisibilityPersistenceMaxWriteQPS,
-		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,
-		serviceConfig.AdvancedVisibilityPersistenceMaxWriteQPS,
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // history visibility never read
-		serviceConfig.AdvancedVisibilityWritingMode,
-		params.MetricsClient,
-		params.Logger,
-	)
+	grpcServerOptions []grpc.ServerOption,
+	serviceConfig *Config,
+) *Service {
+	return &Service{
+		Resource: serviceResource,
+		status:   common.DaemonStatusInitialized,
+		config:   serviceConfig,
+		server:   grpc.NewServer(grpcServerOptions...),
+		handler:  NewHandler(serviceResource, serviceConfig),
+	}
 }
 
 func ServiceLifetimeHooks(
