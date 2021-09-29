@@ -128,15 +128,17 @@ func newWorkflowTaskHandler(
 func (handler *workflowTaskHandlerImpl) handleCommands(
 	commands []*commandpb.Command,
 ) error {
-
+	if err := handler.attrValidator.validateCommandSequence(
+		commands,
+	); err != nil {
+		return err
+	}
 	for _, command := range commands {
-
 		err := handler.handleCommand(command)
 		if err != nil || handler.stopProcessing {
 			return err
 		}
 	}
-
 	return nil
 }
 
