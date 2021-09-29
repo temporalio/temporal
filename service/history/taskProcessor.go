@@ -76,7 +76,7 @@ type (
 
 	taskProcessor struct {
 		shard         shard.Context
-		cache         *workflow.Cache
+		cache         workflow.Cache
 		shutdownCh    chan struct{}
 		tasksCh       chan *taskInfo
 		config        *configs.Config
@@ -112,7 +112,7 @@ func newTaskInfo(
 func newTaskProcessor(
 	options taskProcessorOptions,
 	shard shard.Context,
-	historyCache *workflow.Cache,
+	historyCache workflow.Cache,
 	logger log.Logger,
 ) *taskProcessor {
 

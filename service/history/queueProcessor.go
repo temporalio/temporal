@@ -102,7 +102,7 @@ func newQueueProcessorBase(
 	queueTaskProcessor queueTaskProcessor,
 	queueAckMgr queueAckMgr,
 	redispatchQueue collection.Queue,
-	historyCache *workflow.Cache,
+	historyCache workflow.Cache,
 	queueTaskInitializer queueTaskInitializer,
 	logger log.Logger,
 	metricsScope metrics.Scope,

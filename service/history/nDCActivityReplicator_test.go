@@ -74,7 +74,7 @@ type (
 		mockExecutionMgr *persistence.MockExecutionManager
 
 		logger       log.Logger
-		historyCache *workflow.Cache
+		historyCache workflow.Cache
 
 		nDCActivityReplicator *nDCActivityReplicatorImpl
 	}
