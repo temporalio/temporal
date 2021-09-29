@@ -57,7 +57,7 @@ type (
 		currentClusterName string
 		shard              shard.Context
 		config             *configs.Config
-		historyCache       *workflow.Cache
+		historyCache       workflow.Cache
 		executionMgr       persistence.ExecutionManager
 		metricsClient      metrics.Client
 		logger             log.Logger
@@ -77,7 +77,7 @@ var (
 
 func newReplicatorQueueProcessor(
 	shard shard.Context,
-	historyCache *workflow.Cache,
+	historyCache workflow.Cache,
 	executionMgr persistence.ExecutionManager,
 	logger log.Logger,
 ) *replicatorQueueProcessorImpl {

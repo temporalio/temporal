@@ -75,7 +75,7 @@ type (
 		timeSource             clock.TimeSource
 		historyEngine          *historyEngineImpl
 		namespaceCache         namespace.Cache
-		historyCache           *workflow.Cache
+		historyCache           workflow.Cache
 		txProcessor            transferQueueProcessor
 		timerProcessor         timerQueueProcessor
 		tokenSerializer        common.TaskTokenSerializer

@@ -64,7 +64,7 @@ type (
 	}
 
 	nDCActivityReplicatorImpl struct {
-		historyCache    *workflow.Cache
+		historyCache    workflow.Cache
 		clusterMetadata cluster.Metadata
 		logger          log.Logger
 	}
@@ -72,7 +72,7 @@ type (
 
 func newNDCActivityReplicator(
 	shard shard.Context,
-	historyCache *workflow.Cache,
+	historyCache workflow.Cache,
 	logger log.Logger,
 ) *nDCActivityReplicatorImpl {
 

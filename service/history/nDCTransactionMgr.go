@@ -156,7 +156,7 @@ type (
 	nDCTransactionMgrImpl struct {
 		shard            shard.Context
 		namespaceCache   namespace.Cache
-		historyCache     *workflow.Cache
+		historyCache     workflow.Cache
 		clusterMetadata  cluster.Metadata
 		executionManager persistence.ExecutionManager
 		serializer       serialization.Serializer
@@ -174,7 +174,7 @@ var _ nDCTransactionMgr = (*nDCTransactionMgrImpl)(nil)
 
 func newNDCTransactionMgr(
 	shard shard.Context,
-	historyCache *workflow.Cache,
+	historyCache workflow.Cache,
 	eventsReapplier nDCEventsReapplier,
 	logger log.Logger,
 ) *nDCTransactionMgrImpl {
