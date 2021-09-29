@@ -24,21 +24,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build !cgo
-// +build !cgo
-
 package sqlite
 
 import (
-	"modernc.org/sqlite"
-	sqlite3 "modernc.org/sqlite/lib"
+	"github.com/mattn/go-sqlite3"
 )
 
 const (
-	goSqlDriverName = "sqlite"
+	goSqlDriverName = "sqlite3"
 )
 
 func (mdb *db) IsDupEntryError(err error) bool {
-	sqlErr, ok := err.(*sqlite.Error)
-	return ok && sqlErr.Code() == sqlite3.SQLITE_CONSTRAINT
+	sqlErr, ok := err.(sqlite3.Error)
+	return ok && sqlErr.Code == sqlite3.ErrConstraint
 }
