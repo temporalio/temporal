@@ -100,7 +100,7 @@ type (
 		replicatorProcessor       *replicatorQueueProcessorImpl
 		eventNotifier             events.Notifier
 		tokenSerializer           common.TaskTokenSerializer
-		historyCache              *workflow.Cache
+		historyCache              workflow.Cache
 		metricsClient             metrics.Client
 		logger                    log.Logger
 		throttledLogger           log.Logger

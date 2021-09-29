@@ -51,7 +51,7 @@ type (
 	visibilityQueueTaskExecutor struct {
 		shard                   shard.Context
 		historyService          *historyEngineImpl
-		cache                   *workflow.Cache
+		cache                   workflow.Cache
 		logger                  log.Logger
 		metricsClient           metrics.Client
 		matchingClient          matchingservice.MatchingServiceClient
