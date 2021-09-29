@@ -82,7 +82,7 @@ type (
 		namespaceCache    namespace.Cache
 		clusterMetadata   cluster.Metadata
 		executionMgr      persistence.ExecutionManager
-		historyCache      *workflow.Cache
+		historyCache      workflow.Cache
 		newStateRebuilder nDCStateRebuilderProvider
 		transaction       workflow.Transaction
 		logger            log.Logger
@@ -93,7 +93,7 @@ var _ workflowResetter = (*workflowResetterImpl)(nil)
 
 func newWorkflowResetter(
 	shard shard.Context,
-	historyCache *workflow.Cache,
+	historyCache workflow.Cache,
 	logger log.Logger,
 ) *workflowResetterImpl {
 	return &workflowResetterImpl{

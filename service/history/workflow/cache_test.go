@@ -51,7 +51,7 @@ type (
 		controller *gomock.Controller
 		mockShard  *shard.ContextTest
 
-		cache *Cache
+		cache Cache
 	}
 )
 

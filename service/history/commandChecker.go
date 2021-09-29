@@ -757,8 +757,8 @@ func (v *commandAttrValidator) validateCrossNamespaceCall(
 		return nil
 	}
 
-	namespaceClusters := namespaceEntry.GetReplicationConfig().Clusters
-	targetNamespaceClusters := targetNamespaceEntry.GetReplicationConfig().Clusters
+	namespaceClusters := namespaceEntry.ClusterNames()
+	targetNamespaceClusters := targetNamespaceEntry.ClusterNames()
 
 	// one is local namespace, another one is global namespace or both global namespace
 	// treat global namespace with one replication cluster as local namespace

@@ -100,7 +100,7 @@ type (
 		replicatorProcessor       *replicatorQueueProcessorImpl
 		eventNotifier             events.Notifier
 		tokenSerializer           common.TaskTokenSerializer
-		historyCache              *workflow.Cache
+		historyCache              workflow.Cache
 		metricsClient             metrics.Client
 		logger                    log.Logger
 		throttledLogger           log.Logger
@@ -352,7 +352,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 
 	failoverPredicate := func(shardNotificationVersion int64, nextNamespace *namespace.CacheEntry, action func()) {
 		namespaceFailoverNotificationVersion := nextNamespace.GetFailoverNotificationVersion()
-		namespaceActiveCluster := nextNamespace.GetReplicationConfig().ActiveClusterName
+		namespaceActiveCluster := nextNamespace.ActiveClusterName()
 
 		if nextNamespace.IsGlobalNamespace() &&
 			namespaceFailoverNotificationVersion >= shardNotificationVersion &&

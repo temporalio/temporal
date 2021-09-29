@@ -48,7 +48,24 @@ import (
 type (
 	ReleaseCacheFunc func(err error)
 
-	Cache struct {
+	Cache interface {
+		cache.Cache
+
+		GetOrCreateCurrentWorkflowExecution(
+			ctx context.Context,
+			namespaceID string,
+			workflowID string,
+		) (Context, ReleaseCacheFunc, error)
+
+		GetOrCreateWorkflowExecution(
+			ctx context.Context,
+			namespaceID string,
+			execution commonpb.WorkflowExecution,
+			caller CallerType,
+		) (Context, ReleaseCacheFunc, error)
+	}
+
+	CacheImpl struct {
 		cache.Cache
 		shard            shard.Context
 		executionManager persistence.ExecutionManager
@@ -65,14 +82,14 @@ const (
 	cacheReleased    int32 = 1
 )
 
-func NewCache(shard shard.Context) *Cache {
+func NewCache(shard shard.Context) Cache {
 	opts := &cache.Options{}
 	config := shard.GetConfig()
 	opts.InitialCapacity = config.HistoryCacheInitialSize()
 	opts.TTL = config.HistoryCacheTTL()
 	opts.Pin = true
 
-	return &Cache{
+	return &CacheImpl{
 		Cache:            cache.New(config.HistoryCacheMaxSize(), opts),
 		shard:            shard,
 		executionManager: shard.GetExecutionManager(),
@@ -82,7 +99,7 @@ func NewCache(shard shard.Context) *Cache {
 	}
 }
 
-func (c *Cache) GetOrCreateCurrentWorkflowExecution(
+func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
 	ctx context.Context,
 	namespaceID string,
 	workflowID string,
@@ -110,7 +127,7 @@ func (c *Cache) GetOrCreateCurrentWorkflowExecution(
 	)
 }
 
-func (c *Cache) GetOrCreateWorkflowExecution(
+func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	ctx context.Context,
 	namespaceID string,
 	execution commonpb.WorkflowExecution,
@@ -140,7 +157,8 @@ func (c *Cache) GetOrCreateWorkflowExecution(
 
 	return weCtx, weReleaseFunc, err
 }
-func (c *Cache) getOrCreateWorkflowExecutionInternal(
+
+func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
 	namespaceID string,
 	execution commonpb.WorkflowExecution,
@@ -177,7 +195,7 @@ func (c *Cache) getOrCreateWorkflowExecutionInternal(
 	return workflowCtx, releaseFunc, nil
 }
 
-func (c *Cache) makeReleaseFunc(
+func (c *CacheImpl) makeReleaseFunc(
 	key definition.WorkflowIdentifier,
 	context Context,
 	forceClearContext bool,
@@ -204,7 +222,7 @@ func (c *Cache) makeReleaseFunc(
 	}
 }
 
-func (c *Cache) validateWorkflowExecutionInfo(
+func (c *CacheImpl) validateWorkflowExecutionInfo(
 	namespaceID string,
 	execution *commonpb.WorkflowExecution,
 ) error {
@@ -232,7 +250,7 @@ func (c *Cache) validateWorkflowExecutionInfo(
 	return nil
 }
 
-func (c *Cache) getCurrentExecutionWithRetry(
+func (c *CacheImpl) getCurrentExecutionWithRetry(
 	request *persistence.GetCurrentExecutionRequest,
 ) (*persistence.GetCurrentExecutionResponse, error) {
 

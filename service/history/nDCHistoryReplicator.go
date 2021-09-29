@@ -107,7 +107,7 @@ type (
 		historySerializer serialization.Serializer
 		metricsClient     metrics.Client
 		namespaceCache    namespace.Cache
-		historyCache      *workflow.Cache
+		historyCache      workflow.Cache
 		eventsReapplier   nDCEventsReapplier
 		transactionMgr    nDCTransactionMgr
 		logger            log.Logger
@@ -124,7 +124,7 @@ var errPanic = serviceerror.NewInternal("encounter panic")
 
 func newNDCHistoryReplicator(
 	shard shard.Context,
-	historyCache *workflow.Cache,
+	historyCache workflow.Cache,
 	eventsReapplier nDCEventsReapplier,
 	logger log.Logger,
 ) *nDCHistoryReplicatorImpl {

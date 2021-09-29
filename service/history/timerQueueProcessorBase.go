@@ -62,7 +62,7 @@ type (
 		scope                int
 		shard                shard.Context
 		historyService       *historyEngineImpl
-		cache                *workflow.Cache
+		cache                workflow.Cache
 		executionManager     persistence.ExecutionManager
 		status               int32
 		shutdownWG           sync.WaitGroup

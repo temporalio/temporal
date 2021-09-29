@@ -80,7 +80,7 @@ func (t *taskAllocatorImpl) verifyActiveTask(taskNamespaceID string, task interf
 		t.logger.Warn("Cannot find namespace, default to process task.", tag.WorkflowNamespaceID(taskNamespaceID), tag.Value(task))
 		return true, nil
 	}
-	if namespaceEntry.IsGlobalNamespace() && t.currentClusterName != namespaceEntry.GetReplicationConfig().ActiveClusterName {
+	if namespaceEntry.IsGlobalNamespace() && t.currentClusterName != namespaceEntry.ActiveClusterName() {
 		// timer task does not belong to cluster name
 		t.logger.Debug("Namespace is not active, skip task.", tag.WorkflowNamespaceID(taskNamespaceID), tag.Value(task))
 		return false, nil
@@ -120,7 +120,7 @@ func (t *taskAllocatorImpl) verifyStandbyTask(standbyCluster string, taskNamespa
 		// non global namespace, timer task does not belong here
 		t.logger.Debug("Namespace is not global, skip task.", tag.WorkflowNamespaceID(taskNamespaceID), tag.Value(task))
 		return false, nil
-	} else if namespaceEntry.IsGlobalNamespace() && namespaceEntry.GetReplicationConfig().ActiveClusterName != standbyCluster {
+	} else if namespaceEntry.IsGlobalNamespace() && namespaceEntry.ActiveClusterName() != standbyCluster {
 		// timer task does not belong here
 		t.logger.Debug("Namespace is not standby, skip task.", tag.WorkflowNamespaceID(taskNamespaceID), tag.Value(task))
 		return false, nil

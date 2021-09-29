@@ -32,7 +32,147 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	persistence "go.temporal.io/server/common/persistence"
 )
+
+// MockEntryMutation is a mock of EntryMutation interface.
+type MockEntryMutation struct {
+	ctrl     *gomock.Controller
+	recorder *MockEntryMutationMockRecorder
+}
+
+// MockEntryMutationMockRecorder is the mock recorder for MockEntryMutation.
+type MockEntryMutationMockRecorder struct {
+	mock *MockEntryMutation
+}
+
+// NewMockEntryMutation creates a new mock instance.
+func NewMockEntryMutation(ctrl *gomock.Controller) *MockEntryMutation {
+	mock := &MockEntryMutation{ctrl: ctrl}
+	mock.recorder = &MockEntryMutationMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockEntryMutation) EXPECT() *MockEntryMutationMockRecorder {
+	return m.recorder
+}
+
+// apply mocks base method.
+func (m *MockEntryMutation) apply(arg0 *persistence.GetNamespaceResponse) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "apply", arg0)
+}
+
+// apply indicates an expected call of apply.
+func (mr *MockEntryMutationMockRecorder) apply(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "apply", reflect.TypeOf((*MockEntryMutation)(nil).apply), arg0)
+}
+
+// MockClusterInfo is a mock of ClusterInfo interface.
+type MockClusterInfo struct {
+	ctrl     *gomock.Controller
+	recorder *MockClusterInfoMockRecorder
+}
+
+// MockClusterInfoMockRecorder is the mock recorder for MockClusterInfo.
+type MockClusterInfoMockRecorder struct {
+	mock *MockClusterInfo
+}
+
+// NewMockClusterInfo creates a new mock instance.
+func NewMockClusterInfo(ctrl *gomock.Controller) *MockClusterInfo {
+	mock := &MockClusterInfo{ctrl: ctrl}
+	mock.recorder = &MockClusterInfoMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockClusterInfo) EXPECT() *MockClusterInfoMockRecorder {
+	return m.recorder
+}
+
+// GetCurrentClusterName mocks base method.
+func (m *MockClusterInfo) GetCurrentClusterName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCurrentClusterName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetCurrentClusterName indicates an expected call of GetCurrentClusterName.
+func (mr *MockClusterInfoMockRecorder) GetCurrentClusterName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentClusterName", reflect.TypeOf((*MockClusterInfo)(nil).GetCurrentClusterName))
+}
+
+// IsGlobalNamespaceEnabled mocks base method.
+func (m *MockClusterInfo) IsGlobalNamespaceEnabled() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsGlobalNamespaceEnabled")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsGlobalNamespaceEnabled indicates an expected call of IsGlobalNamespaceEnabled.
+func (mr *MockClusterInfoMockRecorder) IsGlobalNamespaceEnabled() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsGlobalNamespaceEnabled", reflect.TypeOf((*MockClusterInfo)(nil).IsGlobalNamespaceEnabled))
+}
+
+// MockPersistence is a mock of Persistence interface.
+type MockPersistence struct {
+	ctrl     *gomock.Controller
+	recorder *MockPersistenceMockRecorder
+}
+
+// MockPersistenceMockRecorder is the mock recorder for MockPersistence.
+type MockPersistenceMockRecorder struct {
+	mock *MockPersistence
+}
+
+// NewMockPersistence creates a new mock instance.
+func NewMockPersistence(ctrl *gomock.Controller) *MockPersistence {
+	mock := &MockPersistence{ctrl: ctrl}
+	mock.recorder = &MockPersistenceMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockPersistence) EXPECT() *MockPersistenceMockRecorder {
+	return m.recorder
+}
+
+// GetMetadata mocks base method.
+func (m *MockPersistence) GetMetadata() (*persistence.GetMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMetadata")
+	ret0, _ := ret[0].(*persistence.GetMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMetadata indicates an expected call of GetMetadata.
+func (mr *MockPersistenceMockRecorder) GetMetadata() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockPersistence)(nil).GetMetadata))
+}
+
+// ListNamespaces mocks base method.
+func (m *MockPersistence) ListNamespaces(arg0 *persistence.ListNamespacesRequest) (*persistence.ListNamespacesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListNamespaces", arg0)
+	ret0, _ := ret[0].(*persistence.ListNamespacesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListNamespaces indicates an expected call of ListNamespaces.
+func (mr *MockPersistenceMockRecorder) ListNamespaces(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNamespaces", reflect.TypeOf((*MockPersistence)(nil).ListNamespaces), arg0)
+}
 
 // MockCache is a mock of Cache interface.
 type MockCache struct {
