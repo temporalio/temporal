@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 // Service represents the history service
@@ -62,12 +63,13 @@ func NewService(
 	grpcServerOptions []grpc.ServerOption,
 	serviceConfig *configs.Config,
 	visibilityMgr manager.VisibilityManager,
+	newCacheFn workflow.NewCacheFn,
 ) *Service {
 	return &Service{
 		Resource:          serviceResource,
 		status:            common.DaemonStatusInitialized,
 		server:            grpc.NewServer(grpcServerOptions...),
-		handler:           NewHandler(serviceResource, serviceConfig, visibilityMgr),
+		handler:           NewHandler(serviceResource, serviceConfig, visibilityMgr, newCacheFn),
 		visibilityManager: visibilityMgr,
 		config:            serviceConfig,
 	}
