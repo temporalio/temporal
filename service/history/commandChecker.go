@@ -777,3 +777,60 @@ func (v *commandAttrValidator) createCrossNamespaceCallError(
 ) error {
 	return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to process cross namespace command between %v and %v", namespaceEntry.Name(), targetNamespaceEntry.Name()))
 }
+
+func (v *commandAttrValidator) validateCommandSequence(
+	commands []*commandpb.Command,
+) error {
+	encounterTerminalCommand := false
+
+	for _, command := range commands {
+		if encounterTerminalCommand {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf(
+				"encouter invalid commands sequence: %v",
+				strings.Join(v.commandTypes(commands), ", "),
+			))
+		}
+
+		switch command.GetCommandType() {
+		case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
+			// noop
+		case enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK:
+			// noop
+		case enumspb.COMMAND_TYPE_START_TIMER:
+			// noop
+		case enumspb.COMMAND_TYPE_CANCEL_TIMER:
+			// noop
+		case enumspb.COMMAND_TYPE_RECORD_MARKER:
+			// noop
+		case enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION:
+			// noop
+		case enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION:
+			// noop
+		case enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
+			// noop
+		case enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
+			// noop
+		case enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION:
+			encounterTerminalCommand = true
+		case enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION:
+			encounterTerminalCommand = true
+		case enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION:
+			encounterTerminalCommand = true
+		case enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION:
+			encounterTerminalCommand = true
+		default:
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("unknown command type: %v", command.GetCommandType()))
+		}
+	}
+	return nil
+}
+
+func (v *commandAttrValidator) commandTypes(
+	commands []*commandpb.Command,
+) []string {
+	result := make([]string, len(commands))
+	for index, command := range commands {
+		result[index] = command.GetCommandType().String()
+	}
+	return result
+}
