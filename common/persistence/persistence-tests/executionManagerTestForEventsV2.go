@@ -38,6 +38,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/definition"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -106,6 +107,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 		WorkflowId: "test-eventsv2-workflow",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
+	workflowIdentifier := definition.NewWorkflowIdentifier(
+		namespaceID,
+		workflowExecution.WorkflowId,
+		workflowExecution.RunId,
+	)
 
 	csum := s.newRandomChecksum()
 
@@ -134,6 +140,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 			},
 			TransferTasks: []tasks.Task{
 				&tasks.WorkflowTask{
+					WorkflowIdentifier:  workflowIdentifier,
 					TaskID:              s.GetNextSequenceNumber(),
 					NamespaceID:         namespaceID,
 					TaskQueue:           "taskQueue",
@@ -235,6 +242,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 			NextEventID: common.EmptyEventID,
 			TransferTasks: []tasks.Task{
 				&tasks.WorkflowTask{
+					WorkflowIdentifier: definition.NewWorkflowIdentifier(
+						namespaceID,
+						workflowExecution.WorkflowId,
+						workflowExecution.RunId,
+					),
 					TaskID:              s.GetNextSequenceNumber(),
 					NamespaceID:         namespaceID,
 					TaskQueue:           "taskQueue",
@@ -297,6 +309,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 		WorkflowId: "continue-as-new-workflow-test",
 		RunId:      "551c88d2-d9e6-404f-8131-9eec14f36643",
 	}
+	workflowIdentifier := definition.NewWorkflowIdentifier(
+		namespaceID,
+		workflowExecution.WorkflowId,
+		workflowExecution.RunId,
+	)
 
 	_, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, "queue1", "wType", timestamp.DurationFromSeconds(20), timestamp.DurationFromSeconds(13), 3, 0, 2, nil)
 	s.NoError(err0)
@@ -316,10 +333,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	}
 
 	newworkflowTask := &tasks.WorkflowTask{
-		TaskID:      s.GetNextSequenceNumber(),
-		NamespaceID: updatedInfo.NamespaceId,
-		TaskQueue:   updatedInfo.TaskQueue,
-		ScheduleID:  int64(2),
+		WorkflowIdentifier: workflowIdentifier,
+		TaskID:             s.GetNextSequenceNumber(),
+		NamespaceID:        updatedInfo.NamespaceId,
+		TaskQueue:          updatedInfo.TaskQueue,
+		ScheduleID:         int64(2),
 	}
 
 	_, err2 := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{

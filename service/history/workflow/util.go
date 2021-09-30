@@ -28,7 +28,6 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
@@ -161,22 +160,21 @@ func TerminateWorkflow(
 // FindAutoResetPoint returns the auto reset point
 func FindAutoResetPoint(
 	timeSource clock.TimeSource,
-	badBinaries *namespacepb.BadBinaries,
+	verifyChecksum func(string) error,
 	autoResetPoints *workflowpb.ResetPoints,
 ) (string, *workflowpb.ResetPointInfo) {
-	if badBinaries == nil || badBinaries.Binaries == nil || autoResetPoints == nil || autoResetPoints.Points == nil {
+	if autoResetPoints == nil {
 		return "", nil
 	}
 	now := timeSource.Now()
 	for _, p := range autoResetPoints.Points {
-		bin, ok := badBinaries.Binaries[p.GetBinaryChecksum()]
-		if ok && p.GetResettable() {
+		if err := verifyChecksum(p.GetBinaryChecksum()); err != nil && p.GetResettable() {
 			expireTime := timestamp.TimeValue(p.GetExpireTime())
 			if !expireTime.IsZero() && now.After(expireTime) {
 				// reset point has expired and we may already deleted the history
 				continue
 			}
-			return bin.GetReason(), p
+			return err.Error(), p
 		}
 	}
 	return "", nil

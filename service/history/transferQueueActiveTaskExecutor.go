@@ -758,7 +758,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	}
 	logger = log.With(logger, tag.WorkflowNamespace(namespaceEntry.GetInfo().Name))
 
-	reason, resetPoint := workflow.FindAutoResetPoint(t.shard.GetTimeSource(), namespaceEntry.GetConfig().BadBinaries, executionInfo.AutoResetPoints)
+	reason, resetPoint := workflow.FindAutoResetPoint(t.shard.GetTimeSource(), namespaceEntry.VerifyBinaryChecksum, executionInfo.AutoResetPoints)
 	if resetPoint == nil {
 		logger.Warn("Auto-Reset is skipped, because reset point is not found.")
 		return nil

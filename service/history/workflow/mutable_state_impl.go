@@ -383,6 +383,14 @@ func (e *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState {
 	return proto.Clone(ms).(*persistencespb.WorkflowMutableState)
 }
 
+func (e *MutableStateImpl) GetWorkflowIdentifier() definition.WorkflowIdentifier {
+	return definition.NewWorkflowIdentifier(
+		e.executionInfo.NamespaceId,
+		e.executionInfo.WorkflowId,
+		e.executionState.RunId,
+	)
+}
+
 func (e *MutableStateImpl) GetCurrentBranchToken() ([]byte, error) {
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
 	if err != nil {
@@ -4008,11 +4016,12 @@ func (e *MutableStateImpl) eventsToReplicationTask(
 	}
 
 	replicationTask := &tasks.HistoryReplicationTask{
-		FirstEventID:      firstEvent.GetEventId(),
-		NextEventID:       lastEvent.GetEventId() + 1,
-		Version:           firstEvent.GetVersion(),
-		BranchToken:       currentBranchToken,
-		NewRunBranchToken: nil,
+		WorkflowIdentifier: e.GetWorkflowIdentifier(),
+		FirstEventID:       firstEvent.GetEventId(),
+		NextEventID:        lastEvent.GetEventId() + 1,
+		Version:            firstEvent.GetVersion(),
+		BranchToken:        currentBranchToken,
+		NewRunBranchToken:  nil,
 	}
 
 	if e.executionInfo.GetVersionHistories() == nil {
@@ -4032,6 +4041,11 @@ func (e *MutableStateImpl) syncActivityToReplicationTask(
 	}
 
 	return convertSyncActivityInfos(
+		definition.NewWorkflowIdentifier(
+			e.executionInfo.NamespaceId,
+			e.executionInfo.WorkflowId,
+			e.executionState.RunId,
+		),
 		e.pendingActivityInfoIDs,
 		e.syncActivityTasks,
 	)
@@ -4305,7 +4319,7 @@ func (e *MutableStateImpl) closeTransactionHandleWorkflowReset(
 	}
 	if _, pt := FindAutoResetPoint(
 		e.timeSource,
-		namespaceEntry.GetConfig().BadBinaries,
+		namespaceEntry.VerifyBinaryChecksum,
 		e.GetExecutionInfo().AutoResetPoints,
 	); pt != nil {
 		if err := e.taskGenerator.GenerateWorkflowResetTasks(

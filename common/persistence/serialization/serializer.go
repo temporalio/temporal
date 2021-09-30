@@ -38,6 +38,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/tasks"
 )
 
 type (
@@ -92,18 +93,6 @@ type (
 		TaskQueueInfoToBlob(info *persistencespb.TaskQueueInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		TaskQueueInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TaskQueueInfo, error)
 
-		TransferTaskInfoToBlob(info *persistencespb.TransferTaskInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		TransferTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TransferTaskInfo, error)
-
-		TimerTaskInfoToBlob(info *persistencespb.TimerTaskInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		TimerTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TimerTaskInfo, error)
-
-		ReplicationTaskInfoToBlob(info *persistencespb.ReplicationTaskInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		ReplicationTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ReplicationTaskInfo, error)
-
-		VisibilityTaskInfoToBlob(info *persistencespb.VisibilityTaskInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		VisibilityTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.VisibilityTaskInfo, error)
-
 		ChecksumToBlob(checksum *persistencespb.Checksum, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		ChecksumFromBlob(data *commonpb.DataBlob) (*persistencespb.Checksum, error)
 
@@ -112,6 +101,27 @@ type (
 
 		ReplicationTaskToBlob(replicationTask *replicationspb.ReplicationTask, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		ReplicationTaskFromBlob(data *commonpb.DataBlob) (*replicationspb.ReplicationTask, error)
+
+		SerializeTransferTasks(taskSlice []tasks.Task) (map[tasks.Key]commonpb.DataBlob, error)
+		DeserializeTransferTasks(blobSlice []commonpb.DataBlob) ([]tasks.Task, error)
+
+		SerializeTimerTasks(taskSlice []tasks.Task) (map[tasks.Key]commonpb.DataBlob, error)
+		DeserializeTimerTasks(blobSlice []commonpb.DataBlob) ([]tasks.Task, error)
+		SerializeVisibilityTasks(taskSlice []tasks.Task) (map[tasks.Key]commonpb.DataBlob, error)
+		DeserializeVisibilityTasks(blobSlice []commonpb.DataBlob) ([]tasks.Task, error)
+		SerializeReplicationTasks(taskSlice []tasks.Task) (map[tasks.Key]commonpb.DataBlob, error)
+		DeserializeReplicationTasks(blobSlice []commonpb.DataBlob) ([]tasks.Task, error)
+
+		// TODO deprecate method below in favor of methods above (tasks)
+
+		TransferTaskInfoToBlob(info *persistencespb.TransferTaskInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
+		TransferTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TransferTaskInfo, error)
+		TimerTaskInfoToBlob(info *persistencespb.TimerTaskInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
+		TimerTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TimerTaskInfo, error)
+		ReplicationTaskInfoToBlob(info *persistencespb.ReplicationTaskInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
+		ReplicationTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ReplicationTaskInfo, error)
+		VisibilityTaskInfoToBlob(info *persistencespb.VisibilityTaskInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
+		VisibilityTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.VisibilityTaskInfo, error)
 	}
 
 	// SerializationError is an error type for serialization
@@ -129,7 +139,9 @@ type (
 		encodingType enumspb.EncodingType
 	}
 
-	serializerImpl struct{}
+	serializerImpl struct {
+		TaskSerializer
+	}
 )
 
 // NewSerializer returns a PayloadSerializer

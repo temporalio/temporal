@@ -131,12 +131,13 @@ func NewEngineWithShardContext(
 	replicationTaskFetchers ReplicationTaskFetchers,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	queueTaskProcessor queueTaskProcessor,
+	newCacheFn workflow.NewCacheFn,
 ) *historyEngineImpl {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
-	historyCache := workflow.NewCache(shard)
+	historyCache := newCacheFn(shard)
 	historyEngImpl := &historyEngineImpl{
 		status:             common.DaemonStatusInitialized,
 		currentClusterName: currentClusterName,

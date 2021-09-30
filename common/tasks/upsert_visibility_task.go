@@ -26,10 +26,13 @@ package tasks
 
 import (
 	"time"
+
+	"go.temporal.io/server/common/definition"
 )
 
 type (
 	UpsertExecutionVisibilityTask struct {
+		definition.WorkflowIdentifier
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		// this version is not used by task processing for validation,
@@ -37,6 +40,10 @@ type (
 		Version int64
 	}
 )
+
+func (t *UpsertExecutionVisibilityTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
+	return t.WorkflowIdentifier
+}
 
 func (t *UpsertExecutionVisibilityTask) GetKey() Key {
 	return Key{

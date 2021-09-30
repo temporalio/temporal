@@ -26,10 +26,13 @@ package tasks
 
 import (
 	"time"
+
+	"go.temporal.io/server/common/definition"
 )
 
 type (
 	CancelExecutionTask struct {
+		definition.WorkflowIdentifier
 		VisibilityTimestamp     time.Time
 		TaskID                  int64
 		TargetNamespaceID       string
@@ -40,6 +43,10 @@ type (
 		Version                 int64
 	}
 )
+
+func (u *CancelExecutionTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
+	return u.WorkflowIdentifier
+}
 
 func (u *CancelExecutionTask) GetKey() Key {
 	return Key{
