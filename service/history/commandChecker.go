@@ -775,5 +775,5 @@ func (v *commandAttrValidator) createCrossNamespaceCallError(
 	namespaceEntry *namespace.CacheEntry,
 	targetNamespaceEntry *namespace.CacheEntry,
 ) error {
-	return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to process cross namespace command between %v and %v", namespaceEntry.GetInfo().Name, targetNamespaceEntry.GetInfo().Name))
+	return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to process cross namespace command between %v and %v", namespaceEntry.Name(), targetNamespaceEntry.Name()))
 }

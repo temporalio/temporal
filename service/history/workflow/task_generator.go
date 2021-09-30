@@ -527,7 +527,7 @@ func (r *TaskGeneratorImpl) getTargetNamespaceID(
 		if err != nil {
 			return "", err
 		}
-		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
+		targetNamespaceID = targetNamespaceEntry.ID()
 	}
 
 	return targetNamespaceID, nil
