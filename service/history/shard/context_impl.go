@@ -631,10 +631,10 @@ func (s *ContextImpl) AppendHistoryEvents(
 		// N.B. - Dual emit here makes sense so that we can see aggregate timer stats across all
 		// namespaces along with the individual namespaces stats
 		s.GetMetricsClient().RecordDistribution(metrics.SessionSizeStatsScope, metrics.HistorySize, size)
-		if entry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID); err == nil && entry != nil && entry.GetInfo() != nil {
+		if entry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID); err == nil && entry != nil {
 			s.GetMetricsClient().Scope(
 				metrics.SessionSizeStatsScope,
-				metrics.NamespaceTag(entry.GetInfo().Name),
+				metrics.NamespaceTag(entry.Name()),
 			).RecordDistribution(metrics.HistorySize, size)
 		}
 		if size >= historySizeLogThreshold {
@@ -927,7 +927,7 @@ func (s *ContextImpl) allocateTimerIDsLocked(
 			// This can happen if shard move and new host have a time SKU, or there is db write delay.
 			// We generate a new timer ID using timerMaxReadLevel.
 			s.logger.Debug("New timer generated is less than read level",
-				tag.WorkflowNamespaceID(namespaceEntry.GetInfo().Id),
+				tag.WorkflowNamespaceID(namespaceEntry.ID()),
 				tag.WorkflowID(workflowID),
 				tag.Timestamp(ts),
 				tag.CursorTimestamp(readCursorTS),
