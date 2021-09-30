@@ -2466,11 +2466,11 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		return nil, err
 	}
 
-	if entry.GetConfig().VisibilityArchivalState != enumspb.ARCHIVAL_STATE_ENABLED {
+	if entry.VisibilityArchivalState().State != enumspb.ARCHIVAL_STATE_ENABLED {
 		return nil, errNamespaceIsNotConfiguredForVisibilityArchival
 	}
 
-	URI, err := archiver.NewURI(entry.GetConfig().VisibilityArchivalUri)
+	URI, err := archiver.NewURI(entry.VisibilityArchivalState().URI)
 	if err != nil {
 		return nil, err
 	}
@@ -3381,7 +3381,7 @@ func (wh *WorkflowHandler) getArchivedHistory(
 		return nil, err
 	}
 
-	URIString := entry.GetConfig().HistoryArchivalUri
+	URIString := entry.HistoryArchivalState().URI
 	if URIString == "" {
 		// if URI is empty, it means the namespace has never enabled for archival.
 		// the error is not "workflow has passed retention period", because
@@ -3451,13 +3451,8 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, namespaceI
 }
 
 func (wh *WorkflowHandler) checkBadBinary(namespaceEntry *namespace.CacheEntry, binaryChecksum string) error {
-	if namespaceEntry.GetConfig().BadBinaries.Binaries != nil {
-		badBinaries := namespaceEntry.GetConfig().BadBinaries.Binaries
-		_, ok := badBinaries[binaryChecksum]
-		if ok {
-			wh.GetMetricsClient().IncCounter(metrics.FrontendPollWorkflowTaskQueueScope, metrics.ServiceErrBadBinaryCounter)
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("Binary %v already marked as bad deployment.", binaryChecksum))
-		}
+	if err := namespaceEntry.VerifyBinaryChecksum(binaryChecksum); err != nil {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("Binary %v already marked as bad deployment.", binaryChecksum))
 	}
 	return nil
 }
