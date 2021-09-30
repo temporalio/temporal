@@ -1,5 +1,7 @@
 // The MIT License
 //
+// Copyright (c) 2021 Datadog, Inc.
+//
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
 // Copyright (c) 2020 Uber Technologies, Inc.
@@ -22,57 +24,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+package schema
 
-import (
-	"time"
+// Version is the SQLite database release version
+const Version = "0.1"
 
-	"go.temporal.io/server/common/definition"
-)
-
-type (
-	StartChildExecutionTask struct {
-		definition.WorkflowIdentifier
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		TargetNamespaceID   string
-		TargetWorkflowID    string
-		InitiatedID         int64
-		Version             int64
-	}
-)
-
-func (a *StartChildExecutionTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
-	return a.WorkflowIdentifier
-}
-
-func (u *StartChildExecutionTask) GetKey() Key {
-	return Key{
-		FireTime: u.VisibilityTimestamp,
-		TaskID:   u.TaskID,
-	}
-}
-
-func (u *StartChildExecutionTask) GetVersion() int64 {
-	return u.Version
-}
-
-func (u *StartChildExecutionTask) SetVersion(version int64) {
-	u.Version = version
-}
-
-func (u *StartChildExecutionTask) GetTaskID() int64 {
-	return u.TaskID
-}
-
-func (u *StartChildExecutionTask) SetTaskID(id int64) {
-	u.TaskID = id
-}
-
-func (u *StartChildExecutionTask) GetVisibilityTime() time.Time {
-	return u.VisibilityTimestamp
-}
-
-func (u *StartChildExecutionTask) SetVisibilityTime(timestamp time.Time) {
-	u.VisibilityTimestamp = timestamp
-}
+// VisibilityVersion is the SQLite visibility database release version
+const VisibilityVersion = "0.1"

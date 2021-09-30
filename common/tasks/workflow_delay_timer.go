@@ -28,16 +28,22 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/definition"
 )
 
 type (
 	WorkflowBackoffTimerTask struct {
+		definition.WorkflowIdentifier
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
 		WorkflowBackoffType enumsspb.WorkflowBackoffType
 	}
 )
+
+func (r *WorkflowBackoffTimerTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
+	return r.WorkflowIdentifier
+}
 
 func (r *WorkflowBackoffTimerTask) GetKey() Key {
 	return Key{

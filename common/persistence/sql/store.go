@@ -67,7 +67,6 @@ func NewSQLAdminDB(
 	r resolver.ServiceResolver,
 ) (sqlplugin.AdminDB, error) {
 	plugin, ok := supportedPlugins[cfg.PluginName]
-
 	if !ok {
 		return nil, fmt.Errorf("not supported plugin %v, only supported: %v", cfg.PluginName, supportedPlugins)
 	}

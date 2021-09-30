@@ -33,6 +33,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -303,6 +304,11 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 		ReplicationTasks: nil,
 		VisibilityTasks: []tasks.Task{&tasks.DeleteExecutionVisibilityTask{
 			// TaskID is set by shard
+			WorkflowIdentifier: definition.NewWorkflowIdentifier(
+				task.GetNamespaceId(),
+				task.GetWorkflowId(),
+				task.GetRunId(),
+			),
 			VisibilityTimestamp: t.shard.GetTimeSource().Now(),
 			Version:             task.GetVersion(),
 		}},

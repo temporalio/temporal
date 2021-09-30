@@ -26,15 +26,22 @@ package tasks
 
 import (
 	"time"
+
+	"go.temporal.io/server/common/definition"
 )
 
 type (
 	DeleteHistoryEventTask struct {
+		definition.WorkflowIdentifier
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
 	}
 )
+
+func (a *DeleteHistoryEventTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
+	return a.WorkflowIdentifier
+}
 
 func (a *DeleteHistoryEventTask) GetKey() Key {
 	return Key{

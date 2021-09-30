@@ -1,5 +1,7 @@
 // The MIT License
 //
+// Copyright (c) 2021 Datadog, Inc.
+//
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
 // Copyright (c) 2020 Uber Technologies, Inc.
@@ -22,57 +24,44 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+package sqlite
 
-import (
-	"time"
+import "time"
 
-	"go.temporal.io/server/common/definition"
+var (
+	minSQLiteDateTime = getMinSQLiteDateTime()
 )
 
 type (
-	StartChildExecutionTask struct {
-		definition.WorkflowIdentifier
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		TargetNamespaceID   string
-		TargetWorkflowID    string
-		InitiatedID         int64
-		Version             int64
+	// DataConverter defines the API for conversions to/from
+	// go types to sqlite datatypes
+	DataConverter interface {
+		ToSQLiteDateTime(t time.Time) time.Time
+		FromSQLiteDateTime(t time.Time) time.Time
 	}
+	converter struct{}
 )
 
-func (a *StartChildExecutionTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
-	return a.WorkflowIdentifier
-}
-
-func (u *StartChildExecutionTask) GetKey() Key {
-	return Key{
-		FireTime: u.VisibilityTimestamp,
-		TaskID:   u.TaskID,
+// ToSQLiteDateTime converts to time to SQLite datetime
+func (c *converter) ToSQLiteDateTime(t time.Time) time.Time {
+	if t.IsZero() {
+		return minSQLiteDateTime
 	}
+	return t.UTC()
 }
 
-func (u *StartChildExecutionTask) GetVersion() int64 {
-	return u.Version
+// FromSQLiteDateTime converts SQLite datetime and returns go time
+func (c *converter) FromSQLiteDateTime(t time.Time) time.Time {
+	if t.Equal(minSQLiteDateTime) {
+		return time.Time{}.UTC()
+	}
+	return t.UTC()
 }
 
-func (u *StartChildExecutionTask) SetVersion(version int64) {
-	u.Version = version
-}
-
-func (u *StartChildExecutionTask) GetTaskID() int64 {
-	return u.TaskID
-}
-
-func (u *StartChildExecutionTask) SetTaskID(id int64) {
-	u.TaskID = id
-}
-
-func (u *StartChildExecutionTask) GetVisibilityTime() time.Time {
-	return u.VisibilityTimestamp
-}
-
-func (u *StartChildExecutionTask) SetVisibilityTime(timestamp time.Time) {
-	u.VisibilityTimestamp = timestamp
+func getMinSQLiteDateTime() time.Time {
+	t, err := time.Parse(time.RFC3339, "1000-01-01T00:00:00Z")
+	if err != nil {
+		return time.Unix(0, 0).UTC()
+	}
+	return t.UTC()
 }
