@@ -73,6 +73,8 @@ type (
 		metricsClient    metrics.Client
 		config           *configs.Config
 	}
+
+	NewCacheFn func(shard shard.Context) Cache
 )
 
 var NoopReleaseFn ReleaseCacheFunc = func(err error) {}
