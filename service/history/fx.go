@@ -59,7 +59,6 @@ var Module = fx.Options(
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceMaxQpsProvider),
-	resource.Module,
 	fx.Provide(NewService),
 	fx.Invoke(ServiceLifetimeHooks),
 )
