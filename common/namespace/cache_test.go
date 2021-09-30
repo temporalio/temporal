@@ -197,8 +197,8 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 
 	allNamespaces := s.namespaceCache.GetAllNamespace()
 	s.Equal(map[string]*CacheEntry{
-		entry1.GetInfo().Id: entry1,
-		entry2.GetInfo().Id: entry2,
+		entry1.ID(): entry1,
+		entry2.ID(): entry2,
 	}, allNamespaces)
 }
 

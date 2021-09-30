@@ -262,7 +262,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: s.namespaceEntry.GetInfo().Name,
+		Namespace: s.namespaceEntry.Name(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: timerTask.GetWorkflowId(),
 			RunId:      timerTask.GetRunId(),
@@ -487,7 +487,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: s.namespaceEntry.GetInfo().Name,
+		Namespace: s.namespaceEntry.Name(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: timerTask.GetWorkflowId(),
 			RunId:      timerTask.GetRunId(),
@@ -833,7 +833,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: s.namespaceEntry.GetInfo().Name,
+		Namespace: s.namespaceEntry.Name(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: timerTask.GetWorkflowId(),
 			RunId:      timerTask.GetRunId(),
@@ -990,7 +990,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 
 	s.mockShard.SetCurrentTime(s.clusterName, time.Now().UTC().Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: s.namespaceEntry.GetInfo().Name,
+		Namespace: s.namespaceEntry.Name(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: timerTask.GetWorkflowId(),
 			RunId:      timerTask.GetRunId(),
@@ -1119,7 +1119,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: s.namespaceEntry.GetInfo().Name,
+		Namespace: s.namespaceEntry.Name(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: timerTask.GetWorkflowId(),
 			RunId:      timerTask.GetRunId(),

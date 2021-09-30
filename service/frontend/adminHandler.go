@@ -761,7 +761,7 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 	}
 
 	_, err = adh.GetHistoryClient().ReapplyEvents(ctx, &historyservice.ReapplyEventsRequest{
-		NamespaceId: namespaceEntry.GetInfo().Id,
+		NamespaceId: namespaceEntry.ID(),
 		Request:     request,
 	})
 	if err != nil {
@@ -983,7 +983,7 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 	}
 
 	_, err = adh.GetHistoryClient().RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
-		NamespaceId: namespaceEntry.GetInfo().Id,
+		NamespaceId: namespaceEntry.ID(),
 		Request:     request,
 	})
 	if err != nil {

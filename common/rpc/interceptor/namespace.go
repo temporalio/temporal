@@ -54,7 +54,7 @@ func GetNamespace(
 		if err != nil {
 			return ""
 		}
-		return namespaceEntry.GetInfo().Name
+		return namespaceEntry.Name()
 
 	default:
 		return ""
