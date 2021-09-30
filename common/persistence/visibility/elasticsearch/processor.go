@@ -174,6 +174,7 @@ func (p *processorImpl) Add(request *esclient.BulkableRequest, visibilityTaskKey
 		}
 
 		p.logger.Warn("Skipping duplicate ES request for visibility task key.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc), tag.NewDurationTag("interval-between-duplicates", ackCh.createdAt.Sub(ackChExisting.createdAt)))
+		p.metricsClient.IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorDuplicateRequest)
 
 		// Ack duplicate visibility task right away as if it is processed successfully.
 		ackCh.done(true, p.metricsClient)
