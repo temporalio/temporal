@@ -1421,6 +1421,20 @@ func (mr *MockMutableStateMockRecorder) GetUserTimerInfoByEventID(arg0 interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserTimerInfoByEventID", reflect.TypeOf((*MockMutableState)(nil).GetUserTimerInfoByEventID), arg0)
 }
 
+// GetWorkflowIdentifier mocks base method.
+func (m *MockMutableState) GetWorkflowIdentifier() definition.WorkflowIdentifier {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowIdentifier")
+	ret0, _ := ret[0].(definition.WorkflowIdentifier)
+	return ret0
+}
+
+// GetWorkflowIdentifier indicates an expected call of GetWorkflowIdentifier.
+func (mr *MockMutableStateMockRecorder) GetWorkflowIdentifier() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowIdentifier", reflect.TypeOf((*MockMutableState)(nil).GetWorkflowIdentifier))
+}
+
 // GetWorkflowStateStatus mocks base method.
 func (m *MockMutableState) GetWorkflowStateStatus() (v17.WorkflowExecutionState, v11.WorkflowExecutionStatus) {
 	m.ctrl.T.Helper()

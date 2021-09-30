@@ -26,16 +26,23 @@ package tasks
 
 import (
 	"time"
+
+	"go.temporal.io/server/common/definition"
 )
 
 type (
 	SyncActivityTask struct {
+		definition.WorkflowIdentifier
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
 		ScheduledID         int64
 	}
 )
+
+func (a *SyncActivityTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
+	return a.WorkflowIdentifier
+}
 
 func (a *SyncActivityTask) GetKey() Key {
 	return Key{
