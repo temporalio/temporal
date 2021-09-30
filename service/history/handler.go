@@ -30,12 +30,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/events"
-	"go.temporal.io/server/service/history/shard"
-
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -48,13 +42,19 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/task"
+	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -72,6 +72,7 @@ type (
 		replicationTaskFetchers ReplicationTaskFetchers
 		queueTaskProcessor      queueTaskProcessor
 		visibilityMrg           manager.VisibilityManager
+		newCacheFn              workflow.NewCacheFn
 	}
 )
 
@@ -103,6 +104,7 @@ func NewHandler(
 	resource resource.Resource,
 	config *configs.Config,
 	visibilityMrg manager.VisibilityManager,
+	newCacheFn workflow.NewCacheFn,
 ) *Handler {
 	handler := &Handler{
 		Resource:        resource,
@@ -110,6 +112,7 @@ func NewHandler(
 		config:          config,
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		visibilityMrg:   visibilityMrg,
+		newCacheFn:      newCacheFn,
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -229,6 +232,7 @@ func (h *Handler) CreateEngine(
 		h.replicationTaskFetchers,
 		h.GetMatchingRawClient(),
 		h.queueTaskProcessor,
+		h.newCacheFn,
 	)
 }
 
