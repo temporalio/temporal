@@ -74,7 +74,7 @@ type (
 		mockExecutionMgr *persistence.MockExecutionManager
 
 		logger       log.Logger
-		historyCache workflow.Cache
+		historyCache *workflow.CacheImpl
 
 		nDCActivityReplicator *nDCActivityReplicatorImpl
 	}
@@ -123,7 +123,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	s.historyCache = workflow.NewCache(s.mockShard)
+	s.historyCache = workflow.NewCache(s.mockShard).(*workflow.CacheImpl)
 	engine := &historyEngineImpl{
 		currentClusterName: s.mockClusterMetadata.GetCurrentClusterName(),
 		shard:              s.mockShard,
