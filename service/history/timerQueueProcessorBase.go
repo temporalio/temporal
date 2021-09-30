@@ -26,12 +26,14 @@ package history
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
@@ -352,7 +354,7 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistencespb.Tim
 		return nil, err
 	}
 
-	for _, task := range timerTasks {
+	for _, task := range t.convert(timerTasks) {
 		if submitted := t.submitTask(task); !submitted {
 			return nil, nil
 		}
@@ -364,7 +366,10 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistencespb.Tim
 	}
 
 	if !moreTasks {
-		return lookAheadTask, nil
+		if lookAheadTask == nil {
+			return nil, nil
+		}
+		return t.convert([]tasks.Task{lookAheadTask})[0], nil
 	}
 
 	t.notifyNewTimer(time.Time{}) // re-enqueue the event
@@ -419,7 +424,7 @@ func (t *timerQueueProcessorBase) retryTasks() {
 func (t *timerQueueProcessorBase) complete(
 	timerTask *persistencespb.TimerTaskInfo,
 ) {
-	t.timerQueueAckMgr.completeTimerTask(timerTask)
+	t.timerQueueAckMgr.completeTimerTask(*timerTask.GetVisibilityTime(), timerTask.GetTaskId())
 	atomic.AddUint64(&t.timerFiredCount, 1)
 }
 
@@ -477,4 +482,36 @@ func getTimerTaskMetricScope(
 		}
 		return metrics.TimerStandbyQueueProcessorScope
 	}
+}
+
+// TODO @wxing1292 deprecate this additional conversion before 1.14
+func (t *timerQueueProcessorBase) convert(
+	genericTasks []tasks.Task,
+) []*persistencespb.TimerTaskInfo {
+	queueTasks := make([]*persistencespb.TimerTaskInfo, len(genericTasks))
+	serializer := serialization.TaskSerializer{}
+
+	for index, task := range genericTasks {
+		var timerTask *persistencespb.TimerTaskInfo
+		switch task := task.(type) {
+		case *tasks.WorkflowTaskTimeoutTask:
+			timerTask = serializer.TimerWorkflowTaskToProto(task)
+		case *tasks.WorkflowBackoffTimerTask:
+			timerTask = serializer.TimerWorkflowDelayTaskToProto(task)
+		case *tasks.ActivityTimeoutTask:
+			timerTask = serializer.TimerActivityTaskToProto(task)
+		case *tasks.ActivityRetryTimerTask:
+			timerTask = serializer.TimerActivityRetryTaskToProto(task)
+		case *tasks.UserTimerTask:
+			timerTask = serializer.TimerUserTaskToProto(task)
+		case *tasks.WorkflowTimeoutTask:
+			timerTask = serializer.TimerWorkflowRunToProto(task)
+		case *tasks.DeleteHistoryEventTask:
+			timerTask = serializer.TimerWorkflowCleanupTaskToProto(task)
+		default:
+			panic(fmt.Sprintf("Unknown timer task type: %v", task))
+		}
+		queueTasks[index] = timerTask
+	}
+	return queueTasks
 }

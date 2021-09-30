@@ -688,16 +688,33 @@ func (m *executionManagerImpl) AddTasks(
 }
 
 // Transfer task related methods
+
 func (m *executionManagerImpl) GetTransferTask(
 	request *GetTransferTaskRequest,
 ) (*GetTransferTaskResponse, error) {
-	return m.persistence.GetTransferTask(request)
+	resp, err := m.persistence.GetTransferTask(request)
+	if err != nil {
+		return nil, err
+	}
+	tasks, err := m.serializer.DeserializeTransferTasks([]commonpb.DataBlob{resp.Task})
+	if err != nil {
+		return nil, err
+	}
+	return &GetTransferTaskResponse{Task: tasks[0]}, nil
 }
 
 func (m *executionManagerImpl) GetTransferTasks(
 	request *GetTransferTasksRequest,
 ) (*GetTransferTasksResponse, error) {
-	return m.persistence.GetTransferTasks(request)
+	resp, err := m.persistence.GetTransferTasks(request)
+	if err != nil {
+		return nil, err
+	}
+	tasks, err := m.serializer.DeserializeTransferTasks(resp.Tasks)
+	if err != nil {
+		return nil, err
+	}
+	return &GetTransferTasksResponse{Tasks: tasks, NextPageToken: resp.NextPageToken}, nil
 }
 
 func (m *executionManagerImpl) CompleteTransferTask(
@@ -712,42 +729,76 @@ func (m *executionManagerImpl) RangeCompleteTransferTask(
 	return m.persistence.RangeCompleteTransferTask(request)
 }
 
-// Visibility task related methods
-func (m *executionManagerImpl) GetVisibilityTask(
-	request *GetVisibilityTaskRequest,
-) (*GetVisibilityTaskResponse, error) {
-	return m.persistence.GetVisibilityTask(request)
+// Timer related methods.
+
+func (m *executionManagerImpl) GetTimerTask(
+	request *GetTimerTaskRequest,
+) (*GetTimerTaskResponse, error) {
+	resp, err := m.persistence.GetTimerTask(request)
+	if err != nil {
+		return nil, err
+	}
+	tasks, err := m.serializer.DeserializeTimerTasks([]commonpb.DataBlob{resp.Task})
+	if err != nil {
+		return nil, err
+	}
+	return &GetTimerTaskResponse{Task: tasks[0]}, nil
 }
 
-func (m *executionManagerImpl) GetVisibilityTasks(
-	request *GetVisibilityTasksRequest,
-) (*GetVisibilityTasksResponse, error) {
-	return m.persistence.GetVisibilityTasks(request)
+func (m *executionManagerImpl) GetTimerTasks(
+	request *GetTimerTasksRequest,
+) (*GetTimerTasksResponse, error) {
+	resp, err := m.persistence.GetTimerTasks(request)
+	if err != nil {
+		return nil, err
+	}
+	tasks, err := m.serializer.DeserializeTimerTasks(resp.Tasks)
+	if err != nil {
+		return nil, err
+	}
+	return &GetTimerTasksResponse{Tasks: tasks, NextPageToken: resp.NextPageToken}, nil
 }
 
-func (m *executionManagerImpl) CompleteVisibilityTask(
-	request *CompleteVisibilityTaskRequest,
+func (m *executionManagerImpl) CompleteTimerTask(
+	request *CompleteTimerTaskRequest,
 ) error {
-	return m.persistence.CompleteVisibilityTask(request)
+	return m.persistence.CompleteTimerTask(request)
 }
 
-func (m *executionManagerImpl) RangeCompleteVisibilityTask(
-	request *RangeCompleteVisibilityTaskRequest,
+func (m *executionManagerImpl) RangeCompleteTimerTask(
+	request *RangeCompleteTimerTaskRequest,
 ) error {
-	return m.persistence.RangeCompleteVisibilityTask(request)
+	return m.persistence.RangeCompleteTimerTask(request)
 }
 
 // Replication task related methods
+
 func (m *executionManagerImpl) GetReplicationTask(
 	request *GetReplicationTaskRequest,
 ) (*GetReplicationTaskResponse, error) {
-	return m.persistence.GetReplicationTask(request)
+	resp, err := m.persistence.GetReplicationTask(request)
+	if err != nil {
+		return nil, err
+	}
+	tasks, err := m.serializer.DeserializeReplicationTasks([]commonpb.DataBlob{resp.Task})
+	if err != nil {
+		return nil, err
+	}
+	return &GetReplicationTaskResponse{Task: tasks[0]}, nil
 }
 
 func (m *executionManagerImpl) GetReplicationTasks(
 	request *GetReplicationTasksRequest,
 ) (*GetReplicationTasksResponse, error) {
-	return m.persistence.GetReplicationTasks(request)
+	resp, err := m.persistence.GetReplicationTasks(request)
+	if err != nil {
+		return nil, err
+	}
+	tasks, err := m.serializer.DeserializeReplicationTasks(resp.Tasks)
+	if err != nil {
+		return nil, err
+	}
+	return &GetReplicationTasksResponse{Tasks: tasks, NextPageToken: resp.NextPageToken}, nil
 }
 
 func (m *executionManagerImpl) CompleteReplicationTask(
@@ -771,7 +822,15 @@ func (m *executionManagerImpl) PutReplicationTaskToDLQ(
 func (m *executionManagerImpl) GetReplicationTasksFromDLQ(
 	request *GetReplicationTasksFromDLQRequest,
 ) (*GetReplicationTasksFromDLQResponse, error) {
-	return m.persistence.GetReplicationTasksFromDLQ(request)
+	resp, err := m.persistence.GetReplicationTasksFromDLQ(request)
+	if err != nil {
+		return nil, err
+	}
+	tasks, err := m.serializer.DeserializeReplicationTasks(resp.Tasks)
+	if err != nil {
+		return nil, err
+	}
+	return &GetReplicationTasksFromDLQResponse{Tasks: tasks, NextPageToken: resp.NextPageToken}, nil
 }
 
 func (m *executionManagerImpl) DeleteReplicationTaskFromDLQ(
@@ -786,29 +845,46 @@ func (m *executionManagerImpl) RangeDeleteReplicationTaskFromDLQ(
 	return m.persistence.RangeDeleteReplicationTaskFromDLQ(request)
 }
 
-// Timer related methods.
-func (m *executionManagerImpl) GetTimerTask(
-	request *GetTimerTaskRequest,
-) (*GetTimerTaskResponse, error) {
-	return m.persistence.GetTimerTask(request)
+// Visibility task related methods
+
+func (m *executionManagerImpl) GetVisibilityTask(
+	request *GetVisibilityTaskRequest,
+) (*GetVisibilityTaskResponse, error) {
+	resp, err := m.persistence.GetVisibilityTask(request)
+	if err != nil {
+		return nil, err
+	}
+	tasks, err := m.serializer.DeserializeVisibilityTasks([]commonpb.DataBlob{resp.Task})
+	if err != nil {
+		return nil, err
+	}
+	return &GetVisibilityTaskResponse{Task: tasks[0]}, nil
 }
 
-func (m *executionManagerImpl) GetTimerIndexTasks(
-	request *GetTimerIndexTasksRequest,
-) (*GetTimerIndexTasksResponse, error) {
-	return m.persistence.GetTimerIndexTasks(request)
+func (m *executionManagerImpl) GetVisibilityTasks(
+	request *GetVisibilityTasksRequest,
+) (*GetVisibilityTasksResponse, error) {
+	resp, err := m.persistence.GetVisibilityTasks(request)
+	if err != nil {
+		return nil, err
+	}
+	tasks, err := m.serializer.DeserializeVisibilityTasks(resp.Tasks)
+	if err != nil {
+		return nil, err
+	}
+	return &GetVisibilityTasksResponse{Tasks: tasks, NextPageToken: resp.NextPageToken}, nil
 }
 
-func (m *executionManagerImpl) CompleteTimerTask(
-	request *CompleteTimerTaskRequest,
+func (m *executionManagerImpl) CompleteVisibilityTask(
+	request *CompleteVisibilityTaskRequest,
 ) error {
-	return m.persistence.CompleteTimerTask(request)
+	return m.persistence.CompleteVisibilityTask(request)
 }
 
-func (m *executionManagerImpl) RangeCompleteTimerTask(
-	request *RangeCompleteTimerTaskRequest,
+func (m *executionManagerImpl) RangeCompleteVisibilityTask(
+	request *RangeCompleteVisibilityTaskRequest,
 ) error {
-	return m.persistence.RangeCompleteTimerTask(request)
+	return m.persistence.RangeCompleteVisibilityTask(request)
 }
 
 func (m *executionManagerImpl) Close() {

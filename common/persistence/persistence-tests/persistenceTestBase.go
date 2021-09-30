@@ -934,8 +934,8 @@ func (s *TestBase) DeleteCurrentWorkflowExecution(info *persistencespb.WorkflowE
 }
 
 // GetTransferTasks is a utility method to get tasks from transfer task queue
-func (s *TestBase) GetTransferTasks(batchSize int, getAll bool) ([]*persistencespb.TransferTaskInfo, error) {
-	result := []*persistencespb.TransferTaskInfo{}
+func (s *TestBase) GetTransferTasks(batchSize int, getAll bool) ([]tasks.Task, error) {
+	result := []tasks.Task{}
 	var token []byte
 
 Loop:
@@ -959,15 +959,15 @@ Loop:
 	}
 
 	for _, task := range result {
-		atomic.StoreInt64(&s.ReadLevel, task.GetTaskId())
+		atomic.StoreInt64(&s.ReadLevel, task.GetTaskID())
 	}
 
 	return result, nil
 }
 
 // GetReplicationTasks is a utility method to get tasks from replication task queue
-func (s *TestBase) GetReplicationTasks(batchSize int, getAll bool) ([]*persistencespb.ReplicationTaskInfo, error) {
-	result := []*persistencespb.ReplicationTaskInfo{}
+func (s *TestBase) GetReplicationTasks(batchSize int, getAll bool) ([]tasks.Task, error) {
+	result := []tasks.Task{}
 	var token []byte
 
 Loop:
@@ -991,7 +991,7 @@ Loop:
 	}
 
 	for _, task := range result {
-		atomic.StoreInt64(&s.ReplicationReadLevel, task.GetTaskId())
+		atomic.StoreInt64(&s.ReplicationReadLevel, task.GetTaskID())
 	}
 
 	return result, nil
@@ -1094,14 +1094,14 @@ func (s *TestBase) CompleteReplicationTask(taskID int64) error {
 	})
 }
 
-// GetTimerIndexTasks is a utility method to get tasks from transfer task queue
-func (s *TestBase) GetTimerIndexTasks(batchSize int, getAll bool) ([]*persistencespb.TimerTaskInfo, error) {
-	result := []*persistencespb.TimerTaskInfo{}
+// GetTimerTasks is a utility method to get tasks from transfer task queue
+func (s *TestBase) GetTimerTasks(batchSize int, getAll bool) ([]tasks.Task, error) {
+	result := []tasks.Task{}
 	var token []byte
 
 Loop:
 	for {
-		response, err := s.ExecutionManager.GetTimerIndexTasks(&persistence.GetTimerIndexTasksRequest{
+		response, err := s.ExecutionManager.GetTimerTasks(&persistence.GetTimerTasksRequest{
 			ShardID:       s.ShardInfo.GetShardId(),
 			MinTimestamp:  time.Time{},
 			MaxTimestamp:  time.Unix(0, math.MaxInt64).UTC(),
@@ -1113,7 +1113,7 @@ Loop:
 		}
 
 		token = response.NextPageToken
-		result = append(result, response.Timers...)
+		result = append(result, response.Tasks...)
 		if len(token) == 0 || !getAll {
 			break Loop
 		}
@@ -1306,8 +1306,8 @@ func (s *TestBase) ClearTransferQueue() {
 
 	counter := 0
 	for _, t := range tasks {
-		s.Logger.Info("Deleting transfer task with ID", tag.TaskID(t.GetTaskId()))
-		s.NoError(s.CompleteTransferTask(t.GetTaskId()))
+		s.Logger.Info("Deleting transfer task with ID", tag.TaskID(t.GetTaskID()))
+		s.NoError(s.CompleteTransferTask(t.GetTaskID()))
 		counter++
 	}
 
@@ -1325,8 +1325,8 @@ func (s *TestBase) ClearReplicationQueue() {
 
 	counter := 0
 	for _, t := range tasks {
-		s.Logger.Info("Deleting replication task with ID", tag.TaskID(t.GetTaskId()))
-		s.NoError(s.CompleteReplicationTask(t.GetTaskId()))
+		s.Logger.Info("Deleting replication task with ID", tag.TaskID(t.GetTaskID()))
+		s.NoError(s.CompleteReplicationTask(t.GetTaskID()))
 		counter++
 	}
 

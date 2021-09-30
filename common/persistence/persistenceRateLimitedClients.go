@@ -413,12 +413,12 @@ func (p *executionRateLimitedPersistenceClient) GetTimerTask(request *GetTimerTa
 	return response, err
 }
 
-func (p *executionRateLimitedPersistenceClient) GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error) {
+func (p *executionRateLimitedPersistenceClient) GetTimerTasks(request *GetTimerTasksRequest) (*GetTimerTasksResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	resonse, err := p.persistence.GetTimerIndexTasks(request)
+	resonse, err := p.persistence.GetTimerTasks(request)
 	return resonse, err
 }
 

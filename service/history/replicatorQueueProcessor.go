@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -44,6 +45,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tasks"
@@ -200,10 +202,10 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 		}
 
 		token = response.NextPageToken
-		for _, task := range response.Tasks {
+		for _, task := range p.convert(response.Tasks) {
 			if replicationTask, err := p.taskInfoToTask(
 				ctx,
-				&persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: task},
+				task,
 			); err != nil {
 				return nil, 0, err
 			} else if replicationTask != nil {
@@ -245,17 +247,17 @@ func (p *replicatorQueueProcessorImpl) getTask(
 		Version:      taskInfo.GetVersion(),
 		ScheduledId:  taskInfo.GetScheduledId(),
 	}
-	return p.taskInfoToTask(ctx, &persistence.ReplicationTaskInfoWrapper{ReplicationTaskInfo: task})
+	return p.taskInfoToTask(ctx, task)
 }
 
 func (p *replicatorQueueProcessorImpl) taskInfoToTask(
 	ctx context.Context,
-	taskInfo queueTaskInfo,
+	task *persistencespb.ReplicationTaskInfo,
 ) (*replicationspb.ReplicationTask, error) {
 	var replicationTask *replicationspb.ReplicationTask
 	op := func() error {
 		var err error
-		replicationTask, err = p.toReplicationTask(ctx, taskInfo)
+		replicationTask, err = p.toReplicationTask(ctx, task)
 		return err
 	}
 
@@ -293,15 +295,9 @@ func (p *replicatorQueueProcessorImpl) taskIDsRange(
 
 func (p *replicatorQueueProcessorImpl) toReplicationTask(
 	ctx context.Context,
-	qTask queueTaskInfo,
+	task *persistencespb.ReplicationTaskInfo,
 ) (*replicationspb.ReplicationTask, error) {
 
-	t, ok := qTask.(*persistence.ReplicationTaskInfoWrapper)
-	if !ok {
-		return nil, errUnexpectedQueueTask
-	}
-
-	task := t.ReplicationTaskInfo
 	switch task.TaskType {
 	case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
 		return p.generateSyncActivityTask(ctx, task)
@@ -551,4 +547,26 @@ func (p *replicatorQueueProcessorImpl) processReplication(
 	default:
 		return nil, err
 	}
+}
+
+// TODO @wxing1292 deprecate this additional conversion before 1.14
+func (p *replicatorQueueProcessorImpl) convert(
+	genericTasks []tasks.Task,
+) []*persistencespb.ReplicationTaskInfo {
+	queueTasks := make([]*persistencespb.ReplicationTaskInfo, len(genericTasks))
+	serializer := serialization.TaskSerializer{}
+
+	for index, task := range genericTasks {
+		var replicationTask *persistencespb.ReplicationTaskInfo
+		switch task := task.(type) {
+		case *tasks.SyncActivityTask:
+			replicationTask = serializer.ReplicationActivityTaskToProto(task)
+		case *tasks.HistoryReplicationTask:
+			replicationTask = serializer.ReplicationHistoryTaskToProto(task)
+		default:
+			panic(fmt.Sprintf("Unknown repication task type: %v", task))
+		}
+		queueTasks[index] = replicationTask
+	}
+	return queueTasks
 }

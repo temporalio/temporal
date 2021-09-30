@@ -366,7 +366,7 @@ func (d *MutableStateTaskStore) AddTasks(
 
 func (d *MutableStateTaskStore) GetTransferTask(
 	request *p.GetTransferTaskRequest,
-) (*p.GetTransferTaskResponse, error) {
+) (*p.InternalGetTransferTaskResponse, error) {
 	shardID := request.ShardID
 	taskID := request.TaskID
 	query := d.Session.Query(templateGetTransferTaskQuery,
@@ -383,19 +383,12 @@ func (d *MutableStateTaskStore) GetTransferTask(
 	if err := query.Scan(&data, &encoding); err != nil {
 		return nil, gocql.ConvertError("GetTransferTask", err)
 	}
-
-	info, err := serialization.TransferTaskInfoFromBlob(data, encoding)
-
-	if err != nil {
-		return nil, gocql.ConvertError("GetTransferTask", err)
-	}
-
-	return &p.GetTransferTaskResponse{TransferTaskInfo: info}, nil
+	return &p.InternalGetTransferTaskResponse{Task: *p.NewDataBlob(data, encoding)}, nil
 }
 
 func (d *MutableStateTaskStore) GetTransferTasks(
 	request *p.GetTransferTasksRequest,
-) (*p.GetTransferTasksResponse, error) {
+) (*p.InternalGetTransferTasksResponse, error) {
 
 	// Reading transfer tasks need to be quorum level consistent, otherwise we could lose task
 	query := d.Session.Query(templateGetTransferTasksQuery,
@@ -410,17 +403,15 @@ func (d *MutableStateTaskStore) GetTransferTasks(
 	)
 	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
-	response := &p.GetTransferTasksResponse{}
+	response := &p.InternalGetTransferTasksResponse{}
 	var data []byte
 	var encoding string
 
 	for iter.Scan(&data, &encoding) {
-		t, err := serialization.TransferTaskInfoFromBlob(data, encoding)
-		if err != nil {
-			return nil, gocql.ConvertError("GetTransferTasks", err)
-		}
+		response.Tasks = append(response.Tasks, *p.NewDataBlob(data, encoding))
 
-		response.Tasks = append(response.Tasks, t)
+		data = nil
+		encoding = ""
 	}
 	if len(iter.PageState()) > 0 {
 		response.NextPageToken = iter.PageState()
@@ -469,7 +460,7 @@ func (d *MutableStateTaskStore) RangeCompleteTransferTask(
 
 func (d *MutableStateTaskStore) GetTimerTask(
 	request *p.GetTimerTaskRequest,
-) (*p.GetTimerTaskResponse, error) {
+) (*p.InternalGetTimerTaskResponse, error) {
 	shardID := request.ShardID
 	taskID := request.TaskID
 	visibilityTs := request.VisibilityTimestamp
@@ -488,18 +479,12 @@ func (d *MutableStateTaskStore) GetTimerTask(
 		return nil, gocql.ConvertError("GetTimerTask", err)
 	}
 
-	info, err := serialization.TimerTaskInfoFromBlob(data, encoding)
-
-	if err != nil {
-		return nil, gocql.ConvertError("GetTimerTask", err)
-	}
-
-	return &p.GetTimerTaskResponse{TimerTaskInfo: info}, nil
+	return &p.InternalGetTimerTaskResponse{Task: *p.NewDataBlob(data, encoding)}, nil
 }
 
-func (d *MutableStateTaskStore) GetTimerIndexTasks(
-	request *p.GetTimerIndexTasksRequest,
-) (*p.GetTimerIndexTasksResponse, error) {
+func (d *MutableStateTaskStore) GetTimerTasks(
+	request *p.GetTimerTasksRequest,
+) (*p.InternalGetTimerTasksResponse, error) {
 	// Reading timer tasks need to be quorum level consistent, otherwise we could lose tasks
 	minTimestamp := p.UnixMilliseconds(request.MinTimestamp)
 	maxTimestamp := p.UnixMilliseconds(request.MaxTimestamp)
@@ -514,25 +499,22 @@ func (d *MutableStateTaskStore) GetTimerIndexTasks(
 	)
 	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
-	response := &p.GetTimerIndexTasksResponse{}
+	response := &p.InternalGetTimerTasksResponse{}
 	var data []byte
 	var encoding string
 
 	for iter.Scan(&data, &encoding) {
-		t, err := serialization.TimerTaskInfoFromBlob(data, encoding)
+		response.Tasks = append(response.Tasks, *p.NewDataBlob(data, encoding))
 
-		if err != nil {
-			return nil, gocql.ConvertError("GetTimerIndexTasks", err)
-		}
-
-		response.Timers = append(response.Timers, t)
+		data = nil
+		encoding = ""
 	}
 	if len(iter.PageState()) > 0 {
 		response.NextPageToken = iter.PageState()
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, gocql.ConvertError("GetTimerIndexTasks", err)
+		return nil, gocql.ConvertError("GetTimerTasks", err)
 	}
 
 	return response, nil
@@ -576,7 +558,7 @@ func (d *MutableStateTaskStore) RangeCompleteTimerTask(
 
 func (d *MutableStateTaskStore) GetReplicationTask(
 	request *p.GetReplicationTaskRequest,
-) (*p.GetReplicationTaskResponse, error) {
+) (*p.InternalGetReplicationTaskResponse, error) {
 	shardID := request.ShardID
 	taskID := request.TaskID
 	query := d.Session.Query(templateGetReplicationTaskQuery,
@@ -594,18 +576,12 @@ func (d *MutableStateTaskStore) GetReplicationTask(
 		return nil, gocql.ConvertError("GetReplicationTask", err)
 	}
 
-	info, err := serialization.ReplicationTaskInfoFromBlob(data, encoding)
-
-	if err != nil {
-		return nil, gocql.ConvertError("GetReplicationTask", err)
-	}
-
-	return &p.GetReplicationTaskResponse{ReplicationTaskInfo: info}, nil
+	return &p.InternalGetReplicationTaskResponse{Task: *p.NewDataBlob(data, encoding)}, nil
 }
 
 func (d *MutableStateTaskStore) GetReplicationTasks(
 	request *p.GetReplicationTasksRequest,
-) (*p.GetReplicationTasksResponse, error) {
+) (*p.InternalGetReplicationTasksResponse, error) {
 
 	// Reading replication tasks need to be quorum level consistent, otherwise we could lose task
 	query := d.Session.Query(templateGetReplicationTasksQuery,
@@ -687,7 +663,7 @@ func (d *MutableStateTaskStore) PutReplicationTaskToDLQ(
 
 func (d *MutableStateTaskStore) GetReplicationTasksFromDLQ(
 	request *p.GetReplicationTasksFromDLQRequest,
-) (*p.GetReplicationTasksFromDLQResponse, error) {
+) (*p.InternalGetReplicationTasksResponse, error) {
 	// Reading replication tasks need to be quorum level consistent, otherwise we could lose tasks
 	query := d.Session.Query(templateGetReplicationTasksQuery,
 		request.ShardID,
@@ -742,7 +718,7 @@ func (d *MutableStateTaskStore) RangeDeleteReplicationTaskFromDLQ(
 
 func (d *MutableStateTaskStore) GetVisibilityTask(
 	request *p.GetVisibilityTaskRequest,
-) (*p.GetVisibilityTaskResponse, error) {
+) (*p.InternalGetVisibilityTaskResponse, error) {
 	shardID := request.ShardID
 	taskID := request.TaskID
 	query := d.Session.Query(templateGetVisibilityTaskQuery,
@@ -759,19 +735,12 @@ func (d *MutableStateTaskStore) GetVisibilityTask(
 	if err := query.Scan(&data, &encoding); err != nil {
 		return nil, gocql.ConvertError("GetVisibilityTask", err)
 	}
-
-	info, err := serialization.VisibilityTaskInfoFromBlob(data, encoding)
-
-	if err != nil {
-		return nil, gocql.ConvertError("GetVisibilityTask", err)
-	}
-
-	return &p.GetVisibilityTaskResponse{VisibilityTaskInfo: info}, nil
+	return &p.InternalGetVisibilityTaskResponse{Task: *p.NewDataBlob(data, encoding)}, nil
 }
 
 func (d *MutableStateTaskStore) GetVisibilityTasks(
 	request *p.GetVisibilityTasksRequest,
-) (*p.GetVisibilityTasksResponse, error) {
+) (*p.InternalGetVisibilityTasksResponse, error) {
 
 	// Reading Visibility tasks need to be quorum level consistent, otherwise we could lose task
 	query := d.Session.Query(templateGetVisibilityTasksQuery,
@@ -786,17 +755,15 @@ func (d *MutableStateTaskStore) GetVisibilityTasks(
 	)
 	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
-	response := &p.GetVisibilityTasksResponse{}
+	response := &p.InternalGetVisibilityTasksResponse{}
 	var data []byte
 	var encoding string
 
 	for iter.Scan(&data, &encoding) {
-		t, err := serialization.VisibilityTaskInfoFromBlob(data, encoding)
-		if err != nil {
-			return nil, gocql.ConvertError("GetVisibilityTasks", err)
-		}
+		response.Tasks = append(response.Tasks, *p.NewDataBlob(data, encoding))
 
-		response.Tasks = append(response.Tasks, t)
+		data = nil
+		encoding = ""
 	}
 	if len(iter.PageState()) > 0 {
 		response.NextPageToken = iter.PageState()
@@ -846,21 +813,18 @@ func (d *MutableStateTaskStore) RangeCompleteVisibilityTask(
 func (d *MutableStateTaskStore) populateGetReplicationTasksResponse(
 	query gocql.Query,
 	operation string,
-) (*p.GetReplicationTasksResponse, error) {
+) (*p.InternalGetReplicationTasksResponse, error) {
 	iter := query.Iter()
 
-	response := &p.GetReplicationTasksResponse{}
+	response := &p.InternalGetReplicationTasksResponse{}
 	var data []byte
 	var encoding string
 
 	for iter.Scan(&data, &encoding) {
-		t, err := serialization.ReplicationTaskInfoFromBlob(data, encoding)
+		response.Tasks = append(response.Tasks, *p.NewDataBlob(data, encoding))
 
-		if err != nil {
-			return nil, gocql.ConvertError(operation, err)
-		}
-
-		response.Tasks = append(response.Tasks, t)
+		data = nil
+		encoding = ""
 	}
 	if len(iter.PageState()) > 0 {
 		response.NextPageToken = iter.PageState()

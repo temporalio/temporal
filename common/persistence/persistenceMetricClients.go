@@ -576,15 +576,15 @@ func (p *executionPersistenceClient) GetTimerTask(request *GetTimerTaskRequest) 
 	return response, err
 }
 
-func (p *executionPersistenceClient) GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetTimerIndexTasksScope, metrics.PersistenceRequests)
+func (p *executionPersistenceClient) GetTimerTasks(request *GetTimerTasksRequest) (*GetTimerTasksResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceGetTimerTasksScope, metrics.PersistenceRequests)
 
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetTimerIndexTasksScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetTimerIndexTasks(request)
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetTimerTasksScope, metrics.PersistenceLatency)
+	response, err := p.persistence.GetTimerTasks(request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetTimerIndexTasksScope, err)
+		p.updateErrorMetric(metrics.PersistenceGetTimerTasksScope, err)
 	}
 
 	return response, err

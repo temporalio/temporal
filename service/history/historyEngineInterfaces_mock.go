@@ -35,7 +35,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	enums "go.temporal.io/server/api/enums/v1"
-	persistence "go.temporal.io/server/api/persistence/v1"
 	repication "go.temporal.io/server/api/replication/v1"
 	task "go.temporal.io/server/common/task"
 	tasks "go.temporal.io/server/common/tasks"
@@ -1070,15 +1069,15 @@ func (m *MocktimerQueueAckMgr) EXPECT() *MocktimerQueueAckMgrMockRecorder {
 }
 
 // completeTimerTask mocks base method.
-func (m *MocktimerQueueAckMgr) completeTimerTask(timerTask *persistence.TimerTaskInfo) {
+func (m *MocktimerQueueAckMgr) completeTimerTask(arg0 time.Time, arg1 int64) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "completeTimerTask", timerTask)
+	m.ctrl.Call(m, "completeTimerTask", arg0, arg1)
 }
 
 // completeTimerTask indicates an expected call of completeTimerTask.
-func (mr *MocktimerQueueAckMgrMockRecorder) completeTimerTask(timerTask interface{}) *gomock.Call {
+func (mr *MocktimerQueueAckMgrMockRecorder) completeTimerTask(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "completeTimerTask", reflect.TypeOf((*MocktimerQueueAckMgr)(nil).completeTimerTask), timerTask)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "completeTimerTask", reflect.TypeOf((*MocktimerQueueAckMgr)(nil).completeTimerTask), arg0, arg1)
 }
 
 // getAckLevel mocks base method.
@@ -1124,11 +1123,11 @@ func (mr *MocktimerQueueAckMgrMockRecorder) getReadLevel() *gomock.Call {
 }
 
 // readTimerTasks mocks base method.
-func (m *MocktimerQueueAckMgr) readTimerTasks() ([]*persistence.TimerTaskInfo, *persistence.TimerTaskInfo, bool, error) {
+func (m *MocktimerQueueAckMgr) readTimerTasks() ([]tasks.Task, tasks.Task, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "readTimerTasks")
-	ret0, _ := ret[0].([]*persistence.TimerTaskInfo)
-	ret1, _ := ret[1].(*persistence.TimerTaskInfo)
+	ret0, _ := ret[0].([]tasks.Task)
+	ret1, _ := ret[1].(tasks.Task)
 	ret2, _ := ret[2].(bool)
 	ret3, _ := ret[3].(error)
 	return ret0, ret1, ret2, ret3

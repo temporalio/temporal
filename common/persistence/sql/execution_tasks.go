@@ -31,9 +31,9 @@ import (
 	"math"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/persistence"
 	p "go.temporal.io/server/common/persistence"
@@ -64,7 +64,7 @@ func (m *sqlExecutionStore) AddTasks(
 
 func (m *sqlExecutionStore) GetTransferTask(
 	request *persistence.GetTransferTaskRequest,
-) (*persistence.GetTransferTaskResponse, error) {
+) (*persistence.InternalGetTransferTaskResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	rows, err := m.Db.SelectFromTransferTasks(ctx, sqlplugin.TransferTasksFilter{
@@ -83,19 +83,15 @@ func (m *sqlExecutionStore) GetTransferTask(
 	}
 
 	transferRow := rows[0]
-	transferInfo, err := serialization.TransferTaskInfoFromBlob(transferRow.Data, transferRow.DataEncoding)
-	if err != nil {
-		return nil, err
+	resp := &persistence.InternalGetTransferTaskResponse{
+		Task: *persistence.NewDataBlob(transferRow.Data, transferRow.DataEncoding),
 	}
-
-	resp := &persistence.GetTransferTaskResponse{TransferTaskInfo: transferInfo}
-
 	return resp, nil
 }
 
 func (m *sqlExecutionStore) GetTransferTasks(
 	request *p.GetTransferTasksRequest,
-) (*p.GetTransferTasksResponse, error) {
+) (*p.InternalGetTransferTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	rows, err := m.Db.RangeSelectFromTransferTasks(ctx, sqlplugin.TransferTasksRangeFilter{
@@ -108,15 +104,10 @@ func (m *sqlExecutionStore) GetTransferTasks(
 			return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTransferTasks operation failed. Select failed. Error: %v", err))
 		}
 	}
-	resp := &p.GetTransferTasksResponse{Tasks: make([]*persistencespb.TransferTaskInfo, len(rows))}
+	resp := &p.InternalGetTransferTasksResponse{Tasks: make([]commonpb.DataBlob, len(rows))}
 	for i, row := range rows {
-		info, err := serialization.TransferTaskInfoFromBlob(row.Data, row.DataEncoding)
-		if err != nil {
-			return nil, err
-		}
-		resp.Tasks[i] = info
+		resp.Tasks[i] = *persistence.NewDataBlob(row.Data, row.DataEncoding)
 	}
-
 	return resp, nil
 }
 
@@ -151,7 +142,7 @@ func (m *sqlExecutionStore) RangeCompleteTransferTask(
 
 func (m *sqlExecutionStore) GetTimerTask(
 	request *persistence.GetTimerTaskRequest,
-) (*persistence.GetTimerTaskResponse, error) {
+) (*persistence.InternalGetTimerTaskResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	rows, err := m.Db.SelectFromTimerTasks(ctx, sqlplugin.TimerTasksFilter{
@@ -171,19 +162,15 @@ func (m *sqlExecutionStore) GetTimerTask(
 	}
 
 	timerRow := rows[0]
-	timerInfo, err := serialization.TimerTaskInfoFromBlob(timerRow.Data, timerRow.DataEncoding)
-	if err != nil {
-		return nil, err
+	resp := &persistence.InternalGetTimerTaskResponse{
+		Task: *p.NewDataBlob(timerRow.Data, timerRow.DataEncoding),
 	}
-
-	resp := &persistence.GetTimerTaskResponse{TimerTaskInfo: timerInfo}
-
 	return resp, nil
 }
 
-func (m *sqlExecutionStore) GetTimerIndexTasks(
-	request *p.GetTimerIndexTasksRequest,
-) (*p.GetTimerIndexTasksResponse, error) {
+func (m *sqlExecutionStore) GetTimerTasks(
+	request *p.GetTimerTasksRequest,
+) (*p.InternalGetTimerTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	pageToken := &timerTaskPageToken{TaskID: math.MinInt64, Timestamp: request.MinTimestamp}
@@ -205,26 +192,17 @@ func (m *sqlExecutionStore) GetTimerIndexTasks(
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTimerTasks operation failed. Select failed. Error: %v", err))
 	}
 
-	resp := &p.GetTimerIndexTasksResponse{Timers: make([]*persistencespb.TimerTaskInfo, len(rows))}
+	resp := &p.InternalGetTimerTasksResponse{Tasks: make([]commonpb.DataBlob, len(rows))}
 	for i, row := range rows {
-		info, err := serialization.TimerTaskInfoFromBlob(row.Data, row.DataEncoding)
-		if err != nil {
-			return nil, err
-		}
-		resp.Timers[i] = info
+		resp.Tasks[i] = *p.NewDataBlob(row.Data, row.DataEncoding)
 	}
 
-	if len(resp.Timers) > request.BatchSize {
-		goVisibilityTimestamp := resp.Timers[request.BatchSize].VisibilityTime
-		if goVisibilityTimestamp == nil {
-			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTasks: time for page token is nil - TaskId '%v'", resp.Timers[request.BatchSize].TaskId))
-		}
-
+	if len(resp.Tasks) > request.BatchSize {
 		pageToken = &timerTaskPageToken{
-			TaskID:    resp.Timers[request.BatchSize].GetTaskId(),
-			Timestamp: *goVisibilityTimestamp,
+			TaskID:    rows[request.BatchSize].TaskID,
+			Timestamp: rows[request.BatchSize].VisibilityTimestamp,
 		}
-		resp.Timers = resp.Timers[:request.BatchSize]
+		resp.Tasks = resp.Tasks[:request.BatchSize]
 		nextToken, err := pageToken.serialize()
 		if err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTasks: error serializing page token: %v", err))
@@ -269,7 +247,7 @@ func (m *sqlExecutionStore) RangeCompleteTimerTask(
 
 func (m *sqlExecutionStore) GetReplicationTask(
 	request *persistence.GetReplicationTaskRequest,
-) (*persistence.GetReplicationTaskResponse, error) {
+) (*persistence.InternalGetReplicationTaskResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	rows, err := m.Db.SelectFromReplicationTasks(ctx, sqlplugin.ReplicationTasksFilter{
@@ -288,19 +266,13 @@ func (m *sqlExecutionStore) GetReplicationTask(
 	}
 
 	replicationRow := rows[0]
-	replicationInfo, err := serialization.ReplicationTaskInfoFromBlob(replicationRow.Data, replicationRow.DataEncoding)
-	if err != nil {
-		return nil, err
-	}
-
-	resp := &persistence.GetReplicationTaskResponse{ReplicationTaskInfo: replicationInfo}
-
+	resp := &persistence.InternalGetReplicationTaskResponse{Task: *p.NewDataBlob(replicationRow.Data, replicationRow.DataEncoding)}
 	return resp, nil
 }
 
 func (m *sqlExecutionStore) GetReplicationTasks(
 	request *p.GetReplicationTasksRequest,
-) (*p.GetReplicationTasksResponse, error) {
+) (*p.InternalGetReplicationTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	readLevel, maxReadLevelInclusive, err := getReadLevels(request)
@@ -319,7 +291,7 @@ func (m *sqlExecutionStore) GetReplicationTasks(
 	case nil:
 		return m.populateGetReplicationTasksResponse(rows, request.MaxTaskID)
 	case sql.ErrNoRows:
-		return &p.GetReplicationTasksResponse{}, nil
+		return &p.InternalGetReplicationTasksResponse{}, nil
 	default:
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetReplicationTasks operation failed. Select failed: %v", err))
 	}
@@ -343,26 +315,21 @@ func getReadLevels(
 func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
 	rows []sqlplugin.ReplicationTasksRow,
 	requestMaxReadLevel int64,
-) (*p.GetReplicationTasksResponse, error) {
+) (*p.InternalGetReplicationTasksResponse, error) {
 	if len(rows) == 0 {
-		return &p.GetReplicationTasksResponse{}, nil
+		return &p.InternalGetReplicationTasksResponse{}, nil
 	}
 
-	var tasks = make([]*persistencespb.ReplicationTaskInfo, len(rows))
+	var tasks = make([]commonpb.DataBlob, len(rows))
 	for i, row := range rows {
-		info, err := serialization.ReplicationTaskInfoFromBlob(row.Data, row.DataEncoding)
-		if err != nil {
-			return nil, err
-		}
-
-		tasks[i] = info
+		tasks[i] = *p.NewDataBlob(row.Data, row.DataEncoding)
 	}
 	var nextPageToken []byte
 	lastTaskID := rows[len(rows)-1].TaskID
 	if lastTaskID < requestMaxReadLevel {
 		nextPageToken = serializePageToken(lastTaskID)
 	}
-	return &p.GetReplicationTasksResponse{
+	return &p.InternalGetReplicationTasksResponse{
 		Tasks:         tasks,
 		NextPageToken: nextPageToken,
 	}, nil
@@ -371,26 +338,21 @@ func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
 func (m *sqlExecutionStore) populateGetReplicationDLQTasksResponse(
 	rows []sqlplugin.ReplicationDLQTasksRow,
 	requestMaxReadLevel int64,
-) (*p.GetReplicationTasksResponse, error) {
+) (*p.InternalGetReplicationTasksResponse, error) {
 	if len(rows) == 0 {
-		return &p.GetReplicationTasksResponse{}, nil
+		return &p.InternalGetReplicationTasksResponse{}, nil
 	}
 
-	var tasks = make([]*persistencespb.ReplicationTaskInfo, len(rows))
+	var tasks = make([]commonpb.DataBlob, len(rows))
 	for i, row := range rows {
-		info, err := serialization.ReplicationTaskInfoFromBlob(row.Data, row.DataEncoding)
-		if err != nil {
-			return nil, err
-		}
-
-		tasks[i] = info
+		tasks[i] = *p.NewDataBlob(row.Data, row.DataEncoding)
 	}
 	var nextPageToken []byte
 	lastTaskID := rows[len(rows)-1].TaskID
 	if lastTaskID < requestMaxReadLevel {
 		nextPageToken = serializePageToken(lastTaskID)
 	}
-	return &p.GetReplicationTasksResponse{
+	return &p.InternalGetReplicationTasksResponse{
 		Tasks:         tasks,
 		NextPageToken: nextPageToken,
 	}, nil
@@ -456,7 +418,7 @@ func (m *sqlExecutionStore) PutReplicationTaskToDLQ(
 
 func (m *sqlExecutionStore) GetReplicationTasksFromDLQ(
 	request *p.GetReplicationTasksFromDLQRequest,
-) (*p.GetReplicationTasksFromDLQResponse, error) {
+) (*p.InternalGetReplicationTasksFromDLQResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	readLevel, maxReadLevelInclusive, err := getReadLevels(&request.GetReplicationTasksRequest)
@@ -476,7 +438,7 @@ func (m *sqlExecutionStore) GetReplicationTasksFromDLQ(
 	case nil:
 		return m.populateGetReplicationDLQTasksResponse(rows, request.MaxTaskID)
 	case sql.ErrNoRows:
-		return &p.GetReplicationTasksResponse{}, nil
+		return &p.InternalGetReplicationTasksResponse{}, nil
 	default:
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetReplicationTasks operation failed. Select failed: %v", err))
 	}
@@ -515,7 +477,7 @@ func (m *sqlExecutionStore) RangeDeleteReplicationTaskFromDLQ(
 
 func (m *sqlExecutionStore) GetVisibilityTask(
 	request *persistence.GetVisibilityTaskRequest,
-) (*persistence.GetVisibilityTaskResponse, error) {
+) (*persistence.InternalGetVisibilityTaskResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	rows, err := m.Db.SelectFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksFilter{
@@ -534,19 +496,13 @@ func (m *sqlExecutionStore) GetVisibilityTask(
 	}
 
 	visibilityRow := rows[0]
-	visibilityInfo, err := serialization.VisibilityTaskInfoFromBlob(visibilityRow.Data, visibilityRow.DataEncoding)
-	if err != nil {
-		return nil, err
-	}
-
-	resp := &persistence.GetVisibilityTaskResponse{VisibilityTaskInfo: visibilityInfo}
-
+	resp := &persistence.InternalGetVisibilityTaskResponse{Task: *p.NewDataBlob(visibilityRow.Data, visibilityRow.DataEncoding)}
 	return resp, nil
 }
 
 func (m *sqlExecutionStore) GetVisibilityTasks(
 	request *p.GetVisibilityTasksRequest,
-) (*p.GetVisibilityTasksResponse, error) {
+) (*p.InternalGetVisibilityTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	rows, err := m.Db.RangeSelectFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksRangeFilter{
@@ -559,15 +515,10 @@ func (m *sqlExecutionStore) GetVisibilityTasks(
 			return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetVisibilityTasks operation failed. Select failed. Error: %v", err))
 		}
 	}
-	resp := &p.GetVisibilityTasksResponse{Tasks: make([]*persistencespb.VisibilityTaskInfo, len(rows))}
+	resp := &p.InternalGetVisibilityTasksResponse{Tasks: make([]commonpb.DataBlob, len(rows))}
 	for i, row := range rows {
-		info, err := serialization.VisibilityTaskInfoFromBlob(row.Data, row.DataEncoding)
-		if err != nil {
-			return nil, err
-		}
-		resp.Tasks[i] = info
+		resp.Tasks[i] = *p.NewDataBlob(row.Data, row.DataEncoding)
 	}
-
 	return resp, nil
 }
 

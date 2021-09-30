@@ -454,7 +454,7 @@ func (e *FaultInjectionExecutionStore) AddTasks(request *persistence.InternalAdd
 }
 
 func (e *FaultInjectionExecutionStore) GetTransferTask(request *persistence.GetTransferTaskRequest) (
-	*persistence.GetTransferTaskResponse,
+	*persistence.InternalGetTransferTaskResponse,
 	error,
 ) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
@@ -464,7 +464,7 @@ func (e *FaultInjectionExecutionStore) GetTransferTask(request *persistence.GetT
 }
 
 func (e *FaultInjectionExecutionStore) GetTransferTasks(request *persistence.GetTransferTasksRequest) (
-	*persistence.GetTransferTasksResponse,
+	*persistence.InternalGetTransferTasksResponse,
 	error,
 ) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
@@ -488,7 +488,7 @@ func (e *FaultInjectionExecutionStore) RangeCompleteTransferTask(request *persis
 }
 
 func (e *FaultInjectionExecutionStore) GetTimerTask(request *persistence.GetTimerTaskRequest) (
-	*persistence.GetTimerTaskResponse,
+	*persistence.InternalGetTimerTaskResponse,
 	error,
 ) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
@@ -497,14 +497,14 @@ func (e *FaultInjectionExecutionStore) GetTimerTask(request *persistence.GetTime
 	return e.baseExecutionStore.GetTimerTask(request)
 }
 
-func (e *FaultInjectionExecutionStore) GetTimerIndexTasks(request *persistence.GetTimerIndexTasksRequest) (
-	*persistence.GetTimerIndexTasksResponse,
+func (e *FaultInjectionExecutionStore) GetTimerTasks(request *persistence.GetTimerTasksRequest) (
+	*persistence.InternalGetTimerTasksResponse,
 	error,
 ) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return e.baseExecutionStore.GetTimerIndexTasks(request)
+	return e.baseExecutionStore.GetTimerTasks(request)
 }
 
 func (e *FaultInjectionExecutionStore) CompleteTimerTask(request *persistence.CompleteTimerTaskRequest) error {
@@ -522,7 +522,7 @@ func (e *FaultInjectionExecutionStore) RangeCompleteTimerTask(request *persisten
 }
 
 func (e *FaultInjectionExecutionStore) GetReplicationTask(request *persistence.GetReplicationTaskRequest) (
-	*persistence.GetReplicationTaskResponse,
+	*persistence.InternalGetReplicationTaskResponse,
 	error,
 ) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
@@ -532,7 +532,7 @@ func (e *FaultInjectionExecutionStore) GetReplicationTask(request *persistence.G
 }
 
 func (e *FaultInjectionExecutionStore) GetReplicationTasks(request *persistence.GetReplicationTasksRequest) (
-	*persistence.GetReplicationTasksResponse,
+	*persistence.InternalGetReplicationTasksResponse,
 	error,
 ) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
@@ -563,7 +563,7 @@ func (e *FaultInjectionExecutionStore) PutReplicationTaskToDLQ(request *persiste
 }
 
 func (e *FaultInjectionExecutionStore) GetReplicationTasksFromDLQ(request *persistence.GetReplicationTasksFromDLQRequest) (
-	*persistence.GetReplicationTasksFromDLQResponse,
+	*persistence.InternalGetReplicationTasksFromDLQResponse,
 	error,
 ) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
@@ -587,7 +587,7 @@ func (e *FaultInjectionExecutionStore) RangeDeleteReplicationTaskFromDLQ(request
 }
 
 func (e *FaultInjectionExecutionStore) GetVisibilityTask(request *persistence.GetVisibilityTaskRequest) (
-	*persistence.GetVisibilityTaskResponse,
+	*persistence.InternalGetVisibilityTaskResponse,
 	error,
 ) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
@@ -597,7 +597,7 @@ func (e *FaultInjectionExecutionStore) GetVisibilityTask(request *persistence.Ge
 }
 
 func (e *FaultInjectionExecutionStore) GetVisibilityTasks(request *persistence.GetVisibilityTasksRequest) (
-	*persistence.GetVisibilityTasksResponse,
+	*persistence.InternalGetVisibilityTasksResponse,
 	error,
 ) {
 	if err := e.ErrorGenerator.Generate(); err != nil {

@@ -56,19 +56,19 @@ func (s *TaskSerializer) SerializeTransferTasks(
 		var transferTask *persistencespb.TransferTaskInfo
 		switch task := task.(type) {
 		case *tasks.WorkflowTask:
-			transferTask = s.transferWorkflowTaskToProto(task)
+			transferTask = s.TransferWorkflowTaskToProto(task)
 		case *tasks.ActivityTask:
-			transferTask = s.transferActivityTaskToProto(task)
+			transferTask = s.TransferActivityTaskToProto(task)
 		case *tasks.CancelExecutionTask:
-			transferTask = s.transferRequestCancelTaskToProto(task)
+			transferTask = s.TransferRequestCancelTaskToProto(task)
 		case *tasks.SignalExecutionTask:
-			transferTask = s.transferSignalTaskToProto(task)
+			transferTask = s.TransferSignalTaskToProto(task)
 		case *tasks.StartChildExecutionTask:
-			transferTask = s.transferChildWorkflowTaskToProto(task)
+			transferTask = s.TransferChildWorkflowTaskToProto(task)
 		case *tasks.CloseExecutionTask:
-			transferTask = s.transferCloseTaskToProto(task)
+			transferTask = s.TransferCloseTaskToProto(task)
 		case *tasks.ResetWorkflowTask:
-			transferTask = s.transferResetTaskToProto(task)
+			transferTask = s.TransferResetTaskToProto(task)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown transfer task type: %v", task))
 		}
@@ -124,19 +124,19 @@ func (s *TaskSerializer) SerializeTimerTasks(
 		var timerTask *persistencespb.TimerTaskInfo
 		switch task := task.(type) {
 		case *tasks.WorkflowTaskTimeoutTask:
-			timerTask = s.timerWorkflowTaskToProto(task)
+			timerTask = s.TimerWorkflowTaskToProto(task)
 		case *tasks.WorkflowBackoffTimerTask:
-			timerTask = s.timerWorkflowDelayTaskToProto(task)
+			timerTask = s.TimerWorkflowDelayTaskToProto(task)
 		case *tasks.ActivityTimeoutTask:
-			timerTask = s.timerActivityTaskToProto(task)
+			timerTask = s.TimerActivityTaskToProto(task)
 		case *tasks.ActivityRetryTimerTask:
-			timerTask = s.timerActivityRetryTaskToProto(task)
+			timerTask = s.TimerActivityRetryTaskToProto(task)
 		case *tasks.UserTimerTask:
-			timerTask = s.timerUserTaskToProto(task)
+			timerTask = s.TimerUserTaskToProto(task)
 		case *tasks.WorkflowTimeoutTask:
-			timerTask = s.timerWorkflowRunToProto(task)
+			timerTask = s.TimerWorkflowRunToProto(task)
 		case *tasks.DeleteHistoryEventTask:
-			timerTask = s.timerWorkflowCleanupTaskToProto(task)
+			timerTask = s.TimerWorkflowCleanupTaskToProto(task)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown timer task type: %v", task))
 		}
@@ -192,13 +192,13 @@ func (s *TaskSerializer) SerializeVisibilityTasks(
 		var visibilityTask *persistencespb.VisibilityTaskInfo
 		switch task := task.(type) {
 		case *tasks.StartExecutionVisibilityTask:
-			visibilityTask = s.visibilityStartTaskToProto(task)
+			visibilityTask = s.VisibilityStartTaskToProto(task)
 		case *tasks.UpsertExecutionVisibilityTask:
-			visibilityTask = s.visibilityUpsertTaskToProto(task)
+			visibilityTask = s.VisibilityUpsertTaskToProto(task)
 		case *tasks.CloseExecutionVisibilityTask:
-			visibilityTask = s.visibilityCloseTaskToProto(task)
+			visibilityTask = s.VisibilityCloseTaskToProto(task)
 		case *tasks.DeleteExecutionVisibilityTask:
-			visibilityTask = s.visibilityDeleteTaskToProto(task)
+			visibilityTask = s.VisibilityDeleteTaskToProto(task)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown visibilit task type: %v", task))
 		}
@@ -248,9 +248,9 @@ func (s *TaskSerializer) SerializeReplicationTasks(
 		var replicationTask *persistencespb.ReplicationTaskInfo
 		switch task := task.(type) {
 		case *tasks.SyncActivityTask:
-			replicationTask = s.replicationActivityTaskToProto(task)
+			replicationTask = s.ReplicationActivityTaskToProto(task)
 		case *tasks.HistoryReplicationTask:
-			replicationTask = s.replicationHistoryTaskToProto(task)
+			replicationTask = s.ReplicationHistoryTaskToProto(task)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown repication task type: %v", task))
 		}
@@ -288,7 +288,7 @@ func (s *TaskSerializer) DeserializeReplicationTasks(
 	return taskSlice, nil
 }
 
-func (s *TaskSerializer) transferActivityTaskToProto(
+func (s *TaskSerializer) TransferActivityTaskToProto(
 	activityTask *tasks.ActivityTask,
 ) *persistencespb.TransferTaskInfo {
 	return &persistencespb.TransferTaskInfo{
@@ -326,7 +326,7 @@ func (s *TaskSerializer) transferActivityTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) transferWorkflowTaskToProto(
+func (s *TaskSerializer) TransferWorkflowTaskToProto(
 	workflowTask *tasks.WorkflowTask,
 ) *persistencespb.TransferTaskInfo {
 	return &persistencespb.TransferTaskInfo{
@@ -364,7 +364,7 @@ func (s *TaskSerializer) transferWorkflowTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) transferRequestCancelTaskToProto(
+func (s *TaskSerializer) TransferRequestCancelTaskToProto(
 	requestCancelTask *tasks.CancelExecutionTask,
 ) *persistencespb.TransferTaskInfo {
 	return &persistencespb.TransferTaskInfo{
@@ -404,7 +404,7 @@ func (s *TaskSerializer) transferRequestCancelTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) transferSignalTaskToProto(
+func (s *TaskSerializer) TransferSignalTaskToProto(
 	signalTask *tasks.SignalExecutionTask,
 ) *persistencespb.TransferTaskInfo {
 	return &persistencespb.TransferTaskInfo{
@@ -444,7 +444,7 @@ func (s *TaskSerializer) transferSignalTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) transferChildWorkflowTaskToProto(
+func (s *TaskSerializer) TransferChildWorkflowTaskToProto(
 	childWorkflowTask *tasks.StartChildExecutionTask,
 ) *persistencespb.TransferTaskInfo {
 	return &persistencespb.TransferTaskInfo{
@@ -482,7 +482,7 @@ func (s *TaskSerializer) transferChildWorkflowTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) transferCloseTaskToProto(
+func (s *TaskSerializer) TransferCloseTaskToProto(
 	closeTask *tasks.CloseExecutionTask,
 ) *persistencespb.TransferTaskInfo {
 	return &persistencespb.TransferTaskInfo{
@@ -517,7 +517,7 @@ func (s *TaskSerializer) transferCloseTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) transferResetTaskToProto(
+func (s *TaskSerializer) TransferResetTaskToProto(
 	resetTask *tasks.ResetWorkflowTask,
 ) *persistencespb.TransferTaskInfo {
 	return &persistencespb.TransferTaskInfo{
@@ -552,7 +552,7 @@ func (s *TaskSerializer) transferResetTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) timerWorkflowTaskToProto(
+func (s *TaskSerializer) TimerWorkflowTaskToProto(
 	workflowTimer *tasks.WorkflowTaskTimeoutTask,
 ) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
@@ -588,7 +588,7 @@ func (s *TaskSerializer) timerWorkflowTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) timerWorkflowDelayTaskToProto(
+func (s *TaskSerializer) TimerWorkflowDelayTaskToProto(
 	workflowDelayTimer *tasks.WorkflowBackoffTimerTask,
 ) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
@@ -622,7 +622,7 @@ func (s *TaskSerializer) timerWorkflowDelayTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) timerActivityTaskToProto(
+func (s *TaskSerializer) TimerActivityTaskToProto(
 	activityTimer *tasks.ActivityTimeoutTask,
 ) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
@@ -657,7 +657,7 @@ func (s *TaskSerializer) timerActivityTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) timerActivityRetryTaskToProto(
+func (s *TaskSerializer) TimerActivityRetryTaskToProto(
 	activityRetryTimer *tasks.ActivityRetryTimerTask,
 ) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
@@ -692,7 +692,7 @@ func (s *TaskSerializer) timerActivityRetryTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) timerUserTaskToProto(
+func (s *TaskSerializer) TimerUserTaskToProto(
 	userTimer *tasks.UserTimerTask,
 ) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
@@ -726,7 +726,7 @@ func (s *TaskSerializer) timerUserTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) timerWorkflowRunToProto(
+func (s *TaskSerializer) TimerWorkflowRunToProto(
 	workflowTimer *tasks.WorkflowTimeoutTask,
 ) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
@@ -759,7 +759,7 @@ func (s *TaskSerializer) timerWorkflowRunFromProto(
 	}
 }
 
-func (s *TaskSerializer) timerWorkflowCleanupTaskToProto(
+func (s *TaskSerializer) TimerWorkflowCleanupTaskToProto(
 	workflowCleanupTimer *tasks.DeleteHistoryEventTask,
 ) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
@@ -792,7 +792,7 @@ func (s *TaskSerializer) timerWorkflowCleanupTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) visibilityStartTaskToProto(
+func (s *TaskSerializer) VisibilityStartTaskToProto(
 	startVisibilityTask *tasks.StartExecutionVisibilityTask,
 ) *persistencespb.VisibilityTaskInfo {
 	return &persistencespb.VisibilityTaskInfo{
@@ -821,7 +821,7 @@ func (s *TaskSerializer) visibilityStartTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) visibilityUpsertTaskToProto(
+func (s *TaskSerializer) VisibilityUpsertTaskToProto(
 	upsertVisibilityTask *tasks.UpsertExecutionVisibilityTask,
 ) *persistencespb.VisibilityTaskInfo {
 	return &persistencespb.VisibilityTaskInfo{
@@ -850,7 +850,7 @@ func (s *TaskSerializer) visibilityUpsertTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) visibilityCloseTaskToProto(
+func (s *TaskSerializer) VisibilityCloseTaskToProto(
 	closetVisibilityTask *tasks.CloseExecutionVisibilityTask,
 ) *persistencespb.VisibilityTaskInfo {
 	return &persistencespb.VisibilityTaskInfo{
@@ -879,7 +879,7 @@ func (s *TaskSerializer) visibilityCloseTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) visibilityDeleteTaskToProto(
+func (s *TaskSerializer) VisibilityDeleteTaskToProto(
 	deleteVisibilityTask *tasks.DeleteExecutionVisibilityTask,
 ) *persistencespb.VisibilityTaskInfo {
 	return &persistencespb.VisibilityTaskInfo{
@@ -908,7 +908,7 @@ func (s *TaskSerializer) visibilityDeleteTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) replicationActivityTaskToProto(
+func (s *TaskSerializer) ReplicationActivityTaskToProto(
 	activityTask *tasks.SyncActivityTask,
 ) *persistencespb.ReplicationTaskInfo {
 	return &persistencespb.ReplicationTaskInfo{
@@ -942,7 +942,7 @@ func (s *TaskSerializer) replicationActivityTaskFromProto(
 	}
 }
 
-func (s *TaskSerializer) replicationHistoryTaskToProto(
+func (s *TaskSerializer) ReplicationHistoryTaskToProto(
 	historyTask *tasks.HistoryReplicationTask,
 ) *persistencespb.ReplicationTaskInfo {
 	return &persistencespb.ReplicationTaskInfo{
