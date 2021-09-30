@@ -49,8 +49,6 @@ type (
 	ReleaseCacheFunc func(err error)
 
 	Cache interface {
-		cache.Cache
-
 		GetOrCreateCurrentWorkflowExecution(
 			ctx context.Context,
 			namespaceID string,
