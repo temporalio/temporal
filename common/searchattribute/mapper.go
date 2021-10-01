@@ -58,6 +58,8 @@ func ApplyAliases(mapper Mapper, searchAttributes *commonpb.SearchAttributes, na
 		if err != nil {
 			if _, isInvalidArgument := err.(*serviceerror.InvalidArgument); isInvalidArgument {
 				// Silently ignore serviceerror.InvalidArgument because it indicates unmapped field (alias was deleted, for example).
+				// IMPORTANT: ApplyAliases should never return serviceerror.InvalidArgument because it is used by Poll API and the error
+				// goes through up to SDK, which shutdowns worker when it receives serviceerror.InvalidArgument as poll response.
 				continue
 			}
 			return err

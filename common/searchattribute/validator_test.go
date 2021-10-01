@@ -129,7 +129,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfValueLimit),
 		dynamicconfig.GetIntPropertyFilteredByNamespace(sizeOfTotalLimit))
 
-	namespace := "test"
+	namespace := "test-namespace"
 	var attr *commonpb.SearchAttributes
 
 	err := saValidator.Validate(attr, namespace, "")
@@ -146,7 +146,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 	err = saValidator.Validate(attr, namespace, "")
 	s.NoError(err)
 
-	err = saValidator.Validate(attr, "error", "")
+	err = saValidator.Validate(attr, "error-namespace", "")
 	s.Error(err)
 	s.EqualError(err, "mapper error")
 
@@ -156,7 +156,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 	attr = &commonpb.SearchAttributes{
 		IndexedFields: fields,
 	}
-	err = saValidator.Validate(attr, "namespace", "")
+	err = saValidator.Validate(attr, "test-namespace", "")
 	s.NoError(err)
 
 	fields = map[string]*commonpb.Payload{

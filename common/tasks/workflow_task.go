@@ -48,7 +48,7 @@ func (d *WorkflowTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
 
 func (d *WorkflowTask) GetKey() Key {
 	return Key{
-		FireTime: d.VisibilityTimestamp,
+		FireTime: time.Time{},
 		TaskID:   d.TaskID,
 	}
 }

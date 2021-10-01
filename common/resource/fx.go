@@ -54,17 +54,18 @@ import (
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/service/history/configs"
 )
 
 type (
-	SnTaggedLogger  log.Logger
-	ThrottledLogger log.Logger
-	ServiceName     string
-	HostName        string
-	InstanceID      string
+	SnTaggedLogger       log.Logger
+	ThrottledLogger      log.Logger
+	ThrottledLoggerRpsFn quotas.RateFn
+	ServiceName          string
+	HostName             string
+	InstanceID           string
 )
 
 var Module = fx.Options(
@@ -79,7 +80,6 @@ var Module = fx.Options(
 	fx.Provide(TimeSourceProvider),
 	fx.Provide(ClusterMetadataManagerProvider),
 	fx.Provide(PersistenceServiceResolverProvider),
-	fx.Provide(PersistenceMaxQpsProvider),
 	fx.Provide(AbstractDatastoreFactoryProvider),
 	fx.Provide(ClusterNameProvider),
 	fx.Provide(MetricsClientProvider),
@@ -113,11 +113,11 @@ func SnTaggedLoggerProvider(logger log.Logger, sn ServiceName) SnTaggedLogger {
 
 func ThrottledLoggerProvider(
 	logger SnTaggedLogger,
-	serviceConfig *configs.Config,
+	fn ThrottledLoggerRpsFn,
 ) ThrottledLogger {
 	return log.NewThrottledLogger(
 		logger,
-		func() float64 { return float64(serviceConfig.ThrottledLogRPS()) },
+		quotas.RateFn(fn),
 	)
 }
 
@@ -170,24 +170,6 @@ func PersistenceServiceResolverProvider(params *BootstrapParams) resolver.Servic
 
 func AbstractDatastoreFactoryProvider(params *BootstrapParams) persistenceClient.AbstractDataStoreFactory {
 	return params.AbstractDatastoreFactory
-}
-
-func PersistenceMaxQpsProvider(
-	serviceConfig *configs.Config,
-) persistenceClient.PersistenceMaxQps {
-	return func(...dynamicconfig.FilterOption) int {
-		// if persistenceGlobalMaxQPS() > 0 {
-		// 	// TODO: We have a bootstrap issue to correctly find memberCount.  Membership relies on
-		// 	// persistence to bootstrap membership ring, so we cannot have persistence rely on membership
-		// 	// as it will cause circular dependency.
-		// 	// ringSize, err := membershipMonitor.GetMemberCount(serviceName)
-		// 	// if err == nil && ringSize > 0 {
-		// 	// 	avgQuota := common.MaxInt(persistenceGlobalMaxQPS()/ringSize, 1)
-		// 	// 	return common.MinInt(avgQuota, persistenceMaxQPS())
-		// 	// }
-		// }
-		return serviceConfig.PersistenceMaxQPS()
-	}
 }
 
 func TimeSourceProvider() clock.TimeSource {
