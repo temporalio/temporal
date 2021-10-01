@@ -175,7 +175,7 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 		KeepAliveMinTime:                       dc.GetDurationProperty(dynamicconfig.KeepAliveMinTime, 10*time.Second),
 		KeepAlivePermitWithoutStream:           dc.GetBoolProperty(dynamicconfig.KeepAlivePermitWithoutStream, true),
 		KeepAliveMaxConnectionIdle:             dc.GetDurationProperty(dynamicconfig.KeepAliveMaxConnectionIdle, 2*time.Minute),
-		KeepAliveMaxConnectionAge:              dc.GetDurationProperty(dynamicconfig.KeepAliveMaxConnectionAge, 5*time.Minute),
+		KeepAliveMaxConnectionAge:              dc.GetDurationProperty(dynamicconfig.KeepAliveMaxConnectionAge, 0), // default to infinity
 		KeepAliveMaxConnectionAgeGrace:         dc.GetDurationProperty(dynamicconfig.KeepAliveMaxConnectionAgeGrace, 70*time.Second),
 		KeepAliveTime:                          dc.GetDurationProperty(dynamicconfig.KeepAliveTime, 1*time.Minute),
 		KeepAliveTimeout:                       dc.GetDurationProperty(dynamicconfig.KeepAliveTimeout, 10*time.Second),
