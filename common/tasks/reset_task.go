@@ -26,15 +26,22 @@ package tasks
 
 import (
 	"time"
+
+	"go.temporal.io/server/common/definition"
 )
 
 type (
 	ResetWorkflowTask struct {
+		definition.WorkflowIdentifier
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
 	}
 )
+
+func (a *ResetWorkflowTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
+	return a.WorkflowIdentifier
+}
 
 func (a *ResetWorkflowTask) GetKey() Key {
 	return Key{

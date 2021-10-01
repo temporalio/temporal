@@ -206,11 +206,13 @@ func (s *visibilityStore) addBulkRequestAndWait(bulkRequest *client.BulkableRequ
 	select {
 	case ack := <-ackCh:
 		if !ack {
-			return newVisibilityTaskNAckError(visibilityTaskKey)
+			// Returns non-retryable Internal error here because NACK from bulk processor means that this request can't be processed.
+			// Visibility task processor retries all errors though, therefore new request will be generated for the same task.
+			return serviceerror.NewInternal(fmt.Sprintf("visibility task %s received NACK", visibilityTaskKey))
 		}
 		return nil
 	case <-ackTimeoutTimer.C:
-		return newVisibilityTaskAckTimeoutError(visibilityTaskKey, s.processorAckTimeout())
+		return &persistence.TimeoutError{Msg: fmt.Sprintf("visibility task %s timedout waiting for ACK after %v", visibilityTaskKey, s.processorAckTimeout())}
 	}
 }
 

@@ -120,7 +120,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().Id
+	namespaceID := namespaceEntry.ID()
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: req.WorkflowExecution.WorkflowId,
@@ -165,7 +165,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 	if err != nil {
 		return nil, err
 	}
-	namespaceID := namespaceEntry.GetInfo().Id
+	namespaceID := namespaceEntry.ID()
 
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: req.WorkflowExecution.WorkflowId,
@@ -235,7 +235,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			}
 
 			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(*workflowTask.ScheduledTime)
-			namespaceName := namespaceEntry.GetInfo().GetName()
+			namespaceName := namespaceEntry.Name()
 			taskQueue := workflowTask.TaskQueue
 			metrics.GetPerTaskQueueScope(metricsScope, namespaceName, taskQueue.GetName(), taskQueue.GetKind()).
 				Tagged(metrics.TaskTypeTag("workflow")).
@@ -263,7 +263,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.GetInfo().Id
+	namespaceID := namespaceEntry.ID()
 
 	request := req.FailedRequest
 	token, err := handler.tokenSerializer.Deserialize(request.TaskToken)
@@ -312,7 +312,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
-	namespaceID := namespaceEntry.GetInfo().Id
+	namespaceID := namespaceEntry.ID()
 
 	request := req.CompleteRequest
 	token, err0 := handler.tokenSerializer.Deserialize(request.TaskToken)
@@ -370,7 +370,7 @@ Update_History_Loop:
 		}
 
 		startedID := currentWorkflowTask.StartedID
-		maxResetPoints := handler.config.MaxAutoResetPoints(namespaceEntry.GetInfo().Name)
+		maxResetPoints := handler.config.MaxAutoResetPoints(namespaceEntry.Name())
 		if msBuilder.GetExecutionInfo().AutoResetPoints != nil && maxResetPoints == len(msBuilder.GetExecutionInfo().AutoResetPoints.Points) {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.AutoResetPointsLimitExceededCounter)
 		}
@@ -379,7 +379,7 @@ Update_History_Loop:
 		var workflowTaskHeartbeatTimeout bool
 		var completedEvent *historypb.HistoryEvent
 		if workflowTaskHeartbeating {
-			namespace := namespaceEntry.GetInfo().Name
+			namespace := namespaceEntry.Name()
 			timeout := handler.config.WorkflowTaskHeartbeatTimeout(namespace)
 			origSchedTime := timestamp.TimeValue(currentWorkflowTask.OriginalScheduledTime)
 			if origSchedTime.UnixNano() > 0 && handler.timeSource.Now().After(origSchedTime.Add(timeout)) {
@@ -424,10 +424,10 @@ Update_History_Loop:
 		}
 
 		binChecksum := request.GetBinaryChecksum()
-		if _, ok := namespaceEntry.GetConfig().GetBadBinaries().GetBinaries()[binChecksum]; ok {
+		if err := namespaceEntry.VerifyBinaryChecksum(binChecksum); err != nil {
 			wtFailedCause = NewWorkflowTaskFailedCause(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY, serviceerror.NewInvalidArgument(fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum)))
 		} else {
-			namespace := namespaceEntry.GetInfo().Name
+			namespace := namespaceEntry.Name()
 			workflowSizeChecker := newWorkflowSizeChecker(
 				handler.config.BlobSizeLimitWarn(namespace),
 				handler.config.BlobSizeLimitError(namespace),
@@ -678,14 +678,14 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 		return
 	}
 
-	namespaceID := namespaceEntry.GetInfo().Id
-	namespace := namespaceEntry.GetInfo().Name
+	namespaceID := namespaceEntry.ID()
+	namespace := namespaceEntry.Name()
 	workflowID := msBuilder.GetExecutionInfo().WorkflowId
 	runID := msBuilder.GetExecutionState().GetRunId()
 
 	scope := handler.metricsClient.Scope(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.NamespaceTag(namespaceEntry.GetInfo().Name),
+		metrics.NamespaceTag(namespaceEntry.Name()),
 		metrics.CommandTypeTag("ConsistentQuery"))
 
 	// if its a heartbeat workflow task it means local activities may still be running on the worker

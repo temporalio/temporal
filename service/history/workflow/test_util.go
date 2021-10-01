@@ -29,6 +29,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -37,11 +38,12 @@ import (
 func TestLocalMutableState(
 	shard shard.Context,
 	eventsCache events.Cache,
+	ns *namespace.CacheEntry,
 	logger log.Logger,
 	runID string,
 ) *MutableStateImpl {
 
-	msBuilder := NewMutableState(shard, eventsCache, logger, tests.LocalNamespaceEntry, time.Now().UTC())
+	msBuilder := NewMutableState(shard, eventsCache, logger, ns, time.Now().UTC())
 	msBuilder.GetExecutionInfo().ExecutionTime = msBuilder.GetExecutionInfo().StartTime
 	_ = msBuilder.SetHistoryTree(runID)
 

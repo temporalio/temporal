@@ -26,10 +26,13 @@ package tasks
 
 import (
 	"time"
+
+	"go.temporal.io/server/common/definition"
 )
 
 type (
 	ActivityRetryTimerTask struct {
+		definition.WorkflowIdentifier
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		EventID             int64
@@ -37,6 +40,10 @@ type (
 		Attempt             int32
 	}
 )
+
+func (r *ActivityRetryTimerTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
+	return r.WorkflowIdentifier
+}
 
 func (r *ActivityRetryTimerTask) GetKey() Key {
 	return Key{

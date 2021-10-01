@@ -85,6 +85,13 @@ type (
 		apply(*persistence.GetNamespaceResponse)
 	}
 
+	// BadBinaryError is an error type carrying additional information about
+	// when/why/who configured a given checksum as being bad.
+	BadBinaryError struct {
+		cksum string
+		info  *namespacepb.BadBinaryInfo
+	}
+
 	ClusterInfo interface {
 		IsGlobalNamespaceEnabled() bool
 		GetCurrentClusterName() string
@@ -629,16 +636,16 @@ func (entry *CacheEntry) duplicate() *CacheEntry {
 	result := newCacheEntry(entry.thisCluster)
 	result.info = proto.Clone(entry.info).(*persistencespb.NamespaceInfo)
 	if result.info.Data == nil {
-		result.info.Data = make(map[string]string, 0)
+		result.info.Data = make(map[string]string)
 	}
 
 	result.config = proto.Clone(entry.config).(*persistencespb.NamespaceConfig)
 	if result.config.BadBinaries == nil {
 		result.config.BadBinaries = &namespacepb.BadBinaries{
-			Binaries: make(map[string]*namespacepb.BadBinaryInfo, 0),
+			Binaries: make(map[string]*namespacepb.BadBinaryInfo),
 		}
 	} else if result.config.BadBinaries.Binaries == nil {
-		result.config.BadBinaries.Binaries = make(map[string]*namespacepb.BadBinaryInfo, 0)
+		result.config.BadBinaries.Binaries = make(map[string]*namespacepb.BadBinaryInfo)
 	}
 
 	result.replicationConfig = proto.Clone(entry.replicationConfig).(*persistencespb.NamespaceReplicationConfig)
@@ -652,14 +659,46 @@ func (entry *CacheEntry) duplicate() *CacheEntry {
 	return result
 }
 
-// GetInfo return the namespace info
-func (entry *CacheEntry) GetInfo() *persistencespb.NamespaceInfo {
-	return entry.info
+// VisibilityArchivalState observes the visibility archive configuration (state
+// and URI) for this namespace.
+func (entry *CacheEntry) VisibilityArchivalState() ArchivalState {
+	return ArchivalState{
+		State: entry.config.VisibilityArchivalState,
+		URI:   entry.config.VisibilityArchivalUri,
+	}
 }
 
-// GetConfig return the namespace config
-func (entry *CacheEntry) GetConfig() *persistencespb.NamespaceConfig {
-	return entry.config
+// HistoryArchivalState observes the history archive configuration (state and
+// URI) for this namespace.
+func (entry *CacheEntry) HistoryArchivalState() ArchivalState {
+	return ArchivalState{
+		State: entry.config.HistoryArchivalState,
+		URI:   entry.config.HistoryArchivalUri,
+	}
+}
+
+// VerifyBinaryChecksum returns an error if the provided checksum is one of this
+// namespace's configured bad binary checksums. The returned error (if any) will
+// be unwrappable as BadBinaryError.
+func (entry *CacheEntry) VerifyBinaryChecksum(cksum string) error {
+	if entry.config.BadBinaries == nil ||
+		entry.config.BadBinaries.Binaries == nil {
+		return nil
+	}
+	if info, ok := entry.config.BadBinaries.Binaries[cksum]; ok {
+		return BadBinaryError{cksum: cksum, info: info}
+	}
+	return nil
+}
+
+// ID observes this namespace's permanent unique identifier in string form.
+func (entry *CacheEntry) ID() string {
+	return entry.info.Id
+}
+
+// Name observes this namespace's configured name.
+func (entry *CacheEntry) Name() string {
+	return entry.info.Name
 }
 
 // ActiveClusterName observes the name of the cluster that is currently active
@@ -817,4 +856,29 @@ func (entry *CacheEntry) IsSampledForLongerRetention(
 		}
 	}
 	return false
+}
+
+// Error returns the reason associated with this bad binary.
+func (e BadBinaryError) Error() string {
+	return e.info.Reason
+}
+
+// Reason returns the reason associated with this bad binary.
+func (e BadBinaryError) Reason() string {
+	return e.info.Reason
+}
+
+// Operator returns the operator associated with this bad binary.
+func (e BadBinaryError) Operator() string {
+	return e.info.Operator
+}
+
+// Created returns the time at which this bad binary was declared to be bad.
+func (e BadBinaryError) Created() time.Time {
+	return *e.info.CreateTime
+}
+
+// Checksum observes the binary checksum that caused this error.
+func (e BadBinaryError) Checksum() string {
+	return e.cksum
 }

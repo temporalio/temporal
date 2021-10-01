@@ -263,7 +263,7 @@ func (n *NDCHistoryResenderImpl) getHistory(
 		logger.Error("error getting namespace", tag.Error(err))
 		return nil, err
 	}
-	namespace := namespaceEntry.GetInfo().Name
+	namespace := namespaceEntry.Name()
 
 	ctx, cancel := rpc.NewContextFromParentWithTimeoutAndHeaders(ctx, resendContextTimeout)
 	defer cancel()

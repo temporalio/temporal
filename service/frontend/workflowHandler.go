@@ -776,7 +776,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	if err != nil {
 		return nil, err
 	}
-	namespaceID := namespaceEntry.GetInfo().Id
+	namespaceID := namespaceEntry.ID()
 
 	wh.GetLogger().Debug("Poll workflow task queue.", tag.WorkflowNamespace(namespace), tag.WorkflowNamespaceID(namespaceID))
 	if err := wh.checkBadBinary(namespaceEntry, request.GetBinaryChecksum()); err != nil {
@@ -862,7 +862,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 		return nil, err
 	}
 
-	namespaceName := namespaceEntry.GetInfo().Name
+	namespaceName := namespaceEntry.Name()
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
@@ -946,7 +946,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 		return nil, err
 	}
 
-	namespaceName := namespaceEntry.GetInfo().Name
+	namespaceName := namespaceEntry.Name()
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
@@ -960,8 +960,8 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 		return nil, errIdentityTooLong
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.GetInfo().Name)
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name())
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name())
 
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetFailure().Size(),
@@ -1140,8 +1140,8 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		return nil, errShuttingDown
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.GetInfo().Name)
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name())
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name())
 
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetDetails().Size(),
@@ -1238,8 +1238,8 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		return nil, err
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.GetInfo().Name)
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name())
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name())
 
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetDetails().Size(),
@@ -1324,7 +1324,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 		return nil, errIdentityTooLong
 	}
 
-	namespaceName := namespaceEntry.GetInfo().Name
+	namespaceName := namespaceEntry.Name()
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
@@ -1334,8 +1334,8 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 		return nil, err
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.GetInfo().Name)
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name())
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name())
 
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetResult().Size(),
@@ -1434,8 +1434,8 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		return nil, err
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.GetInfo().Name)
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name())
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name())
 
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetResult().Size(),
@@ -1521,7 +1521,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		return nil, errFailureMustHaveApplicationFailureInfo
 	}
 
-	namespaceName := namespaceEntry.GetInfo().Name
+	namespaceName := namespaceEntry.Name()
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
@@ -1535,8 +1535,8 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		return nil, errIdentityTooLong
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.GetInfo().Name)
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name())
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name())
 
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetFailure().Size(),
@@ -1623,8 +1623,8 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		return nil, err
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.GetInfo().Name)
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name())
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name())
 
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetFailure().Size(),
@@ -1693,7 +1693,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		return nil, err
 	}
 
-	namespaceName := namespaceEntry.GetInfo().Name
+	namespaceName := namespaceEntry.Name()
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
@@ -1707,8 +1707,8 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		return nil, errIdentityTooLong
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.GetInfo().Name)
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name())
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name())
 
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetDetails().Size(),
@@ -1806,8 +1806,8 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		return nil, err
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.GetInfo().Name)
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name())
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name())
 
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetDetails().Size(),
@@ -2466,11 +2466,11 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		return nil, err
 	}
 
-	if entry.GetConfig().VisibilityArchivalState != enumspb.ARCHIVAL_STATE_ENABLED {
+	if entry.VisibilityArchivalState().State != enumspb.ARCHIVAL_STATE_ENABLED {
 		return nil, errNamespaceIsNotConfiguredForVisibilityArchival
 	}
 
-	URI, err := archiver.NewURI(entry.GetConfig().VisibilityArchivalUri)
+	URI, err := archiver.NewURI(entry.VisibilityArchivalState().URI)
 	if err != nil {
 		return nil, err
 	}
@@ -2481,7 +2481,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 	}
 
 	archiverRequest := &archiver.QueryVisibilityRequest{
-		NamespaceID:   entry.GetInfo().Id,
+		NamespaceID:   entry.ID(),
 		PageSize:      int(request.GetPageSize()),
 		NextPageToken: request.NextPageToken,
 		Query:         request.GetQuery(),
@@ -2665,7 +2665,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 		return nil, err
 	}
 
-	namespaceName := namespaceEntry.GetInfo().Name
+	namespaceName := namespaceEntry.Name()
 
 	if wh.isStopped() {
 		return nil, errShuttingDown
@@ -2675,8 +2675,8 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 		return nil, err
 	}
 
-	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.GetInfo().Name)
-	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.GetInfo().Name)
+	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name())
+	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name())
 
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetQueryResult().Size(),
@@ -3242,11 +3242,11 @@ func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 		history, persistenceToken, err = wh.getHistory(
 			wh.metricsScope(ctx),
 			namespaceID,
-			namespace.GetInfo().GetName(),
+			namespace.Name(),
 			*matchingResp.GetWorkflowExecution(),
 			firstEventID,
 			nextEventID,
-			int32(wh.config.HistoryMaxPageSize(namespace.GetInfo().GetName())),
+			int32(wh.config.HistoryMaxPageSize(namespace.Name())),
 			nil,
 			matchingResp.GetWorkflowTaskInfo(),
 			branchToken,
@@ -3381,7 +3381,7 @@ func (wh *WorkflowHandler) getArchivedHistory(
 		return nil, err
 	}
 
-	URIString := entry.GetConfig().HistoryArchivalUri
+	URIString := entry.HistoryArchivalState().URI
 	if URIString == "" {
 		// if URI is empty, it means the namespace has never enabled for archival.
 		// the error is not "workflow has passed retention period", because
@@ -3451,13 +3451,8 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, namespaceI
 }
 
 func (wh *WorkflowHandler) checkBadBinary(namespaceEntry *namespace.CacheEntry, binaryChecksum string) error {
-	if namespaceEntry.GetConfig().BadBinaries.Binaries != nil {
-		badBinaries := namespaceEntry.GetConfig().BadBinaries.Binaries
-		_, ok := badBinaries[binaryChecksum]
-		if ok {
-			wh.GetMetricsClient().IncCounter(metrics.FrontendPollWorkflowTaskQueueScope, metrics.ServiceErrBadBinaryCounter)
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("Binary %v already marked as bad deployment.", binaryChecksum))
-		}
+	if err := namespaceEntry.VerifyBinaryChecksum(binaryChecksum); err != nil {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("Binary %v already marked as bad deployment.", binaryChecksum))
 	}
 	return nil
 }

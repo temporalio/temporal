@@ -147,6 +147,7 @@ func (s *processorSuite) TestAdd() {
 
 	// handle duplicate
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
+	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorDuplicateRequest)
 	ackCh2 := s.esProcessor.Add(request, visibilityTaskKey)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
 	select {
@@ -200,6 +201,7 @@ func (s *processorSuite) TestAdd_ConcurrentAdd_Duplicates() {
 	ackChs := make([]<-chan bool, duplicates)
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, gomock.Any()).Times(1)
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any()).Times(duplicates - 1)
+	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorDuplicateRequest).Times(duplicates - 1)
 
 	wg := sync.WaitGroup{}
 	wg.Add(duplicates)

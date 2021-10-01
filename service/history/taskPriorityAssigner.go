@@ -129,9 +129,9 @@ func (a *taskPriorityAssignerImpl) getNamespaceInfo(
 	}
 
 	if namespaceEntry.IsGlobalNamespace() && a.currentClusterName != namespaceEntry.ActiveClusterName() {
-		return namespaceEntry.GetInfo().Name, false, nil
+		return namespaceEntry.Name(), false, nil
 	}
-	return namespaceEntry.GetInfo().Name, true, nil
+	return namespaceEntry.Name(), true, nil
 }
 
 func (a *taskPriorityAssignerImpl) getRateLimiter(

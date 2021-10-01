@@ -175,7 +175,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 		return policy.currentClusterName, false
 	}
 
-	if !policy.config.EnableNamespaceNotActiveAutoForwarding(namespaceEntry.GetInfo().Name) {
+	if !policy.config.EnableNamespaceNotActiveAutoForwarding(namespaceEntry.Name()) {
 		// do not do dc redirection if auto-forwarding dynamic config flag is not enabled
 		return policy.currentClusterName, false
 	}

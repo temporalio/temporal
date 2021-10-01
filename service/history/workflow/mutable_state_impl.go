@@ -383,6 +383,14 @@ func (e *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState {
 	return proto.Clone(ms).(*persistencespb.WorkflowMutableState)
 }
 
+func (e *MutableStateImpl) GetWorkflowIdentifier() definition.WorkflowIdentifier {
+	return definition.NewWorkflowIdentifier(
+		e.executionInfo.NamespaceId,
+		e.executionInfo.WorkflowId,
+		e.executionState.RunId,
+	)
+}
+
 func (e *MutableStateImpl) GetCurrentBranchToken() ([]byte, error) {
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
 	if err != nil {
@@ -1300,7 +1308,7 @@ func (e *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.New(),
-		Namespace:                e.namespaceEntry.GetInfo().Name,
+		Namespace:                e.namespaceEntry.Name(),
 		WorkflowId:               execution.WorkflowId,
 		TaskQueue:                tq,
 		WorkflowType:             wType,
@@ -1318,7 +1326,7 @@ func (e *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
 
 	req := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:              e.namespaceEntry.GetInfo().Id,
+		NamespaceId:              e.namespaceEntry.ID(),
 		StartRequest:             createRequest,
 		ParentExecutionInfo:      parentExecutionInfo,
 		LastCompletionResult:     command.LastCompletionResult,
@@ -1434,7 +1442,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	e.executionState.CreateRequestId = requestID
 	e.executionState.RunId = execution.GetRunId()
-	e.executionInfo.NamespaceId = e.namespaceEntry.GetInfo().Id
+	e.executionInfo.NamespaceId = e.namespaceEntry.ID()
 	e.executionInfo.WorkflowId = execution.GetWorkflowId()
 	e.executionInfo.FirstExecutionRunId = event.GetFirstExecutionRunId()
 	e.executionInfo.TaskQueue = event.TaskQueue.GetName()
@@ -1810,7 +1818,7 @@ func (e *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 		if err != nil {
 			return nil, err
 		}
-		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
+		targetNamespaceID = targetNamespaceEntry.ID()
 	}
 
 	scheduleEventID := event.GetEventId()
@@ -4008,11 +4016,12 @@ func (e *MutableStateImpl) eventsToReplicationTask(
 	}
 
 	replicationTask := &tasks.HistoryReplicationTask{
-		FirstEventID:      firstEvent.GetEventId(),
-		NextEventID:       lastEvent.GetEventId() + 1,
-		Version:           firstEvent.GetVersion(),
-		BranchToken:       currentBranchToken,
-		NewRunBranchToken: nil,
+		WorkflowIdentifier: e.GetWorkflowIdentifier(),
+		FirstEventID:       firstEvent.GetEventId(),
+		NextEventID:        lastEvent.GetEventId() + 1,
+		Version:            firstEvent.GetVersion(),
+		BranchToken:        currentBranchToken,
+		NewRunBranchToken:  nil,
 	}
 
 	if e.executionInfo.GetVersionHistories() == nil {
@@ -4032,6 +4041,11 @@ func (e *MutableStateImpl) syncActivityToReplicationTask(
 	}
 
 	return convertSyncActivityInfos(
+		definition.NewWorkflowIdentifier(
+			e.executionInfo.NamespaceId,
+			e.executionInfo.WorkflowId,
+			e.executionState.RunId,
+		),
 		e.pendingActivityInfoIDs,
 		e.syncActivityTasks,
 	)
@@ -4132,7 +4146,7 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskTTL() {
 		return
 	}
 
-	ttl := e.config.StickyTTL(e.GetNamespaceEntry().GetInfo().Name)
+	ttl := e.config.StickyTTL(e.GetNamespaceEntry().Name())
 	expired := e.timeSource.Now().After(timestamp.TimeValue(e.executionInfo.LastUpdateTime).Add(ttl))
 	if expired && !e.HasPendingWorkflowTask() {
 		e.ClearStickyness()
@@ -4305,7 +4319,7 @@ func (e *MutableStateImpl) closeTransactionHandleWorkflowReset(
 	}
 	if _, pt := FindAutoResetPoint(
 		e.timeSource,
-		namespaceEntry.GetConfig().BadBinaries,
+		namespaceEntry.VerifyBinaryChecksum,
 		e.GetExecutionInfo().AutoResetPoints,
 	); pt != nil {
 		if err := e.taskGenerator.GenerateWorkflowResetTasks(
@@ -4314,7 +4328,7 @@ func (e *MutableStateImpl) closeTransactionHandleWorkflowReset(
 			return err
 		}
 		e.logInfo("Auto-Reset task is scheduled",
-			tag.WorkflowNamespace(namespaceEntry.GetInfo().Name),
+			tag.WorkflowNamespace(namespaceEntry.Name()),
 			tag.WorkflowID(e.executionInfo.WorkflowId),
 			tag.WorkflowRunID(e.executionState.RunId),
 			tag.WorkflowResetBaseRunID(pt.GetRunId()),
@@ -4379,14 +4393,14 @@ func (e *MutableStateImpl) shouldGenerateChecksum() bool {
 	if e.namespaceEntry == nil {
 		return false
 	}
-	return rand.Intn(100) < e.config.MutableStateChecksumGenProbability(e.namespaceEntry.GetInfo().Name)
+	return rand.Intn(100) < e.config.MutableStateChecksumGenProbability(e.namespaceEntry.Name())
 }
 
 func (e *MutableStateImpl) shouldVerifyChecksum() bool {
 	if e.namespaceEntry == nil {
 		return false
 	}
-	return rand.Intn(100) < e.config.MutableStateChecksumVerifyProbability(e.namespaceEntry.GetInfo().Name)
+	return rand.Intn(100) < e.config.MutableStateChecksumVerifyProbability(e.namespaceEntry.Name())
 }
 
 func (e *MutableStateImpl) shouldInvalidateCheckum() bool {

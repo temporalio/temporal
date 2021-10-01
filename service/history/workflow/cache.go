@@ -49,8 +49,6 @@ type (
 	ReleaseCacheFunc func(err error)
 
 	Cache interface {
-		cache.Cache
-
 		GetOrCreateCurrentWorkflowExecution(
 			ctx context.Context,
 			namespaceID string,
@@ -73,6 +71,8 @@ type (
 		metricsClient    metrics.Client
 		config           *configs.Config
 	}
+
+	NewCacheFn func(shard shard.Context) Cache
 )
 
 var NoopReleaseFn ReleaseCacheFunc = func(err error) {}

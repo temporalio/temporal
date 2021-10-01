@@ -22,41 +22,21 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package elasticsearch
+package workflow
 
 import (
-	"fmt"
-	"time"
+	"go.uber.org/fx"
+
+	"go.temporal.io/server/service/history/shard"
 )
 
-type (
-	VisibilityTaskNAckError struct {
-		VisibilityTaskKey string
-	}
-
-	VisibilityTaskAckTimeoutError struct {
-		VisibilityTaskKey string
-		Timeout           time.Duration
-	}
+var Module = fx.Options(
+	fx.Provide(NewCacheFnProvider),
 )
 
-func newVisibilityTaskNAckError(visibilityTaskKey string) error {
-	return &VisibilityTaskNAckError{
-		VisibilityTaskKey: visibilityTaskKey,
+// NewCacheFnProvider provide a NewCacheFn that can be used to create new workflow cache.
+func NewCacheFnProvider() NewCacheFn {
+	return func(shard shard.Context) Cache {
+		return NewCache(shard)
 	}
-}
-
-func (v *VisibilityTaskNAckError) Error() string {
-	return fmt.Sprintf("visibility task %s received NACK", v.VisibilityTaskKey)
-}
-
-func newVisibilityTaskAckTimeoutError(visibilityTaskKey string, timeout time.Duration) error {
-	return &VisibilityTaskAckTimeoutError{
-		VisibilityTaskKey: visibilityTaskKey,
-		Timeout:           timeout,
-	}
-}
-
-func (v *VisibilityTaskAckTimeoutError) Error() string {
-	return fmt.Sprintf("visibility task %s timedout waiting for ACK after %v", v.VisibilityTaskKey, v.Timeout)
 }

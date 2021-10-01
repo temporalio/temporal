@@ -44,9 +44,12 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 var Module = fx.Options(
+	resource.Module,
+	workflow.Module,
 	fx.Provide(ParamsExpandProvider), // BootstrapParams should be deprecated
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
@@ -55,7 +58,6 @@ var Module = fx.Options(
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(ESProcessorConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
-	resource.Module,
 	fx.Provide(NewService),
 	fx.Invoke(ServiceLifetimeHooks),
 )
@@ -83,18 +85,6 @@ func ConfigProvider(
 		persistenceConfig.NumHistoryShards,
 		persistenceConfig.AdvancedVisibilityConfigExist(),
 		esConfig.GetVisibilityIndex())
-}
-
-func ResourceProvider(
-	params *resource.BootstrapParams,
-	serviceConfig *configs.Config) (resource.Resource, error) {
-	return resource.New(
-		params,
-		common.HistoryServiceName,
-		serviceConfig.PersistenceGlobalMaxQPS,
-		serviceConfig.PersistenceGlobalMaxQPS,
-		serviceConfig.ThrottledLogRPS,
-	)
 }
 
 func TelemetryInterceptorProvider(
@@ -178,15 +168,6 @@ func VisibilityManagerProvider(
 		params.MetricsClient,
 		params.Logger,
 	)
-}
-
-func ServiceProvider(
-	serviceResource resource.Resource,
-	grpcServerOptions []grpc.ServerOption,
-	serviceConfig *configs.Config,
-	visibilityMgr manager.VisibilityManager,
-) *Service {
-	return NewService(serviceResource, grpcServerOptions, serviceConfig, visibilityMgr)
 }
 
 func ServiceLifetimeHooks(
