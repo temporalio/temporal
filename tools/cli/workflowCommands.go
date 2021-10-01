@@ -188,7 +188,8 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	taskQueue := getRequiredOption(c, FlagTaskQueue)
 	workflowType := getRequiredOption(c, FlagWorkflowType)
-	et := c.Int(FlagExecutionTimeout)
+	et := c.Int(FlagWorkflowExecutionTimeout)
+	rt := c.Int(FlagWorkflowRunTimeout)
 	dt := c.Int(FlagWorkflowTaskTimeout)
 	wid := c.String(FlagWorkflowID)
 	if len(wid) == 0 {
@@ -209,6 +210,7 @@ func startWorkflowHelper(c *cli.Context, shouldPrintProgress bool) {
 		TaskQueue:                taskQueue,
 		WorkflowExecutionTimeout: time.Duration(et) * time.Second,
 		WorkflowTaskTimeout:      time.Duration(dt) * time.Second,
+		WorkflowRunTimeout:       time.Duration(rt) * time.Second,
 		WorkflowIDReusePolicy:    reusePolicy,
 	}
 	if c.IsSet(FlagCronSchedule) {
