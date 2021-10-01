@@ -185,8 +185,8 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 		return nil
 	})
 	if !isDup {
-		ackCh.add(p.metricsClient)
 		p.bulkProcessor.Add(request)
+		ackCh.recordAdd(p.metricsClient)
 	}
 	return ackCh.ackChInternal
 }
@@ -207,7 +207,7 @@ func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableReq
 			if !ok {
 				p.logger.Fatal(fmt.Sprintf("mapToAckChan has item of a wrong type %T (%T expected).", value, &ackChan{}), tag.Value(key))
 			}
-			ackCh.start(p.metricsClient)
+			ackCh.recordStart(p.metricsClient)
 			return nil
 		})
 	}
@@ -401,12 +401,12 @@ func newAckChan() *ackChan {
 	}
 }
 
-func (a *ackChan) add(metricsClient metrics.Client) {
+func (a *ackChan) recordAdd(metricsClient metrics.Client) {
 	a.addedAt = time.Now().UTC()
 	metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, a.addedAt.Sub(a.createdAt))
 }
 
-func (a *ackChan) start(metricsClient metrics.Client) {
+func (a *ackChan) recordStart(metricsClient metrics.Client) {
 	a.startedAt = time.Now().UTC()
 	metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitStartLatency, a.startedAt.Sub(a.addedAt))
 }

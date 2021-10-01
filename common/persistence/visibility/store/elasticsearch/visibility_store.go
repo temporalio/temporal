@@ -199,6 +199,8 @@ func (s *visibilityStore) addBulkIndexRequestAndWait(
 func (s *visibilityStore) addBulkRequestAndWait(bulkRequest *client.BulkableRequest, visibilityTaskKey string) error {
 	s.checkProcessor()
 
+	// Add method is blocking. If bulk processor is busy flushing previous bulk, request will wait here.
+	// Therefore, ackTimeoutTimer in fact wait for request to be committed after it was added to bulk processor.
 	ackCh := s.processor.Add(bulkRequest, visibilityTaskKey)
 	ackTimeoutTimer := time.NewTimer(s.processorAckTimeout())
 	defer ackTimeoutTimer.Stop()
