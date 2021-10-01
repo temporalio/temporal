@@ -40,10 +40,10 @@ func NewLocalCacheEntryForTest(
 ) *CacheEntry {
 
 	return &CacheEntry{
-		info:              info,
-		config:            config,
+		info:              derefInfo(info),
+		config:            derefConfig(config),
 		isGlobalNamespace: false,
-		replicationConfig: &persistencespb.NamespaceReplicationConfig{
+		replicationConfig: persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: targetCluster,
 			Clusters:          []string{targetCluster},
 		},
@@ -63,10 +63,10 @@ func NewNamespaceCacheEntryForTest(
 ) *CacheEntry {
 
 	return &CacheEntry{
-		info:              info,
-		config:            config,
+		info:              derefInfo(info),
+		config:            derefConfig(config),
 		isGlobalNamespace: isGlobalNamespace,
-		replicationConfig: repConfig,
+		replicationConfig: derefRepConfig(repConfig),
 		failoverVersion:   failoverVersion,
 		thisCluster:       thisCluster,
 	}
@@ -82,11 +82,32 @@ func NewGlobalCacheEntryForTest(
 ) *CacheEntry {
 
 	return &CacheEntry{
-		info:              info,
-		config:            config,
+		info:              derefInfo(info),
+		config:            derefConfig(config),
 		isGlobalNamespace: true,
-		replicationConfig: repConfig,
+		replicationConfig: derefRepConfig(repConfig),
 		failoverVersion:   failoverVersion,
 		thisCluster:       thisCluster,
 	}
+}
+
+func derefInfo(ptr *persistencespb.NamespaceInfo) persistencespb.NamespaceInfo {
+	if ptr == nil {
+		return persistencespb.NamespaceInfo{}
+	}
+	return *ptr
+}
+
+func derefConfig(ptr *persistencespb.NamespaceConfig) persistencespb.NamespaceConfig {
+	if ptr == nil {
+		return persistencespb.NamespaceConfig{}
+	}
+	return *ptr
+}
+
+func derefRepConfig(ptr *persistencespb.NamespaceReplicationConfig) persistencespb.NamespaceReplicationConfig {
+	if ptr == nil {
+		return persistencespb.NamespaceReplicationConfig{}
+	}
+	return *ptr
 }

@@ -352,7 +352,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 	// above 2 guarantees that failover start is after persistence of the task.
 
 	failoverPredicate := func(shardNotificationVersion int64, nextNamespace *namespace.CacheEntry, action func()) {
-		namespaceFailoverNotificationVersion := nextNamespace.GetFailoverNotificationVersion()
+		namespaceFailoverNotificationVersion := nextNamespace.FailoverNotificationVersion()
 		namespaceActiveCluster := nextNamespace.ActiveClusterName()
 
 		if nextNamespace.IsGlobalNamespace() &&
@@ -405,7 +405,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 			}
 
 			// nolint:errcheck
-			e.shard.UpdateNamespaceNotificationVersion(nextNamespaces[len(nextNamespaces)-1].GetNotificationVersion() + 1)
+			e.shard.UpdateNamespaceNotificationVersion(nextNamespaces[len(nextNamespaces)-1].NotificationVersion() + 1)
 		},
 	)
 }

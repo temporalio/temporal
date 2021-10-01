@@ -105,7 +105,8 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.taskManager = newTestTaskManager(s.logger)
 	s.mockNamespaceCache = namespace.NewMockCache(s.controller)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespace.CreateNamespaceCacheEntry(matchingTestNamespace), nil).AnyTimes()
+	ns := namespace.NewLocalCacheEntryForTest(&persistencespb.NamespaceInfo{Name: matchingTestNamespace}, nil, "", nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil).AnyTimes()
 	s.handlerContext = newHandlerContext(
 		context.Background(),
 		matchingTestNamespace,

@@ -218,7 +218,7 @@ func NewMutableState(
 		pendingSignalRequestedIDs: make(map[string]struct{}),
 		deleteSignalRequestedIDs:  make(map[string]struct{}),
 
-		currentVersion:   namespaceEntry.GetFailoverVersion(),
+		currentVersion:   namespaceEntry.FailoverVersion(),
 		bufferEventsInDB: nil,
 		stateInDB:        enumsspb.WORKFLOW_EXECUTION_STATE_VOID,
 		nextEventIDInDB:  common.FirstEventID,
@@ -1518,7 +1518,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 		event.GetPrevAutoResetPoints(),
 		event.GetContinuedExecutionRunId(),
 		timestamp.TimeValue(startEvent.GetEventTime()),
-		e.namespaceEntry.GetRetention(e.executionInfo.WorkflowId),
+		e.namespaceEntry.Retention(e.executionInfo.WorkflowId),
 	)
 
 	if event.Memo != nil {
@@ -3632,7 +3632,7 @@ func (e *MutableStateImpl) StartTransaction(
 ) (bool, error) {
 
 	e.namespaceEntry = namespaceEntry
-	if err := e.UpdateCurrentVersion(namespaceEntry.GetFailoverVersion(), false); err != nil {
+	if err := e.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false); err != nil {
 		return false, err
 	}
 
@@ -3651,7 +3651,7 @@ func (e *MutableStateImpl) StartTransactionSkipWorkflowTaskFail(
 ) error {
 
 	e.namespaceEntry = namespaceEntry
-	if err := e.UpdateCurrentVersion(namespaceEntry.GetFailoverVersion(), false); err != nil {
+	if err := e.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false); err != nil {
 		return err
 	}
 
@@ -4094,7 +4094,7 @@ func (e *MutableStateImpl) updateWithLastWriteEvent(
 }
 
 func (e *MutableStateImpl) canReplicateEvents() bool {
-	return e.namespaceEntry.GetReplicationPolicy() == namespace.ReplicationPolicyMultiCluster
+	return e.namespaceEntry.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster
 }
 
 // validateNoEventsAfterWorkflowFinish perform check on history event batch

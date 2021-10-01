@@ -257,7 +257,7 @@ func createTestTaskQueueManagerWithConfig(
 	logger := log.NewTestLogger()
 	tm := newTestTaskManager(logger)
 	mockNamespaceCache := namespace.NewMockCache(controller)
-	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespace.CreateNamespaceCacheEntry("namespace"), nil).AnyTimes()
+	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.CacheEntry{}, nil).AnyTimes()
 	me := newMatchingEngine(
 		cfg, tm, nil, logger, mockNamespaceCache,
 	)
