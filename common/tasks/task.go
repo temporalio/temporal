@@ -38,6 +38,8 @@ type (
 		TaskID int64
 	}
 
+	Keys []Key
+
 	// Task is the generic task interface
 	Task interface {
 		GetWorkflowIdentifier() definition.WorkflowIdentifier
@@ -50,3 +52,30 @@ type (
 		SetVisibilityTime(timestamp time.Time)
 	}
 )
+
+// Len implements sort.Interface
+func (s Keys) Len() int {
+	return len(s)
+}
+
+// Swap implements sort.Interface.
+func (s Keys) Swap(
+	this int,
+	that int,
+) {
+	s[this], s[that] = s[that], s[this]
+}
+
+// Less implements sort.Interface
+func (s Keys) Less(
+	this int,
+	that int,
+) bool {
+	if s[this].FireTime.Before(s[that].FireTime) {
+		return true
+	} else if s[this].FireTime.After(s[that].FireTime) {
+		return false
+	}
+
+	return s[this].TaskID < s[that].TaskID
+}

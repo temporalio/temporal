@@ -50,7 +50,7 @@ func (u *CancelExecutionTask) GetWorkflowIdentifier() definition.WorkflowIdentif
 
 func (u *CancelExecutionTask) GetKey() Key {
 	return Key{
-		FireTime: u.VisibilityTimestamp,
+		FireTime: time.Time{},
 		TaskID:   u.TaskID,
 	}
 }
