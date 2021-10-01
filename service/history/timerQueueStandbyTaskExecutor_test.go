@@ -107,7 +107,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	config := tests.NewDynamicConfig()
 	s.namespaceID = tests.NamespaceID
 	s.namespaceEntry = tests.GlobalNamespaceEntry
-	s.version = s.namespaceEntry.GetFailoverVersion()
+	s.version = s.namespaceEntry.FailoverVersion()
 	s.clusterName = cluster.TestAlternativeClusterName
 	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
