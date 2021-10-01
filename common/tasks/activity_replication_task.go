@@ -46,7 +46,7 @@ func (a *SyncActivityTask) GetWorkflowIdentifier() definition.WorkflowIdentifier
 
 func (a *SyncActivityTask) GetKey() Key {
 	return Key{
-		FireTime: a.VisibilityTimestamp,
+		FireTime: time.Time{},
 		TaskID:   a.TaskID,
 	}
 }

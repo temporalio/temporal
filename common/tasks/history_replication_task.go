@@ -49,7 +49,7 @@ func (a *HistoryReplicationTask) GetWorkflowIdentifier() definition.WorkflowIden
 
 func (a *HistoryReplicationTask) GetKey() Key {
 	return Key{
-		FireTime: a.VisibilityTimestamp,
+		FireTime: time.Time{},
 		TaskID:   a.TaskID,
 	}
 }
