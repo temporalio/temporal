@@ -53,6 +53,21 @@ type (
 	}
 )
 
+func (left Key) CompareTo(right Key) int {
+	if left.FireTime.Before(right.FireTime) {
+		return -1
+	} else if left.FireTime.After(right.FireTime) {
+		return 1
+	}
+
+	if left.TaskID < right.TaskID {
+		return -1
+	} else if left.TaskID > right.TaskID {
+		return 1
+	}
+	return 0
+}
+
 // Len implements sort.Interface
 func (s Keys) Len() int {
 	return len(s)
@@ -71,11 +86,5 @@ func (s Keys) Less(
 	this int,
 	that int,
 ) bool {
-	if s[this].FireTime.Before(s[that].FireTime) {
-		return true
-	} else if s[this].FireTime.After(s[that].FireTime) {
-		return false
-	}
-
-	return s[this].TaskID < s[that].TaskID
+	return s[this].CompareTo(s[that]) < 0
 }
