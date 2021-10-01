@@ -82,6 +82,7 @@ func NewHandler(
 			resource.GetMetricsClient(),
 			resource.GetNamespaceCache(),
 			resource.GetMatchingServiceResolver(),
+			resource.GetClusterMetadata(),
 		),
 	}
 

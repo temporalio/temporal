@@ -240,7 +240,6 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 			},
 		},
 		1234,
-		nil,
 	), nil).AnyTimes()
 
 	result, err := s.replicatorQueueProcessor.generateSyncActivityTask(ctx, task)
@@ -290,7 +289,6 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 			},
 		},
 		version,
-		nil,
 	), nil).AnyTimes()
 
 	result, err := s.replicatorQueueProcessor.generateSyncActivityTask(ctx, task)
@@ -342,7 +340,6 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 			},
 		},
 		version,
-		nil,
 	), nil).AnyTimes()
 
 	result, err := s.replicatorQueueProcessor.generateSyncActivityTask(ctx, task)
@@ -430,7 +427,6 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 			},
 		},
 		version,
-		nil,
 	), nil).AnyTimes()
 
 	result, err := s.replicatorQueueProcessor.generateSyncActivityTask(ctx, task)
@@ -541,7 +537,6 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 			},
 		},
 		version,
-		nil,
 	), nil).AnyTimes()
 
 	result, err := s.replicatorQueueProcessor.generateSyncActivityTask(ctx, task)

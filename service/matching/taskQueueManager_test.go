@@ -41,6 +41,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -258,14 +259,13 @@ func createTestTaskQueueManagerWithConfig(
 	tm := newTestTaskManager(logger)
 	mockNamespaceCache := namespace.NewMockCache(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.CacheEntry{}, nil).AnyTimes()
-	me := newMatchingEngine(
-		cfg, tm, nil, logger, mockNamespaceCache,
-	)
+	cmeta := cluster.NewTestClusterMetadata(cluster.NewTestClusterMetadataConfig(false, true))
+	me := newMatchingEngine(cfg, tm, nil, logger, mockNamespaceCache)
 	tl := "tq"
 	dID := "deadbeef-0000-4567-890a-bcdef0123456"
 	tlID := newTestTaskQueueID(dID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	tlKind := enumspb.TASK_QUEUE_KIND_NORMAL
-	tlMgr, err := newTaskQueueManager(me, tlID, tlKind, cfg, opts...)
+	tlMgr, err := newTaskQueueManager(me, tlID, tlKind, cfg, cmeta, opts...)
 	if err != nil {
 		return nil, err
 	}

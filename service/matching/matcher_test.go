@@ -478,8 +478,7 @@ func (t *MatcherTestSuite) newNamespaceCache() namespace.Cache {
 	entry := namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
 		&persistencespb.NamespaceConfig{},
-		"",
-		nil)
+		"")
 	dc := namespace.NewMockCache(t.controller)
 	dc.EXPECT().GetNamespaceByID(gomock.Any()).Return(entry, nil).AnyTimes()
 	return dc

@@ -41,6 +41,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -129,6 +130,7 @@ type (
 		outstandingPollsLock sync.Mutex
 		outstandingPollsMap  map[string]context.CancelFunc
 		signalFatalProblem   func(taskQueueManager)
+		clusterMeta          cluster.Metadata
 	}
 )
 
@@ -147,6 +149,7 @@ func newTaskQueueManager(
 	taskQueue *taskQueueID,
 	taskQueueKind enumspb.TaskQueueKind,
 	config *Config,
+	clusterMeta cluster.Metadata,
 	opts ...taskQueueManagerOpt,
 ) (taskQueueManager, error) {
 
@@ -171,6 +174,7 @@ func newTaskQueueManager(
 		pollerHistory:       newPollerHistory(),
 		outstandingPollsMap: make(map[string]context.CancelFunc),
 		signalFatalProblem:  e.unloadTaskQueue,
+		clusterMeta:         clusterMeta,
 	}
 
 	tlMgr.namespaceValue.Store("")
@@ -277,7 +281,7 @@ func (c *taskQueueManagerImpl) AddTask(
 			return nil, err
 		}
 
-		if namespaceEntry.GetNamespaceNotActiveErr() != nil {
+		if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
 			r, err := c.taskWriter.appendTask(params.execution, td)
 			syncMatch = false
 			return r, err
@@ -352,7 +356,7 @@ func (c *taskQueueManagerImpl) GetTask(
 	// value. Last poller wins if different pollers provide different values
 	c.matcher.UpdateRatelimit(maxDispatchPerSecond)
 
-	if namespaceEntry.GetNamespaceNotActiveErr() != nil {
+	if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
 		return c.matcher.PollForQuery(childCtx)
 	}
 
