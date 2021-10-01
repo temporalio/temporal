@@ -409,7 +409,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 
 	recordWorkflowClose := true
 
-	retention := namespaceEntry.GetRetention(workflowID)
+	retention := namespaceEntry.Retention(workflowID)
 	// if sampled for longer retention is enabled, only record those sampled events
 	if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
 		!namespaceEntry.IsSampledForLongerRetention(workflowID) {

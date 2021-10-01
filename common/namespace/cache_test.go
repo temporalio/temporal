@@ -194,12 +194,6 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 	entryByID2, err := s.namespaceCache.GetNamespaceByID(namespaceRecord2.Namespace.Info.Id)
 	s.Nil(err)
 	s.Equal(entry2, entryByID2)
-
-	allNamespaces := s.namespaceCache.GetAllNamespace()
-	s.Equal(map[string]*CacheEntry{
-		entry1.ID(): entry1,
-		entry2.ID(): entry2,
-	}, allNamespaces)
 }
 
 func (s *namespaceCacheSuite) TestRegisterCallback_CatchUp() {
@@ -477,18 +471,12 @@ func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess(
 		entryNew, err := s.namespaceCache.GetNamespaceByID(id)
 		switch err.(type) {
 		case nil:
-			// make the config version the same so we can easily compare those
-			entryNew.configVersion = 0
-			entryNew.failoverVersion = 0
 			s.Equal(entryOld, entryNew)
 			waitGroup.Done()
 		case *serviceerror.NotFound:
 			time.Sleep(4 * time.Second)
 			entryNew, err := s.namespaceCache.GetNamespaceByID(id)
 			s.NoError(err)
-			// make the config version the same so we can easily compare those
-			entryNew.configVersion = 0
-			entryNew.failoverVersion = 0
 			s.Equal(entryOld, entryNew)
 			waitGroup.Done()
 		default:
@@ -511,10 +499,10 @@ func (s *namespaceCacheSuite) buildEntryFromRecord(record *persistence.GetNamesp
 
 func Test_GetRetentionDays(t *testing.T) {
 	d := &CacheEntry{
-		info: &persistencespb.NamespaceInfo{
+		info: persistencespb.NamespaceInfo{
 			Data: make(map[string]string),
 		},
-		config: &persistencespb.NamespaceConfig{
+		config: persistencespb.NamespaceConfig{
 			Retention: timestamp.DurationFromDays(7),
 		},
 	}
@@ -522,38 +510,38 @@ func Test_GetRetentionDays(t *testing.T) {
 	d.info.Data[SampleRateKey] = "0"
 
 	wid := uuid.New()
-	rd := d.GetRetention(wid)
+	rd := d.Retention(wid)
 	require.Equal(t, 7*24*time.Hour, rd)
 
 	d.info.Data[SampleRateKey] = "1"
-	rd = d.GetRetention(wid)
+	rd = d.Retention(wid)
 	require.Equal(t, 30*24*time.Hour, rd)
 
 	d.info.Data[SampleRetentionKey] = "invalid-value"
-	rd = d.GetRetention(wid)
+	rd = d.Retention(wid)
 	require.Equal(t, 7*24*time.Hour, rd) // fallback to normal retention
 
 	d.info.Data[SampleRetentionKey] = "30"
 	d.info.Data[SampleRateKey] = "invalid-value"
-	rd = d.GetRetention(wid)
+	rd = d.Retention(wid)
 	require.Equal(t, 7*24*time.Hour, rd) // fallback to normal retention
 
 	wid = "3aef42a8-db0a-4a3b-b8b7-9829d74b4ebf"
 	d.info.Data[SampleRetentionKey] = "30"
 	d.info.Data[SampleRateKey] = "0.8"
-	rd = d.GetRetention(wid)
+	rd = d.Retention(wid)
 	require.Equal(t, 7*24*time.Hour, rd) // fallback to normal retention
 	d.info.Data[SampleRateKey] = "0.9"
-	rd = d.GetRetention(wid)
+	rd = d.Retention(wid)
 	require.Equal(t, 30*24*time.Hour, rd)
 }
 
 func Test_IsSampledForLongerRetentionEnabled(t *testing.T) {
 	d := &CacheEntry{
-		info: &persistencespb.NamespaceInfo{
+		info: persistencespb.NamespaceInfo{
 			Data: make(map[string]string),
 		},
-		config: &persistencespb.NamespaceConfig{
+		config: persistencespb.NamespaceConfig{
 			Retention: timestamp.DurationFromDays(7),
 			BadBinaries: &namespacepb.BadBinaries{
 				Binaries: map[string]*namespacepb.BadBinaryInfo{},
@@ -569,10 +557,10 @@ func Test_IsSampledForLongerRetentionEnabled(t *testing.T) {
 
 func Test_IsSampledForLongerRetention(t *testing.T) {
 	d := &CacheEntry{
-		info: &persistencespb.NamespaceInfo{
+		info: persistencespb.NamespaceInfo{
 			Data: make(map[string]string),
 		},
-		config: &persistencespb.NamespaceConfig{
+		config: persistencespb.NamespaceConfig{
 			Retention: timestamp.DurationFromDays(7),
 			BadBinaries: &namespacepb.BadBinaries{
 				Binaries: map[string]*namespacepb.BadBinaryInfo{},
@@ -618,7 +606,7 @@ func Test_NamespaceCacheEntry_GetNamespaceNotActiveErr(t *testing.T) {
 	require.Nil(t, namespaceEntry.GetNamespaceNotActiveErr())
 
 	// update to become not active
-	namespaceEntry.replicationConfig.ActiveClusterName = cluster.TestAlternativeClusterName
+	namespaceEntry = namespaceEntry.Clone(WithActiveCluster(cluster.TestAlternativeClusterName))
 	err := namespaceEntry.GetNamespaceNotActiveErr()
 	require.NotNil(t, err)
 	_, ok := err.(*serviceerror.NamespaceNotActive)

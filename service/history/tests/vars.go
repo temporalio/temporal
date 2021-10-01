@@ -29,6 +29,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
+	namespacepb "go.temporal.io/api/namespace/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -54,7 +55,12 @@ var (
 
 	LocalNamespaceEntry = namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Id: NamespaceID, Name: Namespace},
-		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceConfig{
+			Retention: timestamp.DurationFromDays(1),
+			BadBinaries: &namespacepb.BadBinaries{
+				Binaries: map[string]*namespacepb.BadBinaryInfo{},
+			},
+		},
 		cluster.TestCurrentClusterName,
 		nil,
 	)
