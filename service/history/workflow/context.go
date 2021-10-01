@@ -230,7 +230,7 @@ func (c *ContextImpl) GetNamespace() string {
 	if err != nil {
 		return ""
 	}
-	return namespaceEntry.GetInfo().Name
+	return namespaceEntry.Name()
 }
 
 func (c *ContextImpl) GetHistorySize() int64 {
@@ -876,7 +876,7 @@ func (c *ContextImpl) ReapplyEvents(
 	_, err = sourceCluster.ReapplyEvents(
 		ctx2,
 		&adminservice.ReapplyEventsRequest{
-			Namespace:         namespaceEntry.GetInfo().Name,
+			Namespace:         namespaceEntry.Name(),
 			WorkflowExecution: execution,
 			Events:            reapplyEventsDataBlob,
 		},
@@ -953,6 +953,6 @@ func emitStateTransitionCount(
 
 	metricsClient.Scope(
 		metrics.WorkflowContextScope,
-		metrics.NamespaceTag(mutableState.GetNamespaceEntry().GetInfo().Name),
+		metrics.NamespaceTag(mutableState.GetNamespaceEntry().Name()),
 	).RecordDistribution(metrics.StateTransitionCount, int(mutableState.GetExecutionInfo().StateTransitionCount))
 }

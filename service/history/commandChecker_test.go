@@ -25,6 +25,7 @@
 package history
 
 import (
+	"math/rand"
 	"testing"
 	"time"
 
@@ -48,6 +49,27 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tests"
+)
+
+var (
+	nonTerminalCommands = []*commandpb.Command{
+		{CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK},
+		{CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK},
+		{CommandType: enumspb.COMMAND_TYPE_CANCEL_TIMER},
+		{CommandType: enumspb.COMMAND_TYPE_CANCEL_TIMER},
+		{CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER},
+		{CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION},
+		{CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION},
+		{CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION},
+		{CommandType: enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES},
+	}
+
+	terminalCommands = []*commandpb.Command{
+		{CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION},
+		{CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION},
+		{CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION},
+		{CommandType: enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION},
+	}
 )
 
 type (
@@ -654,5 +676,28 @@ func (s *commandAttrValidatorSuite) TestValidateActivityRetryPolicy() {
 			assert.Nil(s.T(), err, "expected no error")
 			assert.Equal(s.T(), tt.want, attr.RetryPolicy, "unexpected retry policy")
 		})
+	}
+}
+
+func (s *commandAttrValidatorSuite) TestValidateCommandSequence_NoTerminalCommand() {
+	err := s.validator.validateCommandSequence(nonTerminalCommands)
+	s.NoError(err)
+}
+
+func (s *commandAttrValidatorSuite) TestValidateCommandSequence_ValidTerminalCommand() {
+	for _, terminalCommand := range terminalCommands {
+		err := s.validator.validateCommandSequence(append(nonTerminalCommands, terminalCommand))
+		s.NoError(err)
+	}
+}
+
+func (s *commandAttrValidatorSuite) TestValidateCommandSequence_InvalidTerminalCommand() {
+	for _, terminalCommand := range terminalCommands {
+		err := s.validator.validateCommandSequence(append(
+			[]*commandpb.Command{terminalCommand},
+			nonTerminalCommands[int(rand.Int31n(int32(len(nonTerminalCommands))))],
+		))
+		s.Error(err)
+		s.IsType(&serviceerror.InvalidArgument{}, err)
 	}
 }

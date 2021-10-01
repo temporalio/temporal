@@ -1907,6 +1907,7 @@ const (
 	ElasticsearchBulkProcessorRetries
 	ElasticsearchBulkProcessorFailures
 	ElasticsearchBulkProcessorCorruptedData
+	ElasticsearchBulkProcessorDuplicateRequest
 
 	ElasticsearchBulkProcessorRequestLatency
 	ElasticsearchBulkProcessorCommitLatency
@@ -2367,6 +2368,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ElasticsearchBulkProcessorRetries:          {metricName: "elasticsearch_bulk_processor_retries"},
 		ElasticsearchBulkProcessorFailures:         {metricName: "elasticsearch_bulk_processor_errors"},
 		ElasticsearchBulkProcessorCorruptedData:    {metricName: "elasticsearch_bulk_processor_corrupted_data"},
+		ElasticsearchBulkProcessorDuplicateRequest: {metricName: "elasticsearch_bulk_processor_duplicate_request"},
 		ElasticsearchBulkProcessorRequestLatency:   {metricName: "elasticsearch_bulk_processor_request_latency", metricType: Timer},
 		ElasticsearchBulkProcessorCommitLatency:    {metricName: "elasticsearch_bulk_processor_commit_latency", metricType: Timer},
 		ElasticsearchBulkProcessorWaitAddLatency:   {metricName: "elasticsearch_bulk_processor_wait_add_latency", metricType: Timer},

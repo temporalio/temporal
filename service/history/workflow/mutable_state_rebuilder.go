@@ -142,7 +142,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				if err != nil {
 					return nil, err
 				}
-				parentNamespaceID = parentNamespaceEntry.GetInfo().Id
+				parentNamespaceID = parentNamespaceEntry.ID()
 			}
 
 			if err := b.mutableState.ReplicateWorkflowExecutionStartedEvent(

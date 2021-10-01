@@ -139,7 +139,7 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespaceCache namespac
 		return nil, err
 	}
 
-	namespace := namespaceEntry.GetInfo().Name
+	namespace := namespaceEntry.Name()
 	taskQueueName := id.name
 	taskType := id.taskType
 

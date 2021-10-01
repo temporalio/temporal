@@ -580,7 +580,7 @@ func (c *taskQueueManagerImpl) tryInitNamespaceAndScope() {
 		return
 	}
 
-	namespace = entry.GetInfo().Name
+	namespace = entry.Name()
 
 	scope := metrics.GetPerTaskQueueScope(c.metricsClient.Scope(metrics.MatchingTaskQueueMgrScope), namespace, c.taskQueueID.name, c.taskQueueKind)
 

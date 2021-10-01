@@ -607,7 +607,7 @@ func emitMutationMetrics(
 	}
 
 	metricsClient := shard.GetMetricsClient()
-	namespaceName := namespaceEntry.GetInfo().Name
+	namespaceName := namespaceEntry.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
 			metricsClient.Scope(metrics.SessionSizeStatsScope, metrics.NamespaceTag(namespaceName)),
@@ -630,7 +630,7 @@ func emitGetMetrics(
 	}
 
 	metricsClient := shard.GetMetricsClient()
-	namespaceName := namespaceEntry.GetInfo().Name
+	namespaceName := namespaceEntry.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
 			metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.NamespaceTag(namespaceName)),
