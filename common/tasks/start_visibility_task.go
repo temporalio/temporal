@@ -45,7 +45,7 @@ func (t *StartExecutionVisibilityTask) GetWorkflowIdentifier() definition.Workfl
 
 func (t *StartExecutionVisibilityTask) GetKey() Key {
 	return Key{
-		FireTime: t.VisibilityTimestamp,
+		FireTime: time.Time{},
 		TaskID:   t.TaskID,
 	}
 }

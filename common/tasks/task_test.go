@@ -25,51 +25,73 @@
 package tasks
 
 import (
+	"math/rand"
+	"sort"
+	"testing"
 	"time"
 
-	"go.temporal.io/server/common/definition"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 type (
-	CloseExecutionVisibilityTask struct {
-		definition.WorkflowIdentifier
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		Version             int64
+	taskKeySuite struct {
+		suite.Suite
+		*require.Assertions
 	}
 )
 
-func (t *CloseExecutionVisibilityTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
-	return t.WorkflowIdentifier
+func TestTaskKeySuite(t *testing.T) {
+	s := new(taskKeySuite)
+	suite.Run(t, s)
 }
 
-func (t *CloseExecutionVisibilityTask) GetKey() Key {
-	return Key{
-		FireTime: time.Time{},
-		TaskID:   t.TaskID,
+func (s *taskKeySuite) SetupSuite() {
+
+}
+
+func (s *taskKeySuite) TearDownSuite() {
+
+}
+
+func (s *taskKeySuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+}
+
+func (s *taskKeySuite) TearDownTest() {
+
+}
+
+func (s *taskKeySuite) TestSort() {
+	numInstant := 256
+	numTaskPerInstant := 16
+
+	taskKeys := Keys{}
+	for i := 0; i < numInstant; i++ {
+		fireTime := time.Unix(0, rand.Int63())
+		for j := 0; j < numTaskPerInstant; j++ {
+			taskKeys = append(taskKeys, Key{
+				FireTime: fireTime,
+				TaskID:   rand.Int63(),
+			})
+		}
 	}
-}
+	sort.Sort(taskKeys)
 
-func (t *CloseExecutionVisibilityTask) GetVersion() int64 {
-	return t.Version
-}
+	for i := 1; i < numInstant*numTaskPerInstant; i++ {
+		prev := taskKeys[i-1]
+		next := taskKeys[i]
 
-func (t *CloseExecutionVisibilityTask) SetVersion(version int64) {
-	t.Version = version
-}
-
-func (t *CloseExecutionVisibilityTask) GetTaskID() int64 {
-	return t.TaskID
-}
-
-func (t *CloseExecutionVisibilityTask) SetTaskID(id int64) {
-	t.TaskID = id
-}
-
-func (t *CloseExecutionVisibilityTask) GetVisibilityTime() time.Time {
-	return t.VisibilityTimestamp
-}
-
-func (t *CloseExecutionVisibilityTask) SetVisibilityTime(timestamp time.Time) {
-	t.VisibilityTimestamp = timestamp
+		if prev.FireTime.Before(next.FireTime) {
+			// noop
+		} else if prev.FireTime.Equal(next.FireTime) {
+			s.True(prev.TaskID <= next.TaskID)
+		} else {
+			s.Fail("task keys are not sorted prev: %v, next: %v", prev, next)
+		}
+	}
 }
