@@ -81,9 +81,9 @@ type (
 
 	ackChan struct { // value of processorImpl.mapToAckChan
 		ackChInternal chan bool
-		createdAt     time.Time // Time when request was created (used to report metrics).
-		addedAt       time.Time // Time when request was added to bulk processor (used to report metrics).
-		startedAt     time.Time // Time when request was sent to Elasticsearch by bulk processor (used to report metrics).
+		createdAt     time.Time    // Time when request was created (used to report metrics).
+		addedAt       atomic.Value // of time.Time // Time when request was added to bulk processor (used to report metrics).
+		startedAt     time.Time    // Time when request was sent to Elasticsearch by bulk processor (used to report metrics).
 	}
 )
 
@@ -402,13 +402,17 @@ func newAckChan() *ackChan {
 }
 
 func (a *ackChan) recordAdd(metricsClient metrics.Client) {
-	a.addedAt = time.Now().UTC()
-	metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, a.addedAt.Sub(a.createdAt))
+	addedAt := time.Now().UTC()
+	a.addedAt.Store(addedAt)
+	metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, addedAt.Sub(a.createdAt))
 }
 
 func (a *ackChan) recordStart(metricsClient metrics.Client) {
 	a.startedAt = time.Now().UTC()
-	metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitStartLatency, a.startedAt.Sub(a.addedAt))
+	addedAt := a.addedAt.Load().(time.Time)
+	if !addedAt.IsZero() {
+		metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitStartLatency, a.startedAt.Sub(addedAt))
+	}
 }
 
 func (a *ackChan) done(ack bool, metricsClient metrics.Client) {
