@@ -69,8 +69,10 @@ const (
 	FlagWorkflowTypeWithAlias                 = FlagWorkflowType + ", wt"
 	FlagWorkflowStatus                        = "status"
 	FlagWorkflowStatusWithAlias               = FlagWorkflowStatus + ", s"
-	FlagExecutionTimeout                      = "execution_timeout"
-	FlagExecutionTimeoutWithAlias             = FlagExecutionTimeout + ", et"
+	FlagWorkflowExecutionTimeout              = "execution_timeout"
+	FlagWorkflowExecutionTimeoutWithAlias     = FlagWorkflowExecutionTimeout + ", et"
+	FlagWorkflowRunTimeout                    = "run-timeout"
+	FlagWorkflowRunTimeoutWithAlias           = FlagWorkflowRunTimeout + ", rt"
 	FlagWorkflowTaskTimeout                   = "workflow_task_timeout"
 	FlagWorkflowTaskTimeoutWithAlias          = FlagWorkflowTaskTimeout + ", wtt"
 	FlagContextTimeout                        = "context_timeout"
@@ -332,13 +334,17 @@ func getFlagsForStart() []cli.Flag {
 			Usage: "WorkflowTypeName",
 		},
 		cli.IntFlag{
-			Name:  FlagExecutionTimeoutWithAlias,
-			Usage: "Execution start to close timeout in seconds",
+			Name:  FlagWorkflowExecutionTimeoutWithAlias,
+			Usage: "Workflow execution timeout, including retries and continue-as-new (seconds)",
+		},
+		cli.IntFlag{
+			Name:  FlagWorkflowRunTimeoutWithAlias,
+			Usage: "Single workflow run timeout (seconds)",
 		},
 		cli.IntFlag{
 			Name:  FlagWorkflowTaskTimeoutWithAlias,
 			Value: defaultWorkflowTaskTimeoutInSeconds,
-			Usage: "Workflow task start to close timeout in seconds",
+			Usage: "Workflow task start to close timeout (seconds)",
 		},
 		cli.StringFlag{
 			Name: FlagCronSchedule,
