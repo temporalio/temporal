@@ -395,9 +395,12 @@ func extractErrorReason(resp *elastic.BulkResponseItem) string {
 }
 
 func newAckChan() *ackChan {
+	var addedAt atomic.Value
+	addedAt.Store(time.Time{})
 	return &ackChan{
 		ackChInternal: make(chan bool, 1),
 		createdAt:     time.Now().UTC(),
+		addedAt:       addedAt,
 	}
 }
 
