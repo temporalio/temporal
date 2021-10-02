@@ -354,13 +354,14 @@ func (s *processorSuite) TestBulkBeforeAction() {
 	s.mockMetricClient.EXPECT().AddCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequests, int64(1))
 	s.mockMetricClient.EXPECT().RecordDistribution(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorBulkSize, 1)
 	s.mockMetricClient.EXPECT().RecordDistribution(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorQueuedRequests, 0)
+	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, gomock.Any())
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitStartLatency, gomock.Any())
 
 	mapVal := newAckChan()
+	mapVal.recordAdd(s.mockMetricClient)
 	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
 	s.True(mapVal.startedAt.IsZero())
 	s.esProcessor.bulkBeforeAction(0, requests)
-
 	s.False(mapVal.startedAt.IsZero())
 }
 
