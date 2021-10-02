@@ -50,7 +50,7 @@ var (
 
 type (
 	TelemetryInterceptor struct {
-		namespaceCache namespace.Cache
+		namespaceRegistry namespace.Registry
 		metricsClient  metrics.Client
 		scopes         map[string]int
 		logger         log.Logger
@@ -60,13 +60,13 @@ type (
 var _ grpc.UnaryServerInterceptor = (*TelemetryInterceptor)(nil).Intercept
 
 func NewTelemetryInterceptor(
-	namespaceCache namespace.Cache,
+	namespaceRegistry namespace.Registry,
 	metricsClient metrics.Client,
 	scopes map[string]int,
 	logger log.Logger,
 ) *TelemetryInterceptor {
 	return &TelemetryInterceptor{
-		namespaceCache: namespaceCache,
+		namespaceRegistry: namespaceRegistry,
 		metricsClient:  metricsClient,
 		scopes:         scopes,
 		logger:         logger,
@@ -131,7 +131,7 @@ func (ti *TelemetryInterceptor) metricsScopeLogTags(
 	scopeDef, _ := ti.scopes[methodName]
 	scopeDef = ti.overrideScope(scopeDef, req)
 
-	namespace := GetNamespace(ti.namespaceCache, req)
+	namespace := GetNamespace(ti.namespaceRegistry, req)
 	if namespace == "" {
 		return ti.metricsClient.Scope(scopeDef).Tagged(metrics.NamespaceUnknownTag()), []tag.Tag{tag.Operation(methodName)}
 	}

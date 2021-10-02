@@ -31,13 +31,13 @@ import (
 
 //TODO: delete this whole file and transition usages to FromPersistentState
 
-// NewLocalCacheEntryForTest returns an entry with test data
-func NewLocalCacheEntryForTest(
+// NewLocalNamespaceForTest returns an entry with test data
+func NewLocalNamespaceForTest(
 	info *persistencespb.NamespaceInfo,
 	config *persistencespb.NamespaceConfig,
 	targetCluster string,
-) *CacheEntry {
-	return &CacheEntry{
+) *Namespace {
+	return &Namespace{
 		info:              derefInfo(info),
 		config:            derefConfig(config),
 		isGlobalNamespace: false,
@@ -49,15 +49,15 @@ func NewLocalCacheEntryForTest(
 	}
 }
 
-// NewNamespaceCacheEntryForTest returns an entry with test data
-func NewNamespaceCacheEntryForTest(
+// NewNamespaceForTest returns an entry with test data
+func NewNamespaceForTest(
 	info *persistencespb.NamespaceInfo,
 	config *persistencespb.NamespaceConfig,
 	isGlobalNamespace bool,
 	repConfig *persistencespb.NamespaceReplicationConfig,
 	failoverVersion int64,
-) *CacheEntry {
-	return &CacheEntry{
+) *Namespace {
+	return &Namespace{
 		info:              derefInfo(info),
 		config:            derefConfig(config),
 		isGlobalNamespace: isGlobalNamespace,
@@ -66,14 +66,14 @@ func NewNamespaceCacheEntryForTest(
 	}
 }
 
-// newGlobalCacheEntryForTest returns an entry with test data
-func NewGlobalCacheEntryForTest(
+// newGlobalNamespaceForTest returns an entry with test data
+func NewGlobalNamespaceForTest(
 	info *persistencespb.NamespaceInfo,
 	config *persistencespb.NamespaceConfig,
 	repConfig *persistencespb.NamespaceReplicationConfig,
 	failoverVersion int64,
-) *CacheEntry {
-	return &CacheEntry{
+) *Namespace {
+	return &Namespace{
 		info:              derefInfo(info),
 		config:            derefConfig(config),
 		isGlobalNamespace: true,

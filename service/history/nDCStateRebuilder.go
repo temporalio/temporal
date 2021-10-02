@@ -66,7 +66,7 @@ type (
 
 	nDCStateRebuilderImpl struct {
 		shard           shard.Context
-		namespaceCache  namespace.Cache
+		namespaceRegistry  namespace.Registry
 		eventsCache     events.Cache
 		clusterMetadata cluster.Metadata
 		executionMgr    persistence.ExecutionManager
@@ -86,13 +86,13 @@ func newNDCStateRebuilder(
 
 	return &nDCStateRebuilderImpl{
 		shard:           shard,
-		namespaceCache:  shard.GetNamespaceCache(),
+		namespaceRegistry:  shard.GetNamespaceRegistry(),
 		eventsCache:     shard.GetEventsCache(),
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
 		executionMgr:    shard.GetExecutionManager(),
 		taskRefresher: workflow.NewTaskRefresher(
 			shard.GetConfig(),
-			shard.GetNamespaceCache(),
+			shard.GetNamespaceRegistry(),
 			shard.GetEventsCache(),
 			logger,
 		),
@@ -119,7 +119,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		baseBranchToken,
 	))
 
-	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(targetWorkflowIdentifier.NamespaceID)
+	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(targetWorkflowIdentifier.NamespaceID)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -189,7 +189,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 }
 
 func (r *nDCStateRebuilderImpl) initializeBuilders(
-	namespaceEntry *namespace.CacheEntry,
+	namespaceEntry *namespace.Namespace,
 	now time.Time,
 ) (workflow.MutableState, workflow.MutableStateRebuilder) {
 	resetMutableStateBuilder := workflow.NewMutableState(
@@ -204,7 +204,7 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 		r.logger,
 		resetMutableStateBuilder,
 		func(mutableState workflow.MutableState) workflow.TaskGenerator {
-			return workflow.NewTaskGenerator(r.shard.GetNamespaceCache(), r.logger, mutableState)
+			return workflow.NewTaskGenerator(r.shard.GetNamespaceRegistry(), r.logger, mutableState)
 		},
 	)
 	return resetMutableStateBuilder, stateBuilder

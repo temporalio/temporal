@@ -74,7 +74,7 @@ type (
 		shard                  shard.Context
 		timeSource             clock.TimeSource
 		historyEngine          *historyEngineImpl
-		namespaceCache         namespace.Cache
+		namespaceRegistry         namespace.Registry
 		historyCache           workflow.Cache
 		txProcessor            transferQueueProcessor
 		timerProcessor         timerQueueProcessor
@@ -94,7 +94,7 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 		shard:              historyEngine.shard,
 		timeSource:         historyEngine.shard.GetTimeSource(),
 		historyEngine:      historyEngine,
-		namespaceCache:     historyEngine.shard.GetNamespaceCache(),
+		namespaceRegistry:     historyEngine.shard.GetNamespaceRegistry(),
 		historyCache:       historyEngine.historyCache,
 		txProcessor:        historyEngine.txProcessor,
 		timerProcessor:     historyEngine.timerProcessor,
@@ -103,7 +103,7 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 		logger:             historyEngine.logger,
 		throttledLogger:    historyEngine.throttledLogger,
 		commandAttrValidator: newCommandAttrValidator(
-			historyEngine.shard.GetNamespaceCache(),
+			historyEngine.shard.GetNamespaceRegistry(),
 			historyEngine.config,
 			historyEngine.searchAttributesValidator,
 		),
@@ -452,7 +452,7 @@ Update_History_Loop:
 				handler.commandAttrValidator,
 				workflowSizeChecker,
 				handler.logger,
-				handler.namespaceCache,
+				handler.namespaceRegistry,
 				handler.metricsClient,
 				handler.config,
 				handler.shard,
@@ -672,7 +672,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStarted
 	return response, nil
 }
 
-func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder workflow.MutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *namespace.CacheEntry, workflowTaskHeartbeating bool) {
+func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder workflow.MutableState, queryResults map[string]*querypb.WorkflowQueryResult, createNewWorkflowTask bool, namespaceEntry *namespace.Namespace, workflowTaskHeartbeating bool) {
 	queryRegistry := msBuilder.GetQueryRegistry()
 	if !queryRegistry.HasBufferedQuery() {
 		return

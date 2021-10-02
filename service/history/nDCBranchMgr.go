@@ -59,7 +59,7 @@ type (
 
 	nDCBranchMgrImpl struct {
 		shard           shard.Context
-		namespaceCache  namespace.Cache
+		namespaceRegistry  namespace.Registry
 		clusterMetadata cluster.Metadata
 		executionMgr    persistence.ExecutionManager
 
@@ -80,7 +80,7 @@ func newNDCBranchMgr(
 
 	return &nDCBranchMgrImpl{
 		shard:           shard,
-		namespaceCache:  shard.GetNamespaceCache(),
+		namespaceRegistry:  shard.GetNamespaceRegistry(),
 		clusterMetadata: shard.GetService().GetClusterMetadata(),
 		executionMgr:    shard.GetExecutionManager(),
 
@@ -174,7 +174,7 @@ func (r *nDCBranchMgrImpl) flushBufferedEvents(
 
 	targetWorkflow := newNDCWorkflow(
 		ctx,
-		r.namespaceCache,
+		r.namespaceRegistry,
 		r.clusterMetadata,
 		r.context,
 		r.mutableState,

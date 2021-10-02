@@ -3138,7 +3138,7 @@ func (m *DescribeHistoryHostRequest) GetWorkflowExecution() *v14.WorkflowExecuti
 type DescribeHistoryHostResponse struct {
 	ShardsNumber          int32                    `protobuf:"varint,1,opt,name=shards_number,json=shardsNumber,proto3" json:"shards_number,omitempty"`
 	ShardIds              []int32                  `protobuf:"varint,2,rep,packed,name=shard_ids,json=shardIds,proto3" json:"shard_ids,omitempty"`
-	NamespaceCache        *v112.NamespaceCacheInfo `protobuf:"bytes,3,opt,name=namespace_cache,json=namespaceCache,proto3" json:"namespace_cache,omitempty"`
+	NamespaceCache        *v112.NamespaceCacheInfo `protobuf:"bytes,3,opt,name=namespace_cache,json=namespaceRegistry,proto3" json:"namespace_cache,omitempty"`
 	ShardControllerStatus string                   `protobuf:"bytes,4,opt,name=shard_controller_status,json=shardControllerStatus,proto3" json:"shard_controller_status,omitempty"`
 	Address               string                   `protobuf:"bytes,5,opt,name=address,proto3" json:"address,omitempty"`
 }
@@ -3189,7 +3189,7 @@ func (m *DescribeHistoryHostResponse) GetShardIds() []int32 {
 	return nil
 }
 
-func (m *DescribeHistoryHostResponse) GetNamespaceCache() *v112.NamespaceCacheInfo {
+func (m *DescribeHistoryHostResponse) GetNamespaceRegistry() *v112.NamespaceCacheInfo {
 	if m != nil {
 		return m.NamespaceCache
 	}

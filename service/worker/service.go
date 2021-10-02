@@ -270,7 +270,7 @@ func (s *Service) startArchiver() {
 		MetricsClient:    s.GetMetricsClient(),
 		Logger:           s.GetLogger(),
 		HistoryV2Manager: s.GetExecutionManager(),
-		NamespaceCache:   s.GetNamespaceCache(),
+		NamespaceCache:   s.GetNamespaceRegistry(),
 		Config:           s.config.ArchiverConfig,
 		ArchiverProvider: s.GetArchiverProvider(),
 	}

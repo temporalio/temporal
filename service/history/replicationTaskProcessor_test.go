@@ -68,7 +68,7 @@ type (
 		mockResource                *resource.Test
 		mockShard                   *shard.ContextTest
 		mockEngine                  *shard.MockEngine
-		mockNamespaceCache          *namespace.MockCache
+		mockNamespaceCache          *namespace.MockRegistry
 		mockClientBean              *client.MockBean
 		mockAdminClient             *adminservicemock.MockAdminServiceClient
 		mockClusterMetadata         *cluster.MockMetadata

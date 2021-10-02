@@ -41,7 +41,7 @@ type (
 )
 
 func GetNamespace(
-	namespaceCache namespace.Cache,
+	namespaceRegistry namespace.Registry,
 	req interface{},
 ) string {
 	switch request := req.(type) {
@@ -50,7 +50,7 @@ func GetNamespace(
 
 	case NamespaceIDGetter:
 		namespaceID := request.GetNamespaceId()
-		namespaceEntry, err := namespaceCache.GetNamespaceByID(namespaceID)
+		namespaceEntry, err := namespaceRegistry.GetNamespaceByID(namespaceID)
 		if err != nil {
 			return ""
 		}

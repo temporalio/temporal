@@ -155,7 +155,7 @@ type (
 
 	nDCTransactionMgrImpl struct {
 		shard            shard.Context
-		namespaceCache   namespace.Cache
+		namespaceRegistry   namespace.Registry
 		historyCache     workflow.Cache
 		clusterMetadata  cluster.Metadata
 		executionManager persistence.ExecutionManager
@@ -181,7 +181,7 @@ func newNDCTransactionMgr(
 
 	transactionMgr := &nDCTransactionMgrImpl{
 		shard:            shard,
-		namespaceCache:   shard.GetNamespaceCache(),
+		namespaceRegistry:   shard.GetNamespaceRegistry(),
 		historyCache:     historyCache,
 		clusterMetadata:  shard.GetClusterMetadata(),
 		executionManager: shard.GetExecutionManager(),
@@ -462,7 +462,7 @@ func (r *nDCTransactionMgrImpl) loadNDCWorkflow(
 		release(err)
 		return nil, err
 	}
-	return newNDCWorkflow(ctx, r.namespaceCache, r.clusterMetadata, weContext, msBuilder, release), nil
+	return newNDCWorkflow(ctx, r.namespaceRegistry, r.clusterMetadata, weContext, msBuilder, release), nil
 }
 
 func (r *nDCTransactionMgrImpl) isWorkflowCurrent(

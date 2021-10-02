@@ -48,7 +48,7 @@ type (
 		sync.RWMutex
 
 		currentClusterName string
-		namespaceCache     namespace.Cache
+		namespaceRegistry     namespace.Registry
 		config             *configs.Config
 		logger             log.Logger
 		scope              metrics.Scope
@@ -60,14 +60,14 @@ var _ taskPriorityAssigner = (*taskPriorityAssignerImpl)(nil)
 
 func newTaskPriorityAssigner(
 	currentClusterName string,
-	namespaceCache namespace.Cache,
+	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 	metricClient metrics.Client,
 	config *configs.Config,
 ) *taskPriorityAssignerImpl {
 	return &taskPriorityAssignerImpl{
 		currentClusterName: currentClusterName,
-		namespaceCache:     namespaceCache,
+		namespaceRegistry:     namespaceRegistry,
 		config:             config,
 		logger:             logger,
 		scope:              metricClient.Scope(metrics.TaskPriorityAssignerScope),
@@ -116,7 +116,7 @@ func (a *taskPriorityAssignerImpl) Assign(
 func (a *taskPriorityAssignerImpl) getNamespaceInfo(
 	namespaceID string,
 ) (string, bool, error) {
-	namespaceEntry, err := a.namespaceCache.GetNamespaceByID(namespaceID)
+	namespaceEntry, err := a.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
 			a.logger.Warn("Cannot find namespace", tag.WorkflowNamespaceID(namespaceID))

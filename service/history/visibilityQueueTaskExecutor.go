@@ -229,7 +229,7 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
-	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
@@ -276,7 +276,7 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
-	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
@@ -402,7 +402,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
-	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}

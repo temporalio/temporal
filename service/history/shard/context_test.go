@@ -53,8 +53,8 @@ type (
 		mockResource *resource.Test
 
 		namespaceID        string
-		mockNamespaceCache *namespace.MockCache
-		namespaceEntry     *namespace.CacheEntry
+		mockNamespaceCache *namespace.MockRegistry
+		namespaceEntry     *namespace.Namespace
 
 		mockClusterMetadata  *cluster.MockMetadata
 		mockExecutionManager *persistence.MockExecutionManager
@@ -87,7 +87,7 @@ func (s *contextSuite) SetupTest() {
 	s.mockResource = shardContext.Resource
 
 	s.namespaceID = "namespace-Id"
-	s.namespaceEntry = namespace.NewLocalCacheEntryForTest(&persistencespb.NamespaceInfo{Id: s.namespaceID}, &persistencespb.NamespaceConfig{}, "")
+	s.namespaceEntry = namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Id: s.namespaceID}, &persistencespb.NamespaceConfig{}, "")
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata

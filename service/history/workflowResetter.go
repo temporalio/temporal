@@ -79,7 +79,7 @@ type (
 
 	workflowResetterImpl struct {
 		shard             shard.Context
-		namespaceCache    namespace.Cache
+		namespaceRegistry    namespace.Registry
 		clusterMetadata   cluster.Metadata
 		executionMgr      persistence.ExecutionManager
 		historyCache      workflow.Cache
@@ -98,7 +98,7 @@ func newWorkflowResetter(
 ) *workflowResetterImpl {
 	return &workflowResetterImpl{
 		shard:           shard,
-		namespaceCache:  shard.GetNamespaceCache(),
+		namespaceRegistry:  shard.GetNamespaceRegistry(),
 		clusterMetadata: shard.GetClusterMetadata(),
 		executionMgr:    shard.GetExecutionManager(),
 		historyCache:    historyCache,
@@ -127,7 +127,7 @@ func (r *workflowResetterImpl) resetWorkflow(
 	resetReapplyType enumspb.ResetReapplyType,
 ) (retError error) {
 
-	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(namespaceID)
+	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
@@ -450,7 +450,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 	resetContext.SetHistorySize(resetHistorySize)
 	return newNDCWorkflow(
 		ctx,
-		r.namespaceCache,
+		r.namespaceRegistry,
 		r.clusterMetadata,
 		resetContext,
 		resetMutableState,

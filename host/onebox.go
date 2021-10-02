@@ -613,18 +613,18 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	service.Start()
 
 	clusterMetadata := cluster.NewTestClusterMetadata(c.clusterMetadataConfig)
-	var replicatorNamespaceCache namespace.Cache
+	var replicatorNamespaceCache namespace.Registry
 	if c.workerConfig.EnableReplicator {
 		metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
-		replicatorNamespaceCache = namespace.NewNamespaceCache(metadataManager, clusterMetadata.IsGlobalNamespaceEnabled(), service.GetMetricsClient(), service.GetLogger())
+		replicatorNamespaceCache = namespace.NewRegistry(metadataManager, clusterMetadata.IsGlobalNamespaceEnabled(), service.GetMetricsClient(), service.GetLogger())
 		replicatorNamespaceCache.Start()
 		c.startWorkerReplicator(service, clusterMetadata)
 	}
 
-	var clientWorkerNamespaceCache namespace.Cache
+	var clientWorkerNamespaceCache namespace.Registry
 	if c.workerConfig.EnableArchiver {
 		metadataProxyManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
-		clientWorkerNamespaceCache = namespace.NewNamespaceCache(metadataProxyManager, clusterMetadata.IsGlobalNamespaceEnabled(), service.GetMetricsClient(), service.GetLogger())
+		clientWorkerNamespaceCache = namespace.NewRegistry(metadataProxyManager, clusterMetadata.IsGlobalNamespaceEnabled(), service.GetMetricsClient(), service.GetLogger())
 		clientWorkerNamespaceCache.Start()
 		c.startWorkerClientWorker(params, service, clientWorkerNamespaceCache)
 	}
@@ -658,7 +658,7 @@ func (c *temporalImpl) startWorkerReplicator(service resource.Resource, clusterM
 	c.replicator.Start()
 }
 
-func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams, service resource.Resource, namespaceCache namespace.Cache) {
+func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams, service resource.Resource, namespaceRegistry namespace.Registry) {
 	workerConfig := worker.NewConfig(params)
 	workerConfig.ArchiverConfig.ArchiverConcurrency = dynamicconfig.GetIntPropertyFn(10)
 
@@ -667,7 +667,7 @@ func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams,
 		MetricsClient:    service.GetMetricsClient(),
 		Logger:           c.logger,
 		HistoryV2Manager: c.executionManager,
-		NamespaceCache:   namespaceCache,
+		NamespaceCache:   namespaceRegistry,
 		Config:           workerConfig.ArchiverConfig,
 		ArchiverProvider: c.archiverProvider,
 	}
@@ -705,13 +705,13 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
 }
 
 func (c *temporalImpl) RefreshNamespaceCache() {
-	c.frontendService.GetNamespaceCache().Refresh()
-	c.matchingService.GetNamespaceCache().Refresh()
+	c.frontendService.GetNamespaceRegistry().Refresh()
+	c.matchingService.GetNamespaceRegistry().Refresh()
 	for _, r := range c.historyServices {
-		r.GetNamespaceCache().Refresh()
+		r.GetNamespaceRegistry().Refresh()
 	}
 	if c.workerService != nil {
-		c.workerService.GetNamespaceCache().Refresh()
+		c.workerService.GetNamespaceRegistry().Refresh()
 	}
 }
 

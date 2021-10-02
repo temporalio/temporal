@@ -49,7 +49,7 @@ type (
 		suite.Suite
 
 		controller         *gomock.Controller
-		mockNamespaceCache *namespace.MockCache
+		mockNamespaceCache *namespace.MockRegistry
 
 		priorityAssigner   *taskPriorityAssignerImpl
 		testTaskProcessRPS int
@@ -65,7 +65,7 @@ func (s *taskPriorityAssignerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockNamespaceCache = namespace.NewMockCache(s.controller)
+	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
 
 	s.testTaskProcessRPS = 10
 	dc := dynamicconfig.NewNoopCollection()

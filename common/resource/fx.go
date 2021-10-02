@@ -207,8 +207,8 @@ func NamespaceCacheProvider(
 	metricsClient metrics.Client,
 	clusterMetadata cluster.Metadata,
 	metadataManager persistence.MetadataManager,
-) namespace.Cache {
-	return namespace.NewNamespaceCache(
+) namespace.Registry {
+	return namespace.NewRegistry(
 		metadataManager,
 		clusterMetadata.IsGlobalNamespaceEnabled(),
 		metricsClient,
@@ -319,7 +319,7 @@ func NewFromDI(
 	saProvider searchattribute.Provider,
 	saManager searchattribute.Manager,
 	saMapper searchattribute.Mapper,
-	namespaceCache namespace.Cache,
+	namespaceRegistry namespace.Registry,
 	timeSource clock.TimeSource,
 	payloadSerializer serialization.Serializer,
 	metricsClient metrics.Client,
@@ -359,7 +359,7 @@ func NewFromDI(
 		return nil, err
 	}
 
-	matchingRawClient, err := clientBean.GetMatchingClient(namespaceCache.GetNamespaceName)
+	matchingRawClient, err := clientBean.GetMatchingClient(namespaceRegistry.GetNamespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -388,7 +388,7 @@ func NewFromDI(
 		saManager:       saManager,
 		saMapper:        saMapper,
 
-		namespaceCache:    namespaceCache,
+		namespaceRegistry:    namespaceRegistry,
 		timeSource:        timeSource,
 		payloadSerializer: payloadSerializer,
 		metricsClient:     metricsClient,

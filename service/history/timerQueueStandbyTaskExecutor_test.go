@@ -73,14 +73,14 @@ type (
 		mockTxProcessor          *MocktransferQueueProcessor
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
-		mockNamespaceCache       *namespace.MockCache
+		mockNamespaceCache       *namespace.MockRegistry
 		mockClusterMetadata      *cluster.MockMetadata
 		mockAdminClient          *adminservicemock.MockAdminServiceClient
 		mockNDCHistoryResender   *xdc.MockNDCHistoryResender
 
 		logger               log.Logger
 		namespaceID          string
-		namespaceEntry       *namespace.CacheEntry
+		namespaceEntry       *namespace.Namespace
 		version              int64
 		clusterName          string
 		now                  time.Time

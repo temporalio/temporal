@@ -69,7 +69,7 @@ type (
 
 		controller             *gomock.Controller
 		mockShard              *shard.ContextTest
-		mockNamespaceCache     *namespace.MockCache
+		mockNamespaceCache     *namespace.MockRegistry
 		mockClusterMetadata    *cluster.MockMetadata
 		mockAdminClient        *adminservicemock.MockAdminServiceClient
 		mockNDCHistoryResender *xdc.MockNDCHistoryResender
@@ -81,7 +81,7 @@ type (
 
 		logger               log.Logger
 		namespaceID          string
-		namespaceEntry       *namespace.CacheEntry
+		namespaceEntry       *namespace.Namespace
 		version              int64
 		clusterName          string
 		now                  time.Time

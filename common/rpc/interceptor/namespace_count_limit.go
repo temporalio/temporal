@@ -40,7 +40,7 @@ var (
 
 type (
 	NamespaceCountLimitInterceptor struct {
-		namespaceCache namespace.Cache
+		namespaceRegistry namespace.Registry
 
 		countFn func(namespace string) int
 		tokens  map[string]int
@@ -53,12 +53,12 @@ type (
 var _ grpc.UnaryServerInterceptor = (*NamespaceCountLimitInterceptor)(nil).Intercept
 
 func NewNamespaceCountLimitInterceptor(
-	namespaceCache namespace.Cache,
+	namespaceRegistry namespace.Registry,
 	countFn func(namespace string) int,
 	tokens map[string]int,
 ) *NamespaceCountLimitInterceptor {
 	return &NamespaceCountLimitInterceptor{
-		namespaceCache: namespaceCache,
+		namespaceRegistry: namespaceRegistry,
 		countFn:        countFn,
 		tokens:         tokens,
 
@@ -76,7 +76,7 @@ func (ni *NamespaceCountLimitInterceptor) Intercept(
 	// token will default to 0
 	token, _ := ni.tokens[methodName]
 	if token != 0 {
-		namespace := GetNamespace(ni.namespaceCache, req)
+		namespace := GetNamespace(ni.namespaceRegistry, req)
 		counter := ni.counter(namespace)
 		count := atomic.AddInt32(counter, int32(token))
 		defer atomic.AddInt32(counter, -int32(token))

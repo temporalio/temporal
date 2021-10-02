@@ -38,7 +38,7 @@ import (
 func TestLocalMutableState(
 	shard shard.Context,
 	eventsCache events.Cache,
-	ns *namespace.CacheEntry,
+	ns *namespace.Namespace,
 	logger log.Logger,
 	runID string,
 ) *MutableStateImpl {

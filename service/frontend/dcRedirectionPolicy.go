@@ -70,7 +70,7 @@ type (
 	SelectedAPIsForwardingRedirectionPolicy struct {
 		currentClusterName string
 		config             *Config
-		namespaceCache     namespace.Cache
+		namespaceRegistry     namespace.Registry
 	}
 )
 
@@ -86,7 +86,7 @@ var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}
 
 // RedirectionPolicyGenerator generate corresponding redirection policy
 func RedirectionPolicyGenerator(clusterMetadata cluster.Metadata, config *Config,
-	namespaceCache namespace.Cache, policy config.DCRedirectionPolicy) DCRedirectionPolicy {
+	namespaceRegistry namespace.Registry, policy config.DCRedirectionPolicy) DCRedirectionPolicy {
 	switch policy.Policy {
 	case DCRedirectionPolicyDefault:
 		// default policy, noop
@@ -95,7 +95,7 @@ func RedirectionPolicyGenerator(clusterMetadata cluster.Metadata, config *Config
 		return NewNoopRedirectionPolicy(clusterMetadata.GetCurrentClusterName())
 	case DCRedirectionPolicySelectedAPIsForwarding:
 		currentClusterName := clusterMetadata.GetCurrentClusterName()
-		return NewSelectedAPIsForwardingPolicy(currentClusterName, config, namespaceCache)
+		return NewSelectedAPIsForwardingPolicy(currentClusterName, config, namespaceRegistry)
 	default:
 		panic(fmt.Sprintf("Unknown DC redirection policy %v", policy.Policy))
 	}
@@ -119,17 +119,17 @@ func (policy *NoopRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, 
 }
 
 // NewSelectedAPIsForwardingPolicy creates a forwarding policy for selected APIs based on namespace
-func NewSelectedAPIsForwardingPolicy(currentClusterName string, config *Config, namespaceCache namespace.Cache) *SelectedAPIsForwardingRedirectionPolicy {
+func NewSelectedAPIsForwardingPolicy(currentClusterName string, config *Config, namespaceRegistry namespace.Registry) *SelectedAPIsForwardingRedirectionPolicy {
 	return &SelectedAPIsForwardingRedirectionPolicy{
 		currentClusterName: currentClusterName,
 		config:             config,
-		namespaceCache:     namespaceCache,
+		namespaceRegistry:     namespaceRegistry,
 	}
 }
 
 // WithNamespaceIDRedirect redirect the API call based on namespace ID
 func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceIDRedirect(ctx context.Context, namespaceID string, apiName string, call func(string) error) error {
-	namespaceEntry, err := policy.namespaceCache.GetNamespaceByID(namespaceID)
+	namespaceEntry, err := policy.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
@@ -138,14 +138,14 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceIDRedirect(c
 
 // WithNamespaceRedirect redirect the API call based on namespace name
 func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, namespace string, apiName string, call func(string) error) error {
-	namespaceEntry, err := policy.namespaceCache.GetNamespace(namespace)
+	namespaceEntry, err := policy.namespaceRegistry.GetNamespace(namespace)
 	if err != nil {
 		return err
 	}
 	return policy.withRedirect(ctx, namespaceEntry, apiName, call)
 }
 
-func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(ctx context.Context, namespaceEntry *namespace.CacheEntry, apiName string, call func(string) error) error {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(ctx context.Context, namespaceEntry *namespace.Namespace, apiName string, call func(string) error) error {
 	targetDC, enableNamespaceNotActiveForwarding := policy.getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx, namespaceEntry, apiName)
 
 	err := call(targetDC)
@@ -165,7 +165,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) isNamespaceNotActiveError
 	return namespaceNotActiveErr.ActiveCluster, true
 }
 
-func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx context.Context, namespaceEntry *namespace.CacheEntry, apiName string) (string, bool) {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx context.Context, namespaceEntry *namespace.Namespace, apiName string) (string, bool) {
 	if !namespaceEntry.IsGlobalNamespace() {
 		return policy.currentClusterName, false
 	}

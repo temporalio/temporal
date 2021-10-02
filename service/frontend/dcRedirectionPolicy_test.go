@@ -57,7 +57,7 @@ type (
 
 		controller          *gomock.Controller
 		mockClusterMetadata *cluster.MockMetadata
-		mockNamespaceCache  *namespace.MockCache
+		mockNamespaceCache  *namespace.MockRegistry
 
 		namespace              string
 		namespaceID            string
@@ -129,7 +129,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
-	s.mockNamespaceCache = namespace.NewMockCache(s.controller)
+	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
 
 	s.namespace = "some random namespace name"
 	s.namespaceID = "deadd0d0-c001-face-d00d-000000000000"
@@ -335,7 +335,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) setupLocalNamespace() {
-	namespaceEntry := namespace.NewLocalCacheEntryForTest(
+	namespaceEntry := namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		cluster.TestCurrentClusterName,
@@ -346,7 +346,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupLocalNamespace() {
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalNamespaceWithOneReplicationCluster() {
-	namespaceEntry := namespace.NewGlobalCacheEntryForTest(
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{
@@ -368,7 +368,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalNamespaceWithT
 	if isRecordActive {
 		activeCluster = s.currentClusterName
 	}
-	namespaceEntry := namespace.NewGlobalCacheEntryForTest(
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{

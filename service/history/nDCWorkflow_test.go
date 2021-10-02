@@ -51,7 +51,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockNamespaceCache  *namespace.MockCache
+		mockNamespaceCache  *namespace.MockRegistry
 		mockContext         *workflow.MockContext
 		mockMutableState    *workflow.MockMutableState
 		mockClusterMetadata *cluster.MockMetadata
@@ -71,7 +71,7 @@ func (s *nDCWorkflowSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockNamespaceCache = namespace.NewMockCache(s.controller)
+	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
 	s.mockContext = workflow.NewMockContext(s.controller)
 	s.mockMutableState = workflow.NewMockMutableState(s.controller)
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)

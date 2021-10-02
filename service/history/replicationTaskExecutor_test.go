@@ -67,7 +67,7 @@ type (
 		mockEngine         *shard.MockEngine
 		config             *configs.Config
 		historyClient      *historyservicemock.MockHistoryServiceClient
-		mockNamespaceCache *namespace.MockCache
+		mockNamespaceCache *namespace.MockRegistry
 		mockClientBean     *client.MockBean
 		adminClient        *adminservicemock.MockAdminServiceClient
 		clusterMetadata    *cluster.MockMetadata
@@ -140,7 +140,7 @@ func (s *replicationTaskExecutorSuite) TestFilterTask_Apply() {
 	namespaceID := uuid.New()
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
-		Return(namespace.NewGlobalCacheEntryForTest(
+		Return(namespace.NewGlobalNamespaceForTest(
 			nil,
 			nil,
 			&persistencespb.NamespaceReplicationConfig{Clusters: []string{
@@ -158,7 +158,7 @@ func (s *replicationTaskExecutorSuite) TestFilterTask_NotApply() {
 	namespaceID := uuid.New()
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
-		Return(namespace.NewGlobalCacheEntryForTest(
+		Return(namespace.NewGlobalNamespaceForTest(
 			nil,
 			nil,
 			&persistencespb.NamespaceReplicationConfig{Clusters: []string{cluster.TestAlternativeClusterName}},

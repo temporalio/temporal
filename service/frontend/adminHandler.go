@@ -338,7 +338,7 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 		return nil, adh.error(err, scope)
 	}
 
-	namespaceID, err := adh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
+	namespaceID, err := adh.GetNamespaceRegistry().GetNamespaceID(request.GetNamespace())
 
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, request.Execution.WorkflowId, adh.numberOfHistoryShards)
 	shardIDStr := convert.Int32ToString(shardID)
@@ -426,7 +426,7 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 	var err error
 	namespaceID := ""
 	if request.WorkflowExecution != nil {
-		namespaceID, err = adh.GetNamespaceCache().GetNamespaceID(request.Namespace)
+		namespaceID, err = adh.GetNamespaceRegistry().GetNamespaceID(request.Namespace)
 		if err != nil {
 			return nil, adh.error(err, scope)
 		}
@@ -450,7 +450,7 @@ func (adh *AdminHandler) DescribeHistoryHost(ctx context.Context, request *admin
 	return &adminservice.DescribeHistoryHostResponse{
 		ShardsNumber:          resp.GetShardsNumber(),
 		ShardIds:              resp.GetShardIds(),
-		NamespaceCache:        resp.GetNamespaceCache(),
+		NamespaceCache:        resp.GetNamespaceRegistry(),
 		ShardControllerStatus: resp.GetShardControllerStatus(),
 		Address:               resp.GetAddress(),
 	}, err
@@ -468,7 +468,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	); err != nil {
 		return nil, adh.error(err, scope)
 	}
-	namespaceID, err := adh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
+	namespaceID, err := adh.GetNamespaceRegistry().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
@@ -755,7 +755,7 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 	if request.GetEvents() == nil {
 		return nil, adh.error(errWorkflowIDNotSet, scope)
 	}
-	namespaceEntry, err := adh.GetNamespaceCache().GetNamespace(request.GetNamespace())
+	namespaceEntry, err := adh.GetNamespaceRegistry().GetNamespace(request.GetNamespace())
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
@@ -977,7 +977,7 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 	if err := validateExecution(request.Execution); err != nil {
 		return nil, adh.error(err, scope)
 	}
-	namespaceEntry, err := adh.GetNamespaceCache().GetNamespace(request.GetNamespace())
+	namespaceEntry, err := adh.GetNamespaceRegistry().GetNamespace(request.GetNamespace())
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
@@ -1006,7 +1006,7 @@ func (adh *AdminHandler) ResendReplicationTasks(
 	}
 
 	resender := xdc.NewNDCHistoryResender(
-		adh.GetNamespaceCache(),
+		adh.GetNamespaceRegistry(),
 		adh.GetRemoteAdminClient(request.GetRemoteCluster()),
 		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 			_, err1 := adh.GetHistoryClient().ReplicateEventsV2(ctx, request)

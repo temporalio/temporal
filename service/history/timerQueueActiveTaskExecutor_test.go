@@ -70,7 +70,7 @@ type (
 		mockShard           *shard.ContextTest
 		mockTxProcessor     *MocktransferQueueProcessor
 		mockTimerProcessor  *MocktimerQueueProcessor
-		mockNamespaceCache  *namespace.MockCache
+		mockNamespaceCache  *namespace.MockRegistry
 		mockMatchingClient  *matchingservicemock.MockMatchingServiceClient
 		mockClusterMetadata *cluster.MockMetadata
 
@@ -79,7 +79,7 @@ type (
 
 		logger                       log.Logger
 		namespaceID                  string
-		namespaceEntry               *namespace.CacheEntry
+		namespaceEntry               *namespace.Namespace
 		version                      int64
 		now                          time.Time
 		timeSource                   *clock.EventTimeSource

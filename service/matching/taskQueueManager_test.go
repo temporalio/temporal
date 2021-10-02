@@ -257,8 +257,8 @@ func createTestTaskQueueManagerWithConfig(
 ) (*taskQueueManagerImpl, error) {
 	logger := log.NewTestLogger()
 	tm := newTestTaskManager(logger)
-	mockNamespaceCache := namespace.NewMockCache(controller)
-	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.CacheEntry{}, nil).AnyTimes()
+	mockNamespaceCache := namespace.NewMockRegistry(controller)
+	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 	cmeta := cluster.NewTestClusterMetadata(cluster.NewTestClusterMetadataConfig(false, true))
 	me := newMatchingEngine(cfg, tm, nil, logger, mockNamespaceCache)
 	tl := "tq"

@@ -60,7 +60,7 @@ type (
 	MutableStateRebuilderImpl struct {
 		shard           shard.Context
 		clusterMetadata cluster.Metadata
-		namespaceCache  namespace.Cache
+		namespaceRegistry  namespace.Registry
 		logger          log.Logger
 
 		mutableState          MutableState
@@ -85,7 +85,7 @@ func NewMutableStateRebuilder(
 	return &MutableStateRebuilderImpl{
 		shard:                 shard,
 		clusterMetadata:       shard.GetService().GetClusterMetadata(),
-		namespaceCache:        shard.GetNamespaceCache(),
+		namespaceRegistry:        shard.GetNamespaceRegistry(),
 		logger:                logger,
 		mutableState:          mutableState,
 		taskGeneratorProvider: taskGeneratorProvider,
@@ -136,7 +136,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			attributes := event.GetWorkflowExecutionStartedEventAttributes()
 			var parentNamespaceID string
 			if attributes.GetParentWorkflowNamespace() != "" {
-				parentNamespaceEntry, err := b.namespaceCache.GetNamespace(
+				parentNamespaceEntry, err := b.namespaceRegistry.GetNamespace(
 					attributes.GetParentWorkflowNamespace(),
 				)
 				if err != nil {

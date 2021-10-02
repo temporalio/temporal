@@ -59,7 +59,7 @@ func verifyTaskVersion(
 	}
 
 	// the first return value is whether this task is valid for further processing
-	namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		logger.Debug("Cannot find namespaceID", tag.WorkflowNamespaceID(namespaceID), tag.Error(err))
 		return false, err
