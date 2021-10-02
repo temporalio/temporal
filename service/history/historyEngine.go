@@ -1192,6 +1192,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			} else {
 				p.LastStartedTime = ai.StartedTime
 			}
+			p.LastWorkerIdentity = ai.StartedIdentity
 			if ai.HasRetryPolicy {
 				p.Attempt = ai.Attempt
 				p.ExpirationTime = ai.RetryExpirationTime
