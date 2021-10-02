@@ -197,20 +197,6 @@ func (m *MockCache) EXPECT() *MockCacheMockRecorder {
 	return m.recorder
 }
 
-// GetAllNamespace mocks base method.
-func (m *MockCache) GetAllNamespace() map[string]*CacheEntry {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAllNamespace")
-	ret0, _ := ret[0].(map[string]*CacheEntry)
-	return ret0
-}
-
-// GetAllNamespace indicates an expected call of GetAllNamespace.
-func (mr *MockCacheMockRecorder) GetAllNamespace() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllNamespace", reflect.TypeOf((*MockCache)(nil).GetAllNamespace))
-}
-
 // GetCacheSize mocks base method.
 func (m *MockCache) GetCacheSize() (int64, int64) {
 	m.ctrl.T.Helper()

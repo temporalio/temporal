@@ -101,7 +101,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 
 	s.namespaceID = tests.NamespaceID
 	s.namespaceEntry = tests.GlobalNamespaceEntry
-	s.version = s.namespaceEntry.GetFailoverVersion()
+	s.version = s.namespaceEntry.FailoverVersion()
 	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
 
@@ -1497,8 +1497,7 @@ func (s *timerQueueActiveTaskExecutorSuite) getMutableStateFromCache(
 	workflowID string,
 	runID string,
 ) workflow.MutableState {
-
-	return s.mockHistoryEngine.historyCache.Get(
+	return s.mockHistoryEngine.historyCache.(*workflow.CacheImpl).Get(
 		definition.NewWorkflowIdentifier(namespaceID, workflowID, runID),
 	).(*workflow.ContextImpl).MutableState
 }

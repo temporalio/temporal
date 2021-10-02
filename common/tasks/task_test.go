@@ -22,41 +22,76 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package elasticsearch
+package tasks
 
 import (
-	"fmt"
+	"math/rand"
+	"sort"
+	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 type (
-	VisibilityTaskNAckError struct {
-		VisibilityTaskKey string
-	}
-
-	VisibilityTaskAckTimeoutError struct {
-		VisibilityTaskKey string
-		Timeout           time.Duration
+	taskKeySuite struct {
+		suite.Suite
+		*require.Assertions
 	}
 )
 
-func newVisibilityTaskNAckError(visibilityTaskKey string) error {
-	return &VisibilityTaskNAckError{
-		VisibilityTaskKey: visibilityTaskKey,
+func TestTaskKeySuite(t *testing.T) {
+	s := new(taskKeySuite)
+	suite.Run(t, s)
+}
+
+func (s *taskKeySuite) SetupSuite() {
+
+}
+
+func (s *taskKeySuite) TearDownSuite() {
+
+}
+
+func (s *taskKeySuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+}
+
+func (s *taskKeySuite) TearDownTest() {
+
+}
+
+func (s *taskKeySuite) TestSort() {
+	numInstant := 256
+	numTaskPerInstant := 16
+
+	taskKeys := Keys{}
+	for i := 0; i < numInstant; i++ {
+		fireTime := time.Unix(0, rand.Int63())
+		for j := 0; j < numTaskPerInstant; j++ {
+			taskKeys = append(taskKeys, Key{
+				FireTime: fireTime,
+				TaskID:   rand.Int63(),
+			})
+		}
 	}
-}
+	sort.Sort(taskKeys)
 
-func (v *VisibilityTaskNAckError) Error() string {
-	return fmt.Sprintf("visibility task %s received NACK", v.VisibilityTaskKey)
-}
+	for i := 1; i < numInstant*numTaskPerInstant; i++ {
+		prev := taskKeys[i-1]
+		next := taskKeys[i]
 
-func newVisibilityTaskAckTimeoutError(visibilityTaskKey string, timeout time.Duration) error {
-	return &VisibilityTaskAckTimeoutError{
-		VisibilityTaskKey: visibilityTaskKey,
-		Timeout:           timeout,
+		if prev.FireTime.Before(next.FireTime) {
+			// noop
+		} else if prev.FireTime.Equal(next.FireTime) {
+			s.True(prev.TaskID <= next.TaskID)
+		} else {
+			s.Fail("task keys are not sorted prev: %v, next: %v", prev, next)
+		}
 	}
-}
-
-func (v *VisibilityTaskAckTimeoutError) Error() string {
-	return fmt.Sprintf("visibility task %s timedout waiting for ACK after %v", v.VisibilityTaskKey, v.Timeout)
 }

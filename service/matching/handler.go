@@ -343,7 +343,7 @@ func (h *Handler) namespaceName(id string) string {
 	if err != nil {
 		return ""
 	}
-	return entry.GetInfo().Name
+	return entry.Name()
 }
 
 func (h *Handler) reportForwardedPerTaskQueueCounter(hCtx *handlerContext, namespaceId string) {

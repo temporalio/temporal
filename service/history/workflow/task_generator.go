@@ -178,7 +178,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(executionInfo.NamespaceId)
 	switch err.(type) {
 	case nil:
-		retention = namespaceEntry.GetRetention(executionInfo.WorkflowId)
+		retention = namespaceEntry.Retention(executionInfo.WorkflowId)
 	case *serviceerror.NotFound:
 		// namespace is not accessible, use default value above
 	default:
@@ -527,7 +527,7 @@ func (r *TaskGeneratorImpl) getTargetNamespaceID(
 		if err != nil {
 			return "", err
 		}
-		targetNamespaceID = targetNamespaceEntry.GetInfo().Id
+		targetNamespaceID = targetNamespaceEntry.ID()
 	}
 
 	return targetNamespaceID, nil

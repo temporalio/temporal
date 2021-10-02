@@ -143,7 +143,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.childNamespaceID = tests.ChildNamespaceID
 	s.childNamespace = tests.ChildNamespace
 	s.childNamespaceEntry = tests.GlobalChildNamespaceEntry
-	s.version = s.namespaceEntry.GetFailoverVersion()
+	s.version = s.namespaceEntry.FailoverVersion()
 	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
 

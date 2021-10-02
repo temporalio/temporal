@@ -37,7 +37,6 @@ import (
 
 	"go.temporal.io/server/common/cache"
 
-	"github.com/gogo/protobuf/proto"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -93,8 +92,8 @@ type (
 	}
 
 	ClusterInfo interface {
-		IsGlobalNamespaceEnabled() bool
 		GetCurrentClusterName() string
+		IsGlobalNamespaceEnabled() bool
 	}
 
 	Persistence interface {
@@ -125,7 +124,6 @@ type (
 		GetNamespaceByID(id string) (*CacheEntry, error)
 		GetNamespaceID(name string) (string, error)
 		GetNamespaceName(id string) (string, error)
-		GetAllNamespace() map[string]*CacheEntry
 		GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64)
 		// Refresh forces an immediate refresh of the namespace cache and blocks until it's complete.
 		Refresh()
@@ -146,8 +144,6 @@ type (
 		// coroutine is doing namespace refreshment
 		refreshLock     sync.Mutex
 		lastRefreshTime atomic.Value
-		checkLock       sync.Mutex
-		lastCheckTime   time.Time
 
 		callbackLock     sync.Mutex
 		prepareCallbacks map[int32]PrepareCallbackFn
@@ -155,16 +151,15 @@ type (
 		triggerRefreshCh chan chan struct{}
 	}
 
-	// CacheEntries CacheEntry slice
-	CacheEntries []*CacheEntry
+	// cacheEntries CacheEntry slice
+	cacheEntries []*CacheEntry
 
 	// CacheEntry contains the info and config for a namespace
 	CacheEntry struct {
-		thisCluster ClusterInfo
-		sync.RWMutex
-		info                        *persistencespb.NamespaceInfo
-		config                      *persistencespb.NamespaceConfig
-		replicationConfig           *persistencespb.NamespaceReplicationConfig
+		thisCluster                 ClusterInfo
+		info                        persistencespb.NamespaceInfo
+		config                      persistencespb.NamespaceConfig
+		replicationConfig           persistencespb.NamespaceReplicationConfig
 		configVersion               int64
 		failoverVersion             int64
 		isGlobalNamespace           bool
@@ -196,8 +191,12 @@ func NewNamespaceCache(
 		callbacks:        make(map[int32]CallbackFn),
 		triggerRefreshCh: make(chan chan struct{}, 1),
 	}
-	nscache.cacheNameToID.Store(newCache())
-	nscache.cacheByID.Store(newCache())
+	cacheOpts := cache.Options{
+		InitialCapacity: namespaceCacheInitialSize,
+		TTL:             namespaceCacheTTL,
+	}
+	nscache.cacheNameToID.Store(cache.New(namespaceCacheMaxSize, &cacheOpts))
+	nscache.cacheByID.Store(cache.New(namespaceCacheMaxSize, &cacheOpts))
 	nscache.lastRefreshTime.Store(time.Time{})
 
 	return nscache
@@ -208,14 +207,6 @@ func newCache() cache.Cache {
 	opts.InitialCapacity = namespaceCacheInitialSize
 	opts.TTL = namespaceCacheTTL
 	return cache.New(namespaceCacheMaxSize, opts)
-}
-
-func newCacheEntry(thisCluster ClusterInfo) *CacheEntry {
-
-	return &CacheEntry{
-		thisCluster: thisCluster,
-		initialized: false,
-	}
 }
 
 func (c *namespaceCache) GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64) {
@@ -245,7 +236,7 @@ func (c *namespaceCache) Stop() {
 	close(c.shutdownChan)
 }
 
-func (c *namespaceCache) GetAllNamespace() map[string]*CacheEntry {
+func (c *namespaceCache) getAllNamespace() map[string]*CacheEntry {
 	result := make(map[string]*CacheEntry)
 	ite := c.cacheByID.Load().(cache.Cache).Iterator()
 	defer ite.Close()
@@ -253,11 +244,7 @@ func (c *namespaceCache) GetAllNamespace() map[string]*CacheEntry {
 	for ite.HasNext() {
 		entry := ite.Next()
 		id := entry.Key().(string)
-		namespaceCacheEntry := entry.Value().(*CacheEntry)
-		namespaceCacheEntry.RLock()
-		dup := namespaceCacheEntry.duplicate()
-		namespaceCacheEntry.RUnlock()
-		result[id] = dup
+		result[id] = entry.Value().(*CacheEntry)
 	}
 	return result
 }
@@ -279,8 +266,8 @@ func (c *namespaceCache) RegisterNamespaceChangeCallback(
 	c.callbackLock.Unlock()
 
 	// this section is trying to make the shard catch up with namespace changes
-	namespaces := CacheEntries{}
-	for _, namespace := range c.GetAllNamespace() {
+	namespaces := cacheEntries{}
+	for _, namespace := range c.getAllNamespace() {
 		namespaces = append(namespaces, namespace)
 	}
 	// we mush notify the change in a ordered fashion
@@ -316,10 +303,7 @@ func (c *namespaceCache) UnregisterNamespaceChangeCallback(
 
 // GetNamespace retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
 // store and writes it to the cache with an expiry before returning back
-func (c *namespaceCache) GetNamespace(
-	name string,
-) (*CacheEntry, error) {
-
+func (c *namespaceCache) GetNamespace(name string) (*CacheEntry, error) {
 	if name == "" {
 		return nil, serviceerror.NewInvalidArgument("Namespace is empty.")
 	}
@@ -328,10 +312,7 @@ func (c *namespaceCache) GetNamespace(
 
 // GetNamespaceByID retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
 // store and writes it to the cache with an expiry before returning back
-func (c *namespaceCache) GetNamespaceByID(
-	id string,
-) (*CacheEntry, error) {
-
+func (c *namespaceCache) GetNamespaceByID(id string) (*CacheEntry, error) {
 	if id == "" {
 		return nil, serviceerror.NewInvalidArgument("NamespaceID is empty.")
 	}
@@ -425,7 +406,7 @@ func (c *namespaceCache) refreshNamespacesLocked() error {
 
 	var token []byte
 	request := &persistence.ListNamespacesRequest{PageSize: namespaceCacheRefreshPageSize}
-	var namespaces CacheEntries
+	var namespaces cacheEntries
 	continuePage := true
 
 	for continuePage {
@@ -452,7 +433,7 @@ func (c *namespaceCache) refreshNamespacesLocked() error {
 	// make a copy of the existing namespace cache, so we can calculate diff and do compare and swap
 	newCacheNameToID := newCache()
 	newCacheByID := newCache()
-	for _, namespace := range c.GetAllNamespace() {
+	for _, namespace := range c.getAllNamespace() {
 		newCacheNameToID.Put(namespace.info.Name, namespace.info.Id)
 		newCacheByID.Put(namespace.info.Id, namespace)
 	}
@@ -467,15 +448,12 @@ UpdateLoop:
 			// will be loaded into cache in the next refresh
 			break UpdateLoop
 		}
-		prevEntry, nextEntry, err := c.updateIDToNamespaceCache(newCacheByID, namespace.info.Id, namespace)
-		if err != nil {
-			return err
-		}
-		c.updateNameToIDCache(newCacheNameToID, nextEntry.info.Name, nextEntry.info.Id)
+		prevEntry := c.updateIDToNamespaceCache(newCacheByID, namespace.ID(), namespace)
+		c.updateNameToIDCache(newCacheNameToID, namespace.Name(), namespace.ID())
 
 		if prevEntry != nil {
 			prevEntries = append(prevEntries, prevEntry)
-			nextEntries = append(nextEntries, nextEntry)
+			nextEntries = append(nextEntries, namespace)
 		}
 	}
 
@@ -498,7 +476,6 @@ func (c *namespaceCache) updateNameToIDCache(
 	name string,
 	id string,
 ) {
-
 	cacheNameToID.Put(name, id)
 }
 
@@ -506,73 +483,35 @@ func (c *namespaceCache) updateIDToNamespaceCache(
 	cacheByID cache.Cache,
 	id string,
 	record *CacheEntry,
-) (*CacheEntry, *CacheEntry, error) {
-
-	elem, err := cacheByID.PutIfNotExist(id, newCacheEntry(c.thisCluster))
-	if err != nil {
-		return nil, nil, err
+) *CacheEntry {
+	prevCacheRec := cacheByID.Put(id, record)
+	if e, ok := prevCacheRec.(*CacheEntry); ok &&
+		record.notificationVersion > e.notificationVersion &&
+		c.thisCluster.IsGlobalNamespaceEnabled() {
+		return e
 	}
-	entry := elem.(*CacheEntry)
-
-	entry.Lock()
-	defer entry.Unlock()
-
-	var prevNamespace *CacheEntry
-	triggerCallback := c.thisCluster.IsGlobalNamespaceEnabled() &&
-		// initialized will be true when the entry contains valid data
-		entry.initialized &&
-		record.notificationVersion > entry.notificationVersion
-	if triggerCallback {
-		prevNamespace = entry.duplicate()
-	}
-
-	entry.info = record.info
-	entry.config = record.config
-	entry.replicationConfig = record.replicationConfig
-	entry.configVersion = record.configVersion
-	entry.failoverVersion = record.failoverVersion
-	entry.isGlobalNamespace = record.isGlobalNamespace
-	entry.failoverNotificationVersion = record.failoverNotificationVersion
-	entry.notificationVersion = record.notificationVersion
-	entry.initialized = record.initialized
-
-	nextNamespace := entry.duplicate()
-
-	return prevNamespace, nextNamespace, nil
+	return nil
 }
 
-// getNamespace retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
-// store and writes it to the cache with an expiry before returning back
-func (c *namespaceCache) getNamespace(
-	name string,
-) (*CacheEntry, error) {
-
-	id, cacheHit := c.cacheNameToID.Load().(cache.Cache).Get(name).(string)
-	if cacheHit {
+// getNamespace retrieves the information from the cache if it exists
+func (c *namespaceCache) getNamespace(name string) (*CacheEntry, error) {
+	if id, ok := c.cacheNameToID.Load().(cache.Cache).Get(name).(string); ok {
 		return c.getNamespaceByID(id)
 	}
 	return nil, serviceerror.NewNotFound(fmt.Sprintf("namespace: %v not found", name))
 }
 
-// getNamespaceByID retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
-// store and writes it to the cache with an expiry before returning back
-func (c *namespaceCache) getNamespaceByID(
-	id string,
-) (*CacheEntry, error) {
-
-	var result *CacheEntry
-	entry, cacheHit := c.cacheByID.Load().(cache.Cache).Get(id).(*CacheEntry)
-	if cacheHit {
-		entry.RLock()
-		result = entry.duplicate()
-		entry.RUnlock()
-		return result, nil
+// getNamespaceByID retrieves the information from the cache if it exists.
+func (c *namespaceCache) getNamespaceByID(id string) (*CacheEntry, error) {
+	if entry, ok := c.cacheByID.Load().(cache.Cache).Get(id).(*CacheEntry); ok {
+		return entry, nil
 	}
 	return nil, serviceerror.NewNotFound(fmt.Sprintf("namespace ID: %v not found", id))
 }
 
 func (c *namespaceCache) triggerNamespaceChangePrepareCallbackLocked() {
-	sw := c.metricsClient.StartTimer(metrics.NamespaceCacheScope, metrics.NamespaceCachePrepareCallbacksLatency)
+	sw := c.metricsClient.StartTimer(
+		metrics.NamespaceCacheScope, metrics.NamespaceCachePrepareCallbacksLatency)
 	defer sw.Stop()
 
 	for _, prepareCallback := range c.prepareCallbacks {
@@ -585,7 +524,8 @@ func (c *namespaceCache) triggerNamespaceChangeCallbackLocked(
 	nextNamespaces []*CacheEntry,
 ) {
 
-	sw := c.metricsClient.StartTimer(metrics.NamespaceCacheScope, metrics.NamespaceCacheCallbacksLatency)
+	sw := c.metricsClient.StartTimer(
+		metrics.NamespaceCacheScope, metrics.NamespaceCacheCallbacksLatency)
 	defer sw.Stop()
 
 	for _, callback := range c.callbacks {
@@ -599,9 +539,9 @@ func FromPersistentState(
 ) *CacheEntry {
 	return &CacheEntry{
 		thisCluster:                 thisCluster,
-		info:                        record.Namespace.Info,
-		config:                      record.Namespace.Config,
-		replicationConfig:           record.Namespace.ReplicationConfig,
+		info:                        *record.Namespace.Info,
+		config:                      *record.Namespace.Config,
+		replicationConfig:           *record.Namespace.ReplicationConfig,
 		configVersion:               record.Namespace.ConfigVersion,
 		failoverVersion:             record.Namespace.FailoverVersion,
 		isGlobalNamespace:           record.IsGlobalNamespace,
@@ -612,12 +552,12 @@ func FromPersistentState(
 }
 
 func (entry *CacheEntry) Clone(ms ...EntryMutation) *CacheEntry {
-	newEntry := entry.duplicate()
+	newEntry := *entry
 	r := persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
-			Info:                        newEntry.info,
-			Config:                      newEntry.config,
-			ReplicationConfig:           newEntry.replicationConfig,
+			Info:                        &newEntry.info,
+			Config:                      &newEntry.config,
+			ReplicationConfig:           &newEntry.replicationConfig,
 			ConfigVersion:               newEntry.configVersion,
 			FailoverNotificationVersion: newEntry.failoverNotificationVersion,
 			FailoverVersion:             newEntry.failoverVersion,
@@ -629,34 +569,6 @@ func (entry *CacheEntry) Clone(ms ...EntryMutation) *CacheEntry {
 		m.apply(&r)
 	}
 	return FromPersistentState(entry.thisCluster, &r)
-}
-
-func (entry *CacheEntry) duplicate() *CacheEntry {
-	// this is a deep copy
-	result := newCacheEntry(entry.thisCluster)
-	result.info = proto.Clone(entry.info).(*persistencespb.NamespaceInfo)
-	if result.info.Data == nil {
-		result.info.Data = make(map[string]string)
-	}
-
-	result.config = proto.Clone(entry.config).(*persistencespb.NamespaceConfig)
-	if result.config.BadBinaries == nil {
-		result.config.BadBinaries = &namespacepb.BadBinaries{
-			Binaries: make(map[string]*namespacepb.BadBinaryInfo),
-		}
-	} else if result.config.BadBinaries.Binaries == nil {
-		result.config.BadBinaries.Binaries = make(map[string]*namespacepb.BadBinaryInfo)
-	}
-
-	result.replicationConfig = proto.Clone(entry.replicationConfig).(*persistencespb.NamespaceReplicationConfig)
-	result.configVersion = entry.configVersion
-	result.failoverVersion = entry.failoverVersion
-
-	result.isGlobalNamespace = entry.isGlobalNamespace
-	result.failoverNotificationVersion = entry.failoverNotificationVersion
-	result.notificationVersion = entry.notificationVersion
-	result.initialized = entry.initialized
-	return result
 }
 
 // VisibilityArchivalState observes the visibility archive configuration (state
@@ -691,9 +603,14 @@ func (entry *CacheEntry) VerifyBinaryChecksum(cksum string) error {
 	return nil
 }
 
-// GetInfo return the namespace info
-func (entry *CacheEntry) GetInfo() *persistencespb.NamespaceInfo {
-	return entry.info
+// ID observes this namespace's permanent unique identifier in string form.
+func (entry *CacheEntry) ID() string {
+	return entry.info.Id
+}
+
+// Name observes this namespace's configured name.
+func (entry *CacheEntry) Name() string {
+	return entry.info.Name
 }
 
 // ActiveClusterName observes the name of the cluster that is currently active
@@ -711,13 +628,13 @@ func (entry *CacheEntry) ClusterNames() []string {
 	return out
 }
 
-// GetConfigVersion return the namespace config version
-func (entry *CacheEntry) GetConfigVersion() int64 {
+// ConfigVersion return the namespace config version
+func (entry *CacheEntry) ConfigVersion() int64 {
 	return entry.configVersion
 }
 
-// GetFailoverVersion return the namespace failover version
-func (entry *CacheEntry) GetFailoverVersion() int64 {
+// FailoverVersion return the namespace failover version
+func (entry *CacheEntry) FailoverVersion() int64 {
 	return entry.failoverVersion
 }
 
@@ -726,29 +643,33 @@ func (entry *CacheEntry) IsGlobalNamespace() bool {
 	return entry.isGlobalNamespace
 }
 
-// GetFailoverNotificationVersion return the global notification version of when failover happened
-func (entry *CacheEntry) GetFailoverNotificationVersion() int64 {
+// FailoverNotificationVersion return the global notification version of when failover happened
+func (entry *CacheEntry) FailoverNotificationVersion() int64 {
 	return entry.failoverNotificationVersion
 }
 
-// GetNotificationVersion return the global notification version of when namespace changed
-func (entry *CacheEntry) GetNotificationVersion() int64 {
+// NotificationVersion return the global notification version of when namespace changed
+func (entry *CacheEntry) NotificationVersion() int64 {
 	return entry.notificationVersion
 }
 
-// IsNamespaceActive return whether the namespace is active, i.e. non global namespace or global namespace which active cluster is the current cluster
+// IsNamespaceActive return whether the namespace is active, i.e. non global
+// namespace or global namespace which active cluster is the current cluster
 func (entry *CacheEntry) IsNamespaceActive() bool {
 	if !entry.isGlobalNamespace {
-		// namespace is not a global namespace, meaning namespace is always "active" within each cluster
+		// namespace is not a global namespace, meaning namespace is always
+		// "active" within each cluster
 		return true
 	}
-	return entry.thisCluster.GetCurrentClusterName() == entry.replicationConfig.ActiveClusterName
+	return entry.thisCluster.GetCurrentClusterName() ==
+		entry.replicationConfig.ActiveClusterName
 }
 
-// GetReplicationPolicy return the derived workflow replication policy
-func (entry *CacheEntry) GetReplicationPolicy() ReplicationPolicy {
-	// frontend guarantee that the clusters always contains the active namespace, so if the # of clusters is 1
-	// then we do not need to send out any events for replication
+// ReplicationPolicy return the derived workflow replication policy
+func (entry *CacheEntry) ReplicationPolicy() ReplicationPolicy {
+	// frontend guarantee that the clusters always contains the active
+	// namespace, so if the # of clusters is 1 then we do not need to send out
+	// any events for replication
 	if entry.isGlobalNamespace && len(entry.replicationConfig.Clusters) > 1 {
 		return ReplicationPolicyMultiCluster
 	}
@@ -769,26 +690,18 @@ func (entry *CacheEntry) GetNamespaceNotActiveErr() error {
 }
 
 // Len return length
-func (t CacheEntries) Len() int {
+func (t cacheEntries) Len() int {
 	return len(t)
 }
 
 // Swap implements sort.Interface.
-func (t CacheEntries) Swap(i, j int) {
+func (t cacheEntries) Swap(i, j int) {
 	t[i], t[j] = t[j], t[i]
 }
 
 // Less implements sort.Interface
-func (t CacheEntries) Less(i, j int) bool {
+func (t cacheEntries) Less(i, j int) bool {
 	return t[i].notificationVersion < t[j].notificationVersion
-}
-
-// CreateNamespaceCacheEntry create a cache entry with namespace
-func CreateNamespaceCacheEntry(
-	namespace string,
-) *CacheEntry {
-
-	return &CacheEntry{info: &persistencespb.NamespaceInfo{Name: namespace}}
 }
 
 // SampleRetentionKey is key to specify sample retention
@@ -797,10 +710,8 @@ var SampleRetentionKey = "sample_retention_days"
 // SampleRateKey is key to specify sample rate
 var SampleRateKey = "sample_retention_rate"
 
-// GetRetention returns retention in days for given workflow
-func (entry *CacheEntry) GetRetention(
-	workflowID string,
-) time.Duration {
+// Retention returns retention in days for given workflow
+func (entry *CacheEntry) Retention(workflowID string) time.Duration {
 
 	if entry.config.Retention == nil {
 		return 0
@@ -820,37 +731,34 @@ func (entry *CacheEntry) GetRetention(
 	return *entry.config.Retention
 }
 
-// IsSampledForLongerRetentionEnabled return whether sample for longer retention is enabled or not
+// IsSampledForLongerRetentionEnabled return whether sample for longer retention
+// is enabled or not
 func (entry *CacheEntry) IsSampledForLongerRetentionEnabled(string) bool {
-
 	_, ok := entry.info.Data[SampleRateKey]
 	return ok
 }
 
 // IsSampledForLongerRetention return should given workflow been sampled or not
-func (entry *CacheEntry) IsSampledForLongerRetention(
-	workflowID string,
-) bool {
-
-	if sampledRateValue, ok := entry.info.Data[SampleRateKey]; ok {
-		sampledRate, err := strconv.ParseFloat(sampledRateValue, 64)
-		if err != nil {
-			return false
-		}
-
-		h := fnv.New32a()
-		_, err = h.Write([]byte(workflowID))
-		if err != nil {
-			return false
-		}
-		hash := h.Sum32()
-
-		r := float64(hash%1000) / float64(1000) // use 1000 so we support one decimal rate like 1.5%.
-		if r < sampledRate {                    // sampled
-			return true
-		}
+func (entry *CacheEntry) IsSampledForLongerRetention(workflowID string) bool {
+	sampledRateValue, ok := entry.info.Data[SampleRateKey]
+	if !ok {
+		return false
 	}
-	return false
+	sampledRate, err := strconv.ParseFloat(sampledRateValue, 64)
+	if err != nil {
+		return false
+	}
+
+	h := fnv.New32a()
+	_, err = h.Write([]byte(workflowID))
+	if err != nil {
+		return false
+	}
+	hash := h.Sum32()
+
+	// use 1000 so we support one decimal rate like 1.5%.
+	r := float64(hash%1000) / float64(1000)
+	return r < sampledRate
 }
 
 // Error returns the reason associated with this bad binary.

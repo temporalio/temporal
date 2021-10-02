@@ -1083,7 +1083,7 @@ func (s *engineSuite) TestValidateSignalRequest() {
 		Identity:                 "identity",
 	}
 	err := s.mockHistoryEngine.validateStartWorkflowExecutionRequest(
-		context.Background(), startRequest, tests.LocalNamespaceEntry.GetInfo().GetName(), "SignalWithStartWorkflowExecution")
+		context.Background(), startRequest, tests.LocalNamespaceEntry.Name(), "SignalWithStartWorkflowExecution")
 	s.Error(err, "startRequest doesn't have request id, it should error out")
 
 	startRequest.RequestId = "request-id"
@@ -1091,7 +1091,7 @@ func (s *engineSuite) TestValidateSignalRequest() {
 		"data": payload.EncodeBytes(make([]byte, 4*1024*1024)),
 	}}
 	err = s.mockHistoryEngine.validateStartWorkflowExecutionRequest(
-		context.Background(), startRequest, tests.LocalNamespaceEntry.GetInfo().GetName(), "SignalWithStartWorkflowExecution")
+		context.Background(), startRequest, tests.LocalNamespaceEntry.Name(), "SignalWithStartWorkflowExecution")
 	s.Error(err, "memo should be too big")
 }
 
@@ -1542,8 +1542,8 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 		namespace.WithID(uuid.New()),
 		namespace.WithBadBinary("test-bad-binary"),
 	)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(ns.GetInfo().Id).Return(ns, nil).AnyTimes()
-	s.mockNamespaceCache.EXPECT().GetNamespace(ns.GetInfo().Id).Return(ns, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(ns.ID()).Return(ns, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(ns.ID()).Return(ns, nil).AnyTimes()
 	msBuilder := workflow.TestLocalMutableState(s.mockHistoryEngine.shard, s.eventsCache,
 		ns, log.NewTestLogger(), we.GetRunId())
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
@@ -1565,7 +1565,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedBadBinary() {
 	})
 
 	_, err := s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
-		NamespaceId: ns.GetInfo().Id,
+		NamespaceId: ns.ID(),
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken:      taskToken,
 			Commands:       commands,

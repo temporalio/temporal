@@ -199,6 +199,8 @@ func (s *visibilityStore) addBulkIndexRequestAndWait(
 func (s *visibilityStore) addBulkRequestAndWait(bulkRequest *client.BulkableRequest, visibilityTaskKey string) error {
 	s.checkProcessor()
 
+	// Add method is blocking. If bulk processor is busy flushing previous bulk, request will wait here.
+	// Therefore, ackTimeoutTimer in fact wait for request to be committed after it was added to bulk processor.
 	ackCh := s.processor.Add(bulkRequest, visibilityTaskKey)
 	ackTimeoutTimer := time.NewTimer(s.processorAckTimeout())
 	defer ackTimeoutTimer.Stop()
@@ -206,11 +208,13 @@ func (s *visibilityStore) addBulkRequestAndWait(bulkRequest *client.BulkableRequ
 	select {
 	case ack := <-ackCh:
 		if !ack {
-			return newVisibilityTaskNAckError(visibilityTaskKey)
+			// Returns non-retryable Internal error here because NACK from bulk processor means that this request can't be processed.
+			// Visibility task processor retries all errors though, therefore new request will be generated for the same task.
+			return serviceerror.NewInternal(fmt.Sprintf("visibility task %s received NACK", visibilityTaskKey))
 		}
 		return nil
 	case <-ackTimeoutTimer.C:
-		return newVisibilityTaskAckTimeoutError(visibilityTaskKey, s.processorAckTimeout())
+		return &persistence.TimeoutError{Msg: fmt.Sprintf("visibility task %s timedout waiting for ACK after %v", visibilityTaskKey, s.processorAckTimeout())}
 	}
 }
 

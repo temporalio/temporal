@@ -131,7 +131,7 @@ func (r *workflowResetterImpl) resetWorkflow(
 	if err != nil {
 		return err
 	}
-	resetWorkflowVersion := namespaceEntry.GetFailoverVersion()
+	resetWorkflowVersion := namespaceEntry.FailoverVersion()
 
 	var currentWorkflowMutation *persistence.WorkflowMutation
 	var currentWorkflowEventsSeq []*persistence.WorkflowEvents

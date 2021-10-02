@@ -229,7 +229,27 @@ func (s *Server) Start() error {
 			}
 			continue
 		case primitives.MatchingService:
-			svc, err = matching.NewService(params)
+			// todo: generalize this custom case logic as other services onboard fx
+			matchingApp := fx.New(
+				fx.Supply(
+					params,
+					s.serviceStoppedChs[svcName],
+				),
+				matching.Module)
+			err = matchingApp.Err()
+			if err != nil {
+				close(s.serviceStoppedChs[svcName])
+				return fmt.Errorf("unable to construct service %q: %w", svcName, err)
+			}
+			s.serviceApps[svcName] = matchingApp
+			timeoutCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStartTimeout)
+			err = matchingApp.Start(timeoutCtx)
+			cancelFunc()
+			if err != nil {
+				close(s.serviceStoppedChs[svcName])
+				return fmt.Errorf("unable to start service %q: %w", svcName, err)
+			}
+			continue
 		case primitives.WorkerService:
 			svc, err = worker.NewService(params)
 		default:
