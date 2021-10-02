@@ -72,7 +72,7 @@ func NewService(
 	}
 
 	metricsInterceptor := interceptor.NewTelemetryInterceptor(
-		serviceResource.GetNamespaceCache(),
+		serviceResource.GetNamespaceRegistry(),
 		serviceResource.GetMetricsClient(),
 		metrics.MatchingAPIMetricsScopes(),
 		logger,

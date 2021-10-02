@@ -416,7 +416,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId
 
 	// do not try to get namespace cache within shard lock
-	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -458,7 +458,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	workflowID := request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId
 
 	// do not try to get namespace cache within shard lock
-	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -513,7 +513,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	workflowID := request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId
 
 	// do not try to get namespace cache within shard lock
-	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -581,7 +581,7 @@ func (s *ContextImpl) AddTasks(
 	workflowID := request.WorkflowID
 
 	// do not try to get namespace cache within shard lock
-	namespaceEntry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
@@ -631,7 +631,7 @@ func (s *ContextImpl) AppendHistoryEvents(
 		// N.B. - Dual emit here makes sense so that we can see aggregate timer stats across all
 		// namespaces along with the individual namespaces stats
 		s.GetMetricsClient().RecordDistribution(metrics.SessionSizeStatsScope, metrics.HistorySize, size)
-		if entry, err := s.GetNamespaceCache().GetNamespaceByID(namespaceID); err == nil && entry != nil {
+		if entry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID); err == nil && entry != nil {
 			s.GetMetricsClient().Scope(
 				metrics.SessionSizeStatsScope,
 				metrics.NamespaceTag(entry.Name()),
@@ -856,7 +856,7 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 }
 
 func (s *ContextImpl) allocateTaskIDsLocked(
-	namespaceEntry *namespace.CacheEntry,
+	namespaceEntry *namespace.Namespace,
 	workflowID string,
 	transferTasks []tasks.Task,
 	replicationTasks []tasks.Task,
@@ -907,7 +907,7 @@ func (s *ContextImpl) allocateTransferIDsLocked(
 // because Temporal Indexer assume timer taskID of deleteWorkflowExecution is larger than transfer taskID of closeWorkflowExecution
 // for a given workflow.
 func (s *ContextImpl) allocateTimerIDsLocked(
-	namespaceEntry *namespace.CacheEntry,
+	namespaceEntry *namespace.Namespace,
 	workflowID string,
 	timerTasks []tasks.Task,
 ) error {

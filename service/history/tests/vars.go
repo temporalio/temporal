@@ -53,7 +53,7 @@ var (
 	WorkflowID        = "random-workflow-id"
 	RunID             = "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 
-	LocalNamespaceEntry = namespace.NewLocalCacheEntryForTest(
+	LocalNamespaceEntry = namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: NamespaceID, Name: Namespace},
 		&persistencespb.NamespaceConfig{
 			Retention: timestamp.DurationFromDays(1),
@@ -64,7 +64,7 @@ var (
 		cluster.TestCurrentClusterName,
 	)
 
-	GlobalNamespaceEntry = namespace.NewGlobalCacheEntryForTest(
+	GlobalNamespaceEntry = namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: NamespaceID, Name: Namespace},
 		&persistencespb.NamespaceConfig{
 			Retention:               timestamp.DurationFromDays(1),
@@ -81,7 +81,7 @@ var (
 		Version,
 	)
 
-	GlobalParentNamespaceEntry = namespace.NewGlobalCacheEntryForTest(
+	GlobalParentNamespaceEntry = namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: ParentNamespaceID, Name: ParentNamespace},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{
@@ -94,7 +94,7 @@ var (
 		Version,
 	)
 
-	GlobalTargetNamespaceEntry = namespace.NewGlobalCacheEntryForTest(
+	GlobalTargetNamespaceEntry = namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: TargetNamespaceID, Name: TargetNamespace},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{
@@ -107,7 +107,7 @@ var (
 		Version,
 	)
 
-	GlobalChildNamespaceEntry = namespace.NewGlobalCacheEntryForTest(
+	GlobalChildNamespaceEntry = namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: ChildNamespaceID, Name: ChildNamespace},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{

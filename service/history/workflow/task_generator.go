@@ -104,8 +104,8 @@ type (
 	}
 
 	TaskGeneratorImpl struct {
-		namespaceCache namespace.Cache
-		logger         log.Logger
+		namespaceRegistry namespace.Registry
+		logger            log.Logger
 
 		mutableState MutableState
 	}
@@ -116,14 +116,14 @@ const defaultWorkflowRetention time.Duration = 1 * 24 * time.Hour
 var _ TaskGenerator = (*TaskGeneratorImpl)(nil)
 
 func NewTaskGenerator(
-	namespaceCache namespace.Cache,
+	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 	mutableState MutableState,
 ) *TaskGeneratorImpl {
 
 	mstg := &TaskGeneratorImpl{
-		namespaceCache: namespaceCache,
-		logger:         logger,
+		namespaceRegistry: namespaceRegistry,
+		logger:            logger,
 
 		mutableState: mutableState,
 	}
@@ -175,7 +175,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	})
 
 	retention := defaultWorkflowRetention
-	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(executionInfo.NamespaceId)
+	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(executionInfo.NamespaceId)
 	switch err.(type) {
 	case nil:
 		retention = namespaceEntry.Retention(executionInfo.WorkflowId)
@@ -523,7 +523,7 @@ func (r *TaskGeneratorImpl) getTargetNamespaceID(
 
 	targetNamespaceID := r.mutableState.GetExecutionInfo().NamespaceId
 	if targetNamespace != "" {
-		targetNamespaceEntry, err := r.namespaceCache.GetNamespace(targetNamespace)
+		targetNamespaceEntry, err := r.namespaceRegistry.GetNamespace(targetNamespace)
 		if err != nil {
 			return "", err
 		}

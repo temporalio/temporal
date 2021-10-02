@@ -67,7 +67,7 @@ type (
 	) workflow.MutableStateRebuilder
 
 	mutableStateProvider func(
-		namespaceEntry *namespace.CacheEntry,
+		namespaceEntry *namespace.Namespace,
 		startTime time.Time,
 		logger log.Logger,
 	) workflow.MutableState
@@ -106,7 +106,7 @@ type (
 		executionMgr      persistence.ExecutionManager
 		historySerializer serialization.Serializer
 		metricsClient     metrics.Client
-		namespaceCache    namespace.Cache
+		namespaceRegistry namespace.Registry
 		historyCache      workflow.Cache
 		eventsReapplier   nDCEventsReapplier
 		transactionMgr    nDCTransactionMgr
@@ -136,7 +136,7 @@ func newNDCHistoryReplicator(
 		executionMgr:      shard.GetExecutionManager(),
 		historySerializer: serialization.NewSerializer(),
 		metricsClient:     shard.GetMetricsClient(),
-		namespaceCache:    shard.GetNamespaceCache(),
+		namespaceRegistry: shard.GetNamespaceRegistry(),
 		historyCache:      historyCache,
 		transactionMgr:    transactionMgr,
 		eventsReapplier:   eventsReapplier,
@@ -176,12 +176,12 @@ func newNDCHistoryReplicator(
 				logger,
 				state,
 				func(mutableState workflow.MutableState) workflow.TaskGenerator {
-					return workflow.NewTaskGenerator(shard.GetNamespaceCache(), logger, mutableState)
+					return workflow.NewTaskGenerator(shard.GetNamespaceRegistry(), logger, mutableState)
 				},
 			)
 		},
 		newMutableState: func(
-			namespaceEntry *namespace.CacheEntry,
+			namespaceEntry *namespace.Namespace,
 			startTime time.Time,
 			logger log.Logger,
 		) workflow.MutableState {
@@ -252,7 +252,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 		// the continue as new + start workflow execution combination will also be processed here
 		var mutableState workflow.MutableState
 		var err error
-		namespaceEntry, err := r.namespaceCache.GetNamespaceByID(context.GetNamespaceID())
+		namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(context.GetNamespaceID())
 		if err != nil {
 			return err
 		}
@@ -312,7 +312,7 @@ func (r *nDCHistoryReplicatorImpl) applyStartEvents(
 	task nDCReplicationTask,
 ) (retError error) {
 
-	namespaceEntry, err := r.namespaceCache.GetNamespaceByID(task.getNamespaceID())
+	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(task.getNamespaceID())
 	if err != nil {
 		return err
 	}
@@ -341,7 +341,7 @@ func (r *nDCHistoryReplicatorImpl) applyStartEvents(
 		task.getEventTime(),
 		newNDCWorkflow(
 			ctx,
-			r.namespaceCache,
+			r.namespaceRegistry,
 			r.clusterMetadata,
 			context,
 			mutableState,
@@ -442,7 +442,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 
 	targetWorkflow := newNDCWorkflow(
 		ctx,
-		r.namespaceCache,
+		r.namespaceRegistry,
 		r.clusterMetadata,
 		context,
 		mutableState,
@@ -465,7 +465,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 
 		newWorkflow = newNDCWorkflow(
 			ctx,
-			r.namespaceCache,
+			r.namespaceRegistry,
 			r.clusterMetadata,
 			newContext,
 			newMutableState,
@@ -550,7 +550,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 		task.getEventTime(),
 		newNDCWorkflow(
 			ctx,
-			r.namespaceCache,
+			r.namespaceRegistry,
 			r.clusterMetadata,
 			context,
 			mutableState,
@@ -702,7 +702,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsResetWorkflow(
 
 	targetWorkflow := newNDCWorkflow(
 		ctx,
-		r.namespaceCache,
+		r.namespaceRegistry,
 		r.clusterMetadata,
 		context,
 		mutableState,

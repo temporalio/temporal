@@ -227,7 +227,7 @@ func NewEngineWithShardContext(
 			common.IsResourceExhausted,
 		)
 		nDCHistoryResender := xdc.NewNDCHistoryResender(
-			shard.GetNamespaceCache(),
+			shard.GetNamespaceRegistry(),
 			adminRetryableClient,
 			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 				_, err := historyRetryableClient.ReplicateEventsV2(ctx, request)
@@ -240,7 +240,7 @@ func NewEngineWithShardContext(
 		replicationTaskExecutor := newReplicationTaskExecutor(
 			sourceCluster,
 			shard,
-			shard.GetNamespaceCache(),
+			shard.GetNamespaceRegistry(),
 			nDCHistoryResender,
 			historyEngImpl,
 			shard.GetMetricsClient(),
@@ -327,7 +327,7 @@ func (e *historyEngineImpl) Stop() {
 	}
 
 	// unset the failover callback
-	e.shard.GetNamespaceCache().UnregisterNamespaceChangeCallback(e.shard.GetShardID())
+	e.shard.GetNamespaceRegistry().UnregisterNamespaceChangeCallback(e.shard.GetShardID())
 }
 
 func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
@@ -351,7 +351,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 	//		failover min / max task levels calculated & updated to shard (using shard lock) -> failover start
 	// above 2 guarantees that failover start is after persistence of the task.
 
-	failoverPredicate := func(shardNotificationVersion int64, nextNamespace *namespace.CacheEntry, action func()) {
+	failoverPredicate := func(shardNotificationVersion int64, nextNamespace *namespace.Namespace, action func()) {
 		namespaceFailoverNotificationVersion := nextNamespace.FailoverNotificationVersion()
 		namespaceActiveCluster := nextNamespace.ActiveClusterName()
 
@@ -363,14 +363,14 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 	}
 
 	// first set the failover callback
-	e.shard.GetNamespaceCache().RegisterNamespaceChangeCallback(
+	e.shard.GetNamespaceRegistry().RegisterNamespaceChangeCallback(
 		e.shard.GetShardID(),
 		e.shard.GetNamespaceNotificationVersion(),
 		func() {
 			e.txProcessor.LockTaskProcessing()
 			e.timerProcessor.LockTaskProcessing()
 		},
-		func(prevNamespaces []*namespace.CacheEntry, nextNamespaces []*namespace.CacheEntry) {
+		func(prevNamespaces []*namespace.Namespace, nextNamespaces []*namespace.Namespace) {
 			defer func() {
 				e.txProcessor.UnlockTaskPrrocessing()
 				e.timerProcessor.UnlockTaskProcessing()
@@ -412,7 +412,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 
 func createMutableState(
 	shard shard.Context,
-	namespaceEntry *namespace.CacheEntry,
+	namespaceEntry *namespace.Namespace,
 	runID string,
 ) (workflow.MutableState, error) {
 
@@ -688,11 +688,11 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 			return response, nil
 		}
 
-		namespaceCache, err := e.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
+		namespaceRegistry, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 		if err != nil {
 			return nil, err
 		}
-		timer := time.NewTimer(e.shard.GetConfig().LongPollExpirationInterval(namespaceCache.Name()))
+		timer := time.NewTimer(e.shard.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name()))
 		defer timer.Stop()
 		for {
 			select {
@@ -747,7 +747,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 		}
 	}
 
-	de, err := e.shard.GetNamespaceCache().GetNamespaceByID(request.GetNamespaceId())
+	de, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(request.GetNamespaceId())
 	if err != nil {
 		return nil, err
 	}
@@ -2400,7 +2400,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 		request.GetRequestId(),
 		newNDCWorkflow(
 			ctx,
-			e.shard.GetNamespaceCache(),
+			e.shard.GetNamespaceRegistry(),
 			e.shard.GetClusterMetadata(),
 			currentContext,
 			currentMutableState,
@@ -2723,7 +2723,7 @@ func validateNamespaceUUID(
 
 func (e *historyEngineImpl) getActiveNamespaceEntry(
 	namespaceUUID string,
-) (*namespace.CacheEntry, error) {
+) (*namespace.Namespace, error) {
 
 	return getActiveNamespaceEntryFromShard(e.shard, namespaceUUID)
 }
@@ -2731,14 +2731,14 @@ func (e *historyEngineImpl) getActiveNamespaceEntry(
 func getActiveNamespaceEntryFromShard(
 	shard shard.Context,
 	namespaceUUID string,
-) (*namespace.CacheEntry, error) {
+) (*namespace.Namespace, error) {
 
 	namespaceID, err := validateNamespaceUUID(namespaceUUID)
 	if err != nil {
 		return nil, err
 	}
 
-	namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -3013,7 +3013,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 					uuid.New(),
 					newNDCWorkflow(
 						ctx,
-						e.shard.GetNamespaceCache(),
+						e.shard.GetNamespaceRegistry(),
 						e.shard.GetClusterMetadata(),
 						context,
 						mutableState,
@@ -3161,7 +3161,7 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 
 	mutableStateTaskRefresher := workflow.NewTaskRefresher(
 		e.shard.GetConfig(),
-		e.shard.GetNamespaceCache(),
+		e.shard.GetNamespaceRegistry(),
 		e.shard.GetEventsCache(),
 		e.shard.GetLogger(),
 	)

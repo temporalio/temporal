@@ -115,18 +115,18 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		return err
 	}
 
-	namespaceCacheEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(task.GetNamespaceId())
+	namespaceRegistryEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(task.GetNamespaceId())
 	if err != nil {
 		return err
 	}
 	clusterConfiguredForHistoryArchival := t.shard.GetService().GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
-	namespaceConfiguredForHistoryArchival := namespaceCacheEntry.HistoryArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED
+	namespaceConfiguredForHistoryArchival := namespaceRegistryEntry.HistoryArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED
 	archiveHistory := clusterConfiguredForHistoryArchival && namespaceConfiguredForHistoryArchival
 
 	// TODO: @ycyang once archival backfill is in place cluster:paused && namespace:enabled should be a nop rather than a delete
 	if archiveHistory {
 		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupArchiveCount)
-		return t.archiveWorkflow(task, weContext, mutableState, namespaceCacheEntry)
+		return t.archiveWorkflow(task, weContext, mutableState, namespaceRegistryEntry)
 	}
 
 	t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteCount)
@@ -165,7 +165,7 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 	task *persistencespb.TimerTaskInfo,
 	workflowContext workflow.Context,
 	msBuilder workflow.MutableState,
-	namespaceCacheEntry *namespace.CacheEntry,
+	namespaceRegistryEntry *namespace.Namespace,
 ) error {
 	branchToken, err := msBuilder.GetCurrentBranchToken()
 	if err != nil {
@@ -181,10 +181,10 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 			NamespaceID:          task.GetNamespaceId(),
 			WorkflowID:           task.GetWorkflowId(),
 			RunID:                task.GetRunId(),
-			Namespace:            namespaceCacheEntry.Name(),
+			Namespace:            namespaceRegistryEntry.Name(),
 			ShardID:              t.shard.GetShardID(),
 			Targets:              []archiver.ArchivalTarget{archiver.ArchiveTargetHistory},
-			HistoryURI:           namespaceCacheEntry.HistoryArchivalState().URI,
+			HistoryURI:           namespaceRegistryEntry.HistoryArchivalState().URI,
 			NextEventID:          msBuilder.GetNextEventID(),
 			BranchToken:          branchToken,
 			CloseFailoverVersion: closeFailoverVersion,

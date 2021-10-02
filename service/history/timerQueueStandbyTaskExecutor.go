@@ -481,7 +481,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		if err := refreshTasks(
 			t.adminClient,
-			t.shard.GetNamespaceCache(),
+			t.shard.GetNamespaceRegistry(),
 			timerTask.GetNamespaceId(),
 			timerTask.GetWorkflowId(),
 			timerTask.GetRunId(),

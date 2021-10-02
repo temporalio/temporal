@@ -66,7 +66,7 @@ type (
 		mockExecutionMgr *persistence.MockExecutionManager
 
 		logger         log.Logger
-		namespaceEntry *namespace.CacheEntry
+		namespaceEntry *namespace.Namespace
 
 		transactionMgr *nDCTransactionMgrImpl
 	}

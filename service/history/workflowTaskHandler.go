@@ -72,11 +72,11 @@ type (
 		sizeLimitChecker       *workflowSizeChecker
 		searchAttributesMapper searchattribute.Mapper
 
-		logger         log.Logger
-		namespaceCache namespace.Cache
-		metricsClient  metrics.Client
-		config         *configs.Config
-		shard          shard.Context
+		logger            log.Logger
+		namespaceRegistry namespace.Registry
+		metricsClient     metrics.Client
+		config            *configs.Config
+		shard             shard.Context
 	}
 
 	workflowTaskFailedCause struct {
@@ -92,7 +92,7 @@ func newWorkflowTaskHandler(
 	attrValidator *commandAttrValidator,
 	sizeLimitChecker *workflowSizeChecker,
 	logger log.Logger,
-	namespaceCache namespace.Cache,
+	namespaceRegistry namespace.Registry,
 	metricsClient metrics.Client,
 	config *configs.Config,
 	shard shard.Context,
@@ -117,11 +117,11 @@ func newWorkflowTaskHandler(
 		sizeLimitChecker:       sizeLimitChecker,
 		searchAttributesMapper: searchAttributesMapper,
 
-		logger:         logger,
-		namespaceCache: namespaceCache,
-		metricsClient:  metricsClient,
-		config:         config,
-		shard:          shard,
+		logger:            logger,
+		namespaceRegistry: namespaceRegistry,
+		metricsClient:     metricsClient,
+		config:            config,
+		shard:             shard,
 	}
 }
 
@@ -201,7 +201,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	namespaceID := executionInfo.NamespaceId
 	targetNamespaceID := namespaceID
 	if attr.GetNamespace() != "" {
-		targetNamespaceEntry, err := handler.namespaceCache.GetNamespace(attr.GetNamespace())
+		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(attr.GetNamespace())
 		if err != nil {
 			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to schedule activity across namespace %v.", attr.GetNamespace()))
 		}
@@ -561,7 +561,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkfl
 	namespaceID := executionInfo.NamespaceId
 	targetNamespaceID := namespaceID
 	if attr.GetNamespace() != "" {
-		targetNamespaceEntry, err := handler.namespaceCache.GetNamespace(attr.GetNamespace())
+		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(attr.GetNamespace())
 		if err != nil {
 			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to cancel workflow across namespace: %v.", attr.GetNamespace()))
 		}
@@ -704,7 +704,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	var parentNamespace string
 	if handler.mutableState.HasParentExecution() {
 		parentNamespaceID := handler.mutableState.GetExecutionInfo().ParentNamespaceId
-		parentNamespaceEntry, err := handler.namespaceCache.GetNamespaceByID(parentNamespaceID)
+		parentNamespaceEntry, err := handler.namespaceRegistry.GetNamespaceByID(parentNamespaceID)
 		if err != nil {
 			return err
 		}
@@ -740,7 +740,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	targetNamespaceID := parentNamespaceID
 	targetNamespace := parentNamespace
 	if attr.GetNamespace() != "" {
-		targetNamespaceEntry, err := handler.namespaceCache.GetNamespace(attr.GetNamespace())
+		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(attr.GetNamespace())
 		if err != nil {
 			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to schedule child execution across namespace %v.", attr.GetNamespace()))
 		}
@@ -835,7 +835,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 	namespaceID := executionInfo.NamespaceId
 	targetNamespaceID := namespaceID
 	if attr.GetNamespace() != "" {
-		targetNamespaceEntry, err := handler.namespaceCache.GetNamespace(attr.GetNamespace())
+		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(attr.GetNamespace())
 		if err != nil {
 			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to signal workflow across namespace: %v.", attr.GetNamespace()))
 		}
@@ -884,7 +884,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 	// get namespace name
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := executionInfo.NamespaceId
-	namespaceEntry, err := handler.namespaceCache.GetNamespaceByID(namespaceID)
+	namespaceEntry, err := handler.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("Unable to get namespace for namespaceID: %v.", namespaceID))
 	}

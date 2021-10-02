@@ -229,7 +229,7 @@ func NewService(
 	}
 
 	metricsInterceptor := interceptor.NewTelemetryInterceptor(
-		serviceResource.GetNamespaceCache(),
+		serviceResource.GetNamespaceRegistry(),
 		serviceResource.GetMetricsClient(),
 		metrics.FrontendAPIMetricsScopes(),
 		serviceResource.GetLogger(),
@@ -239,7 +239,7 @@ func NewService(
 		map[string]int{},
 	)
 	namespaceRateLimiterInterceptor := interceptor.NewNamespaceRateLimitInterceptor(
-		serviceResource.GetNamespaceCache(),
+		serviceResource.GetNamespaceRegistry(),
 		quotas.NewNamespaceRateLimiter(
 			func(req quotas.Request) quotas.RequestRateLimiter {
 				return configs.NewRequestToRateLimiter(func() float64 {
@@ -254,14 +254,14 @@ func NewService(
 		map[string]int{},
 	)
 	namespaceCountLimiterInterceptor := interceptor.NewNamespaceCountLimitInterceptor(
-		serviceResource.GetNamespaceCache(),
+		serviceResource.GetNamespaceRegistry(),
 		serviceConfig.MaxNamespaceCountPerInstance,
 		configs.ExecutionAPICountLimitOverride,
 	)
 
 	namespaceLogger := params.NamespaceLogger
 	namespaceLogInterceptor := interceptor.NewNamespaceLogInterceptor(
-		serviceResource.GetNamespaceCache(),
+		serviceResource.GetNamespaceRegistry(),
 		namespaceLogger)
 
 	kep := keepalive.EnforcementPolicy{

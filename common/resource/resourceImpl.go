@@ -91,7 +91,7 @@ type (
 
 		// other common resources
 
-		namespaceCache    namespace.Cache
+		namespaceRegistry namespace.Registry
 		timeSource        clock.TimeSource
 		payloadSerializer serialization.Serializer
 		metricsClient     metrics.Client
@@ -251,7 +251,7 @@ func New(
 	saProvider := searchattribute.NewManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
 	saManager := searchattribute.NewManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
 
-	namespaceCache := namespace.NewNamespaceCache(
+	namespaceRegistry := namespace.NewRegistry(
 		persistenceBean.GetMetadataManager(),
 		clusterMetadata.IsGlobalNamespaceEnabled(),
 		params.MetricsClient,
@@ -265,7 +265,7 @@ func New(
 		common.IsWhitelistServiceTransientError,
 	)
 
-	matchingRawClient, err := clientBean.GetMatchingClient(namespaceCache.GetNamespaceName)
+	matchingRawClient, err := clientBean.GetMatchingClient(namespaceRegistry.GetNamespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +317,7 @@ func New(
 
 		// other common resources
 
-		namespaceCache:    namespaceCache,
+		namespaceRegistry: namespaceRegistry,
 		timeSource:        clock.NewRealTimeSource(),
 		payloadSerializer: serialization.NewSerializer(),
 		metricsClient:     params.MetricsClient,
@@ -386,7 +386,7 @@ func (h *Impl) Start() {
 	h.runtimeMetricsReporter.Start()
 
 	h.membershipMonitor.Start()
-	h.namespaceCache.Start()
+	h.namespaceRegistry.Start()
 
 	hostInfo, err := h.membershipMonitor.WhoAmI()
 	if err != nil {
@@ -411,7 +411,7 @@ func (h *Impl) Stop() {
 		return
 	}
 
-	h.namespaceCache.Stop()
+	h.namespaceRegistry.Stop()
 	h.membershipMonitor.Stop()
 	h.ringpopChannel.Close()
 	h.runtimeMetricsReporter.Stop()
@@ -440,9 +440,9 @@ func (h *Impl) GetClusterMetadata() cluster.Metadata {
 
 // other common resources
 
-// GetNamespaceCache return namespace cache
-func (h *Impl) GetNamespaceCache() namespace.Cache {
-	return h.namespaceCache
+// GetNamespaceRegistry return namespace cache
+func (h *Impl) GetNamespaceRegistry() namespace.Registry {
+	return h.namespaceRegistry
 }
 
 // GetTimeSource return time source

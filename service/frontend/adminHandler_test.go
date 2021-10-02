@@ -64,7 +64,7 @@ type (
 		controller         *gomock.Controller
 		mockResource       *resource.Test
 		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
-		mockNamespaceCache *namespace.MockCache
+		mockNamespaceCache *namespace.MockRegistry
 
 		mockExecutionMgr *persistence.MockExecutionManager
 

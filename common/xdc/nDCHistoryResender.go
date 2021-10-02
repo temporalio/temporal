@@ -70,7 +70,7 @@ type (
 
 	// NDCHistoryResenderImpl is the implementation of NDCHistoryResender
 	NDCHistoryResenderImpl struct {
-		namespaceCache       namespace.Cache
+		namespaceRegistry    namespace.Registry
 		adminClient          adminservice.AdminServiceClient
 		historyReplicationFn nDCHistoryReplicationFn
 		serializer           serialization.Serializer
@@ -90,7 +90,7 @@ const (
 
 // NewNDCHistoryResender create a new NDCHistoryResenderImpl
 func NewNDCHistoryResender(
-	namespaceCache namespace.Cache,
+	namespaceRegistry namespace.Registry,
 	adminClient adminservice.AdminServiceClient,
 	historyReplicationFn nDCHistoryReplicationFn,
 	serializer serialization.Serializer,
@@ -99,7 +99,7 @@ func NewNDCHistoryResender(
 ) *NDCHistoryResenderImpl {
 
 	return &NDCHistoryResenderImpl{
-		namespaceCache:       namespaceCache,
+		namespaceRegistry:    namespaceRegistry,
 		adminClient:          adminClient,
 		historyReplicationFn: historyReplicationFn,
 		serializer:           serializer,
@@ -258,7 +258,7 @@ func (n *NDCHistoryResenderImpl) getHistory(
 
 	logger := log.With(n.logger, tag.WorkflowRunID(runID))
 
-	namespaceEntry, err := n.namespaceCache.GetNamespaceByID(namespaceID)
+	namespaceEntry, err := n.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		logger.Error("error getting namespace", tag.Error(err))
 		return nil, err

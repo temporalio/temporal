@@ -599,7 +599,7 @@ func emitMutationMetrics(
 	namespaceID string,
 	stats []*persistence.MutableStateStatistics,
 ) {
-	namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(
+	namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
 		namespaceID,
 	)
 	if err != nil {
@@ -622,7 +622,7 @@ func emitGetMetrics(
 	namespaceID string,
 	stats []*persistence.MutableStateStatistics,
 ) {
-	namespaceEntry, err := shard.GetNamespaceCache().GetNamespaceByID(
+	namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
 		namespaceID,
 	)
 	if err != nil {

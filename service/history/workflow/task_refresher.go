@@ -48,25 +48,25 @@ type (
 	}
 
 	TaskRefresherImpl struct {
-		config         *configs.Config
-		namespaceCache namespace.Cache
-		eventsCache    events.Cache
-		logger         log.Logger
+		config            *configs.Config
+		namespaceRegistry namespace.Registry
+		eventsCache       events.Cache
+		logger            log.Logger
 	}
 )
 
 func NewTaskRefresher(
 	config *configs.Config,
-	namespaceCache namespace.Cache,
+	namespaceRegistry namespace.Registry,
 	eventsCache events.Cache,
 	logger log.Logger,
 ) *TaskRefresherImpl {
 
 	return &TaskRefresherImpl{
-		config:         config,
-		namespaceCache: namespaceCache,
-		eventsCache:    eventsCache,
-		logger:         logger,
+		config:            config,
+		namespaceRegistry: namespaceRegistry,
+		eventsCache:       eventsCache,
+		logger:            logger,
 	}
 }
 
@@ -76,7 +76,7 @@ func (r *TaskRefresherImpl) RefreshTasks(
 ) error {
 
 	taskGenerator := NewTaskGenerator(
-		r.namespaceCache,
+		r.namespaceRegistry,
 		r.logger,
 		mutableState,
 	)

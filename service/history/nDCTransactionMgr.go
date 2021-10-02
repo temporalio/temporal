@@ -154,16 +154,16 @@ type (
 	}
 
 	nDCTransactionMgrImpl struct {
-		shard            shard.Context
-		namespaceCache   namespace.Cache
-		historyCache     workflow.Cache
-		clusterMetadata  cluster.Metadata
-		executionManager persistence.ExecutionManager
-		serializer       serialization.Serializer
-		metricsClient    metrics.Client
-		workflowResetter workflowResetter
-		eventsReapplier  nDCEventsReapplier
-		logger           log.Logger
+		shard             shard.Context
+		namespaceRegistry namespace.Registry
+		historyCache      workflow.Cache
+		clusterMetadata   cluster.Metadata
+		executionManager  persistence.ExecutionManager
+		serializer        serialization.Serializer
+		metricsClient     metrics.Client
+		workflowResetter  workflowResetter
+		eventsReapplier   nDCEventsReapplier
+		logger            log.Logger
 
 		createMgr nDCTransactionMgrForNewWorkflow
 		updateMgr nDCTransactionMgrForExistingWorkflow
@@ -180,13 +180,13 @@ func newNDCTransactionMgr(
 ) *nDCTransactionMgrImpl {
 
 	transactionMgr := &nDCTransactionMgrImpl{
-		shard:            shard,
-		namespaceCache:   shard.GetNamespaceCache(),
-		historyCache:     historyCache,
-		clusterMetadata:  shard.GetClusterMetadata(),
-		executionManager: shard.GetExecutionManager(),
-		serializer:       shard.GetService().GetPayloadSerializer(),
-		metricsClient:    shard.GetMetricsClient(),
+		shard:             shard,
+		namespaceRegistry: shard.GetNamespaceRegistry(),
+		historyCache:      historyCache,
+		clusterMetadata:   shard.GetClusterMetadata(),
+		executionManager:  shard.GetExecutionManager(),
+		serializer:        shard.GetService().GetPayloadSerializer(),
+		metricsClient:     shard.GetMetricsClient(),
 		workflowResetter: newWorkflowResetter(
 			shard,
 			historyCache,
@@ -462,7 +462,7 @@ func (r *nDCTransactionMgrImpl) loadNDCWorkflow(
 		release(err)
 		return nil, err
 	}
-	return newNDCWorkflow(ctx, r.namespaceCache, r.clusterMetadata, weContext, msBuilder, release), nil
+	return newNDCWorkflow(ctx, r.namespaceRegistry, r.clusterMetadata, weContext, msBuilder, release), nil
 }
 
 func (r *nDCTransactionMgrImpl) isWorkflowCurrent(

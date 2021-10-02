@@ -204,12 +204,12 @@ func getStandbyPostActionFn(
 
 func refreshTasks(
 	adminClient adminservice.AdminServiceClient,
-	namespaceCache namespace.Cache,
+	namespaceRegistry namespace.Registry,
 	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
-	namespaceEntry, err := namespaceCache.GetNamespaceByID(namespaceID)
+	namespaceEntry, err := namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}

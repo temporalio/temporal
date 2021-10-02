@@ -104,22 +104,22 @@ type (
 
 	// Single task queue in memory state
 	taskQueueManagerImpl struct {
-		status           int32
-		taskQueueID      *taskQueueID
-		taskQueueKind    enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
-		config           *taskQueueConfig
-		db               *taskQueueDB
-		taskWriter       *taskWriter
-		taskReader       *taskReader // reads tasks from db and async matches it with poller
-		liveness         *liveness
-		taskGC           *taskGC
-		taskAckManager   ackManager   // tracks ackLevel for delivered messages
-		matcher          *TaskMatcher // for matching a task producer with a poller
-		namespaceCache   namespace.Cache
-		logger           log.Logger
-		metricsClient    metrics.Client
-		namespaceValue   atomic.Value
-		metricScopeValue atomic.Value // namespace/taskqueue tagged metric scope
+		status            int32
+		taskQueueID       *taskQueueID
+		taskQueueKind     enumspb.TaskQueueKind // sticky taskQueue has different process in persistence
+		config            *taskQueueConfig
+		db                *taskQueueDB
+		taskWriter        *taskWriter
+		taskReader        *taskReader // reads tasks from db and async matches it with poller
+		liveness          *liveness
+		taskGC            *taskGC
+		taskAckManager    ackManager   // tracks ackLevel for delivered messages
+		matcher           *TaskMatcher // for matching a task producer with a poller
+		namespaceRegistry namespace.Registry
+		logger            log.Logger
+		metricsClient     metrics.Client
+		namespaceValue    atomic.Value
+		metricScopeValue  atomic.Value // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory *pollerHistory
 		// outstandingPollsMap is needed to keep track of all outstanding pollers for a
@@ -153,7 +153,7 @@ func newTaskQueueManager(
 	opts ...taskQueueManagerOpt,
 ) (taskQueueManager, error) {
 
-	taskQueueConfig, err := newTaskQueueConfig(taskQueue, config, e.namespaceCache)
+	taskQueueConfig, err := newTaskQueueConfig(taskQueue, config, e.namespaceRegistry)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +162,7 @@ func newTaskQueueManager(
 
 	tlMgr := &taskQueueManagerImpl{
 		status:              common.DaemonStatusInitialized,
-		namespaceCache:      e.namespaceCache,
+		namespaceRegistry:   e.namespaceRegistry,
 		metricsClient:       e.metricsClient,
 		taskQueueID:         taskQueue,
 		taskQueueKind:       taskQueueKind,
@@ -276,7 +276,7 @@ func (c *taskQueueManagerImpl) AddTask(
 	_, err := c.executeWithRetry(func() (interface{}, error) {
 		td := params.taskInfo
 
-		namespaceEntry, err := c.namespaceCache.GetNamespaceByID(td.GetNamespaceId())
+		namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(td.GetNamespaceId())
 		if err != nil {
 			return nil, err
 		}
@@ -344,7 +344,7 @@ func (c *taskQueueManagerImpl) GetTask(
 		c.pollerHistory.updatePollerInfo(pollerIdentity(identity), maxDispatchPerSecond)
 	}
 
-	namespaceEntry, err := c.namespaceCache.GetNamespaceByID(c.taskQueueID.namespaceID)
+	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(c.taskQueueID.namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -572,14 +572,14 @@ func (c *taskQueueManagerImpl) namespace() string {
 	return c.namespaceValue.Load().(string)
 }
 
-// reload from namespaceCache in case it got empty result during construction
+// reload from namespaceRegistry in case it got empty result during construction
 func (c *taskQueueManagerImpl) tryInitNamespaceAndScope() {
 	namespace := c.namespaceValue.Load().(string)
 	if namespace != "" {
 		return
 	}
 
-	entry, err := c.namespaceCache.GetNamespaceByID(c.taskQueueID.namespaceID)
+	entry, err := c.namespaceRegistry.GetNamespaceByID(c.taskQueueID.namespaceID)
 	if err != nil {
 		return
 	}

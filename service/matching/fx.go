@@ -76,7 +76,7 @@ func TelemetryInterceptorProvider(
 	resource resource.Resource,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
-		resource.GetNamespaceCache(),
+		resource.GetNamespaceRegistry(),
 		resource.GetMetricsClient(),
 		metrics.MatchingAPIMetricsScopes(),
 		logger,

@@ -72,7 +72,7 @@ type (
 		suite.Suite
 		controller         *gomock.Controller
 		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
-		mockNamespaceCache *namespace.MockCache
+		mockNamespaceCache *namespace.MockRegistry
 
 		matchingEngine *matchingEngineImpl
 		taskManager    *testTaskManager
@@ -105,8 +105,8 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.taskManager = newTestTaskManager(s.logger)
-	s.mockNamespaceCache = namespace.NewMockCache(s.controller)
-	ns := namespace.NewLocalCacheEntryForTest(&persistencespb.NamespaceInfo{Name: matchingTestNamespace}, nil, "")
+	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
+	ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: matchingTestNamespace}, nil, "")
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil).AnyTimes()
 	s.handlerContext = newHandlerContext(
 		context.Background(),
@@ -134,18 +134,18 @@ func (s *matchingEngineSuite) newMatchingEngine(
 
 func newMatchingEngine(
 	config *Config, taskMgr persistence.TaskManager, mockHistoryClient historyservice.HistoryServiceClient,
-	logger log.Logger, mockNamespaceCache namespace.Cache,
+	logger log.Logger, mockNamespaceCache namespace.Registry,
 ) *matchingEngineImpl {
 	return &matchingEngineImpl{
-		taskManager:     taskMgr,
-		historyService:  mockHistoryClient,
-		taskQueues:      make(map[taskQueueID]taskQueueManager),
-		logger:          logger,
-		metricsClient:   metrics.NewClient(tally.NoopScope, metrics.Matching),
-		tokenSerializer: common.NewProtoTaskTokenSerializer(),
-		config:          config,
-		namespaceCache:  mockNamespaceCache,
-		clusterMeta:     cluster.NewTestClusterMetadata(cluster.NewTestClusterMetadataConfig(false, true)),
+		taskManager:       taskMgr,
+		historyService:    mockHistoryClient,
+		taskQueues:        make(map[taskQueueID]taskQueueManager),
+		logger:            logger,
+		metricsClient:     metrics.NewClient(tally.NoopScope, metrics.Matching),
+		tokenSerializer:   common.NewProtoTaskTokenSerializer(),
+		config:            config,
+		namespaceRegistry: mockNamespaceCache,
+		clusterMeta:       cluster.NewTestClusterMetadata(cluster.NewTestClusterMetadataConfig(false, true)),
 	}
 }
 

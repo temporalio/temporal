@@ -68,7 +68,7 @@ type (
 
 		// other common resources
 
-		GetNamespaceCache() namespace.Cache
+		GetNamespaceRegistry() namespace.Registry
 		GetTimeSource() clock.TimeSource
 		GetPayloadSerializer() serialization.Serializer
 		GetMetricsClient() metrics.Client

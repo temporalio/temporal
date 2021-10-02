@@ -85,7 +85,7 @@ type (
 		taskQueues           map[taskQueueID]taskQueueManager // Convert to LRU cache
 		config               *Config
 		lockableQueryTaskMap lockableQueryTaskMap
-		namespaceCache       namespace.Cache
+		namespaceRegistry    namespace.Registry
 		keyResolver          membership.ServiceResolver
 		clusterMeta          cluster.Metadata
 	}
@@ -116,7 +116,7 @@ func NewEngine(taskManager persistence.TaskManager,
 	config *Config,
 	logger log.Logger,
 	metricsClient metrics.Client,
-	namespaceCache namespace.Cache,
+	namespaceRegistry namespace.Registry,
 	resolver membership.ServiceResolver,
 	clusterMeta cluster.Metadata,
 ) Engine {
@@ -132,7 +132,7 @@ func NewEngine(taskManager persistence.TaskManager,
 		matchingClient:       matchingClient,
 		config:               config,
 		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
-		namespaceCache:       namespaceCache,
+		namespaceRegistry:    namespaceRegistry,
 		keyResolver:          resolver,
 		clusterMeta:          clusterMeta,
 	}
@@ -662,7 +662,7 @@ func (e *matchingEngineImpl) getAllPartitions(
 	taskQueueType enumspb.TaskQueueType,
 ) ([]string, error) {
 	var partitionKeys []string
-	namespaceID, err := e.namespaceCache.GetNamespaceID(namespace)
+	namespaceID, err := e.namespaceRegistry.GetNamespaceID(namespace)
 	if err != nil {
 		return partitionKeys, err
 	}

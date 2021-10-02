@@ -103,7 +103,7 @@ func newTransferQueueProcessor(
 
 		if clusterName != currentClusterName {
 			nDCHistoryResender := xdc.NewNDCHistoryResender(
-				shard.GetNamespaceCache(),
+				shard.GetNamespaceRegistry(),
 				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
 				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 					return historyService.ReplicateEventsV2(ctx, request)

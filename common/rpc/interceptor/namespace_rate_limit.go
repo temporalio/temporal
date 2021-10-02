@@ -44,23 +44,23 @@ var (
 
 type (
 	NamespaceRateLimitInterceptor struct {
-		namespaceCache namespace.Cache
-		rateLimiter    quotas.RequestRateLimiter
-		tokens         map[string]int
+		namespaceRegistry namespace.Registry
+		rateLimiter       quotas.RequestRateLimiter
+		tokens            map[string]int
 	}
 )
 
 var _ grpc.UnaryServerInterceptor = (*NamespaceRateLimitInterceptor)(nil).Intercept
 
 func NewNamespaceRateLimitInterceptor(
-	namespaceCache namespace.Cache,
+	namespaceRegistry namespace.Registry,
 	rateLimiter quotas.RequestRateLimiter,
 	tokens map[string]int,
 ) *NamespaceRateLimitInterceptor {
 	return &NamespaceRateLimitInterceptor{
-		namespaceCache: namespaceCache,
-		rateLimiter:    rateLimiter,
-		tokens:         tokens,
+		namespaceRegistry: namespaceRegistry,
+		rateLimiter:       rateLimiter,
+		tokens:            tokens,
 	}
 }
 
@@ -76,7 +76,7 @@ func (ni *NamespaceRateLimitInterceptor) Intercept(
 		token = NamespaceRateLimitDefaultToken
 	}
 
-	namespace := GetNamespace(ni.namespaceCache, req)
+	namespace := GetNamespace(ni.namespaceRegistry, req)
 	if !ni.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
 		methodName,
 		token,

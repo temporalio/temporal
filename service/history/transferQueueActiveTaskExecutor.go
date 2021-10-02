@@ -395,7 +395,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		return err
 	}
 
-	targetNamespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(task.GetTargetNamespaceId())
+	targetNamespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(task.GetTargetNamespaceId())
 	if err != nil {
 		return err
 	}
@@ -489,7 +489,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		return err
 	}
 
-	targetNamespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(task.GetTargetNamespaceId())
+	targetNamespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(task.GetTargetNamespaceId())
 	if err != nil {
 		return err
 	}
@@ -596,7 +596,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 
 	// Get parent namespace name
 	var namespace string
-	if namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(task.GetNamespaceId()); err != nil {
+	if namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(task.GetNamespaceId()); err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
@@ -608,7 +608,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 
 	// Get target namespace name
 	var targetNamespace string
-	if namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(task.GetTargetNamespaceId()); err != nil {
+	if namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(task.GetTargetNamespaceId()); err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
 		}
@@ -752,7 +752,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 
 	executionInfo := currentMutableState.GetExecutionInfo()
 	executionState := currentMutableState.GetExecutionState()
-	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(executionInfo.NamespaceId)
+	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(executionInfo.NamespaceId)
 	if err != nil {
 		return err
 	}
@@ -1265,7 +1265,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 		uuid.New(),
 		newNDCWorkflow(
 			ctx,
-			t.shard.GetNamespaceCache(),
+			t.shard.GetNamespaceRegistry(),
 			t.shard.GetClusterMetadata(),
 			currentContext,
 			currentMutableState,

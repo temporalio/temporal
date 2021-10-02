@@ -145,7 +145,7 @@ type (
 		GetChildExecutionInitiatedEvent(int64) (*historypb.HistoryEvent, error)
 		GetCompletionEvent() (*historypb.HistoryEvent, error)
 		GetWorkflowTaskInfo(int64) (*WorkflowTaskInfo, bool)
-		GetNamespaceEntry() *namespace.CacheEntry
+		GetNamespaceEntry() *namespace.Namespace
 		GetStartEvent() (*historypb.HistoryEvent, error)
 		GetFirstRunID() (string, error)
 		GetCurrentBranchToken() ([]byte, error)
@@ -243,8 +243,8 @@ type (
 		SetUpdateCondition(int64, int64)
 		GetUpdateCondition() (int64, int64)
 
-		StartTransaction(entry *namespace.CacheEntry) (bool, error)
-		StartTransactionSkipWorkflowTaskFail(entry *namespace.CacheEntry) error
+		StartTransaction(entry *namespace.Namespace) (bool, error)
+		StartTransactionSkipWorkflowTaskFail(entry *namespace.Namespace) error
 		CloseTransactionAsMutation(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
 		CloseTransactionAsSnapshot(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
 	}

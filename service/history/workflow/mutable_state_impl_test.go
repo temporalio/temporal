@@ -592,8 +592,8 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 	return newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent
 }
 
-func (s *mutableStateSuite) newNamespaceCacheEntry() *namespace.CacheEntry {
-	return namespace.NewNamespaceCacheEntryForTest(
+func (s *mutableStateSuite) newNamespaceCacheEntry() *namespace.Namespace {
+	return namespace.NewNamespaceForTest(
 		&persistencespb.NamespaceInfo{Name: "mutableStateTest"},
 		&persistencespb.NamespaceConfig{},
 		true,

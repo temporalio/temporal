@@ -143,7 +143,7 @@ func (h *Handler) Start() {
 		var err error
 		taskPriorityAssigner := newTaskPriorityAssigner(
 			h.GetClusterMetadata().GetCurrentClusterName(),
-			h.GetNamespaceCache(),
+			h.GetNamespaceRegistry(),
 			h.GetLogger(),
 			h.GetMetricsClient(),
 			h.config,
@@ -569,7 +569,7 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	itemsInCacheByIDCount, itemsInCacheByNameCount := h.GetNamespaceCache().GetCacheSize()
+	itemsInCacheByIDCount, itemsInCacheByNameCount := h.GetNamespaceRegistry().GetCacheSize()
 	status := ""
 	switch h.controller.Status() {
 	case common.DaemonStatusInitialized:

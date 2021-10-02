@@ -226,7 +226,7 @@ func (c *ContextImpl) GetExecution() *commonpb.WorkflowExecution {
 }
 
 func (c *ContextImpl) GetNamespace() string {
-	namespaceEntry, err := c.shard.GetNamespaceCache().GetNamespaceByID(c.namespaceID)
+	namespaceEntry, err := c.shard.GetNamespaceRegistry().GetNamespaceByID(c.namespaceID)
 	if err != nil {
 		return ""
 	}
@@ -253,7 +253,7 @@ func (c *ContextImpl) LoadWorkflowExecutionForReplication(
 	incomingVersion int64,
 ) (MutableState, error) {
 
-	namespaceEntry, err := c.shard.GetNamespaceCache().GetNamespaceByID(c.namespaceID)
+	namespaceEntry, err := c.shard.GetNamespaceRegistry().GetNamespaceByID(c.namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +327,7 @@ func (c *ContextImpl) LoadWorkflowExecutionForReplication(
 
 func (c *ContextImpl) LoadWorkflowExecution() (MutableState, error) {
 
-	namespaceEntry, err := c.shard.GetNamespaceCache().GetNamespaceByID(c.namespaceID)
+	namespaceEntry, err := c.shard.GetNamespaceRegistry().GetNamespaceByID(c.namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -836,10 +836,10 @@ func (c *ContextImpl) ReapplyEvents(
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
-	namespaceCache := c.shard.GetNamespaceCache()
+	namespaceRegistry := c.shard.GetNamespaceRegistry()
 	clientBean := c.shard.GetService().GetClientBean()
 	serializer := c.shard.GetService().GetPayloadSerializer()
-	namespaceEntry, err := namespaceCache.GetNamespaceByID(namespaceID)
+	namespaceEntry, err := namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
