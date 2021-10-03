@@ -26,9 +26,8 @@ package postgresql
 
 import (
 	"fmt"
-	"strings"
 	"net/url"
-
+	"strings"
 
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
