@@ -26,6 +26,7 @@ package postgresql
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/iancoleman/strcase"
@@ -149,7 +150,7 @@ func buildDSN(
 	dsn := fmt.Sprintf(
 		dsnFmt,
 		cfg.User,
-		cfg.Password,
+		url.QueryEscape(cfg.Password),
 		resolvedAddr,
 		cfg.DatabaseName,
 		tlsAttrs,
