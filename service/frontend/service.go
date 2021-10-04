@@ -199,8 +199,33 @@ type Service struct {
 	sdkMetricsReporter    metrics.Reporter
 }
 
-// NewService builds a new frontend service
+// todomigryz: rename as NewService
 func NewService(
+	params *resource.BootstrapParams,
+	serviceResource resource.Resource,
+	serviceConfig *Config,
+	handler Handler,
+	visibilityMgr manager.VisibilityManager,
+	grpcServerOptions []grpc.ServerOption,
+) *Service {
+	//todomigryz: inject members. Same for matching/history.
+	return &Service{
+		Resource:          serviceResource,
+		status:            common.DaemonStatusInitialized,
+		config:            serviceConfig,
+		server:            grpc.NewServer(grpcServerOptions...),
+		handler:           handler,
+		adminHandler:      NewAdminHandler(serviceResource, params, serviceConfig),
+		versionChecker:    NewVersionChecker(serviceConfig, params.MetricsClient, serviceResource.GetClusterMetadataManager()),
+		visibilityManager: visibilityMgr,
+	}
+}
+
+// todomigryz: replace as serviceprovider
+// todomigryz: commented code
+// todomigryz: delete old code
+NewService builds a new frontend service
+func NewServiceOld(
 	params *resource.BootstrapParams,
 ) (*Service, error) {
 
@@ -228,7 +253,7 @@ func NewService(
 		namespaceReplicationQueue = serviceResource.GetNamespaceReplicationQueue()
 	}
 
-	metricsInterceptor := interceptor.NewTelemetryInterceptor(
+	telemetryInterceptor := interceptor.NewTelemetryInterceptor(
 		serviceResource.GetNamespaceRegistry(),
 		serviceResource.GetMetricsClient(),
 		metrics.FrontendAPIMetricsScopes(),
@@ -288,7 +313,7 @@ func NewService(
 			namespaceLogInterceptor.Intercept,
 			rpc.ServiceErrorInterceptor,
 			metrics.NewServerMetricsContextInjectorInterceptor(),
-			metricsInterceptor.Intercept,
+			telemetryInterceptor.Intercept,
 			rateLimiterInterceptor.Intercept,
 			namespaceRateLimiterInterceptor.Intercept,
 			namespaceCountLimiterInterceptor.Intercept,

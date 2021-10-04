@@ -205,7 +205,29 @@ func (s *Server) Start() error {
 		var svc common.Daemon
 		switch svcName {
 		case primitives.FrontendService:
-			svc, err = frontend.NewService(params)
+			// svc, err = frontend.NewService(params)
+
+			// todo: generalize this custom case logic as other services onboard fx
+			frontendApp := fx.New(
+				fx.Supply(
+					params,
+					s.serviceStoppedChs[svcName],
+				),
+				frontend.Module)
+			err = frontendApp.Err()
+			if err != nil {
+				close(s.serviceStoppedChs[svcName])
+				return fmt.Errorf("unable to construct service %q: %w", svcName, err)
+			}
+			s.serviceApps[svcName] = frontendApp
+			timeoutCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStartTimeout)
+			err = frontendApp.Start(timeoutCtx)
+			cancelFunc()
+			if err != nil {
+				close(s.serviceStoppedChs[svcName])
+				return fmt.Errorf("unable to start service %q: %w", svcName, err)
+			}
+			continue
 		case primitives.HistoryService:
 			// todo: generalize this custom case logic as other services onboard fx
 			histApp := fx.New(
