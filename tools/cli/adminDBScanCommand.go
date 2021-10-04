@@ -36,6 +36,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -291,7 +292,7 @@ func scanShard(
 		deleteEmptyFiles(outputFiles.CorruptedExecutionFile, outputFiles.ExecutionCheckFailureFile, outputFiles.ShardScanReportFile)
 		closeFn()
 	}()
-	workflowStore := cassp.NewExecutionStore(session, log.NewNoopLogger())
+	workflowStore := cassp.NewExecutionPersistence(session, log.NewNoopLogger())
 	execMan := persistence.NewExecutionManager(workflowStore, log.NewNoopLogger(), dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit))
 
 	var token []byte
