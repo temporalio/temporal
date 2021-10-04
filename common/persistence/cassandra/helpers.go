@@ -34,7 +34,7 @@ import (
 
 const cassandraPersistenceName = "cassandra"
 
-// CreateCassandraKeyspace creates the keyspace using this Session for given replica count
+// CreateCassandraKeyspace creates the keyspace using this session for given replica count
 func CreateCassandraKeyspace(s gocql.Session, keyspace string, replicas int, overwrite bool, logger log.Logger) (err error) {
 	// if overwrite flag is set, drop the keyspace and create a new one
 	if overwrite {
