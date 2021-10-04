@@ -80,7 +80,7 @@ func NewHandler(
 			config,
 			resource.GetLogger(),
 			resource.GetMetricsClient(),
-			resource.GetNamespaceCache(),
+			resource.GetNamespaceRegistry(),
 			resource.GetMatchingServiceResolver(),
 			resource.GetClusterMetadata(),
 		),
@@ -340,7 +340,7 @@ func (h *Handler) ListTaskQueuePartitions(
 }
 
 func (h *Handler) namespaceName(id string) string {
-	entry, err := h.GetNamespaceCache().GetNamespaceByID(id)
+	entry, err := h.GetNamespaceRegistry().GetNamespaceByID(id)
 	if err != nil {
 		return ""
 	}

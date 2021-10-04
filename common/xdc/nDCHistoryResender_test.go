@@ -60,7 +60,7 @@ type (
 
 		controller          *gomock.Controller
 		mockClusterMetadata *cluster.MockMetadata
-		mockNamespaceCache  *namespace.MockCache
+		mockNamespaceCache  *namespace.MockRegistry
 		mockAdminClient     *adminservicemock.MockAdminServiceClient
 		mockHistoryClient   *historyservicemock.MockHistoryServiceClient
 
@@ -93,14 +93,14 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
-	s.mockNamespaceCache = namespace.NewMockCache(s.controller)
+	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
 
 	s.logger = log.NewTestLogger()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 
 	s.namespaceID = uuid.New()
 	s.namespace = "some random namespace name"
-	namespaceEntry := namespace.NewGlobalCacheEntryForTest(
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{

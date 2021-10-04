@@ -65,7 +65,7 @@ type (
 		mockShard           *shard.ContextTest
 		mockEventsCache     *events.MockCache
 		mockTaskRefresher   *workflow.MockTaskRefresher
-		mockNamespaceCache  *namespace.MockCache
+		mockNamespaceCache  *namespace.MockRegistry
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockExecutionManager *persistence.MockExecutionManager
@@ -309,7 +309,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		Size:          historySize2,
 	}, nil)
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(targetNamespaceID).Return(namespace.NewGlobalCacheEntryForTest(
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(targetNamespaceID).Return(namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: targetNamespaceID, Name: targetNamespace},
 		&persistencespb.NamespaceConfig{},
 		&persistencespb.NamespaceReplicationConfig{

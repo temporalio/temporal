@@ -58,7 +58,7 @@ type (
 
 		mockExecutionManager         *persistence.MockExecutionManager
 		mockArchivalClient           *archiver.MockClient
-		mockNamespaceCache           *namespace.MockCache
+		mockNamespaceCache           *namespace.MockRegistry
 		mockClusterMetadata          *cluster.MockMetadata
 		mockSearchAttributesProvider *searchattribute.MockProvider
 
@@ -182,9 +182,9 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchiva
 
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
 
-	namespaceCacheEntry := namespace.NewNamespaceCacheEntryForTest(&persistencespb.NamespaceInfo{}, &persistencespb.NamespaceConfig{}, false, nil, 0)
+	namespaceRegistryEntry := namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{}, &persistencespb.NamespaceConfig{}, false, nil, 0)
 	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceCacheEntry)
+		ScheduleAttempt: 1}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceRegistryEntry)
 	s.NoError(err)
 }
 
@@ -201,9 +201,9 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_SendSignalErr() {
 		Return(nil, errors.New("failed to send signal"))
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
 
-	namespaceCacheEntry := namespace.NewNamespaceCacheEntryForTest(&persistencespb.NamespaceInfo{}, &persistencespb.NamespaceConfig{}, false, nil, 0)
+	namespaceRegistryEntry := namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{}, &persistencespb.NamespaceConfig{}, false, nil, 0)
 	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceCacheEntry)
+		ScheduleAttempt: 1}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceRegistryEntry)
 	s.Error(err)
 }
 

@@ -47,7 +47,7 @@ type (
 	taskAllocatorImpl struct {
 		currentClusterName string
 		shard              shard.Context
-		namespaceCache     namespace.Cache
+		namespaceRegistry  namespace.Registry
 		logger             log.Logger
 
 		locker sync.RWMutex
@@ -59,7 +59,7 @@ func newTaskAllocator(shard shard.Context) taskAllocator {
 	return &taskAllocatorImpl{
 		currentClusterName: shard.GetService().GetClusterMetadata().GetCurrentClusterName(),
 		shard:              shard,
-		namespaceCache:     shard.GetNamespaceCache(),
+		namespaceRegistry:  shard.GetNamespaceRegistry(),
 		logger:             shard.GetLogger(),
 	}
 }
@@ -69,7 +69,7 @@ func (t *taskAllocatorImpl) verifyActiveTask(taskNamespaceID string, task interf
 	t.locker.RLock()
 	defer t.locker.RUnlock()
 
-	namespaceEntry, err := t.namespaceCache.GetNamespaceByID(taskNamespaceID)
+	namespaceEntry, err := t.namespaceRegistry.GetNamespaceByID(taskNamespaceID)
 	if err != nil {
 		// it is possible that the namespace is deleted
 		// we should treat that namespace as active
@@ -105,7 +105,7 @@ func (t *taskAllocatorImpl) verifyStandbyTask(standbyCluster string, taskNamespa
 	t.locker.RLock()
 	defer t.locker.RUnlock()
 
-	namespaceEntry, err := t.namespaceCache.GetNamespaceByID(taskNamespaceID)
+	namespaceEntry, err := t.namespaceRegistry.GetNamespaceByID(taskNamespaceID)
 	if err != nil {
 		// it is possible that the namespace is deleted
 		// we should treat that namespace as not active

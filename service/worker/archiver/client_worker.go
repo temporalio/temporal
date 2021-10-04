@@ -51,8 +51,8 @@ type (
 	}
 
 	clientWorker struct {
-		worker         worker.Worker
-		namespaceCache namespace.Cache
+		worker            worker.Worker
+		namespaceRegistry namespace.Registry
 	}
 
 	// BootstrapContainer contains everything need for bootstrapping
@@ -61,7 +61,7 @@ type (
 		MetricsClient    metrics.Client
 		Logger           log.Logger
 		HistoryV2Manager persistence.ExecutionManager
-		NamespaceCache   namespace.Cache
+		NamespaceCache   namespace.Registry
 		Config           *Config
 		ArchiverProvider provider.ArchiverProvider
 	}
@@ -113,8 +113,8 @@ func NewClientWorker(container *BootstrapContainer) ClientWorker {
 		BackgroundActivityContext:              actCtx,
 	}
 	clientWorker := &clientWorker{
-		worker:         worker.New(container.SdkClient, workflowTaskQueue, wo),
-		namespaceCache: container.NamespaceCache,
+		worker:            worker.New(container.SdkClient, workflowTaskQueue, wo),
+		namespaceRegistry: container.NamespaceCache,
 	}
 
 	clientWorker.worker.RegisterWorkflowWithOptions(archivalWorkflow, workflow.RegisterOptions{Name: archivalWorkflowFnName})
@@ -137,5 +137,5 @@ func (w *clientWorker) Start() error {
 // Stop the ClientWorker
 func (w *clientWorker) Stop() {
 	w.worker.Stop()
-	w.namespaceCache.Stop()
+	w.namespaceRegistry.Stop()
 }

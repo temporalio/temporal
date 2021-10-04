@@ -1161,10 +1161,10 @@ func (mr *MockMutableStateMockRecorder) GetLastWriteVersion() *gomock.Call {
 }
 
 // GetNamespaceEntry mocks base method.
-func (m *MockMutableState) GetNamespaceEntry() *namespace.CacheEntry {
+func (m *MockMutableState) GetNamespaceEntry() *namespace.Namespace {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNamespaceEntry")
-	ret0, _ := ret[0].(*namespace.CacheEntry)
+	ret0, _ := ret[0].(*namespace.Namespace)
 	return ret0
 }
 
@@ -2281,7 +2281,7 @@ func (mr *MockMutableStateMockRecorder) SetUpdateCondition(arg0, arg1 interface{
 }
 
 // StartTransaction mocks base method.
-func (m *MockMutableState) StartTransaction(entry *namespace.CacheEntry) (bool, error) {
+func (m *MockMutableState) StartTransaction(entry *namespace.Namespace) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartTransaction", entry)
 	ret0, _ := ret[0].(bool)
@@ -2296,7 +2296,7 @@ func (mr *MockMutableStateMockRecorder) StartTransaction(entry interface{}) *gom
 }
 
 // StartTransactionSkipWorkflowTaskFail mocks base method.
-func (m *MockMutableState) StartTransactionSkipWorkflowTaskFail(entry *namespace.CacheEntry) error {
+func (m *MockMutableState) StartTransactionSkipWorkflowTaskFail(entry *namespace.Namespace) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartTransactionSkipWorkflowTaskFail", entry)
 	ret0, _ := ret[0].(error)

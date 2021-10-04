@@ -164,7 +164,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
-	namespaceEntry, err := t.shard.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}

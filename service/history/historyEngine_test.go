@@ -85,7 +85,7 @@ type (
 		mockShard            *shard.ContextTest
 		mockTxProcessor      *MocktransferQueueProcessor
 		mockTimerProcessor   *MocktimerQueueProcessor
-		mockNamespaceCache   *namespace.MockCache
+		mockNamespaceCache   *namespace.MockRegistry
 		mockMatchingClient   *matchingservicemock.MockMatchingServiceClient
 		mockHistoryClient    *historyservicemock.MockHistoryServiceClient
 		mockClusterMetadata  *cluster.MockMetadata

@@ -150,7 +150,7 @@ type (
 		dbRecordVersion int64
 		// namespace entry contains a snapshot of namespace
 		// NOTE: do not use the failover version inside, use currentVersion above
-		namespaceEntry *namespace.CacheEntry
+		namespaceEntry *namespace.Namespace
 		// record if a event has been applied to mutable state
 		// TODO: persist this to db
 		appliedEvents map[string]struct{}
@@ -186,7 +186,7 @@ func NewMutableState(
 	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
-	namespaceEntry *namespace.CacheEntry,
+	namespaceEntry *namespace.Namespace,
 	startTime time.Time,
 ) *MutableStateImpl {
 	s := &MutableStateImpl{
@@ -266,7 +266,7 @@ func NewMutableState(
 		common.FirstEventID,
 		s.bufferEventsInDB,
 	)
-	s.taskGenerator = NewTaskGenerator(shard.GetNamespaceCache(), s.logger, s)
+	s.taskGenerator = NewTaskGenerator(shard.GetNamespaceRegistry(), s.logger, s)
 	s.workflowTaskManager = newWorkflowTaskStateMachine(s)
 
 	return s
@@ -276,7 +276,7 @@ func newMutableStateBuilderFromDB(
 	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
-	namespaceEntry *namespace.CacheEntry,
+	namespaceEntry *namespace.Namespace,
 	dbRecord *persistencespb.WorkflowMutableState,
 	dbRecordVersion int64,
 ) (*MutableStateImpl, error) {
@@ -568,7 +568,7 @@ func (e *MutableStateImpl) IsCurrentWorkflowGuaranteed() bool {
 	}
 }
 
-func (e *MutableStateImpl) GetNamespaceEntry() *namespace.CacheEntry {
+func (e *MutableStateImpl) GetNamespaceEntry() *namespace.Namespace {
 	return e.namespaceEntry
 }
 
@@ -1814,7 +1814,7 @@ func (e *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 	attributes := event.GetActivityTaskScheduledEventAttributes()
 	targetNamespaceID := e.executionInfo.NamespaceId
 	if attributes.GetNamespace() != "" {
-		targetNamespaceEntry, err := e.shard.GetNamespaceCache().GetNamespace(attributes.GetNamespace())
+		targetNamespaceEntry, err := e.shard.GetNamespaceRegistry().GetNamespace(attributes.GetNamespace())
 		if err != nil {
 			return nil, err
 		}
@@ -3628,7 +3628,7 @@ func (e *MutableStateImpl) UpdateWorkflowStateStatus(
 }
 
 func (e *MutableStateImpl) StartTransaction(
-	namespaceEntry *namespace.CacheEntry,
+	namespaceEntry *namespace.Namespace,
 ) (bool, error) {
 
 	e.namespaceEntry = namespaceEntry
@@ -3647,7 +3647,7 @@ func (e *MutableStateImpl) StartTransaction(
 }
 
 func (e *MutableStateImpl) StartTransactionSkipWorkflowTaskFail(
-	namespaceEntry *namespace.CacheEntry,
+	namespaceEntry *namespace.Namespace,
 ) error {
 
 	e.namespaceEntry = namespaceEntry
@@ -4313,7 +4313,7 @@ func (e *MutableStateImpl) closeTransactionHandleWorkflowReset(
 		return nil
 	}
 
-	namespaceEntry, err := e.shard.GetNamespaceCache().GetNamespaceByID(e.executionInfo.NamespaceId)
+	namespaceEntry, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(e.executionInfo.NamespaceId)
 	if err != nil {
 		return err
 	}

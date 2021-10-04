@@ -298,7 +298,7 @@ func (t *taskProcessor) handleTaskError(
 	if transferTask, ok := task.task.(*persistencespb.TransferTaskInfo); ok &&
 		transferTask.TaskType == enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION &&
 		err == workflow.ErrMissingWorkflowStartEvent &&
-		t.config.EnableDropStuckTaskByNamespaceID(task.task.GetNamespaceId()) { // use namespaceID here to avoid accessing namespaceCache
+		t.config.EnableDropStuckTaskByNamespaceID(task.task.GetNamespaceId()) { // use namespaceID here to avoid accessing namespaceRegistry
 		scope.IncCounter(metrics.TransferTaskMissingEventCounter)
 		task.logger.Error("Drop close execution transfer task due to corrupted workflow history", tag.Error(err), tag.LifeCycleProcessingFailed)
 		return nil
@@ -359,7 +359,7 @@ func (t *taskProcessor) ackTaskOnce(
 }
 
 func (t *taskProcessor) getNamespaceTagByID(namespaceID string) metrics.Tag {
-	namespace, err := t.shard.GetNamespaceCache().GetNamespaceName(namespaceID)
+	namespace, err := t.shard.GetNamespaceRegistry().GetNamespaceName(namespaceID)
 	if err != nil {
 		t.logger.Error("Unable to get namespace", tag.Error(err))
 		return metrics.NamespaceUnknownTag()

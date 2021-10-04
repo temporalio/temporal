@@ -52,7 +52,7 @@ type (
 		currentCluster     string
 		sourceCluster      string
 		shard              shard.Context
-		namespaceCache     namespace.Cache
+		namespaceRegistry  namespace.Registry
 		nDCHistoryResender xdc.NDCHistoryResender
 		historyEngine      shard.Engine
 
@@ -66,7 +66,7 @@ type (
 func newReplicationTaskExecutor(
 	sourceCluster string,
 	shard shard.Context,
-	namespaceCache namespace.Cache,
+	namespaceRegistry namespace.Registry,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	historyEngine shard.Engine,
 	metricsClient metrics.Client,
@@ -76,7 +76,7 @@ func newReplicationTaskExecutor(
 		currentCluster:     shard.GetClusterMetadata().GetCurrentClusterName(),
 		sourceCluster:      sourceCluster,
 		shard:              shard,
-		namespaceCache:     namespaceCache,
+		namespaceRegistry:  namespaceRegistry,
 		nDCHistoryResender: nDCHistoryResender,
 		historyEngine:      historyEngine,
 		metricsClient:      metricsClient,
@@ -244,7 +244,7 @@ func (e *replicationTaskExecutorImpl) filterTask(
 		return true, nil
 	}
 
-	namespaceEntry, err := e.namespaceCache.GetNamespaceByID(namespaceID)
+	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return false, err
 	}

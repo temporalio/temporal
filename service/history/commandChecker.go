@@ -53,7 +53,7 @@ import (
 
 type (
 	commandAttrValidator struct {
-		namespaceCache                  namespace.Cache
+		namespaceRegistry               namespace.Registry
 		config                          *configs.Config
 		maxIDLengthLimit                int
 		searchAttributesValidator       *searchattribute.Validator
@@ -89,12 +89,12 @@ const (
 )
 
 func newCommandAttrValidator(
-	namespaceCache namespace.Cache,
+	namespaceRegistry namespace.Registry,
 	config *configs.Config,
 	searchAttributesValidator *searchattribute.Validator,
 ) *commandAttrValidator {
 	return &commandAttrValidator{
-		namespaceCache:                  namespaceCache,
+		namespaceRegistry:               namespaceRegistry,
 		config:                          config,
 		maxIDLengthLimit:                config.MaxIDLengthLimit(),
 		searchAttributesValidator:       searchAttributesValidator,
@@ -742,12 +742,12 @@ func (v *commandAttrValidator) validateCrossNamespaceCall(
 		return serviceerror.NewInvalidArgument("cross namespace commands are not allowed")
 	}
 
-	namespaceEntry, err := v.namespaceCache.GetNamespaceByID(namespaceID)
+	namespaceEntry, err := v.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
 
-	targetNamespaceEntry, err := v.namespaceCache.GetNamespaceByID(targetNamespaceID)
+	targetNamespaceEntry, err := v.namespaceRegistry.GetNamespaceByID(targetNamespaceID)
 	if err != nil {
 		return err
 	}
@@ -772,8 +772,8 @@ func (v *commandAttrValidator) validateCrossNamespaceCall(
 }
 
 func (v *commandAttrValidator) createCrossNamespaceCallError(
-	namespaceEntry *namespace.CacheEntry,
-	targetNamespaceEntry *namespace.CacheEntry,
+	namespaceEntry *namespace.Namespace,
+	targetNamespaceEntry *namespace.Namespace,
 ) error {
 	return serviceerror.NewInvalidArgument(fmt.Sprintf("unable to process cross namespace command between %v and %v", namespaceEntry.Name(), targetNamespaceEntry.Name()))
 }

@@ -61,7 +61,7 @@ type (
 		controller          *gomock.Controller
 		mockShard           *shard.ContextTest
 		mockEventsCache     *events.MockCache
-		mockNamespaceCache  *namespace.MockCache
+		mockNamespaceCache  *namespace.MockRegistry
 		mockTaskGenerator   *MockTaskGenerator
 		mockMutableState    *MockMutableState
 		mockClusterMetadata *cluster.MockMetadata

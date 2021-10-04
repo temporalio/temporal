@@ -68,7 +68,7 @@ type (
 
 		// other common resources
 
-		NamespaceCache    *namespace.MockCache
+		NamespaceCache    *namespace.MockRegistry
 		TimeSource        clock.TimeSource
 		PayloadSerializer serialization.Serializer
 		MetricsClient     metrics.Client
@@ -175,7 +175,7 @@ func NewTest(
 
 		// other common resources
 
-		NamespaceCache:    namespace.NewMockCache(controller),
+		NamespaceCache:    namespace.NewMockRegistry(controller),
 		TimeSource:        clock.NewRealTimeSource(),
 		PayloadSerializer: serialization.NewSerializer(),
 		MetricsClient:     metrics.NewClient(scope, serviceMetricsIndex),
@@ -256,8 +256,8 @@ func (s *Test) GetClusterMetadataManager() persistence.ClusterMetadataManager {
 
 // other common resources
 
-// GetNamespaceCache for testing
-func (s *Test) GetNamespaceCache() namespace.Cache {
+// GetNamespaceRegistry for testing
+func (s *Test) GetNamespaceRegistry() namespace.Registry {
 	return s.NamespaceCache
 }
 

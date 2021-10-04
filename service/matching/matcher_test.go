@@ -474,12 +474,12 @@ func (t *MatcherTestSuite) TestRemotePollForQuery() {
 	t.True(task.isStarted())
 }
 
-func (t *MatcherTestSuite) newNamespaceCache() namespace.Cache {
-	entry := namespace.NewLocalCacheEntryForTest(
+func (t *MatcherTestSuite) newNamespaceCache() namespace.Registry {
+	entry := namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Name: "test-namespace"},
 		&persistencespb.NamespaceConfig{},
 		"")
-	dc := namespace.NewMockCache(t.controller)
+	dc := namespace.NewMockRegistry(t.controller)
 	dc.EXPECT().GetNamespaceByID(gomock.Any()).Return(entry, nil).AnyTimes()
 	return dc
 }

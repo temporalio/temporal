@@ -38,18 +38,18 @@ import (
 
 type (
 	NamespaceLogInterceptor struct {
-		namespaceCache namespace.Cache
-		logger         log.Logger
+		namespaceRegistry namespace.Registry
+		logger            log.Logger
 	}
 )
 
 var _ grpc.UnaryServerInterceptor = (*NamespaceLogInterceptor)(nil).Intercept
 
-func NewNamespaceLogInterceptor(namespaceCache namespace.Cache, logger log.Logger) *NamespaceLogInterceptor {
+func NewNamespaceLogInterceptor(namespaceRegistry namespace.Registry, logger log.Logger) *NamespaceLogInterceptor {
 
 	return &NamespaceLogInterceptor{
-		namespaceCache: namespaceCache,
-		logger:         logger,
+		namespaceRegistry: namespaceRegistry,
+		logger:            logger,
 	}
 }
 
@@ -62,7 +62,7 @@ func (nli *NamespaceLogInterceptor) Intercept(
 
 	if nli.logger != nil {
 		_, methodName := splitMethodName(info.FullMethod)
-		namespace := GetNamespace(nli.namespaceCache, req)
+		namespace := GetNamespace(nli.namespaceRegistry, req)
 		tlsInfo := authorization.TLSInfoFormContext(ctx)
 		var serverName string
 		var certThumbprint string

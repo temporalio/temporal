@@ -62,7 +62,7 @@ func NewDCRedirectionHandler(
 	dcRedirectionPolicy := RedirectionPolicyGenerator(
 		resource.GetClusterMetadata(),
 		wfHandler.GetConfig(),
-		resource.GetNamespaceCache(),
+		resource.GetNamespaceRegistry(),
 		policy,
 	)
 

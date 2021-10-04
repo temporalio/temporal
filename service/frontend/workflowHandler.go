@@ -415,7 +415,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
 
 	wh.GetLogger().Debug("Start workflow execution request namespace", tag.WorkflowNamespace(namespace))
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(namespace)
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -460,7 +460,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 
 	enums.SetDefaultHistoryEventFilterType(&request.HistoryEventFilterType)
 
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -772,7 +772,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	}
 
 	namespace := request.GetNamespace()
-	namespaceEntry, err := wh.GetNamespaceCache().GetNamespace(namespace)
+	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespace(namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -857,7 +857,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 		return nil, errNamespaceNotSet
 	}
 
-	namespaceEntry, err := wh.GetNamespaceCache().GetNamespaceByID(namespaceId)
+	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceId)
 	if err != nil {
 		return nil, err
 	}
@@ -941,7 +941,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 		return nil, errNamespaceNotSet
 	}
 
-	namespaceEntry, err := wh.GetNamespaceCache().GetNamespaceByID(namespaceId)
+	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceId)
 	if err != nil {
 		return nil, err
 	}
@@ -1043,7 +1043,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		return nil, errIdentityTooLong
 	}
 
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -1131,7 +1131,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		return nil, errNamespaceNotSet
 	}
 
-	namespaceEntry, err := wh.GetNamespaceCache().GetNamespaceByID(namespaceId)
+	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceId)
 	if err != nil {
 		return nil, err
 	}
@@ -1202,7 +1202,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	}
 
 	wh.GetLogger().Debug("Received RecordActivityTaskHeartbeatById")
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -1233,7 +1233,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		return nil, err
 	}
 
-	namespaceEntry, err := wh.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -1316,7 +1316,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 		return nil, errNamespaceNotSet
 	}
 
-	namespaceEntry, err := wh.GetNamespaceCache().GetNamespaceByID(namespaceId)
+	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceId)
 	if err != nil {
 		return nil, err
 	}
@@ -1394,7 +1394,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		return nil, errRequestNotSet
 	}
 
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -1429,7 +1429,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		return nil, err
 	}
 
-	namespaceEntry, err := wh.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -1512,7 +1512,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		return nil, errNamespaceNotSet
 	}
 
-	namespaceEntry, err := wh.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -1584,7 +1584,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		return nil, errRequestNotSet
 	}
 
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -1618,7 +1618,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		return nil, err
 	}
 
-	namespaceEntry, err := wh.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -1688,7 +1688,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		return nil, errNamespaceNotSet
 	}
 
-	namespaceEntry, err := wh.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -1767,7 +1767,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		return nil, errRequestNotSet
 	}
 
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -1801,7 +1801,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		return nil, err
 	}
 
-	namespaceEntry, err := wh.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -1879,7 +1879,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 		return nil, err
 	}
 
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -1936,7 +1936,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		return nil, errRequestIDTooLong
 	}
 
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -2043,7 +2043,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 
 	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
 
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(namespace)
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -2106,7 +2106,7 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 		return nil, serviceerror.NewInternal("unknown reset type")
 	}
 
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -2147,7 +2147,7 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 		return nil, err
 	}
 
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -2208,7 +2208,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 	}
 
 	namespace := request.GetNamespace()
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(namespace)
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -2305,7 +2305,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 	}
 
 	namespace := request.GetNamespace()
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(namespace)
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -2401,7 +2401,7 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 	}
 
 	namespace := request.GetNamespace()
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(namespace)
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -2461,7 +2461,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		return nil, errClusterIsNotConfiguredForReadingArchivalVisibility
 	}
 
-	entry, err := wh.GetNamespaceCache().GetNamespace(request.GetNamespace())
+	entry, err := wh.GetNamespaceRegistry().GetNamespace(request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -2543,7 +2543,7 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 	}
 
 	namespace := request.GetNamespace()
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(namespace)
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -2588,7 +2588,7 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 	}
 
 	namespace := request.GetNamespace()
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(namespace)
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -2660,7 +2660,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 		return nil, errInvalidTaskToken
 	}
 
-	namespaceEntry, err := wh.GetNamespaceCache().GetNamespaceByID(queryTaskToken.GetNamespaceId())
+	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespaceByID(queryTaskToken.GetNamespaceId())
 	if err != nil {
 		return nil, err
 	}
@@ -2741,7 +2741,7 @@ func (wh *WorkflowHandler) ResetStickyTaskQueue(ctx context.Context, request *wo
 		return nil, err
 	}
 
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -2793,7 +2793,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 
 	enums.SetDefaultQueryRejectCondition(&request.QueryRejectCondition)
 
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -2844,7 +2844,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 	if request.GetNamespace() == "" {
 		return nil, errNamespaceNotSet
 	}
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -2902,7 +2902,7 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 	if request.GetNamespace() == "" {
 		return nil, errNamespaceNotSet
 	}
-	namespaceID, err := wh.GetNamespaceCache().GetNamespaceID(request.GetNamespace())
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -3235,7 +3235,7 @@ func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 		if matchingResp.GetStickyExecutionEnabled() {
 			firstEventID = matchingResp.GetPreviousStartedEventId() + 1
 		}
-		namespace, dErr := wh.GetNamespaceCache().GetNamespaceByID(namespaceID)
+		namespace, dErr := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 		if dErr != nil {
 			return nil, dErr
 		}
@@ -3376,7 +3376,7 @@ func (wh *WorkflowHandler) getArchivedHistory(
 	request *workflowservice.GetWorkflowExecutionHistoryRequest,
 	namespaceID string,
 ) (*workflowservice.GetWorkflowExecutionHistoryResponse, error) {
-	entry, err := wh.GetNamespaceCache().GetNamespaceByID(namespaceID)
+	entry, err := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -3450,7 +3450,7 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(ctx context.Context, namespaceI
 	return true
 }
 
-func (wh *WorkflowHandler) checkBadBinary(namespaceEntry *namespace.CacheEntry, binaryChecksum string) error {
+func (wh *WorkflowHandler) checkBadBinary(namespaceEntry *namespace.Namespace, binaryChecksum string) error {
 	if err := namespaceEntry.VerifyBinaryChecksum(binaryChecksum); err != nil {
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("Binary %v already marked as bad deployment.", binaryChecksum))
 	}

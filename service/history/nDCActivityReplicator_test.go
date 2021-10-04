@@ -67,7 +67,7 @@ type (
 		mockShard           *shard.ContextTest
 		mockTxProcessor     *MocktransferQueueProcessor
 		mockTimerProcessor  *MocktimerQueueProcessor
-		mockNamespaceCache  *namespace.MockCache
+		mockNamespaceCache  *namespace.MockRegistry
 		mockClusterMetadata *cluster.MockMetadata
 		mockMutableState    *workflow.MockMutableState
 
@@ -614,7 +614,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
-		namespace.NewGlobalCacheEntryForTest(
+		namespace.NewGlobalNamespaceForTest(
 			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName},
 			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistencespb.NamespaceReplicationConfig{
@@ -688,7 +688,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 	).AnyTimes()
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
-		namespace.NewGlobalCacheEntryForTest(
+		namespace.NewGlobalNamespaceForTest(
 			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName},
 			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistencespb.NamespaceReplicationConfig{
@@ -763,7 +763,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityNotFound() {
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
-		namespace.NewGlobalCacheEntryForTest(
+		namespace.NewGlobalNamespaceForTest(
 			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName},
 			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistencespb.NamespaceReplicationConfig{
@@ -853,7 +853,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 	).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
-		namespace.NewGlobalCacheEntryForTest(
+		namespace.NewGlobalNamespaceForTest(
 			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName},
 			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistencespb.NamespaceReplicationConfig{
@@ -943,7 +943,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 	).Return(nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(
-		namespace.NewGlobalCacheEntryForTest(
+		namespace.NewGlobalNamespaceForTest(
 			&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName},
 			&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 			&persistencespb.NamespaceReplicationConfig{

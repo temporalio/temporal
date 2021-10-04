@@ -89,7 +89,7 @@ type (
 		mockTxProcessor              *MocktransferQueueProcessor
 		mockReplicationProcessor     *MockReplicatorQueueProcessor
 		mockTimerProcessor           *MocktimerQueueProcessor
-		mockNamespaceCache           *namespace.MockCache
+		mockNamespaceCache           *namespace.MockRegistry
 		mockMatchingClient           *matchingservicemock.MockMatchingServiceClient
 		mockHistoryClient            *historyservicemock.MockHistoryServiceClient
 		mockClusterMetadata          *cluster.MockMetadata
@@ -104,13 +104,13 @@ type (
 		logger                          log.Logger
 		namespaceID                     string
 		namespace                       string
-		namespaceEntry                  *namespace.CacheEntry
+		namespaceEntry                  *namespace.Namespace
 		targetNamespaceID               string
 		targetNamespace                 string
-		targetNamespaceEntry            *namespace.CacheEntry
+		targetNamespaceEntry            *namespace.Namespace
 		childNamespaceID                string
 		childNamespace                  string
-		childNamespaceEntry             *namespace.CacheEntry
+		childNamespaceEntry             *namespace.Namespace
 		version                         int64
 		now                             time.Time
 		timeSource                      *clock.EventTimeSource
