@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/primitives"
@@ -65,16 +66,33 @@ const (
 	v2templateScanAllTreeBranches = `SELECT tree_id, branch_id, branch, branch_encoding FROM history_tree `
 )
 
+type (
+	HistoryStore struct {
+		Session gocql.Session
+		Logger  log.Logger
+	}
+)
+
+func NewHistoryStore(
+	session gocql.Session,
+	logger log.Logger,
+) *HistoryStore {
+	return &HistoryStore{
+		Session: session,
+		Logger:  logger,
+	}
+}
+
 // AppendHistoryNodes upsert a batch of events as a single node to a history branch
 // Note that it's not allowed to append above the branch's ancestors' nodes, which means nodeID >= ForkNodeID
-func (h *cassandraPersistence) AppendHistoryNodes(
+func (h *HistoryStore) AppendHistoryNodes(
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
 	branchInfo := request.BranchInfo
 	node := request.Node
 
 	if !request.IsNewBranch {
-		query := h.session.Query(v2templateUpsertHistoryNode,
+		query := h.Session.Query(v2templateUpsertHistoryNode,
 			branchInfo.TreeId,
 			branchInfo.BranchId,
 			node.NodeID,
@@ -90,7 +108,7 @@ func (h *cassandraPersistence) AppendHistoryNodes(
 	}
 
 	treeInfoDataBlob := request.TreeInfo
-	batch := h.session.NewBatch(gocql.LoggedBatch)
+	batch := h.Session.NewBatch(gocql.LoggedBatch)
 	batch.Query(v2templateInsertTree,
 		branchInfo.TreeId,
 		branchInfo.BranchId,
@@ -106,14 +124,14 @@ func (h *cassandraPersistence) AppendHistoryNodes(
 		node.Events.Data,
 		node.Events.EncodingType.String(),
 	)
-	if err := h.session.ExecuteBatch(batch); err != nil {
+	if err := h.Session.ExecuteBatch(batch); err != nil {
 		return gocql.ConvertError("AppendHistoryNodes", err)
 	}
 	return nil
 }
 
 // DeleteHistoryNodes delete a history node
-func (h *cassandraPersistence) DeleteHistoryNodes(
+func (h *HistoryStore) DeleteHistoryNodes(
 	request *p.InternalDeleteHistoryNodesRequest,
 ) error {
 	branchInfo := request.BranchInfo
@@ -128,7 +146,7 @@ func (h *cassandraPersistence) DeleteHistoryNodes(
 		}
 	}
 
-	query := h.session.Query(v2templateDeleteHistoryNode,
+	query := h.Session.Query(v2templateDeleteHistoryNode,
 		treeID,
 		branchID,
 		nodeID,
@@ -142,7 +160,7 @@ func (h *cassandraPersistence) DeleteHistoryNodes(
 
 // ReadHistoryBranch returns history node data for a branch
 // NOTE: For branch that has ancestors, we need to query Cassandra multiple times, because it doesn't support OR/UNION operator
-func (h *cassandraPersistence) ReadHistoryBranch(
+func (h *HistoryStore) ReadHistoryBranch(
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
 
@@ -162,7 +180,7 @@ func (h *cassandraPersistence) ReadHistoryBranch(
 	} else {
 		queryString = v2templateReadHistoryNode
 	}
-	query := h.session.Query(queryString, treeID, branchID, request.MinNodeID, request.MaxNodeID)
+	query := h.Session.Query(queryString, treeID, branchID, request.MinNodeID, request.MaxNodeID)
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	var pagingToken []byte
@@ -231,7 +249,7 @@ func (h *cassandraPersistence) ReadHistoryBranch(
 //       \
 //       8[8,9]
 //
-func (h *cassandraPersistence) ForkHistoryBranch(
+func (h *HistoryStore) ForkHistoryBranch(
 	request *p.InternalForkHistoryBranchRequest,
 ) error {
 
@@ -247,7 +265,7 @@ func (h *cassandraPersistence) ForkHistoryBranch(
 	if err != nil {
 		return serviceerror.NewInternal(fmt.Sprintf("ForkHistoryBranch - Gocql NewBranchID UUID cast failed. Error: %v", err))
 	}
-	query := h.session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.EncodingType.String())
+	query := h.Session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.EncodingType.String())
 	err = query.Exec()
 	if err != nil {
 		return gocql.ConvertError("ForkHistoryBranch", err)
@@ -257,10 +275,10 @@ func (h *cassandraPersistence) ForkHistoryBranch(
 }
 
 // DeleteHistoryBranch removes a branch
-func (h *cassandraPersistence) DeleteHistoryBranch(
+func (h *HistoryStore) DeleteHistoryBranch(
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
-	batch := h.session.NewBatch(gocql.LoggedBatch)
+	batch := h.Session.NewBatch(gocql.LoggedBatch)
 	batch.Query(v2templateDeleteBranch, request.TreeId, request.BranchId)
 
 	// delete each branch range
@@ -268,14 +286,14 @@ func (h *cassandraPersistence) DeleteHistoryBranch(
 		h.deleteBranchRangeNodes(batch, request.TreeId, br.BranchId, br.BeginNodeId)
 	}
 
-	err := h.session.ExecuteBatch(batch)
+	err := h.Session.ExecuteBatch(batch)
 	if err != nil {
 		return gocql.ConvertError("DeleteHistoryBranch", err)
 	}
 	return nil
 }
 
-func (h *cassandraPersistence) deleteBranchRangeNodes(
+func (h *HistoryStore) deleteBranchRangeNodes(
 	batch gocql.Batch,
 	treeID string,
 	branchID string,
@@ -288,11 +306,11 @@ func (h *cassandraPersistence) deleteBranchRangeNodes(
 		beginNodeID)
 }
 
-func (h *cassandraPersistence) GetAllHistoryTreeBranches(
+func (h *HistoryStore) GetAllHistoryTreeBranches(
 	request *p.GetAllHistoryTreeBranchesRequest,
 ) (*p.InternalGetAllHistoryTreeBranchesResponse, error) {
 
-	query := h.session.Query(v2templateScanAllTreeBranches)
+	query := h.Session.Query(v2templateScanAllTreeBranches)
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
@@ -335,7 +353,7 @@ func (h *cassandraPersistence) GetAllHistoryTreeBranches(
 }
 
 // GetHistoryTree returns all branch information of a tree
-func (h *cassandraPersistence) GetHistoryTree(
+func (h *HistoryStore) GetHistoryTree(
 	request *p.GetHistoryTreeRequest,
 ) (*p.InternalGetHistoryTreeResponse, error) {
 
@@ -343,7 +361,7 @@ func (h *cassandraPersistence) GetHistoryTree(
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch. Gocql TreeId UUID cast failed. Error: %v", err))
 	}
-	query := h.session.Query(v2templateReadAllBranches, treeID)
+	query := h.Session.Query(v2templateReadAllBranches, treeID)
 
 	pageSize := 100
 	var pagingToken []byte
@@ -379,7 +397,7 @@ func (h *cassandraPersistence) GetHistoryTree(
 	}, nil
 }
 
-func (h *cassandraPersistence) sortAncestors(
+func (h *HistoryStore) sortAncestors(
 	ans []*persistencespb.HistoryBranchRange,
 ) {
 	if len(ans) > 0 {

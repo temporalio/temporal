@@ -73,7 +73,7 @@ func AdminShowWorkflow(c *cli.Context) {
 	serializer := serialization.NewSerializer()
 	var history []*commonpb.DataBlob
 	if len(tid) != 0 {
-		histV2 := cassandra.NewExecutionStore(session, log.NewNoopLogger())
+		histV2 := cassandra.NewHistoryStore(session, log.NewNoopLogger())
 		resp, err := histV2.ReadHistoryBranch(&persistence.InternalReadHistoryBranchRequest{
 			TreeID:    tid,
 			BranchID:  bid,

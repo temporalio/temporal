@@ -78,22 +78,22 @@ func NewFactoryFromSession(
 
 // NewTaskStore returns a new task store
 func (f *Factory) NewTaskStore() (p.TaskStore, error) {
-	return newTaskPersistence(f.session, f.logger)
+	return NewMatchingTaskStore(f.session, f.logger), nil
 }
 
 // NewShardStore returns a new shard store
 func (f *Factory) NewShardStore() (p.ShardStore, error) {
-	return newShardPersistence(f.session, f.clusterName, f.logger)
+	return NewShardStore(f.clusterName, f.session, f.logger), nil
 }
 
 // NewMetadataStore returns a metadata store
 func (f *Factory) NewMetadataStore() (p.MetadataStore, error) {
-	return newMetadataPersistence(f.session, f.clusterName, f.logger)
+	return NewMetadataStore(f.clusterName, f.session, f.logger)
 }
 
 // NewClusterMetadataStore returns a metadata store
 func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
-	return newClusterMetadataInstance(f.session, f.logger)
+	return NewClusterMetadataStore(f.session, f.logger)
 }
 
 // NewExecutionStore returns a new ExecutionStore.
@@ -103,7 +103,7 @@ func (f *Factory) NewExecutionStore() (p.ExecutionStore, error) {
 
 // NewQueue returns a new queue backed by cassandra
 func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
-	return newQueue(f.session, f.logger, queueType)
+	return NewQueueStore(queueType, f.session, f.logger)
 }
 
 // Close closes the factory
