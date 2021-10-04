@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 )
 
-//	"go.temporal.io/api/serviceerror"
 // Guidelines for creating new special UUID constants
 // Each UUID should be of the form: E0000000-R000-f000-f000-00000000000x
 // Where x is any hexadecimal value, E represents the entity type valid values are:
