@@ -56,12 +56,12 @@ func NewFactory(
 ) *Factory {
 	session, err := gocql.NewSession(cfg, r, logger)
 	if err != nil {
-		logger.Fatal("unable to initialize cassandra Session", tag.Error(err))
+		logger.Fatal("unable to initialize cassandra session", tag.Error(err))
 	}
 	return NewFactoryFromSession(cfg, clusterName, logger, session)
 }
 
-// NewFactoryFromSession returns an instance of a factory object from the given Session.
+// NewFactoryFromSession returns an instance of a factory object from the given session.
 func NewFactoryFromSession(
 	cfg config.Cassandra,
 	clusterName string,
