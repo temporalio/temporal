@@ -354,23 +354,23 @@ const (
 )
 
 type (
-	MutableStatePersistence struct {
+	MutableStateStore struct {
 		Session gocql.Session
 		Logger  log.Logger
 	}
 )
 
-func NewMutableStatePersistence(
+func NewMutableStateStore(
 	session gocql.Session,
 	logger log.Logger,
-) *MutableStatePersistence {
-	return &MutableStatePersistence{
+) *MutableStateStore {
+	return &MutableStateStore{
 		Session: session,
 		Logger:  logger,
 	}
 }
 
-func (d *MutableStatePersistence) CreateWorkflowExecution(
+func (d *MutableStateStore) CreateWorkflowExecution(
 	request *p.InternalCreateWorkflowExecutionRequest,
 ) (*p.InternalCreateWorkflowExecutionResponse, error) {
 	batch := d.Session.NewBatch(gocql.LoggedBatch)
@@ -497,7 +497,7 @@ func (d *MutableStatePersistence) CreateWorkflowExecution(
 	return &p.InternalCreateWorkflowExecutionResponse{}, nil
 }
 
-func (d *MutableStatePersistence) GetWorkflowExecution(
+func (d *MutableStateStore) GetWorkflowExecution(
 	request *p.GetWorkflowExecutionRequest,
 ) (*p.InternalGetWorkflowExecutionResponse, error) {
 	execution := request.Execution
@@ -584,7 +584,7 @@ func (d *MutableStatePersistence) GetWorkflowExecution(
 	}, nil
 }
 
-func (d *MutableStatePersistence) UpdateWorkflowExecution(
+func (d *MutableStateStore) UpdateWorkflowExecution(
 	request *p.InternalUpdateWorkflowExecutionRequest,
 ) error {
 	batch := d.Session.NewBatch(gocql.LoggedBatch)
@@ -716,7 +716,7 @@ func (d *MutableStatePersistence) UpdateWorkflowExecution(
 	return nil
 }
 
-func (d *MutableStatePersistence) ConflictResolveWorkflowExecution(
+func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 	request *p.InternalConflictResolveWorkflowExecutionRequest,
 ) error {
 	batch := d.Session.NewBatch(gocql.LoggedBatch)
@@ -875,7 +875,7 @@ func (d *MutableStatePersistence) ConflictResolveWorkflowExecution(
 	return nil
 }
 
-func (d *MutableStatePersistence) assertNotCurrentExecution(
+func (d *MutableStateStore) assertNotCurrentExecution(
 	shardID int32,
 	namespaceID string,
 	workflowID string,
@@ -901,7 +901,7 @@ func (d *MutableStatePersistence) assertNotCurrentExecution(
 	return nil
 }
 
-func (d *MutableStatePersistence) DeleteWorkflowExecution(
+func (d *MutableStateStore) DeleteWorkflowExecution(
 	request *p.DeleteWorkflowExecutionRequest,
 ) error {
 	query := d.Session.Query(templateDeleteWorkflowExecutionMutableStateQuery,
@@ -917,7 +917,7 @@ func (d *MutableStatePersistence) DeleteWorkflowExecution(
 	return gocql.ConvertError("DeleteWorkflowExecution", err)
 }
 
-func (d *MutableStatePersistence) DeleteCurrentWorkflowExecution(
+func (d *MutableStateStore) DeleteCurrentWorkflowExecution(
 	request *p.DeleteCurrentWorkflowExecutionRequest,
 ) error {
 	query := d.Session.Query(templateDeleteWorkflowExecutionCurrentRowQuery,
@@ -934,7 +934,7 @@ func (d *MutableStatePersistence) DeleteCurrentWorkflowExecution(
 	return gocql.ConvertError("DeleteWorkflowCurrentRow", err)
 }
 
-func (d *MutableStatePersistence) GetCurrentExecution(
+func (d *MutableStateStore) GetCurrentExecution(
 	request *p.GetCurrentExecutionRequest,
 ) (*p.InternalGetCurrentExecutionResponse,
 	error) {
@@ -972,7 +972,7 @@ func (d *MutableStatePersistence) GetCurrentExecution(
 	}, nil
 }
 
-func (d *MutableStatePersistence) ListConcreteExecutions(
+func (d *MutableStateStore) ListConcreteExecutions(
 	request *p.ListConcreteExecutionsRequest,
 ) (*p.InternalListConcreteExecutionsResponse, error) {
 	query := d.Session.Query(

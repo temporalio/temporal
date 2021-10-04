@@ -63,26 +63,26 @@ WHERE membership_partition = ?`
 )
 
 type (
-	ClusterMetadataPersistence struct {
+	ClusterMetadataStore struct {
 		session gocql.Session
 		logger  log.Logger
 	}
 )
 
-var _ p.ClusterMetadataStore = (*ClusterMetadataPersistence)(nil)
+var _ p.ClusterMetadataStore = (*ClusterMetadataStore)(nil)
 
-// newClusterMetadataInstance is used to create an instance of ClusterMetadataStore implementation
-func newClusterMetadataInstance(
+// NewClusterMetadataStore is used to create an instance of ClusterMetadataStore implementation
+func NewClusterMetadataStore(
 	session gocql.Session,
 	logger log.Logger,
 ) (p.ClusterMetadataStore, error) {
-	return &ClusterMetadataPersistence{
+	return &ClusterMetadataStore{
 		session: session,
 		logger:  logger,
 	}, nil
 }
 
-func (m *ClusterMetadataPersistence) GetClusterMetadata() (*p.InternalGetClusterMetadataResponse, error) {
+func (m *ClusterMetadataStore) GetClusterMetadata() (*p.InternalGetClusterMetadataResponse, error) {
 	query := m.session.Query(templateGetClusterMetadata, constMetadataPartition)
 	var clusterMetadata []byte
 	var encoding string
@@ -98,7 +98,7 @@ func (m *ClusterMetadataPersistence) GetClusterMetadata() (*p.InternalGetCluster
 	}, nil
 }
 
-func (m *ClusterMetadataPersistence) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
+func (m *ClusterMetadataStore) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
 	var query gocql.Query
 	if request.Version == 0 {
 		query = m.session.Query(
@@ -130,7 +130,7 @@ func (m *ClusterMetadataPersistence) SaveClusterMetadata(request *p.InternalSave
 	return true, nil
 }
 
-func (m *ClusterMetadataPersistence) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {
+func (m *ClusterMetadataStore) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {
 	var queryString strings.Builder
 	var operands []interface{}
 	queryString.WriteString(templateGetClusterMembership)
@@ -204,7 +204,7 @@ func (m *ClusterMetadataPersistence) GetClusterMembers(request *p.GetClusterMemb
 	return &p.GetClusterMembersResponse{ActiveMembers: clusterMembers, NextPageToken: pagingToken}, nil
 }
 
-func (m *ClusterMetadataPersistence) UpsertClusterMembership(request *p.UpsertClusterMembershipRequest) error {
+func (m *ClusterMetadataStore) UpsertClusterMembership(request *p.UpsertClusterMembershipRequest) error {
 	query := m.session.Query(templateUpsertActiveClusterMembership, constMembershipPartition, []byte(request.HostID),
 		request.RPCAddress, request.RPCPort, request.Role, request.SessionStart, time.Now().UTC(), int64(request.RecordExpiry.Seconds()))
 	err := query.Exec()
@@ -216,15 +216,15 @@ func (m *ClusterMetadataPersistence) UpsertClusterMembership(request *p.UpsertCl
 	return nil
 }
 
-func (m *ClusterMetadataPersistence) PruneClusterMembership(request *p.PruneClusterMembershipRequest) error {
+func (m *ClusterMetadataStore) PruneClusterMembership(request *p.PruneClusterMembershipRequest) error {
 	return nil
 }
 
-func (m *ClusterMetadataPersistence) GetName() string {
+func (m *ClusterMetadataStore) GetName() string {
 	return cassandraPersistenceName
 }
 
-func (m *ClusterMetadataPersistence) Close() {
+func (m *ClusterMetadataStore) Close() {
 	if m.session != nil {
 		m.session.Close()
 	}

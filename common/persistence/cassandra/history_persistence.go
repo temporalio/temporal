@@ -67,17 +67,17 @@ const (
 )
 
 type (
-	HistoryPersistence struct {
+	HistoryStore struct {
 		Session gocql.Session
 		Logger  log.Logger
 	}
 )
 
-func NewHistoryPersistence(
+func NewHistoryStore(
 	session gocql.Session,
 	logger log.Logger,
-) *HistoryPersistence {
-	return &HistoryPersistence{
+) *HistoryStore {
+	return &HistoryStore{
 		Session: session,
 		Logger:  logger,
 	}
@@ -85,7 +85,7 @@ func NewHistoryPersistence(
 
 // AppendHistoryNodes upsert a batch of events as a single node to a history branch
 // Note that it's not allowed to append above the branch's ancestors' nodes, which means nodeID >= ForkNodeID
-func (h *HistoryPersistence) AppendHistoryNodes(
+func (h *HistoryStore) AppendHistoryNodes(
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
 	branchInfo := request.BranchInfo
@@ -131,7 +131,7 @@ func (h *HistoryPersistence) AppendHistoryNodes(
 }
 
 // DeleteHistoryNodes delete a history node
-func (h *HistoryPersistence) DeleteHistoryNodes(
+func (h *HistoryStore) DeleteHistoryNodes(
 	request *p.InternalDeleteHistoryNodesRequest,
 ) error {
 	branchInfo := request.BranchInfo
@@ -160,7 +160,7 @@ func (h *HistoryPersistence) DeleteHistoryNodes(
 
 // ReadHistoryBranch returns history node data for a branch
 // NOTE: For branch that has ancestors, we need to query Cassandra multiple times, because it doesn't support OR/UNION operator
-func (h *HistoryPersistence) ReadHistoryBranch(
+func (h *HistoryStore) ReadHistoryBranch(
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
 
@@ -249,7 +249,7 @@ func (h *HistoryPersistence) ReadHistoryBranch(
 //       \
 //       8[8,9]
 //
-func (h *HistoryPersistence) ForkHistoryBranch(
+func (h *HistoryStore) ForkHistoryBranch(
 	request *p.InternalForkHistoryBranchRequest,
 ) error {
 
@@ -275,7 +275,7 @@ func (h *HistoryPersistence) ForkHistoryBranch(
 }
 
 // DeleteHistoryBranch removes a branch
-func (h *HistoryPersistence) DeleteHistoryBranch(
+func (h *HistoryStore) DeleteHistoryBranch(
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
 	batch := h.Session.NewBatch(gocql.LoggedBatch)
@@ -293,7 +293,7 @@ func (h *HistoryPersistence) DeleteHistoryBranch(
 	return nil
 }
 
-func (h *HistoryPersistence) deleteBranchRangeNodes(
+func (h *HistoryStore) deleteBranchRangeNodes(
 	batch gocql.Batch,
 	treeID string,
 	branchID string,
@@ -306,7 +306,7 @@ func (h *HistoryPersistence) deleteBranchRangeNodes(
 		beginNodeID)
 }
 
-func (h *HistoryPersistence) GetAllHistoryTreeBranches(
+func (h *HistoryStore) GetAllHistoryTreeBranches(
 	request *p.GetAllHistoryTreeBranchesRequest,
 ) (*p.InternalGetAllHistoryTreeBranchesResponse, error) {
 
@@ -353,7 +353,7 @@ func (h *HistoryPersistence) GetAllHistoryTreeBranches(
 }
 
 // GetHistoryTree returns all branch information of a tree
-func (h *HistoryPersistence) GetHistoryTree(
+func (h *HistoryStore) GetHistoryTree(
 	request *p.GetHistoryTreeRequest,
 ) (*p.InternalGetHistoryTreeResponse, error) {
 
@@ -397,7 +397,7 @@ func (h *HistoryPersistence) GetHistoryTree(
 	}, nil
 }
 
-func (h *HistoryPersistence) sortAncestors(
+func (h *HistoryStore) sortAncestors(
 	ans []*persistencespb.HistoryBranchRange,
 ) {
 	if len(ans) > 0 {

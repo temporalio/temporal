@@ -78,32 +78,32 @@ func NewFactoryFromSession(
 
 // NewTaskStore returns a new task store
 func (f *Factory) NewTaskStore() (p.TaskStore, error) {
-	return NewMatchingTaskPersistence(f.session, f.logger), nil
+	return NewMatchingTaskStore(f.session, f.logger), nil
 }
 
 // NewShardStore returns a new shard store
 func (f *Factory) NewShardStore() (p.ShardStore, error) {
-	return NewShardPersistence(f.clusterName, f.session, f.logger), nil
+	return NewShardStore(f.clusterName, f.session, f.logger), nil
 }
 
 // NewMetadataStore returns a metadata store
 func (f *Factory) NewMetadataStore() (p.MetadataStore, error) {
-	return NewMetadataPersistence(f.clusterName, f.session, f.logger)
+	return NewMetadataStore(f.clusterName, f.session, f.logger)
 }
 
 // NewClusterMetadataStore returns a metadata store
 func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
-	return newClusterMetadataInstance(f.session, f.logger)
+	return NewClusterMetadataStore(f.session, f.logger)
 }
 
 // NewExecutionStore returns a new ExecutionStore.
 func (f *Factory) NewExecutionStore() (p.ExecutionStore, error) {
-	return NewExecutionPersistence(f.session, f.logger), nil
+	return NewExecutionStore(f.session, f.logger), nil
 }
 
 // NewQueue returns a new queue backed by cassandra
 func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
-	return NewQueuePersistence(queueType, f.session, f.logger)
+	return NewQueueStore(queueType, f.session, f.logger)
 }
 
 // Close closes the factory

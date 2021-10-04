@@ -40,23 +40,23 @@ import (
 )
 
 type (
-	MatchingTaskPersistence struct {
+	MatchingTaskStore struct {
 		Session gocql.Session
 		Logger  log.Logger
 	}
 )
 
-func NewMatchingTaskPersistence(
+func NewMatchingTaskStore(
 	session gocql.Session,
 	logger log.Logger,
-) *MatchingTaskPersistence {
-	return &MatchingTaskPersistence{
+) *MatchingTaskStore {
+	return &MatchingTaskStore{
 		Session: session,
 		Logger:  logger,
 	}
 }
 
-func (d *MatchingTaskPersistence) CreateTaskQueue(
+func (d *MatchingTaskStore) CreateTaskQueue(
 	request *p.InternalCreateTaskQueueRequest,
 ) error {
 	query := d.Session.Query(templateInsertTaskQueueQuery,
@@ -87,7 +87,7 @@ func (d *MatchingTaskPersistence) CreateTaskQueue(
 	return nil
 }
 
-func (d *MatchingTaskPersistence) GetTaskQueue(
+func (d *MatchingTaskStore) GetTaskQueue(
 	request *p.InternalGetTaskQueueRequest,
 ) (*p.InternalGetTaskQueueResponse, error) {
 	query := d.Session.Query(templateGetTaskQueue,
@@ -111,7 +111,7 @@ func (d *MatchingTaskPersistence) GetTaskQueue(
 	}, nil
 }
 
-func (d *MatchingTaskPersistence) ExtendLease(
+func (d *MatchingTaskStore) ExtendLease(
 	request *p.InternalExtendLeaseRequest,
 ) error {
 	query := d.Session.Query(templateUpdateTaskQueueQuery,
@@ -143,7 +143,7 @@ func (d *MatchingTaskPersistence) ExtendLease(
 }
 
 // UpdateTaskQueue update task queue
-func (d *MatchingTaskPersistence) UpdateTaskQueue(
+func (d *MatchingTaskStore) UpdateTaskQueue(
 	request *p.InternalUpdateTaskQueueRequest,
 ) (*p.UpdateTaskQueueResponse, error) {
 	var err error
@@ -210,13 +210,13 @@ func (d *MatchingTaskPersistence) UpdateTaskQueue(
 	return &p.UpdateTaskQueueResponse{}, nil
 }
 
-func (d *MatchingTaskPersistence) ListTaskQueue(
+func (d *MatchingTaskStore) ListTaskQueue(
 	_ *p.ListTaskQueueRequest,
 ) (*p.InternalListTaskQueueResponse, error) {
 	return nil, serviceerror.NewUnavailable(fmt.Sprintf("unsupported operation"))
 }
 
-func (d *MatchingTaskPersistence) DeleteTaskQueue(
+func (d *MatchingTaskStore) DeleteTaskQueue(
 	request *p.DeleteTaskQueueRequest,
 ) error {
 	query := d.Session.Query(templateDeleteTaskQueueQuery,
@@ -235,7 +235,7 @@ func (d *MatchingTaskPersistence) DeleteTaskQueue(
 }
 
 // CreateTasks add tasks
-func (d *MatchingTaskPersistence) CreateTasks(
+func (d *MatchingTaskStore) CreateTasks(
 	request *p.InternalCreateTasksRequest,
 ) (*p.CreateTasksResponse, error) {
 	batch := d.Session.NewBatch(gocql.LoggedBatch)
@@ -314,7 +314,7 @@ func GetTaskTTL(expireTime *time.Time) int64 {
 }
 
 // GetTasks get a task
-func (d *MatchingTaskPersistence) GetTasks(
+func (d *MatchingTaskStore) GetTasks(
 	request *p.GetTasksRequest,
 ) (*p.InternalGetTasksResponse, error) {
 	if request.MaxReadLevel == nil {
@@ -380,7 +380,7 @@ PopulateTasks:
 }
 
 // CompleteTask delete a task
-func (d *MatchingTaskPersistence) CompleteTask(
+func (d *MatchingTaskStore) CompleteTask(
 	request *p.CompleteTaskRequest,
 ) error {
 	tli := request.TaskQueue
@@ -402,7 +402,7 @@ func (d *MatchingTaskPersistence) CompleteTask(
 // CompleteTasksLessThan deletes all tasks less than or equal to the given task id. This API ignores the
 // Limit request parameter i.e. either all tasks leq the task_id will be deleted or an error will
 // be returned to the caller
-func (d *MatchingTaskPersistence) CompleteTasksLessThan(
+func (d *MatchingTaskStore) CompleteTasksLessThan(
 	request *p.CompleteTasksLessThanRequest,
 ) (int, error) {
 	query := d.Session.Query(templateCompleteTasksLessThanQuery,
@@ -414,11 +414,11 @@ func (d *MatchingTaskPersistence) CompleteTasksLessThan(
 	return p.UnknownNumRowsAffected, nil
 }
 
-func (d *MatchingTaskPersistence) GetName() string {
+func (d *MatchingTaskStore) GetName() string {
 	return cassandraPersistenceName
 }
 
-func (d *MatchingTaskPersistence) Close() {
+func (d *MatchingTaskStore) Close() {
 	if d.Session != nil {
 		d.Session.Close()
 	}

@@ -297,23 +297,23 @@ const (
 )
 
 type (
-	MutableStateTaskPersistence struct {
+	MutableStateTaskStore struct {
 		Session gocql.Session
 		Logger  log.Logger
 	}
 )
 
-func NewMutableStateTaskPersistence(
+func NewMutableStateTaskStore(
 	session gocql.Session,
 	logger log.Logger,
-) *MutableStateTaskPersistence {
-	return &MutableStateTaskPersistence{
+) *MutableStateTaskStore {
+	return &MutableStateTaskStore{
 		Session: session,
 		Logger:  logger,
 	}
 }
 
-func (d *MutableStateTaskPersistence) AddTasks(
+func (d *MutableStateTaskStore) AddTasks(
 	request *p.InternalAddTasksRequest,
 ) error {
 	batch := d.Session.NewBatch(gocql.LoggedBatch)
@@ -364,7 +364,7 @@ func (d *MutableStateTaskPersistence) AddTasks(
 	return nil
 }
 
-func (d *MutableStateTaskPersistence) GetTransferTask(
+func (d *MutableStateTaskStore) GetTransferTask(
 	request *p.GetTransferTaskRequest,
 ) (*p.GetTransferTaskResponse, error) {
 	shardID := request.ShardID
@@ -393,7 +393,7 @@ func (d *MutableStateTaskPersistence) GetTransferTask(
 	return &p.GetTransferTaskResponse{TransferTaskInfo: info}, nil
 }
 
-func (d *MutableStateTaskPersistence) GetTransferTasks(
+func (d *MutableStateTaskStore) GetTransferTasks(
 	request *p.GetTransferTasksRequest,
 ) (*p.GetTransferTasksResponse, error) {
 
@@ -433,7 +433,7 @@ func (d *MutableStateTaskPersistence) GetTransferTasks(
 	return response, nil
 }
 
-func (d *MutableStateTaskPersistence) CompleteTransferTask(
+func (d *MutableStateTaskStore) CompleteTransferTask(
 	request *p.CompleteTransferTaskRequest,
 ) error {
 	query := d.Session.Query(templateCompleteTransferTaskQuery,
@@ -449,7 +449,7 @@ func (d *MutableStateTaskPersistence) CompleteTransferTask(
 	return gocql.ConvertError("CompleteTransferTask", err)
 }
 
-func (d *MutableStateTaskPersistence) RangeCompleteTransferTask(
+func (d *MutableStateTaskStore) RangeCompleteTransferTask(
 	request *p.RangeCompleteTransferTaskRequest,
 ) error {
 	query := d.Session.Query(templateRangeCompleteTransferTaskQuery,
@@ -467,7 +467,7 @@ func (d *MutableStateTaskPersistence) RangeCompleteTransferTask(
 	return gocql.ConvertError("RangeCompleteTransferTask", err)
 }
 
-func (d *MutableStateTaskPersistence) GetTimerTask(
+func (d *MutableStateTaskStore) GetTimerTask(
 	request *p.GetTimerTaskRequest,
 ) (*p.GetTimerTaskResponse, error) {
 	shardID := request.ShardID
@@ -497,7 +497,7 @@ func (d *MutableStateTaskPersistence) GetTimerTask(
 	return &p.GetTimerTaskResponse{TimerTaskInfo: info}, nil
 }
 
-func (d *MutableStateTaskPersistence) GetTimerIndexTasks(
+func (d *MutableStateTaskStore) GetTimerIndexTasks(
 	request *p.GetTimerIndexTasksRequest,
 ) (*p.GetTimerIndexTasksResponse, error) {
 	// Reading timer tasks need to be quorum level consistent, otherwise we could lose tasks
@@ -538,7 +538,7 @@ func (d *MutableStateTaskPersistence) GetTimerIndexTasks(
 	return response, nil
 }
 
-func (d *MutableStateTaskPersistence) CompleteTimerTask(
+func (d *MutableStateTaskStore) CompleteTimerTask(
 	request *p.CompleteTimerTaskRequest,
 ) error {
 	ts := p.UnixMilliseconds(request.VisibilityTimestamp)
@@ -555,7 +555,7 @@ func (d *MutableStateTaskPersistence) CompleteTimerTask(
 	return gocql.ConvertError("CompleteTimerTask", err)
 }
 
-func (d *MutableStateTaskPersistence) RangeCompleteTimerTask(
+func (d *MutableStateTaskStore) RangeCompleteTimerTask(
 	request *p.RangeCompleteTimerTaskRequest,
 ) error {
 	start := p.UnixMilliseconds(request.InclusiveBeginTimestamp)
@@ -574,7 +574,7 @@ func (d *MutableStateTaskPersistence) RangeCompleteTimerTask(
 	return gocql.ConvertError("RangeCompleteTimerTask", err)
 }
 
-func (d *MutableStateTaskPersistence) GetReplicationTask(
+func (d *MutableStateTaskStore) GetReplicationTask(
 	request *p.GetReplicationTaskRequest,
 ) (*p.GetReplicationTaskResponse, error) {
 	shardID := request.ShardID
@@ -603,7 +603,7 @@ func (d *MutableStateTaskPersistence) GetReplicationTask(
 	return &p.GetReplicationTaskResponse{ReplicationTaskInfo: info}, nil
 }
 
-func (d *MutableStateTaskPersistence) GetReplicationTasks(
+func (d *MutableStateTaskStore) GetReplicationTasks(
 	request *p.GetReplicationTasksRequest,
 ) (*p.GetReplicationTasksResponse, error) {
 
@@ -622,7 +622,7 @@ func (d *MutableStateTaskPersistence) GetReplicationTasks(
 	return d.populateGetReplicationTasksResponse(query, "GetReplicationTasks")
 }
 
-func (d *MutableStateTaskPersistence) CompleteReplicationTask(
+func (d *MutableStateTaskStore) CompleteReplicationTask(
 	request *p.CompleteReplicationTaskRequest,
 ) error {
 	query := d.Session.Query(templateCompleteReplicationTaskQuery,
@@ -638,7 +638,7 @@ func (d *MutableStateTaskPersistence) CompleteReplicationTask(
 	return gocql.ConvertError("CompleteReplicationTask", err)
 }
 
-func (d *MutableStateTaskPersistence) RangeCompleteReplicationTask(
+func (d *MutableStateTaskStore) RangeCompleteReplicationTask(
 	request *p.RangeCompleteReplicationTaskRequest,
 ) error {
 
@@ -656,7 +656,7 @@ func (d *MutableStateTaskPersistence) RangeCompleteReplicationTask(
 	return gocql.ConvertError("RangeCompleteReplicationTask", err)
 }
 
-func (d *MutableStateTaskPersistence) PutReplicationTaskToDLQ(
+func (d *MutableStateTaskStore) PutReplicationTaskToDLQ(
 	request *p.PutReplicationTaskToDLQRequest,
 ) error {
 	task := request.TaskInfo
@@ -685,7 +685,7 @@ func (d *MutableStateTaskPersistence) PutReplicationTaskToDLQ(
 	return nil
 }
 
-func (d *MutableStateTaskPersistence) GetReplicationTasksFromDLQ(
+func (d *MutableStateTaskStore) GetReplicationTasksFromDLQ(
 	request *p.GetReplicationTasksFromDLQRequest,
 ) (*p.GetReplicationTasksFromDLQResponse, error) {
 	// Reading replication tasks need to be quorum level consistent, otherwise we could lose tasks
@@ -703,7 +703,7 @@ func (d *MutableStateTaskPersistence) GetReplicationTasksFromDLQ(
 	return d.populateGetReplicationTasksResponse(query, "GetReplicationTasksFromDLQ")
 }
 
-func (d *MutableStateTaskPersistence) DeleteReplicationTaskFromDLQ(
+func (d *MutableStateTaskStore) DeleteReplicationTaskFromDLQ(
 	request *p.DeleteReplicationTaskFromDLQRequest,
 ) error {
 
@@ -721,7 +721,7 @@ func (d *MutableStateTaskPersistence) DeleteReplicationTaskFromDLQ(
 	return gocql.ConvertError("DeleteReplicationTaskFromDLQ", err)
 }
 
-func (d *MutableStateTaskPersistence) RangeDeleteReplicationTaskFromDLQ(
+func (d *MutableStateTaskStore) RangeDeleteReplicationTaskFromDLQ(
 	request *p.RangeDeleteReplicationTaskFromDLQRequest,
 ) error {
 
@@ -740,7 +740,7 @@ func (d *MutableStateTaskPersistence) RangeDeleteReplicationTaskFromDLQ(
 	return gocql.ConvertError("RangeDeleteReplicationTaskFromDLQ", err)
 }
 
-func (d *MutableStateTaskPersistence) GetVisibilityTask(
+func (d *MutableStateTaskStore) GetVisibilityTask(
 	request *p.GetVisibilityTaskRequest,
 ) (*p.GetVisibilityTaskResponse, error) {
 	shardID := request.ShardID
@@ -769,7 +769,7 @@ func (d *MutableStateTaskPersistence) GetVisibilityTask(
 	return &p.GetVisibilityTaskResponse{VisibilityTaskInfo: info}, nil
 }
 
-func (d *MutableStateTaskPersistence) GetVisibilityTasks(
+func (d *MutableStateTaskStore) GetVisibilityTasks(
 	request *p.GetVisibilityTasksRequest,
 ) (*p.GetVisibilityTasksResponse, error) {
 
@@ -809,7 +809,7 @@ func (d *MutableStateTaskPersistence) GetVisibilityTasks(
 	return response, nil
 }
 
-func (d *MutableStateTaskPersistence) CompleteVisibilityTask(
+func (d *MutableStateTaskStore) CompleteVisibilityTask(
 	request *p.CompleteVisibilityTaskRequest,
 ) error {
 	query := d.Session.Query(templateCompleteVisibilityTaskQuery,
@@ -825,7 +825,7 @@ func (d *MutableStateTaskPersistence) CompleteVisibilityTask(
 	return gocql.ConvertError("CompleteVisibilityTask", err)
 }
 
-func (d *MutableStateTaskPersistence) RangeCompleteVisibilityTask(
+func (d *MutableStateTaskStore) RangeCompleteVisibilityTask(
 	request *p.RangeCompleteVisibilityTaskRequest,
 ) error {
 	query := d.Session.Query(templateRangeCompleteVisibilityTaskQuery,
@@ -843,7 +843,7 @@ func (d *MutableStateTaskPersistence) RangeCompleteVisibilityTask(
 	return gocql.ConvertError("RangeCompleteVisibilityTask", err)
 }
 
-func (d *MutableStateTaskPersistence) populateGetReplicationTasksResponse(
+func (d *MutableStateTaskStore) populateGetReplicationTasksResponse(
 	query gocql.Query,
 	operation string,
 ) (*p.GetReplicationTasksResponse, error) {

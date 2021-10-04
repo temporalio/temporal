@@ -104,27 +104,27 @@ var (
 )
 
 type (
-	ExecutionPersistence struct {
-		*HistoryPersistence
-		*MutableStatePersistence
-		*MutableStateTaskPersistence
+	ExecutionStore struct {
+		*HistoryStore
+		*MutableStateStore
+		*MutableStateTaskStore
 	}
 )
 
-var _ p.ExecutionStore = (*ExecutionPersistence)(nil)
+var _ p.ExecutionStore = (*ExecutionStore)(nil)
 
-func NewExecutionPersistence(
+func NewExecutionStore(
 	session gocql.Session,
 	logger log.Logger,
-) *ExecutionPersistence {
-	return &ExecutionPersistence{
-		HistoryPersistence:          NewHistoryPersistence(session, logger),
-		MutableStatePersistence:     NewMutableStatePersistence(session, logger),
-		MutableStateTaskPersistence: NewMutableStateTaskPersistence(session, logger),
+) *ExecutionStore {
+	return &ExecutionStore{
+		HistoryStore:          NewHistoryStore(session, logger),
+		MutableStateStore:     NewMutableStateStore(session, logger),
+		MutableStateTaskStore: NewMutableStateTaskStore(session, logger),
 	}
 }
 
-func (d *ExecutionPersistence) CreateWorkflowExecution(
+func (d *ExecutionStore) CreateWorkflowExecution(
 	request *p.InternalCreateWorkflowExecutionRequest,
 ) (*p.InternalCreateWorkflowExecutionResponse, error) {
 	for _, req := range request.NewWorkflowNewEvents {
@@ -133,10 +133,10 @@ func (d *ExecutionPersistence) CreateWorkflowExecution(
 		}
 	}
 
-	return d.MutableStatePersistence.CreateWorkflowExecution(request)
+	return d.MutableStateStore.CreateWorkflowExecution(request)
 }
 
-func (d *ExecutionPersistence) UpdateWorkflowExecution(
+func (d *ExecutionStore) UpdateWorkflowExecution(
 	request *p.InternalUpdateWorkflowExecutionRequest,
 ) error {
 	for _, req := range request.UpdateWorkflowNewEvents {
@@ -150,10 +150,10 @@ func (d *ExecutionPersistence) UpdateWorkflowExecution(
 		}
 	}
 
-	return d.MutableStatePersistence.UpdateWorkflowExecution(request)
+	return d.MutableStateStore.UpdateWorkflowExecution(request)
 }
 
-func (d *ExecutionPersistence) ConflictResolveWorkflowExecution(
+func (d *ExecutionStore) ConflictResolveWorkflowExecution(
 	request *p.InternalConflictResolveWorkflowExecutionRequest,
 ) error {
 	for _, req := range request.CurrentWorkflowEventsNewEvents {
@@ -172,21 +172,21 @@ func (d *ExecutionPersistence) ConflictResolveWorkflowExecution(
 		}
 	}
 
-	return d.MutableStatePersistence.ConflictResolveWorkflowExecution(request)
+	return d.MutableStateStore.ConflictResolveWorkflowExecution(request)
 }
 
-func (d *ExecutionPersistence) GetName() string {
+func (d *ExecutionStore) GetName() string {
 	return cassandraPersistenceName
 }
 
-func (d *ExecutionPersistence) Close() {
-	if d.HistoryPersistence.Session != nil {
-		d.HistoryPersistence.Session.Close()
+func (d *ExecutionStore) Close() {
+	if d.HistoryStore.Session != nil {
+		d.HistoryStore.Session.Close()
 	}
-	if d.MutableStatePersistence.Session != nil {
-		d.MutableStatePersistence.Session.Close()
+	if d.MutableStateStore.Session != nil {
+		d.MutableStateStore.Session.Close()
 	}
-	if d.MutableStateTaskPersistence.Session != nil {
-		d.MutableStateTaskPersistence.Session.Close()
+	if d.MutableStateTaskStore.Session != nil {
+		d.MutableStateTaskStore.Session.Close()
 	}
 }

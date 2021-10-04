@@ -61,26 +61,26 @@ const (
 )
 
 type (
-	ShardPersistence struct {
+	ShardStore struct {
 		ClusterName string
 		Session     gocql.Session
 		Logger      log.Logger
 	}
 )
 
-func NewShardPersistence(
+func NewShardStore(
 	clusterName string,
 	session gocql.Session,
 	logger log.Logger,
-) *ShardPersistence {
-	return &ShardPersistence{
+) *ShardStore {
+	return &ShardStore{
 		ClusterName: clusterName,
 		Session:     session,
 		Logger:      logger,
 	}
 }
 
-func (d *ShardPersistence) CreateShard(
+func (d *ShardStore) CreateShard(
 	request *p.InternalCreateShardRequest,
 ) error {
 	query := d.Session.Query(templateCreateShardQuery,
@@ -109,7 +109,7 @@ func (d *ShardPersistence) CreateShard(
 	return nil
 }
 
-func (d *ShardPersistence) GetShard(
+func (d *ShardStore) GetShard(
 	request *p.InternalGetShardRequest,
 ) (*p.InternalGetShardResponse, error) {
 	shardID := request.ShardID
@@ -131,7 +131,7 @@ func (d *ShardPersistence) GetShard(
 	return &p.InternalGetShardResponse{ShardInfo: p.NewDataBlob(data, encoding)}, nil
 }
 
-func (d *ShardPersistence) UpdateShard(
+func (d *ShardStore) UpdateShard(
 	request *p.InternalUpdateShardRequest,
 ) error {
 	query := d.Session.Query(templateUpdateShardQuery,
@@ -169,15 +169,15 @@ func (d *ShardPersistence) UpdateShard(
 	return nil
 }
 
-func (d *ShardPersistence) GetName() string {
+func (d *ShardStore) GetName() string {
 	return cassandraPersistenceName
 }
 
-func (d *ShardPersistence) GetClusterName() string {
+func (d *ShardStore) GetClusterName() string {
 	return d.ClusterName
 }
 
-func (d *ShardPersistence) Close() {
+func (d *ShardStore) Close() {
 	if d.Session != nil {
 		d.Session.Close()
 	}
