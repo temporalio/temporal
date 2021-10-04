@@ -616,7 +616,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	var replicatorNamespaceCache namespace.Cache
 	if c.workerConfig.EnableReplicator {
 		metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
-		replicatorNamespaceCache = namespace.NewNamespaceCache(metadataManager, clusterMetadata, service.GetMetricsClient(), service.GetLogger())
+		replicatorNamespaceCache = namespace.NewNamespaceCache(metadataManager, clusterMetadata.IsGlobalNamespaceEnabled(), service.GetMetricsClient(), service.GetLogger())
 		replicatorNamespaceCache.Start()
 		c.startWorkerReplicator(service, clusterMetadata)
 	}
@@ -624,7 +624,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	var clientWorkerNamespaceCache namespace.Cache
 	if c.workerConfig.EnableArchiver {
 		metadataProxyManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
-		clientWorkerNamespaceCache = namespace.NewNamespaceCache(metadataProxyManager, clusterMetadata, service.GetMetricsClient(), service.GetLogger())
+		clientWorkerNamespaceCache = namespace.NewNamespaceCache(metadataProxyManager, clusterMetadata.IsGlobalNamespaceEnabled(), service.GetMetricsClient(), service.GetLogger())
 		clientWorkerNamespaceCache.Start()
 		c.startWorkerClientWorker(params, service, clientWorkerNamespaceCache)
 	}

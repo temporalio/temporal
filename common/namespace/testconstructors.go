@@ -36,9 +36,7 @@ func NewLocalCacheEntryForTest(
 	info *persistencespb.NamespaceInfo,
 	config *persistencespb.NamespaceConfig,
 	targetCluster string,
-	thisCluster ClusterInfo,
 ) *CacheEntry {
-
 	return &CacheEntry{
 		info:              derefInfo(info),
 		config:            derefConfig(config),
@@ -48,7 +46,6 @@ func NewLocalCacheEntryForTest(
 			Clusters:          []string{targetCluster},
 		},
 		failoverVersion: common.EmptyVersion,
-		thisCluster:     thisCluster,
 	}
 }
 
@@ -59,16 +56,13 @@ func NewNamespaceCacheEntryForTest(
 	isGlobalNamespace bool,
 	repConfig *persistencespb.NamespaceReplicationConfig,
 	failoverVersion int64,
-	thisCluster ClusterInfo,
 ) *CacheEntry {
-
 	return &CacheEntry{
 		info:              derefInfo(info),
 		config:            derefConfig(config),
 		isGlobalNamespace: isGlobalNamespace,
 		replicationConfig: derefRepConfig(repConfig),
 		failoverVersion:   failoverVersion,
-		thisCluster:       thisCluster,
 	}
 }
 
@@ -78,16 +72,13 @@ func NewGlobalCacheEntryForTest(
 	config *persistencespb.NamespaceConfig,
 	repConfig *persistencespb.NamespaceReplicationConfig,
 	failoverVersion int64,
-	thisCluster ClusterInfo,
 ) *CacheEntry {
-
 	return &CacheEntry{
 		info:              derefInfo(info),
 		config:            derefConfig(config),
 		isGlobalNamespace: true,
 		replicationConfig: derefRepConfig(repConfig),
 		failoverVersion:   failoverVersion,
-		thisCluster:       thisCluster,
 	}
 }
 

@@ -53,6 +53,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -105,7 +106,7 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.taskManager = newTestTaskManager(s.logger)
 	s.mockNamespaceCache = namespace.NewMockCache(s.controller)
-	ns := namespace.NewLocalCacheEntryForTest(&persistencespb.NamespaceInfo{Name: matchingTestNamespace}, nil, "", nil)
+	ns := namespace.NewLocalCacheEntryForTest(&persistencespb.NamespaceInfo{Name: matchingTestNamespace}, nil, "")
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil).AnyTimes()
 	s.handlerContext = newHandlerContext(
 		context.Background(),
@@ -144,6 +145,7 @@ func newMatchingEngine(
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		config:          config,
 		namespaceCache:  mockNamespaceCache,
+		clusterMeta:     cluster.NewTestClusterMetadata(cluster.NewTestClusterMetadataConfig(false, true)),
 	}
 }
 
@@ -268,7 +270,9 @@ func (s *matchingEngineSuite) TestOnlyUnloadMatchingInstance() {
 		s.matchingEngine,
 		queueID, // same queueID as above
 		enumspb.TASK_QUEUE_KIND_NORMAL,
-		s.matchingEngine.config)
+		s.matchingEngine.config,
+		s.matchingEngine.clusterMeta,
+	)
 	s.Require().NoError(err)
 
 	// try to unload a different tqm instance with the same taskqueue ID
@@ -679,7 +683,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.matchingEngine.metricsClient = metrics.NewClient(scope, metrics.Matching)
 
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
-	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, tlKind, s.matchingEngine.config)
+	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, tlKind, s.matchingEngine.config, s.matchingEngine.clusterMeta)
 	s.NoError(err)
 
 	mgrImpl, ok := mgr.(*taskQueueManagerImpl)
@@ -893,7 +897,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
-	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, tlKind, s.matchingEngine.config)
+	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, tlKind, s.matchingEngine.config, s.matchingEngine.clusterMeta)
 	s.NoError(err)
 
 	mgrImpl := mgr.(*taskQueueManagerImpl)
@@ -1616,7 +1620,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 	const maxReadLevel = int64(120)
 	config := defaultTestConfig()
 	config.RangeSize = rangeSize
-	tlMgr0, err := newTaskQueueManager(s.matchingEngine, tlID, tlNormal, config)
+	tlMgr0, err := newTaskQueueManager(s.matchingEngine, tlID, tlNormal, config, s.matchingEngine.clusterMeta)
 	s.NoError(err)
 
 	tlMgr, ok := tlMgr0.(*taskQueueManagerImpl)

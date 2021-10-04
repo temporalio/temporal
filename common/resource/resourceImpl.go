@@ -253,7 +253,7 @@ func New(
 
 	namespaceCache := namespace.NewNamespaceCache(
 		persistenceBean.GetMetadataManager(),
-		clusterMetadata,
+		clusterMetadata.IsGlobalNamespaceEnabled(),
 		params.MetricsClient,
 		logger,
 	)

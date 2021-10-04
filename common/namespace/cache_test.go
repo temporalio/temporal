@@ -25,6 +25,7 @@
 package namespace
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -52,10 +53,9 @@ type (
 
 		controller *gomock.Controller
 
-		logger          log.Logger
-		clusterMetadata *cluster.MockMetadata
-		metadataMgr     *persistence.MockMetadataManager
-		namespaceCache  *namespaceCache
+		logger         log.Logger
+		metadataMgr    *persistence.MockMetadataManager
+		namespaceCache *namespaceCache
 	}
 )
 
@@ -77,10 +77,9 @@ func (s *namespaceCacheSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.logger = log.NewTestLogger()
-	s.clusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.metadataMgr = persistence.NewMockMetadataManager(s.controller)
 	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
-	s.namespaceCache = NewNamespaceCache(s.metadataMgr, s.clusterMetadata, metricsClient, s.logger).(*namespaceCache)
+	s.namespaceCache = NewNamespaceCache(s.metadataMgr, true, metricsClient, s.logger).(*namespaceCache)
 }
 
 func (s *namespaceCacheSuite) TearDownTest() {
@@ -109,7 +108,7 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry1 := s.buildEntryFromRecord(namespaceRecord1)
+	entry1 := FromPersistentState(namespaceRecord1)
 	namespaceNotificationVersion++
 
 	namespaceRecord2 := &persistence.GetNamespaceResponse{
@@ -131,7 +130,7 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry2 := s.buildEntryFromRecord(namespaceRecord2)
+	entry2 := FromPersistentState(namespaceRecord2)
 	namespaceNotificationVersion++
 
 	namespaceRecord3 := &persistence.GetNamespaceResponse{
@@ -160,7 +159,6 @@ func (s *namespaceCacheSuite) TestListNamespace() {
 	pageToken := []byte("some random page token")
 
 	s.metadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil)
-	s.clusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.metadataMgr.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
 		PageSize:      namespaceCacheRefreshPageSize,
 		NextPageToken: nil,
@@ -219,7 +217,7 @@ func (s *namespaceCacheSuite) TestRegisterCallback_CatchUp() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry1 := s.buildEntryFromRecord(namespaceRecord1)
+	entry1 := FromPersistentState(namespaceRecord1)
 	namespaceNotificationVersion++
 
 	namespaceRecord2 := &persistence.GetNamespaceResponse{
@@ -243,11 +241,10 @@ func (s *namespaceCacheSuite) TestRegisterCallback_CatchUp() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry2 := s.buildEntryFromRecord(namespaceRecord2)
+	entry2 := FromPersistentState(namespaceRecord2)
 	namespaceNotificationVersion++
 
 	s.metadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil)
-	s.clusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.metadataMgr.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
 		PageSize:      namespaceCacheRefreshPageSize,
 		NextPageToken: nil,
@@ -257,7 +254,7 @@ func (s *namespaceCacheSuite) TestRegisterCallback_CatchUp() {
 	}, nil)
 
 	// load namespaces
-	s.Nil(s.namespaceCache.refreshNamespaces())
+	s.Nil(s.namespaceCache.refreshNamespaces(context.TODO()))
 
 	prepareCallbacckInvoked := false
 	var entriesNotification []*CacheEntry
@@ -306,7 +303,7 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry1Old := s.buildEntryFromRecord(namespaceRecord1Old)
+	entry1Old := FromPersistentState(namespaceRecord1Old)
 	namespaceNotificationVersion++
 
 	namespaceRecord2Old := &persistence.GetNamespaceResponse{
@@ -330,11 +327,10 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry2Old := s.buildEntryFromRecord(namespaceRecord2Old)
+	entry2Old := FromPersistentState(namespaceRecord2Old)
 	namespaceNotificationVersion++
 
 	s.metadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil)
-	s.clusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.metadataMgr.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
 		PageSize:      namespaceCacheRefreshPageSize,
 		NextPageToken: nil,
@@ -344,7 +340,7 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 	}, nil)
 
 	// load namespaces
-	s.Nil(s.namespaceCache.refreshNamespaces())
+	s.Nil(s.namespaceCache.refreshNamespaces(context.TODO()))
 
 	namespaceRecord2New := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
@@ -363,7 +359,7 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry2New := s.buildEntryFromRecord(namespaceRecord2New)
+	entry2New := FromPersistentState(namespaceRecord2New)
 	namespaceNotificationVersion++
 
 	namespaceRecord1New := &persistence.GetNamespaceResponse{ // only the description changed
@@ -383,7 +379,7 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 		},
 		NotificationVersion: namespaceNotificationVersion,
 	}
-	entry1New := s.buildEntryFromRecord(namespaceRecord1New)
+	entry1New := FromPersistentState(namespaceRecord1New)
 	namespaceNotificationVersion++
 
 	prepareCallbacckInvoked := false
@@ -414,7 +410,7 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 		Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecord1New, namespaceRecord2New},
 		NextPageToken: nil,
 	}, nil)
-	s.Nil(s.namespaceCache.refreshNamespaces())
+	s.Nil(s.namespaceCache.refreshNamespaces(context.TODO()))
 
 	// the order matters here: the record 2 got updated first, thus with a lower notification version
 	// the record 1 got updated later, thus a higher notification version.
@@ -426,7 +422,6 @@ func (s *namespaceCacheSuite) TestUpdateCache_TriggerCallBack() {
 }
 
 func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
-	s.clusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	namespaceNotificationVersion := int64(999999) // make this notification version really large for test
 	s.metadataMgr.EXPECT().GetMetadata().Return(&persistence.GetMetadataResponse{NotificationVersion: namespaceNotificationVersion}, nil)
 	id := uuid.NewRandom().String()
@@ -449,7 +444,7 @@ func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess(
 			FailoverVersion: 0,
 		},
 	}
-	entryOld := s.buildEntryFromRecord(namespaceRecordOld)
+	entryOld := FromPersistentState(namespaceRecordOld)
 
 	s.metadataMgr.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
 		PageSize:      namespaceCacheRefreshPageSize,
@@ -491,10 +486,6 @@ func (s *namespaceCacheSuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess(
 	}
 	close(startChan)
 	waitGroup.Wait()
-}
-
-func (s *namespaceCacheSuite) buildEntryFromRecord(record *persistence.GetNamespaceResponse) *CacheEntry {
-	return FromPersistentState(s.clusterMetadata, record)
 }
 
 func Test_GetRetentionDays(t *testing.T) {
@@ -581,34 +572,51 @@ func Test_IsSampledForLongerRetention(t *testing.T) {
 	require.False(t, d.IsSampledForLongerRetention(wid))
 }
 
-func Test_NamespaceCacheEntry_GetNamespaceNotActiveErr(t *testing.T) {
-	clusterMetadata := cluster.NewMetadata(
-		true,
-		int64(10),
-		cluster.TestCurrentClusterName,
-		cluster.TestCurrentClusterName,
-		cluster.TestAllClusterInfo,
-	)
-	namespaceEntry := NewGlobalCacheEntryForTest(
-		&persistencespb.NamespaceInfo{Name: "test-namespace"},
-		nil,
-		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: cluster.TestCurrentClusterName,
-			Clusters: []string{
-				cluster.TestCurrentClusterName,
-				cluster.TestAlternativeClusterName,
+func TestActiveInCluster(t *testing.T) {
+	base := FromPersistentState(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info:   &persistencespb.NamespaceInfo{},
+			Config: &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				Clusters: []string{"foo", "bar"},
 			},
 		},
-		1234,
-		clusterMetadata,
-	)
+		IsGlobalNamespace: true,
+	})
 
-	require.Nil(t, namespaceEntry.GetNamespaceNotActiveErr())
-
-	// update to become not active
-	namespaceEntry = namespaceEntry.Clone(WithActiveCluster(cluster.TestAlternativeClusterName))
-	err := namespaceEntry.GetNamespaceNotActiveErr()
-	require.NotNil(t, err)
-	_, ok := err.(*serviceerror.NamespaceNotActive)
-	require.True(t, ok)
+	for _, tt := range [...]struct {
+		name        string
+		testCluster string
+		entry       *CacheEntry
+		want        bool
+	}{
+		{
+			name:        "global and cluster match",
+			testCluster: "foo",
+			entry:       base.Clone(WithActiveCluster("foo")),
+			want:        true,
+		},
+		{
+			name:        "global and cluster mismatch",
+			testCluster: "bar",
+			entry:       base.Clone(WithActiveCluster("foo")),
+			want:        false,
+		},
+		{
+			name:        "non-global and cluster mismatch",
+			testCluster: "bar",
+			entry:       base.Clone(WithActiveCluster("foo"), WithGlobalFlag(false)),
+			want:        true,
+		},
+		{
+			name:        "non-global and cluster match",
+			testCluster: "foo",
+			entry:       base.Clone(WithActiveCluster("foo"), WithGlobalFlag(false)),
+			want:        true,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, tt.entry.ActiveInCluster(tt.testCluster))
+		})
+	}
 }

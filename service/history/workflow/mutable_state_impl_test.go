@@ -599,7 +599,6 @@ func (s *mutableStateSuite) newNamespaceCacheEntry() *namespace.CacheEntry {
 		true,
 		&persistencespb.NamespaceReplicationConfig{},
 		1,
-		nil,
 	)
 }
 

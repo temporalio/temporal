@@ -111,7 +111,6 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 			},
 		},
 		1234,
-		nil,
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(namespaceEntry, nil).AnyTimes()

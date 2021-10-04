@@ -339,7 +339,6 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupLocalNamespace() {
 		&persistencespb.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		cluster.TestCurrentClusterName,
-		nil,
 	)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
@@ -358,7 +357,6 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalNamespaceWithO
 			},
 		},
 		1234, // not used
-		nil,
 	)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
@@ -381,7 +379,6 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalNamespaceWithT
 			},
 		},
 		1234, // not used
-		nil,
 	)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()

@@ -36,7 +36,7 @@ func (f entryMutationFunc) apply(ns *persistence.GetNamespaceResponse) {
 }
 
 // WithActiveCluster assigns the active cluster to a CacheEntry during a Clone
-// operation
+// operation.
 func WithActiveCluster(name string) EntryMutation {
 	return entryMutationFunc(
 		func(ns *persistence.GetNamespaceResponse) {
@@ -45,7 +45,7 @@ func WithActiveCluster(name string) EntryMutation {
 }
 
 // WithBadBinary adds a bad binary checksum to a CacheEntry during a Clone
-// operation
+// operation.
 func WithBadBinary(chksum string) EntryMutation {
 	return entryMutationFunc(
 		func(ns *persistence.GetNamespaceResponse) {
@@ -54,10 +54,18 @@ func WithBadBinary(chksum string) EntryMutation {
 		})
 }
 
-// WithID assigns the ID to a CacheEntry during a Clone operation
+// WithID assigns the ID to a CacheEntry during a Clone operation.
 func WithID(id string) EntryMutation {
 	return entryMutationFunc(
 		func(ns *persistence.GetNamespaceResponse) {
 			ns.Namespace.Info.Id = id
+		})
+}
+
+// WithGlobalFlag sets wether or not this CacheEntry is global.
+func WithGlobalFlag(b bool) EntryMutation {
+	return entryMutationFunc(
+		func(ns *persistence.GetNamespaceResponse) {
+			ns.IsGlobalNamespace = b
 		})
 }

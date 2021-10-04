@@ -625,7 +625,6 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
 				},
 			},
 			version,
-			nil,
 		), nil,
 	).AnyTimes()
 
@@ -700,7 +699,6 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 				},
 			},
 			lastWriteVersion,
-			nil,
 		), nil,
 	).AnyTimes()
 
@@ -776,7 +774,6 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityNotFound() {
 				},
 			},
 			lastWriteVersion,
-			nil,
 		), nil,
 	).AnyTimes()
 
@@ -867,7 +864,6 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 				},
 			},
 			lastWriteVersion,
-			nil,
 		), nil,
 	).AnyTimes()
 
@@ -958,7 +954,6 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 				},
 			},
 			lastWriteVersion,
-			nil,
 		), nil,
 	).AnyTimes()
 
