@@ -73,7 +73,7 @@ func AdminShowWorkflow(c *cli.Context) {
 	serializer := serialization.NewSerializer()
 	var history []*commonpb.DataBlob
 	if len(tid) != 0 {
-		histV2 := cassandra.NewExecutionStore(session, log.NewNoopLogger())
+		histV2 := cassandra.NewHistoryPersistence(session, log.NewNoopLogger())
 		resp, err := histV2.ReadHistoryBranch(&persistence.InternalReadHistoryBranchRequest{
 			TreeID:    tid,
 			BranchID:  bid,
@@ -240,7 +240,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		}
 		fmt.Println("Deleting history events for:")
 		prettyPrintJSONObject(branchInfo)
-		execStore := cassandra.NewExecutionStore(session, log.NewNoopLogger())
+		execStore := cassandra.NewExecutionPersistence(session, log.NewNoopLogger())
 		execMgr := persistence.NewExecutionManager(execStore, log.NewNoopLogger(), dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit))
 		err = execMgr.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
 			BranchToken: branchToken,
@@ -255,7 +255,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		}
 	}
 
-	exeStore := cassandra.NewExecutionStore(session, log.NewNoopLogger())
+	exeStore := cassandra.NewExecutionPersistence(session, log.NewNoopLogger())
 	req := &persistence.DeleteWorkflowExecutionRequest{
 		ShardID:     int32(shardIDInt),
 		NamespaceID: namespaceID,

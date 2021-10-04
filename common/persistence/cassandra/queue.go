@@ -26,14 +26,12 @@ package cassandra
 
 import (
 	"fmt"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -55,33 +53,26 @@ const (
 )
 
 type (
-	cassandraQueue struct {
+	QueuePersistence struct {
 		queueType persistence.QueueType
+		session   gocql.Session
 		logger    log.Logger
-		cassandraStore
 	}
 )
 
-func newQueue(
+func NewQueuePersistence(
+	queueType persistence.QueueType,
 	session gocql.Session,
 	logger log.Logger,
-	queueType persistence.QueueType,
 ) (persistence.Queue, error) {
-
-	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
-	retryPolicy.SetBackoffCoefficient(1.5)
-	retryPolicy.SetMaximumAttempts(5)
-
-	queue := &cassandraQueue{
-		cassandraStore: cassandraStore{session: session, logger: logger},
-		logger:         logger,
-		queueType:      queueType,
-	}
-
-	return queue, nil
+	return &QueuePersistence{
+		queueType: queueType,
+		session:   session,
+		logger:    logger,
+	}, nil
 }
 
-func (q *cassandraQueue) Init(blob *commonpb.DataBlob) error {
+func (q *QueuePersistence) Init(blob *commonpb.DataBlob) error {
 	if err := q.initializeQueueMetadata(blob); err != nil {
 		return err
 	}
@@ -92,7 +83,7 @@ func (q *cassandraQueue) Init(blob *commonpb.DataBlob) error {
 	return nil
 }
 
-func (q *cassandraQueue) EnqueueMessage(
+func (q *QueuePersistence) EnqueueMessage(
 	blob commonpb.DataBlob,
 ) error {
 	lastMessageID, err := q.getLastMessageID(q.queueType)
@@ -104,7 +95,7 @@ func (q *cassandraQueue) EnqueueMessage(
 	return err
 }
 
-func (q *cassandraQueue) EnqueueMessageToDLQ(
+func (q *QueuePersistence) EnqueueMessageToDLQ(
 	blob commonpb.DataBlob,
 ) (int64, error) {
 	// Use negative queue type as the dlq type
@@ -117,7 +108,7 @@ func (q *cassandraQueue) EnqueueMessageToDLQ(
 	return q.tryEnqueue(q.getDLQTypeFromQueueType(), lastMessageID+1, blob)
 }
 
-func (q *cassandraQueue) tryEnqueue(
+func (q *QueuePersistence) tryEnqueue(
 	queueType persistence.QueueType,
 	messageID int64,
 	blob commonpb.DataBlob,
@@ -136,7 +127,7 @@ func (q *cassandraQueue) tryEnqueue(
 	return messageID, nil
 }
 
-func (q *cassandraQueue) getLastMessageID(
+func (q *QueuePersistence) getLastMessageID(
 	queueType persistence.QueueType,
 ) (int64, error) {
 
@@ -152,7 +143,7 @@ func (q *cassandraQueue) getLastMessageID(
 	return result["message_id"].(int64), nil
 }
 
-func (q *cassandraQueue) ReadMessages(
+func (q *QueuePersistence) ReadMessages(
 	lastMessageID int64,
 	maxCount int,
 ) ([]*persistence.QueueMessage, error) {
@@ -180,7 +171,7 @@ func (q *cassandraQueue) ReadMessages(
 	return result, nil
 }
 
-func (q *cassandraQueue) ReadMessagesFromDLQ(
+func (q *QueuePersistence) ReadMessagesFromDLQ(
 	firstMessageID int64,
 	lastMessageID int64,
 	pageSize int,
@@ -214,7 +205,7 @@ func (q *cassandraQueue) ReadMessagesFromDLQ(
 	return result, nextPageToken, nil
 }
 
-func (q *cassandraQueue) DeleteMessagesBefore(
+func (q *QueuePersistence) DeleteMessagesBefore(
 	messageID int64,
 ) error {
 
@@ -225,7 +216,7 @@ func (q *cassandraQueue) DeleteMessagesBefore(
 	return nil
 }
 
-func (q *cassandraQueue) DeleteMessageFromDLQ(
+func (q *QueuePersistence) DeleteMessageFromDLQ(
 	messageID int64,
 ) error {
 
@@ -238,7 +229,7 @@ func (q *cassandraQueue) DeleteMessageFromDLQ(
 	return nil
 }
 
-func (q *cassandraQueue) RangeDeleteMessagesFromDLQ(
+func (q *QueuePersistence) RangeDeleteMessagesFromDLQ(
 	firstMessageID int64,
 	lastMessageID int64,
 ) error {
@@ -252,11 +243,11 @@ func (q *cassandraQueue) RangeDeleteMessagesFromDLQ(
 	return nil
 }
 
-func (q *cassandraQueue) UpdateAckLevel(metadata *persistence.InternalQueueMetadata) error {
+func (q *QueuePersistence) UpdateAckLevel(metadata *persistence.InternalQueueMetadata) error {
 	return q.updateAckLevel(metadata, q.queueType)
 }
 
-func (q *cassandraQueue) GetAckLevels() (*persistence.InternalQueueMetadata, error) {
+func (q *QueuePersistence) GetAckLevels() (*persistence.InternalQueueMetadata, error) {
 	queueMetadata, err := q.getQueueMetadata(q.queueType)
 	if err != nil {
 		return nil, gocql.ConvertError("GetAckLevels", err)
@@ -265,11 +256,11 @@ func (q *cassandraQueue) GetAckLevels() (*persistence.InternalQueueMetadata, err
 	return queueMetadata, nil
 }
 
-func (q *cassandraQueue) UpdateDLQAckLevel(metadata *persistence.InternalQueueMetadata) error {
+func (q *QueuePersistence) UpdateDLQAckLevel(metadata *persistence.InternalQueueMetadata) error {
 	return q.updateAckLevel(metadata, q.getDLQTypeFromQueueType())
 }
 
-func (q *cassandraQueue) GetDLQAckLevels() (*persistence.InternalQueueMetadata, error) {
+func (q *QueuePersistence) GetDLQAckLevels() (*persistence.InternalQueueMetadata, error) {
 	// Use negative queue type as the dlq type
 	queueMetadata, err := q.getQueueMetadata(q.getDLQTypeFromQueueType())
 	if err != nil {
@@ -279,7 +270,7 @@ func (q *cassandraQueue) GetDLQAckLevels() (*persistence.InternalQueueMetadata, 
 	return queueMetadata, nil
 }
 
-func (q *cassandraQueue) insertInitialQueueMetadataRecord(
+func (q *QueuePersistence) insertInitialQueueMetadataRecord(
 	queueType persistence.QueueType,
 	blob *commonpb.DataBlob,
 ) error {
@@ -302,7 +293,7 @@ func (q *cassandraQueue) insertInitialQueueMetadataRecord(
 	return nil
 }
 
-func (q *cassandraQueue) getQueueMetadata(
+func (q *QueuePersistence) getQueueMetadata(
 	queueType persistence.QueueType,
 ) (*persistence.InternalQueueMetadata, error) {
 
@@ -316,7 +307,7 @@ func (q *cassandraQueue) getQueueMetadata(
 	return convertQueueMetadata(message)
 }
 
-func (q *cassandraQueue) updateAckLevel(
+func (q *QueuePersistence) updateAckLevel(
 	metadata *persistence.InternalQueueMetadata,
 	queueType persistence.QueueType,
 ) error {
@@ -343,17 +334,17 @@ func (q *cassandraQueue) updateAckLevel(
 	return nil
 }
 
-func (q *cassandraQueue) Close() {
+func (q *QueuePersistence) Close() {
 	if q.session != nil {
 		q.session.Close()
 	}
 }
 
-func (q *cassandraQueue) getDLQTypeFromQueueType() persistence.QueueType {
+func (q *QueuePersistence) getDLQTypeFromQueueType() persistence.QueueType {
 	return -q.queueType
 }
 
-func (q *cassandraQueue) initializeQueueMetadata(blob *commonpb.DataBlob) error {
+func (q *QueuePersistence) initializeQueueMetadata(blob *commonpb.DataBlob) error {
 	_, err := q.getQueueMetadata(q.queueType)
 	if gocql.IsNotFoundError(err) {
 		return q.insertInitialQueueMetadataRecord(q.queueType, blob)
@@ -361,7 +352,7 @@ func (q *cassandraQueue) initializeQueueMetadata(blob *commonpb.DataBlob) error 
 	return err
 }
 
-func (q *cassandraQueue) initializeDLQMetadata(blob *commonpb.DataBlob) error {
+func (q *QueuePersistence) initializeDLQMetadata(blob *commonpb.DataBlob) error {
 	_, err := q.getQueueMetadata(q.getDLQTypeFromQueueType())
 	if gocql.IsNotFoundError(err) {
 		return q.insertInitialQueueMetadataRecord(q.getDLQTypeFromQueueType(), blob)

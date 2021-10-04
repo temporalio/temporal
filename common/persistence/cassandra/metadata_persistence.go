@@ -90,29 +90,24 @@ const (
 )
 
 type (
-	cassandraMetadataPersistenceV2 struct {
-		cassandraStore
+	MetadataPersistence struct {
+		session            gocql.Session
+		logger             log.Logger
 		currentClusterName string
 	}
 )
 
-// newMetadataPersistence is used to create an instance of the Namespace MetadataStore implementation
-func newMetadataPersistence(
-	session gocql.Session,
+// NewMetadataPersistence is used to create an instance of the Namespace MetadataStore implementation
+func NewMetadataPersistence(
 	currentClusterName string,
+	session gocql.Session,
 	logger log.Logger,
 ) (p.MetadataStore, error) {
-	return &cassandraMetadataPersistenceV2{
-		cassandraStore:     cassandraStore{session: session, logger: logger},
+	return &MetadataPersistence{
 		currentClusterName: currentClusterName,
+		session:            session,
+		logger:             logger,
 	}, nil
-}
-
-// Close releases the resources held by this object
-func (m *cassandraMetadataPersistenceV2) Close() {
-	if m.session != nil {
-		m.session.Close()
-	}
 }
 
 // CreateNamespace create a namespace
@@ -120,7 +115,7 @@ func (m *cassandraMetadataPersistenceV2) Close() {
 // 'Namespaces' table and then do a conditional insert into namespaces_by_name table.  If the conditional write fails we
 // delete the orphaned entry from namespaces table.  There is a chance delete entry could fail and we never delete the
 // orphaned entry from namespaces table.  We might need a background job to delete those orphaned record.
-func (m *cassandraMetadataPersistenceV2) CreateNamespace(request *p.InternalCreateNamespaceRequest) (*p.CreateNamespaceResponse, error) {
+func (m *MetadataPersistence) CreateNamespace(request *p.InternalCreateNamespaceRequest) (*p.CreateNamespaceResponse, error) {
 	query := m.session.Query(templateCreateNamespaceQuery, request.ID, request.Name)
 	applied, err := query.MapScanCAS(make(map[string]interface{}))
 	if err != nil {
@@ -134,7 +129,7 @@ func (m *cassandraMetadataPersistenceV2) CreateNamespace(request *p.InternalCrea
 }
 
 // CreateNamespaceInV2Table is the temporary function used by namespace v1 -> v2 migration
-func (m *cassandraMetadataPersistenceV2) CreateNamespaceInV2Table(request *p.InternalCreateNamespaceRequest) (*p.CreateNamespaceResponse, error) {
+func (m *MetadataPersistence) CreateNamespaceInV2Table(request *p.InternalCreateNamespaceRequest) (*p.CreateNamespaceResponse, error) {
 	metadata, err := m.GetMetadata()
 	if err != nil {
 		return nil, err
@@ -176,7 +171,7 @@ func (m *cassandraMetadataPersistenceV2) CreateNamespaceInV2Table(request *p.Int
 	return &p.CreateNamespaceResponse{ID: request.ID}, nil
 }
 
-func (m *cassandraMetadataPersistenceV2) UpdateNamespace(request *p.InternalUpdateNamespaceRequest) error {
+func (m *MetadataPersistence) UpdateNamespace(request *p.InternalUpdateNamespaceRequest) error {
 	batch := m.session.NewBatch(gocql.LoggedBatch)
 	batch.Query(templateUpdateNamespaceByNameQueryWithinBatchV2,
 		request.Namespace.Data,
@@ -201,7 +196,7 @@ func (m *cassandraMetadataPersistenceV2) UpdateNamespace(request *p.InternalUpda
 	return nil
 }
 
-func (m *cassandraMetadataPersistenceV2) GetNamespace(request *p.GetNamespaceRequest) (*p.InternalGetNamespaceResponse, error) {
+func (m *MetadataPersistence) GetNamespace(request *p.GetNamespaceRequest) (*p.InternalGetNamespaceResponse, error) {
 	var query gocql.Query
 	var err error
 	var detail []byte
@@ -256,7 +251,7 @@ func (m *cassandraMetadataPersistenceV2) GetNamespace(request *p.GetNamespaceReq
 	}, nil
 }
 
-func (m *cassandraMetadataPersistenceV2) ListNamespaces(request *p.ListNamespacesRequest) (*p.InternalListNamespacesResponse, error) {
+func (m *MetadataPersistence) ListNamespaces(request *p.ListNamespacesRequest) (*p.InternalListNamespacesResponse, error) {
 	query := m.session.Query(templateListNamespaceQueryV2, constNamespacePartition)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
@@ -299,7 +294,7 @@ func (m *cassandraMetadataPersistenceV2) ListNamespaces(request *p.ListNamespace
 	return response, nil
 }
 
-func (m *cassandraMetadataPersistenceV2) DeleteNamespace(request *p.DeleteNamespaceRequest) error {
+func (m *MetadataPersistence) DeleteNamespace(request *p.DeleteNamespaceRequest) error {
 	var name string
 	query := m.session.Query(templateGetNamespaceQuery, request.ID)
 	err := query.Scan(&name)
@@ -317,7 +312,7 @@ func (m *cassandraMetadataPersistenceV2) DeleteNamespace(request *p.DeleteNamesp
 	return m.deleteNamespace(name, parsedID)
 }
 
-func (m *cassandraMetadataPersistenceV2) DeleteNamespaceByName(request *p.DeleteNamespaceByNameRequest) error {
+func (m *MetadataPersistence) DeleteNamespaceByName(request *p.DeleteNamespaceByNameRequest) error {
 	var ID []byte
 	query := m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, request.Name)
 	err := query.Scan(&ID, nil, nil, nil, nil, nil)
@@ -330,7 +325,7 @@ func (m *cassandraMetadataPersistenceV2) DeleteNamespaceByName(request *p.Delete
 	return m.deleteNamespace(request.Name, ID)
 }
 
-func (m *cassandraMetadataPersistenceV2) GetMetadata() (*p.GetMetadataResponse, error) {
+func (m *MetadataPersistence) GetMetadata() (*p.GetMetadataResponse, error) {
 	var notificationVersion int64
 	query := m.session.Query(templateGetMetadataQueryV2, constNamespacePartition, namespaceMetadataRecordName)
 	err := query.Scan(&notificationVersion)
@@ -345,7 +340,7 @@ func (m *cassandraMetadataPersistenceV2) GetMetadata() (*p.GetMetadataResponse, 
 	return &p.GetMetadataResponse{NotificationVersion: notificationVersion}, nil
 }
 
-func (m *cassandraMetadataPersistenceV2) updateMetadataBatch(
+func (m *MetadataPersistence) updateMetadataBatch(
 	batch gocql.Batch,
 	notificationVersion int64,
 ) {
@@ -363,7 +358,7 @@ func (m *cassandraMetadataPersistenceV2) updateMetadataBatch(
 	)
 }
 
-func (m *cassandraMetadataPersistenceV2) deleteNamespace(name string, ID []byte) error {
+func (m *MetadataPersistence) deleteNamespace(name string, ID []byte) error {
 	query := m.session.Query(templateDeleteNamespaceByNameQueryV2, constNamespacePartition, name)
 	if err := query.Exec(); err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("DeleteNamespaceByName operation failed. Error %v", err))
@@ -375,4 +370,14 @@ func (m *cassandraMetadataPersistenceV2) deleteNamespace(name string, ID []byte)
 	}
 
 	return nil
+}
+
+func (m *MetadataPersistence) GetName() string {
+	return cassandraPersistenceName
+}
+
+func (m *MetadataPersistence) Close() {
+	if m.session != nil {
+		m.session.Close()
+	}
 }

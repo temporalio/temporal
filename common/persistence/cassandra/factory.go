@@ -56,12 +56,12 @@ func NewFactory(
 ) *Factory {
 	session, err := gocql.NewSession(cfg, r, logger)
 	if err != nil {
-		logger.Fatal("unable to initialize cassandra session", tag.Error(err))
+		logger.Fatal("unable to initialize cassandra Session", tag.Error(err))
 	}
 	return NewFactoryFromSession(cfg, clusterName, logger, session)
 }
 
-// NewFactoryFromSession returns an instance of a factory object from the given session.
+// NewFactoryFromSession returns an instance of a factory object from the given Session.
 func NewFactoryFromSession(
 	cfg config.Cassandra,
 	clusterName string,
@@ -78,17 +78,17 @@ func NewFactoryFromSession(
 
 // NewTaskStore returns a new task store
 func (f *Factory) NewTaskStore() (p.TaskStore, error) {
-	return newTaskPersistence(f.session, f.logger)
+	return NewMatchingTaskPersistence(f.session, f.logger), nil
 }
 
 // NewShardStore returns a new shard store
 func (f *Factory) NewShardStore() (p.ShardStore, error) {
-	return newShardPersistence(f.session, f.clusterName, f.logger)
+	return NewShardPersistence(f.clusterName, f.session, f.logger), nil
 }
 
 // NewMetadataStore returns a metadata store
 func (f *Factory) NewMetadataStore() (p.MetadataStore, error) {
-	return newMetadataPersistence(f.session, f.clusterName, f.logger)
+	return NewMetadataPersistence(f.clusterName, f.session, f.logger)
 }
 
 // NewClusterMetadataStore returns a metadata store
@@ -98,12 +98,12 @@ func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
 
 // NewExecutionStore returns a new ExecutionStore.
 func (f *Factory) NewExecutionStore() (p.ExecutionStore, error) {
-	return NewExecutionStore(f.session, f.logger), nil
+	return NewExecutionPersistence(f.session, f.logger), nil
 }
 
 // NewQueue returns a new queue backed by cassandra
 func (f *Factory) NewQueue(queueType p.QueueType) (p.Queue, error) {
-	return newQueue(f.session, f.logger, queueType)
+	return NewQueuePersistence(queueType, f.session, f.logger)
 }
 
 // Close closes the factory
