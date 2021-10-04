@@ -62,7 +62,6 @@ var (
 			},
 		},
 		cluster.TestCurrentClusterName,
-		nil,
 	)
 
 	GlobalNamespaceEntry = namespace.NewGlobalCacheEntryForTest(
@@ -80,7 +79,6 @@ var (
 			},
 		},
 		Version,
-		nil,
 	)
 
 	GlobalParentNamespaceEntry = namespace.NewGlobalCacheEntryForTest(
@@ -94,7 +92,6 @@ var (
 			},
 		},
 		Version,
-		nil,
 	)
 
 	GlobalTargetNamespaceEntry = namespace.NewGlobalCacheEntryForTest(
@@ -108,7 +105,6 @@ var (
 			},
 		},
 		Version,
-		nil,
 	)
 
 	GlobalChildNamespaceEntry = namespace.NewGlobalCacheEntryForTest(
@@ -122,7 +118,6 @@ var (
 			},
 		},
 		Version,
-		nil,
 	)
 
 	CreateWorkflowExecutionResponse = &persistence.CreateWorkflowExecutionResponse{

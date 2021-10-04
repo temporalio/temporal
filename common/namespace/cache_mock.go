@@ -70,57 +70,6 @@ func (mr *MockEntryMutationMockRecorder) apply(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "apply", reflect.TypeOf((*MockEntryMutation)(nil).apply), arg0)
 }
 
-// MockClusterInfo is a mock of ClusterInfo interface.
-type MockClusterInfo struct {
-	ctrl     *gomock.Controller
-	recorder *MockClusterInfoMockRecorder
-}
-
-// MockClusterInfoMockRecorder is the mock recorder for MockClusterInfo.
-type MockClusterInfoMockRecorder struct {
-	mock *MockClusterInfo
-}
-
-// NewMockClusterInfo creates a new mock instance.
-func NewMockClusterInfo(ctrl *gomock.Controller) *MockClusterInfo {
-	mock := &MockClusterInfo{ctrl: ctrl}
-	mock.recorder = &MockClusterInfoMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockClusterInfo) EXPECT() *MockClusterInfoMockRecorder {
-	return m.recorder
-}
-
-// GetCurrentClusterName mocks base method.
-func (m *MockClusterInfo) GetCurrentClusterName() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCurrentClusterName")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// GetCurrentClusterName indicates an expected call of GetCurrentClusterName.
-func (mr *MockClusterInfoMockRecorder) GetCurrentClusterName() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentClusterName", reflect.TypeOf((*MockClusterInfo)(nil).GetCurrentClusterName))
-}
-
-// IsGlobalNamespaceEnabled mocks base method.
-func (m *MockClusterInfo) IsGlobalNamespaceEnabled() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsGlobalNamespaceEnabled")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// IsGlobalNamespaceEnabled indicates an expected call of IsGlobalNamespaceEnabled.
-func (mr *MockClusterInfoMockRecorder) IsGlobalNamespaceEnabled() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsGlobalNamespaceEnabled", reflect.TypeOf((*MockClusterInfo)(nil).IsGlobalNamespaceEnabled))
-}
-
 // MockPersistence is a mock of Persistence interface.
 type MockPersistence struct {
 	ctrl     *gomock.Controller

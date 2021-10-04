@@ -977,8 +977,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_ArchivalURIEmpty()
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 			VisibilityArchivalUri:   "",
 		},
-		"",
-		nil)
+		"")
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil).AnyTimes()
 
 	wh := s.getWorkflowHandler(s.newConfig())
@@ -997,8 +996,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Failure_InvalidURI() {
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 			VisibilityArchivalUri:   "",
 		},
-		"",
-		nil)
+		"")
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil).AnyTimes()
 
 	wh := s.getWorkflowHandler(s.newConfig())
@@ -1017,8 +1015,7 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 			VisibilityArchivalUri:   "",
 		},
-		"",
-		nil)
+		"")
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil).AnyTimes()
 
 	nextPageToken := []byte{'1', '2', '3'}
@@ -1261,7 +1258,6 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_NamespaceNotCo
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 		},
 		"",
-		nil,
 	), nil)
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI")).Times(2)
 
@@ -1280,7 +1276,6 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidURI() {
 			VisibilityArchivalUri:   "uri without scheme",
 		},
 		"",
-		nil,
 	), nil)
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI")).Times(2)
 
@@ -1299,7 +1294,6 @@ func (s *workflowHandlerSuite) TestListArchivedVisibility_Success() {
 			VisibilityArchivalUri:   testVisibilityArchivalURI,
 		},
 		"",
-		nil,
 	), nil).AnyTimes()
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewArchivalConfig("enabled", dc.GetStringPropertyFn("enabled"), dc.GetBoolPropertyFn(true), "disabled", "random URI")).Times(2)
 	s.mockVisibilityArchiver.EXPECT().Query(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&archiver.QueryVisibilityResponse{}, nil)
@@ -1575,7 +1569,7 @@ func newNamespaceCacheEntry(namespaceName string) *namespace.CacheEntry {
 	info := &persistencespb.NamespaceInfo{
 		Name: namespaceName,
 	}
-	return namespace.NewLocalCacheEntryForTest(info, nil, "", nil)
+	return namespace.NewLocalCacheEntryForTest(info, nil, "")
 }
 
 func (s *workflowHandlerSuite) setupTokenNamespaceTest(tokenNamespace string, enforce bool) *WorkflowHandler {

@@ -148,7 +148,6 @@ func (s *replicationTaskExecutorSuite) TestFilterTask_Apply() {
 				cluster.TestAlternativeClusterName,
 			}},
 			0,
-			s.clusterMetadata,
 		), nil)
 	ok, err := s.replicationTaskHandler.filterTask(namespaceID, false)
 	s.NoError(err)
@@ -164,7 +163,6 @@ func (s *replicationTaskExecutorSuite) TestFilterTask_NotApply() {
 			nil,
 			&persistencespb.NamespaceReplicationConfig{Clusters: []string{cluster.TestAlternativeClusterName}},
 			0,
-			s.clusterMetadata,
 		), nil)
 	ok, err := s.replicationTaskHandler.filterTask(namespaceID, false)
 	s.NoError(err)

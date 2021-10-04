@@ -320,7 +320,6 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 			},
 		},
 		1234,
-		s.mockClusterMetadata,
 	), nil).AnyTimes()
 	s.mockTaskRefresher.EXPECT().RefreshTasks(s.now, gomock.Any()).Return(nil)
 

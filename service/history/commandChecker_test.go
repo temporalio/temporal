@@ -135,13 +135,11 @@ func (s *commandAttrValidatorSuite) TestValidateSignalExternalWorkflowExecutionA
 		&persistencespb.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
-		nil,
 	)
 	targetNamespaceEntry := namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
-		nil,
 	)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil).AnyTimes()
@@ -204,13 +202,11 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToLocal(
 		&persistencespb.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
-		nil,
 	)
 	targetNamespaceEntry := namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
-		nil,
 	)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
@@ -225,7 +221,6 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffect
 		&persistencespb.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
-		nil,
 	)
 	targetNamespaceEntry := namespace.NewGlobalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
@@ -235,7 +230,6 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffect
 			Clusters:          []string{cluster.TestCurrentClusterName},
 		},
 		1234,
-		nil,
 	)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
@@ -250,7 +244,6 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffect
 		&persistencespb.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
-		nil,
 	)
 	targetNamespaceEntry := namespace.NewGlobalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
@@ -260,7 +253,6 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffect
 			Clusters:          []string{cluster.TestAlternativeClusterName},
 		},
 		1234,
-		nil,
 	)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
@@ -275,7 +267,6 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToGlobal
 		&persistencespb.NamespaceInfo{Name: s.testNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
-		nil,
 	)
 	targetNamespaceEntry := namespace.NewGlobalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
@@ -288,7 +279,6 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToGlobal
 			},
 		},
 		1234,
-		nil,
 	)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
@@ -307,13 +297,11 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 			Clusters:          []string{cluster.TestCurrentClusterName},
 		},
 		1234,
-		nil,
 	)
 	targetNamespaceEntry := namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
-		nil,
 	)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
@@ -332,13 +320,11 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 			Clusters:          []string{cluster.TestAlternativeClusterName},
 		},
 		1234,
-		nil,
 	)
 	targetNamespaceEntry := namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
-		nil,
 	)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
@@ -357,7 +343,6 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 			Clusters:          []string{cluster.TestCurrentClusterName},
 		},
 		1234,
-		nil,
 	)
 	targetNamespaceEntry := namespace.NewGlobalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
@@ -367,7 +352,6 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 			Clusters:          []string{cluster.TestCurrentClusterName},
 		},
 		5678,
-		nil,
 	)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
@@ -386,7 +370,6 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 			Clusters:          []string{cluster.TestCurrentClusterName},
 		},
 		1234,
-		nil,
 	)
 	targetNamespaceEntry := namespace.NewGlobalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
@@ -396,7 +379,6 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 			Clusters:          []string{cluster.TestAlternativeClusterName},
 		},
 		5678,
-		nil,
 	)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
@@ -417,7 +399,6 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 			},
 		},
 		5678,
-		nil,
 	)
 	targetNamespaceEntry := namespace.NewGlobalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
@@ -430,7 +411,6 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 			},
 		},
 		1234,
-		nil,
 	)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
@@ -452,13 +432,11 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToLocal
 			},
 		},
 		1234,
-		nil,
 	)
 	targetNamespaceEntry := namespace.NewLocalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
 		nil,
 		cluster.TestCurrentClusterName,
-		nil,
 	)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
@@ -480,7 +458,6 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToEffec
 			},
 		},
 		5678,
-		nil,
 	)
 	targetNamespaceEntry := namespace.NewGlobalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
@@ -492,7 +469,6 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToEffec
 			},
 		},
 		1234,
-		nil,
 	)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
@@ -514,7 +490,6 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGloba
 			},
 		},
 		1234,
-		nil,
 	)
 	targetNamespaceEntry := namespace.NewGlobalCacheEntryForTest(
 		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
@@ -527,7 +502,6 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGloba
 			},
 		},
 		1234,
-		nil,
 	)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)

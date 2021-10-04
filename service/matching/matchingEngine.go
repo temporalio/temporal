@@ -46,6 +46,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -86,6 +87,7 @@ type (
 		lockableQueryTaskMap lockableQueryTaskMap
 		namespaceCache       namespace.Cache
 		keyResolver          membership.ServiceResolver
+		clusterMeta          cluster.Metadata
 	}
 )
 
@@ -116,6 +118,7 @@ func NewEngine(taskManager persistence.TaskManager,
 	metricsClient metrics.Client,
 	namespaceCache namespace.Cache,
 	resolver membership.ServiceResolver,
+	clusterMeta cluster.Metadata,
 ) Engine {
 
 	return &matchingEngineImpl{
@@ -131,6 +134,7 @@ func NewEngine(taskManager persistence.TaskManager,
 		lockableQueryTaskMap: lockableQueryTaskMap{queryTaskMap: make(map[string]chan *queryResult)},
 		namespaceCache:       namespaceCache,
 		keyResolver:          resolver,
+		clusterMeta:          clusterMeta,
 	}
 }
 
@@ -199,7 +203,7 @@ func (e *matchingEngineImpl) getTaskQueueManager(taskQueue *taskQueueID, taskQue
 	if result, ok := e.taskQueues[*taskQueue]; ok {
 		return result, nil
 	}
-	mgr, err := newTaskQueueManager(e, taskQueue, taskQueueKind, e.config)
+	mgr, err := newTaskQueueManager(e, taskQueue, taskQueueKind, e.config, e.clusterMeta)
 	if err != nil {
 		return nil, err
 	}

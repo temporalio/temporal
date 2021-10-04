@@ -210,7 +210,7 @@ func NamespaceCacheProvider(
 ) namespace.Cache {
 	return namespace.NewNamespaceCache(
 		metadataManager,
-		clusterMetadata,
+		clusterMetadata.IsGlobalNamespaceEnabled(),
 		metricsClient,
 		logger,
 	)
