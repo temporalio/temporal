@@ -128,10 +128,14 @@ func (s *Server) Start() error {
 	}
 
 	if s.so.dynamicConfigClient == nil {
-		s.so.dynamicConfigClient, err = dynamicconfig.NewFileBasedClient(&s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
-		if err != nil {
-			s.logger.Error("Unable to create dynamic config client.", tag.Error(err))
+		if s.so.config.DynamicConfigClient != nil {
+			s.so.dynamicConfigClient, err = dynamicconfig.NewFileBasedClient(s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
+			if err != nil {
+				return fmt.Errorf("unable to create dynamic config client: %w", err)
+			}
+		} else {
 			s.so.dynamicConfigClient = dynamicconfig.NewNoopClient()
+			s.logger.Info("Dynamic config client is not configured. Using noop client.")
 		}
 	}
 	dc := dynamicconfig.NewCollection(s.so.dynamicConfigClient, s.logger)

@@ -146,7 +146,7 @@ func (fc *fileBasedClient) storeValues(newValues map[string][]*constrainedValue)
 
 func validateConfig(config *FileBasedClientConfig) error {
 	if config == nil {
-		return errors.New("configuration for dynamic config client is missing")
+		return errors.New("configuration for dynamic config client is nil")
 	}
 	if _, err := os.Stat(config.Filepath); err != nil {
 		return fmt.Errorf("dynamic config: %s: %w", config.Filepath, err)

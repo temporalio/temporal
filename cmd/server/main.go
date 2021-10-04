@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"      // needed to load mysql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
 	"go.temporal.io/server/temporal"
@@ -131,10 +130,15 @@ func buildCLI() *cli.App {
 
 				logger := log.NewZapLogger(log.BuildZapLogger(cfg.Log))
 
-				dynamicConfigClient, err := dynamicconfig.NewFileBasedClient(&cfg.DynamicConfigClient, logger, temporal.InterruptCh())
-				if err != nil {
-					logger.Error("Unable to create dynamic config client.", tag.Error(err))
+				var dynamicConfigClient dynamicconfig.Client
+				if cfg.DynamicConfigClient != nil {
+					dynamicConfigClient, err = dynamicconfig.NewFileBasedClient(cfg.DynamicConfigClient, logger, temporal.InterruptCh())
+					if err != nil {
+						return cli.Exit(fmt.Sprintf("Unable to create dynamic config client. Error: %v", err), 1)
+					}
+				} else {
 					dynamicConfigClient = dynamicconfig.NewNoopClient()
+					logger.Info("Dynamic config client is not configured. Using noop client.")
 				}
 
 				authorizer, err := authorization.GetAuthorizerFromConfig(
