@@ -29,13 +29,19 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli"
 	enumspb "go.temporal.io/api/enums/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	clispb "go.temporal.io/server/api/cli/v1"
+)
+
+const (
+	addSearchAttributesTimeout = 30 * time.Second
 )
 
 // AdminAddSearchAttributes to add search attributes
@@ -92,7 +98,7 @@ func AdminAddSearchAttributes(c *cli.Context) {
 		SkipSchemaUpdate: c.Bool(FlagSkipSchemaUpdate),
 	}
 
-	ctx, cancel := newContext(c)
+	ctx, cancel := newContextWithTimeout(c, addSearchAttributesTimeout)
 	defer cancel()
 	_, err = adminClient.AddSearchAttributes(ctx, request)
 	if err != nil {
