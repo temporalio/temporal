@@ -333,6 +333,7 @@ func (tm *TaskMatcher) poll(ctx context.Context, queryOnly bool) (*internalTask,
 	// 1. ctx.Done
 	// 2. taskC and queryTaskC
 	// 3. forwarding
+	// 4. block looking locally for remainder of context lifetime
 	// To correctly handle priorities and allow any case to succeed, all select
 	// statements except for the last one must be non-blocking, and the last one
 	// must include all the previous cases.
@@ -381,7 +382,23 @@ func (tm *TaskMatcher) poll(ctx context.Context, queryOnly bool) (*internalTask,
 			return task, nil
 		}
 		token.release()
-		return tm.poll(ctx, queryOnly)
+	}
+
+	// 4. blocking local poll
+	select {
+	case <-ctx.Done():
+		tm.scope().IncCounter(metrics.PollTimeoutPerTaskQueueCounter)
+		return nil, ErrNoTasks
+	case task := <-taskC:
+		if task.responseC != nil {
+			tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
+		}
+		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
+		return task, nil
+	case task := <-queryTaskC:
+		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
+		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
+		return task, nil
 	}
 }
 
