@@ -3,4 +3,5 @@ FROM golang:1.17-alpine3.13 AS base-builder
 
 RUN apk add --update --no-cache \
     make \
-    git
+    git \
+    git-lfs

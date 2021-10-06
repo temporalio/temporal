@@ -7,6 +7,7 @@ RUN apk add --update --no-cache \
     git \
     protobuf \
     build-base \
-    shellcheck
+    shellcheck \
+    git-lfs
 
 RUN wget -O- https://raw.githubusercontent.com/fossas/spectrometer/master/install.sh | sh
