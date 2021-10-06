@@ -550,7 +550,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		fx.Supply(stoppedCh, params),
 		matching.Module,
 		fx.Populate(&matchingService),
-		)
+	)
 	err = app.Err()
 	if err != nil {
 		params.Logger.Fatal("unable to start matching service", tag.Error(err))
