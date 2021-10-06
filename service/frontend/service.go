@@ -224,7 +224,7 @@ func NewService(
 // todomigryz: replace as serviceprovider
 // todomigryz: commented code
 // todomigryz: delete old code
-NewService builds a new frontend service
+// NewService builds a new frontend service
 func NewServiceOld(
 	params *resource.BootstrapParams,
 ) (*Service, error) {
