@@ -32,7 +32,7 @@ GOPATH ?= $(shell go env GOPATH)
 PERSISTENCE_TYPE ?= nosql
 PERSISTENCE_DRIVER ?= cassandra
 
-# Optional args to create multiple keyspaces:
+# Optional args to create multiple key spaces:
 # make install-schema TEMPORAL_DB=temporal2 VISIBILITY_DB=temporal_visibility2
 TEMPORAL_DB ?= temporal
 VISIBILITY_DB ?= temporal_visibility
