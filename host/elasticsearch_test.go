@@ -427,6 +427,110 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
 	s.Equal(3, searchVal)
 }
 
+func (s *elasticsearchIntegrationSuite) TestListWorkflow_WildCardQuery() {
+	id := "es-integration-list-workflow-like-query-test"
+	wt := "es-integration-list-workflow-like-query-test-type"
+	tl := "es-integration-list-workflow-like-query-test-taskqueue"
+	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
+
+	searchAttr := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomStringField":  payload.EncodeString("test-string-1"),
+			"CustomKeywordField": payload.EncodeString("test-keyword-1"),
+		},
+	}
+	request.SearchAttributes = searchAttr
+	we1, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err)
+
+	time.Sleep(waitForESToSettle)
+
+	// Wildcard over String
+	var openExecution *workflowpb.WorkflowExecutionInfo
+	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomStringField LIKE "est-string"`,
+	}
+	for i := 0; i < numOfRetry; i++ {
+		resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+		s.NoError(err)
+		if len(resp.GetExecutions()) == 1 {
+			openExecution = resp.GetExecutions()[0]
+			break
+		}
+		time.Sleep(waitTimeInMs * time.Millisecond)
+	}
+	s.NotNil(openExecution)
+	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
+	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
+	saPayload := openExecution.SearchAttributes.GetIndexedFields()["CustomStringField"]
+	var saValue string
+	err = payload.Decode(saPayload, &saValue)
+	s.NoError(err)
+	s.Equal("test-string-1", saValue)
+
+	// Wildcard on Keyword
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomKeywordField LIKE "%st-key%"`,
+	}
+	resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 0)
+
+	// Equal on String
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomStringField = "test-string-1"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 1)
+
+	// Equal on partial String
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomStringField = "test-string"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 0)
+
+	// Equal on Keyword
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomKeywordField = "test-keyword-1"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 1)
+
+	// Equal on partial Keyword
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomKeywordField = "test-keyword"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 0)
+
+	// Wildcard with NOT
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomStringField NOT LIKE "non-existence-prefix%"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 1)
+}
+
 // To test last page search trigger max window size error
 func (s *elasticsearchIntegrationSuite) TestListWorkflow_MaxWindowSize() {
 	id := "es-integration-list-workflow-max-window-size-test"
