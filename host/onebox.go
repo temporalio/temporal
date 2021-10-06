@@ -544,7 +544,14 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	}
 	params.PersistenceServiceResolver = resolver.NewNoopResolver()
 
-	matchingService, err := matching.NewService(params)
+	stoppedCh := make(chan struct{})
+	var matchingService *matching.Service
+	app := fx.New(
+		fx.Supply(stoppedCh, params),
+		matching.Module,
+		fx.Populate(&matchingService),
+		)
+	err = app.Err()
 	if err != nil {
 		params.Logger.Fatal("unable to start matching service", tag.Error(err))
 	}
