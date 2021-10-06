@@ -90,8 +90,9 @@ var Module = fx.Options(
 	fx.Provide(MetadataManagerProvider),
 	fx.Provide(NamespaceCacheProvider),
 	fx.Provide(serialization.NewSerializer),
-	fx.Provide(ArchiverProviderProvider),
 	fx.Provide(ArchivalMetadataProvider),
+	fx.Provide(ArchiverProviderProvider),
+	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceBeanProvider),
 	fx.Provide(MembershipFactoryProvider),
 	fx.Provide(MembershipMonitorProvider),
@@ -309,6 +310,34 @@ func RuntimeMetricsReporterProvider(
 		string(instanceID),
 	)
 }
+
+
+func RegisterBootstrapContainer(
+	logger SnTaggedLogger,
+	archiverProvider provider.ArchiverProvider,
+	serviceName ServiceName,
+	metricsClient metrics.Client,
+	clusterMetadata cluster.Metadata,
+	persistenceBean persistenceClient.Bean,
+	) error {
+	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
+		ExecutionManager: persistenceBean.GetExecutionManager(),
+		Logger:           logger,
+		MetricsClient:    metricsClient,
+		ClusterMetadata:  clusterMetadata,
+	}
+	visibilityArchiverBootstrapContainer := &archiver.VisibilityBootstrapContainer{
+		Logger:          logger,
+		MetricsClient:   metricsClient,
+		ClusterMetadata: clusterMetadata,
+	}
+	return archiverProvider.RegisterBootstrapContainer(
+		string(serviceName),
+		historyArchiverBootstrapContainer,
+		visibilityArchiverBootstrapContainer,
+	)
+}
+
 
 func NewFromDI(
 	persistenceConf *config.Persistence,
