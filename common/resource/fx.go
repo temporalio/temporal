@@ -311,7 +311,6 @@ func RuntimeMetricsReporterProvider(
 	)
 }
 
-
 func RegisterBootstrapContainer(
 	logger SnTaggedLogger,
 	archiverProvider provider.ArchiverProvider,
@@ -319,7 +318,7 @@ func RegisterBootstrapContainer(
 	metricsClient metrics.Client,
 	clusterMetadata cluster.Metadata,
 	persistenceBean persistenceClient.Bean,
-	) error {
+) error {
 	historyArchiverBootstrapContainer := &archiver.HistoryBootstrapContainer{
 		ExecutionManager: persistenceBean.GetExecutionManager(),
 		Logger:           logger,
@@ -337,7 +336,6 @@ func RegisterBootstrapContainer(
 		visibilityArchiverBootstrapContainer,
 	)
 }
-
 
 func NewFromDI(
 	persistenceConf *config.Persistence,
