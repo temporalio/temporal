@@ -131,11 +131,14 @@ func (s *Server) Start() error {
 		if s.so.config.DynamicConfigClient != nil {
 			s.so.dynamicConfigClient, err = dynamicconfig.NewFileBasedClient(s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
 			if err != nil {
-				return fmt.Errorf("unable to create dynamic config client: %w", err)
+				// TODO: uncomment the next line and remove next 3 lines in 1.14.
+				// return fmt.Errorf("unable to create dynamic config client: %w", err)
+				s.logger.Error("Unable to read dynamic config file. Continue with default settings but the ERROR MUST BE FIXED before the next upgrade", tag.Error(err))
+				s.so.dynamicConfigClient = dynamicconfig.NewNoopClient()
 			}
 		} else {
 			s.so.dynamicConfigClient = dynamicconfig.NewNoopClient()
-			s.logger.Info("Dynamic config client is not configured. Using noop client.")
+			s.logger.Info("Dynamic config client is not configured. Using default values.")
 		}
 	}
 	dc := dynamicconfig.NewCollection(s.so.dynamicConfigClient, s.logger)
@@ -202,6 +205,11 @@ func (s *Server) Start() error {
 		params, err := s.newBootstrapParams(svcName, dc, s.serverReporter, s.sdkReporter, esConfig, esClient)
 		if err != nil {
 			return err
+		}
+
+		// TODO: remove in 1.14 together with IsNoopClient func from NoopClient.
+		if _, ok := s.so.dynamicConfigClient.(interface{ IsNoopClient() }); ok {
+			params.MetricsClient.IncCounter(metrics.DynamicConfigScope, metrics.NoopImplementationIsUsed)
 		}
 
 		s.serviceStoppedChs[svcName] = make(chan struct{})
