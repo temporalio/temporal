@@ -28,7 +28,7 @@ import (
 	"context"
 
 	"go.uber.org/fx"
-	"google.golang.org/grpc"
+	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 
 	"go.temporal.io/server/common"
@@ -67,7 +67,7 @@ var Module = fx.Options(
 	fx.Provide(PersistenceMaxQpsProvider),
 	fx.Provide(NamespaceReplicationQueueProvider),
 	fx.Provide(HandlerProvider),
-	fx.Provide(grpc.NewServer),
+	fx.Provide(func(so []grpc.ServerOption) *grpc.Server { return grpc.NewServer(so...) }),
 	fx.Provide(NewAdminHandler),
 	fx.Provide(NewVersionChecker),
 	fx.Provide(NewService),
