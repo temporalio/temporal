@@ -25,7 +25,7 @@
 package metrics
 
 import (
-	"go.opentelemetry.io/otel/label"
+	label "go.opentelemetry.io/otel/attribute"
 )
 
 func tagMapToLabelArray(tags map[string]string) []label.KeyValue {

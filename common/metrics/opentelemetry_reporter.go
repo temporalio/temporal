@@ -29,9 +29,13 @@ import (
 	"net/http"
 	"time"
 
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/metric/prometheus"
+	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
+	export "go.opentelemetry.io/otel/sdk/export/metric"
+	"go.opentelemetry.io/otel/sdk/metric/aggregator/histogram"
+	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
+	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
+	selector "go.opentelemetry.io/otel/sdk/metric/selector/simple"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -63,12 +67,17 @@ func newOpentelemeteryReporter(
 	if len(histogramBoundaries) == 0 {
 		histogramBoundaries = defaultHistogramBoundaries
 	}
-	exporter, err := prometheus.InstallNewPipeline(
-		prometheus.Config{
-			DefaultSummaryQuantiles:    defaultQuantiles,
-			DefaultHistogramBoundaries: histogramBoundaries,
-		},
+	c := controller.New(
+		processor.NewFactory(
+			selector.NewWithHistogramDistribution(
+				histogram.WithExplicitBoundaries(histogramBoundaries),
+			),
+			export.CumulativeExportKindSelector(),
+			processor.WithMemory(true),
+		),
 	)
+	exporter, err := prometheus.New(
+		prometheus.Config{DefaultHistogramBoundaries: histogramBoundaries}, c)
 
 	if err != nil {
 		logger.Error("Failed to initialize prometheus exporter.", tag.Error(err))
@@ -77,7 +86,7 @@ func newOpentelemeteryReporter(
 
 	metricServer := initPrometheusListener(prometheusConfig, logger, exporter)
 
-	meter := otel.Meter("temporal")
+	meter := c.Meter("temporal")
 	reporter := &OpentelemetryReporter{
 		exporter:  exporter,
 		meter:     meter,

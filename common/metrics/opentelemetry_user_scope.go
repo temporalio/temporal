@@ -28,7 +28,7 @@ import (
 	"context"
 	"time"
 
-	"go.opentelemetry.io/otel/label"
+	label "go.opentelemetry.io/otel/attribute"
 )
 
 type opentelemetryUserScope struct {
@@ -60,25 +60,25 @@ func (o opentelemetryUserScope) AddCounter(counter string, delta int64) {
 
 func (o opentelemetryUserScope) StartTimer(timer string) Stopwatch {
 	metric := newOpenTelemetryStopwatchMetric(
-		o.reporter.GetMeterMust().NewFloat64ValueRecorder(timer),
+		o.reporter.GetMeterMust().NewFloat64Histogram(timer),
 		o.labels)
 	return newOpenTelemetryStopwatch([]openTelemetryStopwatchMetric{metric})
 }
 
 func (o opentelemetryUserScope) RecordTimer(timer string, d time.Duration) {
 	ctx := context.Background()
-	o.reporter.GetMeterMust().NewInt64ValueRecorder(timer).Record(ctx, d.Nanoseconds(), o.labels...)
+	o.reporter.GetMeterMust().NewInt64Histogram(timer).Record(ctx, d.Nanoseconds(), o.labels...)
 }
 
 func (o opentelemetryUserScope) RecordDistribution(id string, d int) {
 	value := int64(d)
 	ctx := context.Background()
-	o.reporter.GetMeterMust().NewInt64ValueRecorder(id).Record(ctx, value, o.labels...)
+	o.reporter.GetMeterMust().NewInt64Histogram(id).Record(ctx, value, o.labels...)
 }
 
 func (o opentelemetryUserScope) UpdateGauge(gauge string, value float64) {
 	ctx := context.Background()
-	o.reporter.GetMeterMust().NewFloat64ValueRecorder(gauge).Record(ctx, value, o.labels...)
+	o.reporter.GetMeterMust().NewFloat64Histogram(gauge).Record(ctx, value, o.labels...)
 }
 
 // Tagged provides new scope with added and/or overriden tags values.

@@ -28,7 +28,7 @@ import (
 	"context"
 	"time"
 
-	"go.opentelemetry.io/otel/label"
+	label "go.opentelemetry.io/otel/attribute"
 )
 
 type (
@@ -82,10 +82,10 @@ func (m *opentelemetryScope) AddCounter(id int, delta int64) {
 func (m *opentelemetryScope) UpdateGauge(id int, value float64) {
 	def := m.defs[id]
 	ctx := context.Background()
-	m.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricName.String()).Record(ctx, value, m.labels...)
+	m.reporter.GetMeterMust().NewFloat64Histogram(def.metricName.String()).Record(ctx, value, m.labels...)
 
 	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
-		m.rootScope.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricRollupName.String()).Record(
+		m.rootScope.reporter.GetMeterMust().NewFloat64Histogram(def.metricRollupName.String()).Record(
 			ctx, value, m.rootScope.labels...,
 		)
 	}
@@ -95,18 +95,18 @@ func (m *opentelemetryScope) StartTimer(id int) Stopwatch {
 	def := m.defs[id]
 
 	timer := newOpenTelemetryStopwatchMetric(
-		m.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricName.String()),
+		m.reporter.GetMeterMust().NewFloat64Histogram(def.metricName.String()),
 		m.labels)
 	switch {
 	case !def.metricRollupName.Empty():
 		timerRollup := newOpenTelemetryStopwatchMetric(
-			m.rootScope.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricName.String()),
+			m.rootScope.reporter.GetMeterMust().NewFloat64Histogram(def.metricName.String()),
 			m.rootScope.labels)
 		return newOpenTelemetryStopwatch([]openTelemetryStopwatchMetric{timer, timerRollup})
 	case m.isNamespaceTagged:
 		allScope := m.taggedString(map[string]string{namespace: namespaceAllValue})
 		timerAll := newOpenTelemetryStopwatchMetric(
-			allScope.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricName.String()),
+			allScope.reporter.GetMeterMust().NewFloat64Histogram(def.metricName.String()),
 			allScope.labels)
 		return newOpenTelemetryStopwatch([]openTelemetryStopwatchMetric{timer, timerAll})
 	default:
@@ -117,21 +117,21 @@ func (m *opentelemetryScope) StartTimer(id int) Stopwatch {
 func (m *opentelemetryScope) RecordTimer(id int, d time.Duration) {
 	def := m.defs[id]
 	ctx := context.Background()
-	m.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricName.String()).Record(ctx, d.Nanoseconds(), m.labels...)
+	m.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String()).Record(ctx, d.Nanoseconds(), m.labels...)
 
 	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
-		m.rootScope.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricRollupName.String()).Record(
+		m.rootScope.reporter.GetMeterMust().NewInt64Histogram(def.metricRollupName.String()).Record(
 			ctx, d.Nanoseconds(), m.rootScope.labels...,
 		)
 	}
 
 	switch {
 	case !def.metricRollupName.Empty() && (m.rootScope != nil):
-		m.rootScope.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricRollupName.String()).Record(
+		m.rootScope.reporter.GetMeterMust().NewInt64Histogram(def.metricRollupName.String()).Record(
 			ctx, d.Nanoseconds(), m.rootScope.labels...,
 		)
 	case m.isNamespaceTagged:
-		m.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricName.String()).Record(
+		m.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String()).Record(
 			ctx,
 			d.Nanoseconds(),
 			m.taggedString(map[string]string{namespace: namespaceAllValue}).labels...,
@@ -144,21 +144,21 @@ func (m *opentelemetryScope) RecordDistribution(id int, d int) {
 	def := m.defs[id]
 
 	ctx := context.Background()
-	m.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricName.String()).Record(ctx, value, m.labels...)
+	m.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String()).Record(ctx, value, m.labels...)
 
 	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
-		m.rootScope.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricRollupName.String()).Record(
+		m.rootScope.reporter.GetMeterMust().NewInt64Histogram(def.metricRollupName.String()).Record(
 			ctx, value, m.rootScope.labels...,
 		)
 	}
 
 	switch {
 	case !def.metricRollupName.Empty() && (m.rootScope != nil):
-		m.rootScope.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricRollupName.String()).Record(
+		m.rootScope.reporter.GetMeterMust().NewInt64Histogram(def.metricRollupName.String()).Record(
 			ctx, value, m.rootScope.labels...,
 		)
 	case m.isNamespaceTagged:
-		m.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricName.String()).Record(
+		m.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String()).Record(
 			ctx,
 			value,
 			m.taggedString(map[string]string{namespace: namespaceAllValue}).labels...,
@@ -170,10 +170,10 @@ func (m *opentelemetryScope) RecordDistribution(id int, d int) {
 func (m *opentelemetryScope) RecordHistogramDuration(id int, value time.Duration) {
 	def := m.defs[id]
 	ctx := context.Background()
-	m.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricName.String()).Record(ctx, value.Nanoseconds(), m.labels...)
+	m.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String()).Record(ctx, value.Nanoseconds(), m.labels...)
 
 	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
-		m.rootScope.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricRollupName.String()).Record(
+		m.rootScope.reporter.GetMeterMust().NewInt64Histogram(def.metricRollupName.String()).Record(
 			ctx, value.Nanoseconds(), m.rootScope.labels...,
 		)
 	}
@@ -183,10 +183,10 @@ func (m *opentelemetryScope) RecordHistogramDuration(id int, value time.Duration
 func (m *opentelemetryScope) RecordHistogramValue(id int, value float64) {
 	def := m.defs[id]
 	ctx := context.Background()
-	m.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricName.String()).Record(ctx, value, m.labels...)
+	m.reporter.GetMeterMust().NewFloat64Histogram(def.metricName.String()).Record(ctx, value, m.labels...)
 
 	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
-		m.rootScope.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricRollupName.String()).Record(
+		m.rootScope.reporter.GetMeterMust().NewFloat64Histogram(def.metricRollupName.String()).Record(
 			ctx, value, m.rootScope.labels...,
 		)
 	}
