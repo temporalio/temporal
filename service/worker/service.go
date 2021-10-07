@@ -80,8 +80,8 @@ func NewService(
 	serviceResource resource.Resource,
 	serviceConfig *Config,
 	sdkClient sdkclient.Client,
-	esClient  esclient.Client,
-) *Service{
+	esClient esclient.Client,
+) *Service {
 	return &Service{
 		Resource:  serviceResource,
 		status:    common.DaemonStatusInitialized,
@@ -91,6 +91,7 @@ func NewService(
 		stopC:     make(chan struct{}),
 	}
 }
+
 //
 // func NewService(
 // 	params *resource.BootstrapParams,
