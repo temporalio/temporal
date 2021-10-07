@@ -11,7 +11,7 @@ Temporal server executes units of application logic, Workflows, in a resilient m
 Temporal is a mature technology, a fork of Uber's Cadence.
 Temporal is being developed by [Temporal Technologies](https://temporal.io/), a startup by the creators of Cadence.
 
-[![Temporal](video.png)](http://www.youtube.com/watch?v=f-18XztyN6c "Temporal")
+[![image](https://user-images.githubusercontent.com/12602502/136433917-98abe0d7-4f81-4f97-9b11-62b331c76608.png)](http://www.youtube.com/watch?v=f-18XztyN6c "Temporal")
 
 Learn more about Temporal at [docs.temporal.io](https://docs.temporal.io).
 
