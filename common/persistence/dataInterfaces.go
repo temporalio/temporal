@@ -287,11 +287,10 @@ type (
 
 	// GetCurrentExecutionResponse is the response to GetCurrentExecution
 	GetCurrentExecutionResponse struct {
-		StartRequestID   string
-		RunID            string
-		State            enumsspb.WorkflowExecutionState
-		Status           enumspb.WorkflowExecutionStatus
-		LastWriteVersion int64
+		StartRequestID string
+		RunID          string
+		State          enumsspb.WorkflowExecutionState
+		Status         enumspb.WorkflowExecutionStatus
 	}
 
 	// UpdateWorkflowExecutionRequest is used to update a workflow execution
