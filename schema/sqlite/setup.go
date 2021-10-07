@@ -52,6 +52,8 @@ var (
 )
 
 // SetupSchema initializes the SQLite schema in an empty database.
+//
+// Note: this function may receive breaking changes or be removed in the future.
 func SetupSchema(cfg *config.SQL) error {
 	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver())
 	if err != nil {
@@ -84,6 +86,9 @@ func SetupSchema(cfg *config.SQL) error {
 	return nil
 }
 
+// NamespaceConfig determines how namespaces should be configured during registration.
+//
+// Note: this struct may receive breaking changes or be removed in the future.
 type NamespaceConfig struct {
 	// Low level representation of a Namespace used by Temporal persistence drivers.
 	Detail *persistence.NamespaceDetail
@@ -97,6 +102,8 @@ type NamespaceConfig struct {
 // typically be created through the Temporal API either via `tctl` or an SDK client.
 //
 // Attempting to create a namespace that already exists will be a no-op.
+//
+// Note: this function may receive breaking changes or be removed in the future.
 func CreateNamespaces(cfg *config.SQL, namespaces ...*NamespaceConfig) error {
 	db, err := sql.NewSQLDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver())
 	if err != nil {
@@ -115,6 +122,8 @@ func CreateNamespaces(cfg *config.SQL, namespaces ...*NamespaceConfig) error {
 
 // NewNamespaceConfig initializes a NamespaceConfig with the field values needed to pre-register
 // the namespace via the CreateNamespaces function.
+//
+// Note: this function may receive breaking changes or be removed in the future.
 func NewNamespaceConfig(activeClusterName, namespace string, global bool) *NamespaceConfig {
 	detail := persistence.NamespaceDetail{
 		Info: &persistence.NamespaceInfo{
