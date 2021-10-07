@@ -1712,7 +1712,6 @@ func (s *ExecutionManagerSuite) TestGetCurrentWorkflow() {
 	})
 	s.NoError(err)
 	s.Equal(workflowExecution.GetRunId(), response.RunID)
-	s.Equal(common.EmptyVersion, response.LastWriteVersion)
 
 	info0, err2 := s.GetWorkflowMutableState(namespaceID, workflowExecution)
 	s.NoError(err2)

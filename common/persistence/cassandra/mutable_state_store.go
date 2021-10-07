@@ -953,7 +953,6 @@ func (d *MutableStateStore) GetCurrentExecution(
 	}
 
 	currentRunID := gocql.UUIDToString(result["current_run_id"])
-	lastWriteVersion := result["workflow_last_write_version"].(int64)
 	executionStateBlob, err := executionStateBlobFromRow(result)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetCurrentExecution operation failed. Error: %v", err))
@@ -966,9 +965,8 @@ func (d *MutableStateStore) GetCurrentExecution(
 	}
 
 	return &p.InternalGetCurrentExecutionResponse{
-		RunID:            currentRunID,
-		ExecutionState:   executionState,
-		LastWriteVersion: lastWriteVersion,
+		RunID:          currentRunID,
+		ExecutionState: executionState,
 	}, nil
 }
 
