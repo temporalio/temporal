@@ -33,12 +33,14 @@ import (
 
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -113,15 +115,24 @@ func CreateNamespaces(cfg *config.SQL, namespaces ...*NamespaceConfig) error {
 
 // NewNamespaceConfig initializes a NamespaceConfig with the field values needed to pre-register
 // the namespace via the CreateNamespaces function.
-func NewNamespaceConfig(namespace string, global bool) *NamespaceConfig {
+func NewNamespaceConfig(activeClusterName, namespace string, global bool) *NamespaceConfig {
 	detail := persistence.NamespaceDetail{
 		Info: &persistence.NamespaceInfo{
 			Id:    primitives.NewUUID().String(),
 			State: enums.NAMESPACE_STATE_REGISTERED,
 			Name:  namespace,
 		},
-		Config:            &persistence.NamespaceConfig{},
-		ReplicationConfig: &persistence.NamespaceReplicationConfig{},
+		Config: &persistence.NamespaceConfig{
+			Retention:               timestamp.DurationFromHours(24),
+			HistoryArchivalState:    enums.ARCHIVAL_STATE_DISABLED,
+			VisibilityArchivalState: enums.ARCHIVAL_STATE_DISABLED,
+		},
+		ReplicationConfig: &persistence.NamespaceReplicationConfig{
+			ActiveClusterName: activeClusterName,
+			Clusters:          p.GetOrUseDefaultClusters(activeClusterName, nil),
+		},
+		FailoverVersion:             common.EmptyVersion,
+		FailoverNotificationVersion: -1,
 	}
 	return &NamespaceConfig{
 		Detail:   &detail,
@@ -143,7 +154,7 @@ func createNamespaceIfNotExists(db sqlplugin.DB, namespace *NamespaceConfig) err
 		return nil
 	}
 
-	d, err := serialization.NewSerializer().NamespaceDetailToBlob(namespace.Detail, enums.ENCODING_TYPE_PROTO3)
+	blob, err := serialization.NewSerializer().NamespaceDetailToBlob(namespace.Detail, enums.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return err
 	}
@@ -151,8 +162,8 @@ func createNamespaceIfNotExists(db sqlplugin.DB, namespace *NamespaceConfig) err
 	if _, err := db.InsertIntoNamespace(context.Background(), &sqlplugin.NamespaceRow{
 		ID:                  id,
 		Name:                name,
-		Data:                d.GetData(),
-		DataEncoding:        d.GetEncodingType().String(),
+		Data:                blob.GetData(),
+		DataEncoding:        blob.GetEncodingType().String(),
 		IsGlobal:            namespace.IsGlobal,
 		NotificationVersion: 0,
 	}); err != nil {
