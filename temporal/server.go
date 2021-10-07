@@ -250,9 +250,6 @@ func (s *Server) Start() error {
 			}
 			continue
 		case primitives.WorkerService:
-			// todomigryz: commented code
-			// svc, err = worker.NewService(params)
-
 			// todo: generalize this custom case logic as other services onboard fx
 			workerApp := fx.New(
 				fx.Supply(

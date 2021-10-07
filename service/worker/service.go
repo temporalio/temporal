@@ -75,7 +75,6 @@ type (
 	}
 )
 
-// todomigryz: rename to NewService
 func NewService(
 	serviceResource resource.Resource,
 	serviceConfig *Config,
@@ -92,34 +91,6 @@ func NewService(
 	}
 }
 
-//
-// func NewService(
-// 	params *resource.BootstrapParams,
-// ) (*Service, error) {
-//
-// 	serviceConfig := NewConfig(params)
-//
-// 	serviceResource, err := resource.New(
-// 		params,
-// 		common.WorkerServiceName,
-// 		serviceConfig.PersistenceMaxQPS,
-// 		serviceConfig.PersistenceGlobalMaxQPS,
-// 		serviceConfig.ThrottledLogRPS,
-// 	)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	return &Service{
-// 		Resource:  serviceResource,
-// 		status:    common.DaemonStatusInitialized,
-// 		config:    serviceConfig,
-// 		sdkClient: params.SdkClient,
-// 		esClient:  params.ESClient,
-// 		stopC:     make(chan struct{}),
-// 	}, nil
-// }
-//
 // NewConfig builds the new Config for worker service
 func NewConfig(params *resource.BootstrapParams) *Config {
 	dc := dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger)
