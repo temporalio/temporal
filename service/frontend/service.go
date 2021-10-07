@@ -197,14 +197,14 @@ func NewService(
 	serviceConfig *Config,
 	handler Handler,
 	visibilityMgr manager.VisibilityManager,
-	grpcServerOptions []grpc.ServerOption,
+	server *grpc.Server,
 ) *Service {
 	//todomigryz: inject members. Same for matching/history.
 	return &Service{
 		Resource:          serviceResource,
 		status:            common.DaemonStatusInitialized,
 		config:            serviceConfig,
-		server:            grpc.NewServer(grpcServerOptions...),
+		server:            server,
 		handler:           handler,
 		adminHandler:      NewAdminHandler(serviceResource, params, serviceConfig),
 		versionChecker:    NewVersionChecker(serviceConfig, params.MetricsClient, serviceResource.GetClusterMetadataManager()),

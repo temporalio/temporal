@@ -67,6 +67,7 @@ var Module = fx.Options(
 	fx.Provide(PersistenceMaxQpsProvider),
 	fx.Provide(NamespaceReplicationQueueProvider),
 	fx.Provide(HandlerProvider),
+	fx.Provide(grpc.NewServer),
 	fx.Provide(NewService),
 	fx.Invoke(ServiceLifetimeHooks),
 )
