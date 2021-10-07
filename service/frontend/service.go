@@ -192,22 +192,22 @@ type Service struct {
 }
 
 func NewService(
-	params *resource.BootstrapParams,
 	serviceResource resource.Resource,
 	serviceConfig *Config,
-	handler Handler,
-	visibilityMgr manager.VisibilityManager,
 	server *grpc.Server,
+	handler Handler,
+	adminHandler *AdminHandler,
+	versionChecker *VersionChecker,
+	visibilityMgr manager.VisibilityManager,
 ) *Service {
-	//todomigryz: inject members. Same for matching/history.
 	return &Service{
 		Resource:          serviceResource,
 		status:            common.DaemonStatusInitialized,
 		config:            serviceConfig,
 		server:            server,
 		handler:           handler,
-		adminHandler:      NewAdminHandler(serviceResource, params, serviceConfig),
-		versionChecker:    NewVersionChecker(serviceConfig, params.MetricsClient, serviceResource.GetClusterMetadataManager()),
+		adminHandler:      adminHandler,
+		versionChecker:    versionChecker,
 		visibilityManager: visibilityMgr,
 	}
 }
