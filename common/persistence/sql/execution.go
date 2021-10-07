@@ -683,7 +683,6 @@ func (m *sqlExecutionStore) GetCurrentExecution(
 			State:           row.State,
 			Status:          row.Status,
 		},
-		LastWriteVersion: row.LastWriteVersion,
 	}, nil
 }
 
