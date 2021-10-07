@@ -449,9 +449,8 @@ type (
 	}
 
 	InternalGetCurrentExecutionResponse struct {
-		RunID            string
-		ExecutionState   *persistencespb.WorkflowExecutionState
-		LastWriteVersion int64
+		RunID          string
+		ExecutionState *persistencespb.WorkflowExecutionState
 	}
 
 	// InternalHistoryNode represent a history node metadata

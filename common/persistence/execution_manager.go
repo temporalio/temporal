@@ -623,11 +623,10 @@ func (m *executionManagerImpl) GetCurrentExecution(
 	}
 
 	return &GetCurrentExecutionResponse{
-		RunID:            internalResp.RunID,
-		LastWriteVersion: internalResp.LastWriteVersion,
-		StartRequestID:   internalResp.ExecutionState.CreateRequestId,
-		State:            internalResp.ExecutionState.State,
-		Status:           internalResp.ExecutionState.Status,
+		RunID:          internalResp.RunID,
+		StartRequestID: internalResp.ExecutionState.CreateRequestId,
+		State:          internalResp.ExecutionState.State,
+		Status:         internalResp.ExecutionState.Status,
 	}, nil
 }
 
