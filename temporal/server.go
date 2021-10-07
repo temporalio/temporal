@@ -205,8 +205,6 @@ func (s *Server) Start() error {
 		var svc common.Daemon
 		switch svcName {
 		case primitives.FrontendService:
-			// svc, err = frontend.NewService(params)
-
 			// todo: generalize this custom case logic as other services onboard fx
 			frontendApp := fx.New(
 				fx.Supply(
