@@ -54,7 +54,7 @@ type (
 		BufferQuery(queryInput *querypb.WorkflowQuery) (string, <-chan struct{})
 		SetTerminationState(string, *QueryTerminationState) error
 		RemoveQuery(id string)
-		Close()
+		Clear()
 	}
 
 	queryRegistryImpl struct {
@@ -194,7 +194,7 @@ func (r *queryRegistryImpl) RemoveQuery(id string) {
 	delete(r.failed, id)
 }
 
-func (r *queryRegistryImpl) Close() {
+func (r *queryRegistryImpl) Clear() {
 	r.Lock()
 	defer r.Unlock()
 	for id, q := range r.buffered {
