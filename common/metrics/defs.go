@@ -64,7 +64,7 @@ const (
 
 // Service names for all services that emit metrics.
 const (
-	Common = iota
+	Common ServiceIdx = iota
 	Frontend
 	History
 	Matching
@@ -665,6 +665,8 @@ const (
 	BlobstoreClientDeleteScope
 	// BlobstoreClientDirectoryExistsScope tracks DirectoryExists calls to blobstore
 	BlobstoreClientDirectoryExistsScope
+
+	DynamicConfigScope
 
 	NumCommonScopes
 )
@@ -1355,6 +1357,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		BlobstoreClientExistsScope:          {operation: "BlobstoreClientExists", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
 		BlobstoreClientDeleteScope:          {operation: "BlobstoreClientDelete", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
 		BlobstoreClientDirectoryExistsScope: {operation: "BlobstoreClientDirectoryExists", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
+
+		DynamicConfigScope: {operation: "DynamicConfig"},
 	},
 	// Frontend Scope Names
 	Frontend: {
@@ -1726,6 +1730,8 @@ const (
 
 	ElasticsearchDocumentParseFailuresCount
 	ElasticsearchDocumentGenerateFailuresCount
+
+	NoopImplementationIsUsed
 
 	NumCommonMetrics // Needs to be last on this list for iota numbering
 )
@@ -2188,6 +2194,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		},
 		ElasticsearchDocumentParseFailuresCount:    {metricName: "elasticsearch_document_parse_failures_counter", metricType: Counter},
 		ElasticsearchDocumentGenerateFailuresCount: {metricName: "elasticsearch_document_generate_failures_counter", metricType: Counter},
+
+		NoopImplementationIsUsed: {metricName: "noop_implementation_is_used", metricType: Counter},
 	},
 	History: {
 		TaskRequests: {metricName: "task_requests", metricType: Counter},
