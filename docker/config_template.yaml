@@ -299,6 +299,7 @@ namespaceDefaults:
 {{- $defaultPublicHostPost := (print $publicIp ":" $temporalGrpcPort) -}}
 publicClient:
     hostPort: "{{ default .Env.PUBLIC_FRONTEND_ADDRESS $defaultPublicHostPost }}"
+    useTls: {{ default .Env.PUBLIC_FRONTEND_USE_TLS "" }}
 
 dynamicConfigClient:
     filepath: "{{ default .Env.DYNAMIC_CONFIG_FILE_PATH "/etc/temporal/config/dynamicconfig" }}"

@@ -64,7 +64,7 @@ func (t *TestDynamicTLSConfigProvider) GetFrontendServerConfig() (*tls.Config, e
 	return newServerTLSConfig(t.FrontendCertProvider, t.FrontendPerHostCertProviderMap, &t.settings.Frontend, t.logger)
 }
 
-func (t *TestDynamicTLSConfigProvider) GetFrontendClientConfig() (*tls.Config, error) {
+func (t *TestDynamicTLSConfigProvider) GetFrontendClientConfig(tlsOption TLSOption) (*tls.Config, error) {
 	return newClientTLSConfig(t.WorkerCertProvider, t.settings.Frontend.Client.ServerName, true, false, true)
 }
 

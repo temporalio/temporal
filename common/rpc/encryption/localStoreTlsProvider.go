@@ -140,7 +140,7 @@ func (s *localStoreTlsProvider) GetInternodeClientConfig() (*tls.Config, error) 
 	)
 }
 
-func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
+func (s *localStoreTlsProvider) GetFrontendClientConfig(tlsOption TLSOption) (*tls.Config, error) {
 
 	var client *config.ClientTLS
 	if isSystemWorker(s.settings) {
@@ -148,13 +148,19 @@ func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 	} else {
 		client = &s.settings.Frontend.Client
 	}
+	// default to autodetection of client TLS based on whether or not it is enabled in the frontend
+	// if an override was supplied, however, use that regardless
+	var useTLS bool = s.settings.Frontend.IsEnabled()
+	if (tlsOption != TLSOptionDefault) {
+		useTLS = tlsOption == TLSOptionUseTLS
+	}
 	return s.getOrCreateConfig(
 		&s.cachedFrontendClientConfig,
 		func() (*tls.Config, error) {
 			return newClientTLSConfig(s.workerCertProvider, client.ServerName,
 				s.settings.Frontend.Server.RequireClientAuth, true, !client.DisableHostVerification)
 		},
-		s.settings.Frontend.IsEnabled(),
+		useTLS,
 	)
 }
 

@@ -426,6 +426,8 @@ type (
 	PublicClient struct {
 		// HostPort is the host port to connect on. Host can be DNS name
 		HostPort string `yaml:"hostPort" validate:"nonzero"`
+		// optionally override smart TLS logic and force TLS on or off for the public client
+		UseTLS string `yaml:"useTls"`
 	}
 
 	// NamespaceDefaults is the default config for each namespace
