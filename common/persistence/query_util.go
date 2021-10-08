@@ -26,6 +26,8 @@ package persistence
 
 import (
 	"fmt"
+	"io"
+	"io/ioutil"
 	"os"
 	"strings"
 )
@@ -39,13 +41,30 @@ const (
 func LoadAndSplitQuery(
 	filePaths []string,
 ) ([]string, error) {
+	var files []io.Reader
+
+	for _, filePath := range filePaths {
+		f, err := os.Open(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("error opening file %s: %w", filePath, err)
+		}
+		files = append(files, f)
+	}
+
+	return LoadAndSplitQueryFromReaders(files)
+}
+
+// LoadAndSplitQueryFromReaders loads and split cql / sql query into one statement per string
+func LoadAndSplitQueryFromReaders(
+	readers []io.Reader,
+) ([]string, error) {
 
 	result := make([]string, 0, querySliceDefaultSize)
 
-	for _, path := range filePaths {
-		content, err := os.ReadFile(path)
+	for _, r := range readers {
+		content, err := ioutil.ReadAll(r)
 		if err != nil {
-			return nil, fmt.Errorf("error reading contents from file %v, err: %v", path, err)
+			return nil, fmt.Errorf("error reading contents: %w", err)
 		}
 		for _, stmt := range strings.Split(string(content), queryDelimiter) {
 			stmt = strings.TrimSpace(stmt)

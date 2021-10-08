@@ -24,7 +24,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package schema
+package sqlite
 
 // Version is the SQLite database release version
 const Version = "0.1"
