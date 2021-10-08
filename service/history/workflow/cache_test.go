@@ -205,7 +205,9 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 	s.Nil(err)
 	// since we are just testing whether the release function will clear the cache
 	// all we need is a fake MutableState
-	ctx.(*ContextImpl).MutableState = NewMockMutableState(s.controller)
+	mock := NewMockMutableState(s.controller)
+	ctx.(*ContextImpl).MutableState = mock
+
 	release(nil)
 
 	// since last time, the release function receive a nil error
@@ -217,7 +219,9 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 		CallerTypeAPI,
 	)
 	s.Nil(err)
+
 	s.NotNil(ctx.(*ContextImpl).MutableState)
+	mock.EXPECT().GetQueryRegistry().Return(NewQueryRegistry())
 	release(errors.New("some random error message"))
 
 	// since last time, the release function receive a non-nil error
@@ -258,7 +262,9 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess() {
 		s.Nil(ctx.(*ContextImpl).MutableState)
 		// since we are just testing whether the release function will clear the cache
 		// all we need is a fake MutableState
-		ctx.(*ContextImpl).MutableState = NewMockMutableState(s.controller)
+		mock := NewMockMutableState(s.controller)
+		mock.EXPECT().GetQueryRegistry().Return(NewQueryRegistry())
+		ctx.(*ContextImpl).MutableState = mock
 		release(errors.New("some random error message"))
 		waitGroup.Done()
 	}

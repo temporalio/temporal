@@ -64,7 +64,7 @@ type fileBasedClient struct {
 // NewFileBasedClient creates a file based client.
 func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (Client, error) {
 	if err := validateConfig(config); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to validate dynamic config: %w", err)
 	}
 
 	client := &fileBasedClient{
@@ -74,7 +74,7 @@ func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh
 		logger:      logger,
 	}
 	if err := client.update(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to read dynamic config: %w", err)
 	}
 	go func() {
 		ticker := time.NewTicker(client.config.PollInterval)
@@ -83,7 +83,7 @@ func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh
 			case <-ticker.C:
 				err := client.update()
 				if err != nil {
-					client.logger.Error("Failed to update dynamic config", tag.Error(err))
+					client.logger.Error("Unable to update dynamic config.", tag.Error(err))
 				}
 			case <-client.doneCh:
 				ticker.Stop()
@@ -103,7 +103,7 @@ func (fc *fileBasedClient) update() error {
 
 	info, err := os.Stat(fc.config.Filepath)
 	if err != nil {
-		return fmt.Errorf("failed to get status of dynamic config file: %v", err)
+		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
 	}
 	if !info.ModTime().After(fc.lastUpdatedTime) {
 		return nil
@@ -111,11 +111,11 @@ func (fc *fileBasedClient) update() error {
 
 	confContent, err := ioutil.ReadFile(fc.config.Filepath)
 	if err != nil {
-		return fmt.Errorf("failed to read dynamic config file %v: %v", fc.config.Filepath, err)
+		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
 	}
 
 	if err = yaml.Unmarshal(confContent, newValues); err != nil {
-		return fmt.Errorf("failed to decode dynamic config %v", err)
+		return fmt.Errorf("unable to decode dynamic config: %w", err)
 	}
 
 	return fc.storeValues(newValues)
@@ -146,7 +146,7 @@ func (fc *fileBasedClient) storeValues(newValues map[string][]*constrainedValue)
 
 func validateConfig(config *FileBasedClientConfig) error {
 	if config == nil {
-		return errors.New("no config found for file based dynamic config client")
+		return errors.New("configuration for dynamic config client is nil")
 	}
 	if _, err := os.Stat(config.Filepath); err != nil {
 		return fmt.Errorf("dynamic config: %s: %w", config.Filepath, err)
