@@ -1044,6 +1044,7 @@ func (e *historyEngineImpl) DescribeMutableState(
 		response.CacheMutableState = msb.CloneToProto()
 	}
 
+	// clear mutable state to force reload from persistence. This API returns both cached and persisted version.
 	context.Clear()
 	mutableState, err := context.LoadWorkflowExecution()
 	if err != nil {
