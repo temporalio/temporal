@@ -33,6 +33,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -47,6 +48,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc"
@@ -582,6 +584,81 @@ func (s *clientIntegrationSuite) Test_ActivityTimeouts() {
 	s.Equal(3, v)
 
 	//s.printHistory(id, workflowRun.GetRunID())
+}
+
+func (s *clientIntegrationSuite) Test_BufferedQuery() {
+	localActivityFn := func(ctx context.Context) error {
+		time.Sleep(5 * time.Second) // use local activity sleep to block workflow task to force query to be buffered
+		return nil
+	}
+
+	wfStarted := sync.WaitGroup{}
+	wfStarted.Add(1)
+	workflowFn := func(ctx workflow.Context) error {
+		wfStarted.Done()
+		status := "init"
+		workflow.SetQueryHandler(ctx, "foo", func() (string, error) {
+			return status, nil
+		})
+		ctx1 := workflow.WithLocalActivityOptions(ctx, workflow.LocalActivityOptions{
+			ScheduleToCloseTimeout: 10 * time.Second,
+		})
+		status = "calling"
+		f1 := workflow.ExecuteLocalActivity(ctx1, localActivityFn)
+		status = "waiting"
+		err1 := f1.Get(ctx1, nil)
+		status = "done"
+
+		workflow.Sleep(ctx, 5*time.Second)
+
+		return err1
+	}
+
+	s.worker.RegisterWorkflow(workflowFn)
+
+	id := "integration-test-buffered-query"
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:                 id,
+		TaskQueue:          s.taskQueue,
+		WorkflowRunTimeout: 20 * time.Second,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	if err != nil {
+		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
+	}
+
+	s.NotNil(workflowRun)
+	s.True(workflowRun.GetRunID() != "")
+
+	// wait until first wf task started
+	wfStarted.Wait()
+
+	go func() {
+		// sleep 2s to make sure DescribeMutableState is called after QueryWorkflow
+		time.Sleep(2 * time.Second)
+		// make DescribeMutableState call, which force mutable state to reload from db
+		s.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+			Namespace: s.namespace,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: id,
+				RunId:      workflowRun.GetRunID(),
+			},
+		})
+	}()
+
+	// this query will be buffered in mutable state because workflow task is in-flight.
+	encodedQueryResult, err := s.sdkClient.QueryWorkflow(ctx, id, workflowRun.GetRunID(), "foo")
+
+	s.NoError(err)
+	var queryResult string
+	err = encodedQueryResult.Get(&queryResult)
+	s.NoError(err)
+	s.Equal("done", queryResult)
+
+	err = workflowRun.Get(ctx, nil)
+	s.NoError(err)
 }
 
 func (s *clientIntegrationSuite) printHistory(workflowID string, runID string) {
