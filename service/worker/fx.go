@@ -28,11 +28,10 @@ import (
 	"context"
 
 	sdkclient "go.temporal.io/sdk/client"
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/common"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
+	"go.uber.org/fx"
 )
 
 var Module = fx.Options(
