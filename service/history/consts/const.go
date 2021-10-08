@@ -72,6 +72,8 @@ var (
 	ErrSizeExceedsLimit = serviceerror.NewResourceExhausted(common.FailureReasonSizeExceedsLimit)
 	// ErrUnknownCluster is error indicating unknown cluster
 	ErrUnknownCluster = serviceerror.NewInvalidArgument("unknown cluster")
+	// ErrBufferedQueryCleared is error indicating mutable state is cleared while buffered query is pending
+	ErrBufferedQueryCleared = serviceerror.NewUnavailable("buffered query cleared, please retry")
 
 	// FailedWorkflowStatuses is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API

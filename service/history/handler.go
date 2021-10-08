@@ -34,14 +34,13 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -52,9 +51,11 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/task"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type (
@@ -961,7 +962,15 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 		return nil, h.convertError(err1)
 	}
 
-	resp, err2 := engine.QueryWorkflow(ctx, request)
+	var resp *historyservice.QueryWorkflowResponse
+	err2 := backoff.RetryContext(ctx, func(ctx context.Context) error {
+		var err error
+		resp, err = engine.QueryWorkflow(ctx, request)
+		return err
+	}, common.CreateHistoryServiceRetryPolicy(), func(err error) bool {
+		return err == consts.ErrBufferedQueryCleared
+	})
+
 	if err2 != nil {
 		return nil, h.convertError(err2)
 	}

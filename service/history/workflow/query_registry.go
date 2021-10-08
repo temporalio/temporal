@@ -29,6 +29,7 @@ import (
 
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/service/history/consts"
 )
 
 var (
@@ -53,6 +54,7 @@ type (
 		BufferQuery(queryInput *querypb.WorkflowQuery) (string, <-chan struct{})
 		SetTerminationState(string, *QueryTerminationState) error
 		RemoveQuery(id string)
+		Clear()
 	}
 
 	queryRegistryImpl struct {
@@ -190,6 +192,19 @@ func (r *queryRegistryImpl) RemoveQuery(id string) {
 	delete(r.completed, id)
 	delete(r.unblocked, id)
 	delete(r.failed, id)
+}
+
+func (r *queryRegistryImpl) Clear() {
+	r.Lock()
+	defer r.Unlock()
+	for id, q := range r.buffered {
+		q.setTerminationState(&QueryTerminationState{
+			QueryTerminationType: QueryTerminationTypeFailed,
+			Failure:              consts.ErrBufferedQueryCleared,
+		})
+		r.failed[id] = q
+	}
+	r.buffered = make(map[string]query)
 }
 
 func (r *queryRegistryImpl) getQueryNoLock(id string) (query, error) {
