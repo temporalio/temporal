@@ -479,6 +479,16 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_KeywordQuery() {
 	s.NoError(err)
 	s.Len(resp.GetExecutions(), 0)
 
+	// Inordered match on Keyword (not supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomKeywordField = "keyword test 1"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 0)
+
 	// LIKE exact match on Keyword (supported)
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
