@@ -479,6 +479,16 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_KeywordQuery() {
 	s.NoError(err)
 	s.Len(resp.GetExecutions(), 0)
 
+	// LIKE exact match on Keyword (supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomKeywordField LIKE "%test keyword 1%"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 1)
+
 	// LIKE %word% on Keyword (not supported)
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
@@ -494,16 +504,6 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_KeywordQuery() {
 		Namespace: s.namespace,
 		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
 		Query:     `CustomKeywordField LIKE "%st%"`,
-	}
-	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	s.Len(resp.GetExecutions(), 0)
-
-	// LIKE chars on Keyword (not supported)
-	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
-		Query:     `CustomKeywordField LIKE "st"`, // Same as previous because % just removed for LIKE queries.
 	}
 	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
 	s.NoError(err)
@@ -572,6 +572,16 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_StringQuery() {
 	s.NoError(err)
 	s.Len(resp.GetExecutions(), 1)
 
+	// Inordered match on String (supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomStringField = "string test 1"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 1)
+
 	// LIKE %word% on String (supported)
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
@@ -582,7 +592,17 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_StringQuery() {
 	s.NoError(err)
 	s.Len(resp.GetExecutions(), 1)
 
-	// LIKE %chars% on String (supported)
+	// LIKE word on String (supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomStringField LIKE "test"`, // Same as previous because % just removed for LIKE queries.
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 1)
+
+	// LIKE %chars% on String (not supported)
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
@@ -590,17 +610,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_StringQuery() {
 	}
 	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
 	s.NoError(err)
-	s.Len(resp.GetExecutions(), 0) //!!!!
-
-	// LIKE chars on String (supported)
-	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
-		Query:     `CustomStringField LIKE "st"`, // Same as previous because % just removed for LIKE queries.
-	}
-	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	s.Len(resp.GetExecutions(), 0) //!!!!
+	s.Len(resp.GetExecutions(), 0)
 
 	// LIKE NOT %word% on String (supported)
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
@@ -611,16 +621,6 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_StringQuery() {
 	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
 	s.NoError(err)
 	s.Len(resp.GetExecutions(), 0)
-
-	// LIKE NOT %chars% on String (supported)
-	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
-		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
-		Query:     `CustomStringField NOT LIKE "%st%"`,
-	}
-	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
-	s.NoError(err)
-	s.Len(resp.GetExecutions(), 1) //!!!!
 }
 
 // To test last page search trigger max window size error
