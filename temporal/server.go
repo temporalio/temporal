@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
+	"go.temporal.io/server/service/worker"
 )
 
 const (
@@ -282,27 +283,7 @@ func (s *Server) Start() error {
 			}
 			continue
 		case primitives.WorkerService:
-			// todo: generalize this custom case logic as other services onboard fx
-			workerApp := fx.New(
-				fx.Supply(
-					params,
-					s.serviceStoppedChs[svcName],
-				),
-				matching.Module)
-			err = workerApp.Err()
-			if err != nil {
-				close(s.serviceStoppedChs[svcName])
-				return fmt.Errorf("unable to construct service %q: %w", svcName, err)
-			}
-			s.serviceApps[svcName] = workerApp
-			timeoutCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStartTimeout)
-			err = workerApp.Start(timeoutCtx)
-			cancelFunc()
-			if err != nil {
-				close(s.serviceStoppedChs[svcName])
-				return fmt.Errorf("unable to start service %q: %w", svcName, err)
-			}
-			continue
+			svc, err = worker.NewService(params)
 		default:
 			return fmt.Errorf("unknown service %q", svcName)
 		}

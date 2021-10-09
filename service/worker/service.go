@@ -75,20 +75,32 @@ type (
 	}
 )
 
+// NewService builds a new worker service
 func NewService(
-	serviceResource resource.Resource,
-	serviceConfig *Config,
-	sdkClient sdkclient.Client,
-	esClient esclient.Client,
-) *Service {
+	params *resource.BootstrapParams,
+) (*Service, error) {
+
+	serviceConfig := NewConfig(params)
+
+	serviceResource, err := resource.New(
+		params,
+		common.WorkerServiceName,
+		serviceConfig.PersistenceMaxQPS,
+		serviceConfig.PersistenceGlobalMaxQPS,
+		serviceConfig.ThrottledLogRPS,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Service{
 		Resource:  serviceResource,
 		status:    common.DaemonStatusInitialized,
 		config:    serviceConfig,
-		sdkClient: sdkClient,
-		esClient:  esClient,
+		sdkClient: params.SdkClient,
+		esClient:  params.ESClient,
 		stopC:     make(chan struct{}),
-	}
+	}, nil
 }
 
 // NewConfig builds the new Config for worker service
