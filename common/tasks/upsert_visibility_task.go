@@ -47,7 +47,7 @@ func (t *UpsertExecutionVisibilityTask) GetWorkflowIdentifier() definition.Workf
 
 func (t *UpsertExecutionVisibilityTask) GetKey() Key {
 	return Key{
-		FireTime: time.Time{},
+		FireTime: time.Unix(0, 0),
 		TaskID:   t.TaskID,
 	}
 }

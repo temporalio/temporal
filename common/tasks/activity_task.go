@@ -48,7 +48,7 @@ func (a *ActivityTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
 
 func (a *ActivityTask) GetKey() Key {
 	return Key{
-		FireTime: time.Time{},
+		FireTime: time.Unix(0, 0),
 		TaskID:   a.TaskID,
 	}
 }

@@ -45,7 +45,7 @@ func (t *CloseExecutionVisibilityTask) GetWorkflowIdentifier() definition.Workfl
 
 func (t *CloseExecutionVisibilityTask) GetKey() Key {
 	return Key{
-		FireTime: time.Time{},
+		FireTime: time.Unix(0, 0),
 		TaskID:   t.TaskID,
 	}
 }

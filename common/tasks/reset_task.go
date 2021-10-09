@@ -45,7 +45,7 @@ func (a *ResetWorkflowTask) GetWorkflowIdentifier() definition.WorkflowIdentifie
 
 func (a *ResetWorkflowTask) GetKey() Key {
 	return Key{
-		FireTime: time.Time{},
+		FireTime: time.Unix(0, 0),
 		TaskID:   a.TaskID,
 	}
 }
