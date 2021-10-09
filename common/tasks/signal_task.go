@@ -50,7 +50,7 @@ func (u *SignalExecutionTask) GetWorkflowIdentifier() definition.WorkflowIdentif
 
 func (u *SignalExecutionTask) GetKey() Key {
 	return Key{
-		FireTime: time.Time{},
+		FireTime: time.Unix(0, 0),
 		TaskID:   u.TaskID,
 	}
 }

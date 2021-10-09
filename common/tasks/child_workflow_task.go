@@ -48,7 +48,7 @@ func (a *StartChildExecutionTask) GetWorkflowIdentifier() definition.WorkflowIde
 
 func (u *StartChildExecutionTask) GetKey() Key {
 	return Key{
-		FireTime: time.Time{},
+		FireTime: time.Unix(0, 0),
 		TaskID:   u.TaskID,
 	}
 }
