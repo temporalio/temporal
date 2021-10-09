@@ -22,58 +22,51 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package persistence
+package worker
 
 import (
-	"fmt"
-	"io"
-	"io/ioutil"
-	"os"
-	"strings"
+	"context"
+
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/server/common"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/resource"
+	"go.uber.org/fx"
 )
 
-const (
-	queryDelimiter        = ";"
-	querySliceDefaultSize = 100
+var Module = fx.Options(
+	resource.Module,
+	fx.Provide(ParamsExpandProvider), // BootstrapParams should be deprecated
+	fx.Provide(NewService),
+	fx.Invoke(ServiceLifetimeHooks),
 )
 
-// LoadAndSplitQuery loads and split cql / sql query into one statement per string
-func LoadAndSplitQuery(
-	filePaths []string,
-) ([]string, error) {
-	var files []io.Reader
-
-	for _, filePath := range filePaths {
-		f, err := os.Open(filePath)
-		if err != nil {
-			return nil, fmt.Errorf("error opening file %s: %w", filePath, err)
-		}
-		files = append(files, f)
-	}
-
-	return LoadAndSplitQueryFromReaders(files)
+func ParamsExpandProvider(params *resource.BootstrapParams) (sdkclient.Client, esclient.Client) {
+	return params.SdkClient,
+		params.ESClient
 }
 
-// LoadAndSplitQueryFromReaders loads and split cql / sql query into one statement per string
-func LoadAndSplitQueryFromReaders(
-	readers []io.Reader,
-) ([]string, error) {
+func ServiceLifetimeHooks(
+	lc fx.Lifecycle,
+	svcStoppedCh chan struct{},
+	svc *Service,
+) {
+	lc.Append(
+		fx.Hook{
+			OnStart: func(context.Context) error {
+				go func(svc common.Daemon, svcStoppedCh chan<- struct{}) {
+					// Start is blocked until Stop() is called.
+					svc.Start()
+					close(svcStoppedCh)
+				}(svc, svcStoppedCh)
 
-	result := make([]string, 0, querySliceDefaultSize)
+				return nil
+			},
+			OnStop: func(ctx context.Context) error {
+				svc.Stop()
+				return nil
+			},
+		},
+	)
 
-	for _, r := range readers {
-		content, err := ioutil.ReadAll(r)
-		if err != nil {
-			return nil, fmt.Errorf("error reading contents: %w", err)
-		}
-		for _, stmt := range strings.Split(string(content), queryDelimiter) {
-			stmt = strings.TrimSpace(stmt)
-			if stmt == "" {
-				continue
-			}
-			result = append(result, stmt)
-		}
-
-	}
-	return result, nil
 }

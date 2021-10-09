@@ -40,7 +40,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service"
-	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/matching/configs"
 )
 
 var Module = fx.Options(

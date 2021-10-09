@@ -80,3 +80,7 @@ func (mc *noopClient) GetMapValue(name Key, filters map[Filter]interface{}, defa
 func (mc *noopClient) GetDurationValue(name Key, filters map[Filter]interface{}, defaultValue time.Duration) (time.Duration, error) {
 	return defaultValue, errors.New("unable to find key")
 }
+
+// TODO: remove in 1.14
+func (mc *noopClient) IsNoopClient() {
+}

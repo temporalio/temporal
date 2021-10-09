@@ -60,7 +60,6 @@ import (
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
-	"go.temporal.io/server/service/worker"
 )
 
 const (
@@ -128,10 +127,17 @@ func (s *Server) Start() error {
 	}
 
 	if s.so.dynamicConfigClient == nil {
-		s.so.dynamicConfigClient, err = dynamicconfig.NewFileBasedClient(&s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
-		if err != nil {
-			s.logger.Info("Error creating file based dynamic config client, use no-op config client instead.", tag.Error(err))
+		if s.so.config.DynamicConfigClient != nil {
+			s.so.dynamicConfigClient, err = dynamicconfig.NewFileBasedClient(s.so.config.DynamicConfigClient, s.logger, s.stoppedCh)
+			if err != nil {
+				// TODO: uncomment the next line and remove next 3 lines in 1.14.
+				// return fmt.Errorf("unable to create dynamic config client: %w", err)
+				s.logger.Error("Unable to read dynamic config file. Continue with default settings but the ERROR MUST BE FIXED before the next upgrade", tag.Error(err))
+				s.so.dynamicConfigClient = dynamicconfig.NewNoopClient()
+			}
+		} else {
 			s.so.dynamicConfigClient = dynamicconfig.NewNoopClient()
+			s.logger.Info("Dynamic config client is not configured. Using default values.")
 		}
 	}
 	dc := dynamicconfig.NewCollection(s.so.dynamicConfigClient, s.logger)
@@ -200,12 +206,37 @@ func (s *Server) Start() error {
 			return err
 		}
 
+		// TODO: remove in 1.14 together with IsNoopClient func from NoopClient.
+		if _, ok := s.so.dynamicConfigClient.(interface{ IsNoopClient() }); ok {
+			params.MetricsClient.IncCounter(metrics.DynamicConfigScope, metrics.NoopImplementationIsUsed)
+		}
+
 		s.serviceStoppedChs[svcName] = make(chan struct{})
 
 		var svc common.Daemon
 		switch svcName {
 		case primitives.FrontendService:
-			svc, err = frontend.NewService(params)
+			// todo: generalize this custom case logic as other services onboard fx
+			frontendApp := fx.New(
+				fx.Supply(
+					params,
+					s.serviceStoppedChs[svcName],
+				),
+				frontend.Module)
+			err = frontendApp.Err()
+			if err != nil {
+				close(s.serviceStoppedChs[svcName])
+				return fmt.Errorf("unable to construct service %q: %w", svcName, err)
+			}
+			s.serviceApps[svcName] = frontendApp
+			timeoutCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStartTimeout)
+			err = frontendApp.Start(timeoutCtx)
+			cancelFunc()
+			if err != nil {
+				close(s.serviceStoppedChs[svcName])
+				return fmt.Errorf("unable to start service %q: %w", svcName, err)
+			}
+			continue
 		case primitives.HistoryService:
 			// todo: generalize this custom case logic as other services onboard fx
 			histApp := fx.New(
@@ -251,7 +282,27 @@ func (s *Server) Start() error {
 			}
 			continue
 		case primitives.WorkerService:
-			svc, err = worker.NewService(params)
+			// todo: generalize this custom case logic as other services onboard fx
+			workerApp := fx.New(
+				fx.Supply(
+					params,
+					s.serviceStoppedChs[svcName],
+				),
+				matching.Module)
+			err = workerApp.Err()
+			if err != nil {
+				close(s.serviceStoppedChs[svcName])
+				return fmt.Errorf("unable to construct service %q: %w", svcName, err)
+			}
+			s.serviceApps[svcName] = workerApp
+			timeoutCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStartTimeout)
+			err = workerApp.Start(timeoutCtx)
+			cancelFunc()
+			if err != nil {
+				close(s.serviceStoppedChs[svcName])
+				return fmt.Errorf("unable to start service %q: %w", svcName, err)
+			}
+			continue
 		default:
 			return fmt.Errorf("unknown service %q", svcName)
 		}

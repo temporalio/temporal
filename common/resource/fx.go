@@ -69,6 +69,7 @@ type (
 )
 
 var Module = fx.Options(
+	persistenceClient.FactoryModule,
 	fx.Provide(SnTaggedLoggerProvider),
 	fx.Provide(ThrottledLoggerProvider),
 	fx.Provide(PersistenceConfigProvider),
@@ -83,15 +84,16 @@ var Module = fx.Options(
 	fx.Provide(AbstractDatastoreFactoryProvider),
 	fx.Provide(ClusterNameProvider),
 	fx.Provide(MetricsClientProvider),
-	persistenceClient.FactoryModule,
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
 	fx.Provide(SearchAttributeMapperProvider),
 	fx.Provide(MetadataManagerProvider),
 	fx.Provide(NamespaceCacheProvider),
 	fx.Provide(serialization.NewSerializer),
-	fx.Provide(ArchiverProviderProvider),
 	fx.Provide(ArchivalMetadataProvider),
+	fx.Provide(ArchiverProviderProvider),
+	fx.Provide(HistoryBootstrapContainerProvider),
+	fx.Provide(VisibilityBootstrapContainerProvider),
 	fx.Provide(PersistenceBeanProvider),
 	fx.Provide(MembershipFactoryProvider),
 	fx.Provide(MembershipMonitorProvider),
@@ -105,6 +107,7 @@ var Module = fx.Options(
 	fx.Provide(RingpopChannelProvider),
 	fx.Provide(RuntimeMetricsReporterProvider),
 	fx.Provide(NewFromDI),
+	fx.Invoke(RegisterBootstrapContainer),
 )
 
 func SnTaggedLoggerProvider(logger log.Logger, sn ServiceName) SnTaggedLogger {
@@ -307,6 +310,45 @@ func RuntimeMetricsReporterProvider(
 		time.Minute,
 		logger,
 		string(instanceID),
+	)
+}
+
+func VisibilityBootstrapContainerProvider(
+	logger SnTaggedLogger,
+	metricsClient metrics.Client,
+	clusterMetadata cluster.Metadata,
+) *archiver.VisibilityBootstrapContainer {
+	return &archiver.VisibilityBootstrapContainer{
+		Logger:          logger,
+		MetricsClient:   metricsClient,
+		ClusterMetadata: clusterMetadata,
+	}
+}
+
+func HistoryBootstrapContainerProvider(
+	logger SnTaggedLogger,
+	metricsClient metrics.Client,
+	clusterMetadata cluster.Metadata,
+	persistenceBean persistenceClient.Bean,
+) *archiver.HistoryBootstrapContainer {
+	return &archiver.HistoryBootstrapContainer{
+		ExecutionManager: persistenceBean.GetExecutionManager(),
+		Logger:           logger,
+		MetricsClient:    metricsClient,
+		ClusterMetadata:  clusterMetadata,
+	}
+}
+
+func RegisterBootstrapContainer(
+	archiverProvider provider.ArchiverProvider,
+	serviceName ServiceName,
+	visibilityArchiverBootstrapContainer *archiver.VisibilityBootstrapContainer,
+	historyArchiverBootstrapContainer *archiver.HistoryBootstrapContainer,
+) error {
+	return archiverProvider.RegisterBootstrapContainer(
+		string(serviceName),
+		historyArchiverBootstrapContainer,
+		visibilityArchiverBootstrapContainer,
 	)
 }
 

@@ -399,9 +399,19 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		}
 	}
 
-	frontendService, err := frontend.NewService(params)
+	stoppedCh := make(chan struct{})
+	var frontendService *frontend.Service
+	feApp := fx.New(
+		fx.Supply(
+			params,
+			stoppedCh,
+		),
+		frontend.Module,
+		fx.Populate(&frontendService),
+	)
+	err = feApp.Err()
 	if err != nil {
-		params.Logger.Fatal("unable to start frontend service", tag.Error(err))
+		params.Logger.Fatal("unable to construct frontend service", tag.Error(err))
 	}
 
 	if c.mockAdminClient != nil {

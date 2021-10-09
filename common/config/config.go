@@ -59,7 +59,7 @@ type (
 		PublicClient PublicClient `yaml:"publicClient"`
 		// DynamicConfigClient is the config for setting up the file based dynamic config client
 		// Filepath should be relative to the root directory
-		DynamicConfigClient dynamicconfig.FileBasedClientConfig `yaml:"dynamicConfigClient"`
+		DynamicConfigClient *dynamicconfig.FileBasedClientConfig `yaml:"dynamicConfigClient"`
 		// NamespaceDefaults is the default config for every namespace
 		NamespaceDefaults NamespaceDefaults `yaml:"namespaceDefaults"`
 	}

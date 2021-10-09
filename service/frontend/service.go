@@ -33,25 +33,17 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/rpc"
-	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/service/frontend/configs"
 )
 
 // Config represents configuration for frontend service
@@ -199,144 +191,25 @@ type Service struct {
 	sdkMetricsReporter    metrics.Reporter
 }
 
-// NewService builds a new frontend service
 func NewService(
-	params *resource.BootstrapParams,
-) (*Service, error) {
-
-	isAdvancedVisExistInConfig := len(params.PersistenceConfig.AdvancedVisibilityStore) != 0
-	serviceConfig := NewConfig(
-		dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger),
-		params.PersistenceConfig.NumHistoryShards,
-		params.ESConfig.GetVisibilityIndex(),
-		isAdvancedVisExistInConfig)
-
-	serviceResource, err := resource.New(
-		params,
-		common.FrontendServiceName,
-		serviceConfig.PersistenceMaxQPS,
-		serviceConfig.PersistenceGlobalMaxQPS,
-		serviceConfig.ThrottledLogRPS,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	var namespaceReplicationQueue persistence.NamespaceReplicationQueue
-	clusterMetadata := serviceResource.GetClusterMetadata()
-	if clusterMetadata.IsGlobalNamespaceEnabled() {
-		namespaceReplicationQueue = serviceResource.GetNamespaceReplicationQueue()
-	}
-
-	metricsInterceptor := interceptor.NewTelemetryInterceptor(
-		serviceResource.GetNamespaceRegistry(),
-		serviceResource.GetMetricsClient(),
-		metrics.FrontendAPIMetricsScopes(),
-		serviceResource.GetLogger(),
-	)
-	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
-		configs.NewRequestToRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
-		map[string]int{},
-	)
-	namespaceRateLimiterInterceptor := interceptor.NewNamespaceRateLimitInterceptor(
-		serviceResource.GetNamespaceRegistry(),
-		quotas.NewNamespaceRateLimiter(
-			func(req quotas.Request) quotas.RequestRateLimiter {
-				return configs.NewRequestToRateLimiter(func() float64 {
-					return namespaceRPS(
-						serviceConfig,
-						serviceResource.GetFrontendServiceResolver(),
-						req.Caller,
-					)
-				})
-			},
-		),
-		map[string]int{},
-	)
-	namespaceCountLimiterInterceptor := interceptor.NewNamespaceCountLimitInterceptor(
-		serviceResource.GetNamespaceRegistry(),
-		serviceConfig.MaxNamespaceCountPerInstance,
-		configs.ExecutionAPICountLimitOverride,
-	)
-
-	namespaceLogger := params.NamespaceLogger
-	namespaceLogInterceptor := interceptor.NewNamespaceLogInterceptor(
-		serviceResource.GetNamespaceRegistry(),
-		namespaceLogger)
-
-	kep := keepalive.EnforcementPolicy{
-		MinTime:             serviceConfig.KeepAliveMinTime(),
-		PermitWithoutStream: serviceConfig.KeepAlivePermitWithoutStream(),
-	}
-	var kp = keepalive.ServerParameters{
-		MaxConnectionIdle:     serviceConfig.KeepAliveMaxConnectionIdle(),
-		MaxConnectionAge:      serviceConfig.KeepAliveMaxConnectionAge(),
-		MaxConnectionAgeGrace: serviceConfig.KeepAliveMaxConnectionAgeGrace(),
-		Time:                  serviceConfig.KeepAliveTime(),
-		Timeout:               serviceConfig.KeepAliveTimeout(),
-	}
-
-	grpcServerOptions, err := params.RPCFactory.GetFrontendGRPCServerOptions()
-	if err != nil {
-		params.Logger.Fatal("creating gRPC server options failed", tag.Error(err))
-	}
-	grpcServerOptions = append(
-		grpcServerOptions,
-		grpc.KeepaliveParams(kp),
-		grpc.KeepaliveEnforcementPolicy(kep),
-		grpc.ChainUnaryInterceptor(
-			namespaceLogInterceptor.Intercept,
-			rpc.ServiceErrorInterceptor,
-			metrics.NewServerMetricsContextInjectorInterceptor(),
-			metricsInterceptor.Intercept,
-			rateLimiterInterceptor.Intercept,
-			namespaceRateLimiterInterceptor.Intercept,
-			namespaceCountLimiterInterceptor.Intercept,
-			authorization.NewAuthorizationInterceptor(
-				params.ClaimMapper,
-				params.Authorizer,
-				serviceResource.GetMetricsClient(),
-				params.Logger,
-				params.AudienceGetter,
-			),
-		),
-	)
-
-	visibilityMgr, err := visibility.NewManager(
-		params.PersistenceConfig,
-		params.PersistenceServiceResolver,
-		params.ESConfig.GetVisibilityIndex(),
-		params.ESClient,
-		nil, // frontend visibility never write
-		serviceResource.GetSearchAttributesProvider(),
-		params.SearchAttributesMapper,
-		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,
-		serviceConfig.StandardVisibilityPersistenceMaxWriteQPS,
-		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,
-		serviceConfig.AdvancedVisibilityPersistenceMaxWriteQPS,
-		serviceConfig.EnableReadVisibilityFromES,
-		dynamicconfig.GetStringPropertyFn(visibility.AdvancedVisibilityWritingModeOff), // frontend visibility never write
-		params.MetricsClient,
-		params.Logger,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	wfHandler := NewWorkflowHandler(serviceResource, serviceConfig, namespaceReplicationQueue, visibilityMgr)
-	handler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy)
-
+	serviceResource resource.Resource,
+	serviceConfig *Config,
+	server *grpc.Server,
+	handler Handler,
+	adminHandler *AdminHandler,
+	versionChecker *VersionChecker,
+	visibilityMgr manager.VisibilityManager,
+) *Service {
 	return &Service{
 		Resource:          serviceResource,
 		status:            common.DaemonStatusInitialized,
 		config:            serviceConfig,
-		server:            grpc.NewServer(grpcServerOptions...),
+		server:            server,
 		handler:           handler,
-		adminHandler:      NewAdminHandler(serviceResource, params, serviceConfig),
-		versionChecker:    NewVersionChecker(serviceConfig, params.MetricsClient, serviceResource.GetClusterMetadataManager()),
+		adminHandler:      adminHandler,
+		versionChecker:    versionChecker,
 		visibilityManager: visibilityMgr,
-	}, nil
+	}
 }
 
 // Start starts the service
