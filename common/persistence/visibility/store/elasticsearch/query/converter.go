@@ -303,20 +303,16 @@ func (c *Converter) convertComparisonExpr(expr *sqlparser.ComparisonExpr) (elast
 		query = elastic.NewRangeQuery(colName).Gt(colValues[0])
 	case "<":
 		query = elastic.NewRangeQuery(colName).Lt(colValues[0])
-	case "=":
-		// Not elastic.NewTermQuery to support String custom search attributes.
-		query = elastic.NewMatchPhraseQuery(colName, colValues[0])
-	case "!=":
-		// Not elastic.NewTermQuery to support String custom search attributes.
-		query = elastic.NewBoolQuery().MustNot(elastic.NewMatchPhraseQuery(colName, colValues[0]))
+	case "=", "like": // The only difference is that "%" is removed for LIKE queries.
+		// Not elastic.NewTermQuery to support partial word match for String custom search attributes.
+		query = elastic.NewMatchQuery(colName, colValues[0])
+	case "!=", "not like":
+		// Not elastic.NewTermQuery to support partial word match for String custom search attributes.
+		query = elastic.NewBoolQuery().MustNot(elastic.NewMatchQuery(colName, colValues[0]))
 	case "in":
 		query = elastic.NewTermsQuery(colName, colValues...)
 	case "not in":
 		query = elastic.NewBoolQuery().MustNot(elastic.NewTermsQuery(colName, colValues...))
-	case "like":
-		query = elastic.NewMatchPhraseQuery(colName, colValues[0])
-	case "not like":
-		query = elastic.NewBoolQuery().MustNot(elastic.NewMatchPhraseQuery(colName, colValues[0]))
 	}
 
 	return query, nil

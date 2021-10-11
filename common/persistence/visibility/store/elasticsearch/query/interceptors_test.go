@@ -72,7 +72,7 @@ func TestNameInterceptor(t *testing.T) {
 	assert.NoError(t, err)
 	actualQueryMap, _ := query.Source()
 	actualQueryJson, _ := json.Marshal(actualQueryMap)
-	assert.Equal(t, `{"bool":{"filter":{"match_phrase":{"ExecutionStatus1":{"query":"Running"}}}}}`, string(actualQueryJson))
+	assert.Equal(t, `{"bool":{"filter":{"match":{"ExecutionStatus1":{"query":"Running"}}}}}`, string(actualQueryJson))
 	var actualSorterMaps []interface{}
 	for _, sorter := range sorters {
 		actualSorterMap, _ := sorter.Source()
@@ -93,7 +93,7 @@ func TestValuesInterceptor(t *testing.T) {
 	assert.NoError(t, err)
 	actualQueryMap, _ := query.Source()
 	actualQueryJson, _ := json.Marshal(actualQueryMap)
-	assert.Equal(t, `{"bool":{"filter":{"match_phrase":{"ExecutionStatus":{"query":"Status1"}}}}}`, string(actualQueryJson))
+	assert.Equal(t, `{"bool":{"filter":{"match":{"ExecutionStatus":{"query":"Status1"}}}}}`, string(actualQueryJson))
 
 	query, _, err = c.ConvertWhereOrderBy("ExecutionStatus in (1,2)")
 	assert.NoError(t, err)

@@ -36,6 +36,7 @@ import (
 	"flag"
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -425,6 +426,232 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_OrQuery() {
 	searchValBytes = e1.SearchAttributes.GetIndexedFields()[key]
 	payload.Decode(searchValBytes, &searchVal)
 	s.Equal(3, searchVal)
+}
+
+func (s *elasticsearchIntegrationSuite) TestListWorkflow_KeywordQuery() {
+	id := "es-integration-list-workflow-keyword-query-test"
+	wt := "es-integration-list-workflow-keyword-query-test-type"
+	tl := "es-integration-list-workflow-keyword-query-test-taskqueue"
+	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
+
+	searchAttr := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomKeywordField": payload.EncodeString("justice for all"),
+		},
+	}
+	request.SearchAttributes = searchAttr
+	we1, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err)
+
+	time.Sleep(waitForESToSettle)
+
+	// Exact match Keyword (supported)
+	var openExecution *workflowpb.WorkflowExecutionInfo
+	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomKeywordField = "justice for all"`,
+	}
+	for i := 0; i < numOfRetry; i++ {
+		resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+		s.NoError(err)
+		if len(resp.GetExecutions()) == 1 {
+			openExecution = resp.GetExecutions()[0]
+			break
+		}
+		time.Sleep(waitTimeInMs * time.Millisecond)
+	}
+	s.NotNil(openExecution)
+	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
+	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
+	saPayload := openExecution.SearchAttributes.GetIndexedFields()["CustomKeywordField"]
+	var saValue string
+	err = payload.Decode(saPayload, &saValue)
+	s.NoError(err)
+	s.Equal("justice for all", saValue)
+
+	// Partial match on Keyword (not supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomKeywordField = "justice"`,
+	}
+	resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 0)
+
+	// Inordered match on Keyword (not supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomKeywordField = "all for justice"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 0)
+
+	// LIKE exact match on Keyword (supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomKeywordField LIKE "%justice for all%"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 1)
+
+	// LIKE %word% on Keyword (not supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomKeywordField LIKE "%justice%"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 0)
+
+	// LIKE %chars% on Keyword (not supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomKeywordField LIKE "%ice%"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 0)
+
+	// LIKE NOT %chars% on Keyword (not supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomKeywordField NOT LIKE "%ice%"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	executionCount := 0
+	for _, execution := range resp.GetExecutions() {
+		saPayload := execution.SearchAttributes.GetIndexedFields()["CustomKeywordField"]
+		var saValue string
+		err = payload.Decode(saPayload, &saValue)
+		s.NoError(err)
+		if strings.Contains(saValue, "ice") {
+			executionCount++ // execution will be found because NOT LIKE is not supported.
+		}
+	}
+	s.Equal(executionCount, 1)
+}
+
+func (s *elasticsearchIntegrationSuite) TestListWorkflow_StringQuery() {
+	id := "es-integration-list-workflow-string-query-test"
+	wt := "es-integration-list-workflow-string-query-test-type"
+	tl := "es-integration-list-workflow-string-query-test-taskqueue"
+	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
+
+	searchAttr := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"CustomStringField": payload.EncodeString("nothing else matters"),
+		},
+	}
+	request.SearchAttributes = searchAttr
+	we1, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err)
+
+	time.Sleep(waitForESToSettle)
+
+	// Exact match String (supported)
+	var openExecution *workflowpb.WorkflowExecutionInfo
+	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomStringField = "nothing else matters"`,
+	}
+	for i := 0; i < numOfRetry; i++ {
+		resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+		s.NoError(err)
+		if len(resp.GetExecutions()) == 1 {
+			openExecution = resp.GetExecutions()[0]
+			break
+		}
+		time.Sleep(waitTimeInMs * time.Millisecond)
+	}
+	s.NotNil(openExecution)
+	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
+	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
+	saPayload := openExecution.SearchAttributes.GetIndexedFields()["CustomStringField"]
+	var saValue string
+	err = payload.Decode(saPayload, &saValue)
+	s.NoError(err)
+	s.Equal("nothing else matters", saValue)
+
+	// Partial match on String (supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomStringField = "nothing"`,
+	}
+	resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 1)
+
+	// Inordered match on String (supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomStringField = "else nothing matters"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 1)
+
+	// LIKE %word% on String (supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomStringField LIKE "%else%"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 1)
+
+	// LIKE word on String (supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomStringField LIKE "else"`, // Same as previous because % just removed for LIKE queries.
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 1)
+
+	// LIKE %chars% on String (not supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomStringField LIKE "%ls%"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	s.Len(resp.GetExecutions(), 0)
+
+	// LIKE NOT %word% on String (supported)
+	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
+		Namespace: s.namespace,
+		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
+		Query:     `CustomStringField NOT LIKE "%else%"`,
+	}
+	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
+	s.NoError(err)
+	executionCount := 0
+	for _, execution := range resp.GetExecutions() {
+		saPayload := execution.SearchAttributes.GetIndexedFields()["CustomStringField"]
+		var saValue string
+		err = payload.Decode(saPayload, &saValue)
+		s.NoError(err)
+		if strings.Contains(saValue, "else") {
+			executionCount++
+		}
+	}
+	s.Equal(executionCount, 0)
 }
 
 // To test last page search trigger max window size error
