@@ -58,7 +58,6 @@ func ParamsExpandProvider(params *resource.BootstrapParams) (
 	return params.Logger, params.ESClient, params.RPCFactory, params.DynamicConfigClient
 }
 
-
 func ThrottledLoggerRpsFnProvider(serviceConfig *Config) resource.ThrottledLoggerRpsFn {
 	return func() float64 { return float64(serviceConfig.ThrottledLogRPS()) }
 }
