@@ -33,8 +33,8 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/tasks"
 	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 func (s *nDCIntegrationTestSuite) TestReplicationMessageApplication() {

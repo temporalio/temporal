@@ -32,7 +32,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
-	"go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 func applyWorkflowMutationBatch(

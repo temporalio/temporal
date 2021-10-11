@@ -25,40 +25,66 @@
 package tasks
 
 import (
-	"go.temporal.io/server/common/backoff"
+	"time"
+
+	"go.temporal.io/server/common/definition"
 )
 
-// State represents the current state of a task
-type State int
-
-const (
-	// TaskStatePending is the state for a task when it's waiting to be processed or currently being processed
-	TaskStatePending State = iota + 1
-	// TaskStateAcked is the state for a task if it has been successfully completed
-	TaskStateAcked
-	// TaskStateNacked is the state for a task if it can not be processed
-	TaskStateNacked
-)
-
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_mock.go
 type (
-	// Task is the interface for tasks which should be executed sequentially
+	Key struct {
+		// FireTime is the scheduled time of the task
+		FireTime time.Time
+		// TaskID is the ID of the task
+		TaskID int64
+	}
+
+	Keys []Key
+
+	// Task is the generic task interface
 	Task interface {
-		// Execute process this task
-		Execute() error
-		// HandleErr handle the error returned by Execute
-		HandleErr(err error) error
-		// RetryErr check whether to retry after HandleErr(Execute())
-		RetryErr(err error) bool
-		// RetryPolicy returns the retry policy for task processing
-		RetryPolicy() backoff.RetryPolicy
-		// Ack marks the task as successful completed
-		Ack()
-		// Nack marks the task as unsuccessful completed
-		Nack()
-		// Reschedule marks the task for retry
-		Reschedule()
-		// State returns the current task state
-		State() State
+		GetWorkflowIdentifier() definition.WorkflowIdentifier
+		GetKey() Key
+		GetVersion() int64
+		SetVersion(version int64)
+		GetTaskID() int64
+		SetTaskID(id int64)
+		GetVisibilityTime() time.Time
+		SetVisibilityTime(timestamp time.Time)
 	}
 )
+
+func (left Key) CompareTo(right Key) int {
+	if left.FireTime.Before(right.FireTime) {
+		return -1
+	} else if left.FireTime.After(right.FireTime) {
+		return 1
+	}
+
+	if left.TaskID < right.TaskID {
+		return -1
+	} else if left.TaskID > right.TaskID {
+		return 1
+	}
+	return 0
+}
+
+// Len implements sort.Interface
+func (s Keys) Len() int {
+	return len(s)
+}
+
+// Swap implements sort.Interface.
+func (s Keys) Swap(
+	this int,
+	that int,
+) {
+	s[this], s[that] = s[that], s[this]
+}
+
+// Less implements sort.Interface
+func (s Keys) Less(
+	this int,
+	that int,
+) bool {
+	return s[this].CompareTo(s[that]) < 0
+}
