@@ -74,18 +74,8 @@ var Module = fx.Options(
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
-func ParamsExpandProvider(params *resource.BootstrapParams) (
-	log.Logger,
-	dynamicconfig.Client,
-	config.Persistence,
-	*esclient.Config,
-	common.RPCFactory,
-) {
-	return params.Logger,
-		params.DynamicConfigClient,
-		params.PersistenceConfig,
-		params.ESConfig,
-		params.RPCFactory
+func ParamsExpandProvider(params *resource.BootstrapParams) common.RPCFactory {
+	return params.RPCFactory
 }
 
 func GrpcServerOptionsProvider(
@@ -131,7 +121,7 @@ func GrpcServerOptionsProvider(
 				params.ClaimMapper,
 				params.Authorizer,
 				serviceResource.GetMetricsClient(),
-				params.Logger,
+				logger,
 				params.AudienceGetter,
 			),
 		),
@@ -225,15 +215,18 @@ func PersistenceMaxQpsProvider(
 }
 
 func VisibilityManagerProvider(
+	logger log.Logger,
 	params *resource.BootstrapParams,
 	serviceResource resource.Resource,
 	serviceConfig *Config,
+	esConfig *esclient.Config,
+	esClient esclient.Client,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		params.PersistenceConfig,
 		params.PersistenceServiceResolver,
-		params.ESConfig.GetVisibilityIndex(),
-		params.ESClient,
+		esConfig.GetVisibilityIndex(),
+		esClient,
 		nil, // frontend visibility never write
 		serviceResource.GetSearchAttributesProvider(),
 		params.SearchAttributesMapper,
@@ -244,7 +237,7 @@ func VisibilityManagerProvider(
 		serviceConfig.EnableReadVisibilityFromES,
 		dynamicconfig.GetStringPropertyFn(visibility.AdvancedVisibilityWritingModeOff), // frontend visibility never write
 		params.MetricsClient,
-		params.Logger,
+		logger,
 	)
 }
 

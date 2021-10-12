@@ -142,14 +142,16 @@ var _ Resource = (*Impl)(nil)
 
 // New create a new resource containing common dependencies
 func New(
+	pLogger log.Logger,
 	params *BootstrapParams,
 	serviceName string,
+	dcClient dynamicconfig.Client,
 	persistenceMaxQPS dynamicconfig.IntPropertyFn,
 	persistenceGlobalMaxQPS dynamicconfig.IntPropertyFn,
 	throttledLoggerMaxRPS dynamicconfig.IntPropertyFn,
 ) (impl *Impl, retError error) {
 
-	logger := log.With(params.Logger, tag.Service(serviceName))
+	logger := log.With(pLogger, tag.Service(serviceName))
 	throttledLogger := log.NewThrottledLogger(logger,
 		func() float64 { return float64(throttledLoggerMaxRPS()) })
 
@@ -208,7 +210,7 @@ func New(
 		return nil, err
 	}
 
-	dynamicCollection := dynamicconfig.NewCollection(params.DynamicConfigClient, logger)
+	dynamicCollection := dynamicconfig.NewCollection(dcClient, logger)
 	factoryProvider := params.ClientFactoryProvider
 	if factoryProvider == nil {
 		factoryProvider = client.NewFactoryProvider()

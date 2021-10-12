@@ -94,6 +94,8 @@ func NewAdminHandler(
 	resource resource.Resource,
 	params *resource.BootstrapParams,
 	config *Config,
+	esConfig *esclient.Config,
+	esClient esclient.Client,
 ) *AdminHandler {
 
 	namespaceReplicationTaskExecutor := namespace.NewReplicationTaskExecutor(
@@ -111,8 +113,8 @@ func NewAdminHandler(
 			resource.GetLogger(),
 		),
 		eventSerializer: serialization.NewSerializer(),
-		ESConfig:        params.ESConfig,
-		ESClient:        params.ESClient,
+		ESConfig:        esConfig,
+		ESClient:        esClient,
 	}
 }
 

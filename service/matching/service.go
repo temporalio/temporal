@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
@@ -55,14 +56,16 @@ type Service struct {
 
 // NewService builds a new matching service
 func NewService(
+	logger log.Logger,
+	dcClient dynamicconfig.Client,
 	params *resource.BootstrapParams,
 ) (*Service, error) {
-	logger := params.Logger
-
-	serviceConfig := NewConfig(dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger))
+	serviceConfig := NewConfig(dynamicconfig.NewCollection(dcClient, logger))
 	serviceResource, err := resource.New(
+		logger,
 		params,
 		common.MatchingServiceName,
+		dcClient,
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
 		serviceConfig.ThrottledLogRPS,

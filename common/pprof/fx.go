@@ -22,38 +22,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package temporal
+package pprof
 
 import (
-	"time"
+	"context"
 
-	"go.temporal.io/server/common/primitives"
+	"go.uber.org/fx"
 )
 
-const (
-	mismatchLogMessage  = "Supplied configuration key/value mismatches persisted cluster metadata. Continuing with the persisted value as this value cannot be changed once initialized."
-	serviceStartTimeout = time.Duration(15) * time.Second
-	serviceStopTimeout  = time.Duration(60) * time.Second
+// Requires *config.PProf available in container.
+var Module = fx.Options(
+	fx.Provide(NewInitializer),
+	fx.Invoke(LifetimeHooks),
 )
 
-type (
-	Server interface {
-		Start() error
-		Stop()
-	}
-)
-
-// Services is the list of all valid temporal services
-var (
-	Services = []string{
-		primitives.FrontendService,
-		primitives.HistoryService,
-		primitives.MatchingService,
-		primitives.WorkerService,
-	}
-)
-
-// NewServer returns a new instance of server that serves one or many services.
-func NewServer(opts ...ServerOption) Server {
-	return NewServerFx(opts...)
+func LifetimeHooks(
+	lc fx.Lifecycle,
+	pprof *PProfInitializerImpl,
+) {
+	lc.Append(
+		fx.Hook{
+			OnStart: func(context.Context) error {
+				return pprof.Start()
+			},
+			// todo: refactor pprof to gracefully shutdown http server
+			// OnStop: func(ctx context.Context) error {
+			// 	pprof.Stop()
+			// 	return nil
+			// },
+		},
+	)
 }

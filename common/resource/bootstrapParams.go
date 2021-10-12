@@ -34,12 +34,10 @@ import (
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -50,7 +48,6 @@ type (
 	BootstrapParams struct {
 		Name            string
 		InstanceID      string
-		Logger          log.Logger
 		ThrottledLogger log.Logger
 		NamespaceLogger log.Logger
 
@@ -65,9 +62,6 @@ type (
 		ServerMetricsReporter        metrics.Reporter
 		SDKMetricsReporter           metrics.Reporter
 		MetricsClient                metrics.Client
-		ESClient                     esclient.Client
-		ESConfig                     *esclient.Config
-		DynamicConfigClient          dynamicconfig.Client
 		DCRedirectionPolicy          config.DCRedirectionPolicy
 		SdkClient                    sdkclient.Client
 		ArchivalMetadata             archiver.ArchivalMetadata
