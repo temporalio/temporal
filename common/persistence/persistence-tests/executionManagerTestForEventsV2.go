@@ -107,7 +107,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 		WorkflowId: "test-eventsv2-workflow",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
-	workflowIdentifier := definition.NewWorkflowIdentifier(
+	workflowKey := definition.NewWorkflowKey(
 		namespaceID,
 		workflowExecution.WorkflowId,
 		workflowExecution.RunId,
@@ -140,7 +140,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 			},
 			TransferTasks: []tasks.Task{
 				&tasks.WorkflowTask{
-					WorkflowIdentifier:  workflowIdentifier,
+					WorkflowKey:         workflowKey,
 					TaskID:              s.GetNextSequenceNumber(),
 					NamespaceID:         namespaceID,
 					TaskQueue:           "taskQueue",
@@ -242,7 +242,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 			NextEventID: common.EmptyEventID,
 			TransferTasks: []tasks.Task{
 				&tasks.WorkflowTask{
-					WorkflowIdentifier: definition.NewWorkflowIdentifier(
+					WorkflowKey: definition.NewWorkflowKey(
 						namespaceID,
 						workflowExecution.WorkflowId,
 						workflowExecution.RunId,
@@ -309,7 +309,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 		WorkflowId: "continue-as-new-workflow-test",
 		RunId:      "551c88d2-d9e6-404f-8131-9eec14f36643",
 	}
-	workflowIdentifier := definition.NewWorkflowIdentifier(
+	workflowKey := definition.NewWorkflowKey(
 		namespaceID,
 		workflowExecution.WorkflowId,
 		workflowExecution.RunId,
@@ -333,11 +333,11 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	}
 
 	newworkflowTask := &tasks.WorkflowTask{
-		WorkflowIdentifier: workflowIdentifier,
-		TaskID:             s.GetNextSequenceNumber(),
-		NamespaceID:        updatedInfo.NamespaceId,
-		TaskQueue:          updatedInfo.TaskQueue,
-		ScheduleID:         int64(2),
+		WorkflowKey: workflowKey,
+		TaskID:      s.GetNextSequenceNumber(),
+		NamespaceID: updatedInfo.NamespaceId,
+		TaskQueue:   updatedInfo.TaskQueue,
+		ScheduleID:  int64(2),
 	}
 
 	_, err2 := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{

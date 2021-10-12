@@ -51,8 +51,8 @@ type (
 		mockMutableState    *MockMutableState
 		mockEventTimeSource clock.TimeSource
 
-		workflowIdentifier definition.WorkflowIdentifier
-		timerSequence      *timerSequenceImpl
+		workflowKey   definition.WorkflowKey
+		timerSequence *timerSequenceImpl
 	}
 )
 
@@ -76,12 +76,12 @@ func (s *timerSequenceSuite) SetupTest() {
 	s.mockMutableState = NewMockMutableState(s.controller)
 	s.mockEventTimeSource = clock.NewEventTimeSource()
 
-	s.workflowIdentifier = definition.NewWorkflowIdentifier(
+	s.workflowKey = definition.NewWorkflowKey(
 		tests.NamespaceID,
 		tests.WorkflowID,
 		tests.RunID,
 	)
-	s.mockMutableState.EXPECT().GetWorkflowIdentifier().Return(s.workflowIdentifier).AnyTimes()
+	s.mockMutableState.EXPECT().GetWorkflowIdentifier().Return(s.workflowKey).AnyTimes()
 	s.timerSequence = NewTimerSequence(s.mockEventTimeSource, s.mockMutableState)
 }
 
@@ -197,7 +197,7 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_BeforeWorkflowEx
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
 	s.mockMutableState.EXPECT().AddTimerTasks(&tasks.UserTimerTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: *timerExpiry,
 		EventID:             timerInfo.GetStartedId(),
 		Version:             currentVersion,
@@ -232,7 +232,7 @@ func (s *timerSequenceSuite) TestCreateNextUserTimer_NotCreated_NoWorkflowExpiry
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
 	s.mockMutableState.EXPECT().AddTimerTasks(&tasks.UserTimerTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: *timerExpiry,
 		EventID:             timerInfo.GetStartedId(),
 		Version:             currentVersion,
@@ -386,7 +386,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_BeforeWorkfl
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
 	s.mockMutableState.EXPECT().AddTimerTasks(&tasks.ActivityTimeoutTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: activityInfo.ScheduledTime.Add(*activityInfo.ScheduleToStartTimeout),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventID:             activityInfo.ScheduleId,
@@ -430,7 +430,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_NotCreated_NoWorkflowEx
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
 	s.mockMutableState.EXPECT().AddTimerTasks(&tasks.ActivityTimeoutTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: activityInfo.ScheduledTime.Add(*activityInfo.ScheduleToStartTimeout),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		EventID:             activityInfo.ScheduleId,
@@ -504,7 +504,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_BeforeWo
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
 	s.mockMutableState.EXPECT().AddTimerTasks(&tasks.ActivityTimeoutTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: taskVisibilityTimestamp,
 		TimeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		EventID:             activityInfo.ScheduleId,
@@ -550,7 +550,7 @@ func (s *timerSequenceSuite) TestCreateNextActivityTimer_HeartbeatTimer_NoWorkfl
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(currentVersion)
 	s.mockMutableState.EXPECT().AddTimerTasks(&tasks.ActivityTimeoutTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: taskVisibilityTimestamp,
 		TimeoutType:         enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		EventID:             activityInfo.ScheduleId,

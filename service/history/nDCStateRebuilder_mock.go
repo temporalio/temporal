@@ -62,7 +62,7 @@ func (m *MocknDCStateRebuilder) EXPECT() *MocknDCStateRebuilderMockRecorder {
 }
 
 // rebuild mocks base method.
-func (m *MocknDCStateRebuilder) rebuild(ctx context.Context, now time.Time, baseWorkflowIdentifier definition.WorkflowIdentifier, baseBranchToken []byte, baseLastEventID, baseLastEventVersion int64, targetWorkflowIdentifier definition.WorkflowIdentifier, targetBranchToken []byte, requestID string) (workflow.MutableState, int64, error) {
+func (m *MocknDCStateRebuilder) rebuild(ctx context.Context, now time.Time, baseWorkflowIdentifier definition.WorkflowKey, baseBranchToken []byte, baseLastEventID, baseLastEventVersion int64, targetWorkflowIdentifier definition.WorkflowKey, targetBranchToken []byte, requestID string) (workflow.MutableState, int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "rebuild", ctx, now, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, requestID)
 	ret0, _ := ret[0].(workflow.MutableState)

@@ -663,7 +663,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 		},
 	}
 
-	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
+	key := definition.NewWorkflowKey(namespaceID, workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
 	weContext.EXPECT().LoadWorkflowExecution().Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
@@ -737,7 +737,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityNotFound() {
 		},
 	}
 
-	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
+	key := definition.NewWorkflowKey(namespaceID, workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
 	weContext.EXPECT().LoadWorkflowExecution().Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
@@ -812,7 +812,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 		},
 	}
 
-	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
+	key := definition.NewWorkflowKey(namespaceID, workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
 	weContext.EXPECT().LoadWorkflowExecution().Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
@@ -902,7 +902,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 		},
 	}
 
-	key := definition.NewWorkflowIdentifier(namespaceID, workflowID, runID)
+	key := definition.NewWorkflowKey(namespaceID, workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
 	weContext.EXPECT().LoadWorkflowExecution().Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)

@@ -46,8 +46,8 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		workflowIdentifier definition.WorkflowIdentifier
-		taskSerializer     *TaskSerializer
+		workflowKey    definition.WorkflowKey
+		taskSerializer *TaskSerializer
 	}
 )
 
@@ -66,7 +66,7 @@ func (s *taskSerializerSuite) TearDownSuite() {
 func (s *taskSerializerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.workflowIdentifier = definition.NewWorkflowIdentifier(
+	s.workflowKey = definition.NewWorkflowKey(
 		"random namespace ID",
 		"random workflow ID",
 		"random run ID",
@@ -80,7 +80,7 @@ func (s *taskSerializerSuite) TearDownTest() {
 
 func (s *taskSerializerSuite) TestTransferWorkflowTask() {
 	workflowTask := &tasks.WorkflowTask{
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		NamespaceID:         uuid.New().String(),
@@ -94,7 +94,7 @@ func (s *taskSerializerSuite) TestTransferWorkflowTask() {
 
 func (s *taskSerializerSuite) TestTransferActivityTask() {
 	activityTask := &tasks.ActivityTask{
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		TargetNamespaceID:   uuid.New().String(),
@@ -108,7 +108,7 @@ func (s *taskSerializerSuite) TestTransferActivityTask() {
 
 func (s *taskSerializerSuite) TestTransferRequestCancelTask() {
 	requestCancelTask := &tasks.CancelExecutionTask{
-		WorkflowIdentifier:      s.workflowIdentifier,
+		WorkflowKey:             s.workflowKey,
 		VisibilityTimestamp:     time.Unix(0, rand.Int63()).UTC(),
 		TaskID:                  rand.Int63(),
 		TargetNamespaceID:       uuid.New().String(),
@@ -124,7 +124,7 @@ func (s *taskSerializerSuite) TestTransferRequestCancelTask() {
 
 func (s *taskSerializerSuite) TestTransferSignalTask() {
 	signalTask := &tasks.SignalExecutionTask{
-		WorkflowIdentifier:      s.workflowIdentifier,
+		WorkflowKey:             s.workflowKey,
 		VisibilityTimestamp:     time.Unix(0, rand.Int63()).UTC(),
 		TaskID:                  rand.Int63(),
 		TargetNamespaceID:       uuid.New().String(),
@@ -140,7 +140,7 @@ func (s *taskSerializerSuite) TestTransferSignalTask() {
 
 func (s *taskSerializerSuite) TestTransferChildWorkflowTask() {
 	childWorkflowTask := &tasks.StartChildExecutionTask{
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		TargetNamespaceID:   uuid.New().String(),
@@ -154,7 +154,7 @@ func (s *taskSerializerSuite) TestTransferChildWorkflowTask() {
 
 func (s *taskSerializerSuite) TestTransferCloseTask() {
 	closeTask := &tasks.CloseExecutionTask{
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
@@ -165,7 +165,7 @@ func (s *taskSerializerSuite) TestTransferCloseTask() {
 
 func (s *taskSerializerSuite) TestTransferResetTask() {
 	resetTask := &tasks.ResetWorkflowTask{
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
@@ -176,7 +176,7 @@ func (s *taskSerializerSuite) TestTransferResetTask() {
 
 func (s *taskSerializerSuite) TestTimerWorkflowTask() {
 	workflowTaskTimer := &tasks.WorkflowTaskTimeoutTask{
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		EventID:             rand.Int63(),
@@ -190,7 +190,7 @@ func (s *taskSerializerSuite) TestTimerWorkflowTask() {
 
 func (s *taskSerializerSuite) TestTimerWorkflowDelayTask() {
 	workflowDelayTimer := &tasks.WorkflowBackoffTimerTask{
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		WorkflowBackoffType: enumsspb.WorkflowBackoffType(rand.Int31n(int32(len(enumsspb.WorkflowBackoffType_name)))),
@@ -202,7 +202,7 @@ func (s *taskSerializerSuite) TestTimerWorkflowDelayTask() {
 
 func (s *taskSerializerSuite) TestTimerActivityTask() {
 	activityTaskTimer := &tasks.ActivityTimeoutTask{
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		EventID:             rand.Int63(),
@@ -216,7 +216,7 @@ func (s *taskSerializerSuite) TestTimerActivityTask() {
 
 func (s *taskSerializerSuite) TestTimerActivityRetryTask() {
 	activityRetryTimer := &tasks.ActivityRetryTimerTask{
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		EventID:             rand.Int63(),
@@ -229,7 +229,7 @@ func (s *taskSerializerSuite) TestTimerActivityRetryTask() {
 
 func (s *taskSerializerSuite) TestTimerUserTask() {
 	userTimer := &tasks.UserTimerTask{
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		EventID:             rand.Int63(),
@@ -241,7 +241,7 @@ func (s *taskSerializerSuite) TestTimerUserTask() {
 
 func (s *taskSerializerSuite) TestTimerWorkflowRun() {
 	workflowTimer := &tasks.WorkflowTimeoutTask{
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
@@ -252,7 +252,7 @@ func (s *taskSerializerSuite) TestTimerWorkflowRun() {
 
 func (s *taskSerializerSuite) TestTimerWorkflowCleanupTask() {
 	workflowCleanupTimer := &tasks.DeleteHistoryEventTask{
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
@@ -263,7 +263,7 @@ func (s *taskSerializerSuite) TestTimerWorkflowCleanupTask() {
 
 func (s *taskSerializerSuite) TestVisibilityStartTask() {
 	visibilityStart := &tasks.StartExecutionVisibilityTask{
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
@@ -274,7 +274,7 @@ func (s *taskSerializerSuite) TestVisibilityStartTask() {
 
 func (s *taskSerializerSuite) TestVisibilityUpsertTask() {
 	visibilityUpsert := &tasks.UpsertExecutionVisibilityTask{
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
@@ -285,7 +285,7 @@ func (s *taskSerializerSuite) TestVisibilityUpsertTask() {
 
 func (s *taskSerializerSuite) TestVisibilityCloseTask() {
 	visibilityClose := &tasks.CloseExecutionVisibilityTask{
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
@@ -296,7 +296,7 @@ func (s *taskSerializerSuite) TestVisibilityCloseTask() {
 
 func (s *taskSerializerSuite) TestVisibilityDeleteTask() {
 	visibilityDelete := &tasks.CloseExecutionVisibilityTask{
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
@@ -307,7 +307,7 @@ func (s *taskSerializerSuite) TestVisibilityDeleteTask() {
 
 func (s *taskSerializerSuite) TestReplicateActivityTask() {
 	replicateActivityTask := &tasks.SyncActivityTask{
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Time{},
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
@@ -319,7 +319,7 @@ func (s *taskSerializerSuite) TestReplicateActivityTask() {
 
 func (s *taskSerializerSuite) TestReplicateHistoryTask() {
 	replicateHistoryTask := &tasks.HistoryReplicationTask{
-		WorkflowIdentifier:  s.workflowIdentifier,
+		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Time{},
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),

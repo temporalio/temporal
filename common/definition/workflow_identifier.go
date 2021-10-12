@@ -25,17 +25,38 @@
 package definition
 
 type (
-	// WorkflowIdentifier is the combinations which represent a workflow
-	WorkflowIdentifier struct {
+	// WorkflowKey is the combinations which represent a current workflow
+	CurrentWorkflowKey struct {
+		NamespaceID string
+		WorkflowID  string
+	}
+
+	// WorkflowKey is the combinations which represent a workflow
+	WorkflowKey struct {
 		NamespaceID string
 		WorkflowID  string
 		RunID       string
 	}
 )
 
-// NewWorkflowIdentifier create a new WorkflowIdentifier
-func NewWorkflowIdentifier(namespaceID string, workflowID string, runID string) WorkflowIdentifier {
-	return WorkflowIdentifier{
+// NewCurrentWorkflowKey create a new CurrentWorkflowKey
+func NewCurrentWorkflowKey(
+	namespaceID string,
+	workflowID string,
+) CurrentWorkflowKey {
+	return CurrentWorkflowKey{
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+	}
+}
+
+// NewWorkflowKey create a new WorkflowKey
+func NewWorkflowKey(
+	namespaceID string,
+	workflowID string,
+	runID string,
+) WorkflowKey {
+	return WorkflowKey{
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,

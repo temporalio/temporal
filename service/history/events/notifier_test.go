@@ -97,7 +97,7 @@ func (s *notifierSuite) TestSingleSubscriberWatchingEvents() {
 	historyEvent := NewNotification(namespaceID, execution, lastFirstEventID, lastFirstEventTxnID, nextEventID, previousStartedEventID, branchToken, workflowState, workflowStatus)
 	timerChan := time.NewTimer(time.Second * 2).C
 
-	subscriberID, channel, err := s.notifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
+	subscriberID, channel, err := s.notifier.WatchHistoryEvent(definition.NewWorkflowKey(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
 	s.Nil(err)
 
 	go func() {
@@ -110,7 +110,7 @@ func (s *notifierSuite) TestSingleSubscriberWatchingEvents() {
 		s.Equal(historyEvent, msg)
 	}
 
-	err = s.notifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID)
+	err = s.notifier.UnwatchHistoryEvent(definition.NewWorkflowKey(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID)
 	s.Nil(err)
 }
 
@@ -136,7 +136,7 @@ func (s *notifierSuite) TestMultipleSubscriberWatchingEvents() {
 	waitGroup.Add(subscriberCount)
 
 	watchFunc := func() {
-		subscriberID, channel, err := s.notifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
+		subscriberID, channel, err := s.notifier.WatchHistoryEvent(definition.NewWorkflowKey(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
 		s.Nil(err)
 
 		timeourChan := time.NewTimer(time.Second * 10).C
@@ -147,7 +147,7 @@ func (s *notifierSuite) TestMultipleSubscriberWatchingEvents() {
 		case <-timeourChan:
 			s.Fail("subscribe to new events timeout")
 		}
-		err = s.notifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID)
+		err = s.notifier.UnwatchHistoryEvent(definition.NewWorkflowKey(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID)
 		s.Nil(err)
 		waitGroup.Done()
 	}

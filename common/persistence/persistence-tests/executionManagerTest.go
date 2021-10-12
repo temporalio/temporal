@@ -1018,7 +1018,7 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 		WorkflowId: "start-workflow-test",
 		RunId:      "7f9fe8a0-9237-11e6-ae22-56b6b6499611",
 	}
-	workflowIdentifier := definition.NewWorkflowIdentifier(
+	workflowKey := definition.NewWorkflowKey(
 		namespaceID,
 		workflowExecution.WorkflowId,
 		workflowExecution.RunId,
@@ -1064,11 +1064,11 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 			NextEventID: int64(3),
 			TransferTasks: []tasks.Task{
 				&tasks.WorkflowTask{
-					WorkflowIdentifier: workflowIdentifier,
-					TaskID:             s.GetNextSequenceNumber(),
-					NamespaceID:        namespaceID,
-					TaskQueue:          "queue1",
-					ScheduleID:         int64(2),
+					WorkflowKey: workflowKey,
+					TaskID:      s.GetNextSequenceNumber(),
+					NamespaceID: namespaceID,
+					TaskQueue:   "queue1",
+					ScheduleID:  int64(2),
 				},
 			},
 			TimerTasks: nil,
@@ -1743,7 +1743,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 		WorkflowId: "get-transfer-tasks-through-update-test",
 		RunId:      "30a9fa1f-0db1-4d7a-8c34-aa82c5dad3aa",
 	}
-	workflowIdentifier := definition.NewWorkflowIdentifier(
+	workflowKey := definition.NewWorkflowKey(
 		namespaceID,
 		workflowExecution.WorkflowId,
 		workflowExecution.RunId,
@@ -1759,7 +1759,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 	s.Equal(1, len(tasks1), "Expected 1 workflow task.")
 	task1 := tasks1[0]
 	s.Equal(&tasks.WorkflowTask{
-		WorkflowIdentifier:  workflowIdentifier,
+		WorkflowKey:         workflowKey,
 		NamespaceID:         namespaceID,
 		VisibilityTimestamp: task1.GetVisibilityTime(),
 		TaskID:              task1.GetTaskID(),
@@ -1786,7 +1786,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 	s.Equal(1, len(tasks2), "Expected 1 workflow task.")
 	task2 := tasks2[0]
 	s.Equal(&tasks.ActivityTask{
-		WorkflowIdentifier:  workflowIdentifier,
+		WorkflowKey:         workflowKey,
 		TargetNamespaceID:   namespaceID,
 		VisibilityTimestamp: task2.GetVisibilityTime(),
 		TaskID:              task2.GetTaskID(),
@@ -1820,7 +1820,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 	s.Equal(1, len(tasks3), "Expected 1 workflow task.")
 	task3 := tasks3[0]
 	s.Equal(&tasks.CloseExecutionTask{
-		WorkflowIdentifier:  workflowIdentifier,
+		WorkflowKey:         workflowKey,
 		VisibilityTimestamp: task3.GetVisibilityTime(),
 		TaskID:              task3.GetTaskID(),
 		Version:             0,
@@ -1843,7 +1843,7 @@ func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 		WorkflowId: "cancel-workflow-test",
 		RunId:      "db20f7e2-1a1e-40d9-9278-d8b886738e05",
 	}
-	workflowIdentifier := definition.NewWorkflowIdentifier(
+	workflowKey := definition.NewWorkflowKey(
 		namespaceID,
 		workflowExecution.WorkflowId,
 		workflowExecution.RunId,
@@ -1872,7 +1872,7 @@ func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 	targetRunID := "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 	targetChildWorkflowOnly := false
 	transferTasks := []tasks.Task{&tasks.CancelExecutionTask{
-		WorkflowIdentifier:      workflowIdentifier,
+		WorkflowKey:             workflowKey,
 		TaskID:                  s.GetNextSequenceNumber(),
 		TargetNamespaceID:       targetNamespaceID,
 		TargetWorkflowID:        targetWorkflowID,
@@ -1889,7 +1889,7 @@ func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 	s.Equal(1, len(tasks1), "Expected 1 cancel task.")
 	task1 := tasks1[0]
 	s.Equal(&tasks.CancelExecutionTask{
-		WorkflowIdentifier:      workflowIdentifier,
+		WorkflowKey:             workflowKey,
 		VisibilityTimestamp:     task1.GetVisibilityTime(),
 		TaskID:                  task1.GetTaskID(),
 		TargetNamespaceID:       targetNamespaceID,
@@ -1908,7 +1908,7 @@ func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 	targetRunID = ""
 	targetChildWorkflowOnly = true
 	transferTasks = []tasks.Task{&tasks.CancelExecutionTask{
-		WorkflowIdentifier:      workflowIdentifier,
+		WorkflowKey:             workflowKey,
 		TaskID:                  s.GetNextSequenceNumber(),
 		TargetNamespaceID:       targetNamespaceID,
 		TargetWorkflowID:        targetWorkflowID,
@@ -1933,7 +1933,7 @@ func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 	s.Equal(1, len(tasks2), "Expected 1 cancel task.")
 	task2 := tasks2[0]
 	s.Equal(&tasks.CancelExecutionTask{
-		WorkflowIdentifier:      workflowIdentifier,
+		WorkflowKey:             workflowKey,
 		VisibilityTimestamp:     task2.GetVisibilityTime(),
 		TaskID:                  task2.GetTaskID(),
 		TargetNamespaceID:       targetNamespaceID,
@@ -1968,7 +1968,7 @@ func (s *ExecutionManagerSuite) TestSignalTransferTaskTasks() {
 		WorkflowId: "signal-workflow-test",
 		RunId:      "db20f7e2-1a1e-40d9-9278-d8b886738e05",
 	}
-	workflowIdentifier := definition.NewWorkflowIdentifier(
+	workflowKey := definition.NewWorkflowKey(
 		namespaceID,
 		workflowExecution.WorkflowId,
 		workflowExecution.RunId,
@@ -1995,7 +1995,7 @@ func (s *ExecutionManagerSuite) TestSignalTransferTaskTasks() {
 	targetRunID := "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 	targetChildWorkflowOnly := false
 	transferTasks := []tasks.Task{&tasks.SignalExecutionTask{
-		WorkflowIdentifier:      workflowIdentifier,
+		WorkflowKey:             workflowKey,
 		TaskID:                  s.GetNextSequenceNumber(),
 		TargetNamespaceID:       targetNamespaceID,
 		TargetWorkflowID:        targetWorkflowID,
@@ -2012,7 +2012,7 @@ func (s *ExecutionManagerSuite) TestSignalTransferTaskTasks() {
 	s.Equal(1, len(tasks1), "Expected 1 cancel task.")
 	task1 := tasks1[0]
 	s.Equal(&tasks.SignalExecutionTask{
-		WorkflowIdentifier:      workflowIdentifier,
+		WorkflowKey:             workflowKey,
 		VisibilityTimestamp:     task1.GetVisibilityTime(),
 		TaskID:                  task1.GetTaskID(),
 		TargetNamespaceID:       targetNamespaceID,
@@ -2031,7 +2031,7 @@ func (s *ExecutionManagerSuite) TestSignalTransferTaskTasks() {
 	targetRunID = ""
 	targetChildWorkflowOnly = true
 	transferTasks = []tasks.Task{&tasks.SignalExecutionTask{
-		WorkflowIdentifier:      workflowIdentifier,
+		WorkflowKey:             workflowKey,
 		TaskID:                  s.GetNextSequenceNumber(),
 		TargetNamespaceID:       targetNamespaceID,
 		TargetWorkflowID:        targetWorkflowID,
@@ -2056,7 +2056,7 @@ func (s *ExecutionManagerSuite) TestSignalTransferTaskTasks() {
 	s.Equal(1, len(tasks2), "Expected 1 cancel task.")
 	task2 := tasks2[0]
 	s.Equal(&tasks.SignalExecutionTask{
-		WorkflowIdentifier:      workflowIdentifier,
+		WorkflowKey:             workflowKey,
 		VisibilityTimestamp:     task2.GetVisibilityTime(),
 		TaskID:                  task2.GetTaskID(),
 		TargetNamespaceID:       targetNamespaceID,
@@ -2078,7 +2078,7 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 		WorkflowId: "get-replication-tasks-test",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
-	workflowIdentifier := definition.NewWorkflowIdentifier(
+	workflowKey := definition.NewWorkflowKey(
 		namespaceID,
 		workflowExecution.WorkflowId,
 		workflowExecution.RunId,
@@ -2101,24 +2101,24 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 
 	replicationTasks := []tasks.Task{
 		&tasks.HistoryReplicationTask{
-			WorkflowIdentifier: workflowIdentifier,
-			TaskID:             s.GetNextSequenceNumber(),
-			FirstEventID:       int64(1),
-			NextEventID:        int64(3),
-			Version:            123,
+			WorkflowKey:  workflowKey,
+			TaskID:       s.GetNextSequenceNumber(),
+			FirstEventID: int64(1),
+			NextEventID:  int64(3),
+			Version:      123,
 		},
 		&tasks.HistoryReplicationTask{
-			WorkflowIdentifier: workflowIdentifier,
-			TaskID:             s.GetNextSequenceNumber(),
-			FirstEventID:       int64(1),
-			NextEventID:        int64(3),
-			Version:            456,
+			WorkflowKey:  workflowKey,
+			TaskID:       s.GetNextSequenceNumber(),
+			FirstEventID: int64(1),
+			NextEventID:  int64(3),
+			Version:      456,
 		},
 		&tasks.SyncActivityTask{
-			WorkflowIdentifier: workflowIdentifier,
-			TaskID:             s.GetNextSequenceNumber(),
-			Version:            789,
-			ScheduledID:        99,
+			WorkflowKey: workflowKey,
+			TaskID:      s.GetNextSequenceNumber(),
+			Version:     789,
+			ScheduledID: 99,
 		},
 	}
 	err = s.UpdateWorklowStateAndReplication(updatedInfo1, updatedState1, state1.NextEventId, int64(3), replicationTasks)
@@ -2153,7 +2153,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 		WorkflowId: "get-transfer-tasks-test-complete",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
-	workflowIdentifier := definition.NewWorkflowIdentifier(
+	workflowKey := definition.NewWorkflowKey(
 		namespaceID,
 		workflowExecution.WorkflowId,
 		workflowExecution.RunId,
@@ -2171,7 +2171,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 	task1 := tasks1[0]
 	scheduleId := int64(2)
 	s.Equal(&tasks.WorkflowTask{
-		WorkflowIdentifier:  workflowIdentifier,
+		WorkflowKey:         workflowKey,
 		NamespaceID:         namespaceID,
 		VisibilityTimestamp: task1.GetVisibilityTime(),
 		TaskID:              task1.GetTaskID(),
@@ -2198,12 +2198,12 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 	now := time.Now().UTC()
 
 	taskSlice := []tasks.Task{
-		&tasks.ActivityTask{workflowIdentifier, now, currentTransferID + 10001, namespaceID, taskqueue, scheduleID, 111},
-		&tasks.WorkflowTask{workflowIdentifier, now, currentTransferID + 10002, namespaceID, taskqueue, scheduleID, 222},
-		&tasks.CloseExecutionTask{workflowIdentifier, now, currentTransferID + 10003, 333},
-		&tasks.CancelExecutionTask{workflowIdentifier, now, currentTransferID + 10004, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 444},
-		&tasks.SignalExecutionTask{workflowIdentifier, now, currentTransferID + 10005, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 555},
-		&tasks.StartChildExecutionTask{workflowIdentifier, now, currentTransferID + 10006, targetNamespaceID, targetWorkflowID, scheduleID, 666},
+		&tasks.ActivityTask{workflowKey, now, currentTransferID + 10001, namespaceID, taskqueue, scheduleID, 111},
+		&tasks.WorkflowTask{workflowKey, now, currentTransferID + 10002, namespaceID, taskqueue, scheduleID, 222},
+		&tasks.CloseExecutionTask{workflowKey, now, currentTransferID + 10003, 333},
+		&tasks.CancelExecutionTask{workflowKey, now, currentTransferID + 10004, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 444},
+		&tasks.SignalExecutionTask{workflowKey, now, currentTransferID + 10005, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 555},
+		&tasks.StartChildExecutionTask{workflowKey, now, currentTransferID + 10006, targetNamespaceID, targetWorkflowID, scheduleID, 666},
 	}
 	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, updatedState, int64(6), int64(3), taskSlice)
 	s.NoError(err2)
@@ -2259,7 +2259,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 		WorkflowId: "get-transfer-tasks-test-range-complete",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
-	workflowIdentifier := definition.NewWorkflowIdentifier(
+	workflowKey := definition.NewWorkflowKey(
 		namespaceID,
 		workflowExecution.WorkflowId,
 		workflowExecution.RunId,
@@ -2276,7 +2276,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	s.Equal(1, len(tasks1), "Expected 1 workflow task.")
 	task1 := tasks1[0]
 	s.Equal(&tasks.WorkflowTask{
-		WorkflowIdentifier:  workflowIdentifier,
+		WorkflowKey:         workflowKey,
 		NamespaceID:         namespaceID,
 		VisibilityTimestamp: task1.GetVisibilityTime(),
 		TaskID:              task1.GetTaskID(),
@@ -2303,12 +2303,12 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	currentTransferID := s.GetTransferReadLevel()
 	now := time.Now().UTC()
 	taskSlice := []tasks.Task{
-		&tasks.ActivityTask{workflowIdentifier, now, currentTransferID + 10001, namespaceID, taskqueue, scheduleID, 111},
-		&tasks.WorkflowTask{workflowIdentifier, now, currentTransferID + 10002, namespaceID, taskqueue, scheduleID, 222},
-		&tasks.CloseExecutionTask{workflowIdentifier, now, currentTransferID + 10003, 333},
-		&tasks.CancelExecutionTask{workflowIdentifier, now, currentTransferID + 10004, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 444},
-		&tasks.SignalExecutionTask{workflowIdentifier, now, currentTransferID + 10005, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 555},
-		&tasks.StartChildExecutionTask{workflowIdentifier, now, currentTransferID + 10006, targetNamespaceID, targetWorkflowID, scheduleID, 666},
+		&tasks.ActivityTask{workflowKey, now, currentTransferID + 10001, namespaceID, taskqueue, scheduleID, 111},
+		&tasks.WorkflowTask{workflowKey, now, currentTransferID + 10002, namespaceID, taskqueue, scheduleID, 222},
+		&tasks.CloseExecutionTask{workflowKey, now, currentTransferID + 10003, 333},
+		&tasks.CancelExecutionTask{workflowKey, now, currentTransferID + 10004, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 444},
+		&tasks.SignalExecutionTask{workflowKey, now, currentTransferID + 10005, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 555},
+		&tasks.StartChildExecutionTask{workflowKey, now, currentTransferID + 10006, targetNamespaceID, targetWorkflowID, scheduleID, 666},
 	}
 	err2 := s.UpdateWorklowStateAndReplication(updatedInfo, updatedState, int64(6), int64(3), taskSlice)
 	s.NoError(err2)
@@ -2355,14 +2355,14 @@ func (s *ExecutionManagerSuite) TestTimerTasksComplete() {
 		WorkflowId: "get-timer-tasks-test-complete",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
-	workflowIdentifier := definition.NewWorkflowIdentifier(
+	workflowKey := definition.NewWorkflowKey(
 		namespaceID,
 		workflowExecution.WorkflowId,
 		workflowExecution.RunId,
 	)
 
 	now := time.Now().UTC()
-	initialTasks := []tasks.Task{&tasks.WorkflowTaskTimeoutTask{workflowIdentifier, now.Add(1 * time.Second), 1, 2, 3, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 11}}
+	initialTasks := []tasks.Task{&tasks.WorkflowTaskTimeoutTask{workflowKey, now.Add(1 * time.Second), 1, 2, 3, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 11}}
 
 	task0, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, "taskQueue", "wType", timestamp.DurationFromSeconds(20), timestamp.DurationFromSeconds(13), 3, 0, 2, initialTasks)
 	s.NoError(err0)
@@ -2377,10 +2377,10 @@ func (s *ExecutionManagerSuite) TestTimerTasksComplete() {
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
 	updatedInfo.LastWorkflowTaskStartId = int64(2)
 	taskSlice := []tasks.Task{
-		&tasks.WorkflowTimeoutTask{workflowIdentifier, now.Add(2 * time.Second), 2, 12},
-		&tasks.DeleteHistoryEventTask{workflowIdentifier, now.Add(2 * time.Second), 3, 13},
-		&tasks.ActivityTimeoutTask{workflowIdentifier, now.Add(3 * time.Second), 4, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 7, 0, 14},
-		&tasks.UserTimerTask{workflowIdentifier, now.Add(3 * time.Second), 5, 7, 15},
+		&tasks.WorkflowTimeoutTask{workflowKey, now.Add(2 * time.Second), 2, 12},
+		&tasks.DeleteHistoryEventTask{workflowKey, now.Add(2 * time.Second), 3, 13},
+		&tasks.ActivityTimeoutTask{workflowKey, now.Add(3 * time.Second), 4, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 7, 0, 14},
+		&tasks.UserTimerTask{workflowKey, now.Add(3 * time.Second), 5, 7, 15},
 	}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedState, int64(5), []int64{int64(4)}, nil, int64(3), taskSlice, nil, nil, nil, nil)
 	s.NoError(err2)
@@ -2417,7 +2417,7 @@ func (s *ExecutionManagerSuite) TestTimerTasksRangeComplete() {
 		WorkflowId: "get-timer-tasks-test-range-complete",
 		RunId:      "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 	}
-	workflowIdentifier := definition.NewWorkflowIdentifier(
+	workflowKey := definition.NewWorkflowKey(
 		namespaceID,
 		workflowExecution.WorkflowId,
 		workflowExecution.RunId,
@@ -2436,11 +2436,11 @@ func (s *ExecutionManagerSuite) TestTimerTasksRangeComplete() {
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
 	updatedInfo.LastWorkflowTaskStartId = int64(2)
 	taskSlice := []tasks.Task{
-		&tasks.WorkflowTaskTimeoutTask{workflowIdentifier, time.Now().UTC(), 1, 2, 3, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 11},
-		&tasks.WorkflowTimeoutTask{workflowIdentifier, time.Now().UTC(), 2, 12},
-		&tasks.DeleteHistoryEventTask{workflowIdentifier, time.Now().UTC(), 3, 13},
-		&tasks.ActivityTimeoutTask{workflowIdentifier, time.Now().UTC(), 4, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 7, 0, 14},
-		&tasks.UserTimerTask{workflowIdentifier, time.Now().UTC(), 5, 7, 15},
+		&tasks.WorkflowTaskTimeoutTask{workflowKey, time.Now().UTC(), 1, 2, 3, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 11},
+		&tasks.WorkflowTimeoutTask{workflowKey, time.Now().UTC(), 2, 12},
+		&tasks.DeleteHistoryEventTask{workflowKey, time.Now().UTC(), 3, 13},
+		&tasks.ActivityTimeoutTask{workflowKey, time.Now().UTC(), 4, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 7, 0, 14},
+		&tasks.UserTimerTask{workflowKey, time.Now().UTC(), 5, 7, 15},
 	}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedState, int64(5), []int64{int64(4)}, nil, int64(3), taskSlice, nil, nil, nil, nil)
 	s.NoError(err2)
@@ -2948,7 +2948,7 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 		WorkflowId: "replication-transfer-task-test",
 		RunId:      "dcde9d85-5d7a-43c7-8b18-cb2cae0e29e0",
 	}
-	workflowIdentifier := definition.NewWorkflowIdentifier(
+	workflowKey := definition.NewWorkflowKey(
 		namespaceID,
 		workflowExecution.WorkflowId,
 		workflowExecution.RunId,
@@ -2971,11 +2971,11 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 	updatedState1 := copyWorkflowExecutionState(state1.ExecutionState)
 
 	replicationTasks := []tasks.Task{&tasks.HistoryReplicationTask{
-		WorkflowIdentifier: workflowIdentifier,
-		TaskID:             s.GetNextSequenceNumber(),
-		FirstEventID:       int64(1),
-		NextEventID:        int64(3),
-		Version:            int64(9),
+		WorkflowKey:  workflowKey,
+		TaskID:       s.GetNextSequenceNumber(),
+		FirstEventID: int64(1),
+		NextEventID:  int64(3),
+		Version:      int64(9),
 	}}
 	err = s.UpdateWorklowStateAndReplication(updatedInfo1, updatedState1, state1.NextEventId, int64(3), replicationTasks)
 	s.NoError(err)
@@ -2986,7 +2986,7 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 	s.Equal(1, len(tasks1), "Expected 1 replication task.")
 	task1 := tasks1[0]
 	s.Equal(&tasks.HistoryReplicationTask{
-		WorkflowIdentifier:  workflowIdentifier,
+		WorkflowKey:         workflowKey,
 		VisibilityTimestamp: task1.GetVisibilityTime(),
 		TaskID:              task1.GetTaskID(),
 		FirstEventID:        1,
@@ -3011,7 +3011,7 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 		WorkflowId: "replication-transfer-task--range-complete-test",
 		RunId:      uuid.New(),
 	}
-	workflowIdentifier := definition.NewWorkflowIdentifier(
+	workflowKey := definition.NewWorkflowKey(
 		namespaceID,
 		workflowExecution.WorkflowId,
 		workflowExecution.RunId,
@@ -3035,18 +3035,18 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 
 	replicationTasks := []tasks.Task{
 		&tasks.HistoryReplicationTask{
-			WorkflowIdentifier: workflowIdentifier,
-			TaskID:             s.GetNextSequenceNumber(),
-			FirstEventID:       int64(1),
-			NextEventID:        int64(3),
-			Version:            int64(9),
+			WorkflowKey:  workflowKey,
+			TaskID:       s.GetNextSequenceNumber(),
+			FirstEventID: int64(1),
+			NextEventID:  int64(3),
+			Version:      int64(9),
 		},
 		&tasks.HistoryReplicationTask{
-			WorkflowIdentifier: workflowIdentifier,
-			TaskID:             s.GetNextSequenceNumber(),
-			FirstEventID:       int64(4),
-			NextEventID:        int64(5),
-			Version:            int64(9),
+			WorkflowKey:  workflowKey,
+			TaskID:       s.GetNextSequenceNumber(),
+			FirstEventID: int64(4),
+			NextEventID:  int64(5),
+			Version:      int64(9),
 		},
 	}
 	err = s.UpdateWorklowStateAndReplication(
@@ -3064,7 +3064,7 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 	s.Equal(1, len(tasks1), "Expected 1 replication task.")
 	task1 := tasks1[0]
 	s.Equal(&tasks.HistoryReplicationTask{
-		WorkflowIdentifier:  workflowIdentifier,
+		WorkflowKey:         workflowKey,
 		VisibilityTimestamp: task1.GetVisibilityTime(),
 		TaskID:              task1.GetTaskID(),
 		FirstEventID:        1,
@@ -3081,7 +3081,7 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 	s.NotNil(tasks2, "expected valid list of tasks.")
 	task2 := tasks2[0]
 	s.Equal(&tasks.HistoryReplicationTask{
-		WorkflowIdentifier:  workflowIdentifier,
+		WorkflowKey:         workflowKey,
 		VisibilityTimestamp: task2.GetVisibilityTime(),
 		TaskID:              task2.GetTaskID(),
 		FirstEventID:        4,

@@ -32,7 +32,7 @@ import (
 
 type (
 	ActivityRetryTimerTask struct {
-		definition.WorkflowIdentifier
+		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		EventID             int64
@@ -41,8 +41,8 @@ type (
 	}
 )
 
-func (r *ActivityRetryTimerTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
-	return r.WorkflowIdentifier
+func (r *ActivityRetryTimerTask) GetWorkflowIdentifier() definition.WorkflowKey {
+	return r.WorkflowKey
 }
 
 func (r *ActivityRetryTimerTask) GetKey() Key {

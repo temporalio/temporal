@@ -32,15 +32,15 @@ import (
 
 type (
 	ResetWorkflowTask struct {
-		definition.WorkflowIdentifier
+		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
 	}
 )
 
-func (a *ResetWorkflowTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
-	return a.WorkflowIdentifier
+func (a *ResetWorkflowTask) GetWorkflowIdentifier() definition.WorkflowKey {
+	return a.WorkflowKey
 }
 
 func (a *ResetWorkflowTask) GetKey() Key {

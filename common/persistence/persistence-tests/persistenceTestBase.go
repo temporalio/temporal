@@ -315,7 +315,7 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 			NextEventID: nextEventID,
 			TransferTasks: []tasks.Task{
 				&tasks.WorkflowTask{
-					WorkflowIdentifier: definition.NewWorkflowIdentifier(
+					WorkflowKey: definition.NewWorkflowKey(
 						namespaceID,
 						workflowExecution.WorkflowId,
 						workflowExecution.RunId,
@@ -347,7 +347,7 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 	taskQueue string, nextEventID int64, lastProcessedEventID int64,
 	workflowTaskScheduleIDs []int64, activityScheduleIDs []int64) (*persistence.CreateWorkflowExecutionResponse, error) {
 
-	workflowIdentifier := definition.NewWorkflowIdentifier(
+	workflowKey := definition.NewWorkflowKey(
 		namespaceID,
 		workflowExecution.WorkflowId,
 		workflowExecution.RunId,
@@ -356,22 +356,22 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 	for _, workflowTaskScheduleID := range workflowTaskScheduleIDs {
 		transferTasks = append(transferTasks,
 			&tasks.WorkflowTask{
-				WorkflowIdentifier: workflowIdentifier,
-				TaskID:             s.GetNextSequenceNumber(),
-				NamespaceID:        namespaceID,
-				TaskQueue:          taskQueue,
-				ScheduleID:         workflowTaskScheduleID,
+				WorkflowKey: workflowKey,
+				TaskID:      s.GetNextSequenceNumber(),
+				NamespaceID: namespaceID,
+				TaskQueue:   taskQueue,
+				ScheduleID:  workflowTaskScheduleID,
 			})
 	}
 
 	for _, activityScheduleID := range activityScheduleIDs {
 		transferTasks = append(transferTasks,
 			&tasks.ActivityTask{
-				WorkflowIdentifier: workflowIdentifier,
-				TaskID:             s.GetNextSequenceNumber(),
-				TargetNamespaceID:  namespaceID,
-				TaskQueue:          taskQueue,
-				ScheduleID:         activityScheduleID,
+				WorkflowKey:       workflowKey,
+				TaskID:            s.GetNextSequenceNumber(),
+				TargetNamespaceID: namespaceID,
+				TaskQueue:         taskQueue,
+				ScheduleID:        activityScheduleID,
 			})
 	}
 
@@ -442,7 +442,7 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 			NextEventID: nextEventID,
 			TransferTasks: []tasks.Task{
 				&tasks.WorkflowTask{
-					WorkflowIdentifier: definition.NewWorkflowIdentifier(
+					WorkflowKey: definition.NewWorkflowKey(
 						namespaceID,
 						workflowExecution.WorkflowId,
 						workflowExecution.RunId,
@@ -495,7 +495,7 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *persistencespb.WorkflowEx
 	newExecution commonpb.WorkflowExecution, nextEventID, workflowTaskScheduleID int64,
 	prevResetPoints *workflowpb.ResetPoints) error {
 	newworkflowTask := &tasks.WorkflowTask{
-		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+		WorkflowKey: definition.NewWorkflowKey(
 			updatedInfo.NamespaceId,
 			updatedInfo.WorkflowId,
 			updatedState.RunId,
@@ -572,7 +572,7 @@ func (s *TestBase) UpdateWorkflowExecutionAndFinish(updatedInfo *persistencespb.
 	updatedState *persistencespb.WorkflowExecutionState, nextEventID int64, condition int64) error {
 	var transferTasks []tasks.Task
 	transferTasks = append(transferTasks, &tasks.CloseExecutionTask{
-		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+		WorkflowKey: definition.NewWorkflowKey(
 			updatedInfo.NamespaceId,
 			updatedInfo.WorkflowId,
 			updatedState.RunId,
@@ -722,27 +722,27 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *persisten
 			panic("Unknown transfer task type.")
 		}
 	}
-	workflowIdentifier := definition.NewWorkflowIdentifier(
+	workflowKey := definition.NewWorkflowKey(
 		updatedInfo.NamespaceId,
 		updatedInfo.WorkflowId,
 		updatedState.RunId,
 	)
 	for _, workflowTaskScheduleID := range workflowTaskScheduleIDs {
 		transferTasks = append(transferTasks, &tasks.WorkflowTask{
-			WorkflowIdentifier: workflowIdentifier,
-			TaskID:             s.GetNextSequenceNumber(),
-			NamespaceID:        updatedInfo.NamespaceId,
-			TaskQueue:          updatedInfo.TaskQueue,
-			ScheduleID:         workflowTaskScheduleID})
+			WorkflowKey: workflowKey,
+			TaskID:      s.GetNextSequenceNumber(),
+			NamespaceID: updatedInfo.NamespaceId,
+			TaskQueue:   updatedInfo.TaskQueue,
+			ScheduleID:  workflowTaskScheduleID})
 	}
 
 	for _, activityScheduleID := range activityScheduleIDs {
 		transferTasks = append(transferTasks, &tasks.ActivityTask{
-			WorkflowIdentifier: workflowIdentifier,
-			TaskID:             s.GetNextSequenceNumber(),
-			TargetNamespaceID:  updatedInfo.NamespaceId,
-			TaskQueue:          updatedInfo.TaskQueue,
-			ScheduleID:         activityScheduleID})
+			WorkflowKey:       workflowKey,
+			TaskID:            s.GetNextSequenceNumber(),
+			TargetNamespaceID: updatedInfo.NamespaceId,
+			TaskQueue:         updatedInfo.TaskQueue,
+			ScheduleID:        activityScheduleID})
 	}
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&persistence.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardInfo.GetShardId(),

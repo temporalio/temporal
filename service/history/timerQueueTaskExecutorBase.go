@@ -304,7 +304,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 		ReplicationTasks: nil,
 		VisibilityTasks: []tasks.Task{&tasks.DeleteExecutionVisibilityTask{
 			// TaskID is set by shard
-			WorkflowIdentifier: definition.NewWorkflowIdentifier(
+			WorkflowKey: definition.NewWorkflowKey(
 				task.GetNamespaceId(),
 				task.GetWorkflowId(),
 				task.GetRunId(),

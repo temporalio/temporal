@@ -32,7 +32,7 @@ import (
 
 type (
 	SignalExecutionTask struct {
-		definition.WorkflowIdentifier
+		definition.WorkflowKey
 		VisibilityTimestamp     time.Time
 		TaskID                  int64
 		TargetNamespaceID       string
@@ -44,8 +44,8 @@ type (
 	}
 )
 
-func (u *SignalExecutionTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
-	return u.WorkflowIdentifier
+func (u *SignalExecutionTask) GetWorkflowIdentifier() definition.WorkflowKey {
+	return u.WorkflowKey
 }
 
 func (u *SignalExecutionTask) GetKey() Key {

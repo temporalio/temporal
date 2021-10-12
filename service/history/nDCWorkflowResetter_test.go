@@ -169,7 +169,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	s.mockStateBuilder.EXPECT().rebuild(
 		ctx,
 		now,
-		definition.NewWorkflowIdentifier(
+		definition.NewWorkflowKey(
 			s.namespaceID,
 			s.workflowID,
 			s.baseRunID,
@@ -177,7 +177,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 		branchToken,
 		baseEventID,
 		baseVersion,
-		definition.NewWorkflowIdentifier(
+		definition.NewWorkflowKey(
 			s.namespaceID,
 			s.workflowID,
 			s.newRunID,

@@ -32,15 +32,15 @@ import (
 
 type (
 	CloseExecutionVisibilityTask struct {
-		definition.WorkflowIdentifier
+		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
 	}
 )
 
-func (t *CloseExecutionVisibilityTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
-	return t.WorkflowIdentifier
+func (t *CloseExecutionVisibilityTask) GetWorkflowIdentifier() definition.WorkflowKey {
+	return t.WorkflowKey
 }
 
 func (t *CloseExecutionVisibilityTask) GetKey() Key {

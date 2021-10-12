@@ -49,12 +49,12 @@ type (
 	Notifier interface {
 		common.Daemon
 		NotifyNewHistoryEvent(event *Notification)
-		WatchHistoryEvent(identifier definition.WorkflowIdentifier) (string, chan *Notification, error)
-		UnwatchHistoryEvent(identifier definition.WorkflowIdentifier, subscriberID string) error
+		WatchHistoryEvent(identifier definition.WorkflowKey) (string, chan *Notification, error)
+		UnwatchHistoryEvent(identifier definition.WorkflowKey, subscriberID string) error
 	}
 
 	Notification struct {
-		ID                     definition.WorkflowIdentifier
+		ID                     definition.WorkflowKey
 		LastFirstEventID       int64
 		LastFirstEventTxnID    int64
 		NextEventID            int64
@@ -77,7 +77,7 @@ type (
 		// function which calculate the shard ID from given namespaceID and workflowID pair
 		workflowIDToShardID func(string, string) int32
 
-		// concurrent map with key workflowIdentifier, value map[string]chan *Notification.
+		// concurrent map with key workflowKey, value map[string]chan *Notification.
 		// the reason for the second map being non thread safe:
 		// 1. expected number of subscriber per workflow is low, i.e. < 5
 		// 2. update to this map is already guarded by GetAndDo API provided by ConcurrentTxMap
@@ -100,7 +100,7 @@ func NewNotification(
 ) *Notification {
 
 	return &Notification{
-		ID: definition.NewWorkflowIdentifier(
+		ID: definition.NewWorkflowKey(
 			namespaceID,
 			workflowExecution.GetWorkflowId(),
 			workflowExecution.GetRunId(),
@@ -142,7 +142,7 @@ func NewNotifier(
 }
 
 func (notifier *NotifierImpl) WatchHistoryEvent(
-	identifier definition.WorkflowIdentifier) (string, chan *Notification, error) {
+	identifier definition.WorkflowKey) (string, chan *Notification, error) {
 
 	channel := make(chan *Notification, 1)
 	subscriberID := uuid.New()
@@ -169,7 +169,7 @@ func (notifier *NotifierImpl) WatchHistoryEvent(
 }
 
 func (notifier *NotifierImpl) UnwatchHistoryEvent(
-	identifier definition.WorkflowIdentifier, subscriberID string) error {
+	identifier definition.WorkflowKey, subscriberID string) error {
 
 	success := true
 	notifier.eventsPubsubs.RemoveIf(identifier, func(key interface{}, value interface{}) bool {

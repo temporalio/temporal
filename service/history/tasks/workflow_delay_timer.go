@@ -33,7 +33,7 @@ import (
 
 type (
 	WorkflowBackoffTimerTask struct {
-		definition.WorkflowIdentifier
+		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
@@ -41,8 +41,8 @@ type (
 	}
 )
 
-func (r *WorkflowBackoffTimerTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
-	return r.WorkflowIdentifier
+func (r *WorkflowBackoffTimerTask) GetWorkflowIdentifier() definition.WorkflowKey {
+	return r.WorkflowKey
 }
 
 func (r *WorkflowBackoffTimerTask) GetKey() Key {

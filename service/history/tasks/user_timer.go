@@ -32,7 +32,7 @@ import (
 
 type (
 	UserTimerTask struct {
-		definition.WorkflowIdentifier
+		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		EventID             int64
@@ -40,8 +40,8 @@ type (
 	}
 )
 
-func (u *UserTimerTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
-	return u.WorkflowIdentifier
+func (u *UserTimerTask) GetWorkflowIdentifier() definition.WorkflowKey {
+	return u.WorkflowKey
 }
 
 func (u *UserTimerTask) GetKey() Key {

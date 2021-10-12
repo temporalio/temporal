@@ -32,7 +32,7 @@ import (
 
 type (
 	HistoryReplicationTask struct {
-		definition.WorkflowIdentifier
+		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		FirstEventID        int64
@@ -43,8 +43,8 @@ type (
 	}
 )
 
-func (a *HistoryReplicationTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
-	return a.WorkflowIdentifier
+func (a *HistoryReplicationTask) GetWorkflowIdentifier() definition.WorkflowKey {
+	return a.WorkflowKey
 }
 
 func (a *HistoryReplicationTask) GetKey() Key {

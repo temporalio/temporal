@@ -147,7 +147,7 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 		},
 	}
 
-	workflowIdentifier := definition.NewWorkflowIdentifier(s.namespaceID, s.workflowID, s.runID)
+	workflowKey := definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.runID)
 
 	mockStateBuilder := workflow.NewMockMutableStateRebuilder(s.controller)
 	mockStateBuilder.EXPECT().ApplyEvents(
@@ -161,7 +161,7 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 		[]*historypb.HistoryEvent(nil),
 	).Return(nil, nil)
 
-	err := s.nDCStateRebuilder.applyEvents(workflowIdentifier, mockStateBuilder, events, requestID)
+	err := s.nDCStateRebuilder.applyEvents(workflowKey, mockStateBuilder, events, requestID)
 	s.NoError(err)
 }
 
@@ -326,11 +326,11 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.rebuild(
 		context.Background(),
 		s.now,
-		definition.NewWorkflowIdentifier(s.namespaceID, s.workflowID, s.runID),
+		definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.runID),
 		branchToken,
 		lastEventID,
 		version,
-		definition.NewWorkflowIdentifier(targetNamespaceID, targetWorkflowID, targetRunID),
+		definition.NewWorkflowKey(targetNamespaceID, targetWorkflowID, targetRunID),
 		targetBranchToken,
 		requestID,
 	)

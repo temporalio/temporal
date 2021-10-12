@@ -141,7 +141,7 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 		RunId: s.runID,
 	}).AnyTimes()
 
-	workflowIdentifier := definition.NewWorkflowIdentifier(
+	workflowKey := definition.NewWorkflowKey(
 		s.namespaceID,
 		s.workflowID,
 		s.runID,
@@ -162,11 +162,11 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 	s.mockStateBuilder.EXPECT().rebuild(
 		ctx,
 		gomock.Any(),
-		workflowIdentifier,
+		workflowKey,
 		branchToken1,
 		lastEventID1,
 		version,
-		workflowIdentifier,
+		workflowKey,
 		branchToken1,
 		requestID,
 	).Return(mockRebuildMutableState, historySize, nil)
@@ -238,7 +238,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 		RunId: s.runID,
 	}).AnyTimes()
 
-	workflowIdentifier := definition.NewWorkflowIdentifier(
+	workflowKey := definition.NewWorkflowKey(
 		s.namespaceID,
 		s.workflowID,
 		s.runID,
@@ -259,11 +259,11 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 	s.mockStateBuilder.EXPECT().rebuild(
 		ctx,
 		gomock.Any(),
-		workflowIdentifier,
+		workflowKey,
 		branchToken1,
 		lastEventID1,
 		version,
-		workflowIdentifier,
+		workflowKey,
 		branchToken1,
 		gomock.Any(),
 	).Return(mockRebuildMutableState, historySize, nil)

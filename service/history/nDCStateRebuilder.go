@@ -54,11 +54,11 @@ type (
 		rebuild(
 			ctx context.Context,
 			now time.Time,
-			baseWorkflowIdentifier definition.WorkflowIdentifier,
+			baseWorkflowIdentifier definition.WorkflowKey,
 			baseBranchToken []byte,
 			baseLastEventID int64,
 			baseLastEventVersion int64,
-			targetWorkflowIdentifier definition.WorkflowIdentifier,
+			targetWorkflowIdentifier definition.WorkflowKey,
 			targetBranchToken []byte,
 			requestID string,
 		) (workflow.MutableState, int64, error)
@@ -104,11 +104,11 @@ func newNDCStateRebuilder(
 func (r *nDCStateRebuilderImpl) rebuild(
 	ctx context.Context,
 	now time.Time,
-	baseWorkflowIdentifier definition.WorkflowIdentifier,
+	baseWorkflowIdentifier definition.WorkflowKey,
 	baseBranchToken []byte,
 	baseLastEventID int64,
 	baseLastEventVersion int64,
-	targetWorkflowIdentifier definition.WorkflowIdentifier,
+	targetWorkflowIdentifier definition.WorkflowKey,
 	targetBranchToken []byte,
 	requestID string,
 ) (workflow.MutableState, int64, error) {
@@ -211,18 +211,18 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 }
 
 func (r *nDCStateRebuilderImpl) applyEvents(
-	workflowIdentifier definition.WorkflowIdentifier,
+	workflowKey definition.WorkflowKey,
 	stateBuilder workflow.MutableStateRebuilder,
 	events []*historypb.HistoryEvent,
 	requestID string,
 ) error {
 
 	_, err := stateBuilder.ApplyEvents(
-		workflowIdentifier.NamespaceID,
+		workflowKey.NamespaceID,
 		requestID,
 		commonpb.WorkflowExecution{
-			WorkflowId: workflowIdentifier.WorkflowID,
-			RunId:      workflowIdentifier.RunID,
+			WorkflowId: workflowKey.WorkflowID,
+			RunId:      workflowKey.RunID,
 		},
 		events,
 		nil, // no new run history when rebuilding mutable state

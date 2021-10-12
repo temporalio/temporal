@@ -32,15 +32,15 @@ import (
 
 type (
 	WorkflowTimeoutTask struct {
-		definition.WorkflowIdentifier
+		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
 	}
 )
 
-func (u *WorkflowTimeoutTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
-	return u.WorkflowIdentifier
+func (u *WorkflowTimeoutTask) GetWorkflowIdentifier() definition.WorkflowKey {
+	return u.WorkflowKey
 }
 
 func (u *WorkflowTimeoutTask) GetKey() Key {

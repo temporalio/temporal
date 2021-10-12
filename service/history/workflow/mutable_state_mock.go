@@ -1422,10 +1422,10 @@ func (mr *MockMutableStateMockRecorder) GetUserTimerInfoByEventID(arg0 interface
 }
 
 // GetWorkflowIdentifier mocks base method.
-func (m *MockMutableState) GetWorkflowIdentifier() definition.WorkflowIdentifier {
+func (m *MockMutableState) GetWorkflowIdentifier() definition.WorkflowKey {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWorkflowIdentifier")
-	ret0, _ := ret[0].(definition.WorkflowIdentifier)
+	ret0, _ := ret[0].(definition.WorkflowKey)
 	return ret0
 }
 

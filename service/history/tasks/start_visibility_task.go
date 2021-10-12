@@ -32,15 +32,15 @@ import (
 
 type (
 	StartExecutionVisibilityTask struct {
-		definition.WorkflowIdentifier
+		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
 	}
 )
 
-func (t *StartExecutionVisibilityTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
-	return t.WorkflowIdentifier
+func (t *StartExecutionVisibilityTask) GetWorkflowIdentifier() definition.WorkflowKey {
+	return t.WorkflowKey
 }
 
 func (t *StartExecutionVisibilityTask) GetKey() Key {
