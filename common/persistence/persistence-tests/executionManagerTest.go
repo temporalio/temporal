@@ -2931,7 +2931,7 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 	s.Equal(int64(3), task1.GetNextEventId())
 	s.Equal(int64(9), task1.Version)
 
-	err = s.CompleteTransferTask(task1.GetTaskId())
+	err = s.CompleteReplicationTask(task1.GetTaskId())
 	s.NoError(err)
 	tasks2, err := s.GetReplicationTasks(1, false)
 	s.NoError(err)
