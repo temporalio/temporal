@@ -230,7 +230,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *config.ClusterMetadata) {
 		RangeId:                 0,
 		TransferAckLevel:        0,
 		ReplicationAckLevel:     0,
-		TimerAckLevelTime:       &time.Time{},
+		TimerAckLevelTime:       timestamp.TimePtr(time.Unix(0, 0).UTC()),
 		ClusterTimerAckLevel:    map[string]*time.Time{},
 		ClusterTransferAckLevel: map[string]int64{clusterName: 0},
 	}
@@ -1103,7 +1103,7 @@ Loop:
 	for {
 		response, err := s.ExecutionManager.GetTimerIndexTasks(&persistence.GetTimerIndexTasksRequest{
 			ShardID:       s.ShardInfo.GetShardId(),
-			MinTimestamp:  time.Time{},
+			MinTimestamp:  time.Unix(0, 0).UTC(),
 			MaxTimestamp:  time.Unix(0, math.MaxInt64).UTC(),
 			BatchSize:     batchSize,
 			NextPageToken: token,
