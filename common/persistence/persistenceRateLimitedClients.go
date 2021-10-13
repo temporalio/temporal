@@ -34,7 +34,7 @@ import (
 
 var (
 	// ErrPersistenceLimitExceeded is the error indicating QPS limit reached.
-	ErrPersistenceLimitExceeded = serviceerror.NewResourceExhausted("Persistence Max QPS Reached.")
+	ErrPersistenceLimitExceeded = serviceerror.NewUnavailable("Persistence Max QPS Reached.")
 )
 
 type (

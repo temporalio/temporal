@@ -170,11 +170,9 @@ func (m *visibilityManagerMetrics) tagScope(scope int) (metrics.Scope, metrics.S
 }
 
 func (m *visibilityManagerMetrics) updateErrorMetric(scope metrics.Scope, err error) error {
-	if err == nil {
-		return nil
-	}
-
 	switch err.(type) {
+	case nil:
+		return nil
 	case *serviceerror.InvalidArgument:
 		scope.IncCounter(metrics.VisibilityPersistenceInvalidArgument)
 		scope.IncCounter(metrics.VisibilityPersistenceFailures)
@@ -195,8 +193,13 @@ func (m *visibilityManagerMetrics) updateErrorMetric(scope metrics.Scope, err er
 	case *serviceerror.NotFound:
 		scope.IncCounter(metrics.VisibilityPersistenceNotFound)
 	default:
-		m.logger.Error("Operation failed with an error.", tag.Error(err))
-		scope.IncCounter(metrics.VisibilityPersistenceFailures)
+		if err == persistence.ErrPersistenceLimitExceeded {
+			scope.IncCounter(metrics.VisibilityPersistenceResourceExhausted)
+			scope.IncCounter(metrics.VisibilityPersistenceFailures)
+		} else {
+			m.logger.Error("Operation failed with an error.", tag.Error(err))
+			scope.IncCounter(metrics.VisibilityPersistenceFailures)
+		}
 	}
 
 	return err
