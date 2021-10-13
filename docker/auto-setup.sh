@@ -237,12 +237,14 @@ wait_for_es() {
 }
 
 setup_es_template() {
+# @@@SNIPSTART setup-es-template-commands
     SCHEMA_FILE=${TEMPORAL_HOME}/schema/elasticsearch/visibility/index_template_${ES_VERSION}.json
     ES_SERVER=$(echo "${ES_SEEDS}" | awk -F ',' '{print $1}')
     TEMPLATE_URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/_template/temporal_visibility_v1_template"
     INDEX_URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/${ES_VIS_INDEX}"
     curl --user "${ES_USER}":"${ES_PWD}" -X PUT "${TEMPLATE_URL}" -H 'Content-Type: application/json' --data-binary "@${SCHEMA_FILE}" --write-out "\n"
     curl --user "${ES_USER}":"${ES_PWD}" -X PUT "${INDEX_URL}" --write-out "\n"
+# @@@SNIPEND
 }
 
 # === Server setup ===
@@ -260,6 +262,7 @@ register_default_namespace() {
 
 add_custom_search_attributes() {
       echo "Adding Custom*Field search attributes."
+# @@@SNIPSTART add-custom-search-attributes-for-testing-command
       tctl --auto_confirm admin cluster add-search-attributes \
           --name CustomKeywordField --type Keyword \
           --name CustomStringField --type String \
@@ -267,6 +270,7 @@ add_custom_search_attributes() {
           --name CustomDatetimeField --type Datetime \
           --name CustomDoubleField --type Double \
           --name CustomBoolField --type Bool
+# @@@SNIPEND
 }
 
 setup_server(){
@@ -303,4 +307,3 @@ fi
 
 # Run this func in parallel process. It will wait for server to start and then run required steps.
 setup_server &
-
