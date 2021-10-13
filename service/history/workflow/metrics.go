@@ -106,5 +106,7 @@ func emitWorkflowCompletionStats(
 		scope.IncCounter(metrics.WorkflowTimeoutCount)
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 		scope.IncCounter(metrics.WorkflowTerminateCount)
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:
+		scope.IncCounter(metrics.WorkflowContinuedAsNewCount)
 	}
 }
