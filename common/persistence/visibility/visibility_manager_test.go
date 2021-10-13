@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/dynamicconfig"
 
 	"go.temporal.io/server/common/log"
@@ -141,9 +140,7 @@ func (s *VisibilityManagerSuite) TestListOpenWorkflowExecutions() {
 	// no remaining tokens
 	_, err = s.visibilityManager.ListOpenWorkflowExecutions(request)
 	s.Error(err)
-	errDetail, ok := err.(*serviceerror.ResourceExhausted)
-	s.True(ok)
-	s.Equal(listErrMsg, errDetail.Message)
+	s.Equal(persistence.ErrPersistenceLimitExceeded, err)
 }
 
 func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutions() {
@@ -158,10 +155,7 @@ func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutions() {
 
 	// no remaining tokens
 	_, err = s.visibilityManager.ListClosedWorkflowExecutions(request)
-	s.Error(err)
-	errDetail, ok := err.(*serviceerror.ResourceExhausted)
-	s.True(ok)
-	s.Equal(listErrMsg, errDetail.Message)
+	s.Equal(persistence.ErrPersistenceLimitExceeded, err)
 }
 
 func (s *VisibilityManagerSuite) TestListOpenWorkflowExecutionsByType() {
@@ -180,10 +174,7 @@ func (s *VisibilityManagerSuite) TestListOpenWorkflowExecutionsByType() {
 
 	// no remaining tokens
 	_, err = s.visibilityManager.ListOpenWorkflowExecutionsByType(request)
-	s.Error(err)
-	errDetail, ok := err.(*serviceerror.ResourceExhausted)
-	s.True(ok)
-	s.Equal(listErrMsg, errDetail.Message)
+	s.Equal(persistence.ErrPersistenceLimitExceeded, err)
 }
 
 func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutionsByType() {
@@ -202,10 +193,7 @@ func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutionsByType() {
 
 	// no remaining tokens
 	_, err = s.visibilityManager.ListClosedWorkflowExecutionsByType(request)
-	s.Error(err)
-	errDetail, ok := err.(*serviceerror.ResourceExhausted)
-	s.True(ok)
-	s.Equal(listErrMsg, errDetail.Message)
+	s.Equal(persistence.ErrPersistenceLimitExceeded, err)
 }
 
 func (s *VisibilityManagerSuite) TestListOpenWorkflowExecutionsByWorkflowID() {
@@ -224,10 +212,7 @@ func (s *VisibilityManagerSuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 
 	// no remaining tokens
 	_, err = s.visibilityManager.ListOpenWorkflowExecutionsByWorkflowID(request)
-	s.Error(err)
-	errDetail, ok := err.(*serviceerror.ResourceExhausted)
-	s.True(ok)
-	s.Equal(listErrMsg, errDetail.Message)
+	s.Equal(persistence.ErrPersistenceLimitExceeded, err)
 }
 
 func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutionsByWorkflowID() {
@@ -246,10 +231,7 @@ func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutionsByWorkflowID() 
 
 	// no remaining tokens
 	_, err = s.visibilityManager.ListClosedWorkflowExecutionsByWorkflowID(request)
-	s.Error(err)
-	errDetail, ok := err.(*serviceerror.ResourceExhausted)
-	s.True(ok)
-	s.Equal(listErrMsg, errDetail.Message)
+	s.Equal(persistence.ErrPersistenceLimitExceeded, err)
 }
 
 func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutionsByStatus() {
@@ -268,8 +250,5 @@ func (s *VisibilityManagerSuite) TestListClosedWorkflowExecutionsByStatus() {
 
 	// no remaining tokens
 	_, err = s.visibilityManager.ListClosedWorkflowExecutionsByStatus(request)
-	s.Error(err)
-	errDetail, ok := err.(*serviceerror.ResourceExhausted)
-	s.True(ok)
-	s.Equal(listErrMsg, errDetail.Message)
+	s.Equal(persistence.ErrPersistenceLimitExceeded, err)
 }
