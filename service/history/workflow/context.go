@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/adminservice/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -713,13 +712,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		int(c.GetHistorySize()),
 		int(c.MutableState.GetNextEventID()-1),
 	)
-	// emit workflow completion stats if any
-	if currentWorkflow.ExecutionState.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		if event, err := c.MutableState.GetCompletionEvent(); err == nil {
-			taskQueue := currentWorkflow.ExecutionInfo.TaskQueue
-			emitWorkflowCompletionStats(c.metricsClient, namespace, taskQueue, event)
-		}
-	}
 
 	return nil
 }
