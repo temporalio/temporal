@@ -506,5 +506,6 @@ func (c *Config) String() string {
 
 func (r *GroupTLS) IsEnabled() bool {
 	return r.Server.KeyFile != "" || r.Server.KeyData != "" ||
-		len(r.Client.RootCAFiles) > 0 || len(r.Client.RootCAData) > 0
+		len(r.Client.RootCAFiles) > 0 || len(r.Client.RootCAData) > 0 ||
+		r.Client.ForceTLS
 }
