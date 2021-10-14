@@ -27,7 +27,6 @@ package temporal
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"sync"
 	"time"
 
@@ -398,18 +397,7 @@ func (s *Server) newBootstrapParams(
 
 	params.MetricsClient = metricsClient
 
-	useTls, err := strconv.ParseBool(s.so.config.PublicClient.UseTLS)
-	tlsOption := encryption.TLSOptionDefault
-	if (err == nil) {
-		if (useTls) {
-			tlsOption = encryption.TLSOptionUseTLS
-		} else {
-			tlsOption = encryption.TLSOptionDoNotUseTLS
-		}
-	}
-
-	options, err := s.so.tlsConfigProvider.GetFrontendClientConfig(tlsOption)
-	
+	options, err := s.so.tlsConfigProvider.GetFrontendClientConfig()
 	if err != nil {
 		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
 	}

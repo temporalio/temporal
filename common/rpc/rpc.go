@@ -86,7 +86,7 @@ func (d *RPCFactory) GetFrontendGRPCServerOptions() ([]grpc.ServerOption, error)
 
 func (d *RPCFactory) GetFrontendClientTlsConfig() (*tls.Config, error) {
 	if d.tlsFactory != nil {
-		return d.tlsFactory.GetFrontendClientConfig(encryption.TLSOptionDefault)
+		return d.tlsFactory.GetFrontendClientConfig()
 	}
 
 	return nil, nil
@@ -241,7 +241,7 @@ func (d *RPCFactory) CreateFrontendGRPCConnection(hostName string) *grpc.ClientC
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
-		tlsClientConfig, err = d.tlsFactory.GetFrontendClientConfig(encryption.TLSOptionDefault)
+		tlsClientConfig, err = d.tlsFactory.GetFrontendClientConfig()
 		if err != nil {
 			d.logger.Fatal("Failed to create tls config for gRPC connection", tag.Error(err))
 			return nil

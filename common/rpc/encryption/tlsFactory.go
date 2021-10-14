@@ -35,21 +35,13 @@ import (
 	"go.temporal.io/server/common/config"
 )
 
-type TLSOption int64
-const (
-	TLSOptionDefault TLSOption = iota
-	TLSOptionUseTLS
-	TLSOptionDoNotUseTLS
-)
-
 type (
-
 	// TLSConfigProvider serves as a common interface to read server and client configuration for TLS.
 	TLSConfigProvider interface {
 		GetInternodeServerConfig() (*tls.Config, error)
 		GetInternodeClientConfig() (*tls.Config, error)
 		GetFrontendServerConfig() (*tls.Config, error)
-		GetFrontendClientConfig(tlsOption TLSOption) (*tls.Config, error)
+		GetFrontendClientConfig() (*tls.Config, error)
 		GetExpiringCerts(timeWindow time.Duration) (expiring CertExpirationMap, expired CertExpirationMap, err error)
 	}
 
