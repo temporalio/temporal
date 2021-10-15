@@ -1,7 +1,7 @@
 # Develop Temporal Server
 This doc is for contributors to Temporal Server (hopefully that's you!)
 
-**Note:** All contributors also need to fill out the [Temporal Contributor License Agreement](https://gist.github.com/samarabbas/7dcd41eb1d847e12263cc961ccfdb197) before we can merge in any of your changes.
+**Note:** All contributors also need to fill out the [Temporal Contributor License Agreement](develop/docs/temporal-cla.md) before we can merge in any of your changes.
 
 ## Prerequisites
 

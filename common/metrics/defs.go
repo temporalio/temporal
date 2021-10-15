@@ -1865,6 +1865,7 @@ const (
 	WorkflowFailedCount
 	WorkflowTimeoutCount
 	WorkflowTerminateCount
+	WorkflowContinuedAsNewCount
 	ArchiverClientSendSignalCount
 	ArchiverClientSendSignalFailureCount
 	ArchiverClientHistoryRequestCount
@@ -2328,6 +2329,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		WorkflowFailedCount:                               {metricName: "workflow_failed", metricType: Counter},
 		WorkflowTimeoutCount:                              {metricName: "workflow_timeout", metricType: Counter},
 		WorkflowTerminateCount:                            {metricName: "workflow_terminate", metricType: Counter},
+		WorkflowContinuedAsNewCount:                       {metricName: "workflow_continued_as_new", metricType: Counter},
 		ArchiverClientSendSignalCount:                     {metricName: "archiver_client_sent_signal", metricType: Counter},
 		ArchiverClientSendSignalFailureCount:              {metricName: "archiver_client_send_signal_error", metricType: Counter},
 		ArchiverClientHistoryRequestCount:                 {metricName: "archiver_client_history_request", metricType: Counter},

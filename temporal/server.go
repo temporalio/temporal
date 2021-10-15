@@ -214,91 +214,57 @@ func (s *Server) Start() error {
 
 		s.serviceStoppedChs[svcName] = make(chan struct{})
 
-		var svc common.Daemon
+		var app *fx.App
 		switch svcName {
 		case primitives.FrontendService:
 			// todo: generalize this custom case logic as other services onboard fx
-			frontendApp := fx.New(
+			app = fx.New(
 				fx.Supply(
 					params,
 					s.serviceStoppedChs[svcName],
 				),
 				frontend.Module)
-			err = frontendApp.Err()
-			if err != nil {
-				close(s.serviceStoppedChs[svcName])
-				return fmt.Errorf("unable to construct service %q: %w", svcName, err)
-			}
-			s.serviceApps[svcName] = frontendApp
-			timeoutCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStartTimeout)
-			err = frontendApp.Start(timeoutCtx)
-			cancelFunc()
-			if err != nil {
-				close(s.serviceStoppedChs[svcName])
-				return fmt.Errorf("unable to start service %q: %w", svcName, err)
-			}
-			continue
 		case primitives.HistoryService:
-			// todo: generalize this custom case logic as other services onboard fx
-			histApp := fx.New(
+			app = fx.New(
 				fx.Supply(
 					params,
 					s.serviceStoppedChs[svcName],
 				),
 				history.Module)
-			err = histApp.Err()
-			if err != nil {
-				close(s.serviceStoppedChs[svcName])
-				return fmt.Errorf("unable to construct service %q: %w", svcName, err)
-			}
-			s.serviceApps[svcName] = histApp
-			timeoutCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStartTimeout)
-			err = histApp.Start(timeoutCtx)
-			cancelFunc()
-			if err != nil {
-				close(s.serviceStoppedChs[svcName])
-				return fmt.Errorf("unable to start service %q: %w", svcName, err)
-			}
-			continue
 		case primitives.MatchingService:
-			// todo: generalize this custom case logic as other services onboard fx
-			matchingApp := fx.New(
+			app = fx.New(
 				fx.Supply(
 					params,
 					s.serviceStoppedChs[svcName],
 				),
 				matching.Module)
-			err = matchingApp.Err()
-			if err != nil {
-				close(s.serviceStoppedChs[svcName])
-				return fmt.Errorf("unable to construct service %q: %w", svcName, err)
-			}
-			s.serviceApps[svcName] = matchingApp
-			timeoutCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStartTimeout)
-			err = matchingApp.Start(timeoutCtx)
-			cancelFunc()
-			if err != nil {
-				close(s.serviceStoppedChs[svcName])
-				return fmt.Errorf("unable to start service %q: %w", svcName, err)
-			}
-			continue
 		case primitives.WorkerService:
-			svc, err = worker.NewService(params)
+			app = fx.New(
+				fx.Supply(
+					params,
+					s.serviceStoppedChs[svcName],
+				),
+				worker.Module)
 		default:
 			return fmt.Errorf("unknown service %q", svcName)
 		}
+
+		err = app.Err()
+		if err != nil {
+			close(s.serviceStoppedChs[svcName])
+			return fmt.Errorf("unable to construct service %q: %w", svcName, err)
+		}
+
+		s.serviceApps[svcName] = app
+
+		timeoutCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStartTimeout)
+		err = app.Start(timeoutCtx)
+		cancelFunc()
+
 		if err != nil {
 			close(s.serviceStoppedChs[svcName])
 			return fmt.Errorf("unable to start service %q: %w", svcName, err)
 		}
-
-		s.services[svcName] = svc
-
-		go func(svc common.Daemon, svcStoppedCh chan<- struct{}) {
-			// Start is blocked until Stop() is called.
-			svc.Start()
-			close(svcStoppedCh)
-		}(svc, s.serviceStoppedChs[svcName])
 	}
 
 	if s.so.blockingStart {

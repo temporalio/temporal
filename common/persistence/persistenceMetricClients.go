@@ -34,40 +34,39 @@ import (
 )
 
 type (
-	shardPersistenceClient struct {
+	metricEmitter struct {
 		metricClient metrics.Client
-		persistence  ShardManager
 		logger       log.Logger
+	}
+
+	shardPersistenceClient struct {
+		metricEmitter
+		persistence ShardManager
 	}
 
 	executionPersistenceClient struct {
-		metricClient metrics.Client
-		persistence  ExecutionManager
-		logger       log.Logger
+		metricEmitter
+		persistence ExecutionManager
 	}
 
 	taskPersistenceClient struct {
-		metricClient metrics.Client
-		persistence  TaskManager
-		logger       log.Logger
+		metricEmitter
+		persistence TaskManager
 	}
 
 	metadataPersistenceClient struct {
-		metricClient metrics.Client
-		persistence  MetadataManager
-		logger       log.Logger
+		metricEmitter
+		persistence MetadataManager
 	}
 
 	clusterMetadataPersistenceClient struct {
-		metricClient metrics.Client
-		persistence  ClusterMetadataManager
-		logger       log.Logger
+		metricEmitter
+		persistence ClusterMetadataManager
 	}
 
 	queuePersistenceClient struct {
-		metricClient metrics.Client
-		persistence  Queue
-		logger       log.Logger
+		metricEmitter
+		persistence Queue
 	}
 )
 
@@ -81,54 +80,66 @@ var _ Queue = (*queuePersistenceClient)(nil)
 // NewShardPersistenceMetricsClient creates a client to manage shards
 func NewShardPersistenceMetricsClient(persistence ShardManager, metricClient metrics.Client, logger log.Logger) ShardManager {
 	return &shardPersistenceClient{
-		persistence:  persistence,
-		metricClient: metricClient,
-		logger:       logger,
+		metricEmitter: metricEmitter{
+			metricClient: metricClient,
+			logger:       logger,
+		},
+		persistence: persistence,
 	}
 }
 
 // NewExecutionPersistenceMetricsClient creates a client to manage executions
 func NewExecutionPersistenceMetricsClient(persistence ExecutionManager, metricClient metrics.Client, logger log.Logger) ExecutionManager {
 	return &executionPersistenceClient{
-		persistence:  persistence,
-		metricClient: metricClient,
-		logger:       logger,
+		metricEmitter: metricEmitter{
+			metricClient: metricClient,
+			logger:       logger,
+		},
+		persistence: persistence,
 	}
 }
 
 // NewTaskPersistenceMetricsClient creates a client to manage tasks
 func NewTaskPersistenceMetricsClient(persistence TaskManager, metricClient metrics.Client, logger log.Logger) TaskManager {
 	return &taskPersistenceClient{
-		persistence:  persistence,
-		metricClient: metricClient,
-		logger:       logger,
+		metricEmitter: metricEmitter{
+			metricClient: metricClient,
+			logger:       logger,
+		},
+		persistence: persistence,
 	}
 }
 
 // NewMetadataPersistenceMetricsClient creates a MetadataManager client to manage metadata
 func NewMetadataPersistenceMetricsClient(persistence MetadataManager, metricClient metrics.Client, logger log.Logger) MetadataManager {
 	return &metadataPersistenceClient{
-		persistence:  persistence,
-		metricClient: metricClient,
-		logger:       logger,
+		metricEmitter: metricEmitter{
+			metricClient: metricClient,
+			logger:       logger,
+		},
+		persistence: persistence,
 	}
 }
 
 // NewClusterMetadataPersistenceMetricsClient creates a ClusterMetadataManager client to manage cluster metadata
 func NewClusterMetadataPersistenceMetricsClient(persistence ClusterMetadataManager, metricClient metrics.Client, logger log.Logger) ClusterMetadataManager {
 	return &clusterMetadataPersistenceClient{
-		persistence:  persistence,
-		metricClient: metricClient,
-		logger:       logger,
+		metricEmitter: metricEmitter{
+			metricClient: metricClient,
+			logger:       logger,
+		},
+		persistence: persistence,
 	}
 }
 
 // NewQueuePersistenceMetricsClient creates a client to manage queue
 func NewQueuePersistenceMetricsClient(persistence Queue, metricClient metrics.Client, logger log.Logger) Queue {
 	return &queuePersistenceClient{
-		persistence:  persistence,
-		metricClient: metricClient,
-		logger:       logger,
+		metricEmitter: metricEmitter{
+			metricClient: metricClient,
+			logger:       logger,
+		},
+		persistence: persistence,
 	}
 }
 
@@ -177,23 +188,6 @@ func (p *shardPersistenceClient) UpdateShard(request *UpdateShardRequest) error 
 	}
 
 	return err
-}
-
-func (p *shardPersistenceClient) updateErrorMetric(scope int, err error) {
-	switch err.(type) {
-	case *ShardAlreadyExistError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardExistsCounter)
-	case *ShardOwnershipLostError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardOwnershipLostCounter)
-	case *serviceerror.NotFound:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
-	case *serviceerror.ResourceExhausted:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
-		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
-	default:
-		p.logger.Error("Operation failed with internal error.", tag.Error(err), tag.MetricScope(scope))
-		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
-	}
 }
 
 func (p *shardPersistenceClient) Close() {
@@ -618,31 +612,6 @@ func (p *executionPersistenceClient) RangeCompleteTimerTask(request *RangeComple
 	return err
 }
 
-func (p *executionPersistenceClient) updateErrorMetric(scope int, err error) {
-	switch err.(type) {
-	case *serviceerror.NotFound:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
-	case *ShardOwnershipLostError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardOwnershipLostCounter)
-	case *CurrentWorkflowConditionFailedError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrCurrentWorkflowConditionFailedCounter)
-	case *WorkflowConditionFailedError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrWorkflowConditionFailedCounter)
-	case *ConditionFailedError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
-	case *TimeoutError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
-		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
-	case *serviceerror.ResourceExhausted:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
-		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
-	default:
-		p.logger.Error("Operation failed with internal error.",
-			tag.Error(err), tag.MetricScope(scope))
-		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
-	}
-}
-
 func (p *executionPersistenceClient) Close() {
 	p.persistence.Close()
 }
@@ -754,23 +723,6 @@ func (p *taskPersistenceClient) UpdateTaskQueue(request *UpdateTaskQueueRequest)
 	return response, err
 }
 
-func (p *taskPersistenceClient) updateErrorMetric(scope int, err error) {
-	switch err.(type) {
-	case *ConditionFailedError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
-	case *TimeoutError:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
-		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
-	case *serviceerror.ResourceExhausted:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
-		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
-	default:
-		p.logger.Error("Operation failed with internal error.",
-			tag.Error(err), tag.MetricScope(scope))
-		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
-	}
-}
-
 func (p *taskPersistenceClient) Close() {
 	p.persistence.Close()
 }
@@ -879,24 +831,6 @@ func (p *metadataPersistenceClient) GetMetadata() (*GetMetadataResponse, error) 
 
 func (p *metadataPersistenceClient) Close() {
 	p.persistence.Close()
-}
-
-func (p *metadataPersistenceClient) updateErrorMetric(scope int, err error) {
-	switch err.(type) {
-	case *serviceerror.NamespaceAlreadyExists:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrNamespaceAlreadyExistsCounter)
-	case *serviceerror.NotFound:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
-	case *serviceerror.InvalidArgument:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrBadRequestCounter)
-	case *serviceerror.ResourceExhausted:
-		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
-		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
-	default:
-		p.logger.Error("Operation failed with internal error.",
-			tag.Error(err), tag.MetricScope(scope))
-		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
-	}
 }
 
 // AppendHistoryNodes add a node to history node table
@@ -1258,4 +1192,42 @@ func (c *metadataPersistenceClient) InitializeSystemNamespaces(currentClusterNam
 	}
 
 	return err
+}
+
+func (p *metricEmitter) updateErrorMetric(scope int, err error) {
+
+	switch err.(type) {
+	case *ShardAlreadyExistError:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardExistsCounter)
+	case *ShardOwnershipLostError:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrShardOwnershipLostCounter)
+	case *CurrentWorkflowConditionFailedError:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrCurrentWorkflowConditionFailedCounter)
+	case *WorkflowConditionFailedError:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrWorkflowConditionFailedCounter)
+	case *ConditionFailedError:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
+	case *TimeoutError:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
+		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
+
+	case *serviceerror.InvalidArgument:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrBadRequestCounter)
+	case *serviceerror.NamespaceAlreadyExists:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrNamespaceAlreadyExistsCounter)
+	case *serviceerror.NotFound:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
+	case *serviceerror.ResourceExhausted:
+		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
+		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
+
+	default:
+		if err == ErrPersistenceLimitExceeded {
+			p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
+			p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
+		} else {
+			p.logger.Error("Operation failed with internal error.", tag.Error(err), tag.MetricScope(scope))
+			p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
+		}
+	}
 }
