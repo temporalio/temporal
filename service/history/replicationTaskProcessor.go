@@ -493,6 +493,7 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 	)
 	err := p.shard.GetExecutionManager().RangeCompleteReplicationTask(
 		&persistence.RangeCompleteReplicationTaskRequest{
+			ShardID:            p.shard.GetShardID(),
 			InclusiveEndTaskID: *minAckedTaskID,
 		},
 	)

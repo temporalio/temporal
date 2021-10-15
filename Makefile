@@ -408,16 +408,6 @@ install-schema-cdc: temporal-cassandra-tool
 	./temporal-cassandra-tool -k temporal_visibility_standby setup-schema -v 0.0
 	./temporal-cassandra-tool -k temporal_visibility_standby update-schema -d ./schema/cassandra/visibility/versioned
 
-	@printf $(COLOR) "Set up temporal_other key space..."
-	./temporal-cassandra-tool drop -k temporal_other -f
-	./temporal-cassandra-tool create -k temporal_other --rf 1
-	./temporal-cassandra-tool -k temporal_other setup-schema -v 0.0
-	./temporal-cassandra-tool -k temporal_other update-schema -d ./schema/cassandra/temporal/versioned
-	./temporal-cassandra-tool drop -k temporal_visibility_other -f
-	./temporal-cassandra-tool create -k temporal_visibility_other --rf 1
-	./temporal-cassandra-tool -k temporal_visibility_other setup-schema -v 0.0
-	./temporal-cassandra-tool -k temporal_visibility_other update-schema -d ./schema/cassandra/visibility/versioned
-
 ##### Run server #####
 start-dependencies:
 	docker-compose -f ./develop/docker-compose/docker-compose.yml -f ./develop/docker-compose/docker-compose.$(GOOS).yml up
