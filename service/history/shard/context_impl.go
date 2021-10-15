@@ -50,8 +50,8 @@ import (
 	"go.temporal.io/server/service/history/events"
 )
 
-const (
-	conditionalRetryCount = 5
+var (
+	defaultTime = time.Unix(0, 0)
 )
 
 type (
@@ -287,13 +287,12 @@ func (s *ContextImpl) UpdateTimerAckLevel(ackLevel time.Time) error {
 	return s.updateShardInfoLocked()
 }
 
-func (s *ContextImpl) GetTimerClusterAckLevel(cluster string) time.Time {
+func (s *ContextImpl) GetTimerClusterAckLevel(cluster string) (t time.Time) {
 	s.RLock()
 	defer s.RUnlock()
 
 	// if we can find corresponding ack level
 	if ackLevel, ok := s.shardInfo.ClusterTimerAckLevel[cluster]; ok {
-
 		return timestamp.TimeValue(ackLevel)
 	}
 	// otherwise, default to existing ack level, which belongs to local cluster
@@ -1054,7 +1053,7 @@ func acquireShard(
 
 	getShard := func() error {
 		resp, err := shardItem.GetShardManager().GetShard(&persistence.GetShardRequest{
-			ShardID: int32(shardItem.shardID),
+			ShardID: shardItem.shardID,
 		})
 		if err == nil {
 			shardInfo = &persistence.ShardInfoWithFailover{ShardInfo: resp.ShardInfo}
@@ -1161,6 +1160,9 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 	}
 	clusterTimerAckLevel := make(map[string]*time.Time)
 	for k, v := range shardInfo.ClusterTimerAckLevel {
+		if timestamp.TimeValue(v).IsZero() {
+			v = timestamp.TimePtr(defaultTime)
+		}
 		clusterTimerAckLevel[k] = v
 	}
 	clusterReplicationLevel := make(map[string]int64)
@@ -1170,6 +1172,9 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 	clusterReplicationDLQLevel := make(map[string]int64)
 	for k, v := range shardInfo.ReplicationDlqAckLevel {
 		clusterReplicationDLQLevel[k] = v
+	}
+	if timestamp.TimeValue(shardInfo.TimerAckLevelTime).IsZero() {
+		shardInfo.TimerAckLevelTime = timestamp.TimePtr(defaultTime)
 	}
 	shardInfoCopy := &persistence.ShardInfoWithFailover{
 		ShardInfo: &persistencespb.ShardInfo{
