@@ -78,6 +78,7 @@ type (
 
 		mockExecutionManager *persistence.MockExecutionManager
 
+		shardID     int32
 		config      *configs.Config
 		requestChan chan *replicationTaskRequest
 
@@ -91,7 +92,7 @@ func TestReplicationTaskProcessorSuite(t *testing.T) {
 }
 
 func (s *replicationTaskProcessorSuite) SetupSuite() {
-
+	rand.Seed(time.Now().UnixNano())
 }
 
 func (s *replicationTaskProcessorSuite) TearDownSuite() {
@@ -105,11 +106,12 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.config = tests.NewDynamicConfig()
 	s.requestChan = make(chan *replicationTaskRequest, 10)
 
+	s.shardID = rand.Int31()
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
-				ShardId:          0,
+				ShardId:          s.shardID,
 				RangeId:          1,
 				TransferAckLevel: 0,
 				ClusterReplicationLevel: map[string]int64{
@@ -166,7 +168,7 @@ func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus_Success() {
 	now := timestamp.TimeNowPtrUtc()
 	s.mockEngine.EXPECT().SyncShardStatus(gomock.Any(), &historyservice.SyncShardStatusRequest{
 		SourceCluster: cluster.TestAlternativeClusterName,
-		ShardId:       0,
+		ShardId:       s.shardID,
 		StatusTime:    now,
 	}).Return(nil)
 
@@ -240,7 +242,7 @@ func (s *replicationTaskProcessorSuite) TestHandleReplicationDLQTask_SyncActivit
 	workflowID := uuid.New()
 	runID := uuid.NewRandom().String()
 	request := &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           s.mockShard.GetShardID(),
+		ShardID:           s.shardID,
 		SourceClusterName: cluster.TestAlternativeClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId: namespaceID,
@@ -261,7 +263,7 @@ func (s *replicationTaskProcessorSuite) TestHandleReplicationDLQTask_History() {
 	runID := uuid.NewRandom().String()
 
 	request := &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           s.mockShard.GetShardID(),
+		ShardID:           s.shardID,
 		SourceClusterName: cluster.TestAlternativeClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId:  namespaceID,
@@ -293,7 +295,7 @@ func (s *replicationTaskProcessorSuite) TestConvertTaskToDLQTask_SyncActivity() 
 		}},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           s.mockShard.GetShardID(),
+		ShardID:           s.shardID,
 		SourceClusterName: cluster.TestAlternativeClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId: namespaceID,
@@ -340,7 +342,7 @@ func (s *replicationTaskProcessorSuite) TestConvertTaskToDLQTask_History() {
 		},
 	}
 	request := &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           s.mockShard.GetShardID(),
+		ShardID:           s.shardID,
 		SourceClusterName: cluster.TestAlternativeClusterName,
 		TaskInfo: &persistencespb.ReplicationTaskInfo{
 			NamespaceId:  namespaceID,
@@ -377,7 +379,7 @@ func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
 
 	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID - 1
 	s.mockExecutionManager.EXPECT().RangeCompleteReplicationTask(&persistence.RangeCompleteReplicationTaskRequest{
-		ShardID:            s.mockShard.GetShardID(),
+		ShardID:            s.shardID,
 		InclusiveEndTaskID: ackedTaskID,
 	}).Return(nil)
 	err = s.replicationTaskProcessor.cleanupReplicationTasks()
@@ -430,7 +432,7 @@ func (s *replicationTaskProcessorSuite) TestPaginationFn_Success_More() {
 	s.replicationTaskProcessor.rxTaskBackoff = rxTaskBackoff
 
 	requestToken := &replicationspb.ReplicationToken{
-		ShardId:                s.mockShard.GetShardID(),
+		ShardId:                s.shardID,
 		LastProcessedMessageId: maxRxProcessedTaskID,
 		LastRetrievedMessageId: maxRxReceivedTaskID,
 	}
@@ -502,7 +504,7 @@ func (s *replicationTaskProcessorSuite) TestPaginationFn_Success_NoMore() {
 	s.replicationTaskProcessor.rxTaskBackoff = rxTaskBackoff
 
 	requestToken := &replicationspb.ReplicationToken{
-		ShardId:                s.mockShard.GetShardID(),
+		ShardId:                s.shardID,
 		LastProcessedMessageId: maxRxProcessedTaskID,
 		LastRetrievedMessageId: maxRxReceivedTaskID,
 	}
@@ -538,7 +540,7 @@ func (s *replicationTaskProcessorSuite) TestPaginationFn_Error() {
 	s.replicationTaskProcessor.rxTaskBackoff = rxTaskBackoff
 
 	requestToken := &replicationspb.ReplicationToken{
-		ShardId:                s.mockShard.GetShardID(),
+		ShardId:                s.shardID,
 		LastProcessedMessageId: maxRxProcessedTaskID,
 		LastRetrievedMessageId: maxRxReceivedTaskID,
 	}
