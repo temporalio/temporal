@@ -129,6 +129,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 			)); err != nil {
 				return nil, err
 			}
+			b.mutableState.GetExecutionInfo().LastEventTaskId = event.GetTaskId()
 		}
 
 		switch event.GetEventType() {

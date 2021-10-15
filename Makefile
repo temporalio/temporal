@@ -382,8 +382,9 @@ install-schema-postgresql: temporal-sql-tool
 
 install-schema-es:
 	@printf $(COLOR) "Install Elasticsearch schema..."
-	curl -X PUT "http://127.0.0.1:9200/_cluster/settings" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/cluster_settings_v7.json --write-out "\n"
-	curl -X PUT "http://127.0.0.1:9200/_template/temporal_visibility_v1_template" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/index_template_v7.json --write-out "\n"
+	curl --fail -X PUT "http://127.0.0.1:9200/_cluster/settings" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/cluster_settings_v7.json --write-out "\n"
+	curl --fail -X PUT "http://127.0.0.1:9200/_template/temporal_visibility_v1_template" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/index_template_v7.json --write-out "\n"
+# No --fail here because create index is not idempotent operation.
 	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev" --write-out "\n"
 
 install-schema-cdc: temporal-cassandra-tool
@@ -406,16 +407,6 @@ install-schema-cdc: temporal-cassandra-tool
 	./temporal-cassandra-tool create -k temporal_visibility_standby --rf 1
 	./temporal-cassandra-tool -k temporal_visibility_standby setup-schema -v 0.0
 	./temporal-cassandra-tool -k temporal_visibility_standby update-schema -d ./schema/cassandra/visibility/versioned
-
-	@printf $(COLOR) "Set up temporal_other key space..."
-	./temporal-cassandra-tool drop -k temporal_other -f
-	./temporal-cassandra-tool create -k temporal_other --rf 1
-	./temporal-cassandra-tool -k temporal_other setup-schema -v 0.0
-	./temporal-cassandra-tool -k temporal_other update-schema -d ./schema/cassandra/temporal/versioned
-	./temporal-cassandra-tool drop -k temporal_visibility_other -f
-	./temporal-cassandra-tool create -k temporal_visibility_other --rf 1
-	./temporal-cassandra-tool -k temporal_visibility_other setup-schema -v 0.0
-	./temporal-cassandra-tool -k temporal_visibility_other update-schema -d ./schema/cassandra/visibility/versioned
 
 ##### Run server #####
 start-dependencies:

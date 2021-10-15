@@ -641,7 +641,6 @@ func (d *MutableStateTaskStore) CompleteReplicationTask(
 func (d *MutableStateTaskStore) RangeCompleteReplicationTask(
 	request *p.RangeCompleteReplicationTaskRequest,
 ) error {
-
 	query := d.Session.Query(templateCompleteReplicationTaskBeforeQuery,
 		request.ShardID,
 		rowTypeReplicationTask,
