@@ -143,10 +143,13 @@ func (s *localStoreTlsProvider) GetInternodeClientConfig() (*tls.Config, error) 
 func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 
 	var client *config.ClientTLS
+	var useTLS bool
 	if isSystemWorker(s.settings) {
 		client = &s.settings.SystemWorker.Client
+		useTLS = true
 	} else {
 		client = &s.settings.Frontend.Client
+		useTLS = s.settings.Frontend.IsEnabled()
 	}
 	return s.getOrCreateConfig(
 		&s.cachedFrontendClientConfig,
@@ -154,7 +157,7 @@ func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 			return newClientTLSConfig(s.workerCertProvider, client.ServerName,
 				s.settings.Frontend.Server.RequireClientAuth, true, !client.DisableHostVerification)
 		},
-		s.settings.Frontend.IsEnabled(),
+		useTLS,
 	)
 }
 
@@ -434,5 +437,7 @@ func mergeMaps(to CertExpirationMap, from CertExpirationMap) {
 }
 
 func isSystemWorker(tls *config.RootTLS) bool {
-	return tls.SystemWorker.CertData != "" || tls.SystemWorker.CertFile != ""
+	return tls.SystemWorker.CertData != "" || tls.SystemWorker.CertFile != "" ||
+		len(tls.SystemWorker.Client.RootCAData) > 0 || len(tls.SystemWorker.Client.RootCAFiles) > 0 ||
+		tls.SystemWorker.Client.ForceTLS
 }
