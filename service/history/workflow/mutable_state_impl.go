@@ -3953,7 +3953,6 @@ func (e *MutableStateImpl) prepareEventsAndReplicationTasks(
 			TxnID:       historyNodeTxnIDs[index],
 			Events:      eventBatch,
 		}
-		e.GetExecutionInfo().LastEventTaskId = eventBatch[len(eventBatch)-1].GetTaskId()
 		e.executionInfo.LastFirstEventId = eventBatch[0].GetEventId()
 		e.executionInfo.LastFirstEventTxnId = historyNodeTxnIDs[index]
 	}
@@ -4079,17 +4078,17 @@ func (e *MutableStateImpl) updateWithLastWriteEvent(
 		return nil
 	}
 
-	if e.executionInfo.VersionHistories != nil {
-		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
-		if err != nil {
-			return err
-		}
-		if err := versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewVersionHistoryItem(
-			lastEvent.GetEventId(), lastEvent.GetVersion(),
-		)); err != nil {
-			return err
-		}
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(e.executionInfo.VersionHistories)
+	if err != nil {
+		return err
 	}
+	if err := versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewVersionHistoryItem(
+		lastEvent.GetEventId(), lastEvent.GetVersion(),
+	)); err != nil {
+		return err
+	}
+	e.executionInfo.LastEventTaskId = lastEvent.GetTaskId()
+
 	return nil
 }
 
