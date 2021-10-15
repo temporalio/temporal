@@ -26,6 +26,7 @@ package workflow
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
@@ -33,6 +34,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/tasks"
@@ -42,6 +44,11 @@ import (
 )
 
 type (
+	completionMetric struct {
+		initialized bool
+		taskQueue   string
+		status      enumspb.WorkflowExecutionStatus
+	}
 	TransactionImpl struct {
 		shard  shard.Context
 		logger log.Logger
@@ -297,13 +304,15 @@ func createWorkflowExecutionWithRetry(
 	)
 	switch err.(type) {
 	case nil:
-		emitMutationMetrics(
-			shard,
+		if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
 			request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
-			[]*persistence.MutableStateStatistics{
+		); err == nil {
+			emitMutationMetrics(
+				shard,
+				namespaceEntry,
 				&resp.NewMutableStateStats,
-			},
-		)
+			)
+		}
 		return resp, nil
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,
@@ -343,15 +352,24 @@ func conflictResolveWorkflowExecutionWithRetry(
 	)
 	switch err.(type) {
 	case nil:
-		emitMutationMetrics(
-			shard,
+		if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
 			request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId,
-			[]*persistence.MutableStateStatistics{
+		); err == nil {
+			emitMutationMetrics(
+				shard,
+				namespaceEntry,
 				&resp.ResetMutableStateStats,
 				resp.NewMutableStateStats,
 				resp.CurrentMutableStateStats,
-			},
-		)
+			)
+			emitCompletionMetrics(
+				shard,
+				namespaceEntry,
+				snapshotToCompletionMetric(&request.ResetWorkflowSnapshot),
+				snapshotToCompletionMetric(request.NewWorkflowSnapshot),
+				mutationToCompletionMetric(request.CurrentWorkflowMutation),
+			)
+		}
 		return resp, nil
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,
@@ -392,13 +410,15 @@ func getWorkflowExecutionWithRetry(
 	)
 	switch err.(type) {
 	case nil:
-		emitGetMetrics(
-			shard,
+		if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
 			resp.State.ExecutionInfo.NamespaceId,
-			[]*persistence.MutableStateStatistics{
+		); err == nil {
+			emitGetMetrics(
+				shard,
+				namespaceEntry,
 				&resp.MutableStateStats,
-			},
-		)
+			)
+		}
 		return resp, nil
 	case *serviceerror.NotFound:
 		// it is possible that workflow does not exists
@@ -434,14 +454,22 @@ func updateWorkflowExecutionWithRetry(
 	)
 	switch err.(type) {
 	case nil:
-		emitMutationMetrics(
-			shard,
+		if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
 			request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId,
-			[]*persistence.MutableStateStatistics{
+		); err == nil {
+			emitMutationMetrics(
+				shard,
+				namespaceEntry,
 				&resp.UpdateMutableStateStats,
 				resp.NewMutableStateStats,
-			},
-		)
+			)
+			emitCompletionMetrics(
+				shard,
+				namespaceEntry,
+				mutationToCompletionMetric(&request.UpdateWorkflowMutation),
+				snapshotToCompletionMetric(request.NewWorkflowSnapshot),
+			)
+		}
 		return resp, nil
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,
@@ -596,18 +624,11 @@ func NotifyNewHistoryMutationEvent(
 
 func emitMutationMetrics(
 	shard shard.Context,
-	namespaceID string,
-	stats []*persistence.MutableStateStatistics,
+	namespace *namespace.Namespace,
+	stats ...*persistence.MutableStateStatistics,
 ) {
-	namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
-		namespaceID,
-	)
-	if err != nil {
-		return
-	}
-
 	metricsClient := shard.GetMetricsClient()
-	namespaceName := namespaceEntry.Name()
+	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
 			metricsClient.Scope(metrics.SessionSizeStatsScope, metrics.NamespaceTag(namespaceName)),
@@ -619,23 +640,63 @@ func emitMutationMetrics(
 
 func emitGetMetrics(
 	shard shard.Context,
-	namespaceID string,
-	stats []*persistence.MutableStateStatistics,
+	namespace *namespace.Namespace,
+	stats ...*persistence.MutableStateStatistics,
 ) {
-	namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
-		namespaceID,
-	)
-	if err != nil {
-		return
-	}
-
 	metricsClient := shard.GetMetricsClient()
-	namespaceName := namespaceEntry.Name()
+	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
 			metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.NamespaceTag(namespaceName)),
 			metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.NamespaceTag(namespaceName)),
 			stat,
+		)
+	}
+}
+
+func snapshotToCompletionMetric(
+	workflowSnapshot *persistence.WorkflowSnapshot,
+) completionMetric {
+	if workflowSnapshot == nil {
+		return completionMetric{initialized: false}
+	}
+	return completionMetric{
+		initialized: true,
+		taskQueue:   workflowSnapshot.ExecutionInfo.TaskQueue,
+		status:      workflowSnapshot.ExecutionState.Status,
+	}
+}
+
+func mutationToCompletionMetric(
+	workflowMutation *persistence.WorkflowMutation,
+) completionMetric {
+	if workflowMutation == nil {
+		return completionMetric{initialized: false}
+	}
+	return completionMetric{
+		initialized: true,
+		taskQueue:   workflowMutation.ExecutionInfo.TaskQueue,
+		status:      workflowMutation.ExecutionState.Status,
+	}
+}
+
+func emitCompletionMetrics(
+	shard shard.Context,
+	namespace *namespace.Namespace,
+	completionMetrics ...completionMetric,
+) {
+	metricsClient := shard.GetMetricsClient()
+	namespaceName := namespace.Name()
+
+	for _, completionMetric := range completionMetrics {
+		if !completionMetric.initialized {
+			continue
+		}
+		emitWorkflowCompletionStats(
+			metricsClient,
+			namespaceName,
+			completionMetric.taskQueue,
+			completionMetric.status,
 		)
 	}
 }
