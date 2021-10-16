@@ -96,7 +96,7 @@ func (s *elasticsearchIntegrationSuite) TearDownSuite() {
 func (s *elasticsearchIntegrationSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	s.testSearchAttributeKey = "CustomStringField"
+	s.testSearchAttributeKey = "CustomTextField"
 	s.testSearchAttributeVal = "test value"
 }
 
@@ -549,7 +549,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_StringQuery() {
 
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"CustomStringField": payload.EncodeString("nothing else matters"),
+			"CustomTextField": payload.EncodeString("nothing else matters"),
 		},
 	}
 	request.SearchAttributes = searchAttr
@@ -563,7 +563,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_StringQuery() {
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
-		Query:     `CustomStringField = "nothing else matters"`,
+		Query:     `CustomTextField = "nothing else matters"`,
 	}
 	for i := 0; i < numOfRetry; i++ {
 		resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
@@ -577,7 +577,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_StringQuery() {
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
 	s.True(!openExecution.GetExecutionTime().Before(*openExecution.GetStartTime()))
-	saPayload := openExecution.SearchAttributes.GetIndexedFields()["CustomStringField"]
+	saPayload := openExecution.SearchAttributes.GetIndexedFields()["CustomTextField"]
 	var saValue string
 	err = payload.Decode(saPayload, &saValue)
 	s.NoError(err)
@@ -587,7 +587,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_StringQuery() {
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
-		Query:     `CustomStringField = "nothing"`,
+		Query:     `CustomTextField = "nothing"`,
 	}
 	resp, err := s.engine.ListWorkflowExecutions(NewContext(), listRequest)
 	s.NoError(err)
@@ -597,7 +597,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_StringQuery() {
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
-		Query:     `CustomStringField = "else nothing matters"`,
+		Query:     `CustomTextField = "else nothing matters"`,
 	}
 	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
 	s.NoError(err)
@@ -607,7 +607,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_StringQuery() {
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
-		Query:     `CustomStringField LIKE "%else%"`,
+		Query:     `CustomTextField LIKE "%else%"`,
 	}
 	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
 	s.NoError(err)
@@ -617,7 +617,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_StringQuery() {
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
-		Query:     `CustomStringField LIKE "else"`, // Same as previous because % just removed for LIKE queries.
+		Query:     `CustomTextField LIKE "else"`, // Same as previous because % just removed for LIKE queries.
 	}
 	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
 	s.NoError(err)
@@ -627,7 +627,7 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_StringQuery() {
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
-		Query:     `CustomStringField LIKE "%ls%"`,
+		Query:     `CustomTextField LIKE "%ls%"`,
 	}
 	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
 	s.NoError(err)
@@ -637,13 +637,13 @@ func (s *elasticsearchIntegrationSuite) TestListWorkflow_StringQuery() {
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.namespace,
 		PageSize:  defaultTestValueOfESIndexMaxResultWindow,
-		Query:     `CustomStringField NOT LIKE "%else%"`,
+		Query:     `CustomTextField NOT LIKE "%else%"`,
 	}
 	resp, err = s.engine.ListWorkflowExecutions(NewContext(), listRequest)
 	s.NoError(err)
 	executionCount := 0
 	for _, execution := range resp.GetExecutions() {
-		saPayload := execution.SearchAttributes.GetIndexedFields()["CustomStringField"]
+		saPayload := execution.SearchAttributes.GetIndexedFields()["CustomTextField"]
 		var saValue string
 		err = payload.Decode(saPayload, &saValue)
 		s.NoError(err)
@@ -1295,7 +1295,7 @@ func (s *elasticsearchIntegrationSuite) testListResultForUpsertSearchAttributes(
 
 func (s *elasticsearchIntegrationSuite) createSearchAttributes() *commonpb.SearchAttributes {
 	searchAttributes, err := searchattribute.Encode(map[string]interface{}{
-		"CustomStringField":             "another string",
+		"CustomTextField":               "another string",
 		"CustomIntField":                123,
 		"CustomDoubleField":             22.0878,
 		searchattribute.BinaryChecksums: []string{"binary-v1", "binary-v2"},

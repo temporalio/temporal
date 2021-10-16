@@ -49,14 +49,14 @@ func Test_ApplyTypeMap_Success(t *testing.T) {
 	}
 
 	validSearchAttributes := NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
-		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 		"key2": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		"key3": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key4": enumspb.INDEXED_VALUE_TYPE_DOUBLE,
 	}}
 
 	ApplyTypeMap(sa, validSearchAttributes)
-	assert.Equal("String", string(sa.GetIndexedFields()["key1"].Metadata["type"]))
+	assert.Equal("Text", string(sa.GetIndexedFields()["key1"].Metadata["type"]))
 	assert.Equal("Keyword", string(sa.GetIndexedFields()["key2"].Metadata["type"]))
 	assert.Equal("Int", string(sa.GetIndexedFields()["key3"].Metadata["type"]))
 }
@@ -77,7 +77,7 @@ func Test_ApplyTypeMap_Skip(t *testing.T) {
 	}
 
 	validSearchAttributes := NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
-		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 		"key2": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		"key3": enumspb.INDEXED_VALUE_TYPE_INT,
 	}}

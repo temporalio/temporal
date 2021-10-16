@@ -550,11 +550,11 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}}}}`, s.queryToJSON(qry))
 	s.Equal(`[{"StartTime":{"order":"desc"}},{"CloseTime":{"order":"asc"}}]`, s.sorterToJSON(srt))
 
-	query = `order by CustomStringField desc`
+	query = `order by CustomTextField desc`
 	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Equal(err.(*serviceerror.InvalidArgument).Error(), "unable to parse query: unable to convert 'order by' column name: unable to sort by field of String type, use field of type Keyword")
+	s.Equal(err.(*serviceerror.InvalidArgument).Error(), "unable to parse query: unable to convert 'order by' column name: unable to sort by field of Text type, use field of type Keyword")
 
 	query = `order by CustomIntField asc`
 	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
@@ -854,7 +854,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
 		Source: []byte(`{"ExecutionStatus": "Completed",
           "TemporalChangeVersion": ["ver1", "ver2"],
           "CustomKeywordField": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
-          "CustomStringField": "text text",
+          "CustomTextField": "text text",
           "CustomDatetimeField": ["2014-08-28T03:15:00.000-07:00", "2016-04-21T05:00:00.000-07:00"],
           "CustomDoubleField": [1234.1234,5678.5678],
           "CustomIntField": [111,222],
@@ -873,7 +873,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
 
 	s.Equal("bfd5c907-f899-4baf-a7b2-2ab85e623ebd", customSearchAttributes["CustomKeywordField"])
 
-	s.Equal("text text", customSearchAttributes["CustomStringField"])
+	s.Equal("text text", customSearchAttributes["CustomTextField"])
 
 	date1, err := time.Parse(time.RFC3339Nano, "2014-08-28T03:15:00.000-07:00")
 	s.NoError(err)
@@ -898,7 +898,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
 		Source: []byte(`{"ExecutionStatus": "Completed",
           "TemporalChangeVersion": ["ver1", "ver2"],
           "CustomKeywordField": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
-          "CustomStringField": "text text",
+          "CustomTextField": "text text",
           "CustomDatetimeField": ["2014-08-28T03:15:00.000-07:00", "2016-04-21T05:00:00.000-07:00"],
           "CustomDoubleField": [1234.1234,5678.5678],
           "CustomIntField": [111,222],
@@ -919,7 +919,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
 	s.Len(info.SearchAttributes.GetIndexedFields(), 7)
 	s.Contains(info.SearchAttributes.GetIndexedFields(), "TemporalChangeVersion")
 	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasOfCustomKeywordField")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasOfCustomStringField")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasOfCustomTextField")
 	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasOfCustomDatetimeField")
 	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasOfCustomDoubleField")
 	s.Contains(info.SearchAttributes.GetIndexedFields(), "AliasOfCustomBoolField")
