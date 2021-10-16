@@ -25,7 +25,6 @@
 package cassandra
 
 import (
-	"io/ioutil"
 	"os"
 	"path"
 	"runtime"
@@ -123,5 +122,5 @@ func (s *VersionTestSuite) createSchemaForVersion(subdir string, v string) {
 	vDir := subdir + "/v" + v
 	s.NoError(os.Mkdir(vDir, os.FileMode(0744)))
 	cqlFile := vDir + "/tmp.cql"
-	s.NoError(ioutil.WriteFile(cqlFile, []byte{}, os.FileMode(0644)))
+	s.NoError(os.WriteFile(cqlFile, []byte{}, os.FileMode(0644)))
 }

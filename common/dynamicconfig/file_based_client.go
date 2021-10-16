@@ -27,7 +27,6 @@ package dynamicconfig
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"time"
@@ -109,7 +108,7 @@ func (fc *fileBasedClient) update() error {
 		return nil
 	}
 
-	confContent, err := ioutil.ReadFile(fc.config.Filepath)
+	confContent, err := os.ReadFile(fc.config.Filepath)
 	if err != nil {
 		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
 	}

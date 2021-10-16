@@ -25,7 +25,7 @@
 package cli
 
 import (
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -88,7 +88,7 @@ func Test_fetchCACertFromUrl(t *testing.T) {
 			_, _ = res.Write([]byte(err.Error()))
 			return
 		}
-		bytes, err := ioutil.ReadAll(file)
+		bytes, err := io.ReadAll(file)
 		if err != nil {
 			res.WriteHeader(http.StatusInternalServerError)
 			_, _ = res.Write([]byte(err.Error()))

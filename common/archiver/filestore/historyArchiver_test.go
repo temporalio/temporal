@@ -27,7 +27,6 @@ package filestore
 import (
 	"context"
 	"errors"
-	"io/ioutil"
 	"os"
 	"path"
 	"testing"
@@ -81,7 +80,7 @@ func TestHistoryArchiverSuite(t *testing.T) {
 
 func (s *historyArchiverSuite) SetupSuite() {
 	var err error
-	s.testGetDirectory, err = ioutil.TempDir("", "TestGet")
+	s.testGetDirectory, err = os.MkdirTemp("", "TestGet")
 	s.Require().NoError(err)
 	s.setupHistoryDirectory()
 	s.testArchivalURI, err = archiver.NewURI("file:///a/b/c")
@@ -309,7 +308,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 		historyIterator.EXPECT().HasNext().Return(false),
 	)
 
-	dir, err := ioutil.TempDir("", "TestArchiveSingleRead")
+	dir, err := os.MkdirTemp("", "TestArchiveSingleRead")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 
@@ -494,7 +493,7 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 		historyIterator.EXPECT().HasNext().Return(false),
 	)
 
-	dir, err := ioutil.TempDir("", "TestArchiveAndGet")
+	dir, err := os.MkdirTemp("", "TestArchiveAndGet")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 
