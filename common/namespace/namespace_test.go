@@ -30,7 +30,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	namespacepb "go.temporal.io/api/namespace/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
@@ -45,11 +44,7 @@ func base(t *testing.T) *namespace.Namespace {
 				Name: t.Name(),
 				Data: make(map[string]string),
 			},
-			Config: &persistencespb.NamespaceConfig{
-				BadBinaries: &namespacepb.BadBinaries{
-					Binaries: make(map[string]*namespacepb.BadBinaryInfo),
-				},
-			},
+			Config: &persistencespb.NamespaceConfig{},
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: "foo",
 				Clusters:          []string{"foo", "bar"},

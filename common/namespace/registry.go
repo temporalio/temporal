@@ -28,6 +28,7 @@ package namespace
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -65,7 +66,7 @@ const (
 	// CacheRefreshFailureRetryInterval is the wait time
 	// if refreshment encounters error
 	CacheRefreshFailureRetryInterval = 1 * time.Second
-	CacheRefreshPageSize             = 200
+	cacheRefreshPageSize             = 200
 
 	cacheInitialized int32 = 0
 	cacheStarted     int32 = 1
@@ -87,30 +88,10 @@ var (
 )
 
 type (
-	// Clock provides timestamping to Registry objects
-	Clock interface {
-		// Now returns the current time.
-		Now() time.Time
-	}
-
-	// Persistence describes the durable storage requirements for a Registry
-	// instance.
 	Persistence interface {
-
-		// GetNamespace reads the state for a single namespace by name or ID
-		// from persistent storage, returning an instance of
-		// serviceerror.NotFound if there is no matching Namespace.
-		GetNamespace(
-			request *persistence.GetNamespaceRequest,
-		) (*persistence.GetNamespaceResponse, error)
-
-		// ListNamespaces fetches a paged set of namespace persistent state
-		// instances.
 		ListNamespaces(
 			*persistence.ListNamespacesRequest,
 		) (*persistence.ListNamespacesResponse, error)
-
-		// GetMetadata fetches the notification version for Temporal namespaces.
 		GetMetadata() (*persistence.GetMetadataResponse, error)
 	}
 
@@ -120,9 +101,16 @@ type (
 
 	// CallbackFn is function to be called when the namespace cache entries are changed
 	// it is guaranteed that PrepareCallbackFn and CallbackFn pair will be both called or non will be called
-	CallbackFn func(oldNamespaces []*Namespace, newNamespaces []*Namespace)
+	CallbackFn func(prevNamespaces []*Namespace, nextNamespaces []*Namespace)
 
-	// Registry provides access to Namespace objects by name or by ID.
+	// Cache is used the cache namespace information and configuration to avoid
+	// making too many calls to cassandra.  This cache is mainly used by
+	// frontend for resolving namespace names to namespace uuids which are used
+	// throughout the system.  Each namespace is kept in the cache for one hour
+	// but also has an expiry of 10 seconds.  This results in updating the
+	// namespace every 10 seconds but in the case of a cassandra failure we can
+	// still keep on serving requests using the stale entry from cache upto an
+	// hour
 	Registry interface {
 		common.Daemon
 		RegisterNamespaceChangeCallback(shard int32, initialNotificationVersion int64, prepareCallback PrepareCallbackFn, callback CallbackFn)
@@ -139,32 +127,22 @@ type (
 	registry struct {
 		status                  int32
 		refresher               *goro.Handle
-		triggerRefreshCh        chan chan struct{}
+		cacheNameToID           *atomic.Value
+		cacheByID               *atomic.Value
 		persistence             Persistence
 		globalNamespacesEnabled bool
-		clock                   Clock
+		timeSource              clock.TimeSource
 		metricsClient           metrics.Client
 		logger                  log.Logger
 		lastRefreshTime         atomic.Value
-
-		// cacheLock protects cachNameToID and cacheByID. If the exclusive side
-		// is to be held at the same time as the callbackLock (below), this lock
-		// MUST be acquired *first*.
-		cacheLock     sync.RWMutex
-		cacheNameToID cache.Cache
-		cacheByID     cache.Cache
-
-		// callbackLock protects prepareCallbacks and callbacks. Do not call
-		// cacheLock.Lock() (the other lock in this struct, above) while holding
-		// this lock or you risk a deadlock.
-		callbackLock     sync.Mutex
-		prepareCallbacks map[int32]PrepareCallbackFn
-		callbacks        map[int32]CallbackFn
+		callbackLock            sync.Mutex
+		prepareCallbacks        map[int32]PrepareCallbackFn
+		callbacks               map[int32]CallbackFn
+		triggerRefreshCh        chan chan struct{}
 	}
 )
 
-// NewRegistry creates a new instance of Registry for accessing and caching
-// namespace information to reduce the load on persistence.
+// NewRegistry creates a new instance of cache for holding onto namespace information to reduce the load on persistence
 func NewRegistry(
 	persistence Persistence,
 	enableGlobalNamespaces bool,
@@ -172,30 +150,29 @@ func NewRegistry(
 	logger log.Logger,
 ) Registry {
 	reg := &registry{
-		triggerRefreshCh:        make(chan chan struct{}, 1),
+		status:                  cacheInitialized,
+		cacheNameToID:           &atomic.Value{},
+		cacheByID:               &atomic.Value{},
 		persistence:             persistence,
 		globalNamespacesEnabled: enableGlobalNamespaces,
-		clock:                   clock.NewRealTimeSource(),
+		timeSource:              clock.NewRealTimeSource(),
 		metricsClient:           metricsClient,
 		logger:                  logger,
-		cacheNameToID:           cache.New(cacheMaxSize, &cacheOpts),
-		cacheByID:               cache.New(cacheMaxSize, &cacheOpts),
 		prepareCallbacks:        make(map[int32]PrepareCallbackFn),
 		callbacks:               make(map[int32]CallbackFn),
+		triggerRefreshCh:        make(chan chan struct{}, 1),
 	}
+	reg.cacheNameToID.Store(cache.New(cacheMaxSize, &cacheOpts))
+	reg.cacheByID.Store(cache.New(cacheMaxSize, &cacheOpts))
 	reg.lastRefreshTime.Store(time.Time{})
 	return reg
 }
 
-// GetCacheSize observes the size of the by-name and by-ID caches in number of
-// entries.
 func (r *registry) GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64) {
-	r.cacheLock.RLock()
-	defer r.cacheLock.RUnlock()
-	return int64(r.cacheByID.Size()), int64(r.cacheNameToID.Size())
+	return int64(r.cacheByID.Load().(cache.Cache).Size()), int64(r.cacheNameToID.Load().(cache.Cache).Size())
 }
 
-// Start the background refresh of Namespace data.
+// Start the background refresh of namespace
 func (r *registry) Start() {
 	if !atomic.CompareAndSwapInt32(&r.status, stopped, starting) {
 		return
@@ -210,7 +187,7 @@ func (r *registry) Start() {
 	r.refresher = goro.Go(context.Background(), r.refreshLoop)
 }
 
-// Stop the background refresh of Namespace data
+// Stop the background refresh of namespace
 func (r *registry) Stop() {
 	if !atomic.CompareAndSwapInt32(&r.status, running, stopping) {
 		return
@@ -222,10 +199,7 @@ func (r *registry) Stop() {
 
 func (r *registry) getAllNamespace() map[string]*Namespace {
 	result := make(map[string]*Namespace)
-	r.cacheLock.RLock()
-	defer r.cacheLock.RUnlock()
-
-	ite := r.cacheByID.Iterator()
+	ite := r.cacheByID.Load().(cache.Cache).Iterator()
 	defer ite.Close()
 
 	for ite.HasNext() {
@@ -236,9 +210,10 @@ func (r *registry) getAllNamespace() map[string]*Namespace {
 	return result
 }
 
-// RegisterNamespaceChangeCallback set a namespace change callback WARN:
-// callback functions MUST NOT call back into this registry instance, either to
-// unregister themselves or to look up Namespaces.
+// RegisterNamespaceChangeCallback set a namespace change callback
+// WARN: the beforeCallback function will be triggered by namespace cache when holding the namespace cache lock,
+// make sure the callback function will not call namespace cache again in case of dead lock
+// afterCallback will be invoked when NOT holding the namespace cache lock.
 func (r *registry) RegisterNamespaceChangeCallback(
 	shard int32,
 	initialNotificationVersion int64,
@@ -261,17 +236,17 @@ func (r *registry) RegisterNamespaceChangeCallback(
 	// with namespace change version.
 	sort.Sort(namespaces)
 
-	var oldEntries []*Namespace
-	var newEntries []*Namespace
+	var prevEntries []*Namespace
+	var nextEntries []*Namespace
 	for _, namespace := range namespaces {
 		if namespace.notificationVersion >= initialNotificationVersion {
-			oldEntries = append(oldEntries, nil)
-			newEntries = append(newEntries, namespace)
+			prevEntries = append(prevEntries, nil)
+			nextEntries = append(nextEntries, namespace)
 		}
 	}
-	if len(oldEntries) > 0 {
+	if len(prevEntries) > 0 {
 		prepareCallback()
-		callback(oldEntries, newEntries)
+		callback(prevEntries, nextEntries)
 	}
 }
 
@@ -376,6 +351,8 @@ func (r *registry) refreshLoop(ctx context.Context) error {
 }
 
 func (r *registry) refreshNamespaces(ctx context.Context) error {
+	now := r.timeSource.Now()
+
 	// first load the metadata record, then load namespaces
 	// this can guarantee that namespaces in the cache are not updated more than metadata record
 	metadata, err := r.persistence.GetMetadata()
@@ -385,7 +362,7 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 	namespaceNotificationVersion := metadata.NotificationVersion
 
 	var token []byte
-	request := &persistence.ListNamespacesRequest{PageSize: CacheRefreshPageSize}
+	request := &persistence.ListNamespacesRequest{PageSize: cacheRefreshPageSize}
 	var namespaces Namespaces
 	continuePage := true
 
@@ -407,8 +384,8 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 	// with namespace change version.
 	sort.Sort(namespaces)
 
-	var oldEntries []*Namespace
-	var newEntries []*Namespace
+	var prevEntries []*Namespace
+	var nextEntries []*Namespace
 
 	// make a copy of the existing namespace cache, so we can calculate diff and do compare and swap
 	newCacheNameToID := cache.New(cacheMaxSize, &cacheOpts)
@@ -428,104 +405,65 @@ UpdateLoop:
 			// will be loaded into cache in the next refresh
 			break UpdateLoop
 		}
-		oldNS := r.updateIDToNamespaceCache(newCacheByID, namespace.ID(), namespace)
+		prevNS := r.updateIDToNamespaceCache(newCacheByID, namespace.ID(), namespace)
 		r.updateNameToIDCache(newCacheNameToID, namespace.Name(), namespace.ID())
 
-		if oldNS != nil {
-			oldEntries = append(oldEntries, oldNS)
-			newEntries = append(newEntries, namespace)
+		if prevNS != nil {
+			prevEntries = append(prevEntries, prevNS)
+			nextEntries = append(nextEntries, namespace)
 		}
 	}
 
 	// NOTE: READ REF BEFORE MODIFICATION
 	// ref: historyEngine.go registerNamespaceFailoverCallback function
-	r.publishCacheUpdate(func() (Namespaces, Namespaces) {
-		r.cacheLock.Lock()
-		defer r.cacheLock.Unlock()
-		r.cacheByID = newCacheByID
-		r.cacheNameToID = newCacheNameToID
-		return oldEntries, newEntries
-	})
+	r.callbackLock.Lock()
+	defer r.callbackLock.Unlock()
+	r.triggerNamespaceChangePrepareCallbackLocked()
+	r.cacheByID.Store(newCacheByID)
+	r.cacheNameToID.Store(newCacheNameToID)
+	r.triggerNamespaceChangeCallbackLocked(prevEntries, nextEntries)
+
+	// only update last refresh time when refresh succeeded
+	r.lastRefreshTime.Store(now)
 	return nil
 }
 
-func (r *registry) updateNameToIDCache(c cache.Cache, name string, id string) {
-	c.Put(name, id)
+func (r *registry) updateNameToIDCache(
+	cacheNameToID cache.Cache,
+	name string,
+	id string,
+) {
+	cacheNameToID.Put(name, id)
 }
 
 func (r *registry) updateIDToNamespaceCache(
 	cacheByID cache.Cache,
 	id string,
-	newNS *Namespace,
+	record *Namespace,
 ) *Namespace {
-	oldCacheRec := cacheByID.Put(id, newNS)
-	if oldNS, ok := oldCacheRec.(*Namespace); ok &&
-		newNS.notificationVersion > oldNS.notificationVersion &&
+	prevCacheRec := cacheByID.Put(id, record)
+	if e, ok := prevCacheRec.(*Namespace); ok &&
+		record.notificationVersion > e.notificationVersion &&
 		r.globalNamespacesEnabled {
-		return oldNS
+		return e
 	}
 	return nil
 }
 
 // getNamespace retrieves the information from the cache if it exists
 func (r *registry) getNamespace(name string) (*Namespace, error) {
-	r.cacheLock.RLock()
-	if id, ok := r.cacheNameToID.Get(name).(string); ok {
-		r.cacheLock.RUnlock()
+	if id, ok := r.cacheNameToID.Load().(cache.Cache).Get(name).(string); ok {
 		return r.getNamespaceByID(id)
 	}
-	r.cacheLock.RUnlock()
-	nsData, err := r.persistence.GetNamespace(byName(name))
-	if err != nil {
-		return nil, err
-	}
-	ns := FromPersistentState(nsData)
-	r.publishCacheUpdate(func() (Namespaces, Namespaces) {
-		return r.singleValueUpdate(ns), Namespaces{ns}
-	})
-	return ns, nil
+	return nil, serviceerror.NewNotFound(fmt.Sprintf("namespace: %v not found", name))
 }
 
 // getNamespaceByID retrieves the information from the cache if it exists.
 func (r *registry) getNamespaceByID(id string) (*Namespace, error) {
-	r.cacheLock.RLock()
-	if ns, ok := r.cacheByID.Get(id).(*Namespace); ok {
-		r.cacheLock.RUnlock()
+	if ns, ok := r.cacheByID.Load().(cache.Cache).Get(id).(*Namespace); ok {
 		return ns, nil
 	}
-	r.cacheLock.RUnlock()
-	nsData, err := r.persistence.GetNamespace(byID(id))
-	if err != nil {
-		return nil, err
-	}
-	ns := FromPersistentState(nsData)
-	r.publishCacheUpdate(func() (Namespaces, Namespaces) {
-		return r.singleValueUpdate(ns), Namespaces{ns}
-	})
-	return ns, nil
-}
-
-func (r *registry) singleValueUpdate(ns *Namespace) Namespaces {
-	out := make([]*Namespace, 0, 1)
-	r.cacheLock.Lock()
-	defer r.cacheLock.Unlock()
-	if old := r.updateIDToNamespaceCache(r.cacheByID, ns.ID(), ns); old != nil {
-		out = append(out, old)
-	}
-	r.updateNameToIDCache(r.cacheNameToID, ns.Name(), ns.ID())
-	return out
-}
-
-func (r *registry) publishCacheUpdate(
-	updateCache func() (Namespaces, Namespaces),
-) {
-	now := r.clock.Now()
-	r.callbackLock.Lock()
-	defer r.callbackLock.Unlock()
-	r.triggerNamespaceChangePrepareCallbackLocked()
-	oldEntries, newEntries := updateCache()
-	r.triggerNamespaceChangeCallbackLocked(oldEntries, newEntries)
-	r.lastRefreshTime.Store(now)
+	return nil, serviceerror.NewNotFound(fmt.Sprintf("namespace ID: %v not found", id))
 }
 
 func (r *registry) triggerNamespaceChangePrepareCallbackLocked() {
@@ -539,8 +477,8 @@ func (r *registry) triggerNamespaceChangePrepareCallbackLocked() {
 }
 
 func (r *registry) triggerNamespaceChangeCallbackLocked(
-	oldNamespaces []*Namespace,
-	newNamespaces []*Namespace,
+	prevNamespaces []*Namespace,
+	nextNamespaces []*Namespace,
 ) {
 
 	sw := r.metricsClient.StartTimer(
@@ -548,14 +486,6 @@ func (r *registry) triggerNamespaceChangeCallbackLocked(
 	defer sw.Stop()
 
 	for _, callback := range r.callbacks {
-		callback(oldNamespaces, newNamespaces)
+		callback(prevNamespaces, nextNamespaces)
 	}
-}
-
-func byName(name string) *persistence.GetNamespaceRequest {
-	return &persistence.GetNamespaceRequest{Name: name}
-}
-
-func byID(id string) *persistence.GetNamespaceRequest {
-	return &persistence.GetNamespaceRequest{ID: id}
 }

@@ -30,48 +30,10 @@ package namespace
 
 import (
 	reflect "reflect"
-	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 	persistence "go.temporal.io/server/common/persistence"
 )
-
-// MockClock is a mock of Clock interface.
-type MockClock struct {
-	ctrl     *gomock.Controller
-	recorder *MockClockMockRecorder
-}
-
-// MockClockMockRecorder is the mock recorder for MockClock.
-type MockClockMockRecorder struct {
-	mock *MockClock
-}
-
-// NewMockClock creates a new mock instance.
-func NewMockClock(ctrl *gomock.Controller) *MockClock {
-	mock := &MockClock{ctrl: ctrl}
-	mock.recorder = &MockClockMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockClock) EXPECT() *MockClockMockRecorder {
-	return m.recorder
-}
-
-// Now mocks base method.
-func (m *MockClock) Now() time.Time {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Now")
-	ret0, _ := ret[0].(time.Time)
-	return ret0
-}
-
-// Now indicates an expected call of Now.
-func (mr *MockClockMockRecorder) Now() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Now", reflect.TypeOf((*MockClock)(nil).Now))
-}
 
 // MockPersistence is a mock of Persistence interface.
 type MockPersistence struct {
@@ -109,21 +71,6 @@ func (m *MockPersistence) GetMetadata() (*persistence.GetMetadataResponse, error
 func (mr *MockPersistenceMockRecorder) GetMetadata() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockPersistence)(nil).GetMetadata))
-}
-
-// GetNamespace mocks base method.
-func (m *MockPersistence) GetNamespace(request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNamespace", request)
-	ret0, _ := ret[0].(*persistence.GetNamespaceResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetNamespace indicates an expected call of GetNamespace.
-func (mr *MockPersistenceMockRecorder) GetNamespace(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespace", reflect.TypeOf((*MockPersistence)(nil).GetNamespace), request)
 }
 
 // ListNamespaces mocks base method.
