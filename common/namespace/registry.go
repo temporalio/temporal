@@ -28,6 +28,7 @@ package namespace
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -470,50 +471,23 @@ func (r *registry) updateIDToNamespaceCache(
 // getNamespace retrieves the information from the cache if it exists
 func (r *registry) getNamespace(name string) (*Namespace, error) {
 	r.cacheLock.RLock()
+	defer r.cacheLock.RUnlock()
 	if id, ok := r.cacheNameToID.Get(name).(string); ok {
-		r.cacheLock.RUnlock()
 		return r.getNamespaceByID(id)
 	}
-	r.cacheLock.RUnlock()
-	nsData, err := r.persistence.GetNamespace(byName(name))
-	if err != nil {
-		return nil, err
-	}
-	ns := FromPersistentState(nsData)
-	r.publishCacheUpdate(func() (Namespaces, Namespaces) {
-		return r.singleValueUpdate(ns), Namespaces{ns}
-	})
-	return ns, nil
+	return nil, serviceerror.NewNotFound(
+		fmt.Sprintf("Namespace name %q not found", name))
 }
 
 // getNamespaceByID retrieves the information from the cache if it exists.
 func (r *registry) getNamespaceByID(id string) (*Namespace, error) {
 	r.cacheLock.RLock()
+	defer r.cacheLock.RUnlock()
 	if ns, ok := r.cacheByID.Get(id).(*Namespace); ok {
-		r.cacheLock.RUnlock()
 		return ns, nil
 	}
-	r.cacheLock.RUnlock()
-	nsData, err := r.persistence.GetNamespace(byID(id))
-	if err != nil {
-		return nil, err
-	}
-	ns := FromPersistentState(nsData)
-	r.publishCacheUpdate(func() (Namespaces, Namespaces) {
-		return r.singleValueUpdate(ns), Namespaces{ns}
-	})
-	return ns, nil
-}
-
-func (r *registry) singleValueUpdate(ns *Namespace) Namespaces {
-	out := make([]*Namespace, 0, 1)
-	r.cacheLock.Lock()
-	defer r.cacheLock.Unlock()
-	if old := r.updateIDToNamespaceCache(r.cacheByID, ns.ID(), ns); old != nil {
-		out = append(out, old)
-	}
-	r.updateNameToIDCache(r.cacheNameToID, ns.Name(), ns.ID())
-	return out
+	return nil, serviceerror.NewNotFound(
+		fmt.Sprintf("Namespace id %q not found", id))
 }
 
 func (r *registry) publishCacheUpdate(

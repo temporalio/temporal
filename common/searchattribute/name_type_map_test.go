@@ -35,7 +35,7 @@ import (
 func Test_IsValid(t *testing.T) {
 	assert := assert.New(t)
 	typeMap := NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
-		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
 	}}
@@ -58,14 +58,14 @@ func Test_IsValid(t *testing.T) {
 func Test_GetType(t *testing.T) {
 	assert := assert.New(t)
 	typeMap := NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
-		"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
 	}}
 
 	ivt, err := typeMap.GetType("key1")
 	assert.NoError(err)
-	assert.Equal(enumspb.INDEXED_VALUE_TYPE_STRING, ivt)
+	assert.Equal(enumspb.INDEXED_VALUE_TYPE_TEXT, ivt)
 	ivt, err = typeMap.GetType("key2")
 	assert.NoError(err)
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_INT, ivt)

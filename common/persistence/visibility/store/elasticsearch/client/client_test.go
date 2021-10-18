@@ -42,7 +42,7 @@ func Test_BuildPutMappingBody(t *testing.T) {
 		expected string
 	}{
 		{
-			input:    map[string]enumspb.IndexedValueType{"Field": enumspb.INDEXED_VALUE_TYPE_STRING},
+			input:    map[string]enumspb.IndexedValueType{"Field": enumspb.INDEXED_VALUE_TYPE_TEXT},
 			expected: "map[properties:map[Field:map[type:text]]]",
 		},
 		{

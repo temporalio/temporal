@@ -237,16 +237,19 @@ wait_for_es() {
 }
 
 setup_es_index() {
+    IFS=',' read -ra ES_SERVERS <<< "${ES_SEEDS}"
+    ES_SERVER="${ES_SCHEME}://${ES_SERVERS[0]}:${ES_PORT}"
+# @@@SNIPSTART setup-es-template-commands
+    # ES_SERVER is the URL of Elasticsearch server i.e. "http://localhost:9200".
+    SETTINGS_URL="${ES_SERVER}/_cluster/settings"
     SETTINGS_FILE=${TEMPORAL_HOME}/schema/elasticsearch/visibility/cluster_settings_${ES_VERSION}.json
+    TEMPLATE_URL="${ES_SERVER}/_template/temporal_visibility_v1_template"
     SCHEMA_FILE=${TEMPORAL_HOME}/schema/elasticsearch/visibility/index_template_${ES_VERSION}.json
-    ES_SERVER=$(echo "${ES_SEEDS}" | awk -F ',' '{print $1}')
-    SETTINGS_URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/_cluster/settings"
-    TEMPLATE_URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/_template/temporal_visibility_v1_template"
-    INDEX_URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/${ES_VIS_INDEX}"
+    INDEX_URL="${ES_SERVER}/${ES_VIS_INDEX}"
     curl --fail --user "${ES_USER}":"${ES_PWD}" -X PUT "${SETTINGS_URL}" -H "Content-Type: application/json" --data-binary "@${SETTINGS_FILE}" --write-out "\n"
     curl --fail --user "${ES_USER}":"${ES_PWD}" -X PUT "${TEMPLATE_URL}" -H 'Content-Type: application/json' --data-binary "@${SCHEMA_FILE}" --write-out "\n"
-    # No --fail here because create index is not idempotent operation.
     curl --user "${ES_USER}":"${ES_PWD}" -X PUT "${INDEX_URL}" --write-out "\n"
+# @@@SNIPEND
 }
 
 # === Server setup ===
@@ -264,13 +267,17 @@ register_default_namespace() {
 
 add_custom_search_attributes() {
       echo "Adding Custom*Field search attributes."
+      # TODO: Remove CustomStringField
+# @@@SNIPSTART add-custom-search-attributes-for-testing-command
       tctl --auto_confirm admin cluster add-search-attributes \
           --name CustomKeywordField --type Keyword \
-          --name CustomStringField --type String \
+          --name CustomStringField --type Text \
+          --name CustomTextField --type Text \
           --name CustomIntField --type Int \
           --name CustomDatetimeField --type Datetime \
           --name CustomDoubleField --type Double \
           --name CustomBoolField --type Bool
+# @@@SNIPEND
 }
 
 setup_server(){
@@ -307,4 +314,3 @@ fi
 
 # Run this func in parallel process. It will wait for server to start and then run required steps.
 setup_server &
-

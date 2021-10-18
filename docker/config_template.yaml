@@ -163,23 +163,31 @@ global:
 
                 certFile: {{ default .Env.TEMPORAL_TLS_SERVER_CERT "" }}
                 keyFile: {{ default .Env.TEMPORAL_TLS_SERVER_KEY "" }}
+                {{- if .Env.TEMPORAL_TLS_SERVER_CA_CERT }}
                 clientCaFiles:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT "" }}
+                {{- end }}
 
                 certData: {{ default .Env.TEMPORAL_TLS_SERVER_CERT_DATA "" }}
                 keyData: {{ default .Env.TEMPORAL_TLS_SERVER_KEY_DATA "" }}
+                {{- if .Env.TEMPORAL_TLS_SERVER_CA_CERT_DATA }}
                 clientCaData:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT_DATA "" }}
-            
+                {{- end }}
+
             # This client section is used to configure the TLS clients within
             # the Temporal Cluster that connect to an Internode (history or matching)
             client:
                 serverName: {{ default .Env.TEMPORAL_TLS_INTERNODE_SERVER_NAME "" }}
                 disableHostVerification: {{ default .Env.TEMPORAL_TLS_INTERNODE_DISABLE_HOST_VERIFICATION "false"}}
+                {{- if .Env.TEMPORAL_TLS_SERVER_CA_CERT }}
                 rootCaFiles:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT "" }}
+                {{- end }}
+                {{- if .Env.TEMPORAL_TLS_SERVER_CA_CERT_DATA }}
                 rootCaData:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT_DATA "" }}
+                {{- end }}
         frontend:
             # This server section configures the TLS certificate that the Frontend
             # server presents to all clients (specifically the Worker role within
@@ -188,25 +196,33 @@ global:
                 requireClientAuth: {{ default .Env.TEMPORAL_TLS_REQUIRE_CLIENT_AUTH "false" }}
                 certFile: {{ default .Env.TEMPORAL_TLS_FRONTEND_CERT "" }}
                 keyFile: {{ default .Env.TEMPORAL_TLS_FRONTEND_KEY "" }}
+                {{- if .Env.TEMPORAL_TLS_CLIENT1_CA_CERT }}
                 clientCaFiles:
                     - {{ default .Env.TEMPORAL_TLS_CLIENT1_CA_CERT "" }}
                     - {{ default .Env.TEMPORAL_TLS_CLIENT2_CA_CERT "" }}
+                {{- end }}
 
                 certData: {{ default .Env.TEMPORAL_TLS_FRONTEND_CERT_DATA "" }}
                 keyData: {{ default .Env.TEMPORAL_TLS_FRONTEND_KEY_DATA "" }}
+                {{- if .Env.TEMPORAL_TLS_CLIENT1_CA_CERT_DATA }}
                 clientCaData:
                     - {{ default .Env.TEMPORAL_TLS_CLIENT1_CA_CERT_DATA "" }}
                     - {{ default .Env.TEMPORAL_TLS_CLIENT2_CA_CERT_DATA "" }}
-            
+                {{- end }}
+
             # This client section is used to configure the TLS clients within
             # the Temporal Cluster (specifically the Worker role) that connect to the Frontend service
             client:
                 serverName: {{ default .Env.TEMPORAL_TLS_FRONTEND_SERVER_NAME "" }}
                 disableHostVerification: {{ default .Env.TEMPORAL_TLS_FRONTEND_DISABLE_HOST_VERIFICATION "false"}}
+                {{- if .Env.TEMPORAL_TLS_SERVER_CA_CERT }}
                 rootCaFiles:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT "" }}
+                {{- end }}
+                {{- if .Env.TEMPORAL_TLS_SERVER_CA_CERT_DATA }}
                 rootCaData:
                     - {{ default .Env.TEMPORAL_TLS_SERVER_CA_CERT_DATA "" }}
+                {{- end }}
     {{- if .Env.STATSD_ENDPOINT }}
     metrics:
         statsd:
