@@ -100,7 +100,7 @@ wait_for_cassandra() {
 wait_for_mysql() {
     until nc -z "${MYSQL_SEEDS%%,*}" "${DB_PORT}"; do
         echo 'Waiting for MySQL to start up.'
-      sleep 1
+        sleep 1
     done
 
     echo 'MySQL started.'
@@ -108,8 +108,8 @@ wait_for_mysql() {
 
 wait_for_postgres() {
     until nc -z "${POSTGRES_SEEDS%%,*}" "${DB_PORT}"; do
-      echo 'Waiting for PostgreSQL to startup.'
-      sleep 1
+        echo 'Waiting for PostgreSQL to startup.'
+        sleep 1
     done
 
     echo 'PostgreSQL started.'
