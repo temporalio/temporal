@@ -258,6 +258,10 @@ func newServerTLSConfig(
 		return nil, err
 	}
 
+	if tlsConfig == nil { // TLS is disabled
+		return nil, nil
+	}
+
 	tlsConfig.GetConfigForClient = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
 
 		remoteAddress := c.Conn.RemoteAddr().String()
