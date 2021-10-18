@@ -55,7 +55,7 @@ func (s *StringifySuite) TearDownTest() {
 func (s *StringifySuite) Test_Stringify() {
 	typeMap := NameTypeMap{
 		customSearchAttributes: map[string]enumspb.IndexedValueType{
-			"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+			"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 			"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 			"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
 		},
@@ -100,7 +100,7 @@ func (s *StringifySuite) Test_Stringify() {
 func (s *StringifySuite) Test_Stringify_Array() {
 	typeMap := NameTypeMap{
 		customSearchAttributes: map[string]enumspb.IndexedValueType{
-			"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+			"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 			"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 			"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
 		},
@@ -149,7 +149,7 @@ func (s *StringifySuite) Test_Parse_ValidTypeMap() {
 		"key3": "true",
 	}, &NameTypeMap{
 		customSearchAttributes: map[string]enumspb.IndexedValueType{
-			"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+			"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 			"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 			"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
 		}})
@@ -157,7 +157,7 @@ func (s *StringifySuite) Test_Parse_ValidTypeMap() {
 	s.NoError(err)
 	s.Len(sa.IndexedFields, 3)
 	s.Equal(`"val1"`, string(sa.IndexedFields["key1"].GetData()))
-	s.Equal("String", string(sa.IndexedFields["key1"].GetMetadata()["type"]))
+	s.Equal("Text", string(sa.IndexedFields["key1"].GetMetadata()["type"]))
 	s.Equal("2", string(sa.IndexedFields["key2"].GetData()))
 	s.Equal("Int", string(sa.IndexedFields["key2"].GetMetadata()["type"]))
 	s.Equal("true", string(sa.IndexedFields["key3"].GetData()))
@@ -185,14 +185,14 @@ func (s *StringifySuite) Test_Parse_WrongTypesInTypeMap() {
 	}, &NameTypeMap{
 		customSearchAttributes: map[string]enumspb.IndexedValueType{
 			"key1": enumspb.INDEXED_VALUE_TYPE_INT,
-			"key2": enumspb.INDEXED_VALUE_TYPE_STRING,
+			"key2": enumspb.INDEXED_VALUE_TYPE_TEXT,
 		}})
 
 	s.Error(err)
 	s.Len(sa.IndexedFields, 2)
 	s.Nil(sa.IndexedFields["key1"])
 	s.Equal(`"2"`, string(sa.IndexedFields["key2"].GetData()))
-	s.Equal("String", string(sa.IndexedFields["key2"].GetMetadata()["type"]))
+	s.Equal("Text", string(sa.IndexedFields["key2"].GetMetadata()["type"]))
 }
 
 func (s *StringifySuite) Test_Parse_MissedFieldsInTypeMap() {
@@ -201,7 +201,7 @@ func (s *StringifySuite) Test_Parse_MissedFieldsInTypeMap() {
 		"key2": "2",
 	}, &NameTypeMap{
 		customSearchAttributes: map[string]enumspb.IndexedValueType{
-			"key3": enumspb.INDEXED_VALUE_TYPE_STRING,
+			"key3": enumspb.INDEXED_VALUE_TYPE_TEXT,
 			"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 		}})
 
@@ -219,14 +219,14 @@ func (s *StringifySuite) Test_Parse_Array() {
 		"key2": "[2,3,4]",
 	}, &NameTypeMap{
 		customSearchAttributes: map[string]enumspb.IndexedValueType{
-			"key1": enumspb.INDEXED_VALUE_TYPE_STRING,
+			"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 			"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 		}})
 
 	s.NoError(err)
 	s.Len(sa.IndexedFields, 2)
 	s.Equal(`["val1","val2"]`, string(sa.IndexedFields["key1"].GetData()))
-	s.Equal("String", string(sa.IndexedFields["key1"].GetMetadata()["type"]))
+	s.Equal("Text", string(sa.IndexedFields["key1"].GetMetadata()["type"]))
 	s.Equal("[2,3,4]", string(sa.IndexedFields["key2"].GetData()))
 	s.Equal("Int", string(sa.IndexedFields["key2"].GetMetadata()["type"]))
 }
@@ -242,13 +242,13 @@ func (s *StringifySuite) Test_parseValueOrArray() {
 	s.Equal("1", string(res.Data))
 
 	// array must be in JSON format.
-	res, err = parseValueOrArray(`["qwe"]`, enumspb.INDEXED_VALUE_TYPE_STRING)
+	res, err = parseValueOrArray(`["qwe"]`, enumspb.INDEXED_VALUE_TYPE_TEXT)
 	s.NoError(err)
-	s.Equal("String", string(res.Metadata["type"]))
+	s.Equal("Text", string(res.Metadata["type"]))
 	s.Equal(`["qwe"]`, string(res.Data))
 
 	// array must be in JSON format.
-	res, err = parseValueOrArray(`[qwe]`, enumspb.INDEXED_VALUE_TYPE_STRING)
+	res, err = parseValueOrArray(`[qwe]`, enumspb.INDEXED_VALUE_TYPE_TEXT)
 	s.Error(err)
 	s.Nil(res)
 }
@@ -296,7 +296,7 @@ func (s *StringifySuite) Test_parseValueTyped() {
 	s.Equal(time.Time{}, res)
 
 	// string
-	res, err = parseValueTyped("test string", enumspb.INDEXED_VALUE_TYPE_STRING)
+	res, err = parseValueTyped("test string", enumspb.INDEXED_VALUE_TYPE_TEXT)
 	s.NoError(err)
 	s.Equal("test string", res)
 
@@ -358,7 +358,7 @@ func (s *StringifySuite) Test_parseJsonArray() {
 	}{
 		{
 			name:             "string",
-			indexedValueType: enumspb.INDEXED_VALUE_TYPE_STRING,
+			indexedValueType: enumspb.INDEXED_VALUE_TYPE_TEXT,
 			input:            `["a", "b", "c"]`,
 			expected:         []string{"a", "b", "c"},
 		},
@@ -409,17 +409,17 @@ func (s *StringifySuite) Test_parseJsonArray() {
 	}{
 		{
 			name:             "not array",
-			indexedValueType: enumspb.INDEXED_VALUE_TYPE_STRING,
+			indexedValueType: enumspb.INDEXED_VALUE_TYPE_TEXT,
 			input:            "normal string",
 		},
 		{
 			name:             "empty string",
-			indexedValueType: enumspb.INDEXED_VALUE_TYPE_STRING,
+			indexedValueType: enumspb.INDEXED_VALUE_TYPE_TEXT,
 			input:            "",
 		},
 		{
 			name:             "not json array",
-			indexedValueType: enumspb.INDEXED_VALUE_TYPE_STRING,
+			indexedValueType: enumspb.INDEXED_VALUE_TYPE_TEXT,
 			input:            "[a, b, c]",
 		},
 	}

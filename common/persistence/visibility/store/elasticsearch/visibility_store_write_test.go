@@ -57,7 +57,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 			TaskQueue:        "task-queue-name",
 			SearchAttributes: &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
-					"CustomStringField": payload.EncodeString("alex"),
+					"CustomTextField": payload.EncodeString("alex"),
 				},
 			},
 		},
@@ -81,9 +81,9 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 			s.Equal(request.Memo.Data, body[searchattribute.Memo])
 			s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), body[searchattribute.MemoEncoding])
 
-			customStringField := body["CustomStringField"].(string)
+			CustomTextField := body["CustomTextField"].(string)
 			// %q because request has JSON encoded string.
-			s.EqualValues(request.SearchAttributes.GetIndexedFields()["CustomStringField"].Data, fmt.Sprintf("%q", customStringField))
+			s.EqualValues(request.SearchAttributes.GetIndexedFields()["CustomTextField"].Data, fmt.Sprintf("%q", CustomTextField))
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
 			s.EqualValues(request.TaskID, bulkRequest.Version)
@@ -149,7 +149,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 			TaskQueue:        "task-queue-name",
 			SearchAttributes: &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
-					"CustomStringField": payload.EncodeString("alex"),
+					"CustomTextField": payload.EncodeString("alex"),
 				},
 			},
 		},

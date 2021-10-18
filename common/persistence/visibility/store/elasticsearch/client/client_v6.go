@@ -639,7 +639,7 @@ func buildMappingBodyV6(mapping map[string]enumspb.IndexedValueType) map[string]
 	for fieldName, fieldType := range mapping {
 		var typeMap map[string]interface{}
 		switch fieldType {
-		case enumspb.INDEXED_VALUE_TYPE_STRING:
+		case enumspb.INDEXED_VALUE_TYPE_TEXT:
 			typeMap = map[string]interface{}{"type": "text"}
 		case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
 			typeMap = map[string]interface{}{"type": "keyword"}
