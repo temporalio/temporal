@@ -136,7 +136,7 @@ func NewClient(
 		logger:         logger,
 		temporalClient: publicClient,
 		numWorkflows:   numWorkflows,
-		rateLimiter: quotas.NewDefaultOutgoingDynamicRateLimiter(
+		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(requestRPS()) },
 		),
 		archiverProvider: archiverProvider,

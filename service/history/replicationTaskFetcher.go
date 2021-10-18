@@ -187,7 +187,7 @@ func newReplicationTaskFetcher(
 	numWorker := config.ReplicationTaskFetcherParallelism()
 	requestChan := make(chan *replicationTaskRequest, requestChanBufferSize)
 	shutdownChan := make(chan struct{})
-	rateLimiter := quotas.NewDefaultOutgoingDynamicRateLimiter(
+	rateLimiter := quotas.NewDefaultOutgoingRateLimiter(
 		func() float64 { return config.ReplicationTaskProcessorHostQPS() },
 	)
 

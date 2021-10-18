@@ -78,7 +78,7 @@ func NewPriorityRateLimiter(
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RateLimiter)
 	for priority := range APIPriorities {
-		rateLimiters[priority] = quotas.NewDefaultIncomingDynamicRateLimiter(rateFn)
+		rateLimiters[priority] = quotas.NewDefaultIncomingRateLimiter(rateFn)
 	}
 	return quotas.NewPriorityRateLimiter(APIToPriority, rateLimiters)
 }

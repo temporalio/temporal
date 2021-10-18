@@ -32,66 +32,116 @@ type (
 	// RateFn returns a float64 as the RPS
 	RateFn func() float64
 
-	// BurstFn returns a int as the RPS
+	// BurstFn returns an int as the burst / bucket size
 	BurstFn func() int
 
-	// DynamicRateImpl stores the dynamic rate per second for rate limiter
-	DynamicRateImpl struct {
-		rate *atomic.Float64
+	// RateBurstFn returns rate & burst for rate limiter
+	RateBurstFn interface {
+		Rate() float64
+		Burst() int
 	}
 
-	// DynamicBurstImpl stores the dynamic burst for rate limiter
-	DynamicBurstImpl struct {
+	RateBurstFnImpl struct {
+		rateFn  RateFn
+		burstFn BurstFn
+	}
+
+	// DynamicRateBurstImpl stores the dynamic rate & burst for rate limiter
+	DynamicRateBurstImpl struct {
+		rate  *atomic.Float64
 		burst *atomic.Int64
 	}
 
-	DynamicRate interface {
-		Load() float64
-		Store(rate float64)
-		RateFn() RateFn
-	}
-
-	DynamicBurst interface {
-		Load() int
-		Store(burst int)
-		BurstFn() BurstFn
+	DynamicRateBurst interface {
+		LoadRate() float64
+		StoreRate(rate float64)
+		LoadBurst() int
+		StoreBurst(burst int)
+		RateBurstFn
 	}
 )
 
-func NewDynamicRate(rate float64) *DynamicRateImpl {
-
-	return &DynamicRateImpl{
-		rate: atomic.NewFloat64(rate),
+func NewRateBurstFn(
+	rateFn RateFn,
+	burstFn BurstFn,
+) *RateBurstFnImpl {
+	return &RateBurstFnImpl{
+		rateFn:  rateFn,
+		burstFn: burstFn,
 	}
 }
 
-func NewDynamicBurst(burst int) *DynamicBurstImpl {
+func NewDefaultIncomingRateBurstFn(
+	rateFn RateFn,
+) *RateBurstFnImpl {
+	return newDefaultRateBurstFn(rateFn, defaultIncomingRateBurstRatio)
+}
 
-	return &DynamicBurstImpl{
+func NewDefaultOutgoingRateBurstFn(
+	rateFn RateFn,
+) *RateBurstFnImpl {
+	return newDefaultRateBurstFn(rateFn, defaultOutgoingRateBurstRatio)
+}
+
+func newDefaultRateBurstFn(
+	rateFn RateFn,
+	rateToBurstRatio float64,
+) *RateBurstFnImpl {
+	burstFn := func() int {
+		rate := rateFn()
+		if rate < 0 {
+			rate = 0
+		}
+		if rateToBurstRatio < 0 {
+			rateToBurstRatio = 0
+		}
+		burst := int(rate * rateToBurstRatio)
+		if burst == 0 && rate > 0 && rateToBurstRatio > 0 {
+			burst = 1
+		}
+		return burst
+	}
+	return NewRateBurstFn(rateFn, burstFn)
+}
+
+func (d *RateBurstFnImpl) Rate() float64 {
+	return d.rateFn()
+}
+
+func (d *RateBurstFnImpl) Burst() int {
+	return d.burstFn()
+}
+
+func NewDynamicRateBurst(
+	rate float64,
+	burst int,
+) *DynamicRateBurstImpl {
+	return &DynamicRateBurstImpl{
+		rate:  atomic.NewFloat64(rate),
 		burst: atomic.NewInt64(int64(burst)),
 	}
 }
 
-func (d *DynamicRateImpl) Load() float64 {
+func (d *DynamicRateBurstImpl) LoadRate() float64 {
 	return d.rate.Load()
 }
 
-func (d *DynamicRateImpl) Store(rate float64) {
+func (d *DynamicRateBurstImpl) StoreRate(rate float64) {
 	d.rate.Store(rate)
 }
 
-func (d *DynamicRateImpl) RateFn() RateFn {
-	return d.Load
-}
-
-func (d *DynamicBurstImpl) Load() int {
+func (d *DynamicRateBurstImpl) LoadBurst() int {
 	return int(d.burst.Load())
 }
 
-func (d *DynamicBurstImpl) Store(burst int) {
+func (d *DynamicRateBurstImpl) StoreBurst(burst int) {
 	d.burst.Store(int64(burst))
 }
 
-func (d *DynamicBurstImpl) BurstFn() BurstFn {
-	return d.Load
+func (d *DynamicRateBurstImpl) Rate() float64 {
+	return d.LoadRate()
+}
+
+func (d *DynamicRateBurstImpl) Burst() int {
+	return d.LoadBurst()
 }

@@ -899,7 +899,7 @@ func getRateLimiter(startRPS int, targetRPS int) quotas.RateLimiter {
 	if startRPS >= targetRPS {
 		ErrorAndExit("startRPS is greater than target RPS", nil)
 	}
-	return quotas.NewDefaultOutgoingDynamicRateLimiter(
+	return quotas.NewDefaultOutgoingRateLimiter(
 		func() float64 { return float64(targetRPS) },
 	)
 }

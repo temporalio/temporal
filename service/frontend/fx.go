@@ -28,7 +28,7 @@ import (
 	"context"
 
 	"go.uber.org/fx"
-	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 
 	"go.temporal.io/server/common"
@@ -181,7 +181,11 @@ func RateLimitInterceptorProvider(
 	serviceConfig *Config,
 ) *interceptor.RateLimitInterceptor {
 	return interceptor.NewRateLimitInterceptor(
-		configs.NewRequestToRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
+		configs.NewRequestToRateLimiter(
+			quotas.NewDefaultIncomingRateLimiter(
+				func() float64 { return float64(serviceConfig.RPS()) },
+			),
+		),
 		map[string]int{},
 	)
 }
@@ -194,13 +198,17 @@ func NamespaceRateLimitInterceptorProvider(
 		serviceResource.GetNamespaceRegistry(),
 		quotas.NewNamespaceRateLimiter(
 			func(req quotas.Request) quotas.RequestRateLimiter {
-				return configs.NewRequestToRateLimiter(func() float64 {
-					return namespaceRPS(
-						serviceConfig,
-						serviceResource.GetFrontendServiceResolver(),
-						req.Caller,
-					)
-				})
+				return configs.NewRequestToRateLimiter(configs.NewConfigRateBurst(
+					req.Caller,
+					func(namespace string) float64 {
+						return namespaceRPS(
+							serviceConfig,
+							serviceResource.GetFrontendServiceResolver(),
+							namespace,
+						)
+					},
+					serviceConfig.MaxNamespaceBurstPerInstance,
+				))
 			},
 		),
 		map[string]int{},

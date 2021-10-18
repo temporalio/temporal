@@ -113,7 +113,7 @@ func NewScavenger(
 		numShards: numShards,
 		db:        db,
 		client:    client,
-		rateLimiter: quotas.NewDefaultOutgoingDynamicRateLimiter(
+		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(rps) },
 		),
 		metrics: metricsClient,

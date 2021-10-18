@@ -167,7 +167,7 @@ func AdminDelete(c *cli.Context) {
 	inputFileName := getRequiredOption(c, FlagInputFile)
 	batchSize := c.Int(FlagBatchSize)
 	rps := c.Int(FlagRPS)
-	ratelimiter := quotas.NewDefaultOutgoingDynamicRateLimiter(
+	ratelimiter := quotas.NewDefaultOutgoingRateLimiter(
 		func() float64 { return float64(rps) },
 	)
 

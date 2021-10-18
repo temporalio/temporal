@@ -44,10 +44,10 @@ func NewVisibilityManagerRateLimited(
 	readMaxQPS dynamicconfig.IntPropertyFn,
 	writeMaxQPS dynamicconfig.IntPropertyFn,
 ) *visibilityManagerRateLimited {
-	readRateLimiter := quotas.NewDefaultOutgoingDynamicRateLimiter(
+	readRateLimiter := quotas.NewDefaultOutgoingRateLimiter(
 		func() float64 { return float64(readMaxQPS()) },
 	)
-	writeRateLimiter := quotas.NewDefaultOutgoingDynamicRateLimiter(
+	writeRateLimiter := quotas.NewDefaultOutgoingRateLimiter(
 		func() float64 { return float64(writeMaxQPS()) },
 	)
 	return &visibilityManagerRateLimited{

@@ -25,6 +25,9 @@
 package configs
 
 import (
+	"time"
+
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/quotas"
 )
 
@@ -105,14 +108,44 @@ var (
 	}
 )
 
+type (
+	ConfigRateBurstImpl struct {
+		namespaceName string
+		rateFn        dynamicconfig.FloatPropertyFnWithNamespaceFilter
+		burstFn       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	}
+)
+
+var _ quotas.RateBurstFn = (*ConfigRateBurstImpl)(nil)
+
+func NewConfigRateBurst(
+	namespaceName string,
+	rateFn dynamicconfig.FloatPropertyFnWithNamespaceFilter,
+	burstFn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+) *ConfigRateBurstImpl {
+	return &ConfigRateBurstImpl{
+		namespaceName: namespaceName,
+		rateFn:        rateFn,
+		burstFn:       burstFn,
+	}
+}
+
+func (c *ConfigRateBurstImpl) Rate() float64 {
+	return c.rateFn(c.namespaceName)
+}
+
+func (c *ConfigRateBurstImpl) Burst() int {
+	return c.burstFn(c.namespaceName)
+}
+
 func NewRequestToRateLimiter(
-	rateFn quotas.RateFn,
+	rateBurstFn quotas.RateBurstFn,
 ) quotas.RequestRateLimiter {
 	mapping := make(map[string]quotas.RequestRateLimiter)
 
-	executionRateLimiter := NewExecutionPriorityRateLimiter(rateFn)
-	visibilityRateLimiter := NewVisibilityPriorityRateLimiter(rateFn)
-	otherRateLimiter := NewOtherAPIPriorityRateLimiter(rateFn)
+	executionRateLimiter := NewExecutionPriorityRateLimiter(rateBurstFn)
+	visibilityRateLimiter := NewVisibilityPriorityRateLimiter(rateBurstFn)
+	otherRateLimiter := NewOtherAPIPriorityRateLimiter(rateBurstFn)
 
 	for api := range ExecutionAPIToPriority {
 		mapping[api] = executionRateLimiter
@@ -128,31 +161,31 @@ func NewRequestToRateLimiter(
 }
 
 func NewExecutionPriorityRateLimiter(
-	rateFn quotas.RateFn,
+	rateBurstFn quotas.RateBurstFn,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RateLimiter)
 	for priority := range ExecutionAPIPriorities {
-		rateLimiters[priority] = quotas.NewDefaultIncomingDynamicRateLimiter(rateFn)
+		rateLimiters[priority] = quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute)
 	}
 	return quotas.NewPriorityRateLimiter(ExecutionAPIToPriority, rateLimiters)
 }
 
 func NewVisibilityPriorityRateLimiter(
-	rateFn quotas.RateFn,
+	rateBurstFn quotas.RateBurstFn,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RateLimiter)
 	for priority := range VisibilityAPIPriorities {
-		rateLimiters[priority] = quotas.NewDefaultIncomingDynamicRateLimiter(rateFn)
+		rateLimiters[priority] = quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute)
 	}
 	return quotas.NewPriorityRateLimiter(VisibilityAPIToPriority, rateLimiters)
 }
 
 func NewOtherAPIPriorityRateLimiter(
-	rateFn quotas.RateFn,
+	rateBurstFn quotas.RateBurstFn,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RateLimiter)
 	for priority := range OtherAPIPriorities {
-		rateLimiters[priority] = quotas.NewDefaultIncomingDynamicRateLimiter(rateFn)
+		rateLimiters[priority] = quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute)
 	}
 	return quotas.NewPriorityRateLimiter(OtherAPIToPriority, rateLimiters)
 }

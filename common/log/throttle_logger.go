@@ -48,7 +48,7 @@ func NewThrottledLogger(logger Logger, rps quotas.RateFn) *throttledLogger {
 		logger = sl.Skip(extraSkipForThrottleLogger)
 	}
 
-	limiter := quotas.NewDefaultOutgoingDynamicRateLimiter(rps)
+	limiter := quotas.NewDefaultOutgoingRateLimiter(rps)
 	tl := &throttledLogger{
 		limiter: limiter,
 		logger:  logger,

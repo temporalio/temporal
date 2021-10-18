@@ -123,7 +123,7 @@ func newQueueProcessorBase(
 		timeSource:  shard.GetTimeSource(),
 		options:     options,
 		processor:   processor,
-		rateLimiter: quotas.NewDefaultOutgoingDynamicRateLimiter(
+		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(options.MaxPollRPS()) },
 		),
 		status:               common.DaemonStatusInitialized,

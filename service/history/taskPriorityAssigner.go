@@ -144,7 +144,7 @@ func (a *taskPriorityAssignerImpl) getRateLimiter(
 	}
 	a.RUnlock()
 
-	limiter := quotas.NewDefaultOutgoingDynamicRateLimiter(
+	limiter := quotas.NewDefaultOutgoingRateLimiter(
 		func() float64 { return float64(a.config.TaskProcessRPS(namespace)) },
 	)
 

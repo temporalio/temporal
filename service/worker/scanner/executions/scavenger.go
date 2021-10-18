@@ -87,7 +87,7 @@ func NewScavenger(
 			metricsClient,
 			metrics.ExecutionsScavengerScope,
 		),
-		rateLimiter: quotas.NewDefaultOutgoingDynamicRateLimiter(
+		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(rateOverall) },
 		),
 		metrics: metricsClient,
@@ -151,7 +151,7 @@ func (s *Scavenger) run() {
 			s.logger,
 			s,
 			quotas.NewMultiRateLimiter([]quotas.RateLimiter{
-				quotas.NewDefaultOutgoingDynamicRateLimiter(
+				quotas.NewDefaultOutgoingRateLimiter(
 					func() float64 { return float64(ratePerShard) },
 				),
 				s.rateLimiter,

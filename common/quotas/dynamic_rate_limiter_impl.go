@@ -38,8 +38,7 @@ const (
 type (
 	// DynamicRateLimiterImpl implements a dynamic config wrapper around the rate limiter
 	DynamicRateLimiterImpl struct {
-		rateFn          RateFn
-		burstFn         BurstFn
+		rateBurstFn     RateBurstFn
 		refreshInterval time.Duration
 
 		refreshTimer *time.Timer
@@ -51,41 +50,37 @@ var _ RateLimiter = (*DynamicRateLimiterImpl)(nil)
 
 // NewDynamicRateLimiter returns a rate limiter which handles dynamic config
 func NewDynamicRateLimiter(
-	rateFn RateFn,
-	burstFn BurstFn,
+	rateBurstFn RateBurstFn,
 	refreshInterval time.Duration,
 ) *DynamicRateLimiterImpl {
 	rateLimiter := &DynamicRateLimiterImpl{
-		rateFn:          rateFn,
-		burstFn:         burstFn,
+		rateBurstFn:     rateBurstFn,
 		refreshInterval: refreshInterval,
 
 		refreshTimer: time.NewTimer(refreshInterval),
-		rateLimiter:  NewRateLimiter(rateFn(), burstFn()),
+		rateLimiter:  NewRateLimiter(rateBurstFn.Rate(), rateBurstFn.Burst()),
 	}
 	return rateLimiter
 }
 
-// NewDefaultIncomingDynamicRateLimiter returns a default rate limiter
+// NewDefaultIncomingRateLimiter returns a default rate limiter
 // for incoming traffic
-func NewDefaultIncomingDynamicRateLimiter(
+func NewDefaultIncomingRateLimiter(
 	rateFn RateFn,
 ) *DynamicRateLimiterImpl {
 	return NewDynamicRateLimiter(
-		rateFn,
-		func() int { return int(defaultIncomingRateBurstRatio * rateFn()) },
+		NewDefaultIncomingRateBurstFn(rateFn),
 		defaultRefreshInterval,
 	)
 }
 
-// NewDefaultOutgoingDynamicRateLimiter returns a default rate limiter
+// NewDefaultOutgoingRateLimiter returns a default rate limiter
 // for outgoing traffic
-func NewDefaultOutgoingDynamicRateLimiter(
+func NewDefaultOutgoingRateLimiter(
 	rateFn RateFn,
 ) *DynamicRateLimiterImpl {
 	return NewDynamicRateLimiter(
-		rateFn,
-		func() int { return int(defaultOutgoingRateBurstRatio * rateFn()) },
+		NewDefaultOutgoingRateBurstFn(rateFn),
 		defaultRefreshInterval,
 	)
 }
@@ -142,7 +137,7 @@ func (d *DynamicRateLimiterImpl) maybeRefresh() {
 	select {
 	case <-d.refreshTimer.C:
 		d.refreshTimer.Reset(d.refreshInterval)
-		d.rateLimiter.SetRateBurst(d.rateFn(), d.burstFn())
+		d.rateLimiter.SetRateBurst(d.rateBurstFn.Rate(), d.rateBurstFn.Burst())
 
 	default:
 		// noop
