@@ -98,8 +98,8 @@ wait_for_cassandra() {
 }
 
 wait_for_mysql() {
-    SERVER=$(echo "${MYSQL_SEEDS}" | awk -F ',' '{print $1}')
-    until nc -z "${SERVER}" "${DB_PORT}"; do
+    IFS=',' read -ra MYSQL_SERVERS <<< "${MYSQL_SEEDS}"
+    until nc -z "${MYSQL_SERVERS[0]}" "${DB_PORT}"; do
         echo 'Waiting for MySQL to start up.'
       sleep 1
     done
@@ -108,8 +108,8 @@ wait_for_mysql() {
 }
 
 wait_for_postgres() {
-    SERVER=$(echo "${POSTGRES_SEEDS}" | awk -F ',' '{print $1}')
-    until nc -z "${SERVER}" "${DB_PORT}"; do
+    IFS=',' read -ra POSTGRES_SERVERS <<< "${POSTGRES_SEEDS}"
+    until nc -z "${POSTGRES_SERVERS[0]}" "${DB_PORT}"; do
       echo 'Waiting for PostgreSQL to startup.'
       sleep 1
     done
@@ -218,10 +218,10 @@ validate_es_env() {
 wait_for_es() {
     SECONDS=0
 
-    ES_SERVER=$(echo "${ES_SEEDS}" | awk -F ',' '{print $1}')
-    URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}"
+    IFS=',' read -ra ES_SERVERS <<< "${ES_SEEDS}"
+    ES_SERVER="${ES_SCHEME}://${ES_SERVERS[0]}:${ES_PORT}"
 
-    until curl --silent --fail --user "${ES_USER}":"${ES_PWD}" "${URL}" > /dev/null 2>&1; do
+    until curl --silent --fail --user "${ES_USER}":"${ES_PWD}" "${ES_SERVER}" > /dev/null 2>&1; do
         DURATION=${SECONDS}
 
         if [ "${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS}" -gt 0 ] && [ ${DURATION} -ge "${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS}" ]; then
