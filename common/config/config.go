@@ -26,7 +26,6 @@ package config
 
 import (
 	"bytes"
-	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -507,18 +506,6 @@ func (c *Config) String() string {
 
 func (r *GroupTLS) IsEnabled() bool {
 	return r.Server.KeyFile != "" || r.Server.KeyData != "" ||
-		ContainsNonEmptyValue(r.Client.RootCAFiles) || ContainsNonEmptyValue(r.Client.RootCAData) ||
+		len(r.Client.RootCAFiles) > 0 || len(r.Client.RootCAData) > 0 ||
 		r.Client.ForceTLS
-}
-
-func ContainsNonEmptyValue(cas []string) bool {
-	if len(cas) == 0 {
-		return false
-	}
-	for _, ca := range cas {
-		if strings.TrimSpace(ca) != "" {
-			return true
-		}
-	}
-	return false
 }

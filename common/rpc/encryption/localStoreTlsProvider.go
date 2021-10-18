@@ -442,6 +442,6 @@ func mergeMaps(to CertExpirationMap, from CertExpirationMap) {
 
 func isSystemWorker(tls *config.RootTLS) bool {
 	return tls.SystemWorker.CertData != "" || tls.SystemWorker.CertFile != "" ||
-		config.ContainsNonEmptyValue(tls.SystemWorker.Client.RootCAData) || config.ContainsNonEmptyValue(tls.SystemWorker.Client.RootCAFiles) ||
+		len(tls.SystemWorker.Client.RootCAData) > 0 || len(tls.SystemWorker.Client.RootCAFiles) > 0 ||
 		tls.SystemWorker.Client.ForceTLS
 }
