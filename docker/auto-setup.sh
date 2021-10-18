@@ -240,6 +240,7 @@ setup_es_index() {
     IFS=',' read -ra ES_SERVERS <<< "${ES_SEEDS}"
     ES_SERVER="${ES_SCHEME}://${ES_SERVERS[0]}:${ES_PORT}"
 # @@@SNIPSTART setup-es-template-commands
+    # ES_SERVER is the URL of Elasticsearch server i.e. "http://localhost:9200".
     SETTINGS_URL="${ES_SERVER}/_cluster/settings"
     SETTINGS_FILE=${TEMPORAL_HOME}/schema/elasticsearch/visibility/cluster_settings_${ES_VERSION}.json
     TEMPLATE_URL="${ES_SERVER}/_template/temporal_visibility_v1_template"
