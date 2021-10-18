@@ -25,7 +25,6 @@
 package namespace_test
 
 import (
-	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -528,52 +527,4 @@ func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 	}
 	close(startChan)
 	waitGroup.Wait()
-}
-
-func TestReadThrough(t *testing.T) {
-	want := base(t)
-	persist := namespace.NewMockPersistence(gomock.NewController(t))
-	reg := namespace.NewRegistry(
-		persist, true, metrics.NewNoopMetricsClient(), log.NewTestLogger())
-
-	t.Run("not found anywhere", func(t *testing.T) {
-		persist.EXPECT().
-			GetNamespace(&persistence.GetNamespaceRequest{ID: want.ID()}).
-			Return(nil, errors.New("foo"))
-		_, err := reg.GetNamespaceByID(want.ID())
-		require.Error(t, err)
-	})
-
-	t.Run("found in persistence", func(t *testing.T) {
-		persist.EXPECT().
-			GetNamespace(&persistence.GetNamespaceRequest{ID: want.ID()}).
-			Return(&persistence.GetNamespaceResponse{
-				Namespace: &persistencespb.NamespaceDetail{
-					Info: &persistencespb.NamespaceInfo{
-						Id:   want.ID(),
-						Name: want.Name(),
-					},
-					Config:            &persistencespb.NamespaceConfig{},
-					ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-				},
-			}, nil)
-		got, err := reg.GetNamespaceByID(want.ID())
-		require.NoError(t, err)
-		require.Equal(t, got.ID(), got.ID())
-	})
-
-	t.Run("pulls through into cache", func(t *testing.T) {
-		// next call should hit cache, not call through
-		persist.EXPECT().GetNamespace(gomock.Any()).Times(0)
-		got, err := reg.GetNamespaceByID(want.ID())
-		require.NoError(t, err)
-		require.Equal(t, want.ID(), got.ID())
-	})
-
-	t.Run("populate both name and id cache", func(t *testing.T) {
-		persist.EXPECT().GetNamespace(gomock.Any()).Times(0)
-		got, err := reg.GetNamespace(want.Name())
-		require.NoError(t, err)
-		require.Equal(t, want.ID(), got.ID())
-	})
 }
