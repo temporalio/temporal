@@ -61,9 +61,18 @@ func AdminAddSearchAttributes(c *cli.Context) {
 
 	searchAttributes := make(map[string]enumspb.IndexedValueType, len(typeStrs))
 	for i := 0; i < len(typeStrs); i++ {
-		typeInt, err := stringToEnum(typeStrs[i], enumspb.IndexedValueType_value)
+		typeStr := typeStrs[i]
+
+		// To support backwards compatibility "String" is an alias to "Text".
+		// TODO: Remove this code in 1 year (after 10/15/22).
+		if strings.EqualFold(typeStr, "String") {
+			color.HiYellow("Search attribute %s: String type is deprecated, use Text instead.", names[i])
+			typeStr = "Text"
+		}
+
+		typeInt, err := stringToEnum(typeStr, enumspb.IndexedValueType_value)
 		if err != nil {
-			ErrorAndExit(fmt.Sprintf("Unable to parse search attribute type: %s", typeStrs[i]), err)
+			ErrorAndExit(fmt.Sprintf("Unable to parse search attribute type: %s", typeStr), err)
 		}
 		existingSearchAttributeType, searchAttributeExists := existingSearchAttributes.CustomAttributes[names[i]]
 		if !searchAttributeExists {
@@ -76,7 +85,7 @@ func AdminAddSearchAttributes(c *cli.Context) {
 	}
 
 	if len(searchAttributes) == 0 {
-		color.HiYellow("No search attributes to add.")
+		color.HiYellow("Search attributes already exist.")
 		return
 	}
 

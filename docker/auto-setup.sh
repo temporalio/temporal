@@ -264,9 +264,11 @@ register_default_namespace() {
 
 add_custom_search_attributes() {
       echo "Adding Custom*Field search attributes."
+      # TODO: Remove CustomStringField
       tctl --auto_confirm admin cluster add-search-attributes \
           --name CustomKeywordField --type Keyword \
-          --name CustomStringField --type String \
+          --name CustomStringField --type Text \
+          --name CustomTextField --type Text \
           --name CustomIntField --type Int \
           --name CustomDatetimeField --type Datetime \
           --name CustomDoubleField --type Double \

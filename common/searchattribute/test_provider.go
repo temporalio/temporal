@@ -36,7 +36,7 @@ var (
 	TestNameTypeMap = NameTypeMap{
 		customSearchAttributes: map[string]enumspb.IndexedValueType{
 			"CustomIntField":      enumspb.INDEXED_VALUE_TYPE_INT,
-			"CustomStringField":   enumspb.INDEXED_VALUE_TYPE_STRING,
+			"CustomTextField":     enumspb.INDEXED_VALUE_TYPE_TEXT,
 			"CustomKeywordField":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			"CustomDatetimeField": enumspb.INDEXED_VALUE_TYPE_DATETIME,
 			"CustomDoubleField":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,

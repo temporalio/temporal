@@ -58,7 +58,7 @@ func DecodeValue(value *commonpb.Payload, t enumspb.IndexedValueType) (interface
 	}
 
 	switch t {
-	case enumspb.INDEXED_VALUE_TYPE_STRING, enumspb.INDEXED_VALUE_TYPE_KEYWORD:
+	case enumspb.INDEXED_VALUE_TYPE_TEXT, enumspb.INDEXED_VALUE_TYPE_KEYWORD:
 		var val string
 		if err := payload.Decode(value, &val); err != nil {
 			var listVal []string
