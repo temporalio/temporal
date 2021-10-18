@@ -39,7 +39,7 @@ func Test_DecodeValue_FromMetadata_Success(t *testing.T) {
 	assert := assert.New(t)
 
 	payloadStr := payload.EncodeString("qwe")
-	payloadStr.Metadata["type"] = []byte("String")
+	payloadStr.Metadata["type"] = []byte("Text")
 	decodedStr, err := DecodeValue(payloadStr, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
 	assert.NoError(err)
 	assert.Equal("qwe", decodedStr)
@@ -47,7 +47,7 @@ func Test_DecodeValue_FromMetadata_Success(t *testing.T) {
 	payloadInt, err := payload.Encode(123)
 	assert.NoError(err)
 	payloadInt.Metadata["type"] = []byte("Int")
-	decodedInt, err := DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_STRING) // MetadataType should be used anyway
+	decodedInt, err := DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_TEXT) // MetadataType should be used anyway
 	assert.NoError(err)
 	assert.Equal(int64(123), decodedInt)
 
@@ -63,7 +63,7 @@ func Test_DecodeValue_FromParameter_Success(t *testing.T) {
 	assert := assert.New(t)
 
 	payloadStr := payload.EncodeString("qwe")
-	decodedStr, err := DecodeValue(payloadStr, enumspb.INDEXED_VALUE_TYPE_STRING)
+	decodedStr, err := DecodeValue(payloadStr, enumspb.INDEXED_VALUE_TYPE_TEXT)
 	assert.NoError(err)
 	assert.Equal("qwe", decodedStr)
 
@@ -106,7 +106,7 @@ func Test_DecodeValue_Error(t *testing.T) {
 
 	payloadInt, err = payload.Encode(123)
 	assert.NoError(err)
-	payloadInt.Metadata["type"] = []byte("String")
+	payloadInt.Metadata["type"] = []byte("Text")
 	decodedInt, err = DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
 	assert.Error(err)
 	assert.True(errors.Is(err, converter.ErrUnableToDecode), err.Error())
@@ -121,8 +121,8 @@ func Test_EncodeValue(t *testing.T) {
 	assert.Equal("123", string(encodedPayload.GetData()))
 	assert.Equal("Int", string(encodedPayload.Metadata["type"]))
 
-	encodedPayload, err = EncodeValue("qwe", enumspb.INDEXED_VALUE_TYPE_STRING)
+	encodedPayload, err = EncodeValue("qwe", enumspb.INDEXED_VALUE_TYPE_TEXT)
 	assert.NoError(err)
 	assert.Equal(`"qwe"`, string(encodedPayload.GetData()))
-	assert.Equal("String", string(encodedPayload.Metadata["type"]))
+	assert.Equal("Text", string(encodedPayload.Metadata["type"]))
 }
