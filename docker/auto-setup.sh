@@ -237,9 +237,9 @@ wait_for_es() {
 }
 
 setup_es_index() {
+# @@@SNIPSTART setup-es-template-commands
     IFS=',' read -ra ES_SERVER <<< "${ES_SEEDS}"
     ES_SERVER="${ES_SCHEME}://${ES_SERVER[0]}:${ES_PORT}"
-# @@@SNIPSTART setup-es-template-commands
     SETTINGS_URL="${ES_SERVER}/_cluster/settings"
     SETTINGS_FILE=${TEMPORAL_HOME}/schema/elasticsearch/visibility/cluster_settings_${ES_VERSION}.json
     TEMPLATE_URL="${ES_SERVER}/_template/temporal_visibility_v1_template"
