@@ -34,10 +34,12 @@ import (
 )
 
 const (
-	ClientNameServer  = "temporal-server"
-	ClientNameGoSDK   = "temporal-go"
-	ClientNameJavaSDK = "temporal-java"
-	ClientNameCLI     = "temporal-cli"
+	ClientNameServer        = "temporal-server"
+	ClientNameGoSDK         = "temporal-go"
+	ClientNameJavaSDK       = "temporal-java"
+	ClientNamePHPSDK        = "temporal-php"
+	ClientNameTypeScriptSDK = "temporal-typescript"
+	ClientNameCLI           = "temporal-cli"
 
 	ServerVersion = "1.13.0"
 	CLIVersion    = "1.13.0"
@@ -59,10 +61,12 @@ var (
 	}, SupportedFeaturesHeaderDelim)
 
 	SupportedClients = map[string]string{
-		ClientNameGoSDK:   "<2.0.0",
-		ClientNameJavaSDK: "<2.0.0",
-		ClientNameCLI:     "<2.0.0",
-		ClientNameServer:  "<2.0.0",
+		ClientNameGoSDK:         "<2.0.0",
+		ClientNameJavaSDK:       "<2.0.0",
+		ClientNamePHPSDK:        "<2.0.0",
+		ClientNameTypeScriptSDK: "<2.0.0",
+		ClientNameCLI:           "<2.0.0",
+		ClientNameServer:        "<2.0.0",
 	}
 )
 
