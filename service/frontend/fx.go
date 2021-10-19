@@ -198,7 +198,7 @@ func NamespaceRateLimitInterceptorProvider(
 		serviceResource.GetNamespaceRegistry(),
 		quotas.NewNamespaceRateLimiter(
 			func(req quotas.Request) quotas.RequestRateLimiter {
-				return configs.NewRequestToRateLimiter(configs.NewConfigRateBurst(
+				return configs.NewRequestToRateLimiter(configs.NewNamespaceRateBurst(
 					req.Caller,
 					func(namespace string) float64 {
 						return namespaceRPS(
