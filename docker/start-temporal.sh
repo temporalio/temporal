@@ -21,4 +21,3 @@ PID=$!
 wait $PID
 trap - TERM INT
 wait $PID
-EXIT_STATUS=$?
