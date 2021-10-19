@@ -28,10 +28,10 @@ import (
 	"context"
 
 	"github.com/pborman/uuid"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -60,7 +60,6 @@ func newTransferQueueActiveProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	taskAllocator taskAllocator,
-	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
 ) *transferQueueActiveProcessorImpl {
 
@@ -131,35 +130,13 @@ func newTransferQueueActiveProcessor(
 		logger,
 	)
 
-	redispatchQueue := collection.NewConcurrentQueue()
-
-	transferQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
-		return newTransferQueueTask(
-			shard,
-			taskInfo,
-			historyEngine.metricsClient.Scope(
-				getTransferTaskMetricsScope(taskInfo.GetTaskType(), true),
-			),
-			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
-			transferTaskFilter,
-			processor.taskExecutor,
-			redispatchQueue,
-			shard.GetTimeSource(),
-			options.MaxRetryCount,
-			queueAckMgr,
-		)
-	}
-
 	queueProcessorBase := newQueueProcessorBase(
 		currentClusterName,
 		shard,
 		options,
 		processor,
-		queueTaskProcessor,
 		queueAckMgr,
-		redispatchQueue,
 		historyEngine.historyCache,
-		transferQueueTaskInitializer,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
 	)
@@ -179,7 +156,6 @@ func newTransferQueueFailoverProcessor(
 	minLevel int64,
 	maxLevel int64,
 	taskAllocator taskAllocator,
-	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
 ) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
 
@@ -266,35 +242,13 @@ func newTransferQueueFailoverProcessor(
 		logger,
 	)
 
-	redispatchQueue := collection.NewConcurrentQueue()
-
-	transferQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
-		return newTransferQueueTask(
-			shard,
-			taskInfo,
-			historyEngine.metricsClient.Scope(
-				getTransferTaskMetricsScope(taskInfo.GetTaskType(), true),
-			),
-			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
-			transferTaskFilter,
-			processor.taskExecutor,
-			redispatchQueue,
-			shard.GetTimeSource(),
-			options.MaxRetryCount,
-			queueAckMgr,
-		)
-	}
-
 	queueProcessorBase := newQueueProcessorBase(
 		currentClusterName,
 		shard,
 		options,
 		processor,
-		queueTaskProcessor,
 		queueAckMgr,
-		redispatchQueue,
 		historyEngine.historyCache,
-		transferQueueTaskInitializer,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
 	)

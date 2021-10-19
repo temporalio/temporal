@@ -77,7 +77,6 @@ type (
 		status                   int32
 		shutdownChan             chan struct{}
 		shutdownWG               sync.WaitGroup
-		queueTaskProcessor       queueTaskProcessor
 		activeTimerProcessor     *timerQueueActiveProcessorImpl
 		standbyTimerProcessors   map[string]*timerQueueStandbyProcessorImpl
 	}
@@ -87,7 +86,6 @@ func newTimerQueueProcessor(
 	shard shard.Context,
 	historyService *historyEngineImpl,
 	matchingClient matchingservice.MatchingServiceClient,
-	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
 ) timerQueueProcessor {
 
@@ -119,7 +117,6 @@ func newTimerQueueProcessor(
 				clusterName,
 				taskAllocator,
 				nDCHistoryResender,
-				queueTaskProcessor,
 				logger,
 			)
 		}
@@ -138,13 +135,11 @@ func newTimerQueueProcessor(
 		matchingClient:           matchingClient,
 		status:                   common.DaemonStatusInitialized,
 		shutdownChan:             make(chan struct{}),
-		queueTaskProcessor:       queueTaskProcessor,
 		activeTimerProcessor: newTimerQueueActiveProcessor(
 			shard,
 			historyService,
 			matchingClient,
 			taskAllocator,
-			queueTaskProcessor,
 			logger,
 		),
 		standbyTimerProcessors: standbyTimerProcessors,
@@ -240,7 +235,6 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 		maxLevel,
 		t.matchingClient,
 		t.taskAllocator,
-		t.queueTaskProcessor,
 		t.logger,
 	)
 

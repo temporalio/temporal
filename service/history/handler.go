@@ -34,6 +34,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
@@ -49,13 +51,11 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/task"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type (
@@ -71,7 +71,6 @@ type (
 		config                  *configs.Config
 		eventNotifier           events.Notifier
 		replicationTaskFetchers ReplicationTaskFetchers
-		queueTaskProcessor      queueTaskProcessor
 		visibilityMrg           manager.VisibilityManager
 		newCacheFn              workflow.NewCacheFn
 	}
@@ -140,49 +139,6 @@ func (h *Handler) Start() {
 
 	h.replicationTaskFetchers.Start()
 
-	if h.config.EnablePriorityTaskProcessor() {
-		var err error
-		taskPriorityAssigner := newTaskPriorityAssigner(
-			h.GetClusterMetadata().GetCurrentClusterName(),
-			h.GetNamespaceRegistry(),
-			h.GetLogger(),
-			h.GetMetricsClient(),
-			h.config,
-		)
-
-		schedulerType := task.SchedulerType(h.config.TaskSchedulerType())
-		queueTaskProcessorOptions := &queueTaskProcessorOptions{
-			schedulerType: schedulerType,
-		}
-		switch schedulerType {
-		case task.SchedulerTypeFIFO:
-			queueTaskProcessorOptions.fifoSchedulerOptions = &task.FIFOTaskSchedulerOptions{
-				QueueSize:   h.config.TaskSchedulerQueueSize(),
-				WorkerCount: h.config.TaskSchedulerWorkerCount(),
-				RetryPolicy: common.CreatePersistanceRetryPolicy(),
-			}
-		case task.SchedulerTypeWRR:
-			queueTaskProcessorOptions.wRRSchedulerOptions = &task.WeightedRoundRobinTaskSchedulerOptions{
-				Weights:     h.config.TaskSchedulerRoundRobinWeights,
-				QueueSize:   h.config.TaskSchedulerQueueSize(),
-				WorkerCount: h.config.TaskSchedulerWorkerCount(),
-				RetryPolicy: common.CreatePersistanceRetryPolicy(),
-			}
-		default:
-			h.GetLogger().Fatal("Unknown task scheduler type", tag.Value(schedulerType))
-		}
-		h.queueTaskProcessor, err = newQueueTaskProcessor(
-			taskPriorityAssigner,
-			queueTaskProcessorOptions,
-			h.GetLogger(),
-			h.GetMetricsClient(),
-		)
-		if err != nil {
-			h.GetLogger().Fatal("Creating priority task processor failed", tag.Error(err))
-		}
-		h.queueTaskProcessor.Start()
-	}
-
 	h.controller = shard.NewController(
 		h.Resource,
 		h,
@@ -207,9 +163,6 @@ func (h *Handler) Stop() {
 	}
 
 	h.replicationTaskFetchers.Stop()
-	if h.queueTaskProcessor != nil {
-		h.queueTaskProcessor.Stop()
-	}
 	h.controller.Stop()
 	h.eventNotifier.Stop()
 }
@@ -232,7 +185,6 @@ func (h *Handler) CreateEngine(
 		h.config,
 		h.replicationTaskFetchers,
 		h.GetMatchingRawClient(),
-		h.queueTaskProcessor,
 		h.newCacheFn,
 	)
 }

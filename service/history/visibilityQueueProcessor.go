@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -88,7 +87,6 @@ func newVisibilityQueueProcessor(
 	visibilityMgr manager.VisibilityManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
-	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
 ) *visibilityQueueProcessorImpl {
 
@@ -159,35 +157,13 @@ func newVisibilityQueueProcessor(
 		logger,
 	)
 
-	redispatchQueue := collection.NewConcurrentQueue()
-
-	visibilityQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
-		return newVisibilityQueueTask(
-			shard,
-			taskInfo,
-			historyEngine.metricsClient.Scope(
-				getVisibilityTaskMetricsScope(taskInfo.GetTaskType()),
-			),
-			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
-			visibilityTaskFilter,
-			retProcessor.taskExecutor,
-			redispatchQueue,
-			shard.GetTimeSource(),
-			options.MaxRetryCount,
-			queueAckMgr,
-		)
-	}
-
 	queueProcessorBase := newQueueProcessorBase(
 		shard.GetService().GetClusterMetadata().GetCurrentClusterName(),
 		shard,
 		options,
 		retProcessor,
-		queueTaskProcessor,
 		queueAckMgr,
-		redispatchQueue,
 		historyEngine.historyCache,
-		visibilityQueueTaskInitializer,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.VisibilityQueueProcessorScope),
 	)

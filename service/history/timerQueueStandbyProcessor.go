@@ -29,7 +29,6 @@ import (
 	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -60,7 +59,6 @@ func newTimerQueueStandbyProcessor(
 	clusterName string,
 	taskAllocator taskAllocator,
 	nDCHistoryResender xdc.NDCHistoryResender,
-	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
 ) *timerQueueStandbyProcessorImpl {
 
@@ -92,8 +90,6 @@ func newTimerQueueStandbyProcessor(
 		clusterName,
 	)
 
-	redispatchQueue := collection.NewConcurrentQueue()
-
 	processor := &timerQueueStandbyProcessorImpl{
 		shard:           shard,
 		timerTaskFilter: timerTaskFilter,
@@ -111,32 +107,12 @@ func newTimerQueueStandbyProcessor(
 		),
 	}
 
-	timerQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
-		return newTimerQueueTask(
-			shard,
-			taskInfo,
-			historyService.metricsClient.Scope(
-				getTimerTaskMetricScope(taskInfo.GetTaskType(), false),
-			),
-			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
-			timerTaskFilter,
-			processor.taskExecutor,
-			redispatchQueue,
-			shard.GetTimeSource(),
-			shard.GetConfig().TimerTaskMaxRetryCount,
-			timerQueueAckMgr,
-		)
-	}
-
 	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
 		metrics.TimerStandbyQueueProcessorScope,
 		shard,
 		historyService,
 		processor,
-		queueTaskProcessor,
 		timerQueueAckMgr,
-		redispatchQueue,
-		timerQueueTaskInitializer,
 		timerGate,
 		shard.GetConfig().TimerProcessorMaxPollRPS,
 		logger,

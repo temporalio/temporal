@@ -32,7 +32,6 @@ import (
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -59,7 +58,6 @@ func newTimerQueueActiveProcessor(
 	historyService *historyEngineImpl,
 	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
-	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
 ) *timerQueueActiveProcessorImpl {
 
@@ -92,8 +90,6 @@ func newTimerQueueActiveProcessor(
 
 	timerGate := NewLocalTimerGate(shard.GetTimeSource())
 
-	redispatchQueue := collection.NewConcurrentQueue()
-
 	processor := &timerQueueActiveProcessorImpl{
 		shard:              shard,
 		timerTaskFilter:    timerTaskFilter,
@@ -110,31 +106,13 @@ func newTimerQueueActiveProcessor(
 		historyService.metricsClient,
 		shard.GetConfig(),
 	)
-	timerQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
-		return newTimerQueueTask(
-			shard,
-			taskInfo,
-			historyService.metricsClient.Scope(
-				getTimerTaskMetricScope(taskInfo.GetTaskType(), true),
-			),
-			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
-			timerTaskFilter,
-			processor.taskExecutor,
-			redispatchQueue,
-			shard.GetTimeSource(),
-			shard.GetConfig().TimerTaskMaxRetryCount,
-			timerQueueAckMgr,
-		)
-	}
+
 	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
 		metrics.TimerActiveQueueProcessorScope,
 		shard,
 		historyService,
 		processor,
-		queueTaskProcessor,
 		timerQueueAckMgr,
-		redispatchQueue,
-		timerQueueTaskInitializer,
 		timerGate,
 		shard.GetConfig().TimerProcessorMaxPollRPS,
 		logger,
@@ -153,7 +131,6 @@ func newTimerQueueFailoverProcessor(
 	maxLevel time.Time,
 	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
-	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
 ) (func(ackLevel timerKey) error, *timerQueueActiveProcessorImpl) {
 
@@ -208,8 +185,6 @@ func newTimerQueueFailoverProcessor(
 
 	timerGate := NewLocalTimerGate(shard.GetTimeSource())
 
-	redispatchQueue := collection.NewConcurrentQueue()
-
 	processor := &timerQueueActiveProcessorImpl{
 		shard:              shard,
 		timerTaskFilter:    timerTaskFilter,
@@ -226,31 +201,13 @@ func newTimerQueueFailoverProcessor(
 		historyService.metricsClient,
 		shard.GetConfig(),
 	)
-	timerQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
-		return newTimerQueueTask(
-			shard,
-			taskInfo,
-			historyService.metricsClient.Scope(
-				getTimerTaskMetricScope(taskInfo.GetTaskType(), true),
-			),
-			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
-			timerTaskFilter,
-			processor.taskExecutor,
-			redispatchQueue,
-			shard.GetTimeSource(),
-			shard.GetConfig().TimerTaskMaxRetryCount,
-			timerQueueAckMgr,
-		)
-	}
+
 	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
 		metrics.TimerActiveQueueProcessorScope,
 		shard,
 		historyService,
 		processor,
-		queueTaskProcessor,
 		timerQueueAckMgr,
-		redispatchQueue,
-		timerQueueTaskInitializer,
 		timerGate,
 		shard.GetConfig().TimerProcessorFailoverMaxPollRPS,
 		logger,
