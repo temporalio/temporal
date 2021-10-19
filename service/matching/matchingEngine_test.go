@@ -2081,13 +2081,13 @@ type (
 	}
 )
 
-func (d *dynamicRateBurstWrapper) StoreRate(rate float64) {
-	d.DynamicRateBurst.StoreRate(rate)
+func (d *dynamicRateBurstWrapper) SetRate(rate float64) {
+	d.DynamicRateBurst.SetRate(rate)
 	d.RateLimiterImpl.SetRate(rate)
 }
 
-func (d *dynamicRateBurstWrapper) StoreBurst(burst int) {
-	d.DynamicRateBurst.StoreBurst(burst)
+func (d *dynamicRateBurstWrapper) SetBurst(burst int) {
+	d.DynamicRateBurst.SetBurst(burst)
 	d.RateLimiterImpl.SetBurst(burst)
 }
 

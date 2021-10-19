@@ -38,7 +38,7 @@ const (
 type (
 	// DynamicRateLimiterImpl implements a dynamic config wrapper around the rate limiter
 	DynamicRateLimiterImpl struct {
-		rateBurstFn     RateBurstFn
+		rateBurstFn     RateBurst
 		refreshInterval time.Duration
 
 		refreshTimer *time.Timer
@@ -50,7 +50,7 @@ var _ RateLimiter = (*DynamicRateLimiterImpl)(nil)
 
 // NewDynamicRateLimiter returns a rate limiter which handles dynamic config
 func NewDynamicRateLimiter(
-	rateBurstFn RateBurstFn,
+	rateBurstFn RateBurst,
 	refreshInterval time.Duration,
 ) *DynamicRateLimiterImpl {
 	rateLimiter := &DynamicRateLimiterImpl{

@@ -48,7 +48,7 @@ func BenchmarkRateLimiter(b *testing.B) {
 
 func BenchmarkDynamicRateLimiter(b *testing.B) {
 	limiter := NewDynamicRateLimiter(
-		NewRateBurstFn(
+		NewRateBurst(
 			func() float64 { return testRate },
 			func() int { return testBurst },
 		),

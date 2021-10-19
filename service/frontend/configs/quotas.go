@@ -116,7 +116,7 @@ type (
 	}
 )
 
-var _ quotas.RateBurstFn = (*ConfigRateBurstImpl)(nil)
+var _ quotas.RateBurst = (*ConfigRateBurstImpl)(nil)
 
 func NewConfigRateBurst(
 	namespaceName string,
@@ -139,7 +139,7 @@ func (c *ConfigRateBurstImpl) Burst() int {
 }
 
 func NewRequestToRateLimiter(
-	rateBurstFn quotas.RateBurstFn,
+	rateBurstFn quotas.RateBurst,
 ) quotas.RequestRateLimiter {
 	mapping := make(map[string]quotas.RequestRateLimiter)
 
@@ -161,7 +161,7 @@ func NewRequestToRateLimiter(
 }
 
 func NewExecutionPriorityRateLimiter(
-	rateBurstFn quotas.RateBurstFn,
+	rateBurstFn quotas.RateBurst,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RateLimiter)
 	for priority := range ExecutionAPIPriorities {
@@ -171,7 +171,7 @@ func NewExecutionPriorityRateLimiter(
 }
 
 func NewVisibilityPriorityRateLimiter(
-	rateBurstFn quotas.RateBurstFn,
+	rateBurstFn quotas.RateBurst,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RateLimiter)
 	for priority := range VisibilityAPIPriorities {
@@ -181,7 +181,7 @@ func NewVisibilityPriorityRateLimiter(
 }
 
 func NewOtherAPIPriorityRateLimiter(
-	rateBurstFn quotas.RateBurstFn,
+	rateBurstFn quotas.RateBurst,
 ) quotas.RequestRateLimiter {
 	rateLimiters := make(map[int]quotas.RateLimiter)
 	for priority := range OtherAPIPriorities {

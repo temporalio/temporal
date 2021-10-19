@@ -310,8 +310,8 @@ func (tm *TaskMatcher) UpdateRatelimit(rps *float64) {
 		burst = minTaskThrottlingBurstSize
 	}
 
-	tm.dynamicRateBurst.StoreRate(rate)
-	tm.dynamicRateBurst.StoreBurst(burst)
+	tm.dynamicRateBurst.SetRate(rate)
+	tm.dynamicRateBurst.SetBurst(burst)
 }
 
 // Rate returns the current rate at which tasks are dispatched

@@ -35,13 +35,13 @@ type (
 	// BurstFn returns an int as the burst / bucket size
 	BurstFn func() int
 
-	// RateBurstFn returns rate & burst for rate limiter
-	RateBurstFn interface {
+	// RateBurst returns rate & burst for rate limiter
+	RateBurst interface {
 		Rate() float64
 		Burst() int
 	}
 
-	RateBurstFnImpl struct {
+	RateBurstImpl struct {
 		rateFn  RateFn
 		burstFn BurstFn
 	}
@@ -53,19 +53,17 @@ type (
 	}
 
 	DynamicRateBurst interface {
-		LoadRate() float64
-		StoreRate(rate float64)
-		LoadBurst() int
-		StoreBurst(burst int)
-		RateBurstFn
+		SetRate(rate float64)
+		SetBurst(burst int)
+		RateBurst
 	}
 )
 
-func NewRateBurstFn(
+func NewRateBurst(
 	rateFn RateFn,
 	burstFn BurstFn,
-) *RateBurstFnImpl {
-	return &RateBurstFnImpl{
+) *RateBurstImpl {
+	return &RateBurstImpl{
 		rateFn:  rateFn,
 		burstFn: burstFn,
 	}
@@ -73,20 +71,20 @@ func NewRateBurstFn(
 
 func NewDefaultIncomingRateBurstFn(
 	rateFn RateFn,
-) *RateBurstFnImpl {
-	return newDefaultRateBurstFn(rateFn, defaultIncomingRateBurstRatio)
+) *RateBurstImpl {
+	return newDefaultRateBurst(rateFn, defaultIncomingRateBurstRatio)
 }
 
 func NewDefaultOutgoingRateBurstFn(
 	rateFn RateFn,
-) *RateBurstFnImpl {
-	return newDefaultRateBurstFn(rateFn, defaultOutgoingRateBurstRatio)
+) *RateBurstImpl {
+	return newDefaultRateBurst(rateFn, defaultOutgoingRateBurstRatio)
 }
 
-func newDefaultRateBurstFn(
+func newDefaultRateBurst(
 	rateFn RateFn,
 	rateToBurstRatio float64,
-) *RateBurstFnImpl {
+) *RateBurstImpl {
 	burstFn := func() int {
 		rate := rateFn()
 		if rate < 0 {
@@ -101,14 +99,14 @@ func newDefaultRateBurstFn(
 		}
 		return burst
 	}
-	return NewRateBurstFn(rateFn, burstFn)
+	return NewRateBurst(rateFn, burstFn)
 }
 
-func (d *RateBurstFnImpl) Rate() float64 {
+func (d *RateBurstImpl) Rate() float64 {
 	return d.rateFn()
 }
 
-func (d *RateBurstFnImpl) Burst() int {
+func (d *RateBurstImpl) Burst() int {
 	return d.burstFn()
 }
 
@@ -122,26 +120,18 @@ func NewDynamicRateBurst(
 	}
 }
 
-func (d *DynamicRateBurstImpl) LoadRate() float64 {
-	return d.rate.Load()
-}
-
-func (d *DynamicRateBurstImpl) StoreRate(rate float64) {
+func (d *DynamicRateBurstImpl) SetRate(rate float64) {
 	d.rate.Store(rate)
 }
 
-func (d *DynamicRateBurstImpl) LoadBurst() int {
-	return int(d.burst.Load())
-}
-
-func (d *DynamicRateBurstImpl) StoreBurst(burst int) {
+func (d *DynamicRateBurstImpl) SetBurst(burst int) {
 	d.burst.Store(int64(burst))
 }
 
 func (d *DynamicRateBurstImpl) Rate() float64 {
-	return d.LoadRate()
+	return d.rate.Load()
 }
 
 func (d *DynamicRateBurstImpl) Burst() int {
-	return d.LoadBurst()
+	return int(d.burst.Load())
 }
