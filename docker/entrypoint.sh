@@ -23,4 +23,13 @@ for arg in "$@" ; do [[ ${arg} == "develop" ]] && ./setup-develop.sh && break ; 
 # Run bash instead of Temporal Server if "bash" is passed as an argument (convenient to debug docker image).
 for arg in "$@" ; do [[ ${arg} == "bash" ]] && bash && exit 0 ; done
 
-./start-temporal.sh
+trap 'kill -TERM $PID; wait $PID' TERM INT
+
+./start-temporal.sh &
+
+# Properly handle shutdown
+PID=$!
+wait $PID
+trap - TERM INT
+wait $PID
+EXIT_STATUS=$?
