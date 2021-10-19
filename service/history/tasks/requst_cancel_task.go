@@ -44,10 +44,6 @@ type (
 	}
 )
 
-func (u *CancelExecutionTask) GetWorkflowIdentifier() definition.WorkflowKey {
-	return u.WorkflowKey
-}
-
 func (u *CancelExecutionTask) GetKey() Key {
 	return Key{
 		FireTime: time.Unix(0, 0),

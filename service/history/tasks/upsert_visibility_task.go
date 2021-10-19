@@ -41,10 +41,6 @@ type (
 	}
 )
 
-func (t *UpsertExecutionVisibilityTask) GetWorkflowIdentifier() definition.WorkflowKey {
-	return t.WorkflowKey
-}
-
 func (t *UpsertExecutionVisibilityTask) GetKey() Key {
 	return Key{
 		FireTime: time.Unix(0, 0),

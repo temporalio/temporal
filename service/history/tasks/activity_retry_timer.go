@@ -41,10 +41,6 @@ type (
 	}
 )
 
-func (r *ActivityRetryTimerTask) GetWorkflowIdentifier() definition.WorkflowKey {
-	return r.WorkflowKey
-}
-
 func (r *ActivityRetryTimerTask) GetKey() Key {
 	return Key{
 		FireTime: r.VisibilityTimestamp,

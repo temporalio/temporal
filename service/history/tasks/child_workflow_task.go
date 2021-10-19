@@ -42,10 +42,6 @@ type (
 	}
 )
 
-func (a *StartChildExecutionTask) GetWorkflowIdentifier() definition.WorkflowKey {
-	return a.WorkflowKey
-}
-
 func (u *StartChildExecutionTask) GetKey() Key {
 	return Key{
 		FireTime: time.Unix(0, 0),
