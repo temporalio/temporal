@@ -473,7 +473,7 @@ func (r *registry) getNamespace(name string) (*Namespace, error) {
 	r.cacheLock.RLock()
 	defer r.cacheLock.RUnlock()
 	if id, ok := r.cacheNameToID.Get(name).(string); ok {
-		return r.getNamespaceByID(id)
+		return r.getNamespaceByIDLocked(id)
 	}
 	return nil, serviceerror.NewNotFound(
 		fmt.Sprintf("Namespace name %q not found", name))
@@ -483,6 +483,10 @@ func (r *registry) getNamespace(name string) (*Namespace, error) {
 func (r *registry) getNamespaceByID(id string) (*Namespace, error) {
 	r.cacheLock.RLock()
 	defer r.cacheLock.RUnlock()
+	return r.getNamespaceByIDLocked(id)
+}
+
+func (r *registry) getNamespaceByIDLocked(id string) (*Namespace, error) {
 	if ns, ok := r.cacheByID.Get(id).(*Namespace); ok {
 		return ns, nil
 	}
