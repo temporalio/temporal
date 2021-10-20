@@ -528,3 +528,29 @@ func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 	close(startChan)
 	waitGroup.Wait()
 }
+
+func TestCacheByName(t *testing.T) {
+	nsrec := persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   uuid.NewString(),
+				Name: "foo",
+			},
+			Config:            &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+		},
+	}
+	regPersist := persistence.NewMockMetadataManager(gomock.NewController(t))
+	regPersist.EXPECT().GetMetadata().Return(
+		&persistence.GetMetadataResponse{NotificationVersion: nsrec.NotificationVersion + 1}, nil)
+	regPersist.EXPECT().ListNamespaces(gomock.Any()).Return(&persistence.ListNamespacesResponse{
+		Namespaces: []*persistence.GetNamespaceResponse{&nsrec},
+	}, nil)
+	reg := namespace.NewRegistry(
+		regPersist, false, metrics.NewNoopMetricsClient(), log.NewNoopLogger())
+	reg.Start()
+	defer reg.Stop()
+	ns, err := reg.GetNamespace("foo")
+	require.NoError(t, err)
+	require.Equal(t, "foo", ns.Name())
+}
