@@ -92,6 +92,15 @@ func (c *metricClient) CloseShard(
 	return resp, err
 }
 
+func (c *metricClient) GetShard(
+	context context.Context,
+	request *historyservice.GetShardRequest,
+	opts ...grpc.CallOption) (*historyservice.GetShardResponse, error) {
+	resp, err := c.client.GetShard(context, request, opts...)
+
+	return resp, err
+}
+
 func (c *metricClient) DescribeMutableState(
 	context context.Context,
 	request *historyservice.DescribeMutableStateRequest,

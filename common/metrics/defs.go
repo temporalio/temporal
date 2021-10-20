@@ -491,6 +491,8 @@ const (
 	AdminClientGetSearchAttributesScope
 	// AdminClientCloseShardScope tracks RPC calls to admin service
 	AdminClientCloseShardScope
+	// AdminClientGetShardScope tracks RPC calls to admin service
+	AdminClientGetShardScope
 	// AdminClientDescribeHistoryHostScope tracks RPC calls to admin service
 	AdminClientDescribeHistoryHostScope
 	// AdminClientDescribeWorkflowMutableStateScope tracks RPC calls to admin service
@@ -701,8 +703,10 @@ const (
 	AdminResendReplicationTasksScope
 	// AdminRemoveTaskScope is the metric scope for admin.AdminRemoveTaskScope
 	AdminRemoveTaskScope
-	// AdminCloseShardTaskScope is the metric scope for admin.AdminRemoveTaskScope
-	AdminCloseShardTaskScope
+	// AdminCloseShardScope is the metric scope for admin.AdminCloseShardScope
+	AdminCloseShardScope
+	// AdminGetShardScope is the metric scope for admin.AdminGetShardScope
+	AdminGetShardScope
 	// AdminReadDLQMessagesScope is the metric scope for admin.AdminReadDLQMessagesScope
 	AdminReadDLQMessagesScope
 	// AdminPurgeDLQMessagesScope is the metric scope for admin.AdminPurgeDLQMessagesScope
@@ -1364,7 +1368,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	Frontend: {
 		// Admin API scope co-locates with with frontend
 		AdminRemoveTaskScope:                       {operation: "AdminRemoveTask"},
-		AdminCloseShardTaskScope:                   {operation: "AdminCloseShardTask"},
+		AdminCloseShardScope:                       {operation: "AdminCloseShard"},
+		AdminGetShardScope:                         {operation: "AdminGetShard"},
 		AdminReadDLQMessagesScope:                  {operation: "AdminReadDLQMessages"},
 		AdminPurgeDLQMessagesScope:                 {operation: "AdminPurgeDLQMessages"},
 		AdminMergeDLQMessagesScope:                 {operation: "AdminMergeDLQMessages"},
