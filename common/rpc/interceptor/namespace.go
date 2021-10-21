@@ -32,11 +32,11 @@ import (
 // for namespace specific metrics to be reported properly
 type (
 	NamespaceNameGetter interface {
-		GetNamespace() namespace.Name
+		GetNamespace() string
 	}
 
 	NamespaceIDGetter interface {
-		GetNamespaceId() namespace.ID
+		GetNamespaceId() string
 	}
 )
 
@@ -46,10 +46,10 @@ func GetNamespace(
 ) namespace.Name {
 	switch request := req.(type) {
 	case NamespaceNameGetter:
-		return request.GetNamespace()
+		return namespace.Name(request.GetNamespace())
 
 	case NamespaceIDGetter:
-		namespaceID := request.GetNamespaceId()
+		namespaceID := namespace.ID(request.GetNamespaceId())
 		namespaceEntry, err := namespaceRegistry.GetNamespaceByID(namespaceID)
 		if err != nil {
 			return ""

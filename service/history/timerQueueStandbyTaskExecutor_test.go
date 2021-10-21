@@ -268,7 +268,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 		},
 	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
-		timerTask.NamespaceID,
+		namespace.ID(timerTask.NamespaceID),
 		timerTask.WorkflowID,
 		timerTask.RunID,
 		nextEventID,
@@ -497,7 +497,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 		},
 	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
-		timerTask.NamespaceID,
+		namespace.ID(timerTask.NamespaceID),
 		timerTask.WorkflowID,
 		timerTask.RunID,
 		nextEventID,
@@ -843,7 +843,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 		},
 	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
-		timerTask.NamespaceID,
+		namespace.ID(timerTask.NamespaceID),
 		timerTask.WorkflowID,
 		timerTask.RunID,
 		nextEventID,
@@ -998,7 +998,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 		},
 	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
-		timerTask.NamespaceID,
+		namespace.ID(timerTask.NamespaceID),
 		timerTask.WorkflowID,
 		timerTask.RunID,
 		nextEventID,
@@ -1123,7 +1123,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 		},
 	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
-		timerTask.NamespaceID,
+		namespace.ID(timerTask.NamespaceID),
 		timerTask.WorkflowID,
 		timerTask.RunID,
 		nextEventID,

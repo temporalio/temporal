@@ -711,7 +711,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 		},
 	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
-		transferTask.NamespaceID,
+		namespace.ID(transferTask.NamespaceID),
 		transferTask.WorkflowID,
 		transferTask.RunID,
 		nextEventID,
@@ -866,7 +866,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 		},
 	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
-		transferTask.NamespaceID,
+		namespace.ID(transferTask.NamespaceID),
 		transferTask.WorkflowID,
 		transferTask.RunID,
 		nextEventID,
@@ -1020,7 +1020,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 		},
 	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
-		transferTask.NamespaceID,
+		namespace.ID(transferTask.NamespaceID),
 		transferTask.WorkflowID,
 		transferTask.RunID,
 		nextEventID,

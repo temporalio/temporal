@@ -2133,7 +2133,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowFail
 	}
 	taskToken, _ := tt.Marshal()
 	identity := "testIdentity"
-	foreignNamespace := "unknown namespace"
+	foreignNamespace := namespace.Name("unknown namespace")
 
 	msBuilder := workflow.TestLocalMutableState(s.mockHistoryEngine.shard, s.eventsCache,
 		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
@@ -2144,7 +2144,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSignalExternalWorkflowFail
 	commands := []*commandpb.Command{{
 		CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-			Namespace: foreignNamespace,
+			Namespace: foreignNamespace.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: we.WorkflowId,
 				RunId:      we.RunId,

@@ -71,7 +71,7 @@ type (
 		mockExecutionManager *persistence.MockExecutionManager
 		logger               log.Logger
 
-		namespaceID string
+		namespaceID namespace.ID
 		workflowID  string
 		runID       string
 		now         time.Time
@@ -147,7 +147,7 @@ func (s *nDCStateRebuilderSuite) TestApplyEvents() {
 		},
 	}
 
-	workflowKey := definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.runID)
+	workflowKey := definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID)
 
 	mockStateBuilder := workflow.NewMockMutableStateRebuilder(s.controller)
 	mockStateBuilder.EXPECT().ApplyEvents(
@@ -246,8 +246,8 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	branchToken := []byte("other random branch token")
 	targetBranchToken := []byte("some other random branch token")
 
-	targetNamespaceID := uuid.New()
-	targetNamespace := "other random namespace name"
+	targetNamespaceID := namespace.ID(uuid.New())
+	targetNamespace := namespace.Name("other random namespace name")
 	targetWorkflowID := "other random workflow ID"
 	targetRunID := uuid.New()
 
@@ -310,7 +310,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	}, nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(targetNamespaceID).Return(namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: targetNamespaceID, Name: targetNamespace},
+		&persistencespb.NamespaceInfo{Id: targetNamespaceID.String(), Name: targetNamespace.String()},
 		&persistencespb.NamespaceConfig{},
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -326,18 +326,18 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.rebuild(
 		context.Background(),
 		s.now,
-		definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.runID),
+		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID),
 		branchToken,
 		lastEventID,
 		version,
-		definition.NewWorkflowKey(targetNamespaceID, targetWorkflowID, targetRunID),
+		definition.NewWorkflowKey(targetNamespaceID.String(), targetWorkflowID, targetRunID),
 		targetBranchToken,
 		requestID,
 	)
 	s.NoError(err)
 	s.NotNil(rebuildMutableState)
 	rebuildExecutionInfo := rebuildMutableState.GetExecutionInfo()
-	s.Equal(targetNamespaceID, rebuildExecutionInfo.NamespaceId)
+	s.Equal(targetNamespaceID, namespace.ID(rebuildExecutionInfo.NamespaceId))
 	s.Equal(targetWorkflowID, rebuildExecutionInfo.WorkflowId)
 	s.Equal(targetRunID, rebuildMutableState.GetExecutionState().RunId)
 	s.Equal(int64(historySize1+historySize2), rebuiltHistorySize)

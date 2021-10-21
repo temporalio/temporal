@@ -550,7 +550,7 @@ func TestCacheByName(t *testing.T) {
 		regPersist, false, metrics.NewNoopMetricsClient(), log.NewNoopLogger())
 	reg.Start()
 	defer reg.Stop()
-	ns, err := reg.GetNamespace("foo")
+	ns, err := reg.GetNamespace(namespace.Name("foo"))
 	require.NoError(t, err)
-	require.Equal(t, "foo", ns.Name())
+	require.Equal(t, namespace.Name("foo"), ns.Name())
 }

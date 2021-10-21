@@ -569,7 +569,7 @@ func (s *visibilityStore) buildSearchParameters(
 		return nil, err
 	}
 
-	boolQuery.Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID))
+	boolQuery.Filter(elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID.String()))
 
 	if !request.EarliestStartTime.IsZero() || !request.LatestStartTime.IsZero() {
 		var rangeQuery *elastic.RangeQuery
@@ -649,7 +649,7 @@ func (s *visibilityStore) convertQuery(namespace namespace.Name, namespaceID nam
 	}
 
 	// Create new bool query because request query might have only "should" (="or") queries.
-	namespaceFilterQuery := elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.NamespaceID, namespaceID))
+	namespaceFilterQuery := elastic.NewBoolQuery().Filter(elastic.NewTermQuery(searchattribute.NamespaceID, namespaceID.String()))
 	if requestQuery != nil {
 		namespaceFilterQuery.Filter(requestQuery)
 	}

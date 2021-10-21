@@ -160,8 +160,8 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 }
 
 func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
-	testNamespace := "test-namespace"
-	namespaceID := uuid.New()
+	testNamespace := namespace.Name("test-namespace")
+	namespaceID := namespace.ID(uuid.New())
 	config := s.newConfig()
 	config.DisableListVisibilityByFilter = dc.GetBoolPropertyFnFilteredByNamespace(true)
 
@@ -171,7 +171,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 
 	// test list open by wid
 	listRequest := &workflowservice.ListOpenWorkflowExecutionsRequest{
-		Namespace: testNamespace,
+		Namespace: testNamespace.String(),
 		StartTimeFilter: &filterpb.StartTimeFilter{
 			EarliestTime: timestamp.TimePtr(time.Time{}),
 			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
@@ -194,7 +194,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 
 	// test list close by wid
 	listRequest2 := &workflowservice.ListClosedWorkflowExecutionsRequest{
-		Namespace: testNamespace,
+		Namespace: testNamespace.String(),
 		StartTimeFilter: &filterpb.StartTimeFilter{
 			EarliestTime: timestamp.TimePtr(time.Time{}),
 			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
@@ -1098,7 +1098,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	}, nil)
 
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
-	s.mockSearchAttributesMapper.EXPECT().GetAlias("CustomKeywordField", namespace).Return("AliasOfCustomKeyword", nil)
+	s.mockSearchAttributesMapper.EXPECT().GetAlias("CustomKeywordField", namespace.String()).Return("AliasOfCustomKeyword", nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1123,13 +1123,13 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 }
 
 func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
-	namespaceID := uuid.New()
-	namespace := "namespace"
+	namespaceID := namespace.ID(uuid.New())
+	namespace := namespace.Name("namespace")
 	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
 	newRunID := uuid.New()
 
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace:              namespace,
+		Namespace:              namespace.String(),
 		Execution:              &we,
 		MaximumPageSize:        10,
 		NextPageToken:          nil,
@@ -1140,11 +1140,11 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 
 	// set up mocks to simulate a failed workflow with a retry policy. the failure event is id 5.
 	branchToken := []byte{1, 2, 3}
-	shardID := common.WorkflowIDToHistoryShard(namespaceID, we.WorkflowId, numHistoryShards)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), we.WorkflowId, numHistoryShards)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace).Return(namespaceID, nil).AnyTimes()
 	s.mockHistoryClient.EXPECT().PollMutableState(gomock.Any(), &historyservice.PollMutableStateRequest{
-		NamespaceId:         namespaceID,
+		NamespaceId:         namespaceID.String(),
 		Execution:           &we,
 		ExpectedNextEventId: common.EndEventID,
 		CurrentBranchToken:  nil,
