@@ -29,8 +29,10 @@ import (
 	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 
 	"github.com/golang/mock/gomock"
@@ -132,15 +134,16 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 
 	moreInput := false
 	taskID1 := int64(59)
-	tasksInput := []queueTaskInfo{
-		&persistencespb.TransferTaskInfo{
-			NamespaceId: TestNamespaceId,
-			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.New(),
-			TaskId:      taskID1,
-			TaskQueue:   "some random taskqueue",
-			TaskType:    1,
-			ScheduleId:  28,
+	tasksInput := []tasks.Task{
+		&tasks.WorkflowTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				TestNamespaceId,
+				"some random workflow ID",
+				uuid.New(),
+			),
+			TaskID:     taskID1,
+			TaskQueue:  "some random task queue",
+			ScheduleID: 28,
 		},
 	}
 
@@ -154,15 +157,16 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 
 	moreInput = true
 	taskID2 := int64(60)
-	tasksInput = []queueTaskInfo{
-		&persistencespb.TransferTaskInfo{
-			NamespaceId: TestNamespaceId,
-			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.New(),
-			TaskId:      taskID2,
-			TaskQueue:   "some random taskqueue",
-			TaskType:    1,
-			ScheduleId:  29,
+	tasksInput = []tasks.Task{
+		&tasks.WorkflowTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				TestNamespaceId,
+				"some random workflow ID",
+				uuid.New(),
+			),
+			TaskID:     taskID2,
+			TaskQueue:  "some random task queue",
+			ScheduleID: 29,
 		},
 	}
 
@@ -182,15 +186,16 @@ func (s *queueAckMgrSuite) TestReadCompleteTimerTasks() {
 
 	moreInput := false
 	taskID := int64(59)
-	tasksInput := []queueTaskInfo{
-		&persistencespb.TransferTaskInfo{
-			NamespaceId: TestNamespaceId,
-			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.New(),
-			TaskId:      taskID,
-			TaskQueue:   "some random taskqueue",
-			TaskType:    1,
-			ScheduleId:  28,
+	tasksInput := []tasks.Task{
+		&tasks.WorkflowTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				TestNamespaceId,
+				"some random workflow ID",
+				uuid.New(),
+			),
+			TaskID:     taskID,
+			TaskQueue:  "some random task queue",
+			ScheduleID: 28,
 		},
 	}
 
@@ -215,33 +220,36 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	taskID1 := int64(59)
 	taskID2 := int64(60)
 	taskID3 := int64(61)
-	tasksInput := []queueTaskInfo{
-		&persistencespb.TransferTaskInfo{
-			NamespaceId: TestNamespaceId,
-			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.New(),
-			TaskId:      taskID1,
-			TaskQueue:   "some random taskqueue",
-			TaskType:    1,
-			ScheduleId:  28,
+	tasksInput := []tasks.Task{
+		&tasks.WorkflowTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				TestNamespaceId,
+				"some random workflow ID",
+				uuid.New(),
+			),
+			TaskID:     taskID1,
+			TaskQueue:  "some random task queue",
+			ScheduleID: 28,
 		},
-		&persistencespb.TransferTaskInfo{
-			NamespaceId: TestNamespaceId,
-			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.New(),
-			TaskId:      taskID2,
-			TaskQueue:   "some random taskqueue",
-			TaskType:    1,
-			ScheduleId:  28,
+		&tasks.WorkflowTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				TestNamespaceId,
+				"some random workflow ID",
+				uuid.New(),
+			),
+			TaskID:     taskID2,
+			TaskQueue:  "some random task queue",
+			ScheduleID: 28,
 		},
-		&persistencespb.TransferTaskInfo{
-			NamespaceId: TestNamespaceId,
-			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.New(),
-			TaskId:      taskID3,
-			TaskQueue:   "some random taskqueue",
-			TaskType:    1,
-			ScheduleId:  28,
+		&tasks.WorkflowTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				TestNamespaceId,
+				"some random workflow ID",
+				uuid.New(),
+			),
+			TaskID:     taskID3,
+			TaskQueue:  "some random task queue",
+			ScheduleID: 28,
 		},
 	}
 
@@ -319,15 +327,16 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 
 	moreInput := true
 	taskID1 := int64(59)
-	tasksInput := []queueTaskInfo{
-		&persistencespb.TransferTaskInfo{
-			NamespaceId: TestNamespaceId,
-			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.New(),
-			TaskId:      taskID1,
-			TaskQueue:   "some random taskqueue",
-			TaskType:    1,
-			ScheduleId:  28,
+	tasksInput := []tasks.Task{
+		&tasks.WorkflowTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				TestNamespaceId,
+				"some random workflow ID",
+				uuid.New(),
+			),
+			TaskID:     taskID1,
+			TaskQueue:  "some random task queue",
+			ScheduleID: 28,
 		},
 	}
 
@@ -342,15 +351,16 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 
 	moreInput = false
 	taskID2 := int64(60)
-	tasksInput = []queueTaskInfo{
-		&persistencespb.TransferTaskInfo{
-			NamespaceId: TestNamespaceId,
-			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.New(),
-			TaskId:      taskID2,
-			TaskQueue:   "some random taskqueue",
-			TaskType:    1,
-			ScheduleId:  29,
+	tasksInput = []tasks.Task{
+		&tasks.WorkflowTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				TestNamespaceId,
+				"some random workflow ID",
+				uuid.New(),
+			),
+			TaskID:     taskID2,
+			TaskQueue:  "some random task queue",
+			ScheduleID: 29,
 		},
 	}
 
@@ -372,24 +382,26 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 	moreInput := false
 	taskID1 := int64(59)
 	taskID2 := int64(60)
-	tasksInput := []queueTaskInfo{
-		&persistencespb.TransferTaskInfo{
-			NamespaceId: TestNamespaceId,
-			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.New(),
-			TaskId:      taskID1,
-			TaskQueue:   "some random taskqueue",
-			TaskType:    1,
-			ScheduleId:  28,
+	tasksInput := []tasks.Task{
+		&tasks.WorkflowTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				TestNamespaceId,
+				"some random workflow ID",
+				uuid.New(),
+			),
+			TaskID:     taskID1,
+			TaskQueue:  "some random task queue",
+			ScheduleID: 28,
 		},
-		&persistencespb.TransferTaskInfo{
-			NamespaceId: TestNamespaceId,
-			WorkflowId:  "some random workflow ID",
-			RunId:       uuid.New(),
-			TaskId:      taskID2,
-			TaskQueue:   "some random taskqueue",
-			TaskType:    2,
-			ScheduleId:  29,
+		&tasks.WorkflowTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				TestNamespaceId,
+				"some random workflow ID",
+				uuid.New(),
+			),
+			TaskID:     taskID2,
+			TaskQueue:  "some random task queue",
+			ScheduleID: 29,
 		},
 	}
 

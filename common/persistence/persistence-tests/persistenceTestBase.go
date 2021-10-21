@@ -321,7 +321,6 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 						workflowExecution.RunId,
 					),
 					TaskID:              s.GetNextSequenceNumber(),
-					NamespaceID:         namespaceID,
 					TaskQueue:           taskQueue,
 					ScheduleID:          workflowTaskScheduleID,
 					VisibilityTimestamp: time.Now().UTC(),
@@ -358,7 +357,6 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 			&tasks.WorkflowTask{
 				WorkflowKey: workflowKey,
 				TaskID:      s.GetNextSequenceNumber(),
-				NamespaceID: namespaceID,
 				TaskQueue:   taskQueue,
 				ScheduleID:  workflowTaskScheduleID,
 			})
@@ -447,10 +445,9 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 						workflowExecution.WorkflowId,
 						workflowExecution.RunId,
 					),
-					TaskID:      s.GetNextSequenceNumber(),
-					NamespaceID: namespaceID,
-					TaskQueue:   taskQueue,
-					ScheduleID:  workflowTaskScheduleID,
+					TaskID:     s.GetNextSequenceNumber(),
+					TaskQueue:  taskQueue,
+					ScheduleID: workflowTaskScheduleID,
 				},
 			},
 			TimerTasks: timerTasks,
@@ -500,10 +497,9 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *persistencespb.WorkflowEx
 			updatedInfo.WorkflowId,
 			updatedState.RunId,
 		),
-		TaskID:      s.GetNextSequenceNumber(),
-		NamespaceID: updatedInfo.NamespaceId,
-		TaskQueue:   updatedInfo.TaskQueue,
-		ScheduleID:  workflowTaskScheduleID,
+		TaskID:     s.GetNextSequenceNumber(),
+		TaskQueue:  updatedInfo.TaskQueue,
+		ScheduleID: workflowTaskScheduleID,
 	}
 
 	req := &persistence.UpdateWorkflowExecutionRequest{
@@ -731,7 +727,6 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *persisten
 		transferTasks = append(transferTasks, &tasks.WorkflowTask{
 			WorkflowKey: workflowKey,
 			TaskID:      s.GetNextSequenceNumber(),
-			NamespaceID: updatedInfo.NamespaceId,
 			TaskQueue:   updatedInfo.TaskQueue,
 			ScheduleID:  workflowTaskScheduleID})
 	}

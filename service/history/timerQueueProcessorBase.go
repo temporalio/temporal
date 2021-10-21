@@ -26,15 +26,10 @@ package history
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -270,7 +265,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 				return err
 			}
 			if lookAheadTimer != nil {
-				t.timerGate.Update(timestamp.TimeValue(lookAheadTimer.VisibilityTime))
+				t.timerGate.Update(lookAheadTimer.GetVisibilityTime())
 			}
 		case <-pollTimer.C:
 			pollTimer.Reset(backoff.JitDuration(
@@ -283,7 +278,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 					return err
 				}
 				if lookAheadTimer != nil {
-					t.timerGate.Update(timestamp.TimeValue(lookAheadTimer.VisibilityTime))
+					t.timerGate.Update(lookAheadTimer.GetVisibilityTime())
 				}
 			}
 		case <-updateAckTimer.C:
@@ -309,7 +304,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 	}
 }
 
-func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistencespb.TimerTaskInfo, error) {
+func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (tasks.Task, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), loadTimerTaskThrottleRetryDelay)
 	if err := t.rateLimiter.Wait(ctx); err != nil {
 		cancel()
@@ -325,7 +320,7 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistencespb.Tim
 		return nil, err
 	}
 
-	for _, task := range t.convert(timerTasks) {
+	for _, task := range timerTasks {
 		if submitted := t.submitTask(task); !submitted {
 			return nil, nil
 		}
@@ -340,7 +335,7 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistencespb.Tim
 		if lookAheadTask == nil {
 			return nil, nil
 		}
-		return t.convert([]tasks.Task{lookAheadTask})[0], nil
+		return lookAheadTask, nil
 	}
 
 	t.notifyNewTimer(time.Time{}) // re-enqueue the event
@@ -348,7 +343,7 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*persistencespb.Tim
 }
 
 func (t *timerQueueProcessorBase) submitTask(
-	taskInfo queueTaskInfo,
+	taskInfo tasks.Task,
 ) bool {
 
 	return t.taskProcessor.addTask(
@@ -367,9 +362,9 @@ func (t *timerQueueProcessorBase) retryTasks() {
 }
 
 func (t *timerQueueProcessorBase) complete(
-	timerTask *persistencespb.TimerTaskInfo,
+	task tasks.Task,
 ) {
-	t.timerQueueAckMgr.completeTimerTask(*timerTask.GetVisibilityTime(), timerTask.GetTaskId())
+	t.timerQueueAckMgr.completeTimerTask(task.GetKey().FireTime, task.GetKey().TaskID)
 	atomic.AddUint64(&t.timerFiredCount, 1)
 }
 
@@ -382,41 +377,41 @@ func (t *timerQueueProcessorBase) getTimerFiredCount() uint64 {
 }
 
 func getTimerTaskMetricScope(
-	taskType enumsspb.TaskType,
+	task tasks.Task,
 	isActive bool,
 ) int {
-	switch taskType {
-	case enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
+	switch task.(type) {
+	case *tasks.WorkflowTaskTimeoutTask:
 		if isActive {
 			return metrics.TimerActiveTaskWorkflowTaskTimeoutScope
 		}
 		return metrics.TimerStandbyTaskWorkflowTaskTimeoutScope
-	case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT:
+	case *tasks.ActivityTimeoutTask:
 		if isActive {
 			return metrics.TimerActiveTaskActivityTimeoutScope
 		}
 		return metrics.TimerStandbyTaskActivityTimeoutScope
-	case enumsspb.TASK_TYPE_USER_TIMER:
+	case *tasks.UserTimerTask:
 		if isActive {
 			return metrics.TimerActiveTaskUserTimerScope
 		}
 		return metrics.TimerStandbyTaskUserTimerScope
-	case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
+	case *tasks.WorkflowTimeoutTask:
 		if isActive {
 			return metrics.TimerActiveTaskWorkflowTimeoutScope
 		}
 		return metrics.TimerStandbyTaskWorkflowTimeoutScope
-	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT:
+	case *tasks.DeleteHistoryEventTask:
 		if isActive {
 			return metrics.TimerActiveTaskDeleteHistoryEventScope
 		}
 		return metrics.TimerStandbyTaskDeleteHistoryEventScope
-	case enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
+	case *tasks.ActivityRetryTimerTask:
 		if isActive {
 			return metrics.TimerActiveTaskActivityRetryTimerScope
 		}
 		return metrics.TimerStandbyTaskActivityRetryTimerScope
-	case enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
+	case *tasks.WorkflowBackoffTimerTask:
 		if isActive {
 			return metrics.TimerActiveTaskWorkflowBackoffTimerScope
 		}
@@ -427,36 +422,4 @@ func getTimerTaskMetricScope(
 		}
 		return metrics.TimerStandbyQueueProcessorScope
 	}
-}
-
-// TODO @wxing1292 deprecate this additional conversion before 1.14
-func (t *timerQueueProcessorBase) convert(
-	genericTasks []tasks.Task,
-) []*persistencespb.TimerTaskInfo {
-	queueTasks := make([]*persistencespb.TimerTaskInfo, len(genericTasks))
-	serializer := serialization.TaskSerializer{}
-
-	for index, task := range genericTasks {
-		var timerTask *persistencespb.TimerTaskInfo
-		switch task := task.(type) {
-		case *tasks.WorkflowTaskTimeoutTask:
-			timerTask = serializer.TimerWorkflowTaskToProto(task)
-		case *tasks.WorkflowBackoffTimerTask:
-			timerTask = serializer.TimerWorkflowDelayTaskToProto(task)
-		case *tasks.ActivityTimeoutTask:
-			timerTask = serializer.TimerActivityTaskToProto(task)
-		case *tasks.ActivityRetryTimerTask:
-			timerTask = serializer.TimerActivityRetryTaskToProto(task)
-		case *tasks.UserTimerTask:
-			timerTask = serializer.TimerUserTaskToProto(task)
-		case *tasks.WorkflowTimeoutTask:
-			timerTask = serializer.TimerWorkflowRunToProto(task)
-		case *tasks.DeleteHistoryEventTask:
-			timerTask = serializer.TimerWorkflowCleanupTaskToProto(task)
-		default:
-			panic(fmt.Sprintf("Unknown timer task type: %v", task))
-		}
-		queueTasks[index] = timerTask
-	}
-	return queueTasks
 }

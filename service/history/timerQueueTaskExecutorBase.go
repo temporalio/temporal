@@ -30,7 +30,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
@@ -79,7 +78,7 @@ func newTimerQueueTaskExecutorBase(
 
 func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	ctx context.Context,
-	task *persistencespb.TimerTaskInfo,
+	task *tasks.DeleteHistoryEventTask,
 ) (retError error) {
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
@@ -110,12 +109,12 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), lastWriteVersion, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.NamespaceID, lastWriteVersion, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
 
-	namespaceRegistryEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(task.GetNamespaceId())
+	namespaceRegistryEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(task.NamespaceID)
 	if err != nil {
 		return err
 	}
@@ -134,7 +133,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 }
 
 func (t *timerQueueTaskExecutorBase) deleteWorkflow(
-	task *persistencespb.TimerTaskInfo,
+	task *tasks.DeleteHistoryEventTask,
 	workflowContext workflow.Context,
 	msBuilder workflow.MutableState,
 ) error {
@@ -162,7 +161,7 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflow(
 }
 
 func (t *timerQueueTaskExecutorBase) archiveWorkflow(
-	task *persistencespb.TimerTaskInfo,
+	task *tasks.DeleteHistoryEventTask,
 	workflowContext workflow.Context,
 	msBuilder workflow.MutableState,
 	namespaceRegistryEntry *namespace.Namespace,
@@ -178,9 +177,9 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 
 	req := &archiver.ClientRequest{
 		ArchiveRequest: &archiver.ArchiveRequest{
-			NamespaceID:          task.GetNamespaceId(),
-			WorkflowID:           task.GetWorkflowId(),
-			RunID:                task.GetRunId(),
+			NamespaceID:          task.NamespaceID,
+			WorkflowID:           task.WorkflowID,
+			RunID:                task.RunID,
 			Namespace:            namespaceRegistryEntry.Name(),
 			ShardID:              t.shard.GetShardID(),
 			Targets:              []archiver.ArchivalTarget{archiver.ArchiveTargetHistory},
@@ -240,37 +239,37 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 }
 
 func (t *timerQueueTaskExecutorBase) deleteWorkflowExecution(
-	task *persistencespb.TimerTaskInfo,
+	task *tasks.DeleteHistoryEventTask,
 ) error {
 
 	op := func() error {
 		return t.shard.GetExecutionManager().DeleteWorkflowExecution(&persistence.DeleteWorkflowExecutionRequest{
 			ShardID:     t.shard.GetShardID(),
-			NamespaceID: task.GetNamespaceId(),
-			WorkflowID:  task.GetWorkflowId(),
-			RunID:       task.GetRunId(),
+			NamespaceID: task.NamespaceID,
+			WorkflowID:  task.WorkflowID,
+			RunID:       task.RunID,
 		})
 	}
 	return backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
 func (t *timerQueueTaskExecutorBase) deleteCurrentWorkflowExecution(
-	task *persistencespb.TimerTaskInfo,
+	task *tasks.DeleteHistoryEventTask,
 ) error {
 
 	op := func() error {
 		return t.shard.GetExecutionManager().DeleteCurrentWorkflowExecution(&persistence.DeleteCurrentWorkflowExecutionRequest{
 			ShardID:     t.shard.GetShardID(),
-			NamespaceID: task.GetNamespaceId(),
-			WorkflowID:  task.GetWorkflowId(),
-			RunID:       task.GetRunId(),
+			NamespaceID: task.NamespaceID,
+			WorkflowID:  task.WorkflowID,
+			RunID:       task.RunID,
 		})
 	}
 	return backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
 func (t *timerQueueTaskExecutorBase) deleteWorkflowHistory(
-	task *persistencespb.TimerTaskInfo,
+	task *tasks.DeleteHistoryEventTask,
 	msBuilder workflow.MutableState,
 ) error {
 
@@ -289,15 +288,15 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowHistory(
 }
 
 func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
-	task *persistencespb.TimerTaskInfo,
+	task *tasks.DeleteHistoryEventTask,
 ) error {
 
 	return t.shard.AddTasks(&persistence.AddTasksRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID is set by shard
-		NamespaceID: task.GetNamespaceId(),
-		WorkflowID:  task.GetWorkflowId(),
-		RunID:       task.GetRunId(),
+		NamespaceID: task.NamespaceID,
+		WorkflowID:  task.WorkflowID,
+		RunID:       task.RunID,
 
 		TransferTasks:    nil,
 		TimerTasks:       nil,
@@ -305,22 +304,22 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 		VisibilityTasks: []tasks.Task{&tasks.DeleteExecutionVisibilityTask{
 			// TaskID is set by shard
 			WorkflowKey: definition.NewWorkflowKey(
-				task.GetNamespaceId(),
-				task.GetWorkflowId(),
-				task.GetRunId(),
+				task.NamespaceID,
+				task.WorkflowID,
+				task.RunID,
 			),
 			VisibilityTimestamp: t.shard.GetTimeSource().Now(),
-			Version:             task.GetVersion(),
+			Version:             task.Version,
 		}},
 	})
 }
 
 func (t *timerQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
-	task *persistencespb.TimerTaskInfo,
+	task tasks.Task,
 ) (string, commonpb.WorkflowExecution) {
 
-	return task.GetNamespaceId(), commonpb.WorkflowExecution{
-		WorkflowId: task.GetWorkflowId(),
-		RunId:      task.GetRunId(),
+	return task.GetNamespaceID(), commonpb.WorkflowExecution{
+		WorkflowId: task.GetWorkflowID(),
+		RunId:      task.GetRunID(),
 	}
 }

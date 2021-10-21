@@ -59,7 +59,7 @@ type (
 		UnlockTaskPrrocessing()
 	}
 
-	taskFilter func(task queueTaskInfo) (bool, error)
+	taskFilter func(task tasks.Task) (bool, error)
 
 	transferQueueProcessorImpl struct {
 		isGlobalNamespaceEnabled bool

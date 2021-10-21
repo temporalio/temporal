@@ -529,11 +529,6 @@ func TaskID(taskID int64) ZapTag {
 	return NewInt64("queue-task-id", taskID)
 }
 
-// TaskType returns tag for TaskType for queue processor
-func TaskType(taskType enumsspb.TaskType) ZapTag {
-	return NewStringTag("queue-task-type", taskType.String())
-}
-
 // TaskVersion returns tag for TaskVersion
 func TaskVersion(taskVersion int64) ZapTag {
 	return NewInt64("queue-task-version", taskVersion)

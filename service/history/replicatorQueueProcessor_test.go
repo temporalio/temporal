@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -212,14 +213,18 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
 	scheduleID := int64(144)
+	version := int64(288)
 	taskID := int64(1444)
-	task := &persistencespb.ReplicationTaskInfo{
-		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
-		TaskId:      taskID,
-		NamespaceId: namespaceID,
-		WorkflowId:  workflowID,
-		RunId:       runID,
-		ScheduledId: scheduleID,
+	task := &tasks.SyncActivityTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			namespaceID,
+			workflowID,
+			runID,
+		),
+		VisibilityTimestamp: time.Now().UTC(),
+		TaskID:              taskID,
+		Version:             version,
+		ScheduledID:         scheduleID,
 	}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 		ShardID:     s.mockShard.GetShardID(),
@@ -256,13 +261,16 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	version := int64(2333)
-	task := &persistencespb.ReplicationTaskInfo{
-		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
-		TaskId:      taskID,
-		NamespaceId: namespaceID,
-		WorkflowId:  workflowID,
-		RunId:       runID,
-		ScheduledId: scheduleID,
+	task := &tasks.SyncActivityTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			namespaceID,
+			workflowID,
+			runID,
+		),
+		VisibilityTimestamp: time.Now().UTC(),
+		TaskID:              taskID,
+		Version:             version,
+		ScheduledID:         scheduleID,
 	}
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.GetOrCreateWorkflowExecution(
@@ -305,13 +313,16 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	version := int64(2333)
-	task := &persistencespb.ReplicationTaskInfo{
-		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
-		TaskId:      taskID,
-		NamespaceId: namespaceID,
-		WorkflowId:  workflowID,
-		RunId:       runID,
-		ScheduledId: scheduleID,
+	task := &tasks.SyncActivityTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			namespaceID,
+			workflowID,
+			runID,
+		),
+		VisibilityTimestamp: time.Now().UTC(),
+		TaskID:              taskID,
+		Version:             version,
+		ScheduledID:         scheduleID,
 	}
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.GetOrCreateWorkflowExecution(
@@ -356,13 +367,16 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	version := int64(2333)
-	task := &persistencespb.ReplicationTaskInfo{
-		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
-		TaskId:      taskID,
-		NamespaceId: namespaceID,
-		WorkflowId:  workflowID,
-		RunId:       runID,
-		ScheduledId: scheduleID,
+	task := &tasks.SyncActivityTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			namespaceID,
+			workflowID,
+			runID,
+		),
+		VisibilityTimestamp: time.Now().UTC(),
+		TaskID:              taskID,
+		Version:             version,
+		ScheduledID:         scheduleID,
 	}
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.GetOrCreateWorkflowExecution(
@@ -464,13 +478,16 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	version := int64(2333)
-	task := &persistencespb.ReplicationTaskInfo{
-		TaskType:    enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
-		TaskId:      taskID,
-		NamespaceId: namespaceID,
-		WorkflowId:  workflowID,
-		RunId:       runID,
-		ScheduledId: scheduleID,
+	task := &tasks.SyncActivityTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			namespaceID,
+			workflowID,
+			runID,
+		),
+		VisibilityTimestamp: time.Now().UTC(),
+		TaskID:              taskID,
+		Version:             version,
+		ScheduledID:         scheduleID,
 	}
 
 	context, release, _ := s.replicatorQueueProcessor.historyCache.GetOrCreateWorkflowExecution(

@@ -27,20 +27,16 @@ package history
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync/atomic"
 	"time"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -108,7 +104,7 @@ func newVisibilityQueueProcessor(
 		EnablePriorityTaskProcessor:         config.VisibilityProcessorEnablePriorityTaskProcessor,
 		MetricScope:                         metrics.VisibilityQueueProcessorScope,
 	}
-	visibilityTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
+	visibilityTaskFilter := func(taskInfo tasks.Task) (bool, error) {
 		return true, nil
 	}
 	maxReadAckLevel := func() int64 {
@@ -275,7 +271,7 @@ func (t *visibilityQueueProcessorImpl) complete(
 	taskInfo *taskInfo,
 ) {
 
-	t.queueProcessorBase.complete(taskInfo.task)
+	t.queueProcessorBase.complete(taskInfo.Task)
 }
 
 func (t *visibilityQueueProcessorImpl) process(
@@ -283,14 +279,14 @@ func (t *visibilityQueueProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
-	metricScope := getVisibilityTaskMetricsScope(taskInfo.task.GetTaskType())
-	return metricScope, t.taskExecutor.execute(ctx, taskInfo.task, taskInfo.shouldProcessTask)
+	metricScope := getVisibilityTaskMetricsScope(taskInfo.Task)
+	return metricScope, t.taskExecutor.execute(ctx, taskInfo.Task, taskInfo.shouldProcessTask)
 }
 
 // processor interfaces
 func (t *visibilityQueueProcessorImpl) readTasks(
 	readLevel int64,
-) ([]queueTaskInfo, bool, error) {
+) ([]tasks.Task, bool, error) {
 
 	response, err := t.executionManager.GetVisibilityTasks(&persistence.GetVisibilityTasksRequest{
 		ShardID:      t.shard.GetShardID(),
@@ -303,7 +299,7 @@ func (t *visibilityQueueProcessorImpl) readTasks(
 		return nil, false, err
 	}
 
-	return t.convert(response.Tasks), len(response.NextPageToken) != 0, nil
+	return response.Tasks, len(response.NextPageToken) != 0, nil
 }
 
 func (t *visibilityQueueProcessorImpl) updateAckLevel(
@@ -319,44 +315,18 @@ func (t *visibilityQueueProcessorImpl) queueShutdown() error {
 
 // some aux stuff
 func getVisibilityTaskMetricsScope(
-	taskType enumsspb.TaskType,
+	task tasks.Task,
 ) int {
-	switch taskType {
-	case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION:
+	switch task.(type) {
+	case *tasks.StartExecutionVisibilityTask:
 		return metrics.VisibilityTaskStartExecutionScope
-	case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION:
+	case *tasks.UpsertExecutionVisibilityTask:
 		return metrics.VisibilityTaskUpsertExecutionScope
-	case enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION:
+	case *tasks.CloseExecutionVisibilityTask:
 		return metrics.VisibilityTaskCloseExecutionScope
-	case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
+	case *tasks.DeleteExecutionVisibilityTask:
 		return metrics.VisibilityTaskDeleteExecutionScope
 	default:
 		return metrics.VisibilityQueueProcessorScope
 	}
-}
-
-// TODO @wxing1292 deprecate this additional conversion before 1.14
-func (t *visibilityQueueProcessorImpl) convert(
-	genericTasks []tasks.Task,
-) []queueTaskInfo {
-	queueTasks := make([]queueTaskInfo, len(genericTasks))
-	serializer := serialization.TaskSerializer{}
-
-	for index, task := range genericTasks {
-		var visibilityTask *persistencespb.VisibilityTaskInfo
-		switch task := task.(type) {
-		case *tasks.StartExecutionVisibilityTask:
-			visibilityTask = serializer.VisibilityStartTaskToProto(task)
-		case *tasks.UpsertExecutionVisibilityTask:
-			visibilityTask = serializer.VisibilityUpsertTaskToProto(task)
-		case *tasks.CloseExecutionVisibilityTask:
-			visibilityTask = serializer.VisibilityCloseTaskToProto(task)
-		case *tasks.DeleteExecutionVisibilityTask:
-			visibilityTask = serializer.VisibilityDeleteTaskToProto(task)
-		default:
-			panic(fmt.Sprintf("Unknown visibilit task type: %v", task))
-		}
-		queueTasks[index] = visibilityTask
-	}
-	return queueTasks
 }

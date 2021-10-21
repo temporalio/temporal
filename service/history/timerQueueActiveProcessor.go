@@ -31,7 +31,6 @@ import (
 	"github.com/pborman/uuid"
 
 	"go.temporal.io/server/api/matchingservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -69,12 +68,8 @@ func newTimerQueueActiveProcessor(
 		return shard.UpdateTimerClusterAckLevel(currentClusterName, ackLevel.VisibilityTimestamp)
 	}
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
-	timerTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
-		timer, ok := taskInfo.(*persistencespb.TimerTaskInfo)
-		if !ok {
-			return false, errUnexpectedQueueTask
-		}
-		return taskAllocator.verifyActiveTask(timer.GetNamespaceId(), timer)
+	timerTaskFilter := func(task tasks.Task) (bool, error) {
+		return taskAllocator.verifyActiveTask(task.GetNamespaceID(), task)
 	}
 
 	timerQueueAckMgr := newTimerQueueAckMgr(
@@ -164,12 +159,8 @@ func newTimerQueueFailoverProcessor(
 		tag.WorkflowNamespaceIDs(namespaceIDs),
 		tag.FailoverMsg("from: "+standbyClusterName),
 	)
-	timerTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
-		timer, ok := taskInfo.(*persistencespb.TimerTaskInfo)
-		if !ok {
-			return false, errUnexpectedQueueTask
-		}
-		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, timer.GetNamespaceId(), timer)
+	timerTaskFilter := func(task tasks.Task) (bool, error) {
+		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, task.GetNamespaceID(), task)
 	}
 
 	timerQueueAckMgr := newTimerQueueFailoverAckMgr(
@@ -248,11 +239,7 @@ func (t *timerQueueActiveProcessorImpl) notifyNewTimers(
 func (t *timerQueueActiveProcessorImpl) complete(
 	taskInfo *taskInfo,
 ) {
-	timerTask, ok := taskInfo.task.(*persistencespb.TimerTaskInfo)
-	if !ok {
-		return
-	}
-	t.timerQueueProcessorBase.complete(timerTask)
+	t.timerQueueProcessorBase.complete(taskInfo.Task)
 }
 
 func (t *timerQueueActiveProcessorImpl) process(
@@ -260,6 +247,6 @@ func (t *timerQueueActiveProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
-	metricScope := getTimerTaskMetricScope(taskInfo.task.GetTaskType(), true)
-	return metricScope, t.taskExecutor.execute(ctx, taskInfo.task, taskInfo.shouldProcessTask)
+	metricScope := getTimerTaskMetricScope(taskInfo.Task, true)
+	return metricScope, t.taskExecutor.execute(ctx, taskInfo.Task, taskInfo.shouldProcessTask)
 }

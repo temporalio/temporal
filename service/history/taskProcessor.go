@@ -31,8 +31,6 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -41,10 +39,10 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -59,9 +57,10 @@ type (
 	}
 
 	taskInfo struct {
+		tasks.Task
+
 		// TODO: change to queueTaskExecutor
 		processor taskExecutor
-		task      queueTaskInfo
 
 		attempt   int
 		startTime time.Time
@@ -95,12 +94,13 @@ type (
 
 func newTaskInfo(
 	processor taskExecutor,
-	task queueTaskInfo,
+	task tasks.Task,
 	logger log.Logger,
 ) *taskInfo {
 	return &taskInfo{
+		Task: task,
+
 		processor:         processor,
-		task:              task,
 		attempt:           1,
 		startTime:         time.Now().UTC(), // used for metrics
 		userLatency:       0,
@@ -209,7 +209,7 @@ FilterLoop:
 			// this must return without ack
 			return
 		default:
-			task.shouldProcessTask, err = task.processor.getTaskFilter()(task.task)
+			task.shouldProcessTask, err = task.processor.getTaskFilter()(task.Task)
 			if err == nil {
 				break FilterLoop
 			}
@@ -225,7 +225,7 @@ FilterLoop:
 			if task.attempt > t.config.TimerTaskMaxRetryCount() {
 				scope.RecordDistribution(metrics.TaskAttemptTimer, task.attempt)
 				task.logger.Error("Critical error processing task, retrying.",
-					tag.Error(err), tag.OperationCritical, tag.TaskType(task.task.GetTaskType()))
+					tag.Error(err), tag.OperationCritical, tag.Task(task.Task))
 			}
 		}
 		return err
@@ -270,7 +270,7 @@ func (t *taskProcessor) processTaskOnce(
 	if duration, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency); ok {
 		task.userLatency += time.Duration(duration)
 	}
-	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getNamespaceTagByID(task.task.GetNamespaceId()))
+	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getNamespaceTagByID(task.GetNamespaceID()))
 	if task.shouldProcessTask {
 		scope.IncCounter(metrics.TaskRequests)
 		scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(startTime))
@@ -292,15 +292,6 @@ func (t *taskProcessor) handleTaskError(
 	}
 
 	if _, ok := err.(*serviceerror.NotFound); ok {
-		return nil
-	}
-
-	if transferTask, ok := task.task.(*persistencespb.TransferTaskInfo); ok &&
-		transferTask.TaskType == enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION &&
-		err == workflow.ErrMissingWorkflowStartEvent &&
-		t.config.EnableDropStuckTaskByNamespaceID(task.task.GetNamespaceId()) { // use namespaceID here to avoid accessing namespaceRegistry
-		scope.IncCounter(metrics.TransferTaskMissingEventCounter)
-		task.logger.Error("Drop close execution transfer task due to corrupted workflow history", tag.Error(err), tag.LifeCycleProcessingFailed)
 		return nil
 	}
 
@@ -348,13 +339,12 @@ func (t *taskProcessor) ackTaskOnce(
 ) {
 	task.processor.complete(task)
 	if task.shouldProcessTask {
-		goVisibilityTime := timestamp.TimeValue(task.task.GetVisibilityTime())
 		scope.RecordDistribution(metrics.TaskAttemptTimer, task.attempt)
 		scope.RecordTimer(metrics.TaskLatency, time.Since(task.startTime))
-		scope.RecordTimer(metrics.TaskQueueLatency, time.Since(goVisibilityTime))
+		scope.RecordTimer(metrics.TaskQueueLatency, time.Since(task.GetVisibilityTime()))
 		scope.RecordTimer(metrics.TaskUserLatency, task.userLatency)
 		scope.RecordTimer(metrics.TaskNoUserLatency, time.Since(task.startTime)-task.userLatency)
-		scope.RecordTimer(metrics.TaskNoUserQueueLatency, time.Since(goVisibilityTime)-task.userLatency)
+		scope.RecordTimer(metrics.TaskNoUserQueueLatency, time.Since(task.GetVisibilityTime())-task.userLatency)
 	}
 }
 

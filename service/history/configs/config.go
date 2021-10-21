@@ -220,8 +220,7 @@ type Config struct {
 	ReplicationEventsFromCurrentCluster    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	StandbyTaskReReplicationContextTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter
 
-	EnableDropStuckTaskByNamespaceID dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
-	SkipReapplicationByNamespaceID   dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
+	SkipReapplicationByNamespaceID dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
 
 	// ===== Visibility related =====
 	// VisibilityQueueProcessor settings
@@ -405,8 +404,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		ReplicationEventsFromCurrentCluster:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.ReplicationEventsFromCurrentCluster, false),
 		StandbyTaskReReplicationContextTimeout: dc.GetDurationPropertyFilteredByNamespaceID(dynamicconfig.StandbyTaskReReplicationContextTimeout, 3*time.Minute),
 
-		EnableDropStuckTaskByNamespaceID: dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.EnableDropStuckTaskByNamespaceID, false),
-		SkipReapplicationByNamespaceID:   dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.SkipReapplicationByNamespaceID, false),
+		SkipReapplicationByNamespaceID: dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.SkipReapplicationByNamespaceID, false),
 
 		// ===== Visibility related =====
 		VisibilityTaskBatchSize:                                dc.GetIntProperty(dynamicconfig.VisibilityTaskBatchSize, 100),
