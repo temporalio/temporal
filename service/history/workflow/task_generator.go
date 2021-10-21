@@ -175,7 +175,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	})
 
 	retention := defaultWorkflowRetention
-	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(executionInfo.NamespaceId)
+	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
 	switch err.(type) {
 	case nil:
 		retention = namespaceEntry.Retention(executionInfo.WorkflowId)
@@ -361,7 +361,7 @@ func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
 
 	attr := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
 	childWorkflowScheduleID := event.GetEventId()
-	childWorkflowTargetNamespace := attr.GetNamespace()
+	childWorkflowTargetNamespace := namespace.Name(attr.GetNamespace())
 
 	childWorkflowInfo, ok := r.mutableState.GetChildExecutionInfo(childWorkflowScheduleID)
 	if !ok {
@@ -377,7 +377,7 @@ func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowIdentifier(),
 		VisibilityTimestamp: now,
-		TargetNamespaceID:   targetNamespaceID,
+		TargetNamespaceID:   targetNamespaceID.String(),
 		TargetWorkflowID:    childWorkflowInfo.StartedWorkflowId,
 		InitiatedID:         childWorkflowInfo.InitiatedId,
 		Version:             childWorkflowInfo.Version,
@@ -394,7 +394,7 @@ func (r *TaskGeneratorImpl) GenerateRequestCancelExternalTasks(
 	attr := event.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()
 	scheduleID := event.GetEventId()
 	version := event.GetVersion()
-	targetNamespace := attr.GetNamespace()
+	targetNamespace := namespace.Name(attr.GetNamespace())
 	targetWorkflowID := attr.GetWorkflowExecution().GetWorkflowId()
 	targetRunID := attr.GetWorkflowExecution().GetRunId()
 	targetChildOnly := attr.GetChildWorkflowOnly()
@@ -413,7 +413,7 @@ func (r *TaskGeneratorImpl) GenerateRequestCancelExternalTasks(
 		// TaskID is set by shard
 		WorkflowKey:             r.mutableState.GetWorkflowIdentifier(),
 		VisibilityTimestamp:     now,
-		TargetNamespaceID:       targetNamespaceID,
+		TargetNamespaceID:       targetNamespaceID.String(),
 		TargetWorkflowID:        targetWorkflowID,
 		TargetRunID:             targetRunID,
 		TargetChildWorkflowOnly: targetChildOnly,
@@ -432,7 +432,7 @@ func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 	attr := event.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 	scheduleID := event.GetEventId()
 	version := event.GetVersion()
-	targetNamespace := attr.GetNamespace()
+	targetNamespace := namespace.Name(attr.GetNamespace())
 	targetWorkflowID := attr.GetWorkflowExecution().GetWorkflowId()
 	targetRunID := attr.GetWorkflowExecution().GetRunId()
 	targetChildOnly := attr.GetChildWorkflowOnly()
@@ -451,7 +451,7 @@ func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 		// TaskID is set by shard
 		WorkflowKey:             r.mutableState.GetWorkflowIdentifier(),
 		VisibilityTimestamp:     now,
-		TargetNamespaceID:       targetNamespaceID,
+		TargetNamespaceID:       targetNamespaceID.String(),
 		TargetWorkflowID:        targetWorkflowID,
 		TargetRunID:             targetRunID,
 		TargetChildWorkflowOnly: targetChildOnly,
@@ -516,10 +516,10 @@ func (r *TaskGeneratorImpl) getTimerSequence(now time.Time) TimerSequence {
 }
 
 func (r *TaskGeneratorImpl) getTargetNamespaceID(
-	targetNamespace string,
-) (string, error) {
+	targetNamespace namespace.Name,
+) (namespace.ID, error) {
 
-	targetNamespaceID := r.mutableState.GetExecutionInfo().NamespaceId
+	targetNamespaceID := namespace.ID(r.mutableState.GetExecutionInfo().NamespaceId)
 	if targetNamespace != "" {
 		targetNamespaceEntry, err := r.namespaceRegistry.GetNamespace(targetNamespace)
 		if err != nil {

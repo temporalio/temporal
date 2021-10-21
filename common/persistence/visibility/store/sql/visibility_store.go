@@ -159,7 +159,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutions(
 		false,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
 			return s.sqlStore.Db.SelectFromVisibility(ctx, sqlplugin.VisibilitySelectFilter{
-				NamespaceID: request.NamespaceID,
+				NamespaceID: request.NamespaceID.String(),
 				MinTime:     &request.EarliestStartTime,
 				MaxTime:     &readLevel.Time,
 				RunID:       &readLevel.RunID,
@@ -181,7 +181,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutions(
 		true,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
 			return s.sqlStore.Db.SelectFromVisibility(ctx, sqlplugin.VisibilitySelectFilter{
-				NamespaceID: request.NamespaceID,
+				NamespaceID: request.NamespaceID.String(),
 				MinTime:     &request.EarliestStartTime,
 				MaxTime:     &readLevel.Time,
 				RunID:       &readLevel.RunID,
@@ -202,7 +202,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByType(
 		false,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
 			return s.sqlStore.Db.SelectFromVisibility(ctx, sqlplugin.VisibilitySelectFilter{
-				NamespaceID:      request.NamespaceID,
+				NamespaceID:      request.NamespaceID.String(),
 				MinTime:          &request.EarliestStartTime,
 				MaxTime:          &readLevel.Time,
 				RunID:            &readLevel.RunID,
@@ -225,7 +225,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByType(
 		true,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
 			return s.sqlStore.Db.SelectFromVisibility(ctx, sqlplugin.VisibilitySelectFilter{
-				NamespaceID:      request.NamespaceID,
+				NamespaceID:      request.NamespaceID.String(),
 				MinTime:          &request.EarliestStartTime,
 				MaxTime:          &readLevel.Time,
 				RunID:            &readLevel.RunID,
@@ -247,7 +247,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 		false,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
 			return s.sqlStore.Db.SelectFromVisibility(ctx, sqlplugin.VisibilitySelectFilter{
-				NamespaceID: request.NamespaceID,
+				NamespaceID: request.NamespaceID.String(),
 				MinTime:     &request.EarliestStartTime,
 				MaxTime:     &readLevel.Time,
 				RunID:       &readLevel.RunID,
@@ -270,7 +270,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 		true,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
 			return s.sqlStore.Db.SelectFromVisibility(ctx, sqlplugin.VisibilitySelectFilter{
-				NamespaceID: request.NamespaceID,
+				NamespaceID: request.NamespaceID.String(),
 				MinTime:     &request.EarliestStartTime,
 				MaxTime:     &readLevel.Time,
 				RunID:       &readLevel.RunID,
@@ -292,7 +292,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 		true,
 		func(readLevel *visibilityPageToken) ([]sqlplugin.VisibilityRow, error) {
 			return s.sqlStore.Db.SelectFromVisibility(ctx, sqlplugin.VisibilitySelectFilter{
-				NamespaceID: request.NamespaceID,
+				NamespaceID: request.NamespaceID.String(),
 				MinTime:     &request.EarliestStartTime,
 				MaxTime:     &readLevel.Time,
 				RunID:       &readLevel.RunID,
@@ -308,7 +308,7 @@ func (s *visibilityStore) DeleteWorkflowExecution(
 	ctx, cancel := newVisibilityContext()
 	defer cancel()
 	_, err := s.sqlStore.Db.DeleteFromVisibility(ctx, sqlplugin.VisibilityDeleteFilter{
-		NamespaceID: request.NamespaceID,
+		NamespaceID: request.NamespaceID.String(),
 		RunID:       request.RunID,
 	})
 	if err != nil {

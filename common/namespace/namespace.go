@@ -30,6 +30,7 @@ import (
 	"time"
 
 	namespacepb "go.temporal.io/api/namespace/v1"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -56,6 +57,12 @@ type (
 		info  *namespacepb.BadBinaryInfo
 	}
 
+	// ID is the unique identifier type for a Namespace.
+	ID string
+
+	// Name is a user-supplied nickname for a Namespace.
+	Name string
+
 	// Namespaces is a *Namespace slice
 	Namespaces []*Namespace
 
@@ -70,6 +77,11 @@ type (
 		failoverNotificationVersion int64
 		notificationVersion         int64
 	}
+)
+
+var (
+	EmptyName Name
+	EmptyID   ID
 )
 
 func FromPersistentState(record *persistence.GetNamespaceResponse) *Namespace {
@@ -138,13 +150,13 @@ func (ns *Namespace) VerifyBinaryChecksum(cksum string) error {
 }
 
 // ID observes this namespace's permanent unique identifier in string form.
-func (ns *Namespace) ID() string {
-	return ns.info.Id
+func (ns *Namespace) ID() ID {
+	return ID(ns.info.Id)
 }
 
 // Name observes this namespace's configured name.
-func (ns *Namespace) Name() string {
-	return ns.info.Name
+func (ns *Namespace) Name() Name {
+	return Name(ns.info.Name)
 }
 
 // ActiveClusterName observes the name of the cluster that is currently active
@@ -297,4 +309,20 @@ func (e BadBinaryError) Created() time.Time {
 // Checksum observes the binary checksum that caused this error.
 func (e BadBinaryError) Checksum() string {
 	return e.cksum
+}
+
+func (id ID) String() string {
+	return string(id)
+}
+
+func (id ID) IsEmpty() bool {
+	return id == EmptyID
+}
+
+func (n Name) String() string {
+	return string(n)
+}
+
+func (n Name) IsEmpty() bool {
+	return n == EmptyName
 }

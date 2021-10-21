@@ -198,10 +198,10 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	namespaceID := executionInfo.NamespaceId
+	namespaceID := namespace.ID(executionInfo.NamespaceId)
 	targetNamespaceID := namespaceID
 	if attr.GetNamespace() != "" {
-		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(attr.GetNamespace())
+		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(namespace.Name(attr.GetNamespace()))
 		if err != nil {
 			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to schedule activity across namespace %v.", attr.GetNamespace()))
 		}
@@ -558,10 +558,10 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkfl
 	)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	namespaceID := executionInfo.NamespaceId
+	namespaceID := namespace.ID(executionInfo.NamespaceId)
 	targetNamespaceID := namespaceID
 	if attr.GetNamespace() != "" {
-		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(attr.GetNamespace())
+		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(namespace.Name(attr.GetNamespace()))
 		if err != nil {
 			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to cancel workflow across namespace: %v.", attr.GetNamespace()))
 		}
@@ -635,12 +635,12 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND, nil)
 	}
 
-	namespace := handler.mutableState.GetNamespaceEntry().Name()
+	namespaceName := handler.mutableState.GetNamespaceEntry().Name()
 
 	if err := handler.validateCommandAttr(
 		func() error {
 			return handler.attrValidator.validateContinueAsNewWorkflowExecutionAttributes(
-				namespace,
+				namespaceName,
 				attr,
 				handler.mutableState.GetExecutionInfo(),
 				handler.config.DefaultVisibilityIndexName,
@@ -673,7 +673,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 
 	failWorkflow, err = handler.sizeLimitChecker.failWorkflowIfSearchAttributesSizeExceedsLimit(
 		attr.GetSearchAttributes(),
-		namespace,
+		namespaceName,
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION.String()),
 	)
 	if err != nil || failWorkflow {
@@ -681,7 +681,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return err
 	}
 
-	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespace); err != nil {
+	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespaceName.String()); err != nil {
 		handler.stopProcessing = true
 		return err
 	}
@@ -700,10 +700,10 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 		return nil
 	}
 
-	// Extract parentNamespace so it can be passed down to next run of workflow execution
-	var parentNamespace string
+	// Extract parentNamespace, so it can be passed down to next run of workflow execution
+	var parentNamespace namespace.Name
 	if handler.mutableState.HasParentExecution() {
-		parentNamespaceID := handler.mutableState.GetExecutionInfo().ParentNamespaceId
+		parentNamespaceID := namespace.ID(handler.mutableState.GetExecutionInfo().ParentNamespaceId)
 		parentNamespaceEntry, err := handler.namespaceRegistry.GetNamespaceByID(parentNamespaceID)
 		if err != nil {
 			return err
@@ -740,14 +740,14 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	targetNamespaceID := parentNamespaceID
 	targetNamespace := parentNamespace
 	if attr.GetNamespace() != "" {
-		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(attr.GetNamespace())
+		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(namespace.Name(attr.GetNamespace()))
 		if err != nil {
 			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to schedule child execution across namespace %v.", attr.GetNamespace()))
 		}
 		targetNamespace = targetNamespaceEntry.Name()
 		targetNamespaceID = targetNamespaceEntry.ID()
 	} else {
-		attr.Namespace = parentNamespace
+		attr.Namespace = parentNamespace.String()
 	}
 
 	if err := handler.validateCommandAttr(
@@ -797,12 +797,12 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 		return err
 	}
 
-	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), targetNamespace); err != nil {
+	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), targetNamespace.String()); err != nil {
 		handler.stopProcessing = true
 		return err
 	}
 
-	enabled := handler.config.EnableParentClosePolicy(parentNamespace)
+	enabled := handler.config.EnableParentClosePolicy(parentNamespace.String())
 	if enabled {
 		enums.SetDefaultParentClosePolicy(&attr.ParentClosePolicy)
 	} else {
@@ -832,10 +832,10 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 	)
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	namespaceID := executionInfo.NamespaceId
+	namespaceID := namespace.ID(executionInfo.NamespaceId)
 	targetNamespaceID := namespaceID
 	if attr.GetNamespace() != "" {
-		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(attr.GetNamespace())
+		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(namespace.Name(attr.GetNamespace()))
 		if err != nil {
 			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to signal workflow across namespace: %v.", attr.GetNamespace()))
 		}
@@ -883,7 +883,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 
 	// get namespace name
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	namespaceID := executionInfo.NamespaceId
+	namespaceID := namespace.ID(executionInfo.NamespaceId)
 	namespaceEntry, err := handler.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("Unable to get namespace for namespaceID: %v.", namespaceID))
@@ -925,7 +925,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 		return err
 	}
 
-	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespace); err != nil {
+	if err := searchattribute.SubstituteAliases(handler.searchAttributesMapper, attr.GetSearchAttributes(), namespace.String()); err != nil {
 		handler.stopProcessing = true
 		return err
 	}

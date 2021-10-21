@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/service/history/configs"
@@ -65,8 +66,8 @@ type (
 	CallerType int
 
 	Context interface {
-		GetNamespace() string
-		GetNamespaceID() string
+		GetNamespace() namespace.Name
+		GetNamespaceID() namespace.ID
 		GetExecution() *commonpb.WorkflowExecution
 
 		LoadWorkflowExecution() (MutableState, error)
@@ -136,7 +137,7 @@ type (
 
 type (
 	ContextImpl struct {
-		namespaceID       string
+		namespaceID       namespace.ID
 		workflowExecution commonpb.WorkflowExecution
 		shard             shard.Context
 		logger            log.Logger
@@ -158,7 +159,7 @@ var (
 )
 
 func NewContext(
-	namespaceID string,
+	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
 	shard shard.Context,
 	logger log.Logger,
@@ -217,7 +218,7 @@ func (c *ContextImpl) Clear() {
 	}
 }
 
-func (c *ContextImpl) GetNamespaceID() string {
+func (c *ContextImpl) GetNamespaceID() namespace.ID {
 	return c.namespaceID
 }
 
@@ -225,7 +226,7 @@ func (c *ContextImpl) GetExecution() *commonpb.WorkflowExecution {
 	return &c.workflowExecution
 }
 
-func (c *ContextImpl) GetNamespace() string {
+func (c *ContextImpl) GetNamespace() namespace.Name {
 	namespaceEntry, err := c.shard.GetNamespaceRegistry().GetNamespaceByID(c.namespaceID)
 	if err != nil {
 		return ""
@@ -261,7 +262,7 @@ func (c *ContextImpl) LoadWorkflowExecutionForReplication(
 	if c.MutableState == nil {
 		response, err := getWorkflowExecutionWithRetry(c.shard, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     c.shard.GetShardID(),
-			NamespaceID: c.namespaceID,
+			NamespaceID: c.namespaceID.String(),
 			Execution:   c.workflowExecution,
 		})
 		if err != nil {
@@ -335,7 +336,7 @@ func (c *ContextImpl) LoadWorkflowExecution() (MutableState, error) {
 	if c.MutableState == nil {
 		response, err := getWorkflowExecutionWithRetry(c.shard, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     c.shard.GetShardID(),
-			NamespaceID: c.namespaceID,
+			NamespaceID: c.namespaceID.String(),
 			Execution:   c.workflowExecution,
 		})
 		if err != nil {
@@ -801,12 +802,12 @@ func (c *ContextImpl) ReapplyEvents(
 		return nil
 	}
 
-	namespaceID := eventBatches[0].NamespaceID
+	namespaceID := namespace.ID(eventBatches[0].NamespaceID)
 	workflowID := eventBatches[0].WorkflowID
 	runID := eventBatches[0].RunID
 	var reapplyEvents []*historypb.HistoryEvent
 	for _, events := range eventBatches {
-		if events.NamespaceID != namespaceID ||
+		if namespace.ID(events.NamespaceID) != namespaceID ||
 			events.WorkflowID != workflowID {
 			return serviceerror.NewInternal("Context encounter mismatch namespaceID / workflowID in events reapplication.")
 		}
@@ -869,7 +870,7 @@ func (c *ContextImpl) ReapplyEvents(
 	_, err = sourceCluster.ReapplyEvents(
 		ctx2,
 		&adminservice.ReapplyEventsRequest{
-			Namespace:         namespaceEntry.Name(),
+			Namespace:         namespaceEntry.Name().String(),
 			WorkflowExecution: execution,
 			Events:            reapplyEventsDataBlob,
 		},
@@ -880,10 +881,11 @@ func (c *ContextImpl) ReapplyEvents(
 
 // Returns true if execution is forced terminated
 func (c *ContextImpl) enforceSizeCheck() (bool, error) {
-	historySizeLimitWarn := c.config.HistorySizeLimitWarn(c.GetNamespace())
-	historySizeLimitError := c.config.HistorySizeLimitError(c.GetNamespace())
-	historyCountLimitWarn := c.config.HistoryCountLimitWarn(c.GetNamespace())
-	historyCountLimitError := c.config.HistoryCountLimitError(c.GetNamespace())
+	namespaceName := c.GetNamespace().String()
+	historySizeLimitWarn := c.config.HistorySizeLimitWarn(namespaceName)
+	historySizeLimitError := c.config.HistorySizeLimitError(namespaceName)
+	historyCountLimitWarn := c.config.HistoryCountLimitWarn(namespaceName)
+	historyCountLimitError := c.config.HistoryCountLimitError(namespaceName)
 
 	historySize := int(c.GetHistorySize())
 	historyCount := int(c.MutableState.GetNextEventID() - 1)
@@ -892,7 +894,7 @@ func (c *ContextImpl) enforceSizeCheck() (bool, error) {
 	if (historySize > historySizeLimitError || historyCount > historyCountLimitError) &&
 		c.MutableState.IsWorkflowExecutionRunning() {
 		c.logger.Error("history size exceeds error limit.",
-			tag.WorkflowNamespaceID(c.namespaceID),
+			tag.WorkflowNamespaceID(c.namespaceID.String()),
 			tag.WorkflowID(c.workflowExecution.GetWorkflowId()),
 			tag.WorkflowRunID(c.workflowExecution.GetRunId()),
 			tag.WorkflowHistorySize(historySize),
@@ -946,6 +948,6 @@ func emitStateTransitionCount(
 
 	metricsClient.Scope(
 		metrics.WorkflowContextScope,
-		metrics.NamespaceTag(mutableState.GetNamespaceEntry().Name()),
+		metrics.NamespaceTag(mutableState.GetNamespaceEntry().Name().String()),
 	).RecordDistribution(metrics.StateTransitionCount, int(mutableState.GetExecutionInfo().StateTransitionCount))
 }

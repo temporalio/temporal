@@ -109,12 +109,12 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.NamespaceID, lastWriteVersion, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(task.NamespaceID), lastWriteVersion, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
 
-	namespaceRegistryEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(task.NamespaceID)
+	namespaceRegistryEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.NamespaceID))
 	if err != nil {
 		return err
 	}
@@ -180,7 +180,7 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 			NamespaceID:          task.NamespaceID,
 			WorkflowID:           task.WorkflowID,
 			RunID:                task.RunID,
-			Namespace:            namespaceRegistryEntry.Name(),
+			Namespace:            namespaceRegistryEntry.Name().String(),
 			ShardID:              t.shard.GetShardID(),
 			Targets:              []archiver.ArchivalTarget{archiver.ArchiveTargetHistory},
 			HistoryURI:           namespaceRegistryEntry.HistoryArchivalState().URI,
@@ -316,9 +316,9 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
 
 func (t *timerQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 	task tasks.Task,
-) (string, commonpb.WorkflowExecution) {
+) (namespace.ID, commonpb.WorkflowExecution) {
 
-	return task.GetNamespaceID(), commonpb.WorkflowExecution{
+	return namespace.ID(task.GetNamespaceID()), commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowID(),
 		RunId:      task.GetRunID(),
 	}

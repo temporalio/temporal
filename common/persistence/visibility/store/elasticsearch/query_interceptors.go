@@ -31,6 +31,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/query"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
@@ -38,7 +39,7 @@ import (
 
 type (
 	nameInterceptor struct {
-		namespace               string
+		namespace               namespace.Name
 		index                   string
 		searchAttributesTypeMap searchattribute.NameTypeMap
 		searchAttributesMapper  searchattribute.Mapper
@@ -47,7 +48,7 @@ type (
 )
 
 func newNameInterceptor(
-	namespace string,
+	namespace namespace.Name,
 	index string,
 	saTypeMap searchattribute.NameTypeMap,
 	searchAttributesMapper searchattribute.Mapper,
@@ -68,7 +69,7 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 	fieldName := name
 	if searchattribute.IsMappable(name) && ni.searchAttributesMapper != nil {
 		var err error
-		fieldName, err = ni.searchAttributesMapper.GetFieldName(name, ni.namespace)
+		fieldName, err = ni.searchAttributesMapper.GetFieldName(name, ni.namespace.String())
 		if err != nil {
 			return "", err
 		}

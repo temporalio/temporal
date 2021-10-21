@@ -185,7 +185,7 @@ func getStandbyPostActionFn(
 func refreshTasks(
 	adminClient adminservice.AdminServiceClient,
 	namespaceRegistry namespace.Registry,
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 ) error {
@@ -198,7 +198,7 @@ func refreshTasks(
 	defer cancel()
 
 	_, err = adminClient.RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: namespaceEntry.Name(),
+		Namespace: namespaceEntry.Name().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,

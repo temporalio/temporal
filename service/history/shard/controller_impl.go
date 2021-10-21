@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/configs"
 
 	"go.temporal.io/server/common"
@@ -182,7 +183,7 @@ func (c *ControllerImpl) Status() int32 {
 	return atomic.LoadInt32(&c.status)
 }
 
-func (c *ControllerImpl) GetEngine(namespaceID, workflowID string) (Engine, error) {
+func (c *ControllerImpl) GetEngine(namespaceID namespace.ID, workflowID string) (Engine, error) {
 	shardID := c.config.GetShardID(namespaceID, workflowID)
 	return c.GetEngineForShard(shardID)
 }

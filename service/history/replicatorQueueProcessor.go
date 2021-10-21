@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -330,7 +331,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 	ctx context.Context,
 	taskInfo *tasks.SyncActivityTask,
 ) (*replicationspb.ReplicationTask, error) {
-	namespaceID := taskInfo.NamespaceID
+	namespaceID := namespace.ID(taskInfo.NamespaceID)
 	workflowID := taskInfo.WorkflowID
 	runID := taskInfo.RunID
 	taskID := taskInfo.TaskID
@@ -370,7 +371,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 				SourceTaskId: taskID,
 				Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
 					SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-						NamespaceId:        namespaceID,
+						NamespaceId:        namespaceID.String(),
 						WorkflowId:         workflowID,
 						RunId:              runID,
 						Version:            activityInfo.Version,
@@ -395,7 +396,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 	ctx context.Context,
 	taskInfo *tasks.HistoryReplicationTask,
 ) (*replicationspb.ReplicationTask, error) {
-	namespaceID := taskInfo.NamespaceID
+	namespaceID := namespace.ID(taskInfo.NamespaceID)
 	workflowID := taskInfo.WorkflowID
 	runID := taskInfo.RunID
 	taskID := taskInfo.TaskID
@@ -447,7 +448,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 				SourceTaskId: taskID,
 				Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
 					HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
-						NamespaceId:         namespaceID,
+						NamespaceId:         namespaceID.String(),
 						WorkflowId:          workflowID,
 						RunId:               runID,
 						VersionHistoryItems: versionHistoryItems,
@@ -527,7 +528,7 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 func (p *replicatorQueueProcessorImpl) processReplication(
 	ctx context.Context,
 	processTaskIfClosed bool,
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 	action func(workflow.MutableState) (*replicationspb.ReplicationTask, error),

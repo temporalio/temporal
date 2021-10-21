@@ -407,7 +407,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 		return nil, ErrShardClosed
 	}
 
-	namespaceID := request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId
+	namespaceID := namespace.ID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId)
 	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId
 
 	// do not try to get namespace cache within shard lock
@@ -449,7 +449,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 		return nil, ErrShardClosed
 	}
 
-	namespaceID := request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId
+	namespaceID := namespace.ID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId)
 	workflowID := request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId
 
 	// do not try to get namespace cache within shard lock
@@ -504,7 +504,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 		return nil, ErrShardClosed
 	}
 
-	namespaceID := request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId
+	namespaceID := namespace.ID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId)
 	workflowID := request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId
 
 	// do not try to get namespace cache within shard lock
@@ -572,7 +572,7 @@ func (s *ContextImpl) AddTasks(
 		return ErrShardClosed
 	}
 
-	namespaceID := request.NamespaceID
+	namespaceID := namespace.ID(request.NamespaceID)
 	workflowID := request.WorkflowID
 
 	// do not try to get namespace cache within shard lock
@@ -612,7 +612,7 @@ func (s *ContextImpl) AddTasks(
 
 func (s *ContextImpl) AppendHistoryEvents(
 	request *persistence.AppendHistoryNodesRequest,
-	namespaceID string,
+	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
 ) (int, error) {
 	if s.isStopped() {
@@ -629,14 +629,14 @@ func (s *ContextImpl) AppendHistoryEvents(
 		if entry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID); err == nil && entry != nil {
 			s.GetMetricsClient().Scope(
 				metrics.SessionSizeStatsScope,
-				metrics.NamespaceTag(entry.Name()),
+				metrics.NamespaceTag(entry.Name().String()),
 			).RecordDistribution(metrics.HistorySize, size)
 		}
 		if size >= historySizeLogThreshold {
 			s.throttledLogger.Warn("history size threshold breached",
 				tag.WorkflowID(execution.GetWorkflowId()),
 				tag.WorkflowRunID(execution.GetRunId()),
-				tag.WorkflowNamespaceID(namespaceID),
+				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowHistorySizeBytes(size))
 		}
 	}()
@@ -920,7 +920,7 @@ func (s *ContextImpl) allocateTimerIDsLocked(
 			// This can happen if shard move and new host have a time SKU, or there is db write delay.
 			// We generate a new timer ID using timerMaxReadLevel.
 			s.logger.Debug("New timer generated is less than read level",
-				tag.WorkflowNamespaceID(namespaceEntry.ID()),
+				tag.WorkflowNamespaceID(namespaceEntry.ID().String()),
 				tag.WorkflowID(workflowID),
 				tag.Timestamp(ts),
 				tag.CursorTimestamp(readCursorTS),

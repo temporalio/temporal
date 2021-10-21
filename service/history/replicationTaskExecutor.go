@@ -119,7 +119,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 ) error {
 
 	attr := task.GetSyncActivityTaskAttributes()
-	doContinue, err := e.filterTask(attr.GetNamespaceId(), forceApply)
+	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), forceApply)
 	if err != nil || !doContinue {
 		return err
 	}
@@ -157,7 +157,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 		defer stopwatch.Stop()
 
 		if resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
-			retryErr.NamespaceId,
+			namespace.ID(retryErr.NamespaceId),
 			retryErr.WorkflowId,
 			retryErr.RunId,
 			retryErr.StartEventId,
@@ -182,7 +182,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 ) error {
 
 	attr := task.GetHistoryTaskV2Attributes()
-	doContinue, err := e.filterTask(attr.GetNamespaceId(), forceApply)
+	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), forceApply)
 	if err != nil || !doContinue {
 		return err
 	}
@@ -215,7 +215,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 		defer resendStopWatch.Stop()
 
 		if resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
-			retryErr.NamespaceId,
+			namespace.ID(retryErr.NamespaceId),
 			retryErr.WorkflowId,
 			retryErr.RunId,
 			retryErr.StartEventId,
@@ -236,7 +236,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 }
 
 func (e *replicationTaskExecutorImpl) filterTask(
-	namespaceID string,
+	namespaceID namespace.ID,
 	forceApply bool,
 ) (bool, error) {
 

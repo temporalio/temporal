@@ -201,7 +201,7 @@ func persistFirstWorkflowEvents(
 	workflowEvents *persistence.WorkflowEvents,
 ) (int64, error) {
 
-	namespaceID := workflowEvents.NamespaceID
+	namespaceID := namespace.ID(workflowEvents.NamespaceID)
 	workflowID := workflowEvents.WorkflowID
 	runID := workflowEvents.RunID
 	execution := commonpb.WorkflowExecution{
@@ -219,7 +219,7 @@ func persistFirstWorkflowEvents(
 		execution,
 		&persistence.AppendHistoryNodesRequest{
 			IsNewBranch:       true,
-			Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, runID),
+			Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID.String(), workflowID, runID),
 			BranchToken:       branchToken,
 			Events:            events,
 			PrevTransactionID: prevTxnID,
@@ -238,7 +238,7 @@ func persistNonFirstWorkflowEvents(
 		return 0, nil // allow update workflow without events
 	}
 
-	namespaceID := workflowEvents.NamespaceID
+	namespaceID := namespace.ID(workflowEvents.NamespaceID)
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: workflowEvents.WorkflowID,
 		RunId:      workflowEvents.RunID,
@@ -265,7 +265,7 @@ func persistNonFirstWorkflowEvents(
 
 func appendHistoryV2EventsWithRetry(
 	shard shard.Context,
-	namespaceID string,
+	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
 	request *persistence.AppendHistoryNodesRequest,
 ) (int64, error) {
@@ -305,7 +305,7 @@ func createWorkflowExecutionWithRetry(
 	switch err.(type) {
 	case nil:
 		if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
-			request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId,
+			namespace.ID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId),
 		); err == nil {
 			emitMutationMetrics(
 				shard,
@@ -353,7 +353,7 @@ func conflictResolveWorkflowExecutionWithRetry(
 	switch err.(type) {
 	case nil:
 		if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
-			request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId,
+			namespace.ID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId),
 		); err == nil {
 			emitMutationMetrics(
 				shard,
@@ -411,7 +411,7 @@ func getWorkflowExecutionWithRetry(
 	switch err.(type) {
 	case nil:
 		if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
-			resp.State.ExecutionInfo.NamespaceId,
+			namespace.ID(resp.State.ExecutionInfo.NamespaceId),
 		); err == nil {
 			emitGetMetrics(
 				shard,
@@ -455,7 +455,7 @@ func updateWorkflowExecutionWithRetry(
 	switch err.(type) {
 	case nil:
 		if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
-			request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId,
+			namespace.ID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId),
 		); err == nil {
 			emitMutationMetrics(
 				shard,
@@ -631,8 +631,8 @@ func emitMutationMetrics(
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
-			metricsClient.Scope(metrics.SessionSizeStatsScope, metrics.NamespaceTag(namespaceName)),
-			metricsClient.Scope(metrics.SessionCountStatsScope, metrics.NamespaceTag(namespaceName)),
+			metricsClient.Scope(metrics.SessionSizeStatsScope, metrics.NamespaceTag(namespaceName.String())),
+			metricsClient.Scope(metrics.SessionCountStatsScope, metrics.NamespaceTag(namespaceName.String())),
 			stat,
 		)
 	}
@@ -647,8 +647,8 @@ func emitGetMetrics(
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
-			metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.NamespaceTag(namespaceName)),
-			metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.NamespaceTag(namespaceName)),
+			metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.NamespaceTag(namespaceName.String())),
+			metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.NamespaceTag(namespaceName.String())),
 			stat,
 		)
 	}

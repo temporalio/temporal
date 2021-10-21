@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -255,7 +256,7 @@ Loop:
 		}
 
 		t.emitTimeoutMetricScopeWithNamespaceTag(
-			mutableState.GetExecutionInfo().NamespaceId,
+			namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
 			metrics.TimerActiveTaskActivityTimeoutScope,
 			timerSequenceID.TimerType,
 		)
@@ -309,7 +310,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	if !ok {
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, task.NamespaceID, workflowTask.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, namespace.ID(task.NamespaceID), workflowTask.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -322,7 +323,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	switch task.TimeoutType {
 	case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 		t.emitTimeoutMetricScopeWithNamespaceTag(
-			mutableState.GetExecutionInfo().NamespaceId,
+			namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
 			metrics.TimerActiveTaskWorkflowTaskTimeoutScope,
 			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		)
@@ -341,7 +342,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 		}
 
 		t.emitTimeoutMetricScopeWithNamespaceTag(
-			mutableState.GetExecutionInfo().NamespaceId,
+			namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
 			metrics.TimerActiveTaskWorkflowTaskTimeoutScope,
 			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		)
@@ -442,7 +443,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		}
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, task.NamespaceID, activityInfo.Version, task.Version, task)
+	ok, err = verifyTaskVersion(t.shard, t.logger, namespace.ID(task.NamespaceID), activityInfo.Version, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -461,7 +462,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	defer cancel()
 	_, retError = t.shard.GetService().GetMatchingClient().AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId:            targetNamespaceID,
-		SourceNamespaceId:      namespaceID,
+		SourceNamespaceId:      namespaceID.String(),
 		Execution:              &execution,
 		TaskQueue:              taskQueue,
 		ScheduleId:             task.EventID,
@@ -504,7 +505,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.NamespaceID, startVersion, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(task.NamespaceID), startVersion, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -582,7 +583,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	return weContext.UpdateWorkflowExecutionWithNewAsActive(
 		t.shard.GetTimeSource().Now(),
 		workflow.NewContext(
-			newExecutionInfo.NamespaceId,
+			namespace.ID(newExecutionInfo.NamespaceId),
 			commonpb.WorkflowExecution{
 				WorkflowId: newExecutionInfo.WorkflowId,
 				RunId:      newExecutionState.RunId,
@@ -632,7 +633,7 @@ func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 }
 
 func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
-	namespaceID string,
+	namespaceID namespace.ID,
 	scope int,
 	timerType enumspb.TimeoutType,
 ) {
@@ -640,7 +641,7 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	if err != nil {
 		return
 	}
-	metricsScope := t.metricsClient.Scope(scope).Tagged(metrics.NamespaceTag(namespaceEntry.Name()))
+	metricsScope := t.metricsClient.Scope(scope).Tagged(metrics.NamespaceTag(namespaceEntry.Name().String()))
 	switch timerType {
 	case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START:
 		metricsScope.IncCounter(metrics.ScheduleToStartTimeoutCounter)

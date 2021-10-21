@@ -27,6 +27,7 @@ package history
 import (
 	"time"
 
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 
 	"github.com/pborman/uuid"
@@ -46,7 +47,7 @@ import (
 
 type (
 	nDCReplicationTask interface {
-		getNamespaceID() string
+		getNamespaceID() namespace.ID
 		getExecution() *commonpb.WorkflowExecution
 		getWorkflowID() string
 		getRunID() string
@@ -66,7 +67,7 @@ type (
 
 	nDCReplicationTaskImpl struct {
 		sourceCluster  string
-		namespaceID    string
+		namespaceID    namespace.ID
 		execution      *commonpb.WorkflowExecution
 		version        int64
 		firstEvent     *historypb.HistoryEvent
@@ -114,7 +115,7 @@ func newNDCReplicationTask(
 		return nil, err
 	}
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	execution := request.WorkflowExecution
 	versionHistory := &historyspb.VersionHistory{
 		BranchToken: nil,
@@ -166,7 +167,7 @@ func newNDCReplicationTask(
 	}, nil
 }
 
-func (t *nDCReplicationTaskImpl) getNamespaceID() string {
+func (t *nDCReplicationTaskImpl) getNamespaceID() namespace.ID {
 	return t.namespaceID
 }
 

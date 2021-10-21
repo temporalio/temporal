@@ -50,7 +50,7 @@ type (
 		tokens  map[string]int
 
 		sync.Mutex
-		namespaceToCount map[string]*int32
+		namespaceToCount map[namespace.Name]*int32
 	}
 )
 
@@ -68,7 +68,7 @@ func NewNamespaceCountLimitInterceptor(
 		countFn:           countFn,
 		tokens:            tokens,
 
-		namespaceToCount: make(map[string]*int32),
+		namespaceToCount: make(map[namespace.Name]*int32),
 	}
 }
 
@@ -90,7 +90,7 @@ func (ni *NamespaceCountLimitInterceptor) Intercept(
 		scope := MetricsScope(ctx, ni.logger)
 		scope.UpdateGauge(metrics.ServicePendingRequests, float64(count))
 
-		if int(count) > ni.countFn(namespace) {
+		if int(count) > ni.countFn(namespace.String()) {
 			return nil, ErrNamespaceCountLimitServerBusy
 		}
 	}
@@ -99,7 +99,7 @@ func (ni *NamespaceCountLimitInterceptor) Intercept(
 }
 
 func (ni *NamespaceCountLimitInterceptor) counter(
-	namespace string,
+	namespace namespace.Name,
 ) *int32 {
 	ni.Lock()
 	defer ni.Unlock()

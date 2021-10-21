@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -208,7 +209,7 @@ func SetupNewWorkflowForRetryOrCron(
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.New(),
-		Namespace:                newMutableState.GetNamespaceEntry().Name(),
+		Namespace:                newMutableState.GetNamespaceEntry().Name().String(),
 		WorkflowId:               newExecution.WorkflowId,
 		TaskQueue:                tq,
 		WorkflowType:             wType,
@@ -229,7 +230,7 @@ func SetupNewWorkflowForRetryOrCron(
 	}
 
 	req := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:              newMutableState.GetNamespaceEntry().ID(),
+		NamespaceId:              newMutableState.GetNamespaceEntry().ID().String(),
 		StartRequest:             createRequest,
 		ParentExecutionInfo:      parentInfo,
 		LastCompletionResult:     lastCompletionResult,
@@ -246,7 +247,7 @@ func SetupNewWorkflowForRetryOrCron(
 	event, err := newMutableState.AddWorkflowExecutionStartedEventWithOptions(
 		newExecution,
 		req,
-		parentInfo.GetNamespaceId(),
+		namespace.ID(parentInfo.GetNamespaceId()),
 		previousExecutionInfo.AutoResetPoints,
 		previousMutableState.GetExecutionState().GetRunId(),
 		firstRunID,

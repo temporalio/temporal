@@ -59,7 +59,7 @@ type (
 		// resetWorkflow is the new NDC compatible workflow reset logic
 		resetWorkflow(
 			ctx context.Context,
-			namespaceID string,
+			namespaceID namespace.ID,
 			workflowID string,
 			baseRunID string,
 			baseBranchToken []byte,
@@ -112,7 +112,7 @@ func newWorkflowResetter(
 
 func (r *workflowResetterImpl) resetWorkflow(
 	ctx context.Context,
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	baseRunID string,
 	baseBranchToken []byte,
@@ -239,7 +239,7 @@ func (r *workflowResetterImpl) resetWorkflow(
 
 func (r *workflowResetterImpl) prepareResetWorkflow(
 	ctx context.Context,
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	baseRunID string,
 	baseBranchToken []byte,
@@ -394,7 +394,7 @@ func (r *workflowResetterImpl) persistToDB(
 
 func (r *workflowResetterImpl) replayResetWorkflow(
 	ctx context.Context,
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	baseRunID string,
 	baseBranchToken []byte,
@@ -428,7 +428,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		ctx,
 		r.shard.GetTimeSource().Now(),
 		definition.NewWorkflowKey(
-			namespaceID,
+			namespaceID.String(),
 			workflowID,
 			baseRunID,
 		),
@@ -436,7 +436,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
 		definition.NewWorkflowKey(
-			namespaceID,
+			namespaceID.String(),
 			workflowID,
 			resetRunID,
 		),
@@ -543,7 +543,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 }
 
 func (r *workflowResetterImpl) forkAndGenerateBranchToken(
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	forkBranchToken []byte,
 	forkNodeID int64,
@@ -554,7 +554,7 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 	resp, err := r.executionMgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: forkBranchToken,
 		ForkNodeID:      forkNodeID,
-		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, resetRunID),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID.String(), workflowID, resetRunID),
 		ShardID:         shardID,
 	})
 	if err != nil {
@@ -582,7 +582,7 @@ func (r *workflowResetterImpl) terminateWorkflow(
 func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 	ctx context.Context,
 	resetMutableState workflow.MutableState,
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	baseRunID string,
 	baseBranchToken []byte,
@@ -607,7 +607,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		// noop
 	case *serviceerror.DataLoss:
 		// log event
-		r.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(workflowID), tag.WorkflowRunID(baseRunID))
+		r.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(workflowID), tag.WorkflowRunID(baseRunID))
 		return "", err
 	default:
 		return "", err
@@ -661,7 +661,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 			// noop
 		case *serviceerror.DataLoss:
 			// log event
-			r.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(workflowID), tag.WorkflowRunID(nextRunID))
+			r.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(workflowID), tag.WorkflowRunID(nextRunID))
 			return "", err
 		default:
 			return "", err

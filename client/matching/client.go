@@ -33,6 +33,7 @@ import (
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/namespace"
 )
 
 var _ matchingservice.MatchingServiceClient = (*clientImpl)(nil)
@@ -71,7 +72,7 @@ func (c *clientImpl) AddActivityTask(
 	request *matchingservice.AddActivityTaskRequest,
 	opts ...grpc.CallOption) (*matchingservice.AddActivityTaskResponse, error) {
 	partition := c.loadBalancer.PickWritePartition(
-		request.GetNamespaceId(),
+		namespace.ID(request.GetNamespaceId()),
 		*request.GetTaskQueue(),
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		request.GetForwardedSource(),
@@ -91,7 +92,7 @@ func (c *clientImpl) AddWorkflowTask(
 	request *matchingservice.AddWorkflowTaskRequest,
 	opts ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
 	partition := c.loadBalancer.PickWritePartition(
-		request.GetNamespaceId(),
+		namespace.ID(request.GetNamespaceId()),
 		*request.GetTaskQueue(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		request.GetForwardedSource(),
@@ -111,7 +112,7 @@ func (c *clientImpl) PollActivityTaskQueue(
 	request *matchingservice.PollActivityTaskQueueRequest,
 	opts ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
 	partition := c.loadBalancer.PickReadPartition(
-		request.GetNamespaceId(),
+		namespace.ID(request.GetNamespaceId()),
 		*request.PollRequest.GetTaskQueue(),
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		request.GetForwardedSource(),
@@ -131,7 +132,7 @@ func (c *clientImpl) PollWorkflowTaskQueue(
 	request *matchingservice.PollWorkflowTaskQueueRequest,
 	opts ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 	partition := c.loadBalancer.PickReadPartition(
-		request.GetNamespaceId(),
+		namespace.ID(request.GetNamespaceId()),
 		*request.PollRequest.GetTaskQueue(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		request.GetForwardedSource(),
@@ -148,7 +149,7 @@ func (c *clientImpl) PollWorkflowTaskQueue(
 
 func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest, opts ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
 	partition := c.loadBalancer.PickReadPartition(
-		request.GetNamespaceId(),
+		namespace.ID(request.GetNamespaceId()),
 		*request.GetTaskQueue(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		request.GetForwardedSource(),
