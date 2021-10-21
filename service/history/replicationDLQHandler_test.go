@@ -158,7 +158,6 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 		SourceTaskId: taskID,
 		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
 			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
-				TaskId:      taskID,
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
@@ -243,7 +242,6 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 		SourceTaskId: taskID,
 		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
 			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
-				TaskId:      taskID,
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
