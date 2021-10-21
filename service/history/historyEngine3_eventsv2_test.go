@@ -137,7 +137,7 @@ func (s *engine3Suite) SetupTest() {
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		config:             s.config,
 		timeSource:         s.mockShard.GetTimeSource(),
-		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
+		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(namespace.ID, string) int32 { return 1 }),
 		txProcessor:        s.mockTxProcessor,
 		timerProcessor:     s.mockTimerProcessor,
 	}
@@ -153,7 +153,7 @@ func (s *engine3Suite) TearDownTest() {
 
 func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	testNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: tests.NamespaceID}, &persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "",
+		&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String()}, &persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "",
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
@@ -184,7 +184,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	request := historyservice.RecordWorkflowTaskStartedRequest{
-		NamespaceId:       namespaceID,
+		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &we,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -226,7 +226,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 
 func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 	testNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: tests.NamespaceID}, &persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "",
+		&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String()}, &persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "",
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
@@ -242,9 +242,9 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 	requestID := uuid.New()
 	resp, err := s.historyEngine.StartWorkflowExecution(context.Background(), &historyservice.StartWorkflowExecutionRequest{
 		Attempt:     1,
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                namespaceID,
+			Namespace:                namespaceID.String(),
 			WorkflowId:               workflowID,
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
@@ -260,7 +260,7 @@ func (s *engine3Suite) TestStartWorkflowExecution_BrandNew() {
 
 func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	testNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: tests.NamespaceID}, &persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "",
+		&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String()}, &persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "",
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
@@ -276,9 +276,9 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:  namespaceID,
+			Namespace:  namespaceID.String(),
 			WorkflowId: workflowID,
 			Identity:   identity,
 			SignalName: signalName,
@@ -303,7 +303,7 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 
 func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	testNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: tests.NamespaceID}, &persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "",
+		&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String()}, &persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)}, "",
 	)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(gomock.Any()).Return(testNamespaceEntry, nil).AnyTimes()
@@ -321,9 +321,9 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	input := payloads.EncodeString("test input")
 	requestID := uuid.New()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:                namespaceID,
+			Namespace:                namespaceID.String(),
 			WorkflowId:               workflowID,
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},

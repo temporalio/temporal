@@ -175,7 +175,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_No
 	now := time.Now().UTC()
 	evenType := enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED
 	startWorkflowAttribute := &historypb.WorkflowExecutionStartedEventAttributes{
-		ParentWorkflowNamespace: tests.ParentNamespace,
+		ParentWorkflowNamespace: tests.ParentNamespace.String(),
 	}
 
 	event := &historypb.HistoryEvent{
@@ -221,7 +221,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 	now := time.Now().UTC()
 	eventType := enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED
 	startWorkflowAttribute := &historypb.WorkflowExecutionStartedEventAttributes{
-		ParentWorkflowNamespace:  tests.ParentNamespace,
+		ParentWorkflowNamespace:  tests.ParentNamespace.String(),
 		Initiator:                enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
 		FirstWorkflowTaskBackoff: timestamp.DurationPtr(backoff.GetBackoffForNextSchedule(cronSchedule, now, now)),
 	}
@@ -448,7 +448,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		EventTime: &now,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-			ParentWorkflowNamespace: tests.ParentNamespace,
+			ParentWorkflowNamespace: tests.ParentNamespace.String(),
 			ParentWorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: parentWorkflowID,
 				RunId:      parentRunID,
@@ -1299,7 +1299,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 		EventTime: &now,
 		EventType: evenType,
 		Attributes: &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{StartChildWorkflowExecutionInitiatedEventAttributes: &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{
-			Namespace:  tests.TargetNamespace,
+			Namespace:  tests.TargetNamespace.String(),
 			WorkflowId: targetWorkflowID,
 		}},
 	}
@@ -1310,7 +1310,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeStartChildWorkflowExecution
 		InitiatedEventBatchId: event.GetEventId(),
 		StartedId:             common.EmptyEventID,
 		CreateRequestId:       createRequestID,
-		Namespace:             tests.TargetNamespace,
+		Namespace:             tests.TargetNamespace.String(),
 	}
 
 	// the create request ID is generated inside, cannot assert equal
@@ -1523,7 +1523,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeRequestCancelExternalWorkfl
 		EventTime: &now,
 		EventType: evenType,
 		Attributes: &historypb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &historypb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
-			Namespace: tests.TargetNamespace,
+			Namespace: tests.TargetNamespace.String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: targetWorkflowID,
 				RunId:      targetRunID,
@@ -1664,7 +1664,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 		EventTime: &now,
 		EventType: evenType,
 		Attributes: &historypb.HistoryEvent_SignalExternalWorkflowExecutionInitiatedEventAttributes{SignalExternalWorkflowExecutionInitiatedEventAttributes: &historypb.SignalExternalWorkflowExecutionInitiatedEventAttributes{
-			Namespace: tests.TargetNamespace,
+			Namespace: tests.TargetNamespace.String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: targetWorkflowID,
 				RunId:      targetRunID,

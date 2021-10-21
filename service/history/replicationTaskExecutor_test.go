@@ -137,7 +137,7 @@ func (s *replicationTaskExecutorSuite) TearDownTest() {
 }
 
 func (s *replicationTaskExecutorSuite) TestFilterTask_Apply() {
-	namespaceID := uuid.New()
+	namespaceID := namespace.ID(uuid.New())
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
 		Return(namespace.NewGlobalNamespaceForTest(
@@ -155,7 +155,7 @@ func (s *replicationTaskExecutorSuite) TestFilterTask_Apply() {
 }
 
 func (s *replicationTaskExecutorSuite) TestFilterTask_NotApply() {
-	namespaceID := uuid.New()
+	namespaceID := namespace.ID(uuid.New())
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
 		Return(namespace.NewGlobalNamespaceForTest(
@@ -170,7 +170,7 @@ func (s *replicationTaskExecutorSuite) TestFilterTask_NotApply() {
 }
 
 func (s *replicationTaskExecutorSuite) TestFilterTask_Error() {
-	namespaceID := uuid.New()
+	namespaceID := namespace.ID(uuid.New())
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
 		Return(nil, fmt.Errorf("random error"))
@@ -180,7 +180,7 @@ func (s *replicationTaskExecutorSuite) TestFilterTask_Error() {
 }
 
 func (s *replicationTaskExecutorSuite) TestFilterTask_EnforceApply() {
-	namespaceID := uuid.New()
+	namespaceID := namespace.ID(uuid.New())
 	ok, err := s.replicationTaskHandler.filterTask(namespaceID, true)
 	s.NoError(err)
 	s.True(ok)

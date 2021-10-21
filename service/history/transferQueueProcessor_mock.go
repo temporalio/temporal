@@ -32,7 +32,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	namespace "go.temporal.io/server/common/namespace"
 	tasks "go.temporal.io/server/service/history/tasks"
 )
 
@@ -60,7 +59,7 @@ func (m *MocktransferQueueProcessor) EXPECT() *MocktransferQueueProcessorMockRec
 }
 
 // FailoverNamespace mocks base method.
-func (m *MocktransferQueueProcessor) FailoverNamespace(namespaceIDs map[namespace.ID]struct{}) {
+func (m *MocktransferQueueProcessor) FailoverNamespace(namespaceIDs map[string]struct{}) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "FailoverNamespace", namespaceIDs)
 }
@@ -119,14 +118,14 @@ func (mr *MocktransferQueueProcessorMockRecorder) Stop() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MocktransferQueueProcessor)(nil).Stop))
 }
 
-// UnlockTaskPrrocessing mocks base method.
+// UnlockTaskProcessing mocks base method.
 func (m *MocktransferQueueProcessor) UnlockTaskProcessing() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "UnlockTaskProcessing")
 }
 
-// UnlockTaskPrrocessing indicates an expected call of UnlockTaskPrrocessing.
-func (mr *MocktransferQueueProcessorMockRecorder) UnlockTaskPrrocessing() *gomock.Call {
+// UnlockTaskProcessing indicates an expected call of UnlockTaskProcessing.
+func (mr *MocktransferQueueProcessorMockRecorder) UnlockTaskProcessing() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnlockTaskProcessing", reflect.TypeOf((*MocktransferQueueProcessor)(nil).UnlockTaskProcessing))
 }

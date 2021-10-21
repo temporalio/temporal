@@ -33,7 +33,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -53,8 +55,8 @@ type VisibilityManagerSuite struct {
 }
 
 var (
-	testNamespaceUUID     = "fb15e4b5-356f-466d-8c6d-a29223e5c536"
-	testNamespace         = "test-namespace"
+	testNamespaceUUID     = namespace.ID("fb15e4b5-356f-466d-8c6d-a29223e5c536")
+	testNamespace         = namespace.Name("test-namespace")
 	testWorkflowExecution = commonpb.WorkflowExecution{
 		WorkflowId: "visibility-workflow-test",
 		RunId:      "843f6fc7-102a-4c63-a2d4-7c653b01bf52",

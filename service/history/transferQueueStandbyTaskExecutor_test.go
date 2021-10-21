@@ -82,7 +82,7 @@ type (
 		mockArchiverProvider *provider.MockArchiverProvider
 
 		logger               log.Logger
-		namespaceID          string
+		namespaceID          namespace.ID
 		namespaceEntry       *namespace.Namespace
 		version              int64
 		clusterName          string
@@ -206,7 +206,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -230,7 +230,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 	now := time.Now().UTC()
 	transferTask := &tasks.ActivityTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -263,7 +263,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending_
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -288,7 +288,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending_
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	transferTask := &tasks.ActivityTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -322,7 +322,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType: &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue: &taskqueuepb.TaskQueue{
@@ -349,7 +349,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 	now := time.Now().UTC()
 	transferTask := &tasks.ActivityTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -386,7 +386,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -403,7 +403,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending(
 	now := time.Now().UTC()
 	transferTask := &tasks.WorkflowTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -436,7 +436,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending_
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -454,7 +454,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending_
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	transferTask := &tasks.WorkflowTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -488,7 +488,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -505,7 +505,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 	now := time.Now().UTC()
 	transferTask := &tasks.WorkflowTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -541,7 +541,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -563,7 +563,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 	now := time.Now().UTC()
 	transferTask := &tasks.WorkflowTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -599,7 +599,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -621,7 +621,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	now := time.Now().UTC()
 	transferTask := &tasks.CloseExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -658,7 +658,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -681,13 +681,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 	now := time.Now().UTC()
 	transferTask := &tasks.CancelExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
 		Version:                 s.version,
 		VisibilityTimestamp:     now,
-		TargetNamespaceID:       tests.TargetNamespaceID,
+		TargetNamespaceID:       tests.TargetNamespaceID.String(),
 		TargetWorkflowID:        targetExecution.GetWorkflowId(),
 		TargetRunID:             targetExecution.GetRunId(),
 		TargetChildWorkflowOnly: true,
@@ -704,7 +704,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: s.namespaceEntry.Name(),
+		Namespace: s.namespaceEntry.Name().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: transferTask.WorkflowID,
 			RunId:      transferTask.RunID,
@@ -746,7 +746,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -768,20 +768,20 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 	now := time.Now().UTC()
 	transferTask := &tasks.CancelExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
 		Version:             s.version,
 		VisibilityTimestamp: now,
-		TargetNamespaceID:   tests.TargetNamespaceID,
+		TargetNamespaceID:   tests.TargetNamespaceID.String(),
 		TargetWorkflowID:    targetExecution.GetWorkflowId(),
 		TargetRunID:         targetExecution.GetRunId(),
 		TaskID:              taskID,
 		InitiatedID:         event.GetEventId(),
 	}
 
-	event = addCancelRequestedEvent(mutableState, event.GetEventId(), tests.TargetNamespaceID, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
+	event = addCancelRequestedEvent(mutableState, event.GetEventId(), tests.TargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
 	// Flush buffered events so real IDs get assigned
 	mutableState.FlushBufferedEvents()
 
@@ -813,7 +813,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -837,13 +837,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 	now := time.Now().UTC()
 	transferTask := &tasks.SignalExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
 		Version:             s.version,
 		VisibilityTimestamp: now,
-		TargetNamespaceID:   tests.TargetNamespaceID,
+		TargetNamespaceID:   tests.TargetNamespaceID.String(),
 		TargetWorkflowID:    targetExecution.GetWorkflowId(),
 		TargetRunID:         targetExecution.GetRunId(),
 		TaskID:              taskID,
@@ -859,7 +859,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: s.namespaceEntry.Name(),
+		Namespace: s.namespaceEntry.Name().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: transferTask.WorkflowID,
 			RunId:      transferTask.RunID,
@@ -902,7 +902,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -925,13 +925,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 	now := time.Now().UTC()
 	transferTask := &tasks.SignalExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
 		Version:             s.version,
 		VisibilityTimestamp: now,
-		TargetNamespaceID:   tests.TargetNamespaceID,
+		TargetNamespaceID:   tests.TargetNamespaceID.String(),
 		TargetWorkflowID:    targetExecution.GetWorkflowId(),
 		TargetRunID:         targetExecution.GetRunId(),
 		TaskID:              taskID,
@@ -968,7 +968,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -992,13 +992,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	now := time.Now().UTC()
 	transferTask := &tasks.StartChildExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
 		Version:             s.version,
 		VisibilityTimestamp: now,
-		TargetNamespaceID:   tests.ChildNamespaceID,
+		TargetNamespaceID:   tests.ChildNamespaceID.String(),
 		TargetWorkflowID:    childWorkflowID,
 		TaskID:              taskID,
 		InitiatedID:         event.GetEventId(),
@@ -1013,7 +1013,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: s.namespaceEntry.Name(),
+		Namespace: s.namespaceEntry.Name().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: transferTask.WorkflowID,
 			RunId:      transferTask.RunID,
@@ -1054,7 +1054,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -1078,13 +1078,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 	now := time.Now().UTC()
 	transferTask := &tasks.StartChildExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
 		Version:             s.version,
 		VisibilityTimestamp: now,
-		TargetNamespaceID:   tests.ChildNamespaceID,
+		TargetNamespaceID:   tests.ChildNamespaceID.String(),
 		TargetWorkflowID:    childWorkflowID,
 		TaskID:              taskID,
 		InitiatedID:         event.GetEventId(),

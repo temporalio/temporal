@@ -457,13 +457,13 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 
 func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesNotExists() {
 	ctx := context.Background()
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 		ShardID:     s.mockShard.GetShardID(),
-		NamespaceID: namespaceID,
+		NamespaceID: namespaceID.String(),
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -477,13 +477,13 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesNotExists() {
 
 func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesExists() {
 	ctx := context.Background()
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 		ShardID:     s.mockShard.GetShardID(),
-		NamespaceID: namespaceID,
+		NamespaceID: namespaceID.String(),
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -497,12 +497,12 @@ func (s *nDCTransactionMgrSuite) TestCheckWorkflowExists_DoesExists() {
 
 func (s *nDCTransactionMgrSuite) TestGetWorkflowCurrentRunID_Missing() {
 	ctx := context.Background()
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 		ShardID:     s.mockShard.GetShardID(),
-		NamespaceID: namespaceID,
+		NamespaceID: namespaceID.String(),
 		WorkflowID:  workflowID,
 	}).Return(nil, serviceerror.NewNotFound(""))
 
@@ -513,13 +513,13 @@ func (s *nDCTransactionMgrSuite) TestGetWorkflowCurrentRunID_Missing() {
 
 func (s *nDCTransactionMgrSuite) TestGetWorkflowCurrentRunID_Exists() {
 	ctx := context.Background()
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
 
 	s.mockExecutionMgr.EXPECT().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
 		ShardID:     s.mockShard.GetShardID(),
-		NamespaceID: namespaceID,
+		NamespaceID: namespaceID.String(),
 		WorkflowID:  workflowID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
 

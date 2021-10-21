@@ -78,7 +78,7 @@ type (
 		mockExecutionMgr  *persistence.MockExecutionManager
 
 		logger                       log.Logger
-		namespaceID                  string
+		namespaceID                  namespace.ID
 		namespaceEntry               *namespace.Namespace
 		version                      int64
 		now                          time.Time
@@ -158,7 +158,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 		logger:             s.logger,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		metricsClient:      s.mockShard.GetMetricsClient(),
-		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
+		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(namespace.ID, string) int32 { return 1 }),
 		txProcessor:        s.mockTxProcessor,
 		timerProcessor:     s.mockTimerProcessor,
 	}
@@ -205,7 +205,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Fire() {
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -234,7 +234,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Fire() {
 
 	timerTask := &tasks.UserTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -276,7 +276,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Noop() {
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -305,7 +305,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Noop() {
 
 	timerTask := &tasks.UserTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -341,7 +341,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -383,7 +383,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 
 	timerTask := &tasks.ActivityTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -421,7 +421,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -465,7 +465,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 
 	timerTask := &tasks.ActivityTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -503,7 +503,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -555,7 +555,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 
 	timerTask := &tasks.ActivityTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -597,7 +597,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -646,7 +646,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 
 	timerTask := &tasks.ActivityTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -683,7 +683,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -735,7 +735,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 
 	timerTask := &tasks.ActivityTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -772,7 +772,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -826,7 +826,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 
 	timerTask := &tasks.ActivityTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -859,7 +859,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Fire() {
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -875,7 +875,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Fire() {
 
 	timerTask := &tasks.WorkflowTaskTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -915,7 +915,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Noop() {
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -931,7 +931,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTaskTimeout_Noop() {
 
 	timerTask := &tasks.WorkflowTaskTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -964,7 +964,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Fire() {
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -1015,7 +1015,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Noop() {
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -1064,7 +1064,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType: &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue: &taskqueuepb.TaskQueue{
@@ -1110,7 +1110,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Fire() {
 
 	timerTask := &tasks.ActivityRetryTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -1157,7 +1157,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Noop() {
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -1202,7 +1202,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestActivityRetryTimer_Noop() {
 
 	timerTask := &tasks.ActivityRetryTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -1234,7 +1234,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Fire() {
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -1253,7 +1253,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Fire() {
 
 	timerTask := &tasks.WorkflowTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -1287,7 +1287,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Retry() {
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -1314,7 +1314,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Retry() {
 
 	timerTask := &tasks.WorkflowTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -1350,7 +1350,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Cron() {
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -1372,7 +1372,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_Cron() {
 
 	timerTask := &tasks.WorkflowTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -1407,7 +1407,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_WorkflowExpired(
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -1429,7 +1429,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowTimeout_WorkflowExpired(
 
 	timerTask := &tasks.WorkflowTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -1466,11 +1466,11 @@ func (s *timerQueueActiveTaskExecutorSuite) createPersistenceMutableState(
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) getMutableStateFromCache(
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 ) workflow.MutableState {
 	return s.mockHistoryEngine.historyCache.(*workflow.CacheImpl).Get(
-		definition.NewWorkflowKey(namespaceID, workflowID, runID),
+		definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
 	).(*workflow.ContextImpl).MutableState
 }

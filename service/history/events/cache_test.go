@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -99,7 +100,7 @@ func (s *eventsCacheSuite) newTestEventsCache() *CacheImpl {
 }
 
 func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
-	namespaceID := "events-cache-hit-success-namespace"
+	namespaceID := namespace.ID("events-cache-hit-success-namespace")
 	workflowID := "events-cache-hit-success-workflow-id"
 	runID := "events-cache-hit-success-run-id"
 	eventID := int64(23)
@@ -120,7 +121,7 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 }
 
 func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
-	namespaceID := "events-cache-miss-multi-events-batch-v2-success-namespace"
+	namespaceID := namespace.ID("events-cache-miss-multi-events-batch-v2-success-namespace")
 	workflowID := "events-cache-miss-multi-events-batch-v2-success-workflow-id"
 	runID := "events-cache-miss-multi-events-batch-v2-success-run-id"
 	event1 := &historypb.HistoryEvent{
@@ -178,7 +179,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 }
 
 func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
-	namespaceID := "events-cache-miss-failure-namespace"
+	namespaceID := namespace.ID("events-cache-miss-failure-namespace")
 	workflowID := "events-cache-miss-failure-workflow-id"
 	runID := "events-cache-miss-failure-run-id"
 
@@ -201,7 +202,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 }
 
 func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
-	namespaceID := "events-cache-disable-success-namespace"
+	namespaceID := namespace.ID("events-cache-disable-success-namespace")
 	workflowID := "events-cache-disable-success-workflow-id"
 	runID := "events-cache-disable-success-run-id"
 	event1 := &historypb.HistoryEvent{
@@ -243,7 +244,7 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 }
 
 func (s *eventsCacheSuite) TestEventsCacheGetCachesResult() {
-	namespaceID := "events-cache-get-caches-namespace"
+	namespaceID := namespace.ID("events-cache-get-caches-namespace")
 	workflowID := "events-cache-get-caches-workflow-id"
 	runID := "events-cache-get-caches-run-id"
 	branchToken := []byte("store_token")
@@ -276,7 +277,7 @@ func (s *eventsCacheSuite) TestEventsCacheGetCachesResult() {
 }
 
 func (s *eventsCacheSuite) TestEventsCacheInvalidKey() {
-	namespaceID := "events-cache-invalid-key-namespace"
+	namespaceID := namespace.ID("events-cache-invalid-key-namespace")
 	workflowID := "events-cache-invalid-key-workflow-id"
 	runID := "" // <-- this is invalid
 	branchToken := []byte("store_token")

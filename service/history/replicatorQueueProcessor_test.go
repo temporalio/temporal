@@ -208,7 +208,7 @@ func (s *replicatorQueueProcessorSuite) TestTaskIDRange_Initialized_UseHighestTr
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	ctx := context.Background()
-	namespaceName := "some random namespace name"
+	namespaceName := namespace.Name("some random namespace name")
 	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
@@ -217,7 +217,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	taskID := int64(1444)
 	task := &tasks.SyncActivityTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			namespaceID,
+			namespaceID.String(),
 			workflowID,
 			runID,
 		),
@@ -228,14 +228,14 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 		ShardID:     s.mockShard.GetShardID(),
-		NamespaceID: namespaceID,
+		NamespaceID: namespaceID.String(),
 		Execution: commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
 		},
 	}).Return(nil, serviceerror.NewNotFound(""))
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName},
+		&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: namespaceName.String()},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -254,7 +254,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	ctx := context.Background()
-	namespaceName := "some random namespace name"
+	namespaceName := namespace.Name("some random namespace name")
 	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
@@ -263,7 +263,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	version := int64(2333)
 	task := &tasks.SyncActivityTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			namespaceID,
+			namespaceID.String(),
 			workflowID,
 			runID,
 		),
@@ -287,7 +287,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 	s.mockMutableState.EXPECT().StartTransaction(gomock.Any()).Return(false, nil)
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName},
+		&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: namespaceName.String()},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -306,7 +306,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	ctx := context.Background()
-	namespaceName := "some random namespace name"
+	namespaceName := namespace.Name("some random namespace name")
 	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
@@ -315,7 +315,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	version := int64(2333)
 	task := &tasks.SyncActivityTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			namespaceID,
+			namespaceID.String(),
 			workflowID,
 			runID,
 		),
@@ -341,7 +341,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().GetActivityInfo(scheduleID).Return(nil, false).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName},
+		&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: namespaceName.String()},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -360,7 +360,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	ctx := context.Background()
-	namespaceName := "some random namespace name"
+	namespaceName := namespace.Name("some random namespace name")
 	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
@@ -369,7 +369,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	version := int64(2333)
 	task := &tasks.SyncActivityTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			namespaceID,
+			namespaceID.String(),
 			workflowID,
 			runID,
 		),
@@ -431,7 +431,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName},
+		&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: namespaceName.String()},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -450,7 +450,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-				NamespaceId:        namespaceID,
+				NamespaceId:        namespaceID.String(),
 				WorkflowId:         workflowID,
 				RunId:              runID,
 				Version:            activityVersion,
@@ -471,7 +471,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 
 func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	ctx := context.Background()
-	namespaceName := "some random namespace name"
+	namespaceName := namespace.Name("some random namespace name")
 	namespaceID := tests.NamespaceID
 	workflowID := "some random workflow ID"
 	runID := uuid.New()
@@ -480,7 +480,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	version := int64(2333)
 	task := &tasks.SyncActivityTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			namespaceID,
+			namespaceID.String(),
 			workflowID,
 			runID,
 		),
@@ -544,7 +544,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName},
+		&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: namespaceName.String()},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -563,7 +563,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-				NamespaceId:        namespaceID,
+				NamespaceId:        namespaceID.String(),
 				WorkflowId:         workflowID,
 				RunId:              runID,
 				Version:            activityVersion,

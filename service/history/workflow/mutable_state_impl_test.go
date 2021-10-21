@@ -613,7 +613,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 
 	startTime := timestamp.TimePtr(time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC))
 	info := &persistencespb.WorkflowExecutionInfo{
-		NamespaceId:                namespaceID,
+		NamespaceId:                namespaceID.String(),
 		WorkflowId:                 we.GetWorkflowId(),
 		TaskQueue:                  tl,
 		WorkflowTypeName:           "wType",
@@ -678,7 +678,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 			InitiatedEventBatchId: 20,
 			StartedId:             common.EmptyEventID,
 			CreateRequestId:       uuid.New(),
-			Namespace:             tests.NamespaceID,
+			Namespace:             tests.Namespace.String(),
 			WorkflowTypeName:      "code.uber.internal/test/foobar",
 		},
 	}

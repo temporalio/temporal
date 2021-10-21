@@ -44,6 +44,7 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
@@ -65,8 +66,8 @@ type (
 
 var (
 	testIndex        = "test-index"
-	testNamespace    = "test-namespace"
-	testNamespaceID  = "bfd5c907-f899-4baf-a7b2-2ab85e623ebd"
+	testNamespace    = namespace.Name("test-namespace")
+	testNamespaceID  = namespace.ID("bfd5c907-f899-4baf-a7b2-2ab85e623ebd")
 	testPageSize     = 5
 	testEarliestTime = time.Unix(0, 1547596872371000000).UTC()
 	testLatestTime   = time.Unix(0, 2547596872371000000).UTC()

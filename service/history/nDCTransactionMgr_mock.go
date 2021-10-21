@@ -34,6 +34,7 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
+	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
 )
 
@@ -75,7 +76,7 @@ func (mr *MocknDCTransactionMgrMockRecorder) backfillWorkflow(ctx, now, targetWo
 }
 
 // checkWorkflowExists mocks base method.
-func (m *MocknDCTransactionMgr) checkWorkflowExists(ctx context.Context, namespaceID, workflowID, runID string) (bool, error) {
+func (m *MocknDCTransactionMgr) checkWorkflowExists(ctx context.Context, namespaceID namespace.ID, workflowID, runID string) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "checkWorkflowExists", ctx, namespaceID, workflowID, runID)
 	ret0, _ := ret[0].(bool)
@@ -104,7 +105,7 @@ func (mr *MocknDCTransactionMgrMockRecorder) createWorkflow(ctx, now, targetWork
 }
 
 // getCurrentWorkflowRunID mocks base method.
-func (m *MocknDCTransactionMgr) getCurrentWorkflowRunID(ctx context.Context, namespaceID, workflowID string) (string, error) {
+func (m *MocknDCTransactionMgr) getCurrentWorkflowRunID(ctx context.Context, namespaceID namespace.ID, workflowID string) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getCurrentWorkflowRunID", ctx, namespaceID, workflowID)
 	ret0, _ := ret[0].(string)
@@ -119,7 +120,7 @@ func (mr *MocknDCTransactionMgrMockRecorder) getCurrentWorkflowRunID(ctx, namesp
 }
 
 // loadNDCWorkflow mocks base method.
-func (m *MocknDCTransactionMgr) loadNDCWorkflow(ctx context.Context, namespaceID, workflowID, runID string) (nDCWorkflow, error) {
+func (m *MocknDCTransactionMgr) loadNDCWorkflow(ctx context.Context, namespaceID namespace.ID, workflowID, runID string) (nDCWorkflow, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "loadNDCWorkflow", ctx, namespaceID, workflowID, runID)
 	ret0, _ := ret[0].(nDCWorkflow)

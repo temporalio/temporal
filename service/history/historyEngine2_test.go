@@ -132,7 +132,7 @@ func (s *engine2Suite) SetupTest() {
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockEventsCache = s.mockShard.MockEventsCache
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: tests.NamespaceID}, &persistencespb.NamespaceConfig{}, "",
+		&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String()}, &persistencespb.NamespaceConfig{}, "",
 	), nil).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
@@ -155,7 +155,7 @@ func (s *engine2Suite) SetupTest() {
 		tokenSerializer:        common.NewProtoTaskTokenSerializer(),
 		config:                 s.config,
 		timeSource:             s.mockShard.GetTimeSource(),
-		eventNotifier:          events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
+		eventNotifier:          events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(namespace.ID, string) int32 { return 1 }),
 		txProcessor:            s.mockTxProcessor,
 		timerProcessor:         s.mockTimerProcessor,
 		searchAttributesMapper: s.mockShard.Resource.SearchAttributesMapper,
@@ -204,7 +204,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	request := historyservice.RecordWorkflowTaskStartedRequest{
-		NamespaceId:       namespaceID,
+		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &we,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -259,7 +259,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfNoExecution() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
-		NamespaceId:       namespaceID,
+		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -289,7 +289,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfGetExecutionFailed() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(nil, errors.New("FAILED"))
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
-		NamespaceId:       namespaceID,
+		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -322,7 +322,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyStarted() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
-		NamespaceId:       namespaceID,
+		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -359,7 +359,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedIfTaskAlreadyCompleted() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
-		NamespaceId:       namespaceID,
+		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -402,7 +402,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedConflictOnUpdate() {
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
-		NamespaceId:       namespaceID,
+		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -445,7 +445,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskRetrySameRequest() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse2, nil)
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
-		NamespaceId:       namespaceID,
+		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -489,7 +489,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskRetryDifferentRequest() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse2, nil)
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
-		NamespaceId:       namespaceID,
+		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -530,7 +530,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskStartedMaxAttemptsExceeded() {
 		&persistence.ConditionFailedError{}).Times(conditionalRetryCount)
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
-		NamespaceId:       namespaceID,
+		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -583,7 +583,7 @@ func (s *engine2Suite) TestRecordWorkflowTaskSuccess() {
 	release(nil)
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordWorkflowTaskStartedRequest{
-		NamespaceId:       namespaceID,
+		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        2,
 		TaskId:            100,
@@ -624,7 +624,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedIfNoExecution() {
 	response, err := s.historyEngine.RecordActivityTaskStarted(
 		metrics.AddMetricsContext(context.Background()),
 		&historyservice.RecordActivityTaskStartedRequest{
-			NamespaceId:       namespaceID,
+			NamespaceId:       namespaceID.String(),
 			WorkflowExecution: workflowExecution,
 			ScheduleId:        5,
 			TaskId:            100,
@@ -681,7 +681,7 @@ func (s *engine2Suite) TestRecordActivityTaskStartedSuccess() {
 		gomock.Any(),
 	).Return(scheduledEvent, nil)
 	response, err := s.historyEngine.RecordActivityTaskStarted(metrics.AddMetricsContext(context.Background()), &historyservice.RecordActivityTaskStartedRequest{
-		NamespaceId:       namespaceID,
+		NamespaceId:       namespaceID.String(),
 		WorkflowExecution: &workflowExecution,
 		ScheduleId:        5,
 		TaskId:            100,
@@ -716,7 +716,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_Running() {
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	err := s.historyEngine.RequestCancelWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.RequestCancelWorkflowExecutionRequest{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowExecution.WorkflowId,
@@ -749,7 +749,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_Finished() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse1, nil)
 
 	err := s.historyEngine.RequestCancelWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.RequestCancelWorkflowExecutionRequest{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowExecution.WorkflowId,
@@ -771,7 +771,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_NotFound() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(nil, &serviceerror.NotFound{})
 
 	err := s.historyEngine.RequestCancelWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.RequestCancelWorkflowExecutionRequest{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowExecution.WorkflowId,
@@ -849,7 +849,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	_, err := s.historyEngine.RespondWorkflowTaskCompleted(metrics.AddMetricsContext(context.Background()), &historyservice.RespondWorkflowTaskCompletedRequest{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 			TaskToken: serializedTaskToken,
 			Commands:  commands,
@@ -876,9 +876,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 	requestID := uuid.New()
 	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.StartWorkflowExecutionRequest{
 		Attempt:     1,
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                namespaceID,
+			Namespace:                namespaceID.String(),
 			WorkflowId:               workflowID,
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
@@ -909,9 +909,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
 	requestID := uuid.New()
 	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.StartWorkflowExecutionRequest{
 		Attempt:     1,
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                namespaceID,
+			Namespace:                namespaceID.String(),
 			WorkflowId:               workflowID,
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
@@ -949,9 +949,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_Dedup() {
 
 	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.StartWorkflowExecutionRequest{
 		Attempt:     1,
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                namespaceID,
+			Namespace:                namespaceID.String(),
 			WorkflowId:               workflowID,
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
@@ -985,9 +985,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_StillRunning_NonDeDup() {
 
 	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.StartWorkflowExecutionRequest{
 		Attempt:     1,
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                namespaceID,
+			Namespace:                namespaceID.String(),
 			WorkflowId:               workflowID,
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
@@ -1046,9 +1046,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 
 		resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: namespaceID,
+			NamespaceId: namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				Namespace:                namespaceID,
+				Namespace:                namespaceID.String(),
 				WorkflowId:               workflowID,
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
@@ -1125,9 +1125,9 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 
 			resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.StartWorkflowExecutionRequest{
 				Attempt:     1,
-				NamespaceId: namespaceID,
+				NamespaceId: namespaceID.String(),
 				StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-					Namespace:                namespaceID,
+					Namespace:                namespaceID.String(),
 					WorkflowId:               workflowID,
 					WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 					TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
@@ -1164,9 +1164,9 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:  namespaceID,
+			Namespace:  namespaceID.String(),
 			WorkflowId: workflowID,
 			Identity:   identity,
 			SignalName: signalName,
@@ -1204,9 +1204,9 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotExist() {
 	requestID := uuid.New()
 
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:                namespaceID,
+			Namespace:                namespaceID.String(),
 			WorkflowId:               workflowID,
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
@@ -1250,9 +1250,9 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	input := payloads.EncodeString("test input")
 	requestID := uuid.New()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:                namespaceID,
+			Namespace:                namespaceID.String(),
 			WorkflowId:               workflowID,
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
@@ -1307,9 +1307,9 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 	}
 	tl := "testTaskQueue"
 	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:                namespaceID,
+			Namespace:                namespaceID.String(),
 			WorkflowId:               workflowID,
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
@@ -1382,9 +1382,9 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	}
 	tl := "testTaskQueue"
 	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:                namespaceID,
+			Namespace:                namespaceID.String(),
 			WorkflowId:               workflowID,
 			WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueue},
@@ -1430,7 +1430,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	s.NotNil(err)
 }
 
-func (s *engine2Suite) getBuilder(namespaceID string, we commonpb.WorkflowExecution) workflow.MutableState {
+func (s *engine2Suite) getBuilder(namespaceID namespace.ID, we commonpb.WorkflowExecution) workflow.MutableState {
 	weContext, release, err := s.historyEngine.historyCache.GetOrCreateWorkflowExecution(
 		metrics.AddMetricsContext(context.Background()),
 		namespaceID,

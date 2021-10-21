@@ -52,8 +52,10 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
@@ -73,8 +75,8 @@ type (
 		mockExecutionMgr  *persistence.MockExecutionManager
 
 		logger                      log.Logger
-		namespaceID                 string
-		namespace                   string
+		namespaceID                 namespace.ID
+		namespace                   namespace.Name
 		version                     int64
 		now                         time.Time
 		timeSource                  *clock.EventTimeSource
@@ -160,7 +162,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		logger:             s.logger,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		metricsClient:      s.mockShard.GetMetricsClient(),
-		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
+		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(namespace.ID, string) int32 { return 1 }),
 	}
 	s.mockShard.SetEngineForTesting(h)
 
@@ -200,7 +202,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -227,7 +229,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 
 	visibilityTask := &tasks.CloseExecutionVisibilityTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -261,7 +263,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -279,7 +281,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessRecordWorkflowStartedTask(
 
 	visibilityTask := &tasks.StartExecutionVisibilityTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -311,7 +313,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 		execution,
 		&historyservice.StartWorkflowExecutionRequest{
 			Attempt:     1,
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
 				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
 				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
@@ -327,7 +329,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 
 	visibilityTask := &tasks.UpsertExecutionVisibilityTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -344,7 +346,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessUpsertWorkflowSearchAttrib
 }
 
 func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedRequest(
-	namespace string,
+	namespaceName namespace.Name,
 	startEvent *historypb.HistoryEvent,
 	task *tasks.StartExecutionVisibilityTask,
 	mutableState workflow.MutableState,
@@ -361,8 +363,8 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedR
 
 	return &manager.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
-			Namespace:        namespace,
-			NamespaceID:      task.NamespaceID,
+			Namespace:        namespaceName,
+			NamespaceID:      namespace.ID(task.NamespaceID),
 			Execution:        *execution,
 			WorkflowTypeName: executionInfo.WorkflowTypeName,
 			StartTime:        timestamp.TimeValue(startEvent.GetEventTime()),
@@ -376,7 +378,7 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionStartedR
 }
 
 func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowSearchAttributesRequest(
-	namespace string,
+	namespaceName namespace.Name,
 	task *tasks.UpsertExecutionVisibilityTask,
 	mutableState workflow.MutableState,
 	taskQueueName string,
@@ -390,8 +392,8 @@ func (s *visibilityQueueTaskExecutorSuite) createUpsertWorkflowSearchAttributesR
 
 	return &manager.UpsertWorkflowExecutionRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
-			Namespace:        namespace,
-			NamespaceID:      task.NamespaceID,
+			Namespace:        namespaceName,
+			NamespaceID:      namespace.ID(task.NamespaceID),
 			Execution:        *execution,
 			WorkflowTypeName: executionInfo.WorkflowTypeName,
 			StartTime:        timestamp.TimeValue(executionInfo.GetStartTime()),

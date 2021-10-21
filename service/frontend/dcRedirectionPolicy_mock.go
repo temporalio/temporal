@@ -33,6 +33,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	namespace "go.temporal.io/server/common/namespace"
 )
 
 // MockDCRedirectionPolicy is a mock of DCRedirectionPolicy interface.
@@ -59,7 +60,7 @@ func (m *MockDCRedirectionPolicy) EXPECT() *MockDCRedirectionPolicyMockRecorder 
 }
 
 // WithNamespaceIDRedirect mocks base method.
-func (m *MockDCRedirectionPolicy) WithNamespaceIDRedirect(ctx context.Context, namespaceID, apiName string, call func(string) error) error {
+func (m *MockDCRedirectionPolicy) WithNamespaceIDRedirect(ctx context.Context, namespaceID namespace.ID, apiName string, call func(string) error) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WithNamespaceIDRedirect", ctx, namespaceID, apiName, call)
 	ret0, _ := ret[0].(error)
@@ -73,7 +74,7 @@ func (mr *MockDCRedirectionPolicyMockRecorder) WithNamespaceIDRedirect(ctx, name
 }
 
 // WithNamespaceRedirect mocks base method.
-func (m *MockDCRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, namespace, apiName string, call func(string) error) error {
+func (m *MockDCRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, namespace namespace.Name, apiName string, call func(string) error) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WithNamespaceRedirect", ctx, namespace, apiName, call)
 	ret0, _ := ret[0].(error)

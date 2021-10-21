@@ -602,7 +602,7 @@ func (e *MutableStateImpl) GetActivityScheduledEvent(
 	}
 	scheduledEvent, err := e.eventsCache.GetEvent(
 		events.EventKey{
-			NamespaceID: e.executionInfo.NamespaceId,
+			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
 			EventID:     ai.ScheduleId,
@@ -677,7 +677,7 @@ func (e *MutableStateImpl) GetChildExecutionInitiatedEvent(
 	}
 	initiatedEvent, err := e.eventsCache.GetEvent(
 		events.EventKey{
-			NamespaceID: e.executionInfo.NamespaceId,
+			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
 			EventID:     ci.InitiatedId,
@@ -760,7 +760,7 @@ func (e *MutableStateImpl) GetCompletionEvent() (*historypb.HistoryEvent, error)
 
 	completionEvent, err := e.eventsCache.GetEvent(
 		events.EventKey{
-			NamespaceID: e.executionInfo.NamespaceId,
+			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
 			EventID:     completionEventID,
@@ -793,7 +793,7 @@ func (e *MutableStateImpl) GetStartEvent() (*historypb.HistoryEvent, error) {
 
 	startEvent, err := e.eventsCache.GetEvent(
 		events.EventKey{
-			NamespaceID: e.executionInfo.NamespaceId,
+			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
 			EventID:     common.FirstEventID,
@@ -898,7 +898,7 @@ func (e *MutableStateImpl) writeEventToCache(
 	// during the processing of DeleteTransferTask without loading this event from database
 	e.eventsCache.PutEvent(
 		events.EventKey{
-			NamespaceID: e.executionInfo.NamespaceId,
+			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
 			EventID:     event.GetEventId(),
@@ -3248,7 +3248,7 @@ func (e *MutableStateImpl) AddStartChildWorkflowExecutionFailedEvent(
 		common.EmptyEventID, // TODO this field is not used at all
 		initiatedID,
 		cause,
-		initiatedEventAttributes.Namespace,
+		namespace.Name(initiatedEventAttributes.Namespace),
 		initiatedEventAttributes.WorkflowId,
 		initiatedEventAttributes.WorkflowType,
 		initiatedEventAttributes.Control, // TODO this field is probably deprecated
@@ -3297,7 +3297,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionCompletedEvent(
 	event := e.hBuilder.AddChildWorkflowExecutionCompletedEvent(
 		ci.InitiatedId,
 		ci.StartedId,
-		ci.Namespace,
+		namespace.Name(ci.Namespace),
 		childExecution,
 		workflowType,
 		attributes.Result,
@@ -3346,7 +3346,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionFailedEvent(
 	event := e.hBuilder.AddChildWorkflowExecutionFailedEvent(
 		ci.InitiatedId,
 		ci.StartedId,
-		ci.Namespace,
+		namespace.Name(ci.Namespace),
 		childExecution,
 		workflowType,
 		attributes.Failure,
@@ -3396,7 +3396,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionCanceledEvent(
 	event := e.hBuilder.AddChildWorkflowExecutionCanceledEvent(
 		ci.InitiatedId,
 		ci.StartedId,
-		ci.Namespace,
+		namespace.Name(ci.Namespace),
 		childExecution,
 		workflowType,
 		attributes.Details,
@@ -3445,7 +3445,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionTerminatedEvent(
 	event := e.hBuilder.AddChildWorkflowExecutionTerminatedEvent(
 		ci.InitiatedId,
 		ci.StartedId,
-		ci.Namespace,
+		namespace.Name(ci.Namespace),
 		childExecution,
 		workflowType,
 	)
@@ -3493,7 +3493,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionTimedOutEvent(
 	event := e.hBuilder.AddChildWorkflowExecutionTimedOutEvent(
 		ci.InitiatedId,
 		ci.StartedId,
-		ci.Namespace,
+		namespace.Name(ci.Namespace),
 		childExecution,
 		workflowType,
 		attributes.RetryState,

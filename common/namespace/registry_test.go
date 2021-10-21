@@ -186,17 +186,17 @@ func (s *registrySuite) TestListNamespace() {
 	s.registry.Start()
 	defer s.registry.Stop()
 
-	entryByName1, err := s.registry.GetNamespace(namespaceRecord1.Namespace.Info.Name)
+	entryByName1, err := s.registry.GetNamespace(namespace.Name(namespaceRecord1.Namespace.Info.Name))
 	s.Nil(err)
 	s.Equal(entry1, entryByName1)
-	entryByID1, err := s.registry.GetNamespaceByID(namespaceRecord1.Namespace.Info.Id)
+	entryByID1, err := s.registry.GetNamespaceByID(namespace.ID(namespaceRecord1.Namespace.Info.Id))
 	s.Nil(err)
 	s.Equal(entry1, entryByID1)
 
-	entryByName2, err := s.registry.GetNamespace(namespaceRecord2.Namespace.Info.Name)
+	entryByName2, err := s.registry.GetNamespace(namespace.Name(namespaceRecord2.Namespace.Info.Name))
 	s.Nil(err)
 	s.Equal(entry2, entryByName2)
-	entryByID2, err := s.registry.GetNamespaceByID(namespaceRecord2.Namespace.Info.Id)
+	entryByID2, err := s.registry.GetNamespaceByID(namespace.ID(namespaceRecord2.Namespace.Info.Id))
 	s.Nil(err)
 	s.Equal(entry2, entryByID2)
 }
@@ -465,10 +465,10 @@ func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 		&persistence.GetMetadataResponse{
 			NotificationVersion: namespaceNotificationVersion,
 		}, nil)
-	id := uuid.NewString()
+	id := namespace.ID(uuid.NewString())
 	namespaceRecordOld := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{Id: id, Name: "some random namespace name", Data: make(map[string]string)},
+			Info: &persistencespb.NamespaceInfo{Id: id.String(), Name: "some random namespace name", Data: make(map[string]string)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
