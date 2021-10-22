@@ -18,7 +18,6 @@
 # Executables produced by temporal repo
 /temporal-*
 /tctl*
-/build/last_build_info.json
 
 # Buf proto image
 /proto/image.bin
