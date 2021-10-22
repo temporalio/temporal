@@ -139,7 +139,6 @@ type (
 		namespaceID       string
 		workflowExecution commonpb.WorkflowExecution
 		shard             shard.Context
-		engine            shard.Engine
 		logger            log.Logger
 		metricsClient     metrics.Client
 		timeSource        clock.TimeSource
@@ -168,7 +167,6 @@ func NewContext(
 		namespaceID:       namespaceID,
 		workflowExecution: execution,
 		shard:             shard,
-		engine:            shard.GetEngine(),
 		logger:            logger,
 		metricsClient:     shard.GetMetricsClient(),
 		timeSource:        shard.GetTimeSource(),
@@ -432,7 +430,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	}
 	c.SetHistorySize(int64(resp.NewMutableStateStats.HistoryStatistics.SizeDiff))
 
-	NotifyWorkflowSnapshotTasks(c.engine, newWorkflow)
+	NotifyWorkflowSnapshotTasks(c.shard.GetEngine(), newWorkflow)
 	emitStateTransitionCount(c.metricsClient, newMutableState)
 
 	return nil
