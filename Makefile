@@ -192,7 +192,8 @@ clean-bins:
 
 temporal-server:
 	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=$(CGO_ENABLED) go build -ldflags "$(shell ./develop/scripts/go-build-ldflags.sh $(MODULE_ROOT)/ldflags)" -o temporal-server cmd/server/main.go
+	@./develop/scripts/create_last_build_info.sh
+	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-server cmd/server/main.go
 
 tctl:
 	@printf $(COLOR) "Build tctl with OS: $(GOOS), ARCH: $(GOARCH)..."

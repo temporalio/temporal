@@ -30,9 +30,7 @@ import (
 
 const (
 	gitRevisionTag   = "git_revision"
-	gitBranchTag     = "git_branch"
 	buildDateTag     = "build_date"
-	gitTagTag        = "git_tag"
 	buildVersionTag  = "build_version"
 	buildPlatformTag = "build_platform"
 	goVersionTag     = "go_version"

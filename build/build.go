@@ -22,34 +22,31 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package ldflags
+package build
 
 import (
-	"runtime"
+	_ "embed"
+	"encoding/json"
+)
+
+type (
+	Info struct {
+		// GitRevision is the git revision associated with this build.
+		GitRevision string
+		// BuildTimeUnix is the seconds since epoch representing the date this build was created.
+		BuildTimeUnix int64
+	}
 )
 
 var (
-	// This variables are overridden using ldflags at compile time. Example:
-	// $ go build -ldflags "-X go.temporal.io/server/ldflags.GitRevision=abcdef" ...
-
-	// GitRevision is the git revision associated with this build.
-	GitRevision = "unknown"
-
-	// GitBranch is the git branch associated with this build.
-	GitBranch = "unknown"
-
-	// GitTag is the git tag associated with this build.
-	GitTag = "unknown"
-
-	// BuildDate is the date this build was created.
-	BuildDate = "unknown"
-
-	// BuildTimeUnix is the seconds since epoch representing the date this build was created.
-	BuildTimeUnix = "0"
-
-	// BuildPlatform is the platform used to build.
-	BuildPlatform = "unknown"
-
-	// GoVersion is the current runtime version.
-	GoVersion = runtime.Version()
+	//go:embed last_build_info.json
+	lastBuildInfoJson []byte
+	LastBuildInfo     Info
 )
+
+func init() {
+	err := json.Unmarshal(lastBuildInfoJson, &LastBuildInfo)
+	if err != nil {
+		panic(err)
+	}
+}

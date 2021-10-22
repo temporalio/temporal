@@ -26,15 +26,14 @@ package metrics
 
 import (
 	"runtime"
-	"strconv"
 	"sync/atomic"
 	"time"
 
 	"github.com/uber-go/tally/v4"
 
+	"go.temporal.io/server/build"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/ldflags"
 )
 
 const (
@@ -64,39 +63,31 @@ func NewRuntimeMetricsReporter(
 	logger log.Logger,
 	instanceID string,
 ) *RuntimeMetricsReporter {
-	const (
-		base    = 10
-		bitSize = 64
-	)
 	if len(instanceID) > 0 {
 		scope = scope.Tagged(map[string]string{instance: instanceID})
 	}
 	var memstats runtime.MemStats
 	runtime.ReadMemStats(&memstats)
-	rReporter := &RuntimeMetricsReporter{
+
+	buildTime := time.Unix(build.LastBuildInfo.BuildTimeUnix, 0)
+
+	return &RuntimeMetricsReporter{
 		scope:          scope,
 		reportInterval: reportInterval,
 		logger:         logger,
 		lastNumGC:      memstats.NumGC,
 		quit:           make(chan struct{}),
+		buildTime:      buildTime,
+		buildInfoScope: scope.Tagged(
+			map[string]string{
+				gitRevisionTag:   build.LastBuildInfo.GitRevision,
+				buildDateTag:     buildTime.Format(time.RFC3339),
+				buildPlatformTag: runtime.GOARCH,
+				goVersionTag:     runtime.Version(),
+				buildVersionTag:  headers.ServerVersion,
+			},
+		),
 	}
-	rReporter.buildInfoScope = scope.Tagged(
-		map[string]string{
-			gitRevisionTag:   ldflags.GitRevision,
-			gitBranchTag:     ldflags.GitBranch,
-			gitTagTag:        ldflags.GitTag,
-			buildDateTag:     ldflags.BuildDate,
-			buildPlatformTag: ldflags.BuildPlatform,
-			goVersionTag:     ldflags.GoVersion,
-			buildVersionTag:  headers.ServerVersion,
-		},
-	)
-	sec, err := strconv.ParseInt(ldflags.BuildTimeUnix, base, bitSize)
-	if err != nil || sec < 0 {
-		sec = 0
-	}
-	rReporter.buildTime = time.Unix(sec, 0).UTC()
-	return rReporter
 }
 
 // report Sends runtime metrics to the local metrics collector.
