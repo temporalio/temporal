@@ -15,9 +15,6 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: 1.17.3
-      - name: Get build unix timestamp
-        id: timestamp
-        run: echo "::set-output name=timestamp::$(date '+%s')"
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v2
         with:
@@ -25,4 +22,3 @@ jobs:
           args: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BUILD_TS_UNIX: ${{ steps.timestamp.outputs.timestamp }}
