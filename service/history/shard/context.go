@@ -58,7 +58,6 @@ type (
 		PreviousShardOwnerWasDifferent() bool
 
 		GetEngine() Engine
-		SetEngine(Engine)
 
 		GenerateTransferTaskID() (int64, error)
 		GenerateTransferTaskIDs(number int) ([]int64, error)

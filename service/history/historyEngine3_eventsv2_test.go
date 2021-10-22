@@ -141,7 +141,7 @@ func (s *engine3Suite) SetupTest() {
 		txProcessor:        s.mockTxProcessor,
 		timerProcessor:     s.mockTimerProcessor,
 	}
-	s.mockShard.SetEngine(h)
+	s.mockShard.SetEngineForTesting(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
 
 	s.historyEngine = h

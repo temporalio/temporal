@@ -167,7 +167,7 @@ func (s *engine2Suite) SetupTest() {
 			s.config.SearchAttributesTotalSizeLimit,
 		),
 	}
-	s.mockShard.SetEngine(h)
+	s.mockShard.SetEngineForTesting(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
 
 	s.historyEngine = h

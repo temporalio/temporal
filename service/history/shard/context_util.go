@@ -66,11 +66,21 @@ func NewTestContext(
 		maxTransferSequenceNumber: 100000,
 		timerMaxReadLevelMap:      make(map[string]time.Time),
 		remoteClusterCurrentTime:  make(map[string]time.Time),
-		EventsCache:               eventsCache,
+		eventsCache:               eventsCache,
 	}
 	return &ContextTest{
 		ContextImpl:     shard,
 		Resource:        resource,
 		MockEventsCache: eventsCache,
 	}
+}
+
+// SetEngineForTest sets s.engine. Only used by tests.
+func (s *ContextImpl) SetEngineForTesting(engine Engine) {
+	s.engine = engine
+}
+
+// SetEventsCacheForTesting sets s.eventsCache. Only used by tests.
+func (s *ContextTest) SetEventsCacheForTesting(c events.Cache) {
+	s.eventsCache = c
 }

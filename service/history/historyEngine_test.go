@@ -145,7 +145,7 @@ func (s *engineSuite) SetupTest() {
 		s.mockShard.GetLogger(),
 		s.mockShard.GetMetricsClient(),
 	)
-	s.mockShard.EventsCache = s.eventsCache
+	s.mockShard.SetEventsCacheForTesting(s.eventsCache)
 
 	s.mockMatchingClient = s.mockShard.Resource.MatchingClient
 	s.mockHistoryClient = s.mockShard.Resource.HistoryClient
@@ -160,7 +160,7 @@ func (s *engineSuite) SetupTest() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.Namespace).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
 
-	eventNitifier := events.NewNotifier(
+	eventNotifier := events.NewNotifier(
 		clock.NewRealTimeSource(),
 		s.mockShard.Resource.MetricsClient,
 		func(namespaceID, workflowID string) int32 {
@@ -179,14 +179,14 @@ func (s *engineSuite) SetupTest() {
 		logger:             s.mockShard.GetLogger(),
 		metricsClient:      s.mockShard.GetMetricsClient(),
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
-		eventNotifier:      eventNitifier,
+		eventNotifier:      eventNotifier,
 		config:             s.config,
 		txProcessor:        s.mockTxProcessor,
 		timerProcessor:     s.mockTimerProcessor,
 		eventsReapplier:    s.mockEventsReapplier,
 		workflowResetter:   s.mockWorkflowResetter,
 	}
-	s.mockShard.SetEngine(h)
+	s.mockShard.SetEngineForTesting(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
 
 	h.eventNotifier.Start()

@@ -107,7 +107,7 @@ func (s *mutableStateSuite) SetupTest() {
 	// set the checksum probabilities to 100% for exercising during test
 	s.mockConfig.MutableStateChecksumGenProbability = func(namespace string) int { return 100 }
 	s.mockConfig.MutableStateChecksumVerifyProbability = func(namespace string) int { return 100 }
-	s.mockShard.EventsCache = s.mockEventsCache
+	s.mockShard.SetEventsCacheForTesting(s.mockEventsCache)
 
 	s.testScope = s.mockShard.Resource.MetricsScope.(tally.TestScope)
 	s.logger = s.mockShard.GetLogger()

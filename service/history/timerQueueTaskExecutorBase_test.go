@@ -98,7 +98,7 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 		config,
 	)
 	s.mockEngine = shard.NewMockEngine(s.controller)
-	s.mockShard.SetEngine(s.mockEngine)
+	s.mockShard.SetEngineForTesting(s.mockEngine)
 
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockArchivalClient = archiver.NewMockClient(s.controller)
