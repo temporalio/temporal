@@ -2,7 +2,7 @@
 
 set -eu
 
-./develop/scripts/create_last_build_info.sh
+./develop/scripts/update_last_build_info.sh
 
 curl -sfL https://install.goreleaser.com/github.com/goreleaser/goreleaser.sh | sh
 
