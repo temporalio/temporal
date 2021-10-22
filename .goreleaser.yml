@@ -1,5 +1,3 @@
-env:
-  - MODULE_ROOT=go.temporal.io/server
 before:
   hooks:
     - go mod download
@@ -9,14 +7,6 @@ builds:
     binary: temporal-server
     env:
       - CGO_ENABLED=0
-    ldflags:
-      - -X {{.Env.MODULE_ROOT}}/ldflags.GitRevision={{.ShortCommit}}
-      - -X {{.Env.MODULE_ROOT}}/ldflags.GitBranch={{.Env.GIT_BRANCH}}
-      - -X {{.Env.MODULE_ROOT}}/ldflags.GitTag={{.Tag}}
-      - -X {{.Env.MODULE_ROOT}}/ldflags.BuildDate={{.Env.BUILD_DATE}}
-      - -X {{.Env.MODULE_ROOT}}/ldflags.BuildTimeUnix={{.Env.BUILD_TS_UNIX}}
-      - -X {{.Env.MODULE_ROOT}}/ldflags.BuildPlatform={{.Env.BUILD_PLATFORM}}
-      - -X {{.Env.MODULE_ROOT}}/ldflags.GoVersion={{.Env.GO_VERSION}}
     goos:
       - linux
       - darwin
