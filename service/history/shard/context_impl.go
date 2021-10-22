@@ -64,7 +64,7 @@ type (
 		executionManager persistence.ExecutionManager
 		metricsClient    metrics.Client
 		EventsCache      events.Cache
-		closeCallback    func(int32, *historyShardsItem)
+		closeCallback    func(*historyShardsItem)
 		config           *configs.Config
 		logger           log.Logger
 		throttledLogger  log.Logger
@@ -690,9 +690,7 @@ func (s *ContextImpl) closeShard() {
 
 	s.logger.Info("Close shard")
 
-	go func() {
-		s.closeCallback(s.shardID, s.shardItem)
-	}()
+	go s.closeCallback(s.shardItem)
 
 	// fails any writes that may start after this point.
 	s.shardInfo.RangeId = -1
@@ -1034,7 +1032,7 @@ func (s *ContextImpl) RUnlock() {
 
 func acquireShard(
 	shardItem *historyShardsItem,
-	closeCallback func(int32, *historyShardsItem),
+	closeCallback func(*historyShardsItem),
 ) (Context, error) {
 
 	var shardInfo *persistence.ShardInfoWithFailover

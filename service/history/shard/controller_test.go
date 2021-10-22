@@ -467,7 +467,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 		mockEngine := historyEngines[shardID]
 		mockEngine.EXPECT().Stop().Return()
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(differentHostInfo, nil).AnyTimes()
-		s.shardController.shardClosedCallback(shardID, nil)
+		s.shardController.CloseShardByID(shardID)
 	}
 
 	for w := 0; w < 10; w++ {
