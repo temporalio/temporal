@@ -131,27 +131,26 @@ func (c *clientV6) Search(ctx context.Context, p *SearchParameters) (*elastic.Se
 		searchService.SearchAfter(p.SearchAfter...)
 	}
 
-	searchResult, err := searchService.Do(ctx)
+	result, err := searchService.Do(ctx)
 	if err != nil {
 		return nil, convertV6ErrorToV7(err)
 	}
 
-	return convertV6SearchResultToV7(searchResult), nil
+	return convertV6SearchResultToV7(result), nil
 }
 
 func (c *clientV6) OpenScroll(ctx context.Context, p *SearchParameters, keepAliveInterval string) (*elastic.SearchResult, error) {
 	scrollService := elastic6.NewScrollService(c.esClient).
 		Index(p.Index).
 		Query(p.Query).
-		SortBy(convertV7SortersToV6(p.Sorter)...).
 		KeepAlive(keepAliveInterval)
 
 	if p.PageSize != 0 {
 		scrollService.Size(p.PageSize)
 	}
 
-	searchResult, err := scrollService.Do(ctx)
-	return convertV6SearchResultToV7(searchResult), convertV6ErrorToV7(err)
+	result, err := scrollService.Do(ctx)
+	return convertV6SearchResultToV7(result), convertV6ErrorToV7(err)
 }
 
 func (c *clientV6) Scroll(ctx context.Context, scrollID string, keepAliveInterval string) (*elastic.SearchResult, error) {

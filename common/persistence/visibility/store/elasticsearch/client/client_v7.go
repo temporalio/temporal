@@ -161,15 +161,14 @@ func (c *clientV7) OpenScroll(ctx context.Context, p *SearchParameters, keepAliv
 	scrollService := elastic.NewScrollService(c.esClient).
 		Index(p.Index).
 		Query(p.Query).
-		SortBy(p.Sorter...).
 		KeepAlive(keepAliveInterval)
 
 	if p.PageSize != 0 {
 		scrollService.Size(p.PageSize)
 	}
 
-	searchResult, err := scrollService.Do(ctx)
-	return searchResult, err
+	result, err := scrollService.Do(ctx)
+	return result, err
 }
 
 func (c *clientV7) Scroll(ctx context.Context, scrollID string, keepAliveInterval string) (*elastic.SearchResult, error) {
