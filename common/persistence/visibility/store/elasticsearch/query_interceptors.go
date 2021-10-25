@@ -80,8 +80,8 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 	}
 
 	if usage == query.FieldNameSorter {
-		if fieldType == enumspb.INDEXED_VALUE_TYPE_STRING {
-			return "", query.NewConverterError(fmt.Sprintf("unable to sort by field of %s type, use field of type %s", enumspb.INDEXED_VALUE_TYPE_STRING.String(), enumspb.INDEXED_VALUE_TYPE_KEYWORD.String()))
+		if fieldType == enumspb.INDEXED_VALUE_TYPE_TEXT {
+			return "", query.NewConverterError(fmt.Sprintf("unable to sort by field of %s type, use field of type %s", enumspb.INDEXED_VALUE_TYPE_TEXT.String(), enumspb.INDEXED_VALUE_TYPE_KEYWORD.String()))
 		}
 	}
 

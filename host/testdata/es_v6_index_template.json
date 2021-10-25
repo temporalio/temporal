@@ -46,7 +46,7 @@
         "TemporalChangeVersion": {
           "type": "keyword"
         },
-        "CustomStringField": {
+        "CustomTextField": {
           "type": "text"
         },
         "CustomKeywordField": {

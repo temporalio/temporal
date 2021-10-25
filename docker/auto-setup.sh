@@ -98,20 +98,18 @@ wait_for_cassandra() {
 }
 
 wait_for_mysql() {
-    SERVER=$(echo "${MYSQL_SEEDS}" | awk -F ',' '{print $1}')
-    until nc -z "${SERVER}" "${DB_PORT}"; do
+    until nc -z "${MYSQL_SEEDS%%,*}" "${DB_PORT}"; do
         echo 'Waiting for MySQL to start up.'
-      sleep 1
+        sleep 1
     done
 
     echo 'MySQL started.'
 }
 
 wait_for_postgres() {
-    SERVER=$(echo "${POSTGRES_SEEDS}" | awk -F ',' '{print $1}')
-    until nc -z "${SERVER}" "${DB_PORT}"; do
-      echo 'Waiting for PostgreSQL to startup.'
-      sleep 1
+    until nc -z "${POSTGRES_SEEDS%%,*}" "${DB_PORT}"; do
+        echo 'Waiting for PostgreSQL to startup.'
+        sleep 1
     done
 
     echo 'PostgreSQL started.'
@@ -218,10 +216,9 @@ validate_es_env() {
 wait_for_es() {
     SECONDS=0
 
-    ES_SERVER=$(echo "${ES_SEEDS}" | awk -F ',' '{print $1}')
-    URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}"
+    ES_SERVER="${ES_SCHEME}://${ES_SEEDS%%,*}:${ES_PORT}"
 
-    until curl --silent --fail --user "${ES_USER}":"${ES_PWD}" "${URL}" > /dev/null 2>&1; do
+    until curl --silent --fail --user "${ES_USER}":"${ES_PWD}" "${ES_SERVER}" > /dev/null 2>&1; do
         DURATION=${SECONDS}
 
         if [ "${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS}" -gt 0 ] && [ ${DURATION} -ge "${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS}" ]; then
@@ -237,16 +234,18 @@ wait_for_es() {
 }
 
 setup_es_index() {
+    ES_SERVER="${ES_SCHEME}://${ES_SEEDS%%,*}:${ES_PORT}"
+# @@@SNIPSTART setup-es-template-commands
+    # ES_SERVER is the URL of Elasticsearch server i.e. "http://localhost:9200".
+    SETTINGS_URL="${ES_SERVER}/_cluster/settings"
     SETTINGS_FILE=${TEMPORAL_HOME}/schema/elasticsearch/visibility/cluster_settings_${ES_VERSION}.json
+    TEMPLATE_URL="${ES_SERVER}/_template/temporal_visibility_v1_template"
     SCHEMA_FILE=${TEMPORAL_HOME}/schema/elasticsearch/visibility/index_template_${ES_VERSION}.json
-    ES_SERVER=$(echo "${ES_SEEDS}" | awk -F ',' '{print $1}')
-    SETTINGS_URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/_cluster/settings"
-    TEMPLATE_URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/_template/temporal_visibility_v1_template"
-    INDEX_URL="${ES_SCHEME}://${ES_SERVER}:${ES_PORT}/${ES_VIS_INDEX}"
+    INDEX_URL="${ES_SERVER}/${ES_VIS_INDEX}"
     curl --fail --user "${ES_USER}":"${ES_PWD}" -X PUT "${SETTINGS_URL}" -H "Content-Type: application/json" --data-binary "@${SETTINGS_FILE}" --write-out "\n"
     curl --fail --user "${ES_USER}":"${ES_PWD}" -X PUT "${TEMPLATE_URL}" -H 'Content-Type: application/json' --data-binary "@${SCHEMA_FILE}" --write-out "\n"
-    # No --fail here because create index is not idempotent operation.
     curl --user "${ES_USER}":"${ES_PWD}" -X PUT "${INDEX_URL}" --write-out "\n"
+# @@@SNIPEND
 }
 
 # === Server setup ===
@@ -264,13 +263,17 @@ register_default_namespace() {
 
 add_custom_search_attributes() {
       echo "Adding Custom*Field search attributes."
+      # TODO: Remove CustomStringField
+# @@@SNIPSTART add-custom-search-attributes-for-testing-command
       tctl --auto_confirm admin cluster add-search-attributes \
           --name CustomKeywordField --type Keyword \
-          --name CustomStringField --type String \
+          --name CustomStringField --type Text \
+          --name CustomTextField --type Text \
           --name CustomIntField --type Int \
           --name CustomDatetimeField --type Datetime \
           --name CustomDoubleField --type Double \
           --name CustomBoolField --type Bool
+# @@@SNIPEND
 }
 
 setup_server(){
@@ -307,4 +310,3 @@ fi
 
 # Run this func in parallel process. It will wait for server to start and then run required steps.
 setup_server &
-

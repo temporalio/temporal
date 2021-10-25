@@ -907,7 +907,7 @@ func finishParseJSONValue(val interface{}, t enumspb.IndexedValueType) (interfac
 	}
 
 	switch t {
-	case enumspb.INDEXED_VALUE_TYPE_STRING, enumspb.INDEXED_VALUE_TYPE_KEYWORD, enumspb.INDEXED_VALUE_TYPE_DATETIME:
+	case enumspb.INDEXED_VALUE_TYPE_TEXT, enumspb.INDEXED_VALUE_TYPE_KEYWORD, enumspb.INDEXED_VALUE_TYPE_DATETIME:
 		stringVal, isString := val.(string)
 		if !isString {
 			return nil, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, val)

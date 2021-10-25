@@ -260,6 +260,26 @@ func (mr *MockAdminServiceClientMockRecorder) GetSearchAttributes(ctx, in interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockAdminServiceClient)(nil).GetSearchAttributes), varargs...)
 }
 
+// GetShard mocks base method.
+func (m *MockAdminServiceClient) GetShard(ctx context.Context, in *adminservice.GetShardRequest, opts ...grpc.CallOption) (*adminservice.GetShardResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetShard", varargs...)
+	ret0, _ := ret[0].(*adminservice.GetShardResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetShard indicates an expected call of GetShard.
+func (mr *MockAdminServiceClientMockRecorder) GetShard(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShard", reflect.TypeOf((*MockAdminServiceClient)(nil).GetShard), varargs...)
+}
+
 // GetWorkflowExecutionRawHistoryV2 mocks base method.
 func (m *MockAdminServiceClient) GetWorkflowExecutionRawHistoryV2(ctx context.Context, in *adminservice.GetWorkflowExecutionRawHistoryV2Request, opts ...grpc.CallOption) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 	m.ctrl.T.Helper()
@@ -591,6 +611,21 @@ func (m *MockAdminServiceServer) GetSearchAttributes(arg0 context.Context, arg1 
 func (mr *MockAdminServiceServerMockRecorder) GetSearchAttributes(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockAdminServiceServer)(nil).GetSearchAttributes), arg0, arg1)
+}
+
+// GetShard mocks base method.
+func (m *MockAdminServiceServer) GetShard(arg0 context.Context, arg1 *adminservice.GetShardRequest) (*adminservice.GetShardResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetShard", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.GetShardResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetShard indicates an expected call of GetShard.
+func (mr *MockAdminServiceServerMockRecorder) GetShard(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShard", reflect.TypeOf((*MockAdminServiceServer)(nil).GetShard), arg0, arg1)
 }
 
 // GetWorkflowExecutionRawHistoryV2 mocks base method.
