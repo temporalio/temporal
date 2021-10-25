@@ -57,6 +57,7 @@ var (
 
 	historyAPIExcluded = map[string]struct{}{
 		"CloseShard":                {},
+		"GetShard":                  {},
 		"GetDLQMessages":            {},
 		"GetDLQReplicationMessages": {},
 		"GetReplicationMessages":    {},
