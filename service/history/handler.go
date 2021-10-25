@@ -635,6 +635,18 @@ func (h *Handler) CloseShard(_ context.Context, request *historyservice.CloseSha
 	return &historyservice.CloseShardResponse{}, nil
 }
 
+// GetShard gets a shard hosted by this instance
+func (h *Handler) GetShard(_ context.Context, request *historyservice.GetShardRequest) (_ *historyservice.GetShardResponse, retError error) {
+	defer log.CapturePanic(h.GetLogger(), &retError)
+	resp, err := h.controller.GetShardManager().GetShard(&persistence.GetShardRequest{
+		ShardID: request.ShardId,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &historyservice.GetShardResponse{ShardInfo: resp.ShardInfo}, nil
+}
+
 // DescribeMutableState - returns the internal analysis of workflow execution state
 func (h *Handler) DescribeMutableState(ctx context.Context, request *historyservice.DescribeMutableStateRequest) (_ *historyservice.DescribeMutableStateResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)

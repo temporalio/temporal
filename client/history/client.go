@@ -239,6 +239,35 @@ func (c *clientImpl) CloseShard(
 	return response, nil
 }
 
+func (c *clientImpl) GetShard(
+	ctx context.Context,
+	request *historyservice.GetShardRequest,
+	opts ...grpc.CallOption) (*historyservice.GetShardResponse, error) {
+
+	var err error
+	var client historyservice.HistoryServiceClient
+	if request.ShardId != 0 {
+		client, err = c.getClientForShardID(request.GetShardId())
+		if err != nil {
+			return nil, err
+		}
+	}
+	var response *historyservice.GetShardResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.GetShard(ctx, request, opts...)
+		return err
+	}
+
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) DescribeMutableState(
 	ctx context.Context,
 	request *historyservice.DescribeMutableStateRequest,

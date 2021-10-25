@@ -220,6 +220,26 @@ func (mr *MockHistoryServiceClientMockRecorder) GetReplicationMessages(ctx, in i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetReplicationMessages), varargs...)
 }
 
+// GetShard mocks base method.
+func (m *MockHistoryServiceClient) GetShard(ctx context.Context, in *historyservice.GetShardRequest, opts ...grpc.CallOption) (*historyservice.GetShardResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetShard", varargs...)
+	ret0, _ := ret[0].(*historyservice.GetShardResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetShard indicates an expected call of GetShard.
+func (mr *MockHistoryServiceClientMockRecorder) GetShard(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShard", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetShard), varargs...)
+}
+
 // MergeDLQMessages mocks base method.
 func (m *MockHistoryServiceClient) MergeDLQMessages(ctx context.Context, in *historyservice.MergeDLQMessagesRequest, opts ...grpc.CallOption) (*historyservice.MergeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -921,6 +941,21 @@ func (m *MockHistoryServiceServer) GetReplicationMessages(arg0 context.Context, 
 func (mr *MockHistoryServiceServerMockRecorder) GetReplicationMessages(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetReplicationMessages), arg0, arg1)
+}
+
+// GetShard mocks base method.
+func (m *MockHistoryServiceServer) GetShard(arg0 context.Context, arg1 *historyservice.GetShardRequest) (*historyservice.GetShardResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetShard", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.GetShardResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetShard indicates an expected call of GetShard.
+func (mr *MockHistoryServiceServerMockRecorder) GetShard(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShard", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetShard), arg0, arg1)
 }
 
 // MergeDLQMessages mocks base method.

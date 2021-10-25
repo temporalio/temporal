@@ -386,11 +386,28 @@ func (adh *AdminHandler) RemoveTask(ctx context.Context, request *adminservice.R
 	return &adminservice.RemoveTaskResponse{}, err
 }
 
+// GetShard returns information about the internal states of a shard
+func (adh *AdminHandler) GetShard(ctx context.Context, request *adminservice.GetShardRequest) (_ *adminservice.GetShardResponse, retError error) {
+	defer log.CapturePanic(adh.GetLogger(), &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminGetShardScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+	resp, err := adh.GetHistoryClient().GetShard(ctx, &historyservice.GetShardRequest{ShardId: request.GetShardId()})
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.GetShardResponse{ShardInfo: resp.ShardInfo}, nil
+}
+
 // CloseShard returns information about the internal states of a history host
 func (adh *AdminHandler) CloseShard(ctx context.Context, request *adminservice.CloseShardRequest) (_ *adminservice.CloseShardResponse, retError error) {
 	defer log.CapturePanic(adh.GetLogger(), &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminCloseShardTaskScope)
+	scope, sw := adh.startRequestProfile(metrics.AdminCloseShardScope)
 	defer sw.Stop()
 
 	if request == nil {
