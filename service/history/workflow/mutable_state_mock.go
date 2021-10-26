@@ -47,7 +47,7 @@ import (
 	definition "go.temporal.io/server/common/definition"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
-	tasks "go.temporal.io/server/common/tasks"
+	tasks "go.temporal.io/server/service/history/tasks"
 )
 
 // MockMutableState is a mock of MutableState interface.

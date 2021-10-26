@@ -37,8 +37,8 @@ import (
 	history "go.temporal.io/api/history/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
-	tasks "go.temporal.io/server/common/tasks"
 	events "go.temporal.io/server/service/history/events"
+	tasks "go.temporal.io/server/service/history/tasks"
 )
 
 // MockEngine is a mock of Engine interface.

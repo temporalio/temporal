@@ -36,7 +36,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (

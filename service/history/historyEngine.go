@@ -43,7 +43,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/tasks"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"

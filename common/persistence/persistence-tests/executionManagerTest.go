@@ -51,7 +51,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (

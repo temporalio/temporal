@@ -45,9 +45,9 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 var (

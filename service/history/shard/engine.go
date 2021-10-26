@@ -35,8 +35,8 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (

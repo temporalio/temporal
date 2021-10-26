@@ -40,7 +40,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 func applyWorkflowMutationTx(

@@ -39,7 +39,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (

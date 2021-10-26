@@ -37,8 +37,8 @@ import (
 	enums "go.temporal.io/server/api/enums/v1"
 	repication "go.temporal.io/server/api/replication/v1"
 	task "go.temporal.io/server/common/task"
-	tasks "go.temporal.io/server/common/tasks"
 	shard "go.temporal.io/server/service/history/shard"
+	tasks "go.temporal.io/server/service/history/tasks"
 )
 
 // MockqueueProcessor is a mock of queueProcessor interface.

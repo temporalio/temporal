@@ -32,7 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	tasks "go.temporal.io/server/common/tasks"
+	tasks "go.temporal.io/server/service/history/tasks"
 )
 
 // MocktimerQueueProcessor is a mock of timerQueueProcessor interface.

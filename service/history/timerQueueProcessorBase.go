@@ -35,9 +35,9 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 
 	"go.temporal.io/server/common"
