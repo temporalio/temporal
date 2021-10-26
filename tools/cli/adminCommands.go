@@ -27,8 +27,8 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math"
+	"os"
 	"strconv"
 	"time"
 
@@ -122,7 +122,7 @@ func AdminShowWorkflow(c *cli.Context) {
 		if err != nil {
 			ErrorAndExit("Failed to serialize history data.", err)
 		}
-		if err := ioutil.WriteFile(outputFileName, data, 0666); err != nil {
+		if err := os.WriteFile(outputFileName, data, 0666); err != nil {
 			ErrorAndExit("Failed to export history data file.", err)
 		}
 	}
@@ -617,17 +617,16 @@ func AdminRemoveTask(c *cli.Context) {
 // AdminDescribeShard describes shard by shard id
 func AdminDescribeShard(c *cli.Context) {
 	sid := getRequiredIntOption(c, FlagShardID)
-	pFactory := CreatePersistenceFactory(c)
-	shardManager, err := pFactory.NewShardManager()
+	adminClient := cFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+	response, err := adminClient.GetShard(ctx, &adminservice.GetShardRequest{ShardId: int32(sid)})
 
 	if err != nil {
 		ErrorAndExit("Failed to initialize shard manager", err)
 	}
 
-	getShardReq := &persistence.GetShardRequest{ShardID: int32(sid)}
-	shard, err := shardManager.GetShard(getShardReq)
-
-	prettyPrintJSONObject(shard)
+	prettyPrintJSONObject(response.ShardInfo)
 }
 
 // AdminShardManagement describes history host

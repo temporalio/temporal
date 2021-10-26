@@ -36,6 +36,9 @@ service AdminService {
     rpc DescribeHistoryHost (DescribeHistoryHostRequest) returns (DescribeHistoryHostResponse) {
     }
 
+    rpc GetShard (GetShardRequest) returns (GetShardResponse) {
+    }
+
     rpc CloseShard (CloseShardRequest) returns (CloseShardResponse) {
     }
 

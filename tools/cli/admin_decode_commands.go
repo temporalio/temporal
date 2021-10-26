@@ -28,7 +28,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"reflect"
 	"strings"
 
@@ -46,7 +46,7 @@ func AdminDecodeProto(c *cli.Context) {
 
 	binaryFile := c.String(FlagBinaryFile)
 	if binaryFile != "" {
-		protoData, err = ioutil.ReadFile(binaryFile)
+		protoData, err = os.ReadFile(binaryFile)
 		if err != nil {
 			ErrorAndExit(fmt.Sprintf("Unable to read binary file %s", binaryFile), err)
 		}
@@ -56,7 +56,7 @@ func AdminDecodeProto(c *cli.Context) {
 		hexData := c.String(FlagHexData)
 		hexFile := c.String(FlagHexFile)
 		if hexData == "" && hexFile != "" {
-			hexBytes, err := ioutil.ReadFile(hexFile)
+			hexBytes, err := os.ReadFile(hexFile)
 			if err != nil {
 				ErrorAndExit(fmt.Sprintf("Unable to read hex file %s", hexFile), err)
 			}
@@ -108,7 +108,7 @@ func AdminDecodeBase64(c *cli.Context) {
 	base64Data := c.String(FlagBase64Data)
 	base64File := c.String(FlagBase64File)
 	if base64Data == "" && base64File != "" {
-		base64Bytes, err := ioutil.ReadFile(base64File)
+		base64Bytes, err := os.ReadFile(base64File)
 		if err != nil {
 			ErrorAndExit(fmt.Sprintf("Unable to read base64 file %s", base64File), err)
 		}

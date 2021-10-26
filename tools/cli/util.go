@@ -29,7 +29,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"regexp"
@@ -664,7 +663,7 @@ func readJSONInputs(c *cli.Context) [][]byte {
 		inputFile := c.String(FlagInputFile)
 		// This method is purely used to parse input from the CLI. The input comes from a trusted user
 		// #nosec
-		data, err := ioutil.ReadFile(inputFile)
+		data, err := os.ReadFile(inputFile)
 		if err != nil {
 			ErrorAndExit("Error reading input file", err)
 		}
