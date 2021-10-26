@@ -197,6 +197,8 @@ func (m *sqlExecutionStore) GetTimerTasks(
 		resp.Tasks[i] = *p.NewDataBlob(row.Data, row.DataEncoding)
 	}
 
+	// above use page size + 1 for query, so if this check is true
+	// there is definitely a next page
 	if len(resp.Tasks) > request.BatchSize {
 		pageToken = &timerTaskPageToken{
 			TaskID:    rows[request.BatchSize].TaskID,
