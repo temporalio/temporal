@@ -30,7 +30,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 	"time"
 
@@ -90,7 +90,7 @@ func NewCassandraCluster(
 		var err error
 
 		if cfg.TLS.CertFile != "" {
-			certBytes, err = ioutil.ReadFile(cfg.TLS.CertFile)
+			certBytes, err = os.ReadFile(cfg.TLS.CertFile)
 			if err != nil {
 				return nil, fmt.Errorf("error reading client certificate file: %w", err)
 			}
@@ -102,7 +102,7 @@ func NewCassandraCluster(
 		}
 
 		if cfg.TLS.KeyFile != "" {
-			keyBytes, err = ioutil.ReadFile(cfg.TLS.KeyFile)
+			keyBytes, err = os.ReadFile(cfg.TLS.KeyFile)
 			if err != nil {
 				return nil, fmt.Errorf("error reading client certificate private key file: %w", err)
 			}

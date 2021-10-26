@@ -34,7 +34,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"flag"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"testing"
@@ -108,7 +107,7 @@ func (s *integrationClustersTestSuite) SetupSuite() {
 	}
 	environment.SetupEnv()
 
-	confContent, err := ioutil.ReadFile(fileName)
+	confContent, err := os.ReadFile(fileName)
 	s.Require().NoError(err)
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 

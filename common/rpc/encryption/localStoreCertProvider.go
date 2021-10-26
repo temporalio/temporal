@@ -33,7 +33,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"sync"
 	"time"
 
@@ -295,7 +295,7 @@ func (s *localStoreCertProvider) fetchCertificate(
 
 	if certFile != "" {
 		s.logger.Info("loading certificate from file", tag.TLSCertFile(certFile))
-		certBytes, err = ioutil.ReadFile(certFile)
+		certBytes, err = os.ReadFile(certFile)
 		if err != nil {
 			return nil, err
 		}
@@ -308,7 +308,7 @@ func (s *localStoreCertProvider) fetchCertificate(
 
 	if keyFile != "" {
 		s.logger.Info("loading private key from file", tag.TLSKeyFile(keyFile))
-		keyBytes, err = ioutil.ReadFile(keyFile)
+		keyBytes, err = os.ReadFile(keyFile)
 		if err != nil {
 			return nil, err
 		}
@@ -460,7 +460,7 @@ func buildCAPoolFromData(caData []string) (*x509.CertPool, []*x509.Certificate, 
 func (s *localStoreCertProvider) buildCAPoolFromFiles(caFiles []string) (*x509.CertPool, []*x509.Certificate, error) {
 
 	s.logger.Info("loading CA certs from", tag.TLSCertFiles(caFiles))
-	return buildCAPool(caFiles, ioutil.ReadFile)
+	return buildCAPool(caFiles, os.ReadFile)
 }
 
 func buildCAPool(cas []string, getBytes loadOrDecodeDataFunc) (*x509.CertPool, []*x509.Certificate, error) {

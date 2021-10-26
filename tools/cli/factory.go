@@ -29,9 +29,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -251,12 +252,12 @@ func fetchCACert(pathOrUrl string) (caPool *x509.CertPool, err error) {
 			return nil, err
 		}
 		defer resp.Body.Close()
-		caBytes, err = ioutil.ReadAll(resp.Body)
+		caBytes, err = io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		caBytes, err = ioutil.ReadFile(pathOrUrl)
+		caBytes, err = os.ReadFile(pathOrUrl)
 		if err != nil {
 			return nil, err
 		}

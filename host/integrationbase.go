@@ -26,7 +26,6 @@ package host
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"time"
 
@@ -130,7 +129,7 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 	}
 	// This is just reading a config so it's less of a security concern
 	// #nosec
-	confContent, err := ioutil.ReadFile(configLocation)
+	confContent, err := os.ReadFile(configLocation)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read test cluster config file %v: %v", configLocation, err)
 	}

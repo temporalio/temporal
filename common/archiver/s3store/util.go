@@ -29,7 +29,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"strings"
 	"time"
 
@@ -230,7 +230,7 @@ func download(ctx context.Context, s3cli s3iface.S3API, URI archiver.URI, key st
 		}
 	}()
 
-	body, err := ioutil.ReadAll(result.Body)
+	body, err := io.ReadAll(result.Body)
 	if err != nil {
 		return nil, err
 	}
