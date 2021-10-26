@@ -631,7 +631,7 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 // CloseShard closes a shard hosted by this instance
 func (h *Handler) CloseShard(_ context.Context, request *historyservice.CloseShardRequest) (_ *historyservice.CloseShardResponse, retError error) {
 	defer log.CapturePanic(h.GetLogger(), &retError)
-	h.controller.RemoveEngineForShard(request.GetShardId(), nil)
+	h.controller.CloseShardByID(request.GetShardId())
 	return &historyservice.CloseShardResponse{}, nil
 }
 
