@@ -28,7 +28,7 @@ import (
 	"context"
 
 	"go.uber.org/fx"
-	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 
 	"go.temporal.io/server/common"
@@ -203,6 +203,7 @@ func NamespaceCountLimitInterceptorProvider(
 ) *interceptor.NamespaceCountLimitInterceptor {
 	return interceptor.NewNamespaceCountLimitInterceptor(
 		serviceResource.GetNamespaceRegistry(),
+		serviceResource.GetLogger(),
 		serviceConfig.MaxNamespaceCountPerInstance,
 		configs.ExecutionAPICountLimitOverride,
 	)

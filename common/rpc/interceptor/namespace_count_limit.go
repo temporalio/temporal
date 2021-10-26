@@ -30,8 +30,11 @@ import (
 	"sync/atomic"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/namespace"
 	"google.golang.org/grpc"
+
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 )
 
 var (
@@ -41,6 +44,7 @@ var (
 type (
 	NamespaceCountLimitInterceptor struct {
 		namespaceRegistry namespace.Registry
+		logger            log.Logger
 
 		countFn func(namespace string) int
 		tokens  map[string]int
@@ -54,11 +58,13 @@ var _ grpc.UnaryServerInterceptor = (*NamespaceCountLimitInterceptor)(nil).Inter
 
 func NewNamespaceCountLimitInterceptor(
 	namespaceRegistry namespace.Registry,
+	logger log.Logger,
 	countFn func(namespace string) int,
 	tokens map[string]int,
 ) *NamespaceCountLimitInterceptor {
 	return &NamespaceCountLimitInterceptor{
 		namespaceRegistry: namespaceRegistry,
+		logger:            logger,
 		countFn:           countFn,
 		tokens:            tokens,
 
@@ -80,6 +86,9 @@ func (ni *NamespaceCountLimitInterceptor) Intercept(
 		counter := ni.counter(namespace)
 		count := atomic.AddInt32(counter, int32(token))
 		defer atomic.AddInt32(counter, -int32(token))
+
+		scope := MetricsScope(ctx, ni.logger)
+		scope.UpdateGauge(metrics.ServicePendingRequests, float64(count))
 
 		if int(count) > ni.countFn(namespace) {
 			return nil, ErrNamespaceCountLimitServerBusy
