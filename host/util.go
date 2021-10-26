@@ -26,7 +26,7 @@ package host
 
 import (
 	"context"
-	"io/ioutil"
+	"os"
 
 	"github.com/stretchr/testify/suite"
 
@@ -44,7 +44,7 @@ func CreateESClient(s suite.Suite, url string, version string) esclient.Integrat
 func PutIndexTemplate(s suite.Suite, esClient esclient.IntegrationTestsClient, templateConfigFile, templateName string) {
 	// This function is used exclusively in tests. Excluding it from security checks.
 	// #nosec
-	template, err := ioutil.ReadFile(templateConfigFile)
+	template, err := os.ReadFile(templateConfigFile)
 	s.Require().NoError(err)
 	acknowledged, err := esClient.IndexPutTemplate(context.Background(), templateName, string(template))
 	s.Require().NoError(err)

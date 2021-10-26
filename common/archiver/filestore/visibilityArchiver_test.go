@@ -27,7 +27,6 @@ package filestore
 import (
 	"context"
 	"errors"
-	"io/ioutil"
 	"os"
 	"path"
 	"testing"
@@ -73,7 +72,7 @@ func TestVisibilityArchiverSuite(t *testing.T) {
 
 func (s *visibilityArchiverSuite) SetupSuite() {
 	var err error
-	s.testQueryDirectory, err = ioutil.TempDir("", "TestQuery")
+	s.testQueryDirectory, err = os.MkdirTemp("", "TestQuery")
 	s.Require().NoError(err)
 	s.setupVisibilityDirectory()
 	s.testArchivalURI, err = archiver.NewURI("file:///a/b/c")
@@ -162,7 +161,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 }
 
 func (s *visibilityArchiverSuite) TestArchive_Success() {
-	dir, err := ioutil.TempDir("", "TestVisibilityArchive")
+	dir, err := os.MkdirTemp("", "TestVisibilityArchive")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 
@@ -470,7 +469,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 }
 
 func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
-	dir, err := ioutil.TempDir("", "TestArchiveAndQuery")
+	dir, err := os.MkdirTemp("", "TestArchiveAndQuery")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 

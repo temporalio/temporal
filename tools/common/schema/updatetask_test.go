@@ -25,7 +25,6 @@
 package schema
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -48,11 +47,11 @@ func (s *UpdateTaskTestSuite) SetupSuite() {
 
 func (s *UpdateTaskTestSuite) TestReadSchemaDir() {
 
-	emptyDir, err := ioutil.TempDir("", "update_schema_test_empty")
+	emptyDir, err := os.MkdirTemp("", "update_schema_test_empty")
 	s.NoError(err)
 	defer os.RemoveAll(emptyDir)
 
-	tmpDir, err := ioutil.TempDir("", "update_schema_test")
+	tmpDir, err := os.MkdirTemp("", "update_schema_test")
 	s.NoError(err)
 	defer os.RemoveAll(tmpDir)
 
@@ -91,7 +90,7 @@ func (s *UpdateTaskTestSuite) TestReadSchemaDir() {
 
 func (s *UpdateTaskTestSuite) TestReadManifest() {
 
-	tmpDir, err := ioutil.TempDir("", "update_schema_test")
+	tmpDir, err := os.MkdirTemp("", "update_schema_test")
 	s.Nil(err)
 	defer os.RemoveAll(tmpDir)
 
@@ -149,7 +148,7 @@ func (s *UpdateTaskTestSuite) runReadManifestTest(dir, input, currVer, minVer, d
 	files []string, isErr bool) {
 
 	file := dir + "/manifest.json"
-	err := ioutil.WriteFile(file, []byte(input), os.FileMode(0644))
+	err := os.WriteFile(file, []byte(input), os.FileMode(0644))
 	s.Nil(err)
 
 	m, err := readManifest(dir)

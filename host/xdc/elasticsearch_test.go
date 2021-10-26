@@ -32,7 +32,6 @@ package xdc
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -109,7 +108,7 @@ func (s *esCrossDCTestSuite) SetupSuite() {
 	}
 	environment.SetupEnv()
 
-	confContent, err := ioutil.ReadFile(fileName)
+	confContent, err := os.ReadFile(fileName)
 	s.Require().NoError(err)
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 

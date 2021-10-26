@@ -28,7 +28,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
+	"os"
 
 	"github.com/go-sql-driver/mysql"
 
@@ -46,7 +46,7 @@ func registerTLSConfig(cfg *config.SQL) error {
 
 	if cfg.TLS.CaFile != "" {
 		rootCertPool := x509.NewCertPool()
-		pem, err := ioutil.ReadFile(cfg.TLS.CaFile)
+		pem, err := os.ReadFile(cfg.TLS.CaFile)
 		if err != nil {
 			return fmt.Errorf("failed to load CA files: %v", err)
 		}

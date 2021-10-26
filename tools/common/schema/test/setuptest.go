@@ -26,7 +26,6 @@ package test
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"time"
@@ -86,11 +85,11 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 	tb.Nil(err)
 	tb.Equal(0, len(tables))
 
-	tmpDir, err := ioutil.TempDir("", "setupSchemaTestDir")
+	tmpDir, err := os.MkdirTemp("", "setupSchemaTestDir")
 	tb.Nil(err)
 	defer os.Remove(tmpDir)
 
-	sqlFile, err := ioutil.TempFile(tmpDir, "setupSchema.cliOptionsTest")
+	sqlFile, err := os.CreateTemp(tmpDir, "setupSchema.cliOptionsTest")
 	tb.Nil(err)
 	defer os.Remove(sqlFile.Name())
 

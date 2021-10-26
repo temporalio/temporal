@@ -25,7 +25,6 @@
 package filestore
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -60,7 +59,7 @@ func (s *UtilSuite) SetupTest() {
 }
 
 func (s *UtilSuite) TestFileExists() {
-	dir, err := ioutil.TempDir("", "TestFileExists")
+	dir, err := os.MkdirTemp("", "TestFileExists")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 	s.assertDirectoryExists(dir)
@@ -81,7 +80,7 @@ func (s *UtilSuite) TestFileExists() {
 }
 
 func (s *UtilSuite) TestDirectoryExists() {
-	dir, err := ioutil.TempDir("", "TestDirectoryExists")
+	dir, err := os.MkdirTemp("", "TestDirectoryExists")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 	s.assertDirectoryExists(dir)
@@ -100,7 +99,7 @@ func (s *UtilSuite) TestDirectoryExists() {
 }
 
 func (s *UtilSuite) TestMkdirAll() {
-	dir, err := ioutil.TempDir("", "TestMkdirAll")
+	dir, err := os.MkdirTemp("", "TestMkdirAll")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 	s.assertDirectoryExists(dir)
@@ -121,7 +120,7 @@ func (s *UtilSuite) TestMkdirAll() {
 }
 
 func (s *UtilSuite) TestWriteFile() {
-	dir, err := ioutil.TempDir("", "TestWriteFile")
+	dir, err := os.MkdirTemp("", "TestWriteFile")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 	s.assertDirectoryExists(dir)
@@ -141,7 +140,7 @@ func (s *UtilSuite) TestWriteFile() {
 }
 
 func (s *UtilSuite) TestReadFile() {
-	dir, err := ioutil.TempDir("", "TestReadFile")
+	dir, err := os.MkdirTemp("", "TestReadFile")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 	s.assertDirectoryExists(dir)
@@ -160,7 +159,7 @@ func (s *UtilSuite) TestReadFile() {
 }
 
 func (s *UtilSuite) TestListFilesByPrefix() {
-	dir, err := ioutil.TempDir("", "TestListFiles")
+	dir, err := os.MkdirTemp("", "TestListFiles")
 	s.NoError(err)
 	defer os.Remove(dir)
 	s.assertDirectoryExists(dir)
@@ -225,7 +224,7 @@ func (s *UtilSuite) TestEncodeDecodeHistoryBatches() {
 }
 
 func (s *UtilSuite) TestValidateDirPath() {
-	dir, err := ioutil.TempDir("", "TestValidateDirPath")
+	dir, err := os.MkdirTemp("", "TestValidateDirPath")
 	s.NoError(err)
 	defer os.RemoveAll(dir)
 	s.assertDirectoryExists(dir)
@@ -444,7 +443,7 @@ func (s *UtilSuite) TestSerializeDeserializeGetHistoryToken() {
 }
 
 func (s *UtilSuite) createFile(dir string, filename string) {
-	err := ioutil.WriteFile(filepath.Join(dir, filename), []byte("file contents"), testFileMode)
+	err := os.WriteFile(filepath.Join(dir, filename), []byte("file contents"), testFileMode)
 	s.Nil(err)
 }
 
