@@ -58,7 +58,10 @@ func WithConfigLoader(configDir string, env string, zone string) ServerOption {
 
 func ForServices(names []string) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
-		s.serviceNames = names
+		s.serviceNames = make(map[string]struct{})
+		for _, name := range names {
+			s.serviceNames[name] = struct{}{}
+		}
 	})
 }
 

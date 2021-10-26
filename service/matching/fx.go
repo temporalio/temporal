@@ -31,12 +31,10 @@ import (
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service"
@@ -57,18 +55,8 @@ var Module = fx.Options(
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
-func ParamsExpandProvider(params *resource.BootstrapParams) (
-	log.Logger,
-	dynamicconfig.Client,
-	config.Persistence,
-	*esclient.Config,
-	common.RPCFactory,
-) {
-	return params.Logger,
-		params.DynamicConfigClient,
-		params.PersistenceConfig,
-		params.ESConfig,
-		params.RPCFactory
+func ParamsExpandProvider(params *resource.BootstrapParams) common.RPCFactory {
+	return params.RPCFactory
 }
 
 func TelemetryInterceptorProvider(

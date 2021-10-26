@@ -31,9 +31,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service"
 )
@@ -49,13 +47,8 @@ var Module = fx.Options(
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
-func ParamsExpandProvider(params *resource.BootstrapParams) (
-	log.Logger,
-	esclient.Client,
-	common.RPCFactory,
-	dynamicconfig.Client,
-) {
-	return params.Logger, params.ESClient, params.RPCFactory, params.DynamicConfigClient
+func ParamsExpandProvider(params *resource.BootstrapParams) common.RPCFactory {
+	return params.RPCFactory
 }
 
 func ThrottledLoggerRpsFnProvider(serviceConfig *Config) resource.ThrottledLoggerRpsFn {
