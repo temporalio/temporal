@@ -39,10 +39,6 @@ type (
 	}
 )
 
-func (a *CloseExecutionTask) GetWorkflowIdentifier() definition.WorkflowKey {
-	return a.WorkflowKey
-}
-
 func (a *CloseExecutionTask) GetKey() Key {
 	return Key{
 		FireTime: time.Unix(0, 0),

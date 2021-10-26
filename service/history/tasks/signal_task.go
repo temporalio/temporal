@@ -44,10 +44,6 @@ type (
 	}
 )
 
-func (u *SignalExecutionTask) GetWorkflowIdentifier() definition.WorkflowKey {
-	return u.WorkflowKey
-}
-
 func (u *SignalExecutionTask) GetKey() Key {
 	return Key{
 		FireTime: time.Unix(0, 0),

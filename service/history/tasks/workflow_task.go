@@ -42,10 +42,6 @@ type (
 	}
 )
 
-func (d *WorkflowTask) GetWorkflowIdentifier() definition.WorkflowKey {
-	return d.WorkflowKey
-}
-
 func (d *WorkflowTask) GetKey() Key {
 	return Key{
 		FireTime: time.Unix(0, 0),

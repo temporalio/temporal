@@ -40,10 +40,6 @@ type (
 	}
 )
 
-func (a *SyncActivityTask) GetWorkflowIdentifier() definition.WorkflowKey {
-	return a.WorkflowKey
-}
-
 func (a *SyncActivityTask) GetKey() Key {
 	return Key{
 		FireTime: time.Unix(0, 0),

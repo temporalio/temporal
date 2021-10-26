@@ -39,10 +39,6 @@ type (
 	}
 )
 
-func (a *DeleteHistoryEventTask) GetWorkflowIdentifier() definition.WorkflowKey {
-	return a.WorkflowKey
-}
-
 func (a *DeleteHistoryEventTask) GetKey() Key {
 	return Key{
 		FireTime: a.VisibilityTimestamp,

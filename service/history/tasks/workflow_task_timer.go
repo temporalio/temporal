@@ -44,10 +44,6 @@ type (
 	}
 )
 
-func (d *WorkflowTaskTimeoutTask) GetWorkflowIdentifier() definition.WorkflowKey {
-	return d.WorkflowKey
-}
-
 func (d *WorkflowTaskTimeoutTask) GetKey() Key {
 	return Key{
 		FireTime: d.VisibilityTimestamp,

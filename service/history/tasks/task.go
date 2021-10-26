@@ -26,8 +26,6 @@ package tasks
 
 import (
 	"time"
-
-	"go.temporal.io/server/common/definition"
 )
 
 type (
@@ -42,7 +40,6 @@ type (
 
 	// Task is the generic task interface
 	Task interface {
-		GetWorkflowIdentifier() definition.WorkflowKey
 		GetKey() Key
 		GetVersion() int64
 		SetVersion(version int64)

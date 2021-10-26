@@ -40,10 +40,6 @@ type (
 	}
 )
 
-func (u *UserTimerTask) GetWorkflowIdentifier() definition.WorkflowKey {
-	return u.WorkflowKey
-}
-
 func (u *UserTimerTask) GetKey() Key {
 	return Key{
 		FireTime: u.VisibilityTimestamp,
