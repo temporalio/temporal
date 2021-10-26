@@ -142,7 +142,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 		txProcessor:    s.mockTxProcessor,
 		timerProcessor: s.mockTimerProcessor,
 	}
-	s.mockShard.SetEngine(engine)
+	s.mockShard.SetEngineForTesting(engine)
 
 	s.nDCActivityReplicator = newNDCActivityReplicator(
 		s.mockShard,

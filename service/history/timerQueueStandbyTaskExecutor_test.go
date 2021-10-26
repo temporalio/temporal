@@ -134,7 +134,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 			}},
 		config,
 	)
-	s.mockShard.EventsCache = events.NewEventsCache(
+	s.mockShard.SetEventsCacheForTesting(events.NewEventsCache(
 		s.mockShard.GetShardID(),
 		s.mockShard.GetConfig().EventsCacheInitialSize(),
 		s.mockShard.GetConfig().EventsCacheMaxSize(),
@@ -143,7 +143,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 		false,
 		s.mockShard.GetLogger(),
 		s.mockShard.GetMetricsClient(),
-	)
+	))
 	s.mockShard.Resource.TimeSource = s.timeSource
 
 	// ack manager will use the namespace information
@@ -173,7 +173,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 		txProcessor:        s.mockTxProcessor,
 		timerProcessor:     s.mockTimerProcessor,
 	}
-	s.mockShard.SetEngine(h)
+	s.mockShard.SetEngineForTesting(h)
 
 	s.timerQueueStandbyTaskExecutor = newTimerQueueStandbyTaskExecutor(
 		s.mockShard,

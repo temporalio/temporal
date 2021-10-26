@@ -115,7 +115,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 			}},
 		config,
 	)
-	s.mockShard.EventsCache = events.NewEventsCache(
+	s.mockShard.SetEventsCacheForTesting(events.NewEventsCache(
 		s.mockShard.GetShardID(),
 		s.mockShard.GetConfig().EventsCacheInitialSize(),
 		s.mockShard.GetConfig().EventsCacheMaxSize(),
@@ -124,7 +124,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		false,
 		s.mockShard.GetLogger(),
 		s.mockShard.GetMetricsClient(),
-	)
+	))
 	s.mockShard.Resource.TimeSource = s.timeSource
 
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
@@ -160,7 +160,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		metricsClient:      s.mockShard.GetMetricsClient(),
 		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NewClient(tally.NoopScope, metrics.History), func(string, string) int32 { return 1 }),
 	}
-	s.mockShard.SetEngine(h)
+	s.mockShard.SetEngineForTesting(h)
 
 	s.visibilityQueueTaskExecutor = newVisibilityQueueTaskExecutor(
 		s.mockShard,

@@ -589,18 +589,6 @@ func (mr *MockContextMockRecorder) SetCurrentTime(cluster, currentTime interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCurrentTime", reflect.TypeOf((*MockContext)(nil).SetCurrentTime), cluster, currentTime)
 }
 
-// SetEngine mocks base method.
-func (m *MockContext) SetEngine(arg0 Engine) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetEngine", arg0)
-}
-
-// SetEngine indicates an expected call of SetEngine.
-func (mr *MockContextMockRecorder) SetEngine(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetEngine", reflect.TypeOf((*MockContext)(nil).SetEngine), arg0)
-}
-
 // UpdateClusterReplicationLevel mocks base method.
 func (m *MockContext) UpdateClusterReplicationLevel(cluster string, ackTaskID int64) error {
 	m.ctrl.T.Helper()

@@ -63,7 +63,7 @@ type (
 		shardID          int32
 		executionManager persistence.ExecutionManager
 		metricsClient    metrics.Client
-		EventsCache      events.Cache
+		eventsCache      events.Cache
 		closeCallback    func(*historyShardsItem)
 		config           *configs.Config
 		logger           log.Logger
@@ -111,10 +111,6 @@ func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
 
 func (s *ContextImpl) GetEngine() Engine {
 	return s.engine
-}
-
-func (s *ContextImpl) SetEngine(engine Engine) {
-	s.engine = engine
 }
 
 func (s *ContextImpl) GenerateTransferTaskID() (int64, error) {
@@ -660,7 +656,7 @@ func (s *ContextImpl) PreviousShardOwnerWasDifferent() bool {
 }
 
 func (s *ContextImpl) GetEventsCache() events.Cache {
-	return s.EventsCache
+	return s.eventsCache
 }
 
 func (s *ContextImpl) GetLogger() log.Logger {
@@ -1033,7 +1029,7 @@ func (s *ContextImpl) RUnlock() {
 func acquireShard(
 	shardItem *historyShardsItem,
 	closeCallback func(*historyShardsItem),
-) (Context, error) {
+) (*ContextImpl, error) {
 
 	var shardInfo *persistence.ShardInfoWithFailover
 
@@ -1122,7 +1118,7 @@ func acquireShard(
 		throttledLogger:                shardItem.throttledLogger,
 		previousShardOwnerWasDifferent: ownershipChanged,
 	}
-	shardContext.EventsCache = events.NewEventsCache(
+	shardContext.eventsCache = events.NewEventsCache(
 		shardContext.GetShardID(),
 		shardContext.GetConfig().EventsCacheInitialSize(),
 		shardContext.GetConfig().EventsCacheMaxSize(),

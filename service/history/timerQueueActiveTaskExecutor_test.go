@@ -122,7 +122,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 			}},
 		config,
 	)
-	s.mockShard.EventsCache = events.NewEventsCache(
+	s.mockShard.SetEventsCacheForTesting(events.NewEventsCache(
 		s.mockShard.GetShardID(),
 		s.mockShard.GetConfig().EventsCacheInitialSize(),
 		s.mockShard.GetConfig().EventsCacheMaxSize(),
@@ -131,7 +131,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 		false,
 		s.mockShard.GetLogger(),
 		s.mockShard.GetMetricsClient(),
-	)
+	))
 
 	s.mockShard.Resource.TimeSource = s.timeSource
 
@@ -162,7 +162,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 		txProcessor:        s.mockTxProcessor,
 		timerProcessor:     s.mockTimerProcessor,
 	}
-	s.mockShard.SetEngine(h)
+	s.mockShard.SetEngineForTesting(h)
 	s.mockHistoryEngine = h
 
 	s.timerQueueActiveTaskExecutor = newTimerQueueActiveTaskExecutor(

@@ -166,7 +166,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 			}},
 		config,
 	)
-	s.mockShard.EventsCache = events.NewEventsCache(
+	s.mockShard.SetEventsCacheForTesting(events.NewEventsCache(
 		s.mockShard.GetShardID(),
 		s.mockShard.GetConfig().EventsCacheInitialSize(),
 		s.mockShard.GetConfig().EventsCacheMaxSize(),
@@ -175,7 +175,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		false,
 		s.mockShard.GetLogger(),
 		s.mockShard.GetMetricsClient(),
-	)
+	))
 	s.mockShard.Resource.TimeSource = s.timeSource
 
 	s.mockParentClosePolicyClient = parentclosepolicy.NewMockClient(s.controller)
@@ -218,7 +218,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		timerProcessor:     s.mockTimerProcessor,
 		archivalClient:     s.mockArchivalClient,
 	}
-	s.mockShard.SetEngine(h)
+	s.mockShard.SetEngineForTesting(h)
 
 	s.transferQueueActiveTaskExecutor = newTransferQueueActiveTaskExecutor(
 		s.mockShard,

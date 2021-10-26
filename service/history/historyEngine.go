@@ -262,7 +262,6 @@ func NewEngineWithShardContext(
 	replicationMessageHandler := newReplicationDLQHandler(shard, replicationTaskExecutors)
 	historyEngImpl.replicationDLQHandler = replicationMessageHandler
 
-	shard.SetEngine(historyEngImpl)
 	return historyEngImpl
 }
 

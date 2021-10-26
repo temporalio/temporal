@@ -390,11 +390,9 @@ func (c *ControllerImpl) doShutdown() {
 }
 
 func (c *ControllerImpl) NumShards() int {
-	nShards := 0
 	c.RLock()
-	nShards = len(c.historyShards)
-	c.RUnlock()
-	return nShards
+	defer c.RUnlock()
+	return len(c.historyShards)
 }
 
 func (c *ControllerImpl) ShardIDs() []int32 {
@@ -437,6 +435,7 @@ func (i *historyShardsItem) getOrCreateEngine(
 		}
 		i.engine = i.engineFactory.CreateEngine(context)
 		i.engine.Start()
+		context.engine = i.engine
 		i.logger.Info("", tag.LifeCycleStarted, tag.ComponentShardEngine)
 		i.status = historyShardsItemStatusStarted
 		return i.engine, nil
