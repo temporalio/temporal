@@ -145,7 +145,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 
 	r.mutableState.AddTimerTasks(&tasks.WorkflowTimeoutTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  r.mutableState.GetWorkflowIdentifier(),
+		WorkflowKey:         r.mutableState.GetWorkflowIdentifier(),
 		VisibilityTimestamp: workflowRunExpirationTime,
 		Version:             startVersion,
 	})
@@ -162,14 +162,14 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 
 	r.mutableState.AddTransferTasks(&tasks.CloseExecutionTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  r.mutableState.GetWorkflowIdentifier(),
+		WorkflowKey:         r.mutableState.GetWorkflowIdentifier(),
 		VisibilityTimestamp: now,
 		Version:             currentVersion,
 	})
 
 	r.mutableState.AddVisibilityTasks(&tasks.CloseExecutionVisibilityTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  r.mutableState.GetWorkflowIdentifier(),
+		WorkflowKey:         r.mutableState.GetWorkflowIdentifier(),
 		VisibilityTimestamp: now,
 		Version:             currentVersion,
 	})
@@ -187,7 +187,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 
 	r.mutableState.AddTimerTasks(&tasks.DeleteHistoryEventTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  r.mutableState.GetWorkflowIdentifier(),
+		WorkflowKey:         r.mutableState.GetWorkflowIdentifier(),
 		VisibilityTimestamp: now.Add(retention),
 		Version:             currentVersion,
 	})
@@ -218,7 +218,7 @@ func (r *TaskGeneratorImpl) GenerateDelayedWorkflowTasks(
 
 	r.mutableState.AddTimerTasks(&tasks.WorkflowBackoffTimerTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  r.mutableState.GetWorkflowIdentifier(),
+		WorkflowKey:         r.mutableState.GetWorkflowIdentifier(),
 		VisibilityTimestamp: executionTimestamp,
 		WorkflowBackoffType: workflowBackoffType,
 		Version:             startVersion,
@@ -236,7 +236,7 @@ func (r *TaskGeneratorImpl) GenerateRecordWorkflowStartedTasks(
 
 	r.mutableState.AddVisibilityTasks(&tasks.StartExecutionVisibilityTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  r.mutableState.GetWorkflowIdentifier(),
+		WorkflowKey:         r.mutableState.GetWorkflowIdentifier(),
 		VisibilityTimestamp: now,
 		Version:             startVersion,
 	})
@@ -258,7 +258,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 
 	r.mutableState.AddTransferTasks(&tasks.WorkflowTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  r.mutableState.GetWorkflowIdentifier(),
+		WorkflowKey:         r.mutableState.GetWorkflowIdentifier(),
 		VisibilityTimestamp: now,
 		NamespaceID:         executionInfo.NamespaceId,
 		TaskQueue:           workflowTask.TaskQueue.GetName(),
@@ -272,7 +272,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 
 		r.mutableState.AddTimerTasks(&tasks.WorkflowTaskTimeoutTask{
 			// TaskID is set by shard
-			WorkflowIdentifier:  r.mutableState.GetWorkflowIdentifier(),
+			WorkflowKey:         r.mutableState.GetWorkflowIdentifier(),
 			VisibilityTimestamp: scheduledTime.Add(scheduleToStartTimeout),
 			TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 			EventID:             workflowTask.ScheduleID,
@@ -301,7 +301,7 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 
 	r.mutableState.AddTimerTasks(&tasks.WorkflowTaskTimeoutTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  r.mutableState.GetWorkflowIdentifier(),
+		WorkflowKey:         r.mutableState.GetWorkflowIdentifier(),
 		VisibilityTimestamp: startedTime.Add(workflowTaskTimeout),
 		TimeoutType:         enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		EventID:             workflowTask.ScheduleID,
@@ -325,7 +325,7 @@ func (r *TaskGeneratorImpl) GenerateActivityTransferTasks(
 
 	r.mutableState.AddTransferTasks(&tasks.ActivityTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  r.mutableState.GetWorkflowIdentifier(),
+		WorkflowKey:         r.mutableState.GetWorkflowIdentifier(),
 		VisibilityTimestamp: now,
 		TargetNamespaceID:   activityInfo.NamespaceId,
 		TaskQueue:           activityInfo.TaskQueue,
@@ -347,7 +347,7 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(
 
 	r.mutableState.AddTimerTasks(&tasks.ActivityRetryTimerTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  r.mutableState.GetWorkflowIdentifier(),
+		WorkflowKey:         r.mutableState.GetWorkflowIdentifier(),
 		Version:             ai.Version,
 		VisibilityTimestamp: *ai.ScheduledTime,
 		EventID:             ai.ScheduleId,
@@ -377,7 +377,7 @@ func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
 
 	r.mutableState.AddTransferTasks(&tasks.StartChildExecutionTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  r.mutableState.GetWorkflowIdentifier(),
+		WorkflowKey:         r.mutableState.GetWorkflowIdentifier(),
 		VisibilityTimestamp: now,
 		TargetNamespaceID:   targetNamespaceID,
 		TargetWorkflowID:    childWorkflowInfo.StartedWorkflowId,
@@ -413,7 +413,7 @@ func (r *TaskGeneratorImpl) GenerateRequestCancelExternalTasks(
 
 	r.mutableState.AddTransferTasks(&tasks.CancelExecutionTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:      r.mutableState.GetWorkflowIdentifier(),
+		WorkflowKey:             r.mutableState.GetWorkflowIdentifier(),
 		VisibilityTimestamp:     now,
 		TargetNamespaceID:       targetNamespaceID,
 		TargetWorkflowID:        targetWorkflowID,
@@ -451,7 +451,7 @@ func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 
 	r.mutableState.AddTransferTasks(&tasks.SignalExecutionTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:      r.mutableState.GetWorkflowIdentifier(),
+		WorkflowKey:             r.mutableState.GetWorkflowIdentifier(),
 		VisibilityTimestamp:     now,
 		TargetNamespaceID:       targetNamespaceID,
 		TargetWorkflowID:        targetWorkflowID,
@@ -472,7 +472,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowSearchAttrTasks(
 
 	r.mutableState.AddVisibilityTasks(&tasks.UpsertExecutionVisibilityTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  r.mutableState.GetWorkflowIdentifier(),
+		WorkflowKey:         r.mutableState.GetWorkflowIdentifier(),
 		VisibilityTimestamp: now,
 		Version:             currentVersion, // task processing does not check this version
 	})
@@ -487,7 +487,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowResetTasks(
 
 	r.mutableState.AddTransferTasks(&tasks.ResetWorkflowTask{
 		// TaskID is set by shard
-		WorkflowIdentifier:  r.mutableState.GetWorkflowIdentifier(),
+		WorkflowKey:         r.mutableState.GetWorkflowIdentifier(),
 		VisibilityTimestamp: now,
 		Version:             currentVersion,
 	})

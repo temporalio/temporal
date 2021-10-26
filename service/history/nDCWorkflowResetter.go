@@ -129,7 +129,7 @@ func (r *nDCWorkflowResetterImpl) resetWorkflow(
 	rebuildMutableState, rebuiltHistorySize, err := r.stateRebuilder.rebuild(
 		ctx,
 		now,
-		definition.NewWorkflowIdentifier(
+		definition.NewWorkflowKey(
 			r.namespaceID,
 			r.workflowID,
 			r.baseRunID,
@@ -137,7 +137,7 @@ func (r *nDCWorkflowResetterImpl) resetWorkflow(
 		baseBranchToken,
 		baseLastEventID,
 		baseLastEventVersion,
-		definition.NewWorkflowIdentifier(
+		definition.NewWorkflowKey(
 			r.namespaceID,
 			r.workflowID,
 			r.newRunID,

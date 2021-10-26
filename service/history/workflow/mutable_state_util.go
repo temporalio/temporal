@@ -36,7 +36,7 @@ import (
 // since this will assume initial length being len(inputs)
 // always use make(type, 0, len(input))
 func convertSyncActivityInfos(
-	workflowIdentifier definition.WorkflowIdentifier,
+	workflowKey definition.WorkflowKey,
 	activityInfos map[int64]*persistencespb.ActivityInfo,
 	inputs map[int64]struct{},
 ) []tasks.Task {
@@ -45,9 +45,9 @@ func convertSyncActivityInfos(
 		activityInfo, ok := activityInfos[item]
 		if ok {
 			outputs = append(outputs, &tasks.SyncActivityTask{
-				WorkflowIdentifier: workflowIdentifier,
-				Version:            activityInfo.Version,
-				ScheduledID:        activityInfo.ScheduleId,
+				WorkflowKey: workflowKey,
+				Version:     activityInfo.Version,
+				ScheduledID: activityInfo.ScheduleId,
 			})
 		}
 	}

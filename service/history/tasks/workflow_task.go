@@ -32,7 +32,7 @@ import (
 
 type (
 	WorkflowTask struct {
-		definition.WorkflowIdentifier
+		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		NamespaceID         string // TODO remove since not used
@@ -42,8 +42,8 @@ type (
 	}
 )
 
-func (d *WorkflowTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
-	return d.WorkflowIdentifier
+func (d *WorkflowTask) GetWorkflowIdentifier() definition.WorkflowKey {
+	return d.WorkflowKey
 }
 
 func (d *WorkflowTask) GetKey() Key {

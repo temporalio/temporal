@@ -32,7 +32,7 @@ import (
 
 type (
 	ActivityTask struct {
-		definition.WorkflowIdentifier
+		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		TargetNamespaceID   string
@@ -42,8 +42,8 @@ type (
 	}
 )
 
-func (a *ActivityTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
-	return a.WorkflowIdentifier
+func (a *ActivityTask) GetWorkflowIdentifier() definition.WorkflowKey {
+	return a.WorkflowKey
 }
 
 func (a *ActivityTask) GetKey() Key {

@@ -283,7 +283,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 	s.mockStateRebuilder.EXPECT().rebuild(
 		ctx,
 		gomock.Any(),
-		definition.NewWorkflowIdentifier(
+		definition.NewWorkflowKey(
 			s.namespaceID,
 			s.workflowID,
 			s.baseRunID,
@@ -291,7 +291,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		baseBranchToken,
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
-		definition.NewWorkflowIdentifier(
+		definition.NewWorkflowKey(
 			s.namespaceID,
 			s.workflowID,
 			s.resetRunID,
@@ -683,7 +683,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	resetContext.EXPECT().LoadWorkflowExecution().Return(resetMutableState, nil)
 	resetMutableState.EXPECT().GetNextEventID().Return(newNextEventID).AnyTimes()
 	resetMutableState.EXPECT().GetCurrentBranchToken().Return(newBranchToken, nil).AnyTimes()
-	resetContextCacheKey := definition.NewWorkflowIdentifier(s.namespaceID, s.workflowID, newRunID)
+	resetContextCacheKey := definition.NewWorkflowKey(s.namespaceID, s.workflowID, newRunID)
 	_, _ = s.workflowResetter.historyCache.(*workflow.CacheImpl).PutIfNotExist(resetContextCacheKey, resetContext)
 
 	mutableState := workflow.NewMockMutableState(s.controller)

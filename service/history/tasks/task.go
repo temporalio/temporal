@@ -42,7 +42,7 @@ type (
 
 	// Task is the generic task interface
 	Task interface {
-		GetWorkflowIdentifier() definition.WorkflowIdentifier
+		GetWorkflowIdentifier() definition.WorkflowKey
 		GetKey() Key
 		GetVersion() int64
 		SetVersion(version int64)

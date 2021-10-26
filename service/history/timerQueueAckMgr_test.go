@@ -188,7 +188,7 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
 	response := &persistence.GetTimerTasksResponse{
 		Tasks: []tasks.Task{
 			&tasks.ActivityTimeoutTask{
-				WorkflowIdentifier: definition.NewWorkflowIdentifier(
+				WorkflowKey: definition.NewWorkflowKey(
 					TestNamespaceId,
 					"some random workflow ID",
 					uuid.New(),
@@ -227,7 +227,7 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
 	response := &persistence.GetTimerTasksResponse{
 		Tasks: []tasks.Task{
 			&tasks.ActivityTimeoutTask{
-				WorkflowIdentifier: definition.NewWorkflowIdentifier(
+				WorkflowKey: definition.NewWorkflowKey(
 					TestNamespaceId,
 					"some random workflow ID",
 					uuid.New(),
@@ -263,7 +263,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 	s.Equal(minQueryLevel, maxQueryLevel)
 
 	timer := &tasks.ActivityTimeoutTask{
-		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+		WorkflowKey: definition.NewWorkflowKey(
 			TestNamespaceId,
 			"some random workflow ID",
 			uuid.New(),
@@ -308,7 +308,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 	s.Equal(minQueryLevel, maxQueryLevel)
 
 	timer := &tasks.ActivityTimeoutTask{
-		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+		WorkflowKey: definition.NewWorkflowKey(
 			TestNamespaceId,
 			"some random workflow ID",
 			uuid.New(),
@@ -355,7 +355,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 	s.Equal(minQueryLevel, maxQueryLevel)
 
 	timer := &tasks.ActivityTimeoutTask{
-		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+		WorkflowKey: definition.NewWorkflowKey(
 			TestNamespaceId,
 			"some random workflow ID",
 			uuid.New(),
@@ -399,7 +399,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 	s.Equal(minQueryLevel, maxQueryLevel)
 
 	timer := &tasks.ActivityTimeoutTask{
-		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+		WorkflowKey: definition.NewWorkflowKey(
 			TestNamespaceId,
 			"some random workflow ID",
 			uuid.New(),
@@ -434,7 +434,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	// create 3 timers, timer1 < timer2 < timer3 < now
 	timer1 := &tasks.ActivityTimeoutTask{
-		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+		WorkflowKey: definition.NewWorkflowKey(
 			TestNamespaceId,
 			"some random workflow ID",
 			uuid.New(),
@@ -447,7 +447,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	}
 
 	timer2 := &tasks.ActivityTimeoutTask{
-		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+		WorkflowKey: definition.NewWorkflowKey(
 			TestNamespaceId,
 			"some random workflow ID",
 			uuid.New(),
@@ -459,7 +459,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		Attempt:             1,
 	}
 	timer3 := &tasks.ActivityTimeoutTask{
-		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+		WorkflowKey: definition.NewWorkflowKey(
 			TestNamespaceId,
 			"some random workflow ID",
 			uuid.New(),
@@ -516,7 +516,7 @@ func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
 	s.timerQueueAckMgr.maxQueryLevel = s.timerQueueAckMgr.minQueryLevel
 
 	timer := &tasks.ActivityTimeoutTask{
-		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+		WorkflowKey: definition.NewWorkflowKey(
 			TestNamespaceId,
 			"some random workflow ID",
 			uuid.New(),
@@ -635,7 +635,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 	s.Equal(s.maxLevel, maxQueryLevel)
 
 	timer1 := &tasks.ActivityTimeoutTask{
-		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+		WorkflowKey: definition.NewWorkflowKey(
 			TestNamespaceId,
 			"some random workflow ID",
 			uuid.New(),
@@ -648,7 +648,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 	}
 
 	timer2 := &tasks.ActivityTimeoutTask{
-		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+		WorkflowKey: definition.NewWorkflowKey(
 			TestNamespaceId,
 			"some random workflow ID",
 			uuid.New(),
@@ -741,7 +741,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 
 	// create 3 timers, timer1 < timer2 < timer3 < now
 	timer1 := &tasks.ActivityTimeoutTask{
-		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+		WorkflowKey: definition.NewWorkflowKey(
 			TestNamespaceId,
 			"some random workflow ID",
 			uuid.New(),
@@ -754,7 +754,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	}
 
 	timer2 := &tasks.ActivityTimeoutTask{
-		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+		WorkflowKey: definition.NewWorkflowKey(
 			TestNamespaceId,
 			"some random workflow ID",
 			uuid.New(),
@@ -766,7 +766,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		Attempt:             1,
 	}
 	timer3 := &tasks.ActivityTimeoutTask{
-		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+		WorkflowKey: definition.NewWorkflowKey(
 			TestNamespaceId,
 			"some random workflow ID",
 			uuid.New(),

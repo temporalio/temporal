@@ -32,7 +32,7 @@ import (
 
 type (
 	UpsertExecutionVisibilityTask struct {
-		definition.WorkflowIdentifier
+		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		// this version is not used by task processing for validation,
@@ -41,8 +41,8 @@ type (
 	}
 )
 
-func (t *UpsertExecutionVisibilityTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
-	return t.WorkflowIdentifier
+func (t *UpsertExecutionVisibilityTask) GetWorkflowIdentifier() definition.WorkflowKey {
+	return t.WorkflowKey
 }
 
 func (t *UpsertExecutionVisibilityTask) GetKey() Key {

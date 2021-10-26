@@ -167,7 +167,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	caller CallerType,
 ) (Context, ReleaseCacheFunc, error) {
 
-	key := definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId())
+	key := definition.NewWorkflowKey(namespaceID, execution.GetWorkflowId(), execution.GetRunId())
 	workflowCtx, cacheHit := c.Get(key).(Context)
 	if !cacheHit {
 		c.metricsClient.IncCounter(scope, metrics.CacheMissCounter)
@@ -196,7 +196,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 }
 
 func (c *CacheImpl) makeReleaseFunc(
-	key definition.WorkflowIdentifier,
+	key definition.WorkflowKey,
 	context Context,
 	forceClearContext bool,
 	caller CallerType,

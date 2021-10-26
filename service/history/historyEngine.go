@@ -669,11 +669,11 @@ func (e *historyEngineImpl) getMutableStateOrPolling(
 	// if caller decide to long poll on workflow execution
 	// and the event ID we are looking for is smaller than current next event ID
 	if expectedNextEventID >= response.GetNextEventId() && response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		subscriberID, channel, err := e.eventNotifier.WatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
+		subscriberID, channel, err := e.eventNotifier.WatchHistoryEvent(definition.NewWorkflowKey(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
 		if err != nil {
 			return nil, err
 		}
-		defer e.eventNotifier.UnwatchHistoryEvent(definition.NewWorkflowIdentifier(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID) // nolint:errcheck
+		defer e.eventNotifier.UnwatchHistoryEvent(definition.NewWorkflowKey(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID) // nolint:errcheck
 		// check again in case the next event ID is updated
 		response, err = e.getMutableState(ctx, namespaceID, execution)
 		if err != nil {

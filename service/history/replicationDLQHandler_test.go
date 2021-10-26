@@ -140,7 +140,7 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 	pageToken := []byte("some random token")
 	dbResp := &persistence.GetReplicationTasksFromDLQResponse{
 		Tasks: []tasks.Task{&tasks.HistoryReplicationTask{
-			WorkflowIdentifier: definition.NewWorkflowIdentifier(
+			WorkflowKey: definition.NewWorkflowKey(
 				namespaceID,
 				workflowID,
 				runID,
@@ -224,7 +224,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 
 	dbResp := &persistence.GetReplicationTasksFromDLQResponse{
 		Tasks: []tasks.Task{&tasks.HistoryReplicationTask{
-			WorkflowIdentifier: definition.NewWorkflowIdentifier(
+			WorkflowKey: definition.NewWorkflowKey(
 				namespaceID,
 				workflowID,
 				runID,

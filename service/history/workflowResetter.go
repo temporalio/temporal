@@ -427,7 +427,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 	resetMutableState, resetHistorySize, err := r.newStateRebuilder().rebuild(
 		ctx,
 		r.shard.GetTimeSource().Now(),
-		definition.NewWorkflowIdentifier(
+		definition.NewWorkflowKey(
 			namespaceID,
 			workflowID,
 			baseRunID,
@@ -435,7 +435,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		baseBranchToken,
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
-		definition.NewWorkflowIdentifier(
+		definition.NewWorkflowKey(
 			namespaceID,
 			workflowID,
 			resetRunID,

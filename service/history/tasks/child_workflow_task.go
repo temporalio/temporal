@@ -32,7 +32,7 @@ import (
 
 type (
 	StartChildExecutionTask struct {
-		definition.WorkflowIdentifier
+		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		TargetNamespaceID   string
@@ -42,8 +42,8 @@ type (
 	}
 )
 
-func (a *StartChildExecutionTask) GetWorkflowIdentifier() definition.WorkflowIdentifier {
-	return a.WorkflowIdentifier
+func (a *StartChildExecutionTask) GetWorkflowIdentifier() definition.WorkflowKey {
+	return a.WorkflowKey
 }
 
 func (u *StartChildExecutionTask) GetKey() Key {

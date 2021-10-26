@@ -1498,6 +1498,6 @@ func (s *timerQueueActiveTaskExecutorSuite) getMutableStateFromCache(
 	runID string,
 ) workflow.MutableState {
 	return s.mockHistoryEngine.historyCache.(*workflow.CacheImpl).Get(
-		definition.NewWorkflowIdentifier(namespaceID, workflowID, runID),
+		definition.NewWorkflowKey(namespaceID, workflowID, runID),
 	).(*workflow.ContextImpl).MutableState
 }

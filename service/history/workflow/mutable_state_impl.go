@@ -383,8 +383,8 @@ func (e *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState {
 	return proto.Clone(ms).(*persistencespb.WorkflowMutableState)
 }
 
-func (e *MutableStateImpl) GetWorkflowIdentifier() definition.WorkflowIdentifier {
-	return definition.NewWorkflowIdentifier(
+func (e *MutableStateImpl) GetWorkflowIdentifier() definition.WorkflowKey {
+	return definition.NewWorkflowKey(
 		e.executionInfo.NamespaceId,
 		e.executionInfo.WorkflowId,
 		e.executionState.RunId,
@@ -4015,12 +4015,12 @@ func (e *MutableStateImpl) eventsToReplicationTask(
 	}
 
 	replicationTask := &tasks.HistoryReplicationTask{
-		WorkflowIdentifier: e.GetWorkflowIdentifier(),
-		FirstEventID:       firstEvent.GetEventId(),
-		NextEventID:        lastEvent.GetEventId() + 1,
-		Version:            firstEvent.GetVersion(),
-		BranchToken:        currentBranchToken,
-		NewRunBranchToken:  nil,
+		WorkflowKey:       e.GetWorkflowIdentifier(),
+		FirstEventID:      firstEvent.GetEventId(),
+		NextEventID:       lastEvent.GetEventId() + 1,
+		Version:           firstEvent.GetVersion(),
+		BranchToken:       currentBranchToken,
+		NewRunBranchToken: nil,
 	}
 
 	if e.executionInfo.GetVersionHistories() == nil {
@@ -4040,7 +4040,7 @@ func (e *MutableStateImpl) syncActivityToReplicationTask(
 	}
 
 	return convertSyncActivityInfos(
-		definition.NewWorkflowIdentifier(
+		definition.NewWorkflowKey(
 			e.executionInfo.NamespaceId,
 			e.executionInfo.WorkflowId,
 			e.executionState.RunId,
