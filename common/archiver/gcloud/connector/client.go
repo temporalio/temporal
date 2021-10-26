@@ -31,7 +31,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"io/ioutil"
 	"os"
 	"regexp"
 
@@ -138,7 +137,7 @@ func (s *storageWrapper) Get(ctx context.Context, URI archiver.URI, fileName str
 	reader, err := bucket.Object(formatSinkPath(URI.Path()) + "/" + fileName).NewReader(ctx)
 	if err == nil {
 		defer reader.Close()
-		return ioutil.ReadAll(reader)
+		return io.ReadAll(reader)
 	}
 
 	return nil, err

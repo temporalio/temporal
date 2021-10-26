@@ -91,8 +91,8 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	s.Equal("search attribute InvalidKey is not defined", err.Error())
 
 	fields = map[string]*commonpb.Payload{
-		"CustomStringField": payload.EncodeString("1"),
-		"CustomBoolField":   payload.EncodeString("123"),
+		"CustomTextField": payload.EncodeString("1"),
+		"CustomBoolField": payload.EncodeString("123"),
 	}
 	attr.IndexedFields = fields
 	err = saValidator.Validate(attr, namespace, "")
@@ -168,8 +168,8 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 	s.Equal("search attribute alias_of_InvalidKey is not defined", err.Error())
 
 	fields = map[string]*commonpb.Payload{
-		"alias_of_CustomStringField": payload.EncodeString("1"),
-		"alias_of_CustomBoolField":   payload.EncodeString("123"),
+		"alias_of_CustomTextField": payload.EncodeString("1"),
+		"alias_of_CustomBoolField": payload.EncodeString("123"),
 	}
 	attr.IndexedFields = fields
 	err = saValidator.Validate(attr, namespace, "")
@@ -205,10 +205,10 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
 
 	fields = map[string]*commonpb.Payload{
 		"CustomKeywordField": payload.EncodeString("123"),
-		"CustomStringField":  payload.EncodeString("12"),
+		"CustomTextField":    payload.EncodeString("12"),
 	}
 	attr.IndexedFields = fields
 	err = saValidator.ValidateSize(attr, namespace)
 	s.Error(err)
-	s.Equal("total size of search attributes 108: exceeds size limit 20", err.Error())
+	s.Equal("total size of search attributes 106: exceeds size limit 20", err.Error())
 }

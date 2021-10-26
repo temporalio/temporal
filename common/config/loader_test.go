@@ -25,7 +25,6 @@
 package config
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 
@@ -61,12 +60,12 @@ func (s *LoaderSuite) SetupTest() {
 
 func (s *LoaderSuite) TestBaseYaml() {
 
-	dir, err := ioutil.TempDir("", "loader.testBaseYaml")
+	dir, err := os.MkdirTemp("", "loader.testBaseYaml")
 	s.Nil(err)
 	defer os.RemoveAll(dir)
 
 	data := buildConfig("", "")
-	err = ioutil.WriteFile(path(dir, "base.yaml"), []byte(data), fileMode)
+	err = os.WriteFile(path(dir, "base.yaml"), []byte(data), fileMode)
 	s.Nil(err)
 
 	envs := []string{"", "prod"}
@@ -85,7 +84,7 @@ func (s *LoaderSuite) TestBaseYaml() {
 
 func (s *LoaderSuite) TestHierarchy() {
 
-	dir, err := ioutil.TempDir("", "loader.testHierarchy")
+	dir, err := os.MkdirTemp("", "loader.testHierarchy")
 	s.Nil(err)
 	defer os.RemoveAll(dir)
 
@@ -127,7 +126,7 @@ func (s *LoaderSuite) TestInvalidPath() {
 }
 
 func (s *LoaderSuite) createFile(dir string, file string, env string, zone string) {
-	err := ioutil.WriteFile(path(dir, file), []byte(buildConfig(env, zone)), fileMode)
+	err := os.WriteFile(path(dir, file), []byte(buildConfig(env, zone)), fileMode)
 	s.Nil(err)
 }
 

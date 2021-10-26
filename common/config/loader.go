@@ -26,7 +26,6 @@ package config
 
 import (
 	"fmt"
-	"io/ioutil"
 	stdlog "log"
 	"os"
 
@@ -93,7 +92,7 @@ func Load(env string, configDir string, zone string, config interface{}) error {
 	for _, f := range files {
 		// This is tagged nosec because the file names being read are for config files that are not user supplied
 		// #nosec
-		data, err := ioutil.ReadFile(f)
+		data, err := os.ReadFile(f)
 		if err != nil {
 			return err
 		}

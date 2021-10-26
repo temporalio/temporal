@@ -491,6 +491,8 @@ const (
 	AdminClientGetSearchAttributesScope
 	// AdminClientCloseShardScope tracks RPC calls to admin service
 	AdminClientCloseShardScope
+	// AdminClientGetShardScope tracks RPC calls to admin service
+	AdminClientGetShardScope
 	// AdminClientDescribeHistoryHostScope tracks RPC calls to admin service
 	AdminClientDescribeHistoryHostScope
 	// AdminClientDescribeWorkflowMutableStateScope tracks RPC calls to admin service
@@ -701,8 +703,10 @@ const (
 	AdminResendReplicationTasksScope
 	// AdminRemoveTaskScope is the metric scope for admin.AdminRemoveTaskScope
 	AdminRemoveTaskScope
-	// AdminCloseShardTaskScope is the metric scope for admin.AdminRemoveTaskScope
-	AdminCloseShardTaskScope
+	// AdminCloseShardScope is the metric scope for admin.AdminCloseShardScope
+	AdminCloseShardScope
+	// AdminGetShardScope is the metric scope for admin.AdminGetShardScope
+	AdminGetShardScope
 	// AdminReadDLQMessagesScope is the metric scope for admin.AdminReadDLQMessagesScope
 	AdminReadDLQMessagesScope
 	// AdminPurgeDLQMessagesScope is the metric scope for admin.AdminPurgeDLQMessagesScope
@@ -874,6 +878,8 @@ const (
 	HistoryHistoryRemoveTaskScope
 	// HistoryCloseShard is the scope used by close shard API
 	HistoryCloseShard
+	// HistoryGetShard is the scope used by get shard API
+	HistoryGetShard
 	// HistoryReplicateEventsV2 is the scope used by replicate events API
 	HistoryReplicateEventsV2
 	// HistoryResetStickyTaskQueue is the scope used by reset sticky task queue API
@@ -1288,6 +1294,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientRefreshWorkflowTasksScope:                  {operation: "AdminClientRefreshWorkflowTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientResendReplicationTasksScope:                {operation: "AdminClientResendReplicationTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientCloseShardScope:                            {operation: "AdminClientCloseShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetShardScope:                              {operation: "AdminClientGetShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetDLQMessagesScope:                        {operation: "AdminClientGetDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientPurgeDLQMessagesScope:                      {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientMergeDLQMessagesScope:                      {operation: "AdminClientMergeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1364,7 +1371,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	Frontend: {
 		// Admin API scope co-locates with with frontend
 		AdminRemoveTaskScope:                       {operation: "AdminRemoveTask"},
-		AdminCloseShardTaskScope:                   {operation: "AdminCloseShardTask"},
+		AdminCloseShardScope:                       {operation: "AdminCloseShard"},
+		AdminGetShardScope:                         {operation: "AdminGetShard"},
 		AdminReadDLQMessagesScope:                  {operation: "AdminReadDLQMessages"},
 		AdminPurgeDLQMessagesScope:                 {operation: "AdminPurgeDLQMessages"},
 		AdminMergeDLQMessagesScope:                 {operation: "AdminMergeDLQMessages"},
@@ -1464,6 +1472,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryRefreshWorkflowTasksScope:             {operation: "RefreshWorkflowTasks"},
 		HistoryHistoryRemoveTaskScope:                {operation: "RemoveTask"},
 		HistoryCloseShard:                            {operation: "CloseShard"},
+		HistoryGetShard:                              {operation: "GetShard"},
 		HistoryReplicateEventsV2:                     {operation: "ReplicateEventsV2"},
 		HistoryResetStickyTaskQueue:                  {operation: "ResetStickyTaskQueue"},
 		HistoryReapplyEvents:                         {operation: "ReapplyEvents"},
@@ -1865,6 +1874,7 @@ const (
 	WorkflowFailedCount
 	WorkflowTimeoutCount
 	WorkflowTerminateCount
+	WorkflowContinuedAsNewCount
 	ArchiverClientSendSignalCount
 	ArchiverClientSendSignalFailureCount
 	ArchiverClientHistoryRequestCount
@@ -2328,6 +2338,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		WorkflowFailedCount:                               {metricName: "workflow_failed", metricType: Counter},
 		WorkflowTimeoutCount:                              {metricName: "workflow_timeout", metricType: Counter},
 		WorkflowTerminateCount:                            {metricName: "workflow_terminate", metricType: Counter},
+		WorkflowContinuedAsNewCount:                       {metricName: "workflow_continued_as_new", metricType: Counter},
 		ArchiverClientSendSignalCount:                     {metricName: "archiver_client_sent_signal", metricType: Counter},
 		ArchiverClientSendSignalFailureCount:              {metricName: "archiver_client_send_signal_error", metricType: Counter},
 		ArchiverClientHistoryRequestCount:                 {metricName: "archiver_client_history_request", metricType: Counter},

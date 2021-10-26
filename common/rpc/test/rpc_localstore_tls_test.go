@@ -32,7 +32,6 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -141,31 +140,31 @@ func (s *localStoreRPCSuite) SetupSuite() {
 	s.NotNil(insecureFactory)
 	s.insecureRPCFactory = i(insecureFactory)
 
-	s.frontendCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteFrontend")
+	s.frontendCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontend")
 	s.NoError(err)
 	s.frontendChain = s.GenerateTestChain(s.frontendCertDir, localhostIPv4)
 
-	s.internodeCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteInternode")
+	s.internodeCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteInternode")
 	s.NoError(err)
 	s.internodeChain = s.GenerateTestChain(s.internodeCertDir, localhostIPv4)
 
-	s.frontendAltCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteFrontendAlt")
+	s.frontendAltCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontendAlt")
 	s.NoError(err)
 	s.frontendAltChain = s.GenerateTestChain(s.frontendAltCertDir, localhost)
 
-	s.frontendClientCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteFrontendClient")
+	s.frontendClientCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontendClient")
 	s.NoError(err)
 	s.frontendClientChain = s.GenerateTestChain(s.frontendClientCertDir, localhostIPv4)
 
-	s.frontendRollingCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteFrontendRolling")
+	s.frontendRollingCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontendRolling")
 	s.NoError(err)
 	s.frontendRollingCerts, s.dynamicCACertPool, s.wrongCACertPool = s.GenerateTestCerts(s.frontendRollingCertDir, localhostIPv4, 2)
 
-	s.internodeRefreshCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteInternodeRefresh")
+	s.internodeRefreshCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteInternodeRefresh")
 	s.NoError(err)
 	s.internodeRefreshChain, s.internodeRefreshCA = s.GenerateTestChainWithSN(s.internodeRefreshCertDir, localhostIPv4, internodeServerCertSerialNumber)
 
-	s.frontendRefreshCertDir, err = ioutil.TempDir("", "localStoreRPCSuiteFrontendRefresh")
+	s.frontendRefreshCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontendRefresh")
 	s.NoError(err)
 	s.frontendRefreshChain, s.frontendRefreshCA = s.GenerateTestChainWithSN(s.frontendRefreshCertDir, localhostIPv4, frontendServerCertSerialNumber)
 
@@ -544,7 +543,7 @@ func (s *localStoreRPCSuite) GenerateServerCert(
 
 func (s *localStoreRPCSuite) pemEncodeToFile(file string, block *pem.Block) {
 	bytes := s.pemEncodeToBytes(block)
-	err := ioutil.WriteFile(file, bytes, os.FileMode(0644))
+	err := os.WriteFile(file, bytes, os.FileMode(0644))
 	s.NoError(err)
 }
 
@@ -564,7 +563,7 @@ func i(r *rpc.RPCFactory) *TestFactory {
 }
 
 func convertFileToBase64(file string) string {
-	fileBytes, err := ioutil.ReadFile(file)
+	fileBytes, err := os.ReadFile(file)
 	if err != nil {
 		panic(err)
 	}

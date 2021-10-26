@@ -117,7 +117,7 @@ func NewStandardManager(
 
 	metricsClient metrics.Client,
 	logger log.Logger,
-) (*visibilityManager, error) {
+) (manager.VisibilityManager, error) {
 
 	stdVisibilityStore, err := newStandardVisibilityStore(
 		persistenceCfg,
@@ -127,17 +127,13 @@ func NewStandardManager(
 		return nil, err
 	}
 
-	var stdVisibilityManager *visibilityManager
-	if stdVisibilityStore != nil {
-		stdVisibilityManager = newVisibilityManager(
-			stdVisibilityStore,
-			standardVisibilityPersistenceMaxReadQPS,
-			standardVisibilityPersistenceMaxWriteQPS,
-			metricsClient,
-			metrics.StandardVisibilityTypeTag(),
-			logger)
-	}
-	return stdVisibilityManager, nil
+	return newVisibilityManager(
+		stdVisibilityStore,
+		standardVisibilityPersistenceMaxReadQPS,
+		standardVisibilityPersistenceMaxWriteQPS,
+		metricsClient,
+		metrics.StandardVisibilityTypeTag(),
+		logger), nil
 }
 
 func NewAdvancedManager(
@@ -152,7 +148,7 @@ func NewAdvancedManager(
 
 	metricsClient metrics.Client,
 	logger log.Logger,
-) (*visibilityManager, error) {
+) (manager.VisibilityManager, error) {
 	advVisibilityStore := newAdvancedVisibilityStore(
 		defaultIndexName,
 		esClient,
@@ -162,17 +158,43 @@ func NewAdvancedManager(
 		metricsClient,
 		logger)
 
-	var advVisibilityManager *visibilityManager
-	if advVisibilityStore != nil {
-		advVisibilityManager = newVisibilityManager(
-			advVisibilityStore,
-			advancedVisibilityPersistenceMaxReadQPS,
-			advancedVisibilityPersistenceMaxWriteQPS,
-			metricsClient,
-			metrics.AdvancedVisibilityTypeTag(),
-			logger)
+	return newVisibilityManager(
+		advVisibilityStore,
+		advancedVisibilityPersistenceMaxReadQPS,
+		advancedVisibilityPersistenceMaxWriteQPS,
+		metricsClient,
+		metrics.AdvancedVisibilityTypeTag(),
+		logger,
+	), nil
+}
+
+func newVisibilityManager(
+	store store.VisibilityStore,
+	maxReadQPS dynamicconfig.IntPropertyFn,
+	maxWriteQPS dynamicconfig.IntPropertyFn,
+	metricsClient metrics.Client,
+	tag metrics.Tag,
+	logger log.Logger,
+) manager.VisibilityManager {
+	if store == nil {
+		return nil
 	}
-	return advVisibilityManager, nil
+
+	var manager manager.VisibilityManager = newVisibilityManagerImpl(store, logger)
+
+	// wrap with rate limiter
+	manager = NewVisibilityManagerRateLimited(
+		manager,
+		maxReadQPS,
+		maxWriteQPS)
+	// wrap with metrics client
+	manager = NewVisibilityManagerMetrics(
+		manager,
+		metricsClient,
+		logger,
+		tag)
+
+	return manager
 }
 
 func newStandardVisibilityStore(

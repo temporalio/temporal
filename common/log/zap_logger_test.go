@@ -28,7 +28,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -66,7 +65,7 @@ func (s *LogSuite) TestParseLogLevel() {
 
 func (s *LogSuite) TestNewLogger() {
 
-	dir, err := ioutil.TempDir("", "config.testNewLogger")
+	dir, err := os.MkdirTemp("", "config.testNewLogger")
 	s.Nil(err)
 	defer os.RemoveAll(dir)
 

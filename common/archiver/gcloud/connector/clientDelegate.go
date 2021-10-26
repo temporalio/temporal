@@ -28,7 +28,6 @@ package connector
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 
 	"cloud.google.com/go/storage"
@@ -124,7 +123,7 @@ func newDefaultClientDelegate(ctx context.Context) (*clientDelegate, error) {
 
 func newClientDelegateWithCredentials(ctx context.Context, credentialsPath string) (*clientDelegate, error) {
 
-	jsonKey, err := ioutil.ReadFile(credentialsPath)
+	jsonKey, err := os.ReadFile(credentialsPath)
 	if err != nil {
 		return newDefaultClientDelegate(ctx)
 	}

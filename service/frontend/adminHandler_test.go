@@ -96,10 +96,9 @@ func (s *adminHandlerSuite) SetupTest() {
 		PersistenceConfig: config.Persistence{
 			NumHistoryShards: 1,
 		},
-		ESClient: s.mockResource.ESClient,
 	}
 	config := &Config{}
-	s.handler = NewAdminHandler(s.mockResource, params, config)
+	s.handler = NewAdminHandler(s.mockResource, params, config, nil, s.mockResource.ESClient)
 	s.handler.Start()
 }
 
@@ -430,7 +429,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 			Name: "reserved key (empty index)",
 			Request: &adminservice.AddSearchAttributesRequest{
 				SearchAttributes: map[string]enumspb.IndexedValueType{
-					"WorkflowId": enumspb.INDEXED_VALUE_TYPE_STRING,
+					"WorkflowId": enumspb.INDEXED_VALUE_TYPE_TEXT,
 				},
 			},
 			Expected: &serviceerror.InvalidArgument{Message: "Search attribute WorkflowId is reserved by system."},
@@ -439,10 +438,10 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 			Name: "key already whitelisted (empty index)",
 			Request: &adminservice.AddSearchAttributesRequest{
 				SearchAttributes: map[string]enumspb.IndexedValueType{
-					"CustomStringField": enumspb.INDEXED_VALUE_TYPE_STRING,
+					"CustomTextField": enumspb.INDEXED_VALUE_TYPE_TEXT,
 				},
 			},
-			Expected: &serviceerror.InvalidArgument{Message: "Search attribute CustomStringField already exists."},
+			Expected: &serviceerror.InvalidArgument{Message: "Search attribute CustomTextField already exists."},
 		},
 	}
 	for _, testCase := range testCases3 {
@@ -466,7 +465,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 			Name: "reserved key (ES configured)",
 			Request: &adminservice.AddSearchAttributesRequest{
 				SearchAttributes: map[string]enumspb.IndexedValueType{
-					"WorkflowId": enumspb.INDEXED_VALUE_TYPE_STRING,
+					"WorkflowId": enumspb.INDEXED_VALUE_TYPE_TEXT,
 				},
 			},
 			Expected: &serviceerror.InvalidArgument{Message: "Search attribute WorkflowId is reserved by system."},
@@ -475,10 +474,10 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 			Name: "key already whitelisted (ES configured)",
 			Request: &adminservice.AddSearchAttributesRequest{
 				SearchAttributes: map[string]enumspb.IndexedValueType{
-					"CustomStringField": enumspb.INDEXED_VALUE_TYPE_STRING,
+					"CustomTextField": enumspb.INDEXED_VALUE_TYPE_TEXT,
 				},
 			},
-			Expected: &serviceerror.InvalidArgument{Message: "Search attribute CustomStringField already exists."},
+			Expected: &serviceerror.InvalidArgument{Message: "Search attribute CustomTextField already exists."},
 		},
 	}
 	for _, testCase := range testCases2 {

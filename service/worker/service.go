@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -75,37 +76,25 @@ type (
 	}
 )
 
-// NewService builds a new worker service
 func NewService(
-	params *resource.BootstrapParams,
-) (*Service, error) {
-
-	serviceConfig := NewConfig(params)
-
-	serviceResource, err := resource.New(
-		params,
-		common.WorkerServiceName,
-		serviceConfig.PersistenceMaxQPS,
-		serviceConfig.PersistenceGlobalMaxQPS,
-		serviceConfig.ThrottledLogRPS,
-	)
-	if err != nil {
-		return nil, err
-	}
-
+	serviceResource resource.Resource,
+	serviceConfig *Config,
+	sdkClient sdkclient.Client,
+	esClient esclient.Client,
+) *Service {
 	return &Service{
 		Resource:  serviceResource,
 		status:    common.DaemonStatusInitialized,
 		config:    serviceConfig,
-		sdkClient: params.SdkClient,
-		esClient:  params.ESClient,
+		sdkClient: sdkClient,
+		esClient:  esClient,
 		stopC:     make(chan struct{}),
-	}, nil
+	}
 }
 
 // NewConfig builds the new Config for worker service
-func NewConfig(params *resource.BootstrapParams) *Config {
-	dc := dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger)
+func NewConfig(logger log.Logger, dcClient dynamicconfig.Client, params *resource.BootstrapParams) *Config {
+	dc := dynamicconfig.NewCollection(dcClient, logger)
 	config := &Config{
 		ArchiverConfig: &archiver.Config{
 			MaxConcurrentActivityExecutionSize:     dc.GetIntProperty(dynamicconfig.WorkerArchiverMaxConcurrentActivityExecutionSize, 1000),

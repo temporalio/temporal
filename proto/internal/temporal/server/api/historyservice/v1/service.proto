@@ -191,6 +191,10 @@ service HistoryService {
     rpc CloseShard (CloseShardRequest) returns (CloseShardResponse) {
     }
 
+    // GetShard gets the ShardInfo
+    rpc GetShard (GetShardRequest) returns (GetShardResponse) {
+    }
+
     // RemoveTask remove task based on type, taskid, shardid.
     rpc RemoveTask (RemoveTaskRequest) returns (RemoveTaskResponse) {
     }

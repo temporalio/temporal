@@ -173,6 +173,10 @@ type (
 		// Optional - A list of base64 PEM-encoded public keys of the Certificate Authorities that are used to validate the server's TLS certificate.
 		// You cannot specify both RootCAFiles and RootCAData
 		RootCAData []string `yaml:"rootCaData"`
+
+		// Optional - Use TLS even is neither client certificate nor root CAs are configured
+		// This is for non-mTLS cases when client validates serve against a set of trusted CA certificates configured in the environment
+		ForceTLS bool `yaml:"forceTLS"`
 	}
 
 	// WorkerTLS contains TLS configuration for system workers within the Temporal Cluster to connect to Temporal frontend.
@@ -501,5 +505,7 @@ func (c *Config) String() string {
 }
 
 func (r *GroupTLS) IsEnabled() bool {
-	return r.Server.KeyFile != "" || r.Server.KeyData != ""
+	return r.Server.KeyFile != "" || r.Server.KeyData != "" ||
+		len(r.Client.RootCAFiles) > 0 || len(r.Client.RootCAData) > 0 ||
+		r.Client.ForceTLS
 }

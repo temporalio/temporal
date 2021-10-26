@@ -32,7 +32,6 @@ package xdc
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -109,7 +108,7 @@ func (s *esCrossDCTestSuite) SetupSuite() {
 	}
 	environment.SetupEnv()
 
-	confContent, err := ioutil.ReadFile(fileName)
+	confContent, err := os.ReadFile(fileName)
 	s.Require().NoError(err)
 	confContent = []byte(os.ExpandEnv(string(confContent)))
 
@@ -130,7 +129,7 @@ func (s *esCrossDCTestSuite) SetupSuite() {
 	host.CreateIndex(s.Suite, s.esClient, s.clusterConfigs[0].ESConfig.GetVisibilityIndex())
 	host.CreateIndex(s.Suite, s.esClient, s.clusterConfigs[1].ESConfig.GetVisibilityIndex())
 
-	s.testSearchAttributeKey = "CustomStringField"
+	s.testSearchAttributeKey = "CustomTextField"
 	s.testSearchAttributeVal = "test value"
 }
 
@@ -388,8 +387,8 @@ func getUpsertSearchAttributes() *commonpb.SearchAttributes {
 	attrValPayload2, _ := payload.Encode(123)
 	upsertSearchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"CustomStringField": attrValPayload1,
-			"CustomIntField":    attrValPayload2,
+			"CustomTextField": attrValPayload1,
+			"CustomIntField":  attrValPayload2,
 		},
 	}
 	return upsertSearchAttr

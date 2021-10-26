@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/adminservice/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -140,7 +139,6 @@ type (
 		namespaceID       string
 		workflowExecution commonpb.WorkflowExecution
 		shard             shard.Context
-		engine            shard.Engine
 		logger            log.Logger
 		metricsClient     metrics.Client
 		timeSource        clock.TimeSource
@@ -169,7 +167,6 @@ func NewContext(
 		namespaceID:       namespaceID,
 		workflowExecution: execution,
 		shard:             shard,
-		engine:            shard.GetEngine(),
 		logger:            logger,
 		metricsClient:     shard.GetMetricsClient(),
 		timeSource:        shard.GetTimeSource(),
@@ -433,7 +430,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	}
 	c.SetHistorySize(int64(resp.NewMutableStateStats.HistoryStatistics.SizeDiff))
 
-	NotifyWorkflowSnapshotTasks(c.engine, newWorkflow)
+	NotifyWorkflowSnapshotTasks(c.shard.GetEngine(), newWorkflow)
 	emitStateTransitionCount(c.metricsClient, newMutableState)
 
 	return nil
@@ -713,13 +710,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		int(c.GetHistorySize()),
 		int(c.MutableState.GetNextEventID()-1),
 	)
-	// emit workflow completion stats if any
-	if currentWorkflow.ExecutionState.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		if event, err := c.MutableState.GetCompletionEvent(); err == nil {
-			taskQueue := currentWorkflow.ExecutionInfo.TaskQueue
-			emitWorkflowCompletionStats(c.metricsClient, namespace, taskQueue, event)
-		}
-	}
 
 	return nil
 }

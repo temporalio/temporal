@@ -27,7 +27,6 @@ package persistence
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 )
@@ -62,7 +61,7 @@ func LoadAndSplitQueryFromReaders(
 	result := make([]string, 0, querySliceDefaultSize)
 
 	for _, r := range readers {
-		content, err := ioutil.ReadAll(r)
+		content, err := io.ReadAll(r)
 		if err != nil {
 			return nil, fmt.Errorf("error reading contents: %w", err)
 		}

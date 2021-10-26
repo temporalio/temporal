@@ -127,18 +127,12 @@ func newAdminShardManagementCommands() []cli.Command {
 			Name:    "describe",
 			Aliases: []string{"d"},
 			Usage:   "Describe shard by Id",
-			Flags: append(
-				getDBFlags(),
+			Flags: []cli.Flag{
 				cli.IntFlag{
 					Name:  FlagShardID,
 					Usage: "The Id of the shard to describe",
 				},
-				cli.StringFlag{
-					Name:  FlagTargetCluster,
-					Value: "active",
-					Usage: "Temporal cluster to use",
-				},
-			),
+			},
 			Action: func(c *cli.Context) {
 				AdminDescribeShard(c)
 			},

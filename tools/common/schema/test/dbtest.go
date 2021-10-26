@@ -26,7 +26,6 @@ package test
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"time"
@@ -79,11 +78,11 @@ func (tb *DBTestBase) TearDownSuiteBase() {
 
 // RunParseFileTest runs a test against the ParseFile method
 func (tb *DBTestBase) RunParseFileTest(content string) {
-	rootDir, err := ioutil.TempDir("", "dbClientTestDir")
+	rootDir, err := os.MkdirTemp("", "dbClientTestDir")
 	tb.Nil(err)
 	defer os.Remove(rootDir)
 
-	cqlFile, err := ioutil.TempFile(rootDir, "parseCQLTest")
+	cqlFile, err := os.CreateTemp(rootDir, "parseCQLTest")
 	tb.Nil(err)
 	defer os.Remove(cqlFile.Name())
 
