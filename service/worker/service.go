@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -92,8 +93,8 @@ func NewService(
 }
 
 // NewConfig builds the new Config for worker service
-func NewConfig(params *resource.BootstrapParams) *Config {
-	dc := dynamicconfig.NewCollection(params.DynamicConfigClient, params.Logger)
+func NewConfig(logger log.Logger, dcClient dynamicconfig.Client, params *resource.BootstrapParams) *Config {
+	dc := dynamicconfig.NewCollection(dcClient, logger)
 	config := &Config{
 		ArchiverConfig: &archiver.Config{
 			MaxConcurrentActivityExecutionSize:     dc.GetIntProperty(dynamicconfig.WorkerArchiverMaxConcurrentActivityExecutionSize, 1000),

@@ -209,7 +209,7 @@ func (t *timerQueueTask) Ack() {
 	if !ok {
 		return
 	}
-	t.ackMgr.completeTimerTask(timerTask)
+	t.ackMgr.completeTimerTask(*timerTask.GetVisibilityTime(), timerTask.GetTaskId())
 }
 
 func (t *timerQueueTask) Nack() {

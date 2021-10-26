@@ -902,10 +902,10 @@ func (mr *MockExecutionStoreMockRecorder) GetName() *gomock.Call {
 }
 
 // GetReplicationTask mocks base method.
-func (m *MockExecutionStore) GetReplicationTask(request *persistence.GetReplicationTaskRequest) (*persistence.GetReplicationTaskResponse, error) {
+func (m *MockExecutionStore) GetReplicationTask(request *persistence.GetReplicationTaskRequest) (*persistence.InternalGetReplicationTaskResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReplicationTask", request)
-	ret0, _ := ret[0].(*persistence.GetReplicationTaskResponse)
+	ret0, _ := ret[0].(*persistence.InternalGetReplicationTaskResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -917,10 +917,10 @@ func (mr *MockExecutionStoreMockRecorder) GetReplicationTask(request interface{}
 }
 
 // GetReplicationTasks mocks base method.
-func (m *MockExecutionStore) GetReplicationTasks(request *persistence.GetReplicationTasksRequest) (*persistence.GetReplicationTasksResponse, error) {
+func (m *MockExecutionStore) GetReplicationTasks(request *persistence.GetReplicationTasksRequest) (*persistence.InternalGetReplicationTasksResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReplicationTasks", request)
-	ret0, _ := ret[0].(*persistence.GetReplicationTasksResponse)
+	ret0, _ := ret[0].(*persistence.InternalGetReplicationTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -932,10 +932,10 @@ func (mr *MockExecutionStoreMockRecorder) GetReplicationTasks(request interface{
 }
 
 // GetReplicationTasksFromDLQ mocks base method.
-func (m *MockExecutionStore) GetReplicationTasksFromDLQ(request *persistence.GetReplicationTasksFromDLQRequest) (*persistence.GetReplicationTasksFromDLQResponse, error) {
+func (m *MockExecutionStore) GetReplicationTasksFromDLQ(request *persistence.GetReplicationTasksFromDLQRequest) (*persistence.InternalGetReplicationTasksFromDLQResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReplicationTasksFromDLQ", request)
-	ret0, _ := ret[0].(*persistence.GetReplicationTasksFromDLQResponse)
+	ret0, _ := ret[0].(*persistence.InternalGetReplicationTasksFromDLQResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -946,26 +946,11 @@ func (mr *MockExecutionStoreMockRecorder) GetReplicationTasksFromDLQ(request int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTasksFromDLQ", reflect.TypeOf((*MockExecutionStore)(nil).GetReplicationTasksFromDLQ), request)
 }
 
-// GetTimerIndexTasks mocks base method.
-func (m *MockExecutionStore) GetTimerIndexTasks(request *persistence.GetTimerIndexTasksRequest) (*persistence.GetTimerIndexTasksResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTimerIndexTasks", request)
-	ret0, _ := ret[0].(*persistence.GetTimerIndexTasksResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetTimerIndexTasks indicates an expected call of GetTimerIndexTasks.
-func (mr *MockExecutionStoreMockRecorder) GetTimerIndexTasks(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimerIndexTasks", reflect.TypeOf((*MockExecutionStore)(nil).GetTimerIndexTasks), request)
-}
-
 // GetTimerTask mocks base method.
-func (m *MockExecutionStore) GetTimerTask(request *persistence.GetTimerTaskRequest) (*persistence.GetTimerTaskResponse, error) {
+func (m *MockExecutionStore) GetTimerTask(request *persistence.GetTimerTaskRequest) (*persistence.InternalGetTimerTaskResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTimerTask", request)
-	ret0, _ := ret[0].(*persistence.GetTimerTaskResponse)
+	ret0, _ := ret[0].(*persistence.InternalGetTimerTaskResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -976,11 +961,26 @@ func (mr *MockExecutionStoreMockRecorder) GetTimerTask(request interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimerTask", reflect.TypeOf((*MockExecutionStore)(nil).GetTimerTask), request)
 }
 
+// GetTimerTasks mocks base method.
+func (m *MockExecutionStore) GetTimerTasks(request *persistence.GetTimerTasksRequest) (*persistence.InternalGetTimerTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTimerTasks", request)
+	ret0, _ := ret[0].(*persistence.InternalGetTimerTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTimerTasks indicates an expected call of GetTimerTasks.
+func (mr *MockExecutionStoreMockRecorder) GetTimerTasks(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimerTasks", reflect.TypeOf((*MockExecutionStore)(nil).GetTimerTasks), request)
+}
+
 // GetTransferTask mocks base method.
-func (m *MockExecutionStore) GetTransferTask(request *persistence.GetTransferTaskRequest) (*persistence.GetTransferTaskResponse, error) {
+func (m *MockExecutionStore) GetTransferTask(request *persistence.GetTransferTaskRequest) (*persistence.InternalGetTransferTaskResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTransferTask", request)
-	ret0, _ := ret[0].(*persistence.GetTransferTaskResponse)
+	ret0, _ := ret[0].(*persistence.InternalGetTransferTaskResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -992,10 +992,10 @@ func (mr *MockExecutionStoreMockRecorder) GetTransferTask(request interface{}) *
 }
 
 // GetTransferTasks mocks base method.
-func (m *MockExecutionStore) GetTransferTasks(request *persistence.GetTransferTasksRequest) (*persistence.GetTransferTasksResponse, error) {
+func (m *MockExecutionStore) GetTransferTasks(request *persistence.GetTransferTasksRequest) (*persistence.InternalGetTransferTasksResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTransferTasks", request)
-	ret0, _ := ret[0].(*persistence.GetTransferTasksResponse)
+	ret0, _ := ret[0].(*persistence.InternalGetTransferTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1007,10 +1007,10 @@ func (mr *MockExecutionStoreMockRecorder) GetTransferTasks(request interface{}) 
 }
 
 // GetVisibilityTask mocks base method.
-func (m *MockExecutionStore) GetVisibilityTask(request *persistence.GetVisibilityTaskRequest) (*persistence.GetVisibilityTaskResponse, error) {
+func (m *MockExecutionStore) GetVisibilityTask(request *persistence.GetVisibilityTaskRequest) (*persistence.InternalGetVisibilityTaskResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetVisibilityTask", request)
-	ret0, _ := ret[0].(*persistence.GetVisibilityTaskResponse)
+	ret0, _ := ret[0].(*persistence.InternalGetVisibilityTaskResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1022,10 +1022,10 @@ func (mr *MockExecutionStoreMockRecorder) GetVisibilityTask(request interface{})
 }
 
 // GetVisibilityTasks mocks base method.
-func (m *MockExecutionStore) GetVisibilityTasks(request *persistence.GetVisibilityTasksRequest) (*persistence.GetVisibilityTasksResponse, error) {
+func (m *MockExecutionStore) GetVisibilityTasks(request *persistence.GetVisibilityTasksRequest) (*persistence.InternalGetVisibilityTasksResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetVisibilityTasks", request)
-	ret0, _ := ret[0].(*persistence.GetVisibilityTasksResponse)
+	ret0, _ := ret[0].(*persistence.InternalGetVisibilityTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

@@ -123,30 +123,30 @@ type (
 		AddTasks(request *InternalAddTasksRequest) error
 
 		// transfer tasks
-		GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error)
-		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)
+		GetTransferTask(request *GetTransferTaskRequest) (*InternalGetTransferTaskResponse, error)
+		GetTransferTasks(request *GetTransferTasksRequest) (*InternalGetTransferTasksResponse, error)
 		CompleteTransferTask(request *CompleteTransferTaskRequest) error
 		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error
 
 		// timer tasks
-		GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error)
-		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
+		GetTimerTask(request *GetTimerTaskRequest) (*InternalGetTimerTaskResponse, error)
+		GetTimerTasks(request *GetTimerTasksRequest) (*InternalGetTimerTasksResponse, error)
 		CompleteTimerTask(request *CompleteTimerTaskRequest) error
 		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
 
 		// replication tasks
-		GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error)
-		GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error)
+		GetReplicationTask(request *GetReplicationTaskRequest) (*InternalGetReplicationTaskResponse, error)
+		GetReplicationTasks(request *GetReplicationTasksRequest) (*InternalGetReplicationTasksResponse, error)
 		CompleteReplicationTask(request *CompleteReplicationTaskRequest) error
 		RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error
 		PutReplicationTaskToDLQ(request *PutReplicationTaskToDLQRequest) error
-		GetReplicationTasksFromDLQ(request *GetReplicationTasksFromDLQRequest) (*GetReplicationTasksFromDLQResponse, error)
+		GetReplicationTasksFromDLQ(request *GetReplicationTasksFromDLQRequest) (*InternalGetReplicationTasksFromDLQResponse, error)
 		DeleteReplicationTaskFromDLQ(request *DeleteReplicationTaskFromDLQRequest) error
 		RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error
 
 		// visibility tasks
-		GetVisibilityTask(request *GetVisibilityTaskRequest) (*GetVisibilityTaskResponse, error)
-		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error)
+		GetVisibilityTask(request *GetVisibilityTaskRequest) (*InternalGetVisibilityTaskResponse, error)
+		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*InternalGetVisibilityTasksResponse, error)
 		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
 		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
 
@@ -490,6 +490,44 @@ type (
 	// InternalListConcreteExecutionsResponse is the response to ListConcreteExecutions for Persistence Interface
 	InternalListConcreteExecutionsResponse struct {
 		States        []*InternalWorkflowMutableState
+		NextPageToken []byte
+	}
+
+	InternalGetTransferTaskResponse struct {
+		Task commonpb.DataBlob
+	}
+
+	InternalGetTransferTasksResponse struct {
+		Tasks         []commonpb.DataBlob
+		NextPageToken []byte
+	}
+
+	InternalGetTimerTaskResponse struct {
+		Task commonpb.DataBlob
+	}
+
+	InternalGetTimerTasksResponse struct {
+		Tasks         []commonpb.DataBlob
+		NextPageToken []byte
+	}
+
+	InternalGetReplicationTaskResponse struct {
+		Task commonpb.DataBlob
+	}
+
+	InternalGetReplicationTasksResponse struct {
+		Tasks         []commonpb.DataBlob
+		NextPageToken []byte
+	}
+
+	InternalGetReplicationTasksFromDLQResponse = InternalGetReplicationTasksResponse
+
+	InternalGetVisibilityTaskResponse struct {
+		Task commonpb.DataBlob
+	}
+
+	InternalGetVisibilityTasksResponse struct {
+		Tasks         []commonpb.DataBlob
 		NextPageToken []byte
 	}
 

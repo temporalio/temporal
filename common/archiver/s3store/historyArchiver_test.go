@@ -29,7 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -221,7 +221,7 @@ func setupFsEmulation(s3cli *mocks.MockS3API) {
 			}
 
 			return &s3.GetObjectOutput{
-				Body: ioutil.NopCloser(bytes.NewReader(fs[*input.Bucket+*input.Key])),
+				Body: io.NopCloser(bytes.NewReader(fs[*input.Bucket+*input.Key])),
 			}, nil
 		}).AnyTimes()
 }

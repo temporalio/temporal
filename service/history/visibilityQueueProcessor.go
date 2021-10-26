@@ -27,18 +27,21 @@ package history
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
@@ -324,12 +327,7 @@ func (t *visibilityQueueProcessorImpl) readTasks(
 		return nil, false, err
 	}
 
-	tasks := make([]queueTaskInfo, len(response.Tasks))
-	for i := range response.Tasks {
-		tasks[i] = response.Tasks[i]
-	}
-
-	return tasks, len(response.NextPageToken) != 0, nil
+	return t.convert(response.Tasks), len(response.NextPageToken) != 0, nil
 }
 
 func (t *visibilityQueueProcessorImpl) updateAckLevel(
@@ -359,4 +357,30 @@ func getVisibilityTaskMetricsScope(
 	default:
 		return metrics.VisibilityQueueProcessorScope
 	}
+}
+
+// TODO @wxing1292 deprecate this additional conversion before 1.14
+func (t *visibilityQueueProcessorImpl) convert(
+	genericTasks []tasks.Task,
+) []queueTaskInfo {
+	queueTasks := make([]queueTaskInfo, len(genericTasks))
+	serializer := serialization.TaskSerializer{}
+
+	for index, task := range genericTasks {
+		var visibilityTask *persistencespb.VisibilityTaskInfo
+		switch task := task.(type) {
+		case *tasks.StartExecutionVisibilityTask:
+			visibilityTask = serializer.VisibilityStartTaskToProto(task)
+		case *tasks.UpsertExecutionVisibilityTask:
+			visibilityTask = serializer.VisibilityUpsertTaskToProto(task)
+		case *tasks.CloseExecutionVisibilityTask:
+			visibilityTask = serializer.VisibilityCloseTaskToProto(task)
+		case *tasks.DeleteExecutionVisibilityTask:
+			visibilityTask = serializer.VisibilityDeleteTaskToProto(task)
+		default:
+			panic(fmt.Sprintf("Unknown visibilit task type: %v", task))
+		}
+		queueTasks[index] = visibilityTask
+	}
+	return queueTasks
 }

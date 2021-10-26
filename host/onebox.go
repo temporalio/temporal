@@ -367,7 +367,6 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	params := &resource.BootstrapParams{}
 	params.DCRedirectionPolicy = config.DCRedirectionPolicy{}
 	params.Name = common.FrontendServiceName
-	params.Logger = c.logger
 	params.ThrottledLogger = c.logger
 	params.RPCFactory = newRPCFactoryImpl(common.FrontendServiceName, c.FrontendGRPCAddress(), c.FrontendRingpopAddress(),
 		c.logger)
@@ -377,11 +376,8 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
 	params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
-	params.DynamicConfigClient = newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
-	params.ESConfig = c.esConfig
-	params.ESClient = c.esClient
 	params.Authorizer = authorization.NewNoopAuthorizer()
 
 	var err error
@@ -405,13 +401,19 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		fx.Supply(
 			params,
 			stoppedCh,
+			params.ClusterMetadataConfig,
+			params.PersistenceConfig,
 		),
+		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
+		fx.Provide(func() log.Logger { return c.logger }),
+		fx.Provide(func() *esclient.Config { return c.esConfig }),
+		fx.Provide(func() esclient.Client { return c.esClient }),
 		frontend.Module,
 		fx.Populate(&frontendService),
 	)
 	err = feApp.Err()
 	if err != nil {
-		params.Logger.Fatal("unable to construct frontend service", tag.Error(err))
+		c.logger.Fatal("unable to construct frontend service", tag.Error(err))
 	}
 
 	if c.mockAdminClient != nil {
@@ -442,7 +444,6 @@ func (c *temporalImpl) startHistory(
 	for i, grpcPort := range c.HistoryServiceAddress(3) {
 		params := &resource.BootstrapParams{}
 		params.Name = common.HistoryServiceName
-		params.Logger = c.logger
 		params.ThrottledLogger = c.logger
 		params.RPCFactory = newRPCFactoryImpl(common.HistoryServiceName, grpcPort, membershipPorts[i], c.logger)
 		params.MetricsScope = tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
@@ -453,7 +454,6 @@ func (c *temporalImpl) startHistory(
 		params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 		c.overrideHistoryDynamicConfig(integrationClient)
-		params.DynamicConfigClient = integrationClient
 
 		var err error
 		params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
@@ -470,8 +470,6 @@ func (c *temporalImpl) startHistory(
 
 		params.ArchivalMetadata = c.archiverMetadata
 		params.ArchiverProvider = c.archiverProvider
-		params.ESConfig = c.esConfig
-		params.ESClient = c.esClient
 
 		params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)
 		if err != nil {
@@ -493,12 +491,19 @@ func (c *temporalImpl) startHistory(
 			fx.Supply(
 				params,
 				stoppedCh,
+				integrationClient,
+				params.ClusterMetadataConfig,
+				params.PersistenceConfig,
 			),
+			fx.Provide(func() dynamicconfig.Client { return integrationClient }),
+			fx.Provide(func() log.Logger { return c.logger }),
+			fx.Provide(func() *esclient.Config { return c.esConfig }),
+			fx.Provide(func() esclient.Client { return c.esClient }),
 			history.Module,
 			fx.Populate(&historyService))
 		err = app.Err()
 		if err != nil {
-			params.Logger.Fatal("unable to construct history service", tag.Error(err))
+			c.logger.Fatal("unable to construct history service", tag.Error(err))
 		}
 
 		if c.mockAdminClient != nil {
@@ -534,7 +539,6 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 
 	params := &resource.BootstrapParams{}
 	params.Name = common.MatchingServiceName
-	params.Logger = c.logger
 	params.ThrottledLogger = c.logger
 	params.RPCFactory = newRPCFactoryImpl(common.MatchingServiceName, c.MatchingGRPCServiceAddress(), c.MatchingServiceRingpopAddress(), c.logger)
 	params.MetricsScope = tally.NewTestScope(common.MatchingServiceName, make(map[string]string))
@@ -543,7 +547,6 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
 	params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
-	params.DynamicConfigClient = newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
@@ -557,13 +560,19 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	stoppedCh := make(chan struct{})
 	var matchingService *matching.Service
 	app := fx.New(
-		fx.Supply(stoppedCh, params),
+		fx.Supply(
+			stoppedCh,
+			params,
+			params.ClusterMetadataConfig,
+		),
+		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
+		fx.Provide(func() log.Logger { return c.logger }),
 		matching.Module,
 		fx.Populate(&matchingService),
 	)
 	err = app.Err()
 	if err != nil {
-		params.Logger.Fatal("unable to start matching service", tag.Error(err))
+		c.logger.Fatal("unable to start matching service", tag.Error(err))
 	}
 	if c.mockAdminClient != nil {
 		clientBean := matchingService.GetClientBean()
@@ -584,7 +593,6 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.WaitGroup) {
 	params := &resource.BootstrapParams{}
 	params.Name = common.WorkerServiceName
-	params.Logger = c.logger
 	params.ThrottledLogger = c.logger
 	params.RPCFactory = newRPCFactoryImpl(common.WorkerServiceName, c.WorkerGRPCServiceAddress(), c.WorkerServiceRingpopAddress(), c.logger)
 	params.MetricsScope = tally.NewTestScope(common.WorkerServiceName, make(map[string]string))
@@ -593,7 +601,6 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
 	params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
-	params.DynamicConfigClient = newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
@@ -616,15 +623,18 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		c.logger.Fatal("Failed to create client for worker", tag.Error(err))
 	}
 
+	dcClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 	service, err := resource.New(
+		c.logger,
 		params,
 		common.WorkerServiceName,
+		dcClient,
 		dynamicconfig.GetIntPropertyFn(5000),
 		dynamicconfig.GetIntPropertyFn(5000),
 		dynamicconfig.GetIntPropertyFn(10000),
 	)
 	if err != nil {
-		params.Logger.Fatal("unable to create worker service", tag.Error(err))
+		c.logger.Fatal("unable to create worker service", tag.Error(err))
 	}
 	c.workerService = service
 	service.Start()
@@ -643,7 +653,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		metadataProxyManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)
 		clientWorkerNamespaceCache = namespace.NewRegistry(metadataProxyManager, clusterMetadata.IsGlobalNamespaceEnabled(), service.GetMetricsClient(), service.GetLogger())
 		clientWorkerNamespaceCache.Start()
-		c.startWorkerClientWorker(params, service, clientWorkerNamespaceCache)
+		c.startWorkerClientWorker(params, service, clientWorkerNamespaceCache, dcClient)
 	}
 
 	startWG.Done()
@@ -675,8 +685,12 @@ func (c *temporalImpl) startWorkerReplicator(service resource.Resource, clusterM
 	c.replicator.Start()
 }
 
-func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams, service resource.Resource, namespaceRegistry namespace.Registry) {
-	workerConfig := worker.NewConfig(params)
+func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams, service resource.Resource, namespaceRegistry namespace.Registry, dcClient dynamicconfig.Client) {
+	workerConfig := worker.NewConfig(
+		c.logger,
+		dcClient,
+		params,
+	)
 	workerConfig.ArchiverConfig.ArchiverConcurrency = dynamicconfig.GetIntPropertyFn(10)
 
 	bc := &archiver.BootstrapContainer{

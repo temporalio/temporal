@@ -77,7 +77,6 @@ var Module = fx.Options(
 	fx.Provide(HostNameProvider),
 	fx.Provide(ServiceNameProvider),
 	fx.Provide(ClusterMetadataProvider),
-	fx.Provide(ClusterMetadataConfigProvider),
 	fx.Provide(TimeSourceProvider),
 	fx.Provide(ClusterMetadataManagerProvider),
 	fx.Provide(PersistenceServiceResolverProvider),
@@ -147,10 +146,6 @@ func ServiceNameProvider(params *BootstrapParams) ServiceName {
 func HostNameProvider() (HostName, error) {
 	hn, err := os.Hostname()
 	return HostName(hn), err
-}
-
-func ClusterMetadataConfigProvider(params *BootstrapParams) *config.ClusterMetadata {
-	return params.ClusterMetadataConfig
 }
 
 func ClusterMetadataProvider(config *config.ClusterMetadata) cluster.Metadata {

@@ -28,14 +28,17 @@ package history
 
 import (
 	"context"
+	"fmt"
 
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -132,17 +135,34 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 	remoteAdminClient := r.shard.GetService().GetClientBean().GetRemoteAdminClient(sourceCluster)
 	taskInfo := make([]*replicationspb.ReplicationTaskInfo, 0, len(resp.Tasks))
 	for _, task := range resp.Tasks {
-		taskInfo = append(taskInfo, &replicationspb.ReplicationTaskInfo{
-			NamespaceId:  task.GetNamespaceId(),
-			WorkflowId:   task.GetWorkflowId(),
-			RunId:        task.GetRunId(),
-			TaskType:     task.GetTaskType(),
-			TaskId:       task.GetTaskId(),
-			Version:      task.GetVersion(),
-			FirstEventId: task.GetFirstEventId(),
-			NextEventId:  task.GetNextEventId(),
-			ScheduledId:  task.GetScheduledId(),
-		})
+		switch task := task.(type) {
+		case *tasks.SyncActivityTask:
+			taskInfo = append(taskInfo, &replicationspb.ReplicationTaskInfo{
+				NamespaceId:  task.NamespaceID,
+				WorkflowId:   task.WorkflowID,
+				RunId:        task.RunID,
+				TaskType:     enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY,
+				TaskId:       task.TaskID,
+				Version:      task.GetVersion(),
+				FirstEventId: 0,
+				NextEventId:  0,
+				ScheduledId:  task.ScheduledID,
+			})
+		case *tasks.HistoryReplicationTask:
+			taskInfo = append(taskInfo, &replicationspb.ReplicationTaskInfo{
+				NamespaceId:  task.NamespaceID,
+				WorkflowId:   task.WorkflowID,
+				RunId:        task.RunID,
+				TaskType:     enumsspb.TASK_TYPE_REPLICATION_HISTORY,
+				TaskId:       task.TaskID,
+				Version:      task.Version,
+				FirstEventId: task.FirstEventID,
+				NextEventId:  task.NextEventID,
+				ScheduledId:  0,
+			})
+		default:
+			panic(fmt.Sprintf("Unknown repication task type: %v", task))
+		}
 	}
 
 	if len(taskInfo) == 0 {

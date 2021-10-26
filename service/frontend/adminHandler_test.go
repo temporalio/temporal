@@ -96,10 +96,9 @@ func (s *adminHandlerSuite) SetupTest() {
 		PersistenceConfig: config.Persistence{
 			NumHistoryShards: 1,
 		},
-		ESClient: s.mockResource.ESClient,
 	}
 	config := &Config{}
-	s.handler = NewAdminHandler(s.mockResource, params, config)
+	s.handler = NewAdminHandler(s.mockResource, params, config, nil, s.mockResource.ESClient)
 	s.handler.Start()
 }
 

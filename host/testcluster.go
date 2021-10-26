@@ -26,7 +26,6 @@ package host
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 
 	"github.com/pborman/uuid"
@@ -244,11 +243,11 @@ func newArchiverBase(enabled bool, logger log.Logger) *ArchiverBase {
 		}
 	}
 
-	historyStoreDirectory, err := ioutil.TempDir("", "test-history-archival")
+	historyStoreDirectory, err := os.MkdirTemp("", "test-history-archival")
 	if err != nil {
 		logger.Fatal("Failed to create temp dir for history archival", tag.Error(err))
 	}
-	visibilityStoreDirectory, err := ioutil.TempDir("", "test-visibility-archival")
+	visibilityStoreDirectory, err := os.MkdirTemp("", "test-visibility-archival")
 	if err != nil {
 		logger.Fatal("Failed to create temp dir for visibility archival", tag.Error(err))
 	}

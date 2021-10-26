@@ -175,6 +175,7 @@ message ReplicationTaskInfo {
     bytes new_run_branch_token = 13;
     reserved 14;
     int64 task_id = 15;
+    google.protobuf.Timestamp visibility_time = 16 [(gogoproto.stdtime) = true];
 }
 
 // visibility_task_data column

@@ -63,18 +63,8 @@ var Module = fx.Options(
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
-func ParamsExpandProvider(params *resource.BootstrapParams) (
-	log.Logger,
-	dynamicconfig.Client,
-	config.Persistence,
-	*esclient.Config,
-	common.RPCFactory,
-) {
-	return params.Logger,
-		params.DynamicConfigClient,
-		params.PersistenceConfig,
-		params.ESConfig,
-		params.RPCFactory
+func ParamsExpandProvider(params *resource.BootstrapParams) common.RPCFactory {
+	return params.RPCFactory
 }
 
 func ConfigProvider(
@@ -133,16 +123,19 @@ func PersistenceMaxQpsProvider(
 }
 
 func VisibilityManagerProvider(
+	logger log.Logger,
 	params *resource.BootstrapParams,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	serviceResource resource.Resource,
 	serviceConfig *configs.Config,
+	esConfig *esclient.Config,
+	esClient esclient.Client,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		params.PersistenceConfig,
 		params.PersistenceServiceResolver,
-		params.ESConfig.GetVisibilityIndex(),
-		params.ESClient,
+		esConfig.GetVisibilityIndex(),
+		esClient,
 		esProcessorConfig,
 		serviceResource.GetSearchAttributesProvider(),
 		params.SearchAttributesMapper,
@@ -153,7 +146,7 @@ func VisibilityManagerProvider(
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // history visibility never read
 		serviceConfig.AdvancedVisibilityWritingMode,
 		params.MetricsClient,
-		params.Logger,
+		logger,
 	)
 }
 

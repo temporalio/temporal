@@ -26,7 +26,6 @@ package test
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"time"
@@ -98,7 +97,7 @@ func (tb *UpdateSchemaTestBase) RunDryrunTest(app *cli.App, db DB, dbNameFlag st
 
 // RunUpdateSchemaTest tests schema update
 func (tb *UpdateSchemaTestBase) RunUpdateSchemaTest(app *cli.App, db DB, dbNameFlag string, sqlFileContent string, expectedTables []string) {
-	tmpDir, err := ioutil.TempDir("", "update_schema_test")
+	tmpDir, err := os.MkdirTemp("", "update_schema_test")
 	tb.Nil(err)
 	defer os.RemoveAll(tmpDir)
 
@@ -152,9 +151,9 @@ func (tb *UpdateSchemaTestBase) makeSchemaVersionDirs(rootDir string, sqlFileCon
 
 	dir := rootDir + "/v1.0"
 	tb.NoError(os.Mkdir(rootDir+"/v1.0", os.FileMode(0700)))
-	err := ioutil.WriteFile(dir+"/manifest.json", []byte(mData), os.FileMode(0600))
+	err := os.WriteFile(dir+"/manifest.json", []byte(mData), os.FileMode(0600))
 	tb.Nil(err)
-	err = ioutil.WriteFile(dir+"/base.sql", []byte(sqlFileContent), os.FileMode(0600))
+	err = os.WriteFile(dir+"/base.sql", []byte(sqlFileContent), os.FileMode(0600))
 	tb.Nil(err)
 
 	mData = `{
@@ -171,9 +170,9 @@ func (tb *UpdateSchemaTestBase) makeSchemaVersionDirs(rootDir string, sqlFileCon
 
 	dir = rootDir + "/v2.0"
 	tb.NoError(os.Mkdir(rootDir+"/v2.0", os.FileMode(0700)))
-	err = ioutil.WriteFile(dir+"/manifest.json", []byte(mData), os.FileMode(0600))
+	err = os.WriteFile(dir+"/manifest.json", []byte(mData), os.FileMode(0600))
 	tb.Nil(err)
-	err = ioutil.WriteFile(dir+"/namespace.cql", []byte(namespace), os.FileMode(0600))
+	err = os.WriteFile(dir+"/namespace.cql", []byte(namespace), os.FileMode(0600))
 	tb.Nil(err)
 }
 

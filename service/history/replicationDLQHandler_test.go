@@ -42,8 +42,10 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -129,7 +131,6 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 	workflowID := uuid.New()
 	runID := uuid.New()
 	taskID := int64(12345)
-	taskType := enumsspb.TASK_TYPE_REPLICATION_HISTORY
 	version := int64(2333)
 	firstEventID := int64(144)
 	nextEventID := int64(233)
@@ -137,17 +138,17 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 	lastMessageID := int64(1394)
 	pageSize := 1
 	pageToken := []byte("some random token")
-
 	dbResp := &persistence.GetReplicationTasksFromDLQResponse{
-		Tasks: []*persistencespb.ReplicationTaskInfo{{
-			NamespaceId:  namespaceID,
-			WorkflowId:   workflowID,
-			RunId:        runID,
+		Tasks: []tasks.Task{&tasks.HistoryReplicationTask{
+			WorkflowIdentifier: definition.NewWorkflowIdentifier(
+				namespaceID,
+				workflowID,
+				runID,
+			),
 			Version:      version,
-			FirstEventId: firstEventID,
-			NextEventId:  nextEventID,
-			TaskId:       taskID,
-			TaskType:     taskType,
+			FirstEventID: firstEventID,
+			NextEventID:  nextEventID,
+			TaskID:       taskID,
 		}},
 		NextPageToken: pageToken,
 	}
@@ -214,7 +215,6 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 	workflowID := uuid.New()
 	runID := uuid.New()
 	taskID := int64(12345)
-	taskType := enumsspb.TASK_TYPE_REPLICATION_HISTORY
 	version := int64(2333)
 	firstEventID := int64(144)
 	nextEventID := int64(233)
@@ -224,15 +224,16 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 	pageToken := []byte("some random token")
 
 	dbResp := &persistence.GetReplicationTasksFromDLQResponse{
-		Tasks: []*persistencespb.ReplicationTaskInfo{{
-			NamespaceId:  namespaceID,
-			WorkflowId:   workflowID,
-			RunId:        runID,
+		Tasks: []tasks.Task{&tasks.HistoryReplicationTask{
+			WorkflowIdentifier: definition.NewWorkflowIdentifier(
+				namespaceID,
+				workflowID,
+				runID,
+			),
 			Version:      version,
-			FirstEventId: firstEventID,
-			NextEventId:  nextEventID,
-			TaskId:       taskID,
-			TaskType:     taskType,
+			FirstEventID: firstEventID,
+			NextEventID:  nextEventID,
+			TaskID:       taskID,
 		}},
 		NextPageToken: pageToken,
 	}

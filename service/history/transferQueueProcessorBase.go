@@ -25,10 +25,15 @@
 package history
 
 import (
+	"fmt"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/shard"
 )
 
@@ -84,12 +89,7 @@ func (t *transferQueueProcessorBase) readTasks(
 		return nil, false, err
 	}
 
-	tasks := make([]queueTaskInfo, len(response.Tasks))
-	for i := range response.Tasks {
-		tasks[i] = response.Tasks[i]
-	}
-
-	return tasks, len(response.NextPageToken) != 0, nil
+	return t.convert(response.Tasks), len(response.NextPageToken) != 0, nil
 }
 
 func (t *transferQueueProcessorBase) updateAckLevel(
@@ -149,4 +149,36 @@ func getTransferTaskMetricsScope(
 		}
 		return metrics.TransferStandbyQueueProcessorScope
 	}
+}
+
+// TODO @wxing1292 deprecate this additional conversion before 1.14
+func (t *transferQueueProcessorBase) convert(
+	genericTasks []tasks.Task,
+) []queueTaskInfo {
+	queueTasks := make([]queueTaskInfo, len(genericTasks))
+	serializer := serialization.TaskSerializer{}
+
+	for index, task := range genericTasks {
+		var transferTask *persistencespb.TransferTaskInfo
+		switch task := task.(type) {
+		case *tasks.WorkflowTask:
+			transferTask = serializer.TransferWorkflowTaskToProto(task)
+		case *tasks.ActivityTask:
+			transferTask = serializer.TransferActivityTaskToProto(task)
+		case *tasks.CancelExecutionTask:
+			transferTask = serializer.TransferRequestCancelTaskToProto(task)
+		case *tasks.SignalExecutionTask:
+			transferTask = serializer.TransferSignalTaskToProto(task)
+		case *tasks.StartChildExecutionTask:
+			transferTask = serializer.TransferChildWorkflowTaskToProto(task)
+		case *tasks.CloseExecutionTask:
+			transferTask = serializer.TransferCloseTaskToProto(task)
+		case *tasks.ResetWorkflowTask:
+			transferTask = serializer.TransferResetTaskToProto(task)
+		default:
+			panic(fmt.Sprintf("Unknown transfer task type: %v", task))
+		}
+		queueTasks[index] = transferTask
+	}
+	return queueTasks
 }

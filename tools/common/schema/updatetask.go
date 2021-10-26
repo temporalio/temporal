@@ -32,7 +32,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"sort"
 	"strings"
 
@@ -259,7 +259,7 @@ func validateCQLStmts(stmts []string) error {
 func readManifest(dirPath string) (*manifest, error) {
 
 	filePath := dirPath + "/" + manifestFileName
-	jsonBlob, err := ioutil.ReadFile(filePath)
+	jsonBlob, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +308,7 @@ func readManifest(dirPath string) (*manifest, error) {
 //  - endVer is non-empty and subdir with version == endVer is not found
 func readSchemaDir(dir string, startVer string, endVer string) ([]string, error) {
 
-	subdirs, err := ioutil.ReadDir(dir)
+	subdirs, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}

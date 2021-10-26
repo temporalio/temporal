@@ -184,11 +184,6 @@ type (
 		NamespaceIDs map[string]struct{}
 	}
 
-	// ReplicationTaskInfoWrapper describes a replication task.
-	ReplicationTaskInfoWrapper struct {
-		*persistencespb.ReplicationTaskInfo
-	}
-
 	// TaskQueueKey is the struct used to identity TaskQueues
 	TaskQueueKey struct {
 		NamespaceID string
@@ -431,7 +426,7 @@ type (
 
 	// GetTransferTaskResponse is the response to GetTransferTask
 	GetTransferTaskResponse struct {
-		TransferTaskInfo *persistencespb.TransferTaskInfo
+		Task tasks.Task
 	}
 
 	// GetTransferTasksRequest is used to read tasks from the transfer task queue
@@ -445,7 +440,7 @@ type (
 
 	// GetTransferTasksResponse is the response to GetTransferTasksRequest
 	GetTransferTasksResponse struct {
-		Tasks         []*persistencespb.TransferTaskInfo
+		Tasks         []tasks.Task
 		NextPageToken []byte
 	}
 
@@ -457,7 +452,7 @@ type (
 
 	// GetVisibilityTaskResponse is the response to GetVisibilityTask
 	GetVisibilityTaskResponse struct {
-		VisibilityTaskInfo *persistencespb.VisibilityTaskInfo
+		Task tasks.Task
 	}
 
 	// GetVisibilityTasksRequest is used to read tasks from the visibility task queue
@@ -471,7 +466,7 @@ type (
 
 	// GetVisibilityTasksResponse is the response to GetVisibilityTasksRequest
 	GetVisibilityTasksResponse struct {
-		Tasks         []*persistencespb.VisibilityTaskInfo
+		Tasks         []tasks.Task
 		NextPageToken []byte
 	}
 
@@ -483,7 +478,7 @@ type (
 
 	// GetReplicationTaskResponse is the response to GetReplicationTask
 	GetReplicationTaskResponse struct {
-		ReplicationTaskInfo *persistencespb.ReplicationTaskInfo
+		Task tasks.Task
 	}
 
 	// GetReplicationTasksRequest is used to read tasks from the replication task queue
@@ -497,7 +492,7 @@ type (
 
 	// GetReplicationTasksResponse is the response to GetReplicationTask
 	GetReplicationTasksResponse struct {
-		Tasks         []*persistencespb.ReplicationTaskInfo
+		Tasks         []tasks.Task
 		NextPageToken []byte
 	}
 
@@ -681,12 +676,12 @@ type (
 
 	// GetTimerTaskResponse is the response to GetTimerTask
 	GetTimerTaskResponse struct {
-		TimerTaskInfo *persistencespb.TimerTaskInfo
+		Task tasks.Task
 	}
 
-	// GetTimerIndexTasksRequest is the request for GetTimerIndexTasks
+	// GetTimerTasksRequest is the request for GetTimerTasks
 	// TODO: replace this with an iterator that can configure min and max index.
-	GetTimerIndexTasksRequest struct {
+	GetTimerTasksRequest struct {
 		ShardID       int32
 		MinTimestamp  time.Time
 		MaxTimestamp  time.Time
@@ -694,9 +689,9 @@ type (
 		NextPageToken []byte
 	}
 
-	// GetTimerIndexTasksResponse is the response for GetTimerIndexTasks
-	GetTimerIndexTasksResponse struct {
-		Timers        []*persistencespb.TimerTaskInfo
+	// GetTimerTasksResponse is the response for GetTimerTasks
+	GetTimerTasksResponse struct {
+		Tasks         []tasks.Task
 		NextPageToken []byte
 	}
 
@@ -1059,7 +1054,7 @@ type (
 		// timer tasks
 
 		GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error)
-		GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error)
+		GetTimerTasks(request *GetTimerTasksRequest) (*GetTimerTasksResponse, error)
 		CompleteTimerTask(request *CompleteTimerTaskRequest) error
 		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
 
@@ -1186,11 +1181,6 @@ func (e *TimeoutError) Error() string {
 
 func (e *TransactionSizeLimitError) Error() string {
 	return e.Msg
-}
-
-// GetVisibilityTime get the visibility timestamp
-func (d *ReplicationTaskInfoWrapper) GetVisibilityTime() *time.Time {
-	return &time.Time{}
 }
 
 // UnixMilliseconds returns t as a Unix time, the number of milliseconds elapsed since January 1, 1970 UTC.

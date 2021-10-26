@@ -26,7 +26,6 @@ package clitest
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 
 	"github.com/stretchr/testify/require"
@@ -151,5 +150,5 @@ func (s *VersionTestSuite) createSchemaForVersion(subdir string, v string) {
 	vDir := subdir + "/v" + v
 	s.NoError(os.Mkdir(vDir, os.FileMode(0744)))
 	cqlFile := vDir + "/tmp.sql"
-	s.NoError(ioutil.WriteFile(cqlFile, []byte{}, os.FileMode(0644)))
+	s.NoError(os.WriteFile(cqlFile, []byte{}, os.FileMode(0644)))
 }

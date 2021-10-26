@@ -27,8 +27,8 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math"
+	"os"
 	"strconv"
 	"time"
 
@@ -122,7 +122,7 @@ func AdminShowWorkflow(c *cli.Context) {
 		if err != nil {
 			ErrorAndExit("Failed to serialize history data.", err)
 		}
-		if err := ioutil.WriteFile(outputFileName, data, 0666); err != nil {
+		if err := os.WriteFile(outputFileName, data, 0666); err != nil {
 			ErrorAndExit("Failed to export history data file.", err)
 		}
 	}
@@ -538,21 +538,21 @@ func AdminListTasks(c *cli.Context) {
 		minVis := parseTime(c.String(FlagMinVisibilityTimestamp), time.Time{}, time.Now().UTC())
 		maxVis := parseTime(c.String(FlagMaxVisibilityTimestamp), time.Time{}, time.Now().UTC())
 
-		req := &persistence.GetTimerIndexTasksRequest{
+		req := &persistence.GetTimerTasksRequest{
 			ShardID:      sid,
 			MinTimestamp: minVis,
 			MaxTimestamp: maxVis,
 		}
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
-			response, err := executionManager.GetTimerIndexTasks(req)
+			response, err := executionManager.GetTimerTasks(req)
 			if err != nil {
 				return nil, nil, err
 			}
 			token := response.NextPageToken
 
 			var items []interface{}
-			for _, task := range response.Timers {
+			for _, task := range response.Tasks {
 				items = append(items, task)
 			}
 			return items, token, nil
@@ -617,17 +617,16 @@ func AdminRemoveTask(c *cli.Context) {
 // AdminDescribeShard describes shard by shard id
 func AdminDescribeShard(c *cli.Context) {
 	sid := getRequiredIntOption(c, FlagShardID)
-	pFactory := CreatePersistenceFactory(c)
-	shardManager, err := pFactory.NewShardManager()
+	adminClient := cFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+	response, err := adminClient.GetShard(ctx, &adminservice.GetShardRequest{ShardId: int32(sid)})
 
 	if err != nil {
 		ErrorAndExit("Failed to initialize shard manager", err)
 	}
 
-	getShardReq := &persistence.GetShardRequest{ShardID: int32(sid)}
-	shard, err := shardManager.GetShard(getShardReq)
-
-	prettyPrintJSONObject(shard)
+	prettyPrintJSONObject(response.ShardInfo)
 }
 
 // AdminShardManagement describes history host

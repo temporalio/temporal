@@ -29,7 +29,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -51,7 +50,7 @@ func (s *clientSuite) SetupTest() {
 	file, _ := json.MarshalIndent(&fakeData{data: "example"}, "", " ")
 
 	os.MkdirAll("/tmp/temporal_archival/development", os.ModePerm)
-	s.Require().NoError(ioutil.WriteFile("/tmp/temporal_archival/development/myfile.history", file, 0644))
+	s.Require().NoError(os.WriteFile("/tmp/temporal_archival/development/myfile.history", file, 0644))
 }
 
 func (s *clientSuite) TearDownTest() {
