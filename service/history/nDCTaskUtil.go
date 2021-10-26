@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -187,7 +186,7 @@ func initializeLoggerForTask(
 		log.With(taskLogger, tag.WorkflowTimeoutType(task.TimeoutType))
 	case *persistencespb.TransferTaskInfo,
 		*persistencespb.VisibilityTaskInfo,
-		*persistence.ReplicationTaskInfoWrapper:
+		*persistencespb.ReplicationTaskInfo:
 		// noop
 	default:
 		taskLogger.Error(fmt.Sprintf("Unknown queue task type: %v", task))

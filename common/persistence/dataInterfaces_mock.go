@@ -486,21 +486,6 @@ func (mr *MockExecutionManagerMockRecorder) GetReplicationTasksFromDLQ(request i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTasksFromDLQ", reflect.TypeOf((*MockExecutionManager)(nil).GetReplicationTasksFromDLQ), request)
 }
 
-// GetTimerIndexTasks mocks base method.
-func (m *MockExecutionManager) GetTimerIndexTasks(request *GetTimerIndexTasksRequest) (*GetTimerIndexTasksResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTimerIndexTasks", request)
-	ret0, _ := ret[0].(*GetTimerIndexTasksResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetTimerIndexTasks indicates an expected call of GetTimerIndexTasks.
-func (mr *MockExecutionManagerMockRecorder) GetTimerIndexTasks(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimerIndexTasks", reflect.TypeOf((*MockExecutionManager)(nil).GetTimerIndexTasks), request)
-}
-
 // GetTimerTask mocks base method.
 func (m *MockExecutionManager) GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error) {
 	m.ctrl.T.Helper()
@@ -514,6 +499,21 @@ func (m *MockExecutionManager) GetTimerTask(request *GetTimerTaskRequest) (*GetT
 func (mr *MockExecutionManagerMockRecorder) GetTimerTask(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimerTask", reflect.TypeOf((*MockExecutionManager)(nil).GetTimerTask), request)
+}
+
+// GetTimerTasks mocks base method.
+func (m *MockExecutionManager) GetTimerTasks(request *GetTimerTasksRequest) (*GetTimerTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTimerTasks", request)
+	ret0, _ := ret[0].(*GetTimerTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTimerTasks indicates an expected call of GetTimerTasks.
+func (mr *MockExecutionManagerMockRecorder) GetTimerTasks(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimerTasks", reflect.TypeOf((*MockExecutionManager)(nil).GetTimerTasks), request)
 }
 
 // GetTransferTask mocks base method.

@@ -31,8 +31,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 
@@ -175,7 +177,7 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
 	maxTimestamp := time.Now().UTC().Add(10 * time.Second)
 	batchSize := 10
 
-	request := &persistence.GetTimerIndexTasksRequest{
+	request := &persistence.GetTimerTasksRequest{
 		ShardID:       s.mockShard.GetShardID(),
 		MinTimestamp:  minTimestamp,
 		MaxTimestamp:  maxTimestamp,
@@ -183,28 +185,29 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
 		NextPageToken: []byte("some random input next page token"),
 	}
 
-	response := &persistence.GetTimerIndexTasksResponse{
-		Timers: []*persistencespb.TimerTaskInfo{
-			{
-				NamespaceId:     TestNamespaceId,
-				WorkflowId:      "some random workflow ID",
-				RunId:           uuid.New(),
-				VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(-5),
-				TaskId:          int64(59),
-				TaskType:        1,
-				TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-				EventId:         int64(28),
-				ScheduleAttempt: 1,
+	response := &persistence.GetTimerTasksResponse{
+		Tasks: []tasks.Task{
+			&tasks.ActivityTimeoutTask{
+				WorkflowIdentifier: definition.NewWorkflowIdentifier(
+					TestNamespaceId,
+					"some random workflow ID",
+					uuid.New(),
+				),
+				VisibilityTimestamp: time.Now().UTC().Add(-5 * time.Second),
+				TaskID:              int64(59),
+				TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+				EventID:             int64(28),
+				Attempt:             1,
 			},
 		},
 		NextPageToken: []byte("some random output next page token"),
 	}
 
-	s.mockExecutionMgr.EXPECT().GetTimerIndexTasks(request).Return(response, nil)
+	s.mockExecutionMgr.EXPECT().GetTimerTasks(request).Return(response, nil)
 
 	timers, token, err := s.timerQueueAckMgr.getTimerTasks(minTimestamp, maxTimestamp, batchSize, request.NextPageToken)
 	s.Nil(err)
-	s.Equal(response.Timers, timers)
+	s.Equal(response.Tasks, timers)
 	s.Equal(response.NextPageToken, token)
 }
 
@@ -213,7 +216,7 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
 	maxTimestamp := time.Now().UTC().Add(10 * time.Second)
 	batchSize := 10
 
-	request := &persistence.GetTimerIndexTasksRequest{
+	request := &persistence.GetTimerTasksRequest{
 		ShardID:       s.mockShard.GetShardID(),
 		MinTimestamp:  minTimestamp,
 		MaxTimestamp:  maxTimestamp,
@@ -221,28 +224,29 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
 		NextPageToken: nil,
 	}
 
-	response := &persistence.GetTimerIndexTasksResponse{
-		Timers: []*persistencespb.TimerTaskInfo{
-			{
-				NamespaceId:     TestNamespaceId,
-				WorkflowId:      "some random workflow ID",
-				RunId:           uuid.New(),
-				VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(-5),
-				TaskId:          int64(59),
-				TaskType:        1,
-				TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-				EventId:         int64(28),
-				ScheduleAttempt: 1,
+	response := &persistence.GetTimerTasksResponse{
+		Tasks: []tasks.Task{
+			&tasks.ActivityTimeoutTask{
+				WorkflowIdentifier: definition.NewWorkflowIdentifier(
+					TestNamespaceId,
+					"some random workflow ID",
+					uuid.New(),
+				),
+				VisibilityTimestamp: time.Now().UTC().Add(-5 * time.Second),
+				TaskID:              int64(59),
+				TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+				EventID:             int64(28),
+				Attempt:             1,
 			},
 		},
 		NextPageToken: nil,
 	}
 
-	s.mockExecutionMgr.EXPECT().GetTimerIndexTasks(request).Return(response, nil)
+	s.mockExecutionMgr.EXPECT().GetTimerTasks(request).Return(response, nil)
 
 	timers, token, err := s.timerQueueAckMgr.getTimerTasks(minTimestamp, maxTimestamp, batchSize, request.NextPageToken)
 	s.Nil(err)
-	s.Equal(response.Timers, timers)
+	s.Equal(response.Tasks, timers)
 	s.Empty(token)
 }
 
@@ -258,31 +262,33 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
-	timer := &persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1,
-		NamespaceId:     TestNamespaceId,
-		WorkflowId:      "some random workflow ID",
-		RunId:           uuid.New(),
-		VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(-5),
-		TaskId:          int64(59),
-		TaskType:        1,
-		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		EventId:         int64(28),
+	timer := &tasks.ActivityTimeoutTask{
+		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+			TestNamespaceId,
+			"some random workflow ID",
+			uuid.New(),
+		),
+		VisibilityTimestamp: time.Now().UTC().Add(-5 * time.Second),
+		TaskID:              int64(59),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		EventID:             int64(28),
+		Attempt:             1,
 	}
-	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistencespb.TimerTaskInfo{timer},
+
+	response := &persistence.GetTimerTasksResponse{
+		Tasks:         []tasks.Task{timer},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockExecutionMgr.EXPECT().GetTimerIndexTasks(gomock.Any()).Return(response, nil)
-	s.mockExecutionMgr.EXPECT().GetTimerIndexTasks(gomock.Any()).Return(&persistence.GetTimerIndexTasksResponse{}, nil)
+	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
+	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(&persistence.GetTimerTasksResponse{}, nil)
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistencespb.TimerTaskInfo{timer}, filteredTasks)
+	s.Equal([]tasks.Task{timer}, filteredTasks)
 	s.Nil(lookAheadTask)
 	s.False(moreTasks)
 
-	timerSequenceID := timerKeyFromTimePtr(timer.VisibilityTime, timer.GetTaskId())
+	timerSequenceID := newTimerKey(timer.VisibilityTimestamp, timer.TaskID)
 	s.Equal(map[timerKey]bool{*timerSequenceID: false}, s.timerQueueAckMgr.outstandingTasks)
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Empty(s.timerQueueAckMgr.pageToken)
@@ -301,32 +307,33 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
-	timer := &persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1,
-		NamespaceId:     TestNamespaceId,
-		WorkflowId:      "some random workflow ID",
-		RunId:           uuid.New(),
-		VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(-5),
-		TaskId:          int64(59),
-		TaskType:        1,
-		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		EventId:         int64(28),
-		Version:         int64(79),
+	timer := &tasks.ActivityTimeoutTask{
+		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+			TestNamespaceId,
+			"some random workflow ID",
+			uuid.New(),
+		),
+		VisibilityTimestamp: time.Now().UTC().Add(-5 * time.Second),
+		TaskID:              int64(59),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		EventID:             int64(28),
+		Version:             int64(79),
+		Attempt:             1,
 	}
 
-	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistencespb.TimerTaskInfo{timer},
+	response := &persistence.GetTimerTasksResponse{
+		Tasks:         []tasks.Task{timer},
 		NextPageToken: []byte("some random next page token"),
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockExecutionMgr.EXPECT().GetTimerIndexTasks(gomock.Any()).Return(response, nil)
+	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
 	readTimestamp := time.Now().UTC() // the approximate time of calling readTimerTasks
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistencespb.TimerTaskInfo{timer}, filteredTasks)
+	s.Equal([]tasks.Task{timer}, filteredTasks)
 	s.Nil(lookAheadTask)
 	s.True(moreTasks)
-	timerSequenceID := timerKeyFromTimePtr(timer.VisibilityTime, timer.GetTaskId())
+	timerSequenceID := newTimerKey(timer.VisibilityTimestamp, timer.TaskID)
 	s.Equal(map[timerKey]bool{*timerSequenceID: false}, s.timerQueueAckMgr.outstandingTasks)
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Equal(minQueryLevel, s.timerQueueAckMgr.minQueryLevel)
@@ -347,27 +354,28 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
-	timer := &persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1,
-		NamespaceId:     TestNamespaceId,
-		WorkflowId:      "some random workflow ID",
-		RunId:           uuid.New(),
-		VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(int(s.mockShard.GetConfig().TimerProcessorMaxTimeShift().Seconds())),
-		TaskId:          int64(59),
-		TaskType:        1,
-		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		EventId:         int64(28),
+	timer := &tasks.ActivityTimeoutTask{
+		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+			TestNamespaceId,
+			"some random workflow ID",
+			uuid.New(),
+		),
+		VisibilityTimestamp: time.Now().UTC().Add(s.mockShard.GetConfig().TimerProcessorMaxTimeShift()),
+		TaskID:              int64(59),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		EventID:             int64(28),
+		Attempt:             1,
 	}
 
-	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistencespb.TimerTaskInfo{timer},
+	response := &persistence.GetTimerTasksResponse{
+		Tasks:         []tasks.Task{timer},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockExecutionMgr.EXPECT().GetTimerIndexTasks(gomock.Any()).Return(response, nil)
+	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistencespb.TimerTaskInfo{}, filteredTasks)
+	s.Equal([]tasks.Task{}, filteredTasks)
 	s.Equal(timer, lookAheadTask)
 	s.False(moreTasks)
 
@@ -375,7 +383,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Equal(s.timerQueueAckMgr.maxQueryLevel, s.timerQueueAckMgr.minQueryLevel)
 	s.Empty(s.timerQueueAckMgr.pageToken)
-	s.Equal(timer.VisibilityTime.UnixNano(), s.timerQueueAckMgr.maxQueryLevel.UnixNano())
+	s.Equal(timer.VisibilityTimestamp.UnixNano(), s.timerQueueAckMgr.maxQueryLevel.UnixNano())
 }
 
 func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
@@ -390,28 +398,29 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
-	timer := &persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1,
-		NamespaceId:     TestNamespaceId,
-		WorkflowId:      "some random workflow ID",
-		RunId:           uuid.New(),
-		VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(int(s.mockShard.GetConfig().TimerProcessorMaxTimeShift().Seconds())),
-		TaskId:          int64(59),
-		TaskType:        1,
-		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		EventId:         int64(28),
-		Version:         int64(79),
+	timer := &tasks.ActivityTimeoutTask{
+		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+			TestNamespaceId,
+			"some random workflow ID",
+			uuid.New(),
+		),
+		VisibilityTimestamp: time.Now().UTC().Add(s.mockShard.GetConfig().TimerProcessorMaxTimeShift()),
+		TaskID:              int64(59),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		EventID:             int64(28),
+		Version:             int64(79),
+		Attempt:             1,
 	}
 
-	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistencespb.TimerTaskInfo{timer},
+	response := &persistence.GetTimerTasksResponse{
+		Tasks:         []tasks.Task{timer},
 		NextPageToken: []byte("some random next page token"),
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockExecutionMgr.EXPECT().GetTimerIndexTasks(gomock.Any()).Return(response, nil)
+	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistencespb.TimerTaskInfo{}, filteredTasks)
+	s.Equal([]tasks.Task{}, filteredTasks)
 	s.Equal(timer, lookAheadTask)
 	s.False(moreTasks)
 
@@ -419,80 +428,84 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Equal(s.timerQueueAckMgr.maxQueryLevel, s.timerQueueAckMgr.minQueryLevel)
 	s.Empty(s.timerQueueAckMgr.pageToken)
-	s.Equal(timer.VisibilityTime.UnixNano(), s.timerQueueAckMgr.maxQueryLevel.UnixNano())
+	s.Equal(timer.VisibilityTimestamp.UnixNano(), s.timerQueueAckMgr.maxQueryLevel.UnixNano())
 }
 
 func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	// create 3 timers, timer1 < timer2 < timer3 < now
-	timer1 := &persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1,
-		NamespaceId:     TestNamespaceId,
-		WorkflowId:      "some random workflow ID",
-		RunId:           uuid.New(),
-		VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(-5),
-		TaskId:          int64(59),
-		TaskType:        1,
-		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		EventId:         int64(28),
+	timer1 := &tasks.ActivityTimeoutTask{
+		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+			TestNamespaceId,
+			"some random workflow ID",
+			uuid.New(),
+		),
+		VisibilityTimestamp: time.Now().UTC().Add(-5 * time.Second),
+		TaskID:              int64(59),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		EventID:             int64(28),
+		Attempt:             1,
 	}
-	timer2 := &persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1,
-		NamespaceId:     TestNamespaceId,
-		WorkflowId:      "some random workflow ID",
-		RunId:           uuid.New(),
-		VisibilityTime:  timer1.VisibilityTime,
-		TaskId:          timer1.GetTaskId() + 1,
-		TaskType:        1,
-		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		EventId:         int64(29),
+
+	timer2 := &tasks.ActivityTimeoutTask{
+		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+			TestNamespaceId,
+			"some random workflow ID",
+			uuid.New(),
+		),
+		VisibilityTimestamp: timer1.VisibilityTimestamp,
+		TaskID:              timer1.TaskID + 1,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		EventID:             int64(29),
+		Attempt:             1,
 	}
-	timer3 := &persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1,
-		NamespaceId:     TestNamespaceId,
-		WorkflowId:      "some random workflow ID",
-		RunId:           uuid.New(),
-		VisibilityTime:  timestamp.TimePtr(timer1.VisibilityTime.Add(time.Second)),
-		TaskId:          timer2.GetTaskId() + 1,
-		TaskType:        1,
-		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		EventId:         int64(30),
+	timer3 := &tasks.ActivityTimeoutTask{
+		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+			TestNamespaceId,
+			"some random workflow ID",
+			uuid.New(),
+		),
+		VisibilityTimestamp: timer2.VisibilityTimestamp.Add(time.Second),
+		TaskID:              timer2.TaskID + 1,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		EventID:             int64(30),
+		Attempt:             1,
 	}
-	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistencespb.TimerTaskInfo{timer1, timer2, timer3},
+	response := &persistence.GetTimerTasksResponse{
+		Tasks:         []tasks.Task{timer1, timer2, timer3},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockExecutionMgr.EXPECT().GetTimerIndexTasks(gomock.Any()).Return(response, nil)
-	s.mockExecutionMgr.EXPECT().GetTimerIndexTasks(gomock.Any()).Return(&persistence.GetTimerIndexTasksResponse{}, nil)
+	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
+	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(&persistence.GetTimerTasksResponse{}, nil)
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistencespb.TimerTaskInfo{timer1, timer2, timer3}, filteredTasks)
+	s.Equal([]tasks.Task{timer1, timer2, timer3}, filteredTasks)
 	s.Nil(lookAheadTask)
 	s.False(moreTasks)
 
 	// we are not testing shard context
 	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
-	timerSequenceID1 := timerKeyFromTimePtr(timer1.VisibilityTime, timer1.GetTaskId())
-	s.timerQueueAckMgr.completeTimerTask(timer1)
+	timerSequenceID1 := newTimerKey(timer1.VisibilityTimestamp, timer1.TaskID)
+	s.timerQueueAckMgr.completeTimerTask(timer1.VisibilityTimestamp, timer1.TaskID)
 	s.True(s.timerQueueAckMgr.outstandingTasks[*timerSequenceID1])
 	_ = s.timerQueueAckMgr.updateAckLevel()
-	s.Equal(timer1.VisibilityTime.UnixNano(), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
+	s.Equal(timer1.VisibilityTimestamp.UnixNano(), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
 
 	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
-	timerSequenceID3 := timerKeyFromTimePtr(timer3.VisibilityTime, timer3.GetTaskId())
-	s.timerQueueAckMgr.completeTimerTask(timer3)
+	timerSequenceID3 := newTimerKey(timer3.VisibilityTimestamp, timer3.TaskID)
+	s.timerQueueAckMgr.completeTimerTask(timer3.VisibilityTimestamp, timer3.TaskID)
 	s.True(s.timerQueueAckMgr.outstandingTasks[*timerSequenceID3])
 	_ = s.timerQueueAckMgr.updateAckLevel()
 	// ack level remains unchanged
-	s.Equal(timer1.VisibilityTime.UnixNano(), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
+	s.Equal(timer1.VisibilityTimestamp.UnixNano(), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
 
 	// we are not testing shard context
 	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
-	timerSequenceID2 := timerKeyFromTimePtr(timer2.VisibilityTime, timer2.GetTaskId())
-	s.timerQueueAckMgr.completeTimerTask(timer2)
+	timerSequenceID2 := newTimerKey(timer2.VisibilityTimestamp, timer2.TaskID)
+	s.timerQueueAckMgr.completeTimerTask(timer2.VisibilityTimestamp, timer2.TaskID)
 	s.True(s.timerQueueAckMgr.outstandingTasks[*timerSequenceID2])
 	_ = s.timerQueueAckMgr.updateAckLevel()
-	s.Equal(timer3.VisibilityTime.UnixNano(), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
+	s.Equal(timer3.VisibilityTimestamp.UnixNano(), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
 }
 
 func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
@@ -502,24 +515,25 @@ func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
 	s.timerQueueAckMgr.minQueryLevel = level
 	s.timerQueueAckMgr.maxQueryLevel = s.timerQueueAckMgr.minQueryLevel
 
-	timer := &persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1,
-		NamespaceId:     TestNamespaceId,
-		WorkflowId:      "some random workflow ID",
-		RunId:           uuid.New(),
-		VisibilityTime:  &level,
-		TaskId:          int64(59),
-		TaskType:        1,
-		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		EventId:         int64(28),
-		Version:         int64(79),
+	timer := &tasks.ActivityTimeoutTask{
+		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+			TestNamespaceId,
+			"some random workflow ID",
+			uuid.New(),
+		),
+		VisibilityTimestamp: time.Now().UTC().Add(-5 * time.Second),
+		TaskID:              int64(59),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		EventID:             int64(28),
+		Attempt:             1,
+		Version:             int64(79),
 	}
 
-	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistencespb.TimerTaskInfo{timer},
+	response := &persistence.GetTimerTasksResponse{
+		Tasks:         []tasks.Task{timer},
 		NextPageToken: []byte("some random next page token"),
 	}
-	s.mockExecutionMgr.EXPECT().GetTimerIndexTasks(gomock.Any()).Return(response, nil)
+	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
 	lookAheadTask, err := s.timerQueueAckMgr.readLookAheadTask()
 	s.Nil(err)
 	s.Equal(timer, lookAheadTask)
@@ -620,40 +634,42 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 	s.Empty(token)
 	s.Equal(s.maxLevel, maxQueryLevel)
 
-	timer1 := &persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1,
-		NamespaceId:     TestNamespaceId,
-		WorkflowId:      "some random workflow ID",
-		RunId:           uuid.New(),
-		VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(-5),
-		TaskId:          int64(59),
-		TaskType:        1,
-		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		EventId:         int64(28),
+	timer1 := &tasks.ActivityTimeoutTask{
+		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+			TestNamespaceId,
+			"some random workflow ID",
+			uuid.New(),
+		),
+		VisibilityTimestamp: time.Now().UTC().Add(-5 * time.Second),
+		TaskID:              int64(59),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		EventID:             int64(28),
+		Attempt:             1,
 	}
 
-	timer2 := &persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1,
-		NamespaceId:     TestNamespaceId,
-		WorkflowId:      "some random workflow ID",
-		RunId:           uuid.New(),
-		VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(-5),
-		TaskId:          int64(60),
-		TaskType:        1,
-		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		EventId:         int64(28),
+	timer2 := &tasks.ActivityTimeoutTask{
+		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+			TestNamespaceId,
+			"some random workflow ID",
+			uuid.New(),
+		),
+		VisibilityTimestamp: time.Now().UTC().Add(-5 * time.Second),
+		TaskID:              int64(60),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		EventID:             int64(28),
+		Attempt:             1,
 	}
 
-	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistencespb.TimerTaskInfo{timer1, timer2},
+	response := &persistence.GetTimerTasksResponse{
+		Tasks:         []tasks.Task{timer1, timer2},
 		NextPageToken: []byte("some random next page token"),
 	}
 
-	s.mockExecutionMgr.EXPECT().GetTimerIndexTasks(gomock.Any()).Return(response, nil)
+	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
 	readTimestamp := time.Now().UTC() // the approximate time of calling readTimerTasks
 	timers, lookAheadTimer, more, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistencespb.TimerTaskInfo{timer1, timer2}, timers)
+	s.Equal([]tasks.Task{timer1, timer2}, timers)
 	s.Nil(lookAheadTimer)
 	s.True(more)
 	s.Equal(ackLevel, s.timerQueueFailoverAckMgr.ackLevel)
@@ -675,17 +691,17 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_NoNextPage() {
 	s.Empty(token)
 	s.Equal(s.maxLevel, maxQueryLevel)
 
-	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistencespb.TimerTaskInfo{},
+	response := &persistence.GetTimerTasksResponse{
+		Tasks:         []tasks.Task{},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockExecutionMgr.EXPECT().GetTimerIndexTasks(gomock.Any()).Return(response, nil)
+	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
 
 	readTimestamp := time.Now().UTC() // the approximate time of calling readTimerTasks
 	timers, lookAheadTimer, more, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistencespb.TimerTaskInfo{}, timers)
+	s.Equal([]tasks.Task{}, timers)
 	s.Nil(lookAheadTimer)
 	s.False(more)
 
@@ -724,53 +740,57 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.timerQueueFailoverAckMgr.ackLevel = timerKey{VisibilityTimestamp: from}
 
 	// create 3 timers, timer1 < timer2 < timer3 < now
-	timer1 := &persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1,
-		NamespaceId:     TestNamespaceId,
-		WorkflowId:      "some random workflow ID",
-		RunId:           uuid.New(),
-		VisibilityTime:  timestamp.TimeNowPtrUtcAddSeconds(-5),
-		TaskId:          int64(59),
-		TaskType:        1,
-		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		EventId:         int64(28),
+	timer1 := &tasks.ActivityTimeoutTask{
+		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+			TestNamespaceId,
+			"some random workflow ID",
+			uuid.New(),
+		),
+		VisibilityTimestamp: time.Now().UTC().Add(-5 * time.Second),
+		TaskID:              int64(59),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		EventID:             int64(28),
+		Attempt:             1,
 	}
-	timer2 := &persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1,
-		NamespaceId:     TestNamespaceId,
-		WorkflowId:      "some random workflow ID",
-		RunId:           uuid.New(),
-		VisibilityTime:  timer1.VisibilityTime,
-		TaskId:          timer1.GetTaskId() + 1,
-		TaskType:        1,
-		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		EventId:         int64(29),
+
+	timer2 := &tasks.ActivityTimeoutTask{
+		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+			TestNamespaceId,
+			"some random workflow ID",
+			uuid.New(),
+		),
+		VisibilityTimestamp: timer1.VisibilityTimestamp,
+		TaskID:              timer1.TaskID + 1,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		EventID:             int64(29),
+		Attempt:             1,
 	}
-	timer3 := &persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1,
-		NamespaceId:     TestNamespaceId,
-		WorkflowId:      "some random workflow ID",
-		RunId:           uuid.New(),
-		VisibilityTime:  timestamp.TimePtr(timer1.VisibilityTime.Add(time.Second)),
-		TaskId:          timer2.GetTaskId() + 1,
-		TaskType:        1,
-		TimeoutType:     enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-		EventId:         int64(30),
+	timer3 := &tasks.ActivityTimeoutTask{
+		WorkflowIdentifier: definition.NewWorkflowIdentifier(
+			TestNamespaceId,
+			"some random workflow ID",
+			uuid.New(),
+		),
+		VisibilityTimestamp: timer2.VisibilityTimestamp.Add(time.Second),
+		TaskID:              timer2.TaskID + 1,
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		EventID:             int64(30),
+		Attempt:             1,
 	}
-	response := &persistence.GetTimerIndexTasksResponse{
-		Timers:        []*persistencespb.TimerTaskInfo{timer1, timer2, timer3},
+	response := &persistence.GetTimerTasksResponse{
+		Tasks:         []tasks.Task{timer1, timer2, timer3},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockExecutionMgr.EXPECT().GetTimerIndexTasks(gomock.Any()).Return(response, nil)
+	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
-	s.Equal([]*persistencespb.TimerTaskInfo{timer1, timer2, timer3}, filteredTasks)
+	s.Equal([]tasks.Task{timer1, timer2, timer3}, filteredTasks)
 	s.Nil(lookAheadTask)
 	s.False(moreTasks)
 
-	timerSequenceID2 := timerKeyFromTimePtr(timer2.VisibilityTime, timer2.GetTaskId())
-	s.timerQueueFailoverAckMgr.completeTimerTask(timer2)
+	timerSequenceID2 := newTimerKey(timer2.VisibilityTimestamp, timer2.TaskID)
+	s.timerQueueFailoverAckMgr.completeTimerTask(timer2.VisibilityTimestamp, timer2.TaskID)
 	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[*timerSequenceID2])
 	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
 	_ = s.timerQueueFailoverAckMgr.updateAckLevel()
@@ -780,8 +800,8 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	default:
 	}
 
-	timerSequenceID3 := timerKeyFromTimePtr(timer3.VisibilityTime, timer3.GetTaskId())
-	s.timerQueueFailoverAckMgr.completeTimerTask(timer3)
+	timerSequenceID3 := newTimerKey(timer3.VisibilityTimestamp, timer3.TaskID)
+	s.timerQueueFailoverAckMgr.completeTimerTask(timer3.VisibilityTimestamp, timer3.TaskID)
 	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[*timerSequenceID3])
 	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
 	_ = s.timerQueueFailoverAckMgr.updateAckLevel()
@@ -791,8 +811,8 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	default:
 	}
 
-	timerSequenceID1 := timerKeyFromTimePtr(timer1.VisibilityTime, timer1.GetTaskId())
-	s.timerQueueFailoverAckMgr.completeTimerTask(timer1)
+	timerSequenceID1 := newTimerKey(timer1.VisibilityTimestamp, timer1.TaskID)
+	s.timerQueueFailoverAckMgr.completeTimerTask(timer1.VisibilityTimestamp, timer1.TaskID)
 	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[*timerSequenceID1])
 	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
 	_ = s.timerQueueFailoverAckMgr.updateAckLevel()

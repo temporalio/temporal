@@ -538,21 +538,21 @@ func AdminListTasks(c *cli.Context) {
 		minVis := parseTime(c.String(FlagMinVisibilityTimestamp), time.Time{}, time.Now().UTC())
 		maxVis := parseTime(c.String(FlagMaxVisibilityTimestamp), time.Time{}, time.Now().UTC())
 
-		req := &persistence.GetTimerIndexTasksRequest{
+		req := &persistence.GetTimerTasksRequest{
 			ShardID:      sid,
 			MinTimestamp: minVis,
 			MaxTimestamp: maxVis,
 		}
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
-			response, err := executionManager.GetTimerIndexTasks(req)
+			response, err := executionManager.GetTimerTasks(req)
 			if err != nil {
 				return nil, nil, err
 			}
 			token := response.NextPageToken
 
 			var items []interface{}
-			for _, task := range response.Timers {
+			for _, task := range response.Tasks {
 				items = append(items, task)
 			}
 			return items, token, nil
