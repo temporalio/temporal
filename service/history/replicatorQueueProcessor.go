@@ -431,7 +431,6 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 				SourceTaskId: taskID,
 				Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
 					HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
-						TaskId:              taskInfo.GetFirstEventId(),
 						NamespaceId:         namespaceID,
 						WorkflowId:          workflowID,
 						RunId:               runID,

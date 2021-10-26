@@ -1762,7 +1762,6 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 			TaskType:     taskType,
 			SourceTaskId: 1,
 			Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
-				TaskId:              1,
 				NamespaceId:         s.namespaceID,
 				WorkflowId:          workflowID,
 				RunId:               runID,
