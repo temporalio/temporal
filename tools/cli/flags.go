@@ -243,6 +243,7 @@ const (
 	FlagType                                  = "type"
 	FlagTypeWithAlias                         = FlagType + ", t"
 	FlagVersion                               = "version"
+	FlagPort                                  = "port"
 
 	FlagProtoType  = "type"
 	FlagHexData    = "hex_data"
