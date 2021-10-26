@@ -34,12 +34,15 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/resource"
 )
 
 const (
@@ -67,19 +70,16 @@ type (
 		ExecutionsScannerEnabled dynamicconfig.BoolPropertyFn
 	}
 
-	// BootstrapParams contains the set of params needed to bootstrap
-	// the scanner sub-system
-	BootstrapParams struct {
-		// Config contains the configuration for scanner
-		Config Config
-		// TallyScope is an instance of tally metrics scope
-	}
-
 	// scannerContext is the context object that get's
 	// passed around within the scanner workflows / activities
 	scannerContext struct {
-		resource.Resource
-		cfg Config
+		cfg              *Config
+		logger           log.Logger
+		sdkClient        sdkclient.Client
+		metricsClient    metrics.Client
+		executionManager persistence.ExecutionManager
+		taskManager      persistence.TaskManager
+		historyClient    historyservice.HistoryServiceClient
 	}
 
 	// Scanner is the background sub-system that does full scans
@@ -96,15 +96,23 @@ type (
 // resources, monitor system anamolies and emit stats
 // for analysis and alerting
 func New(
-	resource resource.Resource,
-	params *BootstrapParams,
+	logger log.Logger,
+	cfg *Config,
+	sdkClient sdkclient.Client,
+	metricsClient metrics.Client,
+	executionManager persistence.ExecutionManager,
+	taskManager persistence.TaskManager,
+	historyClient historyservice.HistoryServiceClient,
 ) *Scanner {
-
-	cfg := params.Config
 	return &Scanner{
 		context: scannerContext{
-			Resource: resource,
-			cfg:      cfg,
+			cfg:              cfg,
+			sdkClient:        sdkClient,
+			logger:           logger,
+			metricsClient:    metricsClient,
+			executionManager: executionManager,
+			taskManager:      taskManager,
+			historyClient:    historyClient,
 		},
 	}
 }
@@ -135,7 +143,7 @@ func (s *Scanner) Start() error {
 	}
 
 	for _, tl := range workerTaskQueueNames {
-		work := worker.New(s.context.GetSDKClient(), tl, workerOpts)
+		work := worker.New(s.context.sdkClient, tl, workerOpts)
 
 		work.RegisterWorkflowWithOptions(TaskQueueScannerWorkflow, workflow.RegisterOptions{Name: tqScannerWFTypeName})
 		work.RegisterWorkflowWithOptions(HistoryScannerWorkflow, workflow.RegisterOptions{Name: historyScannerWFTypeName})
@@ -165,12 +173,12 @@ func (s *Scanner) startWorkflowWithRetry(
 	policy.SetMaximumInterval(time.Minute)
 	policy.SetExpirationInterval(backoff.NoInterval)
 	err := backoff.Retry(func() error {
-		return s.startWorkflow(s.context.GetSDKClient(), options, workflowType, workflowArgs...)
+		return s.startWorkflow(s.context.sdkClient, options, workflowType, workflowArgs...)
 	}, policy, func(err error) bool {
 		return true
 	})
 	if err != nil {
-		s.context.GetLogger().Fatal("unable to start scanner", tag.WorkflowType(workflowType), tag.Error(err))
+		s.context.logger.Fatal("unable to start scanner", tag.WorkflowType(workflowType), tag.Error(err))
 	}
 }
 
@@ -188,9 +196,9 @@ func (s *Scanner) startWorkflow(
 		if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); ok {
 			return nil
 		}
-		s.context.GetLogger().Error("error starting "+workflowType+" workflow", tag.Error(err))
+		s.context.logger.Error("error starting "+workflowType+" workflow", tag.Error(err))
 		return err
 	}
-	s.context.GetLogger().Info(workflowType + " workflow successfully started")
+	s.context.logger.Info(workflowType + " workflow successfully started")
 	return nil
 }

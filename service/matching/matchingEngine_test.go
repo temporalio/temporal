@@ -145,7 +145,7 @@ func newMatchingEngine(
 		tokenSerializer:   common.NewProtoTaskTokenSerializer(),
 		config:            config,
 		namespaceRegistry: mockNamespaceCache,
-		clusterMeta:       cluster.NewTestClusterMetadata(cluster.NewTestClusterMetadataConfig(false, true)),
+		clusterMeta:       cluster.NewMetadataFromConfig(cluster.NewTestClusterMetadataConfig(false, true)),
 	}
 }
 

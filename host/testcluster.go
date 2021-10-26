@@ -74,7 +74,7 @@ type (
 		EnableArchival  bool
 		IsMasterCluster bool
 		ClusterNo       int
-		ClusterMetadata config.ClusterMetadata
+		ClusterMetadata cluster.Config
 		Persistence     persistencetests.TestBaseOptions
 		HistoryConfig   *HistoryConfig
 		ESConfig        *esclient.Config
@@ -104,7 +104,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		options.IsMasterCluster,
 	)
 	if !options.IsMasterCluster && options.ClusterMetadata.MasterClusterName != "" { // xdc cluster metadata setup
-		clusterMetadataConfig = &config.ClusterMetadata{
+		clusterMetadataConfig = &cluster.Config{
 			EnableGlobalNamespace:    options.ClusterMetadata.EnableGlobalNamespace,
 			FailoverVersionIncrement: options.ClusterMetadata.FailoverVersionIncrement,
 			MasterClusterName:        options.ClusterMetadata.MasterClusterName,

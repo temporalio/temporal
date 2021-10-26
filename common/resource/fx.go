@@ -69,19 +69,19 @@ type (
 )
 
 var Module = fx.Options(
-	persistenceClient.FactoryModule,
+	persistenceClient.Module,
+
 	fx.Provide(SnTaggedLoggerProvider),
 	fx.Provide(ThrottledLoggerProvider),
 	fx.Provide(PersistenceConfigProvider),
 	fx.Provide(MetricsScopeProvider),
 	fx.Provide(HostNameProvider),
 	fx.Provide(ServiceNameProvider),
-	fx.Provide(ClusterMetadataProvider),
+	fx.Provide(cluster.NewMetadataFromConfig),
 	fx.Provide(TimeSourceProvider),
 	fx.Provide(ClusterMetadataManagerProvider),
 	fx.Provide(PersistenceServiceResolverProvider),
 	fx.Provide(AbstractDatastoreFactoryProvider),
-	fx.Provide(ClusterNameProvider),
 	fx.Provide(MetricsClientProvider),
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
@@ -93,7 +93,7 @@ var Module = fx.Options(
 	fx.Provide(ArchiverProviderProvider),
 	fx.Provide(HistoryBootstrapContainerProvider),
 	fx.Provide(VisibilityBootstrapContainerProvider),
-	fx.Provide(PersistenceBeanProvider),
+	fx.Provide(PersistenceExecutionManagerProvider),
 	fx.Provide(MembershipFactoryProvider),
 	fx.Provide(MembershipMonitorProvider),
 	fx.Provide(ClientFactoryProvider),
@@ -146,20 +146,6 @@ func ServiceNameProvider(params *BootstrapParams) ServiceName {
 func HostNameProvider() (HostName, error) {
 	hn, err := os.Hostname()
 	return HostName(hn), err
-}
-
-func ClusterMetadataProvider(config *config.ClusterMetadata) cluster.Metadata {
-	return cluster.NewMetadata(
-		config.EnableGlobalNamespace,
-		config.FailoverVersionIncrement,
-		config.MasterClusterName,
-		config.CurrentClusterName,
-		config.ClusterInformation,
-	)
-}
-
-func ClusterNameProvider(config *config.ClusterMetadata) persistenceClient.ClusterName {
-	return persistenceClient.ClusterName(config.CurrentClusterName)
 }
 
 func PersistenceServiceResolverProvider(params *BootstrapParams) resolver.ServiceResolver {
@@ -261,11 +247,7 @@ func MembershipFactoryProvider(
 	return params.MembershipFactoryInitializer(persistenceBean, logger)
 }
 
-func PersistenceBeanProvider(factory persistenceClient.Factory) (persistenceClient.Bean, error) {
-	return persistenceClient.NewBeanFromFactory(factory)
-}
-
-// TODO: Seems that all this factory mostly handles singleton logic. We should be able to handle it via IOC.
+// TODO: Seems that this factory mostly handles singleton logic. We should be able to handle it via IOC.
 func MembershipMonitorProvider(membershipFactory MembershipMonitorFactory) (membership.Monitor, error) {
 	return membershipFactory.GetMembershipMonitor()
 }
@@ -320,14 +302,20 @@ func VisibilityBootstrapContainerProvider(
 	}
 }
 
+func PersistenceExecutionManagerProvider(
+	persistenceBean persistenceClient.Bean,
+) persistence.ExecutionManager {
+	return persistenceBean.GetExecutionManager()
+}
+
 func HistoryBootstrapContainerProvider(
 	logger SnTaggedLogger,
 	metricsClient metrics.Client,
 	clusterMetadata cluster.Metadata,
-	persistenceBean persistenceClient.Bean,
+	executionManager persistence.ExecutionManager,
 ) *archiver.HistoryBootstrapContainer {
 	return &archiver.HistoryBootstrapContainer{
-		ExecutionManager: persistenceBean.GetExecutionManager(),
+		ExecutionManager: executionManager,
 		Logger:           logger,
 		MetricsClient:    metricsClient,
 		ClusterMetadata:  clusterMetadata,

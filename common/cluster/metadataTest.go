@@ -24,10 +24,6 @@
 
 package cluster
 
-import (
-	"go.temporal.io/server/common/config"
-)
-
 const (
 	// TestCurrentClusterInitialFailoverVersion is initial failover version for current cluster
 	TestCurrentClusterInitialFailoverVersion = int64(1)
@@ -49,13 +45,13 @@ var (
 	// TestAllClusterNames is the all cluster names used for test
 	TestAllClusterNames = []string{TestCurrentClusterName, TestAlternativeClusterName}
 	// TestAllClusterInfo is the same as above, just convenient for test mocking
-	TestAllClusterInfo = map[string]config.ClusterInformation{
-		TestCurrentClusterName: config.ClusterInformation{
+	TestAllClusterInfo = map[string]ClusterInformation{
+		TestCurrentClusterName: ClusterInformation{
 			Enabled:                true,
 			InitialFailoverVersion: TestCurrentClusterInitialFailoverVersion,
 			RPCAddress:             TestCurrentClusterFrontendAddress,
 		},
-		TestAlternativeClusterName: config.ClusterInformation{
+		TestAlternativeClusterName: ClusterInformation{
 			Enabled:                true,
 			InitialFailoverVersion: TestAlternativeClusterInitialFailoverVersion,
 			RPCAddress:             TestAlternativeClusterFrontendAddress,
@@ -65,8 +61,8 @@ var (
 	// TestSingleDCAllClusterNames is the all cluster names used for test
 	TestSingleDCAllClusterNames = []string{TestCurrentClusterName}
 	// TestSingleDCClusterInfo is the same as above, just convenient for test mocking
-	TestSingleDCClusterInfo = map[string]config.ClusterInformation{
-		TestCurrentClusterName: config.ClusterInformation{
+	TestSingleDCClusterInfo = map[string]ClusterInformation{
+		TestCurrentClusterName: ClusterInformation{
 			Enabled:                true,
 			InitialFailoverVersion: TestCurrentClusterInitialFailoverVersion,
 			RPCAddress:             TestCurrentClusterFrontendAddress,
@@ -75,14 +71,14 @@ var (
 )
 
 // NewTestClusterMetadataConfig return an cluster metadata config
-func NewTestClusterMetadataConfig(enableGlobalNamespace bool, isMasterCluster bool) *config.ClusterMetadata {
+func NewTestClusterMetadataConfig(enableGlobalNamespace bool, isMasterCluster bool) *Config {
 	masterClusterName := TestCurrentClusterName
 	if !isMasterCluster {
 		masterClusterName = TestAlternativeClusterName
 	}
 
 	if enableGlobalNamespace {
-		return &config.ClusterMetadata{
+		return &Config{
 			EnableGlobalNamespace:    true,
 			FailoverVersionIncrement: TestFailoverVersionIncrement,
 			MasterClusterName:        masterClusterName,
@@ -91,22 +87,11 @@ func NewTestClusterMetadataConfig(enableGlobalNamespace bool, isMasterCluster bo
 		}
 	}
 
-	return &config.ClusterMetadata{
+	return &Config{
 		EnableGlobalNamespace:    false,
 		FailoverVersionIncrement: TestFailoverVersionIncrement,
 		MasterClusterName:        TestCurrentClusterName,
 		CurrentClusterName:       TestCurrentClusterName,
 		ClusterInformation:       TestSingleDCClusterInfo,
 	}
-}
-
-// NewTestClusterMetadata return an cluster metadata instance, which is initialized
-func NewTestClusterMetadata(cfg *config.ClusterMetadata) Metadata {
-	return NewMetadata(
-		cfg.EnableGlobalNamespace,
-		cfg.FailoverVersionIncrement,
-		cfg.MasterClusterName,
-		cfg.CurrentClusterName,
-		cfg.ClusterInformation,
-	)
 }

@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
@@ -57,7 +58,7 @@ type (
 		ClientFactoryProvider        client.FactoryProvider
 		AbstractDatastoreFactory     persistenceClient.AbstractDataStoreFactory
 		PersistenceConfig            config.Persistence
-		ClusterMetadataConfig        *config.ClusterMetadata
+		ClusterMetadataConfig        *cluster.Config
 		ReplicatorConfig             config.Replicator
 		ServerMetricsReporter        metrics.Reporter
 		SDKMetricsReporter           metrics.Reporter

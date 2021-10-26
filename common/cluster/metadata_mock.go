@@ -32,7 +32,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	config "go.temporal.io/server/common/config"
 )
 
 // MockMetadata is a mock of Metadata interface.
@@ -73,10 +72,10 @@ func (mr *MockMetadataMockRecorder) ClusterNameForFailoverVersion(failoverVersio
 }
 
 // GetAllClusterInfo mocks base method.
-func (m *MockMetadata) GetAllClusterInfo() map[string]config.ClusterInformation {
+func (m *MockMetadata) GetAllClusterInfo() map[string]ClusterInformation {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAllClusterInfo")
-	ret0, _ := ret[0].(map[string]config.ClusterInformation)
+	ret0, _ := ret[0].(map[string]ClusterInformation)
 	return ret0
 }
 

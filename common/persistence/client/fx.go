@@ -25,8 +25,11 @@
 package client
 
 import (
+	"context"
+
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -39,13 +42,23 @@ type (
 	ClusterName       string
 )
 
+var Module = fx.Options(
+	FactoryModule,
+	BeanModule,
+)
+
 var FactoryModule = fx.Options(
+	fx.Provide(ClusterNameProvider),
 	fx.Provide(NewFactoryImplProvider),
 	fx.Provide(BindFactory),
 )
 
 func BindFactory(f *factoryImpl) Factory {
 	return f
+}
+
+func ClusterNameProvider(config *cluster.Config) ClusterName {
+	return ClusterName(config.CurrentClusterName)
 }
 
 func NewFactoryImplProvider(
@@ -64,4 +77,27 @@ func NewFactoryImplProvider(
 		string(clusterName),
 		metricsClient,
 		logger)
+}
+
+var BeanModule = fx.Options(
+	fx.Provide(PersistenceBeanProvider),
+	fx.Invoke(BeanLifetimeHooks),
+)
+
+func PersistenceBeanProvider(factory Factory) (Bean, error) {
+	return NewBeanFromFactory(factory)
+}
+
+func BeanLifetimeHooks(
+	lc fx.Lifecycle,
+	bean Bean,
+) {
+	lc.Append(
+		fx.Hook{
+			OnStop: func(ctx context.Context) error {
+				bean.Close()
+				return nil
+			},
+		},
+	)
 }

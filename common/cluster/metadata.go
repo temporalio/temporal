@@ -30,7 +30,6 @@ import (
 	"fmt"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/config"
 )
 
 type (
@@ -50,7 +49,7 @@ type (
 		// GetCurrentClusterName return the current cluster name
 		GetCurrentClusterName() string
 		// GetAllClusterInfo return the all cluster name -> corresponding info
-		GetAllClusterInfo() map[string]config.ClusterInformation
+		GetAllClusterInfo() map[string]ClusterInformation
 		// ClusterNameForFailoverVersion return the corresponding cluster name for a given failover version
 		ClusterNameForFailoverVersion(failoverVersion int64) string
 	}
@@ -66,9 +65,31 @@ type (
 		// currentClusterName is the name of the current cluster
 		currentClusterName string
 		// clusterInfo contains all cluster name -> corresponding information
-		clusterInfo map[string]config.ClusterInformation
+		clusterInfo map[string]ClusterInformation
 		// versionToClusterName contains all initial version -> corresponding cluster name
 		versionToClusterName map[int64]string
+	}
+
+	// ClusterMetadata contains the all cluster which participated in cross DC
+	Config struct {
+		EnableGlobalNamespace bool `yaml:"enableGlobalNamespace"`
+		// FailoverVersionIncrement is the increment of each cluster version when failover happens
+		FailoverVersionIncrement int64 `yaml:"failoverVersionIncrement"`
+		// MasterClusterName is the master cluster name, only the master cluster can register / update namespace
+		// all clusters can do namespace failover
+		MasterClusterName string `yaml:"masterClusterName"`
+		// CurrentClusterName is the name of the current cluster
+		CurrentClusterName string `yaml:"currentClusterName"`
+		// ClusterInformation contains all cluster names to corresponding information about that cluster
+		ClusterInformation map[string]ClusterInformation `yaml:"clusterInformation"`
+	}
+
+	// ClusterInformation contains the information about each cluster which participated in cross DC
+	ClusterInformation struct {
+		Enabled                bool  `yaml:"enabled"`
+		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
+		// Address indicate the remote service address(Host:Port). Host can be DNS name.
+		RPCAddress string `yaml:"rpcAddress"`
 	}
 )
 
@@ -78,7 +99,7 @@ func NewMetadata(
 	failoverVersionIncrement int64,
 	masterClusterName string,
 	currentClusterName string,
-	clusterInfo map[string]config.ClusterInformation,
+	clusterInfo map[string]ClusterInformation,
 ) Metadata {
 
 	if len(clusterInfo) == 0 {
@@ -130,6 +151,16 @@ func NewMetadata(
 	}
 }
 
+func NewMetadataFromConfig(config *Config) Metadata {
+	return NewMetadata(
+		config.EnableGlobalNamespace,
+		config.FailoverVersionIncrement,
+		config.MasterClusterName,
+		config.CurrentClusterName,
+		config.ClusterInformation,
+	)
+}
+
 // IsGlobalNamespaceEnabled whether the global namespace is enabled,
 // this attr should be discarded when cross DC is made public
 func (m *metadataImpl) IsGlobalNamespaceEnabled() bool {
@@ -173,7 +204,7 @@ func (m *metadataImpl) GetCurrentClusterName() string {
 }
 
 // GetAllClusterInfo return the all cluster name -> corresponding information
-func (m *metadataImpl) GetAllClusterInfo() map[string]config.ClusterInformation {
+func (m *metadataImpl) GetAllClusterInfo() map[string]ClusterInformation {
 	return m.clusterInfo
 }
 
