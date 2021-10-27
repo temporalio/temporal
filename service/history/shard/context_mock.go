@@ -563,20 +563,6 @@ func (mr *MockContextMockRecorder) GetVisibilityAckLevel() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityAckLevel", reflect.TypeOf((*MockContext)(nil).GetVisibilityAckLevel))
 }
 
-// PreviousShardOwnerWasDifferent mocks base method.
-func (m *MockContext) PreviousShardOwnerWasDifferent() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PreviousShardOwnerWasDifferent")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// PreviousShardOwnerWasDifferent indicates an expected call of PreviousShardOwnerWasDifferent.
-func (mr *MockContextMockRecorder) PreviousShardOwnerWasDifferent() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PreviousShardOwnerWasDifferent", reflect.TypeOf((*MockContext)(nil).PreviousShardOwnerWasDifferent))
-}
-
 // SetCurrentTime mocks base method.
 func (m *MockContext) SetCurrentTime(cluster string, currentTime time.Time) {
 	m.ctrl.T.Helper()
