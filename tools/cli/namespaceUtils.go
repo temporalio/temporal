@@ -28,7 +28,7 @@ import (
 	"strings"
 
 	"github.com/golang/mock/gomock"
-	"github.com/uber-go/tally"
+	"github.com/uber-go/tally/v4"
 	"github.com/urfave/cli"
 	"go.temporal.io/api/workflowservice/v1"
 
