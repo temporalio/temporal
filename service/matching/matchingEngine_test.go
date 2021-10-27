@@ -695,7 +695,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		defaultTaskDispatchRPS,
 	)
 	mgrImpl.matcher.dynamicRateBurst = &dynamicRateBurstWrapper{
-		MutableRateBurst: quotas.NewDynamicRateBurst(
+		MutableRateBurst: quotas.NewMutableRateBurst(
 			defaultTaskDispatchRPS,
 			defaultTaskDispatchRPS,
 		),
@@ -906,7 +906,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 		defaultTaskDispatchRPS,
 	)
 	mgrImpl.matcher.dynamicRateBurst = &dynamicRateBurstWrapper{
-		MutableRateBurst: quotas.NewDynamicRateBurst(
+		MutableRateBurst: quotas.NewMutableRateBurst(
 			defaultTaskDispatchRPS,
 			defaultTaskDispatchRPS,
 		),

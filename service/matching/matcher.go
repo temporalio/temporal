@@ -68,7 +68,7 @@ const (
 // used by task producers and consumers to find a match. Both sync matches and non-sync
 // matches should use this implementation
 func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, scopeFunc func() metrics.Scope) *TaskMatcher {
-	dynamicRateBurst := quotas.NewDynamicRateBurst(
+	dynamicRateBurst := quotas.NewMutableRateBurst(
 		defaultTaskDispatchRPS,
 		int(defaultTaskDispatchRPS),
 	)

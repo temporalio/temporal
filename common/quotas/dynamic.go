@@ -69,13 +69,13 @@ func NewRateBurst(
 	}
 }
 
-func NewDefaultIncomingRateBurstFn(
+func NewDefaultIncomingRateBurst(
 	rateFn RateFn,
 ) *RateBurstImpl {
 	return newDefaultRateBurst(rateFn, defaultIncomingRateBurstRatio)
 }
 
-func NewDefaultOutgoingRateBurstFn(
+func NewDefaultOutgoingRateBurst(
 	rateFn RateFn,
 ) *RateBurstImpl {
 	return newDefaultRateBurst(rateFn, defaultOutgoingRateBurstRatio)
@@ -110,7 +110,7 @@ func (d *RateBurstImpl) Burst() int {
 	return d.burstFn()
 }
 
-func NewDynamicRateBurst(
+func NewMutableRateBurst(
 	rate float64,
 	burst int,
 ) *MutableRateBurstImpl {

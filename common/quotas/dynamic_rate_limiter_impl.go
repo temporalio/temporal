@@ -69,7 +69,7 @@ func NewDefaultIncomingRateLimiter(
 	rateFn RateFn,
 ) *DynamicRateLimiterImpl {
 	return NewDynamicRateLimiter(
-		NewDefaultIncomingRateBurstFn(rateFn),
+		NewDefaultIncomingRateBurst(rateFn),
 		defaultRefreshInterval,
 	)
 }
@@ -80,7 +80,7 @@ func NewDefaultOutgoingRateLimiter(
 	rateFn RateFn,
 ) *DynamicRateLimiterImpl {
 	return NewDynamicRateLimiter(
-		NewDefaultOutgoingRateBurstFn(rateFn),
+		NewDefaultOutgoingRateBurst(rateFn),
 		defaultRefreshInterval,
 	)
 }
