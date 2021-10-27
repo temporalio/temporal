@@ -41,7 +41,7 @@ require (
 	go.opentelemetry.io/otel v0.15.0
 	go.opentelemetry.io/otel/exporters/metric/prometheus v0.15.0
 	go.temporal.io/api v1.5.1-0.20211018190919-a5f4a169cd08
-	go.temporal.io/sdk v1.10.1-0.20211026165730-f73a232013f4
+	go.temporal.io/sdk v1.11.0
 	go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193
 	go.uber.org/atomic v1.9.0
 	go.uber.org/fx v1.14.2
@@ -113,4 +113,12 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 )
 
+// This is required to allow go 1.16 to build this (go 1.17 is fine). With go
+// <= 1.16, github.com/cactus/go-statsd-client/statsd is seen as having an
+// ambiguous dependency of github.com/cactus/go-statsd-client/statsd defined
+// earlier in this file (fixed to v3.2.1) and github.com/cactus/go-statsd-client
+// defined in Tally's go.mod (fixed on v3.1.1). This forces that upgrade so that
+// the parent path of github.com/cactus/go-statsd-client is v3.2.1 which means
+// at that tag it no longer provides github.com/cactus/go-statsd-client/statsd
+// thereby removing the import.
 replace github.com/cactus/go-statsd-client => github.com/cactus/go-statsd-client v3.2.1+incompatible
