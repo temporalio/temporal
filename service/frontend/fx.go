@@ -27,12 +27,13 @@ package frontend
 import (
 	"context"
 
+	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/rpc"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -45,7 +46,6 @@ import (
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
@@ -105,26 +105,31 @@ func GrpcServerOptionsProvider(
 	if err != nil {
 		logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
+	interceptors := []grpc.UnaryServerInterceptor{
+		namespaceLogInterceptor.Intercept,
+		rpc.ServiceErrorInterceptor,
+		metrics.NewServerMetricsContextInjectorInterceptor(),
+		telemetryInterceptor.Intercept,
+		rateLimitInterceptor.Intercept,
+		namespaceRateLimiterInterceptor.Intercept,
+		namespaceCountLimiterInterceptor.Intercept,
+		authorization.NewAuthorizationInterceptor(
+			params.ClaimMapper,
+			params.Authorizer,
+			serviceResource.GetMetricsClient(),
+			logger,
+			params.AudienceGetter,
+		),
+	}
+	if len(params.CustomInterceptors) > 0 {
+		interceptors = append(interceptors, params.CustomInterceptors...)
+	}
+
 	return append(
 		grpcServerOptions,
 		grpc.KeepaliveParams(kp),
 		grpc.KeepaliveEnforcementPolicy(kep),
-		grpc.ChainUnaryInterceptor(
-			namespaceLogInterceptor.Intercept,
-			rpc.ServiceErrorInterceptor,
-			metrics.NewServerMetricsContextInjectorInterceptor(),
-			telemetryInterceptor.Intercept,
-			rateLimitInterceptor.Intercept,
-			namespaceRateLimiterInterceptor.Intercept,
-			namespaceCountLimiterInterceptor.Intercept,
-			authorization.NewAuthorizationInterceptor(
-				params.ClaimMapper,
-				params.Authorizer,
-				serviceResource.GetMetricsClient(),
-				logger,
-				params.AudienceGetter,
-			),
-		),
+		grpc.ChainUnaryInterceptor(interceptors...),
 	)
 }
 
