@@ -46,13 +46,13 @@ type (
 		burstFn BurstFn
 	}
 
-	// DynamicRateBurstImpl stores the dynamic rate & burst for rate limiter
-	DynamicRateBurstImpl struct {
+	// MutableRateBurstImpl stores the dynamic rate & burst for rate limiter
+	MutableRateBurstImpl struct {
 		rate  *atomic.Float64
 		burst *atomic.Int64
 	}
 
-	DynamicRateBurst interface {
+	MutableRateBurst interface {
 		SetRate(rate float64)
 		SetBurst(burst int)
 		RateBurst
@@ -113,25 +113,25 @@ func (d *RateBurstImpl) Burst() int {
 func NewDynamicRateBurst(
 	rate float64,
 	burst int,
-) *DynamicRateBurstImpl {
-	return &DynamicRateBurstImpl{
+) *MutableRateBurstImpl {
+	return &MutableRateBurstImpl{
 		rate:  atomic.NewFloat64(rate),
 		burst: atomic.NewInt64(int64(burst)),
 	}
 }
 
-func (d *DynamicRateBurstImpl) SetRate(rate float64) {
+func (d *MutableRateBurstImpl) SetRate(rate float64) {
 	d.rate.Store(rate)
 }
 
-func (d *DynamicRateBurstImpl) SetBurst(burst int) {
+func (d *MutableRateBurstImpl) SetBurst(burst int) {
 	d.burst.Store(int64(burst))
 }
 
-func (d *DynamicRateBurstImpl) Rate() float64 {
+func (d *MutableRateBurstImpl) Rate() float64 {
 	return d.rate.Load()
 }
 
-func (d *DynamicRateBurstImpl) Burst() int {
+func (d *MutableRateBurstImpl) Burst() int {
 	return int(d.burst.Load())
 }

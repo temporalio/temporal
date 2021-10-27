@@ -50,7 +50,7 @@ type TaskMatcher struct {
 	queryTaskC chan *internalTask
 
 	// dynamicRate is the dynamic rate & burst for rate limiter
-	dynamicRateBurst quotas.DynamicRateBurst
+	dynamicRateBurst quotas.MutableRateBurst
 	// rateLimiter that limits the rate at which tasks can be dispatched to consumers
 	rateLimiter quotas.RateLimiter
 
