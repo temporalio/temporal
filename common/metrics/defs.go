@@ -1588,6 +1588,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 // Common Metrics enum
 const (
 	ServiceRequests = iota
+	ServicePendingRequests
 	ServiceFailures
 	ServiceCriticalFailures
 	ServiceLatency
@@ -2031,6 +2032,7 @@ const (
 var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 	Common: {
 		ServiceRequests:                                     {metricName: "service_requests", metricType: Counter},
+		ServicePendingRequests:                              {metricName: "service_pending_requests", metricType: Gauge},
 		ServiceFailures:                                     {metricName: "service_errors", metricType: Counter},
 		ServiceCriticalFailures:                             {metricName: "service_errors_critical", metricType: Counter},
 		ServiceLatency:                                      {metricName: "service_latency", metricType: Timer},
