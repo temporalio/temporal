@@ -173,7 +173,6 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 			h,
 			s.mockMatchingClient,
 			newTaskAllocator(s.mockShard),
-			nil,
 			s.logger,
 		),
 		s.logger,

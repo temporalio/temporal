@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/visibility"
-	"go.temporal.io/server/common/task"
 )
 
 // Config represents configuration for history service
@@ -81,14 +80,6 @@ type Config struct {
 	StandbyClusterDelay                  dynamicconfig.DurationPropertyFn
 	StandbyTaskMissingEventsResendDelay  dynamicconfig.DurationPropertyFn
 	StandbyTaskMissingEventsDiscardDelay dynamicconfig.DurationPropertyFn
-
-	// Task process settings
-	TaskProcessRPS                 dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnablePriorityTaskProcessor    dynamicconfig.BoolPropertyFn
-	TaskSchedulerType              dynamicconfig.IntPropertyFn
-	TaskSchedulerWorkerCount       dynamicconfig.IntPropertyFn
-	TaskSchedulerQueueSize         dynamicconfig.IntPropertyFn
-	TaskSchedulerRoundRobinWeights dynamicconfig.MapPropertyFn
 
 	// TimerQueueProcessor settings
 	TimerTaskBatchSize                                dynamicconfig.IntPropertyFn
@@ -304,14 +295,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		StandbyClusterDelay:                  dc.GetDurationProperty(dynamicconfig.StandbyClusterDelay, 5*time.Minute),
 		StandbyTaskMissingEventsResendDelay:  dc.GetDurationProperty(dynamicconfig.StandbyTaskMissingEventsResendDelay, 10*time.Minute),
 		StandbyTaskMissingEventsDiscardDelay: dc.GetDurationProperty(dynamicconfig.StandbyTaskMissingEventsDiscardDelay, 15*time.Minute),
-
-		TaskProcessRPS: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.TaskProcessRPS, 1000),
-
-		EnablePriorityTaskProcessor:    dc.GetBoolProperty(dynamicconfig.EnablePriorityTaskProcessor, false),
-		TaskSchedulerType:              dc.GetIntProperty(dynamicconfig.TaskSchedulerType, int(task.SchedulerTypeWRR)),
-		TaskSchedulerWorkerCount:       dc.GetIntProperty(dynamicconfig.TaskSchedulerWorkerCount, 20),
-		TaskSchedulerQueueSize:         dc.GetIntProperty(dynamicconfig.TaskSchedulerQueueSize, 2000),
-		TaskSchedulerRoundRobinWeights: dc.GetMapProperty(dynamicconfig.TaskSchedulerRoundRobinWeights, ConvertWeightsToDynamicConfigValue(DefaultTaskPriorityWeight)),
 
 		TimerTaskBatchSize:                                dc.GetIntProperty(dynamicconfig.TimerTaskBatchSize, 100),
 		TimerTaskWorkerCount:                              dc.GetIntProperty(dynamicconfig.TimerTaskWorkerCount, 10),

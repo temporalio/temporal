@@ -29,7 +29,6 @@ import (
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -61,7 +60,6 @@ func newTransferQueueStandbyProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
 	nDCHistoryResender xdc.NDCHistoryResender,
-	queueTaskProcessor queueTaskProcessor,
 	logger log.Logger,
 ) *transferQueueStandbyProcessorImpl {
 
@@ -134,35 +132,13 @@ func newTransferQueueStandbyProcessor(
 		logger,
 	)
 
-	redispatchQueue := collection.NewConcurrentQueue()
-
-	transferQueueTaskInitializer := func(taskInfo queueTaskInfo) queueTask {
-		return newTransferQueueTask(
-			shard,
-			taskInfo,
-			historyEngine.metricsClient.Scope(
-				getTransferTaskMetricsScope(taskInfo.GetTaskType(), false),
-			),
-			initializeLoggerForTask(shard.GetShardID(), taskInfo, logger),
-			transferTaskFilter,
-			processor.taskExecutor,
-			redispatchQueue,
-			shard.GetTimeSource(),
-			options.MaxRetryCount,
-			queueAckMgr,
-		)
-	}
-
 	queueProcessorBase := newQueueProcessorBase(
 		clusterName,
 		shard,
 		options,
 		processor,
-		queueTaskProcessor,
 		queueAckMgr,
-		redispatchQueue,
 		historyEngine.historyCache,
-		transferQueueTaskInitializer,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TransferStandbyQueueProcessorScope),
 	)
