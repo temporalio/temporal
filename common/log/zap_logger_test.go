@@ -135,7 +135,7 @@ func TestThrottleLogger(t *testing.T) {
 	assert.Nil(t, err)
 	lineNum := fmt.Sprintf("%v", par+1)
 	fmt.Println(out, lineNum)
-	assert.Equal(t, `{"level":"info","msg":"test info","error":"test error","component":"shard","wf-action":"add-workflow-started-event","logging-call-at":"zap_logger_test.go:`+lineNum+`"}`+"\n", out)
+	assert.Equal(t, `{"level":"info","msg":"test info","error":"test error","component":"shard-context","wf-action":"add-workflow-started-event","logging-call-at":"zap_logger_test.go:`+lineNum+`"}`+"\n", out)
 }
 
 func TestEmptyMsg(t *testing.T) {
