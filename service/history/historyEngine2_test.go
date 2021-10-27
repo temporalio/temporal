@@ -175,6 +175,7 @@ func (s *engine2Suite) SetupTest() {
 
 func (s *engine2Suite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {

@@ -88,6 +88,7 @@ func (s *historyCacheSuite) SetupTest() {
 
 func (s *historyCacheSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *historyCacheSuite) TestHistoryCacheBasic() {

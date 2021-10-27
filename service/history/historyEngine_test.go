@@ -196,6 +196,7 @@ func (s *engineSuite) SetupTest() {
 
 func (s *engineSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 	s.mockHistoryEngine.eventNotifier.Stop()
 }
 
@@ -875,7 +876,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedUpdateExecutionFailed() {
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, errors.New("FAILED"))
-	s.mockShardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil)
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil).AnyTimes() // might be called in background goroutine
 
 	_, err := s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -2369,7 +2370,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, errors.New("FAILED"))
-	s.mockShardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil)
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil).AnyTimes() // might be called in background goroutine
 
 	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &historyservice.RespondActivityTaskCompletedRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -2905,7 +2906,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, errors.New("FAILED"))
-	s.mockShardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil)
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil).AnyTimes() // might be called in background goroutine
 
 	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &historyservice.RespondActivityTaskFailedRequest{
 		NamespaceId: tests.NamespaceID.String(),

@@ -183,6 +183,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 
 func (s *timerQueueActiveTaskExecutorSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Fire() {

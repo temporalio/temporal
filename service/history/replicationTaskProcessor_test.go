@@ -154,6 +154,7 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 
 func (s *replicationTaskProcessorSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus_Stale() {

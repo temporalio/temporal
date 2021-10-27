@@ -122,6 +122,7 @@ func (s *replicationDLQHandlerSuite) SetupTest() {
 
 func (s *replicationDLQHandlerSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {

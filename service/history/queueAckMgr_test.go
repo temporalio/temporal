@@ -125,6 +125,7 @@ func (s *queueAckMgrSuite) SetupTest() {
 
 func (s *queueAckMgrSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *queueAckMgrSuite) TestReadTimerTasks() {
@@ -318,6 +319,7 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 
 func (s *queueFailoverAckMgrSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {

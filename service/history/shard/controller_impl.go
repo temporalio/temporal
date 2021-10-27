@@ -63,30 +63,8 @@ type (
 		metricsScope       metrics.Scope
 
 		sync.RWMutex
-		historyShards map[int32]*historyShardsItem
+		historyShards map[int32]*ContextImpl
 	}
-
-	historyShardsItemStatus int
-
-	historyShardsItem struct {
-		resource.Resource
-
-		shardID         int32
-		config          *configs.Config
-		logger          log.Logger
-		throttledLogger log.Logger
-		engineFactory   EngineFactory
-
-		sync.RWMutex
-		status historyShardsItemStatus
-		engine Engine
-	}
-)
-
-const (
-	historyShardsItemStatusInitialized = iota
-	historyShardsItemStatusStarted
-	historyShardsItemStatusStopped
 )
 
 func NewController(
@@ -100,36 +78,13 @@ func NewController(
 		status:             common.DaemonStatusInitialized,
 		membershipUpdateCh: make(chan *membership.ChangedEvent, 10),
 		engineFactory:      factory,
-		historyShards:      make(map[int32]*historyShardsItem),
+		historyShards:      make(map[int32]*ContextImpl),
 		shutdownCh:         make(chan struct{}),
 		logger:             log.With(resource.GetLogger(), tag.ComponentShardController, tag.Address(hostIdentity)),
 		throttledLogger:    log.With(resource.GetThrottledLogger(), tag.ComponentShardController, tag.Address(hostIdentity)),
 		config:             config,
 		metricsScope:       resource.GetMetricsClient().Scope(metrics.HistoryShardControllerScope),
 	}
-}
-
-func newHistoryShardsItem(
-	resource resource.Resource,
-	shardID int32,
-	factory EngineFactory,
-	config *configs.Config,
-) (*historyShardsItem, error) {
-
-	hostIdentity := resource.GetHostInfo().Identity()
-	shardItem := &historyShardsItem{
-		Resource:        resource,
-		shardID:         shardID,
-		status:          historyShardsItemStatusInitialized,
-		engineFactory:   factory,
-		config:          config,
-		logger:          log.With(resource.GetLogger(), tag.ShardID(shardID), tag.Address(hostIdentity)),
-		throttledLogger: log.With(resource.GetThrottledLogger(), tag.ShardID(shardID), tag.Address(hostIdentity)),
-	}
-	shardItem.logger = log.With(shardItem.logger, tag.ShardItem(shardItem))
-	shardItem.throttledLogger = log.With(shardItem.throttledLogger, tag.ShardItem(shardItem))
-
-	return shardItem, nil
 }
 
 func (c *ControllerImpl) Start() {
@@ -191,56 +146,61 @@ func (c *ControllerImpl) GetEngine(namespaceID namespace.ID, workflowID string) 
 func (c *ControllerImpl) GetEngineForShard(shardID int32) (Engine, error) {
 	sw := c.metricsScope.StartTimer(metrics.GetEngineForShardLatency)
 	defer sw.Stop()
-	item, err := c.getOrCreateHistoryShardItem(shardID)
+	shard, err := c.getOrCreateShardContext(shardID)
 	if err != nil {
 		return nil, err
 	}
-	return item.getOrCreateEngine(c.shardClosedCallback)
+	return shard.getOrCreateEngine()
 }
 
 func (c *ControllerImpl) CloseShardByID(shardID int32) {
 	sw := c.metricsScope.StartTimer(metrics.RemoveEngineForShardLatency)
 	defer sw.Stop()
-	shard, _ := c.removeShard(shardID, nil)
-	// Stop the engine for the current shard, if it exists.
+
+	shard, newNumShards, _ := c.removeShard(shardID, nil)
+	// Stop the current shard, if it exists.
 	if shard != nil {
-		shard.stopEngine()
+		shard.logger.Info("", tag.LifeCycleStopping, tag.ComponentShardContext, tag.ShardID(shardID))
+		shard.stop()
+		c.metricsScope.IncCounter(metrics.ShardContextRemovedCounter)
+		shard.logger.Info("", tag.LifeCycleStopped, tag.ComponentShardContext, tag.Number(newNumShards))
 	}
 }
 
-func (c *ControllerImpl) removeEngineForShard(shard *historyShardsItem) {
+func (c *ControllerImpl) shardClosedCallback(shard *ContextImpl) {
 	sw := c.metricsScope.StartTimer(metrics.RemoveEngineForShardLatency)
 	defer sw.Stop()
-	c.removeShard(shard.shardID, shard)
-	// Whether shard was in the shards map or not, in both cases we should stop the engine.
-	shard.stopEngine()
+
+	c.metricsScope.IncCounter(metrics.ShardContextClosedCounter)
+
+	_, newNumShards, _ := c.removeShard(shard.shardID, shard)
+
+	// Whether shard was in the shards map or not, in both cases we should stop it.
+	shard.logger.Info("", tag.LifeCycleStopping, tag.ComponentShardContext, tag.ShardID(shard.shardID))
+	shard.stop()
+	c.metricsScope.IncCounter(metrics.ShardContextRemovedCounter)
+	shard.logger.Info("", tag.LifeCycleStopped, tag.ComponentShardContext, tag.Number(newNumShards))
 }
 
-func (c *ControllerImpl) shardClosedCallback(shardItem *historyShardsItem) {
-	c.metricsScope.IncCounter(metrics.ShardClosedCounter)
-	c.logger.Info("", tag.LifeCycleStopping, tag.ComponentShard, tag.ShardID(shardItem.shardID))
-	c.removeEngineForShard(shardItem)
-}
-
-func (c *ControllerImpl) getOrCreateHistoryShardItem(shardID int32) (*historyShardsItem, error) {
+func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, error) {
 	c.RLock()
-	if item, ok := c.historyShards[shardID]; ok {
-		if item.isValid() {
+	if shard, ok := c.historyShards[shardID]; ok {
+		if shard.isValid() {
 			c.RUnlock()
-			return item, nil
+			return shard, nil
 		}
-		// if item not valid then process to create a new one
+		// if shard not valid then proceed to create a new one
 	}
 	c.RUnlock()
 
 	c.Lock()
 	defer c.Unlock()
 
-	if item, ok := c.historyShards[shardID]; ok {
-		if item.isValid() {
-			return item, nil
+	if shard, ok := c.historyShards[shardID]; ok {
+		if shard.isValid() {
+			return shard, nil
 		}
-		// if item not valid then process to create a new one
+		// if shard not valid then proceed to create a new one
 	}
 
 	if atomic.LoadInt32(&c.status) == common.DaemonStatusStopped {
@@ -251,47 +211,46 @@ func (c *ControllerImpl) getOrCreateHistoryShardItem(shardID int32) (*historySha
 		return nil, err
 	}
 
-	if info.Identity() == c.GetHostInfo().Identity() {
-		shardItem, err := newHistoryShardsItem(
-			c.Resource,
-			shardID,
-			c.engineFactory,
-			c.config,
-		)
-		if err != nil {
-			return nil, err
-		}
-		c.historyShards[shardID] = shardItem
-		c.metricsScope.IncCounter(metrics.ShardItemCreatedCounter)
-
-		shardItem.logger.Info("", tag.LifeCycleStarted, tag.ComponentShardItem)
-		return shardItem, nil
+	if info.Identity() != c.GetHostInfo().Identity() {
+		return nil, serviceerrors.NewShardOwnershipLost(c.GetHostInfo().Identity(), info.GetAddress())
 	}
 
-	return nil, serviceerrors.NewShardOwnershipLost(c.GetHostInfo().Identity(), info.GetAddress())
+	shard, err := newContext(
+		c.Resource,
+		shardID,
+		c.engineFactory,
+		c.config,
+		c.shardClosedCallback,
+	)
+	if err != nil {
+		return nil, err
+	}
+	shard.start()
+	c.historyShards[shardID] = shard
+	c.metricsScope.IncCounter(metrics.ShardContextCreatedCounter)
+
+	shard.logger.Info("", tag.LifeCycleStarted, tag.ComponentShardContext)
+	return shard, nil
 }
 
-func (c *ControllerImpl) removeShard(shardID int32, expected *historyShardsItem) (*historyShardsItem, error) {
+func (c *ControllerImpl) removeShard(shardID int32, expected *ContextImpl) (*ContextImpl, int64, error) {
 	c.Lock()
 	defer c.Unlock()
 
-	currentShardItem, ok := c.historyShards[shardID]
+	nShards := int64(len(c.historyShards))
+	current, ok := c.historyShards[shardID]
 	if !ok {
-		return nil, fmt.Errorf("No item found to remove for shard: %v", shardID)
+		return nil, nShards, fmt.Errorf("No shard found to remove for shard: %v", shardID)
 	}
-	if expected != nil && currentShardItem != expected {
-		// the shardItem comparison is a defensive check to make sure we are deleting
+	if expected != nil && current != expected {
+		// the shard comparison is a defensive check to make sure we are deleting
 		// what we intend to delete.
-		return nil, fmt.Errorf("Current shardItem doesn't match the one we intend to delete for shard: %v", shardID)
+		return nil, nShards, fmt.Errorf("Current shard doesn't match the one we intend to delete for shard: %v", shardID)
 	}
 
 	delete(c.historyShards, shardID)
-	nShards := len(c.historyShards)
 
-	c.metricsScope.IncCounter(metrics.ShardItemRemovedCounter)
-
-	currentShardItem.logger.Info("", tag.LifeCycleStopped, tag.ComponentShardItem, tag.Number(int64(nShards)))
-	return currentShardItem, nil
+	return current, nShards - 1, nil
 }
 
 // shardManagementPump is the main event loop for
@@ -357,6 +316,7 @@ func (c *ControllerImpl) acquireShards() {
 								c.logger.Error("Unable to create history shard engine", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
 							}
 						}
+						// QUESTION: do we want to proactively unload shards here?
 					}
 				}
 			}
@@ -384,8 +344,8 @@ func (c *ControllerImpl) doShutdown() {
 	c.logger.Info("", tag.LifeCycleStopping)
 	c.Lock()
 	defer c.Unlock()
-	for _, item := range c.historyShards {
-		item.stopEngine()
+	for _, shard := range c.historyShards {
+		shard.stop()
 	}
 	c.historyShards = nil
 }
@@ -405,94 +365,6 @@ func (c *ControllerImpl) ShardIDs() []int32 {
 	}
 	c.RUnlock()
 	return ids
-}
-
-func (i *historyShardsItem) getOrCreateEngine(
-	closeCallback func(*historyShardsItem),
-) (Engine, error) {
-	i.RLock()
-	if i.status == historyShardsItemStatusStarted {
-		defer i.RUnlock()
-		return i.engine, nil
-	}
-	i.RUnlock()
-
-	i.Lock()
-	defer i.Unlock()
-	switch i.status {
-	case historyShardsItemStatusInitialized:
-		i.logger.Info("", tag.LifeCycleStarting, tag.ComponentShardEngine)
-		context, err := acquireShard(i, closeCallback)
-		if err != nil {
-			// invalidate the shardItem so that the same shardItem won't be
-			// used to create another shardContext
-			i.logger.Info("", tag.LifeCycleStopped, tag.ComponentShardEngine)
-			i.status = historyShardsItemStatusStopped
-			return nil, err
-		}
-		if context.PreviousShardOwnerWasDifferent() {
-			i.GetMetricsClient().RecordTimer(metrics.ShardInfoScope, metrics.ShardItemAcquisitionLatency,
-				context.GetCurrentTime(i.GetClusterMetadata().GetCurrentClusterName()).Sub(context.GetLastUpdatedTime()))
-		}
-		i.engine = i.engineFactory.CreateEngine(context)
-		i.engine.Start()
-		context.engine = i.engine
-		i.logger.Info("", tag.LifeCycleStarted, tag.ComponentShardEngine)
-		i.status = historyShardsItemStatusStarted
-		return i.engine, nil
-	case historyShardsItemStatusStarted:
-		return i.engine, nil
-	case historyShardsItemStatusStopped:
-		return nil, fmt.Errorf("shard %v for host '%v' is shut down", i.shardID, i.GetHostInfo().Identity())
-	default:
-		panic(i.logInvalidStatus())
-	}
-}
-
-func (i *historyShardsItem) stopEngine() {
-	i.Lock()
-	defer i.Unlock()
-
-	switch i.status {
-	case historyShardsItemStatusInitialized:
-		i.status = historyShardsItemStatusStopped
-	case historyShardsItemStatusStarted:
-		i.logger.Info("", tag.LifeCycleStopping, tag.ComponentShardEngine)
-		i.engine.Stop()
-		i.engine = nil
-		i.logger.Info("", tag.LifeCycleStopped, tag.ComponentShardEngine)
-		i.status = historyShardsItemStatusStopped
-	case historyShardsItemStatusStopped:
-		// no op
-	default:
-		panic(i.logInvalidStatus())
-	}
-}
-
-func (i *historyShardsItem) isValid() bool {
-	i.RLock()
-	defer i.RUnlock()
-
-	switch i.status {
-	case historyShardsItemStatusInitialized, historyShardsItemStatusStarted:
-		return true
-	case historyShardsItemStatusStopped:
-		return false
-	default:
-		panic(i.logInvalidStatus())
-	}
-}
-
-func (i *historyShardsItem) logInvalidStatus() string {
-	msg := fmt.Sprintf("Host '%v' encounter invalid status %v for shard item for shardID '%v'.",
-		i.GetHostInfo().Identity(), i.status, i.shardID)
-	i.logger.Error(msg)
-	return msg
-}
-
-func (i *historyShardsItem) String() string {
-	// use memory address as shard item's identity
-	return fmt.Sprintf("%p", i)
 }
 
 func IsShardOwnershipLostError(err error) bool {

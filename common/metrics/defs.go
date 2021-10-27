@@ -1814,10 +1814,10 @@ const (
 	NewTimerNotifyCounter
 	AcquireShardsCounter
 	AcquireShardsLatency
-	ShardClosedCounter
-	ShardItemCreatedCounter
-	ShardItemRemovedCounter
-	ShardItemAcquisitionLatency
+	ShardContextClosedCounter
+	ShardContextCreatedCounter
+	ShardContextRemovedCounter
+	ShardContextAcquisitionLatency
 	ShardInfoReplicationPendingTasksTimer
 	ShardInfoTransferActivePendingTasksTimer
 	ShardInfoTransferStandbyPendingTasksTimer
@@ -2280,10 +2280,10 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		NewTimerNotifyCounter:                             {metricName: "new_timer_notifications", metricType: Counter},
 		AcquireShardsCounter:                              {metricName: "acquire_shards_count", metricType: Counter},
 		AcquireShardsLatency:                              {metricName: "acquire_shards_latency", metricType: Timer},
-		ShardClosedCounter:                                {metricName: "shard_closed_count", metricType: Counter},
-		ShardItemCreatedCounter:                           {metricName: "sharditem_created_count", metricType: Counter},
-		ShardItemRemovedCounter:                           {metricName: "sharditem_removed_count", metricType: Counter},
-		ShardItemAcquisitionLatency:                       {metricName: "sharditem_acquisition_latency", metricType: Timer},
+		ShardContextClosedCounter:                         {metricName: "shard_closed_count", metricType: Counter},
+		ShardContextCreatedCounter:                        {metricName: "sharditem_created_count", metricType: Counter},
+		ShardContextRemovedCounter:                        {metricName: "sharditem_removed_count", metricType: Counter},
+		ShardContextAcquisitionLatency:                    {metricName: "sharditem_acquisition_latency", metricType: Timer},
 		ShardInfoReplicationPendingTasksTimer:             {metricName: "shardinfo_replication_pending_task", metricType: Timer},
 		ShardInfoTransferActivePendingTasksTimer:          {metricName: "shardinfo_transfer_active_pending_task", metricType: Timer},
 		ShardInfoTransferStandbyPendingTasksTimer:         {metricName: "shardinfo_transfer_standby_pending_task", metricType: Timer},
