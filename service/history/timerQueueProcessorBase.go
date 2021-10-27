@@ -142,7 +142,7 @@ func newTimerQueueProcessorBase(
 		queueTaskProcessor:   queueTaskProcessor,
 		redispatchQueue:      redispatchQueue,
 		queueTaskInitializer: queueTaskInitializer,
-		rateLimiter: quotas.NewDefaultOutgoingDynamicRateLimiter(
+		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(maxPollRPS()) },
 		),
 		retryPolicy: common.CreatePersistanceRetryPolicy(),

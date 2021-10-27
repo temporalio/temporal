@@ -105,7 +105,7 @@ func newForwarder(
 		taskQueueKind:         kind,
 		outstandingTasksLimit: int32(cfg.ForwarderMaxOutstandingTasks()),
 		outstandingPollsLimit: int32(cfg.ForwarderMaxOutstandingPolls()),
-		limiter: quotas.NewDefaultOutgoingDynamicRateLimiter(
+		limiter: quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(cfg.ForwarderMaxRatePerSecond()) },
 		),
 	}

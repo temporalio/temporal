@@ -332,7 +332,7 @@ func buildRateLimiters(
 	result := make(map[string]quotas.RateLimiter, len(cfg.DataStores))
 	for dsName := range cfg.DataStores {
 		if maxQPS != nil && maxQPS() > 0 {
-			result[dsName] = quotas.NewDefaultOutgoingDynamicRateLimiter(
+			result[dsName] = quotas.NewDefaultOutgoingRateLimiter(
 				func() float64 { return float64(maxQPS()) },
 			)
 		}

@@ -49,10 +49,8 @@ type TaskMatcher struct {
 	// not active in a cluster
 	queryTaskC chan *internalTask
 
-	// dynamicRate is the dynamic rate for rate limiter
-	dynamicRate quotas.DynamicRate
-	// dynamicBurst is the dynamic burst for rate limiter
-	dynamicBurst quotas.DynamicBurst
+	// dynamicRate is the dynamic rate & burst for rate limiter
+	dynamicRateBurst quotas.MutableRateBurst
 	// rateLimiter that limits the rate at which tasks can be dispatched to consumers
 	rateLimiter quotas.RateLimiter
 
@@ -70,31 +68,31 @@ const (
 // used by task producers and consumers to find a match. Both sync matches and non-sync
 // matches should use this implementation
 func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, scopeFunc func() metrics.Scope) *TaskMatcher {
-	dynamicRate := quotas.NewDynamicRate(defaultTaskDispatchRPS)
-	dynamicBurst := quotas.NewDynamicBurst(int(defaultTaskDispatchRPS))
+	dynamicRateBurst := quotas.NewMutableRateBurst(
+		defaultTaskDispatchRPS,
+		int(defaultTaskDispatchRPS),
+	)
 	limiter := quotas.NewMultiRateLimiter([]quotas.RateLimiter{
 		quotas.NewDynamicRateLimiter(
-			dynamicRate.RateFn(),
-			dynamicBurst.BurstFn(),
+			dynamicRateBurst,
 			defaultTaskDispatchRPSTTL,
 		),
-		quotas.NewDefaultOutgoingDynamicRateLimiter(
+		quotas.NewDefaultOutgoingRateLimiter(
 			config.AdminNamespaceTaskQueueToPartitionDispatchRate,
 		),
-		quotas.NewDefaultOutgoingDynamicRateLimiter(
+		quotas.NewDefaultOutgoingRateLimiter(
 			config.AdminNamespaceToPartitionDispatchRate,
 		),
 	})
 	return &TaskMatcher{
-		config:        config,
-		dynamicRate:   dynamicRate,
-		dynamicBurst:  dynamicBurst,
-		rateLimiter:   limiter,
-		scope:         scopeFunc,
-		fwdr:          fwdr,
-		taskC:         make(chan *internalTask),
-		queryTaskC:    make(chan *internalTask),
-		numPartitions: config.NumReadPartitions,
+		config:           config,
+		dynamicRateBurst: dynamicRateBurst,
+		rateLimiter:      limiter,
+		scope:            scopeFunc,
+		fwdr:             fwdr,
+		taskC:            make(chan *internalTask),
+		queryTaskC:       make(chan *internalTask),
+		numPartitions:    config.NumReadPartitions,
 	}
 }
 
@@ -312,8 +310,8 @@ func (tm *TaskMatcher) UpdateRatelimit(rps *float64) {
 		burst = minTaskThrottlingBurstSize
 	}
 
-	tm.dynamicRate.Store(rate)
-	tm.dynamicBurst.Store(burst)
+	tm.dynamicRateBurst.SetRate(rate)
+	tm.dynamicRateBurst.SetBurst(burst)
 }
 
 // Rate returns the current rate at which tasks are dispatched

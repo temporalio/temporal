@@ -48,8 +48,10 @@ func BenchmarkRateLimiter(b *testing.B) {
 
 func BenchmarkDynamicRateLimiter(b *testing.B) {
 	limiter := NewDynamicRateLimiter(
-		func() float64 { return testRate },
-		func() int { return testBurst },
+		NewRateBurst(
+			func() float64 { return testRate },
+			func() int { return testBurst },
+		),
 		time.Minute,
 	)
 	for n := 0; n < b.N; n++ {
