@@ -103,6 +103,10 @@ type (
 		value string
 	}
 
+	queueTypeTag struct {
+		value string
+	}
+
 	visibilityTypeTag struct {
 		value string
 	}
@@ -325,6 +329,13 @@ func TaskTypeTag(value string) Tag {
 
 }
 
+func QueueTypeTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return queueTypeTag{value}
+}
+
 // Key returns the key of the tag
 func (d taskTypeTag) Key() string {
 	return TaskTypeTagName
@@ -357,5 +368,13 @@ func (d visibilityTypeTag) Key() string {
 
 // Value returns the value of the tag
 func (d visibilityTypeTag) Value() string {
+	return d.value
+}
+
+func (d queueTypeTag) Key() string {
+	return QueueTypeTagName
+}
+
+func (d queueTypeTag) Value() string {
 	return d.value
 }

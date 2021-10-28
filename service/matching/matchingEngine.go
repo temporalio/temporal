@@ -73,6 +73,12 @@ type (
 		queryTaskMap map[string]chan *queryResult
 	}
 
+	taskQueueCounterKey struct {
+		namespaceID string
+		taskType    enumspb.TaskQueueType
+		queueType   enumspb.TaskQueueKind
+	}
+
 	matchingEngineImpl struct {
 		status               int32
 		taskManager          persistence.TaskManager
@@ -83,6 +89,7 @@ type (
 		metricsClient        metrics.Client
 		taskQueuesLock       sync.RWMutex                     // locks mutation of taskQueues
 		taskQueues           map[taskQueueID]taskQueueManager // Convert to LRU cache
+		taskQueueCount       map[taskQueueCounterKey]int      // per-namespace task queue counter
 		config               *Config
 		lockableQueryTaskMap lockableQueryTaskMap
 		namespaceRegistry    namespace.Registry
@@ -127,6 +134,7 @@ func NewEngine(taskManager persistence.TaskManager,
 		historyService:       historyService,
 		tokenSerializer:      common.NewProtoTaskTokenSerializer(),
 		taskQueues:           make(map[taskQueueID]taskQueueManager),
+		taskQueueCount:       make(map[taskQueueCounterKey]int),
 		logger:               log.With(logger, tag.ComponentMatchingEngine),
 		metricsClient:        metricsClient,
 		matchingClient:       matchingClient,
@@ -209,6 +217,11 @@ func (e *matchingEngineImpl) getTaskQueueManager(taskQueue *taskQueueID, taskQue
 	}
 	mgr.Start()
 	e.taskQueues[*taskQueue] = mgr
+	countKey := taskQueueCounterKey{namespaceID: taskQueue.namespaceID, taskType: taskQueue.taskType, queueType: taskQueueKind}
+	e.taskQueueCount[countKey]++
+	taskQueueCount := e.taskQueueCount[countKey]
+	e.updateTaskQueueGauge(countKey, taskQueueCount)
+
 	return mgr, nil
 }
 
@@ -707,8 +720,28 @@ func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
 		return
 	}
 	delete(e.taskQueues, *queueID)
+	countKey := taskQueueCounterKey{namespaceID: queueID.namespaceID, taskType: queueID.taskType, queueType: foundTQM.TaskQueueKind()}
+	e.taskQueueCount[countKey]--
+	taskQueueCount := e.taskQueueCount[countKey]
 	e.taskQueuesLock.Unlock()
+
+	e.updateTaskQueueGauge(countKey, taskQueueCount)
 	foundTQM.Stop()
+}
+
+func (e *matchingEngineImpl) updateTaskQueueGauge(countKey taskQueueCounterKey, taskQueueCount int) {
+	nsEntry, err := e.namespaceRegistry.GetNamespaceByID(countKey.namespaceID)
+	namespace := "unknown"
+	if err == nil {
+		namespace = nsEntry.Name()
+	}
+
+	e.metricsClient.Scope(
+		metrics.MatchingEngineScope,
+		metrics.NamespaceTag(namespace),
+		metrics.TaskTypeTag(countKey.taskType.String()),
+		metrics.QueueTypeTag(countKey.queueType.String()),
+	).UpdateGauge(metrics.TaskQueueGauge, float64(taskQueueCount))
 }
 
 // Populate the workflow task response based on context and scheduled/started events.

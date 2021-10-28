@@ -85,6 +85,7 @@ const (
 	CacheTypeTagName      = "cache_type"
 	FailureTagName        = "failure"
 	TaskTypeTagName       = "task_type"
+	QueueTypeTagName      = "queue_type"
 	visibilityTypeTagName = "visibility_type"
 )
 
@@ -1036,6 +1037,8 @@ const (
 	MatchingAddWorkflowTaskScope
 	// MatchingTaskQueueMgrScope is the metrics scope for matching.TaskQueueManager component
 	MatchingTaskQueueMgrScope
+	// MatchingEngineScope is the metrics scope for matchingEngine component
+	MatchingEngineScope
 	// MatchingQueryWorkflowScope tracks AddWorkflowTask API calls received by service
 	MatchingQueryWorkflowScope
 	// MatchingRespondQueryTaskCompletedScope tracks AddWorkflowTask API calls received by service
@@ -1554,6 +1557,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingAddActivityTaskScope:           {operation: "AddActivityTask"},
 		MatchingAddWorkflowTaskScope:           {operation: "AddWorkflowTask"},
 		MatchingTaskQueueMgrScope:              {operation: "TaskQueueMgr"},
+		MatchingEngineScope:                    {operation: "MatchingEngine"},
 		MatchingQueryWorkflowScope:             {operation: "QueryWorkflow"},
 		MatchingRespondQueryTaskCompletedScope: {operation: "RespondQueryTaskCompleted"},
 		MatchingCancelOutstandingPollScope:     {operation: "CancelOutstandingPoll"},
@@ -1966,6 +1970,7 @@ const (
 	LocalToRemoteMatchPerTaskQueueCounter
 	RemoteToLocalMatchPerTaskQueueCounter
 	RemoteToRemoteMatchPerTaskQueueCounter
+	TaskQueueGauge
 
 	NumMatchingMetrics
 )
@@ -2424,6 +2429,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		LocalToRemoteMatchPerTaskQueueCounter:     {metricName: "local_to_remote_matches_per_tl", metricRollupName: "local_to_remote_matches"},
 		RemoteToLocalMatchPerTaskQueueCounter:     {metricName: "remote_to_local_matches_per_tl", metricRollupName: "remote_to_local_matches"},
 		RemoteToRemoteMatchPerTaskQueueCounter:    {metricName: "remote_to_remote_matches_per_tl", metricRollupName: "remote_to_remote_matches"},
+		TaskQueueGauge:                            {metricName: "loaded_task_queue_count", metricType: Gauge},
 	},
 	Worker: {
 		ReplicatorMessages:                            {metricName: "replicator_messages"},
