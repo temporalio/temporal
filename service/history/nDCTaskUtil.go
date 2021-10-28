@@ -27,8 +27,6 @@ package history
 import (
 	"time"
 
-	"go.temporal.io/api/serviceerror"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -82,37 +80,13 @@ func loadMutableStateForTransferTask(
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
-	msBuilder, err := context.LoadWorkflowExecution()
-	switch err.(type) {
-	case nil:
-		// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
-		// the exception is workflow task consistently fail
-		// there will be no event generated, thus making the workflow task schedule ID == next event ID
-		eventID, retryable := getTransferTaskEventIDAndRetryable(transferTask, msBuilder.GetExecutionInfo())
-		if eventID >= msBuilder.GetNextEventID() && retryable {
-			metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.StaleMutableStateCounter)
-			context.Clear()
-
-			msBuilder, err = context.LoadWorkflowExecution()
-			if err != nil {
-				return nil, err
-			}
-			// after refresh, still mutable state's next event ID <= task ID
-			if eventID >= msBuilder.GetNextEventID() {
-				logger.Info("Transfer Task Processor: task event ID >= MS NextEventID, skip.",
-					tag.WorkflowScheduleID(eventID),
-					tag.WorkflowNextEventID(msBuilder.GetNextEventID()))
-				return nil, nil
-			}
-		}
-		return msBuilder, nil
-
-	case *serviceerror.NotFound:
-		return nil, nil
-
-	default:
-		return nil, err
-	}
+	return loadMutableStateForTask(
+		context,
+		transferTask,
+		getTransferTaskEventIDAndRetryable,
+		metricsClient.Scope(metrics.TransferQueueProcessorScope),
+		logger,
+	)
 }
 
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
@@ -123,38 +97,52 @@ func loadMutableStateForTimerTask(
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
+	return loadMutableStateForTask(
+		context,
+		timerTask,
+		getTimerTaskEventIDAndRetryable,
+		metricsClient.Scope(metrics.TimerQueueProcessorScope),
+		logger,
+	)
+}
 
-	msBuilder, err := context.LoadWorkflowExecution()
-	switch err.(type) {
-	case nil:
-		// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
-		// the exception is workflow task consistently fail
-		// there will be no event generated, thus making the workflow task schedule ID == next event ID
-		eventID, retryable := getTimerTaskEventIDAndRetryable(timerTask, msBuilder.GetExecutionInfo())
-		if eventID >= msBuilder.GetNextEventID() && retryable {
-			metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)
-			context.Clear()
+func loadMutableStateForTask(
+	context workflow.Context,
+	task tasks.Task,
+	taskEventIDAndRetryable func(task tasks.Task, executionInfo *persistencespb.WorkflowExecutionInfo) (int64, bool),
+	scope metrics.Scope,
+	logger log.Logger,
+) (workflow.MutableState, error) {
 
-			msBuilder, err = context.LoadWorkflowExecution()
-			if err != nil {
-				return nil, err
-			}
-			// after refresh, still mutable state's next event ID <= task ID
-			if eventID >= msBuilder.GetNextEventID() {
-				logger.Info("Timer Task Processor: task event ID >= MS NextEventID, skip.",
-					tag.WorkflowEventID(eventID),
-					tag.WorkflowNextEventID(msBuilder.GetNextEventID()))
-				return nil, nil
-			}
-		}
-		return msBuilder, nil
-
-	case *serviceerror.NotFound:
-		return nil, nil
-
-	default:
+	mutableState, err := context.LoadWorkflowExecution()
+	if err != nil {
 		return nil, err
 	}
+
+	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
+	// the exception is workflow task consistently fail
+	// there will be no event generated, thus making the workflow task schedule ID == next event ID
+	eventID, retryable := taskEventIDAndRetryable(task, mutableState.GetExecutionInfo())
+	if eventID < mutableState.GetNextEventID() || !retryable {
+		return mutableState, nil
+	}
+
+	scope.IncCounter(metrics.StaleMutableStateCounter)
+	context.Clear()
+
+	mutableState, err = context.LoadWorkflowExecution()
+	if err != nil {
+		return nil, err
+	}
+	// after refresh, still mutable state's next event ID <= task's event ID
+	if eventID >= mutableState.GetNextEventID() {
+		logger.Info("Timer Task Processor: task event ID >= MS NextEventID, skip.",
+			tag.WorkflowEventID(eventID),
+			tag.WorkflowNextEventID(mutableState.GetNextEventID()),
+		)
+		return nil, nil
+	}
+	return mutableState, nil
 }
 
 func initializeLoggerForTask(
