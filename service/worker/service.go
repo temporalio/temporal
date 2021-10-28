@@ -49,6 +49,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
@@ -85,11 +86,12 @@ type (
 
 		metricsScope tally.Scope
 
-		status    int32
-		stopC     chan struct{}
-		sdkClient sdkclient.Client
-		esClient  esclient.Client
-		config    *Config
+		status           int32
+		stopC            chan struct{}
+		sdkClient        sdkclient.Client
+		sdkClientFactory sdk.ClientFactory
+		esClient         esclient.Client
+		config           *Config
 
 		manager *workerManager
 	}
@@ -112,6 +114,7 @@ func NewService(
 	logger resource.SnTaggedLogger,
 	serviceConfig *Config,
 	sdkClient sdkclient.Client,
+	sdkClientFactory sdk.ClientFactory,
 	esClient esclient.Client,
 	archivalMetadata carchiver.ArchivalMetadata,
 	clusterMetadata cluster.Metadata,
@@ -136,12 +139,13 @@ func NewService(
 	}
 
 	return &Service{
-		status:    common.DaemonStatusInitialized,
-		config:    serviceConfig,
-		sdkClient: sdkClient,
-		esClient:  esClient,
-		stopC:     make(chan struct{}),
 
+		status:                    common.DaemonStatusInitialized,
+		config:                    serviceConfig,
+		sdkClient:                 sdkClient,
+		sdkClientFactory:          sdkClientFactory,
+		esClient:                  esClient,
+		stopC:                     make(chan struct{}),
 		logger:                    logger,
 		archivalMetadata:          archivalMetadata,
 		clusterMetadata:           clusterMetadata,
@@ -409,7 +413,7 @@ func (s *Service) startBatcher() {
 		Logger:        s.logger,
 		ClientBean:    s.clientBean,
 	}
-	if err := batcher.New(params).Start(); err != nil {
+	if err := batcher.New(params, s.sdkClientFactory).Start(); err != nil {
 		s.logger.Fatal(
 			"error starting batcher",
 			tag.Error(err),
