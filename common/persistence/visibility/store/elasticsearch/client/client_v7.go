@@ -135,23 +135,30 @@ func newSimpleClientV7(url string) (*clientV7, error) {
 }
 
 func (c *clientV7) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
-	searchService := c.esClient.Search().
+	searchSource := elastic.NewSearchSource().
 		Query(p.Query).
 		SortBy(p.Sorter...)
 
-	// When pit.id is specified index must not be used.
-	if p.PointInTime == nil {
-		searchService.Index(p.Index)
-	} else {
-		searchService.PointInTime(p.PointInTime)
+	if p.PointInTime != nil {
+		searchSource.PointInTime(p.PointInTime)
 	}
 
 	if p.PageSize != 0 {
-		searchService.Size(p.PageSize)
+		searchSource.Size(p.PageSize)
 	}
 
 	if len(p.SearchAfter) != 0 {
-		searchService.SearchAfter(p.SearchAfter...)
+		searchSource.SearchAfter(p.SearchAfter...)
+	}
+
+	// 	jsonMap, _ := searchSource.Source()
+	// 	jsonBytes, _ := json.Marshal(jsonMap)
+	// 	println(string(jsonBytes))
+
+	searchService := c.esClient.Search().SearchSource(searchSource)
+	// When pit.id is specified index must not be used.
+	if p.PointInTime == nil {
+		searchService.Index(p.Index)
 	}
 
 	return searchService.Do(ctx)
