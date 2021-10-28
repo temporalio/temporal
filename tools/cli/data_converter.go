@@ -36,9 +36,9 @@ func newDataConverterCommands() []cli.Command {
 					Required: true,
 				},
 				cli.IntFlag{
-					Name: FlagPort,
-					Value: 0,
-					Usage: "Port for the dataconverter to listen on. Defaults to a random port.",
+					Name:   FlagPort,
+					Value:  0,
+					Usage:  "Port for the dataconverter to listen on. Defaults to a random port.",
 					EnvVar: "TEMPORAL_CLI_DATA_CONVERTER_PORT",
 				},
 			},
