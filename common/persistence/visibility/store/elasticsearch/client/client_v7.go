@@ -151,10 +151,6 @@ func (c *clientV7) Search(ctx context.Context, p *SearchParameters) (*elastic.Se
 		searchSource.SearchAfter(p.SearchAfter...)
 	}
 
-	// 	jsonMap, _ := searchSource.Source()
-	// 	jsonBytes, _ := json.Marshal(jsonMap)
-	// 	println(string(jsonBytes))
-
 	searchService := c.esClient.Search().SearchSource(searchSource)
 	// When pit.id is specified index must not be used.
 	if p.PointInTime == nil {
