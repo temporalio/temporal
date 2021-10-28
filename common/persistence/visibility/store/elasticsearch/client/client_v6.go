@@ -131,10 +131,6 @@ func (c *clientV6) Search(ctx context.Context, p *SearchParameters) (*elastic.Se
 		searchSource.SearchAfter(p.SearchAfter...)
 	}
 
-	// 	jsonMap, _ := searchSource.Source()
-	// 	jsonBytes, _ := json.Marshal(jsonMap)
-	// 	println(string(jsonBytes))
-
 	searchResult, err := c.esClient.Search(p.Index).SearchSource(searchSource).Do(ctx)
 	if err != nil {
 		return nil, convertV6ErrorToV7(err)
