@@ -140,6 +140,7 @@ func newMatchingEngine(
 		taskManager:       taskMgr,
 		historyService:    mockHistoryClient,
 		taskQueues:        make(map[taskQueueID]taskQueueManager),
+		taskQueueCount:    make(map[taskQueueCounterKey]int),
 		logger:            logger,
 		metricsClient:     metrics.NewClient(tally.NoopScope, metrics.Matching),
 		tokenSerializer:   common.NewProtoTaskTokenSerializer(),
