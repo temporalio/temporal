@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -274,7 +275,7 @@ func (p *queueProcessorBase) processBatch() {
 }
 
 func (p *queueProcessorBase) submitTask(
-	taskInfo queueTaskInfo,
+	taskInfo tasks.Task,
 ) bool {
 
 	return p.taskProcessor.addTask(
@@ -293,7 +294,7 @@ func (p *queueProcessorBase) retryTasks() {
 }
 
 func (p *queueProcessorBase) complete(
-	task queueTaskInfo,
+	task tasks.Task,
 ) {
-	p.ackMgr.completeQueueTask(task.GetTaskId())
+	p.ackMgr.completeQueueTask(task.GetKey().TaskID)
 }

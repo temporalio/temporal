@@ -27,11 +27,15 @@ package history
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -39,7 +43,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/archiver"
@@ -130,10 +133,15 @@ func (s *timerQueueTaskExecutorBaseSuite) TearDownTest() {
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
-	task := &persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1,
-		TaskId:          12345,
-		VisibilityTime:  timestamp.TimeNowPtrUtc(),
+	task := &tasks.DeleteHistoryEventTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			tests.NamespaceID,
+			tests.WorkflowID,
+			tests.RunID,
+		),
+		Version:             123,
+		TaskID:              12345,
+		VisibilityTimestamp: time.Now().UTC(),
 	}
 
 	s.mockWorkflowExecutionContext.EXPECT().Clear()
@@ -156,6 +164,17 @@ func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchivalFailed() {
+	task := &tasks.DeleteHistoryEventTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			tests.NamespaceID,
+			tests.WorkflowID,
+			tests.RunID,
+		),
+		Version:             123,
+		TaskID:              12345,
+		VisibilityTimestamp: time.Now().UTC(),
+	}
+
 	s.mockWorkflowExecutionContext.EXPECT().LoadExecutionStats().Return(&persistencespb.ExecutionStats{
 		HistorySize: 1024,
 	}, nil)
@@ -183,12 +202,22 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchiva
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
 
 	namespaceRegistryEntry := namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{}, &persistencespb.NamespaceConfig{}, false, nil, 0)
-	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceRegistryEntry)
+	err := s.timerQueueTaskExecutorBase.archiveWorkflow(task, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceRegistryEntry)
 	s.NoError(err)
 }
 
 func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_SendSignalErr() {
+	task := &tasks.DeleteHistoryEventTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			tests.NamespaceID,
+			tests.WorkflowID,
+			tests.RunID,
+		),
+		Version:             123,
+		TaskID:              12345,
+		VisibilityTimestamp: time.Now().UTC(),
+	}
+
 	s.mockWorkflowExecutionContext.EXPECT().LoadExecutionStats().Return(&persistencespb.ExecutionStats{
 		HistorySize: 1024 * 1024 * 1024,
 	}, nil)
@@ -202,8 +231,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_SendSignalErr() {
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
 
 	namespaceRegistryEntry := namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{}, &persistencespb.NamespaceConfig{}, false, nil, 0)
-	err := s.timerQueueTaskExecutorBase.archiveWorkflow(&persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1}, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceRegistryEntry)
+	err := s.timerQueueTaskExecutorBase.archiveWorkflow(task, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceRegistryEntry)
 	s.Error(err)
 }
 

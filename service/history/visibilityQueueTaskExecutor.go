@@ -33,16 +33,15 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 )
@@ -95,37 +94,31 @@ func newVisibilityQueueTaskExecutor(
 
 func (t *visibilityQueueTaskExecutor) execute(
 	ctx context.Context,
-	taskInfo queueTaskInfo,
+	taskInfo tasks.Task,
 	shouldProcessTask bool,
 ) error {
-
-	task, ok := taskInfo.(*persistencespb.VisibilityTaskInfo)
-	if !ok {
-		return errUnexpectedQueueTask
-	}
 
 	if !shouldProcessTask {
 		return nil
 	}
 
-	switch task.GetTaskType() {
-	case enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION:
-		return t.processStartOrUpsertExecution(ctx, task, true)
-	case enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION:
-		return t.processStartOrUpsertExecution(ctx, task, false)
-	case enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION:
+	switch task := taskInfo.(type) {
+	case *tasks.StartExecutionVisibilityTask:
+		return t.processStartExecution(ctx, task)
+	case *tasks.UpsertExecutionVisibilityTask:
+		return t.processUpsertExecution(ctx, task)
+	case *tasks.CloseExecutionVisibilityTask:
 		return t.processCloseExecution(ctx, task)
-	case enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
+	case *tasks.DeleteExecutionVisibilityTask:
 		return t.processDeleteExecution(task)
 	default:
 		return errUnknownVisibilityTask
 	}
 }
 
-func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
+func (t *visibilityQueueTaskExecutor) processStartExecution(
 	ctx context.Context,
-	task *persistencespb.VisibilityTaskInfo,
-	isStartExecution bool,
+	task *tasks.StartExecutionVisibilityTask,
 ) (retError error) {
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
@@ -133,10 +126,10 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 	defer cancel()
 	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
-		task.GetNamespaceId(),
+		task.NamespaceID,
 		commonpb.WorkflowExecution{
-			WorkflowId: task.GetWorkflowId(),
-			RunId:      task.GetRunId(),
+			WorkflowId: task.WorkflowID,
+			RunId:      task.RunID,
 		},
 		workflow.CallerTypeTask,
 	)
@@ -155,15 +148,13 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 
 	// verify task version for RecordWorkflowStarted.
 	// upsert doesn't require verifyTask, because it is just a sync of mutableState.
-	if isStartExecution {
-		startVersion, err := mutableState.GetStartVersion()
-		if err != nil {
-			return err
-		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), startVersion, task.Version, task)
-		if err != nil || !ok {
-			return err
-		}
+	startVersion, err := mutableState.GetStartVersion()
+	if err != nil {
+		return err
+	}
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.NamespaceID, startVersion, task.Version, task)
+	if err != nil || !ok {
+		return err
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
@@ -183,37 +174,85 @@ func (t *visibilityQueueTaskExecutor) processStartOrUpsertExecution(
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 
-	if isStartExecution {
-		return t.recordStartExecution(
-			task.GetNamespaceId(),
-			task.GetWorkflowId(),
-			task.GetRunId(),
-			wfTypeName,
-			workflowStartTime,
-			workflowExecutionTime,
-			stateTransitionCount,
-			task.GetTaskId(),
-			executionStatus,
-			taskQueue,
-			visibilityMemo,
-			searchAttr,
-		)
-	}
-	return t.upsertExecution(
-		task.GetNamespaceId(),
-		task.GetWorkflowId(),
-		task.GetRunId(),
+	return t.recordStartExecution(
+		task.GetNamespaceID(),
+		task.GetWorkflowID(),
+		task.GetRunID(),
 		wfTypeName,
 		workflowStartTime,
 		workflowExecutionTime,
 		stateTransitionCount,
-		task.GetTaskId(),
+		task.GetTaskID(),
 		executionStatus,
 		taskQueue,
 		visibilityMemo,
 		searchAttr,
 	)
 }
+
+func (t *visibilityQueueTaskExecutor) processUpsertExecution(
+	ctx context.Context,
+	task *tasks.UpsertExecutionVisibilityTask,
+) (retError error) {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
+
+	defer cancel()
+	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
+		ctx,
+		task.NamespaceID,
+		commonpb.WorkflowExecution{
+			WorkflowId: task.WorkflowID,
+			RunId:      task.RunID,
+		},
+		workflow.CallerTypeTask,
+	)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	mutableState, err := weContext.LoadWorkflowExecution()
+	if err != nil {
+		return err
+	}
+	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
+	executionInfo := mutableState.GetExecutionInfo()
+	executionState := mutableState.GetExecutionState()
+	wfTypeName := executionInfo.WorkflowTypeName
+
+	workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
+	workflowExecutionTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetExecutionTime())
+	visibilityMemo := getWorkflowMemo(copyMemo(executionInfo.Memo))
+	searchAttr := getSearchAttributes(copySearchAttributes(executionInfo.SearchAttributes))
+	executionStatus := executionState.GetStatus()
+	taskQueue := executionInfo.TaskQueue
+	stateTransitionCount := executionInfo.GetStateTransitionCount()
+
+	// NOTE: do not access anything related mutable state after this lock release
+	// release the context lock since we no longer need mutable state builder and
+	// the rest of logic is making RPC call, which takes time.
+	release(nil)
+
+	return t.upsertExecution(
+		task.GetNamespaceID(),
+		task.GetWorkflowID(),
+		task.GetRunID(),
+		wfTypeName,
+		workflowStartTime,
+		workflowExecutionTime,
+		stateTransitionCount,
+		task.GetTaskID(),
+		executionStatus,
+		taskQueue,
+		visibilityMemo,
+		searchAttr,
+	)
+}
+
 func (t *visibilityQueueTaskExecutor) recordStartExecution(
 	namespaceID string,
 	workflowID string,
@@ -306,7 +345,7 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 
 func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	ctx context.Context,
-	task *persistencespb.VisibilityTaskInfo,
+	task *tasks.CloseExecutionVisibilityTask,
 ) (retError error) {
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
@@ -314,10 +353,10 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	defer cancel()
 	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
-		task.GetNamespaceId(),
+		task.NamespaceID,
 		commonpb.WorkflowExecution{
-			WorkflowId: task.GetWorkflowId(),
-			RunId:      task.GetRunId(),
+			WorkflowId: task.WorkflowID,
+			RunId:      task.RunID,
 		},
 		workflow.CallerTypeTask,
 	)
@@ -338,7 +377,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.GetNamespaceId(), lastWriteVersion, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, task.NamespaceID, lastWriteVersion, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -368,9 +407,9 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	return t.recordCloseExecution(
-		task.GetNamespaceId(),
-		task.GetWorkflowId(),
-		task.GetRunId(),
+		task.GetNamespaceID(),
+		task.GetWorkflowID(),
+		task.GetRunID(),
 		workflowTypeName,
 		workflowStartTime,
 		workflowExecutionTime,
@@ -378,7 +417,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		workflowStatus,
 		stateTransitionCount,
 		workflowHistoryLength,
-		task.GetTaskId(),
+		task.GetTaskID(),
 		visibilityMemo,
 		taskQueue,
 		searchAttr,
@@ -445,13 +484,13 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 }
 
 func (t *visibilityQueueTaskExecutor) processDeleteExecution(
-	task *persistencespb.VisibilityTaskInfo,
+	task *tasks.DeleteExecutionVisibilityTask,
 ) (retError error) {
 	request := &manager.VisibilityDeleteWorkflowExecutionRequest{
-		NamespaceID: task.GetNamespaceId(),
-		WorkflowID:  task.GetWorkflowId(),
-		RunID:       task.GetRunId(),
-		TaskID:      task.GetTaskId(),
+		NamespaceID: task.NamespaceID,
+		WorkflowID:  task.WorkflowID,
+		RunID:       task.RunID,
+		TaskID:      task.TaskID,
 	}
 	return t.visibilityMgr.DeleteWorkflowExecution(request)
 }

@@ -357,7 +357,6 @@ func (s *TaskSerializer) transferWorkflowTaskFromProto(
 		),
 		VisibilityTimestamp: *workflowTask.VisibilityTime,
 		TaskID:              workflowTask.TaskId,
-		NamespaceID:         workflowTask.TargetNamespaceId,
 		TaskQueue:           workflowTask.TaskQueue,
 		ScheduleID:          workflowTask.ScheduleId,
 		Version:             workflowTask.Version,
@@ -935,7 +934,7 @@ func (s *TaskSerializer) replicationActivityTaskFromProto(
 			activityTask.WorkflowId,
 			activityTask.RunId,
 		),
-		VisibilityTimestamp: time.Time{}, // TODO add the missing attribute to proto definition
+		VisibilityTimestamp: time.Unix(0, 0), // TODO add the missing attribute to proto definition
 		Version:             activityTask.Version,
 		TaskID:              activityTask.TaskId,
 		ScheduledID:         activityTask.ScheduledId,
@@ -969,7 +968,7 @@ func (s *TaskSerializer) replicationHistoryTaskFromProto(
 			historyTask.WorkflowId,
 			historyTask.RunId,
 		),
-		VisibilityTimestamp: time.Time{}, // TODO add the missing attribute to proto definition
+		VisibilityTimestamp: time.Unix(0, 0), // TODO add the missing attribute to proto definition
 		TaskID:              historyTask.TaskId,
 		FirstEventID:        historyTask.FirstEventId,
 		NextEventID:         historyTask.NextEventId,

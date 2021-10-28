@@ -28,7 +28,6 @@ import (
 	"context"
 	"time"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -69,12 +68,8 @@ func newTimerQueueStandbyProcessor(
 		return shard.UpdateTimerClusterAckLevel(clusterName, ackLevel.VisibilityTimestamp)
 	}
 	logger = log.With(logger, tag.ClusterName(clusterName))
-	timerTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
-		timer, ok := taskInfo.(*persistencespb.TimerTaskInfo)
-		if !ok {
-			return false, errUnexpectedQueueTask
-		}
-		return taskAllocator.verifyStandbyTask(clusterName, timer.GetNamespaceId(), timer)
+	timerTaskFilter := func(task tasks.Task) (bool, error) {
+		return taskAllocator.verifyStandbyTask(clusterName, task.GetNamespaceID(), task)
 	}
 
 	timerGate := NewRemoteTimerGate()
@@ -171,11 +166,7 @@ func (t *timerQueueStandbyProcessorImpl) notifyNewTimers(
 func (t *timerQueueStandbyProcessorImpl) complete(
 	taskInfo *taskInfo,
 ) {
-	timerTask, ok := taskInfo.task.(*persistencespb.TimerTaskInfo)
-	if !ok {
-		return
-	}
-	t.timerQueueProcessorBase.complete(timerTask)
+	t.timerQueueProcessorBase.complete(taskInfo.Task)
 }
 
 func (t *timerQueueStandbyProcessorImpl) process(
@@ -183,6 +174,6 @@ func (t *timerQueueStandbyProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
-	metricScope := getTimerTaskMetricScope(taskInfo.task.GetTaskType(), false)
-	return metricScope, t.taskExecutor.execute(ctx, taskInfo.task, taskInfo.shouldProcessTask)
+	metricScope := getTimerTaskMetricScope(taskInfo.Task, false)
+	return metricScope, t.taskExecutor.execute(ctx, taskInfo.Task, taskInfo.shouldProcessTask)
 }

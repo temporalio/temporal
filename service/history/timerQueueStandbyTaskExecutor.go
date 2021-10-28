@@ -33,18 +33,16 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/adminservice/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -83,39 +81,39 @@ func newTimerQueueStandbyTaskExecutor(
 
 func (t *timerQueueStandbyTaskExecutor) execute(
 	ctx context.Context,
-	taskInfo queueTaskInfo,
+	taskInfo tasks.Task,
 	shouldProcessTask bool,
 ) error {
 
-	timerTask, ok := taskInfo.(*persistencespb.TimerTaskInfo)
-	if !ok {
-		return errUnexpectedQueueTask
-	}
-
-	if !shouldProcessTask &&
-		timerTask.TaskType != enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT &&
-		timerTask.TaskType != enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT {
-		// guarantee the processing of workflow execution history deletion
-		return nil
-	}
-
-	switch timerTask.TaskType {
-	case enumsspb.TASK_TYPE_USER_TIMER:
-		return t.executeUserTimerTimeoutTask(ctx, timerTask)
-	case enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT:
-		return t.executeActivityTimeoutTask(ctx, timerTask)
-	case enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT:
-		return t.executeWorkflowTaskTimeoutTask(ctx, timerTask)
-	case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT:
-		return t.executeWorkflowTimeoutTask(ctx, timerTask)
-	case enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER:
+	switch task := taskInfo.(type) {
+	case *tasks.UserTimerTask:
+		if !shouldProcessTask {
+			return nil
+		}
+		return t.executeUserTimerTimeoutTask(ctx, task)
+	case *tasks.ActivityTimeoutTask:
+		if !shouldProcessTask {
+			return nil
+		}
+		return t.executeActivityTimeoutTask(ctx, task)
+	case *tasks.WorkflowTaskTimeoutTask:
+		if !shouldProcessTask {
+			return nil
+		}
+		return t.executeWorkflowTaskTimeoutTask(ctx, task)
+	case *tasks.WorkflowBackoffTimerTask:
+		if !shouldProcessTask {
+			return nil
+		}
+		return t.executeWorkflowBackoffTimerTask(ctx, task)
+	case *tasks.ActivityRetryTimerTask:
 		// retry backoff timer should not get created on passive cluster
 		// TODO: add error logs
 		return nil
-	case enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER:
-		return t.executeWorkflowBackoffTimerTask(ctx, timerTask)
-	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT:
-		return t.executeDeleteHistoryEventTask(ctx, timerTask)
+	case *tasks.WorkflowTimeoutTask:
+		return t.executeWorkflowTimeoutTask(ctx, task)
+	case *tasks.DeleteHistoryEventTask:
+		return t.executeDeleteHistoryEventTask(ctx, task)
 	default:
 		return errUnknownTimerTask
 	}
@@ -123,7 +121,7 @@ func (t *timerQueueStandbyTaskExecutor) execute(
 
 func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 	ctx context.Context,
-	timerTask *persistencespb.TimerTaskInfo,
+	timerTask *tasks.UserTimerTask,
 ) error {
 
 	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
@@ -140,7 +138,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 			}
 
 			if isExpired := timerSequence.IsExpired(
-				timestamp.TimeValue(timerTask.VisibilityTime),
+				timerTask.GetVisibilityTime(),
 				timerSequenceID,
 			); isExpired {
 				return getHistoryResendInfo(mutableState)
@@ -170,7 +168,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 
 func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 	ctx context.Context,
-	timerTask *persistencespb.TimerTaskInfo,
+	timerTask *tasks.ActivityTimeoutTask,
 ) error {
 
 	// activity heartbeat timer task is a special snowflake.
@@ -200,7 +198,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			}
 
 			if isExpired := timerSequence.IsExpired(
-				timestamp.TimeValue(timerTask.VisibilityTime),
+				timerTask.GetVisibilityTime(),
 				timerSequenceID,
 			); isExpired {
 				return getHistoryResendInfo(mutableState)
@@ -225,9 +223,9 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		// for updating workflow execution. In that case, only one new heartbeat timeout task should be
 		// created.
 		isHeartBeatTask := timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
-		activityInfo, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(timerTask.GetEventId())
-		goTS := timestamp.TimeValue(timerTask.VisibilityTime)
-		if isHeartBeatTask && ok && (heartbeatTimeoutVis.Before(goTS) || heartbeatTimeoutVis.Equal(goTS)) {
+		activityInfo, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(timerTask.EventID)
+		fireTimer := timerTask.GetVisibilityTime()
+		if isHeartBeatTask && ok && (heartbeatTimeoutVis.Before(fireTimer) || heartbeatTimeoutVis.Equal(fireTimer)) {
 			activityInfo.TimerTaskStatus = activityInfo.TimerTaskStatus &^ workflow.TimerTaskStatusCreatedHeartbeat
 			if err := mutableState.UpdateActivity(activityInfo); err != nil {
 				return nil, err
@@ -275,7 +273,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 
 func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 	ctx context.Context,
-	timerTask *persistencespb.TimerTaskInfo,
+	timerTask *tasks.WorkflowTaskTimeoutTask,
 ) error {
 
 	// workflow task schedule to start timer task is a special snowflake.
@@ -287,12 +285,12 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 
 	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
-		workflowTask, isPending := mutableState.GetWorkflowTaskInfo(timerTask.GetEventId())
+		workflowTask, isPending := mutableState.GetWorkflowTaskInfo(timerTask.EventID)
 		if !isPending {
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.GetNamespaceId(), workflowTask.Version, timerTask.Version, timerTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.NamespaceID, workflowTask.Version, timerTask.Version, timerTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -317,7 +315,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 
 func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 	ctx context.Context,
-	timerTask *persistencespb.TimerTaskInfo,
+	timerTask *tasks.WorkflowBackoffTimerTask,
 ) error {
 
 	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
@@ -358,7 +356,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowBackoffTimerTask(
 
 func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 	ctx context.Context,
-	timerTask *persistencespb.TimerTaskInfo,
+	timerTask *tasks.WorkflowTimeoutTask,
 ) error {
 
 	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
@@ -370,7 +368,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 		if err != nil {
 			return nil, err
 		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.GetNamespaceId(), startVersion, timerTask.Version, timerTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.NamespaceID, startVersion, timerTask.Version, timerTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -411,7 +409,7 @@ func (t *timerQueueStandbyTaskExecutor) getTimerSequence(
 
 func (t *timerQueueStandbyTaskExecutor) processTimer(
 	ctx context.Context,
-	timerTask *persistencespb.TimerTaskInfo,
+	timerTask tasks.Task,
 	actionFn standbyActionFn,
 	postActionFn standbyPostActionFn,
 ) (retError error) {
@@ -461,7 +459,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 }
 
 func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
-	taskInfo queueTaskInfo,
+	taskInfo tasks.Task,
 	postActionInfo interface{},
 	log log.Logger,
 ) error {
@@ -470,7 +468,6 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		return nil
 	}
 
-	timerTask := taskInfo.(*persistencespb.TimerTaskInfo)
 	resendInfo := postActionInfo.(*historyResendInfo)
 
 	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientRequests)
@@ -482,22 +479,22 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		if err := refreshTasks(
 			t.adminClient,
 			t.shard.GetNamespaceRegistry(),
-			timerTask.GetNamespaceId(),
-			timerTask.GetWorkflowId(),
-			timerTask.GetRunId(),
+			taskInfo.GetNamespaceID(),
+			taskInfo.GetWorkflowID(),
+			taskInfo.GetRunID(),
 		); err != nil {
 			t.logger.Error("Error refresh tasks from remote.",
 				tag.ShardID(t.shard.GetShardID()),
-				tag.WorkflowNamespaceID(timerTask.GetNamespaceId()),
-				tag.WorkflowID(timerTask.GetWorkflowId()),
-				tag.WorkflowRunID(timerTask.GetRunId()),
+				tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
+				tag.WorkflowID(taskInfo.GetWorkflowID()),
+				tag.WorkflowRunID(taskInfo.GetRunID()),
 				tag.ClusterName(t.clusterName))
 		}
 
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-			timerTask.GetNamespaceId(),
-			timerTask.GetWorkflowId(),
-			timerTask.GetRunId(),
+			taskInfo.GetNamespaceID(),
+			taskInfo.GetWorkflowID(),
+			taskInfo.GetRunID(),
 			resendInfo.lastEventID,
 			resendInfo.lastEventVersion,
 			common.EmptyEventID,
@@ -510,9 +507,9 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	if err != nil {
 		t.logger.Error("Error re-replicating history from remote.",
 			tag.ShardID(t.shard.GetShardID()),
-			tag.WorkflowNamespaceID(timerTask.GetNamespaceId()),
-			tag.WorkflowID(timerTask.GetWorkflowId()),
-			tag.WorkflowRunID(timerTask.GetRunId()),
+			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
+			tag.WorkflowID(taskInfo.GetWorkflowID()),
+			tag.WorkflowRunID(taskInfo.GetRunID()),
 			tag.ClusterName(t.clusterName))
 	}
 

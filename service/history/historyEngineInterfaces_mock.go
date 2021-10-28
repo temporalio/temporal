@@ -34,7 +34,6 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-	enums "go.temporal.io/server/api/enums/v1"
 	repication "go.temporal.io/server/api/replication/v1"
 	tasks "go.temporal.io/server/service/history/tasks"
 )
@@ -265,10 +264,10 @@ func (mr *MockqueueAckMgrMockRecorder) getQueueReadLevel() *gomock.Call {
 }
 
 // readQueueTasks mocks base method.
-func (m *MockqueueAckMgr) readQueueTasks() ([]queueTaskInfo, bool, error) {
+func (m *MockqueueAckMgr) readQueueTasks() ([]tasks.Task, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "readQueueTasks")
-	ret0, _ := ret[0].([]queueTaskInfo)
+	ret0, _ := ret[0].([]tasks.Task)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -292,127 +291,6 @@ func (m *MockqueueAckMgr) updateQueueAckLevel() error {
 func (mr *MockqueueAckMgrMockRecorder) updateQueueAckLevel() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "updateQueueAckLevel", reflect.TypeOf((*MockqueueAckMgr)(nil).updateQueueAckLevel))
-}
-
-// MockqueueTaskInfo is a mock of queueTaskInfo interface.
-type MockqueueTaskInfo struct {
-	ctrl     *gomock.Controller
-	recorder *MockqueueTaskInfoMockRecorder
-}
-
-// MockqueueTaskInfoMockRecorder is the mock recorder for MockqueueTaskInfo.
-type MockqueueTaskInfoMockRecorder struct {
-	mock *MockqueueTaskInfo
-}
-
-// NewMockqueueTaskInfo creates a new mock instance.
-func NewMockqueueTaskInfo(ctrl *gomock.Controller) *MockqueueTaskInfo {
-	mock := &MockqueueTaskInfo{ctrl: ctrl}
-	mock.recorder = &MockqueueTaskInfoMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockqueueTaskInfo) EXPECT() *MockqueueTaskInfoMockRecorder {
-	return m.recorder
-}
-
-// GetNamespaceId mocks base method.
-func (m *MockqueueTaskInfo) GetNamespaceId() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNamespaceId")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// GetNamespaceId indicates an expected call of GetNamespaceId.
-func (mr *MockqueueTaskInfoMockRecorder) GetNamespaceId() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceId", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetNamespaceId))
-}
-
-// GetRunId mocks base method.
-func (m *MockqueueTaskInfo) GetRunId() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRunId")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// GetRunId indicates an expected call of GetRunId.
-func (mr *MockqueueTaskInfoMockRecorder) GetRunId() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRunId", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetRunId))
-}
-
-// GetTaskId mocks base method.
-func (m *MockqueueTaskInfo) GetTaskId() int64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTaskId")
-	ret0, _ := ret[0].(int64)
-	return ret0
-}
-
-// GetTaskId indicates an expected call of GetTaskId.
-func (mr *MockqueueTaskInfoMockRecorder) GetTaskId() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskId", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetTaskId))
-}
-
-// GetTaskType mocks base method.
-func (m *MockqueueTaskInfo) GetTaskType() enums.TaskType {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTaskType")
-	ret0, _ := ret[0].(enums.TaskType)
-	return ret0
-}
-
-// GetTaskType indicates an expected call of GetTaskType.
-func (mr *MockqueueTaskInfoMockRecorder) GetTaskType() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskType", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetTaskType))
-}
-
-// GetVersion mocks base method.
-func (m *MockqueueTaskInfo) GetVersion() int64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVersion")
-	ret0, _ := ret[0].(int64)
-	return ret0
-}
-
-// GetVersion indicates an expected call of GetVersion.
-func (mr *MockqueueTaskInfoMockRecorder) GetVersion() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVersion", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetVersion))
-}
-
-// GetVisibilityTime mocks base method.
-func (m *MockqueueTaskInfo) GetVisibilityTime() *time.Time {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVisibilityTime")
-	ret0, _ := ret[0].(*time.Time)
-	return ret0
-}
-
-// GetVisibilityTime indicates an expected call of GetVisibilityTime.
-func (mr *MockqueueTaskInfoMockRecorder) GetVisibilityTime() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTime", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetVisibilityTime))
-}
-
-// GetWorkflowId mocks base method.
-func (m *MockqueueTaskInfo) GetWorkflowId() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetWorkflowId")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// GetWorkflowId indicates an expected call of GetWorkflowId.
-func (mr *MockqueueTaskInfoMockRecorder) GetWorkflowId() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowId", reflect.TypeOf((*MockqueueTaskInfo)(nil).GetWorkflowId))
 }
 
 // MockqueueTaskExecutor is a mock of queueTaskExecutor interface.
@@ -439,7 +317,7 @@ func (m *MockqueueTaskExecutor) EXPECT() *MockqueueTaskExecutorMockRecorder {
 }
 
 // execute mocks base method.
-func (m *MockqueueTaskExecutor) execute(ctx context.Context, taskInfo queueTaskInfo, shouldProcessTask bool) error {
+func (m *MockqueueTaskExecutor) execute(ctx context.Context, taskInfo tasks.Task, shouldProcessTask bool) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "execute", ctx, taskInfo, shouldProcessTask)
 	ret0, _ := ret[0].(error)
@@ -595,10 +473,10 @@ func (mr *MockprocessorMockRecorder) queueShutdown() *gomock.Call {
 }
 
 // readTasks mocks base method.
-func (m *Mockprocessor) readTasks(readLevel int64) ([]queueTaskInfo, bool, error) {
+func (m *Mockprocessor) readTasks(readLevel int64) ([]tasks.Task, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "readTasks", readLevel)
-	ret0, _ := ret[0].([]queueTaskInfo)
+	ret0, _ := ret[0].([]tasks.Task)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2

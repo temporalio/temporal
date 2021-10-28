@@ -28,13 +28,13 @@ import (
 	"context"
 
 	"go.temporal.io/server/api/matchingservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
@@ -81,12 +81,8 @@ func newTransferQueueStandbyProcessor(
 	}
 	logger = log.With(logger, tag.ClusterName(clusterName))
 
-	transferTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
-		task, ok := taskInfo.(*persistencespb.TransferTaskInfo)
-		if !ok {
-			return false, errUnexpectedQueueTask
-		}
-		return taskAllocator.verifyStandbyTask(clusterName, task.GetNamespaceId(), task)
+	transferTaskFilter := func(task tasks.Task) (bool, error) {
+		return taskAllocator.verifyStandbyTask(clusterName, task.GetNamespaceID(), task)
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetTransferMaxReadLevel()
@@ -161,7 +157,7 @@ func (t *transferQueueStandbyProcessorImpl) complete(
 	taskInfo *taskInfo,
 ) {
 
-	t.queueProcessorBase.complete(taskInfo.task)
+	t.queueProcessorBase.complete(taskInfo.Task)
 }
 
 func (t *transferQueueStandbyProcessorImpl) process(
@@ -169,6 +165,6 @@ func (t *transferQueueStandbyProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
-	metricScope := getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), false)
-	return metricScope, t.taskExecutor.execute(ctx, taskInfo.task, taskInfo.shouldProcessTask)
+	metricScope := getTransferTaskMetricsScope(taskInfo.Task, false)
+	return metricScope, t.taskExecutor.execute(ctx, taskInfo.Task, taskInfo.shouldProcessTask)
 }

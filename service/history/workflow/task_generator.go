@@ -248,7 +248,6 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 	workflowTaskScheduleID int64,
 ) error {
 
-	executionInfo := r.mutableState.GetExecutionInfo()
 	workflowTask, ok := r.mutableState.GetWorkflowTaskInfo(
 		workflowTaskScheduleID,
 	)
@@ -260,7 +259,6 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowIdentifier(),
 		VisibilityTimestamp: now,
-		NamespaceID:         executionInfo.NamespaceId,
 		TaskQueue:           workflowTask.TaskQueue.GetName(),
 		ScheduleID:          workflowTask.ScheduleID,
 		Version:             workflowTask.Version,

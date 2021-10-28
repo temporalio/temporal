@@ -41,13 +41,17 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 )
 
 type (
+	taskForTest struct {
+		tasks.Key
+	}
+
 	taskProcessorSuite struct {
 		suite.Suite
 		*require.Assertions
@@ -123,20 +127,18 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_ShutDown() {
 		s.notificationChan,
 		&taskInfo{
 			processor: s.mockProcessor,
-			task: &persistencespb.TimerTaskInfo{
-				ScheduleAttempt: 1},
-			attempt: 1,
+			Task:      &taskForTest{Key: tasks.Key{TaskID: 12345, FireTime: time.Now().UTC()}},
+			attempt:   1,
 		},
 	)
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceErrRetry_ProcessNoErr() {
-	task := newTaskInfo(s.mockProcessor, &persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1, TaskId: 12345, VisibilityTime: timestamp.TimeNowPtrUtc()}, s.logger)
-	var taskFilterErr taskFilter = func(task queueTaskInfo) (bool, error) {
+	task := newTaskInfo(s.mockProcessor, &taskForTest{Key: tasks.Key{TaskID: 12345, FireTime: time.Now().UTC()}}, s.logger)
+	var taskFilterErr taskFilter = func(task tasks.Task) (bool, error) {
 		return false, errors.New("some random error")
 	}
-	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
+	var taskFilter taskFilter = func(task tasks.Task) (bool, error) {
 		return true, nil
 	}
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilterErr)
@@ -151,10 +153,9 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceErrRetry_ProcessNoEr
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceFalse_ProcessNoErr() {
-	task := newTaskInfo(s.mockProcessor, &persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1, TaskId: 12345, VisibilityTime: timestamp.TimeNowPtrUtc()}, s.logger)
+	task := newTaskInfo(s.mockProcessor, &taskForTest{Key: tasks.Key{TaskID: 12345, FireTime: time.Now().UTC()}}, s.logger)
 	task.shouldProcessTask = false
-	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
+	var taskFilter taskFilter = func(task tasks.Task) (bool, error) {
 		return false, nil
 	}
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
@@ -168,9 +169,8 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceFalse_ProcessNoErr()
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessNoErr() {
-	task := newTaskInfo(s.mockProcessor, &persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1, TaskId: 12345, VisibilityTime: timestamp.TimeNowPtrUtc()}, s.logger)
-	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
+	task := newTaskInfo(s.mockProcessor, &taskForTest{Key: tasks.Key{TaskID: 12345, FireTime: time.Now().UTC()}}, s.logger)
+	var taskFilter taskFilter = func(task tasks.Task) (bool, error) {
 		return true, nil
 	}
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
@@ -185,9 +185,8 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessNoErr() 
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessErrNoErr() {
 	err := errors.New("some random err")
-	task := newTaskInfo(s.mockProcessor, &persistencespb.TimerTaskInfo{
-		ScheduleAttempt: 1, TaskId: 12345, VisibilityTime: timestamp.TimeNowPtrUtc()}, s.logger)
-	var taskFilter taskFilter = func(task queueTaskInfo) (bool, error) {
+	task := newTaskInfo(s.mockProcessor, &taskForTest{Key: tasks.Key{TaskID: 12345, FireTime: time.Now().UTC()}}, s.logger)
+	var taskFilter taskFilter = func(task tasks.Task) (bool, error) {
 		return true, nil
 	}
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
@@ -255,3 +254,32 @@ func (s *taskProcessorSuite) TestHandleTaskError_RandomErr() {
 	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
 	s.Equal(err, s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 }
+
+func (t *taskForTest) GetKey() tasks.Key {
+	return t.Key
+}
+
+func (t *taskForTest) GetTaskID() int64 {
+	return t.TaskID
+}
+
+func (t *taskForTest) GetVisibilityTime() time.Time {
+	return t.FireTime
+}
+
+func (t *taskForTest) GetNamespaceID() string {
+	return tests.NamespaceID
+}
+
+func (t *taskForTest) GetWorkflowID() string {
+	return tests.WorkflowID
+}
+
+func (t *taskForTest) GetRunID() string {
+	return tests.RunID
+}
+
+func (t *taskForTest) GetVersion() int64             { panic("implement me") }
+func (t *taskForTest) SetVersion(_ int64)            { panic("implement me") }
+func (t *taskForTest) SetTaskID(_ int64)             { panic("implement me") }
+func (t *taskForTest) SetVisibilityTime(_ time.Time) { panic("implement me") }

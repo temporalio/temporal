@@ -36,16 +36,15 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
@@ -202,7 +201,7 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 		}
 
 		token = response.NextPageToken
-		for _, task := range p.convert(response.Tasks) {
+		for _, task := range response.Tasks {
 			if replicationTask, err := p.taskInfoToTask(
 				ctx,
 				task,
@@ -236,23 +235,40 @@ func (p *replicatorQueueProcessorImpl) getTask(
 	taskInfo *replicationspb.ReplicationTaskInfo,
 ) (*replicationspb.ReplicationTask, error) {
 
-	task := &persistencespb.ReplicationTaskInfo{
-		NamespaceId:  taskInfo.GetNamespaceId(),
-		WorkflowId:   taskInfo.GetWorkflowId(),
-		RunId:        taskInfo.GetRunId(),
-		TaskId:       taskInfo.GetTaskId(),
-		TaskType:     taskInfo.GetTaskType(),
-		FirstEventId: taskInfo.GetFirstEventId(),
-		NextEventId:  taskInfo.GetNextEventId(),
-		Version:      taskInfo.GetVersion(),
-		ScheduledId:  taskInfo.GetScheduledId(),
+	switch taskInfo.TaskType {
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
+		return p.taskInfoToTask(ctx, &tasks.SyncActivityTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				taskInfo.GetNamespaceId(),
+				taskInfo.GetWorkflowId(),
+				taskInfo.GetRunId(),
+			),
+			VisibilityTimestamp: time.Unix(0, 0), // TODO add the missing attribute to proto definition
+			TaskID:              taskInfo.TaskId,
+			Version:             taskInfo.Version,
+			ScheduledID:         taskInfo.ScheduledId,
+		})
+	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
+		return p.taskInfoToTask(ctx, &tasks.HistoryReplicationTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				taskInfo.GetNamespaceId(),
+				taskInfo.GetWorkflowId(),
+				taskInfo.GetRunId(),
+			),
+			VisibilityTimestamp: time.Unix(0, 0), // TODO add the missing attribute to proto definition
+			TaskID:              taskInfo.TaskId,
+			Version:             taskInfo.Version,
+			FirstEventID:        taskInfo.FirstEventId,
+			NextEventID:         taskInfo.NextEventId,
+		})
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", taskInfo.TaskType))
 	}
-	return p.taskInfoToTask(ctx, task)
 }
 
 func (p *replicatorQueueProcessorImpl) taskInfoToTask(
 	ctx context.Context,
-	task *persistencespb.ReplicationTaskInfo,
+	task tasks.Task,
 ) (*replicationspb.ReplicationTask, error) {
 	var replicationTask *replicationspb.ReplicationTask
 	op := func() error {
@@ -295,14 +311,14 @@ func (p *replicatorQueueProcessorImpl) taskIDsRange(
 
 func (p *replicatorQueueProcessorImpl) toReplicationTask(
 	ctx context.Context,
-	task *persistencespb.ReplicationTaskInfo,
+	task tasks.Task,
 ) (*replicationspb.ReplicationTask, error) {
 
-	switch task.TaskType {
-	case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
+	switch task := task.(type) {
+	case *tasks.SyncActivityTask:
 		return p.generateSyncActivityTask(ctx, task)
 
-	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
+	case *tasks.HistoryReplicationTask:
 		return p.generateHistoryReplicationTask(ctx, task)
 
 	default:
@@ -312,12 +328,12 @@ func (p *replicatorQueueProcessorImpl) toReplicationTask(
 
 func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 	ctx context.Context,
-	taskInfo *persistencespb.ReplicationTaskInfo,
+	taskInfo *tasks.SyncActivityTask,
 ) (*replicationspb.ReplicationTask, error) {
-	namespaceID := taskInfo.GetNamespaceId()
-	workflowID := taskInfo.GetWorkflowId()
-	runID := taskInfo.GetRunId()
-	taskID := taskInfo.GetTaskId()
+	namespaceID := taskInfo.NamespaceID
+	workflowID := taskInfo.WorkflowID
+	runID := taskInfo.RunID
+	taskID := taskInfo.TaskID
 	return p.processReplication(
 		ctx,
 		false, // not necessary to send out sync activity task if workflow closed
@@ -325,7 +341,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 		workflowID,
 		runID,
 		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
-			activityInfo, ok := mutableState.GetActivityInfo(taskInfo.GetScheduledId())
+			activityInfo, ok := mutableState.GetActivityInfo(taskInfo.ScheduledID)
 			if !ok {
 				return nil, nil
 			}
@@ -377,12 +393,12 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 
 func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 	ctx context.Context,
-	taskInfo *persistencespb.ReplicationTaskInfo,
+	taskInfo *tasks.HistoryReplicationTask,
 ) (*replicationspb.ReplicationTask, error) {
-	namespaceID := taskInfo.GetNamespaceId()
-	workflowID := taskInfo.GetWorkflowId()
-	runID := taskInfo.GetRunId()
-	taskID := taskInfo.GetTaskId()
+	namespaceID := taskInfo.NamespaceID
+	workflowID := taskInfo.WorkflowID
+	runID := taskInfo.RunID
+	taskID := taskInfo.TaskID
 	return p.processReplication(
 		ctx,
 		true, // still necessary to send out history replication message if workflow closed
@@ -392,7 +408,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
 			versionHistoryItems, branchToken, err := p.getVersionHistoryItems(
 				mutableState,
-				taskInfo.GetFirstEventId(),
+				taskInfo.FirstEventID,
 				taskInfo.Version,
 			)
 			if err != nil {
@@ -406,8 +422,8 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 
 			eventsBlob, err := p.getEventsBlob(
 				taskInfo.BranchToken,
-				taskInfo.GetFirstEventId(),
-				taskInfo.GetNextEventId(),
+				taskInfo.FirstEventID,
+				taskInfo.NextEventID,
 			)
 			if err != nil {
 				return nil, err
@@ -546,26 +562,4 @@ func (p *replicatorQueueProcessorImpl) processReplication(
 	default:
 		return nil, err
 	}
-}
-
-// TODO @wxing1292 deprecate this additional conversion before 1.14
-func (p *replicatorQueueProcessorImpl) convert(
-	genericTasks []tasks.Task,
-) []*persistencespb.ReplicationTaskInfo {
-	queueTasks := make([]*persistencespb.ReplicationTaskInfo, len(genericTasks))
-	serializer := serialization.TaskSerializer{}
-
-	for index, task := range genericTasks {
-		var replicationTask *persistencespb.ReplicationTaskInfo
-		switch task := task.(type) {
-		case *tasks.SyncActivityTask:
-			replicationTask = serializer.ReplicationActivityTaskToProto(task)
-		case *tasks.HistoryReplicationTask:
-			replicationTask = serializer.ReplicationHistoryTaskToProto(task)
-		default:
-			panic(fmt.Sprintf("Unknown repication task type: %v", task))
-		}
-		queueTasks[index] = replicationTask
-	}
-	return queueTasks
 }

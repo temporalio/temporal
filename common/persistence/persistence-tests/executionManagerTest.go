@@ -1066,7 +1066,6 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 				&tasks.WorkflowTask{
 					WorkflowKey: workflowKey,
 					TaskID:      s.GetNextSequenceNumber(),
-					NamespaceID: namespaceID,
 					TaskQueue:   "queue1",
 					ScheduleID:  int64(2),
 				},
@@ -1760,7 +1759,6 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 	task1 := tasks1[0]
 	s.Equal(&tasks.WorkflowTask{
 		WorkflowKey:         workflowKey,
-		NamespaceID:         namespaceID,
 		VisibilityTimestamp: task1.GetVisibilityTime(),
 		TaskID:              task1.GetTaskID(),
 		TaskQueue:           "queue1",
@@ -2172,7 +2170,6 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 	scheduleId := int64(2)
 	s.Equal(&tasks.WorkflowTask{
 		WorkflowKey:         workflowKey,
-		NamespaceID:         namespaceID,
 		VisibilityTimestamp: task1.GetVisibilityTime(),
 		TaskID:              task1.GetTaskID(),
 		TaskQueue:           taskqueue,
@@ -2199,7 +2196,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksComplete() {
 
 	taskSlice := []tasks.Task{
 		&tasks.ActivityTask{workflowKey, now, currentTransferID + 10001, namespaceID, taskqueue, scheduleID, 111},
-		&tasks.WorkflowTask{workflowKey, now, currentTransferID + 10002, namespaceID, taskqueue, scheduleID, 222},
+		&tasks.WorkflowTask{workflowKey, now, currentTransferID + 10002, taskqueue, scheduleID, 222},
 		&tasks.CloseExecutionTask{workflowKey, now, currentTransferID + 10003, 333},
 		&tasks.CancelExecutionTask{workflowKey, now, currentTransferID + 10004, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 444},
 		&tasks.SignalExecutionTask{workflowKey, now, currentTransferID + 10005, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 555},
@@ -2277,7 +2274,6 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	task1 := tasks1[0]
 	s.Equal(&tasks.WorkflowTask{
 		WorkflowKey:         workflowKey,
-		NamespaceID:         namespaceID,
 		VisibilityTimestamp: task1.GetVisibilityTime(),
 		TaskID:              task1.GetTaskID(),
 		TaskQueue:           taskqueue,
@@ -2304,7 +2300,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	now := time.Now().UTC()
 	taskSlice := []tasks.Task{
 		&tasks.ActivityTask{workflowKey, now, currentTransferID + 10001, namespaceID, taskqueue, scheduleID, 111},
-		&tasks.WorkflowTask{workflowKey, now, currentTransferID + 10002, namespaceID, taskqueue, scheduleID, 222},
+		&tasks.WorkflowTask{workflowKey, now, currentTransferID + 10002, taskqueue, scheduleID, 222},
 		&tasks.CloseExecutionTask{workflowKey, now, currentTransferID + 10003, 333},
 		&tasks.CancelExecutionTask{workflowKey, now, currentTransferID + 10004, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 444},
 		&tasks.SignalExecutionTask{workflowKey, now, currentTransferID + 10005, targetNamespaceID, targetWorkflowID, targetRunID, true, scheduleID, 555},

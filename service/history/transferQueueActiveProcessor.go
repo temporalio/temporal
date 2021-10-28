@@ -31,12 +31,12 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
@@ -81,12 +81,8 @@ func newTransferQueueActiveProcessor(
 	}
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
-	transferTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
-		task, ok := taskInfo.(*persistencespb.TransferTaskInfo)
-		if !ok {
-			return false, errUnexpectedQueueTask
-		}
-		return taskAllocator.verifyActiveTask(task.GetNamespaceId(), task)
+	transferTaskFilter := func(task tasks.Task) (bool, error) {
+		return taskAllocator.verifyActiveTask(task.GetNamespaceID(), task)
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetTransferMaxReadLevel()
@@ -184,12 +180,8 @@ func newTransferQueueFailoverProcessor(
 		tag.FailoverMsg("from: "+standbyClusterName),
 	)
 
-	transferTaskFilter := func(taskInfo queueTaskInfo) (bool, error) {
-		task, ok := taskInfo.(*persistencespb.TransferTaskInfo)
-		if !ok {
-			return false, errUnexpectedQueueTask
-		}
-		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, task.GetNamespaceId(), task)
+	transferTaskFilter := func(task tasks.Task) (bool, error) {
+		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, task.GetNamespaceID(), task)
 	}
 	maxReadAckLevel := func() int64 {
 		return maxLevel // this is a const
@@ -269,7 +261,7 @@ func (t *transferQueueActiveProcessorImpl) complete(
 	taskInfo *taskInfo,
 ) {
 
-	t.queueProcessorBase.complete(taskInfo.task)
+	t.queueProcessorBase.complete(taskInfo.Task)
 }
 
 func (t *transferQueueActiveProcessorImpl) process(
@@ -277,6 +269,6 @@ func (t *transferQueueActiveProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
-	metricScope := getTransferTaskMetricsScope(taskInfo.task.GetTaskType(), true)
-	return metricScope, t.taskExecutor.execute(ctx, taskInfo.task, taskInfo.shouldProcessTask)
+	metricScope := getTransferTaskMetricsScope(taskInfo.Task, true)
+	return metricScope, t.taskExecutor.execute(ctx, taskInfo.Task, taskInfo.shouldProcessTask)
 }

@@ -25,17 +25,15 @@
 package history
 
 import (
-	"fmt"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -78,119 +76,144 @@ func verifyTaskVersion(
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTransferTask(
 	context workflow.Context,
-	transferTask *persistencespb.TransferTaskInfo,
+	transferTask tasks.Task,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
-
-	msBuilder, err := context.LoadWorkflowExecution()
-	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); ok {
-			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
-			return nil, nil
-		}
-		return nil, err
-	}
-	executionInfo := msBuilder.GetExecutionInfo()
-
-	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
-	// the exception is workflow task consistently fail
-	// there will be no event generated, thus making the workflow task schedule ID == next event ID
-	isWorkflowTaskRetry := transferTask.TaskType == enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK &&
-		executionInfo.WorkflowTaskScheduleId == transferTask.GetScheduleId() &&
-		executionInfo.WorkflowTaskAttempt > 1
-
-	if transferTask.GetScheduleId() >= msBuilder.GetNextEventID() && !isWorkflowTaskRetry {
-		metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.StaleMutableStateCounter)
-		context.Clear()
-
-		msBuilder, err = context.LoadWorkflowExecution()
-		if err != nil {
-			return nil, err
-		}
-		// after refresh, still mutable state's next event ID <= task ID
-		if transferTask.GetScheduleId() >= msBuilder.GetNextEventID() {
-			logger.Info("Transfer Task Processor: task event ID >= MS NextEventID, skip.",
-				tag.WorkflowScheduleID(transferTask.GetScheduleId()),
-				tag.WorkflowNextEventID(msBuilder.GetNextEventID()))
-			return nil, nil
-		}
-	}
-	return msBuilder, nil
+	return loadMutableStateForTask(
+		context,
+		transferTask,
+		getTransferTaskEventIDAndRetryable,
+		metricsClient.Scope(metrics.TransferQueueProcessorScope),
+		logger,
+	)
 }
 
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTimerTask(
 	context workflow.Context,
-	timerTask *persistencespb.TimerTaskInfo,
+	timerTask tasks.Task,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
+	return loadMutableStateForTask(
+		context,
+		timerTask,
+		getTimerTaskEventIDAndRetryable,
+		metricsClient.Scope(metrics.TimerQueueProcessorScope),
+		logger,
+	)
+}
 
-	msBuilder, err := context.LoadWorkflowExecution()
+func loadMutableStateForTask(
+	context workflow.Context,
+	task tasks.Task,
+	taskEventIDAndRetryable func(task tasks.Task, executionInfo *persistencespb.WorkflowExecutionInfo) (int64, bool),
+	scope metrics.Scope,
+	logger log.Logger,
+) (workflow.MutableState, error) {
+
+	mutableState, err := context.LoadWorkflowExecution()
 	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); ok {
-			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
-			return nil, nil
-		}
 		return nil, err
 	}
-	executionInfo := msBuilder.GetExecutionInfo()
 
 	// check to see if cache needs to be refreshed as we could potentially have stale workflow execution
 	// the exception is workflow task consistently fail
 	// there will be no event generated, thus making the workflow task schedule ID == next event ID
-	isWorkflowTaskRetry := timerTask.TaskType == enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT &&
-		executionInfo.WorkflowTaskScheduleId == timerTask.GetEventId() &&
-		executionInfo.WorkflowTaskAttempt > 1
-
-	if timerTask.GetEventId() >= msBuilder.GetNextEventID() && !isWorkflowTaskRetry {
-		metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.StaleMutableStateCounter)
-		context.Clear()
-
-		msBuilder, err = context.LoadWorkflowExecution()
-		if err != nil {
-			return nil, err
-		}
-		// after refresh, still mutable state's next event ID <= task ID
-		if timerTask.GetEventId() >= msBuilder.GetNextEventID() {
-			logger.Info("Timer Task Processor: task event ID >= MS NextEventID, skip.",
-				tag.WorkflowEventID(timerTask.GetEventId()),
-				tag.WorkflowNextEventID(msBuilder.GetNextEventID()))
-			return nil, nil
-		}
+	eventID, retryable := taskEventIDAndRetryable(task, mutableState.GetExecutionInfo())
+	if eventID < mutableState.GetNextEventID() || !retryable {
+		return mutableState, nil
 	}
-	return msBuilder, nil
+
+	scope.IncCounter(metrics.StaleMutableStateCounter)
+	context.Clear()
+
+	mutableState, err = context.LoadWorkflowExecution()
+	if err != nil {
+		return nil, err
+	}
+	// after refresh, still mutable state's next event ID <= task's event ID
+	if eventID >= mutableState.GetNextEventID() {
+		logger.Info("Timer Task Processor: task event ID >= MS NextEventID, skip.",
+			tag.WorkflowEventID(eventID),
+			tag.WorkflowNextEventID(mutableState.GetNextEventID()),
+		)
+		return nil, nil
+	}
+	return mutableState, nil
 }
 
 func initializeLoggerForTask(
 	shardID int32,
-	task queueTaskInfo,
+	task tasks.Task,
 	logger log.Logger,
 ) log.Logger {
 	taskLogger := log.With(
 		logger,
 		tag.ShardID(shardID),
-		tag.TaskID(task.GetTaskId()),
-		tag.TaskVisibilityTimestamp(*task.GetVisibilityTime()),
-		tag.FailoverVersion(task.GetVersion()),
-		tag.TaskType(task.GetTaskType()),
-		tag.WorkflowNamespaceID(task.GetNamespaceId()),
-		tag.WorkflowID(task.GetWorkflowId()),
-		tag.WorkflowRunID(task.GetRunId()),
+		tag.TaskID(task.GetTaskID()),
+		tag.TaskVisibilityTimestamp(task.GetVisibilityTime()),
+		tag.Task(task),
 	)
-
-	switch task := task.(type) {
-	case *persistencespb.TimerTaskInfo:
-		log.With(taskLogger, tag.WorkflowTimeoutType(task.TimeoutType))
-	case *persistencespb.TransferTaskInfo,
-		*persistencespb.VisibilityTaskInfo,
-		*persistencespb.ReplicationTaskInfo:
-		// noop
-	default:
-		taskLogger.Error(fmt.Sprintf("Unknown queue task type: %v", task))
-	}
-
 	return taskLogger
+}
+
+func getTransferTaskEventIDAndRetryable(
+	transferTask tasks.Task,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+) (int64, bool) {
+	eventID := int64(0)
+	retryable := true
+
+	switch task := transferTask.(type) {
+	case *tasks.ActivityTask:
+		eventID = task.ScheduleID
+	case *tasks.WorkflowTask:
+		eventID = task.ScheduleID
+		retryable = !(executionInfo.WorkflowTaskScheduleId == task.ScheduleID && executionInfo.WorkflowTaskAttempt > 1)
+	case *tasks.CloseExecutionTask:
+		eventID = common.FirstEventID
+	case *tasks.CancelExecutionTask:
+		eventID = task.InitiatedID
+	case *tasks.SignalExecutionTask:
+		eventID = task.InitiatedID
+	case *tasks.StartChildExecutionTask:
+		eventID = task.InitiatedID
+	case *tasks.ResetWorkflowTask:
+		eventID = common.FirstEventID
+	default:
+		panic(errUnknownTransferTask)
+	}
+	return eventID, retryable
+}
+
+func getTimerTaskEventIDAndRetryable(
+	timerTask tasks.Task,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+) (int64, bool) {
+	eventID := int64(0)
+	retryable := true
+
+	switch task := timerTask.(type) {
+	case *tasks.UserTimerTask:
+		eventID = task.EventID
+	case *tasks.ActivityTimeoutTask:
+		eventID = task.EventID
+	case *tasks.WorkflowTaskTimeoutTask:
+		eventID = task.EventID
+		retryable = !(executionInfo.WorkflowTaskScheduleId == task.EventID && executionInfo.WorkflowTaskAttempt > 1)
+	case *tasks.WorkflowBackoffTimerTask:
+		eventID = common.FirstEventID
+	case *tasks.ActivityRetryTimerTask:
+		eventID = task.EventID
+	case *tasks.WorkflowTimeoutTask:
+		eventID = common.FirstEventID
+	case *tasks.DeleteHistoryEventTask:
+		eventID = common.FirstEventID
+	default:
+		panic(errUnknownTimerTask)
+	}
+	return eventID, retryable
 }
