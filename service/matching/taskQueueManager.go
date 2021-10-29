@@ -100,6 +100,7 @@ type (
 		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		String() string
 		QueueID() *taskQueueID
+		TaskQueueKind() enumspb.TaskQueueKind
 	}
 
 	// Single task queue in memory state
@@ -594,4 +595,8 @@ func (c *taskQueueManagerImpl) tryInitNamespaceAndScope() {
 
 func (c *taskQueueManagerImpl) QueueID() *taskQueueID {
 	return c.taskQueueID
+}
+
+func (c *taskQueueManagerImpl) TaskQueueKind() enumspb.TaskQueueKind {
+	return c.taskQueueKind
 }
