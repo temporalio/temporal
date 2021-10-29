@@ -51,8 +51,8 @@ func newConnPool() *connPool {
 	}
 }
 
-// Allocate allocated the shared database in the pool or returns already exists instance with the same DSN. If instance
-// for such DSN already exists, it will be returned instead.
+// Allocate allocates the shared database in the pool or returns already exists instance with the same DSN. If instance
+// for such DSN already exists, it will be returned instead. Each request counts as reference until Close.
 func (cp *connPool) Allocate(
 	cfg *config.SQL,
 	resolver resolver.ServiceResolver,
@@ -66,9 +66,9 @@ func (cp *connPool) Allocate(
 		return nil, err
 	}
 
-	if e, ok := cp.pool[dsn]; ok {
-		e.refCount++
-		return e.db, nil
+	if entry, ok := cp.pool[dsn]; ok {
+		entry.refCount++
+		return entry.db, nil
 	}
 
 	db, err = create(cfg, resolver)
