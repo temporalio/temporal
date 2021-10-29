@@ -303,7 +303,7 @@ func readManifest(dirPath string) (*manifest, error) {
 // this method has an assumption that the subdirs containing the
 // schema changes will be of the form vx.x, where x.x is the version
 // returns error when
-//  - startVer <= endVer
+//  - startVer < endVer
 //  - endVer is empty and no subdirs have version >= startVer
 //  - endVer is non-empty and subdir with version == endVer is not found
 func readSchemaDir(dir string, startVer string, endVer string) ([]string, error) {
@@ -315,8 +315,8 @@ func readSchemaDir(dir string, startVer string, endVer string) ([]string, error)
 
 	hasEndVer := len(endVer) > 0
 
-	if hasEndVer && cmpVersion(startVer, endVer) >= 0 {
-		return nil, fmt.Errorf("startVer (%v) must be less than endVer (%v)", startVer, endVer)
+	if hasEndVer && cmpVersion(startVer, endVer) > 0 {
+		return nil, fmt.Errorf("startVer (%v) must be less than or equal to endVer (%v)", startVer, endVer)
 	}
 
 	var endFound bool
@@ -347,17 +347,17 @@ func readSchemaDir(dir string, startVer string, endVer string) ([]string, error)
 		lowcmp := cmpVersion(ver, startVer)
 		if hasEndVer {
 			highcmp = cmpVersion(ver, endVer)
+			endFound = endFound || (highcmp == 0)
 		}
 
 		if lowcmp <= 0 || highcmp > 0 {
 			continue // out of range
 		}
 
-		endFound = endFound || (highcmp == 0)
 		result = append(result, dirname)
 	}
 
-	// when endVer is specified, atleast one result MUST be found since startVer < endVer
+	// when endVer is specified, atleast one result MUST be found
 	if hasEndVer && !endFound {
 		return nil, fmt.Errorf("version dir not found for target version %v", endVer)
 	}
