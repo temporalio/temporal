@@ -32,6 +32,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -173,11 +174,25 @@ func (s *visibilityStore) DeleteWorkflowExecution(request *manager.VisibilityDel
 }
 
 func getDocID(workflowID string, runID string) string {
-	return fmt.Sprintf("%s%s%s", workflowID, delimiter, runID)
+	// From Elasticsearch doc: _id is limited to 512 bytes in size and larger values will be rejected.
+	const maxDocIDLength = 512
+	// Generally runID is guid and this should never be the case.
+	if len(runID)+len(delimiter) >= maxDocIDLength {
+		if len(runID) >= maxDocIDLength {
+			return runID[0:maxDocIDLength]
+		}
+		return runID[0 : maxDocIDLength-len(delimiter)]
+	}
+
+	if len(workflowID)+len(runID)+len(delimiter) > maxDocIDLength {
+		workflowID = workflowID[0 : maxDocIDLength-len(runID)-len(delimiter)]
+	}
+
+	return workflowID + delimiter + runID
 }
 
 func getVisibilityTaskKey(shardID int32, taskID int64) string {
-	return fmt.Sprintf("%d%s%d", shardID, delimiter, taskID)
+	return strconv.FormatInt(int64(shardID), 10) + delimiter + strconv.FormatInt(taskID, 10)
 }
 
 func (s *visibilityStore) addBulkIndexRequestAndWait(
