@@ -86,6 +86,35 @@ func SetupSchema(cfg *config.SQL) error {
 	return nil
 }
 
+// SetupSchemaOnDB initializes the SQLite schema in an empty database using existing DB connection.
+//
+// Note: this function may receive breaking changes or be removed in the future.
+func SetupSchemaOnDB(db sqlplugin.AdminDB) error {
+	statements, err := p.LoadAndSplitQueryFromReaders([]io.Reader{bytes.NewBuffer(executionSchema)})
+	if err != nil {
+		return fmt.Errorf("error loading execution schema: %w", err)
+	}
+
+	for _, stmt := range statements {
+		if err = db.Exec(stmt); err != nil {
+			return fmt.Errorf("error executing statement %q: %w", stmt, err)
+		}
+	}
+
+	statements, err = p.LoadAndSplitQueryFromReaders([]io.Reader{bytes.NewBuffer(visibilitySchema)})
+	if err != nil {
+		return fmt.Errorf("error loading visibility schema: %w", err)
+	}
+
+	for _, stmt := range statements {
+		if err = db.Exec(stmt); err != nil {
+			return fmt.Errorf("error executing statement %q: %w", stmt, err)
+		}
+	}
+
+	return nil
+}
+
 // NamespaceConfig determines how namespaces should be configured during registration.
 //
 // Note: this struct may receive breaking changes or be removed in the future.
