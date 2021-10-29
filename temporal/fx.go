@@ -35,6 +35,7 @@ import (
 	"github.com/pborman/uuid"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -177,7 +178,7 @@ func HistoryServiceProvider(
 	esClient esclient.Client,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	persistenceConfig config.Persistence,
-	clusterMetadata *config.ClusterMetadata,
+	clusterMetadata *cluster.Config,
 ) (ServicesGroupOut, error) {
 	serviceName := primitives.HistoryService
 
@@ -234,7 +235,7 @@ func MatchingServiceProvider(
 	esClient esclient.Client,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	persistenceConfig config.Persistence,
-	clusterMetadata *config.ClusterMetadata,
+	clusterMetadata *cluster.Config,
 ) (ServicesGroupOut, error) {
 	serviceName := primitives.MatchingService
 
@@ -291,7 +292,7 @@ func FrontendServiceProvider(
 	esClient esclient.Client,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	persistenceConfig config.Persistence,
-	clusterMetadata *config.ClusterMetadata,
+	clusterMetadata *cluster.Config,
 ) (ServicesGroupOut, error) {
 	serviceName := primitives.FrontendService
 
@@ -348,7 +349,7 @@ func WorkerServiceProvider(
 	esClient esclient.Client,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	persistenceConfig config.Persistence,
-	clusterMetadata *config.ClusterMetadata,
+	clusterMetadata *cluster.Config,
 ) (ServicesGroupOut, error) {
 	serviceName := primitives.WorkerService
 
@@ -460,7 +461,7 @@ func ApplyClusterMetadataConfigProvider(
 	config *config.Config,
 	persistenceServiceResolver resolver.ServiceResolver,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
-) (*config.ClusterMetadata, config.Persistence, error) {
+) (*cluster.Config, config.Persistence, error) {
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
 
 	factory := persistenceClient.NewFactory(

@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -69,7 +70,7 @@ type (
 		dcCollection        *dynamicconfig.Collection
 
 		persistenceConfig config.Persistence
-		clusterMetadata   *config.ClusterMetadata
+		clusterMetadata   *cluster.Config
 	}
 )
 
@@ -91,7 +92,7 @@ func NewServerFxImpl(
 	globalMetricsScope tally.Scope,
 	servicesGroup ServicesGroupIn,
 	persistenceConfig config.Persistence,
-	clusterMetadata *config.ClusterMetadata,
+	clusterMetadata *cluster.Config,
 ) *ServerImpl {
 	s := &ServerImpl{
 		so:                  opts,
@@ -179,7 +180,7 @@ func newBootstrapParams(
 	sdkReporter SdkReporter,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	persistenceConfig config.Persistence,
-	clusterMetadata *config.ClusterMetadata,
+	clusterMetadata *cluster.Config,
 ) (*resource.BootstrapParams, error) {
 	svcName := string(serviceName)
 	params := &resource.BootstrapParams{

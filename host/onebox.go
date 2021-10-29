@@ -91,7 +91,7 @@ type (
 		frontendClient                   workflowservice.WorkflowServiceClient
 		historyClient                    historyservice.HistoryServiceClient
 		logger                           log.Logger
-		clusterMetadataConfig            *config.ClusterMetadata
+		clusterMetadataConfig            *cluster.Config
 		persistenceConfig                config.Persistence
 		metadataMgr                      persistence.MetadataManager
 		clusterMetadataMgr               persistence.ClusterMetadataManager
@@ -124,7 +124,7 @@ type (
 
 	// TemporalParams contains everything needed to bootstrap Temporal
 	TemporalParams struct {
-		ClusterMetadataConfig            *config.ClusterMetadata
+		ClusterMetadataConfig            *cluster.Config
 		PersistenceConfig                config.Persistence
 		MetadataMgr                      persistence.MetadataManager
 		ClusterMetadataManager           persistence.ClusterMetadataManager
@@ -639,7 +639,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	c.workerService = service
 	service.Start()
 
-	clusterMetadata := cluster.NewTestClusterMetadata(c.clusterMetadataConfig)
+	clusterMetadata := cluster.NewMetadataFromConfig(c.clusterMetadataConfig)
 	var replicatorNamespaceCache namespace.Registry
 	if c.workerConfig.EnableReplicator {
 		metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)

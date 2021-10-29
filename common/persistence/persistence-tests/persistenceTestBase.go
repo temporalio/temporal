@@ -186,7 +186,7 @@ func NewTestBaseForCluster(testCluster PersistenceTestCluster, logger log.Logger
 }
 
 // Setup sets up the test base, must be called as part of SetupSuite
-func (s *TestBase) Setup(clusterMetadataConfig *config.ClusterMetadata) {
+func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	var err error
 	shardID := int32(10)
 	if clusterMetadataConfig == nil {
@@ -208,7 +208,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *config.ClusterMetadata) {
 	s.ClusterMetadataManager, err = factory.NewClusterMetadataManager()
 	s.fatalOnError("NewClusterMetadataManager", err)
 
-	s.ClusterMetadata = cluster.NewTestClusterMetadata(clusterMetadataConfig)
+	s.ClusterMetadata = cluster.NewMetadataFromConfig(clusterMetadataConfig)
 	s.SearchAttributesManager = searchattribute.NewManager(clock.NewRealTimeSource(), s.ClusterMetadataManager)
 
 	s.MetadataManager, err = factory.NewMetadataManager()
