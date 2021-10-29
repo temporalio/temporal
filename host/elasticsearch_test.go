@@ -22,6 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:build esintegration
 // +build esintegration
 
 // to run locally, make sure Elasticsearch is running,
@@ -35,6 +36,7 @@ import (
 	"flag"
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -50,6 +52,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 
 	"go.temporal.io/server/common/config"
