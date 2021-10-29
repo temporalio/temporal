@@ -87,6 +87,7 @@ const (
 	TaskTypeTagName       = "task_type"
 	QueueTypeTagName      = "queue_type"
 	visibilityTypeTagName = "visibility_type"
+	httpStatusTagName     = "http_status"
 )
 
 // This package should hold all the metrics and tags for temporal

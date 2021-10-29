@@ -29,11 +29,15 @@ import (
 )
 
 func IsRetryableError(err error) bool {
+	return IsRetryableStatus(HttpStatus(err))
+}
+
+func HttpStatus(err error) int {
 	switch e := err.(type) {
 	case *elastic.Error:
-		return IsRetryableStatus(e.Status)
+		return e.Status
 	default:
-		return false
+		return 0
 	}
 }
 
