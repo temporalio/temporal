@@ -1378,6 +1378,19 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 	s.NotNil(failedEventAttr.GetFailure())
 }
 
+func (s *elasticsearchIntegrationSuite) Test_LongWorkflowID() {
+	id := strings.Repeat("a", 1000)
+	wt := "es-integration-long-workflow-id-test-type"
+	tl := "es-integration-long-workflow-id-test-taskqueue"
+	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
+
+	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err)
+
+	query := fmt.Sprintf(`WorkflowId = "%s"`, id)
+	s.testHelperForReadOnce(we.GetRunId(), query, false)
+}
+
 func (s *elasticsearchIntegrationSuite) putIndexSettings(indexName string, maxResultWindowSize int) {
 	acknowledged, err := s.esClient.IndexPutSettings(
 		context.Background(),
