@@ -116,7 +116,7 @@ type (
 	}
 
 	httpStatusTag struct {
-		value int
+		value string
 	}
 )
 
@@ -389,7 +389,7 @@ func (d queueTypeTag) Value() string {
 
 // HttpStatusTag returns a new httpStatusTag.
 func HttpStatusTag(value int) Tag {
-	return httpStatusTag{value}
+	return httpStatusTag{value: strconv.Itoa(value)}
 }
 
 // Key returns the key of the stats type tag
@@ -399,5 +399,5 @@ func (t httpStatusTag) Key() string {
 
 // Value returns the value of the stats type tag
 func (t httpStatusTag) Value() string {
-	return strconv.Itoa(t.value)
+	return t.value
 }
