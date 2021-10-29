@@ -30,6 +30,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -216,13 +217,14 @@ func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableReq
 // bulkAfterAction is triggered after bulk processor commit
 func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
 	if err != nil {
-		// This happens after configured retry, which means something bad happens on cluster or index
-		// When cluster back to live, processor will re-commit those failure requests
-
+		const logFirstNRequests = 5
 		isRetryable := client.IsRetryableError(err)
-		p.logger.Error("Unable to commit bulk ES request.", tag.Error(err), tag.Bool(isRetryable))
-		for _, request := range requests {
-			p.logger.Error("ES request failed.", tag.ESRequest(request.String()))
+		var logRequests strings.Builder
+		for i, request := range requests {
+			if i < logFirstNRequests {
+				logRequests.WriteString(request.String())
+				logRequests.WriteRune('\n')
+			}
 			p.metricsClient.IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorFailures)
 
 			if !isRetryable {
@@ -233,6 +235,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 				p.sendToAckChan(visibilityTaskKey, false)
 			}
 		}
+		p.logger.Error("Unable to commit bulk ES request.", tag.Error(err), tag.IsRetryable(isRetryable), tag.RequestCount(len(requests)), tag.ESRequest(logRequests.String()))
 		return
 	}
 
