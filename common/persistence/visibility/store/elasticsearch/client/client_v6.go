@@ -119,19 +119,19 @@ func newSimpleClientV6(url string) (*clientV6, error) {
 }
 
 func (c *clientV6) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
-	searchService := c.esClient.Search(p.Index).
+	searchSource := elastic6.NewSearchSource().
 		Query(p.Query).
 		SortBy(convertV7SortersToV6(p.Sorter)...)
 
 	if p.PageSize != 0 {
-		searchService.Size(p.PageSize)
+		searchSource.Size(p.PageSize)
 	}
 
 	if len(p.SearchAfter) != 0 {
-		searchService.SearchAfter(p.SearchAfter...)
+		searchSource.SearchAfter(p.SearchAfter...)
 	}
 
-	searchResult, err := searchService.Do(ctx)
+	searchResult, err := c.esClient.Search(p.Index).SearchSource(searchSource).Do(ctx)
 	if err != nil {
 		return nil, convertV6ErrorToV7(err)
 	}
