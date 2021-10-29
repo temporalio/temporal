@@ -56,6 +56,11 @@ func Error(err error) ZapTag {
 	return NewErrorTag(err)
 }
 
+// IsRetryable returns tag for IsRetryable
+func IsRetryable(isRetryable bool) ZapTag {
+	return NewBoolTag("is-retryable", isRetryable)
+}
+
 // ClusterName returns tag for ClusterName
 func ClusterName(clusterName string) ZapTag {
 	return NewStringTag("cluster-name", clusterName)
@@ -433,6 +438,11 @@ func DetailInfo(i string) ZapTag {
 // Counter returns tag for Counter
 func Counter(c int) ZapTag {
 	return NewInt("counter", c)
+}
+
+// RequestCount returns tag for RequestCount
+func RequestCount(c int) ZapTag {
+	return NewInt("request-count", c)
 }
 
 // Number returns tag for Number
