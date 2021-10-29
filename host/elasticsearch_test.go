@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	esclient "go.temporal.io/server/common/persistence/visibility/elasticsearch/client"
 
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -1144,6 +1145,24 @@ func (s *elasticsearchIntegrationSuite) TestUpsertWorkflowExecution_InvalidKey()
 	failedEventAttr := workflowTaskFailedEvent.GetWorkflowTaskFailedEventAttributes()
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, failedEventAttr.GetCause())
 	s.NotNil(failedEventAttr.GetFailure())
+}
+
+func (s *elasticsearchIntegrationSuite) Test_LongWorkflowID() {
+	if s.testClusterConfig.Persistence.StoreType == config.StoreTypeSQL {
+		// TODO: remove this when workflow_id field size is increased from varchar(255) in SQL schema.
+		return
+	}
+
+	id := strings.Repeat("a", 1000)
+	wt := "es-integration-long-workflow-id-test-type"
+	tl := "es-integration-long-workflow-id-test-taskqueue"
+	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
+
+	we, err := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err)
+
+	query := fmt.Sprintf(`WorkflowId = "%s"`, id)
+	s.testHelperForReadOnce(we.GetRunId(), query, false)
 }
 
 func (s *elasticsearchIntegrationSuite) putIndexSettings(indexName string, maxResultWindowSize int) {
